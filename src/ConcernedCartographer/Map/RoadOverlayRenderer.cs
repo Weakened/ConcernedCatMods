@@ -175,11 +175,10 @@ internal sealed class RoadOverlayRenderer
         int dy = -Math.Abs(y1 - y0);
         int sy = y0 < y1 ? 1 : -1;
         int error = dx + dy;
-        int radius = Math.Max(0, (lineWidth - 1) / 2);
 
         while (true)
         {
-            Stamp(setPixel, size, x0, y0, radius);
+            Stamp(setPixel, size, x0, y0, lineWidth);
             if (x0 == x1 && y0 == y1)
             {
                 break;
@@ -200,16 +199,21 @@ internal sealed class RoadOverlayRenderer
         }
     }
 
-    private static void Stamp(Action<int, int> setPixel, int size, int centerX, int centerY, int radius)
+    private static void Stamp(Action<int, int> setPixel, int size, int centerX, int centerY, int lineWidth)
     {
-        for (int y = centerY - radius; y <= centerY + radius; y++)
+        // Integer division made even widths collapse (2 -> 1 texel); cover the
+        // exact configured width with a box balanced around the center texel.
+        int low = Math.Max(1, lineWidth) / 2;
+        int high = Math.Max(1, lineWidth) - 1 - low;
+
+        for (int y = centerY - low; y <= centerY + high; y++)
         {
             if (y < 0 || y >= size)
             {
                 continue;
             }
 
-            for (int x = centerX - radius; x <= centerX + radius; x++)
+            for (int x = centerX - low; x <= centerX + high; x++)
             {
                 if (x >= 0 && x < size)
                 {
