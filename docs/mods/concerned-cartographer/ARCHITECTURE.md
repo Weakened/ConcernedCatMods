@@ -61,8 +61,11 @@ The write uses an intermediate temporary file and replacement. A malformed line 
 
 Creates two named Jötunn overlays:
 
-- `Concerned Cartographer - Dirt Paths`
-- `Concerned Cartographer - Paved Roads`
+- `CC Dirt Paths`
+- `CC Paved Roads`
+
+The names are deliberately short: Jötunn's overlay toggle panel truncates long
+names, and both layers must remain distinguishable after truncation.
 
 Jötunn renders overlays on the full map and minimap, respects fog by default, and exposes GUI toggles. The renderer never retains a `MapOverlay` reference across world loads. Full texture redraw occurs only when a map becomes available; new survey segments are drawn incrementally.
 

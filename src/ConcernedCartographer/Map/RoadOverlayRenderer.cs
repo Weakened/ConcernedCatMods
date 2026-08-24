@@ -9,8 +9,10 @@ namespace TheConcernedCat.ConcernedCartographer.Map;
 
 internal sealed class RoadOverlayRenderer
 {
-    private const string DirtOverlayName = "Concerned Cartographer - Dirt Paths";
-    private const string PavedOverlayName = "Concerned Cartographer - Paved Roads";
+    // Jotunn's overlay toggle panel truncates long names; both layers must stay
+    // distinguishable after truncation, so the mod prefix is a short "CC".
+    private const string DirtOverlayName = "CC Dirt Paths";
+    private const string PavedOverlayName = "CC Paved Roads";
 
     private static readonly Color32 DirtColor = new(138, 96, 58, 230);
     private static readonly Color32 PavedColor = new(180, 184, 188, 235);
