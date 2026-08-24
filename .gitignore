@@ -1,0 +1,55 @@
+# Local machine configuration and secrets
+Environment.props
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.env
+.env.*
+!.env.example
+
+# Build output
+[Bb]in/
+[Oo]bj/
+artifacts/
+build/
+dist/
+TestResults/
+*.nupkg
+*.snupkg
+
+# IDE/editor
+.vs/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+.idea/
+_ReSharper*/
+*.DotSettings.user
+
+# Operating system
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs and local data
+*.log
+*.roads.tsv
+*.tmp
+
+# Game/mod-loader binaries must never be committed
+**/Assembly-CSharp.dll
+**/assembly_*.dll
+**/UnityEngine*.dll
+**/BepInEx*.dll
+**/0Harmony.dll
+**/Jotunn.dll
+**/publicized_assemblies/
+**/BepInEx/core/
+**/BepInEx/plugins/
+**/valheim_Data/
+**/Valheim_Data/
+
+# Local Thunderstore service tokens or generated manifests
+TCLI_AUTH_TOKEN*
+manifest.json

@@ -1,0 +1,34 @@
+name: Feature request
+description: Propose a focused Concerned Cat mod improvement
+title: "feature: "
+labels: ["mod:cartographer", "type:feature"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Player problem
+      description: Describe the problem before proposing an implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+    validations:
+      required: true
+  - type: textarea
+    id: valheim-fit
+    attributes:
+      label: Why this fits Valheim
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Existing-mod overlap or compatibility concerns
+      description: Mention Pinnacle, MapRoutes, or other relevant mods.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Proposed acceptance criteria
+      placeholder: "- [ ] ..."

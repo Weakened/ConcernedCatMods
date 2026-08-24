@@ -1,0 +1,52 @@
+name: Bug report
+description: Report a reproducible Concerned Cat mod defect
+title: "bug: "
+labels: ["mod:cartographer"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Mod version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: game-version
+    attributes:
+      label: Valheim version
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: BepInExPack/Jotunn versions, client/server type, mod-manager profile, and relevant mod list.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      placeholder: "1. ...\n2. ...\n3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant BepInEx log excerpt
+      description: Remove secrets/private information. Attach the file when the excerpt is long.
+      render: text
+    validations:
+      required: true

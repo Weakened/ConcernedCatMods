@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <!-- Steam: Valheim -> Manage -> Browse local files. Point to the base Valheim folder. -->
+    <VALHEIM_INSTALL>C:\Program Files (x86)\Steam\steamapps\common\Valheim</VALHEIM_INSTALL>
+
+    <!-- Point this to BepInEx inside the dedicated TCC-Dev mod-manager profile. -->
+    <BEPINEX_PATH>C:\REPLACE_ME\TCC-Dev\BepInEx</BEPINEX_PATH>
+
+    <!-- Debug builds are deployed here. This must be the TCC-Dev profile's plugins folder. -->
+    <MOD_DEPLOYPATH>C:\REPLACE_ME\TCC-Dev\BepInEx\plugins</MOD_DEPLOYPATH>
+  </PropertyGroup>
+</Project>

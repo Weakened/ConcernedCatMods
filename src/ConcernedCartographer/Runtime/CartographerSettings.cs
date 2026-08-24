@@ -1,0 +1,66 @@
+using BepInEx.Configuration;
+
+namespace TheConcernedCat.ConcernedCartographer.Runtime;
+
+internal sealed class CartographerSettings
+{
+    private CartographerSettings(
+        ConfigEntry<bool> enabled,
+        ConfigEntry<float> sampleIntervalSeconds,
+        ConfigEntry<float> minimumPointSpacingMeters,
+        ConfigEntry<float> maximumStrokeGapMeters,
+        ConfigEntry<float> autosaveIntervalSeconds,
+        ConfigEntry<float> paintThreshold,
+        ConfigEntry<int> paintSampleRadius,
+        ConfigEntry<int> lineWidthPixels,
+        ConfigEntry<bool> debugLogging)
+    {
+        Enabled = enabled;
+        SampleIntervalSeconds = sampleIntervalSeconds;
+        MinimumPointSpacingMeters = minimumPointSpacingMeters;
+        MaximumStrokeGapMeters = maximumStrokeGapMeters;
+        AutosaveIntervalSeconds = autosaveIntervalSeconds;
+        PaintThreshold = paintThreshold;
+        PaintSampleRadius = paintSampleRadius;
+        LineWidthPixels = lineWidthPixels;
+        DebugLogging = debugLogging;
+    }
+
+    public ConfigEntry<bool> Enabled { get; }
+    public ConfigEntry<float> SampleIntervalSeconds { get; }
+    public ConfigEntry<float> MinimumPointSpacingMeters { get; }
+    public ConfigEntry<float> MaximumStrokeGapMeters { get; }
+    public ConfigEntry<float> AutosaveIntervalSeconds { get; }
+    public ConfigEntry<float> PaintThreshold { get; }
+    public ConfigEntry<int> PaintSampleRadius { get; }
+    public ConfigEntry<int> LineWidthPixels { get; }
+    public ConfigEntry<bool> DebugLogging { get; }
+
+    public static CartographerSettings Bind(ConfigFile config)
+    {
+        return new CartographerSettings(
+            config.Bind("General", "Enabled", true, "Enable road surveying and map overlays."),
+            config.Bind("Survey", "SampleIntervalSeconds", 0.35f, new ConfigDescription(
+                "Seconds between terrain samples.",
+                new AcceptableValueRange<float>(0.10f, 5.0f))),
+            config.Bind("Survey", "MinimumPointSpacingMeters", 1.5f, new ConfigDescription(
+                "Minimum horizontal distance before a new road point is stored.",
+                new AcceptableValueRange<float>(0.5f, 20.0f))),
+            config.Bind("Survey", "MaximumStrokeGapMeters", 8.0f, new ConfigDescription(
+                "A larger gap starts a new stroke instead of drawing a long connector.",
+                new AcceptableValueRange<float>(2.0f, 100.0f))),
+            config.Bind("Persistence", "AutosaveIntervalSeconds", 15.0f, new ConfigDescription(
+                "Seconds between dirty-atlas autosaves.",
+                new AcceptableValueRange<float>(5.0f, 300.0f))),
+            config.Bind("Detection", "PaintThreshold", 0.40f, new ConfigDescription(
+                "Minimum averaged red/blue paint value used to identify roads.",
+                new AcceptableValueRange<float>(0.10f, 0.95f))),
+            config.Bind("Detection", "PaintSampleRadius", 1, new ConfigDescription(
+                "Terrain paint pixels sampled around the player (0 is a single pixel).",
+                new AcceptableValueRange<int>(0, 3))),
+            config.Bind("Map", "LineWidthPixels", 2, new ConfigDescription(
+                "Road line width on the map overlay.",
+                new AcceptableValueRange<int>(1, 6))),
+            config.Bind("Diagnostics", "DebugLogging", false, "Write diagnostic road classification messages."));
+    }
+}

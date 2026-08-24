@@ -1,0 +1,38 @@
+[config]
+schemaVersion = "0.0.1"
+
+[package]
+namespace = "TheConcernedCat"
+name = "ConcernedCartographer"
+versionNumber = "0.1.0"
+description = "Builds a local Valheim road atlas by mapping player-traversed dirt Pathen and paved terrain onto the map."
+websiteUrl = "https://github.com/Weakened/ConcernedCatMods"
+containsNsfwContent = false
+
+[package.dependencies]
+denikson-BepInExPack_Valheim = "5.4.2333"
+ValheimModding-Jotunn = "2.29.2"
+
+[build]
+icon = "./icon.png"
+readme = "./README.md"
+outdir = "../../../artifacts/thunderstore"
+
+[[build.copy]]
+source = "../bin/Release/net48/TheConcernedCat.ConcernedCartographer.dll"
+target = "plugins/TheConcernedCat.ConcernedCartographer.dll"
+
+[[build.copy]]
+source = "./CHANGELOG.md"
+target = "CHANGELOG.md"
+
+[[build.copy]]
+source = "../../../LICENSE"
+target = "LICENSE"
+
+[publish]
+repository = "https://thunderstore.io"
+communities = ["valheim"]
+
+[publish.categories]
+valheim = ["mods", "client-side", "utility", "ai-generated"]
