@@ -67,6 +67,48 @@ internal sealed class RoadOverlayRenderer
         }
     }
 
+    public void DrawCalibrationMarkers()
+    {
+        try
+        {
+            var overlay = MinimapManager.Instance.GetMapOverlay(DirtOverlayName);
+            int size = overlay.TextureSize;
+            StampCross(overlay.OverlayTex, size, new Vector3(0f, 0f, 0f), new Color32(255, 0, 255, 255), "origin (0,0)");
+            StampCross(overlay.OverlayTex, size, new Vector3(128f, 0f, 0f), new Color32(255, 255, 0, 255), "+128m east");
+            StampCross(overlay.OverlayTex, size, new Vector3(0f, 0f, 128f), new Color32(0, 255, 255, 255), "+128m north");
+            overlay.OverlayTex.Apply(false);
+        }
+        catch (Exception exception)
+        {
+            _log.LogWarning($"Could not draw calibration markers: {exception.Message}");
+        }
+    }
+
+    private void StampCross(Texture2D texture, int size, Vector3 world, Color32 color, string label)
+    {
+        Vector2 coords = MinimapManager.Instance.WorldToOverlayCoords(world, size);
+        int centerX = Mathf.RoundToInt(coords.x);
+        int centerY = Mathf.RoundToInt(coords.y);
+        const int armTexels = 4;
+
+        for (int offset = -armTexels; offset <= armTexels; offset++)
+        {
+            int x = centerX + offset;
+            if (x >= 0 && x < size && centerY >= 0 && centerY < size)
+            {
+                texture.SetPixel(x, centerY, color);
+            }
+
+            int y = centerY + offset;
+            if (centerX >= 0 && centerX < size && y >= 0 && y < size)
+            {
+                texture.SetPixel(centerX, y, color);
+            }
+        }
+
+        _log.LogInfo($"Calibration marker {label}: world ({world.x:0.#}, {world.z:0.#}) -> overlay pixel ({centerX}, {centerY}) of {size}.");
+    }
+
     public void DrawSegment(RoadSegment segment)
     {
         try

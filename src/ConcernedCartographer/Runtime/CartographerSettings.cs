@@ -13,7 +13,8 @@ internal sealed class CartographerSettings
         ConfigEntry<float> paintThreshold,
         ConfigEntry<int> paintSampleRadius,
         ConfigEntry<int> lineWidthPixels,
-        ConfigEntry<bool> debugLogging)
+        ConfigEntry<bool> debugLogging,
+        ConfigEntry<bool> drawCalibrationMarkers)
     {
         Enabled = enabled;
         SampleIntervalSeconds = sampleIntervalSeconds;
@@ -24,6 +25,7 @@ internal sealed class CartographerSettings
         PaintSampleRadius = paintSampleRadius;
         LineWidthPixels = lineWidthPixels;
         DebugLogging = debugLogging;
+        DrawCalibrationMarkers = drawCalibrationMarkers;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -35,6 +37,7 @@ internal sealed class CartographerSettings
     public ConfigEntry<int> PaintSampleRadius { get; }
     public ConfigEntry<int> LineWidthPixels { get; }
     public ConfigEntry<bool> DebugLogging { get; }
+    public ConfigEntry<bool> DrawCalibrationMarkers { get; }
 
     public static CartographerSettings Bind(ConfigFile config)
     {
@@ -61,6 +64,8 @@ internal sealed class CartographerSettings
             config.Bind("Map", "LineWidthPixels", 2, new ConfigDescription(
                 "Road line width on the map overlay.",
                 new AcceptableValueRange<int>(1, 6))),
-            config.Bind("Diagnostics", "DebugLogging", false, "Write diagnostic road classification messages."));
+            config.Bind("Diagnostics", "DebugLogging", false, "Write diagnostic road classification messages."),
+            config.Bind("Diagnostics", "DrawCalibrationMarkers", false,
+                "Draw fixed calibration crosses into the dirt overlay at world origin (magenta), +128m east (yellow), and +128m north (cyan) to verify overlay/map alignment."));
     }
 }
