@@ -17,6 +17,8 @@ Concerned Cartographer turns the dirt Pathen and paved terrain your Viking actua
 
 - Roads are discovered as **you walk along them after installing the mod**.
 - This version does not scan the whole world or immediately recover every old road.
+- Any road-like terrain paint you walk on is recorded, including world-generated dirt patches such as the circle around the spawn stones — the mod does not yet distinguish player-made from world-generated paint.
+- A road line can sit up to ~6 m from its true position at maximum zoom; that is the native resolution of Valheim's 2048-pixel map texture.
 - Road data is local to each client; there is no multiplayer sharing yet.
 - Marker editing, richer legends, and cartography-table sharing are planned but not in this build.
 

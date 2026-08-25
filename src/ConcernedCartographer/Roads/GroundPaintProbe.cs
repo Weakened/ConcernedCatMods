@@ -122,9 +122,11 @@ internal sealed class GroundPaintProbe
 
     private void LogClassification(RoadKind kind, Color color)
     {
+        // Info level, not Debug: BepInEx's disk logger drops Debug by default,
+        // so opt-in diagnostics at Debug never reach LogOutput.log.
         if (_settings.DebugLogging.Value)
         {
-            _log.LogDebug($"Terrain classified as {kind}; paint RGBA={color}.");
+            _log.LogInfo($"Terrain classified as {kind}; paint RGBA={color}.");
         }
     }
 
