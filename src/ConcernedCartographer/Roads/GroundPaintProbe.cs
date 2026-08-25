@@ -10,6 +10,7 @@ internal sealed class GroundPaintProbe
 {
     private readonly CartographerSettings _settings;
     private readonly ManualLogSource _log;
+    private readonly RateLimitedLog _rateLimited;
     private readonly List<Heightmap> _heightmaps = new();
     private bool _disabledForSession;
     private bool _failureLogged;
@@ -18,6 +19,7 @@ internal sealed class GroundPaintProbe
     {
         _settings = settings;
         _log = log;
+        _rateLimited = new RateLimitedLog(log, 5f);
     }
 
     public bool TryClassify(Vector3 worldPosition, out RoadKind kind)
@@ -123,10 +125,11 @@ internal sealed class GroundPaintProbe
     private void LogClassification(RoadKind kind, Color color)
     {
         // Info level, not Debug: BepInEx's disk logger drops Debug by default,
-        // so opt-in diagnostics at Debug never reach LogOutput.log.
+        // so opt-in diagnostics at Debug never reach LogOutput.log. Rate-limited
+        // per kind so even the opt-in stream cannot spam the log.
         if (_settings.DebugLogging.Value)
         {
-            _log.LogInfo($"Terrain classified as {kind}; paint RGBA={color}.");
+            _rateLimited.Info($"classify-{kind}", $"Terrain classified as {kind}; paint RGBA={color}.");
         }
     }
 

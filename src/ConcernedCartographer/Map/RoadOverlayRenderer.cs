@@ -19,11 +19,13 @@ internal sealed class RoadOverlayRenderer
 
     private readonly CartographerSettings _settings;
     private readonly ManualLogSource _log;
+    private readonly RateLimitedLog _rateLimited;
 
     public RoadOverlayRenderer(CartographerSettings settings, ManualLogSource log)
     {
         _settings = settings;
         _log = log;
+        _rateLimited = new RateLimitedLog(log, 5f);
     }
 
     public void RedrawAll(RoadAtlas atlas)
@@ -132,7 +134,8 @@ internal sealed class RoadOverlayRenderer
         }
         catch (Exception exception)
         {
-            _log.LogWarning($"Could not draw an incremental road segment: {exception.Message}");
+            // Every new sample retries this path, so keep the warning rate-limited.
+            _rateLimited.Warning("draw-segment", $"Could not draw an incremental road segment: {exception.Message}");
         }
     }
 

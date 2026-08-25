@@ -10,10 +10,15 @@ namespace TheConcernedCat.ConcernedCartographer.Persistence;
 internal sealed class RoadPersistence
 {
     private readonly ManualLogSource _log;
+    private readonly Runtime.RateLimitedLog _rateLimited;
 
     public RoadPersistence(ManualLogSource log)
     {
         _log = log;
+
+        // Autosave retries every few seconds forever on a broken disk; one
+        // error per minute is plenty to diagnose without flooding the log.
+        _rateLimited = new Runtime.RateLimitedLog(log, 60f);
     }
 
     public RoadAtlas Load(long worldUid)
@@ -63,7 +68,7 @@ internal sealed class RoadPersistence
         }
         catch (Exception exception)
         {
-            _log.LogError($"Could not save road atlas to {path}: {exception}");
+            _rateLimited.Error("atlas-save", $"Could not save road atlas to {path}: {exception}");
             TryDelete(temporaryPath);
             return false;
         }

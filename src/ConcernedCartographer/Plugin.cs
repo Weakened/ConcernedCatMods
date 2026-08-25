@@ -21,6 +21,46 @@ public sealed class Plugin : BaseUnityPlugin
 
         MinimapManager.OnVanillaMapAvailable += HandleMapAvailable;
         Logger.LogInfo($"{PluginName} {PluginVersion} loaded");
+        LogEnvironment(settings);
+    }
+
+    private void LogEnvironment(CartographerSettings settings)
+    {
+        try
+        {
+            string bepInExVersion = typeof(BaseUnityPlugin).Assembly.GetName().Version?.ToString() ?? "unknown";
+            string jotunnVersion = typeof(Jotunn.Main).Assembly.GetName().Version?.ToString() ?? "unknown";
+            string gameVersion = "unknown";
+            try
+            {
+                gameVersion = global::Version.GetVersionString();
+            }
+            catch
+            {
+                // The version API is cosmetic; never fail startup over it.
+            }
+
+            Logger.LogInfo(
+                $"Environment: Valheim {gameVersion}, Unity {UnityEngine.Application.unityVersion}, " +
+                $"BepInEx {bepInExVersion}, Jotunn {jotunnVersion}.");
+            Logger.LogInfo(
+                "Effective config (out-of-range values are clamped to documented ranges): " +
+                $"Enabled={settings.Enabled.Value}, " +
+                $"SampleIntervalSeconds={settings.SampleIntervalSeconds.Value}, " +
+                $"MinimumPointSpacingMeters={settings.MinimumPointSpacingMeters.Value}, " +
+                $"MaximumStrokeGapMeters={settings.MaximumStrokeGapMeters.Value}, " +
+                $"DuplicateSuppressionMeters={settings.DuplicateSuppressionMeters.Value}, " +
+                $"AutosaveIntervalSeconds={settings.AutosaveIntervalSeconds.Value}, " +
+                $"PaintThreshold={settings.PaintThreshold.Value}, " +
+                $"PaintSampleRadius={settings.PaintSampleRadius.Value}, " +
+                $"LineWidthPixels={settings.LineWidthPixels.Value}, " +
+                $"DebugLogging={settings.DebugLogging.Value}, " +
+                $"DrawCalibrationMarkers={settings.DrawCalibrationMarkers.Value}.");
+        }
+        catch (System.Exception exception)
+        {
+            Logger.LogWarning($"Could not record environment versions: {exception.Message}");
+        }
     }
 
     private void HandleMapAvailable()

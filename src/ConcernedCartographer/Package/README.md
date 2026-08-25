@@ -34,6 +34,24 @@ Install with a Thunderstore-compatible mod manager. BepInExPack Valheim and Jöt
 3. Open the map.
 4. Use Jötunn's map-overlay menu to toggle the dirt and paved layers.
 
+## Configuration
+
+Settings live in `BepInEx/config/com.theconcernedcat.valheim.concernedcartographer.cfg`. Out-of-range values are clamped to the documented range; the effective values are logged once at startup.
+
+| Setting | Default | Range | Purpose |
+|---|---|---|---|
+| General / Enabled | true | — | Master switch for surveying and overlays |
+| Survey / SampleIntervalSeconds | 0.35 | 0.10–5.0 | Seconds between terrain samples |
+| Survey / MinimumPointSpacingMeters | 1.5 | 0.5–20 | Minimum distance before a new road point is stored |
+| Survey / MaximumStrokeGapMeters | 8.0 | 2–100 | Larger gaps start a new stroke instead of a connector line |
+| Survey / DuplicateSuppressionMeters | 2.0 | 0–10 | Skip samples near already-recorded ink of the same kind; re-walking a road never grows the atlas (0 disables; values above ~3 can also suppress tight hairpins) |
+| Persistence / AutosaveIntervalSeconds | 15 | 5–300 | Seconds between dirty-atlas autosaves |
+| Detection / PaintThreshold | 0.40 | 0.10–0.95 | Minimum averaged paint value that counts as road |
+| Detection / PaintSampleRadius | 1 | 0–3 | Paint pixels averaged around the player |
+| Map / LineWidthPixels | 2 | 1–6 | Road line width in map texels |
+| Diagnostics / DebugLogging | false | — | Opt-in, rate-limited classification/recording diagnostics |
+| Diagnostics / DrawCalibrationMarkers | false | — | Overlay alignment calibration crosses (development aid) |
+
 ## Data and uninstall safety
 
 The atlas is stored at:
