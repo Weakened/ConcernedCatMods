@@ -78,6 +78,7 @@ Version 0.1 is a local, client-side **road survey alpha**:
 ### Explicit v0.1 limitations
 
 - It discovers a road as the local player traverses it.
+- It records any road-like terrain paint, including world-generated dirt such as the circle around the spawn sacrificial stones; v0.1 deliberately does not distinguish player-made from world-generated paint (owner decision, 2026-08-24).
 - It does not scan the entire world.
 - It does not recover every old road immediately.
 - It does not synchronize road data between players.

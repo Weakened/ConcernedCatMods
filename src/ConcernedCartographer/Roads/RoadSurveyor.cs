@@ -57,7 +57,7 @@ internal sealed class RoadSurveyor
 
         if (recorded && _settings.DebugLogging.Value)
         {
-            _log.LogDebug($"Recorded {kind} road segment from {segment.Start} to {segment.End}.");
+            _log.LogInfo($"Recorded {kind} road segment from {segment.Start} to {segment.End}.");
         }
 
         return recorded;
