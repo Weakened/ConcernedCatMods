@@ -64,7 +64,11 @@ internal sealed class CartographerRuntime : IDisposable
 
         if (!WorldContext.TryGetWorldUid(out long uid) || _worldUid != uid)
         {
+            // Logout or world switch: stop sampling and flush now instead of
+            // waiting for the next map event, so no surveyed data is lost.
             _mapReady = false;
+            _surveyor.EndStroke();
+            SaveIfDirty();
             return;
         }
 
