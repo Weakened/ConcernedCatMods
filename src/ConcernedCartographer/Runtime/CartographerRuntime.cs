@@ -47,6 +47,11 @@ internal sealed class CartographerRuntime : IDisposable
         SwitchWorld(uid);
         _mapReady = true;
         _renderer.RedrawAll(_atlas);
+        if (_settings.DrawCalibrationMarkers.Value)
+        {
+            _renderer.DrawCalibrationMarkers();
+        }
+
         _log.LogInfo($"Road atlas ready for world {uid}: {_atlas.Strokes.Count} stroke(s), {_atlas.PointCount} point(s).");
     }
 
