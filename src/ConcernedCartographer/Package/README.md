@@ -19,6 +19,7 @@ Concerned Cartographer turns the dirt Pathen and paved terrain your Viking actua
 - This version does not scan the whole world or immediately recover every old road.
 - Any road-like terrain paint you walk on is recorded, including world-generated dirt patches such as the circle around the spawn stones — the mod does not yet distinguish player-made from world-generated paint.
 - A road line can sit up to ~6 m from its true position at maximum zoom; that is the native resolution of Valheim's 2048-pixel map texture.
+- The atlas is stored inside the **active mod-manager profile's** BepInEx config folder. Each profile keeps its own atlas, so switching to a fresh profile starts an empty atlas for the same world and roads re-record as you traverse them. Copy the `ConcernedCatMods` config folder between profiles to carry an atlas over.
 - Road data is local to each client; there is no multiplayer sharing yet.
 - Marker editing, richer legends, and cartography-table sharing are planned but not in this build.
 
@@ -45,7 +46,7 @@ The mod does not edit the Valheim world file. Removing the DLL stops surveying/r
 
 ## Compatibility
 
-The first release is client-side and intentionally avoids replacing vanilla pin UI. Compatibility with Pinnacle and MapRoutes is part of the release test matrix. Report conflicts with a BepInEx log and the exact mod versions installed.
+The first release is client-side and intentionally avoids replacing vanilla pin UI. Verified compatible with **Pinnacle 1.16.0** (pin create/edit/list/filter) and **MapRoutes 1.1.0** (route drawing and persistence) in the same profile — road layers, pins, and manual routes coexist, and toggling one system never hides another. Report conflicts with a BepInEx log and the exact mod versions installed.
 
 ## AI disclosure
 
