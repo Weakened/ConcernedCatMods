@@ -73,10 +73,15 @@ Jötunn renders overlays on the full map and minimap, respects fog by default, a
 
 ```text
 # ConcernedCartographer roads v1
-<stroke-guid>\t<Dirt|Paved>\t<point-index>\t<x>\t<y>\t<z>
+<stroke-guid>\t<Dirt|Paved>\t<point-index>\t<x>\t<y>\t<z>\t1
 ```
 
-Coordinates use invariant-culture decimal formatting. The file is intentionally simple enough to inspect and recover manually.
+Every row ends with a literal `1` row marker reserved for future per-row
+flags; the loader treats a row without it as malformed. Point indices must
+start at 0 and increase by 1 within a stroke. Coordinates use
+invariant-culture decimal formatting. The file is intentionally simple
+enough to inspect and recover manually; malformed rows are skipped with a
+single warning that reports the skipped count.
 
 ## Lifecycle
 
