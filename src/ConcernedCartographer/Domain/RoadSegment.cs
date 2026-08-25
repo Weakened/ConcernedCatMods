@@ -1,10 +1,8 @@
-using UnityEngine;
-
 namespace TheConcernedCat.ConcernedCartographer.Roads;
 
 internal readonly struct RoadSegment
 {
-    public RoadSegment(RoadKind kind, Vector3 start, Vector3 end)
+    public RoadSegment(RoadKind kind, RoadPoint start, RoadPoint end)
     {
         Kind = kind;
         Start = start;
@@ -12,6 +10,6 @@ internal readonly struct RoadSegment
     }
 
     public RoadKind Kind { get; }
-    public Vector3 Start { get; }
-    public Vector3 End { get; }
+    public RoadPoint Start { get; }
+    public RoadPoint End { get; }
 }

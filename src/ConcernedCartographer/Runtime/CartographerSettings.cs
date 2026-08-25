@@ -9,6 +9,7 @@ internal sealed class CartographerSettings
         ConfigEntry<float> sampleIntervalSeconds,
         ConfigEntry<float> minimumPointSpacingMeters,
         ConfigEntry<float> maximumStrokeGapMeters,
+        ConfigEntry<float> duplicateSuppressionMeters,
         ConfigEntry<float> autosaveIntervalSeconds,
         ConfigEntry<float> paintThreshold,
         ConfigEntry<int> paintSampleRadius,
@@ -20,6 +21,7 @@ internal sealed class CartographerSettings
         SampleIntervalSeconds = sampleIntervalSeconds;
         MinimumPointSpacingMeters = minimumPointSpacingMeters;
         MaximumStrokeGapMeters = maximumStrokeGapMeters;
+        DuplicateSuppressionMeters = duplicateSuppressionMeters;
         AutosaveIntervalSeconds = autosaveIntervalSeconds;
         PaintThreshold = paintThreshold;
         PaintSampleRadius = paintSampleRadius;
@@ -32,6 +34,7 @@ internal sealed class CartographerSettings
     public ConfigEntry<float> SampleIntervalSeconds { get; }
     public ConfigEntry<float> MinimumPointSpacingMeters { get; }
     public ConfigEntry<float> MaximumStrokeGapMeters { get; }
+    public ConfigEntry<float> DuplicateSuppressionMeters { get; }
     public ConfigEntry<float> AutosaveIntervalSeconds { get; }
     public ConfigEntry<float> PaintThreshold { get; }
     public ConfigEntry<int> PaintSampleRadius { get; }
@@ -52,6 +55,9 @@ internal sealed class CartographerSettings
             config.Bind("Survey", "MaximumStrokeGapMeters", 8.0f, new ConfigDescription(
                 "A larger gap starts a new stroke instead of drawing a long connector.",
                 new AcceptableValueRange<float>(2.0f, 100.0f))),
+            config.Bind("Survey", "DuplicateSuppressionMeters", 2.0f, new ConfigDescription(
+                "Skip samples within this distance of already-recorded road ink of the same kind, so re-walking a road never grows the atlas. 0 disables suppression; values above ~3 may also suppress tight hairpin switchbacks.",
+                new AcceptableValueRange<float>(0.0f, 10.0f))),
             config.Bind("Persistence", "AutosaveIntervalSeconds", 15.0f, new ConfigDescription(
                 "Seconds between dirty-atlas autosaves.",
                 new AcceptableValueRange<float>(5.0f, 300.0f))),

@@ -48,11 +48,15 @@ internal sealed class RoadSurveyor
             return false;
         }
 
-        bool recorded = _atlas.RecordSample(
-            kind,
-            position,
+        var rules = new RoadSamplingRules(
             _settings.MinimumPointSpacingMeters.Value,
             _settings.MaximumStrokeGapMeters.Value,
+            _settings.DuplicateSuppressionMeters.Value);
+
+        bool recorded = _atlas.RecordSample(
+            kind,
+            new RoadPoint(position.x, position.y, position.z),
+            rules,
             out segment);
 
         if (recorded && _settings.DebugLogging.Value)

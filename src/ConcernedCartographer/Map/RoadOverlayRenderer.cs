@@ -118,8 +118,8 @@ internal sealed class RoadOverlayRenderer
             var overlay = MinimapManager.Instance.GetMapOverlay(overlayName);
             int size = overlay.TextureSize;
 
-            Vector2 start = MinimapManager.Instance.WorldToOverlayCoords(segment.Start, size);
-            Vector2 end = MinimapManager.Instance.WorldToOverlayCoords(segment.End, size);
+            Vector2 start = MinimapManager.Instance.WorldToOverlayCoords(ToVector3(segment.Start), size);
+            Vector2 end = MinimapManager.Instance.WorldToOverlayCoords(ToVector3(segment.End), size);
             DrawLine(
                 (x, y) => overlay.OverlayTex.SetPixel(x, y, color),
                 size,
@@ -136,15 +136,20 @@ internal sealed class RoadOverlayRenderer
         }
     }
 
+    private static Vector3 ToVector3(RoadPoint point)
+    {
+        return new Vector3(point.X, point.Y, point.Z);
+    }
+
     private void DrawIntoBuffer(
         Color32[] pixels,
         int size,
-        Vector3 worldStart,
-        Vector3 worldEnd,
+        RoadPoint worldStart,
+        RoadPoint worldEnd,
         Color32 color)
     {
-        Vector2 start = MinimapManager.Instance.WorldToOverlayCoords(worldStart, size);
-        Vector2 end = MinimapManager.Instance.WorldToOverlayCoords(worldEnd, size);
+        Vector2 start = MinimapManager.Instance.WorldToOverlayCoords(ToVector3(worldStart), size);
+        Vector2 end = MinimapManager.Instance.WorldToOverlayCoords(ToVector3(worldEnd), size);
 
         DrawLine(
             (x, y) => pixels[(y * size) + x] = color,
