@@ -34,6 +34,7 @@ internal sealed class CartographerRuntime : IDisposable
 
     private RoadAtlas _atlas = new();
     private RoadObservationPipeline? _pipeline;
+    private RoadAtlasEditor? _editor;
     private RoadSurveyor? _surveyor;
     private long? _worldUid;
     private bool _mapReady;
@@ -218,6 +219,110 @@ internal sealed class CartographerRuntime : IDisposable
         }
     }
 
+    /// <summary>Backs the `cc_roads` console command. Returns the message to
+    /// print in the terminal; every mutation is journaled, saved, and
+    /// scheduled for redraw.</summary>
+    internal string ExecuteRoadCommand(string[] args)
+    {
+        if (_disposed || !_mapReady || _editor is null || _worldUid is null)
+        {
+            return "Concerned Cartographer: no world is loaded yet.";
+        }
+
+        Player player = Player.m_localPlayer;
+        if (player is null)
+        {
+            return "Concerned Cartographer: no local player.";
+        }
+
+        UnityEngine.Vector3 playerPosition = player.transform.position;
+        var position = new RoadPoint(playerPosition.x, playerPosition.y, playerPosition.z);
+        string subcommand = args.Length == 0 ? "status" : args[0].ToLowerInvariant();
+        float radius = RoadAtlasEditor.DefaultSelectRadiusMeters;
+        if (args.Length > 1 &&
+            float.TryParse(args[1], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float parsedRadius))
+        {
+            radius = UnityEngine.Mathf.Clamp(parsedRadius, 1f, 100f);
+        }
+
+        bool changed;
+        string summary;
+        switch (subcommand)
+        {
+            case "status":
+                int hiddenCount = 0;
+                foreach (RoadStroke stroke in _atlas.Strokes)
+                {
+                    if (stroke.Hidden)
+                    {
+                        hiddenCount++;
+                    }
+                }
+
+                return $"Atlas: {_atlas.Strokes.Count} road(s), {_atlas.PointCount} point(s), " +
+                    $"{hiddenCount} hidden, undo depth {_editor.UndoCount}. {_editor.DescribeNearest(position, radius)}";
+            case "delete":
+                changed = MutateWithBackup(() => _editor.DeleteNearest(position, radius, out _lastToolSummary));
+                summary = _lastToolSummary;
+                break;
+            case "kind":
+                changed = MutateWithBackup(() => _editor.ReclassifyNearest(position, radius, out _lastToolSummary));
+                summary = _lastToolSummary;
+                break;
+            case "hide":
+                changed = MutateWithBackup(() => _editor.SetHiddenNearest(position, radius, hidden: true, out _lastToolSummary));
+                summary = _lastToolSummary;
+                break;
+            case "unhide":
+                changed = MutateWithBackup(() => _editor.SetHiddenNearest(position, radius, hidden: false, out _lastToolSummary));
+                summary = _lastToolSummary;
+                break;
+            case "split":
+                changed = MutateWithBackup(() => _editor.SplitNearest(position, radius, out _lastToolSummary));
+                summary = _lastToolSummary;
+                break;
+            case "join":
+                changed = MutateWithBackup(() => _editor.JoinNearest(position, radius, out _lastToolSummary));
+                summary = _lastToolSummary;
+                break;
+            case "rebuild":
+                float rebuildRadius = args.Length > 1 ? radius : 32f;
+                _persistence.BackupBeforeReconciliation(_worldUid.Value);
+                int removed = _atlas.RemoveCoverage(RoadKind.Dirt, position, rebuildRadius)
+                    + _atlas.RemoveCoverage(RoadKind.Paved, position, rebuildRadius);
+                _chunkRecovery.Reset();
+                changed = removed > 0;
+                summary = $"Cleared {removed} road point(s) within {rebuildRadius:0.#} m; explored loaded terrain " +
+                    "will be re-scanned with the current detection settings.";
+                break;
+            case "undo":
+                changed = _editor.Undo(out summary);
+                break;
+            default:
+                return "Usage: cc_roads [status|delete|kind|hide|unhide|split|join|rebuild|undo] [radius].";
+        }
+
+        if (changed)
+        {
+            _redrawPending = true;
+            SaveIfDirty();
+            _log.LogInfo($"Road tool '{subcommand}': {summary}");
+        }
+
+        return summary;
+    }
+
+    private string _lastToolSummary = "";
+
+    private bool MutateWithBackup(Func<bool> operation)
+    {
+        // Snapshot the last saved sidecar once per session before the first
+        // tool mutation, mirroring reconciliation's journal.
+        _persistence.BackupBeforeReconciliation(_worldUid!.Value);
+        return operation();
+    }
+
     public void SaveIfDirty()
     {
         if (_worldUid is null || !_atlas.IsDirty)
@@ -259,6 +364,7 @@ internal sealed class CartographerRuntime : IDisposable
         _worldUid = uid;
         _atlas = _persistence.Load(uid);
         _pipeline = new RoadObservationPipeline(_atlas);
+        _editor = new RoadAtlasEditor(_atlas);
         _surveyor = new RoadSurveyor(_settings, _probe, _pipeline, _log);
         _chunkRecovery.Reset();
         _redrawPending = false;

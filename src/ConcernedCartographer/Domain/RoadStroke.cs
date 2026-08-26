@@ -20,5 +20,10 @@ internal sealed class RoadStroke
     /// Traversal.</summary>
     public RoadObservationSource Source { get; }
 
+    /// <summary>Player-controlled visibility (repair tools). A hidden stroke
+    /// is not rendered but stays in the atlas and keeps suppressing
+    /// re-recording of its ground; delete it to allow re-recording.</summary>
+    public bool Hidden { get; set; }
+
     public List<RoadPoint> Points { get; } = new();
 }

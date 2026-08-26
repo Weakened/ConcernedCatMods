@@ -41,7 +41,7 @@ internal sealed class RoadOverlayRenderer
 
             foreach (RoadStroke stroke in atlas.Strokes)
             {
-                if (stroke.Points.Count == 0)
+                if (stroke.Points.Count == 0 || stroke.Hidden)
                 {
                     continue;
                 }

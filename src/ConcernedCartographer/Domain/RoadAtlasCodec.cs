@@ -7,16 +7,20 @@ namespace TheConcernedCat.ConcernedCartographer.Roads;
 /// <summary>Pure serialization of the sidecar TSV format. No file IO, no
 /// game or BepInEx dependencies, so every rule is unit-testable.
 ///
-/// v1 rows (7 fields, trailing marker "1"): id, kind, index, x, y, z, 1.
-/// v2 rows (8 fields, trailing marker "2"): id, kind, index, x, y, z, source, 2.
-/// Parse accepts both and treats v1 rows as Traversal; Serialize always
-/// writes v2. Callers use <see cref="ParseResult.LegacyRows"/> to back up a
-/// v1 file before the next save rewrites it in v2.</summary>
+/// v1 rows (7 fields, marker "1"): id, kind, index, x, y, z, 1.
+/// v2 rows (8 fields, marker "2"): id, kind, index, x, y, z, source, 2.
+/// v3 rows (9 fields, marker "3"): id, kind, index, x, y, z, source, flags, 3
+/// where flags is an integer bitmask (1 = hidden).
+/// Parse accepts all three (v1 rows load as Traversal); Serialize always
+/// writes v3. Callers use <see cref="ParseResult.LegacyRows"/> to back up a
+/// v1 file before the next save rewrites it in the current format.</summary>
 internal static class RoadAtlasCodec
 {
-    public const string Header = "# ConcernedCartographer roads v2";
-    private const string LegacyRowMarker = "1";
-    private const string RowMarker = "2";
+    public const string Header = "# ConcernedCartographer roads v3";
+    private const string RowMarkerV1 = "1";
+    private const string RowMarkerV2 = "2";
+    private const string RowMarkerV3 = "3";
+    private const int HiddenFlag = 1;
 
     public sealed class ParseResult
     {
@@ -53,7 +57,7 @@ internal static class RoadAtlasCodec
 
             string[] parts = line.Split('\t');
             if (!TryParseRow(parts, out Guid strokeId, out RoadKind kind, out int pointIndex,
-                    out RoadPoint point, out RoadObservationSource source, out bool isLegacyRow))
+                    out RoadPoint point, out RoadObservationSource source, out bool hidden, out bool isLegacyRow))
             {
                 malformedRows++;
                 continue;
@@ -66,12 +70,13 @@ internal static class RoadAtlasCodec
 
             if (!strokesById.TryGetValue(strokeId, out RoadStroke? stroke))
             {
-                stroke = new RoadStroke(strokeId, kind, source);
+                stroke = new RoadStroke(strokeId, kind, source) { Hidden = hidden };
                 strokesById.Add(strokeId, stroke);
                 orderedStrokes.Add(stroke);
             }
 
-            if (stroke.Kind != kind || stroke.Source != source || pointIndex != stroke.Points.Count)
+            if (stroke.Kind != kind || stroke.Source != source || stroke.Hidden != hidden ||
+                pointIndex != stroke.Points.Count)
             {
                 malformedRows++;
                 continue;
@@ -90,6 +95,7 @@ internal static class RoadAtlasCodec
 
         foreach (RoadStroke stroke in strokes)
         {
+            string flags = (stroke.Hidden ? HiddenFlag : 0).ToString(CultureInfo.InvariantCulture);
             for (int index = 0; index < stroke.Points.Count; index++)
             {
                 RoadPoint point = stroke.Points[index];
@@ -102,7 +108,8 @@ internal static class RoadAtlasCodec
                     point.Y.ToString("R", CultureInfo.InvariantCulture),
                     point.Z.ToString("R", CultureInfo.InvariantCulture),
                     stroke.Source.ToString(),
-                    RowMarker);
+                    flags,
+                    RowMarkerV3);
             }
         }
     }
@@ -114,6 +121,7 @@ internal static class RoadAtlasCodec
         out int pointIndex,
         out RoadPoint point,
         out RoadObservationSource source,
+        out bool hidden,
         out bool isLegacyRow)
     {
         strokeId = default;
@@ -121,9 +129,10 @@ internal static class RoadAtlasCodec
         pointIndex = default;
         point = default;
         source = RoadObservationSource.Traversal;
+        hidden = false;
         isLegacyRow = parts.Length == 7;
 
-        if (parts.Length != 7 && parts.Length != 8)
+        if (parts.Length < 7 || parts.Length > 9)
         {
             return false;
         }
@@ -139,9 +148,9 @@ internal static class RoadAtlasCodec
             return false;
         }
 
-        if (isLegacyRow)
+        if (parts.Length == 7)
         {
-            if (parts[6] != LegacyRowMarker)
+            if (parts[6] != RowMarkerV1)
             {
                 return false;
             }
@@ -149,10 +158,27 @@ internal static class RoadAtlasCodec
         else
         {
             if (!Enum.TryParse(parts[6], ignoreCase: true, out source) ||
-                !Enum.IsDefined(typeof(RoadObservationSource), source) ||
-                parts[7] != RowMarker)
+                !Enum.IsDefined(typeof(RoadObservationSource), source))
             {
                 return false;
+            }
+
+            if (parts.Length == 8)
+            {
+                if (parts[7] != RowMarkerV2)
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                if (!int.TryParse(parts[7], NumberStyles.Integer, CultureInfo.InvariantCulture, out int flags) ||
+                    parts[8] != RowMarkerV3)
+                {
+                    return false;
+                }
+
+                hidden = (flags & HiddenFlag) != 0;
             }
         }
 

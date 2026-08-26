@@ -56,6 +56,27 @@ Settings live in `BepInEx/config/com.theconcernedcat.valheim.concernedcartograph
 | Diagnostics / DebugLogging | false | — | Opt-in, rate-limited classification/recording diagnostics |
 | Diagnostics / DrawCalibrationMarkers | false | — | Overlay alignment calibration crosses (development aid) |
 
+## Road repair tools
+
+Open the console (launch with `-console`) and use `cc_roads` — every
+operation targets the recorded road nearest your character, and an optional
+number widens the search radius in meters:
+
+| Command | Effect |
+|---|---|
+| `cc_roads status` | Atlas totals and the nearest road's kind/size/source |
+| `cc_roads delete [radius]` | Delete the nearest road (undoable) |
+| `cc_roads kind` | Toggle the nearest road between Dirt and Paved |
+| `cc_roads hide` / `unhide` | Hide a road from the map without deleting it |
+| `cc_roads split` | Split the nearest road at its closest interior point |
+| `cc_roads join [radius]` | Stitch the two nearest same-kind road ends |
+| `cc_roads rebuild [radius]` | Clear recorded roads nearby and re-scan explored terrain |
+| `cc_roads undo` | Undo the last tool operation (up to 20) |
+
+The tools edit only the mod's own atlas; they can never modify terrain or
+world saves. Before the first destructive change each session the sidecar is
+backed up to `.pre-reconcile.bak`.
+
 ## Data and uninstall safety
 
 The atlas is stored at:
