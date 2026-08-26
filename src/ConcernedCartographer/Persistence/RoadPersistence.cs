@@ -50,7 +50,17 @@ internal sealed class RoadPersistence
                     "the original will be kept as .v1.bak when it is first rewritten in v2.");
             }
 
-            return new RoadAtlas(result.Strokes);
+            var atlas = new RoadAtlas(result.Strokes);
+            RoadAtlas.MaintenanceResult maintenance = atlas.PerformMaintenance();
+            if (maintenance.MergedStrokes > 0 || maintenance.RemovedPoints > 0)
+            {
+                _log.LogInfo(
+                    $"Road atlas maintenance: merged {maintenance.MergedStrokes} stroke fragment(s), " +
+                    $"simplified away {maintenance.RemovedPoints} point(s); {atlas.Strokes.Count} stroke(s), " +
+                    $"{atlas.PointCount} point(s) remain.");
+            }
+
+            return atlas;
         }
         catch (Exception exception)
         {

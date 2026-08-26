@@ -24,7 +24,8 @@ Plugin
 Pure domain types live under `src/ConcernedCartographer/Domain` (`RoadPoint`,
 `RoadKind`, `RoadStroke`, `RoadSegment`, `RoadSamplingRules`, `RoadObservation`,
 `RoadObservationSource`, `RoadObservationPipeline`, `RoadAtlas`,
-`RoadAtlasCodec`). They have no Unity, BepInEx, or Jötunn dependencies and are
+`RoadAtlasCodec`, `RoadGeometry`, `RecoveryShapeHeuristic`). They have no
+Unity, BepInEx, or Jötunn dependencies and are
 compiled directly into `src/ConcernedCartographer.Tests`, so stroke and
 serialization rules are unit-tested without the game installed. The shipped
 plugin remains a single DLL because the tests link the sources instead of
@@ -161,10 +162,13 @@ Sampling rules, in order:
    (default 2 m, 0 disables) of already-recorded ink of the same kind is
    skipped and ends the observing source's active stroke, so re-walking a
    road never grows the atlas and never draws a connector across the covered
-   stretch. The newest three points of that source's active stroke are exempt
-   so forward walking cannot suppress itself. A per-kind spatial hash grid
-   keeps the check O(1) per sample. Radii above ~3 m may also suppress tight
-   hairpin switchbacks; the default stays below that.
+   stretch. Proximity is measured to recorded **segments**, not points, so a
+   simplified straight stretch keeps suppressing along its whole length.
+   Segments touching the newest three points of that source's active stroke
+   are exempt so forward walking cannot suppress itself. A per-kind spatial
+   hash grid of segment entries keeps the check O(1) per sample. Radii above
+   ~3 m may also suppress tight hairpin switchbacks; the default stays below
+   that.
 2. **Stroke start** — no active stroke, or a road-kind change, starts a new
    correctly-typed stroke.
 3. **Minimum spacing** — closer than `MinimumPointSpacingMeters` to the last
@@ -172,6 +176,27 @@ Sampling rules, in order:
 4. **Maximum gap** — farther than `MaximumStrokeGapMeters`: a new stroke starts
    with no connector segment (teleports, portals, and respawns can never draw
    cross-map lines).
+
+### Geometry maintenance
+
+`RoadAtlas.PerformMaintenance` runs at load time (logged when it changes
+anything) and keeps the atlas compact:
+
+1. **Merge** — same-kind, same-source strokes whose endpoints sit within
+   2.5 m are joined into one polyline (reversing fragments as needed; the
+   first stroke keeps its identity). The tolerance is below every
+   stroke-breaking distance — the 8 m gap rule, teleports — so merging can
+   only heal fragmentation from suppression breaks and recovery scan order,
+   never bridge real gaps, parallel roads, or crossings (which meet
+   mid-polyline, not at endpoints). Loops never join themselves.
+2. **Simplify** — Douglas-Peucker at 1.0 m horizontal tolerance, far under
+   the ~11.6 m map texel, so the drawn shape is unchanged. Measured on the
+   10 km synthetic atlas: 6,667 → 186 points (97%) in ~8 ms; on the real
+   ModrTestWorld atlas: 1,061 → 434 points with 57 fragments healed.
+
+Simplification is safe precisely because suppression is segment-based; with
+point-based suppression a thinned straight stroke would let re-walks re-ink
+its interior.
 
 ### RoadAtlasCodec
 
