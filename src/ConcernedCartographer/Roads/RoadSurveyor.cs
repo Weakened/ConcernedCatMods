@@ -4,11 +4,13 @@ using UnityEngine;
 
 namespace TheConcernedCat.ConcernedCartographer.Roads;
 
+/// <summary>The traversal observation source: samples the terrain beneath
+/// the local player and feeds sightings into the shared pipeline.</summary>
 internal sealed class RoadSurveyor
 {
     private readonly CartographerSettings _settings;
     private readonly GroundPaintProbe _probe;
-    private readonly RoadAtlas _atlas;
+    private readonly RoadObservationPipeline _pipeline;
     private readonly ManualLogSource _log;
     private readonly RateLimitedLog _rateLimited;
     private float _elapsed;
@@ -16,12 +18,12 @@ internal sealed class RoadSurveyor
     public RoadSurveyor(
         CartographerSettings settings,
         GroundPaintProbe probe,
-        RoadAtlas atlas,
+        RoadObservationPipeline pipeline,
         ManualLogSource log)
     {
         _settings = settings;
         _probe = probe;
-        _atlas = atlas;
+        _pipeline = pipeline;
         _log = log;
         _rateLimited = new RateLimitedLog(log, 5f);
     }
@@ -39,14 +41,14 @@ internal sealed class RoadSurveyor
         Player player = Player.m_localPlayer;
         if (player is null || player.IsDead())
         {
-            _atlas.EndStroke();
+            _pipeline.EndStroke(RoadObservationSource.Traversal);
             return false;
         }
 
         Vector3 position = player.transform.position;
         if (!_probe.TryClassify(position, out RoadKind kind))
         {
-            _atlas.EndStroke();
+            _pipeline.EndStroke(RoadObservationSource.Traversal);
             return false;
         }
 
@@ -55,15 +57,15 @@ internal sealed class RoadSurveyor
             _settings.MaximumStrokeGapMeters.Value,
             _settings.DuplicateSuppressionMeters.Value);
 
-        bool recorded = _atlas.RecordSample(
+        var observation = new RoadObservation(
+            RoadObservationSource.Traversal,
             kind,
-            new RoadPoint(position.x, position.y, position.z),
-            rules,
-            out segment);
+            new RoadPoint(position.x, position.y, position.z));
+        bool recorded = _pipeline.Observe(observation, rules, out segment);
 
         if (recorded && _settings.DebugLogging.Value)
         {
-            _rateLimited.Info("segment-recorded", $"Recorded {kind} road segment from {segment.Start} to {segment.End}.");
+            _rateLimited.Info("segment-recorded", $"Recorded {observation} segment from {segment.Start} to {segment.End}.");
         }
 
         return recorded;
@@ -71,6 +73,6 @@ internal sealed class RoadSurveyor
 
     public void EndStroke()
     {
-        _atlas.EndStroke();
+        _pipeline.EndStroke(RoadObservationSource.Traversal);
     }
 }

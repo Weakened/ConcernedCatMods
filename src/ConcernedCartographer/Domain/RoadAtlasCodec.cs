@@ -4,23 +4,36 @@ using System.Globalization;
 
 namespace TheConcernedCat.ConcernedCartographer.Roads;
 
-/// <summary>Pure serialization of the v1 sidecar TSV format. No file IO, no
-/// game or BepInEx dependencies, so every rule is unit-testable.</summary>
+/// <summary>Pure serialization of the sidecar TSV format. No file IO, no
+/// game or BepInEx dependencies, so every rule is unit-testable.
+///
+/// v1 rows (7 fields, trailing marker "1"): id, kind, index, x, y, z, 1.
+/// v2 rows (8 fields, trailing marker "2"): id, kind, index, x, y, z, source, 2.
+/// Parse accepts both and treats v1 rows as Traversal; Serialize always
+/// writes v2. Callers use <see cref="ParseResult.LegacyRows"/> to back up a
+/// v1 file before the next save rewrites it in v2.</summary>
 internal static class RoadAtlasCodec
 {
-    public const string Header = "# ConcernedCartographer roads v1";
-    private const string RowMarker = "1";
+    public const string Header = "# ConcernedCartographer roads v2";
+    private const string LegacyRowMarker = "1";
+    private const string RowMarker = "2";
 
     public sealed class ParseResult
     {
-        public ParseResult(List<RoadStroke> strokes, int malformedRows)
+        public ParseResult(List<RoadStroke> strokes, int malformedRows, int legacyRows)
         {
             Strokes = strokes;
             MalformedRows = malformedRows;
+            LegacyRows = legacyRows;
         }
 
         public List<RoadStroke> Strokes { get; }
         public int MalformedRows { get; }
+
+        /// <summary>How many rows used the pre-source v1 format. Non-zero
+        /// means the file predates v2 and deserves a one-time backup before
+        /// it is rewritten, because a v0.1 mod cannot read v2 rows.</summary>
+        public int LegacyRows { get; }
     }
 
     public static ParseResult Parse(IEnumerable<string> lines)
@@ -28,6 +41,7 @@ internal static class RoadAtlasCodec
         var orderedStrokes = new List<RoadStroke>();
         var strokesById = new Dictionary<Guid, RoadStroke>();
         int malformedRows = 0;
+        int legacyRows = 0;
 
         foreach (string rawLine in lines)
         {
@@ -38,37 +52,36 @@ internal static class RoadAtlasCodec
             }
 
             string[] parts = line.Split('\t');
-            if (parts.Length != 7 ||
-                !Guid.TryParse(parts[0], out Guid strokeId) ||
-                !Enum.TryParse(parts[1], ignoreCase: true, out RoadKind kind) ||
-                !int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int pointIndex) ||
-                !TryParseFloat(parts[3], out float x) ||
-                !TryParseFloat(parts[4], out float y) ||
-                !TryParseFloat(parts[5], out float z) ||
-                parts[6] != RowMarker)
+            if (!TryParseRow(parts, out Guid strokeId, out RoadKind kind, out int pointIndex,
+                    out RoadPoint point, out RoadObservationSource source, out bool isLegacyRow))
             {
                 malformedRows++;
                 continue;
+            }
+
+            if (isLegacyRow)
+            {
+                legacyRows++;
             }
 
             if (!strokesById.TryGetValue(strokeId, out RoadStroke? stroke))
             {
-                stroke = new RoadStroke(strokeId, kind);
+                stroke = new RoadStroke(strokeId, kind, source);
                 strokesById.Add(strokeId, stroke);
                 orderedStrokes.Add(stroke);
             }
 
-            if (stroke.Kind != kind || pointIndex != stroke.Points.Count)
+            if (stroke.Kind != kind || stroke.Source != source || pointIndex != stroke.Points.Count)
             {
                 malformedRows++;
                 continue;
             }
 
-            stroke.Points.Add(new RoadPoint(x, y, z));
+            stroke.Points.Add(point);
         }
 
         orderedStrokes.RemoveAll(stroke => stroke.Points.Count == 0);
-        return new ParseResult(orderedStrokes, malformedRows);
+        return new ParseResult(orderedStrokes, malformedRows, legacyRows);
     }
 
     public static IEnumerable<string> Serialize(IEnumerable<RoadStroke> strokes)
@@ -88,9 +101,63 @@ internal static class RoadAtlasCodec
                     point.X.ToString("R", CultureInfo.InvariantCulture),
                     point.Y.ToString("R", CultureInfo.InvariantCulture),
                     point.Z.ToString("R", CultureInfo.InvariantCulture),
+                    stroke.Source.ToString(),
                     RowMarker);
             }
         }
+    }
+
+    private static bool TryParseRow(
+        string[] parts,
+        out Guid strokeId,
+        out RoadKind kind,
+        out int pointIndex,
+        out RoadPoint point,
+        out RoadObservationSource source,
+        out bool isLegacyRow)
+    {
+        strokeId = default;
+        kind = default;
+        pointIndex = default;
+        point = default;
+        source = RoadObservationSource.Traversal;
+        isLegacyRow = parts.Length == 7;
+
+        if (parts.Length != 7 && parts.Length != 8)
+        {
+            return false;
+        }
+
+        if (!Guid.TryParse(parts[0], out strokeId) ||
+            !Enum.TryParse(parts[1], ignoreCase: true, out kind) ||
+            !Enum.IsDefined(typeof(RoadKind), kind) ||
+            !int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out pointIndex) ||
+            !TryParseFloat(parts[3], out float x) ||
+            !TryParseFloat(parts[4], out float y) ||
+            !TryParseFloat(parts[5], out float z))
+        {
+            return false;
+        }
+
+        if (isLegacyRow)
+        {
+            if (parts[6] != LegacyRowMarker)
+            {
+                return false;
+            }
+        }
+        else
+        {
+            if (!Enum.TryParse(parts[6], ignoreCase: true, out source) ||
+                !Enum.IsDefined(typeof(RoadObservationSource), source) ||
+                parts[7] != RowMarker)
+            {
+                return false;
+            }
+        }
+
+        point = new RoadPoint(x, y, z);
+        return true;
     }
 
     private static bool TryParseFloat(string value, out float result)

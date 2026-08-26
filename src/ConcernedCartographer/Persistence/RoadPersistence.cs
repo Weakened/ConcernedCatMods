@@ -12,6 +12,11 @@ internal sealed class RoadPersistence
     private readonly ManualLogSource _log;
     private readonly Runtime.RateLimitedLog _rateLimited;
 
+    // Sidecars still in the pre-source v1 format get one backup copy before
+    // the first v2 save rewrites them, because a downgraded v0.1 mod cannot
+    // read v2 rows and would discard the file as fully malformed.
+    private readonly System.Collections.Generic.HashSet<string> _legacyPathsAwaitingBackup = new();
+
     public RoadPersistence(ManualLogSource log)
     {
         _log = log;
@@ -37,6 +42,14 @@ internal sealed class RoadPersistence
                 _log.LogWarning($"Skipped {result.MalformedRows} malformed road-atlas row(s) in {path}.");
             }
 
+            if (result.LegacyRows > 0)
+            {
+                _legacyPathsAwaitingBackup.Add(path);
+                _log.LogInfo(
+                    $"Road atlas {path} uses the v1 format ({result.LegacyRows} row(s)); " +
+                    "the original will be kept as .v1.bak when it is first rewritten in v2.");
+            }
+
             return new RoadAtlas(result.Strokes);
         }
         catch (Exception exception)
@@ -54,6 +67,18 @@ internal sealed class RoadPersistence
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            if (_legacyPathsAwaitingBackup.Contains(path) && File.Exists(path))
+            {
+                string backupPath = path + ".v1.bak";
+                if (!File.Exists(backupPath))
+                {
+                    File.Copy(path, backupPath);
+                    _log.LogInfo($"Backed up v1 road atlas to {backupPath} before the first v2 save.");
+                }
+
+                _legacyPathsAwaitingBackup.Remove(path);
+            }
+
             using (var writer = new StreamWriter(temporaryPath, append: false))
             {
                 foreach (string line in RoadAtlasCodec.Serialize(atlas.Strokes))
