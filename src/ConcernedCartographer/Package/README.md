@@ -48,7 +48,7 @@ Settings live in `BepInEx/config/com.theconcernedcat.valheim.concernedcartograph
 | Persistence / AutosaveIntervalSeconds | 15 | 5–300 | Seconds between dirty-atlas autosaves |
 | Detection / PaintThreshold | 0.40 | 0.10–0.95 | Minimum averaged paint value that counts as road |
 | Detection / PaintSampleRadius | 1 | 0–3 | Paint pixels averaged around the player |
-| Map / LineWidthPixels | 2 | 1–6 | Road line width in map texels |
+| Map / LineWidthPixels | 1 | 1–6 | Road line width in map texels (~11.6 m each; widths above 1 make nearby roads merge) |
 | Diagnostics / DebugLogging | false | — | Opt-in, rate-limited classification/recording diagnostics |
 | Diagnostics / DrawCalibrationMarkers | false | — | Overlay alignment calibration crosses (development aid) |
 
