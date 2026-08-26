@@ -12,6 +12,7 @@ Plugin
   └─ CartographerRuntime
        ├─ GroundPaintProbe        (game adapter)
        ├─ RoadSurveyor            (game adapter: traversal source)
+       ├─ ConstructionCapture     (game adapter: construction source)
        ├─ RoadObservationPipeline (pure domain)
        ├─ RoadAtlas               (pure domain)
        ├─ RoadAtlasCodec          (pure domain)
@@ -51,6 +52,32 @@ frame; samples the local player's position, classifies the paint beneath it,
 and feeds `RoadObservation`s into the pipeline. It ends its own stroke when
 the player is off road paint or dead, and returns only a newly created
 segment for incremental rendering.
+
+### ConstructionCapture
+
+The **construction observation source**: a read-only Harmony postfix on
+`TerrainComp.ApplyOperation(TerrainOp)`, gated by
+`Sources/CaptureConstructionActions` (default on).
+
+Verified against Valheim 0.221.12: a successful hoe/cultivator/stonecutter
+placement spawns a `TerrainOp` on the placing client (failed or cancelled
+placements never spawn one), whose `Awake` calls `ApplyOperation` once per
+affected heightmap. The op itself is applied by the **chunk-owner** client —
+`ZNetView.InvokeRPC(string, …)` routes the `ApplyOperation` RPC to
+`m_zdo.GetOwner()` only — and every other client receives results passively
+through ZDO data revisions. Hooking `ApplyOperation` therefore captures
+exactly the local player's own successful actions on every ownership
+topology; other players' construction is chunk-recovery's job (CC-006).
+
+`PaintType.Dirt` maps to Dirt, `PaintType.Paved` to Paved;
+`Cultivate`/`Reset` are ignored here and become removal signals in
+reconciliation (CC-015). Raise-ground ops paint Dirt and are captured,
+consistent with the v0.1 "paint counts as road" decision. Seam duplicates
+(one op, two heightmaps) collapse via pipeline replay idempotency. The
+postfix never mutates game state; a capture exception disables the source
+for the session without touching traversal surveying. Known bounded failure:
+if an absent chunk owner never applies the routed op, a dab can be inked
+without a terrain change; reconciliation and recovery correct it.
 
 ### RoadObservationPipeline
 
