@@ -99,6 +99,34 @@ internal sealed class RoadPersistence
         }
     }
 
+    private readonly System.Collections.Generic.HashSet<long> _reconcileBackupsTaken = new();
+
+    /// <summary>Journals destructive reconciliation: before the first
+    /// coverage removal in a session touches a world's atlas, the last saved
+    /// sidecar is copied to .pre-reconcile.bak (overwritten next session).
+    /// Manual recovery = delete the sidecar, rename the backup.</summary>
+    public void BackupBeforeReconciliation(long worldUid)
+    {
+        if (!_reconcileBackupsTaken.Add(worldUid))
+        {
+            return;
+        }
+
+        try
+        {
+            string path = GetPath(worldUid);
+            if (File.Exists(path))
+            {
+                File.Copy(path, path + ".pre-reconcile.bak", overwrite: true);
+                _log.LogInfo($"Backed up road atlas to {path}.pre-reconcile.bak before this session's first reconciliation.");
+            }
+        }
+        catch (Exception exception)
+        {
+            _rateLimited.Error("reconcile-backup", $"Could not back up the road atlas before reconciliation: {exception}");
+        }
+    }
+
     private static string GetPath(long worldUid)
     {
         return Path.Combine(
