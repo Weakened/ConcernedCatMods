@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 (in development)
+## 0.2.0
 
 - Roads you build now appear on the map as you build them: your own successful hoe path and stonecutter paving actions are captured directly (configurable, on by default). Cultivating and resetting terrain are never recorded as roads.
 - Old roads recover themselves: nearby loaded terrain is scanned on a small per-frame budget, and narrow road paint in areas you have already explored is added to the atlas without re-walking it. Unexplored regions stay hidden, and broad cleared areas (bases, plazas) are deliberately not turned into roads.
@@ -10,6 +10,14 @@
 - Isolated road points render as dots instead of being invisible.
 - The atlas compacts itself on load: road fragments merge into continuous polylines and straight stretches thin out (a 10 km atlas shrinks ~97%), with no visible change on the map and no loss of re-walk suppression.
 - Road repair tools: the `cc_roads` console command deletes, reclassifies, hides/unhides, splits, and joins the road nearest you, rebuilds a region with current detection settings, and undoes up to 20 operations. Tools edit only the mod's atlas, never terrain or saves.
+
+### Known limitations
+
+- Construction capture and ghost-road reconciliation see only your own actions; other players' roads and removals arrive through chunk recovery of loaded, explored terrain.
+- Chunk recovery targets narrow paths (up to ~2 brush widths); broad paved plazas and leveled bases are deliberately not auto-recovered.
+- A road line can sit up to ~6 m from its true position — the native resolution of the 2048-pixel map.
+- The atlas is stored per mod-manager profile, and there is no multiplayer synchronization; everything is client-side and local.
+- Repair-tool selection is nearest-to-player via console; there is no map-click editor yet.
 
 ## 0.1.0
 
