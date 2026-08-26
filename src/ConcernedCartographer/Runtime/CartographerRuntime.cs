@@ -15,7 +15,14 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly GroundPaintProbe _probe;
     private readonly RoadOverlayRenderer _renderer;
     private readonly ConstructionCapture _constructionCapture;
+    private readonly ChunkRecoveryScanner _chunkRecovery;
     private readonly RateLimitedLog _rateLimited;
+
+    // Chunk recovery emits cells in row-major scan order, so only adjacent
+    // cells (~1 m apart, diagonal ~1.4 m) may chain into one stroke; a wider
+    // gap would draw connectors between separate parallel roads that happen
+    // to share a scan row.
+    private const float RecoveryMaxGapMeters = 2.5f;
 
     private RoadAtlas _atlas = new();
     private RoadObservationPipeline? _pipeline;
@@ -35,6 +42,8 @@ internal sealed class CartographerRuntime : IDisposable
         _rateLimited = new RateLimitedLog(log, 5f);
         _constructionCapture = new ConstructionCapture(log);
         _constructionCapture.PaintObserved += HandleConstructionPaint;
+        _chunkRecovery = new ChunkRecoveryScanner(settings, log);
+        _chunkRecovery.PaintObserved += HandleRecoveredPaint;
     }
 
     public void OnMapAvailable()
@@ -75,6 +84,7 @@ internal sealed class CartographerRuntime : IDisposable
             // waiting for the next map event, so no surveyed data is lost.
             _mapReady = false;
             _pipeline?.EndAllStrokes();
+            _chunkRecovery.Reset();
             SaveIfDirty();
             return;
         }
@@ -83,6 +93,8 @@ internal sealed class CartographerRuntime : IDisposable
         {
             _renderer.DrawSegment(segment);
         }
+
+        _chunkRecovery.Tick();
 
         _autosaveElapsed += unscaledDeltaTime;
         if (_autosaveElapsed >= _settings.AutosaveIntervalSeconds.Value)
@@ -94,11 +106,7 @@ internal sealed class CartographerRuntime : IDisposable
 
     private void HandleConstructionPaint(RoadKind kind, Vector3 position)
     {
-        if (_disposed ||
-            !_settings.Enabled.Value ||
-            !_settings.CaptureConstructionActions.Value ||
-            !_mapReady ||
-            _pipeline is null)
+        if (!_settings.CaptureConstructionActions.Value)
         {
             return;
         }
@@ -107,8 +115,32 @@ internal sealed class CartographerRuntime : IDisposable
             _settings.MinimumPointSpacingMeters.Value,
             _settings.MaximumStrokeGapMeters.Value,
             _settings.DuplicateSuppressionMeters.Value);
+        ObserveAndDraw(RoadObservationSource.Construction, kind, position, rules, "construction-observed");
+    }
+
+    private void HandleRecoveredPaint(RoadKind kind, Vector3 position)
+    {
+        var rules = new RoadSamplingRules(
+            _settings.MinimumPointSpacingMeters.Value,
+            RecoveryMaxGapMeters,
+            _settings.DuplicateSuppressionMeters.Value);
+        ObserveAndDraw(RoadObservationSource.ChunkRecovery, kind, position, rules, "recovery-observed");
+    }
+
+    private void ObserveAndDraw(
+        RoadObservationSource source,
+        RoadKind kind,
+        Vector3 position,
+        RoadSamplingRules rules,
+        string debugKey)
+    {
+        if (_disposed || !_settings.Enabled.Value || !_mapReady || _pipeline is null)
+        {
+            return;
+        }
+
         var observation = new RoadObservation(
-            RoadObservationSource.Construction,
+            source,
             kind,
             new RoadPoint(position.x, position.y, position.z));
 
@@ -126,7 +158,7 @@ internal sealed class CartographerRuntime : IDisposable
 
         if (_settings.DebugLogging.Value)
         {
-            _rateLimited.Info("construction-observed", $"Observed {observation}.");
+            _rateLimited.Info(debugKey, $"Observed {observation}.");
         }
     }
 
@@ -154,6 +186,8 @@ internal sealed class CartographerRuntime : IDisposable
         _pipeline?.EndAllStrokes();
         _constructionCapture.PaintObserved -= HandleConstructionPaint;
         _constructionCapture.Dispose();
+        _chunkRecovery.PaintObserved -= HandleRecoveredPaint;
+        _chunkRecovery.Reset();
         _disposed = true;
     }
 
@@ -170,6 +204,7 @@ internal sealed class CartographerRuntime : IDisposable
         _atlas = _persistence.Load(uid);
         _pipeline = new RoadObservationPipeline(_atlas);
         _surveyor = new RoadSurveyor(_settings, _probe, _pipeline, _log);
+        _chunkRecovery.Reset();
         _autosaveElapsed = 0f;
     }
 }

@@ -42,6 +42,8 @@ Settings live in `BepInEx/config/com.theconcernedcat.valheim.concernedcartograph
 |---|---|---|---|
 | General / Enabled | true | — | Master switch for surveying and overlays |
 | Sources / CaptureConstructionActions | true | — | Record your own successful hoe/stonecutter paint actions instantly, without walking them |
+| Sources / RecoverLoadedChunks | true | — | Recover narrow road paint from loaded terrain near you, only in map areas you have explored |
+| Sources / RecoveryBudgetCellsPerFrame | 256 | 32–8192 | Paint cells examined per frame by chunk recovery |
 | Survey / SampleIntervalSeconds | 0.35 | 0.10–5.0 | Seconds between terrain samples |
 | Survey / MinimumPointSpacingMeters | 1.5 | 0.5–20 | Minimum distance before a new road point is stored |
 | Survey / MaximumStrokeGapMeters | 8.0 | 2–100 | Larger gaps start a new stroke instead of a connector line |

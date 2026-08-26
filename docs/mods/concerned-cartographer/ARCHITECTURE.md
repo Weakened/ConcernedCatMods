@@ -13,6 +13,7 @@ Plugin
        ├─ GroundPaintProbe        (game adapter)
        ├─ RoadSurveyor            (game adapter: traversal source)
        ├─ ConstructionCapture     (game adapter: construction source)
+       ├─ ChunkRecoveryScanner    (game adapter: chunk-recovery source)
        ├─ RoadObservationPipeline (pure domain)
        ├─ RoadAtlas               (pure domain)
        ├─ RoadAtlasCodec          (pure domain)
@@ -78,6 +79,35 @@ postfix never mutates game state; a capture exception disables the source
 for the session without touching traversal surveying. Known bounded failure:
 if an absent chunk owner never applies the routed op, a dab can be inked
 without a terrain change; reconciliation and recovery correct it.
+
+### ChunkRecoveryScanner
+
+The **chunk-recovery observation source**, gated by
+`Sources/RecoverLoadedChunks` (default on). Incrementally scans the paint
+masks of loaded, non-LOD heightmaps within 128 m of the player — never the
+world file, never a global scan — and emits explored, path-like road-paint
+cells as ChunkRecovery observations. Bounds:
+
+- **Budgeted and cancellable** — at most `RecoveryBudgetCellsPerFrame`
+  (default 256) cells per frame; one heightmap is scanned at a time, once
+  per session, and the scan state resets on logout/world switch.
+- **Fog-gated** — each candidate cell is checked against
+  `Minimap.IsExplored` (own or shared exploration), so unexplored map
+  regions never reveal roads.
+- **Shape-filtered** — `RecoveryShapeHeuristic` (pure domain, unit-tested)
+  rejects cells whose 5×5 neighborhood is more than half road paint, so
+  plazas, leveled bases, and broad pads do not become road tangles. Wide
+  (>~2 cell) roads are deliberately not auto-recovered; traversal still
+  records them when walked.
+- **Order-safe chaining** — recovery observations use a tightened 2.5 m
+  stroke gap so only adjacent scan cells chain; parallel roads sharing a
+  scan row can never be connected. Density is simplified by the pipeline's
+  minimum-spacing rule before persistence; CC-016 adds real geometry
+  merging.
+
+Cell-to-world uses the verified inverse of `Heightmap.WorldToVertexMask`;
+out-of-mask lookups return black (unpainted), biasing seam windows toward
+recovery. A scanner exception disables only this source for the session.
 
 ### RoadObservationPipeline
 
