@@ -38,6 +38,7 @@ public sealed class Plugin : BaseUnityPlugin
             Logger.LogInfo(
                 "Effective config (out-of-range values are clamped to documented ranges): " +
                 $"Enabled={settings.Enabled.Value}, " +
+                $"CaptureConstructionActions={settings.CaptureConstructionActions.Value}, " +
                 $"SampleIntervalSeconds={settings.SampleIntervalSeconds.Value}, " +
                 $"MinimumPointSpacingMeters={settings.MinimumPointSpacingMeters.Value}, " +
                 $"MaximumStrokeGapMeters={settings.MaximumStrokeGapMeters.Value}, " +

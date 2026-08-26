@@ -3,6 +3,7 @@ using BepInEx.Logging;
 using TheConcernedCat.ConcernedCartographer.Map;
 using TheConcernedCat.ConcernedCartographer.Persistence;
 using TheConcernedCat.ConcernedCartographer.Roads;
+using UnityEngine;
 
 namespace TheConcernedCat.ConcernedCartographer.Runtime;
 
@@ -13,6 +14,8 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly RoadPersistence _persistence;
     private readonly GroundPaintProbe _probe;
     private readonly RoadOverlayRenderer _renderer;
+    private readonly ConstructionCapture _constructionCapture;
+    private readonly RateLimitedLog _rateLimited;
 
     private RoadAtlas _atlas = new();
     private RoadObservationPipeline? _pipeline;
@@ -29,6 +32,9 @@ internal sealed class CartographerRuntime : IDisposable
         _persistence = new RoadPersistence(log);
         _probe = new GroundPaintProbe(settings, log);
         _renderer = new RoadOverlayRenderer(settings, log);
+        _rateLimited = new RateLimitedLog(log, 5f);
+        _constructionCapture = new ConstructionCapture(log);
+        _constructionCapture.PaintObserved += HandleConstructionPaint;
     }
 
     public void OnMapAvailable()
@@ -86,6 +92,44 @@ internal sealed class CartographerRuntime : IDisposable
         }
     }
 
+    private void HandleConstructionPaint(RoadKind kind, Vector3 position)
+    {
+        if (_disposed ||
+            !_settings.Enabled.Value ||
+            !_settings.CaptureConstructionActions.Value ||
+            !_mapReady ||
+            _pipeline is null)
+        {
+            return;
+        }
+
+        var rules = new RoadSamplingRules(
+            _settings.MinimumPointSpacingMeters.Value,
+            _settings.MaximumStrokeGapMeters.Value,
+            _settings.DuplicateSuppressionMeters.Value);
+        var observation = new RoadObservation(
+            RoadObservationSource.Construction,
+            kind,
+            new RoadPoint(position.x, position.y, position.z));
+
+        int pointsBefore = _atlas.PointCount;
+        if (_pipeline.Observe(observation, rules, out RoadSegment segment))
+        {
+            _renderer.DrawSegment(segment);
+        }
+        else if (_atlas.PointCount > pointsBefore)
+        {
+            // A stroke start stores a point without producing a segment; a
+            // lone dab must still appear on the map immediately.
+            _renderer.DrawPoint(kind, observation.Position);
+        }
+
+        if (_settings.DebugLogging.Value)
+        {
+            _rateLimited.Info("construction-observed", $"Observed {observation}.");
+        }
+    }
+
     public void SaveIfDirty()
     {
         if (_worldUid is null || !_atlas.IsDirty)
@@ -108,6 +152,8 @@ internal sealed class CartographerRuntime : IDisposable
 
         SaveIfDirty();
         _pipeline?.EndAllStrokes();
+        _constructionCapture.PaintObserved -= HandleConstructionPaint;
+        _constructionCapture.Dispose();
         _disposed = true;
     }
 

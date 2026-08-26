@@ -6,6 +6,7 @@ internal sealed class CartographerSettings
 {
     private CartographerSettings(
         ConfigEntry<bool> enabled,
+        ConfigEntry<bool> captureConstructionActions,
         ConfigEntry<float> sampleIntervalSeconds,
         ConfigEntry<float> minimumPointSpacingMeters,
         ConfigEntry<float> maximumStrokeGapMeters,
@@ -18,6 +19,7 @@ internal sealed class CartographerSettings
         ConfigEntry<bool> drawCalibrationMarkers)
     {
         Enabled = enabled;
+        CaptureConstructionActions = captureConstructionActions;
         SampleIntervalSeconds = sampleIntervalSeconds;
         MinimumPointSpacingMeters = minimumPointSpacingMeters;
         MaximumStrokeGapMeters = maximumStrokeGapMeters;
@@ -31,6 +33,7 @@ internal sealed class CartographerSettings
     }
 
     public ConfigEntry<bool> Enabled { get; }
+    public ConfigEntry<bool> CaptureConstructionActions { get; }
     public ConfigEntry<float> SampleIntervalSeconds { get; }
     public ConfigEntry<float> MinimumPointSpacingMeters { get; }
     public ConfigEntry<float> MaximumStrokeGapMeters { get; }
@@ -46,6 +49,8 @@ internal sealed class CartographerSettings
     {
         return new CartographerSettings(
             config.Bind("General", "Enabled", true, "Enable road surveying and map overlays."),
+            config.Bind("Sources", "CaptureConstructionActions", true,
+                "Record roads from your own successful hoe/cultivator/stonecutter paint actions immediately, without walking them."),
             config.Bind("Survey", "SampleIntervalSeconds", 0.35f, new ConfigDescription(
                 "Seconds between terrain samples.",
                 new AcceptableValueRange<float>(0.10f, 5.0f))),
