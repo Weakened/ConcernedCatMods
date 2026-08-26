@@ -24,6 +24,14 @@ internal sealed class CartographerRuntime : IDisposable
     // to share a scan row.
     private const float RecoveryMaxGapMeters = 2.5f;
 
+    // Removing ink requires a full overlay rebuild (pixels cannot be
+    // un-drawn incrementally); coalesce bursts of hoe swings into one
+    // redraw at most this often.
+    private const float RedrawDebounceSeconds = 0.5f;
+
+    private bool _redrawPending;
+    private float _redrawElapsed;
+
     private RoadAtlas _atlas = new();
     private RoadObservationPipeline? _pipeline;
     private RoadSurveyor? _surveyor;
@@ -41,7 +49,7 @@ internal sealed class CartographerRuntime : IDisposable
         _renderer = new RoadOverlayRenderer(settings, log);
         _rateLimited = new RateLimitedLog(log, 5f);
         _constructionCapture = new ConstructionCapture(log);
-        _constructionCapture.PaintObserved += HandleConstructionPaint;
+        _constructionCapture.OperationCaptured += HandleTerrainOperation;
         _chunkRecovery = new ChunkRecoveryScanner(settings, log);
         _chunkRecovery.PaintObserved += HandleRecoveredPaint;
     }
@@ -96,6 +104,14 @@ internal sealed class CartographerRuntime : IDisposable
 
         _chunkRecovery.Tick();
 
+        _redrawElapsed += unscaledDeltaTime;
+        if (_redrawPending && _redrawElapsed >= RedrawDebounceSeconds)
+        {
+            _redrawPending = false;
+            _redrawElapsed = 0f;
+            _renderer.RedrawAll(_atlas);
+        }
+
         _autosaveElapsed += unscaledDeltaTime;
         if (_autosaveElapsed >= _settings.AutosaveIntervalSeconds.Value)
         {
@@ -104,18 +120,58 @@ internal sealed class CartographerRuntime : IDisposable
         }
     }
 
-    private void HandleConstructionPaint(RoadKind kind, Vector3 position)
+    private void HandleTerrainOperation(CapturedTerrainOperation operation)
     {
-        if (!_settings.CaptureConstructionActions.Value)
+        if (_disposed || !_settings.Enabled.Value || !_mapReady || _pipeline is null || _worldUid is null)
         {
             return;
         }
 
-        var rules = new RoadSamplingRules(
-            _settings.MinimumPointSpacingMeters.Value,
-            _settings.MaximumStrokeGapMeters.Value,
-            _settings.DuplicateSuppressionMeters.Value);
-        ObserveAndDraw(RoadObservationSource.Construction, kind, position, rules, "construction-observed");
+        var center = new RoadPoint(operation.Position.x, operation.Position.y, operation.Position.z);
+
+        if (_settings.ReconcileTerrainChanges.Value)
+        {
+            int removed = 0;
+            if (operation.RoadKind is RoadKind paintedKind)
+            {
+                // A kind change: new paint of one kind erases covered ink of
+                // the other. Same-kind ink stays put (suppression keeps it
+                // from duplicating).
+                RoadKind other = paintedKind == RoadKind.Dirt ? RoadKind.Paved : RoadKind.Dirt;
+                removed = RemoveCoverageWithBackup(other, center, operation.RadiusMeters);
+            }
+            else
+            {
+                // Cultivate/Reset erase road-ness entirely.
+                removed = RemoveCoverageWithBackup(RoadKind.Dirt, center, operation.RadiusMeters)
+                    + RemoveCoverageWithBackup(RoadKind.Paved, center, operation.RadiusMeters);
+            }
+
+            if (removed > 0)
+            {
+                _redrawPending = true;
+                _log.LogInfo(
+                    $"Reconciled a terrain change at ({operation.Position.x:0.#}, {operation.Position.z:0.#}) " +
+                    $"r={operation.RadiusMeters:0.#}m: removed {removed} road point(s).");
+            }
+        }
+
+        if (operation.RoadKind is RoadKind kind && _settings.CaptureConstructionActions.Value)
+        {
+            var rules = new RoadSamplingRules(
+                _settings.MinimumPointSpacingMeters.Value,
+                _settings.MaximumStrokeGapMeters.Value,
+                _settings.DuplicateSuppressionMeters.Value);
+            ObserveAndDraw(RoadObservationSource.Construction, kind, operation.Position, rules, "construction-observed");
+        }
+    }
+
+    private int RemoveCoverageWithBackup(RoadKind kind, RoadPoint center, float radiusMeters)
+    {
+        // Snapshot the last saved sidecar before this session's first
+        // destructive change, so a reconciliation bug is recoverable.
+        _persistence.BackupBeforeReconciliation(_worldUid!.Value);
+        return _atlas.RemoveCoverage(kind, center, radiusMeters);
     }
 
     private void HandleRecoveredPaint(RoadKind kind, Vector3 position)
@@ -184,7 +240,7 @@ internal sealed class CartographerRuntime : IDisposable
 
         SaveIfDirty();
         _pipeline?.EndAllStrokes();
-        _constructionCapture.PaintObserved -= HandleConstructionPaint;
+        _constructionCapture.OperationCaptured -= HandleTerrainOperation;
         _constructionCapture.Dispose();
         _chunkRecovery.PaintObserved -= HandleRecoveredPaint;
         _chunkRecovery.Reset();
@@ -205,6 +261,7 @@ internal sealed class CartographerRuntime : IDisposable
         _pipeline = new RoadObservationPipeline(_atlas);
         _surveyor = new RoadSurveyor(_settings, _probe, _pipeline, _log);
         _chunkRecovery.Reset();
+        _redrawPending = false;
         _autosaveElapsed = 0f;
     }
 }

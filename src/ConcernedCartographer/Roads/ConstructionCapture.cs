@@ -41,9 +41,10 @@ internal sealed class ConstructionCapture : IDisposable
         }
     }
 
-    /// <summary>Raised on the placing client for every successful Dirt or
-    /// Paved terrain-paint operation, with the op's world position.</summary>
-    public event Action<RoadKind, Vector3>? PaintObserved;
+    /// <summary>Raised on the placing client for every successful
+    /// terrain-paint operation: Dirt/Paved ops carry their road kind,
+    /// Cultivate/Reset ops carry none and act as road-removal signals.</summary>
+    public event Action<CapturedTerrainOperation>? OperationCaptured;
 
     private static void AfterApplyOperation(TerrainOp modifier)
     {
@@ -61,7 +62,7 @@ internal sealed class ConstructionCapture : IDisposable
                 return;
             }
 
-            RoadKind kind;
+            RoadKind? kind;
             switch (settings.m_paintType)
             {
                 case TerrainModifier.PaintType.Dirt:
@@ -70,13 +71,20 @@ internal sealed class ConstructionCapture : IDisposable
                 case TerrainModifier.PaintType.Paved:
                     kind = RoadKind.Paved;
                     break;
+                case TerrainModifier.PaintType.Cultivate:
+                case TerrainModifier.PaintType.Reset:
+                    // These erase road paint; reconciliation removes the
+                    // covered ink.
+                    kind = null;
+                    break;
                 default:
-                    // Cultivate/Reset are road-removal signals handled by
-                    // reconciliation, not road observations.
                     return;
             }
 
-            active.PaintObserved?.Invoke(kind, modifier!.transform.position);
+            active.OperationCaptured?.Invoke(new CapturedTerrainOperation(
+                kind,
+                modifier!.transform.position,
+                settings.m_paintRadius));
         }
         catch (Exception exception)
         {

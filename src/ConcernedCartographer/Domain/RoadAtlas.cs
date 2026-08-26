@@ -134,6 +134,103 @@ internal sealed class RoadAtlas
         return false;
     }
 
+    /// <summary>Removes every point of the given kind within
+    /// <paramref name="radiusMeters"/> of <paramref name="center"/>, for
+    /// reconciliation when terrain is repainted, cultivated, or reset. A
+    /// stroke whose interior is removed splits into separate strokes (the
+    /// first surviving run keeps the original identity); points outside the
+    /// radius — including other-kind ink and unrelated nearby roads — are
+    /// never touched. Returns the number of removed points.</summary>
+    public int RemoveCoverage(RoadKind kind, RoadPoint center, float radiusMeters)
+    {
+        if (radiusMeters <= 0f)
+        {
+            return 0;
+        }
+
+        int removedPoints = 0;
+        bool structureChanged = false;
+        var rebuilt = new List<RoadStroke>(Strokes.Count);
+        var replacedOriginals = new List<RoadStroke>();
+
+        foreach (RoadStroke stroke in Strokes)
+        {
+            if (stroke.Kind != kind)
+            {
+                rebuilt.Add(stroke);
+                continue;
+            }
+
+            var survivingRuns = new List<List<RoadPoint>>();
+            List<RoadPoint>? currentRun = null;
+            int removedFromStroke = 0;
+
+            foreach (RoadPoint point in stroke.Points)
+            {
+                if (point.HorizontalDistanceTo(center) <= radiusMeters)
+                {
+                    removedFromStroke++;
+                    currentRun = null;
+                    continue;
+                }
+
+                if (currentRun is null)
+                {
+                    currentRun = new List<RoadPoint>();
+                    survivingRuns.Add(currentRun);
+                }
+
+                currentRun.Add(point);
+            }
+
+            if (removedFromStroke == 0)
+            {
+                rebuilt.Add(stroke);
+                continue;
+            }
+
+            removedPoints += removedFromStroke;
+            structureChanged = true;
+            replacedOriginals.Add(stroke);
+
+            bool first = true;
+            foreach (List<RoadPoint> run in survivingRuns)
+            {
+                var replacement = new RoadStroke(first ? stroke.Id : Guid.NewGuid(), stroke.Kind, stroke.Source);
+                replacement.Points.AddRange(run);
+                rebuilt.Add(replacement);
+                first = false;
+            }
+        }
+
+        if (!structureChanged)
+        {
+            return 0;
+        }
+
+        // Any source actively extending a replaced stroke must start fresh;
+        // its stroke object no longer belongs to the atlas.
+        var staleSources = new List<RoadObservationSource>();
+        foreach (KeyValuePair<RoadObservationSource, RoadStroke> active in _activeStrokes)
+        {
+            if (replacedOriginals.Contains(active.Value))
+            {
+                staleSources.Add(active.Key);
+            }
+        }
+
+        foreach (RoadObservationSource source in staleSources)
+        {
+            _activeStrokes.Remove(source);
+        }
+
+        Strokes.Clear();
+        Strokes.AddRange(rebuilt);
+        RebuildIndex();
+        IsDirty = true;
+        return removedPoints;
+    }
+
     public void EndStroke(RoadObservationSource source)
     {
         _activeStrokes.Remove(source);
@@ -202,6 +299,22 @@ internal sealed class RoadAtlas
         }
 
         return false;
+    }
+
+    private void RebuildIndex()
+    {
+        // Grid entries carry (stroke, pointIndex) pairs, so any structural
+        // edit invalidates them wholesale. Reconciliation ops are as rare as
+        // hoe swings; a full rebuild is simpler than incremental repair and
+        // costs well under a millisecond at 10k points.
+        _grid.Clear();
+        foreach (RoadStroke stroke in Strokes)
+        {
+            for (int index = 0; index < stroke.Points.Count; index++)
+            {
+                IndexPoint(stroke, index);
+            }
+        }
     }
 
     private void IndexPoint(RoadStroke stroke, int pointIndex)

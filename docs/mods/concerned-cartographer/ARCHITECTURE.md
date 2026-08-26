@@ -80,6 +80,30 @@ for the session without touching traversal surveying. Known bounded failure:
 if an absent chunk owner never applies the routed op, a dab can be inked
 without a terrain change; reconciliation and recovery correct it.
 
+### Reconciliation
+
+Gated by `Sources/ReconcileTerrainChanges` (default on) and fed by the same
+captured operations as ConstructionCapture, so it inherits the same
+confirmed-success and local-player-only semantics:
+
+- A **Dirt or Paved** op removes covered ink of the *other* kind within the
+  op's own brush radius (kind changes never leave duplicate parallel
+  geometry); same-kind ink stays, and suppression keeps the new dab from
+  duplicating it.
+- A **Cultivate or Reset** op removes covered ink of both kinds and records
+  nothing.
+- `RoadAtlas.RemoveCoverage` is the pure domain operation: points within the
+  radius are removed, strokes split into surviving runs (the first run keeps
+  the stroke's identity), the spatial index is rebuilt, and any source
+  actively extending a replaced stroke starts fresh. Unrelated nearby
+  geometry and other-kind ink are never touched.
+- **Journal**: the first destructive change per session copies the last
+  saved sidecar to `.pre-reconcile.bak` (manual recovery: delete the
+  sidecar, rename the backup), and every reconciliation logs its position,
+  radius, and removed-point count.
+- Ink cannot be un-drawn incrementally, so removals schedule a full overlay
+  rebuild, debounced to at most one per 0.5 s.
+
 ### ChunkRecoveryScanner
 
 The **chunk-recovery observation source**, gated by
