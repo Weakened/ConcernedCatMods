@@ -67,8 +67,8 @@ internal sealed class CartographerSettings
             config.Bind("Detection", "PaintSampleRadius", 1, new ConfigDescription(
                 "Terrain paint pixels sampled around the player (0 is a single pixel).",
                 new AcceptableValueRange<int>(0, 3))),
-            config.Bind("Map", "LineWidthPixels", 2, new ConfigDescription(
-                "Road line width on the map overlay.",
+            config.Bind("Map", "LineWidthPixels", 1, new ConfigDescription(
+                "Road line width on the map overlay, in map texels. One texel covers ~11.6 m of world, so widths above 1 make nearby roads merge into blobs.",
                 new AcceptableValueRange<int>(1, 6))),
             config.Bind("Diagnostics", "DebugLogging", false, "Write diagnostic road classification messages."),
             config.Bind("Diagnostics", "DrawCalibrationMarkers", false,
