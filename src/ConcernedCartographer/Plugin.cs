@@ -20,6 +20,7 @@ public sealed class Plugin : BaseUnityPlugin
         _runtime = new CartographerRuntime(settings, Logger);
 
         MinimapManager.OnVanillaMapAvailable += HandleMapAvailable;
+        CommandManager.Instance.AddConsoleCommand(new RoadToolsCommand(_runtime));
         Logger.LogInfo($"{PluginName} {PluginVersion} loaded");
         LogEnvironment(settings);
     }

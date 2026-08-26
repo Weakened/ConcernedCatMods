@@ -177,6 +177,27 @@ Sampling rules, in order:
    with no connector segment (teleports, portals, and respawns can never draw
    cross-map lines).
 
+### Repair tools
+
+`RoadAtlasEditor` (pure domain, unit-tested) plus the `cc_roads` console
+command (registered through Jötunn's `CommandManager`). Selection is
+proximity-based — every operation targets the recorded road nearest the
+player, with an optional search-radius argument:
+
+- `status`, `delete`, `kind` (Dirt↔Paved toggle keeping stroke identity),
+  `hide`/`unhide` (visual only — hidden strokes keep suppressing; delete to
+  allow re-recording), `split` (at the nearest interior point, junction
+  shared), `join` (nearest two same-kind, same-source endpoints), `rebuild`
+  (clears both kinds in a radius and resets chunk recovery so explored
+  terrain re-scans with current settings), `undo`.
+- **Undo** is a bounded (depth 20) stack of affected-stroke snapshots;
+  every mutation funnels through `RoadAtlas.EditStrokes`, which restores the
+  atlas invariants (index rebuild, dirty flag), and the once-per-session
+  `.pre-reconcile.bak` snapshot also covers tool mistakes across sessions.
+- Summaries always identify the target's kind, point count, and recording
+  source before/after destructive edits. The tools touch only the mod's
+  atlas — never terrain or world saves.
+
 ### Geometry maintenance
 
 `RoadAtlas.PerformMaintenance` runs at load time (logged when it changes
@@ -228,25 +249,27 @@ Jötunn renders overlays on the full map and minimap, respects fog by default, a
 
 ## Persistence format
 
-Current format, v2 (written since 0.2.0):
+Current format, v3 (written since 0.2.0):
 
 ```text
-# ConcernedCartographer roads v2
-<stroke-guid>\t<Dirt|Paved>\t<point-index>\t<x>\t<y>\t<z>\t<source>\t2
+# ConcernedCartographer roads v3
+<stroke-guid>\t<Dirt|Paved>\t<point-index>\t<x>\t<y>\t<z>\t<source>\t<flags>\t3
 ```
 
 `<source>` is the stroke's `RoadObservationSource` name (`Traversal`,
-`Construction`, `ChunkRecovery`). The trailing marker names the row format:
-`2` for v2 rows, `1` for legacy v1 rows, which have no source column:
+`Construction`, `ChunkRecovery`); `<flags>` is an integer bitmask (1 =
+hidden by the repair tools). The trailing marker names the row format: `3`
+for v3, `2` for the source-only v2 rows (a development-only intermediate),
+`1` for legacy v1 rows, which have no source column:
 
 ```text
 <stroke-guid>\t<Dirt|Paved>\t<point-index>\t<x>\t<y>\t<z>\t1
 ```
 
-The parser accepts both row formats in one file; v1 rows load with source
-`Traversal`. The writer always emits v2. Because a downgraded 0.1.0 mod would
-treat every v2 row as malformed and discard the file, `RoadPersistence` copies
-a v1 file once to `<file>.v1.bak` before the first v2 save; deleting the v2
+The parser accepts all row formats in one file; v1 rows load with source
+`Traversal`. The writer always emits v3. Because a downgraded 0.1.0 mod would
+treat newer rows as malformed and discard the file, `RoadPersistence` copies
+a v1 file once to `<file>.v1.bak` before its first rewrite; deleting the new
 file and renaming the backup is the manual rollback path.
 
 Point indices must start at 0 and increase by 1 within a stroke, and a

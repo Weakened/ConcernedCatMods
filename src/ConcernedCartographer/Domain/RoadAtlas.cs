@@ -262,6 +262,58 @@ internal sealed class RoadAtlas
         return new MaintenanceResult(mergedStrokes, removedPoints);
     }
 
+    /// <summary>Structural edit hatch for the repair tools: ends all active
+    /// strokes, hands the stroke list to the edit, then restores the atlas
+    /// invariants (no empty strokes, fresh segment index, dirty flag). All
+    /// tool operations funnel through here so they cannot desynchronize the
+    /// suppression index.</summary>
+    public void EditStrokes(Action<List<RoadStroke>> edit)
+    {
+        EndAllStrokes();
+        edit(Strokes);
+        Strokes.RemoveAll(stroke => stroke.Points.Count == 0);
+        RebuildIndex();
+        IsDirty = true;
+    }
+
+    /// <summary>Finds the stroke whose polyline passes nearest to the
+    /// position within <paramref name="maxRadiusMeters"/>. Linear over the
+    /// atlas; tool invocations are rare and post-maintenance atlases are
+    /// small.</summary>
+    public bool TryFindNearestStroke(
+        RoadPoint position,
+        float maxRadiusMeters,
+        bool includeHidden,
+        out RoadStroke? stroke,
+        out float distanceMeters)
+    {
+        stroke = null;
+        distanceMeters = float.MaxValue;
+
+        foreach (RoadStroke candidate in Strokes)
+        {
+            if (candidate.Hidden && !includeHidden)
+            {
+                continue;
+            }
+
+            List<RoadPoint> points = candidate.Points;
+            for (int index = 0; index < Math.Max(1, points.Count - 1); index++)
+            {
+                RoadPoint start = points[index];
+                RoadPoint end = index + 1 < points.Count ? points[index + 1] : start;
+                float distance = RoadGeometry.HorizontalDistanceToSegment(position, start, end);
+                if (distance < distanceMeters)
+                {
+                    distanceMeters = distance;
+                    stroke = candidate;
+                }
+            }
+        }
+
+        return stroke is not null && distanceMeters <= maxRadiusMeters;
+    }
+
     public void EndStroke(RoadObservationSource source)
     {
         _activeStrokes.Remove(source);

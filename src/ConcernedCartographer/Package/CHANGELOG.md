@@ -9,6 +9,7 @@
 - Sidecar format v2 adds the origin column. v1 files still load, and the original is backed up once to `.v1.bak` before the first v2 save; deleting the v2 file and renaming the backup rolls back to 0.1.0.
 - Isolated road points render as dots instead of being invisible.
 - The atlas compacts itself on load: road fragments merge into continuous polylines and straight stretches thin out (a 10 km atlas shrinks ~97%), with no visible change on the map and no loss of re-walk suppression.
+- Road repair tools: the `cc_roads` console command deletes, reclassifies, hides/unhides, splits, and joins the road nearest you, rebuilds a region with current detection settings, and undoes up to 20 operations. Tools edit only the mod's atlas, never terrain or saves.
 
 ## 0.1.0
 

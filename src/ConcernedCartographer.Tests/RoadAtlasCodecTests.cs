@@ -37,15 +37,35 @@ public class RoadAtlasCodecTests
     }
 
     [Fact]
-    public void SerializedOutput_StartsWithVersionHeaderAndUsesEightFields()
+    public void SerializedOutput_StartsWithVersionHeaderAndUsesNineFields()
     {
         var strokes = new List<RoadStroke> { MakeStroke(RoadKind.Dirt, (1f, 2f)) };
         var lines = RoadAtlasCodec.Serialize(strokes).ToList();
 
         Assert.Equal(RoadAtlasCodec.Header, lines[0]);
-        Assert.Equal(8, lines[1].Split('\t').Length);
-        Assert.Contains("\tTraversal\t", lines[1]);
-        Assert.EndsWith("\t2", lines[1]);
+        Assert.Equal(9, lines[1].Split('\t').Length);
+        Assert.Contains("\tTraversal\t0\t", lines[1]);
+        Assert.EndsWith("\t3", lines[1]);
+    }
+
+    [Fact]
+    public void HiddenFlag_RoundtripsAndMismatchIsMalformed()
+    {
+        var hiddenStroke = MakeStroke(RoadKind.Dirt, (1f, 2f), (3f, 4f));
+        hiddenStroke.Hidden = true;
+        RoadAtlasCodec.ParseResult roundtrip = RoadAtlasCodec.Parse(RoadAtlasCodec.Serialize(new[] { hiddenStroke }));
+        Assert.True(roundtrip.Strokes[0].Hidden);
+        Assert.Equal(0, roundtrip.MalformedRows);
+
+        Guid id = Guid.NewGuid();
+        var lines = new List<string>
+        {
+            $"{id:D}\tDirt\t0\t1.0\t2.0\t3.0\tTraversal\t1\t3",
+            $"{id:D}\tDirt\t1\t4.0\t2.0\t3.0\tTraversal\t0\t3",
+        };
+        RoadAtlasCodec.ParseResult mismatch = RoadAtlasCodec.Parse(lines);
+        Assert.Equal(1, mismatch.MalformedRows);
+        Assert.True(mismatch.Strokes[0].Hidden);
     }
 
     [Fact]
