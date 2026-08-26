@@ -30,15 +30,7 @@ public sealed class Plugin : BaseUnityPlugin
         {
             string bepInExVersion = typeof(BaseUnityPlugin).Assembly.GetName().Version?.ToString() ?? "unknown";
             string jotunnVersion = typeof(Jotunn.Main).Assembly.GetName().Version?.ToString() ?? "unknown";
-            string gameVersion = "unknown";
-            try
-            {
-                gameVersion = global::Version.GetVersionString();
-            }
-            catch
-            {
-                // The version API is cosmetic; never fail startup over it.
-            }
+            string gameVersion = ResolveGameVersion();
 
             Logger.LogInfo(
                 $"Environment: Valheim {gameVersion}, Unity {UnityEngine.Application.unityVersion}, " +
@@ -61,6 +53,54 @@ public sealed class Plugin : BaseUnityPlugin
         {
             Logger.LogWarning($"Could not record environment versions: {exception.Message}");
         }
+    }
+
+    private static string ResolveGameVersion()
+    {
+        // Calling Version.GetVersionString() directly threw MissingMethodException
+        // at runtime (the publicized reference assembly and the live game assembly
+        // disagree on the signature), so the game version is resolved reflectively.
+        try
+        {
+            System.Type versionType = typeof(global::Version);
+            const System.Reflection.BindingFlags publicStatic =
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static;
+
+            object? currentVersion =
+                versionType.GetField("CurrentVersion", publicStatic)?.GetValue(null) ??
+                versionType.GetProperty("CurrentVersion", publicStatic)?.GetValue(null);
+            if (currentVersion is not null)
+            {
+                return currentVersion.ToString();
+            }
+
+            foreach (System.Reflection.MethodInfo method in versionType.GetMethods(publicStatic))
+            {
+                if (method.Name != "GetVersionString" || method.ReturnType != typeof(string))
+                {
+                    continue;
+                }
+
+                System.Reflection.ParameterInfo[] parameters = method.GetParameters();
+                object?[] arguments = new object?[parameters.Length];
+                for (int index = 0; index < parameters.Length; index++)
+                {
+                    arguments[index] = parameters[index].HasDefaultValue
+                        ? parameters[index].DefaultValue
+                        : parameters[index].ParameterType.IsValueType
+                            ? System.Activator.CreateInstance(parameters[index].ParameterType)
+                            : null;
+                }
+
+                return method.Invoke(null, arguments) as string ?? "unknown";
+            }
+        }
+        catch
+        {
+            // The version banner is cosmetic; never fail startup over it.
+        }
+
+        return "unknown";
     }
 
     private void HandleMapAvailable()
