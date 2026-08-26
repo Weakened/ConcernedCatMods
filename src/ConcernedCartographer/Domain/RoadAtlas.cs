@@ -9,13 +9,17 @@ internal sealed class RoadAtlas
     // the configured radius, so the cell size only affects bucket granularity.
     private const float GridCellMeters = 4f;
 
-    // The newest points of the active stroke never suppress the next sample;
-    // otherwise ordinary forward walking would suppress itself whenever the
-    // suppression radius exceeds the minimum point spacing.
+    // The newest points of a source's active stroke never suppress that
+    // source's next sample; otherwise ordinary forward walking would suppress
+    // itself whenever the suppression radius exceeds the minimum point spacing.
     private const int ActiveTailExemptPoints = 3;
 
     private readonly Dictionary<long, List<GridEntry>> _grid = new();
-    private RoadStroke? _activeStroke;
+
+    // Each observation source builds its own stroke, so interleaved
+    // observations (walking while paving elsewhere) stay coherent polylines
+    // instead of breaking each other on every sample.
+    private readonly Dictionary<RoadObservationSource, RoadStroke> _activeStrokes = new();
 
     public RoadAtlas()
     {
@@ -53,29 +57,31 @@ internal sealed class RoadAtlas
     }
 
     public bool RecordSample(
+        RoadObservationSource source,
         RoadKind kind,
         RoadPoint position,
         RoadSamplingRules rules,
         out RoadSegment segment)
     {
         segment = default;
+        _activeStrokes.TryGetValue(source, out RoadStroke? activeStroke);
 
-        if (IsSuppressedDuplicate(kind, position, rules.DuplicateSuppressionMeters))
+        if (IsSuppressedDuplicate(activeStroke, kind, position, rules.DuplicateSuppressionMeters))
         {
-            // The player is on already-recorded ground. Never re-ink it, and end
-            // the active stroke so a later uncovered stretch starts fresh with
-            // no connector across the covered section.
-            _activeStroke = null;
+            // The observation is on already-recorded ground. Never re-ink it,
+            // and end this source's active stroke so a later uncovered stretch
+            // starts fresh with no connector across the covered section.
+            _activeStrokes.Remove(source);
             return false;
         }
 
-        if (_activeStroke is null || _activeStroke.Kind != kind)
+        if (activeStroke is null || activeStroke.Kind != kind)
         {
-            StartStroke(kind, position);
+            StartStroke(source, kind, position);
             return false;
         }
 
-        RoadPoint previous = _activeStroke.Points[_activeStroke.Points.Count - 1];
+        RoadPoint previous = activeStroke.Points[activeStroke.Points.Count - 1];
         float distance = previous.HorizontalDistanceTo(position);
 
         if (distance < rules.MinimumSpacingMeters)
@@ -85,49 +91,26 @@ internal sealed class RoadAtlas
 
         if (distance > rules.MaximumGapMeters)
         {
-            StartStroke(kind, position);
+            StartStroke(source, kind, position);
             return false;
         }
 
-        _activeStroke.Points.Add(position);
-        IndexPoint(_activeStroke, _activeStroke.Points.Count - 1);
+        activeStroke.Points.Add(position);
+        IndexPoint(activeStroke, activeStroke.Points.Count - 1);
         IsDirty = true;
         segment = new RoadSegment(kind, previous, position);
         return true;
     }
 
-    public void EndStroke()
+    /// <summary>True when a point of this kind already exists within
+    /// <paramref name="radiusMeters"/>, with no active-tail exemption. Used
+    /// for exact-replay idempotency, which must hold even when configurable
+    /// duplicate suppression is disabled.</summary>
+    public bool ContainsPointNear(RoadKind kind, RoadPoint position, float radiusMeters)
     {
-        _activeStroke = null;
-    }
-
-    public void MarkClean()
-    {
-        IsDirty = false;
-    }
-
-    private void StartStroke(RoadKind kind, RoadPoint position)
-    {
-        _activeStroke = new RoadStroke(Guid.NewGuid(), kind);
-        _activeStroke.Points.Add(position);
-        Strokes.Add(_activeStroke);
-        IndexPoint(_activeStroke, 0);
-        IsDirty = true;
-    }
-
-    private bool IsSuppressedDuplicate(RoadKind kind, RoadPoint position, float radiusMeters)
-    {
-        if (radiusMeters <= 0f)
-        {
-            return false;
-        }
-
         int cellRange = (int)Math.Ceiling(radiusMeters / GridCellMeters);
         int centerX = ToCell(position.X);
         int centerZ = ToCell(position.Z);
-        int exemptFromIndex = _activeStroke is null
-            ? int.MaxValue
-            : _activeStroke.Points.Count - ActiveTailExemptPoints;
 
         for (int cellX = centerX - cellRange; cellX <= centerX + cellRange; cellX++)
         {
@@ -140,7 +123,72 @@ internal sealed class RoadAtlas
 
                 foreach (GridEntry entry in entries)
                 {
-                    if (ReferenceEquals(entry.Stroke, _activeStroke) && entry.PointIndex >= exemptFromIndex)
+                    if (entry.Stroke.Points[entry.PointIndex].HorizontalDistanceTo(position) <= radiusMeters)
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public void EndStroke(RoadObservationSource source)
+    {
+        _activeStrokes.Remove(source);
+    }
+
+    public void EndAllStrokes()
+    {
+        _activeStrokes.Clear();
+    }
+
+    public void MarkClean()
+    {
+        IsDirty = false;
+    }
+
+    private void StartStroke(RoadObservationSource source, RoadKind kind, RoadPoint position)
+    {
+        var stroke = new RoadStroke(Guid.NewGuid(), kind, source);
+        stroke.Points.Add(position);
+        _activeStrokes[source] = stroke;
+        Strokes.Add(stroke);
+        IndexPoint(stroke, 0);
+        IsDirty = true;
+    }
+
+    private bool IsSuppressedDuplicate(
+        RoadStroke? activeStroke,
+        RoadKind kind,
+        RoadPoint position,
+        float radiusMeters)
+    {
+        if (radiusMeters <= 0f)
+        {
+            return false;
+        }
+
+        int cellRange = (int)Math.Ceiling(radiusMeters / GridCellMeters);
+        int centerX = ToCell(position.X);
+        int centerZ = ToCell(position.Z);
+        int exemptFromIndex = activeStroke is null
+            ? int.MaxValue
+            : activeStroke.Points.Count - ActiveTailExemptPoints;
+
+        for (int cellX = centerX - cellRange; cellX <= centerX + cellRange; cellX++)
+        {
+            for (int cellZ = centerZ - cellRange; cellZ <= centerZ + cellRange; cellZ++)
+            {
+                if (!_grid.TryGetValue(CellKey(kind, cellX, cellZ), out List<GridEntry>? entries))
+                {
+                    continue;
+                }
+
+                foreach (GridEntry entry in entries)
+                {
+                    if (ReferenceEquals(entry.Stroke, activeStroke) && entry.PointIndex >= exemptFromIndex)
                     {
                         continue;
                     }

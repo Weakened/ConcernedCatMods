@@ -15,6 +15,7 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly RoadOverlayRenderer _renderer;
 
     private RoadAtlas _atlas = new();
+    private RoadObservationPipeline? _pipeline;
     private RoadSurveyor? _surveyor;
     private long? _worldUid;
     private bool _mapReady;
@@ -67,7 +68,7 @@ internal sealed class CartographerRuntime : IDisposable
             // Logout or world switch: stop sampling and flush now instead of
             // waiting for the next map event, so no surveyed data is lost.
             _mapReady = false;
-            _surveyor.EndStroke();
+            _pipeline?.EndAllStrokes();
             SaveIfDirty();
             return;
         }
@@ -106,7 +107,7 @@ internal sealed class CartographerRuntime : IDisposable
         }
 
         SaveIfDirty();
-        _surveyor?.EndStroke();
+        _pipeline?.EndAllStrokes();
         _disposed = true;
     }
 
@@ -121,7 +122,8 @@ internal sealed class CartographerRuntime : IDisposable
 
         _worldUid = uid;
         _atlas = _persistence.Load(uid);
-        _surveyor = new RoadSurveyor(_settings, _probe, _atlas, _log);
+        _pipeline = new RoadObservationPipeline(_atlas);
+        _surveyor = new RoadSurveyor(_settings, _probe, _pipeline, _log);
         _autosaveElapsed = 0f;
     }
 }

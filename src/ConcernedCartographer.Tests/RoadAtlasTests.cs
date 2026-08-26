@@ -24,7 +24,7 @@ public class RoadAtlasTests
         RoadSamplingRules effective = rules ?? DefaultRules;
         for (float x = fromX; stepX > 0 ? x <= toX : x >= toX; x += stepX)
         {
-            if (atlas.RecordSample(kind, P(x, z), effective, out _))
+            if (atlas.RecordSample(RoadObservationSource.Traversal, kind, P(x, z), effective, out _))
             {
                 recorded++;
             }
@@ -72,8 +72,8 @@ public class RoadAtlasTests
     public void SamplesBelowMinimumSpacing_AreNotStored()
     {
         var atlas = new RoadAtlas();
-        atlas.RecordSample(RoadKind.Dirt, P(0f, 0f), DefaultRules, out _);
-        bool recorded = atlas.RecordSample(RoadKind.Dirt, P(0.5f, 0f), DefaultRules, out _);
+        atlas.RecordSample(RoadObservationSource.Traversal, RoadKind.Dirt, P(0f, 0f), DefaultRules, out _);
+        bool recorded = atlas.RecordSample(RoadObservationSource.Traversal, RoadKind.Dirt, P(0.5f, 0f), DefaultRules, out _);
 
         Assert.False(recorded);
         Assert.Equal(1, atlas.PointCount);
@@ -85,7 +85,7 @@ public class RoadAtlasTests
         var atlas = new RoadAtlas();
         for (int i = 0; i < 500; i++)
         {
-            atlas.RecordSample(RoadKind.Dirt, P(5f, 5f), DefaultRules, out _);
+            atlas.RecordSample(RoadObservationSource.Traversal, RoadKind.Dirt, P(5f, 5f), DefaultRules, out _);
         }
 
         Assert.Equal(1, atlas.PointCount);
@@ -97,7 +97,7 @@ public class RoadAtlasTests
         var atlas = new RoadAtlas();
         WalkLine(atlas, RoadKind.Dirt, 0f, 10f, 2f);
 
-        bool recorded = atlas.RecordSample(RoadKind.Dirt, P(500f, 500f), DefaultRules, out RoadSegment segment);
+        bool recorded = atlas.RecordSample(RoadObservationSource.Traversal, RoadKind.Dirt, P(500f, 500f), DefaultRules, out RoadSegment segment);
 
         Assert.False(recorded);
         Assert.Equal(default, segment.Start.X);
@@ -109,10 +109,10 @@ public class RoadAtlasTests
     public void TeleportSizedJump_NeverEmitsASegment()
     {
         var atlas = new RoadAtlas();
-        atlas.RecordSample(RoadKind.Dirt, P(0f, 0f), DefaultRules, out _);
-        atlas.RecordSample(RoadKind.Dirt, P(2f, 0f), DefaultRules, out _);
+        atlas.RecordSample(RoadObservationSource.Traversal, RoadKind.Dirt, P(0f, 0f), DefaultRules, out _);
+        atlas.RecordSample(RoadObservationSource.Traversal, RoadKind.Dirt, P(2f, 0f), DefaultRules, out _);
 
-        bool recorded = atlas.RecordSample(RoadKind.Dirt, P(4000f, -3000f), DefaultRules, out _);
+        bool recorded = atlas.RecordSample(RoadObservationSource.Traversal, RoadKind.Dirt, P(4000f, -3000f), DefaultRules, out _);
 
         Assert.False(recorded);
         // The jump destination begins its own stroke; no segment ever spans it.
@@ -124,7 +124,7 @@ public class RoadAtlasTests
     {
         var atlas = new RoadAtlas();
         WalkLine(atlas, RoadKind.Dirt, 0f, 10f, 2f);
-        atlas.EndStroke();
+        atlas.EndStroke(RoadObservationSource.Traversal);
         WalkLine(atlas, RoadKind.Dirt, 30f, 40f, 2f);
 
         Assert.Equal(2, atlas.Strokes.Count);
@@ -136,7 +136,7 @@ public class RoadAtlasTests
         var atlas = new RoadAtlas();
         WalkLine(atlas, RoadKind.Dirt, 0f, 30f, 2f);
         int before = atlas.PointCount;
-        atlas.EndStroke();
+        atlas.EndStroke(RoadObservationSource.Traversal);
 
         WalkLine(atlas, RoadKind.Dirt, 30f, 0f, -2f);
 
@@ -162,13 +162,13 @@ public class RoadAtlasTests
     {
         var atlas = new RoadAtlas();
         WalkLine(atlas, RoadKind.Dirt, 0f, 100f, 2f);
-        atlas.EndStroke();
+        atlas.EndStroke(RoadObservationSource.Traversal);
         int afterFirst = atlas.PointCount;
 
         for (int pass = 0; pass < 10; pass++)
         {
             WalkLine(atlas, RoadKind.Dirt, 0f, 100f, 2f);
-            atlas.EndStroke();
+            atlas.EndStroke(RoadObservationSource.Traversal);
         }
 
         Assert.Equal(afterFirst, atlas.PointCount);
@@ -179,7 +179,7 @@ public class RoadAtlasTests
     {
         var atlas = new RoadAtlas();
         WalkLine(atlas, RoadKind.Dirt, 0f, 30f, 2f);
-        atlas.EndStroke();
+        atlas.EndStroke(RoadObservationSource.Traversal);
 
         var reloaded = new RoadAtlas(atlas.Strokes);
         Assert.False(reloaded.IsDirty);
@@ -196,7 +196,7 @@ public class RoadAtlasTests
     {
         var atlas = new RoadAtlas();
         WalkLine(atlas, RoadKind.Dirt, 0f, 20f, 2f);
-        atlas.EndStroke();
+        atlas.EndStroke(RoadObservationSource.Traversal);
         int before = atlas.PointCount;
 
         WalkLine(atlas, RoadKind.Paved, 0f, 20f, 2f);
@@ -211,7 +211,7 @@ public class RoadAtlasTests
         var rules = new RoadSamplingRules(1.5f, 8.0f, 0f);
         var atlas = new RoadAtlas();
         WalkLine(atlas, RoadKind.Dirt, 0f, 20f, 2f, rules: rules);
-        atlas.EndStroke();
+        atlas.EndStroke(RoadObservationSource.Traversal);
         int afterFirst = atlas.PointCount;
 
         WalkLine(atlas, RoadKind.Dirt, 0f, 20f, 2f, rules: rules);
@@ -224,7 +224,7 @@ public class RoadAtlasTests
     {
         var atlas = new RoadAtlas();
         WalkLine(atlas, RoadKind.Dirt, 0f, 20f, 2f, z: 0f);
-        atlas.EndStroke();
+        atlas.EndStroke(RoadObservationSource.Traversal);
 
         WalkLine(atlas, RoadKind.Dirt, 0f, 20f, 2f, z: 5f);
 

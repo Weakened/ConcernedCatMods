@@ -11,7 +11,8 @@ Plugin
   ├─ CartographerSettings
   └─ CartographerRuntime
        ├─ GroundPaintProbe        (game adapter)
-       ├─ RoadSurveyor            (game adapter)
+       ├─ RoadSurveyor            (game adapter: traversal source)
+       ├─ RoadObservationPipeline (pure domain)
        ├─ RoadAtlas               (pure domain)
        ├─ RoadAtlasCodec          (pure domain)
        ├─ RoadPersistence         (IO adapter)
@@ -19,7 +20,8 @@ Plugin
 ```
 
 Pure domain types live under `src/ConcernedCartographer/Domain` (`RoadPoint`,
-`RoadKind`, `RoadStroke`, `RoadSegment`, `RoadSamplingRules`, `RoadAtlas`,
+`RoadKind`, `RoadStroke`, `RoadSegment`, `RoadSamplingRules`, `RoadObservation`,
+`RoadObservationSource`, `RoadObservationPipeline`, `RoadAtlas`,
 `RoadAtlasCodec`). They have no Unity, BepInEx, or Jötunn dependencies and are
 compiled directly into `src/ConcernedCartographer.Tests`, so stroke and
 serialization rules are unit-tested without the game installed. The shipped
@@ -44,28 +46,44 @@ A Valheim update should require changes here rather than throughout the mod.
 
 ### RoadSurveyor
 
-Runs at a configured interval, not every frame. It samples the local player's position and:
+The **traversal observation source**. Runs at a configured interval, not every
+frame; samples the local player's position, classifies the paint beneath it,
+and feeds `RoadObservation`s into the pipeline. It ends its own stroke when
+the player is off road paint or dead, and returns only a newly created
+segment for incremental rendering.
 
-- ends the active stroke when the player is not on road paint;
-- starts a stroke when road kind changes;
-- rejects points closer than the minimum spacing;
-- starts a new stroke when a gap is too large;
-- returns only a newly created segment for incremental rendering.
+### RoadObservationPipeline
+
+The single entry point through which every detection source feeds the atlas.
+`RoadObservationSource` names the sources: `Traversal` (v0.1 behavior),
+`Construction` (confirmed terrain-paint actions, CC-005), and `ChunkRecovery`
+(paint recovered from loaded terrain, CC-006). The pipeline guarantees:
+
+- **Source neutrality** — all sources share the same sampling rules and atlas
+  semantics; a `RoadObservation` carries only source, kind, and position.
+- **Exact-replay idempotency** — an observation replayed with identical
+  coordinates never grows the atlas, even when configurable duplicate
+  suppression is disabled (a 0.05 m epsilon far below the minimum spacing).
+- **Source isolation** — each source builds its own stroke, so interleaved
+  observations stay coherent polylines, and ending or failing one source
+  never breaks another's stroke. `EndAllStrokes` runs on logout/world switch.
 
 ### RoadAtlas
 
-Pure in-memory domain state. It owns strokes, dirty state, and append rules. It does not touch Unity map textures or the filesystem.
+Pure in-memory domain state. It owns strokes, dirty state, per-source active
+strokes, and append rules. It does not touch Unity map textures or the
+filesystem. Every stroke records its originating `RoadObservationSource`.
 
 Sampling rules, in order:
 
 1. **Duplicate suppression** — a sample within `DuplicateSuppressionMeters`
    (default 2 m, 0 disables) of already-recorded ink of the same kind is
-   skipped and ends the active stroke, so re-walking a road never grows the
-   atlas and never draws a connector across the covered stretch. The newest
-   three points of the active stroke are exempt so forward walking cannot
-   suppress itself. A per-kind spatial hash grid keeps the check O(1) per
-   sample. Radii above ~3 m may also suppress tight hairpin switchbacks; the
-   default stays below that.
+   skipped and ends the observing source's active stroke, so re-walking a
+   road never grows the atlas and never draws a connector across the covered
+   stretch. The newest three points of that source's active stroke are exempt
+   so forward walking cannot suppress itself. A per-kind spatial hash grid
+   keeps the check O(1) per sample. Radii above ~3 m may also suppress tight
+   hairpin switchbacks; the default stays below that.
 2. **Stroke start** — no active stroke, or a road-kind change, starts a new
    correctly-typed stroke.
 3. **Minimum spacing** — closer than `MinimumPointSpacingMeters` to the last
@@ -76,9 +94,9 @@ Sampling rules, in order:
 
 ### RoadAtlasCodec
 
-Pure serialization of the sidecar TSV format (see “Persistence format v1”).
+Pure serialization of the sidecar TSV format (see “Persistence format”).
 `RoadPersistence` delegates all parsing/formatting here and keeps only file IO,
-logging, and the atomic-write dance.
+logging, the atomic-write dance, and the one-time v1 backup.
 
 ### RoadPersistence
 
@@ -100,18 +118,33 @@ Creates two named Jötunn overlays:
 The names are deliberately short: Jötunn's overlay toggle panel truncates long
 names, and both layers must remain distinguishable after truncation.
 
-Jötunn renders overlays on the full map and minimap, respects fog by default, and exposes GUI toggles. The renderer never retains a `MapOverlay` reference across world loads. Full texture redraw occurs only when a map becomes available; new survey segments are drawn incrementally.
+Jötunn renders overlays on the full map and minimap, respects fog by default, and exposes GUI toggles. The renderer never retains a `MapOverlay` reference across world loads. Full texture redraw occurs only when a map becomes available; new survey segments are drawn incrementally. Single-point strokes (lone construction dabs, isolated chunk-recovery hits) render as dots of the configured line width.
 
-## Persistence format v1
+## Persistence format
+
+Current format, v2 (written since 0.2.0):
 
 ```text
-# ConcernedCartographer roads v1
+# ConcernedCartographer roads v2
+<stroke-guid>\t<Dirt|Paved>\t<point-index>\t<x>\t<y>\t<z>\t<source>\t2
+```
+
+`<source>` is the stroke's `RoadObservationSource` name (`Traversal`,
+`Construction`, `ChunkRecovery`). The trailing marker names the row format:
+`2` for v2 rows, `1` for legacy v1 rows, which have no source column:
+
+```text
 <stroke-guid>\t<Dirt|Paved>\t<point-index>\t<x>\t<y>\t<z>\t1
 ```
 
-Every row ends with a literal `1` row marker reserved for future per-row
-flags; the loader treats a row without it as malformed. Point indices must
-start at 0 and increase by 1 within a stroke. Coordinates use
+The parser accepts both row formats in one file; v1 rows load with source
+`Traversal`. The writer always emits v2. Because a downgraded 0.1.0 mod would
+treat every v2 row as malformed and discard the file, `RoadPersistence` copies
+a v1 file once to `<file>.v1.bak` before the first v2 save; deleting the v2
+file and renaming the backup is the manual rollback path.
+
+Point indices must start at 0 and increase by 1 within a stroke, and a
+stroke's kind and source must not change between rows. Coordinates use
 invariant-culture decimal formatting. The file is intentionally simple
 enough to inspect and recover manually; malformed rows are skipped with a
 single warning that reports the skipped count.
@@ -165,7 +198,7 @@ single warning that reports the skipped count.
 
 ## Future extension seams
 
-- `IRoadObservationSource` can later support direct hoe-action capture and loaded-chunk scanning.
-- Persistence can gain a versioned binary format after profiling, with a migration from v1 TSV.
+- `RoadObservationPipeline` accepts direct hoe-action capture (CC-005) and loaded-chunk scanning (CC-006) as additional sources without atlas changes.
+- Persistence can gain a versioned binary format after profiling, with a migration from the TSV formats.
 - A network layer can exchange immutable stroke updates without changing `RoadAtlas` semantics.
 - Marker editing remains a separate UI subsystem so it cannot destabilize the road atlas.
