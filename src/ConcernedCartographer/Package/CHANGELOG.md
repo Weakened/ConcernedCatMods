@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0 (in development)
+
+- Roads are recorded through a source-neutral observation pipeline; every stroke remembers whether it came from walking, a construction action, or terrain recovery.
+- Sidecar format v2 adds the origin column. v1 files still load, and the original is backed up once to `.v1.bak` before the first v2 save; deleting the v2 file and renaming the backup rolls back to 0.1.0.
+- Isolated road points render as dots instead of being invisible.
+
 ## 0.1.0
 
 Initial public alpha: the roads your Viking actually walks become a per-world map atlas.
