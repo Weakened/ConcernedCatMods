@@ -19,9 +19,9 @@ internal sealed class AtlasToolsCommand : ConsoleCommand
     public override string Name => "cc_atlas";
 
     public override string Help =>
-        "Concerned Cartographer atlas drawer. Subcommands: status, query <text>, clear, " +
-        "pins on|off, cluster on|off, dirt on|off, paved on|off, view save|apply|del <name>, views. " +
-        "The drawer panel opens with the DrawerHotkey (default L) on the large map.";
+        "Concerned Cartographer atlas drawer and maintenance. Subcommands: status, query <text>, clear, " +
+        "pins on|off, cluster on|off, dirt on|off, paved on|off, view save|apply|del <name>, views, " +
+        "compat, backup, backups, restore <n>, support. Drawer panel: DrawerHotkey (default L) on the large map.";
 
     public override void Run(string[] args, Terminal context)
     {
@@ -40,6 +40,10 @@ internal sealed class AtlasToolsCommand : ConsoleCommand
 
     public override List<string> CommandOptionList()
     {
-        return new List<string> { "status", "query", "clear", "pins", "cluster", "dirt", "paved", "view", "views" };
+        return new List<string>
+        {
+            "status", "query", "clear", "pins", "cluster", "dirt", "paved", "view", "views",
+            "compat", "backup", "backups", "restore", "support",
+        };
     }
 }
