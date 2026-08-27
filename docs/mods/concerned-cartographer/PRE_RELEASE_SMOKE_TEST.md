@@ -5,8 +5,56 @@ manual-only verification deferred by the autonomous conveyor (OPS-001
 rev 2) from v0.3 onward and is finalized against the exact v1.0 RC. Rows
 marked **BLOCKS** must pass before publication; others are record-and-ship.
 
-> Status: FINAL for v1.0 — one session, top to bottom. Estimated 2.5–4 h
-> including the two-client section.
+> Status: FINAL for v1.0, amended 2026-08-27 after the first smoke pass
+> found three release blockers (DEF-v1.0-001/-002/-003, issues #89–#91).
+> **Do NOT restart the full 2.5–4 h checklist.** Start at section R below
+> and resume the shortened golden path from where the first pass stopped.
+
+## R. Replacement-RC mini-regression — RESUME SMOKE FROM HERE
+
+The first human smoke pass (2026-08-27) ran against RC `9eb65291…`
+(ZIP `9F1F4128…`). That RC is **superseded / failed human smoke** — do
+not test or upload it again. What it already proved stays proven and is
+NOT re-run beyond step 5's quick check:
+
+```text
+Valheim 0.221.12, Unity 6000.0.61f1, BepInEx 5.4.23.3, Jötunn 2.29.2.0
+Concerned Cartographer 1.0.0 startup — banner logged, no CC errors
+```
+
+Run these steps in order against the NEW RC (identity in
+`RELEASE_DOSSIER.md`). If any of steps 7–10 fails, capture the listed
+evidence and STOP the human test.
+
+1. Fresh `TCC-v1-Smoke` profile, or cleanly replace the mod in an
+   existing test profile.
+2. Install the pinned BepInEx/Jötunn dependencies.
+3. Import the exact new RC ZIP (verify its SHA-256 against the dossier).
+4. Start modded.
+5. Main menu: Concerned Cartographer 1.0.0 banner, no CC exceptions,
+   menu responsive. **BLOCKS** (short regression only — code changed).
+6. Enter a disposable world (e.g. ModrTestWorld).
+7. **Pin Workbench adoption FIRST** (DEF-v1.0-001, #89): adopt a vanilla
+   pin → edit → Apply; open again → Close; open again → Escape;
+   close/reopen the large map; zoom and pan; then repeat the whole
+   adopt/open/close cycle twice more. Everything must be fully normal —
+   no stuck map, no dead zoom, no unclosable panel. **BLOCKS**
+   *On failure capture:* LogOutput.log (look for the workbench
+   invariant error line) + a clip of the stuck input.
+8. Verify every workbench label/control sits inside the wood panel, at
+   UiScale 0.8, 1.0, and 1.6 (DEF-v1.0-003, #91). **BLOCKS**
+   *On failure capture:* screenshots at the failing scale/resolution.
+9. Run `cc_roads align` at a known road/player coordinate
+   (DEF-v1.0-002, #90): every "CC align" dot pin must sit on its magenta
+   cross within one map texel (~12 m). **BLOCKS**
+   *On failure capture:* the full "Alignment probe" log block +
+   a zoomed screenshot of pin vs cross; then `cc_roads align clear`.
+10. Build one short dirt path and one paved stretch; confirm the ink
+    lands at the correct world location visually. **BLOCKS**
+    *On failure capture:* map screenshot + the align log from step 9.
+11. Only then resume the shortened golden-path smoke at
+    roads/routes/persistence/multiplayer (sections 2, 4, 6, 7 onward),
+    skipping rows the first pass already completed.
 
 ## 0. RC identity
 
@@ -35,6 +83,7 @@ marked **BLOCKS** must pass before publication; others are record-and-ship.
 | 2.3 | Recorded road | Cultivate/reset over part of it; pave over a dirt stretch | Covered ink vanishes; kind converts without doubles | Before/after screenshots | Yes |
 | 2.4 | Recorded roads | `cc_roads delete` then `cc_roads rebuild` | Road returns from terrain paint; unexplored regions stay empty | Log + screenshot | Yes |
 | 2.5 | Console | Run the cc_roads operation set (status/kind/hide/unhide/split/join/undo) | Summaries correct; map updates; undo reverts | Console screenshot | No |
+| 2.6 | Near a recorded road | `cc_roads align`, inspect map, then `cc_roads align clear` (DEF-v1.0-002 regression) | Every "CC align" dot pin sits on its magenta cross within one texel (~12 m) at all probe positions incl. the latest dirt point; clear removes the pins | "Alignment probe" log block + zoomed screenshot | Yes |
 
 ## 3. Pin Workbench (v0.3)
 
@@ -49,6 +98,8 @@ marked **BLOCKS** must pass before publication; others are record-and-ship.
 | 3.7 | ~50+ adopted/created pins | `cc_pins adoptall confirm`, batch `cc_pins category`, map browsing | Responsive UI, no errors, one-step undo works | Console output | No |
 | 3.8 | Profile with the mod removed | Launch vanilla after using pins | All managed pins remain as ordinary vanilla pins with names/icons/positions/cross-offs | Screenshot | Yes |
 | 3.9 | Panel open | Resolution sanity at 1080p and 1440p/ultrawide | Panel fits, vanilla map controls (pin bar, toggles) stay reachable | Screenshots | No |
+| 3.10 | Vanilla pin | Adopt → edit → Apply; reopen → Close; reopen → Escape; close/reopen map; zoom/pan; repeat cycle ×2 (DEF-v1.0-001 regression) | Map input NEVER sticks: map closes normally, zoom/pan normal after every cycle, panel always closable | LogOutput.log (workbench invariant error) + clip | Yes |
+| 3.11 | Workbench open | Check all labels/fields/buttons at UiScale 0.8 / 1.0 / 1.6 (DEF-v1.0-003 regression) | Every label/control fully inside the wood panel; labels left-aligned to one column; panel fully on screen at every scale | Screenshots | Yes |
 
 ## 4. World isolation and persistence
 

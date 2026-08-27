@@ -7,13 +7,18 @@ The single remaining gate is the human smoke test
 ## 1–5. Release candidate identity
 
 - **Version:** 1.0.0
-- **RC commit:** `9eb65291dbba3bd910525bbb6be8d8b160947129` (main; includes the
-  SEC-1.0-001 sync hardening #87, the developer/provenance documentation
-  kit PR #88, and the owner-requested assembly authorship metadata —
-  supersedes RCs `ff2bc798`, `53f371c` and `6ee4ee9`)
+- **RC commit:** `7ed20fefdfa49c22d41217f216aed25f482f38ca` (main; the
+  v1.0 smoke-blocker fix pass — DEF-v1.0-001 input-block leak #89,
+  DEF-v1.0-002 alignment diagnostic #90, DEF-v1.0-003 workbench layout
+  #91 — plus everything in the previous RC line. **Supersedes RC
+  `9eb65291` (ZIP `9F1F4128…`), which FAILED the first human smoke pass
+  on the adoption input trap and workbench layout; do not test or upload
+  that ZIP again.** Its already-passed startup evidence remains valid:
+  Valheim 0.221.12 / Unity 6000.0.61f1 / BepInEx 5.4.23.3 /
+  Jötunn 2.29.2.0, clean 1.0.0 banner, no CC errors.)
 - **ZIP:** `artifacts\thunderstore\TheConcernedCat-ConcernedCartographer-1.0.0.zip`
-- **ZIP SHA-256:** `9F1F41289F8A5A3A2858E25C21F5539DDD4767571F4B8E838A7CD9CA2EAD9B48` (209,424 bytes)
-- **Plugin DLL SHA-256:** `2D42168BF07AE54C8922A445ABE9EF37A5C48AEF51B1D2EC088A3A9EBC27AF99` (253,952 bytes; the DLL inside the ZIP and the DLLs deployed to the TCC-Dev/TCC-Compat profiles are hash-identical; plugin logic identical to RCs `53f371c`/`6ee4ee9` — only docs and assembly metadata changed since)
+- **ZIP SHA-256:** `B47E7C9D751CD30198460C1081FEB75E01933B1D41B366190C1853396C6FADBA` (212,396 bytes)
+- **Plugin DLL SHA-256:** `8B7CEE2877DBAD8B038FD62D66A998FA891894E645A26358D82BC7891E57395F` (261,120 bytes; the DLL inside the ZIP and the DLLs deployed to the TCC-Dev/TCC-Compat profiles are hash-identical; informational version `1.0.0+7ed20fef…` verified in the DLL)
 - **Assembly metadata (verified in the DLL):** Company "The Concerned Cat",
   Product "Concerned Cartographer", Copyright © 2026 Eren Cansunar,
   RepositoryUrl embedded, informational version `1.0.0+<RC commit>`.
@@ -46,16 +51,41 @@ revision sanity cap, non-finite float rejection, string-length caps,
 deletion names in the sync preview, author display sanitization, and
 declared-length verification.
 
+First human smoke pass (2026-08-27) against RC `9eb65291` found three
+release blockers, all addressed in this RC:
+
+- **DEF-v1.0-001 (#89, P1)**: adopting a vanilla pin trapped map/game
+  input. Proven root cause: Jötunn's `GUIManager.BlockInput` is
+  reference-counted and the adopt-prompt → managed-editor transition
+  issued two requests but released one. Fixed with an owned, provably
+  balanced `ModalInputBlock` state machine (11 new unit tests), teardown
+  on external map close / logout / dispose, and a per-frame fail-safe
+  invariant (hidden workbench ⇒ no owned block).
+- **DEF-v1.0-002 (#90, P1, open pending live proof)**: sacrifice-stones
+  icon vs dirt-road ink appeared misaligned. Static audit found no
+  projection defect (both draw paths share Jötunn's
+  `WorldToOverlayCoords`, overlay texture is the vanilla 2048, no
+  offsets anywhere); a deterministic `cc_roads align` diagnostic (native
+  pin vs overlay cross + full projection logging at five known
+  positions) now proves or refutes alignment against the live game.
+  Pass bound: ≤ 1 texel (~12 m), matching the v0.1 CC-009 calibration.
+- **DEF-v1.0-003 (#91, P2)**: workbench labels rendered outside the
+  panel (center-anchored −150/130-wide labels in a 400 px panel). Fixed
+  with an explicit constant-derived two-column layout on a 460 px panel,
+  left-aligned labels, and scale-aware re-docking (0.8–1.6).
+
 ## 8. Automated evidence (at the RC commit)
 
-- **243/243 tests** in the game-free core suite (CI-run): road geometry
+- **254/254 tests** in the game-free core suite (CI-run): road geometry
   and suppression, codecs and journal recovery for all three entity
   families, migration matrix across every shipped format, pin/route
   operations with undo-convergence properties, query/clustering,
   survey bounds, sync policy/planner including tombstone
-  no-resurrection, localization safety, and the SEC-1.0-001 hardening
+  no-resurrection, localization safety, the SEC-1.0-001 hardening
   suite (decompression-bomb rejection, revision/float/string bounds,
-  deletion-name previews, display sanitization).
+  deletion-name previews, display sanitization), and the DEF-v1.0-001
+  modal-input-block ownership suite (balance under re-entry,
+  double-close, arbitrary sequences, throwing backend).
 - Validator green with `--expected-version 1.0.0`; solution builds with
   0 errors (1 known benign MSB3245).
 - Scale: 10,000-pin suites (<200 ms total), 10 km road compaction
@@ -108,12 +138,15 @@ defaults.
 
 ## 18. Smoke test
 
-`docs/mods/concerned-cartographer/PRE_RELEASE_SMOKE_TEST.md`
+`docs/mods/concerned-cartographer/PRE_RELEASE_SMOKE_TEST.md` — **the
+owner resumes at its section R (replacement-RC mini-regression), NOT at
+the top.** The full 2.5–4 h checklist is not restarted; sections the
+first pass already completed stay completed.
 
 ## 19. Remaining Git commands (run after the smoke test passes)
 
 ```powershell
-git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" 9eb65291dbba3bd910525bbb6be8d8b160947129
+git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" 7ed20fefdfa49c22d41217f216aed25f482f38ca
 git push origin concerned-cartographer/v1.0.0
 gh release create concerned-cartographer/v1.0.0 artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-1.0.0.zip --title "Concerned Cartographer 1.0.0" --notes-file src/ConcernedCartographer/Package/CHANGELOG.md
 ```
