@@ -40,6 +40,7 @@ internal sealed class CartographerRuntime : IDisposable
     private RoadAtlasEditor? _editor;
     private RoadSurveyor? _surveyor;
     private PinStore _pinStore = new();
+    private PinCommandHandler? _pinCommands;
     private long? _worldUid;
     private bool _mapReady;
     private float _autosaveElapsed;
@@ -137,6 +138,25 @@ internal sealed class CartographerRuntime : IDisposable
     internal PinStore Pins => _pinStore;
 
     internal PinAdapter PinAdapter => _pinAdapter;
+
+    internal PinCommandHandler? PinCommands => _pinCommands;
+
+    /// <summary>Backs the `cc_pins` console command.</summary>
+    internal string ExecutePinCommand(string[] args)
+    {
+        if (_disposed || !_mapReady || _pinCommands is null)
+        {
+            return "Concerned Cartographer: no world is loaded yet.";
+        }
+
+        Player player = Player.m_localPlayer;
+        if (player is null)
+        {
+            return "Concerned Cartographer: no local player.";
+        }
+
+        return _pinCommands.Execute(args, player.transform.position);
+    }
 
     /// <summary>Roads and pins together, for quit/teardown paths.</summary>
     public void SaveAll()
@@ -400,6 +420,12 @@ internal sealed class CartographerRuntime : IDisposable
         _pinStore = _pinPersistence.Load(uid);
         _pinStore.Changed += _pinPersistence.QueueJournal;
         _pinAdapter.Reset();
+        _pinCommands = new PinCommandHandler(
+            _pinStore,
+            new PinOperations(_pinStore),
+            _pinAdapter,
+            _log,
+            () => _pinAdapter.ReconcileOnMapReady(_pinStore));
         _pipeline = new RoadObservationPipeline(_atlas);
         _editor = new RoadAtlasEditor(_atlas);
         _surveyor = new RoadSurveyor(_settings, _probe, _pipeline, _log);
