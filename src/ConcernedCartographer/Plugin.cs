@@ -21,6 +21,7 @@ public sealed class Plugin : BaseUnityPlugin
 
         MinimapManager.OnVanillaMapAvailable += HandleMapAvailable;
         CommandManager.Instance.AddConsoleCommand(new RoadToolsCommand(_runtime));
+        CommandManager.Instance.AddConsoleCommand(new PinToolsCommand(_runtime));
         Logger.LogInfo($"{PluginName} {PluginVersion} loaded");
         LogEnvironment(settings);
     }
