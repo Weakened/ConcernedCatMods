@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0
+
+The atlas for every Viking: NoMap tables, controllers, translations, and accessibility.
+
+- **NoMap worlds**: the atlas becomes a cartography-table ritual — panels and console tools work only near a table, keeping immersive servers immersive.
+- **Controller support**: panels focus their first element for gamepad navigation, and opt-in rebindable gamepad bindings open the workbench and drawer. Every keyboard hotkey was already rebindable.
+- **Translations**: all UI and HUD text lives in a string catalog; a translator template is generated next to your config, and a `cartographer-strings.tsv` file translates the mod into any language. Partial translations safely fall back to English.
+- **Accessibility**: UI scaling (0.8–1.6×), a high-contrast map ink mode, and non-color cues everywhere (line styles, icons, text labels).
+- A one-time first-run tip points at the two hotkeys. Defaults stay conservative.
+
 ## 0.6.0
 
 The trustworthy collaborative atlas: share deliberately, review everything, lose nothing.
