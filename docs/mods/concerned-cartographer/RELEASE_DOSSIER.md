@@ -7,13 +7,16 @@ The single remaining gate is the human smoke test
 ## 1–5. Release candidate identity
 
 - **Version:** 1.0.0
-- **RC commit:** `6ee4ee90d18d83ac9af274a7bb795262f81af060` (main; includes the
-  SEC-1.0-001 sync hardening, issue #87, and the developer/provenance
-  documentation kit, PR #88, whose package-README attribution ships in the
-  ZIP — supersedes RCs `ff2bc798` and `53f371c`)
+- **RC commit:** `9eb65291dbba3bd910525bbb6be8d8b160947129` (main; includes the
+  SEC-1.0-001 sync hardening #87, the developer/provenance documentation
+  kit PR #88, and the owner-requested assembly authorship metadata —
+  supersedes RCs `ff2bc798`, `53f371c` and `6ee4ee9`)
 - **ZIP:** `artifacts\thunderstore\TheConcernedCat-ConcernedCartographer-1.0.0.zip`
-- **ZIP SHA-256:** `0E30E9A4B8ABFB95CCD23393B3F7E85A81843E5F4EFD08670EA34EED169CE5DE` (209,218 bytes)
-- **Plugin DLL SHA-256:** `BF82967E6D023C0F7857510069A60A33820FCB61753B5F05DAA773591A21A3D3` (253,952 bytes; the DLL inside the ZIP and the DLLs deployed to the TCC-Dev/TCC-Compat profiles are hash-identical; source-identical to the DLL of RC `53f371c` — only doc files changed between them)
+- **ZIP SHA-256:** `9F1F41289F8A5A3A2858E25C21F5539DDD4767571F4B8E838A7CD9CA2EAD9B48` (209,424 bytes)
+- **Plugin DLL SHA-256:** `2D42168BF07AE54C8922A445ABE9EF37A5C48AEF51B1D2EC088A3A9EBC27AF99` (253,952 bytes; the DLL inside the ZIP and the DLLs deployed to the TCC-Dev/TCC-Compat profiles are hash-identical; plugin logic identical to RCs `53f371c`/`6ee4ee9` — only docs and assembly metadata changed since)
+- **Assembly metadata (verified in the DLL):** Company "The Concerned Cat",
+  Product "Concerned Cartographer", Copyright © 2026 Eren Cansunar,
+  RepositoryUrl embedded, informational version `1.0.0+<RC commit>`.
 - **Package audit:** ZIP root contains exactly `manifest.json`, `README.md`,
   `CHANGELOG.md`, `LICENSE`, `icon.png` (256×256),
   `plugins/TheConcernedCat.ConcernedCartographer.dll`. No PDBs, game DLLs,
@@ -110,7 +113,7 @@ defaults.
 ## 19. Remaining Git commands (run after the smoke test passes)
 
 ```powershell
-git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" 6ee4ee90d18d83ac9af274a7bb795262f81af060
+git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" 9eb65291dbba3bd910525bbb6be8d8b160947129
 git push origin concerned-cartographer/v1.0.0
 gh release create concerned-cartographer/v1.0.0 artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-1.0.0.zip --title "Concerned Cartographer 1.0.0" --notes-file src/ConcernedCartographer/Package/CHANGELOG.md
 ```
