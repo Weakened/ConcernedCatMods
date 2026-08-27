@@ -4,7 +4,7 @@
     <OutputType>Library</OutputType>
     <RootNamespace>TheConcernedCat.ConcernedCartographer</RootNamespace>
     <AssemblyName>TheConcernedCat.ConcernedCartographer</AssemblyName>
-    <Version>0.6.0</Version>
+    <Version>0.7.0</Version>
     <FileAlignment>512</FileAlignment>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>

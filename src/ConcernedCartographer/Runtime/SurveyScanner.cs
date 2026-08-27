@@ -106,7 +106,7 @@ internal sealed class SurveyScanner
             {
                 player.Message(
                     MessageHud.MessageType.TopLeft,
-                    $"Survey: {added} new observation(s) — review with cc_survey");
+                    AtlasStrings.Format("hud.surveyObservations", added));
             }
         }
         catch (Exception exception)
@@ -114,6 +114,37 @@ internal sealed class SurveyScanner
             _disabledForSession = true;
             _log.LogError($"Survey scanner failed and was disabled for this session: {exception}");
         }
+    }
+
+    /// <summary>True when any loaded instance whose prefab name contains
+    /// the fragment sits within the radius. Used by the NoMap gate to find
+    /// a cartography table; bounded by the loaded-instance set.</summary>
+    public static bool AnyInstanceNear(string prefabNameFragment, Vector3 position, float radius)
+    {
+        if (InstancesField is null || ZNetScene.instance == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            foreach (KeyValuePair<ZDO, ZNetView> entry in InstancesField(ZNetScene.instance))
+            {
+                ZNetView view = entry.Value;
+                if (view != null && view.gameObject != null &&
+                    view.gameObject.name.IndexOf(prefabNameFragment, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                    Vector3.Distance(view.transform.position, position) <= radius)
+                {
+                    return true;
+                }
+            }
+        }
+        catch
+        {
+            // Fail open at the caller.
+        }
+
+        return false;
     }
 
     private static AccessTools.FieldRef<ZNetScene, Dictionary<ZDO, ZNetView>>? BuildInstancesRef()

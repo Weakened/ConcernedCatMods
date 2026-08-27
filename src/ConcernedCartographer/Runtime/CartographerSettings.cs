@@ -39,7 +39,11 @@ internal sealed class CartographerSettings
         ConfigEntry<float> routeSnapRadius,
         ConfigEntry<float> routeOnRoadTolerance,
         ConfigEntry<float> routeOffRoadSpeed,
-        ConfigEntry<float> routeOnRoadSpeed)
+        ConfigEntry<float> routeOnRoadSpeed,
+        ConfigEntry<float> uiScale,
+        ConfigEntry<bool> highContrast,
+        ConfigEntry<string> workbenchGamepadButton,
+        ConfigEntry<string> drawerGamepadButton)
     {
         Enabled = enabled;
         CaptureConstructionActions = captureConstructionActions;
@@ -75,6 +79,10 @@ internal sealed class CartographerSettings
         RouteOnRoadTolerance = routeOnRoadTolerance;
         RouteOffRoadSpeed = routeOffRoadSpeed;
         RouteOnRoadSpeed = routeOnRoadSpeed;
+        UiScale = uiScale;
+        HighContrast = highContrast;
+        WorkbenchGamepadButton = workbenchGamepadButton;
+        DrawerGamepadButton = drawerGamepadButton;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -111,6 +119,10 @@ internal sealed class CartographerSettings
     public ConfigEntry<float> RouteOnRoadTolerance { get; }
     public ConfigEntry<float> RouteOffRoadSpeed { get; }
     public ConfigEntry<float> RouteOnRoadSpeed { get; }
+    public ConfigEntry<float> UiScale { get; }
+    public ConfigEntry<bool> HighContrast { get; }
+    public ConfigEntry<string> WorkbenchGamepadButton { get; }
+    public ConfigEntry<string> DrawerGamepadButton { get; }
 
     public static CartographerSettings Bind(ConfigFile config)
     {
@@ -189,6 +201,14 @@ internal sealed class CartographerSettings
             config.Bind("Routes", "RouteOffRoadSpeed", 2.5f, new ConfigDescription(
                 "Off-road travel speed (m/s) for time estimates.", new AcceptableValueRange<float>(0.5f, 15f))),
             config.Bind("Routes", "RouteOnRoadSpeed", 5f, new ConfigDescription(
-                "On-road travel speed (m/s) for time estimates.", new AcceptableValueRange<float>(0.5f, 15f))));
+                "On-road travel speed (m/s) for time estimates.", new AcceptableValueRange<float>(0.5f, 15f))),
+            config.Bind("Accessibility", "UiScale", 1f, new ConfigDescription(
+                "Scale multiplier for Concerned Cartographer panels.", new AcceptableValueRange<float>(0.8f, 1.6f))),
+            config.Bind("Accessibility", "HighContrast", false,
+                "High-contrast map ink: near-black dirt, near-white paved, brighter route colors. Kinds stay distinguishable without color (dashed/dotted styles, icons, labels)."),
+            config.Bind("Accessibility", "WorkbenchGamepadButton", "",
+                "ZInput button name that opens the Pin Workbench (e.g. JoyLStick). Empty disables; conflicts are avoided by explicit opt-in."),
+            config.Bind("Accessibility", "DrawerGamepadButton", "",
+                "ZInput button name that toggles the Atlas Drawer. Empty disables."));
     }
 }

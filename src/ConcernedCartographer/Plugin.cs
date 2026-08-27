@@ -10,13 +10,14 @@ public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernedcartographer";
     public const string PluginName = "Concerned Cartographer";
-    public const string PluginVersion = "0.6.0";
+    public const string PluginVersion = "0.7.0";
 
     private CartographerRuntime? _runtime;
 
     private void Awake()
     {
         CartographerSettings settings = CartographerSettings.Bind(Config);
+        Persistence.LocalizationPersistence.Initialize(Logger);
         _runtime = new CartographerRuntime(settings, Logger);
 
         MinimapManager.OnVanillaMapAvailable += HandleMapAvailable;
