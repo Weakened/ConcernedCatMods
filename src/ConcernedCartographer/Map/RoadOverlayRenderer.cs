@@ -151,6 +151,21 @@ internal sealed class RoadOverlayRenderer
         }
     }
 
+    /// <summary>Shows or hides one road layer (the same switch as Jötunn's
+    /// overlay toggle panel).</summary>
+    public void SetOverlayEnabled(RoadKind kind, bool enabled)
+    {
+        try
+        {
+            string overlayName = kind == RoadKind.Dirt ? DirtOverlayName : PavedOverlayName;
+            MinimapManager.Instance.GetMapOverlay(overlayName).Enabled = enabled;
+        }
+        catch (Exception exception)
+        {
+            _rateLimited.Warning("overlay-toggle", $"Could not toggle the {kind} overlay: {exception.Message}");
+        }
+    }
+
     /// <summary>Draws a single observation point as a dot, for sources whose
     /// first (possibly only) point never produces a segment.</summary>
     public void DrawPoint(RoadKind kind, RoadPoint point)
