@@ -73,8 +73,10 @@ topology; other players' construction is chunk-recovery's job (CC-006).
 
 `PaintType.Dirt` maps to Dirt, `PaintType.Paved` to Paved;
 `Cultivate`/`Reset` are ignored here and become removal signals in
-reconciliation (CC-015). Raise-ground ops paint Dirt and are captured,
-consistent with the v0.1 "paint counts as road" decision. Seam duplicates
+reconciliation (CC-015). Level/raise ops are **terraforming**: their dirt
+paint is a side effect, so they reconcile covered other-kind ink but never
+record road observations (walking on leveled ground still records via
+traversal, per the v0.1 "paint counts as road" decision). Seam duplicates
 (one op, two heightmaps) collapse via pipeline replay idempotency. The
 postfix never mutates game state; a capture exception disables the source
 for the session without touching traversal surveying. Known bounded failure:
