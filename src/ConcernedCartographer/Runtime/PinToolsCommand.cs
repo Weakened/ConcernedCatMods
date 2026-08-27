@@ -19,7 +19,7 @@ internal sealed class PinToolsCommand : ConsoleCommand
     public override string Name => "cc_pins";
 
     public override string Help =>
-        "Concerned Cartographer pin workbench. Subcommands: status, list, adopt, adoptall, create, " +
+        "Concerned Cartographer pin workbench. Subcommands: edit (opens the panel), status, list, adopt, adoptall, create, " +
         "name, icon, icons, category, color, size, note, tag+, tag-, setstatus, check, uncheck, scope, " +
         "move, dup, archive, unarchive, delete, restore, deleted, dups, merge, undo, redo, coords. " +
         "Most target the managed pin nearest you.";
@@ -43,7 +43,7 @@ internal sealed class PinToolsCommand : ConsoleCommand
     {
         return new List<string>
         {
-            "status", "list", "adopt", "adoptall", "create", "name", "icon", "icons", "category",
+            "edit", "status", "list", "adopt", "adoptall", "create", "name", "icon", "icons", "category",
             "color", "size", "note", "tag+", "tag-", "setstatus", "check", "uncheck", "scope",
             "move", "dup", "archive", "unarchive", "delete", "restore", "deleted", "dups",
             "merge", "undo", "redo", "coords",
