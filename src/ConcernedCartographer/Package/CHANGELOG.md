@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0
+
+Public beta hardening: no new features, everything sturdier.
+
+- Feature freeze: 0.9.x is hardening-only on the road to 1.0.
+- Automated migration matrix across every format the mod has ever written.
+- Deterministic test-fixture generator for community testing (`scripts/make-test-fixtures.ps1` in the repo).
+- Public documentation completed: feedback channel, privacy statement, and the security model in plain language.
+
 ## 0.8.0
 
 Plays well with others, and never loses your atlas.
