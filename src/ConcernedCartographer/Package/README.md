@@ -77,6 +77,21 @@ Pins are stored per world next to the road atlas with crash-safe
 snapshot+journal persistence. Removing the mod leaves every managed pin on
 the map as a plain vanilla pin.
 
+## Atlas Drawer, search, and clustering
+
+Press `L` on the large map for the Atlas Drawer: toggle road/pin layers and
+clustering, search the atlas (plain words, or tokens like `tag:iron`,
+`category:travel`, `is:unchecked`, `near:0,0,500`), click a result to edit
+it, and save the current filter/layer state as a named view. Zoomed out,
+crowded pins fold into cluster markers; filters and clusters are display
+only and never change stored data. Console: `cc_atlas`.
+
+Press `F7` in the world to quick-pin whatever you're looking at (never
+creatures). Opt-in **Survey Rules** (`Survey/SurveyRulesEnabled`, plus a
+shareable `survey-rules.tsv`) turn nearby loaded objects into reviewable
+observations — `cc_survey list/accept/reject` — with hard caps, duplicate
+radii, and base-exclusion zones so your map never floods.
+
 ## Road repair tools
 
 Open the console (launch with `-console`) and use `cc_roads` — every

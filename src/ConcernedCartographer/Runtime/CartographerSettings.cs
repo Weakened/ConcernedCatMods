@@ -21,7 +21,19 @@ internal sealed class CartographerSettings
         ConfigEntry<int> lineWidthPixels,
         ConfigEntry<bool> debugLogging,
         ConfigEntry<bool> drawCalibrationMarkers,
-        ConfigEntry<KeyCode> workbenchHotkey)
+        ConfigEntry<KeyCode> workbenchHotkey,
+        ConfigEntry<KeyCode> drawerHotkey,
+        ConfigEntry<bool> drawerShowDirt,
+        ConfigEntry<bool> drawerShowPaved,
+        ConfigEntry<bool> drawerShowPins,
+        ConfigEntry<bool> drawerCluster,
+        ConfigEntry<KeyCode> quickPinHotkey,
+        ConfigEntry<float> quickPinDuplicateRadius,
+        ConfigEntry<bool> surveyRulesEnabled,
+        ConfigEntry<float> surveyScanIntervalSeconds,
+        ConfigEntry<float> surveyScanRadius,
+        ConfigEntry<float> surveyBaseExclusionRadius,
+        ConfigEntry<int> surveyMaxObservations)
     {
         Enabled = enabled;
         CaptureConstructionActions = captureConstructionActions;
@@ -39,6 +51,18 @@ internal sealed class CartographerSettings
         DebugLogging = debugLogging;
         DrawCalibrationMarkers = drawCalibrationMarkers;
         WorkbenchHotkey = workbenchHotkey;
+        DrawerHotkey = drawerHotkey;
+        DrawerShowDirt = drawerShowDirt;
+        DrawerShowPaved = drawerShowPaved;
+        DrawerShowPins = drawerShowPins;
+        DrawerCluster = drawerCluster;
+        QuickPinHotkey = quickPinHotkey;
+        QuickPinDuplicateRadius = quickPinDuplicateRadius;
+        SurveyRulesEnabled = surveyRulesEnabled;
+        SurveyScanIntervalSeconds = surveyScanIntervalSeconds;
+        SurveyScanRadius = surveyScanRadius;
+        SurveyBaseExclusionRadius = surveyBaseExclusionRadius;
+        SurveyMaxObservations = surveyMaxObservations;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -57,6 +81,18 @@ internal sealed class CartographerSettings
     public ConfigEntry<bool> DebugLogging { get; }
     public ConfigEntry<bool> DrawCalibrationMarkers { get; }
     public ConfigEntry<KeyCode> WorkbenchHotkey { get; }
+    public ConfigEntry<KeyCode> DrawerHotkey { get; }
+    public ConfigEntry<bool> DrawerShowDirt { get; }
+    public ConfigEntry<bool> DrawerShowPaved { get; }
+    public ConfigEntry<bool> DrawerShowPins { get; }
+    public ConfigEntry<bool> DrawerCluster { get; }
+    public ConfigEntry<KeyCode> QuickPinHotkey { get; }
+    public ConfigEntry<float> QuickPinDuplicateRadius { get; }
+    public ConfigEntry<bool> SurveyRulesEnabled { get; }
+    public ConfigEntry<float> SurveyScanIntervalSeconds { get; }
+    public ConfigEntry<float> SurveyScanRadius { get; }
+    public ConfigEntry<float> SurveyBaseExclusionRadius { get; }
+    public ConfigEntry<int> SurveyMaxObservations { get; }
 
     public static CartographerSettings Bind(ConfigFile config)
     {
@@ -99,6 +135,29 @@ internal sealed class CartographerSettings
             config.Bind("Diagnostics", "DrawCalibrationMarkers", false,
                 "Draw fixed calibration crosses into the dirt overlay at world origin (magenta), +128m east (yellow), and +128m north (cyan) to verify overlay/map alignment."),
             config.Bind("Workbench", "WorkbenchHotkey", KeyCode.P,
-                "Key that opens the Pin Workbench for the pin under the cursor while the large map is open."));
+                "Key that opens the Pin Workbench for the pin under the cursor while the large map is open."),
+            config.Bind("Drawer", "DrawerHotkey", KeyCode.L,
+                "Key that toggles the Atlas Drawer (layers, search, saved views) while the large map is open."),
+            config.Bind("Drawer", "ShowDirtRoads", true, "Show the dirt-road layer."),
+            config.Bind("Drawer", "ShowPavedRoads", true, "Show the paved-road layer."),
+            config.Bind("Drawer", "ShowPins", true, "Show managed pins on the map."),
+            config.Bind("Drawer", "Clustering", true,
+                "Fold crowded pins into cluster markers when zoomed out (display only; never changes stored pins)."),
+            config.Bind("Workbench", "QuickPinHotkey", KeyCode.F7,
+                "Key that pins the object you are looking at (set to None to disable). Never pins creatures."),
+            config.Bind("Workbench", "QuickPinDuplicateRadius", 25f, new ConfigDescription(
+                "Skip a quick pin when a same-named pin already exists within this many meters (0 disables the check).",
+                new AcceptableValueRange<float>(0f, 200f))),
+            config.Bind("Survey", "SurveyRulesEnabled", false,
+                "Opt-in survey rules: nearby loaded objects matching survey-rules.tsv become reviewable observations (never pins directly)."),
+            config.Bind("Survey", "SurveyScanIntervalSeconds", 10f, new ConfigDescription(
+                "Seconds between survey scans.", new AcceptableValueRange<float>(2f, 60f))),
+            config.Bind("Survey", "SurveyScanRadius", 40f, new ConfigDescription(
+                "Survey scan radius around the player in meters.", new AcceptableValueRange<float>(10f, 100f))),
+            config.Bind("Survey", "SurveyBaseExclusionRadius", 30f, new ConfigDescription(
+                "No observations within this distance of a pin categorized/tagged Base (0 disables).",
+                new AcceptableValueRange<float>(0f, 100f))),
+            config.Bind("Survey", "SurveyMaxObservations", 200, new ConfigDescription(
+                "Hard cap on pending survey observations.", new AcceptableValueRange<int>(10, 1000))));
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using BepInEx.Logging;
 using TheConcernedCat.ConcernedCartographer.Atlas;
 using TheConcernedCat.ConcernedCartographer.Map;
@@ -42,6 +43,14 @@ internal sealed class CartographerRuntime : IDisposable
     private PinStore _pinStore = new();
     private PinCommandHandler? _pinCommands;
     private readonly PinWorkbenchPanel _workbenchPanel;
+    private readonly PinDisplayController _displayController;
+    private readonly AtlasDrawerPanel _drawerPanel;
+    private readonly SavedViewPersistence _savedViewPersistence;
+    private SavedViewStore _savedViews = new();
+    private readonly QuickPinCapture _quickPinCapture;
+    private readonly SurveyEngine _surveyEngine = new();
+    private readonly SurveyScanner _surveyScanner;
+    private readonly SurveyRulePersistence _surveyRulePersistence;
     private long? _worldUid;
     private bool _mapReady;
     private float _autosaveElapsed;
@@ -58,6 +67,15 @@ internal sealed class CartographerRuntime : IDisposable
         _rateLimited = new RateLimitedLog(log, 5f);
         _pinAdapter = new PinAdapter(log);
         _workbenchPanel = new PinWorkbenchPanel(log);
+        _displayController = new PinDisplayController(log);
+        _savedViewPersistence = new SavedViewPersistence(log);
+        _savedViews = _savedViewPersistence.Load();
+        _drawerPanel = new AtlasDrawerPanel(log);
+        WireDrawer();
+        _quickPinCapture = new QuickPinCapture(settings, log);
+        _surveyRulePersistence = new SurveyRulePersistence(log);
+        _surveyEngine.Rules = _surveyRulePersistence.LoadOrCreate();
+        _surveyScanner = new SurveyScanner(settings, log);
         _constructionCapture = new ConstructionCapture(log);
         _constructionCapture.OperationCaptured += HandleTerrainOperation;
         _chunkRecovery = new ChunkRecoveryScanner(settings, log);
@@ -82,6 +100,11 @@ internal sealed class CartographerRuntime : IDisposable
         _mapReady = true;
         _renderer.RedrawAll(_atlas);
         _pinAdapter.ReconcileOnMapReady(_pinStore);
+        _renderer.SetOverlayEnabled(RoadKind.Dirt, _settings.DrawerShowDirt.Value);
+        _renderer.SetOverlayEnabled(RoadKind.Paved, _settings.DrawerShowPaved.Value);
+        _displayController.ShowPins = _settings.DrawerShowPins.Value;
+        _displayController.ClusterEnabled = _settings.DrawerCluster.Value;
+        _displayController.Apply(_pinStore, _pinAdapter);
         if (_settings.DrawCalibrationMarkers.Value)
         {
             _renderer.DrawCalibrationMarkers();
@@ -98,11 +121,43 @@ internal sealed class CartographerRuntime : IDisposable
         }
 
         _workbenchPanel.HandleFrame();
-        if (_pinCommands is not null &&
-            Minimap.IsOpen() && !Minimap.InTextInput() && !_workbenchPanel.IsVisible &&
-            Input.GetKeyDown(_settings.WorkbenchHotkey.Value))
+        _drawerPanel.HandleFrame();
+        if (!Minimap.IsOpen() && !Minimap.InTextInput() &&
+            _settings.QuickPinHotkey.Value != KeyCode.None &&
+            Input.GetKeyDown(_settings.QuickPinHotkey.Value))
         {
-            OpenWorkbenchAtCursor();
+            if (_quickPinCapture.TryCapture(_pinStore, out string quickPinMessage))
+            {
+                ReapplyDisplay();
+            }
+
+            if (quickPinMessage.Length > 0)
+            {
+                Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, quickPinMessage);
+            }
+        }
+
+        if (Minimap.IsOpen() && !Minimap.InTextInput())
+        {
+            if (_pinCommands is not null && !_workbenchPanel.IsVisible &&
+                Input.GetKeyDown(_settings.WorkbenchHotkey.Value))
+            {
+                OpenWorkbenchAtCursor();
+            }
+
+            if (Input.GetKeyDown(_settings.DrawerHotkey.Value))
+            {
+                _drawerPanel.Toggle(
+                    _settings.DrawerShowDirt.Value,
+                    _settings.DrawerShowPaved.Value,
+                    _settings.DrawerShowPins.Value,
+                    _settings.DrawerCluster.Value);
+            }
+
+            if (_displayController.ZoomTierChanged())
+            {
+                _displayController.Apply(_pinStore, _pinAdapter);
+            }
         }
 
         if (!WorldContext.TryGetWorldUid(out long uid) || _worldUid != uid)
@@ -112,6 +167,7 @@ internal sealed class CartographerRuntime : IDisposable
             _mapReady = false;
             _pipeline?.EndAllStrokes();
             _chunkRecovery.Reset();
+            _displayController.Reset();
             _pinAdapter.Reset();
             SaveIfDirty();
             SavePinsSnapshot();
@@ -124,6 +180,7 @@ internal sealed class CartographerRuntime : IDisposable
         }
 
         _chunkRecovery.Tick();
+        _surveyScanner.Tick(unscaledDeltaTime, _surveyEngine, _pinStore);
 
         _redrawElapsed += unscaledDeltaTime;
         if (_redrawPending && _redrawElapsed >= RedrawDebounceSeconds)
@@ -172,6 +229,126 @@ internal sealed class CartographerRuntime : IDisposable
         }
 
         return _pinCommands.Execute(args, player.transform.position);
+    }
+
+    private void WireDrawer()
+    {
+        _drawerPanel.DirtToggled = value =>
+        {
+            _settings.DrawerShowDirt.Value = value;
+            _renderer.SetOverlayEnabled(RoadKind.Dirt, value);
+        };
+        _drawerPanel.PavedToggled = value =>
+        {
+            _settings.DrawerShowPaved.Value = value;
+            _renderer.SetOverlayEnabled(RoadKind.Paved, value);
+        };
+        _drawerPanel.PinsToggled = value =>
+        {
+            _settings.DrawerShowPins.Value = value;
+            _displayController.ShowPins = value;
+            ReapplyDisplay();
+        };
+        _drawerPanel.ClusterToggled = value =>
+        {
+            _settings.DrawerCluster.Value = value;
+            _displayController.ClusterEnabled = value;
+            ReapplyDisplay();
+        };
+        _drawerPanel.QueryApplied = query =>
+        {
+            _displayController.SetQuery(query);
+            ReapplyDisplay();
+        };
+        _drawerPanel.ViewSaved = name =>
+        {
+            _savedViews.Save(new SavedView(
+                name,
+                _displayController.QueryText,
+                _settings.DrawerShowDirt.Value,
+                _settings.DrawerShowPaved.Value,
+                _displayController.ShowPins,
+                _displayController.ClusterEnabled));
+            _savedViewPersistence.Save(_savedViews);
+        };
+        _drawerPanel.ViewApplied = name => ApplySavedView(name);
+        _drawerPanel.ResultClicked = id =>
+        {
+            if (_pinCommands is not null && _pinStore.TryGet(id, out AtlasPin pin))
+            {
+                _workbenchPanel.OpenForManaged(pin, _pinCommands.Operations, ResyncPins);
+            }
+        };
+        _drawerPanel.StatusLine = () =>
+            $"{_displayController.VisibleCount} shown · {_displayController.HiddenByFilter} filtered · {_displayController.ClusterCount} clusters";
+        _drawerPanel.TopResults = () =>
+        {
+            var results = new List<(string, AtlasId)>();
+            PinQuery query = PinQuery.Parse(_displayController.QueryText);
+            foreach (AtlasPin pin in _pinStore.Living)
+            {
+                if (pin.Archived || !query.Matches(pin))
+                {
+                    continue;
+                }
+
+                results.Add((pin.Name.Length == 0 ? "(unnamed)" : pin.Name, pin.Id));
+                if (results.Count >= 6)
+                {
+                    break;
+                }
+            }
+
+            return results;
+        };
+        _drawerPanel.ViewNames = () =>
+        {
+            var names = new List<string>();
+            foreach (SavedView view in _savedViews.Views)
+            {
+                names.Add(view.Name);
+                if (names.Count >= 5)
+                {
+                    break;
+                }
+            }
+
+            return names;
+        };
+    }
+
+    private bool ApplySavedView(string name)
+    {
+        if (!_savedViews.TryGet(name, out SavedView view))
+        {
+            return false;
+        }
+
+        _settings.DrawerShowDirt.Value = view.ShowDirt;
+        _settings.DrawerShowPaved.Value = view.ShowPaved;
+        _settings.DrawerShowPins.Value = view.ShowPins;
+        _settings.DrawerCluster.Value = view.ClusterEnabled;
+        _renderer.SetOverlayEnabled(RoadKind.Dirt, view.ShowDirt);
+        _renderer.SetOverlayEnabled(RoadKind.Paved, view.ShowPaved);
+        _displayController.ShowPins = view.ShowPins;
+        _displayController.ClusterEnabled = view.ClusterEnabled;
+        _displayController.SetQuery(view.Query);
+        ReapplyDisplay();
+        return true;
+    }
+
+    private void ReapplyDisplay()
+    {
+        if (_mapReady)
+        {
+            _displayController.Apply(_pinStore, _pinAdapter);
+        }
+    }
+
+    private void ResyncPins()
+    {
+        _pinAdapter.ReconcileOnMapReady(_pinStore);
+        ReapplyDisplay();
     }
 
     private void OpenWorkbenchAtCursor()
@@ -237,11 +414,220 @@ internal sealed class CartographerRuntime : IDisposable
         }
     }
 
-    /// <summary>Roads and pins together, for quit/teardown paths.</summary>
+    /// <summary>Roads, pins, and views together, for quit/teardown paths.</summary>
     public void SaveAll()
     {
         SaveIfDirty();
         SavePinsSnapshot();
+        _savedViewPersistence.Save(_savedViews);
+    }
+
+    /// <summary>Backs the `cc_atlas` console command: the scriptable drawer.</summary>
+    internal string ExecuteAtlasCommand(string[] args)
+    {
+        if (_disposed || !_mapReady)
+        {
+            return "Concerned Cartographer: no world is loaded yet.";
+        }
+
+        string subcommand = args.Length == 0 ? "status" : args[0].ToLowerInvariant();
+        string remainder = args.Length > 1 ? string.Join(" ", args, 1, args.Length - 1) : "";
+
+        switch (subcommand)
+        {
+            case "status":
+                return $"Atlas view: query \"{_displayController.QueryText}\", pins {(_displayController.ShowPins ? "on" : "off")}, " +
+                    $"cluster {(_displayController.ClusterEnabled ? "on" : "off")}, dirt {(_settings.DrawerShowDirt.Value ? "on" : "off")}, " +
+                    $"paved {(_settings.DrawerShowPaved.Value ? "on" : "off")}. " +
+                    $"{_displayController.VisibleCount} shown, {_displayController.HiddenByFilter} filtered, {_displayController.ClusterCount} clusters.";
+            case "query":
+                _displayController.SetQuery(remainder);
+                ReapplyDisplay();
+                return $"Filter applied: \"{remainder}\" — {_displayController.VisibleCount} shown, {_displayController.HiddenByFilter} filtered. Filters are display-only; 'cc_atlas clear' restores everything.";
+            case "clear":
+                _displayController.SetQuery("");
+                ReapplyDisplay();
+                return "Filter cleared; all pins shown.";
+            case "pins":
+            case "cluster":
+            case "dirt":
+            case "paved":
+                if (!TryParseOnOff(remainder, out bool enabled))
+                {
+                    return $"Usage: cc_atlas {subcommand} on|off";
+                }
+
+                ApplyToggle(subcommand, enabled);
+                return $"{subcommand} {(enabled ? "on" : "off")}.";
+            case "view":
+                return HandleViewCommand(remainder);
+            case "views":
+                var names = new System.Text.StringBuilder("Saved views:");
+                if (_savedViews.Views.Count == 0)
+                {
+                    return "Saved views: none. 'cc_atlas view save <name>' captures the current filter/layer state.";
+                }
+
+                foreach (SavedView view in _savedViews.Views)
+                {
+                    names.Append($"\n  \"{view.Name}\" — query \"{view.Query}\"");
+                }
+
+                return names.ToString();
+            default:
+                return "Usage: cc_atlas [status|query <text>|clear|pins on/off|cluster on/off|dirt on/off|paved on/off|view save/apply/del <name>|views]";
+        }
+    }
+
+    /// <summary>Backs the `cc_survey` console command: review-before-commit
+    /// for survey observations.</summary>
+    internal string ExecuteSurveyCommand(string[] args)
+    {
+        if (_disposed || !_mapReady)
+        {
+            return "Concerned Cartographer: no world is loaded yet.";
+        }
+
+        string subcommand = args.Length == 0 ? "status" : args[0].ToLowerInvariant();
+        string remainder = args.Length > 1 ? args[1].ToLowerInvariant() : "";
+        IReadOnlyList<SurveyEngine.Observation> observations = _surveyEngine.Observations;
+
+        switch (subcommand)
+        {
+            case "status":
+                return $"Survey: {(_settings.SurveyRulesEnabled.Value ? "ENABLED" : "disabled (Survey/SurveyRulesEnabled)")}, " +
+                    $"{_surveyEngine.Rules.Rules.Count} rule(s), {_surveyEngine.Rules.Blacklist.Count} blacklist pattern(s), " +
+                    $"{observations.Count} pending observation(s). Rules file: {SurveyRulePersistence.RulePath}";
+            case "list":
+                if (observations.Count == 0)
+                {
+                    return "No pending observations.";
+                }
+
+                var builder = new System.Text.StringBuilder($"{observations.Count} observation(s):");
+                for (int index = 0; index < observations.Count && index < 15; index++)
+                {
+                    SurveyEngine.Observation observation = observations[index];
+                    builder.Append($"\n  {index + 1}. {observation.SuggestedName} [{observation.Category}] at ({observation.Position.X:0}, {observation.Position.Z:0})");
+                }
+
+                if (observations.Count > 15)
+                {
+                    builder.Append($"\n  ... and {observations.Count - 15} more.");
+                }
+
+                builder.Append("\ncc_survey accept <n|all> / reject <n|all>");
+                return builder.ToString();
+            case "accept":
+                if (remainder == "all")
+                {
+                    int accepted = _surveyEngine.AcceptAll(_pinStore);
+                    ResyncPins();
+                    return $"Accepted {accepted} observation(s) as pins.";
+                }
+
+                if (int.TryParse(remainder, out int acceptIndex) && acceptIndex >= 1 && acceptIndex <= observations.Count)
+                {
+                    _surveyEngine.Accept(observations[acceptIndex - 1].Id, _pinStore);
+                    ResyncPins();
+                    return $"Accepted observation {acceptIndex}.";
+                }
+
+                return "Usage: cc_survey accept <n|all>";
+            case "reject":
+                if (remainder == "all")
+                {
+                    return $"Rejected {_surveyEngine.RejectAll()} observation(s).";
+                }
+
+                if (int.TryParse(remainder, out int rejectIndex) && rejectIndex >= 1 && rejectIndex <= observations.Count)
+                {
+                    _surveyEngine.Reject(observations[rejectIndex - 1].Id);
+                    return $"Rejected observation {rejectIndex}.";
+                }
+
+                return "Usage: cc_survey reject <n|all>";
+            case "reload":
+                _surveyEngine.Rules = _surveyRulePersistence.LoadOrCreate();
+                return $"Reloaded {_surveyEngine.Rules.Rules.Count} rule(s) and {_surveyEngine.Rules.Blacklist.Count} blacklist pattern(s).";
+            case "path":
+                return SurveyRulePersistence.RulePath + " (the file is the shareable import/export format)";
+            default:
+                return "Usage: cc_survey [status|list|accept <n|all>|reject <n|all>|reload|path]";
+        }
+    }
+
+    private string HandleViewCommand(string remainder)
+    {
+        int space = remainder.IndexOf(' ');
+        string action = (space < 0 ? remainder : remainder.Substring(0, space)).ToLowerInvariant();
+        string name = space < 0 ? "" : remainder.Substring(space + 1).Trim();
+        if (name.Length == 0)
+        {
+            return "Usage: cc_atlas view save|apply|del <name>";
+        }
+
+        switch (action)
+        {
+            case "save":
+                _drawerPanel.ViewSaved?.Invoke(name);
+                return $"View \"{name}\" saved with the current filter and layer state.";
+            case "apply":
+                return ApplySavedView(name)
+                    ? $"View \"{name}\" applied."
+                    : $"No view named \"{name}\".";
+            case "del":
+                bool removed = _savedViews.Remove(name);
+                _savedViewPersistence.Save(_savedViews);
+                return removed ? $"View \"{name}\" deleted." : $"No view named \"{name}\".";
+            default:
+                return "Usage: cc_atlas view save|apply|del <name>";
+        }
+    }
+
+    private void ApplyToggle(string which, bool enabled)
+    {
+        switch (which)
+        {
+            case "pins":
+                _settings.DrawerShowPins.Value = enabled;
+                _displayController.ShowPins = enabled;
+                ReapplyDisplay();
+                break;
+            case "cluster":
+                _settings.DrawerCluster.Value = enabled;
+                _displayController.ClusterEnabled = enabled;
+                ReapplyDisplay();
+                break;
+            case "dirt":
+                _settings.DrawerShowDirt.Value = enabled;
+                _renderer.SetOverlayEnabled(RoadKind.Dirt, enabled);
+                break;
+            case "paved":
+                _settings.DrawerShowPaved.Value = enabled;
+                _renderer.SetOverlayEnabled(RoadKind.Paved, enabled);
+                break;
+        }
+    }
+
+    private static bool TryParseOnOff(string text, out bool enabled)
+    {
+        switch (text.Trim().ToLowerInvariant())
+        {
+            case "on":
+            case "true":
+            case "1":
+                enabled = true;
+                return true;
+            case "off":
+            case "false":
+            case "0":
+                enabled = false;
+                return true;
+            default:
+                enabled = false;
+                return false;
+        }
     }
 
     private void SavePinsSnapshot()
@@ -504,7 +890,8 @@ internal sealed class CartographerRuntime : IDisposable
             new PinOperations(_pinStore),
             _pinAdapter,
             _log,
-            () => _pinAdapter.ReconcileOnMapReady(_pinStore));
+            ResyncPins);
+        _displayController.Reset();
         _pipeline = new RoadObservationPipeline(_atlas);
         _editor = new RoadAtlasEditor(_atlas);
         _surveyor = new RoadSurveyor(_settings, _probe, _pipeline, _log);
