@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using BepInEx.Logging;
+using HarmonyLib;
 using TheConcernedCat.ConcernedCartographer.Runtime;
 using UnityEngine;
 
@@ -19,10 +21,20 @@ internal sealed class ChunkRecoveryScanner
 {
     private const float ScanRadiusMeters = 128f;
 
+    // Minimap.IsExplored is private, and the Mono runtime enforces member
+    // access at JIT even when compiling against publicized references
+    // (proven by a MethodAccessException in the field). Harmony's invoker
+    // builds a DynamicMethod with skipVisibility, which the runtime accepts.
+    private static readonly MethodInfo? IsExploredMethod =
+        AccessTools.Method(typeof(Minimap), "IsExplored", new[] { typeof(Vector3) });
+    private static readonly FastInvokeHandler? IsExploredInvoker =
+        IsExploredMethod is null ? null : MethodInvoker.GetHandler(IsExploredMethod);
+
     private readonly CartographerSettings _settings;
     private readonly ManualLogSource _log;
     private readonly List<Heightmap> _buffer = new();
     private readonly HashSet<Vector3> _scannedOrigins = new();
+    private readonly object[] _isExploredArguments = new object[1];
 
     private Heightmap? _current;
     private int _cursor;
@@ -141,7 +153,7 @@ internal sealed class ChunkRecoveryScanner
             }
 
             Vector3 world = CellToWorld(heightmap, x, y);
-            if (minimap == null || !minimap.IsExplored(world))
+            if (minimap == null || !IsExplored(minimap, world))
             {
                 continue;
             }
@@ -162,6 +174,19 @@ internal sealed class ChunkRecoveryScanner
             _scannedOrigins.Add(heightmap.transform.position);
             _current = null;
         }
+    }
+
+    private bool IsExplored(Minimap minimap, Vector3 world)
+    {
+        if (IsExploredInvoker is null)
+        {
+            // Fail closed via Tick's catch: without the fog gate the scanner
+            // must not run at all, or it would reveal unexplored regions.
+            throw new MissingMethodException("Minimap.IsExplored(Vector3) was not found; chunk recovery cannot fog-gate.");
+        }
+
+        _isExploredArguments[0] = world;
+        return (bool)IsExploredInvoker(minimap, _isExploredArguments);
     }
 
     private static bool TryClassifyCell(Heightmap heightmap, int x, int y, float threshold, out RoadKind kind)
