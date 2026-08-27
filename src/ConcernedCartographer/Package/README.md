@@ -56,6 +56,27 @@ Settings live in `BepInEx/config/com.theconcernedcat.valheim.concernedcartograph
 | Diagnostics / DebugLogging | false | — | Opt-in, rate-limited classification/recording diagnostics |
 | Diagnostics / DrawCalibrationMarkers | false | — | Overlay alignment calibration crosses (development aid) |
 
+## Pin Workbench
+
+Your pins become a durable, editable atlas. Press the workbench hotkey
+(default `P`) over a pin while the large map is open: managed pins open the
+editor, your vanilla pins offer an explicit **Adopt** button (adoption
+never moves or duplicates the pin), and foreign/system pins show read-only
+info. Every edit keeps the pin's identity — nothing is deleted and
+recreated — and deletes are recoverable tombstones.
+
+The `cc_pins` console command drives everything scriptably: `edit`,
+`status`, `list [filter]`, `adopt`, `adoptall confirm`, `create <name>`,
+field editors (`name`, `icon`, `category`, `color`, `size`, `note`,
+`tag+/tag-`, `setstatus`, `check/uncheck`, `scope`), `move`, `dup`,
+`archive/unarchive`, `delete`, `restore`, `deleted`, `dups`,
+`merge confirm`, `undo`, `redo`, and `coords` (copies to clipboard).
+Batch adoption and merges always preview first and require `confirm`.
+
+Pins are stored per world next to the road atlas with crash-safe
+snapshot+journal persistence. Removing the mod leaves every managed pin on
+the map as a plain vanilla pin.
+
 ## Road repair tools
 
 Open the console (launch with `-console`) and use `cc_roads` — every
