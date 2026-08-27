@@ -41,6 +41,7 @@ internal sealed class CartographerRuntime : IDisposable
     private RoadSurveyor? _surveyor;
     private PinStore _pinStore = new();
     private PinCommandHandler? _pinCommands;
+    private readonly PinWorkbenchPanel _workbenchPanel;
     private long? _worldUid;
     private bool _mapReady;
     private float _autosaveElapsed;
@@ -56,6 +57,7 @@ internal sealed class CartographerRuntime : IDisposable
         _renderer = new RoadOverlayRenderer(settings, log);
         _rateLimited = new RateLimitedLog(log, 5f);
         _pinAdapter = new PinAdapter(log);
+        _workbenchPanel = new PinWorkbenchPanel(log);
         _constructionCapture = new ConstructionCapture(log);
         _constructionCapture.OperationCaptured += HandleTerrainOperation;
         _chunkRecovery = new ChunkRecoveryScanner(settings, log);
@@ -93,6 +95,14 @@ internal sealed class CartographerRuntime : IDisposable
         if (_disposed || !_settings.Enabled.Value || !_mapReady || _surveyor is null)
         {
             return;
+        }
+
+        _workbenchPanel.HandleFrame();
+        if (_pinCommands is not null &&
+            Minimap.IsOpen() && !Minimap.InTextInput() && !_workbenchPanel.IsVisible &&
+            Input.GetKeyDown(_settings.WorkbenchHotkey.Value))
+        {
+            OpenWorkbenchAtCursor();
         }
 
         if (!WorldContext.TryGetWorldUid(out long uid) || _worldUid != uid)
@@ -155,7 +165,76 @@ internal sealed class CartographerRuntime : IDisposable
             return "Concerned Cartographer: no local player.";
         }
 
+        if (args.Length > 0 && string.Equals(args[0], "edit", StringComparison.OrdinalIgnoreCase))
+        {
+            OpenWorkbenchNear(player.transform.position);
+            return "Opening the Pin Workbench for the nearest pin.";
+        }
+
         return _pinCommands.Execute(args, player.transform.position);
+    }
+
+    private void OpenWorkbenchAtCursor()
+    {
+        if (!MinimapReflection.TryScreenToWorldPoint(Input.mousePosition, out Vector3 world))
+        {
+            Player player = Player.m_localPlayer;
+            if (player is null)
+            {
+                return;
+            }
+
+            world = player.transform.position;
+        }
+
+        OpenWorkbenchNear(world);
+    }
+
+    private void OpenWorkbenchNear(Vector3 world)
+    {
+        if (_pinCommands is null)
+        {
+            return;
+        }
+
+        var point = new RoadPoint(world.x, world.y, world.z);
+        PinOperations operations = _pinCommands.Operations;
+        Action resync = () => _pinAdapter.ReconcileOnMapReady(_pinStore);
+
+        AtlasPin? nearestManaged = null;
+        float best = 30f;
+        foreach (AtlasPin pin in _pinStore.Living)
+        {
+            float distance = pin.Position.HorizontalDistanceTo(point);
+            if (distance < best)
+            {
+                best = distance;
+                nearestManaged = pin;
+            }
+        }
+
+        if (nearestManaged is not null)
+        {
+            _workbenchPanel.OpenForManaged(nearestManaged, operations, resync);
+            return;
+        }
+
+        if (_pinAdapter.TryFindNearest(world, 30f, out Minimap.PinData mapPin, out _))
+        {
+            if (_pinAdapter.IsAdoptableVanilla(mapPin))
+            {
+                Minimap.PinData captured = mapPin;
+                _workbenchPanel.OpenAdoptPrompt(
+                    captured.m_name ?? "",
+                    () => _pinAdapter.Adopt(_pinStore, captured),
+                    operations,
+                    resync);
+            }
+            else
+            {
+                _workbenchPanel.OpenReadOnly($"\"{mapPin.m_name}\" ({mapPin.m_type})");
+            }
+        }
     }
 
     /// <summary>Roads and pins together, for quit/teardown paths.</summary>

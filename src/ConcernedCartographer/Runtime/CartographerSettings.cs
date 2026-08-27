@@ -1,4 +1,5 @@
 using BepInEx.Configuration;
+using UnityEngine;
 
 namespace TheConcernedCat.ConcernedCartographer.Runtime;
 
@@ -19,7 +20,8 @@ internal sealed class CartographerSettings
         ConfigEntry<int> paintSampleRadius,
         ConfigEntry<int> lineWidthPixels,
         ConfigEntry<bool> debugLogging,
-        ConfigEntry<bool> drawCalibrationMarkers)
+        ConfigEntry<bool> drawCalibrationMarkers,
+        ConfigEntry<KeyCode> workbenchHotkey)
     {
         Enabled = enabled;
         CaptureConstructionActions = captureConstructionActions;
@@ -36,6 +38,7 @@ internal sealed class CartographerSettings
         LineWidthPixels = lineWidthPixels;
         DebugLogging = debugLogging;
         DrawCalibrationMarkers = drawCalibrationMarkers;
+        WorkbenchHotkey = workbenchHotkey;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -53,6 +56,7 @@ internal sealed class CartographerSettings
     public ConfigEntry<int> LineWidthPixels { get; }
     public ConfigEntry<bool> DebugLogging { get; }
     public ConfigEntry<bool> DrawCalibrationMarkers { get; }
+    public ConfigEntry<KeyCode> WorkbenchHotkey { get; }
 
     public static CartographerSettings Bind(ConfigFile config)
     {
@@ -93,6 +97,8 @@ internal sealed class CartographerSettings
                 new AcceptableValueRange<int>(1, 6))),
             config.Bind("Diagnostics", "DebugLogging", false, "Write diagnostic road classification messages."),
             config.Bind("Diagnostics", "DrawCalibrationMarkers", false,
-                "Draw fixed calibration crosses into the dirt overlay at world origin (magenta), +128m east (yellow), and +128m north (cyan) to verify overlay/map alignment."));
+                "Draw fixed calibration crosses into the dirt overlay at world origin (magenta), +128m east (yellow), and +128m north (cyan) to verify overlay/map alignment."),
+            config.Bind("Workbench", "WorkbenchHotkey", KeyCode.P,
+                "Key that opens the Pin Workbench for the pin under the cursor while the large map is open."));
     }
 }
