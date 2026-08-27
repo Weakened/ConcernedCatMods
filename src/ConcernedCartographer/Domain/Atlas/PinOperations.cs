@@ -116,11 +116,27 @@ internal sealed class PinOperations
 
     /// <summary>Likely duplicates: living pins within the radius that share
     /// an icon or a normalized name. Each group's first entry (the oldest)
-    /// is the suggested merge primary.</summary>
+    /// is the suggested merge primary. Spatially bucketed so the scan stays
+    /// near-linear on 10,000-pin atlases.</summary>
     public List<List<AtlasPin>> FindDuplicateGroups(float radiusMeters)
     {
         var pins = new List<AtlasPin>(_store.Living);
         pins.Sort((a, b) => a.CreatedUtc.CompareTo(b.CreatedUtc));
+
+        float cell = Math.Max(1f, radiusMeters);
+        var buckets = new Dictionary<long, List<int>>();
+        for (int index = 0; index < pins.Count; index++)
+        {
+            long key = BucketKey(pins[index], cell);
+            if (!buckets.TryGetValue(key, out List<int>? bucket))
+            {
+                bucket = new List<int>();
+                buckets.Add(key, bucket);
+            }
+
+            bucket.Add(index);
+        }
+
         var grouped = new bool[pins.Count];
         var groups = new List<List<AtlasPin>>();
 
@@ -132,16 +148,29 @@ internal sealed class PinOperations
             }
 
             List<AtlasPin>? group = null;
-            for (int j = i + 1; j < pins.Count; j++)
+            int cellX = (int)Math.Floor(pins[i].Position.X / cell);
+            int cellZ = (int)Math.Floor(pins[i].Position.Z / cell);
+            for (int dx = -1; dx <= 1; dx++)
             {
-                if (grouped[j] || !AreLikelyDuplicates(pins[i], pins[j], radiusMeters))
+                for (int dz = -1; dz <= 1; dz++)
                 {
-                    continue;
-                }
+                    if (!buckets.TryGetValue(Combine(cellX + dx, cellZ + dz), out List<int>? bucket))
+                    {
+                        continue;
+                    }
 
-                group ??= new List<AtlasPin> { pins[i] };
-                group.Add(pins[j]);
-                grouped[j] = true;
+                    foreach (int j in bucket)
+                    {
+                        if (j <= i || grouped[j] || !AreLikelyDuplicates(pins[i], pins[j], radiusMeters))
+                        {
+                            continue;
+                        }
+
+                        group ??= new List<AtlasPin> { pins[i] };
+                        group.Add(pins[j]);
+                        grouped[j] = true;
+                    }
+                }
             }
 
             if (group is not null)
@@ -152,6 +181,16 @@ internal sealed class PinOperations
         }
 
         return groups;
+    }
+
+    private static long BucketKey(AtlasPin pin, float cell)
+    {
+        return Combine((int)Math.Floor(pin.Position.X / cell), (int)Math.Floor(pin.Position.Z / cell));
+    }
+
+    private static long Combine(int cellX, int cellZ)
+    {
+        return ((long)(uint)cellX << 32) ^ (uint)cellZ;
     }
 
     /// <summary>Merges duplicates into the primary: tags union, notes
