@@ -8,6 +8,21 @@ namespace TheConcernedCat.ConcernedCartographer.Roads;
 /// Douglas-Peucker simplification for atlas maintenance.</summary>
 internal static class RoadGeometry
 {
+    public static RoadPoint NearestPointOnSegment(RoadPoint point, RoadPoint start, RoadPoint end)
+    {
+        float segmentX = end.X - start.X;
+        float segmentZ = end.Z - start.Z;
+        float lengthSquared = (segmentX * segmentX) + (segmentZ * segmentZ);
+        if (lengthSquared <= float.Epsilon)
+        {
+            return start;
+        }
+
+        float t = (((point.X - start.X) * segmentX) + ((point.Z - start.Z) * segmentZ)) / lengthSquared;
+        t = Math.Max(0f, Math.Min(1f, t));
+        return new RoadPoint(start.X + (t * segmentX), start.Y, start.Z + (t * segmentZ));
+    }
+
     public static float HorizontalDistanceToSegment(RoadPoint point, RoadPoint start, RoadPoint end)
     {
         float segmentX = end.X - start.X;

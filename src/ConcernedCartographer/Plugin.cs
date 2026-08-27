@@ -10,7 +10,7 @@ public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernedcartographer";
     public const string PluginName = "Concerned Cartographer";
-    public const string PluginVersion = "0.4.0";
+    public const string PluginVersion = "0.5.0";
 
     private CartographerRuntime? _runtime;
 
@@ -24,6 +24,7 @@ public sealed class Plugin : BaseUnityPlugin
         CommandManager.Instance.AddConsoleCommand(new PinToolsCommand(_runtime));
         CommandManager.Instance.AddConsoleCommand(new AtlasToolsCommand(_runtime));
         CommandManager.Instance.AddConsoleCommand(new SurveyToolsCommand(_runtime));
+        CommandManager.Instance.AddConsoleCommand(new RouteToolsCommand(_runtime));
         Logger.LogInfo($"{PluginName} {PluginVersion} loaded");
         LogEnvironment(settings);
     }

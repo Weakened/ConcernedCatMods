@@ -51,6 +51,12 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly SurveyEngine _surveyEngine = new();
     private readonly SurveyScanner _surveyScanner;
     private readonly SurveyRulePersistence _surveyRulePersistence;
+    private readonly RoutePersistence _routePersistence;
+    private readonly RouteOverlayRenderer _routeRenderer;
+    private RouteStore _routeStore = new();
+    private RouteCommandHandler? _routeCommands;
+    private bool _routeRedrawPending;
+    private float _routeRedrawElapsed;
     private long? _worldUid;
     private bool _mapReady;
     private float _autosaveElapsed;
@@ -76,6 +82,8 @@ internal sealed class CartographerRuntime : IDisposable
         _surveyRulePersistence = new SurveyRulePersistence(log);
         _surveyEngine.Rules = _surveyRulePersistence.LoadOrCreate();
         _surveyScanner = new SurveyScanner(settings, log);
+        _routePersistence = new RoutePersistence(log);
+        _routeRenderer = new RouteOverlayRenderer(settings, log);
         _constructionCapture = new ConstructionCapture(log);
         _constructionCapture.OperationCaptured += HandleTerrainOperation;
         _chunkRecovery = new ChunkRecoveryScanner(settings, log);
@@ -105,6 +113,7 @@ internal sealed class CartographerRuntime : IDisposable
         _displayController.ShowPins = _settings.DrawerShowPins.Value;
         _displayController.ClusterEnabled = _settings.DrawerCluster.Value;
         _displayController.Apply(_pinStore, _pinAdapter);
+        _routeRenderer.RedrawAll(_routeStore);
         if (_settings.DrawCalibrationMarkers.Value)
         {
             _renderer.DrawCalibrationMarkers();
@@ -158,6 +167,24 @@ internal sealed class CartographerRuntime : IDisposable
             {
                 _displayController.Apply(_pinStore, _pinAdapter);
             }
+
+            if (_routeCommands is not null && _routeCommands.Mode != RouteCommandHandler.MapMode.None &&
+                Input.GetKey(_settings.RouteDrawModifier.Value) &&
+                MinimapReflection.TryScreenToWorldPoint(Input.mousePosition, out Vector3 cursorWorld))
+            {
+                _routeCommands.HandleMapFrame(
+                    new RoadPoint(cursorWorld.x, cursorWorld.y, cursorWorld.z),
+                    Input.GetMouseButton(0),
+                    Input.GetMouseButtonDown(0));
+            }
+        }
+
+        _routeRedrawElapsed += unscaledDeltaTime;
+        if (_routeRedrawPending && _routeRedrawElapsed >= RedrawDebounceSeconds)
+        {
+            _routeRedrawElapsed = 0f;
+            _routeRedrawPending = false;
+            _routeRenderer.RedrawAll(_routeStore);
         }
 
         if (!WorldContext.TryGetWorldUid(out long uid) || _worldUid != uid)
@@ -197,6 +224,7 @@ internal sealed class CartographerRuntime : IDisposable
             SaveIfDirty();
             _pinAdapter.AbsorbVanillaChanges(_pinStore);
             _pinPersistence.FlushJournal();
+            _routePersistence.FlushJournal();
         }
     }
 
@@ -635,7 +663,25 @@ internal sealed class CartographerRuntime : IDisposable
         if (_worldUid is long uid)
         {
             _pinPersistence.Save(uid, _pinStore);
+            _routePersistence.Save(uid, _routeStore);
         }
+    }
+
+    /// <summary>Backs the `cc_routes` console command.</summary>
+    internal string ExecuteRouteCommand(string[] args)
+    {
+        if (_disposed || !_mapReady || _routeCommands is null)
+        {
+            return "Concerned Cartographer: no world is loaded yet.";
+        }
+
+        Player player = Player.m_localPlayer;
+        if (player is null)
+        {
+            return "Concerned Cartographer: no local player.";
+        }
+
+        return _routeCommands.Execute(args, player.transform.position);
     }
 
     private void HandleTerrainOperation(CapturedTerrainOperation operation)
@@ -892,6 +938,15 @@ internal sealed class CartographerRuntime : IDisposable
             _log,
             ResyncPins);
         _displayController.Reset();
+        _routeStore = _routePersistence.Load(uid);
+        _routeStore.Changed += _routePersistence.QueueJournal;
+        _routeCommands = new RouteCommandHandler(
+            _routeStore,
+            new RouteOperations(_routeStore),
+            _atlas,
+            _settings,
+            _log,
+            () => _routeRedrawPending = true);
         _pipeline = new RoadObservationPipeline(_atlas);
         _editor = new RoadAtlasEditor(_atlas);
         _surveyor = new RoadSurveyor(_settings, _probe, _pipeline, _log);
