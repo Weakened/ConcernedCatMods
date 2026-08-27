@@ -13,9 +13,11 @@ namespace TheConcernedCat.ConcernedCartographer.Atlas;
 /// without discarding valid entities.</summary>
 internal static class PinCodec
 {
-    public const string Header = "# ConcernedCartographer pins v1";
-    private const string RowMarker = "1";
-    private const int FieldCount = 22;
+    public const string Header = "# ConcernedCartographer pins v2";
+    private const string RowMarkerV1 = "1";
+    private const string RowMarker = "2";
+    private const int FieldCountV1 = 22;
+    private const int FieldCount = 24;
 
     public sealed class ParseResult
     {
@@ -113,6 +115,8 @@ internal static class PinCodec
             pin.Archived ? "1" : "0",
             pin.Deleted ? "1" : "0",
             pin.DeletedUtc?.Ticks.ToString(CultureInfo.InvariantCulture) ?? "",
+            AtlasText.Escape(pin.OwnerAuthor),
+            AtlasText.Escape(pin.LastAuthor),
             pin.Position.X.ToString("R", CultureInfo.InvariantCulture),
             pin.Position.Y.ToString("R", CultureInfo.InvariantCulture),
             pin.Position.Z.ToString("R", CultureInfo.InvariantCulture),
@@ -123,10 +127,17 @@ internal static class PinCodec
     {
         pin = null!;
         string[] parts = line.Split('\t');
-        if (parts.Length != FieldCount || parts[FieldCount - 1] != RowMarker)
+        bool isLegacy = parts.Length == FieldCountV1 && parts[FieldCountV1 - 1] == RowMarkerV1;
+        bool isCurrent = parts.Length == FieldCount && parts[FieldCount - 1] == RowMarker;
+        if (!isLegacy && !isCurrent)
         {
             return false;
         }
+
+        // Position fields sit after the optional author columns.
+        int positionIndex = isCurrent ? 20 : 18;
+        string ownerAuthor = isCurrent ? AtlasText.Unescape(parts[18]) : "";
+        string lastAuthor = isCurrent ? AtlasText.Unescape(parts[19]) : "";
 
         if (!AtlasId.TryParse(parts[0], out AtlasId id) ||
             !string.Equals(id.Kind, AtlasId.PinKind, StringComparison.Ordinal) ||
@@ -146,9 +157,9 @@ internal static class PinCodec
             !TryParseFlag(parts[15], out bool archived) ||
             !TryParseFlag(parts[16], out bool deleted) ||
             !TryParseNullableTicks(parts[17], out DateTime? deletedUtc) ||
-            !float.TryParse(parts[18], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) ||
-            !float.TryParse(parts[19], NumberStyles.Float, CultureInfo.InvariantCulture, out float y) ||
-            !float.TryParse(parts[20], NumberStyles.Float, CultureInfo.InvariantCulture, out float z))
+            !float.TryParse(parts[positionIndex], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) ||
+            !float.TryParse(parts[positionIndex + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out float y) ||
+            !float.TryParse(parts[positionIndex + 2], NumberStyles.Float, CultureInfo.InvariantCulture, out float z))
         {
             return false;
         }
@@ -171,6 +182,8 @@ internal static class PinCodec
             Archived = archived,
             Deleted = deleted,
             DeletedUtc = deletedUtc,
+            OwnerAuthor = ownerAuthor,
+            LastAuthor = lastAuthor,
             Position = new RoadPoint(x, y, z),
         };
         pin.Tags.AddRange(AtlasText.SplitTags(parts[10]));
