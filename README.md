@@ -6,7 +6,7 @@ Valheim mods by **The Concerned Cat**. This repository is a monorepo: shared eng
 
 | Mod | Status | Purpose |
 |---|---|---|
-| [Concerned Cartographer](docs/mods/concerned-cartographer/PROJECT.md) | Prototype / alpha | Builds a local, per-world road atlas by detecting player-made dirt and paved terrain and drawing it on Valheim's map. |
+| [Concerned Cartographer](docs/mods/concerned-cartographer/PROJECT.md) | 1.0 release candidate | A living atlas: self-mapping roads, durable managed pins, search and decluttering, road-aware routes, and explicit collaborative sharing on Valheim's map. |
 
 ## Repository model
 
@@ -41,3 +41,22 @@ another-mod/v0.1.0
 ## License
 
 Source code in this repository is licensed under the MIT License. Valheim and its assets are owned by their respective rights holders and are not distributed here.
+
+<!-- CC-DEVELOPER-DOCS -->
+## Developer documentation
+
+Concerned Cartographer is intentionally documented for outside contributors and future maintainers:
+
+- [Developer setup](docs/mods/concerned-cartographer/DEVELOPER_GUIDE.md)
+- [Complete codebase/class map](docs/mods/concerned-cartographer/CODEBASE_GUIDE.md)
+- [Architecture](docs/mods/concerned-cartographer/ARCHITECTURE.md)
+- [Data formats and migrations](docs/mods/concerned-cartographer/DATA_FORMATS.md)
+- [Troubleshooting](docs/mods/concerned-cartographer/TROUBLESHOOTING.md)
+- [AI-assisted development and provenance](docs/mods/concerned-cartographer/AI_DEVELOPMENT.md)
+- [v1 release/authorship preparation](docs/mods/concerned-cartographer/V1_RELEASE_PREP.md)
+- [Contributing](CONTRIBUTING.md)
+- [Attribution / project notice](NOTICE.md)
+
+## Original project and attribution
+
+ConcernedCatMods and Concerned Cartographer are created and maintained by **Eren Cansunar / The Concerned Cat**. AI coding agents materially assisted implementation, tests, research and documentation. See [AUTHORS.md](AUTHORS.md), [NOTICE.md](NOTICE.md), and the repository [LICENSE](LICENSE).
