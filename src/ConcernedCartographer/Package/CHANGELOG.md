@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.0
+
+Routes and planning: draw where you'll go, and let the roads do the navigating.
+
+- **Freehand routes**: `cc_routes draw <name>`, then hold Shift+LeftClick on the large map and sketch. Partial erase (`cc_routes erase`) rubs out just the stretch you brush over, splitting cleanly.
+- **Waypoint routes with road-aware routing**: `cc_routes waypoint <name>` places waypoints that snap to your recorded roads — and when both ends touch the road network, the route follows the actual roads across junctions instead of cutting straight lines.
+- **Full editing**: split, merge, lock (blocks all geometry edits), archive, styles (solid/dashed/dotted), status (planned/active/done), custom colors, undo/redo.
+- **Measure anything**: `cc_routes measure` gives distance, how much of the route runs on roads, and a travel-time estimate at configurable speeds.
+- Routes render on their own "CC Routes" map layer with per-status colors, persist per world with crash-safe journaling, and never touch the world or other mods' data.
+
+### Known limitations
+
+- Route drawing needs the large map and mouse (controller pass arrives in v0.7); the modifier key avoids vanilla map-drag conflicts.
+- Road-aware routing follows your recorded road atlas — unexplored roads can't route until discovered.
+
 ## 0.4.0
 
 The atlas becomes readable at any scale: one drawer, real search, and calm maps.

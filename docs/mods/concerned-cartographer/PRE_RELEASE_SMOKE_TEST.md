@@ -70,7 +70,18 @@ marked **BLOCKS** must pass before publication; others are record-and-ship.
 | 5.8 | Enable SurveyRulesEnabled | Walk near copper rocks ~1 min | HUD reports observations; `cc_survey list` shows them; nothing pinned until accept; base exclusion respected near a Base pin | Console output | Yes |
 | 5.9 | 5.8 | `cc_survey accept all`, disable survey | Pins appear tagged "surveyed"; scanner stays silent when disabled | Console output | No |
 
-## 6–13. Later-sprint sections
+## 6. Routes (v0.5)
+
+| # | Setup | Action | Expected | Evidence on failure | Blocks |
+|---|---|---|---|---|---|
+| 6.1 | Large map | `cc_routes draw Test`, hold Shift+LMB and sketch, `cc_routes stop` | Line appears live while drawing; no map pan fighting; survives restart | Clip | Yes |
+| 6.2 | 6.1 | `cc_routes erase`, brush the middle | Only the brushed stretch vanishes; route splits into two; undo restores | Clip | Yes |
+| 6.3 | Recorded road network | `cc_routes waypoint Trip`, click two points near roads | Route follows the roads across junctions, not a straight cut; snap off → straight lines | Screenshot | Yes |
+| 6.4 | Any route | `cc_routes measure` | Plausible distance, on-road %, minutes | Console output | No |
+| 6.5 | Any route | style/status/color/lock/archive cycle | Dashed/dotted render distinctly; status colors differ; locked rejects edits; archived hides | Screenshots | No |
+| 6.6 | "CC Routes" overlay toggle | Toggle in Jötunn panel | Route layer hides/shows independently of roads | Screenshot | No |
+
+## 7–13. Later-sprint sections
 
 Placeholders grow as sprints complete: Atlas Drawer/search/views (v0.4),
 routes (v0.5), multiplayer/tombstones (v0.6), NoMap/controller/
