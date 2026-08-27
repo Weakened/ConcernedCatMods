@@ -13,6 +13,7 @@ Highlights across the 1.0 line:
 - **Collaboration you can trust**: explicit sharing, preview-before-apply, honest conflicts, and deletions that can never resurrect.
 - **For every Viking**: NoMap table mode, controller path, translations, UI scaling, high contrast, backups, and a sanitized support report.
 - **Pre-release security audit**: the sync receive path was adversarially audited and hardened — bounded decompression, sanity bounds on every parsed field, deletion names in the sync preview, and sanitized author labels.
+- **Release-candidate smoke fixes**: adopting a vanilla pin can no longer trap map/game input (the workbench now provably balances Jötunn's global input block and fail-closes on map close, logout, and shutdown); the Pin Workbench uses a padded two-column layout that keeps every label inside the panel at all UI scales; and a `cc_roads align` diagnostic verifies road-overlay/map alignment against the live game.
 
 Upgrading from any earlier version is automatic and lossless.
 ## 0.9.0
