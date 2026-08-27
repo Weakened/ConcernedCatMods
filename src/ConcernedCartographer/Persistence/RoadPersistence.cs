@@ -12,6 +12,11 @@ internal sealed class RoadPersistence
     private readonly ManualLogSource _log;
     private readonly Runtime.RateLimitedLog _rateLimited;
 
+    // Sidecars still in the pre-source v1 format get one backup copy before
+    // the first v2 save rewrites them, because a downgraded v0.1 mod cannot
+    // read v2 rows and would discard the file as fully malformed.
+    private readonly System.Collections.Generic.HashSet<string> _legacyPathsAwaitingBackup = new();
+
     public RoadPersistence(ManualLogSource log)
     {
         _log = log;
@@ -37,7 +42,25 @@ internal sealed class RoadPersistence
                 _log.LogWarning($"Skipped {result.MalformedRows} malformed road-atlas row(s) in {path}.");
             }
 
-            return new RoadAtlas(result.Strokes);
+            if (result.LegacyRows > 0)
+            {
+                _legacyPathsAwaitingBackup.Add(path);
+                _log.LogInfo(
+                    $"Road atlas {path} uses the v1 format ({result.LegacyRows} row(s)); " +
+                    "the original will be kept as .v1.bak when it is first rewritten in v2.");
+            }
+
+            var atlas = new RoadAtlas(result.Strokes);
+            RoadAtlas.MaintenanceResult maintenance = atlas.PerformMaintenance();
+            if (maintenance.MergedStrokes > 0 || maintenance.RemovedPoints > 0)
+            {
+                _log.LogInfo(
+                    $"Road atlas maintenance: merged {maintenance.MergedStrokes} stroke fragment(s), " +
+                    $"simplified away {maintenance.RemovedPoints} point(s); {atlas.Strokes.Count} stroke(s), " +
+                    $"{atlas.PointCount} point(s) remain.");
+            }
+
+            return atlas;
         }
         catch (Exception exception)
         {
@@ -54,6 +77,18 @@ internal sealed class RoadPersistence
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            if (_legacyPathsAwaitingBackup.Contains(path) && File.Exists(path))
+            {
+                string backupPath = path + ".v1.bak";
+                if (!File.Exists(backupPath))
+                {
+                    File.Copy(path, backupPath);
+                    _log.LogInfo($"Backed up v1 road atlas to {backupPath} before the first v2 save.");
+                }
+
+                _legacyPathsAwaitingBackup.Remove(path);
+            }
+
             using (var writer = new StreamWriter(temporaryPath, append: false))
             {
                 foreach (string line in RoadAtlasCodec.Serialize(atlas.Strokes))
@@ -71,6 +106,34 @@ internal sealed class RoadPersistence
             _rateLimited.Error("atlas-save", $"Could not save road atlas to {path}: {exception}");
             TryDelete(temporaryPath);
             return false;
+        }
+    }
+
+    private readonly System.Collections.Generic.HashSet<long> _reconcileBackupsTaken = new();
+
+    /// <summary>Journals destructive reconciliation: before the first
+    /// coverage removal in a session touches a world's atlas, the last saved
+    /// sidecar is copied to .pre-reconcile.bak (overwritten next session).
+    /// Manual recovery = delete the sidecar, rename the backup.</summary>
+    public void BackupBeforeReconciliation(long worldUid)
+    {
+        if (!_reconcileBackupsTaken.Add(worldUid))
+        {
+            return;
+        }
+
+        try
+        {
+            string path = GetPath(worldUid);
+            if (File.Exists(path))
+            {
+                File.Copy(path, path + ".pre-reconcile.bak", overwrite: true);
+                _log.LogInfo($"Backed up road atlas to {path}.pre-reconcile.bak before this session's first reconciliation.");
+            }
+        }
+        catch (Exception exception)
+        {
+            _rateLimited.Error("reconcile-backup", $"Could not back up the road atlas before reconciliation: {exception}");
         }
     }
 

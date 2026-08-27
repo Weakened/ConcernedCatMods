@@ -41,6 +41,10 @@ Settings live in `BepInEx/config/com.theconcernedcat.valheim.concernedcartograph
 | Setting | Default | Range | Purpose |
 |---|---|---|---|
 | General / Enabled | true | — | Master switch for surveying and overlays |
+| Sources / CaptureConstructionActions | true | — | Record your own successful hoe/stonecutter paint actions instantly, without walking them |
+| Sources / ReconcileTerrainChanges | true | — | Cultivating/resetting terrain removes covered road ink; repainting converts road kind |
+| Sources / RecoverLoadedChunks | true | — | Recover narrow road paint from loaded terrain near you, only in map areas you have explored |
+| Sources / RecoveryBudgetCellsPerFrame | 256 | 32–8192 | Paint cells examined per frame by chunk recovery |
 | Survey / SampleIntervalSeconds | 0.35 | 0.10–5.0 | Seconds between terrain samples |
 | Survey / MinimumPointSpacingMeters | 1.5 | 0.5–20 | Minimum distance before a new road point is stored |
 | Survey / MaximumStrokeGapMeters | 8.0 | 2–100 | Larger gaps start a new stroke instead of a connector line |
@@ -51,6 +55,27 @@ Settings live in `BepInEx/config/com.theconcernedcat.valheim.concernedcartograph
 | Map / LineWidthPixels | 1 | 1–6 | Road line width in map texels (~11.6 m each; widths above 1 make nearby roads merge) |
 | Diagnostics / DebugLogging | false | — | Opt-in, rate-limited classification/recording diagnostics |
 | Diagnostics / DrawCalibrationMarkers | false | — | Overlay alignment calibration crosses (development aid) |
+
+## Road repair tools
+
+Open the console (launch with `-console`) and use `cc_roads` — every
+operation targets the recorded road nearest your character, and an optional
+number widens the search radius in meters:
+
+| Command | Effect |
+|---|---|
+| `cc_roads status` | Atlas totals and the nearest road's kind/size/source |
+| `cc_roads delete [radius]` | Delete the nearest road (undoable) |
+| `cc_roads kind` | Toggle the nearest road between Dirt and Paved |
+| `cc_roads hide` / `unhide` | Hide a road from the map without deleting it |
+| `cc_roads split` | Split the nearest road at its closest interior point |
+| `cc_roads join [radius]` | Stitch the two nearest same-kind road ends |
+| `cc_roads rebuild [radius]` | Clear recorded roads nearby and re-scan explored terrain |
+| `cc_roads undo` | Undo the last tool operation (up to 20) |
+
+The tools edit only the mod's own atlas; they can never modify terrain or
+world saves. Before the first destructive change each session the sidecar is
+backed up to `.pre-reconcile.bak`.
 
 ## Data and uninstall safety
 

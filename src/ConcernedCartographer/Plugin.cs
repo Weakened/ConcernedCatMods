@@ -10,7 +10,7 @@ public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernedcartographer";
     public const string PluginName = "Concerned Cartographer";
-    public const string PluginVersion = "0.1.0";
+    public const string PluginVersion = "0.2.0";
 
     private CartographerRuntime? _runtime;
 
@@ -20,6 +20,7 @@ public sealed class Plugin : BaseUnityPlugin
         _runtime = new CartographerRuntime(settings, Logger);
 
         MinimapManager.OnVanillaMapAvailable += HandleMapAvailable;
+        CommandManager.Instance.AddConsoleCommand(new RoadToolsCommand(_runtime));
         Logger.LogInfo($"{PluginName} {PluginVersion} loaded");
         LogEnvironment(settings);
     }
@@ -38,6 +39,10 @@ public sealed class Plugin : BaseUnityPlugin
             Logger.LogInfo(
                 "Effective config (out-of-range values are clamped to documented ranges): " +
                 $"Enabled={settings.Enabled.Value}, " +
+                $"CaptureConstructionActions={settings.CaptureConstructionActions.Value}, " +
+                $"ReconcileTerrainChanges={settings.ReconcileTerrainChanges.Value}, " +
+                $"RecoverLoadedChunks={settings.RecoverLoadedChunks.Value}, " +
+                $"RecoveryBudgetCellsPerFrame={settings.RecoveryBudgetCellsPerFrame.Value}, " +
                 $"SampleIntervalSeconds={settings.SampleIntervalSeconds.Value}, " +
                 $"MinimumPointSpacingMeters={settings.MinimumPointSpacingMeters.Value}, " +
                 $"MaximumStrokeGapMeters={settings.MaximumStrokeGapMeters.Value}, " +

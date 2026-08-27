@@ -6,6 +6,10 @@ internal sealed class CartographerSettings
 {
     private CartographerSettings(
         ConfigEntry<bool> enabled,
+        ConfigEntry<bool> captureConstructionActions,
+        ConfigEntry<bool> reconcileTerrainChanges,
+        ConfigEntry<bool> recoverLoadedChunks,
+        ConfigEntry<int> recoveryBudgetCellsPerFrame,
         ConfigEntry<float> sampleIntervalSeconds,
         ConfigEntry<float> minimumPointSpacingMeters,
         ConfigEntry<float> maximumStrokeGapMeters,
@@ -18,6 +22,10 @@ internal sealed class CartographerSettings
         ConfigEntry<bool> drawCalibrationMarkers)
     {
         Enabled = enabled;
+        CaptureConstructionActions = captureConstructionActions;
+        ReconcileTerrainChanges = reconcileTerrainChanges;
+        RecoverLoadedChunks = recoverLoadedChunks;
+        RecoveryBudgetCellsPerFrame = recoveryBudgetCellsPerFrame;
         SampleIntervalSeconds = sampleIntervalSeconds;
         MinimumPointSpacingMeters = minimumPointSpacingMeters;
         MaximumStrokeGapMeters = maximumStrokeGapMeters;
@@ -31,6 +39,10 @@ internal sealed class CartographerSettings
     }
 
     public ConfigEntry<bool> Enabled { get; }
+    public ConfigEntry<bool> CaptureConstructionActions { get; }
+    public ConfigEntry<bool> ReconcileTerrainChanges { get; }
+    public ConfigEntry<bool> RecoverLoadedChunks { get; }
+    public ConfigEntry<int> RecoveryBudgetCellsPerFrame { get; }
     public ConfigEntry<float> SampleIntervalSeconds { get; }
     public ConfigEntry<float> MinimumPointSpacingMeters { get; }
     public ConfigEntry<float> MaximumStrokeGapMeters { get; }
@@ -46,6 +58,15 @@ internal sealed class CartographerSettings
     {
         return new CartographerSettings(
             config.Bind("General", "Enabled", true, "Enable road surveying and map overlays."),
+            config.Bind("Sources", "CaptureConstructionActions", true,
+                "Record roads from your own successful hoe/cultivator/stonecutter paint actions immediately, without walking them."),
+            config.Bind("Sources", "ReconcileTerrainChanges", true,
+                "When you cultivate, reset, or repaint terrain, remove the covered road ink from the atlas so no ghost roads remain."),
+            config.Bind("Sources", "RecoverLoadedChunks", true,
+                "Recover narrow road paint from already-loaded terrain near you, limited to map areas you have explored."),
+            config.Bind("Sources", "RecoveryBudgetCellsPerFrame", 256, new ConfigDescription(
+                "Terrain paint cells examined per frame by chunk recovery. Higher recovers faster at more CPU cost.",
+                new AcceptableValueRange<int>(32, 8192))),
             config.Bind("Survey", "SampleIntervalSeconds", 0.35f, new ConfigDescription(
                 "Seconds between terrain samples.",
                 new AcceptableValueRange<float>(0.10f, 5.0f))),
