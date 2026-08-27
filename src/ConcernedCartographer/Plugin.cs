@@ -24,6 +24,7 @@ public sealed class Plugin : BaseUnityPlugin
         CommandManager.Instance.AddConsoleCommand(new PinToolsCommand(_runtime));
         CommandManager.Instance.AddConsoleCommand(new AtlasToolsCommand(_runtime));
         CommandManager.Instance.AddConsoleCommand(new SurveyToolsCommand(_runtime));
+        CommandManager.Instance.AddConsoleCommand(new RouteToolsCommand(_runtime));
         Logger.LogInfo($"{PluginName} {PluginVersion} loaded");
         LogEnvironment(settings);
     }

@@ -314,6 +314,49 @@ internal sealed class RoadAtlas
         return stroke is not null && distanceMeters <= maxRadiusMeters;
     }
 
+    /// <summary>Nearest point on any road geometry (either kind) within the
+    /// radius — the snapping primitive for route planning. Projects onto
+    /// segments, so simplified straight stretches snap along their whole
+    /// length.</summary>
+    public bool TryGetNearestPointOnRoads(RoadPoint position, float maxRadiusMeters, out RoadPoint nearest, out float distanceMeters)
+    {
+        nearest = default;
+        distanceMeters = float.MaxValue;
+        int cellRange = (int)Math.Ceiling(maxRadiusMeters / GridCellMeters);
+        int centerX = ToCell(position.X);
+        int centerZ = ToCell(position.Z);
+
+        foreach (RoadKind kind in new[] { RoadKind.Dirt, RoadKind.Paved })
+        {
+            for (int cellX = centerX - cellRange; cellX <= centerX + cellRange; cellX++)
+            {
+                for (int cellZ = centerZ - cellRange; cellZ <= centerZ + cellRange; cellZ++)
+                {
+                    if (!_grid.TryGetValue(CellKey(kind, cellX, cellZ), out List<GridEntry>? entries))
+                    {
+                        continue;
+                    }
+
+                    foreach (GridEntry entry in entries)
+                    {
+                        List<RoadPoint> points = entry.Stroke.Points;
+                        RoadPoint start = points[entry.SegmentIndex];
+                        RoadPoint end = entry.SegmentIndex + 1 < points.Count ? points[entry.SegmentIndex + 1] : start;
+                        RoadPoint candidate = RoadGeometry.NearestPointOnSegment(position, start, end);
+                        float distance = candidate.HorizontalDistanceTo(position);
+                        if (distance < distanceMeters)
+                        {
+                            distanceMeters = distance;
+                            nearest = candidate;
+                        }
+                    }
+                }
+            }
+        }
+
+        return distanceMeters <= maxRadiusMeters;
+    }
+
     public void EndStroke(RoadObservationSource source)
     {
         _activeStrokes.Remove(source);

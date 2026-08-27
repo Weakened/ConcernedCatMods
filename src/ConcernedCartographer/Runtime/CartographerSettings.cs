@@ -33,7 +33,13 @@ internal sealed class CartographerSettings
         ConfigEntry<float> surveyScanIntervalSeconds,
         ConfigEntry<float> surveyScanRadius,
         ConfigEntry<float> surveyBaseExclusionRadius,
-        ConfigEntry<int> surveyMaxObservations)
+        ConfigEntry<int> surveyMaxObservations,
+        ConfigEntry<KeyCode> routeDrawModifier,
+        ConfigEntry<float> routeEraseRadius,
+        ConfigEntry<float> routeSnapRadius,
+        ConfigEntry<float> routeOnRoadTolerance,
+        ConfigEntry<float> routeOffRoadSpeed,
+        ConfigEntry<float> routeOnRoadSpeed)
     {
         Enabled = enabled;
         CaptureConstructionActions = captureConstructionActions;
@@ -63,6 +69,12 @@ internal sealed class CartographerSettings
         SurveyScanRadius = surveyScanRadius;
         SurveyBaseExclusionRadius = surveyBaseExclusionRadius;
         SurveyMaxObservations = surveyMaxObservations;
+        RouteDrawModifier = routeDrawModifier;
+        RouteEraseRadius = routeEraseRadius;
+        RouteSnapRadius = routeSnapRadius;
+        RouteOnRoadTolerance = routeOnRoadTolerance;
+        RouteOffRoadSpeed = routeOffRoadSpeed;
+        RouteOnRoadSpeed = routeOnRoadSpeed;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -93,6 +105,12 @@ internal sealed class CartographerSettings
     public ConfigEntry<float> SurveyScanRadius { get; }
     public ConfigEntry<float> SurveyBaseExclusionRadius { get; }
     public ConfigEntry<int> SurveyMaxObservations { get; }
+    public ConfigEntry<KeyCode> RouteDrawModifier { get; }
+    public ConfigEntry<float> RouteEraseRadius { get; }
+    public ConfigEntry<float> RouteSnapRadius { get; }
+    public ConfigEntry<float> RouteOnRoadTolerance { get; }
+    public ConfigEntry<float> RouteOffRoadSpeed { get; }
+    public ConfigEntry<float> RouteOnRoadSpeed { get; }
 
     public static CartographerSettings Bind(ConfigFile config)
     {
@@ -158,6 +176,19 @@ internal sealed class CartographerSettings
                 "No observations within this distance of a pin categorized/tagged Base (0 disables).",
                 new AcceptableValueRange<float>(0f, 100f))),
             config.Bind("Survey", "SurveyMaxObservations", 200, new ConfigDescription(
-                "Hard cap on pending survey observations.", new AcceptableValueRange<int>(10, 1000))));
+                "Hard cap on pending survey observations.", new AcceptableValueRange<int>(10, 1000))),
+            config.Bind("Routes", "RouteDrawModifier", KeyCode.LeftShift,
+                "Modifier held with LeftClick on the large map for route draw/erase/waypoint modes (avoids vanilla map-drag conflicts)."),
+            config.Bind("Routes", "RouteEraseRadius", 8f, new ConfigDescription(
+                "Route erase brush radius in meters.", new AcceptableValueRange<float>(1f, 30f))),
+            config.Bind("Routes", "RouteSnapRadius", 15f, new ConfigDescription(
+                "Waypoints snap to roads within this many meters.", new AcceptableValueRange<float>(2f, 50f))),
+            config.Bind("Routes", "RouteOnRoadTolerance", 6f, new ConfigDescription(
+                "A route counts as on-road when within this distance of recorded road ink.",
+                new AcceptableValueRange<float>(1f, 15f))),
+            config.Bind("Routes", "RouteOffRoadSpeed", 2.5f, new ConfigDescription(
+                "Off-road travel speed (m/s) for time estimates.", new AcceptableValueRange<float>(0.5f, 15f))),
+            config.Bind("Routes", "RouteOnRoadSpeed", 5f, new ConfigDescription(
+                "On-road travel speed (m/s) for time estimates.", new AcceptableValueRange<float>(0.5f, 15f))));
     }
 }
