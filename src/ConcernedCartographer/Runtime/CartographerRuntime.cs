@@ -17,6 +17,7 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly GroundPaintProbe _probe;
     private readonly RoadOverlayRenderer _renderer;
     private readonly ConstructionCapture _constructionCapture;
+    private readonly PinAdapter _pinAdapter;
     private readonly ChunkRecoveryScanner _chunkRecovery;
     private readonly RateLimitedLog _rateLimited;
 
@@ -53,6 +54,7 @@ internal sealed class CartographerRuntime : IDisposable
         _probe = new GroundPaintProbe(settings, log);
         _renderer = new RoadOverlayRenderer(settings, log);
         _rateLimited = new RateLimitedLog(log, 5f);
+        _pinAdapter = new PinAdapter(log);
         _constructionCapture = new ConstructionCapture(log);
         _constructionCapture.OperationCaptured += HandleTerrainOperation;
         _chunkRecovery = new ChunkRecoveryScanner(settings, log);
@@ -76,6 +78,7 @@ internal sealed class CartographerRuntime : IDisposable
         SwitchWorld(uid);
         _mapReady = true;
         _renderer.RedrawAll(_atlas);
+        _pinAdapter.ReconcileOnMapReady(_pinStore);
         if (_settings.DrawCalibrationMarkers.Value)
         {
             _renderer.DrawCalibrationMarkers();
@@ -98,6 +101,7 @@ internal sealed class CartographerRuntime : IDisposable
             _mapReady = false;
             _pipeline?.EndAllStrokes();
             _chunkRecovery.Reset();
+            _pinAdapter.Reset();
             SaveIfDirty();
             SavePinsSnapshot();
             return;
@@ -123,6 +127,7 @@ internal sealed class CartographerRuntime : IDisposable
         {
             _autosaveElapsed = 0f;
             SaveIfDirty();
+            _pinAdapter.AbsorbVanillaChanges(_pinStore);
             _pinPersistence.FlushJournal();
         }
     }
@@ -130,6 +135,8 @@ internal sealed class CartographerRuntime : IDisposable
     /// <summary>The current world's managed pins. Empty store before the
     /// first world loads.</summary>
     internal PinStore Pins => _pinStore;
+
+    internal PinAdapter PinAdapter => _pinAdapter;
 
     /// <summary>Roads and pins together, for quit/teardown paths.</summary>
     public void SaveAll()
@@ -392,6 +399,7 @@ internal sealed class CartographerRuntime : IDisposable
         _atlas = _persistence.Load(uid);
         _pinStore = _pinPersistence.Load(uid);
         _pinStore.Changed += _pinPersistence.QueueJournal;
+        _pinAdapter.Reset();
         _pipeline = new RoadObservationPipeline(_atlas);
         _editor = new RoadAtlasEditor(_atlas);
         _surveyor = new RoadSurveyor(_settings, _probe, _pipeline, _log);
