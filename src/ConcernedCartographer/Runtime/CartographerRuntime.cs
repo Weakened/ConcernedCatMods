@@ -1170,8 +1170,20 @@ internal sealed class CartographerRuntime : IDisposable
             case "undo":
                 changed = _editor.Undo(out summary);
                 break;
+            case "align":
+                // DEF-v1.0-002 diagnostic: native pin vs overlay cross at
+                // known world positions, with the full projection numbers
+                // logged. Never touches stored data.
+                if (args.Length > 1 && string.Equals(args[1], "clear", StringComparison.OrdinalIgnoreCase))
+                {
+                    _renderer.ClearAlignmentProbe();
+                    _redrawPending = true;
+                    return "Alignment probe pins removed; road overlays will redraw clean.";
+                }
+
+                return _renderer.RunAlignmentProbe(playerPosition, _atlas);
             default:
-                return "Usage: cc_roads [status|delete|kind|hide|unhide|split|join|rebuild|undo] [radius].";
+                return "Usage: cc_roads [status|delete|kind|hide|unhide|split|join|rebuild|undo|align] [radius].";
         }
 
         if (changed)
