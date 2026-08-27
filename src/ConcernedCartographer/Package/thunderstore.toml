@@ -4,7 +4,7 @@ schemaVersion = "0.0.1"
 [package]
 namespace = "TheConcernedCat"
 name = "ConcernedCartographer"
-versionNumber = "0.7.0"
+versionNumber = "0.8.0"
 description = "Builds a local Valheim road atlas by mapping player-traversed dirt Pathen and paved terrain onto the map."
 websiteUrl = "https://github.com/Weakened/ConcernedCatMods"
 containsNsfwContent = false
