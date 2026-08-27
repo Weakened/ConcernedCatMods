@@ -5,18 +5,19 @@ manual-only verification deferred by the autonomous conveyor (OPS-001
 rev 2) from v0.3 onward and is finalized against the exact v1.0 RC. Rows
 marked **BLOCKS** must pass before publication; others are record-and-ship.
 
-> Status: LIVING DOCUMENT — grows each sprint; the RC identity section is
-> filled in when the final package is built.
+> Status: FINAL for v1.0 — one session, top to bottom. Estimated 2.5–4 h
+> including the two-client section.
 
-## 0. RC identity (filled at final packaging)
+## 0. RC identity
 
-- Version: _pending_
-- RC commit: _pending_
-- ZIP path: _pending_
-- ZIP SHA-256: _pending_
+- Version: **1.0.0**
+- RC commit, ZIP path, and ZIP SHA-256: see
+  `docs/mods/concerned-cartographer/RELEASE_DOSSIER.md` (written against
+  the exact final package).
 - Package audit: ZIP root = manifest.json, README.md, CHANGELOG.md,
   LICENSE, icon.png (256×256), plugins/TheConcernedCat.ConcernedCartographer.dll
-  and nothing else. **BLOCKS**
+  and nothing else; dependencies pinned to BepInExPack 5.4.2333 and
+  Jötunn 2.29.2. **BLOCKS**
 
 ## 1. Fresh install and lifecycle
 
@@ -113,10 +114,32 @@ marked **BLOCKS** must pass before publication; others are record-and-ship.
 | 9.4 | Any world | `cc_atlas support`; open the file | Only versions/settings/counts/sizes — no coordinates, names, or notes | The file | Yes |
 | 9.5 | Large real atlas | Map open/pan/zoom/search feel at your biggest world | No perceptible hitching | Subjective + clip | Yes |
 
-## 10–13. Later-sprint sections
+## 10. Upgrade, migration, and uninstall (v0.9/v1.0)
 
-Placeholders grow as sprints complete: Atlas Drawer/search/views (v0.4),
-routes (v0.5), multiplayer/tombstones (v0.6), NoMap/controller/
-localization/accessibility (v0.7), compatibility/import-export/backup
-(v0.8), migration/upgrade/beta items (v0.9), final performance-feel and
-Thunderstore preflight (v1.0).
+| # | Setup | Action | Expected | Evidence on failure | Blocks |
+|---|---|---|---|---|---|
+| 10.1 | Profile still on 0.2.0-era data (or fixtures via `scripts/make-test-fixtures.ps1`) | Install the 1.0.0 RC over it; load the world | Everything migrates (log shows format upgrades + maintenance); zero data loss; `.v1.bak` style backups appear where applicable | Log + sidecars | Yes |
+| 10.2 | 10.1 | Downgrade check: remove the mod, launch vanilla | World loads fine; managed pins persist as vanilla pins; no errors | Screenshot | Yes |
+| 10.3 | 10.2 | Reinstall the RC | Atlas returns exactly; vanilla cross-offs made while unmodded were absorbed | `cc_pins status` | Yes |
+| 10.4 | Fresh profile | Import the RC ZIP via "Import local mod" | Dependencies auto-install; smoke section 1 passes | Log | Yes |
+
+## 11. Performance feel and soak (v1.0)
+
+| # | Setup | Action | Expected | Evidence on failure | Blocks |
+|---|---|---|---|---|---|
+| 11.1 | 10k-pin + 10 km fixtures | Map open, pan, zoom, search, cluster at full scale | No perceptible hitching on the baseline PC (i9-9900K/RTX 4080-class) | Clip | Yes |
+| 11.2 | Normal world | 45+ min continuous play with capture/recovery/survey(on)/routes active | No creeping errors, no log spam, memory stable in Task Manager | Log + observation | Yes |
+
+## 12. Thunderstore preflight (owner-only)
+
+- [ ] `python ./tools/validate_repo.py --expected-version 1.0.0` passes. **BLOCKS**
+- [ ] ZIP inspected by a human for secrets/saves/game DLLs/unrelated files. **BLOCKS**
+- [ ] README/CHANGELOG on the package page match actual behavior. **BLOCKS**
+- [ ] Categories: mods, client-side, utility, **ai-generated**. **BLOCKS**
+- [ ] Upload via thunderstore.io web UI or `pwsh ./scripts/publish.ps1 -Version 1.0.0` (token via env var, never stored). **BLOCKS**
+
+## 13. Post-publication smoke
+
+- [ ] Install the published package from Thunderstore into a clean profile; smoke section 1 passes.
+- [ ] Package page renders README/icon/changelog correctly.
+- [ ] First community-visible version pinned in the GitHub release notes.
