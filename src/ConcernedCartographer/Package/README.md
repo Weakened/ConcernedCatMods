@@ -155,3 +155,12 @@ AI coding agents materially assisted implementation and review. Releases are man
 ## Support and source
 
 Use the GitHub issue tracker linked by the package website. Include the game version, mod version, profile mod list, reproduction steps, and `BepInEx/LogOutput.log` excerpt.
+
+<!-- CC-PACKAGE-ATTRIBUTION -->
+## Original project, source, and contributions
+
+Concerned Cartographer is created and maintained by **Eren Cansunar / The Concerned Cat**. AI coding agents materially assisted implementation, tests, research and documentation; releases use the appropriate AI disclosure and are validated through the project's release process.
+
+Source, technical documentation, issue tracker, and contribution guide are available in the canonical repository: `Weakened/ConcernedCatMods`.
+
+The source-code license is in `LICENSE`. Original project attribution/provenance is documented in `NOTICE.md` and `AUTHORS.md`.

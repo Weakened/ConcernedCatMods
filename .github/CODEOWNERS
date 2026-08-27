@@ -1,0 +1,8 @@
+# Canonical repository maintainer / release owner.
+# Update deliberately when maintainers are added.
+* @Weakened
+
+# Concerned Cartographer product ownership.
+/src/ConcernedCartographer/ @Weakened
+/src/ConcernedCartographer.Tests/ @Weakened
+/docs/mods/concerned-cartographer/ @Weakened

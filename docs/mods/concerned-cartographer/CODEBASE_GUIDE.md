@@ -1,0 +1,959 @@
+# Concerned Cartographer — Codebase Guide
+
+> **Audience:** maintainers, contributors, reviewers, and anyone trying to understand or extend the mod.
+>
+> **Snapshot:** originally written against 0.4.0; updated for the Concerned Cartographer **1.0.0 release candidate** (repository `main`, RC lineage commit `53f371c60da8b6b5b69d590b918657d0ecbe4026`). Sections 8b–8e cover the v0.5–v1.0 additions (routes, collaboration/sync, localization/accessibility, compatibility/backup, and the SEC-1.0-001 hardening layer). This document remains a living map: update it in the same PR whenever source files or responsibilities change.
+
+## 1. Architectural model
+
+Concerned Cartographer is a single BepInEx/Jötunn plugin DLL targeting .NET Framework 4.8.
+
+The code intentionally separates four kinds of responsibilities:
+
+1. **Pure domain logic** — roads, pins, search, clustering, serialization rules, undo/redo. These classes do not depend on Unity or Valheim and can be unit-tested outside the game.
+2. **Game adapters** — classes that read Valheim terrain, map pins, loaded objects, world identity, and construction events.
+3. **Presentation adapters** — map overlays and Jötunn/Unity UI.
+4. **Persistence/runtime orchestration** — world switching, sidecar files, autosave, commands, lifecycle and fail-closed behavior.
+
+The most important design rule is:
+
+> **Valheim-specific internals belong at the edges. Domain logic should not know what `Minimap`, `Heightmap`, `TerrainComp`, BepInEx, Jötunn, or Unity are.**
+
+This keeps game-version breakage localized and makes AI-assisted code easier to review.
+
+## 2. High-level data flow
+
+### Plugin lifecycle
+
+```mermaid
+flowchart TD
+    A[BepInEx loads Plugin] --> B[Bind CartographerSettings]
+    B --> C[Construct CartographerRuntime]
+    C --> D[Subscribe MinimapManager.OnVanillaMapAvailable]
+    C --> E[Register console commands]
+    D --> F[Map becomes available]
+    F --> G[Resolve world UID]
+    G --> H[Load road atlas + pin atlas]
+    H --> I[Reconcile map renderings]
+    I --> J[Tick runtime]
+    J --> K[Survey roads / recover chunks / scan survey rules]
+    J --> L[Handle map UI + hotkeys]
+    J --> M[Autosave dirty state]
+```
+
+### Road flow
+
+```mermaid
+flowchart LR
+    A1[Player walks road] --> B[RoadSurveyor]
+    A2[Successful TerrainOp] --> C[ConstructionCapture]
+    A3[Loaded explored Heightmap] --> D[ChunkRecoveryScanner]
+    B --> E[RoadObservationPipeline]
+    C --> E
+    D --> E
+    E --> F[RoadAtlas]
+    F --> G[RoadOverlayRenderer]
+    F --> H[RoadPersistence]
+    I[Road repair tools] --> J[RoadAtlasEditor]
+    J --> F
+```
+
+Every road source emits the same `RoadObservation`. The pipeline does not care whether the point came from walking, a construction action, or recovery.
+
+### Pin flow
+
+```mermaid
+flowchart LR
+    A[Valheim Minimap.PinData] <--> B[PinAdapter]
+    B <--> C[PinStore]
+    C --> D[PinPersistence]
+    C --> E[PinOperations]
+    C --> F[PinDisplayController]
+    C --> G[PinWorkbenchController]
+    G --> H[PinWorkbenchPanel]
+    F --> A
+    I[Atlas Drawer] --> F
+    J[QuickPinCapture] --> C
+    K[SurveyEngine] --> C
+```
+
+`PinStore` owns durable identity. `Minimap.PinData` is only a rendering/adoption surface.
+
+### Route flow (v0.5+)
+
+```mermaid
+flowchart LR
+    A[Map draw modes / cc_routes] --> B[RouteCommandHandler]
+    B --> C[RouteOperations]
+    C --> D[RouteStore]
+    D --> E[RoutePersistence]
+    D --> F[RouteOverlayRenderer]
+    G[RoadAtlas] --> H[RoadGraphRouter]
+    H --> C
+    G --> I[RouteEstimator]
+    I --> B
+```
+
+### Sync flow (v0.6+)
+
+```mermaid
+flowchart LR
+    A[cc_sync share] --> B[SyncPlanner.CollectShared]
+    B --> C[SyncTransport / CC_AtlasShare RPC]
+    C --> D[Peer SyncTransport]
+    D --> E[Bounded decompress + codecs + caps]
+    E --> F[SyncInbox]
+    F --> G[cc_sync preview → SyncPlanner.Plan]
+    G --> H[cc_sync apply → Store upserts]
+```
+
+Nothing received over the network is ever applied automatically: every envelope lands in the inbox and goes through an explicit preview/apply step.
+
+## 3. Repository layout
+
+```text
+ConcernedCatMods/
+├─ ConcernedCatMods.sln
+├─ Directory.Build.props
+├─ DoPrebuild.props
+├─ Environment.props.example
+├─ scripts/
+├─ tools/
+├─ docs/
+│  └─ mods/
+│     └─ concerned-cartographer/
+├─ src/
+│  ├─ ConcernedCartographer/
+│  │  ├─ Domain/
+│  │  ├─ Map/
+│  │  ├─ Persistence/
+│  │  ├─ Roads/
+│  │  ├─ Runtime/
+│  │  ├─ Package/
+│  │  └─ Plugin.cs
+│  └─ ConcernedCartographer.Tests/
+└─ .github/
+```
+
+The shipped plugin remains **one DLL**. The pure domain sources are compiled directly into the test project, so tests can run without shipping a second domain assembly.
+
+## 4. Entry point and runtime orchestration
+
+### `Plugin.cs`
+
+**Role:** BepInEx entry point and lifecycle shell.
+
+Responsibilities:
+
+- declares plugin GUID, name, and version;
+- declares Jötunn dependency;
+- binds configuration;
+- creates `CartographerRuntime`;
+- subscribes to Jötunn's vanilla-map-available event;
+- registers `cc_roads`, `cc_pins`, `cc_atlas`, `cc_survey`, `cc_routes`, and `cc_sync`;
+- forwards Unity `Update` ticks;
+- triggers final persistence on quit/destroy;
+- logs environment versions and effective configuration.
+
+Do not put terrain detection, persistence formats, road geometry, or pin business rules here.
+
+### `Runtime/CartographerRuntime.cs`
+
+**Role:** central application coordinator.
+
+This is intentionally the busiest integration class. It wires together the current world, domain stores, adapters, UI, persistence and runtime scanners.
+
+It currently coordinates:
+
+- `RoadPersistence`
+- `PinPersistence`
+- `GroundPaintProbe`
+- `RoadOverlayRenderer`
+- `ConstructionCapture`
+- `ChunkRecoveryScanner`
+- `RoadObservationPipeline`
+- `RoadAtlas`
+- `RoadAtlasEditor`
+- `RoadSurveyor`
+- `PinStore`
+- `PinAdapter`
+- `PinCommandHandler`
+- `PinWorkbenchPanel`
+- `PinDisplayController`
+- `AtlasDrawerPanel`
+- `SavedViewStore` / persistence
+- `QuickPinCapture`
+- `SurveyEngine`
+- `SurveyScanner`
+- `SurveyRulePersistence`
+- `RouteStore` / `RoutePersistence` / `RouteOperations` / `RouteCommandHandler`
+- `RouteOverlayRenderer`
+- `RoadGraphRouter` / `RouteEstimator`
+- `AuthorIdentity` / `SyncTransport` / `SyncInbox`
+- `CompatibilityRegistry`
+- `AtlasBackupTools`
+- `AtlasStrings` / `LocalizationPersistence`
+
+Major lifecycle responsibilities:
+
+1. resolve active world UID;
+2. switch persistence state on world change;
+3. load/maintain roads and pins;
+4. recreate overlays and managed pin renderings when the map is ready;
+5. tick traversal, chunk recovery and survey scanning;
+6. process map hotkeys/panels;
+7. autosave;
+8. end active strokes and flush data on logout/world switch;
+9. debounce full road redraws after destructive terrain reconciliation.
+
+**Maintainer warning:** new deterministic algorithms should usually be extracted from this class. It is an orchestration layer, not a dumping ground.
+
+### `Runtime/CartographerSettings.cs`
+
+**Role:** single home for BepInEx config bindings.
+
+Current settings cover:
+
+- master enable;
+- construction capture;
+- terrain reconciliation;
+- loaded-chunk recovery and budget;
+- road sample interval/spacing/gap/suppression;
+- autosave;
+- terrain paint threshold/sample radius;
+- road line width;
+- diagnostics/calibration;
+- Pin Workbench and Atlas Drawer hotkeys/preferences;
+- quick-pin hotkey/radius;
+- Survey Rules enable/cadence/radius/base exclusion/max observations;
+- routes: draw modifier, erase/snap radii, on-road tolerance, travel speeds (v0.5);
+- accessibility: UI scale, high-contrast ink palettes, gamepad open buttons (v0.7).
+
+New configuration should be bound here rather than read directly from `ConfigFile` by arbitrary feature classes.
+
+### `Runtime/WorldContext.cs`
+
+Tiny adapter for resolving the active Valheim world UID. Per-world storage should key off UID, not display name.
+
+### `Runtime/RateLimitedLog.cs`
+
+Prevents retrying failures (disk/reflection/runtime) from flooding `LogOutput.log`.
+
+## 5. Road domain (`Domain/`)
+
+Namespace: `TheConcernedCat.ConcernedCartographer.Roads`.
+
+### `RoadKind.cs`
+
+Road-type enum. Current kinds: Dirt and Paved.
+
+### `RoadPoint.cs`
+
+Game-independent world coordinate value. Provides horizontal-distance semantics used by roads and pins.
+
+### `RoadSegment.cs`
+
+One newly created drawable segment. Allows incremental rendering instead of rebuilding the entire overlay after every sample.
+
+### `RoadStroke.cs`
+
+One road polyline:
+
+- stable `Guid`;
+- `RoadKind`;
+- `RoadObservationSource` provenance;
+- ordered point list;
+- hidden flag for repair tools.
+
+### `RoadSamplingRules.cs`
+
+Bundles minimum spacing, maximum gap and duplicate-suppression values so all observation sources use shared semantics.
+
+### `RoadObservationSource.cs`
+
+Provenance for road knowledge. Current sources are Traversal, Construction and ChunkRecovery.
+
+### `RoadObservation.cs`
+
+Source-neutral ingestion payload: source + kind + position.
+
+### `RoadObservationPipeline.cs`
+
+Single entry point for all road sources.
+
+Guarantees:
+
+- exact-replay idempotency;
+- source-neutral atlas semantics;
+- per-source active stroke isolation;
+- one source can end/fail without breaking the others.
+
+New road observers should feed this pipeline rather than write directly to `RoadAtlas` or the map.
+
+### `RoadAtlas.cs`
+
+**Core road state machine.**
+
+Owns:
+
+- all strokes;
+- per-source active strokes;
+- dirty state;
+- duplicate-suppression spatial index;
+- append/gap/kind-change rules;
+- coverage removal;
+- maintenance;
+- nearest-stroke queries;
+- structural edit hatch used by repair tools.
+
+Important invariants:
+
+- duplicate suppression is **segment-based**, not point-only;
+- newest active-stroke tail is exempt from self-suppression;
+- maximum-gap violation starts a new stroke, never a connector;
+- sources are independent;
+- destructive edits rebuild the spatial index;
+- coverage removal may split a stroke while preserving the first surviving run's identity.
+
+Load-time maintenance currently:
+
+- merges compatible endpoints within a small tolerance;
+- Douglas–Peucker simplifies within 1 m horizontal tolerance.
+
+Do not mutate `Strokes` from random callers. Use `EditStrokes` or a dedicated domain method.
+
+### `RoadGeometry.cs`
+
+Pure geometry helpers such as point-to-segment distance and polyline simplification.
+
+Math belongs here rather than in Unity/map adapters.
+
+### `RoadAtlasEditor.cs`
+
+Pure road correction tools:
+
+- nearest-road delete;
+- Dirt/Paved reclassification;
+- hide/unhide;
+- split;
+- join;
+- bounded undo;
+- nearest-road description.
+
+All operations mutate through `RoadAtlas.EditStrokes` so indexes/dirty state stay coherent.
+
+### `RoadAtlasCodec.cs`
+
+Pure parser/writer for versioned road TSV rows. Filesystem behavior belongs in `RoadPersistence`.
+
+### `RecoveryShapeHeuristic.cs`
+
+Pure old-road recovery heuristic that favors path-like painted neighborhoods and rejects broad pads/plazas. It is testable because recovery false positives are a product risk.
+
+## 6. Road game adapters (`Roads/`)
+
+### `GroundPaintProbe.cs`
+
+**Narrow Valheim terrain-paint adapter.**
+
+It finds loaded `Heightmap` data, converts world position to paint-mask position, samples a configurable neighborhood and classifies Dirt/Paved/no-road.
+
+If a Valheim update changes terrain internals, fix this adapter first instead of spreading paint-mask knowledge across the codebase.
+
+### `RoadSurveyor.cs`
+
+Traversal observation source.
+
+On a configured cadence it samples the local player, probes terrain and feeds `RoadObservationSource.Traversal` into the pipeline. It ends the traversal stroke when the signal disappears or the player cannot be sampled.
+
+### `CapturedTerrainOperation.cs`
+
+Neutral value object containing the useful facts extracted from a Valheim `TerrainOp`: position, radius, road/removal kind and whether the operation is ordinary terraforming rather than intended road paint.
+
+### `ConstructionCapture.cs`
+
+Harmony/game adapter for successful terrain operations.
+
+It observes the confirmed game operation, classifies Dirt/Paved/Cultivate/Reset/terraforming and raises `CapturedTerrainOperation`.
+
+The patch is observational. It must never mutate Valheim terrain.
+
+Failure should disable this source without taking traversal down.
+
+### `ChunkRecoveryScanner.cs`
+
+Incremental old-road recovery source.
+
+It:
+
+- scans loaded non-LOD heightmaps near the player;
+- uses a cells-per-frame budget;
+- checks exploration before revealing candidates;
+- applies shape heuristics;
+- emits ChunkRecovery observations;
+- resets scan state on world changes.
+
+This is a performance boundary. Never turn it into a whole-world scan.
+
+## 7. Road/map rendering (`Map/`)
+
+### `RoadOverlayRenderer.cs`
+
+Jötunn overlay adapter for `CC Dirt Paths` and `CC Paved Roads`.
+
+Responsibilities:
+
+- world→overlay coordinate conversion;
+- line/dot drawing;
+- full redraw from `RoadAtlas`;
+- incremental segment draw;
+- layer enable/disable;
+- calibration markers;
+- safe recreation after map/world lifecycle transitions.
+
+Destructive road edits schedule/debounce a full redraw because pixels cannot be safely “un-drawn” incrementally.
+
+### `MinimapReflection.cs`
+
+Centralizes reflection helpers for fragile/private `Minimap` state.
+
+Private-member access should be kept here or in equally narrow adapters and documented with the tested Valheim version.
+
+## 8. Pin domain (`Domain/Atlas/`)
+
+Namespace: `TheConcernedCat.ConcernedCartographer.Atlas`.
+
+### `AtlasId.cs`
+
+Stable namespaced identity independent of map-object identity.
+
+### `AtlasPin.cs`
+
+Durable pin entity. Current fields include:
+
+- stable ID;
+- monotonic revision;
+- name;
+- icon ID;
+- category;
+- color;
+- display size;
+- notes;
+- tags;
+- status;
+- checked state;
+- scope intent;
+- source;
+- archived flag;
+- durable deletion/tombstone state;
+- position;
+- created/modified/deleted timestamps.
+
+Edits mutate fields under a newer revision; they do not replace identity.
+
+### `AtlasPinSource.cs`
+
+Pin provenance (managed/adopted/generated/etc.). Provenance is used for safe ownership and compatibility decisions.
+
+### `AtlasPinStatus.cs`
+
+User-facing pin status beyond vanilla checked/unchecked.
+
+### `AtlasScope.cs`
+
+Sharing/scope intent (Private/Table/Server). Since v0.6 this drives sync policy: only Table/Server entities ever travel; Private entities never leave the machine (property-tested).
+
+### `AtlasText.cs`
+
+Escapes delimiter-dangerous free text in sidecars. Percent-encodes tabs, newlines, carriage returns, percent signs and commas.
+
+New TSV formats containing free text should reuse this contract.
+
+### `PinStore.cs`
+
+**Core pin state table.**
+
+Owns:
+
+- stable-ID dictionary;
+- create/mutate;
+- revision bumps;
+- durable delete/restore;
+- higher-revision-wins upsert;
+- tombstone enumeration/retention purge;
+- dirty state;
+- `Changed` event for journaling.
+
+Critical future-sync invariant:
+
+> Incoming state only wins when its revision is strictly newer.
+
+### `PinCodec.cs`
+
+Pure pin TSV serialization/parser. Snapshot and journal rows use the same full-entity representation.
+
+### `PinOperations.cs`
+
+Higher-level operations over `PinStore`:
+
+- move;
+- duplicate;
+- archive/unarchive;
+- delete/restore;
+- batch edit;
+- spatial duplicate detection;
+- duplicate merge;
+- recently deleted;
+- bounded undo/redo.
+
+Critical invariant:
+
+> Undo/redo restores old **field values under a new revision**. Revisions never move backward.
+
+That allows future revision-based sync to converge.
+
+### `PinWorkbenchController.cs`
+
+Pure edit-buffer/controller between UI/commands and domain operations.
+
+The UI should edit a buffer, validate, then apply through controller/operations rather than directly modifying authoritative pin objects.
+
+### `IconRegistry.cs`
+
+Append-only registry of stable namespaced icon IDs mapped to vanilla pin ordinals.
+
+Rules:
+
+- never reuse an existing ID for a new meaning;
+- unknown IDs are preserved even if rendered via fallback;
+- append new IDs rather than reordering/renaming old ones.
+
+### `PinQuery.cs`
+
+Deterministic search/filter parser.
+
+Supported forms include plain words and:
+
+- `name:`
+- `category:`
+- `tag:`
+- `icon:`
+- `status:`
+- `scope:`
+- `source:`
+- `is:checked|unchecked|archived|deleted`
+- `near:x,z,radius`
+
+Malformed special syntax degrades safely instead of mutating/hiding stored data permanently.
+
+### `PinClusterer.cs`
+
+Pure display grouping for semantic zoom. Returns singles and clusters; never mutates `PinStore`.
+
+### `SavedView` / `SavedViewStore.cs`
+
+Profile-level display preferences: query and layer/cluster flags. Applying a view re-evaluates live data.
+
+### `QuickPinSuggester.cs`
+
+Pure object-name/type → suggested pin metadata policy. Keep suggestion heuristics here instead of inside the Unity raycast adapter.
+
+### `SurveyRule` / `SurveyRuleSet.cs`
+
+Pure shareable Survey Rules format.
+
+Rules support exact or prefix prefab patterns, blacklist patterns, icon/category suggestion, duplicate radius and expiry. Blacklist wins first; exact beats prefix; longer prefix beats shorter prefix.
+
+### `SurveyEngine.cs`
+
+Pure review-before-commit state for survey observations. A scan match is not automatically a permanent pin, preventing map flooding.
+
+## 8b. Route domain (`Domain/Atlas/`, v0.5)
+
+### `AtlasRoute.cs`
+
+Durable route entity (`RouteKind`, `RouteStyle`, `RouteStatus` enums live here too): stable `cc:route:<guid>` identity, monotonic revision, name/notes/color, kind (freehand/waypoint), style, status, scope, locked/archived flags, durable tombstone state, author columns and an ordered point list.
+
+### `RouteStore.cs`
+
+Route state table mirroring `PinStore` semantics: create/mutate under new revisions, durable delete/restore, higher-revision-wins upsert, tombstone enumeration, dirty state and a `Changed` event for journaling.
+
+### `RouteCodec.cs`
+
+Pure route TSV codec. Each route serializes as one meta row plus point rows, all stamped with the route's revision; parsing keeps only the highest revision per identity, so snapshot+journal replay is idempotent. Meta format v1 (17 fields) and v2 (19 fields, author columns) both parse; v2 is written.
+
+### `RouteOperations.cs`
+
+Freehand append (2 m spacing), erase-with-split, waypoint insert/move/remove, split/merge, lock, and bounded undo/redo that restores old values under **new** revisions (same convergence rule as pins).
+
+### `RoadGraphRouter.cs`
+
+Builds a graph over road-stroke points (plus ~8 m junction links) and runs bounded A* so waypoint routes can follow recorded roads.
+
+### `RouteEstimator.cs`
+
+Distance/on-road-share/travel-time estimates by sampling route segments against `RoadAtlas` with configured on/off-road speeds.
+
+## 8c. Collaboration domain (`Domain/Atlas/SyncPlanner.cs`, v0.6)
+
+One file holds the pure sync stack:
+
+- **`SyncPolicy`** — verdict rules: only Table/Server scopes travel; a non-owner delete is rejected; equal-revision divergence is a Conflict; otherwise strictly-higher revision wins.
+- **`SyncPlan`** — the preview result (new/updated/tombstone/conflict/rejected/superseded lists per family) plus `Summary()` and `DeletionNames()` — the preview must NAME what a share would delete, because author identity is labeling, not authentication.
+- **`SyncPlanner`** — `CollectShared` (everything shareable including tombstones so deletions propagate), `Plan` (pure preview against local stores) and `Apply` (explicit, conflict side selectable; taking the remote side lands as a NEW local revision so both sides converge).
+- **`SyncInbox`** — bounded (8 authors) peek/take review inbox. Incoming envelopes stop here; nothing auto-applies.
+
+Property-style tests cover tombstone no-resurrection through stale clients, private-never-travels and conflict convergence.
+
+## 8d. Hardening layer (`Domain/Atlas/`, SEC-1.0-001)
+
+### `AtlasLimits.cs`
+
+Structural bounds enforced at every parse boundary: revision sanity cap (1e12), finite-float checks, and graceful string truncation caps (name 200, category/icon 100, notes 10k, 64 tags × 64 chars). Applied inside `PinCodec`, `RouteCodec` and `RoadAtlasCodec`, so hostile rows cannot smuggle absurd revisions, NaN/Infinity coordinates or memory-hostile strings into the stores.
+
+### `AtlasCompression.cs`
+
+Bounded gzip for sync envelopes (standard format, interoperable with the game's own compression). `TryDecompress` aborts mid-stream the moment output exceeds the cap, so a decompression bomb can never balloon memory. The game's `Utils.Decompress` is unbounded — never reintroduce it on a receive path.
+
+### `AtlasText.SanitizeDisplay`
+
+Strips rich-text markup and control characters and caps length for any network-supplied string that reaches the HUD (author names).
+
+## 8e. Localization (`Domain/Atlas/AtlasStrings.cs`, v0.7)
+
+String catalog with English defaults and optional `cartographer-strings.tsv` overrides (loaded by `LocalizationPersistence`). Console output intentionally stays English; UI/HUD strings go through the catalog.
+
+## 9. Pin/map adapters and UI
+
+### `Map/PinAdapter.cs`
+
+**Single bridge between durable atlas pins and Valheim `Minimap.PinData`.**
+
+Responsibilities:
+
+- enumerate adoptable player vanilla pins;
+- refuse foreign/system/shared-owner pins;
+- adopt without moving/duplicating the existing map pin;
+- reconcile durable atlas pins to saved vanilla renderings after map load;
+- add renderings for unmatched living pins;
+- remove renderings for deleted/archived pins;
+- sync atlas edits to the map;
+- absorb vanilla checked/deleted changes back into `PinStore`;
+- track atlas-ID ↔ map-object relationships.
+
+Managed pins intentionally render as ordinary saved vanilla pins, which improves disable/uninstall safety.
+
+### `Map/PinDisplayController.cs`
+
+Display-only filtering, semantic zoom and clustering.
+
+Important property:
+
+> Filtered/clustered pins remain in `PinStore` unchanged.
+
+Temporary cluster markers are unsaved vanilla pins, so they never persist or become adoptable.
+
+### `Map/PinWorkbenchPanel.cs`
+
+Unity/Jötunn presentation for managed edit, vanilla adoption prompt and foreign/system read-only modes.
+
+It should drive `PinWorkbenchController` / `PinOperations`, not persistence directly.
+
+### `Map/AtlasDrawerPanel.cs`
+
+Presentation for road/pin layer toggles, clustering, search, counts/results and saved views. The runtime wires callbacks.
+
+### `Map/RouteOverlayRenderer.cs` (v0.5)
+
+Jötunn overlay for the `CC Routes` layer: world→overlay conversion, style/status colors (dashed/dotted so kinds stay distinguishable without color), high-contrast palette support and debounced full redraws on destructive route edits (its own debounce timer, separate from roads).
+
+## 10. Persistence
+
+### `Persistence/PinPersistence.cs`
+
+Snapshot + append-journal persistence.
+
+Per-world files:
+
+```text
+<world-uid>.pins.tsv
+<world-uid>.pins.tsv.journal
+```
+
+Recovery flow:
+
+1. load snapshot;
+2. load journal;
+3. resolve highest revision per identity through `PinCodec`;
+4. compact recovered journal into fresh snapshot;
+5. every mutation queues a full row;
+6. autosave flushes rows;
+7. world switch/quit writes atomic snapshot and absorbs journal.
+
+A truncated trailing journal row should lose at most that row, not the atlas.
+
+### `Persistence/RoadPersistence.cs`
+
+Per-world road sidecar IO at roughly:
+
+```text
+BepInEx/config/ConcernedCatMods/ConcernedCartographer/<world-uid>.roads.tsv
+```
+
+Responsibilities:
+
+- parse via `RoadAtlasCodec`;
+- run maintenance after load;
+- temporary-file write/copy flow;
+- legacy migration backup;
+- pre-reconciliation backup;
+- rate-limited write failures.
+
+It must never write Valheim world-save files.
+
+### `Persistence/SavedViewPersistence.cs`
+
+Filesystem wrapper for profile-level `SavedViewStore` preferences.
+
+### `Persistence/SurveyRulePersistence.cs`
+
+Loads/saves the shareable Survey Rules file and creates conservative starter rules.
+
+### `Persistence/RoutePersistence.cs` (v0.5)
+
+Per-world `<world-uid>.routes-atlas.tsv` + `.journal` with the same snapshot/journal/compaction lifecycle as pins, via `RouteCodec`.
+
+### `Persistence/AuthorIdentity.cs` (v0.6)
+
+Stable local author GUID in `author-id.txt` (profile config root). Used for audit labels and the self-echo filter; it is labeling, not authentication.
+
+### `Persistence/LocalizationPersistence.cs` (v0.7)
+
+Loads `cartographer-strings.tsv` overrides into `AtlasStrings` and can write a translation template.
+
+### `Persistence/AtlasBackupTools.cs` (v0.8)
+
+`cc_atlas backup/backups/restore <n>` — timestamped snapshot folders of the whole atlas (which double as the export/import format), pre-restore safety backup plus journal clearing, and `cc_atlas support`, a sanitized report (versions, settings, counts, sizes — never positions, names or notes).
+
+## 11. Runtime commands and scanning
+
+### `Runtime/RoadToolsCommand.cs`
+
+Jötunn command shell for `cc_roads`. Delegates road mutations to runtime/editor.
+
+### `Runtime/PinToolsCommand.cs`
+
+Jötunn command shell for `cc_pins`.
+
+### `Runtime/PinCommandHandler.cs`
+
+Scriptable pin command interpreter. Converts arguments into domain operations, store queries, adapter sync and workbench behavior.
+
+Do not duplicate pin business rules here.
+
+### `Runtime/AtlasToolsCommand.cs`
+
+Jötunn command shell for `cc_atlas` (query/layers/views/status).
+
+### `Runtime/SurveyToolsCommand.cs`
+
+Jötunn command shell for `cc_survey` review/accept/reject/reload behavior.
+
+### `Runtime/QuickPinCapture.cs`
+
+Valheim/Unity target adapter. Raycasts the object being looked at, rejects creatures, asks `QuickPinSuggester` for metadata, applies duplicate checks and creates a managed pin.
+
+### `Runtime/SurveyScanner.cs`
+
+Bounded loaded-object scanner for opt-in Survey Rules. Converts game objects into pure `SurveyEngine` observations.
+
+It is intentionally not a world scanner/live radar.
+
+### `Runtime/RouteToolsCommand.cs` / `Runtime/RouteCommandHandler.cs` (v0.5)
+
+Jötunn shell for `cc_routes` and the interpreter that also owns the map draw/erase/waypoint modes (behind the configured modifier + left click).
+
+### `Runtime/SyncToolsCommand.cs` (v0.6)
+
+Jötunn shell for `cc_sync` (status/share/inbox/preview/apply mine|theirs/clear).
+
+### `Runtime/SyncTransport.cs` (v0.6, hardened by SEC-1.0-001)
+
+Peer-to-peer share transport over `ZRoutedRpc` (`CC_AtlasShare`, protocol version 1). Receive path enforces, in order: protocol version, sanitized author strings, self-echo filter, declared-length cap (320 KB compressed), declared-vs-actual length verification, **bounded** decompression (4 MB via `AtlasCompression`), row cap (20k), then the malformed-skipping codecs — and delivers only into `SyncInbox`. Failures disable the transport for the session rather than crashing.
+
+### `Runtime/CompatibilityRegistry.cs` (v0.8)
+
+Detects known neighbor mods by BepInEx GUID and applies coexistence policies (e.g. with another pin manager present the workbench hotkey never prompts adoption). Backs `cc_atlas compat`.
+
+## 12. Tests
+
+Project: `src/ConcernedCartographer.Tests`.
+
+Current test target: `.NET 10`.
+
+The project compiles `Domain/**/*.cs` directly, so pure tests do not require Valheim/Unity/BepInEx/Jötunn assemblies.
+
+| Test file | Primary coverage |
+|---|---|
+| `RoadAtlasTests.cs` | sample/stroke/gap/suppression fundamentals |
+| `RoadAtlasRemoveCoverageTests.cs` | repaint/removal splitting and safety |
+| `RoadGeometryMaintenanceTests.cs` | merge/simplify/geometry invariants |
+| `RoadObservationPipelineTests.cs` | source neutrality and replay idempotency |
+| `RoadAtlasCodecTests.cs` | road serialization/legacy formats |
+| `RoadAtlasEditorTests.cs` | road correction operations/undo |
+| `RecoveryShapeHeuristicTests.cs` | path-like vs broad-area recovery |
+| `PinStoreTests.cs` | identity, revisions, delete/restore/upsert |
+| `PinCodecTests.cs` | pin serialization/recovery |
+| `PinOperationsTests.cs` | batch, duplicate, merge, undo/redo |
+| `PinWorkbenchControllerTests.cs` | edit-buffer/controller behavior |
+| `PinQueryTests.cs` | plain/power query semantics |
+| `PinScaleTests.cs` | large pin-set behavior/performance guardrails |
+| `QuickPinSuggesterTests.cs` | object→pin suggestion policy |
+| `SurveyTests.cs` | rules, matching and observation safety |
+| `RouteTests.cs` | route store/codec/operations, road-graph routing, estimates |
+| `SyncTests.cs` | sync policy/planner, tombstone no-resurrection, conflict convergence, inbox bounds |
+| `AtlasStringsTests.cs` | localization catalog/override safety |
+| `MigrationMatrixTests.cs` | every shipped sidecar format back-parses into the current readers |
+| `SecurityHardeningTests.cs` | SEC-1.0-001: decompression-bomb rejection, revision/float/string bounds, deletion-name previews, display sanitization |
+
+At the 1.0.0 RC the suite is 243 tests, all green, run without any game assemblies.
+
+Game adapters still need real Valheim tests; unit tests cannot prove Harmony targets, private field names, overlay alignment or Unity UI behavior.
+
+## 13. Persistence/data ownership rule
+
+Concerned Cartographer's core safety principle is:
+
+> **World-safe sidecars, not Valheim world-save mutation.**
+
+Current important files may include:
+
+```text
+BepInEx/config/ConcernedCatMods/ConcernedCartographer/
+├─ <world-uid>.roads.tsv                     (+ .v1.bak / .pre-reconcile.bak)
+├─ <world-uid>.pins.tsv                      (+ .journal)
+├─ <world-uid>.routes-atlas.tsv              (+ .journal)
+├─ views.tsv                                 (profile-level saved views)
+├─ survey-rules.tsv                          (shareable survey rules)
+├─ cartographer-strings.tsv                  (optional localization overrides)
+├─ author-id.txt                             (local author GUID for sync labels)
+├─ onboarding-shown.txt                      (one-time tip marker)
+└─ backups/<timestamp>/                      (cc_atlas backup snapshots)
+```
+
+Never move private atlas persistence into Valheim `.db`/`.fwl` files without an explicit design/migration/safety decision.
+
+## 14. Error-handling philosophy
+
+Adapters fail **closed and locally**.
+
+Examples:
+
+- terrain-probe failure disables probing rather than crashing the whole plugin;
+- chunk-recovery failure should not disable traversal;
+- pin-display failure should fall back to plain pins rather than delete data;
+- disk failures preserve dirty state/retry and rate-limit logs;
+- unknown icon IDs remain stored and render via fallback;
+- map teardown cleanup is best effort.
+
+When adding an adapter ask:
+
+1. Can it corrupt user data?
+2. Can it reveal unexplored information?
+3. Can failure be isolated?
+4. Is the warning actionable/rate-limited?
+5. Does disabling it leave durable data intact?
+
+## 15. How to extend safely
+
+### New road source
+
+1. Build a narrow game adapter.
+2. Convert game state to `RoadObservation`.
+3. Add provenance enum if needed.
+4. Feed `RoadObservationPipeline`.
+5. Do not write directly to overlays/sidecars.
+6. Add domain tests.
+7. Add game-level fail-closed testing.
+
+### New pin operation
+
+1. Put deterministic mutation in `PinOperations`/`PinStore`.
+2. Preserve `AtlasId`.
+3. Increment revisions; never decrement them.
+4. Use tombstones/recovery for destructive operations where appropriate.
+5. Update controller/commands/UI.
+6. Sync through `PinAdapter`.
+7. Add tests before UI polish.
+
+### New icon
+
+Append a stable namespaced ID in `IconRegistry`. Never reuse an old ID for a different meaning.
+
+### New query token
+
+Implement in `PinQuery`, degrade malformed syntax safely, add tests and update public help.
+
+### New persistence field
+
+1. Update pure codec first.
+2. Version/migrate if old readers can misinterpret it.
+3. Back up before destructive migration.
+4. Add round-trip, malformed and migration tests.
+5. Update `DATA_FORMATS.md` and `ARCHITECTURE.md`.
+
+### Touching a private Valheim API
+
+Centralize reflection/Harmony use and document:
+
+- game version tested;
+- member/signature;
+- fallback;
+- failure behavior;
+- exact post-update test.
+
+## 16. Highest-risk v1 areas
+
+The most review-sensitive v1 areas (all landed by the 1.0.0 RC) are:
+
+- peer synchronization (`SyncTransport`/`SyncPlanner`) — covered by property tests plus the SEC-1.0-001 hardening layer;
+- tombstone retention and stale-client merge — tombstone no-resurrection is property-tested;
+- protocol/schema migrations — `MigrationMatrixTests` back-parses every shipped format;
+- NoMap permission boundaries — atlas commands/panels gate on cartography-table proximity when `nomap` is active;
+- controller focus traps;
+- map-mod interoperability (`CompatibilityRegistry`);
+- large-atlas performance (10k-pin and 10 km road suites);
+- UI references surviving world/map teardown;
+- private Valheim API drift (always use skip-visibility invokers for publicized private members — direct calls JIT-throw `MethodAccessException` on Mono).
+
+These keep needing both domain tests and explicit final smoke-test coverage whenever touched.
+
+## 17. AI-assisted development implications
+
+This codebase has been materially developed with AI coding agents.
+
+AI changes should be treated as untrusted until:
+
+- a maintainer understands the architectural role;
+- compilation succeeds;
+- deterministic logic has tests;
+- game assumptions are validated against real Valheim;
+- unrelated diff is removed;
+- licensing/provenance is checked;
+- release-blocking behavior has human smoke-test coverage.
+
+See `AI_DEVELOPMENT.md`.
+
+## 18. Keeping this guide current
+
+The v1 update pass was executed at the 1.0.0 RC: the full `git ls-files` source inventory was compared against this guide, the v0.5–v1.0 classes were added (sections 8b–8e, 9, 10, 11), diagrams, persistence filenames and the test inventory were refreshed, and the RC commit is recorded at the top.
+
+For every release after v1, repeat the same pass:
+
+1. list every source file under `src/ConcernedCartographer`;
+2. compare to this guide and add/remove class entries;
+3. update diagrams, persistence filenames and schema/protocol versions;
+4. update the test inventory;
+5. record the release commit at the top.
+
+This guide is part of every release's Definition of Done.
