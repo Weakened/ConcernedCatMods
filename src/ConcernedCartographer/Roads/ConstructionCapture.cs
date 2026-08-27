@@ -81,10 +81,16 @@ internal sealed class ConstructionCapture : IDisposable
                     return;
             }
 
+            // Level/raise ops paint dirt as a terraforming side effect
+            // (leveling a base is not building a road); pathen/paved-road
+            // pieces smooth-and-paint only. Terraforming still reconciles.
+            bool isTerraforming = settings.m_level || settings.m_raise;
+
             active.OperationCaptured?.Invoke(new CapturedTerrainOperation(
                 kind,
                 modifier!.transform.position,
-                settings.m_paintRadius));
+                settings.m_paintRadius,
+                isTerraforming));
         }
         catch (Exception exception)
         {

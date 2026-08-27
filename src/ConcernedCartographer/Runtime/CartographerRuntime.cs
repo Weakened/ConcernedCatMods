@@ -157,7 +157,7 @@ internal sealed class CartographerRuntime : IDisposable
             }
         }
 
-        if (operation.RoadKind is RoadKind kind && _settings.CaptureConstructionActions.Value)
+        if (operation.RoadKind is RoadKind kind && !operation.IsTerraforming && _settings.CaptureConstructionActions.Value)
         {
             var rules = new RoadSamplingRules(
                 _settings.MinimumPointSpacingMeters.Value,
