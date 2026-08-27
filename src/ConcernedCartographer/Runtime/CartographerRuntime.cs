@@ -57,6 +57,9 @@ internal sealed class CartographerRuntime : IDisposable
     private RouteCommandHandler? _routeCommands;
     private bool _routeRedrawPending;
     private float _routeRedrawElapsed;
+    private readonly SyncInbox _syncInbox = new();
+    private readonly SyncTransport _syncTransport;
+    private string _authorId = "";
     private long? _worldUid;
     private bool _mapReady;
     private float _autosaveElapsed;
@@ -84,6 +87,8 @@ internal sealed class CartographerRuntime : IDisposable
         _surveyScanner = new SurveyScanner(settings, log);
         _routePersistence = new RoutePersistence(log);
         _routeRenderer = new RouteOverlayRenderer(settings, log);
+        _authorId = AuthorIdentity.Get(log);
+        _syncTransport = new SyncTransport(log, _syncInbox) { LocalAuthorId = _authorId };
         _constructionCapture = new ConstructionCapture(log);
         _constructionCapture.OperationCaptured += HandleTerrainOperation;
         _chunkRecovery = new ChunkRecoveryScanner(settings, log);
@@ -114,6 +119,7 @@ internal sealed class CartographerRuntime : IDisposable
         _displayController.ClusterEnabled = _settings.DrawerCluster.Value;
         _displayController.Apply(_pinStore, _pinAdapter);
         _routeRenderer.RedrawAll(_routeStore);
+        _syncTransport.EnsureRegistered();
         if (_settings.DrawCalibrationMarkers.Value)
         {
             _renderer.DrawCalibrationMarkers();
@@ -667,6 +673,90 @@ internal sealed class CartographerRuntime : IDisposable
         }
     }
 
+    /// <summary>Backs the `cc_sync` console command: explicit share and
+    /// review-before-apply for the collaborative atlas.</summary>
+    internal string ExecuteSyncCommand(string[] args)
+    {
+        if (_disposed || !_mapReady)
+        {
+            return "Concerned Cartographer: no world is loaded yet.";
+        }
+
+        string subcommand = args.Length == 0 ? "status" : args[0].ToLowerInvariant();
+        string remainder = args.Length > 1 ? string.Join(" ", args, 1, args.Length - 1).Trim() : "";
+
+        switch (subcommand)
+        {
+            case "status":
+                (List<AtlasPin> sharedPins, List<AtlasRoute> sharedRoutes) = SyncPlanner.CollectShared(_pinStore, _routeStore);
+                return $"Sync: sharing {sharedPins.Count} pin(s) and {sharedRoutes.Count} route(s) " +
+                    $"(scope table/server, tombstones included). Inbox: {_syncInbox.Envelopes.Count} pending share(s). " +
+                    "Set a pin/route scope with 'cc_pins scope table' or 'cc_routes ...' to share it; 'cc_sync share' broadcasts.";
+            case "share":
+                (List<AtlasPin> pins, List<AtlasRoute> routes) = SyncPlanner.CollectShared(_pinStore, _routeStore);
+                if (pins.Count == 0 && routes.Count == 0)
+                {
+                    return "Nothing is scoped for sharing yet. 'cc_pins scope table' near a pin shares it.";
+                }
+
+                string playerName = Player.m_localPlayer?.GetPlayerName() ?? "";
+                _syncTransport.Share(_authorId, playerName, pins, routes, out string shareMessage);
+                _log.LogInfo($"Sync share: {shareMessage}");
+                return shareMessage;
+            case "inbox":
+                if (_syncInbox.Envelopes.Count == 0)
+                {
+                    return "Sync inbox: empty.";
+                }
+
+                var builder = new System.Text.StringBuilder("Sync inbox:");
+                foreach (SyncInbox.Envelope pending in _syncInbox.Envelopes)
+                {
+                    builder.Append($"\n  {pending.AuthorName}: {pending.Pins.Count} pin(s), {pending.Routes.Count} route(s) " +
+                        $"at {pending.ReceivedUtc:HH:mm} UTC — 'cc_sync preview {pending.AuthorName}'");
+                }
+
+                return builder.ToString();
+            case "preview":
+                if (!_syncInbox.TryPeek(remainder, out SyncInbox.Envelope preview))
+                {
+                    return $"No pending share from \"{remainder}\". 'cc_sync inbox' lists them.";
+                }
+
+                SyncPlan previewPlan = SyncPlanner.Plan(_pinStore, _routeStore, preview.Pins, preview.Routes);
+                return $"Share from {preview.AuthorName}: {previewPlan.Summary()}." +
+                    (previewPlan.PinConflicts.Count + previewPlan.RouteConflicts.Count > 0
+                        ? $" Apply with 'cc_sync apply {preview.AuthorName} mine' (keep local on conflicts) or '... theirs'."
+                        : $" Apply with 'cc_sync apply {preview.AuthorName}'.");
+            case "apply":
+                string[] applyParts = remainder.Split(' ');
+                bool takeRemote = applyParts.Length > 1 &&
+                    string.Equals(applyParts[applyParts.Length - 1], "theirs", StringComparison.OrdinalIgnoreCase);
+                string author = takeRemote || (applyParts.Length > 1 &&
+                        string.Equals(applyParts[applyParts.Length - 1], "mine", StringComparison.OrdinalIgnoreCase))
+                    ? string.Join(" ", applyParts, 0, applyParts.Length - 1)
+                    : remainder;
+                if (!_syncInbox.TryTake(author, out SyncInbox.Envelope envelope))
+                {
+                    return $"No pending share from \"{author}\".";
+                }
+
+                SyncPlan plan = SyncPlanner.Plan(_pinStore, _routeStore, envelope.Pins, envelope.Routes);
+                int applied = SyncPlanner.Apply(plan, _pinStore, _routeStore, takeRemote);
+                ResyncPins();
+                _routeRedrawPending = true;
+                SavePinsSnapshot();
+                _log.LogInfo($"Sync apply from {envelope.AuthorName}: {applied} change(s); {plan.Summary()}");
+                return $"Applied {applied} change(s) from {envelope.AuthorName} " +
+                    $"({(takeRemote ? "conflicts took their side" : "conflicts kept your side")}). {plan.Summary()}";
+            case "clear":
+                _syncInbox.Clear();
+                return "Sync inbox cleared.";
+            default:
+                return "Usage: cc_sync [status|share|inbox|preview <author>|apply <author> [mine|theirs]|clear]";
+        }
+    }
+
     /// <summary>Backs the `cc_routes` console command.</summary>
     internal string ExecuteRouteCommand(string[] args)
     {
@@ -929,6 +1019,7 @@ internal sealed class CartographerRuntime : IDisposable
         _worldUid = uid;
         _atlas = _persistence.Load(uid);
         _pinStore = _pinPersistence.Load(uid);
+        _pinStore.LocalAuthor = _authorId;
         _pinStore.Changed += _pinPersistence.QueueJournal;
         _pinAdapter.Reset();
         _pinCommands = new PinCommandHandler(
@@ -939,7 +1030,9 @@ internal sealed class CartographerRuntime : IDisposable
             ResyncPins);
         _displayController.Reset();
         _routeStore = _routePersistence.Load(uid);
+        _routeStore.LocalAuthor = _authorId;
         _routeStore.Changed += _routePersistence.QueueJournal;
+        _syncInbox.Clear();
         _routeCommands = new RouteCommandHandler(
             _routeStore,
             new RouteOperations(_routeStore),

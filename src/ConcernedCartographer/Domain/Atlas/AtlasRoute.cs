@@ -56,6 +56,13 @@ internal sealed class AtlasRoute
     public bool Archived { get; set; }
     public bool Deleted { get; set; }
     public DateTime? DeletedUtc { get; set; }
+
+    /// <summary>Audit metadata mirroring pins: creator and last editor
+    /// identities; empty for pre-audit data.</summary>
+    public string OwnerAuthor { get; set; } = "";
+
+    public string LastAuthor { get; set; } = "";
+
     public List<RoadPoint> Points { get; } = new();
 
     public AtlasRoute Clone()
@@ -76,6 +83,8 @@ internal sealed class AtlasRoute
             Archived = Archived,
             Deleted = Deleted,
             DeletedUtc = DeletedUtc,
+            OwnerAuthor = OwnerAuthor,
+            LastAuthor = LastAuthor,
         };
         clone.Points.AddRange(Points);
         return clone;
@@ -97,6 +106,8 @@ internal sealed class AtlasRoute
         Archived = other.Archived;
         Deleted = other.Deleted;
         DeletedUtc = other.DeletedUtc;
+        OwnerAuthor = other.OwnerAuthor;
+        LastAuthor = other.LastAuthor;
         Points.Clear();
         Points.AddRange(other.Points);
     }
