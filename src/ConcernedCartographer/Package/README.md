@@ -113,6 +113,24 @@ The tools edit only the mod's own atlas; they can never modify terrain or
 world saves. Before the first destructive change each session the sidecar is
 backed up to `.pre-reconcile.bak`.
 
+## Beta feedback, privacy, and security
+
+Found a problem? Open an issue at
+https://github.com/Weakened/ConcernedCatMods/issues and attach the file
+from `cc_atlas support` — it is sanitized by construction (versions,
+settings, and counts only; never positions, names, or notes).
+
+**Privacy**: everything the mod records stays in local files under your
+BepInEx config folder. Nothing is uploaded anywhere. Sharing happens only
+between players on your server, only for entities you explicitly scope,
+and only after the receiver reviews and applies it.
+
+**Security model**: incoming shares are size-capped, parsed with
+malformed-row skipping, and never applied automatically. Deletions are
+durable — a stale or misbehaving client cannot resurrect them. Author
+labels identify who edited what but are not cryptographic proof of
+identity.
+
 ## Data and uninstall safety
 
 The atlas is stored at:

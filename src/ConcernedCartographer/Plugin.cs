@@ -10,7 +10,7 @@ public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernedcartographer";
     public const string PluginName = "Concerned Cartographer";
-    public const string PluginVersion = "0.8.0";
+    public const string PluginVersion = "0.9.0";
 
     private CartographerRuntime? _runtime;
 
