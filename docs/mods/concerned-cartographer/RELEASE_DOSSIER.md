@@ -7,12 +7,12 @@ The single remaining gate is the human smoke test
 ## 1–5. Release candidate identity
 
 - **Version:** 1.0.0
-- **RC commit:** `25cd53852db52a0968e3087a2440e0f9122fa671` (main; includes the
-  SEC-1.0-001 sync-hardening merge from the owner-requested security audit,
-  issue #87 — supersedes RC `ff2bc798`)
+- **RC commit:** `53f371c60da8b6b5b69d590b918657d0ecbe4026` (main; includes the
+  SEC-1.0-001 sync-hardening code and closeout docs from the owner-requested
+  security audit, issue #87 — supersedes RC `ff2bc798`)
 - **ZIP:** `artifacts\thunderstore\TheConcernedCat-ConcernedCartographer-1.0.0.zip`
-- **ZIP SHA-256:** `4A948BB6C4D6B16CBF2DA3EC7405E87B6D52D534CF7CE721D9BB8A8EFAE7411A` (208,750 bytes)
-- **Plugin DLL SHA-256:** `3842E5674557C1397B71F5BE580D8F68B0EF12A4FD31D5B5A3ACF04E8D4DEC6A` (253,952 bytes; the DLL inside the ZIP and the DLLs deployed to the TCC-Dev/TCC-Compat profiles are hash-identical)
+- **ZIP SHA-256:** `C0E6A96232DFDC0F12443FC0DC111886EEE94E1E197B97F5E4A876DAB16F86CC` (208,943 bytes)
+- **Plugin DLL SHA-256:** `2732713D64CCAE58A080B8281D31A59D4670FCA9E9E8D3723794F7F159AEC0D0` (253,952 bytes; the DLL inside the ZIP and the DLLs deployed to the TCC-Dev/TCC-Compat profiles are hash-identical)
 - **Package audit:** ZIP root contains exactly `manifest.json`, `README.md`,
   `CHANGELOG.md`, `LICENSE`, `icon.png` (256×256),
   `plugins/TheConcernedCat.ConcernedCartographer.dll`. No PDBs, game DLLs,
@@ -109,7 +109,7 @@ defaults.
 ## 19. Remaining Git commands (run after the smoke test passes)
 
 ```powershell
-git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" 25cd53852db52a0968e3087a2440e0f9122fa671
+git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" 53f371c60da8b6b5b69d590b918657d0ecbe4026
 git push origin concerned-cartographer/v1.0.0
 gh release create concerned-cartographer/v1.0.0 artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-1.0.0.zip --title "Concerned Cartographer 1.0.0" --notes-file src/ConcernedCartographer/Package/CHANGELOG.md
 ```
