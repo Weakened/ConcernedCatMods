@@ -343,6 +343,7 @@ internal sealed class CartographerRuntime : IDisposable
         {
             if (_pinCommands is not null && _pinStore.TryGet(id, out AtlasPin pin))
             {
+                _workbenchPanel.UiScale = _settings.UiScale.Value;
                 _workbenchPanel.OpenForManaged(pin, _pinCommands.Operations, ResyncPins);
             }
         };

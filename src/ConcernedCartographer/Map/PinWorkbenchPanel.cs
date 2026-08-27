@@ -17,8 +17,23 @@ namespace TheConcernedCat.ConcernedCartographer.Map;
 /// write goes through the controller's validated single-batch Apply.</summary>
 internal sealed class PinWorkbenchPanel
 {
-    private const float PanelWidth = 400f;
+    private const float PanelWidth = 460f;
     private const float PanelHeight = 640f;
+
+    // Explicit two-column edit layout (DEF-v1.0-003). Every row is derived
+    // from these constants, so no label or control can leave the panel:
+    // | EdgePadding | label column | ColumnGap | field column | EdgePadding |
+    private const float EdgePadding = 24f;
+    private const float LabelColumnWidth = 150f;
+    private const float ColumnGap = 12f;
+    private const float FieldColumnWidth = PanelWidth - (2f * EdgePadding) - LabelColumnWidth - ColumnGap;
+    private const float LabelCenterX = (-PanelWidth / 2f) + EdgePadding + (LabelColumnWidth / 2f);
+    private const float FieldCenterX = LabelCenterX + (LabelColumnWidth / 2f) + ColumnGap + (FieldColumnWidth / 2f);
+    private const float ContentHalfWidth = (PanelWidth / 2f) - EdgePadding;
+
+    // The scaled panel re-docks this far from the screen's right edge so
+    // it stays fully on screen at every configured UiScale.
+    private const float ScreenEdgeMargin = 30f;
 
     private readonly ManualLogSource _log;
     private readonly PinWorkbenchController _controller = new();
@@ -267,6 +282,8 @@ internal sealed class PinWorkbenchPanel
     /// <summary>Accessibility scale applied when the panel shows.</summary>
     public float UiScale = 1f;
 
+    private float _appliedScale = 1f;
+
     private void Show(bool visible)
     {
         if (_panel == null)
@@ -274,7 +291,16 @@ internal sealed class PinWorkbenchPanel
             return;
         }
 
-        _panel.transform.localScale = Vector3.one * UiScale;
+        if (visible && !Mathf.Approximately(_appliedScale, UiScale))
+        {
+            // A scale change re-docks the panel at the default position so
+            // the resized panel stays fully on screen; the user can still
+            // drag it afterwards.
+            _appliedScale = UiScale;
+            _panel.transform.localScale = Vector3.one * UiScale;
+            ((RectTransform)_panel.transform).anchoredPosition = DefaultAnchoredPosition(UiScale);
+        }
+
         _panel.SetActive(visible);
         if (visible)
         {
@@ -331,7 +357,7 @@ internal sealed class PinWorkbenchPanel
             GUIManager.CustomGUIFront!.transform,
             new Vector2(1f, 0.5f),
             new Vector2(1f, 0.5f),
-            new Vector2(-230f, 0f),
+            DefaultAnchoredPosition(1f),
             PanelWidth,
             PanelHeight,
             draggable: true);
@@ -339,13 +365,13 @@ internal sealed class PinWorkbenchPanel
         _title = gui.CreateText(
             AtlasStrings.Get("workbench.title"), _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -30f),
-            font, 20, labelColor, outline: true, Color.black, 360f, 32f, addContentSizeFitter: false)
+            font, 20, labelColor, outline: true, Color.black, ContentHalfWidth * 2f, 32f, addContentSizeFitter: false)
             .GetComponent<Text>();
 
         _info = gui.CreateText(
             "", _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -60f),
-            font, 12, Color.white, outline: false, Color.black, 370f, 40f, addContentSizeFitter: false)
+            font, 12, Color.white, outline: false, Color.black, ContentHalfWidth * 2f, 40f, addContentSizeFitter: false)
             .GetComponent<Text>();
 
         _editRows = new GameObject("CCEditRows", typeof(RectTransform));
@@ -364,18 +390,20 @@ internal sealed class PinWorkbenchPanel
         _size = CreateRow(gui, font, labelColor, AtlasStrings.Get("workbench.size"), ref y);
         _tags = CreateRow(gui, font, labelColor, AtlasStrings.Get("workbench.tags"), ref y);
 
-        CreateLabel(gui, font, labelColor, AtlasStrings.Get("workbench.notes"), new Vector2(-150f, y));
+        CreateLabel(gui, font, labelColor, AtlasStrings.Get("workbench.notes"), new Vector2(LabelCenterX, y));
         GameObject notesField = gui.CreateInputField(
             _editRows.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(60f, y - 22f),
-            InputField.ContentType.Standard, "notes", 13, 240f, 74f);
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(FieldCenterX, y - 22f),
+            InputField.ContentType.Standard, "notes", 13, FieldColumnWidth, 74f);
         _notes = notesField.GetComponent<InputField>();
         _notes.lineType = InputField.LineType.MultiLineNewline;
         y -= 92f;
 
+        const float cycleButtonWidth = 190f;
         GameObject statusButton = gui.CreateButton(
             "Status", _editRows.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-95f, y), 170f, 30f);
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(-ContentHalfWidth + (cycleButtonWidth / 2f), y), cycleButtonWidth, 30f);
         _statusLabel = statusButton.GetComponentInChildren<Text>();
         statusButton.GetComponent<Button>().onClick.AddListener(() =>
         {
@@ -384,7 +412,8 @@ internal sealed class PinWorkbenchPanel
 
         GameObject scopeButton = gui.CreateButton(
             "Scope", _editRows.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(95f, y), 170f, 30f);
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(ContentHalfWidth - (cycleButtonWidth / 2f), y), cycleButtonWidth, 30f);
         _scopeLabel = scopeButton.GetComponentInChildren<Text>();
         scopeButton.GetComponent<Button>().onClick.AddListener(() =>
         {
@@ -392,23 +421,26 @@ internal sealed class PinWorkbenchPanel
         });
         y -= 38f;
 
-        CreateLabel(gui, font, labelColor, AtlasStrings.Get("workbench.checked"), new Vector2(-150f, y));
+        CreateLabel(gui, font, labelColor, AtlasStrings.Get("workbench.checked"), new Vector2(LabelCenterX, y));
         GameObject toggle = gui.CreateToggle(_editRows.transform, 28f, 28f);
         var toggleRect = (RectTransform)toggle.transform;
         toggleRect.anchorMin = new Vector2(0.5f, 1f);
         toggleRect.anchorMax = new Vector2(0.5f, 1f);
-        toggleRect.anchoredPosition = new Vector2(-40f, y);
+        toggleRect.anchoredPosition = new Vector2(FieldCenterX - (FieldColumnWidth / 2f) + 14f, y);
         _checked = toggle.GetComponentInChildren<Toggle>();
         y -= 40f;
 
+        const float actionButtonWidth = 110f;
         GameObject apply = gui.CreateButton(
             AtlasStrings.Get("workbench.apply"), _editRows.transform,
-            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-120f, 40f), 110f, 36f);
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(-ContentHalfWidth + (actionButtonWidth / 2f), 40f), actionButtonWidth, 36f);
         apply.GetComponent<Button>().onClick.AddListener(ApplyClicked);
 
         GameObject deleteButton = gui.CreateButton(
             AtlasStrings.Get("workbench.delete"), _editRows.transform,
-            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(120f, 40f), 110f, 36f);
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(ContentHalfWidth - (actionButtonWidth / 2f), 40f), actionButtonWidth, 36f);
         deleteButton.GetComponent<Button>().onClick.AddListener(DeleteClicked);
 
         _adoptButton = gui.CreateButton(
@@ -426,21 +458,29 @@ internal sealed class PinWorkbenchPanel
 
     private InputField? CreateRow(GUIManager gui, Font font, Color labelColor, string label, ref float y)
     {
-        CreateLabel(gui, font, labelColor, label, new Vector2(-150f, y));
+        CreateLabel(gui, font, labelColor, label, new Vector2(LabelCenterX, y));
         GameObject field = gui.CreateInputField(
             _editRows!.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(60f, y),
-            InputField.ContentType.Standard, label, 14, 240f, 28f);
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(FieldCenterX, y),
+            InputField.ContentType.Standard, label, 14, FieldColumnWidth, 28f);
         y -= 36f;
         return field.GetComponent<InputField>();
     }
 
     private void CreateLabel(GUIManager gui, Font font, Color color, string text, Vector2 position)
     {
+        // Left-aligned inside the label column; the extra height lets a
+        // long localized label wrap to a second line instead of clipping.
         gui.CreateText(
             text, _editRows!.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), position,
-            font, 13, color, outline: false, Color.black, 130f, 26f, addContentSizeFitter: false);
+            font, 13, color, outline: false, Color.black, LabelColumnWidth, 36f, addContentSizeFitter: false)
+            .GetComponent<Text>().alignment = TextAnchor.MiddleLeft;
+    }
+
+    private static Vector2 DefaultAnchoredPosition(float scale)
+    {
+        return new Vector2(-((PanelWidth * scale) / 2f) - ScreenEdgeMargin, 0f);
     }
 
     private void Fail(Exception exception)
