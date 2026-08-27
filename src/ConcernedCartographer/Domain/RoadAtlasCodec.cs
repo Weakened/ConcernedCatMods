@@ -143,7 +143,10 @@ internal static class RoadAtlasCodec
             !int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out pointIndex) ||
             !TryParseFloat(parts[3], out float x) ||
             !TryParseFloat(parts[4], out float y) ||
-            !TryParseFloat(parts[5], out float z))
+            !TryParseFloat(parts[5], out float z) ||
+            float.IsNaN(x) || float.IsInfinity(x) ||
+            float.IsNaN(y) || float.IsInfinity(y) ||
+            float.IsNaN(z) || float.IsInfinity(z))
         {
             return false;
         }

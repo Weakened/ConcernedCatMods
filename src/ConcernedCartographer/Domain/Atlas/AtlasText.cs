@@ -71,6 +71,47 @@ internal static class AtlasText
         return builder.ToString();
     }
 
+    /// <summary>Display sanitization for strings that came off the network:
+    /// strips rich-text markup and control characters and caps the length,
+    /// so a hostile author name cannot disrupt HUD rendering.</summary>
+    public static string SanitizeDisplay(string? value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return "";
+        }
+
+        var builder = new StringBuilder(Math.Min(value!.Length, maxLength));
+        bool inTag = false;
+        foreach (char character in value)
+        {
+            if (character == '<')
+            {
+                inTag = true;
+                continue;
+            }
+
+            if (character == '>')
+            {
+                inTag = false;
+                continue;
+            }
+
+            if (inTag || char.IsControl(character))
+            {
+                continue;
+            }
+
+            builder.Append(character);
+            if (builder.Length >= maxLength)
+            {
+                break;
+            }
+        }
+
+        return builder.ToString().Trim();
+    }
+
     public static string JoinTags(IEnumerable<string> tags)
     {
         var parts = new List<string>();

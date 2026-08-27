@@ -110,7 +110,7 @@ internal static class RouteCodec
                 !AtlasId.TryParse(parts[0], out AtlasId id) ||
                 !string.Equals(id.Kind, AtlasId.RouteKind, StringComparison.Ordinal) ||
                 !long.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out long revision) ||
-                revision < 1)
+                revision < 1 || revision > AtlasLimits.MaxRevision)
             {
                 malformed++;
                 continue;
@@ -155,7 +155,8 @@ internal static class RouteCodec
                     index < 0 ||
                     !TryParseFloat(parts[3], out float x) ||
                     !TryParseFloat(parts[4], out float y) ||
-                    !TryParseFloat(parts[5], out float z))
+                    !TryParseFloat(parts[5], out float z) ||
+                    !AtlasLimits.IsFinite(x) || !AtlasLimits.IsFinite(y) || !AtlasLimits.IsFinite(z))
                 {
                     malformed++;
                     continue;
@@ -221,12 +222,12 @@ internal static class RouteCodec
             LastAuthor = hasAuthors ? AtlasText.Unescape(parts[17]) : "",
             CreatedUtc = new DateTime(created, DateTimeKind.Utc),
             ModifiedUtc = new DateTime(modified, DateTimeKind.Utc),
-            Name = AtlasText.Unescape(parts[5]),
+            Name = AtlasLimits.Cap(AtlasText.Unescape(parts[5]), AtlasLimits.MaxNameLength),
             Kind = (RouteKind)kind,
             Style = (RouteStyle)style,
             Status = (RouteStatus)status,
             ColorArgb = colorArgb,
-            Notes = AtlasText.Unescape(parts[10]),
+            Notes = AtlasLimits.Cap(AtlasText.Unescape(parts[10]), AtlasLimits.MaxNotesLength),
             Scope = (AtlasScope)scope,
             Locked = locked,
             Archived = archived,

@@ -114,6 +114,36 @@ internal sealed class SyncPlan
             $"routes: +{NewRoutes.Count} new, {UpdatedRoutes.Count} updated, {TombstoneRoutes.Count} deletions, " +
             $"{RouteConflicts.Count} conflicts, {RejectedRoutes} rejected, {SupersededRoutes} already-newer";
     }
+
+    /// <summary>Names of the local entities this plan would delete, for the
+    /// preview: author identity is labeling, not authentication, so a
+    /// deletion must be reviewable by NAME before it is applied
+    /// (SEC-1.0-001). Empty when the plan deletes nothing.</summary>
+    public List<string> DeletionNames(int max)
+    {
+        var names = new List<string>();
+        foreach (AtlasPin pin in TombstonePins)
+        {
+            if (names.Count >= max)
+            {
+                return names;
+            }
+
+            names.Add($"pin \"{(pin.Name.Length > 0 ? pin.Name : pin.Id.ToString())}\"");
+        }
+
+        foreach (AtlasRoute route in TombstoneRoutes)
+        {
+            if (names.Count >= max)
+            {
+                return names;
+            }
+
+            names.Add($"route \"{(route.Name.Length > 0 ? route.Name : route.Id.ToString())}\"");
+        }
+
+        return names;
+    }
 }
 
 internal static class SyncPlanner
