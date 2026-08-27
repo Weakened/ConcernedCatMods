@@ -82,7 +82,7 @@ internal sealed class SyncTransport
                 }
             }
 
-            byte[] compressed = Utils.Compress(Encoding.UTF8.GetBytes(payload.ToString()));
+            byte[] compressed = AtlasCompression.Compress(Encoding.UTF8.GetBytes(payload.ToString()));
             if (compressed.Length > MaxCompressedBytes)
             {
                 message = $"The shared atlas is too large to broadcast ({compressed.Length / 1024} KB compressed). " +
@@ -124,8 +124,8 @@ internal sealed class SyncTransport
                 return;
             }
 
-            string authorId = package.ReadString();
-            string authorName = package.ReadString();
+            string authorId = AtlasText.SanitizeDisplay(package.ReadString(), 64);
+            string authorName = AtlasText.SanitizeDisplay(package.ReadString(), 24);
             if (LocalAuthorId.Length > 0 && string.Equals(authorId, LocalAuthorId, StringComparison.Ordinal))
             {
                 return;
@@ -138,10 +138,17 @@ internal sealed class SyncTransport
             }
 
             byte[] compressed = package.ReadByteArray();
-            byte[] raw = Utils.Decompress(compressed);
-            if (raw.Length > MaxDecompressedBytes)
+            if (compressed.Length != length || compressed.Length > MaxCompressedBytes)
             {
-                _log.LogWarning("Ignored an atlas share that decompressed beyond the safety cap.");
+                _log.LogWarning("Ignored an atlas share whose payload did not match its declared size.");
+                return;
+            }
+
+            // Bounded decompression: aborts mid-stream at the cap, so a
+            // gzip bomb can never balloon memory (SEC-1.0-001).
+            if (!AtlasCompression.TryDecompress(compressed, MaxDecompressedBytes, out byte[] raw))
+            {
+                _log.LogWarning("Ignored an atlas share that was corrupt or decompressed beyond the safety cap.");
                 return;
             }
 

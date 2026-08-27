@@ -912,7 +912,14 @@ internal sealed class CartographerRuntime : IDisposable
                 }
 
                 SyncPlan previewPlan = SyncPlanner.Plan(_pinStore, _routeStore, preview.Pins, preview.Routes);
-                return $"Share from {preview.AuthorName}: {previewPlan.Summary()}." +
+                List<string> deletionNames = previewPlan.DeletionNames(10);
+                string deletionDetail = deletionNames.Count == 0
+                    ? ""
+                    : $"\n  Would DELETE: {string.Join(", ", deletionNames)}" +
+                      (previewPlan.TombstonePins.Count + previewPlan.TombstoneRoutes.Count > deletionNames.Count
+                          ? $" (+{previewPlan.TombstonePins.Count + previewPlan.TombstoneRoutes.Count - deletionNames.Count} more)"
+                          : "");
+                return $"Share from {preview.AuthorName}: {previewPlan.Summary()}.{deletionDetail}" +
                     (previewPlan.PinConflicts.Count + previewPlan.RouteConflicts.Count > 0
                         ? $" Apply with 'cc_sync apply {preview.AuthorName} mine' (keep local on conflicts) or '... theirs'."
                         : $" Apply with 'cc_sync apply {preview.AuthorName}'.");

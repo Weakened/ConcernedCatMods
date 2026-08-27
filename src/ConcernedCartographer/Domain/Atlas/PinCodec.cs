@@ -142,7 +142,7 @@ internal static class PinCodec
         if (!AtlasId.TryParse(parts[0], out AtlasId id) ||
             !string.Equals(id.Kind, AtlasId.PinKind, StringComparison.Ordinal) ||
             !long.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out long revision) ||
-            revision < 1 ||
+            revision < 1 || revision > AtlasLimits.MaxRevision ||
             !long.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out long createdTicks) ||
             !long.TryParse(parts[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out long modifiedTicks) ||
             !TryParseNullableInt(parts[7], out int? colorArgb) ||
@@ -159,7 +159,9 @@ internal static class PinCodec
             !TryParseNullableTicks(parts[17], out DateTime? deletedUtc) ||
             !float.TryParse(parts[positionIndex], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) ||
             !float.TryParse(parts[positionIndex + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out float y) ||
-            !float.TryParse(parts[positionIndex + 2], NumberStyles.Float, CultureInfo.InvariantCulture, out float z))
+            !float.TryParse(parts[positionIndex + 2], NumberStyles.Float, CultureInfo.InvariantCulture, out float z) ||
+            !AtlasLimits.IsFinite(x) || !AtlasLimits.IsFinite(y) || !AtlasLimits.IsFinite(z) ||
+            !AtlasLimits.IsFinite(sizeScale))
         {
             return false;
         }
@@ -169,12 +171,12 @@ internal static class PinCodec
             Revision = revision,
             CreatedUtc = new DateTime(createdTicks, DateTimeKind.Utc),
             ModifiedUtc = new DateTime(modifiedTicks, DateTimeKind.Utc),
-            Name = AtlasText.Unescape(parts[4]),
-            IconId = AtlasText.Unescape(parts[5]),
-            Category = AtlasText.Unescape(parts[6]),
+            Name = AtlasLimits.Cap(AtlasText.Unescape(parts[4]), AtlasLimits.MaxNameLength),
+            IconId = AtlasLimits.Cap(AtlasText.Unescape(parts[5]), AtlasLimits.MaxIconIdLength),
+            Category = AtlasLimits.Cap(AtlasText.Unescape(parts[6]), AtlasLimits.MaxCategoryLength),
             ColorArgb = colorArgb,
             SizeScale = sizeScale,
-            Notes = AtlasText.Unescape(parts[9]),
+            Notes = AtlasLimits.Cap(AtlasText.Unescape(parts[9]), AtlasLimits.MaxNotesLength),
             Status = (AtlasPinStatus)status,
             Checked = isChecked,
             Scope = (AtlasScope)scope,
@@ -186,7 +188,16 @@ internal static class PinCodec
             LastAuthor = lastAuthor,
             Position = new RoadPoint(x, y, z),
         };
-        pin.Tags.AddRange(AtlasText.SplitTags(parts[10]));
+        foreach (string tag in AtlasText.SplitTags(parts[10]))
+        {
+            if (pin.Tags.Count >= AtlasLimits.MaxTags)
+            {
+                break;
+            }
+
+            pin.Tags.Add(AtlasLimits.Cap(tag, AtlasLimits.MaxTagLength));
+        }
+
         return true;
     }
 
