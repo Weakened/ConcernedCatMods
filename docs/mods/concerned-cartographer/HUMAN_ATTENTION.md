@@ -13,7 +13,7 @@ repeated in PRE_RELEASE_SMOKE_TEST.md.
 - Why work continued: satisfies the acceptance intent (CI tests without Valheim; no game references in core code) without changing the packaging contract.
 - Risk / alternative: a real Core assembly with ILRepack could come later; purely additive.
 - Must resolve before public release: No
-- Status: Open
+- Status: Resolved 2026-08-27 — owner approved ("stick to proven pattern, no action needed").
 
 ### 2026-08-26 — Roads keep their own sidecar; the "atlas store" is a family of sidecars
 
@@ -23,7 +23,7 @@ repeated in PRE_RELEASE_SMOKE_TEST.md.
 - Why work continued: road migration/backup evidence already exists and shipped in 0.2.0; a unified single-file store can be introduced later behind the same persistence interface.
 - Risk / alternative: two files per world instead of one; no data risk.
 - Must resolve before public release: No
-- Status: Open
+- Status: Resolved 2026-08-27 — owner approved the sidecar-family choice.
 
 ### 2026-08-27 — No dedicated-server persistence component in v0.6 sync
 
@@ -33,7 +33,7 @@ repeated in PRE_RELEASE_SMOKE_TEST.md.
 - Why work continued: every client keeps the full shared state with revisions and tombstones, so a rejoining peer re-syncs from any other peer; a true server store can be added later without protocol changes (same envelopes).
 - Risk / alternative: an empty server with no peers online holds no atlas; communities wanting server-authoritative storage must wait.
 - Must resolve before public release: No (documented limitation)
-- Status: Open
+- Status: Resolved 2026-08-27 — owner approved the peer-to-peer design.
 
 ### 2026-08-27 — Sync author identity is labeling, not authentication
 
@@ -43,7 +43,7 @@ repeated in PRE_RELEASE_SMOKE_TEST.md.
 - Why work continued: the threat model for a co-op map mod is misbehaving clients corrupting data, and that is covered structurally; impersonation only mislabels an audit line the player reviews anyway.
 - Risk / alternative: a malicious modded client could claim another player's name in the sync preview.
 - Must resolve before public release: No (documented in README security notes)
-- Status: Open
+- Status: Resolved 2026-08-27 — owner requested an "ultra triple check"; executed as adversarial audit SEC-1.0-001 (#87). 7 hardening gaps found and fixed (worst: decompression bomb — cap was checked after unbounded decompression); bounded gzip, revision/float/string bounds, deletion names in preview, author display sanitization, declared-length verification. 22 new tests; the RC in RELEASE_DOSSIER.md includes all fixes.
 
 ### 2026-08-27 — MapRoutes route import not implemented
 
@@ -52,7 +52,7 @@ repeated in PRE_RELEASE_SMOKE_TEST.md.
 - Safe reversible default selected: coexistence only (both route layers render independently; detection logs the policy); no import. Users keep both mods running side by side losslessly.
 - Why work continued: nothing is lost — MapRoutes data stays in MapRoutes; an importer can ship later as a pure codec addition.
 - Must resolve before public release: No (documented limitation)
-- Status: Open
+- Status: Resolved 2026-08-27 — owner approved coexistence-only.
 
 ### 2026-08-26 — Per-pin custom color/size not rendered on the vanilla map in v0.3
 
@@ -62,4 +62,4 @@ repeated in PRE_RELEASE_SMOKE_TEST.md.
 - Why work continued: no data loss — the metadata is persisted and versioned; rendering can be layered on later without migration.
 - Risk / alternative: users may expect the color to show on the map immediately.
 - Must resolve before public release: No (documented limitation)
-- Status: Open
+- Status: Resolved 2026-08-27 — owner offered a quick look; guidance delivered (see conversation/dossier). Decision: rendering stays deferred to 1.1 so the hardened RC is not destabilized before the smoke test; metadata already round-trips, so shipping rendering later needs no migration.
