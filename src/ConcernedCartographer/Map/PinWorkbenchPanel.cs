@@ -17,11 +17,32 @@ namespace TheConcernedCat.ConcernedCartographer.Map;
 /// write goes through the controller's validated single-batch Apply.</summary>
 internal sealed class PinWorkbenchPanel
 {
-    private const float PanelWidth = 400f;
+    private const float PanelWidth = 460f;
     private const float PanelHeight = 640f;
+
+    // Explicit two-column edit layout (DEF-v1.0-003). Every row is derived
+    // from these constants, so no label or control can leave the panel:
+    // | EdgePadding | label column | ColumnGap | field column | EdgePadding |
+    private const float EdgePadding = 24f;
+    private const float LabelColumnWidth = 150f;
+    private const float ColumnGap = 12f;
+    private const float FieldColumnWidth = PanelWidth - (2f * EdgePadding) - LabelColumnWidth - ColumnGap;
+    private const float LabelCenterX = (-PanelWidth / 2f) + EdgePadding + (LabelColumnWidth / 2f);
+    private const float FieldCenterX = LabelCenterX + (LabelColumnWidth / 2f) + ColumnGap + (FieldColumnWidth / 2f);
+    private const float ContentHalfWidth = (PanelWidth / 2f) - EdgePadding;
+
+    // The scaled panel re-docks this far from the screen's right edge so
+    // it stays fully on screen at every configured UiScale.
+    private const float ScreenEdgeMargin = 30f;
 
     private readonly ManualLogSource _log;
     private readonly PinWorkbenchController _controller = new();
+
+    // Jötunn's BlockInput is reference-counted, so the panel must hold at
+    // most ONE outstanding request for its whole modal lifetime no matter
+    // how many times it transitions (adopt prompt → managed editor re-shows
+    // without hiding). All block traffic goes through this owner.
+    private readonly ModalInputBlock _inputBlock = new(GUIManager.BlockInput);
 
     private GameObject? _panel;
     private Text? _title;
@@ -128,12 +149,36 @@ internal sealed class PinWorkbenchPanel
         Show(false);
     }
 
-    /// <summary>Per-frame housekeeping from the runtime: Escape closes.</summary>
+    /// <summary>Per-frame housekeeping from the runtime. Escape closes; a
+    /// large map that disappeared under the panel (death, another mod,
+    /// world teardown) force-closes it; and a fail-safe invariant makes
+    /// sure a hidden workbench can never keep holding the global input
+    /// block. Runs every frame, gated only on plugin disposal.</summary>
     public void HandleFrame()
     {
-        if (IsVisible && Input.GetKeyDown(KeyCode.Escape))
+        if (IsVisible)
         {
-            Close();
+            if (!Minimap.IsOpen())
+            {
+                // The panel lives inside the open large map; if the map
+                // went away underneath it, fail closed with it.
+                Close();
+                return;
+            }
+
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                Close();
+            }
+
+            return;
+        }
+
+        if (_inputBlock.Owned)
+        {
+            _log.LogError(
+                "Workbench invariant violated: the panel is hidden but still owned the GUI input block; releasing it now.");
+            _inputBlock.Release();
         }
     }
 
@@ -237,6 +282,8 @@ internal sealed class PinWorkbenchPanel
     /// <summary>Accessibility scale applied when the panel shows.</summary>
     public float UiScale = 1f;
 
+    private float _appliedScale = 1f;
+
     private void Show(bool visible)
     {
         if (_panel == null)
@@ -244,15 +291,29 @@ internal sealed class PinWorkbenchPanel
             return;
         }
 
-        _panel.transform.localScale = Vector3.one * UiScale;
+        if (visible && !Mathf.Approximately(_appliedScale, UiScale))
+        {
+            // A scale change re-docks the panel at the default position so
+            // the resized panel stays fully on screen; the user can still
+            // drag it afterwards.
+            _appliedScale = UiScale;
+            _panel.transform.localScale = Vector3.one * UiScale;
+            ((RectTransform)_panel.transform).anchoredPosition = DefaultAnchoredPosition(UiScale);
+        }
+
         _panel.SetActive(visible);
-        GUIManager.BlockInput(visible);
         if (visible)
         {
+            _inputBlock.Acquire();
+
             // Controller entry point: focus the first field so navigation
             // can walk the chain.
             UnityEngine.EventSystems.EventSystem.current?.SetSelectedGameObject(
                 _adoptButton != null && _adoptButton.activeSelf ? _adoptButton : _name?.gameObject);
+        }
+        else
+        {
+            _inputBlock.Release();
         }
     }
 
@@ -296,7 +357,7 @@ internal sealed class PinWorkbenchPanel
             GUIManager.CustomGUIFront!.transform,
             new Vector2(1f, 0.5f),
             new Vector2(1f, 0.5f),
-            new Vector2(-230f, 0f),
+            DefaultAnchoredPosition(1f),
             PanelWidth,
             PanelHeight,
             draggable: true);
@@ -304,13 +365,13 @@ internal sealed class PinWorkbenchPanel
         _title = gui.CreateText(
             AtlasStrings.Get("workbench.title"), _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -30f),
-            font, 20, labelColor, outline: true, Color.black, 360f, 32f, addContentSizeFitter: false)
+            font, 20, labelColor, outline: true, Color.black, ContentHalfWidth * 2f, 32f, addContentSizeFitter: false)
             .GetComponent<Text>();
 
         _info = gui.CreateText(
             "", _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -60f),
-            font, 12, Color.white, outline: false, Color.black, 370f, 40f, addContentSizeFitter: false)
+            font, 12, Color.white, outline: false, Color.black, ContentHalfWidth * 2f, 40f, addContentSizeFitter: false)
             .GetComponent<Text>();
 
         _editRows = new GameObject("CCEditRows", typeof(RectTransform));
@@ -329,18 +390,20 @@ internal sealed class PinWorkbenchPanel
         _size = CreateRow(gui, font, labelColor, AtlasStrings.Get("workbench.size"), ref y);
         _tags = CreateRow(gui, font, labelColor, AtlasStrings.Get("workbench.tags"), ref y);
 
-        CreateLabel(gui, font, labelColor, AtlasStrings.Get("workbench.notes"), new Vector2(-150f, y));
+        CreateLabel(gui, font, labelColor, AtlasStrings.Get("workbench.notes"), new Vector2(LabelCenterX, y));
         GameObject notesField = gui.CreateInputField(
             _editRows.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(60f, y - 22f),
-            InputField.ContentType.Standard, "notes", 13, 240f, 74f);
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(FieldCenterX, y - 22f),
+            InputField.ContentType.Standard, "notes", 13, FieldColumnWidth, 74f);
         _notes = notesField.GetComponent<InputField>();
         _notes.lineType = InputField.LineType.MultiLineNewline;
         y -= 92f;
 
+        const float cycleButtonWidth = 190f;
         GameObject statusButton = gui.CreateButton(
             "Status", _editRows.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-95f, y), 170f, 30f);
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(-ContentHalfWidth + (cycleButtonWidth / 2f), y), cycleButtonWidth, 30f);
         _statusLabel = statusButton.GetComponentInChildren<Text>();
         statusButton.GetComponent<Button>().onClick.AddListener(() =>
         {
@@ -349,7 +412,8 @@ internal sealed class PinWorkbenchPanel
 
         GameObject scopeButton = gui.CreateButton(
             "Scope", _editRows.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(95f, y), 170f, 30f);
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(ContentHalfWidth - (cycleButtonWidth / 2f), y), cycleButtonWidth, 30f);
         _scopeLabel = scopeButton.GetComponentInChildren<Text>();
         scopeButton.GetComponent<Button>().onClick.AddListener(() =>
         {
@@ -357,23 +421,26 @@ internal sealed class PinWorkbenchPanel
         });
         y -= 38f;
 
-        CreateLabel(gui, font, labelColor, AtlasStrings.Get("workbench.checked"), new Vector2(-150f, y));
+        CreateLabel(gui, font, labelColor, AtlasStrings.Get("workbench.checked"), new Vector2(LabelCenterX, y));
         GameObject toggle = gui.CreateToggle(_editRows.transform, 28f, 28f);
         var toggleRect = (RectTransform)toggle.transform;
         toggleRect.anchorMin = new Vector2(0.5f, 1f);
         toggleRect.anchorMax = new Vector2(0.5f, 1f);
-        toggleRect.anchoredPosition = new Vector2(-40f, y);
+        toggleRect.anchoredPosition = new Vector2(FieldCenterX - (FieldColumnWidth / 2f) + 14f, y);
         _checked = toggle.GetComponentInChildren<Toggle>();
         y -= 40f;
 
+        const float actionButtonWidth = 110f;
         GameObject apply = gui.CreateButton(
             AtlasStrings.Get("workbench.apply"), _editRows.transform,
-            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-120f, 40f), 110f, 36f);
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(-ContentHalfWidth + (actionButtonWidth / 2f), 40f), actionButtonWidth, 36f);
         apply.GetComponent<Button>().onClick.AddListener(ApplyClicked);
 
         GameObject deleteButton = gui.CreateButton(
             AtlasStrings.Get("workbench.delete"), _editRows.transform,
-            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(120f, 40f), 110f, 36f);
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(ContentHalfWidth - (actionButtonWidth / 2f), 40f), actionButtonWidth, 36f);
         deleteButton.GetComponent<Button>().onClick.AddListener(DeleteClicked);
 
         _adoptButton = gui.CreateButton(
@@ -391,21 +458,29 @@ internal sealed class PinWorkbenchPanel
 
     private InputField? CreateRow(GUIManager gui, Font font, Color labelColor, string label, ref float y)
     {
-        CreateLabel(gui, font, labelColor, label, new Vector2(-150f, y));
+        CreateLabel(gui, font, labelColor, label, new Vector2(LabelCenterX, y));
         GameObject field = gui.CreateInputField(
             _editRows!.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(60f, y),
-            InputField.ContentType.Standard, label, 14, 240f, 28f);
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(FieldCenterX, y),
+            InputField.ContentType.Standard, label, 14, FieldColumnWidth, 28f);
         y -= 36f;
         return field.GetComponent<InputField>();
     }
 
     private void CreateLabel(GUIManager gui, Font font, Color color, string text, Vector2 position)
     {
+        // Left-aligned inside the label column; the extra height lets a
+        // long localized label wrap to a second line instead of clipping.
         gui.CreateText(
             text, _editRows!.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), position,
-            font, 13, color, outline: false, Color.black, 130f, 26f, addContentSizeFitter: false);
+            font, 13, color, outline: false, Color.black, LabelColumnWidth, 36f, addContentSizeFitter: false)
+            .GetComponent<Text>().alignment = TextAnchor.MiddleLeft;
+    }
+
+    private static Vector2 DefaultAnchoredPosition(float scale)
+    {
+        return new Vector2(-((PanelWidth * scale) / 2f) - ScreenEdgeMargin, 0f);
     }
 
     private void Fail(Exception exception)
@@ -416,7 +491,9 @@ internal sealed class PinWorkbenchPanel
             _panel.SetActive(false);
         }
 
-        GUIManager.BlockInput(false);
+        // Release only a block this panel actually owns: an unconditional
+        // BlockInput(false) here could steal another mod's request.
+        _inputBlock.Release();
         _log.LogError($"Workbench panel failed and was disabled for this session (cc_pins console remains available): {exception}");
     }
 
