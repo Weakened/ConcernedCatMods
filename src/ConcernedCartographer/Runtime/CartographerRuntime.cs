@@ -135,12 +135,22 @@ internal sealed class CartographerRuntime : IDisposable
 
     public void Tick(float unscaledDeltaTime)
     {
-        if (_disposed || !_settings.Enabled.Value || !_mapReady || _surveyor is null)
+        if (_disposed)
         {
             return;
         }
 
+        // The workbench frame handler runs before every other gate: it owns
+        // the fail-safe that a hidden or orphaned panel can never keep
+        // holding the global input block (DEF-v1.0-001), which must hold
+        // even when the mod is disabled mid-session or the world tears down.
         _workbenchPanel.HandleFrame();
+
+        if (!_settings.Enabled.Value || !_mapReady || _surveyor is null)
+        {
+            return;
+        }
+
         _drawerPanel.HandleFrame();
         if (!Minimap.IsOpen() && !Minimap.InTextInput() &&
             _settings.QuickPinHotkey.Value != KeyCode.None &&
@@ -212,7 +222,10 @@ internal sealed class CartographerRuntime : IDisposable
         {
             // Logout or world switch: stop sampling and flush now instead of
             // waiting for the next map event, so no surveyed data is lost.
+            // The workbench must close here too — it can never carry an
+            // input block across a world boundary.
             _mapReady = false;
+            _workbenchPanel.Close();
             _pipeline?.EndAllStrokes();
             _chunkRecovery.Reset();
             _displayController.Reset();
@@ -1201,6 +1214,7 @@ internal sealed class CartographerRuntime : IDisposable
             return;
         }
 
+        _workbenchPanel.Close();
         SaveIfDirty();
         SavePinsSnapshot();
         _pipeline?.EndAllStrokes();

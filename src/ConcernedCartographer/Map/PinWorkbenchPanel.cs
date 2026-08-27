@@ -23,6 +23,12 @@ internal sealed class PinWorkbenchPanel
     private readonly ManualLogSource _log;
     private readonly PinWorkbenchController _controller = new();
 
+    // Jötunn's BlockInput is reference-counted, so the panel must hold at
+    // most ONE outstanding request for its whole modal lifetime no matter
+    // how many times it transitions (adopt prompt → managed editor re-shows
+    // without hiding). All block traffic goes through this owner.
+    private readonly ModalInputBlock _inputBlock = new(GUIManager.BlockInput);
+
     private GameObject? _panel;
     private Text? _title;
     private Text? _info;
@@ -128,12 +134,36 @@ internal sealed class PinWorkbenchPanel
         Show(false);
     }
 
-    /// <summary>Per-frame housekeeping from the runtime: Escape closes.</summary>
+    /// <summary>Per-frame housekeeping from the runtime. Escape closes; a
+    /// large map that disappeared under the panel (death, another mod,
+    /// world teardown) force-closes it; and a fail-safe invariant makes
+    /// sure a hidden workbench can never keep holding the global input
+    /// block. Runs every frame, gated only on plugin disposal.</summary>
     public void HandleFrame()
     {
-        if (IsVisible && Input.GetKeyDown(KeyCode.Escape))
+        if (IsVisible)
         {
-            Close();
+            if (!Minimap.IsOpen())
+            {
+                // The panel lives inside the open large map; if the map
+                // went away underneath it, fail closed with it.
+                Close();
+                return;
+            }
+
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                Close();
+            }
+
+            return;
+        }
+
+        if (_inputBlock.Owned)
+        {
+            _log.LogError(
+                "Workbench invariant violated: the panel is hidden but still owned the GUI input block; releasing it now.");
+            _inputBlock.Release();
         }
     }
 
@@ -246,13 +276,18 @@ internal sealed class PinWorkbenchPanel
 
         _panel.transform.localScale = Vector3.one * UiScale;
         _panel.SetActive(visible);
-        GUIManager.BlockInput(visible);
         if (visible)
         {
+            _inputBlock.Acquire();
+
             // Controller entry point: focus the first field so navigation
             // can walk the chain.
             UnityEngine.EventSystems.EventSystem.current?.SetSelectedGameObject(
                 _adoptButton != null && _adoptButton.activeSelf ? _adoptButton : _name?.gameObject);
+        }
+        else
+        {
+            _inputBlock.Release();
         }
     }
 
@@ -416,7 +451,9 @@ internal sealed class PinWorkbenchPanel
             _panel.SetActive(false);
         }
 
-        GUIManager.BlockInput(false);
+        // Release only a block this panel actually owns: an unconditional
+        // BlockInput(false) here could steal another mod's request.
+        _inputBlock.Release();
         _log.LogError($"Workbench panel failed and was disabled for this session (cc_pins console remains available): {exception}");
     }
 
