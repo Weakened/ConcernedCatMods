@@ -14,8 +14,10 @@ internal sealed class RoadOverlayRenderer
     private const string DirtOverlayName = "CC Dirt Paths";
     private const string PavedOverlayName = "CC Paved Roads";
 
-    private static readonly Color32 DirtColor = new(138, 96, 58, 230);
-    private static readonly Color32 PavedColor = new(180, 184, 188, 235);
+    // Dark, fully opaque ink: at 1-texel width the earlier lighter colors
+    // washed out under the vanilla map cloud layer (owner campaign finding).
+    private static readonly Color32 DirtColor = new(94, 62, 34, 255);
+    private static readonly Color32 PavedColor = new(88, 90, 96, 255);
 
     private readonly CartographerSettings _settings;
     private readonly ManualLogSource _log;
