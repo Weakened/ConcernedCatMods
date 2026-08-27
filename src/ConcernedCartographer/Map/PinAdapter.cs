@@ -268,6 +268,31 @@ internal sealed class PinAdapter
         }
     }
 
+    /// <summary>Removes a managed pin's rendering only (display filtering /
+    /// clustering). The store entity is untouched, and because the pin is
+    /// untracked first, the vanilla-change absorber can never mistake this
+    /// for a player deletion.</summary>
+    public void DisplayHide(AtlasId id)
+    {
+        if (_disabledForSession)
+        {
+            return;
+        }
+
+        try
+        {
+            if (_pinById.TryGetValue(id.Value, out Minimap.PinData? rendered))
+            {
+                Untrack(rendered);
+                Minimap.instance.RemovePin(rendered);
+            }
+        }
+        catch (Exception exception)
+        {
+            Disable(exception);
+        }
+    }
+
     public bool TryGetManagedId(Minimap.PinData pin, out AtlasId id)
     {
         return _idByPin.TryGetValue(pin, out id);

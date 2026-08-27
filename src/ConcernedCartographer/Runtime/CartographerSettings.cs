@@ -21,7 +21,12 @@ internal sealed class CartographerSettings
         ConfigEntry<int> lineWidthPixels,
         ConfigEntry<bool> debugLogging,
         ConfigEntry<bool> drawCalibrationMarkers,
-        ConfigEntry<KeyCode> workbenchHotkey)
+        ConfigEntry<KeyCode> workbenchHotkey,
+        ConfigEntry<KeyCode> drawerHotkey,
+        ConfigEntry<bool> drawerShowDirt,
+        ConfigEntry<bool> drawerShowPaved,
+        ConfigEntry<bool> drawerShowPins,
+        ConfigEntry<bool> drawerCluster)
     {
         Enabled = enabled;
         CaptureConstructionActions = captureConstructionActions;
@@ -39,6 +44,11 @@ internal sealed class CartographerSettings
         DebugLogging = debugLogging;
         DrawCalibrationMarkers = drawCalibrationMarkers;
         WorkbenchHotkey = workbenchHotkey;
+        DrawerHotkey = drawerHotkey;
+        DrawerShowDirt = drawerShowDirt;
+        DrawerShowPaved = drawerShowPaved;
+        DrawerShowPins = drawerShowPins;
+        DrawerCluster = drawerCluster;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -57,6 +67,11 @@ internal sealed class CartographerSettings
     public ConfigEntry<bool> DebugLogging { get; }
     public ConfigEntry<bool> DrawCalibrationMarkers { get; }
     public ConfigEntry<KeyCode> WorkbenchHotkey { get; }
+    public ConfigEntry<KeyCode> DrawerHotkey { get; }
+    public ConfigEntry<bool> DrawerShowDirt { get; }
+    public ConfigEntry<bool> DrawerShowPaved { get; }
+    public ConfigEntry<bool> DrawerShowPins { get; }
+    public ConfigEntry<bool> DrawerCluster { get; }
 
     public static CartographerSettings Bind(ConfigFile config)
     {
@@ -99,6 +114,13 @@ internal sealed class CartographerSettings
             config.Bind("Diagnostics", "DrawCalibrationMarkers", false,
                 "Draw fixed calibration crosses into the dirt overlay at world origin (magenta), +128m east (yellow), and +128m north (cyan) to verify overlay/map alignment."),
             config.Bind("Workbench", "WorkbenchHotkey", KeyCode.P,
-                "Key that opens the Pin Workbench for the pin under the cursor while the large map is open."));
+                "Key that opens the Pin Workbench for the pin under the cursor while the large map is open."),
+            config.Bind("Drawer", "DrawerHotkey", KeyCode.L,
+                "Key that toggles the Atlas Drawer (layers, search, saved views) while the large map is open."),
+            config.Bind("Drawer", "ShowDirtRoads", true, "Show the dirt-road layer."),
+            config.Bind("Drawer", "ShowPavedRoads", true, "Show the paved-road layer."),
+            config.Bind("Drawer", "ShowPins", true, "Show managed pins on the map."),
+            config.Bind("Drawer", "Clustering", true,
+                "Fold crowded pins into cluster markers when zoomed out (display only; never changes stored pins)."));
     }
 }
