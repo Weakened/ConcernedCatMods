@@ -93,7 +93,17 @@ marked **BLOCKS** must pass before publication; others are record-and-ship.
 | 7.6 | B tries `cc_pins delete` on A's shared pin, shares | A's preview shows 1 rejected (non-owner delete) | Console output | Yes |
 | 7.7 | Private pin on A | A shares | B never receives it | Console output | Yes |
 
-## 8–13. Later-sprint sections
+## 8. NoMap, controller, localization, accessibility (v0.7)
+
+| # | Setup | Action | Expected | Evidence on failure | Blocks |
+|---|---|---|---|---|---|
+| 8.1 | World with `nomap` global key | Try cc_pins/drawer away from a table, then beside a cartography table | Denied with the table message away; everything works beside the table | Console output | Yes |
+| 8.2 | Gamepad connected | Bind Accessibility/DrawerGamepadButton (e.g. JoyBack); open drawer; navigate with stick/dpad | Focus visibly walks the controls; toggles/buttons actuate | Clip | No |
+| 8.3 | Copy template → `cartographer-strings.tsv`, translate 3 keys | Restart | Translated strings appear; untranslated fall back to English | Screenshot | No |
+| 8.4 | Accessibility/UiScale 1.4 + HighContrast on | Open both panels; view roads/routes | Panels larger and usable; dirt near-black, paved near-white, routes bright; dashed/dotted still distinct | Screenshots | No |
+| 8.5 | Fresh profile first world | Enter world | One-time hotkey tip appears once, never again | Screenshot | No |
+
+## 9–13. Later-sprint sections
 
 Placeholders grow as sprints complete: Atlas Drawer/search/views (v0.4),
 routes (v0.5), multiplayer/tombstones (v0.6), NoMap/controller/
