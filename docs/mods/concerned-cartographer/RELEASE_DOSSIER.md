@@ -7,10 +7,12 @@ The single remaining gate is the human smoke test
 ## 1–5. Release candidate identity
 
 - **Version:** 1.0.0
-- **RC commit:** `ff2bc79886dfb78779fd4b6c6e5f83a7dd52a3e5` (sprint/concerned-cartographer-v1.0)
+- **RC commit:** `25cd53852db52a0968e3087a2440e0f9122fa671` (main; includes the
+  SEC-1.0-001 sync-hardening merge from the owner-requested security audit,
+  issue #87 — supersedes RC `ff2bc798`)
 - **ZIP:** `artifacts\thunderstore\TheConcernedCat-ConcernedCartographer-1.0.0.zip`
-- **ZIP SHA-256:** `722088FBF10B016FD9F394D1BA35751D8B13C099A98626F98CDFDB4F132171A5` (207,651 bytes)
-- **Plugin DLL SHA-256:** `4FCD1EB5981378BC6C830061EF2C9A09C2D9454445675FE5DCC35EB9435D6DA7` (251,392 bytes)
+- **ZIP SHA-256:** `4A948BB6C4D6B16CBF2DA3EC7405E87B6D52D534CF7CE721D9BB8A8EFAE7411A` (208,750 bytes)
+- **Plugin DLL SHA-256:** `3842E5674557C1397B71F5BE580D8F68B0EF12A4FD31D5B5A3ACF04E8D4DEC6A` (253,952 bytes; the DLL inside the ZIP and the DLLs deployed to the TCC-Dev/TCC-Compat profiles are hash-identical)
 - **Package audit:** ZIP root contains exactly `manifest.json`, `README.md`,
   `CHANGELOG.md`, `LICENSE`, `icon.png` (256×256),
   `plugins/TheConcernedCat.ConcernedCartographer.dll`. No PDBs, game DLLs,
@@ -32,14 +34,24 @@ Notable finds: chunk-recovery MethodAccessException (P1, silent
 fail-closed — caught by log review), terraforming-inks-roads (P2), ink
 contrast (P3).
 
+Post-RC audit: SEC-1.0-001 (#87) — owner-requested adversarial audit of
+the sync receive path found and fixed 7 hardening gaps, the worst a
+decompression bomb (size cap was checked only after unbounded
+decompression). All fixed in the RC identified above: bounded gzip,
+revision sanity cap, non-finite float rejection, string-length caps,
+deletion names in the sync preview, author display sanitization, and
+declared-length verification.
+
 ## 8. Automated evidence (at the RC commit)
 
-- **221/221 tests** in the game-free core suite (CI-run): road geometry
+- **243/243 tests** in the game-free core suite (CI-run): road geometry
   and suppression, codecs and journal recovery for all three entity
   families, migration matrix across every shipped format, pin/route
   operations with undo-convergence properties, query/clustering,
   survey bounds, sync policy/planner including tombstone
-  no-resurrection, localization safety.
+  no-resurrection, localization safety, and the SEC-1.0-001 hardening
+  suite (decompression-bomb rejection, revision/float/string bounds,
+  deletion-name previews, display sanitization).
 - Validator green with `--expected-version 1.0.0`; solution builds with
   0 errors (1 known benign MSB3245).
 - Scale: 10,000-pin suites (<200 ms total), 10 km road compaction
@@ -97,7 +109,7 @@ defaults.
 ## 19. Remaining Git commands (run after the smoke test passes)
 
 ```powershell
-git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" ff2bc79886dfb78779fd4b6c6e5f83a7dd52a3e5
+git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" 25cd53852db52a0968e3087a2440e0f9122fa671
 git push origin concerned-cartographer/v1.0.0
 gh release create concerned-cartographer/v1.0.0 artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-1.0.0.zip --title "Concerned Cartographer 1.0.0" --notes-file src/ConcernedCartographer/Package/CHANGELOG.md
 ```

@@ -125,11 +125,14 @@ BepInEx config folder. Nothing is uploaded anywhere. Sharing happens only
 between players on your server, only for entities you explicitly scope,
 and only after the receiver reviews and applies it.
 
-**Security model**: incoming shares are size-capped, parsed with
-malformed-row skipping, and never applied automatically. Deletions are
-durable — a stale or misbehaving client cannot resurrect them. Author
-labels identify who edited what but are not cryptographic proof of
-identity.
+**Security model**: incoming shares are size-capped (including bounded
+decompression, so oversized payloads are rejected before they can use
+memory), parsed with malformed-row skipping and sanity bounds on every
+field, and never applied automatically. The sync preview names any entity
+a share would delete so you can review deletions before accepting them.
+Deletions are durable — a stale or misbehaving client cannot resurrect
+them. Author labels identify who edited what but are not cryptographic
+proof of identity.
 
 ## Data and uninstall safety
 

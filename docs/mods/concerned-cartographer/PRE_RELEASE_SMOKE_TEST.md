@@ -88,7 +88,7 @@ marked **BLOCKS** must pass before publication; others are record-and-ship.
 |---|---|---|---|---|---|
 | 7.1 | Two clients A+B in one world | A: `cc_pins scope table` on a pin, `cc_sync share` | B gets a HUD notice; `cc_sync inbox` lists A; nothing changed yet | Console output | Yes |
 | 7.2 | 7.1 | B: `cc_sync preview A`, then `apply A` | Preview counts match; pin appears for B with A's authorship in the workbench info line | Screenshots | Yes |
-| 7.3 | 7.2 | A deletes the shared pin, shares; B applies | Pin disappears for B; `cc_pins deleted` shows the tombstone | Console output | Yes |
+| 7.3 | 7.2 | A deletes the shared pin, shares; B applies | B's `cc_sync preview A` lists the pin BY NAME under "Would DELETE" (SEC-1.0-001) before apply; pin then disappears for B; `cc_pins deleted` shows the tombstone | Console output | Yes |
 | 7.4 | 7.3 | B (stale copy) shares back without applying A's deletion first | A's pin stays deleted after preview/apply — NO resurrection | Console output | Yes |
 | 7.5 | Both edit one shared pin while separated | Share both ways | Conflict appears in preview; `apply <name> theirs` converges both sides | Console output | Yes |
 | 7.6 | B tries `cc_pins delete` on A's shared pin, shares | A's preview shows 1 rejected (non-owner delete) | Console output | Yes |

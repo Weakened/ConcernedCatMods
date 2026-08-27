@@ -12,6 +12,7 @@ Highlights across the 1.0 line:
 - **Routes that follow your roads**: freehand or waypoints with road-aware routing, measures, and travel-time estimates.
 - **Collaboration you can trust**: explicit sharing, preview-before-apply, honest conflicts, and deletions that can never resurrect.
 - **For every Viking**: NoMap table mode, controller path, translations, UI scaling, high contrast, backups, and a sanitized support report.
+- **Pre-release security audit**: the sync receive path was adversarially audited and hardened — bounded decompression, sanity bounds on every parsed field, deletion names in the sync preview, and sanitized author labels.
 
 Upgrading from any earlier version is automatic and lossless.
 ## 0.9.0
