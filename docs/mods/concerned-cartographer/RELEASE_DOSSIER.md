@@ -7,12 +7,13 @@ The single remaining gate is the human smoke test
 ## 1–5. Release candidate identity
 
 - **Version:** 1.0.0
-- **RC commit:** `53f371c60da8b6b5b69d590b918657d0ecbe4026` (main; includes the
-  SEC-1.0-001 sync-hardening code and closeout docs from the owner-requested
-  security audit, issue #87 — supersedes RC `ff2bc798`)
+- **RC commit:** `6ee4ee90d18d83ac9af274a7bb795262f81af060` (main; includes the
+  SEC-1.0-001 sync hardening, issue #87, and the developer/provenance
+  documentation kit, PR #88, whose package-README attribution ships in the
+  ZIP — supersedes RCs `ff2bc798` and `53f371c`)
 - **ZIP:** `artifacts\thunderstore\TheConcernedCat-ConcernedCartographer-1.0.0.zip`
-- **ZIP SHA-256:** `C0E6A96232DFDC0F12443FC0DC111886EEE94E1E197B97F5E4A876DAB16F86CC` (208,943 bytes)
-- **Plugin DLL SHA-256:** `2732713D64CCAE58A080B8281D31A59D4670FCA9E9E8D3723794F7F159AEC0D0` (253,952 bytes; the DLL inside the ZIP and the DLLs deployed to the TCC-Dev/TCC-Compat profiles are hash-identical)
+- **ZIP SHA-256:** `0E30E9A4B8ABFB95CCD23393B3F7E85A81843E5F4EFD08670EA34EED169CE5DE` (209,218 bytes)
+- **Plugin DLL SHA-256:** `BF82967E6D023C0F7857510069A60A33820FCB61753B5F05DAA773591A21A3D3` (253,952 bytes; the DLL inside the ZIP and the DLLs deployed to the TCC-Dev/TCC-Compat profiles are hash-identical; source-identical to the DLL of RC `53f371c` — only doc files changed between them)
 - **Package audit:** ZIP root contains exactly `manifest.json`, `README.md`,
   `CHANGELOG.md`, `LICENSE`, `icon.png` (256×256),
   `plugins/TheConcernedCat.ConcernedCartographer.dll`. No PDBs, game DLLs,
@@ -109,7 +110,7 @@ defaults.
 ## 19. Remaining Git commands (run after the smoke test passes)
 
 ```powershell
-git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" 53f371c60da8b6b5b69d590b918657d0ecbe4026
+git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" 6ee4ee90d18d83ac9af274a7bb795262f81af060
 git push origin concerned-cartographer/v1.0.0
 gh release create concerned-cartographer/v1.0.0 artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-1.0.0.zip --title "Concerned Cartographer 1.0.0" --notes-file src/ConcernedCartographer/Package/CHANGELOG.md
 ```
