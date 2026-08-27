@@ -19,11 +19,13 @@ internal sealed class RoadOverlayRenderer
 
     private readonly CartographerSettings _settings;
     private readonly ManualLogSource _log;
+    private readonly RateLimitedLog _rateLimited;
 
     public RoadOverlayRenderer(CartographerSettings settings, ManualLogSource log)
     {
         _settings = settings;
         _log = log;
+        _rateLimited = new RateLimitedLog(log, 5f);
     }
 
     public void RedrawAll(RoadAtlas atlas)
@@ -118,8 +120,8 @@ internal sealed class RoadOverlayRenderer
             var overlay = MinimapManager.Instance.GetMapOverlay(overlayName);
             int size = overlay.TextureSize;
 
-            Vector2 start = MinimapManager.Instance.WorldToOverlayCoords(segment.Start, size);
-            Vector2 end = MinimapManager.Instance.WorldToOverlayCoords(segment.End, size);
+            Vector2 start = MinimapManager.Instance.WorldToOverlayCoords(ToVector3(segment.Start), size);
+            Vector2 end = MinimapManager.Instance.WorldToOverlayCoords(ToVector3(segment.End), size);
             DrawLine(
                 (x, y) => overlay.OverlayTex.SetPixel(x, y, color),
                 size,
@@ -132,19 +134,25 @@ internal sealed class RoadOverlayRenderer
         }
         catch (Exception exception)
         {
-            _log.LogWarning($"Could not draw an incremental road segment: {exception.Message}");
+            // Every new sample retries this path, so keep the warning rate-limited.
+            _rateLimited.Warning("draw-segment", $"Could not draw an incremental road segment: {exception.Message}");
         }
+    }
+
+    private static Vector3 ToVector3(RoadPoint point)
+    {
+        return new Vector3(point.X, point.Y, point.Z);
     }
 
     private void DrawIntoBuffer(
         Color32[] pixels,
         int size,
-        Vector3 worldStart,
-        Vector3 worldEnd,
+        RoadPoint worldStart,
+        RoadPoint worldEnd,
         Color32 color)
     {
-        Vector2 start = MinimapManager.Instance.WorldToOverlayCoords(worldStart, size);
-        Vector2 end = MinimapManager.Instance.WorldToOverlayCoords(worldEnd, size);
+        Vector2 start = MinimapManager.Instance.WorldToOverlayCoords(ToVector3(worldStart), size);
+        Vector2 end = MinimapManager.Instance.WorldToOverlayCoords(ToVector3(worldEnd), size);
 
         DrawLine(
             (x, y) => pixels[(y * size) + x] = color,

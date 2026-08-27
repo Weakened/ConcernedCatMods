@@ -10,6 +10,7 @@ internal sealed class RoadSurveyor
     private readonly GroundPaintProbe _probe;
     private readonly RoadAtlas _atlas;
     private readonly ManualLogSource _log;
+    private readonly RateLimitedLog _rateLimited;
     private float _elapsed;
 
     public RoadSurveyor(
@@ -22,6 +23,7 @@ internal sealed class RoadSurveyor
         _probe = probe;
         _atlas = atlas;
         _log = log;
+        _rateLimited = new RateLimitedLog(log, 5f);
     }
 
     public bool Tick(float deltaTime, out RoadSegment segment)
@@ -48,16 +50,20 @@ internal sealed class RoadSurveyor
             return false;
         }
 
-        bool recorded = _atlas.RecordSample(
-            kind,
-            position,
+        var rules = new RoadSamplingRules(
             _settings.MinimumPointSpacingMeters.Value,
             _settings.MaximumStrokeGapMeters.Value,
+            _settings.DuplicateSuppressionMeters.Value);
+
+        bool recorded = _atlas.RecordSample(
+            kind,
+            new RoadPoint(position.x, position.y, position.z),
+            rules,
             out segment);
 
         if (recorded && _settings.DebugLogging.Value)
         {
-            _log.LogInfo($"Recorded {kind} road segment from {segment.Start} to {segment.End}.");
+            _rateLimited.Info("segment-recorded", $"Recorded {kind} road segment from {segment.Start} to {segment.End}.");
         }
 
         return recorded;

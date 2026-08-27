@@ -1,23 +1,24 @@
 using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Linq;
 using BepInEx;
 using BepInEx.Logging;
 using TheConcernedCat.ConcernedCartographer.Roads;
-using UnityEngine;
 
 namespace TheConcernedCat.ConcernedCartographer.Persistence;
 
 internal sealed class RoadPersistence
 {
-    private const string Header = "# ConcernedCartographer roads v1";
     private readonly ManualLogSource _log;
+    private readonly Runtime.RateLimitedLog _rateLimited;
 
     public RoadPersistence(ManualLogSource log)
     {
         _log = log;
+
+        // Autosave retries every few seconds forever on a broken disk; one
+        // error per minute is plenty to diagnose without flooding the log.
+        _rateLimited = new Runtime.RateLimitedLog(log, 60f);
     }
 
     public RoadAtlas Load(long worldUid)
@@ -30,55 +31,13 @@ internal sealed class RoadPersistence
 
         try
         {
-            var orderedStrokes = new List<RoadStroke>();
-            var strokesById = new Dictionary<Guid, RoadStroke>();
-            int malformedRows = 0;
-
-            foreach (string rawLine in File.ReadLines(path))
+            RoadAtlasCodec.ParseResult result = RoadAtlasCodec.Parse(File.ReadLines(path));
+            if (result.MalformedRows > 0)
             {
-                string line = rawLine.Trim();
-                if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                string[] parts = line.Split('\t');
-                if (parts.Length != 7 ||
-                    !Guid.TryParse(parts[0], out Guid strokeId) ||
-                    !Enum.TryParse(parts[1], ignoreCase: true, out RoadKind kind) ||
-                    !int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int pointIndex) ||
-                    !TryParseFloat(parts[3], out float x) ||
-                    !TryParseFloat(parts[4], out float y) ||
-                    !TryParseFloat(parts[5], out float z) ||
-                    parts[6] != "1")
-                {
-                    malformedRows++;
-                    continue;
-                }
-
-                if (!strokesById.TryGetValue(strokeId, out RoadStroke stroke))
-                {
-                    stroke = new RoadStroke(strokeId, kind);
-                    strokesById.Add(strokeId, stroke);
-                    orderedStrokes.Add(stroke);
-                }
-
-                if (stroke.Kind != kind || pointIndex != stroke.Points.Count)
-                {
-                    malformedRows++;
-                    continue;
-                }
-
-                stroke.Points.Add(new Vector3(x, y, z));
+                _log.LogWarning($"Skipped {result.MalformedRows} malformed road-atlas row(s) in {path}.");
             }
 
-            orderedStrokes.RemoveAll(stroke => stroke.Points.Count == 0);
-            if (malformedRows > 0)
-            {
-                _log.LogWarning($"Skipped {malformedRows} malformed road-atlas row(s) in {path}.");
-            }
-
-            return new RoadAtlas(orderedStrokes);
+            return new RoadAtlas(result.Strokes);
         }
         catch (Exception exception)
         {
@@ -97,25 +56,9 @@ internal sealed class RoadPersistence
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             using (var writer = new StreamWriter(temporaryPath, append: false))
             {
-                writer.WriteLine(Header);
-                foreach (RoadStroke stroke in atlas.Strokes)
+                foreach (string line in RoadAtlasCodec.Serialize(atlas.Strokes))
                 {
-                    for (int index = 0; index < stroke.Points.Count; index++)
-                    {
-                        Vector3 point = stroke.Points[index];
-                        writer.Write(stroke.Id.ToString("D", CultureInfo.InvariantCulture));
-                        writer.Write('\t');
-                        writer.Write(stroke.Kind);
-                        writer.Write('\t');
-                        writer.Write(index.ToString(CultureInfo.InvariantCulture));
-                        writer.Write('\t');
-                        writer.Write(point.x.ToString("R", CultureInfo.InvariantCulture));
-                        writer.Write('\t');
-                        writer.Write(point.y.ToString("R", CultureInfo.InvariantCulture));
-                        writer.Write('\t');
-                        writer.Write(point.z.ToString("R", CultureInfo.InvariantCulture));
-                        writer.WriteLine("\t1");
-                    }
+                    writer.WriteLine(line);
                 }
             }
 
@@ -125,7 +68,7 @@ internal sealed class RoadPersistence
         }
         catch (Exception exception)
         {
-            _log.LogError($"Could not save road atlas to {path}: {exception}");
+            _rateLimited.Error("atlas-save", $"Could not save road atlas to {path}: {exception}");
             TryDelete(temporaryPath);
             return false;
         }
@@ -138,11 +81,6 @@ internal sealed class RoadPersistence
             "ConcernedCatMods",
             "ConcernedCartographer",
             worldUid.ToString(CultureInfo.InvariantCulture) + ".roads.tsv");
-    }
-
-    private static bool TryParseFloat(string value, out float result)
-    {
-        return float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out result);
     }
 
     private static void TryDelete(string path)

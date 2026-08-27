@@ -22,6 +22,14 @@ jobs:
       - name: Validate repository and package metadata
         run: python tools/validate_repo.py
 
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Run pure-domain unit tests
+        run: dotnet test src/ConcernedCartographer.Tests/ConcernedCartographer.Tests.csproj --nologo
+
       - name: Explain build boundary
         run: |
           echo "Game-linked C# builds are intentionally local or self-hosted."

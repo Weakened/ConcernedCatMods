@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using UnityEngine;
 
 namespace TheConcernedCat.ConcernedCartographer.Roads;
 
@@ -14,5 +13,5 @@ internal sealed class RoadStroke
 
     public Guid Id { get; }
     public RoadKind Kind { get; }
-    public List<Vector3> Points { get; } = new();
+    public List<RoadPoint> Points { get; } = new();
 }

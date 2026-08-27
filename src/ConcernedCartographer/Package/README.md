@@ -19,6 +19,7 @@ Concerned Cartographer turns the dirt Pathen and paved terrain your Viking actua
 - This version does not scan the whole world or immediately recover every old road.
 - Any road-like terrain paint you walk on is recorded, including world-generated dirt patches such as the circle around the spawn stones — the mod does not yet distinguish player-made from world-generated paint.
 - A road line can sit up to ~6 m from its true position at maximum zoom; that is the native resolution of Valheim's 2048-pixel map texture.
+- The atlas is stored inside the **active mod-manager profile's** BepInEx config folder. Each profile keeps its own atlas, so switching to a fresh profile starts an empty atlas for the same world and roads re-record as you traverse them. Copy the `ConcernedCatMods` config folder between profiles to carry an atlas over.
 - Road data is local to each client; there is no multiplayer sharing yet.
 - Marker editing, richer legends, and cartography-table sharing are planned but not in this build.
 
@@ -33,6 +34,24 @@ Install with a Thunderstore-compatible mod manager. BepInExPack Valheim and Jöt
 3. Open the map.
 4. Use Jötunn's map-overlay menu to toggle the dirt and paved layers.
 
+## Configuration
+
+Settings live in `BepInEx/config/com.theconcernedcat.valheim.concernedcartographer.cfg`. Out-of-range values are clamped to the documented range; the effective values are logged once at startup.
+
+| Setting | Default | Range | Purpose |
+|---|---|---|---|
+| General / Enabled | true | — | Master switch for surveying and overlays |
+| Survey / SampleIntervalSeconds | 0.35 | 0.10–5.0 | Seconds between terrain samples |
+| Survey / MinimumPointSpacingMeters | 1.5 | 0.5–20 | Minimum distance before a new road point is stored |
+| Survey / MaximumStrokeGapMeters | 8.0 | 2–100 | Larger gaps start a new stroke instead of a connector line |
+| Survey / DuplicateSuppressionMeters | 2.0 | 0–10 | Skip samples near already-recorded ink of the same kind; re-walking a road never grows the atlas (0 disables; values above ~3 can also suppress tight hairpins) |
+| Persistence / AutosaveIntervalSeconds | 15 | 5–300 | Seconds between dirty-atlas autosaves |
+| Detection / PaintThreshold | 0.40 | 0.10–0.95 | Minimum averaged paint value that counts as road |
+| Detection / PaintSampleRadius | 1 | 0–3 | Paint pixels averaged around the player |
+| Map / LineWidthPixels | 1 | 1–6 | Road line width in map texels (~11.6 m each; widths above 1 make nearby roads merge) |
+| Diagnostics / DebugLogging | false | — | Opt-in, rate-limited classification/recording diagnostics |
+| Diagnostics / DrawCalibrationMarkers | false | — | Overlay alignment calibration crosses (development aid) |
+
 ## Data and uninstall safety
 
 The atlas is stored at:
@@ -45,7 +64,7 @@ The mod does not edit the Valheim world file. Removing the DLL stops surveying/r
 
 ## Compatibility
 
-The first release is client-side and intentionally avoids replacing vanilla pin UI. Compatibility with Pinnacle and MapRoutes is part of the release test matrix. Report conflicts with a BepInEx log and the exact mod versions installed.
+The first release is client-side and intentionally avoids replacing vanilla pin UI. Verified compatible with **Pinnacle 1.16.0** (pin create/edit/list/filter) and **MapRoutes 1.1.0** (route drawing and persistence) in the same profile — road layers, pins, and manual routes coexist, and toggling one system never hides another. Report conflicts with a BepInEx log and the exact mod versions installed.
 
 ## AI disclosure
 

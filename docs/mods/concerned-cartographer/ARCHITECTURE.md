@@ -10,12 +10,21 @@ The first release is a client-side BepInEx/Jötunn plugin targeting .NET Framewo
 Plugin
   ├─ CartographerSettings
   └─ CartographerRuntime
-       ├─ GroundPaintProbe
-       ├─ RoadSurveyor
-       ├─ RoadAtlas
-       ├─ RoadPersistence
-       └─ RoadOverlayRenderer
+       ├─ GroundPaintProbe        (game adapter)
+       ├─ RoadSurveyor            (game adapter)
+       ├─ RoadAtlas               (pure domain)
+       ├─ RoadAtlasCodec          (pure domain)
+       ├─ RoadPersistence         (IO adapter)
+       └─ RoadOverlayRenderer     (Jötunn adapter)
 ```
+
+Pure domain types live under `src/ConcernedCartographer/Domain` (`RoadPoint`,
+`RoadKind`, `RoadStroke`, `RoadSegment`, `RoadSamplingRules`, `RoadAtlas`,
+`RoadAtlasCodec`). They have no Unity, BepInEx, or Jötunn dependencies and are
+compiled directly into `src/ConcernedCartographer.Tests`, so stroke and
+serialization rules are unit-tested without the game installed. The shipped
+plugin remains a single DLL because the tests link the sources instead of
+referencing a second assembly.
 
 ### Plugin
 
@@ -46,6 +55,30 @@ Runs at a configured interval, not every frame. It samples the local player's po
 ### RoadAtlas
 
 Pure in-memory domain state. It owns strokes, dirty state, and append rules. It does not touch Unity map textures or the filesystem.
+
+Sampling rules, in order:
+
+1. **Duplicate suppression** — a sample within `DuplicateSuppressionMeters`
+   (default 2 m, 0 disables) of already-recorded ink of the same kind is
+   skipped and ends the active stroke, so re-walking a road never grows the
+   atlas and never draws a connector across the covered stretch. The newest
+   three points of the active stroke are exempt so forward walking cannot
+   suppress itself. A per-kind spatial hash grid keeps the check O(1) per
+   sample. Radii above ~3 m may also suppress tight hairpin switchbacks; the
+   default stays below that.
+2. **Stroke start** — no active stroke, or a road-kind change, starts a new
+   correctly-typed stroke.
+3. **Minimum spacing** — closer than `MinimumPointSpacingMeters` to the last
+   stored point: skipped (standing still stores nothing).
+4. **Maximum gap** — farther than `MaximumStrokeGapMeters`: a new stroke starts
+   with no connector segment (teleports, portals, and respawns can never draw
+   cross-map lines).
+
+### RoadAtlasCodec
+
+Pure serialization of the sidecar TSV format (see “Persistence format v1”).
+`RoadPersistence` delegates all parsing/formatting here and keeps only file IO,
+logging, and the atomic-write dance.
 
 ### RoadPersistence
 
