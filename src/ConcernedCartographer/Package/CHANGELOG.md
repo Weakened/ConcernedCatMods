@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.0
+
+**The Stable Living Atlas.** The roads your Vikings actually build become a durable, searchable, shareable map — and everything on it can be trusted.
+
+Highlights across the 1.0 line:
+
+- **Roads map themselves**: walk them, build them, or let recovery find them — with ghost-free reconciliation and a self-compacting atlas.
+- **Pins with memory**: adopt your vanilla pins, edit everything in place, batch, merge, undo — durable identities, recoverable deletes, uninstall-safe by construction.
+- **A readable map at any scale**: the Atlas Drawer, real search, saved views, and lossless clustering.
+- **Routes that follow your roads**: freehand or waypoints with road-aware routing, measures, and travel-time estimates.
+- **Collaboration you can trust**: explicit sharing, preview-before-apply, honest conflicts, and deletions that can never resurrect.
+- **For every Viking**: NoMap table mode, controller path, translations, UI scaling, high contrast, backups, and a sanitized support report.
+
+Upgrading from any earlier version is automatic and lossless.
 ## 0.9.0
 
 Public beta hardening: no new features, everything sturdier.
