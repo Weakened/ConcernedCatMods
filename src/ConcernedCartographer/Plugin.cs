@@ -120,7 +120,7 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void OnApplicationQuit()
     {
-        _runtime?.SaveIfDirty();
+        _runtime?.SaveAll();
     }
 
     private void OnDestroy()
