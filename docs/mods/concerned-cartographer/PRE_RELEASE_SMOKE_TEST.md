@@ -81,7 +81,19 @@ marked **BLOCKS** must pass before publication; others are record-and-ship.
 | 6.5 | Any route | style/status/color/lock/archive cycle | Dashed/dotted render distinctly; status colors differ; locked rejects edits; archived hides | Screenshots | No |
 | 6.6 | "CC Routes" overlay toggle | Toggle in Jötunn panel | Route layer hides/shows independently of roads | Screenshot | No |
 
-## 7–13. Later-sprint sections
+## 7. Collaborative atlas (v0.6) — needs two clients (or one client + a second profile on another PC/steam account)
+
+| # | Setup | Action | Expected | Evidence on failure | Blocks |
+|---|---|---|---|---|---|
+| 7.1 | Two clients A+B in one world | A: `cc_pins scope table` on a pin, `cc_sync share` | B gets a HUD notice; `cc_sync inbox` lists A; nothing changed yet | Console output | Yes |
+| 7.2 | 7.1 | B: `cc_sync preview A`, then `apply A` | Preview counts match; pin appears for B with A's authorship in the workbench info line | Screenshots | Yes |
+| 7.3 | 7.2 | A deletes the shared pin, shares; B applies | Pin disappears for B; `cc_pins deleted` shows the tombstone | Console output | Yes |
+| 7.4 | 7.3 | B (stale copy) shares back without applying A's deletion first | A's pin stays deleted after preview/apply — NO resurrection | Console output | Yes |
+| 7.5 | Both edit one shared pin while separated | Share both ways | Conflict appears in preview; `apply <name> theirs` converges both sides | Console output | Yes |
+| 7.6 | B tries `cc_pins delete` on A's shared pin, shares | A's preview shows 1 rejected (non-owner delete) | Console output | Yes |
+| 7.7 | Private pin on A | A shares | B never receives it | Console output | Yes |
+
+## 8–13. Later-sprint sections
 
 Placeholders grow as sprints complete: Atlas Drawer/search/views (v0.4),
 routes (v0.5), multiplayer/tombstones (v0.6), NoMap/controller/

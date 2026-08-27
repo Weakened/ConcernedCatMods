@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.6.0
+
+The trustworthy collaborative atlas: share deliberately, review everything, lose nothing.
+
+- **Share what you choose**: mark pins/routes with `scope table` and `cc_sync share` broadcasts them to connected players. Everything else stays private — always.
+- **Review before it lands**: incoming shares wait in an inbox (`cc_sync inbox`); `cc_sync preview` shows exactly what would change (new, updated, deletions, conflicts); apply is explicit and selective.
+- **Deletions never resurrect**: shared deletions travel as durable tombstones, and a teammate who was offline for a week cannot bring your deleted pin back — guaranteed structurally, not by luck.
+- **Honest conflicts**: when two people edited the same thing offline, you see it and choose your side (`apply <name> mine` / `theirs`); either choice converges for everyone.
+- Every shared entity carries who created it and who last edited it; only the owner's deletions are honored.
+- Hardened transport: compressed, size-capped, protocol-versioned envelopes; malformed data is skipped row-by-row, never trusted.
+
+### Known limitations
+
+- Sync is peer-to-peer between online players (the server relays; it does not store the atlas itself). A rejoining player gets the current state from any online teammate's share.
+- Author identity labels edits but cannot cryptographically prove who sent a share; every structural protection holds regardless.
+
 ## 0.5.0
 
 Routes and planning: draw where you'll go, and let the roads do the navigating.
