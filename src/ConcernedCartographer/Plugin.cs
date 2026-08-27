@@ -17,6 +17,7 @@ public sealed class Plugin : BaseUnityPlugin
     private void Awake()
     {
         CartographerSettings settings = CartographerSettings.Bind(Config);
+        Persistence.LocalizationPersistence.Initialize(Logger);
         _runtime = new CartographerRuntime(settings, Logger);
 
         MinimapManager.OnVanillaMapAvailable += HandleMapAvailable;

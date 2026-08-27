@@ -120,6 +120,7 @@ internal sealed class CartographerRuntime : IDisposable
         _displayController.Apply(_pinStore, _pinAdapter);
         _routeRenderer.RedrawAll(_routeStore);
         _syncTransport.EnsureRegistered();
+        ShowOnboardingOnce();
         if (_settings.DrawCalibrationMarkers.Value)
         {
             _renderer.DrawCalibrationMarkers();
@@ -155,18 +156,28 @@ internal sealed class CartographerRuntime : IDisposable
         if (Minimap.IsOpen() && !Minimap.InTextInput())
         {
             if (_pinCommands is not null && !_workbenchPanel.IsVisible &&
-                Input.GetKeyDown(_settings.WorkbenchHotkey.Value))
+                (Input.GetKeyDown(_settings.WorkbenchHotkey.Value) ||
+                 GamepadDown(_settings.WorkbenchGamepadButton.Value)))
             {
                 OpenWorkbenchAtCursor();
             }
 
-            if (Input.GetKeyDown(_settings.DrawerHotkey.Value))
+            if (Input.GetKeyDown(_settings.DrawerHotkey.Value) ||
+                GamepadDown(_settings.DrawerGamepadButton.Value))
             {
-                _drawerPanel.Toggle(
-                    _settings.DrawerShowDirt.Value,
-                    _settings.DrawerShowPaved.Value,
-                    _settings.DrawerShowPins.Value,
-                    _settings.DrawerCluster.Value);
+                if (AtlasAccessAllowed(out string drawerDenial))
+                {
+                    _drawerPanel.UiScale = _settings.UiScale.Value;
+                    _drawerPanel.Toggle(
+                        _settings.DrawerShowDirt.Value,
+                        _settings.DrawerShowPaved.Value,
+                        _settings.DrawerShowPins.Value,
+                        _settings.DrawerCluster.Value);
+                }
+                else
+                {
+                    Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, drawerDenial);
+                }
             }
 
             if (_displayController.ZoomTierChanged())
@@ -245,6 +256,11 @@ internal sealed class CartographerRuntime : IDisposable
     /// <summary>Backs the `cc_pins` console command.</summary>
     internal string ExecutePinCommand(string[] args)
     {
+        if (!AtlasAccessAllowed(out string atlasDenial))
+        {
+            return atlasDenial;
+        }
+
         if (_disposed || !_mapReady || _pinCommands is null)
         {
             return "Concerned Cartographer: no world is loaded yet.";
@@ -401,12 +417,98 @@ internal sealed class CartographerRuntime : IDisposable
         OpenWorkbenchNear(world);
     }
 
+    /// <summary>NoMap worlds keep the atlas as a cartography-table ritual:
+    /// panels and consoles work only near a table. Detection failures fail
+    /// open so the atlas can never be bricked by an API change.</summary>
+    private bool AtlasAccessAllowed(out string denial)
+    {
+        denial = "";
+        try
+        {
+            if (ZoneSystem.instance == null || !ZoneSystem.instance.GetGlobalKey("nomap"))
+            {
+                return true;
+            }
+
+            Player player = Player.m_localPlayer;
+            if (player is not null &&
+                SurveyScanner.AnyInstanceNear("piece_maptable", player.transform.position, 10f))
+            {
+                return true;
+            }
+
+            denial = AtlasStrings.Get("hud.noMapNeedTable");
+            return false;
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    private bool _onboardingChecked;
+
+    /// <summary>One-time first-run tip pointing at the two entry hotkeys.</summary>
+    private void ShowOnboardingOnce()
+    {
+        if (_onboardingChecked)
+        {
+            return;
+        }
+
+        _onboardingChecked = true;
+        try
+        {
+            string path = System.IO.Path.Combine(
+                BepInEx.Paths.ConfigPath, "ConcernedCatMods", "ConcernedCartographer", "onboarding-shown.txt");
+            if (System.IO.File.Exists(path))
+            {
+                return;
+            }
+
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+            System.IO.File.WriteAllText(path, DateTime.UtcNow.ToString("o"));
+            Player.m_localPlayer?.Message(
+                MessageHud.MessageType.Center,
+                AtlasStrings.Format("hud.onboarding", _settings.DrawerHotkey.Value, _settings.WorkbenchHotkey.Value));
+        }
+        catch
+        {
+            // A failed tip is never worth an error.
+        }
+    }
+
+    private static bool GamepadDown(string buttonName)
+    {
+        if (string.IsNullOrEmpty(buttonName))
+        {
+            return false;
+        }
+
+        try
+        {
+            return ZInput.GetButtonDown(buttonName);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private void OpenWorkbenchNear(Vector3 world)
     {
         if (_pinCommands is null)
         {
             return;
         }
+
+        if (!AtlasAccessAllowed(out string denial))
+        {
+            Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, denial);
+            return;
+        }
+
+        _workbenchPanel.UiScale = _settings.UiScale.Value;
 
         var point = new RoadPoint(world.x, world.y, world.z);
         PinOperations operations = _pinCommands.Operations;
@@ -459,6 +561,11 @@ internal sealed class CartographerRuntime : IDisposable
     /// <summary>Backs the `cc_atlas` console command: the scriptable drawer.</summary>
     internal string ExecuteAtlasCommand(string[] args)
     {
+        if (!AtlasAccessAllowed(out string atlasDenial))
+        {
+            return atlasDenial;
+        }
+
         if (_disposed || !_mapReady)
         {
             return "Concerned Cartographer: no world is loaded yet.";
@@ -517,6 +624,11 @@ internal sealed class CartographerRuntime : IDisposable
     /// for survey observations.</summary>
     internal string ExecuteSurveyCommand(string[] args)
     {
+        if (!AtlasAccessAllowed(out string atlasDenial))
+        {
+            return atlasDenial;
+        }
+
         if (_disposed || !_mapReady)
         {
             return "Concerned Cartographer: no world is loaded yet.";
@@ -677,6 +789,11 @@ internal sealed class CartographerRuntime : IDisposable
     /// review-before-apply for the collaborative atlas.</summary>
     internal string ExecuteSyncCommand(string[] args)
     {
+        if (!AtlasAccessAllowed(out string atlasDenial))
+        {
+            return atlasDenial;
+        }
+
         if (_disposed || !_mapReady)
         {
             return "Concerned Cartographer: no world is loaded yet.";
@@ -760,6 +877,11 @@ internal sealed class CartographerRuntime : IDisposable
     /// <summary>Backs the `cc_routes` console command.</summary>
     internal string ExecuteRouteCommand(string[] args)
     {
+        if (!AtlasAccessAllowed(out string atlasDenial))
+        {
+            return atlasDenial;
+        }
+
         if (_disposed || !_mapReady || _routeCommands is null)
         {
             return "Concerned Cartographer: no world is loaded yet.";
@@ -877,6 +999,11 @@ internal sealed class CartographerRuntime : IDisposable
     /// scheduled for redraw.</summary>
     internal string ExecuteRoadCommand(string[] args)
     {
+        if (!AtlasAccessAllowed(out string atlasDenial))
+        {
+            return atlasDenial;
+        }
+
         if (_disposed || !_mapReady || _editor is null || _worldUid is null)
         {
             return "Concerned Cartographer: no world is loaded yet.";

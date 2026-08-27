@@ -66,7 +66,7 @@ internal sealed class PinWorkbenchPanel
             _controller.Open(pin);
             LoadBufferIntoWidgets();
             SetMode(edit: true, adopt: false);
-            _title!.text = pin.Name.Length == 0 ? "Pin Workbench" : $"Pin: {Truncate(pin.Name, 24)}";
+            _title!.text = pin.Name.Length == 0 ? AtlasStrings.Get("workbench.title") : $"Pin: {Truncate(pin.Name, 24)}";
             _info!.text = _controller.InfoLine;
             Show(true);
         }
@@ -89,8 +89,9 @@ internal sealed class PinWorkbenchPanel
             _onApplied = onApplied;
             _adopt = adopt;
             SetMode(edit: false, adopt: true);
-            _title!.text = pinName.Length == 0 ? "Vanilla pin" : $"Vanilla pin: {Truncate(pinName, 20)}";
-            _info!.text = "Not managed yet. Adopting preserves position, icon, name, and checked state.";
+            string vanillaLabel = AtlasStrings.Get("workbench.vanillaPin");
+            _title!.text = pinName.Length == 0 ? vanillaLabel : $"{vanillaLabel}: {Truncate(pinName, 20)}";
+            _info!.text = AtlasStrings.Get("workbench.adoptInfo");
             Show(true);
         }
         catch (Exception exception)
@@ -111,8 +112,8 @@ internal sealed class PinWorkbenchPanel
             _operations = null;
             _adopt = null;
             SetMode(edit: false, adopt: false);
-            _title!.text = "Foreign pin";
-            _info!.text = description + " — owned by the game or another mod; Concerned Cartographer never edits it.";
+            _title!.text = AtlasStrings.Get("workbench.foreignPin");
+            _info!.text = description + " — " + AtlasStrings.Get("workbench.foreignInfo");
             Show(true);
         }
         catch (Exception exception)
@@ -210,8 +211,8 @@ internal sealed class PinWorkbenchPanel
         _tags!.text = _controller.TagsField;
         _notes!.text = _controller.NotesField;
         _checked!.isOn = _controller.CheckedField;
-        _statusLabel!.text = $"Status: {_controller.StatusField}";
-        _scopeLabel!.text = $"Scope: {_controller.ScopeField}";
+        _statusLabel!.text = AtlasStrings.Get("workbench.status") + ": " + _controller.StatusField;
+        _scopeLabel!.text = AtlasStrings.Get("workbench.scope") + ": " + _controller.ScopeField;
     }
 
     private void ReadWidgetsIntoBuffer()
@@ -233,6 +234,9 @@ internal sealed class PinWorkbenchPanel
         _adoptButton!.SetActive(adopt);
     }
 
+    /// <summary>Accessibility scale applied when the panel shows.</summary>
+    public float UiScale = 1f;
+
     private void Show(bool visible)
     {
         if (_panel == null)
@@ -240,8 +244,16 @@ internal sealed class PinWorkbenchPanel
             return;
         }
 
+        _panel.transform.localScale = Vector3.one * UiScale;
         _panel.SetActive(visible);
         GUIManager.BlockInput(visible);
+        if (visible)
+        {
+            // Controller entry point: focus the first field so navigation
+            // can walk the chain.
+            UnityEngine.EventSystems.EventSystem.current?.SetSelectedGameObject(
+                _adoptButton != null && _adoptButton.activeSelf ? _adoptButton : _name?.gameObject);
+        }
     }
 
     private bool EnsureBuilt()
@@ -290,7 +302,7 @@ internal sealed class PinWorkbenchPanel
             draggable: true);
 
         _title = gui.CreateText(
-            "Pin Workbench", _panel.transform,
+            AtlasStrings.Get("workbench.title"), _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -30f),
             font, 20, labelColor, outline: true, Color.black, 360f, 32f, addContentSizeFitter: false)
             .GetComponent<Text>();
@@ -310,14 +322,14 @@ internal sealed class PinWorkbenchPanel
         editRect.offsetMax = Vector2.zero;
 
         float y = -95f;
-        _name = CreateRow(gui, font, labelColor, "Name", ref y);
-        _icon = CreateRow(gui, font, labelColor, "Icon", ref y);
-        _category = CreateRow(gui, font, labelColor, "Category", ref y);
-        _color = CreateRow(gui, font, labelColor, "Color hex", ref y);
-        _size = CreateRow(gui, font, labelColor, "Size 0.5-2", ref y);
-        _tags = CreateRow(gui, font, labelColor, "Tags (a, b)", ref y);
+        _name = CreateRow(gui, font, labelColor, AtlasStrings.Get("workbench.name"), ref y);
+        _icon = CreateRow(gui, font, labelColor, AtlasStrings.Get("workbench.icon"), ref y);
+        _category = CreateRow(gui, font, labelColor, AtlasStrings.Get("workbench.category"), ref y);
+        _color = CreateRow(gui, font, labelColor, AtlasStrings.Get("workbench.color"), ref y);
+        _size = CreateRow(gui, font, labelColor, AtlasStrings.Get("workbench.size"), ref y);
+        _tags = CreateRow(gui, font, labelColor, AtlasStrings.Get("workbench.tags"), ref y);
 
-        CreateLabel(gui, font, labelColor, "Notes", new Vector2(-150f, y));
+        CreateLabel(gui, font, labelColor, AtlasStrings.Get("workbench.notes"), new Vector2(-150f, y));
         GameObject notesField = gui.CreateInputField(
             _editRows.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(60f, y - 22f),
@@ -332,7 +344,7 @@ internal sealed class PinWorkbenchPanel
         _statusLabel = statusButton.GetComponentInChildren<Text>();
         statusButton.GetComponent<Button>().onClick.AddListener(() =>
         {
-            _statusLabel!.text = $"Status: {_controller.CycleStatus()}";
+            _statusLabel!.text = AtlasStrings.Get("workbench.status") + ": " + _controller.CycleStatus();
         });
 
         GameObject scopeButton = gui.CreateButton(
@@ -341,11 +353,11 @@ internal sealed class PinWorkbenchPanel
         _scopeLabel = scopeButton.GetComponentInChildren<Text>();
         scopeButton.GetComponent<Button>().onClick.AddListener(() =>
         {
-            _scopeLabel!.text = $"Scope: {_controller.CycleScope()}";
+            _scopeLabel!.text = AtlasStrings.Get("workbench.scope") + ": " + _controller.CycleScope();
         });
         y -= 38f;
 
-        CreateLabel(gui, font, labelColor, "Crossed off", new Vector2(-150f, y));
+        CreateLabel(gui, font, labelColor, AtlasStrings.Get("workbench.checked"), new Vector2(-150f, y));
         GameObject toggle = gui.CreateToggle(_editRows.transform, 28f, 28f);
         var toggleRect = (RectTransform)toggle.transform;
         toggleRect.anchorMin = new Vector2(0.5f, 1f);
@@ -355,22 +367,22 @@ internal sealed class PinWorkbenchPanel
         y -= 40f;
 
         GameObject apply = gui.CreateButton(
-            "Apply", _editRows.transform,
+            AtlasStrings.Get("workbench.apply"), _editRows.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-120f, 40f), 110f, 36f);
         apply.GetComponent<Button>().onClick.AddListener(ApplyClicked);
 
         GameObject deleteButton = gui.CreateButton(
-            "Delete", _editRows.transform,
+            AtlasStrings.Get("workbench.delete"), _editRows.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(120f, 40f), 110f, 36f);
         deleteButton.GetComponent<Button>().onClick.AddListener(DeleteClicked);
 
         _adoptButton = gui.CreateButton(
-            "Adopt this pin", _panel.transform,
+            AtlasStrings.Get("workbench.adopt"), _panel.transform,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 0f), 220f, 40f);
         _adoptButton.GetComponent<Button>().onClick.AddListener(AdoptClicked);
 
         GameObject cancel = gui.CreateButton(
-            "Close", _panel.transform,
+            AtlasStrings.Get("workbench.close"), _panel.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 40f), 110f, 36f);
         cancel.GetComponent<Button>().onClick.AddListener(Close);
 

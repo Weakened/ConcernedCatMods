@@ -37,13 +37,13 @@ internal sealed class QuickPinCapture
             GameObject? target = player.GetHoverObject();
             if (target == null)
             {
-                message = "Nothing targeted to pin.";
+                message = AtlasStrings.Get("hud.quickPinNothing");
                 return false;
             }
 
             if (target.GetComponentInParent<Character>() != null)
             {
-                message = "Creatures are not pinned.";
+                message = AtlasStrings.Get("hud.quickPinCreature");
                 return false;
             }
 
@@ -74,7 +74,7 @@ internal sealed class QuickPinCapture
                         string.Equals(existing.Name, suggestion.Name, StringComparison.OrdinalIgnoreCase) &&
                         existing.Position.HorizontalDistanceTo(point) <= radius)
                     {
-                        message = $"\"{suggestion.Name}\" is already pinned {existing.Position.HorizontalDistanceTo(point):0.#} m away.";
+                        message = AtlasStrings.Format("hud.quickPinDuplicate", suggestion.Name, existing.Position.HorizontalDistanceTo(point).ToString("0.#"));
                         return false;
                     }
                 }
@@ -90,7 +90,7 @@ internal sealed class QuickPinCapture
             });
 
             _log.LogInfo($"Quick pin {pin.Id}: \"{suggestion.Name}\" ({suggestion.IconId}).");
-            message = $"Pinned \"{suggestion.Name}\".";
+            message = AtlasStrings.Format("hud.quickPinned", suggestion.Name);
             return true;
         }
         catch (Exception exception)
