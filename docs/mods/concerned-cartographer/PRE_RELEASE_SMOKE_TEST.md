@@ -103,7 +103,17 @@ marked **BLOCKS** must pass before publication; others are record-and-ship.
 | 8.4 | Accessibility/UiScale 1.4 + HighContrast on | Open both panels; view roads/routes | Panels larger and usable; dirt near-black, paved near-white, routes bright; dashed/dotted still distinct | Screenshots | No |
 | 8.5 | Fresh profile first world | Enter world | One-time hotkey tip appears once, never again | Screenshot | No |
 
-## 9–13. Later-sprint sections
+## 9. Compatibility, recovery, scale (v0.8)
+
+| # | Setup | Action | Expected | Evidence on failure | Blocks |
+|---|---|---|---|---|---|
+| 9.1 | TCC-Compat (Pinnacle + MapRoutes) | Play 15 min using both mods and CC | No conflicts/errors; `cc_atlas compat` lists both with policies; hotkey on a vanilla pin shows read-only info (Pinnacle present) | LogOutput.log | Yes |
+| 9.2 | Any world with data | `cc_atlas backup`, delete a few pins, `cc_atlas restore 1`, relog | Atlas back to the snapshot; a pre-restore backup also exists | Console output | Yes |
+| 9.3 | 9.2 | Copy a backup folder to another PC/profile and restore there | Atlas travels (export/import path) | Console output | No |
+| 9.4 | Any world | `cc_atlas support`; open the file | Only versions/settings/counts/sizes — no coordinates, names, or notes | The file | Yes |
+| 9.5 | Large real atlas | Map open/pan/zoom/search feel at your biggest world | No perceptible hitching | Subjective + clip | Yes |
+
+## 10–13. Later-sprint sections
 
 Placeholders grow as sprints complete: Atlas Drawer/search/views (v0.4),
 routes (v0.5), multiplayer/tombstones (v0.6), NoMap/controller/

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.0
+
+Plays well with others, and never loses your atlas.
+
+- **Compatibility awareness**: known neighbors (Pinnacle, PinAssistant, AutoMapPins, MapRoutes, Better Cartography Table, OneMap) are detected and coexistence policies apply automatically — with another pin manager installed, the hotkey never prompts adoption (explicit `cc_pins adopt` remains). `cc_atlas compat` shows the report.
+- **Backups and restore**: `cc_atlas backup` snapshots your whole atlas; `restore <n>` brings any snapshot back (with its own safety backup first). The backup folders double as the export/import format — copy them between machines or profiles.
+- **Support report**: `cc_atlas support` writes a sanitized report (versions, settings, counts, sizes — never positions, names, or notes) safe to paste into a bug report.
+
+### Known limitations
+
+- MapRoutes routes are not imported (both layers coexist independently).
+
 ## 0.7.0
 
 The atlas for every Viking: NoMap tables, controllers, translations, and accessibility.

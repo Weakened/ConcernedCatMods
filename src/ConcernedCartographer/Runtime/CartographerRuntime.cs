@@ -60,6 +60,8 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly SyncInbox _syncInbox = new();
     private readonly SyncTransport _syncTransport;
     private string _authorId = "";
+    private readonly CompatibilityRegistry _compatibility = new();
+    private readonly AtlasBackupTools _backupTools;
     private long? _worldUid;
     private bool _mapReady;
     private float _autosaveElapsed;
@@ -89,6 +91,7 @@ internal sealed class CartographerRuntime : IDisposable
         _routeRenderer = new RouteOverlayRenderer(settings, log);
         _authorId = AuthorIdentity.Get(log);
         _syncTransport = new SyncTransport(log, _syncInbox) { LocalAuthorId = _authorId };
+        _backupTools = new AtlasBackupTools(log);
         _constructionCapture = new ConstructionCapture(log);
         _constructionCapture.OperationCaptured += HandleTerrainOperation;
         _chunkRecovery = new ChunkRecoveryScanner(settings, log);
@@ -120,6 +123,7 @@ internal sealed class CartographerRuntime : IDisposable
         _displayController.Apply(_pinStore, _pinAdapter);
         _routeRenderer.RedrawAll(_routeStore);
         _syncTransport.EnsureRegistered();
+        _compatibility.Evaluate(_log);
         ShowOnboardingOnce();
         if (_settings.DrawCalibrationMarkers.Value)
         {
@@ -534,6 +538,16 @@ internal sealed class CartographerRuntime : IDisposable
 
         if (_pinAdapter.TryFindNearest(world, 30f, out Minimap.PinData mapPin, out _))
         {
+            if (_pinAdapter.IsAdoptableVanilla(mapPin) && _compatibility.PinManagerPresent)
+            {
+                // Another pin manager owns the vanilla-pin editing workflow;
+                // adoption stays available but only through the explicit
+                // cc_pins adopt command.
+                _workbenchPanel.OpenReadOnly(
+                    $"\"{mapPin.m_name}\" — another pin manager is installed; use 'cc_pins adopt' to manage this pin here");
+                return;
+            }
+
             if (_pinAdapter.IsAdoptableVanilla(mapPin))
             {
                 Minimap.PinData captured = mapPin;
@@ -602,6 +616,63 @@ internal sealed class CartographerRuntime : IDisposable
                 return $"{subcommand} {(enabled ? "on" : "off")}.";
             case "view":
                 return HandleViewCommand(remainder);
+            case "compat":
+                return _compatibility.Report();
+            case "backup":
+                if (_worldUid is not long backupUid)
+                {
+                    return "No world loaded.";
+                }
+
+                return "Backed up to " + _backupTools.Backup(backupUid);
+            case "backups":
+                if (_worldUid is not long listUid)
+                {
+                    return "No world loaded.";
+                }
+
+                List<string> backups = _backupTools.ListBackups(listUid);
+                if (backups.Count == 0)
+                {
+                    return "No backups yet. 'cc_atlas backup' creates one; exports/imports use the same folders.";
+                }
+
+                var backupList = new System.Text.StringBuilder($"{backups.Count} backup(s), newest first:");
+                for (int index = 0; index < backups.Count && index < 10; index++)
+                {
+                    backupList.Append($"\n  {index + 1}. {System.IO.Path.GetFileName(backups[index])}");
+                }
+
+                backupList.Append("\n'cc_atlas restore <n>' restores one (takes a safety backup first).");
+                return backupList.ToString();
+            case "restore":
+                if (_worldUid is not long restoreUid)
+                {
+                    return "No world loaded.";
+                }
+
+                List<string> candidates = _backupTools.ListBackups(restoreUid);
+                if (!int.TryParse(remainder.Trim(), out int restoreIndex) ||
+                    restoreIndex < 1 || restoreIndex > candidates.Count)
+                {
+                    return "Usage: cc_atlas restore <n>  (see 'cc_atlas backups')";
+                }
+
+                return _backupTools.Restore(restoreUid, candidates[restoreIndex - 1]);
+            case "support":
+                if (_worldUid is not long supportUid)
+                {
+                    return "No world loaded.";
+                }
+
+                string report = _backupTools.WriteSupportReport(
+                    supportUid,
+                    Plugin.PluginVersion,
+                    $"enabled={_settings.Enabled.Value}, capture={_settings.CaptureConstructionActions.Value}, " +
+                    $"reconcile={_settings.ReconcileTerrainChanges.Value}, recovery={_settings.RecoverLoadedChunks.Value}, " +
+                    $"survey={_settings.SurveyRulesEnabled.Value}, cluster={_settings.DrawerCluster.Value}, " +
+                    $"contrast={_settings.HighContrast.Value}, uiScale={_settings.UiScale.Value}");
+                return "Sanitized support report (no positions/names/notes) written to " + report;
             case "views":
                 var names = new System.Text.StringBuilder("Saved views:");
                 if (_savedViews.Views.Count == 0)

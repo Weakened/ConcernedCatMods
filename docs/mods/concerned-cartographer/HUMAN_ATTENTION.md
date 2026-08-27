@@ -45,6 +45,15 @@ repeated in PRE_RELEASE_SMOKE_TEST.md.
 - Must resolve before public release: No (documented in README security notes)
 - Status: Open
 
+### 2026-08-27 — MapRoutes route import not implemented
+
+- Version / issue: v0.8 / CC-051 (#65)
+- Question: CC-051 marks route import from MapRoutes as optional; importing would require reverse-engineering another mod's private save format, which is fragile across its versions and impossible to verify by automation here.
+- Safe reversible default selected: coexistence only (both route layers render independently; detection logs the policy); no import. Users keep both mods running side by side losslessly.
+- Why work continued: nothing is lost — MapRoutes data stays in MapRoutes; an importer can ship later as a pure codec addition.
+- Must resolve before public release: No (documented limitation)
+- Status: Open
+
 ### 2026-08-26 — Per-pin custom color/size not rendered on the vanilla map in v0.3
 
 - Version / issue: v0.3 / CC-022, CC-024 (#31, #33)
