@@ -47,6 +47,7 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly AtlasDrawerPanel _drawerPanel;
     private readonly SavedViewPersistence _savedViewPersistence;
     private SavedViewStore _savedViews = new();
+    private readonly QuickPinCapture _quickPinCapture;
     private long? _worldUid;
     private bool _mapReady;
     private float _autosaveElapsed;
@@ -68,6 +69,7 @@ internal sealed class CartographerRuntime : IDisposable
         _savedViews = _savedViewPersistence.Load();
         _drawerPanel = new AtlasDrawerPanel(log);
         WireDrawer();
+        _quickPinCapture = new QuickPinCapture(settings, log);
         _constructionCapture = new ConstructionCapture(log);
         _constructionCapture.OperationCaptured += HandleTerrainOperation;
         _chunkRecovery = new ChunkRecoveryScanner(settings, log);
@@ -114,6 +116,21 @@ internal sealed class CartographerRuntime : IDisposable
 
         _workbenchPanel.HandleFrame();
         _drawerPanel.HandleFrame();
+        if (!Minimap.IsOpen() && !Minimap.InTextInput() &&
+            _settings.QuickPinHotkey.Value != KeyCode.None &&
+            Input.GetKeyDown(_settings.QuickPinHotkey.Value))
+        {
+            if (_quickPinCapture.TryCapture(_pinStore, out string quickPinMessage))
+            {
+                ReapplyDisplay();
+            }
+
+            if (quickPinMessage.Length > 0)
+            {
+                Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, quickPinMessage);
+            }
+        }
+
         if (Minimap.IsOpen() && !Minimap.InTextInput())
         {
             if (_pinCommands is not null && !_workbenchPanel.IsVisible &&

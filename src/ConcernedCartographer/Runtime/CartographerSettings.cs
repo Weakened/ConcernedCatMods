@@ -26,7 +26,9 @@ internal sealed class CartographerSettings
         ConfigEntry<bool> drawerShowDirt,
         ConfigEntry<bool> drawerShowPaved,
         ConfigEntry<bool> drawerShowPins,
-        ConfigEntry<bool> drawerCluster)
+        ConfigEntry<bool> drawerCluster,
+        ConfigEntry<KeyCode> quickPinHotkey,
+        ConfigEntry<float> quickPinDuplicateRadius)
     {
         Enabled = enabled;
         CaptureConstructionActions = captureConstructionActions;
@@ -49,6 +51,8 @@ internal sealed class CartographerSettings
         DrawerShowPaved = drawerShowPaved;
         DrawerShowPins = drawerShowPins;
         DrawerCluster = drawerCluster;
+        QuickPinHotkey = quickPinHotkey;
+        QuickPinDuplicateRadius = quickPinDuplicateRadius;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -72,6 +76,8 @@ internal sealed class CartographerSettings
     public ConfigEntry<bool> DrawerShowPaved { get; }
     public ConfigEntry<bool> DrawerShowPins { get; }
     public ConfigEntry<bool> DrawerCluster { get; }
+    public ConfigEntry<KeyCode> QuickPinHotkey { get; }
+    public ConfigEntry<float> QuickPinDuplicateRadius { get; }
 
     public static CartographerSettings Bind(ConfigFile config)
     {
@@ -121,6 +127,11 @@ internal sealed class CartographerSettings
             config.Bind("Drawer", "ShowPavedRoads", true, "Show the paved-road layer."),
             config.Bind("Drawer", "ShowPins", true, "Show managed pins on the map."),
             config.Bind("Drawer", "Clustering", true,
-                "Fold crowded pins into cluster markers when zoomed out (display only; never changes stored pins)."));
+                "Fold crowded pins into cluster markers when zoomed out (display only; never changes stored pins)."),
+            config.Bind("Workbench", "QuickPinHotkey", KeyCode.F7,
+                "Key that pins the object you are looking at (set to None to disable). Never pins creatures."),
+            config.Bind("Workbench", "QuickPinDuplicateRadius", 25f, new ConfigDescription(
+                "Skip a quick pin when a same-named pin already exists within this many meters (0 disables the check).",
+                new AcceptableValueRange<float>(0f, 200f))));
     }
 }
