@@ -48,6 +48,9 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly SavedViewPersistence _savedViewPersistence;
     private SavedViewStore _savedViews = new();
     private readonly QuickPinCapture _quickPinCapture;
+    private readonly SurveyEngine _surveyEngine = new();
+    private readonly SurveyScanner _surveyScanner;
+    private readonly SurveyRulePersistence _surveyRulePersistence;
     private long? _worldUid;
     private bool _mapReady;
     private float _autosaveElapsed;
@@ -70,6 +73,9 @@ internal sealed class CartographerRuntime : IDisposable
         _drawerPanel = new AtlasDrawerPanel(log);
         WireDrawer();
         _quickPinCapture = new QuickPinCapture(settings, log);
+        _surveyRulePersistence = new SurveyRulePersistence(log);
+        _surveyEngine.Rules = _surveyRulePersistence.LoadOrCreate();
+        _surveyScanner = new SurveyScanner(settings, log);
         _constructionCapture = new ConstructionCapture(log);
         _constructionCapture.OperationCaptured += HandleTerrainOperation;
         _chunkRecovery = new ChunkRecoveryScanner(settings, log);
@@ -174,6 +180,7 @@ internal sealed class CartographerRuntime : IDisposable
         }
 
         _chunkRecovery.Tick();
+        _surveyScanner.Tick(unscaledDeltaTime, _surveyEngine, _pinStore);
 
         _redrawElapsed += unscaledDeltaTime;
         if (_redrawPending && _redrawElapsed >= RedrawDebounceSeconds)
@@ -469,6 +476,84 @@ internal sealed class CartographerRuntime : IDisposable
                 return names.ToString();
             default:
                 return "Usage: cc_atlas [status|query <text>|clear|pins on/off|cluster on/off|dirt on/off|paved on/off|view save/apply/del <name>|views]";
+        }
+    }
+
+    /// <summary>Backs the `cc_survey` console command: review-before-commit
+    /// for survey observations.</summary>
+    internal string ExecuteSurveyCommand(string[] args)
+    {
+        if (_disposed || !_mapReady)
+        {
+            return "Concerned Cartographer: no world is loaded yet.";
+        }
+
+        string subcommand = args.Length == 0 ? "status" : args[0].ToLowerInvariant();
+        string remainder = args.Length > 1 ? args[1].ToLowerInvariant() : "";
+        IReadOnlyList<SurveyEngine.Observation> observations = _surveyEngine.Observations;
+
+        switch (subcommand)
+        {
+            case "status":
+                return $"Survey: {(_settings.SurveyRulesEnabled.Value ? "ENABLED" : "disabled (Survey/SurveyRulesEnabled)")}, " +
+                    $"{_surveyEngine.Rules.Rules.Count} rule(s), {_surveyEngine.Rules.Blacklist.Count} blacklist pattern(s), " +
+                    $"{observations.Count} pending observation(s). Rules file: {SurveyRulePersistence.RulePath}";
+            case "list":
+                if (observations.Count == 0)
+                {
+                    return "No pending observations.";
+                }
+
+                var builder = new System.Text.StringBuilder($"{observations.Count} observation(s):");
+                for (int index = 0; index < observations.Count && index < 15; index++)
+                {
+                    SurveyEngine.Observation observation = observations[index];
+                    builder.Append($"\n  {index + 1}. {observation.SuggestedName} [{observation.Category}] at ({observation.Position.X:0}, {observation.Position.Z:0})");
+                }
+
+                if (observations.Count > 15)
+                {
+                    builder.Append($"\n  ... and {observations.Count - 15} more.");
+                }
+
+                builder.Append("\ncc_survey accept <n|all> / reject <n|all>");
+                return builder.ToString();
+            case "accept":
+                if (remainder == "all")
+                {
+                    int accepted = _surveyEngine.AcceptAll(_pinStore);
+                    ResyncPins();
+                    return $"Accepted {accepted} observation(s) as pins.";
+                }
+
+                if (int.TryParse(remainder, out int acceptIndex) && acceptIndex >= 1 && acceptIndex <= observations.Count)
+                {
+                    _surveyEngine.Accept(observations[acceptIndex - 1].Id, _pinStore);
+                    ResyncPins();
+                    return $"Accepted observation {acceptIndex}.";
+                }
+
+                return "Usage: cc_survey accept <n|all>";
+            case "reject":
+                if (remainder == "all")
+                {
+                    return $"Rejected {_surveyEngine.RejectAll()} observation(s).";
+                }
+
+                if (int.TryParse(remainder, out int rejectIndex) && rejectIndex >= 1 && rejectIndex <= observations.Count)
+                {
+                    _surveyEngine.Reject(observations[rejectIndex - 1].Id);
+                    return $"Rejected observation {rejectIndex}.";
+                }
+
+                return "Usage: cc_survey reject <n|all>";
+            case "reload":
+                _surveyEngine.Rules = _surveyRulePersistence.LoadOrCreate();
+                return $"Reloaded {_surveyEngine.Rules.Rules.Count} rule(s) and {_surveyEngine.Rules.Blacklist.Count} blacklist pattern(s).";
+            case "path":
+                return SurveyRulePersistence.RulePath + " (the file is the shareable import/export format)";
+            default:
+                return "Usage: cc_survey [status|list|accept <n|all>|reject <n|all>|reload|path]";
         }
     }
 
