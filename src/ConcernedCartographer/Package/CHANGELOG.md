@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0
+
+The atlas becomes readable at any scale: one drawer, real search, and calm maps.
+
+- **Atlas Drawer** (default hotkey `L` on the large map): layer toggles for dirt/paved roads, pins, and clustering; search with live counts and click-to-edit results; saved views. Everything also drives from the `cc_atlas` console.
+- **Search and queries**: plain words search names, notes, tags, and categories; power tokens (`name:`, `category:`, `tag:`, `icon:`, `status:`, `scope:`, `source:`, `is:checked`, `near:x,z,r`) narrow precisely. Filters are display-only — clearing the query always restores everything.
+- **Saved views** capture your query and layer state as named presets.
+- **Semantic zoom and clustering**: zoomed out, crowded pins fold into count markers by dominant category; zooming in progressively reveals detail. Clusters are pure display — nothing is ever merged or deleted underneath.
+- **Quick pins** (default `F7`): pin what you're looking at, with a sensible name, icon, and category. Never pins creatures; duplicate radius prevents spam.
+- **Survey Rules** (opt-in, off by default): pattern rules in a shareable `survey-rules.tsv` turn nearby loaded objects into reviewable observations — never directly into pins. Hard caps, duplicate radii, base-exclusion zones, and expiry keep it bounded; review with `cc_survey`.
+
+### Known limitations
+
+- Cluster markers and drawer visuals need the large map; NoMap support arrives in v0.7.
+- Survey rules match loaded objects near you only — no world scanning, by design.
+
 ## 0.3.0
 
 The Pin Workbench: your pins become a durable, editable atlas.
