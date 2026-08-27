@@ -1,5 +1,6 @@
 using System;
 using BepInEx.Logging;
+using TheConcernedCat.ConcernedCartographer.Atlas;
 using TheConcernedCat.ConcernedCartographer.Map;
 using TheConcernedCat.ConcernedCartographer.Persistence;
 using TheConcernedCat.ConcernedCartographer.Roads;
@@ -12,9 +13,11 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly CartographerSettings _settings;
     private readonly ManualLogSource _log;
     private readonly RoadPersistence _persistence;
+    private readonly PinPersistence _pinPersistence;
     private readonly GroundPaintProbe _probe;
     private readonly RoadOverlayRenderer _renderer;
     private readonly ConstructionCapture _constructionCapture;
+    private readonly PinAdapter _pinAdapter;
     private readonly ChunkRecoveryScanner _chunkRecovery;
     private readonly RateLimitedLog _rateLimited;
 
@@ -36,6 +39,9 @@ internal sealed class CartographerRuntime : IDisposable
     private RoadObservationPipeline? _pipeline;
     private RoadAtlasEditor? _editor;
     private RoadSurveyor? _surveyor;
+    private PinStore _pinStore = new();
+    private PinCommandHandler? _pinCommands;
+    private readonly PinWorkbenchPanel _workbenchPanel;
     private long? _worldUid;
     private bool _mapReady;
     private float _autosaveElapsed;
@@ -46,9 +52,12 @@ internal sealed class CartographerRuntime : IDisposable
         _settings = settings;
         _log = log;
         _persistence = new RoadPersistence(log);
+        _pinPersistence = new PinPersistence(log);
         _probe = new GroundPaintProbe(settings, log);
         _renderer = new RoadOverlayRenderer(settings, log);
         _rateLimited = new RateLimitedLog(log, 5f);
+        _pinAdapter = new PinAdapter(log);
+        _workbenchPanel = new PinWorkbenchPanel(log);
         _constructionCapture = new ConstructionCapture(log);
         _constructionCapture.OperationCaptured += HandleTerrainOperation;
         _chunkRecovery = new ChunkRecoveryScanner(settings, log);
@@ -72,6 +81,7 @@ internal sealed class CartographerRuntime : IDisposable
         SwitchWorld(uid);
         _mapReady = true;
         _renderer.RedrawAll(_atlas);
+        _pinAdapter.ReconcileOnMapReady(_pinStore);
         if (_settings.DrawCalibrationMarkers.Value)
         {
             _renderer.DrawCalibrationMarkers();
@@ -87,6 +97,14 @@ internal sealed class CartographerRuntime : IDisposable
             return;
         }
 
+        _workbenchPanel.HandleFrame();
+        if (_pinCommands is not null &&
+            Minimap.IsOpen() && !Minimap.InTextInput() && !_workbenchPanel.IsVisible &&
+            Input.GetKeyDown(_settings.WorkbenchHotkey.Value))
+        {
+            OpenWorkbenchAtCursor();
+        }
+
         if (!WorldContext.TryGetWorldUid(out long uid) || _worldUid != uid)
         {
             // Logout or world switch: stop sampling and flush now instead of
@@ -94,7 +112,9 @@ internal sealed class CartographerRuntime : IDisposable
             _mapReady = false;
             _pipeline?.EndAllStrokes();
             _chunkRecovery.Reset();
+            _pinAdapter.Reset();
             SaveIfDirty();
+            SavePinsSnapshot();
             return;
         }
 
@@ -118,6 +138,117 @@ internal sealed class CartographerRuntime : IDisposable
         {
             _autosaveElapsed = 0f;
             SaveIfDirty();
+            _pinAdapter.AbsorbVanillaChanges(_pinStore);
+            _pinPersistence.FlushJournal();
+        }
+    }
+
+    /// <summary>The current world's managed pins. Empty store before the
+    /// first world loads.</summary>
+    internal PinStore Pins => _pinStore;
+
+    internal PinAdapter PinAdapter => _pinAdapter;
+
+    internal PinCommandHandler? PinCommands => _pinCommands;
+
+    /// <summary>Backs the `cc_pins` console command.</summary>
+    internal string ExecutePinCommand(string[] args)
+    {
+        if (_disposed || !_mapReady || _pinCommands is null)
+        {
+            return "Concerned Cartographer: no world is loaded yet.";
+        }
+
+        Player player = Player.m_localPlayer;
+        if (player is null)
+        {
+            return "Concerned Cartographer: no local player.";
+        }
+
+        if (args.Length > 0 && string.Equals(args[0], "edit", StringComparison.OrdinalIgnoreCase))
+        {
+            OpenWorkbenchNear(player.transform.position);
+            return "Opening the Pin Workbench for the nearest pin.";
+        }
+
+        return _pinCommands.Execute(args, player.transform.position);
+    }
+
+    private void OpenWorkbenchAtCursor()
+    {
+        if (!MinimapReflection.TryScreenToWorldPoint(Input.mousePosition, out Vector3 world))
+        {
+            Player player = Player.m_localPlayer;
+            if (player is null)
+            {
+                return;
+            }
+
+            world = player.transform.position;
+        }
+
+        OpenWorkbenchNear(world);
+    }
+
+    private void OpenWorkbenchNear(Vector3 world)
+    {
+        if (_pinCommands is null)
+        {
+            return;
+        }
+
+        var point = new RoadPoint(world.x, world.y, world.z);
+        PinOperations operations = _pinCommands.Operations;
+        Action resync = () => _pinAdapter.ReconcileOnMapReady(_pinStore);
+
+        AtlasPin? nearestManaged = null;
+        float best = 30f;
+        foreach (AtlasPin pin in _pinStore.Living)
+        {
+            float distance = pin.Position.HorizontalDistanceTo(point);
+            if (distance < best)
+            {
+                best = distance;
+                nearestManaged = pin;
+            }
+        }
+
+        if (nearestManaged is not null)
+        {
+            _workbenchPanel.OpenForManaged(nearestManaged, operations, resync);
+            return;
+        }
+
+        if (_pinAdapter.TryFindNearest(world, 30f, out Minimap.PinData mapPin, out _))
+        {
+            if (_pinAdapter.IsAdoptableVanilla(mapPin))
+            {
+                Minimap.PinData captured = mapPin;
+                _workbenchPanel.OpenAdoptPrompt(
+                    captured.m_name ?? "",
+                    () => _pinAdapter.Adopt(_pinStore, captured),
+                    operations,
+                    resync);
+            }
+            else
+            {
+                _workbenchPanel.OpenReadOnly($"\"{mapPin.m_name}\" ({mapPin.m_type})");
+            }
+        }
+    }
+
+    /// <summary>Roads and pins together, for quit/teardown paths.</summary>
+    public void SaveAll()
+    {
+        SaveIfDirty();
+        SavePinsSnapshot();
+    }
+
+    private void SavePinsSnapshot()
+    {
+        if (_worldUid is long uid)
+        {
+            _pinPersistence.Save(uid, _pinStore);
         }
     }
 
@@ -344,6 +475,7 @@ internal sealed class CartographerRuntime : IDisposable
         }
 
         SaveIfDirty();
+        SavePinsSnapshot();
         _pipeline?.EndAllStrokes();
         _constructionCapture.OperationCaptured -= HandleTerrainOperation;
         _constructionCapture.Dispose();
@@ -360,9 +492,19 @@ internal sealed class CartographerRuntime : IDisposable
         }
 
         SaveIfDirty();
+        SavePinsSnapshot();
 
         _worldUid = uid;
         _atlas = _persistence.Load(uid);
+        _pinStore = _pinPersistence.Load(uid);
+        _pinStore.Changed += _pinPersistence.QueueJournal;
+        _pinAdapter.Reset();
+        _pinCommands = new PinCommandHandler(
+            _pinStore,
+            new PinOperations(_pinStore),
+            _pinAdapter,
+            _log,
+            () => _pinAdapter.ReconcileOnMapReady(_pinStore));
         _pipeline = new RoadObservationPipeline(_atlas);
         _editor = new RoadAtlasEditor(_atlas);
         _surveyor = new RoadSurveyor(_settings, _probe, _pipeline, _log);

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.0
+
+The Pin Workbench: your pins become a durable, editable atlas.
+
+- Adopt your vanilla pins (one at a time or all at once, with a reviewed preview) — position, icon, name, and crossed-off state are preserved exactly, and the map pin itself is never touched by adoption.
+- Edit pins in place on the map: press the workbench hotkey (default P) over a pin on the large map, or use the `cc_pins` console. Name, icon, category, color, size, notes, tags, status, crossed-off, and sharing intent — all without deleting and recreating anything.
+- Every pin has a durable identity and revision history; deletes are recoverable tombstones with restore and a recently-deleted list.
+- Full operation set: move, duplicate, archive, batch edits, duplicate detection and merge (notes and provenance preserved), bounded undo/redo.
+- Crash-safe pin storage: per-world snapshot plus journal with automatic recovery; edits made through vanilla UI (cross-off, delete) are absorbed into the atlas.
+- Curated icon registry with stable namespaced IDs; unknown icons render safely without losing their identity.
+- Uninstall-safe by construction: managed pins remain ordinary vanilla pins if the mod is removed.
+
+### Known limitations
+
+- Pin color and display size are stored and editable but not yet rendered on the vanilla map (planned).
+- Foreign and system pins (other mods, death/bed/boss/server markers) are read-only by design.
+- Sharing intent is stored only; synchronization arrives with the collaborative atlas.
+
 ## 0.2.0
 
 - Roads you build now appear on the map as you build them: your own successful hoe path and stonecutter paving actions are captured directly (configurable, on by default). Cultivating and resetting terrain are never recorded as roads.

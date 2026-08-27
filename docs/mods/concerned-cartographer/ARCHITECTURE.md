@@ -280,6 +280,46 @@ invariant-culture decimal formatting. The file is intentionally simple
 enough to inspect and recover manually; malformed rows are skipped with a
 single warning that reports the skipped count.
 
+## Atlas Core and Pin Workbench (v0.3)
+
+Pure pin machinery lives in `Domain/Atlas` (namespace
+`TheConcernedCat.ConcernedCartographer.Atlas`), game-free and CI-tested:
+
+- **Identity** — `AtlasId` (`cc:pin:<guid>`), never changed by any edit.
+- **Entity** — `AtlasPin`: name, namespaced icon ID, category, color,
+  display size, notes, tags, status, checked, scope intent, source,
+  archived, durable-deletion tombstone, position, created/modified times,
+  and a monotonic per-entity revision owned by `PinStore`.
+- **Store** — in-place mutation with revision bumps, tombstone
+  delete/restore, higher-revision-wins upserts (idempotent replay; a stale
+  writer can never resurrect a deletion), a change stream, and tombstone
+  retention purging.
+- **Persistence** — `<uid>.pins.tsv` snapshot plus `.journal` append file
+  sharing one escaped-TSV row codec (v1): recovery parses snapshot then
+  journal and resolves per identity by highest revision, so an interrupted
+  write loses at most its own truncated line. Snapshots are atomic at world
+  boundaries; journal rows flush on the autosave tick.
+- **Operations** — `PinOperations`: move/duplicate/archive/delete/restore,
+  one-step-undoable batch edits, bucketed duplicate detection, merge with
+  tag union + note provenance, and bounded undo/redo whose restores always
+  move revisions FORWARD (old field values under a new revision), keeping
+  journal replay and future sync convergent.
+- **Icon registry** — curated, append-only, namespaced IDs mapped to
+  vanilla pin-type ordinals; unknown IDs render as the fallback while the
+  stored identity is preserved verbatim.
+- **Workbench** — `PinWorkbenchController` (pure buffer/validate/apply as
+  one undo step) drives both the Jötunn-built map panel
+  (`PinWorkbenchPanel`: managed edit / vanilla adopt-prompt / foreign
+  read-only modes) and the `cc_pins` console.
+
+`PinAdapter` is the only Minimap bridge: managed pins render as ordinary
+saved vanilla pins (uninstall-safe by construction), adoption tracks the
+existing PinData untouched, restart reconciliation matches by position+name
+with single-claim semantics (no duplicates), vanilla cross-offs/deletions
+are absorbed into the store, and foreign/system pins are untouchable
+through every code path. Private Minimap members are reached only through
+Harmony skip-visibility helpers (`MinimapReflection`).
+
 ## Lifecycle
 
 ### Plugin load

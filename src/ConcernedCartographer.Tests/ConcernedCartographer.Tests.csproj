@@ -11,7 +11,7 @@
     <!-- The pure domain sources are compiled directly into the test assembly:
          they have no Unity/BepInEx dependencies, and shipping stays a single
          plugin DLL because no extra domain assembly exists. -->
-    <Compile Include="..\ConcernedCartographer\Domain\*.cs" LinkBase="Domain" />
+    <Compile Include="..\ConcernedCartographer\Domain\**\*.cs" LinkBase="Domain" />
   </ItemGroup>
 
   <ItemGroup>
