@@ -30,6 +30,10 @@ internal sealed class RouteStore
     public event Action<AtlasRoute>? Changed;
 
     public bool IsDirty { get; private set; }
+
+    /// <summary>The local author identity stamped onto creations and edits.</summary>
+    public string LocalAuthor { get; set; } = "";
+
     public int Count => _routes.Count;
 
     public IEnumerable<AtlasRoute> All => _routes.Values;
@@ -61,6 +65,8 @@ internal sealed class RouteStore
             Revision = 1,
             CreatedUtc = now,
             ModifiedUtc = now,
+            OwnerAuthor = LocalAuthor,
+            LastAuthor = LocalAuthor,
         };
         initialize?.Invoke(route);
         _routes[route.Id.Value] = route;
@@ -78,6 +84,11 @@ internal sealed class RouteStore
         edit(route);
         route.Revision++;
         route.ModifiedUtc = _clock();
+        if (LocalAuthor.Length > 0)
+        {
+            route.LastAuthor = LocalAuthor;
+        }
+
         Publish(route);
         return true;
     }

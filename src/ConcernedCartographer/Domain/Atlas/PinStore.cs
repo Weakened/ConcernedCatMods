@@ -33,6 +33,10 @@ internal sealed class PinStore
 
     public bool IsDirty { get; private set; }
 
+    /// <summary>The local author identity stamped onto creations and
+    /// edits. Empty when auditing is unavailable.</summary>
+    public string LocalAuthor { get; set; } = "";
+
     public int Count => _pins.Count;
 
     /// <summary>All pins including tombstones and archived entries.</summary>
@@ -80,6 +84,8 @@ internal sealed class PinStore
             Revision = 1,
             CreatedUtc = now,
             ModifiedUtc = now,
+            OwnerAuthor = LocalAuthor,
+            LastAuthor = LocalAuthor,
         };
         initialize?.Invoke(pin);
         _pins[pin.Id.Value] = pin;
@@ -98,6 +104,11 @@ internal sealed class PinStore
         edit(pin);
         pin.Revision++;
         pin.ModifiedUtc = _clock();
+        if (LocalAuthor.Length > 0)
+        {
+            pin.LastAuthor = LocalAuthor;
+        }
+
         Publish(pin);
         return true;
     }

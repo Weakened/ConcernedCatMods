@@ -39,6 +39,15 @@ internal sealed class AtlasPin
     public bool Archived { get; set; }
     public bool Deleted { get; set; }
     public DateTime? DeletedUtc { get; set; }
+
+    /// <summary>Audit metadata: the author identity that created the entity
+    /// and the one that last modified it. Empty for pre-audit data. Used
+    /// for sync labels and the non-owner-delete policy; never for local
+    /// feature gating.</summary>
+    public string OwnerAuthor { get; set; } = "";
+
+    public string LastAuthor { get; set; } = "";
+
     public RoadPoint Position { get; set; }
 
     /// <summary>Deep copy used by undo snapshots and sync payloads.</summary>
@@ -62,6 +71,8 @@ internal sealed class AtlasPin
             Archived = Archived,
             Deleted = Deleted,
             DeletedUtc = DeletedUtc,
+            OwnerAuthor = OwnerAuthor,
+            LastAuthor = LastAuthor,
             Position = Position,
         };
         clone.Tags.AddRange(Tags);
@@ -86,6 +97,8 @@ internal sealed class AtlasPin
         Archived = other.Archived;
         Deleted = other.Deleted;
         DeletedUtc = other.DeletedUtc;
+        OwnerAuthor = other.OwnerAuthor;
+        LastAuthor = other.LastAuthor;
         Position = other.Position;
         Tags.Clear();
         Tags.AddRange(other.Tags);

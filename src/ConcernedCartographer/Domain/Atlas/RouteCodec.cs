@@ -12,10 +12,13 @@ namespace TheConcernedCat.ConcernedCartographer.Atlas;
 /// trailing line costs at most itself.</summary>
 internal static class RouteCodec
 {
-    public const string Header = "# ConcernedCartographer routes v1";
+    public const string Header = "# ConcernedCartographer routes v2";
     private const string RowMarker = "1";
+    private const string MetaMarkerV2 = "2";
     private const string MetaTag = "M";
     private const string PointTag = "P";
+    private const int MetaFieldCountV1 = 17;
+    private const int MetaFieldCountV2 = 19;
 
     public sealed class ParseResult
     {
@@ -66,7 +69,9 @@ internal static class RouteCodec
             route.Archived ? "1" : "0",
             route.Deleted ? "1" : "0",
             route.DeletedUtc?.Ticks.ToString(CultureInfo.InvariantCulture) ?? "",
-            RowMarker);
+            AtlasText.Escape(route.OwnerAuthor),
+            AtlasText.Escape(route.LastAuthor),
+            MetaMarkerV2);
 
         for (int index = 0; index < route.Points.Count; index++)
         {
@@ -101,7 +106,7 @@ internal static class RouteCodec
 
             string[] parts = line.Split('\t');
             if (parts.Length < 8 ||
-                parts[parts.Length - 1] != RowMarker ||
+                (parts[parts.Length - 1] != RowMarker && parts[parts.Length - 1] != MetaMarkerV2) ||
                 !AtlasId.TryParse(parts[0], out AtlasId id) ||
                 !string.Equals(id.Kind, AtlasId.RouteKind, StringComparison.Ordinal) ||
                 !long.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out long revision) ||
@@ -134,7 +139,7 @@ internal static class RouteCodec
                 bucket.Reset(revision);
             }
 
-            if (parts.Length == 17 && parts[4] == MetaTag)
+            if ((parts.Length == MetaFieldCountV1 || parts.Length == MetaFieldCountV2) && parts[4] == MetaTag)
             {
                 if (!TryParseMeta(parts, id, revision, out AtlasRoute meta))
                 {
@@ -144,7 +149,7 @@ internal static class RouteCodec
 
                 bucket.Meta = meta;
             }
-            else if (parts.Length == 8 && parts[6] == PointTag)
+            else if (parts.Length == 8 && parts[6] == PointTag && parts[7] == RowMarker)
             {
                 if (!int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int index) ||
                     index < 0 ||
@@ -208,9 +213,12 @@ internal static class RouteCodec
             return false;
         }
 
+        bool hasAuthors = parts.Length == MetaFieldCountV2;
         route = new AtlasRoute(id)
         {
             Revision = revision,
+            OwnerAuthor = hasAuthors ? AtlasText.Unescape(parts[16]) : "",
+            LastAuthor = hasAuthors ? AtlasText.Unescape(parts[17]) : "",
             CreatedUtc = new DateTime(created, DateTimeKind.Utc),
             ModifiedUtc = new DateTime(modified, DateTimeKind.Utc),
             Name = AtlasText.Unescape(parts[5]),
