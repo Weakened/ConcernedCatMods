@@ -28,7 +28,12 @@ internal sealed class CartographerSettings
         ConfigEntry<bool> drawerShowPins,
         ConfigEntry<bool> drawerCluster,
         ConfigEntry<KeyCode> quickPinHotkey,
-        ConfigEntry<float> quickPinDuplicateRadius)
+        ConfigEntry<float> quickPinDuplicateRadius,
+        ConfigEntry<bool> surveyRulesEnabled,
+        ConfigEntry<float> surveyScanIntervalSeconds,
+        ConfigEntry<float> surveyScanRadius,
+        ConfigEntry<float> surveyBaseExclusionRadius,
+        ConfigEntry<int> surveyMaxObservations)
     {
         Enabled = enabled;
         CaptureConstructionActions = captureConstructionActions;
@@ -53,6 +58,11 @@ internal sealed class CartographerSettings
         DrawerCluster = drawerCluster;
         QuickPinHotkey = quickPinHotkey;
         QuickPinDuplicateRadius = quickPinDuplicateRadius;
+        SurveyRulesEnabled = surveyRulesEnabled;
+        SurveyScanIntervalSeconds = surveyScanIntervalSeconds;
+        SurveyScanRadius = surveyScanRadius;
+        SurveyBaseExclusionRadius = surveyBaseExclusionRadius;
+        SurveyMaxObservations = surveyMaxObservations;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -78,6 +88,11 @@ internal sealed class CartographerSettings
     public ConfigEntry<bool> DrawerCluster { get; }
     public ConfigEntry<KeyCode> QuickPinHotkey { get; }
     public ConfigEntry<float> QuickPinDuplicateRadius { get; }
+    public ConfigEntry<bool> SurveyRulesEnabled { get; }
+    public ConfigEntry<float> SurveyScanIntervalSeconds { get; }
+    public ConfigEntry<float> SurveyScanRadius { get; }
+    public ConfigEntry<float> SurveyBaseExclusionRadius { get; }
+    public ConfigEntry<int> SurveyMaxObservations { get; }
 
     public static CartographerSettings Bind(ConfigFile config)
     {
@@ -132,6 +147,17 @@ internal sealed class CartographerSettings
                 "Key that pins the object you are looking at (set to None to disable). Never pins creatures."),
             config.Bind("Workbench", "QuickPinDuplicateRadius", 25f, new ConfigDescription(
                 "Skip a quick pin when a same-named pin already exists within this many meters (0 disables the check).",
-                new AcceptableValueRange<float>(0f, 200f))));
+                new AcceptableValueRange<float>(0f, 200f))),
+            config.Bind("Survey", "SurveyRulesEnabled", false,
+                "Opt-in survey rules: nearby loaded objects matching survey-rules.tsv become reviewable observations (never pins directly)."),
+            config.Bind("Survey", "SurveyScanIntervalSeconds", 10f, new ConfigDescription(
+                "Seconds between survey scans.", new AcceptableValueRange<float>(2f, 60f))),
+            config.Bind("Survey", "SurveyScanRadius", 40f, new ConfigDescription(
+                "Survey scan radius around the player in meters.", new AcceptableValueRange<float>(10f, 100f))),
+            config.Bind("Survey", "SurveyBaseExclusionRadius", 30f, new ConfigDescription(
+                "No observations within this distance of a pin categorized/tagged Base (0 disables).",
+                new AcceptableValueRange<float>(0f, 100f))),
+            config.Bind("Survey", "SurveyMaxObservations", 200, new ConfigDescription(
+                "Hard cap on pending survey observations.", new AcceptableValueRange<int>(10, 1000))));
     }
 }
