@@ -14,10 +14,15 @@ internal sealed class RoadOverlayRenderer
     private const string DirtOverlayName = "CC Dirt Paths";
     private const string PavedOverlayName = "CC Paved Roads";
 
-    // Dark, fully opaque ink: at 1-texel width the earlier lighter colors
-    // washed out under the vanilla map cloud layer (owner campaign finding).
-    private static readonly Color32 DirtColor = new(94, 62, 34, 255);
-    private static readonly Color32 PavedColor = new(88, 90, 96, 255);
+    // Dark, fully opaque ink (cloud-layer contrast); the high-contrast
+    // palette pushes dirt near black and paved near white for accessibility.
+    private Color32 DirtColor => _settings.HighContrast.Value
+        ? new Color32(26, 15, 6, 255)
+        : new Color32(94, 62, 34, 255);
+
+    private Color32 PavedColor => _settings.HighContrast.Value
+        ? new Color32(245, 245, 250, 255)
+        : new Color32(88, 90, 96, 255);
 
     private readonly CartographerSettings _settings;
     private readonly ManualLogSource _log;

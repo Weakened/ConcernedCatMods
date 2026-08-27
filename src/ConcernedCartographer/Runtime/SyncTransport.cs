@@ -190,7 +190,7 @@ internal sealed class SyncTransport
                 DateTime.UtcNow));
             Player.m_localPlayer?.Message(
                 MessageHud.MessageType.TopLeft,
-                $"Atlas share received from {authorName} — review with cc_sync preview");
+                AtlasStrings.Format("hud.syncReceived", authorName));
             _log.LogInfo($"Atlas share received from {authorName} ({pins.Pins.Count} pin(s), {routes.Routes.Count} route(s), " +
                 $"{pins.MalformedRows + routes.MalformedRows} malformed row(s) skipped).");
         }

@@ -16,9 +16,17 @@ internal sealed class RouteOverlayRenderer
 {
     private const string OverlayName = "CC Routes";
 
-    private static readonly Color32 PlannedColor = new(210, 210, 235, 255);
-    private static readonly Color32 ActiveColor = new(255, 200, 80, 255);
-    private static readonly Color32 DoneColor = new(135, 135, 135, 255);
+    private Color32 PlannedColor => _settings.HighContrast.Value
+        ? new Color32(0, 220, 255, 255)
+        : new Color32(210, 210, 235, 255);
+
+    private Color32 ActiveColor => _settings.HighContrast.Value
+        ? new Color32(255, 160, 0, 255)
+        : new Color32(255, 200, 80, 255);
+
+    private Color32 DoneColor => _settings.HighContrast.Value
+        ? new Color32(200, 200, 200, 255)
+        : new Color32(135, 135, 135, 255);
 
     private readonly CartographerSettings _settings;
     private readonly RateLimitedLog _rateLimited;

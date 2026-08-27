@@ -57,6 +57,9 @@ internal sealed class AtlasDrawerPanel
 
     public bool IsVisible => _panel != null && _panel.activeSelf;
 
+    /// <summary>Accessibility scale applied when the drawer shows.</summary>
+    public float UiScale = 1f;
+
     public void Toggle(bool showDirt, bool showPaved, bool showPins, bool cluster)
     {
         if (IsVisible)
@@ -79,7 +82,10 @@ internal sealed class AtlasDrawerPanel
             _cluster!.isOn = cluster;
             _suppressToggleEvents = false;
             RefreshLists();
-            _panel!.SetActive(true);
+            _panel!.transform.localScale = Vector3.one * UiScale;
+            _panel.SetActive(true);
+            UnityEngine.EventSystems.EventSystem.current?.SetSelectedGameObject(
+                _dirt != null ? _dirt.gameObject : null);
         }
         catch (Exception exception)
         {
@@ -185,23 +191,23 @@ internal sealed class AtlasDrawerPanel
             new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
             new Vector2(210f, 0f), 380f, 680f, draggable: true);
 
-        gui.CreateText("Atlas", _panel.transform,
+        gui.CreateText(AtlasStrings.Get("drawer.title"), _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -28f),
             font, 20, header, true, Color.black, 340f, 30f, false);
 
         float y = -62f;
-        gui.CreateText("Layers", _panel.transform,
+        gui.CreateText(AtlasStrings.Get("drawer.layers"), _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-130f, y),
             font, 15, header, false, Color.black, 120f, 24f, false);
         y -= 30f;
 
-        _dirt = CreateToggleRow(gui, font, "Dirt roads", ref y, value => { if (!_suppressToggleEvents) DirtToggled?.Invoke(value); });
-        _paved = CreateToggleRow(gui, font, "Paved roads", ref y, value => { if (!_suppressToggleEvents) PavedToggled?.Invoke(value); });
-        _pins = CreateToggleRow(gui, font, "Pins", ref y, value => { if (!_suppressToggleEvents) { PinsToggled?.Invoke(value); RefreshLists(); } });
-        _cluster = CreateToggleRow(gui, font, "Clustering", ref y, value => { if (!_suppressToggleEvents) { ClusterToggled?.Invoke(value); RefreshLists(); } });
+        _dirt = CreateToggleRow(gui, font, AtlasStrings.Get("drawer.dirtRoads"), ref y, value => { if (!_suppressToggleEvents) DirtToggled?.Invoke(value); });
+        _paved = CreateToggleRow(gui, font, AtlasStrings.Get("drawer.pavedRoads"), ref y, value => { if (!_suppressToggleEvents) PavedToggled?.Invoke(value); });
+        _pins = CreateToggleRow(gui, font, AtlasStrings.Get("drawer.pins"), ref y, value => { if (!_suppressToggleEvents) { PinsToggled?.Invoke(value); RefreshLists(); } });
+        _cluster = CreateToggleRow(gui, font, AtlasStrings.Get("drawer.clustering"), ref y, value => { if (!_suppressToggleEvents) { ClusterToggled?.Invoke(value); RefreshLists(); } });
         y -= 8f;
 
-        gui.CreateText("Search", _panel.transform,
+        gui.CreateText(AtlasStrings.Get("drawer.search"), _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-125f, y),
             font, 15, header, false, Color.black, 120f, 24f, false);
         y -= 30f;
@@ -210,7 +216,7 @@ internal sealed class AtlasDrawerPanel
             _panel.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
             new Vector2(-35f, y), InputField.ContentType.Standard, "name, tag:iron, near:…", 13, 250f, 28f)
             .GetComponent<InputField>();
-        GameObject go = gui.CreateButton("Go", _panel.transform,
+        GameObject go = gui.CreateButton(AtlasStrings.Get("drawer.go"), _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(135f, y), 55f, 28f);
         go.GetComponent<Button>().onClick.AddListener(() =>
         {
@@ -219,7 +225,7 @@ internal sealed class AtlasDrawerPanel
         });
         y -= 34f;
 
-        GameObject clear = gui.CreateButton("Clear filter", _panel.transform,
+        GameObject clear = gui.CreateButton(AtlasStrings.Get("drawer.clearFilter"), _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-95f, y), 130f, 26f);
         clear.GetComponent<Button>().onClick.AddListener(() =>
         {
@@ -247,7 +253,7 @@ internal sealed class AtlasDrawerPanel
         }
 
         y -= 6f;
-        gui.CreateText("Views", _panel.transform,
+        gui.CreateText(AtlasStrings.Get("drawer.views"), _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-129f, y),
             font, 15, header, false, Color.black, 120f, 24f, false);
         y -= 30f;
@@ -256,7 +262,7 @@ internal sealed class AtlasDrawerPanel
             _panel.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
             new Vector2(-35f, y), InputField.ContentType.Standard, "view name", 13, 250f, 28f)
             .GetComponent<InputField>();
-        GameObject save = gui.CreateButton("Save", _panel.transform,
+        GameObject save = gui.CreateButton(AtlasStrings.Get("drawer.save"), _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(135f, y), 55f, 28f);
         save.GetComponent<Button>().onClick.AddListener(() =>
         {
@@ -284,7 +290,7 @@ internal sealed class AtlasDrawerPanel
             y -= 30f;
         }
 
-        gui.CreateText("Routes — arrives in v0.5   ·   Sharing — arrives in v0.6",
+        gui.CreateText(AtlasStrings.Get("drawer.placeholders"),
             _panel.transform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 24f),
             font, 11, new Color(1f, 1f, 1f, 0.6f), false, Color.black, 360f, 22f, false);
 
