@@ -8,7 +8,16 @@
     <FileAlignment>512</FileAlignment>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <Authors>Eren Cansunar</Authors>
+    <Company>The Concerned Cat</Company>
+    <Product>Concerned Cartographer</Product>
+    <Copyright>Copyright © 2026 Eren Cansunar</Copyright>
+    <RepositoryUrl>https://github.com/Weakened/ConcernedCatMods</RepositoryUrl>
   </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="RepositoryUrl" Value="https://github.com/Weakened/ConcernedCatMods" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="JotunnLib" Version="2.29.2" />
