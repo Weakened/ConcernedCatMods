@@ -6,19 +6,25 @@ The single remaining gate is the human smoke test
 
 ## 1–5. Release candidate identity
 
-- **Version:** 1.0.0
-- **RC commit:** `7ed20fefdfa49c22d41217f216aed25f482f38ca` (main; the
-  v1.0 smoke-blocker fix pass — DEF-v1.0-001 input-block leak #89,
-  DEF-v1.0-002 alignment diagnostic #90, DEF-v1.0-003 workbench layout
-  #91 — plus everything in the previous RC line. **Supersedes RC
-  `9eb65291` (ZIP `9F1F4128…`), which FAILED the first human smoke pass
-  on the adoption input trap and workbench layout; do not test or upload
-  that ZIP again.** Its already-passed startup evidence remains valid:
-  Valheim 0.221.12 / Unity 6000.0.61f1 / BepInEx 5.4.23.3 /
-  Jötunn 2.29.2.0, clean 1.0.0 banner, no CC errors.)
+- **Version:** 1.0.0 (unchanged — 1.0.0 has never been publicly tagged or published)
+- **RC commit:** `86050cd2e2a6d5d81d55bc563aab8a8a62574e7e` (main; the
+  **RC3 fix pass** — DEF-v1.0-004 pin edit-in-place identity #92,
+  DEF-v1.0-005 persistent negative terrain intent #93, workbench visual
+  pickers #94, large-map discoverability #95, alignment-diagnostic
+  polish and DEF-v1.0-002 closure #90 — plus everything in the previous
+  RC line. **Supersedes RC `7ed20fef` (ZIP `B47E7C9D…`), which FAILED
+  the second human smoke pass on managed-pin edit duplication and
+  leveling-paints-roads; and RC `9eb65291` (ZIP `9F1F4128…`) before it.
+  Do not test or upload those ZIPs again.** Already-passed evidence that
+  remains valid from the earlier passes: startup environment
+  (Valheim 0.221.12 / Unity 6000.0.61f1 / BepInEx 5.4.23.3 /
+  Jötunn 2.29.2.0, clean 1.0.0 banner, no CC errors), the adoption
+  input-trap fix (DEF-v1.0-001), the workbench layout (DEF-v1.0-003),
+  and overlay alignment (DEF-v1.0-002, closed as PASS on logged
+  residuals ≤ 1 texel).)
 - **ZIP:** `artifacts\thunderstore\TheConcernedCat-ConcernedCartographer-1.0.0.zip`
-- **ZIP SHA-256:** `B47E7C9D751CD30198460C1081FEB75E01933B1D41B366190C1853396C6FADBA` (212,396 bytes)
-- **Plugin DLL SHA-256:** `8B7CEE2877DBAD8B038FD62D66A998FA891894E645A26358D82BC7891E57395F` (261,120 bytes; the DLL inside the ZIP and the DLLs deployed to the TCC-Dev/TCC-Compat profiles are hash-identical; informational version `1.0.0+7ed20fef…` verified in the DLL)
+- **ZIP SHA-256:** `710183B3C02E62E50C1D4A35C9039D61147126736DA0BB7CC13FAB532B7810D6` (220,466 bytes)
+- **Plugin DLL SHA-256:** `571F5AB39F2B8F0C1D5978B26367D9F6DBFB4F9A5ADE6CF8CF456E172F13362C` (278,528 bytes; the DLL inside the ZIP is hash-identical to the Release build output; informational version `1.0.0+86050cd2…` verified in the DLL)
 - **Assembly metadata (verified in the DLL):** Company "The Concerned Cat",
   Product "Concerned Cartographer", Copyright © 2026 Eren Cansunar,
   RepositoryUrl embedded, informational version `1.0.0+<RC commit>`.
@@ -51,8 +57,40 @@ revision sanity cap, non-finite float rejection, string-length caps,
 deletion names in the sync preview, author display sanitization, and
 declared-length verification.
 
+Second human smoke pass (2026-08-27) against RC `7ed20fef` found two new
+P1 release blockers plus P2 UX gaps, all addressed in this RC:
+
+- **DEF-v1.0-004 (#92, P1)**: editing an adopted/managed pin created a
+  duplicate map rendering. Root cause: the workbench resynced through the
+  full `ReconcileOnMapReady` (reset + claim-by-position-and-name), which
+  cannot re-claim a rendering after a rename. Fixed at the lifecycle
+  level: tracking + decisions extracted into the pure
+  `PinRenderingLedger`, all in-session mutations use the
+  tracking-preserving targeted sync path, full reconcile is reserved for
+  map/world reconstruction. 11 regression tests.
+- **DEF-v1.0-005 (#93, P1)**: leveling still painted the map — Level/
+  Raise leave Dirt terrain paint that traversal and chunk recovery
+  rediscovered as road. Fixed with persistent per-world negative terrain
+  intent (`<uid>.terrain-intent.tsv`, format v1): Level/Raise/Cultivate/
+  Reset exclude their brush footprint, passive Dirt observations are
+  refused inside exclusion, explicit Pathen/Paved clears and re-inks,
+  bounded 250k cells, survives restart. 15 regression tests.
+- **#94 (P2 UX)**: workbench visual fields were developer free-text.
+  Now: icon picker with live sprite preview + "Keep custom" for legacy
+  IDs, category suggestions, size stepper; color honestly labeled
+  metadata-only (pins are not color-rendered in v1).
+- **#95 (P2 UX)**: panels were hotkey-only. Now: visible `CC Atlas [L]`
+  large-map button, contextual `P — Edit with Concerned Cartographer`
+  hint over editable pins, README Controls section; vanilla right-click
+  untouched.
+- **DEF-v1.0-002 (#90)**: CLOSED as PASS — three logged `cc_roads align`
+  runs show overlay pixel == native `WorldToPixel` pixel at every probe
+  (residual ≤ ~0.4 texel sub-pixel, bound is 1 texel); owner screenshots
+  concur. The diagnostic remains available but unadvertised, with a
+  compact PASS/FAIL residual table.
+
 First human smoke pass (2026-08-27) against RC `9eb65291` found three
-release blockers, all addressed in this RC:
+release blockers, all addressed in the previous RC:
 
 - **DEF-v1.0-001 (#89, P1)**: adopting a vanilla pin trapped map/game
   input. Proven root cause: Jötunn's `GUIManager.BlockInput` is
@@ -61,7 +99,7 @@ release blockers, all addressed in this RC:
   balanced `ModalInputBlock` state machine (11 new unit tests), teardown
   on external map close / logout / dispose, and a per-frame fail-safe
   invariant (hidden workbench ⇒ no owned block).
-- **DEF-v1.0-002 (#90, P1, open pending live proof)**: sacrifice-stones
+- **DEF-v1.0-002 (#90, P1, since CLOSED as PASS — see above)**: sacrifice-stones
   icon vs dirt-road ink appeared misaligned. Static audit found no
   projection defect (both draw paths share Jötunn's
   `WorldToOverlayCoords`, overlay texture is the vanilla 2048, no
@@ -76,7 +114,13 @@ release blockers, all addressed in this RC:
 
 ## 8. Automated evidence (at the RC commit)
 
-- **254/254 tests** in the game-free core suite (CI-run): road geometry
+- **280/280 tests** in the game-free core suite (Release configuration,
+  re-run at the RC commit): everything below plus the DEF-v1.0-004
+  pin-rendering-lifecycle suite (11 tests: adopt→edit→apply keeps one
+  rendering, restart reconcile, claim strictness, batch sync) and the
+  DEF-v1.0-005 terrain-intent suite (15 tests: exclusion blocks
+  traversal/recovery, Pathen clears, codec round-trip/restart, world
+  independence, bounded eviction): road geometry
   and suppression, codecs and journal recovery for all three entity
   families, migration matrix across every shipped format, pin/route
   operations with undo-convergence properties, query/clustering,
@@ -139,14 +183,15 @@ defaults.
 ## 18. Smoke test
 
 `docs/mods/concerned-cartographer/PRE_RELEASE_SMOKE_TEST.md` — **the
-owner resumes at its section R (replacement-RC mini-regression), NOT at
-the top.** The full 2.5–4 h checklist is not restarted; sections the
-first pass already completed stay completed.
+owner resumes at its section R2 (RC3 mini-regression, blocks A–E), NOT
+at the top.** The full 2.5–4 h checklist is not restarted; sections the
+earlier passes already completed stay completed. Only after A–E pass
+does the owner resume routes/world-isolation/multiplayer.
 
 ## 19. Remaining Git commands (run after the smoke test passes)
 
 ```powershell
-git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" 7ed20fefdfa49c22d41217f216aed25f482f38ca
+git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" 86050cd2e2a6d5d81d55bc563aab8a8a62574e7e
 git push origin concerned-cartographer/v1.0.0
 gh release create concerned-cartographer/v1.0.0 artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-1.0.0.zip --title "Concerned Cartographer 1.0.0" --notes-file src/ConcernedCartographer/Package/CHANGELOG.md
 ```
