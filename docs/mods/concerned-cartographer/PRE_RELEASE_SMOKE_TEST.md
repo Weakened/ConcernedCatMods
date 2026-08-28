@@ -5,23 +5,23 @@ manual-only verification deferred by the autonomous conveyor (OPS-001
 rev 2) from v0.3 onward and is finalized against the exact v1.0 RC. Rows
 marked **BLOCKS** must pass before publication; others are record-and-ship.
 
-> Status: FINAL for v1.0, amended 2026-08-28 (third amendment): the RC3
-> fix pass (DEF-v1.0-004/-005, #92–#95) was superseded before testing by
-> the owner-approved v1 map UX direction (#96 — Atlas button, contextual
-> pin actions, Enhanced Pin Palette). **Do NOT restart the full 2.5–4 h
-> checklist.** Start at section R3 below and resume the shortened golden
-> path from where the second pass stopped.
+> Status: FINAL for v1.0, amended 2026-08-28 (fourth amendment): RC4
+> (v1 map UX, #96) was superseded before testing by the addition of
+> opt-in crash reporting + canonical support routing (#97). **Do NOT
+> restart the full 2.5–4 h checklist.** Start at section R3 below and
+> resume the shortened golden path from where the second pass stopped.
 
-## R3. RC4 mini-regression — RESUME SMOKE FROM HERE
+## R3. RC5 mini-regression — RESUME SMOKE FROM HERE
 
 The second human smoke pass (2026-08-27) ran against RC `7ed20fef…`
 (ZIP `B47E7C9D…`); it PASSED the adoption input trap (DEF-v1.0-001),
 workbench layout (DEF-v1.0-003), and overlay alignment (DEF-v1.0-002,
 closed on logged residuals ≤ 1 texel — #90), and FAILED on managed-pin
 edit duplication (DEF-v1.0-004, #92) and leveling-paints-roads
-(DEF-v1.0-005, #93). RC3 (`86050cd2…`, ZIP `710183B3…`) fixed those but
-was superseded by the v1 map UX direction (#96) before human testing —
-do not test either old ZIP. Run blocks A–K in order against the NEW RC
+(DEF-v1.0-005, #93). RC3 (`86050cd2…`, ZIP `710183B3…`) fixed those and
+RC4 (`35f20e1a…`, ZIP `8B4B41AD…`) added the v1 map UX (#96); both were
+superseded before human testing (RC5 adds opt-in crash reporting, #97) —
+do not test the old ZIPs. Run blocks A–L in order against the NEW RC
 (identity in `RELEASE_DOSSIER.md`); every block **BLOCKS**.
 
 ### A. Startup
@@ -127,7 +127,34 @@ controls (icon bar area, shared-position toggle, biome text, hints bar).
 2. `cc_roads align clear` removes every diagnostic pin and cross
    immediately.
 
-Only after A–K pass, resume the shortened golden path at
+### L. Crash-reporting consent and privacy (#97)
+
+Note: the RC ships with the ingestion DSN EMPTY, so no event can leave
+the machine in any of these steps; this block verifies the consent UX
+and notices. (To verify a live send, set `Privacy/SentryDsn` in a
+private profile per CRASH_REPORTING.md — optional.)
+
+1. Fresh (or reset: `Privacy/SendCrashReports = Unknown`,
+   `AcceptedPrivacyPolicyVersion = 0`) profile → enter world → open the
+   large map: the "Help improve Concerned Cartographer" dialog appears
+   exactly once. It does NOT appear on the title screen.
+2. Choose **No thanks** → close/reopen the map → no prompt.
+3. Restart the game → no prompt; config shows `Disabled`.
+4. CC Atlas → **Privacy** → toggle reporting **On** (state line flips
+   immediately; [Learn more] opens/points at PRIVACY.md).
+5. Restart → remains On, still no prompt.
+6. Enter a different world and a different character → no prompt
+   (consent is profile-level, and nothing is written to world saves).
+7. While `Unknown` or `Disabled`: no crash-report traffic is possible —
+   with the DSN empty this is structural; the notice after a forced/
+   observed subsystem failure must read the "Crash reporting is off…
+   cc_atlas support" variant (with reporting on AND a DSN configured it
+   reads "An anonymous crash report was sent."), and appears at most
+   once per subsystem.
+8. Escape/dismiss variant (fresh profile again, optional): opening the
+   map and pressing Escape with the dialog up counts as **No thanks**.
+
+Only after A–L pass, resume the shortened golden path at
 routes/world-isolation/multiplayer (sections 2, 4, 6, 7 onward),
 skipping rows earlier passes already completed.
 

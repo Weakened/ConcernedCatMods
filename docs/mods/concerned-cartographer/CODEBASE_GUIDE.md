@@ -632,6 +632,26 @@ Bounded gzip for sync envelopes (standard format, interoperable with the game's 
 
 Strips rich-text markup and control characters and caps length for any network-supplied string that reaches the HUD (author names).
 
+## 8f. Crash reporting (`Domain/Reporting/`, #97)
+
+Pure, provider-abstracted crash reporting: `ICrashReporter`
+(Initialize/CaptureException/CaptureFatalSubsystemFailure/Flush/Dispose)
+with `NullCrashReporter` and `SentryCrashReporter` — the latter built
+directly against Sentry's envelope HTTP endpoint (no SDK bundled) with an
+injectable transport seam. `CrashReportEvent` is allowlist-only;
+`CrashReportSanitizer` scrubs URLs/coordinates/paths+usernames/save-file
+names/IPs/secret shapes/long IDs with length caps; `CrashReportThrottle`
+enforces session dedupe + caps + once-per-subsystem notices;
+`CrashSubsystems` infers subsystem names from the mod's own error
+messages; `SentryDsn`/`SentryEnvelopeCodec` parse the public ingestion
+DSN and build the exact outgoing envelope. Consent-gated before any
+queueing; bounded queue; one delivery attempt; background sender.
+Runtime side: `Runtime/CrashReportingConfig` (tri-state consent enum,
+EMPTY embedded DSN by policy, policy version), `Runtime/CrashReportingHub`
+(owns the reporter, hooks the mod's own Error/Fatal log events and CC
+unhandled exceptions, player notices), `Map/CrashConsentPanel` (one-time
+dialog + Atlas → Privacy surface). See CRASH_REPORTING.md and PRIVACY.md.
+
 ## 8e. Localization (`Domain/Atlas/AtlasStrings.cs`, v0.7)
 
 String catalog with English defaults and optional `cartographer-strings.tsv` overrides (loaded by `LocalizationPersistence`). Console output intentionally stays English; UI/HUD strings go through the catalog.
@@ -837,6 +857,7 @@ The project compiles `Domain/**/*.cs` directly, so pure tests do not require Val
 | `PinStoreTests.cs` | identity, revisions, delete/restore/upsert |
 | `PinRenderingLedgerTests.cs` | DEF-v1.0-004: rendering lifecycle — adopt/edit/apply keeps one rendering, restart reconcile, claim strictness |
 | `PaletteBirthTrackerTests.cs` | #96: managed-from-birth claims — armed/unarmed, swaps, disarm, single claim |
+| `CrashReportingTests.cs` | #97: forbidden-field redaction matrix over the outgoing envelope, consent gating, dedupe/caps, bounded queue, DSN/envelope, release identity |
 | `PinCodecTests.cs` | pin serialization/recovery |
 | `PinOperationsTests.cs` | batch, duplicate, merge, undo/redo |
 | `PinWorkbenchControllerTests.cs` | edit-buffer/controller behavior |
@@ -850,7 +871,7 @@ The project compiles `Domain/**/*.cs` directly, so pure tests do not require Val
 | `MigrationMatrixTests.cs` | every shipped sidecar format back-parses into the current readers |
 | `SecurityHardeningTests.cs` | SEC-1.0-001: decompression-bomb rejection, revision/float/string bounds, deletion-name previews, display sanitization |
 
-At the 1.0.0 RC4 the suite is 287 tests, all green, run without any game assemblies.
+At the 1.0.0 RC5 the suite is 310 tests, all green, run without any game assemblies.
 
 Game adapters still need real Valheim tests; unit tests cannot prove Harmony targets, private field names, overlay alignment or Unity UI behavior.
 

@@ -2,11 +2,13 @@
 
 ## Reporting
 
-Use the GitHub issue tracker for ordinary bugs.
+Use the GitHub issue tracker for ordinary bugs and feature requests.
 
-For a vulnerability that could expose user data, execute unintended code, corrupt saves, bypass multiplayer permissions, or create a serious security/privacy risk, avoid posting exploit details publicly until the maintainer can assess it.
+For a vulnerability that could expose user data, execute unintended code, corrupt saves, bypass multiplayer permissions, or create a serious security/privacy risk, avoid posting exploit details publicly until the maintainer can assess it. Report privately to:
 
-Use the current official contact channel published by The Concerned Cat.
+**support@theconcernedcat.com**
+
+The same address handles privacy/crash-reporting questions and any logs or information that should not be posted publicly.
 
 ## Do not include in public issues
 
@@ -23,7 +25,11 @@ Concerned Cartographer should:
 
 - never require elevated/admin privileges for normal use;
 - never execute downloaded code;
-- never send telemetry unless a future version explicitly documents it;
+- send no telemetry except the **opt-in, consent-gated crash reporting**
+  documented in `PRIVACY.md` (allowlisted technical fields only,
+  client-side scrubbing with automated redaction tests, disabled by
+  default, inert without an embedded ingestion DSN; no gameplay
+  analytics of any kind);
 - treat network payloads as untrusted;
 - bound message sizes and work queues;
 - reject malformed/incompatible protocol data safely;
