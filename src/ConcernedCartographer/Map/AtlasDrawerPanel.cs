@@ -30,6 +30,7 @@ internal sealed class AtlasDrawerPanel
     public Action<string>? ViewSaved;
     public Action<string>? ViewApplied;
     public Action<AtlasId>? ResultClicked;
+    public Action? PrivacyClicked;
     public Func<string>? StatusLine;
     public Func<List<(string Label, AtlasId Id)>>? TopResults;
     public Func<List<string>>? ViewNames;
@@ -293,6 +294,12 @@ internal sealed class AtlasDrawerPanel
         gui.CreateText(AtlasStrings.Get("drawer.placeholders"),
             _panel.transform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 24f),
             font, 11, new Color(1f, 1f, 1f, 0.6f), false, Color.black, 360f, 22f, false);
+
+        // Settings → Privacy (#97): opens the consent/privacy panel with
+        // the crash-reporting toggle and the what-is-sent summary.
+        GameObject privacy = gui.CreateButton(AtlasStrings.Get("drawer.privacy"), _panel.transform,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 52f), 120f, 26f);
+        privacy.GetComponent<Button>().onClick.AddListener(() => PrivacyClicked?.Invoke());
 
         _panel.SetActive(false);
     }
