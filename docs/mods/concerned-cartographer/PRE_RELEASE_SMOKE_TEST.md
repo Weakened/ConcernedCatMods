@@ -5,63 +5,109 @@ manual-only verification deferred by the autonomous conveyor (OPS-001
 rev 2) from v0.3 onward and is finalized against the exact v1.0 RC. Rows
 marked **BLOCKS** must pass before publication; others are record-and-ship.
 
-> Status: FINAL for v1.0, amended 2026-08-27 (second amendment) after the
-> second smoke pass found two new P1 blockers (DEF-v1.0-004/-005, issues
-> #92–#93) plus UX gaps (#94–#95). **Do NOT restart the full 2.5–4 h
-> checklist.** Start at section R2 below and resume the shortened golden
+> Status: FINAL for v1.0, amended 2026-08-28 (third amendment): the RC3
+> fix pass (DEF-v1.0-004/-005, #92–#95) was superseded before testing by
+> the owner-approved v1 map UX direction (#96 — Atlas button, contextual
+> pin actions, Enhanced Pin Palette). **Do NOT restart the full 2.5–4 h
+> checklist.** Start at section R3 below and resume the shortened golden
 > path from where the second pass stopped.
 
-## R2. RC3 mini-regression — RESUME SMOKE FROM HERE
+## R3. RC4 mini-regression — RESUME SMOKE FROM HERE
 
 The second human smoke pass (2026-08-27) ran against RC `7ed20fef…`
-(ZIP `B47E7C9D…`). That RC is **superseded** — do not test or upload it
-again. It PASSED: adoption input trap (DEF-v1.0-001), workbench layout
-(DEF-v1.0-003), and overlay alignment (DEF-v1.0-002, closed on logged
-residuals ≤ 1 texel — see #90). It FAILED on managed-pin edit
-duplication (DEF-v1.0-004, #92) and leveling-paints-roads
-(DEF-v1.0-005, #93), with UX gaps filed as #94/#95 — all addressed in
-this RC. Run blocks A–E in order against the NEW RC (identity in
-`RELEASE_DOSSIER.md`); every block **BLOCKS**.
+(ZIP `B47E7C9D…`); it PASSED the adoption input trap (DEF-v1.0-001),
+workbench layout (DEF-v1.0-003), and overlay alignment (DEF-v1.0-002,
+closed on logged residuals ≤ 1 texel — #90), and FAILED on managed-pin
+edit duplication (DEF-v1.0-004, #92) and leveling-paints-roads
+(DEF-v1.0-005, #93). RC3 (`86050cd2…`, ZIP `710183B3…`) fixed those but
+was superseded by the v1 map UX direction (#96) before human testing —
+do not test either old ZIP. Run blocks A–K in order against the NEW RC
+(identity in `RELEASE_DOSSIER.md`); every block **BLOCKS**.
 
 ### A. Startup
 
-1. Clean import of the exact RC3 ZIP into the smoke profile (verify its
+1. Clean import of the exact RC4 ZIP into the smoke profile (verify its
    SHA-256 against the dossier).
 2. Start modded: Concerned Cartographer **1.0.0** banner, no CC errors,
    menu responsive.
 
-### B. Edit-in-place identity (DEF-v1.0-004, #92)
+### B. Atlas discoverability (#95/#96)
 
-1. In a disposable world, create a vanilla pin named `Home`.
-2. Adopt it (`P` over the pin → Adopt).
-3. Rename to `Smoke Home`; Apply.
-4. Change the icon via the picker; Apply.
-5. Change category/notes/tags; Apply.
-6. Close and reopen the large map.
-7. Restart the game and re-enter the world.
+1. Open the large map: the **[Atlas]** button is visible, unobtrusive,
+   inside the map, and shows its tooltip on hover.
+2. Click it: the Atlas Drawer opens. Click again/close: it closes.
+3. `L` still toggles the drawer.
+4. Clicking an Atlas Drawer search result opens the Pin Workbench for
+   that exact pin.
 
-PASS: exactly **ONE** map pin throughout, at the intended position;
-metadata persists; no orphan pin with the old name; no duplicate after
-restart. *On failure capture:* map screenshots + `LogOutput.log`
+### C. Vanilla pin upgrade — edit-in-place identity (#92, #96)
+
+1. In a disposable world, create an ordinary vanilla pin named `Home`
+   (use the vanilla fallback flow of block F, or a pre-existing pin).
+2. Hover it: the hint plus a visible **Upgrade & Edit** button appear.
+3. Click **Upgrade & Edit**: the editor opens; the marker has not moved
+   or duplicated.
+4. Rename to `Smoke Home`; Apply. Change the icon via the picker; Apply.
+   Change category/notes/tags; Apply.
+5. Close and reopen the large map; then restart and re-enter the world.
+
+PASS: exactly **ONE** map marker throughout, at the intended position;
+metadata persists; no orphan old-name pin; no duplicate after restart.
+*On failure capture:* map screenshots + `LogOutput.log`
 ("Pin reconcile"/pin-adapter lines).
 
-### C. Editor and discoverability (#94, #95)
+### D. Managed edit (#92, #94)
 
-1. Icon is selected via the picker (sprite preview + list); a pin with a
-   custom/legacy icon ID keeps it via "Keep custom".
-2. Color appears only at the bottom labeled **metadata** — no prominent
-   picker that visibly does nothing.
-3. Size adjusts via the −/+ stepper with Reset (labeled metadata).
-4. Every label/control sits inside the panel (spot-check UiScale 0.8 and 1.6).
-5. The **CC Atlas [L]** button is visible on the large map and opens the
-   Atlas Drawer.
-6. Hovering an editable pin shows `P — Edit with Concerned Cartographer`
-   and the hint is understandable.
-7. Clicking an Atlas Drawer search result opens the Pin Workbench for
-   that pin.
-8. Vanilla right-click pin deletion still behaves exactly vanilla.
+1. Hover a managed marker: **Edit Pin** is visible; click it (also try
+   `P`).
+2. Icon picker shows sprite preview + list; a custom/legacy icon ID is
+   preserved via "Keep custom".
+3. Status and Scope are dropdown selects; size is a −/+ stepper with
+   Reset; color appears only at the bottom labeled **metadata**.
+4. Exactly one marker remains after each Apply and after restart.
 
-### D. Terrain intent (DEF-v1.0-005, #93)
+### E. Enhanced Pin Palette — managed from birth (#96)
+
+1. The five vanilla player icon buttons are hidden by default; the CC
+   **Markers** palette is visible (collapsible via its button).
+2. Search for an icon (e.g. "harbor"); choose it — the palette shows
+   "Double-click the map to place: …".
+3. Double-click the map; name the marker in the vanilla name input.
+4. The marker exists exactly once and is managed immediately: hovering
+   it shows **Edit Pin** (NOT Upgrade & Edit) and the workbench shows
+   the palette's icon and category. No upgrade step ever appears.
+5. Repeat once via the Recent group. Also place one and CANCEL the name
+   input: still exactly one managed (unnamed) marker.
+
+### F. Vanilla fallback (#96)
+
+1. Set `Pins/ShowVanillaPinPalette = true` (config or Configuration
+   Manager): the vanilla five-icon selector returns immediately;
+   vanilla pin placement works as stock.
+2. CC atlas, editor, and context actions keep working.
+3. Set it back to false: the palette returns, vanilla buttons hide.
+
+### G. Vanilla controls untouched
+
+Cross Off (left-click), Remove Pin (right-click), Ping (middle-click),
+and Visible-to-other-players all behave exactly vanilla, with the
+palette both shown and hidden.
+
+### H. Controller
+
+1. The Atlas button is focusable and clickable with a controller.
+2. Palette rows can be focused/navigated; an icon can be selected and a
+   marker created.
+3. The pin edit action is reachable (context button or the configured
+   gamepad binding / `P`).
+
+### I. Layout
+
+At 1080p, 1440p, and ultrawide (if available), with UI scale 0.8 / 1.0 /
+1.6: no CC panel or button sits outside the map or covers vanilla map
+controls (icon bar area, shared-position toggle, biome text, hints bar).
+
+### J. Terrain intent (DEF-v1.0-005, #93)
 
 1. Level (hoe) a patch of untouched ground away from real roads.
 2. Walk back and forth over it.
@@ -73,7 +119,7 @@ restart. *On failure capture:* map screenshots + `LogOutput.log`
 
 *On failure capture:* before/after map screenshots + `LogOutput.log`.
 
-### E. Alignment spot check (diagnostic only)
+### K. Alignment spot check (diagnostic only)
 
 1. `cc_roads align`: the console table must end
    `ALIGNMENT PASS: max residual … texels` (≤ 1.00); markers are small
@@ -81,7 +127,7 @@ restart. *On failure capture:* map screenshots + `LogOutput.log`
 2. `cc_roads align clear` removes every diagnostic pin and cross
    immediately.
 
-Only after A–E pass, resume the shortened golden path at
+Only after A–K pass, resume the shortened golden path at
 routes/world-isolation/multiplayer (sections 2, 4, 6, 7 onward),
 skipping rows earlier passes already completed.
 

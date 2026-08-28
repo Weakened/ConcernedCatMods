@@ -58,34 +58,54 @@ Settings live in `BepInEx/config/com.theconcernedcat.valheim.concernedcartograph
 
 ## Controls
 
-Everything is reachable from the large map; hotkeys are rebindable in the
-config.
+Everything is reachable with the mouse from the large map — no hotkeys
+required (they remain as rebindable accelerators).
 
-| Input | Where | Action |
+| Control | Where | Action |
 |---|---|---|
-| `L`, or the **CC Atlas [L]** button | Large map | Open/close the Atlas Drawer (layers, search, saved views) |
-| `P` | Large map, cursor over/near a pin | Open the Pin Workbench for that pin — a hint appears whenever the cursor is over an editable pin |
+| **[ Atlas ]** button (or `L`) | Large map, bottom right | Open/close the Atlas Drawer — layers, search, filters, saved views |
+| **[ Markers ]** palette | Large map, right side | Create managed markers: pick an icon, then double-click the map — the marker is fully editable immediately, no upgrade step |
+| Hover an existing marker | Large map | A context button appears: **Upgrade & Edit** for your vanilla markers, **Edit Pin** for managed ones (or press `P`) |
 | `F7` | In the world | Quick-pin what you are looking at |
 | Right-click on a pin | Large map | Vanilla pin delete — this mod never changes vanilla map input |
 
-Console commands (launch with `-console`): `cc_roads`, `cc_pins`,
-`cc_atlas`, `cc_survey`, `cc_routes`, `cc_sync`.
+Cross Off, Remove Pin, Ping, and Visible-to-other-players all remain
+pure vanilla. Console commands (launch with `-console`): `cc_roads`,
+`cc_pins`, `cc_atlas`, `cc_survey`, `cc_routes`, `cc_sync`.
+
+## Enhanced Pin Palette
+
+While the large map is open, the **Markers** palette replaces Valheim's
+five raw icon buttons as the way to place your own pins: a searchable
+list with icon previews, human names, and your recent picks. Choose a
+marker, double-click the map, name it — the pin is a managed
+Concerned Cartographer marker from birth, rendered as one ordinary
+saved vanilla pin (uninstall-safe as always).
+
+Prefer the vanilla selector? Set `Pins/ShowVanillaPinPalette = true`
+(or `Pins/EnhancedPinPalette = false`) — the vanilla buttons come back
+instantly and everything else keeps working. When a known conflicting
+pin manager is installed, the vanilla selector stays automatically.
+Death, boss, bed, and other system pins are never touched.
 
 ## Pin Workbench
 
-Your pins become a durable, editable atlas. Press the workbench hotkey
-(default `P`) over a pin while the large map is open: managed pins open the
-editor, your vanilla pins offer an explicit **Adopt** button (adoption
-never moves or duplicates the pin), and foreign/system pins show read-only
-info. Every edit keeps the pin's identity — nothing is deleted and
-recreated — and deletes are recoverable tombstones.
+Your pins become a durable, editable atlas. Hover any marker on the
+large map and click the context button (or press `P`): managed markers
+open the editor, your existing vanilla markers offer **Upgrade & Edit**
+— it keeps the marker exactly where it is and enables Concerned
+Cartographer editing, notes, categories and atlas features. Foreign and
+system pins show read-only info. Every edit keeps the pin's identity —
+nothing is deleted and recreated — and deletes are recoverable
+tombstones.
 
 Visual properties are edited with pickers, not raw IDs: the icon field is
 a dropdown with the live pin sprite as preview (custom/legacy icon IDs are
 preserved and offered as "Keep custom"), category offers suggestions while
-staying free text, and size is a stepper. Pin color is stored and synced
-but not yet rendered on the map, so it sits at the bottom of the panel
-labeled **metadata** rather than pretending to be visual.
+staying free text, size is a stepper, and status/visibility are dropdown
+selects. Pin color is stored and synced but not yet rendered on the map,
+so it sits at the bottom of the panel labeled **metadata** rather than
+pretending to be visual.
 
 The `cc_pins` console command drives everything scriptably: `edit`,
 `status`, `list [filter]`, `adopt`, `adoptall confirm`, `create <name>`,

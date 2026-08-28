@@ -674,9 +674,17 @@ Unity/Jötunn presentation for managed edit, vanilla adoption prompt and foreign
 
 It should drive `PinWorkbenchController` / `PinOperations`, not persistence directly.
 
-### `Map/LargeMapControls.cs` (#95)
+### `Map/LargeMapControls.cs` (#95, #96)
 
-Discoverability layer on `Minimap.m_largeRoot`: the "CC Atlas [hotkey]" button (routes through the same NoMap-gated drawer toggle as the hotkey) and the contextual "P — Edit with Concerned Cartographer" hint the runtime shows while the map cursor is over an editable pin. Fail-closed; rebuilt automatically after map teardown; never touches vanilla map input.
+Discoverability layer on `Minimap.m_largeRoot`: the [Atlas] button with hover tooltip (routes through the same NoMap-gated drawer toggle as the hotkey), the contextual pin action button ("Upgrade & Edit" for adoptable vanilla markers, "Edit Pin" for managed ones — kept alive via pointer-hover plus a grace window while the mouse travels to it), and the "P — Edit with Concerned Cartographer" accelerator hint. Fail-closed; rebuilt automatically after map teardown; never touches vanilla map input.
+
+### `Map/PinPalettePanel.cs` (#96)
+
+The Enhanced Pin Palette on the large map: a searchable, sprite-previewed, human-labeled marker browser over the stable IconRegistry (session recents, collapse toggle, no raw IDs). Choosing a marker selects the mapped vanilla icon type through the game's own `SelectIcon` and arms the runtime's `PaletteBirthTracker`; vanilla double-click + naming then creates the pin and the runtime associates the AtlasPin when naming closes — managed from birth, exactly one rendering. The runtime hides the five vanilla placeable icon buttons (`SetActive` only, per-cycle enforcement) and restores them on `Pins/ShowVanillaPinPalette`, `EnhancedPinPalette=false`, a detected conflicting pin manager, palette failure, mod disable, or dispose.
+
+### `Domain/Atlas/PaletteBirthTracker.cs` (#96)
+
+Pure managed-from-birth state machine: watches the map's "pin being named" handle per frame and reports a palette-placed newborn exactly once, when its naming flow closes (same-frame swaps included). Only pins whose naming started while a selection was armed are claimed.
 
 ### `Map/AtlasDrawerPanel.cs`
 
@@ -828,6 +836,7 @@ The project compiles `Domain/**/*.cs` directly, so pure tests do not require Val
 | `TerrainIntentTests.cs` | DEF-v1.0-005: exclusion blocks passive Dirt sources, Pathen clears, codec round-trip, bounds |
 | `PinStoreTests.cs` | identity, revisions, delete/restore/upsert |
 | `PinRenderingLedgerTests.cs` | DEF-v1.0-004: rendering lifecycle — adopt/edit/apply keeps one rendering, restart reconcile, claim strictness |
+| `PaletteBirthTrackerTests.cs` | #96: managed-from-birth claims — armed/unarmed, swaps, disarm, single claim |
 | `PinCodecTests.cs` | pin serialization/recovery |
 | `PinOperationsTests.cs` | batch, duplicate, merge, undo/redo |
 | `PinWorkbenchControllerTests.cs` | edit-buffer/controller behavior |
@@ -841,7 +850,7 @@ The project compiles `Domain/**/*.cs` directly, so pure tests do not require Val
 | `MigrationMatrixTests.cs` | every shipped sidecar format back-parses into the current readers |
 | `SecurityHardeningTests.cs` | SEC-1.0-001: decompression-bomb rejection, revision/float/string bounds, deletion-name previews, display sanitization |
 
-At the 1.0.0 RC3 the suite is 280 tests, all green, run without any game assemblies.
+At the 1.0.0 RC4 the suite is 287 tests, all green, run without any game assemblies.
 
 Game adapters still need real Valheim tests; unit tests cannot prove Harmony targets, private field names, overlay alignment or Unity UI behavior.
 
