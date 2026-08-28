@@ -150,6 +150,33 @@ internal static class MinimapReflection
         }
     }
 
+    private static readonly MethodInfo? GetSpriteMethod =
+        AccessTools.Method(typeof(Minimap), "GetSprite", new[] { typeof(Minimap.PinType) });
+
+    private static readonly FastInvokeHandler? GetSpriteInvoker =
+        GetSpriteMethod is null ? null : MethodInvoker.GetHandler(GetSpriteMethod);
+
+    /// <summary>The sprite the game renders for a vanilla pin type, for
+    /// icon-picker previews. Fails soft (no preview) when unavailable.</summary>
+    public static bool TryGetPinSprite(int vanillaType, out Sprite? sprite)
+    {
+        sprite = null;
+        if (GetSpriteInvoker is null || Minimap.instance == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            sprite = GetSpriteInvoker(Minimap.instance, new object[] { (Minimap.PinType)vanillaType }) as Sprite;
+            return sprite != null;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static AccessTools.FieldRef<Minimap, float>? BuildLargeZoomRef()
     {
         try

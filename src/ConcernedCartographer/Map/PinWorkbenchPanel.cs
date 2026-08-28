@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using BepInEx.Logging;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedCartographer.Atlas;
@@ -12,6 +14,13 @@ namespace TheConcernedCat.ConcernedCartographer.Map;
 /// PinWorkbenchController. Three modes: edit (managed pin), adopt prompt
 /// (unadopted vanilla pin), and read-only (foreign/system pin). Fields are
 /// laid out as a linear top-to-bottom chain for controller navigation.
+///
+/// Visual properties use pickers instead of developer free-text (#94):
+/// icon = sprite preview + dropdown list over the stable IconRegistry IDs
+/// (unknown legacy IDs preserved and offered as "Keep custom"), category =
+/// free text + suggestion dropdown, size = stepper. Pin color is not map-
+/// rendered in v1, so it lives at the bottom labeled metadata-only.
+///
 /// Fail-closed: any UI exception hides the panel and leaves the console
 /// workbench as the fallback; store data can never be harmed because every
 /// write goes through the controller's validated single-batch Apply.</summary>
@@ -30,10 +39,15 @@ internal sealed class PinWorkbenchPanel
     private const float LabelCenterX = (-PanelWidth / 2f) + EdgePadding + (LabelColumnWidth / 2f);
     private const float FieldCenterX = LabelCenterX + (LabelColumnWidth / 2f) + ColumnGap + (FieldColumnWidth / 2f);
     private const float ContentHalfWidth = (PanelWidth / 2f) - EdgePadding;
+    private const float FieldLeftEdge = FieldCenterX - (FieldColumnWidth / 2f);
 
     // The scaled panel re-docks this far from the screen's right edge so
     // it stays fully on screen at every configured UiScale.
     private const float ScreenEdgeMargin = 30f;
+
+    private const float SizeStep = 0.25f;
+    private const float SizeMin = 0.5f;
+    private const float SizeMax = 2f;
 
     private readonly ManualLogSource _log;
     private readonly PinWorkbenchController _controller = new();
@@ -48,10 +62,8 @@ internal sealed class PinWorkbenchPanel
     private Text? _title;
     private Text? _info;
     private InputField? _name;
-    private InputField? _icon;
     private InputField? _category;
     private InputField? _color;
-    private InputField? _size;
     private InputField? _tags;
     private InputField? _notes;
     private Toggle? _checked;
@@ -59,6 +71,25 @@ internal sealed class PinWorkbenchPanel
     private Text? _scopeLabel;
     private GameObject? _editRows;
     private GameObject? _adoptButton;
+
+    private Image? _iconPreview;
+    private Text? _iconButtonLabel;
+    private GameObject? _iconDropdown;
+    private GameObject? _categoryDropdown;
+    private Text? _sizeValueLabel;
+    private float _iconRowY;
+    private float _categoryRowY;
+
+    /// <summary>The stable registry ID (or preserved legacy/custom ID) the
+    /// picker currently shows; written back verbatim on Apply.</summary>
+    private string _selectedIconId = IconRegistry.DefaultIconId;
+
+    /// <summary>Set when the opened pin carries an ID the registry does not
+    /// know: the dropdown then offers "Keep custom" so the identity is
+    /// never lost by merely opening the editor.</summary>
+    private string? _customIconId;
+
+    private float _sizeValue = 1f;
 
     private PinOperations? _operations;
     private Action? _onApplied;
@@ -249,24 +280,34 @@ internal sealed class PinWorkbenchPanel
     private void LoadBufferIntoWidgets()
     {
         _name!.text = _controller.NameField;
-        _icon!.text = _controller.IconField;
         _category!.text = _controller.CategoryField;
         _color!.text = _controller.ColorField;
-        _size!.text = _controller.SizeField;
         _tags!.text = _controller.TagsField;
         _notes!.text = _controller.NotesField;
         _checked!.isOn = _controller.CheckedField;
         _statusLabel!.text = AtlasStrings.Get("workbench.status") + ": " + _controller.StatusField;
         _scopeLabel!.text = AtlasStrings.Get("workbench.scope") + ": " + _controller.ScopeField;
+
+        _selectedIconId = _controller.IconField.Trim().Length == 0
+            ? IconRegistry.DefaultIconId
+            : _controller.IconField.Trim();
+        _customIconId = IconRegistry.TryResolve(_selectedIconId, out _) ? null : _selectedIconId;
+        UpdateIconWidgets();
+
+        _sizeValue = float.TryParse(
+            _controller.SizeField.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out float parsedSize)
+            ? Mathf.Clamp(parsedSize, SizeMin, SizeMax)
+            : 1f;
+        UpdateSizeLabel();
     }
 
     private void ReadWidgetsIntoBuffer()
     {
         _controller.NameField = _name!.text;
-        _controller.IconField = _icon!.text;
+        _controller.IconField = _selectedIconId;
         _controller.CategoryField = _category!.text;
         _controller.ColorField = _color!.text;
-        _controller.SizeField = _size!.text;
+        _controller.SizeField = _sizeValue.ToString("0.##", CultureInfo.InvariantCulture);
         _controller.TagsField = _tags!.text;
         _controller.NotesField = _notes!.text;
         _controller.CheckedField = _checked!.isOn;
@@ -275,6 +316,7 @@ internal sealed class PinWorkbenchPanel
 
     private void SetMode(bool edit, bool adopt)
     {
+        CloseDropdowns();
         _editRows!.SetActive(edit);
         _adoptButton!.SetActive(adopt);
     }
@@ -291,6 +333,7 @@ internal sealed class PinWorkbenchPanel
             return;
         }
 
+        CloseDropdowns();
         if (visible && !Mathf.Approximately(_appliedScale, UiScale))
         {
             // A scale change re-docks the panel at the default position so
@@ -384,10 +427,9 @@ internal sealed class PinWorkbenchPanel
 
         float y = -95f;
         _name = CreateRow(gui, font, labelColor, AtlasStrings.Get("workbench.name"), ref y);
-        _icon = CreateRow(gui, font, labelColor, AtlasStrings.Get("workbench.icon"), ref y);
-        _category = CreateRow(gui, font, labelColor, AtlasStrings.Get("workbench.category"), ref y);
-        _color = CreateRow(gui, font, labelColor, AtlasStrings.Get("workbench.color"), ref y);
-        _size = CreateRow(gui, font, labelColor, AtlasStrings.Get("workbench.size"), ref y);
+        BuildIconRow(gui, font, labelColor, ref y);
+        BuildCategoryRow(gui, font, labelColor, ref y);
+        BuildSizeRow(gui, font, labelColor, ref y);
         _tags = CreateRow(gui, font, labelColor, AtlasStrings.Get("workbench.tags"), ref y);
 
         CreateLabel(gui, font, labelColor, AtlasStrings.Get("workbench.notes"), new Vector2(LabelCenterX, y));
@@ -426,9 +468,20 @@ internal sealed class PinWorkbenchPanel
         var toggleRect = (RectTransform)toggle.transform;
         toggleRect.anchorMin = new Vector2(0.5f, 1f);
         toggleRect.anchorMax = new Vector2(0.5f, 1f);
-        toggleRect.anchoredPosition = new Vector2(FieldCenterX - (FieldColumnWidth / 2f) + 14f, y);
+        toggleRect.anchoredPosition = new Vector2(FieldLeftEdge + 14f, y);
         _checked = toggle.GetComponentInChildren<Toggle>();
         y -= 40f;
+
+        // Metadata-only footer: pin color is stored/synced but NOT rendered
+        // on the map in v1, so it must not masquerade as a visual control
+        // (#94). Raw hex entry is the advanced fallback by design.
+        CreateLabel(gui, font, labelColor, AtlasStrings.Get("workbench.colorMeta"), new Vector2(LabelCenterX, y));
+        GameObject colorField = gui.CreateInputField(
+            _editRows.transform,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(FieldCenterX, y),
+            InputField.ContentType.Standard, AtlasStrings.Get("workbench.colorMeta"), 14, FieldColumnWidth, 28f);
+        _color = colorField.GetComponent<InputField>();
+        y -= 36f;
 
         const float actionButtonWidth = 110f;
         GameObject apply = gui.CreateButton(
@@ -454,6 +507,277 @@ internal sealed class PinWorkbenchPanel
         cancel.GetComponent<Button>().onClick.AddListener(Close);
 
         _panel.SetActive(false);
+    }
+
+    private void BuildIconRow(GUIManager gui, Font font, Color labelColor, ref float y)
+    {
+        CreateLabel(gui, font, labelColor, AtlasStrings.Get("workbench.icon"), new Vector2(LabelCenterX, y));
+
+        const float previewSize = 26f;
+        var previewHolder = new GameObject("CCIconPreview", typeof(RectTransform), typeof(Image));
+        previewHolder.transform.SetParent(_editRows!.transform, worldPositionStays: false);
+        var previewRect = (RectTransform)previewHolder.transform;
+        previewRect.anchorMin = new Vector2(0.5f, 1f);
+        previewRect.anchorMax = new Vector2(0.5f, 1f);
+        previewRect.anchoredPosition = new Vector2(FieldLeftEdge + (previewSize / 2f), y);
+        previewRect.sizeDelta = new Vector2(previewSize, previewSize);
+        _iconPreview = previewHolder.GetComponent<Image>();
+        _iconPreview.preserveAspect = true;
+        _iconPreview.enabled = false;
+
+        float buttonWidth = FieldColumnWidth - previewSize - 6f;
+        GameObject iconButton = gui.CreateButton(
+            "", _editRows.transform,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(FieldLeftEdge + previewSize + 6f + (buttonWidth / 2f), y), buttonWidth, 28f);
+        _iconButtonLabel = iconButton.GetComponentInChildren<Text>();
+        iconButton.GetComponent<Button>().onClick.AddListener(ToggleIconDropdown);
+        _iconRowY = y;
+        y -= 36f;
+    }
+
+    private void BuildCategoryRow(GUIManager gui, Font font, Color labelColor, ref float y)
+    {
+        CreateLabel(gui, font, labelColor, AtlasStrings.Get("workbench.category"), new Vector2(LabelCenterX, y));
+
+        const float suggestWidth = 32f;
+        float fieldWidth = FieldColumnWidth - suggestWidth - 4f;
+        GameObject categoryField = gui.CreateInputField(
+            _editRows!.transform,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(FieldLeftEdge + (fieldWidth / 2f), y),
+            InputField.ContentType.Standard, AtlasStrings.Get("workbench.category"), 14, fieldWidth, 28f);
+        _category = categoryField.GetComponent<InputField>();
+
+        GameObject suggestButton = gui.CreateButton(
+            "...", _editRows.transform,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(FieldLeftEdge + fieldWidth + 4f + (suggestWidth / 2f), y), suggestWidth, 28f);
+        suggestButton.GetComponent<Button>().onClick.AddListener(ToggleCategoryDropdown);
+        _categoryRowY = y;
+        y -= 36f;
+    }
+
+    private void BuildSizeRow(GUIManager gui, Font font, Color labelColor, ref float y)
+    {
+        CreateLabel(gui, font, labelColor, AtlasStrings.Get("workbench.sizeMeta"), new Vector2(LabelCenterX, y));
+
+        float x = FieldLeftEdge;
+        GameObject minus = gui.CreateButton(
+            "-", _editRows!.transform,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(x + 14f, y), 28f, 28f);
+        minus.GetComponent<Button>().onClick.AddListener(() => NudgeSize(-SizeStep));
+        x += 32f;
+
+        _sizeValueLabel = gui.CreateText(
+            "", _editRows.transform,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(x + 28f, y),
+            font, 14, Color.white, outline: false, Color.black, 56f, 28f, addContentSizeFitter: false)
+            .GetComponent<Text>();
+        _sizeValueLabel.alignment = TextAnchor.MiddleCenter;
+        x += 60f;
+
+        GameObject plus = gui.CreateButton(
+            "+", _editRows.transform,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(x + 14f, y), 28f, 28f);
+        plus.GetComponent<Button>().onClick.AddListener(() => NudgeSize(SizeStep));
+        x += 40f;
+
+        float resetWidth = FieldColumnWidth - (x - FieldLeftEdge);
+        GameObject reset = gui.CreateButton(
+            AtlasStrings.Get("workbench.reset"), _editRows.transform,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(x + (resetWidth / 2f), y), resetWidth, 28f);
+        reset.GetComponent<Button>().onClick.AddListener(() =>
+        {
+            _sizeValue = 1f;
+            UpdateSizeLabel();
+        });
+        y -= 36f;
+    }
+
+    private void NudgeSize(float delta)
+    {
+        _sizeValue = Mathf.Clamp(_sizeValue + delta, SizeMin, SizeMax);
+        UpdateSizeLabel();
+    }
+
+    private void UpdateSizeLabel()
+    {
+        if (_sizeValueLabel != null)
+        {
+            _sizeValueLabel.text = "×" + _sizeValue.ToString("0.##", CultureInfo.InvariantCulture);
+        }
+    }
+
+    private void UpdateIconWidgets()
+    {
+        bool known = IconRegistry.TryResolve(_selectedIconId, out IconRegistry.IconDefinition definition);
+        if (_iconButtonLabel != null)
+        {
+            _iconButtonLabel.text = known
+                ? definition.DisplayName
+                : AtlasStrings.Format("workbench.customIcon", Truncate(_selectedIconId, 16));
+        }
+
+        if (_iconPreview != null)
+        {
+            if (MinimapReflection.TryGetPinSprite(IconRegistry.ResolveVanillaType(_selectedIconId), out Sprite? sprite))
+            {
+                _iconPreview.sprite = sprite;
+                _iconPreview.enabled = true;
+            }
+            else
+            {
+                _iconPreview.enabled = false;
+            }
+        }
+    }
+
+    private void ToggleIconDropdown()
+    {
+        try
+        {
+            if (_iconDropdown != null && _iconDropdown.activeSelf)
+            {
+                _iconDropdown.SetActive(false);
+                return;
+            }
+
+            CloseDropdowns();
+            if (_iconDropdown != null)
+            {
+                UnityEngine.Object.Destroy(_iconDropdown);
+                _iconDropdown = null;
+            }
+
+            var entries = new List<(string Label, Action OnPick)>();
+            if (_customIconId is string customId)
+            {
+                entries.Add((
+                    AtlasStrings.Format("workbench.keepCustomIcon", Truncate(customId, 14)),
+                    () =>
+                    {
+                        _selectedIconId = customId;
+                        UpdateIconWidgets();
+                    }));
+            }
+
+            foreach (IconRegistry.IconDefinition definition in IconRegistry.All)
+            {
+                string id = definition.Id;
+                entries.Add((definition.DisplayName, () =>
+                {
+                    _selectedIconId = id;
+                    UpdateIconWidgets();
+                }));
+            }
+
+            _iconDropdown = BuildDropdown(new Vector2(FieldCenterX, _iconRowY - 16f), 230f, entries);
+            _iconDropdown.SetActive(true);
+        }
+        catch (Exception exception)
+        {
+            Fail(exception);
+        }
+    }
+
+    private void ToggleCategoryDropdown()
+    {
+        try
+        {
+            if (_categoryDropdown != null && _categoryDropdown.activeSelf)
+            {
+                _categoryDropdown.SetActive(false);
+                return;
+            }
+
+            CloseDropdowns();
+            if (_categoryDropdown != null)
+            {
+                UnityEngine.Object.Destroy(_categoryDropdown);
+                _categoryDropdown = null;
+            }
+
+            // Suggestions only: picking one fills the field, which stays
+            // free text so custom categories are always possible.
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var entries = new List<(string Label, Action OnPick)>();
+            string current = _category != null ? _category.text.Trim() : "";
+            if (current.Length > 0)
+            {
+                seen.Add(current);
+            }
+
+            foreach (IconRegistry.IconDefinition definition in IconRegistry.All)
+            {
+                string category = definition.DefaultCategory;
+                if (category.Length == 0 || !seen.Add(category))
+                {
+                    continue;
+                }
+
+                entries.Add((category, () =>
+                {
+                    if (_category != null)
+                    {
+                        _category.text = category;
+                    }
+                }));
+            }
+
+            _categoryDropdown = BuildDropdown(new Vector2(FieldCenterX, _categoryRowY - 16f), 230f, entries);
+            _categoryDropdown.SetActive(true);
+        }
+        catch (Exception exception)
+        {
+            Fail(exception);
+        }
+    }
+
+    private GameObject BuildDropdown(Vector2 anchoredPosition, float width, List<(string Label, Action OnPick)> entries)
+    {
+        GUIManager gui = GUIManager.Instance;
+        const float rowHeight = 28f;
+        float height = (entries.Count * rowHeight) + 12f;
+
+        var dropdown = new GameObject("CCDropdown", typeof(RectTransform), typeof(Image));
+        dropdown.transform.SetParent(_panel!.transform, worldPositionStays: false);
+        var rect = (RectTransform)dropdown.transform;
+        rect.anchorMin = new Vector2(0.5f, 1f);
+        rect.anchorMax = new Vector2(0.5f, 1f);
+        rect.anchoredPosition = anchoredPosition + new Vector2(0f, -height / 2f);
+        rect.sizeDelta = new Vector2(width, height);
+        dropdown.GetComponent<Image>().color = new Color(0.13f, 0.1f, 0.07f, 0.98f);
+
+        for (int index = 0; index < entries.Count; index++)
+        {
+            (string label, Action onPick) = entries[index];
+            GameObject button = gui.CreateButton(
+                label, dropdown.transform,
+                new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                new Vector2(0f, -6f - (rowHeight / 2f) - (index * rowHeight)), width - 12f, 26f);
+            GameObject captured = dropdown;
+            button.GetComponent<Button>().onClick.AddListener(() =>
+            {
+                onPick();
+                captured.SetActive(false);
+            });
+        }
+
+        return dropdown;
+    }
+
+    private void CloseDropdowns()
+    {
+        if (_iconDropdown != null)
+        {
+            _iconDropdown.SetActive(false);
+        }
+
+        if (_categoryDropdown != null)
+        {
+            _categoryDropdown.SetActive(false);
+        }
     }
 
     private InputField? CreateRow(GUIManager gui, Font font, Color labelColor, string label, ref float y)
