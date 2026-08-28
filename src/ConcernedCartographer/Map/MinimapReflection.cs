@@ -150,6 +150,94 @@ internal static class MinimapReflection
         }
     }
 
+    private static readonly AccessTools.FieldRef<Minimap, Minimap.PinData>? NamePinField =
+        BuildFieldRef<Minimap.PinData>("m_namePin");
+
+    private static readonly MethodInfo? SelectIconMethod =
+        AccessTools.Method(typeof(Minimap), "SelectIcon", new[] { typeof(Minimap.PinType) });
+
+    private static readonly FastInvokeHandler? SelectIconInvoker =
+        SelectIconMethod is null ? null : MethodInvoker.GetHandler(SelectIconMethod);
+
+    /// <summary>The pin currently going through the vanilla naming flow
+    /// (double-click → name input), or null when the input is closed. The
+    /// Enhanced Pin Palette watches this to claim palette-born pins.</summary>
+    public static bool TryGetNamePin(out Minimap.PinData? namePin)
+    {
+        namePin = null;
+        if (NamePinField is null || Minimap.instance == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            namePin = NamePinField(Minimap.instance);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Selects the vanilla placement icon through the game's own
+    /// SelectIcon, so vanilla double-click placement uses the palette's
+    /// chosen type and the (possibly hidden) vanilla highlights stay
+    /// consistent.</summary>
+    public static bool TrySelectIcon(int vanillaType)
+    {
+        if (SelectIconInvoker is null || Minimap.instance == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            SelectIconInvoker(Minimap.instance, new object[] { (Minimap.PinType)vanillaType });
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>The five vanilla player-placeable icon buttons on the large
+    /// map (the parents of the public m_selectedIcon0..4 highlight images).
+    /// Death/boss filter buttons are deliberately NOT included — only the
+    /// pin-creation selectors may be hidden by the enhanced palette.</summary>
+    public static System.Collections.Generic.List<GameObject> GetPlaceableIconButtons()
+    {
+        var buttons = new System.Collections.Generic.List<GameObject>();
+        Minimap minimap = Minimap.instance;
+        if (minimap == null)
+        {
+            return buttons;
+        }
+
+        try
+        {
+            foreach (UnityEngine.UI.Image image in new[]
+            {
+                minimap.m_selectedIcon0, minimap.m_selectedIcon1, minimap.m_selectedIcon2,
+                minimap.m_selectedIcon3, minimap.m_selectedIcon4,
+            })
+            {
+                if (image != null && image.transform.parent != null)
+                {
+                    buttons.Add(image.transform.parent.gameObject);
+                }
+            }
+        }
+        catch
+        {
+            // Fail soft: an unexpected hierarchy simply leaves vanilla visible.
+        }
+
+        return buttons;
+    }
+
     private static readonly MethodInfo? GetSpriteMethod =
         AccessTools.Method(typeof(Minimap), "GetSprite", new[] { typeof(Minimap.PinType) });
 

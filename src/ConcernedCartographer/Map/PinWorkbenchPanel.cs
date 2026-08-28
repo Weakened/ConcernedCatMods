@@ -76,9 +76,12 @@ internal sealed class PinWorkbenchPanel
     private Text? _iconButtonLabel;
     private GameObject? _iconDropdown;
     private GameObject? _categoryDropdown;
+    private GameObject? _statusDropdown;
+    private GameObject? _scopeDropdown;
     private Text? _sizeValueLabel;
     private float _iconRowY;
     private float _categoryRowY;
+    private float _statusRowY;
 
     /// <summary>The stable registry ID (or preserved legacy/custom ID) the
     /// picker currently shows; written back verbatim on Apply.</summary>
@@ -441,26 +444,23 @@ internal sealed class PinWorkbenchPanel
         _notes.lineType = InputField.LineType.MultiLineNewline;
         y -= 92f;
 
+        // Status and Scope are dropdown selects (#96); the buttons show the
+        // current value and open a value list.
         const float cycleButtonWidth = 190f;
+        _statusRowY = y;
         GameObject statusButton = gui.CreateButton(
             "Status", _editRows.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
             new Vector2(-ContentHalfWidth + (cycleButtonWidth / 2f), y), cycleButtonWidth, 30f);
         _statusLabel = statusButton.GetComponentInChildren<Text>();
-        statusButton.GetComponent<Button>().onClick.AddListener(() =>
-        {
-            _statusLabel!.text = AtlasStrings.Get("workbench.status") + ": " + _controller.CycleStatus();
-        });
+        statusButton.GetComponent<Button>().onClick.AddListener(ToggleStatusDropdown);
 
         GameObject scopeButton = gui.CreateButton(
             "Scope", _editRows.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
             new Vector2(ContentHalfWidth - (cycleButtonWidth / 2f), y), cycleButtonWidth, 30f);
         _scopeLabel = scopeButton.GetComponentInChildren<Text>();
-        scopeButton.GetComponent<Button>().onClick.AddListener(() =>
-        {
-            _scopeLabel!.text = AtlasStrings.Get("workbench.scope") + ": " + _controller.CycleScope();
-        });
+        scopeButton.GetComponent<Button>().onClick.AddListener(ToggleScopeDropdown);
         y -= 38f;
 
         CreateLabel(gui, font, labelColor, AtlasStrings.Get("workbench.checked"), new Vector2(LabelCenterX, y));
@@ -767,6 +767,82 @@ internal sealed class PinWorkbenchPanel
         return dropdown;
     }
 
+    private void ToggleStatusDropdown()
+    {
+        try
+        {
+            if (_statusDropdown != null && _statusDropdown.activeSelf)
+            {
+                _statusDropdown.SetActive(false);
+                return;
+            }
+
+            CloseDropdowns();
+            if (_statusDropdown != null)
+            {
+                UnityEngine.Object.Destroy(_statusDropdown);
+                _statusDropdown = null;
+            }
+
+            var entries = new List<(string Label, Action OnPick)>();
+            foreach (AtlasPinStatus status in Enum.GetValues(typeof(AtlasPinStatus)))
+            {
+                AtlasPinStatus captured = status;
+                entries.Add((status.ToString(), () =>
+                {
+                    _controller.StatusField = captured;
+                    _statusLabel!.text = AtlasStrings.Get("workbench.status") + ": " + captured;
+                }));
+            }
+
+            _statusDropdown = BuildDropdown(
+                new Vector2(-ContentHalfWidth + 95f, _statusRowY - 18f), 190f, entries);
+            _statusDropdown.SetActive(true);
+        }
+        catch (Exception exception)
+        {
+            Fail(exception);
+        }
+    }
+
+    private void ToggleScopeDropdown()
+    {
+        try
+        {
+            if (_scopeDropdown != null && _scopeDropdown.activeSelf)
+            {
+                _scopeDropdown.SetActive(false);
+                return;
+            }
+
+            CloseDropdowns();
+            if (_scopeDropdown != null)
+            {
+                UnityEngine.Object.Destroy(_scopeDropdown);
+                _scopeDropdown = null;
+            }
+
+            var entries = new List<(string Label, Action OnPick)>();
+            foreach (AtlasScope scope in Enum.GetValues(typeof(AtlasScope)))
+            {
+                AtlasScope captured = scope;
+                entries.Add((scope.ToString(), () =>
+                {
+                    _controller.ScopeField = captured;
+                    _scopeLabel!.text = AtlasStrings.Get("workbench.scope") + ": " + captured;
+                }));
+            }
+
+            _scopeDropdown = BuildDropdown(
+                new Vector2(ContentHalfWidth - 95f, _statusRowY - 18f), 190f, entries);
+            _scopeDropdown.SetActive(true);
+        }
+        catch (Exception exception)
+        {
+            Fail(exception);
+        }
+    }
+
     private void CloseDropdowns()
     {
         if (_iconDropdown != null)
@@ -777,6 +853,16 @@ internal sealed class PinWorkbenchPanel
         if (_categoryDropdown != null)
         {
             _categoryDropdown.SetActive(false);
+        }
+
+        if (_statusDropdown != null)
+        {
+            _statusDropdown.SetActive(false);
+        }
+
+        if (_scopeDropdown != null)
+        {
+            _scopeDropdown.SetActive(false);
         }
     }
 

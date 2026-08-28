@@ -43,7 +43,9 @@ internal sealed class CartographerSettings
         ConfigEntry<float> uiScale,
         ConfigEntry<bool> highContrast,
         ConfigEntry<string> workbenchGamepadButton,
-        ConfigEntry<string> drawerGamepadButton)
+        ConfigEntry<string> drawerGamepadButton,
+        ConfigEntry<bool> enhancedPinPalette,
+        ConfigEntry<bool> showVanillaPinPalette)
     {
         Enabled = enabled;
         CaptureConstructionActions = captureConstructionActions;
@@ -83,6 +85,8 @@ internal sealed class CartographerSettings
         HighContrast = highContrast;
         WorkbenchGamepadButton = workbenchGamepadButton;
         DrawerGamepadButton = drawerGamepadButton;
+        EnhancedPinPalette = enhancedPinPalette;
+        ShowVanillaPinPalette = showVanillaPinPalette;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -123,6 +127,8 @@ internal sealed class CartographerSettings
     public ConfigEntry<bool> HighContrast { get; }
     public ConfigEntry<string> WorkbenchGamepadButton { get; }
     public ConfigEntry<string> DrawerGamepadButton { get; }
+    public ConfigEntry<bool> EnhancedPinPalette { get; }
+    public ConfigEntry<bool> ShowVanillaPinPalette { get; }
 
     public static CartographerSettings Bind(ConfigFile config)
     {
@@ -209,6 +215,10 @@ internal sealed class CartographerSettings
             config.Bind("Accessibility", "WorkbenchGamepadButton", "",
                 "ZInput button name that opens the Pin Workbench (e.g. JoyLStick). Empty disables; conflicts are avoided by explicit opt-in."),
             config.Bind("Accessibility", "DrawerGamepadButton", "",
-                "ZInput button name that toggles the Atlas Drawer. Empty disables."));
+                "ZInput button name that toggles the Atlas Drawer. Empty disables."),
+            config.Bind("Pins", "EnhancedPinPalette", true,
+                "Show the Concerned Cartographer marker palette on the large map. Markers created through it are managed from birth (no upgrade step)."),
+            config.Bind("Pins", "ShowVanillaPinPalette", false,
+                "Keep Valheim's own five pin-icon buttons visible alongside (or instead of) the enhanced palette. Automatically treated as true when a known conflicting pin manager is installed."));
     }
 }

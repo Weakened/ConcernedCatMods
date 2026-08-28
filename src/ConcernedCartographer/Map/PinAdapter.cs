@@ -336,6 +336,14 @@ internal sealed class PinAdapter
         return _ledger.TryGetId(pin, out id);
     }
 
+    /// <summary>True while the rendering still exists on the map. Guards
+    /// palette-birth adoption against a pin the player removed during its
+    /// own naming flow.</summary>
+    public bool ContainsPin(Minimap.PinData pin)
+    {
+        return TryGetPins(out List<Minimap.PinData> pins) && pins.Contains(pin);
+    }
+
     /// <summary>The nearest map pin to a world position with its class, for
     /// selection and status displays. Foreign pins are reported but marked
     /// read-only.</summary>
