@@ -7,28 +7,32 @@ The single remaining gate is the human smoke test
 ## 1–5. Release candidate identity
 
 - **Version:** 1.0.0 (unchanged — 1.0.0 has never been publicly tagged or published)
-- **RC commit:** `7881cbcd93630c3d1eb17577f6796da9fa4b3262` (main; the
-  **RC5 / opt-in crash-reporting pass, #97** — consent-gated,
-  allowlist-only crash reporting behind ICrashReporter with a
-  Sentry-envelope backend (no SDK bundled; DSN ships EMPTY so the
-  pipeline is inert until the owner embeds it per CRASH_REPORTING.md),
+- **RC commit:** `17b0524350b97caa521d0b44ff8b19c0cbc91c14` (main; **RC6
+  — the RC5 crash-reporting pass (#97) plus the owner-provided LIVE
+  Sentry ingestion DSN embedded in `CrashReportingConfig`** (ingestion
+  pre-verified with a direct envelope POST → HTTP 200; consent still
+  gates every send; the SDK onboarding snippet's NuGet package, Debug
+  mode, and AutoSessionTracking were deliberately not adopted). RC5
+  content: consent-gated, allowlist-only crash reporting behind
+  ICrashReporter with a Sentry-envelope backend (no SDK bundled),
   automated forbidden-field redaction tests over the exact outgoing
   payload, one-time consent dialog + Atlas → Privacy surface,
   once-per-subsystem failure notices, PRIVACY.md, and canonical support
   routing (support@theconcernedcat.com) — on top of the RC4 v1 map UX
-  pass (#96) and the RC3 fixes (#92–#95, #90). **Supersedes RC4
-  `35f20e1a` (ZIP `8B4B41AD…`) and RC3 `86050cd2` (ZIP `710183B3…`),
-  both superseded before human testing; RC `7ed20fef` (ZIP `B47E7C9D…`,
-  FAILED the second human smoke pass); and RC `9eb65291`
-  (ZIP `9F1F4128…`). Do not test or upload those ZIPs.** Already-passed
-  evidence that remains valid: startup environment (Valheim 0.221.12 /
-  Unity 6000.0.61f1 / BepInEx 5.4.23.3 / Jötunn 2.29.2.0, clean 1.0.0
-  banner, no CC errors), the adoption input-trap fix (DEF-v1.0-001),
-  the workbench layout (DEF-v1.0-003), and overlay alignment
-  (DEF-v1.0-002, closed as PASS on logged residuals ≤ 1 texel).)
+  pass (#96) and the RC3 fixes (#92–#95, #90). **Supersedes RC5
+  `7881cbcd` (ZIP `1849C62E…`), RC4 `35f20e1a` (ZIP `8B4B41AD…`), and
+  RC3 `86050cd2` (ZIP `710183B3…`), all superseded before human
+  testing; RC `7ed20fef` (ZIP `B47E7C9D…`, FAILED the second human
+  smoke pass); and RC `9eb65291` (ZIP `9F1F4128…`). Do not test or
+  upload those ZIPs.** Already-passed evidence that remains valid:
+  startup environment (Valheim 0.221.12 / Unity 6000.0.61f1 /
+  BepInEx 5.4.23.3 / Jötunn 2.29.2.0, clean 1.0.0 banner, no CC
+  errors), the adoption input-trap fix (DEF-v1.0-001), the workbench
+  layout (DEF-v1.0-003), and overlay alignment (DEF-v1.0-002, closed as
+  PASS on logged residuals ≤ 1 texel).)
 - **ZIP:** `artifacts\thunderstore\TheConcernedCat-ConcernedCartographer-1.0.0.zip`
-- **ZIP SHA-256:** `1849C62E250FBAF900137FB0284E5A097F20FCB45E9822EAD04438B99ABA1495` (237,080 bytes)
-- **Plugin DLL SHA-256:** `E1C981E84C1858076372192E2D1DA8D4C3DEA4B1044D2A9C7D3CDC54D6022136` (317,440 bytes; the DLL inside the ZIP is hash-identical to the Release build output; informational version `1.0.0+7881cbcd…` verified in the DLL)
+- **ZIP SHA-256:** `EE0F3A6EFB1A2C9C36A5ED0932BB89AB8F77420A058D9FADD670D4C678B88B5E` (237,299 bytes)
+- **Plugin DLL SHA-256:** `558E01DCFBEF44A479D8DF7C83B2433F35D92D28165B55FE4850DBEF9A472F97` (317,440 bytes; the DLL inside the ZIP is hash-identical to the Release build output; informational version `1.0.0+17b05243…` verified in the DLL)
 - **Assembly metadata (verified in the DLL):** Company "The Concerned Cat",
   Product "Concerned Cartographer", Copyright © 2026 Eren Cansunar,
   RepositoryUrl embedded, informational version `1.0.0+<RC commit>`.
@@ -69,8 +73,10 @@ profile-level consent (Unknown default; one-time dialog on first
 large-map open; permanent Atlas → Privacy surface; policy-version-gated
 re-consent), capture of the mod's own Error/Fatal events + CC unhandled
 exceptions only, once-per-subsystem notices, bounded queue / no retries /
-background sender, empty embedded DSN by policy (owner ship-time action
-in HUMAN_ATTENTION + CRASH_REPORTING.md), PRIVACY.md, SECURITY.md
+background sender, the live ingestion DSN embedded at the owner's
+direction with ingestion pre-verified (remaining owner actions —
+Sentry-side scrubbing settings and alerts — in HUMAN_ATTENTION +
+CRASH_REPORTING.md), PRIVACY.md, SECURITY.md
 telemetry clause updated, support@theconcernedcat.com routing everywhere
 (no personal email anywhere in mod/package/docs; crash reports never by
 email). **Publish/tag remains blocked until the redaction tests pass in
@@ -233,7 +239,7 @@ does the owner resume routes/world-isolation/multiplayer.
 ## 19. Remaining Git commands (run after the smoke test passes)
 
 ```powershell
-git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" 7881cbcd93630c3d1eb17577f6796da9fa4b3262
+git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" 17b0524350b97caa521d0b44ff8b19c0cbc91c14
 git push origin concerned-cartographer/v1.0.0
 gh release create concerned-cartographer/v1.0.0 artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-1.0.0.zip --title "Concerned Cartographer 1.0.0" --notes-file src/ConcernedCartographer/Package/CHANGELOG.md
 ```
