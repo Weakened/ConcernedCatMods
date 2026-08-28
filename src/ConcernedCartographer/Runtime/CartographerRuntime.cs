@@ -50,6 +50,8 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly SavedViewPersistence _savedViewPersistence;
     private SavedViewStore _savedViews = new();
     private readonly LargeMapControls _mapControls;
+    private readonly CrashConsentPanel _consentPanel;
+    private bool _consentPromptChecked;
     private readonly PinPalettePanel _palettePanel;
     private readonly PaletteBirthTracker<Minimap.PinData> _birthTracker = new();
     private float _hintElapsed;
@@ -97,6 +99,8 @@ internal sealed class CartographerRuntime : IDisposable
         _drawerPanel = new AtlasDrawerPanel(log);
         WireDrawer();
         _mapControls = new LargeMapControls(log) { AtlasButtonClicked = ToggleDrawer };
+        _consentPanel = new CrashConsentPanel(log, settings);
+        _drawerPanel.PrivacyClicked = () => _consentPanel.ShowSettings();
         _palettePanel = new PinPalettePanel(log);
         _palettePanel.IconChosen = definition =>
         {
@@ -169,6 +173,7 @@ internal sealed class CartographerRuntime : IDisposable
         // holding the global input block (DEF-v1.0-001), which must hold
         // even when the mod is disabled mid-session or the world tears down.
         _workbenchPanel.HandleFrame();
+        _consentPanel.HandleFrame();
 
         if (!_settings.Enabled.Value || !_mapReady || _surveyor is null)
         {
@@ -205,6 +210,19 @@ internal sealed class CartographerRuntime : IDisposable
             // actions, the enhanced pin palette, and the edit hint — on
             // top of (never instead of) the rebindable hotkeys.
             _mapControls.EnsureBuilt(_settings.DrawerHotkey.Value.ToString());
+
+            // One-time crash-reporting consent (#97): offered on the first
+            // large-map open only, never on the title screen, never again
+            // once answered (unless the policy version materially bumps).
+            if (!_consentPromptChecked)
+            {
+                _consentPromptChecked = true;
+                if (_consentPanel.NeedsFirstRunPrompt)
+                {
+                    _consentPanel.ShowFirstRun();
+                }
+            }
+
             bool paletteActive = _settings.EnhancedPinPalette.Value &&
                 !_compatibility.PinManagerPresent && !_palettePanel.HasFailed;
             if (paletteActive)

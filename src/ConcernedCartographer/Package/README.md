@@ -160,12 +160,25 @@ backed up to `.pre-reconcile.bak`.
 Found a problem? Open an issue at
 https://github.com/Weakened/ConcernedCatMods/issues and attach the file
 from `cc_atlas support` — it is sanitized by construction (versions,
-settings, and counts only; never positions, names, or notes).
+settings, and counts only; never positions, names, or notes). For
+security vulnerabilities, privacy questions, or logs you should not post
+publicly: **support@theconcernedcat.com**.
 
 **Privacy**: everything the mod records stays in local files under your
 BepInEx config folder. Nothing is uploaded anywhere. Sharing happens only
 between players on your server, only for entities you explicitly scope,
 and only after the receiver reviews and applies it.
+
+**Optional crash reporting (off by default)**: on your first large-map
+open the mod asks once whether to send anonymous crash reports when
+Concerned Cartographer itself hits an internal error. If you say yes, a
+report carries only mod/game versions, the affected subsystem, the
+exception type, and a sanitized stack trace — never your identity,
+world/character names, seeds, coordinates, pins/routes, server details,
+saves, or logs (automated tests enforce this, and the provider is
+configured not to store IPs). Change your answer anytime under
+**CC Atlas → Privacy**. Full policy: `PRIVACY.md` in the repository.
+No gameplay analytics, ever.
 
 **Security model**: incoming shares are size-capped (including bounded
 decompression, so oversized payloads are rejected before they can use
@@ -196,7 +209,12 @@ AI coding agents materially assisted implementation and review. Releases are man
 
 ## Support and source
 
-Use the GitHub issue tracker linked by the package website. Include the game version, mod version, profile mod list, reproduction steps, and `BepInEx/LogOutput.log` excerpt.
+Use the GitHub issue tracker linked by the package website for bugs and
+feature requests. Include the game version, mod version, profile mod
+list, reproduction steps, and a `BepInEx/LogOutput.log` excerpt. For
+security vulnerabilities, privacy questions, or anything that should not
+be public: **support@theconcernedcat.com** (human support only — crash
+reports are never sent by email).
 
 <!-- CC-PACKAGE-ATTRIBUTION -->
 ## Original project, source, and contributions

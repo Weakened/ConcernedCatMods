@@ -22,6 +22,12 @@ Each mod remains independently packaged. Do **not** combine all mods into one DL
 4. Run `pwsh ./scripts/build.ps1` and `pwsh ./scripts/deploy.ps1`.
 5. Launch the dedicated development profile with **Start modded** and inspect `BepInEx/LogOutput.log`.
 
+## Support
+
+- Bugs and feature requests: the [GitHub issue tracker](https://github.com/Weakened/ConcernedCatMods/issues).
+- Security vulnerabilities, privacy/crash-reporting questions, or anything that should not be public: **support@theconcernedcat.com**.
+- Privacy policy (including the optional, opt-in crash reporting): [`PRIVACY.md`](PRIVACY.md).
+
 ## Important boundaries
 
 - Never commit Valheim, Unity, BepInEx, or publicized game DLLs.

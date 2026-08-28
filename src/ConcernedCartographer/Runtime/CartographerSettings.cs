@@ -45,7 +45,10 @@ internal sealed class CartographerSettings
         ConfigEntry<string> workbenchGamepadButton,
         ConfigEntry<string> drawerGamepadButton,
         ConfigEntry<bool> enhancedPinPalette,
-        ConfigEntry<bool> showVanillaPinPalette)
+        ConfigEntry<bool> showVanillaPinPalette,
+        ConfigEntry<CrashConsentState> crashReportingConsent,
+        ConfigEntry<int> acceptedPrivacyPolicyVersion,
+        ConfigEntry<string> sentryDsn)
     {
         Enabled = enabled;
         CaptureConstructionActions = captureConstructionActions;
@@ -87,6 +90,9 @@ internal sealed class CartographerSettings
         DrawerGamepadButton = drawerGamepadButton;
         EnhancedPinPalette = enhancedPinPalette;
         ShowVanillaPinPalette = showVanillaPinPalette;
+        CrashReportingConsent = crashReportingConsent;
+        AcceptedPrivacyPolicyVersion = acceptedPrivacyPolicyVersion;
+        SentryDsn = sentryDsn;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -129,6 +135,9 @@ internal sealed class CartographerSettings
     public ConfigEntry<string> DrawerGamepadButton { get; }
     public ConfigEntry<bool> EnhancedPinPalette { get; }
     public ConfigEntry<bool> ShowVanillaPinPalette { get; }
+    public ConfigEntry<CrashConsentState> CrashReportingConsent { get; }
+    public ConfigEntry<int> AcceptedPrivacyPolicyVersion { get; }
+    public ConfigEntry<string> SentryDsn { get; }
 
     public static CartographerSettings Bind(ConfigFile config)
     {
@@ -219,6 +228,12 @@ internal sealed class CartographerSettings
             config.Bind("Pins", "EnhancedPinPalette", true,
                 "Show the Concerned Cartographer marker palette on the large map. Markers created through it are managed from birth (no upgrade step)."),
             config.Bind("Pins", "ShowVanillaPinPalette", false,
-                "Keep Valheim's own five pin-icon buttons visible alongside (or instead of) the enhanced palette. Automatically treated as true when a known conflicting pin manager is installed."));
+                "Keep Valheim's own five pin-icon buttons visible alongside (or instead of) the enhanced palette. Automatically treated as true when a known conflicting pin manager is installed."),
+            config.Bind("Privacy", "SendCrashReports", CrashConsentState.Unknown,
+                "Send anonymous crash reports when Concerned Cartographer hits an internal error. Unknown = not asked yet (a one-time dialog appears on the first large-map open); nothing is ever sent while Unknown or Disabled. What is and is not collected: PRIVACY.md. No gameplay analytics, ever."),
+            config.Bind("Privacy", "AcceptedPrivacyPolicyVersion", 0,
+                "Internal: the crash-reporting policy version the player answered. Re-prompts only if the collected data categories materially change in a future release."),
+            config.Bind("Privacy", "SentryDsn", "",
+                "Advanced: override the embedded crash-report ingestion DSN (a public event-submission key). Empty uses the built-in value; if both are empty, crash reporting is fully inert. NEVER put a Sentry auth token here."));
     }
 }

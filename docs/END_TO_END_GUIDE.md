@@ -110,7 +110,7 @@ Extract `ConcernedCatMods-starter.zip` under a normal development folder, for ex
 git init
 git branch -M main
 git config user.name "Eren Cansunar"
-git config user.email "erencansunar@gmail.com"
+git config user.email "<your-git-commit-email>"
 git add .
 git commit -m "chore: bootstrap ConcernedCatMods monorepo"
 git remote add origin https://github.com/Weakened/ConcernedCatMods.git

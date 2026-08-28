@@ -24,6 +24,17 @@ Include in bug reports:
 - exact reproduction;
 - relevant log excerpt.
 
+## Where to send what
+
+- Ordinary bugs and feature requests: the GitHub issue tracker
+  (https://github.com/Weakened/ConcernedCatMods/issues) — first stop.
+  `cc_atlas support` produces a sanitized report safe to attach.
+- Security vulnerabilities, privacy/crash-reporting questions, or logs
+  and information that should not be posted publicly:
+  **support@theconcernedcat.com**.
+- Optional anonymous crash reporting (opt-in, `PRIVACY.md`) reaches the
+  maintainer automatically when enabled — never by email.
+
 ## Plugin does not load
 
 Check:

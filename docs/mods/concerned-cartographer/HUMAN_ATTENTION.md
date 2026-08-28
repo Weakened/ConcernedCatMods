@@ -63,3 +63,13 @@ repeated in PRE_RELEASE_SMOKE_TEST.md.
 - Risk / alternative: users may expect the color to show on the map immediately.
 - Must resolve before public release: No (documented limitation)
 - Status: Resolved 2026-08-27 — owner offered a quick look; guidance delivered (see conversation/dossier). Decision: rendering stays deferred to 1.1 so the hardened RC is not destabilized before the smoke test; metadata already round-trips, so shipping rendering later needs no migration.
+
+### 2026-08-28 — Crash reporting ships inert until the owner creates the Sentry project and embeds the DSN
+
+- Version / issue: v1.0 RC5 / #97
+- Question: opt-in crash reporting (consent UI, capture, sanitizer, redaction tests) is fully implemented, but only the owner can create the Sentry organization/project, configure the REQUIRED server-side scrubbing (Prevent Storing of IP Addresses ON, Data Scrubbers ON, sensitive fields), set the four alerts (new issue / regression / high-frequency / persistence-tag), and provide the project DSN.
+- Safe reversible default selected: `CrashReportingConfig.EmbeddedSentryDsn` ships EMPTY, so the whole pipeline is inert regardless of consent; the consent UI, settings, notices, and redaction tests are still fully exercisable. `Privacy/SentryDsn` allows owner-local testing without a source change.
+- Why work continued: everything except the provider account is automatable and testable; the DSN is a one-line ship-time insertion documented in CRASH_REPORTING.md.
+- Risk / alternative: until the DSN is embedded, opted-in players send nothing (silent no-op) — exactly the documented behavior.
+- Must resolve before public release: Yes, if the owner wants live crash reporting in 1.0.0 (otherwise it can ship inert and be enabled in a later release with the same consent already gathered).
+- Status: Open — owner action listed in CRASH_REPORTING.md.

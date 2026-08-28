@@ -13,11 +13,27 @@ public sealed class Plugin : BaseUnityPlugin
     public const string PluginVersion = "1.0.0";
 
     private CartographerRuntime? _runtime;
+    private CrashReportingHub? _crashHub;
 
     private void Awake()
     {
         CartographerSettings settings = CartographerSettings.Bind(Config);
         Persistence.LocalizationPersistence.Initialize(Logger);
+
+        // Crash reporting (#97) attaches before the runtime exists so even
+        // construction-time failures are captured; it is fully inert until
+        // the player consents AND a DSN is configured.
+        try
+        {
+            _crashHub = new CrashReportingHub(settings, BuildCrashContext());
+            _crashHub.Attach(Logger);
+        }
+        catch (System.Exception exception)
+        {
+            _crashHub = null;
+            Logger.LogWarning($"Crash reporting unavailable this session: {exception.Message}");
+        }
+
         _runtime = new CartographerRuntime(settings, Logger);
 
         MinimapManager.OnVanillaMapAvailable += HandleMapAvailable;
@@ -29,6 +45,76 @@ public sealed class Plugin : BaseUnityPlugin
         CommandManager.Instance.AddConsoleCommand(new SyncToolsCommand(_runtime));
         Logger.LogInfo($"{PluginName} {PluginVersion} loaded");
         LogEnvironment(settings);
+    }
+
+    private Reporting.CrashReportContext BuildCrashContext()
+    {
+        string informational = PluginVersion;
+        try
+        {
+            informational = System.Reflection.CustomAttributeExtensions
+                .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(Plugin).Assembly)
+                ?.InformationalVersion ?? PluginVersion;
+        }
+        catch
+        {
+            // The plain version is an acceptable release identity fallback.
+        }
+
+        string bepInExVersion = "unknown";
+        string jotunnVersion = "unknown";
+        try
+        {
+            bepInExVersion = typeof(BaseUnityPlugin).Assembly.GetName().Version?.ToString() ?? "unknown";
+            jotunnVersion = typeof(Jotunn.Main).Assembly.GetName().Version?.ToString() ?? "unknown";
+        }
+        catch
+        {
+            // Version labels are metadata only.
+        }
+
+        return new Reporting.CrashReportContext
+        {
+            Release = "ConcernedCartographer@" + informational,
+            ModVersion = PluginVersion,
+            ValheimVersion = ResolveGameVersion(),
+            UnityVersion = UnityEngine.Application.unityVersion,
+            BepInExVersion = bepInExVersion,
+            JotunnVersion = jotunnVersion,
+            RuntimeState = SampleRuntimeState,
+        };
+    }
+
+    private static Reporting.CrashReportRuntimeState SampleRuntimeState()
+    {
+        bool multiplayer = false;
+        bool noMap = false;
+        bool mapOpen = false;
+        try
+        {
+            multiplayer = ZNet.instance != null && ZNet.instance.GetPeers().Count > 0;
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            noMap = ZoneSystem.instance != null && ZoneSystem.instance.GetGlobalKey("nomap");
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            mapOpen = Minimap.IsOpen();
+        }
+        catch
+        {
+        }
+
+        return new Reporting.CrashReportRuntimeState(multiplayer, noMap, mapOpen);
     }
 
     private void LogEnvironment(CartographerSettings settings)
@@ -134,5 +220,10 @@ public sealed class Plugin : BaseUnityPlugin
         MinimapManager.OnVanillaMapAvailable -= HandleMapAvailable;
         _runtime?.Dispose();
         _runtime = null;
+
+        // Last, so runtime teardown failures are still captured; its own
+        // flush is bounded and its sender is a background thread.
+        _crashHub?.Dispose();
+        _crashHub = null;
     }
 }
