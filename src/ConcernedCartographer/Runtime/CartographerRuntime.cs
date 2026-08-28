@@ -50,7 +50,15 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly SavedViewPersistence _savedViewPersistence;
     private SavedViewStore _savedViews = new();
     private readonly LargeMapControls _mapControls;
+    private readonly PinPalettePanel _palettePanel;
+    private readonly PaletteBirthTracker<Minimap.PinData> _birthTracker = new();
     private float _hintElapsed;
+
+    // The context button sits away from the hovered pin, so the action
+    // stays alive briefly (and while the pointer is over the button) to
+    // survive the mouse travel from pin to button.
+    private const float ContextGraceSeconds = 1.5f;
+    private float _contextGrace;
     private readonly QuickPinCapture _quickPinCapture;
     private readonly SurveyEngine _surveyEngine = new();
     private readonly SurveyScanner _surveyScanner;
@@ -89,6 +97,16 @@ internal sealed class CartographerRuntime : IDisposable
         _drawerPanel = new AtlasDrawerPanel(log);
         WireDrawer();
         _mapControls = new LargeMapControls(log) { AtlasButtonClicked = ToggleDrawer };
+        _palettePanel = new PinPalettePanel(log);
+        _palettePanel.IconChosen = definition =>
+        {
+            // Vanilla placement does the rest: double-click creates the
+            // rendering with this type and opens the name input; the birth
+            // tracker claims the newborn when naming closes (#96).
+            MinimapReflection.TrySelectIcon(definition.VanillaType);
+            _birthTracker.Arm(definition.Id, definition.DefaultCategory);
+        };
+        _palettePanel.SelectionCleared = () => _birthTracker.Disarm();
         _quickPinCapture = new QuickPinCapture(settings, log);
         _surveyRulePersistence = new SurveyRulePersistence(log);
         _surveyEngine.Rules = _surveyRulePersistence.LoadOrCreate();
@@ -154,6 +172,14 @@ internal sealed class CartographerRuntime : IDisposable
 
         if (!_settings.Enabled.Value || !_mapReady || _surveyor is null)
         {
+            // Disabled mid-session: the vanilla pin selector must come
+            // back even though the rest of the runtime is dormant.
+            if (Minimap.IsOpen())
+            {
+                EnforceVanillaPaletteVisibility();
+                _palettePanel.SetVisible(false);
+            }
+
             return;
         }
 
@@ -175,10 +201,19 @@ internal sealed class CartographerRuntime : IDisposable
 
         if (Minimap.IsOpen() && !Minimap.InTextInput())
         {
-            // Discoverability (#95): a visible Atlas button and a
-            // contextual edit hint, on top of (never instead of) the
-            // rebindable hotkeys.
+            // Discoverability (#95/#96): the Atlas button, contextual pin
+            // actions, the enhanced pin palette, and the edit hint — on
+            // top of (never instead of) the rebindable hotkeys.
             _mapControls.EnsureBuilt(_settings.DrawerHotkey.Value.ToString());
+            bool paletteActive = _settings.EnhancedPinPalette.Value &&
+                !_compatibility.PinManagerPresent && !_palettePanel.HasFailed;
+            if (paletteActive)
+            {
+                _palettePanel.UiScale = _settings.UiScale.Value;
+                _palettePanel.EnsureBuilt();
+            }
+
+            _palettePanel.SetVisible(paletteActive);
             UpdateEditHint(unscaledDeltaTime);
 
             if (_pinCommands is not null && !_workbenchPanel.IsVisible &&
@@ -230,6 +265,8 @@ internal sealed class CartographerRuntime : IDisposable
             _chunkRecovery.Reset();
             _displayController.Reset();
             _mapControls.Reset();
+            _palettePanel.Reset();
+            _birthTracker.Reset();
             _pinAdapter.Reset();
             SaveIfDirty();
             SavePinsSnapshot();
@@ -243,6 +280,20 @@ internal sealed class CartographerRuntime : IDisposable
 
         _chunkRecovery.Tick();
         _surveyScanner.Tick(unscaledDeltaTime, _surveyEngine, _pinStore);
+
+        // Managed-from-birth (#96): claim a palette-placed pin the moment
+        // its vanilla naming flow closes. Runs every tick (not only while
+        // the map is open) so a naming flow that outlives the map close
+        // still resolves.
+        if (_settings.EnhancedPinPalette.Value &&
+            MinimapReflection.TryGetNamePin(out Minimap.PinData? namingPin))
+        {
+            Minimap.PinData? born = _birthTracker.Observe(namingPin);
+            if (born is not null)
+            {
+                HandlePaletteBirth(born);
+            }
+        }
 
         _redrawElapsed += unscaledDeltaTime;
         if (_redrawPending && _redrawElapsed >= RedrawDebounceSeconds)
@@ -340,14 +391,9 @@ internal sealed class CartographerRuntime : IDisposable
             _savedViewPersistence.Save(_savedViews);
         };
         _drawerPanel.ViewApplied = name => ApplySavedView(name);
-        _drawerPanel.ResultClicked = id =>
-        {
-            if (_pinCommands is not null && _pinStore.TryGet(id, out AtlasPin pin))
-            {
-                _workbenchPanel.UiScale = _settings.UiScale.Value;
-                _workbenchPanel.OpenForManaged(pin, _pinCommands.Operations, ResyncPins);
-            }
-        };
+        // Search results carry the stable AtlasId, so selection opens the
+        // workbench for that exact pin — never proximity guessing.
+        _drawerPanel.ResultClicked = OpenWorkbenchForId;
         _drawerPanel.StatusLine = () =>
             $"{_displayController.VisibleCount} shown · {_displayController.HiddenByFilter} filtered · {_displayController.ClusterCount} clusters";
         _drawerPanel.TopResults = () =>
@@ -445,9 +491,13 @@ internal sealed class CartographerRuntime : IDisposable
         }
     }
 
-    /// <summary>Shows "{hotkey} — Edit with Concerned Cartographer" while
-    /// the map cursor is over a managed or adoptable pin. Throttled; never
-    /// touches vanilla pin input.</summary>
+    /// <summary>Contextual pin UX (#95/#96), throttled: while the map
+    /// cursor is over an editable pin, shows the accelerator hint plus the
+    /// matching action button — "Edit Pin" for managed pins, "Upgrade &
+    /// Edit" for adoptable vanilla ones. The action stays alive while the
+    /// pointer travels to the button (hover + grace window). Also enforces
+    /// the vanilla-selector visibility on the same cadence. Never touches
+    /// vanilla pin input.</summary>
     private void UpdateEditHint(float unscaledDeltaTime)
     {
         _hintElapsed += unscaledDeltaTime;
@@ -457,21 +507,178 @@ internal sealed class CartographerRuntime : IDisposable
         }
 
         _hintElapsed = 0f;
+        EnforceVanillaPaletteVisibility();
+
         if (_workbenchPanel.IsVisible)
         {
             _mapControls.SetHint(null);
+            _mapControls.SetContext(null, null);
             return;
         }
 
-        if (MinimapReflection.TryScreenToWorldPoint(Input.mousePosition, out Vector3 cursorWorld) &&
-            _pinAdapter.TryFindNearest(cursorWorld, 30f, out Minimap.PinData hoverPin, out _) &&
-            (_pinAdapter.TryGetManagedId(hoverPin, out _) || _pinAdapter.IsAdoptableVanilla(hoverPin)))
+        Minimap.PinData hoverPin = null!;
+        bool hovering = MinimapReflection.TryScreenToWorldPoint(Input.mousePosition, out Vector3 cursorWorld) &&
+            _pinAdapter.TryFindNearest(cursorWorld, 30f, out hoverPin, out _);
+
+        if (hovering && _pinAdapter.TryGetManagedId(hoverPin!, out AtlasId managedId))
         {
+            _contextGrace = ContextGraceSeconds;
             _mapControls.SetHint(AtlasStrings.Format("hud.editHint", _settings.WorkbenchHotkey.Value));
+            AtlasId captured = managedId;
+            _mapControls.SetContext(AtlasStrings.Get("hud.editPin"), () => OpenWorkbenchForId(captured));
+            return;
+        }
+
+        if (hovering && _pinAdapter.IsAdoptableVanilla(hoverPin!) && !_compatibility.PinManagerPresent)
+        {
+            _contextGrace = ContextGraceSeconds;
+            _mapControls.SetHint(AtlasStrings.Format("hud.editHint", _settings.WorkbenchHotkey.Value));
+            Minimap.PinData capturedPin = hoverPin!;
+            _mapControls.SetContext(AtlasStrings.Get("hud.upgradeEdit"), () => UpgradeAndEdit(capturedPin));
+            return;
+        }
+
+        if (_mapControls.PointerOverContext)
+        {
+            return;
+        }
+
+        _contextGrace -= 0.2f;
+        if (_contextGrace > 0f)
+        {
             return;
         }
 
         _mapControls.SetHint(null);
+        _mapControls.SetContext(null, null);
+    }
+
+    /// <summary>Opens the Pin Workbench for a known managed pin by its
+    /// stable identity — no proximity guessing.</summary>
+    private void OpenWorkbenchForId(AtlasId id)
+    {
+        if (_pinCommands is null || !_pinStore.TryGet(id, out AtlasPin pin) || pin.Deleted)
+        {
+            return;
+        }
+
+        if (!AtlasAccessAllowed(out string denial))
+        {
+            Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, denial);
+            return;
+        }
+
+        _workbenchPanel.UiScale = _settings.UiScale.Value;
+        _workbenchPanel.OpenForManaged(pin, _pinCommands.Operations, ResyncPins);
+    }
+
+    /// <summary>The "Upgrade &amp; Edit" context action: converts an
+    /// existing vanilla marker into a managed pin (internally: adoption —
+    /// position/icon/name/checked preserved, exactly one rendering) and
+    /// opens the editor for it.</summary>
+    private void UpgradeAndEdit(Minimap.PinData pin)
+    {
+        if (_pinCommands is null)
+        {
+            return;
+        }
+
+        if (!AtlasAccessAllowed(out string denial))
+        {
+            Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, denial);
+            return;
+        }
+
+        if (!_pinAdapter.ContainsPin(pin) || !_pinAdapter.IsAdoptableVanilla(pin))
+        {
+            return;
+        }
+
+        AtlasPin? managed = _pinAdapter.Adopt(_pinStore, pin);
+        if (managed is null)
+        {
+            return;
+        }
+
+        _workbenchPanel.UiScale = _settings.UiScale.Value;
+        _workbenchPanel.OpenForManaged(managed, _pinCommands.Operations, ResyncPins);
+    }
+
+    /// <summary>A palette-placed pin finished its vanilla naming flow:
+    /// associate the AtlasPin now, with the palette's icon identity and
+    /// default category. Exactly one rendering and one entity — the
+    /// existing rendering is tracked, never replaced (#96).</summary>
+    private void HandlePaletteBirth(Minimap.PinData born)
+    {
+        if (!_pinAdapter.ContainsPin(born) || !_pinAdapter.IsAdoptableVanilla(born))
+        {
+            // Removed (or claimed by something else) during naming.
+            return;
+        }
+
+        AtlasPin? managed = _pinAdapter.Adopt(_pinStore, born);
+        if (managed is null)
+        {
+            return;
+        }
+
+        string iconId = _birthTracker.IconId;
+        string category = _birthTracker.Category;
+        _pinStore.Mutate(managed.Id, pin =>
+        {
+            if (iconId.Length > 0)
+            {
+                pin.IconId = iconId;
+            }
+
+            pin.Category = category;
+            pin.Source = AtlasPinSource.Managed;
+        });
+        _palettePanel.NoteUsed(iconId);
+        ReapplyDisplay();
+        if (_settings.DebugLogging.Value)
+        {
+            _log.LogInfo($"Palette marker born managed: {managed.Id} icon {iconId} category \"{category}\".");
+        }
+    }
+
+    /// <summary>Keeps the five vanilla placeable icon buttons hidden while
+    /// the enhanced palette owns pin creation, and restores them the
+    /// moment any fallback applies (setting, compat, failure, disable).
+    /// Only SetActive is ever used — nothing vanilla is destroyed.</summary>
+    private void EnforceVanillaPaletteVisibility()
+    {
+        bool wantVisible = !_settings.Enabled.Value ||
+            !_settings.EnhancedPinPalette.Value ||
+            _settings.ShowVanillaPinPalette.Value ||
+            _compatibility.PinManagerPresent ||
+            _palettePanel.HasFailed;
+        foreach (GameObject button in MinimapReflection.GetPlaceableIconButtons())
+        {
+            if (button != null && button.activeSelf != wantVisible)
+            {
+                button.SetActive(wantVisible);
+            }
+        }
+    }
+
+    /// <summary>Unconditional vanilla-selector restore for teardown.</summary>
+    private void RestoreVanillaPalette()
+    {
+        try
+        {
+            foreach (GameObject button in MinimapReflection.GetPlaceableIconButtons())
+            {
+                if (button != null && !button.activeSelf)
+                {
+                    button.SetActive(true);
+                }
+            }
+        }
+        catch
+        {
+            // Map may already be gone; vanilla state dies with it anyway.
+        }
     }
 
     private void OpenWorkbenchAtCursor()
@@ -1320,6 +1527,7 @@ internal sealed class CartographerRuntime : IDisposable
         }
 
         _workbenchPanel.Close();
+        RestoreVanillaPalette();
         SaveIfDirty();
         SavePinsSnapshot();
         _pipeline?.EndAllStrokes();
