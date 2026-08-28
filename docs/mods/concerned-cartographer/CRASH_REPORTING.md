@@ -33,27 +33,36 @@ implementation contract and the Sentry-side setup the maintainer must do.
   dialog appears on the first large-map open; the permanent surface is
   CC Atlas → Privacy.
 
-## The DSN (and what is embedded)
+## The DSN (and exactly what is embedded)
 
-`Runtime/CrashReportingConfig.EmbeddedSentryDsn` is **empty in the
-repository** — with it empty (and no `Privacy/SentryDsn` override) the
-whole feature is inert regardless of consent.
+`Runtime/CrashReportingConfig.EmbeddedSentryDsn` carries the live
+project DSN, owner-provided and embedded 2026-08-28:
 
-A Sentry DSN (`https://<publicKey>@<org>.ingest.sentry.io/<projectId>`)
-is a *public event-ingestion key*: it can submit events to the project
-and nothing else. It is not an account secret — but it is still kept out
-of the repo so forks/CI never inherit the live project. **Sentry auth
-tokens must never appear anywhere in this repository or the mod.**
+```text
+https://eec0ed91ddb82ee984103b4180573feb@o4511990602989568.ingest.us.sentry.io/4511990681436160
+```
 
-Ship-time procedure:
+That is the ONLY credential-like value in the repository or the mod. A
+Sentry DSN is a *public event-ingestion key*: it can submit events to
+this one project and nothing else — no reads, no account access. Client
+apps routinely ship it. **Sentry auth tokens must never appear anywhere
+in this repository or the mod.** Ingestion was verified live at embed
+time (envelope POST → HTTP 200).
 
-1. Create the Sentry project (platform "Other"/C#), org `TheConcernedCat`.
-2. Paste the project DSN into `CrashReportingConfig.EmbeddedSentryDsn`
-   in the release working tree (this is the ONLY line that changes).
-3. Build/package through the normal release gate; record in the release
-   dossier that the DSN was embedded.
-4. For local verification before that: set `Privacy/SentryDsn` in your
-   own profile config instead of editing source.
+Notes:
+
+- Consent still rules: the mod sends nothing while consent is Unknown
+  or Disabled, DSN or not.
+- Abuse of a public DSN (third-party spam into the project) is handled
+  with Sentry's rate limits / inbound filters; if needed, rotate the key
+  in Sentry, replace this constant, and cut a new RC.
+- `Privacy/SentryDsn` in a profile config overrides the embedded value
+  for local testing without a source change.
+- The Sentry NuGet SDK is deliberately NOT used (`SentrySdk.Init`,
+  `AutoSessionTracking`, `Debug` do not exist here): the package ships
+  one DLL, and Release-Health session tracking would be session
+  telemetry beyond the consented crash-reports-only policy — adding it
+  would require a PRIVACY.md revision and a ConsentPolicyVersion bump.
 
 ## Required Sentry project settings (server-side scrubbing)
 

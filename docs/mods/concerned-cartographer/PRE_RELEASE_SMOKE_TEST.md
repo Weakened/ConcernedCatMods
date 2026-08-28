@@ -129,10 +129,15 @@ controls (icon bar area, shared-position toggle, biome text, hints bar).
 
 ### L. Crash-reporting consent and privacy (#97)
 
-Note: the RC ships with the ingestion DSN EMPTY, so no event can leave
-the machine in any of these steps; this block verifies the consent UX
-and notices. (To verify a live send, set `Privacy/SentryDsn` in a
-private profile per CRASH_REPORTING.md — optional.)
+Note: the RC now carries the LIVE ingestion DSN (embedded 2026-08-28,
+ingestion pre-verified with a direct envelope POST → HTTP 200). While
+consent is Unknown or Disabled nothing can be sent (steps 1–3, 7); once
+you toggle reporting On in step 4, a subsequent forced/observed CC
+subsystem failure should appear in the Sentry project within a minute —
+verify the event contains no names/coordinates/paths (it is built from
+the tested allowlist). Also confirm the Sentry project settings per
+CRASH_REPORTING.md: "Prevent Storing of IP Addresses" ON and Data
+Scrubbers ON (PRIVACY.md promises both). **BLOCKS**
 
 1. Fresh (or reset: `Privacy/SendCrashReports = Unknown`,
    `AcceptedPrivacyPolicyVersion = 0`) profile → enter world → open the

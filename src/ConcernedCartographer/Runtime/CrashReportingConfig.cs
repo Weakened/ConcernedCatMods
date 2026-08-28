@@ -16,17 +16,16 @@ internal enum CrashConsentState
 /// constant (#97), so exactly what ships is auditable in one place.</summary>
 internal static class CrashReportingConfig
 {
-    /// <summary>The Sentry client DSN embedded at package time — the ONLY
-    /// credential-like value that may ship, and it is a public
-    /// event-ingestion key (it can submit events to the project; it
-    /// cannot read data or manage the account). Sentry AUTH TOKENS are
-    /// never embedded or used anywhere in this mod.
-    ///
-    /// Empty in the repository by policy: with no DSN (and no
-    /// Privacy/SentryDsn override) crash reporting is fully inert
-    /// regardless of consent. The maintainer inserts the real DSN here
-    /// before packaging — see docs/mods/concerned-cartographer/CRASH_REPORTING.md.</summary>
-    public const string EmbeddedSentryDsn = "";
+    /// <summary>The Sentry client DSN — the ONLY credential-like value
+    /// that ships, and it is a public event-ingestion key: it can submit
+    /// events to the project and nothing else (no reads, no account
+    /// access). Sentry AUTH TOKENS are never embedded or used anywhere in
+    /// this mod. Owner-provided and embedded 2026-08-28 (#97); ingestion
+    /// verified live (HTTP 200). Rotation: replace this value and cut a
+    /// new RC — see docs/mods/concerned-cartographer/CRASH_REPORTING.md.
+    /// Reporting still sends nothing without explicit player consent.</summary>
+    public const string EmbeddedSentryDsn =
+        "https://eec0ed91ddb82ee984103b4180573feb@o4511990602989568.ingest.us.sentry.io/4511990681436160";
 
     /// <summary>Version of the crash-reporting privacy policy the consent
     /// dialog describes. Bump ONLY when the categories or purpose of the
