@@ -7,24 +7,27 @@ The single remaining gate is the human smoke test
 ## 1–5. Release candidate identity
 
 - **Version:** 1.0.0 (unchanged — 1.0.0 has never been publicly tagged or published)
-- **RC commit:** `86050cd2e2a6d5d81d55bc563aab8a8a62574e7e` (main; the
-  **RC3 fix pass** — DEF-v1.0-004 pin edit-in-place identity #92,
-  DEF-v1.0-005 persistent negative terrain intent #93, workbench visual
-  pickers #94, large-map discoverability #95, alignment-diagnostic
-  polish and DEF-v1.0-002 closure #90 — plus everything in the previous
-  RC line. **Supersedes RC `7ed20fef` (ZIP `B47E7C9D…`), which FAILED
-  the second human smoke pass on managed-pin edit duplication and
-  leveling-paints-roads; and RC `9eb65291` (ZIP `9F1F4128…`) before it.
-  Do not test or upload those ZIPs again.** Already-passed evidence that
-  remains valid from the earlier passes: startup environment
-  (Valheim 0.221.12 / Unity 6000.0.61f1 / BepInEx 5.4.23.3 /
-  Jötunn 2.29.2.0, clean 1.0.0 banner, no CC errors), the adoption
+- **RC commit:** `35f20e1af35e1d24f4a8aef6d5428bca36776ad0` (main; the
+  **RC4 / v1 map UX pass, #96** — Atlas button + tooltip, contextual
+  Upgrade & Edit / Edit Pin actions, Enhanced Pin Palette with
+  managed-from-birth placement, vanilla-palette fallback settings,
+  Status/Scope dropdown selects — on top of the RC3 fixes:
+  DEF-v1.0-004 pin edit-in-place identity #92, DEF-v1.0-005 persistent
+  negative terrain intent #93, workbench visual pickers #94, large-map
+  discoverability #95, alignment-diagnostic polish and DEF-v1.0-002
+  closure #90. **Supersedes RC3 `86050cd2` (ZIP `710183B3…`, superseded
+  before human testing by the owner's UX direction), RC `7ed20fef`
+  (ZIP `B47E7C9D…`, FAILED the second human smoke pass), and RC
+  `9eb65291` (ZIP `9F1F4128…`) before them. Do not test or upload those
+  ZIPs.** Already-passed evidence that remains valid: startup
+  environment (Valheim 0.221.12 / Unity 6000.0.61f1 / BepInEx 5.4.23.3
+  / Jötunn 2.29.2.0, clean 1.0.0 banner, no CC errors), the adoption
   input-trap fix (DEF-v1.0-001), the workbench layout (DEF-v1.0-003),
   and overlay alignment (DEF-v1.0-002, closed as PASS on logged
   residuals ≤ 1 texel).)
 - **ZIP:** `artifacts\thunderstore\TheConcernedCat-ConcernedCartographer-1.0.0.zip`
-- **ZIP SHA-256:** `710183B3C02E62E50C1D4A35C9039D61147126736DA0BB7CC13FAB532B7810D6` (220,466 bytes)
-- **Plugin DLL SHA-256:** `571F5AB39F2B8F0C1D5978B26367D9F6DBFB4F9A5ADE6CF8CF456E172F13362C` (278,528 bytes; the DLL inside the ZIP is hash-identical to the Release build output; informational version `1.0.0+86050cd2…` verified in the DLL)
+- **ZIP SHA-256:** `8B4B41ADB8AB06DD22AD27311968B25BA1B2CFE2BD7AF8E5D470B4A65AE40366` (226,581 bytes)
+- **Plugin DLL SHA-256:** `B87D4FD7D2EAF751C18744F03D1528F3E2857BA8FDA897607BECC0A72210DF25` (292,352 bytes; the DLL inside the ZIP is hash-identical to the Release build output; informational version `1.0.0+35f20e1a…` verified in the DLL)
 - **Assembly metadata (verified in the DLL):** Company "The Concerned Cat",
   Product "Concerned Cartographer", Copyright © 2026 Eren Cansunar,
   RepositoryUrl embedded, informational version `1.0.0+<RC commit>`.
@@ -57,8 +60,27 @@ revision sanity cap, non-finite float rejection, string-length caps,
 deletion names in the sync preview, author display sanitization, and
 declared-length verification.
 
+Owner-approved v1 map UX direction (2026-08-28, #96), implemented in
+this RC on top of the RC3 fixes: the map is button-first — [Atlas]
+button with tooltip, contextual **Upgrade & Edit** (adoptable vanilla;
+internally the DEF-v1.0-004-safe adoption) and **Edit Pin** actions with
+the accelerator hint, and the **Enhanced Pin Palette** (searchable,
+sprite-previewed marker browser over stable IconRegistry IDs, session
+recents, collapse) replacing the five vanilla placeable icon buttons by
+default. Palette markers are **managed from birth**: choosing a marker
+selects the mapped vanilla icon type and arms a pure birth tracker
+(7 tests); vanilla double-click + naming creates the pin, and the
+runtime associates the AtlasPin when naming closes — one rendering, one
+entity, no upgrade step. Fallback: `Pins/ShowVanillaPinPalette` /
+`EnhancedPinPalette=false` restore vanilla instantly; a detected
+conflicting pin manager keeps vanilla automatically; only SetActive is
+ever used on vanilla objects; death/boss/system pins, Cross Off,
+Remove, Ping, Visible-to-others, and uninstall safety are untouched.
+Status/Scope became dropdown selects; hotkeys stay as rebindable
+accelerators.
+
 Second human smoke pass (2026-08-27) against RC `7ed20fef` found two new
-P1 release blockers plus P2 UX gaps, all addressed in this RC:
+P1 release blockers plus P2 UX gaps, all addressed in the RC3 line:
 
 - **DEF-v1.0-004 (#92, P1)**: editing an adopted/managed pin created a
   duplicate map rendering. Root cause: the workbench resynced through the
@@ -114,8 +136,9 @@ release blockers, all addressed in the previous RC:
 
 ## 8. Automated evidence (at the RC commit)
 
-- **280/280 tests** in the game-free core suite (Release configuration,
-  re-run at the RC commit): everything below plus the DEF-v1.0-004
+- **287/287 tests** in the game-free core suite (Release configuration,
+  re-run at the RC commit): everything below plus the #96
+  managed-from-birth palette tracker suite (7 tests), the DEF-v1.0-004
   pin-rendering-lifecycle suite (11 tests: adopt→edit→apply keeps one
   rendering, restart reconcile, claim strictness, batch sync) and the
   DEF-v1.0-005 terrain-intent suite (15 tests: exclusion blocks
@@ -183,15 +206,15 @@ defaults.
 ## 18. Smoke test
 
 `docs/mods/concerned-cartographer/PRE_RELEASE_SMOKE_TEST.md` — **the
-owner resumes at its section R2 (RC3 mini-regression, blocks A–E), NOT
+owner resumes at its section R3 (RC4 mini-regression, blocks A–K), NOT
 at the top.** The full 2.5–4 h checklist is not restarted; sections the
-earlier passes already completed stay completed. Only after A–E pass
+earlier passes already completed stay completed. Only after A–K pass
 does the owner resume routes/world-isolation/multiplayer.
 
 ## 19. Remaining Git commands (run after the smoke test passes)
 
 ```powershell
-git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" 86050cd2e2a6d5d81d55bc563aab8a8a62574e7e
+git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" 35f20e1af35e1d24f4a8aef6d5428bca36776ad0
 git push origin concerned-cartographer/v1.0.0
 gh release create concerned-cartographer/v1.0.0 artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-1.0.0.zip --title "Concerned Cartographer 1.0.0" --notes-file src/ConcernedCartographer/Package/CHANGELOG.md
 ```
