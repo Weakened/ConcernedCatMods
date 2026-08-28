@@ -7,27 +7,28 @@ The single remaining gate is the human smoke test
 ## 1–5. Release candidate identity
 
 - **Version:** 1.0.0 (unchanged — 1.0.0 has never been publicly tagged or published)
-- **RC commit:** `35f20e1af35e1d24f4a8aef6d5428bca36776ad0` (main; the
-  **RC4 / v1 map UX pass, #96** — Atlas button + tooltip, contextual
-  Upgrade & Edit / Edit Pin actions, Enhanced Pin Palette with
-  managed-from-birth placement, vanilla-palette fallback settings,
-  Status/Scope dropdown selects — on top of the RC3 fixes:
-  DEF-v1.0-004 pin edit-in-place identity #92, DEF-v1.0-005 persistent
-  negative terrain intent #93, workbench visual pickers #94, large-map
-  discoverability #95, alignment-diagnostic polish and DEF-v1.0-002
-  closure #90. **Supersedes RC3 `86050cd2` (ZIP `710183B3…`, superseded
-  before human testing by the owner's UX direction), RC `7ed20fef`
-  (ZIP `B47E7C9D…`, FAILED the second human smoke pass), and RC
-  `9eb65291` (ZIP `9F1F4128…`) before them. Do not test or upload those
-  ZIPs.** Already-passed evidence that remains valid: startup
-  environment (Valheim 0.221.12 / Unity 6000.0.61f1 / BepInEx 5.4.23.3
-  / Jötunn 2.29.2.0, clean 1.0.0 banner, no CC errors), the adoption
-  input-trap fix (DEF-v1.0-001), the workbench layout (DEF-v1.0-003),
-  and overlay alignment (DEF-v1.0-002, closed as PASS on logged
-  residuals ≤ 1 texel).)
+- **RC commit:** `7881cbcd93630c3d1eb17577f6796da9fa4b3262` (main; the
+  **RC5 / opt-in crash-reporting pass, #97** — consent-gated,
+  allowlist-only crash reporting behind ICrashReporter with a
+  Sentry-envelope backend (no SDK bundled; DSN ships EMPTY so the
+  pipeline is inert until the owner embeds it per CRASH_REPORTING.md),
+  automated forbidden-field redaction tests over the exact outgoing
+  payload, one-time consent dialog + Atlas → Privacy surface,
+  once-per-subsystem failure notices, PRIVACY.md, and canonical support
+  routing (support@theconcernedcat.com) — on top of the RC4 v1 map UX
+  pass (#96) and the RC3 fixes (#92–#95, #90). **Supersedes RC4
+  `35f20e1a` (ZIP `8B4B41AD…`) and RC3 `86050cd2` (ZIP `710183B3…`),
+  both superseded before human testing; RC `7ed20fef` (ZIP `B47E7C9D…`,
+  FAILED the second human smoke pass); and RC `9eb65291`
+  (ZIP `9F1F4128…`). Do not test or upload those ZIPs.** Already-passed
+  evidence that remains valid: startup environment (Valheim 0.221.12 /
+  Unity 6000.0.61f1 / BepInEx 5.4.23.3 / Jötunn 2.29.2.0, clean 1.0.0
+  banner, no CC errors), the adoption input-trap fix (DEF-v1.0-001),
+  the workbench layout (DEF-v1.0-003), and overlay alignment
+  (DEF-v1.0-002, closed as PASS on logged residuals ≤ 1 texel).)
 - **ZIP:** `artifacts\thunderstore\TheConcernedCat-ConcernedCartographer-1.0.0.zip`
-- **ZIP SHA-256:** `8B4B41ADB8AB06DD22AD27311968B25BA1B2CFE2BD7AF8E5D470B4A65AE40366` (226,581 bytes)
-- **Plugin DLL SHA-256:** `B87D4FD7D2EAF751C18744F03D1528F3E2857BA8FDA897607BECC0A72210DF25` (292,352 bytes; the DLL inside the ZIP is hash-identical to the Release build output; informational version `1.0.0+35f20e1a…` verified in the DLL)
+- **ZIP SHA-256:** `1849C62E250FBAF900137FB0284E5A097F20FCB45E9822EAD04438B99ABA1495` (237,080 bytes)
+- **Plugin DLL SHA-256:** `E1C981E84C1858076372192E2D1DA8D4C3DEA4B1044D2A9C7D3CDC54D6022136` (317,440 bytes; the DLL inside the ZIP is hash-identical to the Release build output; informational version `1.0.0+7881cbcd…` verified in the DLL)
 - **Assembly metadata (verified in the DLL):** Company "The Concerned Cat",
   Product "Concerned Cartographer", Copyright © 2026 Eren Cansunar,
   RepositoryUrl embedded, informational version `1.0.0+<RC commit>`.
@@ -60,8 +61,23 @@ revision sanity cap, non-finite float rejection, string-length caps,
 deletion names in the sync preview, author display sanitization, and
 declared-length verification.
 
+Owner-directed opt-in crash reporting (2026-08-28, #97), implemented in
+this RC: `Domain/Reporting` provider abstraction (Null/Sentry), the
+sanitizer + allowlist-only event with the forbidden-field redaction test
+matrix (23 tests asserting on the complete outgoing envelope), tri-state
+profile-level consent (Unknown default; one-time dialog on first
+large-map open; permanent Atlas → Privacy surface; policy-version-gated
+re-consent), capture of the mod's own Error/Fatal events + CC unhandled
+exceptions only, once-per-subsystem notices, bounded queue / no retries /
+background sender, empty embedded DSN by policy (owner ship-time action
+in HUMAN_ATTENTION + CRASH_REPORTING.md), PRIVACY.md, SECURITY.md
+telemetry clause updated, support@theconcernedcat.com routing everywhere
+(no personal email anywhere in mod/package/docs; crash reports never by
+email). **Publish/tag remains blocked until the redaction tests pass in
+the gate (they do) AND the human consent flow passes smoke block R3.L.**
+
 Owner-approved v1 map UX direction (2026-08-28, #96), implemented in
-this RC on top of the RC3 fixes: the map is button-first — [Atlas]
+RC4 on top of the RC3 fixes: the map is button-first — [Atlas]
 button with tooltip, contextual **Upgrade & Edit** (adoptable vanilla;
 internally the DEF-v1.0-004-safe adoption) and **Edit Pin** actions with
 the accelerator hint, and the **Enhanced Pin Palette** (searchable,
@@ -136,8 +152,11 @@ release blockers, all addressed in the previous RC:
 
 ## 8. Automated evidence (at the RC commit)
 
-- **287/287 tests** in the game-free core suite (Release configuration,
-  re-run at the RC commit): everything below plus the #96
+- **310/310 tests** in the game-free core suite (Release configuration,
+  re-run at the RC commit): everything below plus the #97
+  crash-reporting suite (23 tests: forbidden-field redaction matrix over
+  the outgoing envelope, consent gating, dedupe/caps/bounded queue,
+  DSN/envelope codecs, release identity), the #96
   managed-from-birth palette tracker suite (7 tests), the DEF-v1.0-004
   pin-rendering-lifecycle suite (11 tests: adopt→edit→apply keeps one
   rendering, restart reconcile, claim strictness, batch sync) and the
@@ -206,15 +225,15 @@ defaults.
 ## 18. Smoke test
 
 `docs/mods/concerned-cartographer/PRE_RELEASE_SMOKE_TEST.md` — **the
-owner resumes at its section R3 (RC4 mini-regression, blocks A–K), NOT
+owner resumes at its section R3 (RC5 mini-regression, blocks A–L), NOT
 at the top.** The full 2.5–4 h checklist is not restarted; sections the
-earlier passes already completed stay completed. Only after A–K pass
+earlier passes already completed stay completed. Only after A–L pass
 does the owner resume routes/world-isolation/multiplayer.
 
 ## 19. Remaining Git commands (run after the smoke test passes)
 
 ```powershell
-git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" 35f20e1af35e1d24f4a8aef6d5428bca36776ad0
+git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" 7881cbcd93630c3d1eb17577f6796da9fa4b3262
 git push origin concerned-cartographer/v1.0.0
 gh release create concerned-cartographer/v1.0.0 artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-1.0.0.zip --title "Concerned Cartographer 1.0.0" --notes-file src/ConcernedCartographer/Package/CHANGELOG.md
 ```
