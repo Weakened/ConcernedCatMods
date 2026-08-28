@@ -286,7 +286,8 @@ Guarantees:
 - exact-replay idempotency;
 - source-neutral atlas semantics;
 - per-source active stroke isolation;
-- one source can end/fail without breaking the others.
+- one source can end/fail without breaking the others;
+- negative terrain intent (DEF-v1.0-005): Dirt observations from non-Construction sources are refused inside the world's `TerrainIntentMask` exclusion, and the refusing source's stroke ends so nothing connects across excluded ground.
 
 New road observers should feed this pipeline rather than write directly to `RoadAtlas` or the map.
 
@@ -349,6 +350,14 @@ Pure parser/writer for versioned road TSV rows. Filesystem behavior belongs in `
 ### `RecoveryShapeHeuristic.cs`
 
 Pure old-road recovery heuristic that favors path-like painted neighborhoods and rejects broad pads/plazas. It is testable because recovery false positives are a product risk.
+
+### `TerrainIntentMask.cs` (DEF-v1.0-005)
+
+Persistent negative terrain intent for one world: a bounded set of 1 m ground cells the player explicitly terraformed (Level/Raise/Cultivate/Reset), where dirt paint is a side effect and must never be recorded as road. `RoadObservationPipeline` refuses Dirt observations from the passive sources (traversal, chunk recovery) inside the mask and ends the active stroke so no connector crosses the pad; Construction is never gated, and a deliberate Pathen/Paved clears the cells its brush covers. Bounded at 250k cells with oldest-first eviction; derives only from the local player's own operations (no unexplored-world reveal).
+
+### `TerrainIntentCodec.cs`
+
+Pure parser/writer for the versioned `cc-terrain-intent v1` sidecar rows. Malformed rows are skipped and counted; an unknown header loads empty (documented derived-data downgrade). Filesystem behavior belongs in `TerrainIntentPersistence`.
 
 ## 6. Road game adapters (`Roads/`)
 
@@ -518,6 +527,10 @@ Pure edit-buffer/controller between UI/commands and domain operations.
 
 The UI should edit a buffer, validate, then apply through controller/operations rather than directly modifying authoritative pin objects.
 
+### `PinRenderingLedger.cs` (DEF-v1.0-004)
+
+Pure decision core of the map pin adapter: owns the AtlasId↔rendering tracking table (generic over the rendering handle, so tests use fakes) plus every match/sync decision — `ClaimMatch` (position + exact name, each rendering claimable once; map/world reconstruction only) and `DecideSync` (targeted Add/Remove/Replace/UpdateChecked against the *tracked* rendering, so in-session edits update their own rendering instead of orphaning it and duplicating). The lifecycle regression suite lives against this class.
+
 ### `IconRegistry.cs`
 
 Append-only registry of stable namespaced icon IDs mapped to vanilla pin ordinals.
@@ -641,6 +654,8 @@ Responsibilities:
 - absorb vanilla checked/deleted changes back into `PinStore`;
 - track atlas-ID ↔ map-object relationships.
 
+Tracking and decisions live in the pure `PinRenderingLedger` (DEF-v1.0-004); the adapter only executes them against the real Minimap. In-session mutations go through the targeted `SyncPin`/`SyncAllPins` path, which preserves tracking; `ReconcileOnMapReady` (reset + claim) is reserved for map/world reconstruction.
+
 Managed pins intentionally render as ordinary saved vanilla pins, which improves disable/uninstall safety.
 
 ### `Map/PinDisplayController.cs`
@@ -658,6 +673,10 @@ Temporary cluster markers are unsaved vanilla pins, so they never persist or bec
 Unity/Jötunn presentation for managed edit, vanilla adoption prompt and foreign/system read-only modes.
 
 It should drive `PinWorkbenchController` / `PinOperations`, not persistence directly.
+
+### `Map/LargeMapControls.cs` (#95)
+
+Discoverability layer on `Minimap.m_largeRoot`: the "CC Atlas [hotkey]" button (routes through the same NoMap-gated drawer toggle as the hotkey) and the contextual "P — Edit with Concerned Cartographer" hint the runtime shows while the map cursor is over an editable pin. Fail-closed; rebuilt automatically after map teardown; never touches vanilla map input.
 
 ### `Map/AtlasDrawerPanel.cs`
 
@@ -710,6 +729,10 @@ Responsibilities:
 - rate-limited write failures.
 
 It must never write Valheim world-save files.
+
+### `Persistence/TerrainIntentPersistence.cs` (DEF-v1.0-005)
+
+Per-world `<world-uid>.terrain-intent.tsv` IO for the terrain-intent mask via `TerrainIntentCodec`: temp-file write flow, rate-limited failures, unknown-header degrade to empty. Saved on the same dirty-flag cadence as the road atlas.
 
 ### `Persistence/SavedViewPersistence.cs`
 
@@ -802,7 +825,9 @@ The project compiles `Domain/**/*.cs` directly, so pure tests do not require Val
 | `RoadAtlasCodecTests.cs` | road serialization/legacy formats |
 | `RoadAtlasEditorTests.cs` | road correction operations/undo |
 | `RecoveryShapeHeuristicTests.cs` | path-like vs broad-area recovery |
+| `TerrainIntentTests.cs` | DEF-v1.0-005: exclusion blocks passive Dirt sources, Pathen clears, codec round-trip, bounds |
 | `PinStoreTests.cs` | identity, revisions, delete/restore/upsert |
+| `PinRenderingLedgerTests.cs` | DEF-v1.0-004: rendering lifecycle — adopt/edit/apply keeps one rendering, restart reconcile, claim strictness |
 | `PinCodecTests.cs` | pin serialization/recovery |
 | `PinOperationsTests.cs` | batch, duplicate, merge, undo/redo |
 | `PinWorkbenchControllerTests.cs` | edit-buffer/controller behavior |
@@ -816,7 +841,7 @@ The project compiles `Domain/**/*.cs` directly, so pure tests do not require Val
 | `MigrationMatrixTests.cs` | every shipped sidecar format back-parses into the current readers |
 | `SecurityHardeningTests.cs` | SEC-1.0-001: decompression-bomb rejection, revision/float/string bounds, deletion-name previews, display sanitization |
 
-At the 1.0.0 RC the suite is 243 tests, all green, run without any game assemblies.
+At the 1.0.0 RC3 the suite is 280 tests, all green, run without any game assemblies.
 
 Game adapters still need real Valheim tests; unit tests cannot prove Harmony targets, private field names, overlay alignment or Unity UI behavior.
 
@@ -831,6 +856,7 @@ Current important files may include:
 ```text
 BepInEx/config/ConcernedCatMods/ConcernedCartographer/
 ├─ <world-uid>.roads.tsv                     (+ .v1.bak / .pre-reconcile.bak)
+├─ <world-uid>.terrain-intent.tsv            (not-road exclusion mask, DEF-v1.0-005)
 ├─ <world-uid>.pins.tsv                      (+ .journal)
 ├─ <world-uid>.routes-atlas.tsv              (+ .journal)
 ├─ views.tsv                                 (profile-level saved views)

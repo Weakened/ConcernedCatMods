@@ -34,6 +34,11 @@ internal static class AtlasStrings
         ["workbench.status"] = "Status",
         ["workbench.scope"] = "Scope",
         ["workbench.checked"] = "Crossed off",
+        ["workbench.customIcon"] = "Custom: {0}",
+        ["workbench.keepCustomIcon"] = "Keep custom ({0})",
+        ["workbench.sizeMeta"] = "Size (metadata)",
+        ["workbench.colorMeta"] = "Color hex (metadata)",
+        ["workbench.reset"] = "Reset",
         ["drawer.title"] = "Atlas",
         ["drawer.layers"] = "Layers",
         ["drawer.dirtRoads"] = "Dirt roads",
@@ -53,6 +58,8 @@ internal static class AtlasStrings
         ["hud.surveyObservations"] = "Survey: {0} new observation(s) — review with cc_survey",
         ["hud.syncReceived"] = "Atlas share received from {0} — review with cc_sync preview",
         ["hud.onboarding"] = "Concerned Cartographer: press {0} on the large map for the Atlas, {1} over a pin to edit it.",
+        ["hud.atlasButton"] = "CC Atlas [{0}]",
+        ["hud.editHint"] = "{0} — Edit with Concerned Cartographer",
         ["hud.noMapNeedTable"] = "The atlas needs a cartography table nearby in a nomap world.",
     };
 

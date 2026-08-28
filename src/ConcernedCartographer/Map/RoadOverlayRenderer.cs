@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 using BepInEx.Logging;
 using Jotunn.Managers;
@@ -116,10 +117,8 @@ internal sealed class RoadOverlayRenderer
         _log.LogInfo($"Calibration marker {label}: world ({world.x:0.#}, {world.z:0.#}) -> overlay pixel ({centerX}, {centerY}) of {size}.");
     }
 
-    private static void StampCrossAt(Texture2D texture, int size, int centerX, int centerY, Color32 color)
+    private static void StampCrossAt(Texture2D texture, int size, int centerX, int centerY, Color32 color, int armTexels = 4)
     {
-        const int armTexels = 4;
-
         for (int offset = -armTexels; offset <= armTexels; offset++)
         {
             int x = centerX + offset;
@@ -158,26 +157,94 @@ internal sealed class RoadOverlayRenderer
             {
                 ("player", playerPosition),
                 ("origin", new Vector3(0f, 0f, 0f)),
-                ("east+128", new Vector3(128f, 0f, 0f)),
-                ("north+128", new Vector3(0f, 0f, 128f)),
+                ("east", new Vector3(128f, 0f, 0f)),
+                ("north", new Vector3(0f, 0f, 128f)),
             };
             if (TryGetLatestDirtPoint(atlas, out Vector3 dirtPoint))
             {
-                probes.Add(("latest-dirt-point", dirtPoint));
+                probes.Add(("road", dirtPoint));
             }
 
-            var report = new StringBuilder();
+            // Native pixels come out in map-texture space; scale them into
+            // overlay space so the residual is a straight pixel distance.
+            float nativeToOverlay = MinimapReflection.TryGetTextureSize(out int mapTextureSize) && mapTextureSize > 0
+                ? (float)size / mapTextureSize
+                : 1f;
+
+            var table = new StringBuilder();
+            table.Append(string.Format(
+                CultureInfo.InvariantCulture,
+                "{0,-8}{1,-20}{2,-16}{3,-18}{4}",
+                "Probe", "World X/Z", "Native pixel", "Overlay pixel", "Delta px"));
+
+            float maxResidual = 0f;
+            bool residualsAvailable = true;
             foreach ((string label, Vector3 world) in probes)
             {
-                report.Append('\n').Append(ProbeOne(overlay.OverlayTex, size, label, world));
+                try
+                {
+                    Minimap.PinData pin = Minimap.instance.AddPin(
+                        world, Minimap.PinType.Icon3, "CC " + label, save: false, isChecked: false);
+                    if (pin is not null)
+                    {
+                        _alignmentPins.Add(pin);
+                    }
+                }
+                catch (Exception exception)
+                {
+                    _log.LogWarning($"Alignment probe '{label}': could not add the native pin: {exception.Message}");
+                }
+
+                // The exact projection used by DrawSegment/DrawIntoBuffer.
+                Vector2 coords = MinimapManager.Instance.WorldToOverlayCoords(world, size);
+                StampCrossAt(
+                    overlay.OverlayTex, size,
+                    Mathf.RoundToInt(coords.x), Mathf.RoundToInt(coords.y),
+                    new Color32(255, 0, 255, 255), armTexels: 1);
+
+                string nativeText = "n/a";
+                string deltaText = "n/a";
+                if (MinimapReflection.TryWorldToPixel(world, out int pixelX, out int pixelY))
+                {
+                    nativeText = FormattableString.Invariant($"({pixelX}, {pixelY})");
+                    float dx = coords.x - (pixelX * nativeToOverlay);
+                    float dy = coords.y - (pixelY * nativeToOverlay);
+                    float residual = Mathf.Sqrt((dx * dx) + (dy * dy));
+                    maxResidual = Mathf.Max(maxResidual, residual);
+                    deltaText = FormattableString.Invariant($"{residual:0.00}");
+                }
+                else
+                {
+                    residualsAvailable = false;
+                }
+
+                table.Append('\n').Append(string.Format(
+                    CultureInfo.InvariantCulture,
+                    "{0,-8}{1,-20}{2,-16}{3,-18}{4}",
+                    label,
+                    FormattableString.Invariant($"({world.x:0.#}, {world.z:0.#})"),
+                    nativeText,
+                    FormattableString.Invariant($"({coords.x:0.0}, {coords.y:0.0})"),
+                    deltaText));
             }
 
             overlay.OverlayTex.Apply(false);
-            return $"Alignment probe: {probes.Count} position(s), each marked with a native dot pin \"CC align ...\" " +
-                "plus a magenta overlay cross drawn through the road-rendering projection. PASS = every pin center " +
-                "sits on its cross within one map texel (~12 m of world). Full numbers are in the BepInEx log." +
-                report +
-                "\n'cc_roads align clear' removes the pins; any road redraw clears the crosses.";
+
+            string metersPerTexel = MinimapReflection.TryGetPixelSize(out float pixelMeters)
+                ? FormattableString.Invariant($"{pixelMeters:0.###}")
+                : "n/a";
+            string context = FormattableString.Invariant(
+                $"overlaySize={size} mapTextureSize={(mapTextureSize > 0 ? mapTextureSize.ToString(CultureInfo.InvariantCulture) : "n/a")} metersPerTexel={metersPerTexel}");
+
+            // PASS bound: <= 1 map texel, matching DEF-v1.0-002 / CC-009.
+            string verdict = !residualsAvailable
+                ? "ALIGNMENT INDETERMINATE: native pixel projection unavailable (see rows above)"
+                : FormattableString.Invariant(
+                    $"ALIGNMENT {(maxResidual <= 1f ? "PASS" : "FAIL")}: max residual {maxResidual:0.00} texels");
+
+            string report = table.ToString() + "\n" + context + "\n" + verdict;
+            _log.LogInfo("cc_roads align\n" + report);
+            return report + "\n'cc_roads align clear' removes the markers.";
         }
         catch (Exception exception)
         {
@@ -186,58 +253,11 @@ internal sealed class RoadOverlayRenderer
         }
     }
 
-    /// <summary>Removes the probe's native pins (the overlay crosses clear
-    /// with the next full redraw).</summary>
+    /// <summary>Removes the probe's native pins (the caller redraws the
+    /// overlay so the crosses vanish with them).</summary>
     public void ClearAlignmentProbe()
     {
         ClearAlignmentPins();
-    }
-
-    private string ProbeOne(Texture2D texture, int size, string label, Vector3 world)
-    {
-        try
-        {
-            Minimap.PinData pin = Minimap.instance.AddPin(
-                world, Minimap.PinType.Icon3, $"CC align {label}", save: false, isChecked: false);
-            if (pin is not null)
-            {
-                _alignmentPins.Add(pin);
-            }
-        }
-        catch (Exception exception)
-        {
-            _log.LogWarning($"Alignment probe '{label}': could not add the native pin: {exception.Message}");
-        }
-
-        // The exact projection used by DrawSegment/DrawIntoBuffer.
-        Vector2 coords = MinimapManager.Instance.WorldToOverlayCoords(world, size);
-        int overlayX = Mathf.RoundToInt(coords.x);
-        int overlayY = Mathf.RoundToInt(coords.y);
-        StampCrossAt(texture, size, overlayX, overlayY, new Color32(255, 0, 255, 255));
-
-        string nativePixel = MinimapReflection.TryWorldToPixel(world, out int pixelX, out int pixelY)
-            ? FormattableString.Invariant($"({pixelX}, {pixelY})")
-            : "n/a";
-        string nativeUv = MinimapReflection.TryWorldToMapPoint(world, out float mapX, out float mapY)
-            ? FormattableString.Invariant($"({mapX:0.#####}, {mapY:0.#####}) -> uv*overlaySize ({mapX * size:0.#}, {mapY * size:0.#})")
-            : "n/a";
-        string mapTexture = MinimapReflection.TryGetTextureSize(out int textureSize)
-            ? textureSize.ToString(System.Globalization.CultureInfo.InvariantCulture)
-            : "n/a";
-        string metersPerTexel = MinimapReflection.TryGetPixelSize(out float pixelMeters)
-            ? FormattableString.Invariant($"{pixelMeters:0.###}")
-            : "n/a";
-        string zoom = MinimapReflection.TryGetLargeZoom(out float largeZoom)
-            ? FormattableString.Invariant($"{largeZoom:0.####}")
-            : "n/a";
-
-        string worldPart = FormattableString.Invariant($"world=({world.x:0.##}, {world.z:0.##})");
-        string line =
-            $"Alignment probe '{label}': {worldPart} overlaySize={size} " +
-            $"overlayPixel=({overlayX}, {overlayY}) nativeWorldToPixel={nativePixel} nativeMapUv={nativeUv} " +
-            $"mapTextureSize={mapTexture} metersPerTexel={metersPerTexel} largeZoom={zoom}";
-        _log.LogInfo(line);
-        return line;
     }
 
     private static bool TryGetLatestDirtPoint(RoadAtlas atlas, out Vector3 world)

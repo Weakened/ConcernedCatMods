@@ -37,6 +37,8 @@ internal sealed class CartographerRuntime : IDisposable
     private float _redrawElapsed;
 
     private RoadAtlas _atlas = new();
+    private TerrainIntentMask _terrainIntent = new();
+    private readonly TerrainIntentPersistence _terrainIntentPersistence;
     private RoadObservationPipeline? _pipeline;
     private RoadAtlasEditor? _editor;
     private RoadSurveyor? _surveyor;
@@ -47,6 +49,8 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly AtlasDrawerPanel _drawerPanel;
     private readonly SavedViewPersistence _savedViewPersistence;
     private SavedViewStore _savedViews = new();
+    private readonly LargeMapControls _mapControls;
+    private float _hintElapsed;
     private readonly QuickPinCapture _quickPinCapture;
     private readonly SurveyEngine _surveyEngine = new();
     private readonly SurveyScanner _surveyScanner;
@@ -72,6 +76,7 @@ internal sealed class CartographerRuntime : IDisposable
         _settings = settings;
         _log = log;
         _persistence = new RoadPersistence(log);
+        _terrainIntentPersistence = new TerrainIntentPersistence(log);
         _pinPersistence = new PinPersistence(log);
         _probe = new GroundPaintProbe(settings, log);
         _renderer = new RoadOverlayRenderer(settings, log);
@@ -83,6 +88,7 @@ internal sealed class CartographerRuntime : IDisposable
         _savedViews = _savedViewPersistence.Load();
         _drawerPanel = new AtlasDrawerPanel(log);
         WireDrawer();
+        _mapControls = new LargeMapControls(log) { AtlasButtonClicked = ToggleDrawer };
         _quickPinCapture = new QuickPinCapture(settings, log);
         _surveyRulePersistence = new SurveyRulePersistence(log);
         _surveyEngine.Rules = _surveyRulePersistence.LoadOrCreate();
@@ -169,6 +175,12 @@ internal sealed class CartographerRuntime : IDisposable
 
         if (Minimap.IsOpen() && !Minimap.InTextInput())
         {
+            // Discoverability (#95): a visible Atlas button and a
+            // contextual edit hint, on top of (never instead of) the
+            // rebindable hotkeys.
+            _mapControls.EnsureBuilt(_settings.DrawerHotkey.Value.ToString());
+            UpdateEditHint(unscaledDeltaTime);
+
             if (_pinCommands is not null && !_workbenchPanel.IsVisible &&
                 (Input.GetKeyDown(_settings.WorkbenchHotkey.Value) ||
                  GamepadDown(_settings.WorkbenchGamepadButton.Value)))
@@ -179,19 +191,7 @@ internal sealed class CartographerRuntime : IDisposable
             if (Input.GetKeyDown(_settings.DrawerHotkey.Value) ||
                 GamepadDown(_settings.DrawerGamepadButton.Value))
             {
-                if (AtlasAccessAllowed(out string drawerDenial))
-                {
-                    _drawerPanel.UiScale = _settings.UiScale.Value;
-                    _drawerPanel.Toggle(
-                        _settings.DrawerShowDirt.Value,
-                        _settings.DrawerShowPaved.Value,
-                        _settings.DrawerShowPins.Value,
-                        _settings.DrawerCluster.Value);
-                }
-                else
-                {
-                    Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, drawerDenial);
-                }
+                ToggleDrawer();
             }
 
             if (_displayController.ZoomTierChanged())
@@ -229,6 +229,7 @@ internal sealed class CartographerRuntime : IDisposable
             _pipeline?.EndAllStrokes();
             _chunkRecovery.Reset();
             _displayController.Reset();
+            _mapControls.Reset();
             _pinAdapter.Reset();
             SaveIfDirty();
             SavePinsSnapshot();
@@ -413,10 +414,64 @@ internal sealed class CartographerRuntime : IDisposable
         }
     }
 
+    /// <summary>In-session pin sync (DEF-v1.0-004): targeted per-pin
+    /// updates that preserve AtlasId↔rendering tracking, so an edited pin
+    /// updates its own rendering instead of orphaning it and duplicating.
+    /// Full ReconcileOnMapReady is reserved for map/world reconstruction
+    /// in OnMapAvailable. Display filters/clustering are re-applied so
+    /// edits that change filter membership take effect immediately.</summary>
     private void ResyncPins()
     {
-        _pinAdapter.ReconcileOnMapReady(_pinStore);
+        _pinAdapter.SyncAllPins(_pinStore, _displayController.IsDisplayHidden);
         ReapplyDisplay();
+    }
+
+    /// <summary>Drawer toggle shared by the hotkey and the large-map
+    /// button, with the NoMap cartography-table gate applied to both.</summary>
+    private void ToggleDrawer()
+    {
+        if (AtlasAccessAllowed(out string drawerDenial))
+        {
+            _drawerPanel.UiScale = _settings.UiScale.Value;
+            _drawerPanel.Toggle(
+                _settings.DrawerShowDirt.Value,
+                _settings.DrawerShowPaved.Value,
+                _settings.DrawerShowPins.Value,
+                _settings.DrawerCluster.Value);
+        }
+        else
+        {
+            Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, drawerDenial);
+        }
+    }
+
+    /// <summary>Shows "{hotkey} — Edit with Concerned Cartographer" while
+    /// the map cursor is over a managed or adoptable pin. Throttled; never
+    /// touches vanilla pin input.</summary>
+    private void UpdateEditHint(float unscaledDeltaTime)
+    {
+        _hintElapsed += unscaledDeltaTime;
+        if (_hintElapsed < 0.2f)
+        {
+            return;
+        }
+
+        _hintElapsed = 0f;
+        if (_workbenchPanel.IsVisible)
+        {
+            _mapControls.SetHint(null);
+            return;
+        }
+
+        if (MinimapReflection.TryScreenToWorldPoint(Input.mousePosition, out Vector3 cursorWorld) &&
+            _pinAdapter.TryFindNearest(cursorWorld, 30f, out Minimap.PinData hoverPin, out _) &&
+            (_pinAdapter.TryGetManagedId(hoverPin, out _) || _pinAdapter.IsAdoptableVanilla(hoverPin)))
+        {
+            _mapControls.SetHint(AtlasStrings.Format("hud.editHint", _settings.WorkbenchHotkey.Value));
+            return;
+        }
+
+        _mapControls.SetHint(null);
     }
 
     private void OpenWorkbenchAtCursor()
@@ -530,7 +585,11 @@ internal sealed class CartographerRuntime : IDisposable
 
         var point = new RoadPoint(world.x, world.y, world.z);
         PinOperations operations = _pinCommands.Operations;
-        Action resync = () => _pinAdapter.ReconcileOnMapReady(_pinStore);
+
+        // The workbench applies edits to a known managed pin, so it must
+        // resync through the tracking-preserving in-session path — a full
+        // reconcile here is exactly the DEF-v1.0-004 duplicate bug.
+        Action resync = ResyncPins;
 
         AtlasPin? nearestManaged = null;
         float best = 30f;
@@ -997,6 +1056,29 @@ internal sealed class CartographerRuntime : IDisposable
 
         var center = new RoadPoint(operation.Position.x, operation.Position.y, operation.Position.z);
 
+        // DEF-v1.0-005: persistent negative terrain intent. Level/Raise
+        // (terraforming side-effect paint) and Cultivate/Reset mark their
+        // brush footprint as explicitly-not-road, so traversal and chunk
+        // recovery can never rediscover the leftover dirt paint as a road —
+        // this session or any later one. A deliberate Pathen/Paved op
+        // clears the footprint it covers before its observation lands.
+        float intentRadius = operation.RadiusMeters + TerrainIntentMask.BrushMarginMeters;
+        if (operation.IsTerraforming || operation.RoadKind is null)
+        {
+            int excluded = _terrainIntent.AddExclusion(center.X, center.Z, intentRadius);
+            if (excluded > 0 && _settings.DebugLogging.Value)
+            {
+                _rateLimited.Info(
+                    "terrain-intent-add",
+                    $"Terraforming at ({center.X:0.#}, {center.Z:0.#}) r={operation.RadiusMeters:0.#}m: " +
+                    $"{excluded} cell(s) marked not-road ({_terrainIntent.Count} total).");
+            }
+        }
+        else
+        {
+            _terrainIntent.ClearExclusion(center.X, center.Z, intentRadius);
+        }
+
         if (_settings.ReconcileTerrainChanges.Value)
         {
             int removed = 0;
@@ -1177,14 +1259,19 @@ internal sealed class CartographerRuntime : IDisposable
                 // logged. Never touches stored data.
                 if (args.Length > 1 && string.Equals(args[1], "clear", StringComparison.OrdinalIgnoreCase))
                 {
+                    // Immediate redraw: the diagnostic must leave nothing
+                    // behind, not wait for the debounce window.
                     _renderer.ClearAlignmentProbe();
-                    _redrawPending = true;
-                    return "Alignment probe pins removed; road overlays will redraw clean.";
+                    _renderer.RedrawAll(_atlas);
+                    _redrawPending = false;
+                    return "Alignment markers removed.";
                 }
 
                 return _renderer.RunAlignmentProbe(playerPosition, _atlas);
             default:
-                return "Usage: cc_roads [status|delete|kind|hide|unhide|split|join|rebuild|undo|align] [radius].";
+                // "align" stays functional but unadvertised: it is a
+                // DEF-v1.0-002 diagnostic, not a player tool.
+                return "Usage: cc_roads [status|delete|kind|hide|unhide|split|join|rebuild|undo] [radius].";
         }
 
         if (changed)
@@ -1209,14 +1296,19 @@ internal sealed class CartographerRuntime : IDisposable
 
     public void SaveIfDirty()
     {
-        if (_worldUid is null || !_atlas.IsDirty)
+        if (_worldUid is null)
         {
             return;
         }
 
-        if (_persistence.Save(_worldUid.Value, _atlas))
+        if (_atlas.IsDirty && _persistence.Save(_worldUid.Value, _atlas))
         {
             _atlas.MarkClean();
+        }
+
+        if (_terrainIntent.IsDirty && _terrainIntentPersistence.Save(_worldUid.Value, _terrainIntent))
+        {
+            _terrainIntent.MarkClean();
         }
     }
 
@@ -1250,6 +1342,7 @@ internal sealed class CartographerRuntime : IDisposable
 
         _worldUid = uid;
         _atlas = _persistence.Load(uid);
+        _terrainIntent = _terrainIntentPersistence.Load(uid);
         _pinStore = _pinPersistence.Load(uid);
         _pinStore.LocalAuthor = _authorId;
         _pinStore.Changed += _pinPersistence.QueueJournal;
@@ -1272,7 +1365,7 @@ internal sealed class CartographerRuntime : IDisposable
             _settings,
             _log,
             () => _routeRedrawPending = true);
-        _pipeline = new RoadObservationPipeline(_atlas);
+        _pipeline = new RoadObservationPipeline(_atlas, _terrainIntent);
         _editor = new RoadAtlasEditor(_atlas);
         _surveyor = new RoadSurveyor(_settings, _probe, _pipeline, _log);
         _chunkRecovery.Reset();
