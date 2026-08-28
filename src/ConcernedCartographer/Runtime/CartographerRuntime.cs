@@ -1223,7 +1223,9 @@ internal sealed class CartographerRuntime : IDisposable
 
                 return _renderer.RunAlignmentProbe(playerPosition, _atlas);
             default:
-                return "Usage: cc_roads [status|delete|kind|hide|unhide|split|join|rebuild|undo|align] [radius].";
+                // "align" stays functional but unadvertised: it is a
+                // DEF-v1.0-002 diagnostic, not a player tool.
+                return "Usage: cc_roads [status|delete|kind|hide|unhide|split|join|rebuild|undo] [radius].";
         }
 
         if (changed)
