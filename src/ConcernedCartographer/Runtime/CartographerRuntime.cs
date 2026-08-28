@@ -49,6 +49,8 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly AtlasDrawerPanel _drawerPanel;
     private readonly SavedViewPersistence _savedViewPersistence;
     private SavedViewStore _savedViews = new();
+    private readonly LargeMapControls _mapControls;
+    private float _hintElapsed;
     private readonly QuickPinCapture _quickPinCapture;
     private readonly SurveyEngine _surveyEngine = new();
     private readonly SurveyScanner _surveyScanner;
@@ -86,6 +88,7 @@ internal sealed class CartographerRuntime : IDisposable
         _savedViews = _savedViewPersistence.Load();
         _drawerPanel = new AtlasDrawerPanel(log);
         WireDrawer();
+        _mapControls = new LargeMapControls(log) { AtlasButtonClicked = ToggleDrawer };
         _quickPinCapture = new QuickPinCapture(settings, log);
         _surveyRulePersistence = new SurveyRulePersistence(log);
         _surveyEngine.Rules = _surveyRulePersistence.LoadOrCreate();
@@ -172,6 +175,12 @@ internal sealed class CartographerRuntime : IDisposable
 
         if (Minimap.IsOpen() && !Minimap.InTextInput())
         {
+            // Discoverability (#95): a visible Atlas button and a
+            // contextual edit hint, on top of (never instead of) the
+            // rebindable hotkeys.
+            _mapControls.EnsureBuilt(_settings.DrawerHotkey.Value.ToString());
+            UpdateEditHint(unscaledDeltaTime);
+
             if (_pinCommands is not null && !_workbenchPanel.IsVisible &&
                 (Input.GetKeyDown(_settings.WorkbenchHotkey.Value) ||
                  GamepadDown(_settings.WorkbenchGamepadButton.Value)))
@@ -182,19 +191,7 @@ internal sealed class CartographerRuntime : IDisposable
             if (Input.GetKeyDown(_settings.DrawerHotkey.Value) ||
                 GamepadDown(_settings.DrawerGamepadButton.Value))
             {
-                if (AtlasAccessAllowed(out string drawerDenial))
-                {
-                    _drawerPanel.UiScale = _settings.UiScale.Value;
-                    _drawerPanel.Toggle(
-                        _settings.DrawerShowDirt.Value,
-                        _settings.DrawerShowPaved.Value,
-                        _settings.DrawerShowPins.Value,
-                        _settings.DrawerCluster.Value);
-                }
-                else
-                {
-                    Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, drawerDenial);
-                }
+                ToggleDrawer();
             }
 
             if (_displayController.ZoomTierChanged())
@@ -232,6 +229,7 @@ internal sealed class CartographerRuntime : IDisposable
             _pipeline?.EndAllStrokes();
             _chunkRecovery.Reset();
             _displayController.Reset();
+            _mapControls.Reset();
             _pinAdapter.Reset();
             SaveIfDirty();
             SavePinsSnapshot();
@@ -426,6 +424,54 @@ internal sealed class CartographerRuntime : IDisposable
     {
         _pinAdapter.SyncAllPins(_pinStore, _displayController.IsDisplayHidden);
         ReapplyDisplay();
+    }
+
+    /// <summary>Drawer toggle shared by the hotkey and the large-map
+    /// button, with the NoMap cartography-table gate applied to both.</summary>
+    private void ToggleDrawer()
+    {
+        if (AtlasAccessAllowed(out string drawerDenial))
+        {
+            _drawerPanel.UiScale = _settings.UiScale.Value;
+            _drawerPanel.Toggle(
+                _settings.DrawerShowDirt.Value,
+                _settings.DrawerShowPaved.Value,
+                _settings.DrawerShowPins.Value,
+                _settings.DrawerCluster.Value);
+        }
+        else
+        {
+            Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, drawerDenial);
+        }
+    }
+
+    /// <summary>Shows "{hotkey} — Edit with Concerned Cartographer" while
+    /// the map cursor is over a managed or adoptable pin. Throttled; never
+    /// touches vanilla pin input.</summary>
+    private void UpdateEditHint(float unscaledDeltaTime)
+    {
+        _hintElapsed += unscaledDeltaTime;
+        if (_hintElapsed < 0.2f)
+        {
+            return;
+        }
+
+        _hintElapsed = 0f;
+        if (_workbenchPanel.IsVisible)
+        {
+            _mapControls.SetHint(null);
+            return;
+        }
+
+        if (MinimapReflection.TryScreenToWorldPoint(Input.mousePosition, out Vector3 cursorWorld) &&
+            _pinAdapter.TryFindNearest(cursorWorld, 30f, out Minimap.PinData hoverPin, out _) &&
+            (_pinAdapter.TryGetManagedId(hoverPin, out _) || _pinAdapter.IsAdoptableVanilla(hoverPin)))
+        {
+            _mapControls.SetHint(AtlasStrings.Format("hud.editHint", _settings.WorkbenchHotkey.Value));
+            return;
+        }
+
+        _mapControls.SetHint(null);
     }
 
     private void OpenWorkbenchAtCursor()

@@ -17,7 +17,7 @@ Concerned Cartographer turns the dirt Pathen and paved terrain your Viking actua
 
 - Roads are discovered as **you walk along them after installing the mod**.
 - This version does not scan the whole world or immediately recover every old road.
-- Any road-like terrain paint you walk on is recorded, including world-generated dirt patches such as the circle around the spawn stones — the mod does not yet distinguish player-made from world-generated paint.
+- World-generated dirt patches (such as the circle around the spawn stones) can still be recorded when you walk on them — the mod cannot distinguish world-generated paint from roads. Your **own terraforming is understood**, though: ground you Level/Raise/Cultivate/Reset is remembered as explicitly-not-road (persistently, per world), and only a later deliberate Pathen/Paved action turns it into road ink.
 - A road line can sit up to ~6 m from its true position at maximum zoom; that is the native resolution of Valheim's 2048-pixel map texture.
 - The atlas is stored inside the **active mod-manager profile's** BepInEx config folder. Each profile keeps its own atlas, so switching to a fresh profile starts an empty atlas for the same world and roads re-record as you traverse them. Copy the `ConcernedCatMods` config folder between profiles to carry an atlas over.
 - Road data is local to each client; there is no multiplayer sharing yet.
@@ -56,6 +56,21 @@ Settings live in `BepInEx/config/com.theconcernedcat.valheim.concernedcartograph
 | Diagnostics / DebugLogging | false | — | Opt-in, rate-limited classification/recording diagnostics |
 | Diagnostics / DrawCalibrationMarkers | false | — | Overlay alignment calibration crosses (development aid) |
 
+## Controls
+
+Everything is reachable from the large map; hotkeys are rebindable in the
+config.
+
+| Input | Where | Action |
+|---|---|---|
+| `L`, or the **CC Atlas [L]** button | Large map | Open/close the Atlas Drawer (layers, search, saved views) |
+| `P` | Large map, cursor over/near a pin | Open the Pin Workbench for that pin — a hint appears whenever the cursor is over an editable pin |
+| `F7` | In the world | Quick-pin what you are looking at |
+| Right-click on a pin | Large map | Vanilla pin delete — this mod never changes vanilla map input |
+
+Console commands (launch with `-console`): `cc_roads`, `cc_pins`,
+`cc_atlas`, `cc_survey`, `cc_routes`, `cc_sync`.
+
 ## Pin Workbench
 
 Your pins become a durable, editable atlas. Press the workbench hotkey
@@ -64,6 +79,13 @@ editor, your vanilla pins offer an explicit **Adopt** button (adoption
 never moves or duplicates the pin), and foreign/system pins show read-only
 info. Every edit keeps the pin's identity — nothing is deleted and
 recreated — and deletes are recoverable tombstones.
+
+Visual properties are edited with pickers, not raw IDs: the icon field is
+a dropdown with the live pin sprite as preview (custom/legacy icon IDs are
+preserved and offered as "Keep custom"), category offers suggestions while
+staying free text, and size is a stepper. Pin color is stored and synced
+but not yet rendered on the map, so it sits at the bottom of the panel
+labeled **metadata** rather than pretending to be visual.
 
 The `cc_pins` console command drives everything scriptably: `edit`,
 `status`, `list [filter]`, `adopt`, `adoptall confirm`, `create <name>`,
