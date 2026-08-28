@@ -37,6 +37,8 @@ internal sealed class CartographerRuntime : IDisposable
     private float _redrawElapsed;
 
     private RoadAtlas _atlas = new();
+    private TerrainIntentMask _terrainIntent = new();
+    private readonly TerrainIntentPersistence _terrainIntentPersistence;
     private RoadObservationPipeline? _pipeline;
     private RoadAtlasEditor? _editor;
     private RoadSurveyor? _surveyor;
@@ -72,6 +74,7 @@ internal sealed class CartographerRuntime : IDisposable
         _settings = settings;
         _log = log;
         _persistence = new RoadPersistence(log);
+        _terrainIntentPersistence = new TerrainIntentPersistence(log);
         _pinPersistence = new PinPersistence(log);
         _probe = new GroundPaintProbe(settings, log);
         _renderer = new RoadOverlayRenderer(settings, log);
@@ -413,9 +416,15 @@ internal sealed class CartographerRuntime : IDisposable
         }
     }
 
+    /// <summary>In-session pin sync (DEF-v1.0-004): targeted per-pin
+    /// updates that preserve AtlasId↔rendering tracking, so an edited pin
+    /// updates its own rendering instead of orphaning it and duplicating.
+    /// Full ReconcileOnMapReady is reserved for map/world reconstruction
+    /// in OnMapAvailable. Display filters/clustering are re-applied so
+    /// edits that change filter membership take effect immediately.</summary>
     private void ResyncPins()
     {
-        _pinAdapter.ReconcileOnMapReady(_pinStore);
+        _pinAdapter.SyncAllPins(_pinStore, _displayController.IsDisplayHidden);
         ReapplyDisplay();
     }
 
@@ -530,7 +539,11 @@ internal sealed class CartographerRuntime : IDisposable
 
         var point = new RoadPoint(world.x, world.y, world.z);
         PinOperations operations = _pinCommands.Operations;
-        Action resync = () => _pinAdapter.ReconcileOnMapReady(_pinStore);
+
+        // The workbench applies edits to a known managed pin, so it must
+        // resync through the tracking-preserving in-session path — a full
+        // reconcile here is exactly the DEF-v1.0-004 duplicate bug.
+        Action resync = ResyncPins;
 
         AtlasPin? nearestManaged = null;
         float best = 30f;
@@ -997,6 +1010,29 @@ internal sealed class CartographerRuntime : IDisposable
 
         var center = new RoadPoint(operation.Position.x, operation.Position.y, operation.Position.z);
 
+        // DEF-v1.0-005: persistent negative terrain intent. Level/Raise
+        // (terraforming side-effect paint) and Cultivate/Reset mark their
+        // brush footprint as explicitly-not-road, so traversal and chunk
+        // recovery can never rediscover the leftover dirt paint as a road —
+        // this session or any later one. A deliberate Pathen/Paved op
+        // clears the footprint it covers before its observation lands.
+        float intentRadius = operation.RadiusMeters + TerrainIntentMask.BrushMarginMeters;
+        if (operation.IsTerraforming || operation.RoadKind is null)
+        {
+            int excluded = _terrainIntent.AddExclusion(center.X, center.Z, intentRadius);
+            if (excluded > 0 && _settings.DebugLogging.Value)
+            {
+                _rateLimited.Info(
+                    "terrain-intent-add",
+                    $"Terraforming at ({center.X:0.#}, {center.Z:0.#}) r={operation.RadiusMeters:0.#}m: " +
+                    $"{excluded} cell(s) marked not-road ({_terrainIntent.Count} total).");
+            }
+        }
+        else
+        {
+            _terrainIntent.ClearExclusion(center.X, center.Z, intentRadius);
+        }
+
         if (_settings.ReconcileTerrainChanges.Value)
         {
             int removed = 0;
@@ -1209,14 +1245,19 @@ internal sealed class CartographerRuntime : IDisposable
 
     public void SaveIfDirty()
     {
-        if (_worldUid is null || !_atlas.IsDirty)
+        if (_worldUid is null)
         {
             return;
         }
 
-        if (_persistence.Save(_worldUid.Value, _atlas))
+        if (_atlas.IsDirty && _persistence.Save(_worldUid.Value, _atlas))
         {
             _atlas.MarkClean();
+        }
+
+        if (_terrainIntent.IsDirty && _terrainIntentPersistence.Save(_worldUid.Value, _terrainIntent))
+        {
+            _terrainIntent.MarkClean();
         }
     }
 
@@ -1250,6 +1291,7 @@ internal sealed class CartographerRuntime : IDisposable
 
         _worldUid = uid;
         _atlas = _persistence.Load(uid);
+        _terrainIntent = _terrainIntentPersistence.Load(uid);
         _pinStore = _pinPersistence.Load(uid);
         _pinStore.LocalAuthor = _authorId;
         _pinStore.Changed += _pinPersistence.QueueJournal;
@@ -1272,7 +1314,7 @@ internal sealed class CartographerRuntime : IDisposable
             _settings,
             _log,
             () => _routeRedrawPending = true);
-        _pipeline = new RoadObservationPipeline(_atlas);
+        _pipeline = new RoadObservationPipeline(_atlas, _terrainIntent);
         _editor = new RoadAtlasEditor(_atlas);
         _surveyor = new RoadSurveyor(_settings, _probe, _pipeline, _log);
         _chunkRecovery.Reset();
