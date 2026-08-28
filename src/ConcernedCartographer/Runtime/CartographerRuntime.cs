@@ -1213,9 +1213,12 @@ internal sealed class CartographerRuntime : IDisposable
                 // logged. Never touches stored data.
                 if (args.Length > 1 && string.Equals(args[1], "clear", StringComparison.OrdinalIgnoreCase))
                 {
+                    // Immediate redraw: the diagnostic must leave nothing
+                    // behind, not wait for the debounce window.
                     _renderer.ClearAlignmentProbe();
-                    _redrawPending = true;
-                    return "Alignment probe pins removed; road overlays will redraw clean.";
+                    _renderer.RedrawAll(_atlas);
+                    _redrawPending = false;
+                    return "Alignment markers removed.";
                 }
 
                 return _renderer.RunAlignmentProbe(playerPosition, _atlas);
