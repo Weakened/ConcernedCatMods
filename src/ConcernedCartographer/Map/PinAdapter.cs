@@ -18,6 +18,13 @@ namespace TheConcernedCat.ConcernedCartographer.Map;
 /// owner, foreign-author pins) is foreign and is never edited, adopted, or
 /// removed by any operation here.
 ///
+/// Tracking and every match/sync decision live in the pure
+/// <see cref="PinRenderingLedger{THandle}"/> (DEF-v1.0-004): in-session
+/// mutations go through the targeted <see cref="SyncPin"/>/<see
+/// cref="SyncAllPins"/> path, which preserves tracking so an edited pin
+/// replaces its own rendering; <see cref="ReconcileOnMapReady"/> (reset +
+/// claim-by-position-and-name) is reserved for map/world reconstruction.
+///
 /// The private Minimap.m_pins list is read through a Harmony
 /// skip-visibility FieldRef (direct publicized access throws
 /// MethodAccessException at JIT — proven by DEF-v0.2-001). Every visual
@@ -33,8 +40,7 @@ internal sealed class PinAdapter
     private static readonly int[] PlaceableTypes = { 0, 1, 2, 3, 6 };
 
     private readonly ManualLogSource _log;
-    private readonly Dictionary<Minimap.PinData, AtlasId> _idByPin = new();
-    private readonly Dictionary<Guid, Minimap.PinData> _pinById = new();
+    private readonly PinRenderingLedger<Minimap.PinData> _ledger = new(ReadRenderingState);
     private bool _disabledForSession;
 
     public PinAdapter(ManualLogSource log)
@@ -48,8 +54,7 @@ internal sealed class PinAdapter
     /// untouched.</summary>
     public void Reset()
     {
-        _idByPin.Clear();
-        _pinById.Clear();
+        _ledger.Reset();
     }
 
     /// <summary>Vanilla pins the player could adopt right now.</summary>
@@ -93,7 +98,7 @@ internal sealed class PinAdapter
                 pin.Source = AtlasPinSource.AdoptedVanilla;
                 pin.Position = new RoadPoint(source.m_pos.x, source.m_pos.y, source.m_pos.z);
             });
-            Track(source, managed.Id);
+            _ledger.Track(source, managed.Id);
             return managed;
         }
         catch (Exception exception)
@@ -108,7 +113,12 @@ internal sealed class PinAdapter
     /// name, adds map pins for unmatched living entries, removes renderings
     /// of deleted/archived entries, and leaves every unmatched vanilla or
     /// foreign pin untouched. Each vanilla pin can be claimed at most once,
-    /// so restarts can never produce duplicates.</summary>
+    /// so restarts can never produce duplicates.
+    ///
+    /// Map/world reconstruction ONLY (DEF-v1.0-004): the reset discards
+    /// tracking, and claim-by-name cannot re-link a rendering whose pin was
+    /// renamed since the rendering was last synced. In-session mutations
+    /// must go through <see cref="SyncPin"/>/<see cref="SyncAllPins"/>.</summary>
     public void ReconcileOnMapReady(PinStore store)
     {
         if (_disabledForSession)
@@ -137,7 +147,7 @@ internal sealed class PinAdapter
             int removed = 0;
             foreach (AtlasPin managed in store.All)
             {
-                Minimap.PinData? match = ClaimMatch(unclaimed, managed);
+                Minimap.PinData? match = _ledger.ClaimMatch(unclaimed, managed);
 
                 if (managed.Deleted || managed.Archived)
                 {
@@ -152,8 +162,8 @@ internal sealed class PinAdapter
 
                 if (match is not null)
                 {
-                    Track(match, managed.Id);
-                    SyncPinData(managed, match);
+                    _ledger.Track(match, managed.Id);
+                    SyncPin(store, managed.Id);
                 }
                 else
                 {
@@ -164,7 +174,7 @@ internal sealed class PinAdapter
 
             if (added > 0 || removed > 0)
             {
-                _log.LogInfo($"Pin reconcile: linked {_idByPin.Count} managed pin(s), added {added}, removed {removed} stale rendering(s).");
+                _log.LogInfo($"Pin reconcile: linked {_ledger.TrackedCount} managed pin(s), added {added}, removed {removed} stale rendering(s).");
             }
         }
         catch (Exception exception)
@@ -173,8 +183,10 @@ internal sealed class PinAdapter
         }
     }
 
-    /// <summary>Pushes a store entity's current state onto the map. Uses
-    /// public RemovePin/AddPin when visual fields changed.</summary>
+    /// <summary>Pushes a store entity's current state onto the map through
+    /// the tracked rendering. Uses public RemovePin/AddPin when visual
+    /// fields changed; tracking follows the replacement, so repeated edits
+    /// always target the same single rendering.</summary>
     public void SyncPin(PinStore store, AtlasId id)
     {
         if (_disabledForSession)
@@ -189,30 +201,56 @@ internal sealed class PinAdapter
                 return;
             }
 
-            _pinById.TryGetValue(id.Value, out Minimap.PinData? existing);
-
-            if (managed.Deleted || managed.Archived)
+            int wantedType = IconRegistry.ResolveVanillaType(managed.IconId);
+            switch (_ledger.DecideSync(managed, wantedType, out Minimap.PinData? existing))
             {
-                if (existing is not null)
-                {
+                case PinRenderingLedger<Minimap.PinData>.SyncDecision.Add:
+                    AddManagedPin(managed);
+                    break;
+                case PinRenderingLedger<Minimap.PinData>.SyncDecision.Remove:
                     Minimap.instance.RemovePin(existing);
-                    Untrack(existing);
-                }
-
-                return;
+                    _ledger.Untrack(existing!);
+                    break;
+                case PinRenderingLedger<Minimap.PinData>.SyncDecision.Replace:
+                    Minimap.instance.RemovePin(existing);
+                    _ledger.Untrack(existing!);
+                    AddManagedPin(managed);
+                    break;
+                case PinRenderingLedger<Minimap.PinData>.SyncDecision.UpdateChecked:
+                    existing!.m_checked = managed.Checked;
+                    break;
             }
-
-            if (existing is null)
-            {
-                AddManagedPin(managed);
-                return;
-            }
-
-            SyncPinData(managed, existing);
         }
         catch (Exception exception)
         {
             Disable(exception);
+        }
+    }
+
+    /// <summary>In-session batch sync (DEF-v1.0-004): pushes every store
+    /// entity through the targeted <see cref="SyncPin"/> path WITHOUT
+    /// resetting tracking, so batch edits, merges, undo/redo, sync applies
+    /// and survey accepts can never orphan a rendering. skipRendering lets
+    /// the display layer keep filtered/clustered pins hidden.</summary>
+    public void SyncAllPins(PinStore store, Func<AtlasPin, bool>? skipRendering = null)
+    {
+        if (_disabledForSession)
+        {
+            return;
+        }
+
+        foreach (AtlasPin managed in store.All)
+        {
+            if (skipRendering is not null && !managed.Deleted && !managed.Archived && skipRendering(managed))
+            {
+                continue;
+            }
+
+            SyncPin(store, managed.Id);
+            if (_disabledForSession)
+            {
+                return;
+            }
         }
     }
 
@@ -222,7 +260,7 @@ internal sealed class PinAdapter
     /// autosave cadence.</summary>
     public void AbsorbVanillaChanges(PinStore store)
     {
-        if (_disabledForSession || _idByPin.Count == 0)
+        if (_disabledForSession || _ledger.TrackedCount == 0)
         {
             return;
         }
@@ -236,7 +274,7 @@ internal sealed class PinAdapter
 
             var live = new HashSet<Minimap.PinData>(pins);
             var vanished = new List<Minimap.PinData>();
-            foreach (KeyValuePair<Minimap.PinData, AtlasId> tracked in _idByPin)
+            foreach (KeyValuePair<Minimap.PinData, AtlasId> tracked in _ledger.Tracked)
             {
                 if (!live.Contains(tracked.Key))
                 {
@@ -254,10 +292,10 @@ internal sealed class PinAdapter
 
             foreach (Minimap.PinData gone in vanished)
             {
-                if (_idByPin.TryGetValue(gone, out AtlasId id))
+                if (_ledger.TryGetId(gone, out AtlasId id))
                 {
                     store.Delete(id);
-                    Untrack(gone);
+                    _ledger.Untrack(gone);
                     _log.LogInfo($"Managed pin {id} was deleted through vanilla UI; tombstoned in the atlas.");
                 }
             }
@@ -281,9 +319,9 @@ internal sealed class PinAdapter
 
         try
         {
-            if (_pinById.TryGetValue(id.Value, out Minimap.PinData? rendered))
+            if (_ledger.TryGetRendering(id, out Minimap.PinData rendered))
             {
-                Untrack(rendered);
+                _ledger.Untrack(rendered);
                 Minimap.instance.RemovePin(rendered);
             }
         }
@@ -295,7 +333,7 @@ internal sealed class PinAdapter
 
     public bool TryGetManagedId(Minimap.PinData pin, out AtlasId id)
     {
-        return _idByPin.TryGetValue(pin, out id);
+        return _ledger.TryGetId(pin, out id);
     }
 
     /// <summary>The nearest map pin to a world position with its class, for
@@ -330,31 +368,13 @@ internal sealed class PinAdapter
         return pin is not null &&
             pin.m_save &&
             pin.m_ownerID == 0L &&
-            !_idByPin.ContainsKey(pin) &&
+            !_ledger.IsTracked(pin) &&
             Array.IndexOf(PlaceableTypes, (int)pin.m_type) >= 0;
     }
 
     public bool IsForeign(Minimap.PinData pin)
     {
-        return !_idByPin.ContainsKey(pin) && !IsAdoptableVanilla(pin);
-    }
-
-    private Minimap.PinData? ClaimMatch(List<Minimap.PinData> unclaimed, AtlasPin managed)
-    {
-        for (int index = 0; index < unclaimed.Count; index++)
-        {
-            Minimap.PinData candidate = unclaimed[index];
-            float dx = candidate.m_pos.x - managed.Position.X;
-            float dz = candidate.m_pos.z - managed.Position.Z;
-            if ((dx * dx) + (dz * dz) <= 0.25f &&
-                string.Equals(candidate.m_name ?? "", managed.Name, StringComparison.Ordinal))
-            {
-                unclaimed.RemoveAt(index);
-                return candidate;
-            }
-        }
-
-        return null;
+        return !_ledger.IsTracked(pin) && !IsAdoptableVanilla(pin);
     }
 
     private void AddManagedPin(AtlasPin managed)
@@ -362,43 +382,18 @@ internal sealed class PinAdapter
         var position = new Vector3(managed.Position.X, managed.Position.Y, managed.Position.Z);
         var type = (Minimap.PinType)IconRegistry.ResolveVanillaType(managed.IconId);
         Minimap.PinData created = Minimap.instance.AddPin(position, type, managed.Name, save: true, managed.Checked);
-        Track(created, managed.Id);
+        _ledger.Track(created, managed.Id);
     }
 
-    private void SyncPinData(AtlasPin managed, Minimap.PinData rendered)
+    private static PinRenderingLedger<Minimap.PinData>.RenderingState ReadRenderingState(Minimap.PinData pin)
     {
-        int wantedType = IconRegistry.ResolveVanillaType(managed.IconId);
-        bool visualChange = (int)rendered.m_type != wantedType ||
-            !string.Equals(rendered.m_name ?? "", managed.Name, StringComparison.Ordinal) ||
-            Vector3.Distance(rendered.m_pos, new Vector3(managed.Position.X, managed.Position.Y, managed.Position.Z)) > 0.01f;
-
-        if (visualChange)
-        {
-            Minimap.instance.RemovePin(rendered);
-            Untrack(rendered);
-            AddManagedPin(managed);
-            return;
-        }
-
-        if (rendered.m_checked != managed.Checked)
-        {
-            rendered.m_checked = managed.Checked;
-        }
-    }
-
-    private void Track(Minimap.PinData pin, AtlasId id)
-    {
-        _idByPin[pin] = id;
-        _pinById[id.Value] = pin;
-    }
-
-    private void Untrack(Minimap.PinData pin)
-    {
-        if (_idByPin.TryGetValue(pin, out AtlasId id))
-        {
-            _idByPin.Remove(pin);
-            _pinById.Remove(id.Value);
-        }
+        return new PinRenderingLedger<Minimap.PinData>.RenderingState(
+            pin.m_name ?? "",
+            pin.m_pos.x,
+            pin.m_pos.y,
+            pin.m_pos.z,
+            (int)pin.m_type,
+            pin.m_checked);
     }
 
     private bool TryGetPins(out List<Minimap.PinData> pins)

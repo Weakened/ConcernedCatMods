@@ -47,6 +47,14 @@ internal sealed class PinDisplayController
         QueryText = text ?? "";
     }
 
+    /// <summary>True when this layer is currently hiding the pin's
+    /// rendering (filtered out or folded into a cluster). The in-session
+    /// batch sync uses this to leave hidden pins hidden (DEF-v1.0-004).</summary>
+    public bool IsDisplayHidden(AtlasPin pin)
+    {
+        return _displayHidden.Contains(pin.Id.Value);
+    }
+
     /// <summary>Recomputes what the map shows. Idempotent; call after any
     /// filter/toggle change, store resync, or zoom-tier change.</summary>
     public void Apply(PinStore store, PinAdapter adapter)
