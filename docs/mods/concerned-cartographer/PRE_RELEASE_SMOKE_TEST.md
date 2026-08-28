@@ -5,12 +5,87 @@ manual-only verification deferred by the autonomous conveyor (OPS-001
 rev 2) from v0.3 onward and is finalized against the exact v1.0 RC. Rows
 marked **BLOCKS** must pass before publication; others are record-and-ship.
 
-> Status: FINAL for v1.0, amended 2026-08-27 after the first smoke pass
-> found three release blockers (DEF-v1.0-001/-002/-003, issues #89–#91).
-> **Do NOT restart the full 2.5–4 h checklist.** Start at section R below
-> and resume the shortened golden path from where the first pass stopped.
+> Status: FINAL for v1.0, amended 2026-08-27 (second amendment) after the
+> second smoke pass found two new P1 blockers (DEF-v1.0-004/-005, issues
+> #92–#93) plus UX gaps (#94–#95). **Do NOT restart the full 2.5–4 h
+> checklist.** Start at section R2 below and resume the shortened golden
+> path from where the second pass stopped.
 
-## R. Replacement-RC mini-regression — RESUME SMOKE FROM HERE
+## R2. RC3 mini-regression — RESUME SMOKE FROM HERE
+
+The second human smoke pass (2026-08-27) ran against RC `7ed20fef…`
+(ZIP `B47E7C9D…`). That RC is **superseded** — do not test or upload it
+again. It PASSED: adoption input trap (DEF-v1.0-001), workbench layout
+(DEF-v1.0-003), and overlay alignment (DEF-v1.0-002, closed on logged
+residuals ≤ 1 texel — see #90). It FAILED on managed-pin edit
+duplication (DEF-v1.0-004, #92) and leveling-paints-roads
+(DEF-v1.0-005, #93), with UX gaps filed as #94/#95 — all addressed in
+this RC. Run blocks A–E in order against the NEW RC (identity in
+`RELEASE_DOSSIER.md`); every block **BLOCKS**.
+
+### A. Startup
+
+1. Clean import of the exact RC3 ZIP into the smoke profile (verify its
+   SHA-256 against the dossier).
+2. Start modded: Concerned Cartographer **1.0.0** banner, no CC errors,
+   menu responsive.
+
+### B. Edit-in-place identity (DEF-v1.0-004, #92)
+
+1. In a disposable world, create a vanilla pin named `Home`.
+2. Adopt it (`P` over the pin → Adopt).
+3. Rename to `Smoke Home`; Apply.
+4. Change the icon via the picker; Apply.
+5. Change category/notes/tags; Apply.
+6. Close and reopen the large map.
+7. Restart the game and re-enter the world.
+
+PASS: exactly **ONE** map pin throughout, at the intended position;
+metadata persists; no orphan pin with the old name; no duplicate after
+restart. *On failure capture:* map screenshots + `LogOutput.log`
+("Pin reconcile"/pin-adapter lines).
+
+### C. Editor and discoverability (#94, #95)
+
+1. Icon is selected via the picker (sprite preview + list); a pin with a
+   custom/legacy icon ID keeps it via "Keep custom".
+2. Color appears only at the bottom labeled **metadata** — no prominent
+   picker that visibly does nothing.
+3. Size adjusts via the −/+ stepper with Reset (labeled metadata).
+4. Every label/control sits inside the panel (spot-check UiScale 0.8 and 1.6).
+5. The **CC Atlas [L]** button is visible on the large map and opens the
+   Atlas Drawer.
+6. Hovering an editable pin shows `P — Edit with Concerned Cartographer`
+   and the hint is understandable.
+7. Clicking an Atlas Drawer search result opens the Pin Workbench for
+   that pin.
+8. Vanilla right-click pin deletion still behaves exactly vanilla.
+
+### D. Terrain intent (DEF-v1.0-005, #93)
+
+1. Level (hoe) a patch of untouched ground away from real roads.
+2. Walk back and forth over it.
+3. Stay nearby long enough for chunk recovery to scan the area.
+4. **NO** Dirt road ink appears on the map.
+5. Restart, revisit, walk it again: still **NO** ink.
+6. Pathen across part of it: Dirt ink appears exactly there.
+7. Pave part of the pathen strip: Paved ink replaces it, no double ink.
+
+*On failure capture:* before/after map screenshots + `LogOutput.log`.
+
+### E. Alignment spot check (diagnostic only)
+
+1. `cc_roads align`: the console table must end
+   `ALIGNMENT PASS: max residual … texels` (≤ 1.00); markers are small
+   dots/crosses and labels do not obscure the marker centers.
+2. `cc_roads align clear` removes every diagnostic pin and cross
+   immediately.
+
+Only after A–E pass, resume the shortened golden path at
+routes/world-isolation/multiplayer (sections 2, 4, 6, 7 onward),
+skipping rows earlier passes already completed.
+
+## R. First replacement-RC mini-regression — COMPLETED 2026-08-27 (second pass); kept for the record
 
 The first human smoke pass (2026-08-27) ran against RC `9eb65291…`
 (ZIP `9F1F4128…`). That RC is **superseded / failed human smoke** — do

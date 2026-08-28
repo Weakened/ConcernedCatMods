@@ -64,6 +64,47 @@ A newer writer should:
 4. write one current canonical format;
 5. never discard an entire atlas because one row is malformed.
 
+## Terrain intent (negative road coverage)
+
+File:
+
+```text
+<world-uid>.terrain-intent.tsv
+```
+
+Format v1 (DEF-v1.0-005): a header row, then one row per excluded 1 m
+ground cell (cell indices, invariant culture):
+
+```text
+cc-terrain-intent\tv1
+cell\t<cx>\t<cz>
+```
+
+Semantics:
+
+- a cell is excluded when one of the local player's own successful
+  Level/Raise/Cultivate/Reset operations covered it (brush radius plus a
+  1 m margin) — dirt paint there is a terraforming side effect, never a
+  road;
+- traversal and chunk recovery refuse Dirt observations inside excluded
+  cells; Construction (explicit Pathen/Paved) is never gated, and its
+  brush clears the cells it covers;
+- bounded: 250,000 cells per world with oldest-first eviction beyond the
+  cap; adds/clears are idempotent set operations, so overlapping and
+  repeated operations converge;
+- world-isolated by filename; derived only from the local player's own
+  operations, so it can never reveal unexplored terrain.
+
+### Terrain-intent migration rule
+
+- readers skip malformed rows individually and never discard the file for
+  one bad row;
+- an **unknown header** (newer format or foreign file) loads as EMPTY for
+  the session, and the file is rewritten as v1 on the next save. This is
+  deliberate: the mask is derived safety data — the worst downgrade cost
+  is that already-leveled ground can re-ink until terraformed again; no
+  user-authored data is involved.
+
 ## Pin atlas
 
 Snapshot:
