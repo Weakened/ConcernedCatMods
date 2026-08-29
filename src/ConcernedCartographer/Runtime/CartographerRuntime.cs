@@ -49,10 +49,24 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly AtlasDrawerPanel _drawerPanel;
     private readonly SavedViewPersistence _savedViewPersistence;
     private SavedViewStore _savedViews = new();
-    private readonly LargeMapControls _mapControls;
+    private readonly MapUiCoordinator _mapUi;
     private readonly CrashConsentPanel _consentPanel;
     private bool _consentPromptChecked;
     private readonly PinPalettePanel _palettePanel;
+    private readonly RoutesPanel _routesPanel;
+    private readonly SurveyPanel _surveyPanel;
+    private readonly SharePanel _sharePanel;
+    private readonly SettingsPanel _settingsPanel;
+    private readonly SystemMarkersPanel _systemMarkersPanel;
+    private int _drawerToken;
+    private int _paletteToken;
+    private int _routesToken;
+    private int _surveyToken;
+    private int _shareToken;
+    private int _settingsToken;
+    private int _systemMarkersToken;
+    private int _workbenchToken;
+    private bool _quickPinArmed;
     private readonly PaletteBirthTracker<Minimap.PinData> _birthTracker = new();
     private float _hintElapsed;
 
@@ -98,10 +112,57 @@ internal sealed class CartographerRuntime : IDisposable
         _savedViews = _savedViewPersistence.Load();
         _drawerPanel = new AtlasDrawerPanel(log);
         WireDrawer();
-        _mapControls = new LargeMapControls(log) { AtlasButtonClicked = ToggleDrawer };
+        _mapUi = new MapUiCoordinator(log);
         _consentPanel = new CrashConsentPanel(log, settings);
-        _drawerPanel.PrivacyClicked = () => _consentPanel.ShowSettings();
         _palettePanel = new PinPalettePanel(log);
+        _routesPanel = new RoutesPanel(log, () => _routeCommands);
+        _surveyPanel = new SurveyPanel(log, settings, ExecuteSurveyCommand, () => _surveyEngine.Observations);
+        _sharePanel = new SharePanel(log, ExecuteSyncCommand, () =>
+        {
+            var authors = new List<string>();
+            foreach (SyncInbox.Envelope envelope in _syncInbox.Envelopes)
+            {
+                authors.Add(envelope.AuthorName);
+            }
+
+            return authors;
+        });
+        _settingsPanel = new SettingsPanel(log, ExecuteAtlasCommand, ExecuteRoadCommand, () => _consentPanel.ShowSettings());
+        _systemMarkersPanel = new SystemMarkersPanel(log);
+
+        // One major side surface at a time (#100).
+        _drawerToken = _mapUi.RegisterSurface(() => _drawerPanel.IsVisible, _drawerPanel.Hide);
+        _paletteToken = _mapUi.RegisterSurface(() => _palettePanel.IsVisible, _palettePanel.Hide);
+        _routesToken = _mapUi.RegisterSurface(() => _routesPanel.IsVisible, _routesPanel.Hide);
+        _surveyToken = _mapUi.RegisterSurface(() => _surveyPanel.IsVisible, _surveyPanel.Hide);
+        _shareToken = _mapUi.RegisterSurface(() => _sharePanel.IsVisible, _sharePanel.Hide);
+        _settingsToken = _mapUi.RegisterSurface(() => _settingsPanel.IsVisible, _settingsPanel.Hide);
+        _systemMarkersToken = _mapUi.RegisterSurface(() => _systemMarkersPanel.IsVisible, _systemMarkersPanel.Hide);
+        _workbenchToken = _mapUi.RegisterSurface(() => _workbenchPanel.IsVisible, _workbenchPanel.Close);
+
+        _mapUi.AtlasClicked = () => _mapUi.OpenExclusive(_drawerToken, ToggleDrawer);
+        _mapUi.MarkersClicked = () =>
+        {
+            if (PaletteActive())
+            {
+                _palettePanel.UiScale = _settings.UiScale.Value;
+                _palettePanel.EnsureBuilt();
+                _mapUi.OpenExclusive(_paletteToken, _palettePanel.Toggle);
+            }
+            else
+            {
+                Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft,
+                    "The enhanced marker palette is disabled (setting or a conflicting pin manager); the vanilla selector is shown instead.");
+            }
+        };
+        _mapUi.RoutesClicked = () => OpenSidePanel(_routesToken, _routesPanel);
+        _mapUi.SurveyClicked = () => OpenSidePanel(_surveyToken, _surveyPanel);
+        _mapUi.ShareClicked = () => OpenSidePanel(_shareToken, _sharePanel);
+        _mapUi.SettingsClicked = () => OpenSidePanel(_settingsToken, _settingsPanel);
+        _mapUi.QuickPinClicked = ArmQuickPin;
+        _drawerPanel.PrivacyClicked = () => _consentPanel.ShowSettings();
+        _drawerPanel.SystemMarkersClicked = () => OpenSidePanel(_systemMarkersToken, _systemMarkersPanel);
+        MapInputGate.Install(log);
         _palettePanel.IconChosen = definition =>
         {
             // Vanilla placement does the rest: double-click creates the
@@ -174,42 +235,62 @@ internal sealed class CartographerRuntime : IDisposable
         // even when the mod is disabled mid-session or the world tears down.
         _workbenchPanel.HandleFrame();
         _consentPanel.HandleFrame();
+        _routesPanel.HandleFrame();
+        _surveyPanel.HandleFrame();
+        _sharePanel.HandleFrame();
+        _settingsPanel.HandleFrame();
+        _systemMarkersPanel.HandleFrame();
+        if (!Minimap.IsOpen())
+        {
+            MapInputGate.ConsumeClicks = false;
+        }
 
         if (!_settings.Enabled.Value || !_mapReady || _surveyor is null)
         {
-            // Disabled mid-session: the vanilla pin selector must come
-            // back even though the rest of the runtime is dormant.
+            // Disabled mid-session: the vanilla controls must come back
+            // even though the rest of the runtime is dormant.
+            MapInputGate.ConsumeClicks = false;
             if (Minimap.IsOpen())
             {
                 EnforceVanillaPaletteVisibility();
-                _palettePanel.SetVisible(false);
+                _palettePanel.SetUnavailable();
             }
 
             return;
         }
 
         _drawerPanel.HandleFrame();
-        if (!Minimap.IsOpen() && !Minimap.InTextInput() &&
-            _settings.QuickPinHotkey.Value != KeyCode.None &&
-            Input.GetKeyDown(_settings.QuickPinHotkey.Value))
+        if (!Minimap.IsOpen() && !Minimap.InTextInput())
         {
-            if (_quickPinCapture.TryCapture(_pinStore, out string quickPinMessage))
+            if (_quickPinArmed)
             {
-                ReapplyDisplay();
+                // One-shot armed capture from the toolbar (#102).
+                if (Input.GetKeyDown(KeyCode.Escape))
+                {
+                    _quickPinArmed = false;
+                    Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, AtlasStrings.Get("quickpin.cancelled"));
+                }
+                else if (Input.GetMouseButtonDown(0) ||
+                    (_settings.QuickPinHotkey.Value != KeyCode.None && Input.GetKeyDown(_settings.QuickPinHotkey.Value)) ||
+                    GamepadDown(_settings.WorkbenchGamepadButton.Value))
+                {
+                    _quickPinArmed = false;
+                    CaptureQuickPin();
+                }
             }
-
-            if (quickPinMessage.Length > 0)
+            else if (_settings.QuickPinHotkey.Value != KeyCode.None &&
+                Input.GetKeyDown(_settings.QuickPinHotkey.Value))
             {
-                Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, quickPinMessage);
+                CaptureQuickPin();
             }
         }
 
         if (Minimap.IsOpen() && !Minimap.InTextInput())
         {
-            // Discoverability (#95/#96): the Atlas button, contextual pin
+            // The CC map surface (#96/#100): toolbar, contextual pin
             // actions, the enhanced pin palette, and the edit hint — on
             // top of (never instead of) the rebindable hotkeys.
-            _mapControls.EnsureBuilt(_settings.DrawerHotkey.Value.ToString());
+            _mapUi.EnsureBuilt(_settings.DrawerHotkey.Value.ToString());
 
             // One-time crash-reporting consent (#97): offered on the first
             // large-map open only, never on the title screen, never again
@@ -223,15 +304,16 @@ internal sealed class CartographerRuntime : IDisposable
                 }
             }
 
-            bool paletteActive = _settings.EnhancedPinPalette.Value &&
-                !_compatibility.PinManagerPresent && !_palettePanel.HasFailed;
-            if (paletteActive)
+            if (PaletteActive())
             {
                 _palettePanel.UiScale = _settings.UiScale.Value;
                 _palettePanel.EnsureBuilt();
             }
+            else
+            {
+                _palettePanel.SetUnavailable();
+            }
 
-            _palettePanel.SetVisible(paletteActive);
             UpdateEditHint(unscaledDeltaTime);
 
             if (_pinCommands is not null && !_workbenchPanel.IsVisible &&
@@ -244,7 +326,7 @@ internal sealed class CartographerRuntime : IDisposable
             if (Input.GetKeyDown(_settings.DrawerHotkey.Value) ||
                 GamepadDown(_settings.DrawerGamepadButton.Value))
             {
-                ToggleDrawer();
+                _mapUi.OpenExclusive(_drawerToken, ToggleDrawer);
             }
 
             if (_displayController.ZoomTierChanged())
@@ -252,8 +334,22 @@ internal sealed class CartographerRuntime : IDisposable
                 _displayController.Apply(_pinStore, _pinAdapter);
             }
 
+            // Route map modes (#101): a mode entered through the Routes
+            // panel works with plain mouse input and consumes vanilla map
+            // drag/clicks for its duration; the console path keeps the
+            // classic modifier+LMB behavior. Vanilla input returns the
+            // instant no UI-owned mode is active.
+            bool uiRouteMode = _routeCommands is not null &&
+                _routeCommands.Mode != RouteCommandHandler.MapMode.None &&
+                _routeCommands.UiModeOwned;
+            MapInputGate.ConsumeClicks = uiRouteMode;
+            if (uiRouteMode)
+            {
+                MinimapReflection.TrySuppressMapDragThisFrame();
+            }
+
             if (_routeCommands is not null && _routeCommands.Mode != RouteCommandHandler.MapMode.None &&
-                Input.GetKey(_settings.RouteDrawModifier.Value) &&
+                (uiRouteMode || Input.GetKey(_settings.RouteDrawModifier.Value)) &&
                 MinimapReflection.TryScreenToWorldPoint(Input.mousePosition, out Vector3 cursorWorld))
             {
                 _routeCommands.HandleMapFrame(
@@ -279,10 +375,13 @@ internal sealed class CartographerRuntime : IDisposable
             // input block across a world boundary.
             _mapReady = false;
             _workbenchPanel.Close();
+            _mapUi.CloseAllSurfaces();
+            MapInputGate.ConsumeClicks = false;
+            _quickPinArmed = false;
             _pipeline?.EndAllStrokes();
             _chunkRecovery.Reset();
             _displayController.Reset();
-            _mapControls.Reset();
+            _mapUi.Reset();
             _palettePanel.Reset();
             _birthTracker.Reset();
             _pinAdapter.Reset();
@@ -490,6 +589,59 @@ internal sealed class CartographerRuntime : IDisposable
         ReapplyDisplay();
     }
 
+    private void CaptureQuickPin()
+    {
+        if (_quickPinCapture.TryCapture(_pinStore, out string quickPinMessage))
+        {
+            ReapplyDisplay();
+        }
+
+        if (quickPinMessage.Length > 0)
+        {
+            Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, quickPinMessage);
+        }
+    }
+
+    private bool PaletteActive()
+    {
+        return _settings.EnhancedPinPalette.Value && !_compatibility.PinManagerPresent && !_palettePanel.HasFailed;
+    }
+
+    /// <summary>Opens one CC side panel exclusively at the shared dock,
+    /// with the NoMap cartography-table gate applied.</summary>
+    private void OpenSidePanel(int token, Map.CcSidePanel panel)
+    {
+        if (!AtlasAccessAllowed(out string denial))
+        {
+            Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, denial);
+            return;
+        }
+
+        panel.UiScale = _settings.UiScale.Value;
+        _mapUi.OpenExclusive(token, panel.Toggle);
+    }
+
+    /// <summary>Toolbar [Quick Pin] (#102): closes the map and arms a
+    /// one-shot capture — the next deliberate click (or the quick-pin
+    /// hotkey) captures what the player is looking at through the
+    /// existing QuickPinCapture (creature refusal and duplicate
+    /// protection included). Esc cancels; F7 remains the instant path.</summary>
+    private void ArmQuickPin()
+    {
+        try
+        {
+            _mapUi.CloseAllSurfaces();
+            Minimap.instance?.SetMapMode(Minimap.MapMode.Small);
+        }
+        catch
+        {
+            // If the map cannot close, the armed mode still works later.
+        }
+
+        _quickPinArmed = true;
+        Player.m_localPlayer?.Message(MessageHud.MessageType.Center, AtlasStrings.Get("quickpin.armed"));
+    }
+
     /// <summary>Drawer toggle shared by the hotkey and the large-map
     /// button, with the NoMap cartography-table gate applied to both.</summary>
     private void ToggleDrawer()
@@ -529,8 +681,8 @@ internal sealed class CartographerRuntime : IDisposable
 
         if (_workbenchPanel.IsVisible)
         {
-            _mapControls.SetHint(null);
-            _mapControls.SetContext(null, null);
+            _mapUi.SetHint(null);
+            _mapUi.SetContext(null, null);
             return;
         }
 
@@ -541,22 +693,22 @@ internal sealed class CartographerRuntime : IDisposable
         if (hovering && _pinAdapter.TryGetManagedId(hoverPin!, out AtlasId managedId))
         {
             _contextGrace = ContextGraceSeconds;
-            _mapControls.SetHint(AtlasStrings.Format("hud.editHint", _settings.WorkbenchHotkey.Value));
+            _mapUi.SetHint(AtlasStrings.Format("hud.editHint", _settings.WorkbenchHotkey.Value));
             AtlasId captured = managedId;
-            _mapControls.SetContext(AtlasStrings.Get("hud.editPin"), () => OpenWorkbenchForId(captured));
+            _mapUi.SetContext(AtlasStrings.Get("hud.editPin"), () => OpenWorkbenchForId(captured));
             return;
         }
 
         if (hovering && _pinAdapter.IsAdoptableVanilla(hoverPin!) && !_compatibility.PinManagerPresent)
         {
             _contextGrace = ContextGraceSeconds;
-            _mapControls.SetHint(AtlasStrings.Format("hud.editHint", _settings.WorkbenchHotkey.Value));
+            _mapUi.SetHint(AtlasStrings.Format("hud.editHint", _settings.WorkbenchHotkey.Value));
             Minimap.PinData capturedPin = hoverPin!;
-            _mapControls.SetContext(AtlasStrings.Get("hud.upgradeEdit"), () => UpgradeAndEdit(capturedPin));
+            _mapUi.SetContext(AtlasStrings.Get("hud.upgradeEdit"), () => UpgradeAndEdit(capturedPin));
             return;
         }
 
-        if (_mapControls.PointerOverContext)
+        if (_mapUi.PointerOverContext)
         {
             return;
         }
@@ -567,8 +719,8 @@ internal sealed class CartographerRuntime : IDisposable
             return;
         }
 
-        _mapControls.SetHint(null);
-        _mapControls.SetContext(null, null);
+        _mapUi.SetHint(null);
+        _mapUi.SetContext(null, null);
     }
 
     /// <summary>Opens the Pin Workbench for a known managed pin by its
@@ -587,7 +739,8 @@ internal sealed class CartographerRuntime : IDisposable
         }
 
         _workbenchPanel.UiScale = _settings.UiScale.Value;
-        _workbenchPanel.OpenForManaged(pin, _pinCommands.Operations, ResyncPins);
+        _mapUi.OpenExclusive(_workbenchToken,
+            () => _workbenchPanel.OpenForManaged(pin, _pinCommands.Operations, ResyncPins));
     }
 
     /// <summary>The "Upgrade &amp; Edit" context action: converts an
@@ -619,7 +772,8 @@ internal sealed class CartographerRuntime : IDisposable
         }
 
         _workbenchPanel.UiScale = _settings.UiScale.Value;
-        _workbenchPanel.OpenForManaged(managed, _pinCommands.Operations, ResyncPins);
+        _mapUi.OpenExclusive(_workbenchToken,
+            () => _workbenchPanel.OpenForManaged(managed, _pinCommands.Operations, ResyncPins));
     }
 
     /// <summary>A palette-placed pin finished its vanilla naming flow:
@@ -660,27 +814,59 @@ internal sealed class CartographerRuntime : IDisposable
         }
     }
 
-    /// <summary>Keeps the five vanilla placeable icon buttons hidden while
-    /// the enhanced palette owns pin creation, and restores them the
-    /// moment any fallback applies (setting, compat, failure, disable).
-    /// Only SetActive is ever used — nothing vanilla is destroyed.</summary>
+    /// <summary>Keeps the vanilla right-side map rail hidden while CC owns
+    /// its functionality, and restores it the moment any fallback applies
+    /// (settings, conflicting pin manager, CC UI failure, disable). The
+    /// five placeable icon selectors follow the enhanced-palette rules; the
+    /// death/boss filter buttons and the visible-to-others toggle follow
+    /// Map/ShowVanillaMapControls (their behavior lives on in Atlas →
+    /// System Markers, driven through vanilla state). Only SetActive is
+    /// ever used — nothing vanilla is destroyed (#99).</summary>
     private void EnforceVanillaPaletteVisibility()
     {
-        bool wantVisible = !_settings.Enabled.Value ||
+        bool wantPlaceablesVisible = !_settings.Enabled.Value ||
             !_settings.EnhancedPinPalette.Value ||
             _settings.ShowVanillaPinPalette.Value ||
+            _settings.ShowVanillaMapControls.Value ||
             _compatibility.PinManagerPresent ||
             _palettePanel.HasFailed;
         foreach (GameObject button in MinimapReflection.GetPlaceableIconButtons())
         {
-            if (button != null && button.activeSelf != wantVisible)
+            if (button != null && button.activeSelf != wantPlaceablesVisible)
             {
-                button.SetActive(wantVisible);
+                button.SetActive(wantPlaceablesVisible);
             }
+        }
+
+        bool wantRailVisible = !_settings.Enabled.Value ||
+            _settings.ShowVanillaMapControls.Value ||
+            _compatibility.PinManagerPresent ||
+            _systemMarkersPanel.HasFailed;
+        foreach (GameObject button in MinimapReflection.GetSystemFilterButtons())
+        {
+            if (button != null && button.activeSelf != wantRailVisible)
+            {
+                button.SetActive(wantRailVisible);
+            }
+        }
+
+        try
+        {
+            GameObject? publicPosition = Minimap.instance != null && Minimap.instance.m_publicPosition != null
+                ? Minimap.instance.m_publicPosition.gameObject
+                : null;
+            if (publicPosition != null && publicPosition.activeSelf != wantRailVisible)
+            {
+                publicPosition.SetActive(wantRailVisible);
+            }
+        }
+        catch
+        {
+            // Missing toggle just stays vanilla.
         }
     }
 
-    /// <summary>Unconditional vanilla-selector restore for teardown.</summary>
+    /// <summary>Unconditional vanilla-rail restore for teardown.</summary>
     private void RestoreVanillaPalette()
     {
         try
@@ -691,6 +877,20 @@ internal sealed class CartographerRuntime : IDisposable
                 {
                     button.SetActive(true);
                 }
+            }
+
+            foreach (GameObject button in MinimapReflection.GetSystemFilterButtons())
+            {
+                if (button != null && !button.activeSelf)
+                {
+                    button.SetActive(true);
+                }
+            }
+
+            if (Minimap.instance != null && Minimap.instance.m_publicPosition != null &&
+                !Minimap.instance.m_publicPosition.gameObject.activeSelf)
+            {
+                Minimap.instance.m_publicPosition.gameObject.SetActive(true);
             }
         }
         catch
@@ -830,7 +1030,9 @@ internal sealed class CartographerRuntime : IDisposable
 
         if (nearestManaged is not null)
         {
-            _workbenchPanel.OpenForManaged(nearestManaged, operations, resync);
+            AtlasPin captured = nearestManaged;
+            _mapUi.OpenExclusive(_workbenchToken,
+                () => _workbenchPanel.OpenForManaged(captured, operations, resync));
             return;
         }
 
@@ -1546,6 +1748,7 @@ internal sealed class CartographerRuntime : IDisposable
 
         _workbenchPanel.Close();
         RestoreVanillaPalette();
+        MapInputGate.Uninstall();
         SaveIfDirty();
         SavePinsSnapshot();
         _pipeline?.EndAllStrokes();

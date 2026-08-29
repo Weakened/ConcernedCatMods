@@ -48,7 +48,9 @@ internal sealed class CartographerSettings
         ConfigEntry<bool> showVanillaPinPalette,
         ConfigEntry<CrashConsentState> crashReportingConsent,
         ConfigEntry<int> acceptedPrivacyPolicyVersion,
-        ConfigEntry<string> sentryDsn)
+        ConfigEntry<string> sentryDsn,
+        ConfigEntry<bool> showVanillaMapControls,
+        ConfigEntry<bool> highPrecisionLargeMapRoads)
     {
         Enabled = enabled;
         CaptureConstructionActions = captureConstructionActions;
@@ -93,6 +95,8 @@ internal sealed class CartographerSettings
         CrashReportingConsent = crashReportingConsent;
         AcceptedPrivacyPolicyVersion = acceptedPrivacyPolicyVersion;
         SentryDsn = sentryDsn;
+        ShowVanillaMapControls = showVanillaMapControls;
+        HighPrecisionLargeMapRoads = highPrecisionLargeMapRoads;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -138,6 +142,8 @@ internal sealed class CartographerSettings
     public ConfigEntry<CrashConsentState> CrashReportingConsent { get; }
     public ConfigEntry<int> AcceptedPrivacyPolicyVersion { get; }
     public ConfigEntry<string> SentryDsn { get; }
+    public ConfigEntry<bool> ShowVanillaMapControls { get; }
+    public ConfigEntry<bool> HighPrecisionLargeMapRoads { get; }
 
     public static CartographerSettings Bind(ConfigFile config)
     {
@@ -234,6 +240,10 @@ internal sealed class CartographerSettings
             config.Bind("Privacy", "AcceptedPrivacyPolicyVersion", 0,
                 "Internal: the crash-reporting policy version the player answered. Re-prompts only if the collected data categories materially change in a future release."),
             config.Bind("Privacy", "SentryDsn", "",
-                "Advanced: override the embedded crash-report ingestion DSN (a public event-submission key). Empty uses the built-in value; if both are empty, crash reporting is fully inert. NEVER put a Sentry auth token here."));
+                "Advanced: override the embedded crash-report ingestion DSN (a public event-submission key). Empty uses the built-in value; if both are empty, crash reporting is fully inert. NEVER put a Sentry auth token here."),
+            config.Bind("Map", "ShowVanillaMapControls", false,
+                "Show Valheim's own right-side map control rail (pin icon selectors, death/boss filter buttons, visible-to-others toggle) alongside the Concerned Cartographer toolbar. Default: the CC toolbar and Atlas System Markers replace it. Automatically treated as true when a known conflicting pin manager is installed."),
+            config.Bind("Map", "HighPrecisionLargeMapRoads", true,
+                "Render roads on the LARGE map as sub-texel vector geometry that pans/zooms with the map (DEF-v1.0-006), instead of only the 2048-texel texture overlay (which stays for the minimap and as fallback)."));
     }
 }

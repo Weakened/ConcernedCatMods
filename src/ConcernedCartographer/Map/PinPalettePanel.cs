@@ -20,15 +20,14 @@ namespace TheConcernedCat.ConcernedCartographer.Map;
 /// and the vanilla selector is restored by the runtime.</summary>
 internal sealed class PinPalettePanel
 {
-    private const float PanelWidth = 216f;
-    private const float PanelHeight = 500f;
+    private const float PanelWidth = 232f;
+    private const float PanelHeight = 632f;
     private const float RowHeight = 24f;
     private const float RowWidth = PanelWidth - 24f;
-    private const int MaxRows = 14;
+    private const int MaxRows = 16;
     private const int MaxRecents = 3;
 
     private readonly ManualLogSource _log;
-    private GameObject? _toggleButton;
     private GameObject? _panel;
     private InputField? _search;
     private Text? _status;
@@ -55,10 +54,12 @@ internal sealed class PinPalettePanel
     public string? SelectedIconId => _selectedIconId;
 
     /// <summary>Builds the palette onto the open large map when needed;
-    /// cheap after the first call, rebuilt automatically after teardown.</summary>
+    /// cheap after the first call, rebuilt automatically after teardown.
+    /// Opened from the toolbar's [Markers] action (#100) — the panel
+    /// starts hidden and docks at the shared right-edge position.</summary>
     public void EnsureBuilt()
     {
-        if (_failed || _toggleButton != null)
+        if (_failed || _panel != null)
         {
             return;
         }
@@ -73,27 +74,14 @@ internal sealed class PinPalettePanel
 
             GUIManager gui = GUIManager.Instance;
 
-            _toggleButton = gui.CreateButton(
-                AtlasStrings.Get("palette.toggle"),
-                largeRoot.transform,
-                new Vector2(1f, 0f), new Vector2(1f, 0f),
-                new Vector2(-110f, 128f), 170f, 30f);
-            _toggleButton.transform.localScale = Vector3.one * UiScale;
-            _toggleButton.GetComponent<Button>().onClick.AddListener(() =>
-            {
-                if (_panel != null)
-                {
-                    _panel.SetActive(!_panel.activeSelf);
-                }
-            });
-
             _panel = gui.CreateWoodpanel(
                 largeRoot.transform,
                 new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
-                new Vector2(-((PanelWidth * UiScale) / 2f) - 12f, 40f),
+                new Vector2(-((PanelWidth * UiScale) / 2f) - 30f, 0f),
                 PanelWidth, PanelHeight,
                 draggable: false);
             _panel.transform.localScale = Vector3.one * UiScale;
+            _panel.SetActive(false);
 
             Font font = gui.AveriaSerifBold;
             var labelColor = new Color(0.9f, 0.8f, 0.6f, 1f);
@@ -132,21 +120,31 @@ internal sealed class PinPalettePanel
         }
     }
 
-    /// <summary>Master visibility (EnhancedPinPalette setting / compat
-    /// fallback). Hiding also clears any armed selection.</summary>
-    public void SetVisible(bool visible)
-    {
-        if (_toggleButton != null && _toggleButton.activeSelf != visible)
-        {
-            _toggleButton.SetActive(visible);
-        }
+    public bool IsVisible => _panel != null && _panel.activeSelf;
 
-        if (!visible && _panel != null && _panel.activeSelf)
+    public void Toggle()
+    {
+        if (_panel != null)
+        {
+            _panel.SetActive(!_panel.activeSelf);
+        }
+    }
+
+    public void Hide()
+    {
+        if (_panel != null && _panel.activeSelf)
         {
             _panel.SetActive(false);
         }
+    }
 
-        if (!visible && _selectedIconId is not null)
+    /// <summary>Called when the enhanced palette becomes unavailable
+    /// (setting off, conflicting pin manager, failure): hides the panel
+    /// and clears any armed selection.</summary>
+    public void SetUnavailable()
+    {
+        Hide();
+        if (_selectedIconId is not null)
         {
             _selectedIconId = null;
             SelectionCleared?.Invoke();
@@ -175,7 +173,6 @@ internal sealed class PinPalettePanel
     /// by the owner via SelectionCleared flows.</summary>
     public void Reset()
     {
-        _toggleButton = null;
         _panel = null;
         _search = null;
         _status = null;
@@ -230,16 +227,40 @@ internal sealed class PinPalettePanel
                     }
                 }
 
-                AddHeader(gui, font, headerColor, AtlasStrings.Get("palette.all"), ref y);
+                // Category grouping; search flattens it. Rows are capped to
+                // the panel; the search field covers registry growth.
+                var seenCategories = new List<string>();
                 foreach (IconRegistry.IconDefinition definition in IconRegistry.All)
+                {
+                    if (!seenCategories.Contains(definition.DefaultCategory))
+                    {
+                        seenCategories.Add(definition.DefaultCategory);
+                    }
+                }
+
+                foreach (string category in seenCategories)
                 {
                     if (rows >= MaxRows)
                     {
                         break;
                     }
 
-                    AddIconRow(gui, definition, ref y);
-                    rows++;
+                    AddHeader(gui, font, headerColor, "— " + category + " —", ref y);
+                    foreach (IconRegistry.IconDefinition definition in IconRegistry.All)
+                    {
+                        if (definition.DefaultCategory != category)
+                        {
+                            continue;
+                        }
+
+                        if (rows >= MaxRows)
+                        {
+                            break;
+                        }
+
+                        AddIconRow(gui, definition, ref y);
+                        rows++;
+                    }
                 }
             }
             else
@@ -339,11 +360,6 @@ internal sealed class PinPalettePanel
         if (_panel != null)
         {
             _panel.SetActive(false);
-        }
-
-        if (_toggleButton != null)
-        {
-            _toggleButton.SetActive(false);
         }
 
         _log.LogError($"Enhanced pin palette failed and was disabled for this session (vanilla pin selector remains available): {exception}");

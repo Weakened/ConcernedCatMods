@@ -31,6 +31,7 @@ internal sealed class AtlasDrawerPanel
     public Action<string>? ViewApplied;
     public Action<AtlasId>? ResultClicked;
     public Action? PrivacyClicked;
+    public Action? SystemMarkersClicked;
     public Func<string>? StatusLine;
     public Func<List<(string Label, AtlasId Id)>>? TopResults;
     public Func<List<string>>? ViewNames;
@@ -84,6 +85,8 @@ internal sealed class AtlasDrawerPanel
             _suppressToggleEvents = false;
             RefreshLists();
             _panel!.transform.localScale = Vector3.one * UiScale;
+            ((RectTransform)_panel.transform).anchoredPosition =
+                new Vector2(-((380f * UiScale) / 2f) - 30f, 0f);
             _panel.SetActive(true);
             UnityEngine.EventSystems.EventSystem.current?.SetSelectedGameObject(
                 _dirt != null ? _dirt.gameObject : null);
@@ -187,10 +190,12 @@ internal sealed class AtlasDrawerPanel
         Font font = gui.AveriaSerifBold;
         var header = new Color(0.9f, 0.8f, 0.6f, 1f);
 
+        // Shared right-edge dock (#100): the same placement reference as
+        // the Pin Workbench and every other CC side panel.
         _panel = gui.CreateWoodpanel(
             GUIManager.CustomGUIFront!.transform,
-            new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
-            new Vector2(210f, 0f), 380f, 680f, draggable: true);
+            new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
+            new Vector2(-220f, 0f), 380f, 680f, draggable: true);
 
         gui.CreateText(AtlasStrings.Get("drawer.title"), _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -28f),
@@ -295,11 +300,13 @@ internal sealed class AtlasDrawerPanel
             _panel.transform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 24f),
             font, 11, new Color(1f, 1f, 1f, 0.6f), false, Color.black, 360f, 22f, false);
 
-        // Settings → Privacy (#97): opens the consent/privacy panel with
-        // the crash-reporting toggle and the what-is-sent summary.
+        // Settings → Privacy (#97) and Atlas → System Markers (#99).
         GameObject privacy = gui.CreateButton(AtlasStrings.Get("drawer.privacy"), _panel.transform,
-            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 52f), 120f, 26f);
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-78f, 52f), 130f, 26f);
         privacy.GetComponent<Button>().onClick.AddListener(() => PrivacyClicked?.Invoke());
+        GameObject systemMarkers = gui.CreateButton(AtlasStrings.Get("system.title"), _panel.transform,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(78f, 52f), 150f, 26f);
+        systemMarkers.GetComponent<Button>().onClick.AddListener(() => SystemMarkersClicked?.Invoke());
 
         _panel.SetActive(false);
     }

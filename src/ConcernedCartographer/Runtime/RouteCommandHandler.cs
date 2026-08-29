@@ -52,6 +52,251 @@ internal sealed class RouteCommandHandler
     public bool SnapEnabled { get; private set; } = true;
     public RouteOperations Operations => _operations;
 
+    /// <summary>True when the current map mode was entered through the
+    /// Routes panel (#101): the runtime then feeds map input WITHOUT the
+    /// draw modifier and consumes vanilla click/drag while it lasts. The
+    /// console path leaves this false, keeping the classic Shift+LMB
+    /// behavior.</summary>
+    public bool UiModeOwned { get; private set; }
+
+    // ------------------------------------------------------------------
+    // Routes-panel surface (#101): identical operations to the console,
+    // addressed by stable AtlasId — no player-proximity requirement.
+    // ------------------------------------------------------------------
+
+    public string UiStart(RouteKind kind, string name)
+    {
+        AtlasRoute started = _operations.StartRoute(
+            kind, name.Trim().Length == 0 ? "New route" : name.Trim());
+        ActiveRouteId = started.Id;
+        Mode = kind == RouteKind.Freehand ? MapMode.Draw : MapMode.Waypoint;
+        UiModeOwned = true;
+        return started.Name;
+    }
+
+    public void UiStartErase()
+    {
+        Mode = MapMode.Erase;
+        UiModeOwned = true;
+    }
+
+    public void UiStop()
+    {
+        Mode = MapMode.None;
+        UiModeOwned = false;
+        _redraw();
+    }
+
+    public void UiSetSnap(bool enabled)
+    {
+        SnapEnabled = enabled;
+    }
+
+    public List<(AtlasId Id, string Label)> UiListRoutes(int max)
+    {
+        var rows = new List<(AtlasId, string)>();
+        foreach (AtlasRoute route in _store.Living)
+        {
+            if (rows.Count >= max)
+            {
+                break;
+            }
+
+            RouteEstimator.Estimate estimate = RouteEstimator.Compute(
+                route.Points, _roads,
+                _settings.RouteOnRoadTolerance.Value,
+                _settings.RouteOffRoadSpeed.Value,
+                _settings.RouteOnRoadSpeed.Value);
+            string flags = (route.Locked ? " L" : "") + (route.Archived ? " A" : "");
+            rows.Add((route.Id,
+                $"{route.Name} [{route.Kind}, {route.Status}]{flags} {estimate.DistanceMeters:0} m"));
+        }
+
+        return rows;
+    }
+
+    public string UiRename(AtlasId id, string name)
+    {
+        return UiEdit(id, route => route.Name = name.Trim(), $"renamed to \"{name.Trim()}\"");
+    }
+
+    public string UiCycleStyle(AtlasId id)
+    {
+        if (!_store.TryGet(id, out AtlasRoute route) || route.Deleted)
+        {
+            return "Route no longer exists.";
+        }
+
+        RouteStyle next = route.Style == RouteStyle.Dotted ? RouteStyle.Solid : route.Style + 1;
+        return UiEdit(id, r => r.Style = next, $"style {next}");
+    }
+
+    public string UiCycleStatus(AtlasId id)
+    {
+        if (!_store.TryGet(id, out AtlasRoute route) || route.Deleted)
+        {
+            return "Route no longer exists.";
+        }
+
+        RouteStatus next = route.Status == RouteStatus.Done ? RouteStatus.Planned : route.Status + 1;
+        return UiEdit(id, r => r.Status = next, $"status {next}");
+    }
+
+    public string UiSetColor(AtlasId id, int? argb)
+    {
+        return UiEdit(id, route => route.ColorArgb = argb, argb is null ? "color cleared" : "color set");
+    }
+
+    public string UiToggleLock(AtlasId id)
+    {
+        if (!_store.TryGet(id, out AtlasRoute route) || route.Deleted)
+        {
+            return "Route no longer exists.";
+        }
+
+        bool locked = !route.Locked;
+        _operations.SetLocked(id, locked);
+        return $"\"{route.Name}\" {(locked ? "locked (geometry edits rejected)" : "unlocked")}.";
+    }
+
+    public string UiToggleArchive(AtlasId id)
+    {
+        if (!_store.TryGet(id, out AtlasRoute route) || route.Deleted)
+        {
+            return "Route no longer exists.";
+        }
+
+        bool archived = !route.Archived;
+        _operations.SetArchived(id, archived);
+        _redraw();
+        return $"\"{route.Name}\" {(archived ? "archived (hidden from the map)" : "unarchived")}.";
+    }
+
+    public string UiDelete(AtlasId id)
+    {
+        if (!_store.TryGet(id, out AtlasRoute route) || route.Deleted)
+        {
+            return "Route no longer exists.";
+        }
+
+        if (Mode != MapMode.None && ActiveRouteId.Equals(id))
+        {
+            UiStop();
+        }
+
+        _operations.Delete(id);
+        _redraw();
+        return $"Deleted \"{route.Name}\". Restore or Undo reverts.";
+    }
+
+    public string UiRestoreLatest()
+    {
+        foreach (AtlasRoute route in _store.All)
+        {
+            if (route.Deleted)
+            {
+                _operations.RestoreDeleted(route.Id);
+                _redraw();
+                return $"Restored \"{route.Name}\".";
+            }
+        }
+
+        return "No deleted route to restore.";
+    }
+
+    public string UiSplit(AtlasId id)
+    {
+        if (!_store.TryGet(id, out AtlasRoute route) || route.Deleted)
+        {
+            return "Route no longer exists.";
+        }
+
+        if (route.Points.Count < 3)
+        {
+            return "That route is too short to split.";
+        }
+
+        AtlasRoute? tail = _operations.Split(id, route.Points.Count / 2);
+        if (tail is null)
+        {
+            return route.Locked ? "The route is locked." : "Split failed.";
+        }
+
+        _redraw();
+        return $"Split \"{route.Name}\" at its midpoint.";
+    }
+
+    public string UiMerge(AtlasId keep, AtlasId absorbed)
+    {
+        if (keep.Equals(absorbed))
+        {
+            return "Pick two different routes to merge.";
+        }
+
+        if (!_store.TryGet(keep, out AtlasRoute keepRoute) || !_store.TryGet(absorbed, out AtlasRoute absorbedRoute))
+        {
+            return "Route no longer exists.";
+        }
+
+        if (!_operations.Merge(keep, absorbed))
+        {
+            return "Merge failed (locked or empty route).";
+        }
+
+        _redraw();
+        return $"Merged \"{absorbedRoute.Name}\" into \"{keepRoute.Name}\". Undo reverts.";
+    }
+
+    public string UiMeasure(AtlasId id)
+    {
+        if (!_store.TryGet(id, out AtlasRoute route) || route.Deleted)
+        {
+            return "Route no longer exists.";
+        }
+
+        RouteEstimator.Estimate estimate = RouteEstimator.Compute(
+            route.Points, _roads,
+            _settings.RouteOnRoadTolerance.Value,
+            _settings.RouteOffRoadSpeed.Value,
+            _settings.RouteOnRoadSpeed.Value);
+        return $"\"{route.Name}\": {estimate.DistanceMeters:0} m, {estimate.OnRoadFraction:P0} on roads, " +
+            $"≈{estimate.EstimatedMinutes:0.#} min.";
+    }
+
+    public bool UiUndo(out string summary)
+    {
+        bool changed = _operations.Undo(out summary);
+        if (changed)
+        {
+            _redraw();
+        }
+
+        return changed;
+    }
+
+    public bool UiRedo(out string summary)
+    {
+        bool changed = _operations.Redo(out summary);
+        if (changed)
+        {
+            _redraw();
+        }
+
+        return changed;
+    }
+
+    private string UiEdit(AtlasId id, Action<AtlasRoute> edit, string description)
+    {
+        if (!_store.TryGet(id, out AtlasRoute route) || route.Deleted)
+        {
+            return "Route no longer exists.";
+        }
+
+        _operations.EditMetadata(id, edit, description);
+        _redraw();
+        return $"\"{route.Name}\": {description}.";
+    }
+
     /// <summary>Interactive input while the large map is open and a mode is
     /// active. Draw/erase act while held; waypoint acts on click.</summary>
     public void HandleMapFrame(RoadPoint cursorWorld, bool actionHeld, bool actionClicked)
@@ -135,15 +380,18 @@ internal sealed class RouteCommandHandler
                     remainder.Trim().Length == 0 ? "New route" : remainder.Trim());
                 ActiveRouteId = started.Id;
                 Mode = subcommand == "draw" ? MapMode.Draw : MapMode.Waypoint;
+                UiModeOwned = false;
                 return subcommand == "draw"
                     ? $"Drawing \"{started.Name}\": open the large map and hold {_settings.RouteDrawModifier.Value}+LeftClick to draw. 'cc_routes stop' finishes."
                     : $"Waypoint route \"{started.Name}\": {_settings.RouteDrawModifier.Value}+LeftClick places waypoints (snap {(SnapEnabled ? "on" : "off")}). 'cc_routes stop' finishes.";
             case "erase":
                 Mode = MapMode.Erase;
+                UiModeOwned = false;
                 return $"Erase mode: hold {_settings.RouteDrawModifier.Value}+LeftClick on the map to erase route ink " +
                     $"({_settings.RouteEraseRadius.Value:0.#} m radius). 'cc_routes stop' finishes.";
             case "stop":
                 Mode = MapMode.None;
+                UiModeOwned = false;
                 _redraw();
                 return "Route mode off.";
             case "snap":

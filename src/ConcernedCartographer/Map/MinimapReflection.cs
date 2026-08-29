@@ -238,6 +238,116 @@ internal static class MinimapReflection
         return buttons;
     }
 
+    private static readonly AccessTools.FieldRef<Minimap, bool[]>? VisibleIconTypesField =
+        BuildFieldRef<bool[]>("m_visibleIconTypes");
+
+    private static readonly MethodInfo? ToggleIconFilterMethod =
+        AccessTools.Method(typeof(Minimap), "ToggleIconFilter", new[] { typeof(Minimap.PinType) });
+
+    private static readonly FastInvokeHandler? ToggleIconFilterInvoker =
+        ToggleIconFilterMethod is null ? null : MethodInvoker.GetHandler(ToggleIconFilterMethod);
+
+    private static readonly AccessTools.FieldRef<Minimap, bool>? DragViewField =
+        BuildFieldRef<bool>("m_dragView");
+
+    /// <summary>Reads the vanilla per-pin-type visibility filter state.</summary>
+    public static bool TryGetIconFilterVisible(int vanillaType, out bool visible)
+    {
+        visible = true;
+        if (VisibleIconTypesField is null || Minimap.instance == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            bool[] types = VisibleIconTypesField(Minimap.instance);
+            if (types is null || vanillaType < 0 || vanillaType >= types.Length)
+            {
+                return false;
+            }
+
+            visible = types[vanillaType];
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Toggles a vanilla pin-type filter through the game's own
+    /// ToggleIconFilter, so state and (possibly hidden) highlights stay
+    /// canonical. Filtering never touches pin data.</summary>
+    public static bool TryToggleIconFilter(int vanillaType)
+    {
+        if (ToggleIconFilterInvoker is null || Minimap.instance == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            ToggleIconFilterInvoker(Minimap.instance, new object[] { (Minimap.PinType)vanillaType });
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Suppresses vanilla left-drag map panning for this frame
+    /// (route drawing consumes the drag). Called every frame while an
+    /// explicit CC map mode is active; vanilla behavior returns the moment
+    /// the calls stop.</summary>
+    public static bool TrySuppressMapDragThisFrame()
+    {
+        if (DragViewField is null || Minimap.instance == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            DragViewField(Minimap.instance) = false;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>The death/boss filter buttons on the vanilla rail (parents
+    /// of the public highlight images), for the full-rail replacement.</summary>
+    public static System.Collections.Generic.List<GameObject> GetSystemFilterButtons()
+    {
+        var buttons = new System.Collections.Generic.List<GameObject>();
+        Minimap minimap = Minimap.instance;
+        if (minimap == null)
+        {
+            return buttons;
+        }
+
+        try
+        {
+            foreach (UnityEngine.UI.Image image in new[] { minimap.m_selectedIconDeath, minimap.m_selectedIconBoss })
+            {
+                if (image != null && image.transform.parent != null)
+                {
+                    buttons.Add(image.transform.parent.gameObject);
+                }
+            }
+        }
+        catch
+        {
+            // Fail soft: vanilla stays visible.
+        }
+
+        return buttons;
+    }
+
     private static readonly MethodInfo? GetSpriteMethod =
         AccessTools.Method(typeof(Minimap), "GetSprite", new[] { typeof(Minimap.PinType) });
 
