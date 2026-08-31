@@ -64,6 +64,16 @@ repeated in PRE_RELEASE_SMOKE_TEST.md.
 - Must resolve before public release: No (documented limitation)
 - Status: Resolved 2026-08-27 — owner offered a quick look; guidance delivered (see conversation/dossier). Decision: rendering stays deferred to 1.1 so the hardened RC is not destabilized before the smoke test; metadata already round-trips, so shipping rendering later needs no migration.
 
+### 2026-08-31 — Deliberate v1 bounds of the full-UI surface (#99–#102 audit)
+
+- Version / issue: v1.0 RC7 / CC-098 (#98–#102)
+- Question: an independent audit of the landed UI against the #99–#102 directive confirmed the surface but found bounded gaps: list capacities are fixed (routes 6 rows, survey 5, share inbox 3 — no scrolling); a subset of `cc_pins` remains console-only (`list`, `move`, `dup`, `archive/unarchive`, `merge`, `restore`, `deleted`, `undo/redo`, `coords`, `create`, `adoptall`), as do `cc_atlas view del`/`compat`/`restore <n>` (older backups), `cc_survey path`, and arbitrary hex route colors; the Routes **Restore** button restores the most recently deleted route (deleted routes are not listed, so they cannot be selected); Style/Status buttons cycle rather than open pickers; controller focus is select-on-open (first control), not a full navigation chain; and the vanilla-rail enforcement runs at 5 Hz, so up to ~200 ms of rail flash can appear on map open.
+- Safe reversible default selected: ship the audited surface with the directive-critical defects FIXED in RC7 (Escape parity for the palette, UI route modes ending with their panel, rail restore on toolbar/drawer failure, the Quick Pin NoMap gate, close-on-disable, honest drawer footer), document the bounded gaps here and in the package README's shortcut-parity table (console paths stay documented accelerators), and leave capacity/picker/scroll growth to 1.x.
+- Why work continued: every gameplay feature has a working visible UI path; the remaining console-only set is batch/recovery tooling; nothing blocks the DEF-v1.0-006 acceptance or the smoke gate (new section R4 covers all of it in game).
+- Risk / alternative: players with >6 routes or >5 pending survey rows manage overflow via console until list scrolling ships; a 1.x pass can add scrolling, real pickers, and a deeper controller chain without structural change.
+- Must resolve before public release: No (documented limitations; smoke R4 verifies the shipped behavior)
+- Status: Open — recorded for the owner with the RC7 dossier.
+
 ### 2026-08-28 — Crash reporting ships inert until the owner creates the Sentry project and embeds the DSN
 
 - Version / issue: v1.0 RC5 / #97

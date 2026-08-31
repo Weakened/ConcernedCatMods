@@ -14,9 +14,10 @@ rows deferred to PRE_RELEASE_SMOKE_TEST.md (OPS-001 runtime honesty).
 | Progressive loaded-road recovery | Done\* | v0.2; fog-gated, narrowness heuristic, budgeted |
 | Repaint/removal reconciliation | Done\* | v0.2; journaled, `.pre-reconcile.bak` |
 | Compact / spatially indexed geometry | Done | v0.2; segment index, 97% compaction measured |
-| Correction/repair tools | Done\* | v0.2 `cc_roads` |
+| Correction/repair tools | Done\* | v0.2 `cc_roads`; Settings panel Advanced since RC7 |
 | World-isolated persistence | Done\* | per-UID sidecars since v0.1 |
 | No world-save mutation | Done | no terrain/save write API anywhere; uninstall rows in smoke |
+| High-precision large-map rendering + live alignment diagnosis (DEF-v1.0-006) | Done\* | RC7: RoadVectorLayer (sub-texel vector ink, exact vanilla projection, tested math) + `cc_roads align live` A/B/C/D verdicts (tested); in-game acceptance is smoke R4-R/S |
 
 ## Pins
 
@@ -37,7 +38,8 @@ rows deferred to PRE_RELEASE_SMOKE_TEST.md (OPS-001 runtime honesty).
 
 | Capability | Status | Where |
 |---|---|---|
-| Unified Atlas Drawer | Done\* | v0.4, hotkey L |
+| Unified Atlas Drawer | Done\* | v0.4, hotkey L; toolbar [Atlas] since RC7 |
+| Full-UI feature surface: toolbar, panel dock, vanilla-rail replacement, Routes/Survey/Share/Settings/System-Markers panels, Quick Pin armed mode (#99–#102) | Done\* | RC7 (75d9d01 + audit fixes); bounded gaps in HUMAN_ATTENTION 2026-08-31; in-game rows are smoke R4 M–Q |
 | Search/query/filtering | Done | token language, display-only, 10k benchmarked |
 | Saved views | Done | profile-level presets |
 | Semantic zoom | Done\* | zoom tiers via m_largeZoom |

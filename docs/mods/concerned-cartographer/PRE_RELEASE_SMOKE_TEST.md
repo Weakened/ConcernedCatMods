@@ -5,11 +5,13 @@ manual-only verification deferred by the autonomous conveyor (OPS-001
 rev 2) from v0.3 onward and is finalized against the exact v1.0 RC. Rows
 marked **BLOCKS** must pass before publication; others are record-and-ship.
 
-> Status: FINAL for v1.0, amended 2026-08-28 (fourth amendment): RC4
-> (v1 map UX, #96) was superseded before testing by the addition of
-> opt-in crash reporting + canonical support routing (#97). **Do NOT
-> restart the full 2.5–4 h checklist.** Start at section R3 below and
-> resume the shortened golden path from where the second pass stopped.
+> Status: FINAL for v1.0, amended 2026-08-31 (fifth amendment): RC5/RC6
+> were superseded before testing by RC7 — the full-UI map surface
+> (#99–#102 + audit fixes) and the DEF-v1.0-006 high-precision road
+> layer + `cc_roads align live` (#98). **Do NOT restart the full
+> 2.5–4 h checklist.** Start at section R3 below, continue with the new
+> section R4, then resume the shortened golden path from where the
+> second pass stopped. Test only the RC ZIP named in RELEASE_DOSSIER.md.
 
 ## R3. RC5 mini-regression — RESUME SMOKE FROM HERE
 
@@ -26,8 +28,8 @@ do not test the old ZIPs. Run blocks A–L in order against the NEW RC
 
 ### A. Startup
 
-1. Clean import of the exact RC4 ZIP into the smoke profile (verify its
-   SHA-256 against the dossier).
+1. Clean import of the exact RC ZIP named in `RELEASE_DOSSIER.md` into
+   the smoke profile (verify its SHA-256 against the dossier).
 2. Start modded: Concerned Cartographer **1.0.0** banner, no CC errors,
    menu responsive.
 
@@ -159,9 +161,131 @@ Scrubbers ON (PRIVACY.md promises both). **BLOCKS**
 8. Escape/dismiss variant (fresh profile again, optional): opening the
    map and pressing Escape with the dialog up counts as **No thanks**.
 
-Only after A–L pass, resume the shortened golden path at
-routes/world-isolation/multiplayer (sections 2, 4, 6, 7 onward),
-skipping rows earlier passes already completed.
+Only after A–L pass, continue with R4 below, then resume the shortened
+golden path at routes/world-isolation/multiplayer (sections 2, 4, 6, 7
+onward), skipping rows earlier passes already completed.
+
+## R4. RC7 full-UI surface + road precision (#98–#102) — run AFTER R3 A–L
+
+RC7 lands the unified toolbar/panel surface (#99–#102, plus audit-driven
+fixes) and the DEF-v1.0-006 high-precision road layer with its
+`cc_roads align live` diagnostic. None of it has been seen in game.
+Every block **BLOCKS** unless marked otherwise.
+
+### M. Toolbar and panel dock (#100)
+
+1. Open the large map: the toolbar shows **[Atlas] [Markers] [Routes]
+   [Survey] [Share] [Quick Pin] [Settings]** at the bottom center,
+   inside the map.
+2. Open each panel in turn: exactly one side panel is ever visible;
+   opening the next closes the previous. Each docks at the same
+   right-edge position with the wood-panel look.
+3. Escape closes whichever surface is open — including the **[Markers]**
+   palette (RC7 fix).
+4. `Accessibility/UiScale` 0.8 and 1.6: panels re-dock, nothing clips at
+   your resolution (record the resolution tested).
+5. Hover an editable marker: the hint and context button still appear
+   (tooltip and hint may share a spot — record, does not block).
+
+### N. Vanilla rail replacement (#99)
+
+1. Default config: the vanilla right-side rail is fully hidden — the
+   five icon selectors, the death/boss filter buttons, AND the
+   visible-to-others toggle. No dead empty strip misbehaves.
+2. **[Atlas] → System Markers**: toggling a pin-type filter immediately
+   filters the map exactly like the vanilla button did; toggling
+   visible-to-others flips the real setting (verify on the minimap
+   position-sharing behavior or a second client if handy). No pin is
+   ever deleted by filtering.
+3. `Map/ShowVanillaMapControls = true` (live config reload or restart):
+   the whole vanilla rail is back and works; the CC toolbar coexists.
+   Set back to false: hidden again.
+4. `General/Enabled = false` mid-session with the map open: the full
+   vanilla rail returns immediately; no CC panel is left stuck open
+   (RC7 fix). Re-enable: CC surface returns on next map open.
+
+### O. Routes panel (#101)
+
+1. **[Routes]** → **Free Draw**: a visible mode banner appears; drawing
+   with plain LMB inks a route and the map does NOT pan while drawing;
+   no pin is created by map clicks. **Finish** ends the mode; vanilla
+   drag/clicks return instantly.
+2. **Waypoints** mode with snap on: waypoints snap to your recorded
+   road; snap off: they do not.
+3. Escape during a mode ends the mode first; second Escape closes the
+   panel.
+4. Start a mode, then open another toolbar panel: the mode ENDS with the
+   panel (RC7 fix) — vanilla map input is back (drag pans, double-click
+   places a pin).
+5. Select a route in the list: rename, style, status, a color swatch,
+   lock (then verify an edit is rejected), archive, split, merge,
+   measure, delete — all act on the selected route without standing
+   near it. **Restore** brings back the most recently deleted route.
+6. `cc_routes draw` from the console still needs the classic
+   `Shift+LMB` (console alias unchanged).
+
+### P. Survey, Share, Settings panels (#102)
+
+1. **[Survey]**: enable Survey Rules from the panel; pending
+   observations list; accept one (pin appears only now), reject one
+   (gone, nothing pinned), bulk accept/reject asks for a confirming
+   second click; reload re-reads the rules file.
+2. **[Share]**: status shows scoped counts; with a second client (or
+   deferred to section 7): share now, inbox, preview (deletions named),
+   apply mine/theirs, clear. Single-client: verify the panel renders
+   and status/clear behave; the two-client rows stay in section 7.
+3. **[Settings]**: privacy opens the consent surface; **Back up atlas**
+   reports success; **Restore** asks for a confirming second click and
+   names the backup, then restores the most recent one; support bundle
+   writes the sanitized file; road repair buttons under Advanced work
+   (spot-check `status` and one `undo`-able operation); the support
+   email is shown.
+
+### Q. Quick Pin armed mode (#102)
+
+1. Toolbar **[Quick Pin]**: the map closes, a HUD hint appears; your
+   next click captures exactly one quick pin (creature refusal and
+   duplicate radius still apply); a second click does nothing more.
+2. Arm again, press Escape: cancelled, no pin.
+3. `F7` in the world remains the instant path, no arming.
+4. (NoMap world only, with section 8) Arming away from a cartography
+   table is denied with the standard message (RC7 fix).
+
+### R4-R. High-precision large-map roads (DEF-v1.0-006 acceptance)
+
+1. Stand ON a recorded dirt road; open the large map and zoom to
+   maximum useful zoom: the player marker sits ON the CC road
+   centerline (≤ ~2 px). Walk 50–100 m along the road with the map
+   open: the marker stays on the line the whole way.
+2. Repeat on a paved road.
+3. Pan and zoom around: the road ink is rock-stable against the map
+   (no swimming, no jumping at zoom-step changes beyond a brief width
+   settle).
+4. The minimap still renders roads (texture overlay, unchanged), and
+   the origin/east/north calibration probes of `cc_roads align` still
+   PASS (block K).
+5. Dirt/paved layer toggles (drawer or Jötunn panel) hide/show BOTH the
+   texture and vector ink together; high contrast recolors both.
+6. `Map/HighPrecisionLargeMapRoads = false` (+ map reopen): the vector
+   ink is gone, texture-only rendering as in RC6. Set true: it returns.
+7. Unexplored area (if any peer/shared roads exist beyond your fog):
+   vector ink does not reveal roads under fog beyond what the texture
+   overlay shows (record-and-ship: fog parity refreshes within ~30 s).
+
+### S. `cc_roads align live` diagnostic (#98)
+
+1. Standing ON a recorded road with the large map open, run
+   `cc_roads align live`: the report prints player position, terrain
+   classification, latest traversal sample, latest accepted pipeline
+   point, nearest stored road point + distance, all three projections,
+   texture size / m-per-texel / zoom / screen-px-per-texel, the live
+   marker anchor vs expected, and four separated verdicts —
+   **A PASS, B PASS, C PASS (vector ACTIVE), D PASS**.
+2. Standing OFF road: A reads N/A with the stand-on-road hint.
+3. With `Map/HighPrecisionLargeMapRoads = false` at deep zoom: C reads
+   FAIL naming the setting (honest resolution verdict), A/B/D
+   unaffected.
+4. The full report also lands in `LogOutput.log` (evidence trail).
 
 ## R. First replacement-RC mini-regression — COMPLETED 2026-08-27 (second pass); kept for the record
 

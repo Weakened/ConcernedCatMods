@@ -694,13 +694,37 @@ Unity/Jötunn presentation for managed edit, vanilla adoption prompt and foreign
 
 It should drive `PinWorkbenchController` / `PinOperations`, not persistence directly.
 
-### `Map/LargeMapControls.cs` (#95, #96)
+### `Map/MapUiCoordinator.cs` (#100, replaced `LargeMapControls.cs`)
 
-Discoverability layer on `Minimap.m_largeRoot`: the [Atlas] button with hover tooltip (routes through the same NoMap-gated drawer toggle as the hotkey), the contextual pin action button ("Upgrade & Edit" for adoptable vanilla markers, "Edit Pin" for managed ones — kept alive via pointer-hover plus a grace window while the mouse travels to it), and the "P — Edit with Concerned Cartographer" accelerator hint. Fail-closed; rebuilt automatically after map teardown; never touches vanilla map input.
+The large-map UI coordinator on `Minimap.m_largeRoot`: the persistent compact toolbar ([Atlas] [Markers] [Routes] [Survey] [Share] [Quick Pin] [Settings]), the contextual pin action button ("Upgrade & Edit" / "Edit Pin", kept alive via pointer-hover plus a grace window), the hover tooltip, and the accelerator hint. It also owns the one-major-side-surface-at-a-time rule: every panel registers with `RegisterSurface`, `OpenExclusive` closes the rest before opening one, and `CloseAllSurfaces` runs on world switch, disable, and Quick Pin arming. `HasFailed` feeds the vanilla-rail restore (#99): if the toolbar dies, the rail comes back, because the toolbar is the only route to the replacement surfaces. Fail-closed; rebuilt automatically after map teardown; never touches vanilla map input.
+
+### `Map/CcSidePanel.cs` (#100)
+
+The shared side-panel base: every panel docks at the Pin Workbench right-edge reference, speaks the wood-panel language, scales with `Accessibility/UiScale` (re-docking so the edge margin stays constant), closes on Escape and on map close (`HandleFrame`), selects its first interactable on open (controller entry), and fail-closes via `HasFailed`. Subclasses implement `BuildContent` and the `OnShown`/`OnHidden` hooks.
+
+### `Map/RoutesPanel.cs` (#101)
+
+Route list (stable AtlasId selection; name/kind/status/distance/lock/archive) plus the full operation surface: Free Draw / Waypoints / Erase enter explicit UI-owned map modes (`RouteCommandHandler.UiModeOwned`) — no modifier key, vanilla map drag suppressed per frame, map clicks consumed via `MapInputGate` — with Finish/Undo/Redo/snap, rename/style/status/ink swatches/lock/archive/delete/restore-latest/split/merge/measure. `OnHidden` ends any UI-owned mode so a hidden panel can never keep consuming map input. Console `cc_routes` remains the scriptable alias with the classic modifier behavior.
+
+### `Map/SurveyPanel.cs`, `Map/SharePanel.cs`, `Map/SettingsPanel.cs`, `Map/SystemMarkersPanel.cs` (#99, #102)
+
+The remaining feature panels: survey enable/pending/accept/reject/reload (nothing pinned until accepted), sharing status/share/inbox/preview-with-deletion-names/apply-mine-theirs/clear, settings (privacy, backup, confirmed restore, sanitized support bundle, road repair as Advanced, support email), and System Markers — the vanilla pin-type filters and visible-to-others toggle, driven exclusively through vanilla state (`ToggleIconFilter`, `SetPublicReferencePosition`), never by touching pins. The runtime hides the whole vanilla rail by default (`SetActive` only) and restores it on `Map/ShowVanillaMapControls`, a conflicting pin manager, any replacement-surface failure, disable, or dispose.
+
+### `Map/MapInputGate.cs` (#101)
+
+Skippable Harmony prefixes on the public `Minimap.OnMapLeftClick`/`OnMapDblClick`, active only while a UI-owned route mode runs (`ConsumeClicks`); uninstalled on dispose. Right-click and ping are never patched.
+
+### `Map/RoadVectorLayer.cs` (#98, DEF-v1.0-006)
+
+The high-precision large-map road layer: road vertices are baked once into zoom-independent map space (`Domain/RoadVectorMath`) as batched quads under `m_mapImageLarge` — above Jötunn's overlay (its first child), below pins and the player marker — and a per-frame container transform reproduces vanilla's `((m − uvMin)/uvSize)·rectSize` exactly for any pan/zoom. Rebakes only on road-data changes (debounced), zoom-step drift, palette change, or a slow fog/resolution parity timer; unexplored segments are skipped at bake. Kind-split visibility mirrors `SetOverlayEnabled`. Budgeted (16k quads), fail-soft: any error disables the layer for the session and the texture overlay continues. `Map/HighPrecisionLargeMapRoads` toggles it.
+
+### `Map/LiveAlignmentProbe.cs` + `Domain/AlignmentVerdicts.cs` + `Domain/RoadVectorMath.cs` (#98)
+
+`cc_roads align live`: gathers player position, terrain classification, latest traversal sample (`RoadSurveyor.LatestSample`), latest accepted pipeline point (`RoadObservationPipeline.LastAccepted`), nearest stored road point, all three projections (native `WorldToPixel`/`WorldToMapPoint`, CC overlay), texture size / m-per-texel / zoom / screen-px-per-texel, and the live player-marker anchor versus the canonical projection (screen pixels, via `Map/MapScreenMath`), then hands the measurements to the pure `AlignmentVerdicts` for the separated A (observation) / B (projection) / C (render resolution) / D (marker anchor) verdicts. Read-only, fails soft to n/a per quantity.
 
 ### `Map/PinPalettePanel.cs` (#96)
 
-The Enhanced Pin Palette on the large map: a searchable, sprite-previewed, human-labeled marker browser over the stable IconRegistry (session recents, collapse toggle, no raw IDs). Choosing a marker selects the mapped vanilla icon type through the game's own `SelectIcon` and arms the runtime's `PaletteBirthTracker`; vanilla double-click + naming then creates the pin and the runtime associates the AtlasPin when naming closes — managed from birth, exactly one rendering. The runtime hides the five vanilla placeable icon buttons (`SetActive` only, per-cycle enforcement) and restores them on `Pins/ShowVanillaPinPalette`, `EnhancedPinPalette=false`, a detected conflicting pin manager, palette failure, mod disable, or dispose.
+The Enhanced Pin Palette on the large map: a searchable, sprite-previewed, human-labeled marker browser over the stable IconRegistry (session recents, collapse toggle, no raw IDs). Choosing a marker selects the mapped vanilla icon type through the game's own `SelectIcon` and arms the runtime's `PaletteBirthTracker`; vanilla double-click + naming then creates the pin and the runtime associates the AtlasPin when naming closes — managed from birth, exactly one rendering. The runtime hides the five vanilla placeable icon buttons (`SetActive` only, per-cycle enforcement) and restores them on `Pins/ShowVanillaPinPalette`, `EnhancedPinPalette=false`, a detected conflicting pin manager, palette or toolbar failure, mod disable, or dispose. Since #100 the palette starts hidden, opens from the toolbar's [Markers] button as a registered exclusive surface, and closes on Escape (`HandleFrame`).
 
 ### `Domain/Atlas/PaletteBirthTracker.cs` (#96)
 
