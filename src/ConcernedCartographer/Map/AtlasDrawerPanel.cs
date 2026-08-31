@@ -59,6 +59,11 @@ internal sealed class AtlasDrawerPanel
 
     public bool IsVisible => _panel != null && _panel.activeSelf;
 
+    /// <summary>True after a UI failure disabled the drawer for this
+    /// session. The drawer is the only route to Atlas → System Markers, so
+    /// owners restore the vanilla rail when it fails (#99).</summary>
+    public bool HasFailed => _failed;
+
     /// <summary>Accessibility scale applied when the drawer shows.</summary>
     public float UiScale = 1f;
 

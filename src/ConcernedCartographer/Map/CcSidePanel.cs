@@ -69,6 +69,16 @@ internal abstract class CcSidePanel
 
             _panel!.SetActive(true);
             OnShown();
+
+            // Controller focus chain (#100): opening a surface selects its
+            // first interactable control, mirroring the drawer/workbench
+            // select-on-open pattern.
+            UnityEngine.UI.Selectable? firstSelectable =
+                _panel.GetComponentInChildren<UnityEngine.UI.Selectable>(includeInactive: false);
+            if (firstSelectable != null)
+            {
+                UnityEngine.EventSystems.EventSystem.current?.SetSelectedGameObject(firstSelectable.gameObject);
+            }
         }
         catch (Exception exception)
         {

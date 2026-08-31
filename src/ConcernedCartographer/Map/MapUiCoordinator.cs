@@ -47,6 +47,29 @@ internal sealed class MapUiCoordinator
 
     public bool PointerOverContext => _pointerOverContext;
 
+    /// <summary>True after a toolbar/hint/context failure disabled the
+    /// coordinator for this session. Owners fall back (e.g. restore the
+    /// vanilla rail, whose replacement is only reachable through here).</summary>
+    public bool HasFailed => _failed;
+
+    /// <summary>Whether any registered side surface is currently visible
+    /// (cheap disabled-state guard).</summary>
+    public bool AnySurfaceVisible
+    {
+        get
+        {
+            foreach ((Func<bool> isVisible, _) in _surfaces)
+            {
+                if (SafeIsVisible(isVisible))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
     /// <summary>Registers a major side surface for exclusivity and returns
     /// its token for <see cref="OpenExclusive"/>.</summary>
     public int RegisterSurface(Func<bool> isVisible, Action close)

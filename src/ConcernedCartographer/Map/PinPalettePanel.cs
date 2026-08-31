@@ -138,6 +138,17 @@ internal sealed class PinPalettePanel
         }
     }
 
+    /// <summary>Escape closes the palette like every other major surface
+    /// (#100). Call every tick; a closed large map hides the panel with its
+    /// root, so only Escape needs handling here.</summary>
+    public void HandleFrame()
+    {
+        if (IsVisible && Input.GetKeyDown(KeyCode.Escape))
+        {
+            Hide();
+        }
+    }
+
     /// <summary>Called when the enhanced palette becomes unavailable
     /// (setting off, conflicting pin manager, failure): hides the panel
     /// and clears any armed selection.</summary>

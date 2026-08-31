@@ -240,6 +240,7 @@ internal sealed class CartographerRuntime : IDisposable
         _sharePanel.HandleFrame();
         _settingsPanel.HandleFrame();
         _systemMarkersPanel.HandleFrame();
+        _palettePanel.HandleFrame();
         if (!Minimap.IsOpen())
         {
             MapInputGate.ConsumeClicks = false;
@@ -248,12 +249,19 @@ internal sealed class CartographerRuntime : IDisposable
         if (!_settings.Enabled.Value || !_mapReady || _surveyor is null)
         {
             // Disabled mid-session: the vanilla controls must come back
-            // even though the rest of the runtime is dormant.
+            // even though the rest of the runtime is dormant, and no CC
+            // surface may linger un-closeable (its Escape handling is
+            // gated behind this branch).
             MapInputGate.ConsumeClicks = false;
             if (Minimap.IsOpen())
             {
                 EnforceVanillaPaletteVisibility();
                 _palettePanel.SetUnavailable();
+            }
+
+            if (_mapUi.AnySurfaceVisible)
+            {
+                _mapUi.CloseAllSurfaces();
             }
 
             return;
@@ -632,6 +640,14 @@ internal sealed class CartographerRuntime : IDisposable
     /// protection included). Esc cancels; F7 remains the instant path.</summary>
     private void ArmQuickPin()
     {
+        // The same NoMap cartography-table gate every other panel entry
+        // uses: arming is an atlas write path (it creates a pin).
+        if (!AtlasAccessAllowed(out string denial))
+        {
+            Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, denial);
+            return;
+        }
+
         try
         {
             _mapUi.CloseAllSurfaces();
@@ -833,7 +849,8 @@ internal sealed class CartographerRuntime : IDisposable
             _settings.ShowVanillaPinPalette.Value ||
             _settings.ShowVanillaMapControls.Value ||
             _compatibility.PinManagerPresent ||
-            _palettePanel.HasFailed;
+            _palettePanel.HasFailed ||
+            _mapUi.HasFailed;
         foreach (GameObject button in MinimapReflection.GetPlaceableIconButtons())
         {
             if (button != null && button.activeSelf != wantPlaceablesVisible)
@@ -842,10 +859,15 @@ internal sealed class CartographerRuntime : IDisposable
             }
         }
 
+        // The toolbar is the only route to every replacement surface, and
+        // the drawer is the only route to System Markers — either failing
+        // means the vanilla rail must come back (#99 "CC UI failure").
         bool wantRailVisible = !_settings.Enabled.Value ||
             _settings.ShowVanillaMapControls.Value ||
             _compatibility.PinManagerPresent ||
-            _systemMarkersPanel.HasFailed;
+            _systemMarkersPanel.HasFailed ||
+            _drawerPanel.HasFailed ||
+            _mapUi.HasFailed;
         foreach (GameObject button in MinimapReflection.GetSystemFilterButtons())
         {
             if (button != null && button.activeSelf != wantRailVisible)
@@ -972,7 +994,7 @@ internal sealed class CartographerRuntime : IDisposable
             System.IO.File.WriteAllText(path, DateTime.UtcNow.ToString("o"));
             Player.m_localPlayer?.Message(
                 MessageHud.MessageType.Center,
-                AtlasStrings.Format("hud.onboarding", _settings.DrawerHotkey.Value, _settings.WorkbenchHotkey.Value));
+                AtlasStrings.Get("hud.onboarding"));
         }
         catch
         {

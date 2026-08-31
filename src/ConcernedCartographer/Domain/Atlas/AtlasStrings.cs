@@ -50,7 +50,7 @@ internal static class AtlasStrings
         ["drawer.clearFilter"] = "Clear filter",
         ["drawer.views"] = "Views",
         ["drawer.save"] = "Save",
-        ["drawer.placeholders"] = "Routes: cc_routes console   ·   Sharing: cc_sync console",
+        ["drawer.placeholders"] = "Routes and Sharing live on the map toolbar: [Routes] · [Share]",
         ["drawer.privacy"] = "Privacy",
         ["toolbar.atlas"] = "Atlas",
         ["toolbar.markers"] = "Markers",

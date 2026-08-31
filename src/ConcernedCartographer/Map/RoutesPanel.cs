@@ -81,6 +81,21 @@ internal sealed class RoutesPanel : CcSidePanel
         base.HandleFrame();
     }
 
+    /// <summary>A hidden panel must never leave a UI-owned mode running
+    /// (#101 "explicit visible modes"): whatever hides the panel — Escape,
+    /// another toolbar surface opening exclusively, map close — the mode
+    /// ends with it, releasing map drag and the click gate.</summary>
+    protected override void OnHidden()
+    {
+        if (ModeActive)
+        {
+            _handler()?.UiStop();
+            RefreshMode();
+        }
+
+        base.OnHidden();
+    }
+
     protected override void BuildContent(GUIManager gui, Font font, Color headerColor, ref float y)
     {
         GameObject nameField = gui.CreateInputField(
