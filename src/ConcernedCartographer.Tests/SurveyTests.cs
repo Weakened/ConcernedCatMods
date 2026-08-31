@@ -179,4 +179,79 @@ public class SurveyEngineTests
         Assert.Equal(SurveyEngine.OfferResult.NoRule, engine.Offer("boar", P(0f, 0f), pins, _now));
         Assert.Empty(engine.Observations);
     }
+
+    [Fact]
+    public void DefaultRules_MatchRealWorldPrefabNames_OutOfTheBox()
+    {
+        // RC8: the starter file must produce observations in ordinary play.
+        // Representative live prefab names, as the scanner sees them
+        // (instantiated clones, original casing).
+        var engine = new SurveyEngine { Rules = SurveyRuleSet.Default() };
+        var pins = new PinStore();
+        float x = 0f;
+
+        foreach ((string prefab, string icon, string category) in new[]
+        {
+            ("RaspberryBush(Clone)", "cc:resource", "Resources"),
+            ("BlueberryBush(Clone)", "cc:resource", "Resources"),
+            ("Pickable_Mushroom(Clone)", "cc:resource", "Resources"),
+            ("Pickable_Thistle(Clone)", "cc:resource", "Resources"),
+            ("rock4_copper(Clone)", "cc:mine", "Resources"),
+            ("silvervein(Clone)", "cc:mine", "Resources"),
+            ("mudpile2(Clone)", "cc:mine", "Resources"),
+            ("Crypt2(Clone)", "cc:dungeon", "Dungeons"),
+            ("SunkenCrypt4(Clone)", "cc:dungeon", "Dungeons"),
+            ("TrollCave02(Clone)", "cc:dungeon", "Dungeons"),
+            ("Vegvisir_Eikthyr(Clone)", "cc:objective", "Points of interest"),
+        })
+        {
+            x += 500f; // outside every duplicate radius
+            SurveyEngine.OfferResult result = engine.Offer(prefab, P(x, 0f), pins, _now);
+            Assert.Equal(SurveyEngine.OfferResult.Added, result);
+            SurveyEngine.Observation added = engine.Observations[engine.Observations.Count - 1];
+            Assert.Equal(icon, added.IconId);
+            Assert.Equal(category, added.Category);
+        }
+    }
+
+    [Fact]
+    public void DefaultRules_BlacklistBuildPiecesAndEffects()
+    {
+        var engine = new SurveyEngine { Rules = SurveyRuleSet.Default() };
+        var pins = new PinStore();
+
+        Assert.Equal(SurveyEngine.OfferResult.NoRule, engine.Offer("piece_workbench(Clone)", P(0f, 0f), pins, _now));
+        Assert.Equal(SurveyEngine.OfferResult.NoRule, engine.Offer("vfx_firework(Clone)", P(10f, 0f), pins, _now));
+        Assert.Empty(engine.Observations);
+    }
+
+    [Fact]
+    public void DefaultRules_RoundTripThroughTheShareableFileFormat()
+    {
+        SurveyRuleSet defaults = SurveyRuleSet.Default();
+
+        SurveyRuleSet reloaded = SurveyRuleSet.Parse(defaults.Serialize(), out int malformed);
+
+        Assert.Equal(0, malformed);
+        Assert.Equal(defaults.Rules.Count, reloaded.Rules.Count);
+        Assert.Equal(defaults.Blacklist.Count, reloaded.Blacklist.Count);
+        Assert.True(reloaded.TryMatch("raspberrybush", out SurveyRule match));
+        Assert.Equal("cc:resource", match.IconId);
+    }
+
+    [Fact]
+    public void LegacyStarterSet_DiffersFromTheNewDefaults()
+    {
+        // The in-place upgrade recognizes an untouched pre-RC8 starter file
+        // by exact content; the two sets must therefore serialize
+        // differently, and both must parse cleanly.
+        var legacyLines = new List<string>(SurveyRuleSet.LegacyStarterSet().Serialize());
+        var defaultLines = new List<string>(SurveyRuleSet.Default().Serialize());
+
+        Assert.NotEqual(legacyLines, defaultLines);
+        SurveyRuleSet.Parse(legacyLines, out int malformedLegacy);
+        SurveyRuleSet.Parse(defaultLines, out int malformedDefault);
+        Assert.Equal(0, malformedLegacy);
+        Assert.Equal(0, malformedDefault);
+    }
 }

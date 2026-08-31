@@ -199,4 +199,42 @@ public class IconRegistryTests
         Assert.Contains(results, definition => definition.Id == "vanilla:portal");
         Assert.Contains(results, definition => definition.Id == "cc:harbor");
     }
+
+    [Fact]
+    public void Rc8_MinimumUsefulCcSet_ShipsDistinctSprites()
+    {
+        string[] required =
+        {
+            "cc:road", "cc:harbor", "cc:resource", "cc:danger", "cc:farm",
+            "cc:mine", "cc:fishing", "cc:camp", "cc:travel", "cc:trader",
+            "cc:dungeon", "cc:objective",
+        };
+
+        var spriteKeys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string id in required)
+        {
+            Assert.True(IconRegistry.TryResolve(id, out var definition), $"missing {id}");
+            Assert.True(definition.HasCustomSprite, $"{id} must ship its own sprite");
+            Assert.True(spriteKeys.Add(definition.SpriteKey), $"{id} reuses sprite {definition.SpriteKey}");
+        }
+    }
+
+    [Fact]
+    public void Rc8_VanillaIcons_KeepVanillaRendering()
+    {
+        foreach (string id in new[] { "vanilla:fire", "vanilla:house", "vanilla:hammer", "vanilla:dot", "vanilla:portal" })
+        {
+            Assert.True(IconRegistry.TryResolve(id, out var definition));
+            Assert.False(definition.HasCustomSprite);
+        }
+    }
+
+    [Fact]
+    public void Rc8_EveryDefinition_KeepsAVanillaFallbackType()
+    {
+        foreach (var definition in IconRegistry.All)
+        {
+            Assert.InRange(definition.VanillaType, 0, 12);
+        }
+    }
 }

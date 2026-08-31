@@ -313,7 +313,8 @@ internal sealed class PinPalettePanel
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, y),
             RowWidth, RowHeight);
 
-        if (MinimapReflection.TryGetPinSprite(definition.VanillaType, out Sprite? sprite))
+        Sprite? sprite = CcIconSprites.TryGet(definition.Id, out Sprite ccSprite) ? ccSprite : null;
+        if (sprite != null || MinimapReflection.TryGetPinSprite(definition.VanillaType, out sprite))
         {
             var previewHolder = new GameObject("CCPalettePreview", typeof(RectTransform), typeof(Image));
             previewHolder.transform.SetParent(row.transform, worldPositionStays: false);

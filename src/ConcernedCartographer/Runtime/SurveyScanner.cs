@@ -33,6 +33,27 @@ internal sealed class SurveyScanner
         _log = log;
     }
 
+    /// <summary>When the last scan pass ran (UTC), or null before the
+    /// first. Feeds the Survey panel status.</summary>
+    public DateTime? LastScanUtc { get; private set; }
+
+    /// <summary>Loaded objects examined by the last scan pass.</summary>
+    public int LastScanExamined { get; private set; }
+
+    /// <summary>Observations the last scan pass added.</summary>
+    public int LastScanAdded { get; private set; }
+
+    /// <summary>True after a scanner failure disabled it for this session
+    /// (the panel shows this honestly instead of a silent "no results").</summary>
+    public bool DisabledForSession => _disabledForSession;
+
+    /// <summary>Makes the next enabled tick scan immediately instead of
+    /// waiting out the cadence — the Survey panel's "Scan now".</summary>
+    public void RequestImmediateScan()
+    {
+        _elapsed = float.MaxValue;
+    }
+
     public void Tick(float deltaTime, SurveyEngine engine, PinStore pins)
     {
         if (_disabledForSession || !_settings.SurveyRulesEnabled.Value)
@@ -68,6 +89,7 @@ internal sealed class SurveyScanner
 
             Vector3 playerPosition = player.transform.position;
             float radius = _settings.SurveyScanRadius.Value;
+            LastScanUtc = now;
             int added = 0;
             int examined = 0;
             while (examined < ScanBudget && _buffer.Count > 0)
@@ -102,6 +124,8 @@ internal sealed class SurveyScanner
                 }
             }
 
+            LastScanExamined = examined;
+            LastScanAdded = added;
             if (added > 0)
             {
                 player.Message(

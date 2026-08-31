@@ -109,7 +109,11 @@ internal sealed class CartographerRuntime : IDisposable
         _consentPanel = new CrashConsentPanel(log, settings);
         _palettePanel = new PinPalettePanel(log);
         _routesPanel = new RoutesPanel(log, () => _routeCommands);
-        _surveyPanel = new SurveyPanel(log, settings, ExecuteSurveyCommand, () => _surveyEngine.Observations);
+        _surveyPanel = new SurveyPanel(
+            log, settings, ExecuteSurveyCommand,
+            () => _surveyEngine.Observations,
+            () => _surveyEngine,
+            () => _surveyScanner);
         _sharePanel = new SharePanel(log, ExecuteSyncCommand, () =>
         {
             var authors = new List<string>();

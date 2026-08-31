@@ -161,9 +161,47 @@ internal sealed class SurveyRuleSet
         return set;
     }
 
-    /// <summary>The starter rule file written when none exists: safe,
-    /// conservative examples the player can edit.</summary>
+    /// <summary>The starter rule file written when none exists (RC8): a
+    /// bounded, immediately useful set — common gatherables, ore deposits,
+    /// dungeon entrances, and boss runestones — every one duplicate-radius
+    /// and expiry bounded so a walk through a forest yields a handful of
+    /// reviewable observations, never a flood. Players edit the file
+    /// freely; it is the shareable import/export format.</summary>
     public static SurveyRuleSet Default()
+    {
+        var set = new SurveyRuleSet();
+
+        // Gatherables (30 m duplicate radius, 2 h expiry).
+        set.AddRule(new SurveyRule("raspberrybush*", "cc:resource", "Resources", 30f, 120f));
+        set.AddRule(new SurveyRule("blueberrybush*", "cc:resource", "Resources", 30f, 120f));
+        set.AddRule(new SurveyRule("cloudberrybush*", "cc:resource", "Resources", 30f, 120f));
+        set.AddRule(new SurveyRule("pickable_mushroom*", "cc:resource", "Resources", 30f, 120f));
+        set.AddRule(new SurveyRule("pickable_thistle*", "cc:resource", "Resources", 30f, 120f));
+
+        // Ore and metal deposits (40 m duplicate radius, 4 h expiry).
+        set.AddRule(new SurveyRule("rock4_copper*", "cc:mine", "Resources", 40f, 240f));
+        set.AddRule(new SurveyRule("minerock_tin*", "cc:mine", "Resources", 30f, 240f));
+        set.AddRule(new SurveyRule("silvervein*", "cc:mine", "Resources", 40f, 240f));
+        set.AddRule(new SurveyRule("minerock_obsidian*", "cc:mine", "Resources", 40f, 240f));
+        set.AddRule(new SurveyRule("mudpile*", "cc:mine", "Resources", 40f, 240f));
+
+        // Dungeon entrances and points of interest (8 h expiry).
+        set.AddRule(new SurveyRule("crypt*", "cc:dungeon", "Dungeons", 80f, 480f));
+        set.AddRule(new SurveyRule("sunkencrypt*", "cc:dungeon", "Dungeons", 80f, 480f));
+        set.AddRule(new SurveyRule("trollcave*", "cc:dungeon", "Dungeons", 80f, 480f));
+        set.AddRule(new SurveyRule("vegvisir*", "cc:objective", "Points of interest", 80f, 480f));
+
+        set.AddBlacklist("piece_*");
+        set.AddBlacklist("vfx_*");
+        set.AddBlacklist("sfx_*");
+        set.AddBlacklist("fx_*");
+        return set;
+    }
+
+    /// <summary>The exact starter set shipped by v1.0 RCs before RC8, used
+    /// to recognize an untouched starter file and upgrade it in place. A
+    /// file the player edited never matches and is never touched.</summary>
+    public static SurveyRuleSet LegacyStarterSet()
     {
         var set = new SurveyRuleSet();
         set.AddRule(new SurveyRule("rock4_copper*", "cc:resource", "Resources", 40f, 60f));

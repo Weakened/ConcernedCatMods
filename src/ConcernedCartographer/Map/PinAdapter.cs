@@ -41,6 +41,12 @@ internal sealed class PinAdapter
 
     private readonly ManualLogSource _log;
     private readonly PinRenderingLedger<Minimap.PinData> _ledger = new(ReadRenderingState);
+
+    // RC8: which icon id's CUSTOM sprite a rendering currently shows (only
+    // renderings with a CC sprite are listed). Lets the sync detect icon
+    // changes the vanilla-type comparison cannot see (two cc:* ids can
+    // share a fallback type) and re-apply sprites after a restart claim.
+    private readonly Dictionary<Minimap.PinData, string> _customSpriteByRendering = new();
     private bool _disabledForSession;
 
     public PinAdapter(ManualLogSource log)
@@ -55,6 +61,7 @@ internal sealed class PinAdapter
     public void Reset()
     {
         _ledger.Reset();
+        _customSpriteByRendering.Clear();
     }
 
     /// <summary>Vanilla pins the player could adopt right now.</summary>
@@ -209,15 +216,23 @@ internal sealed class PinAdapter
                     break;
                 case PinRenderingLedger<Minimap.PinData>.SyncDecision.Remove:
                     Minimap.instance.RemovePin(existing);
-                    _ledger.Untrack(existing!);
+                    ForgetRendering(existing!);
                     break;
                 case PinRenderingLedger<Minimap.PinData>.SyncDecision.Replace:
                     Minimap.instance.RemovePin(existing);
-                    _ledger.Untrack(existing!);
+                    ForgetRendering(existing!);
                     AddManagedPin(managed);
                     break;
                 case PinRenderingLedger<Minimap.PinData>.SyncDecision.UpdateChecked:
                     existing!.m_checked = managed.Checked;
+                    EnsureCustomSprite(existing, managed);
+                    break;
+                case PinRenderingLedger<Minimap.PinData>.SyncDecision.None:
+                    if (existing is not null && !managed.Deleted && !managed.Archived)
+                    {
+                        EnsureCustomSprite(existing, managed);
+                    }
+
                     break;
             }
         }
@@ -295,7 +310,7 @@ internal sealed class PinAdapter
                 if (_ledger.TryGetId(gone, out AtlasId id))
                 {
                     store.Delete(id);
-                    _ledger.Untrack(gone);
+                    ForgetRendering(gone);
                     _log.LogInfo($"Managed pin {id} was deleted through vanilla UI; tombstoned in the atlas.");
                 }
             }
@@ -321,7 +336,7 @@ internal sealed class PinAdapter
         {
             if (_ledger.TryGetRendering(id, out Minimap.PinData rendered))
             {
-                _ledger.Untrack(rendered);
+                ForgetRendering(rendered);
                 Minimap.instance.RemovePin(rendered);
             }
         }
@@ -391,6 +406,40 @@ internal sealed class PinAdapter
         var type = (Minimap.PinType)IconRegistry.ResolveVanillaType(managed.IconId);
         Minimap.PinData created = Minimap.instance.AddPin(position, type, managed.Name, save: true, managed.Checked);
         _ledger.Track(created, managed.Id);
+
+        // RC8: overriding m_icon BEFORE the UI element exists makes the
+        // element render the CC sprite; the saved pin still persists only
+        // its vanilla type, keeping disable/uninstall degradation intact.
+        if (CcIconSprites.TryGet(managed.IconId, out Sprite sprite))
+        {
+            created.m_icon = sprite;
+            _customSpriteByRendering[created] = managed.IconId;
+        }
+    }
+
+    /// <summary>A kept rendering whose icon id changed to (or from) a
+    /// custom-sprite icon of the SAME vanilla fallback type is invisible to
+    /// the ledger's type comparison; rebuild it so the element picks up the
+    /// right sprite. Also restores CC sprites onto renderings claimed from
+    /// the save file after a restart.</summary>
+    private void EnsureCustomSprite(Minimap.PinData rendering, AtlasPin managed)
+    {
+        string? wanted = CcIconSprites.TryGet(managed.IconId, out _) ? managed.IconId : null;
+        string? applied = _customSpriteByRendering.TryGetValue(rendering, out string current) ? current : null;
+        if (string.Equals(wanted, applied, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        Minimap.instance.RemovePin(rendering);
+        ForgetRendering(rendering);
+        AddManagedPin(managed);
+    }
+
+    private void ForgetRendering(Minimap.PinData rendering)
+    {
+        _ledger.Untrack(rendering);
+        _customSpriteByRendering.Remove(rendering);
     }
 
     private static PinRenderingLedger<Minimap.PinData>.RenderingState ReadRenderingState(Minimap.PinData pin)

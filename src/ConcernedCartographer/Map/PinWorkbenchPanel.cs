@@ -621,7 +621,12 @@ internal sealed class PinWorkbenchPanel
 
         if (_iconPreview != null)
         {
-            if (MinimapReflection.TryGetPinSprite(IconRegistry.ResolveVanillaType(_selectedIconId), out Sprite? sprite))
+            if (CcIconSprites.TryGet(_selectedIconId, out Sprite ccSprite))
+            {
+                _iconPreview.sprite = ccSprite;
+                _iconPreview.enabled = true;
+            }
+            else if (MinimapReflection.TryGetPinSprite(IconRegistry.ResolveVanillaType(_selectedIconId), out Sprite? sprite))
             {
                 _iconPreview.sprite = sprite;
                 _iconPreview.enabled = true;

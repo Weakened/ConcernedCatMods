@@ -9,12 +9,14 @@ using UnityEngine.UI;
 
 namespace TheConcernedCat.ConcernedCartographer.Map;
 
-/// <summary>The Survey side panel (#102): enable/disable the opt-in
-/// survey rules, see rule/observation status, and review pending
-/// observations — accept or reject each, or all at once with a
-/// click-again confirmation. Drives the same tested paths as the
+/// <summary>The Survey side panel (#102, RC8): enable/disable the opt-in
+/// survey rules, see the full pipeline status — scanner state, rule
+/// counts, last scan, pending count — trigger an immediate scan, and
+/// review pending observations (accept/reject each, or all at once with a
+/// click-again confirmation). Drives the same tested paths as the
 /// `cc_survey` console (which remains a scriptable alias). Nothing ever
-/// becomes a marker until explicitly accepted.</summary>
+/// becomes a marker until explicitly accepted; an accepted observation
+/// becomes a visible map pin immediately through the targeted pin sync.</summary>
 internal sealed class SurveyPanel : CcSidePanel
 {
     private const int Slots = 5;
@@ -22,23 +24,30 @@ internal sealed class SurveyPanel : CcSidePanel
     private readonly CartographerSettings _settings;
     private readonly Func<string[], string> _execute;
     private readonly Func<IReadOnlyList<SurveyEngine.Observation>> _observations;
+    private readonly Func<SurveyEngine> _engine;
+    private readonly Func<SurveyScanner?> _scanner;
     private Toggle? _enabled;
     private Text? _status;
     private Text? _output;
     private readonly GameObject[] _rows = new GameObject[Slots];
     private readonly Text[] _rowLabels = new Text[Slots];
     private string _pendingConfirm = "";
+    private float _refreshElapsed;
 
     public SurveyPanel(
         ManualLogSource log,
         CartographerSettings settings,
         Func<string[], string> execute,
-        Func<IReadOnlyList<SurveyEngine.Observation>> observations)
-        : base(log, "survey.title", 384f, 560f)
+        Func<IReadOnlyList<SurveyEngine.Observation>> observations,
+        Func<SurveyEngine> engine,
+        Func<SurveyScanner?> scanner)
+        : base(log, "survey.title", 384f, 600f)
     {
         _settings = settings;
         _execute = execute;
         _observations = observations;
+        _engine = engine;
+        _scanner = scanner;
     }
 
     protected override void BuildContent(GUIManager gui, Font font, Color headerColor, ref float y)
@@ -51,7 +60,9 @@ internal sealed class SurveyPanel : CcSidePanel
         y -= 32f;
 
         AddBody(gui, font, AtlasStrings.Get("survey.note"), 12, Color.white, ref y, 32f);
-        _status = AddBody(gui, font, "", 12, new Color(0.85f, 1f, 0.85f, 1f), ref y, 30f);
+
+        // Dedicated status block: scanner state, rules, last scan, pending.
+        _status = AddBody(gui, font, "", 12, new Color(0.85f, 1f, 0.85f, 1f), ref y, 64f);
 
         float left = -(Width - 44f) / 2f;
         for (int index = 0; index < Slots; index++)
@@ -86,14 +97,28 @@ internal sealed class SurveyPanel : CcSidePanel
         }
 
         y -= 8f;
-        float third = (Width - 44f) / 3f;
-        AddButton(gui, "Accept all", left + (third * 0.5f), y, third - 4f, 26f, () => ConfirmedBulk("accept"));
-        AddButton(gui, "Reject all", left + (third * 1.5f), y, third - 4f, 26f, () => ConfirmedBulk("reject"));
-        AddButton(gui, "Reload rules", left + (third * 2.5f), y, third - 4f, 26f, () =>
+        float half = (Width - 44f) / 2f;
+        AddButton(gui, "Scan now", left + (half * 0.5f), y, half - 4f, 26f, () =>
+        {
+            if (!_settings.SurveyRulesEnabled.Value)
+            {
+                Report("Enable the survey first — the scanner only runs while it is on.");
+                return;
+            }
+
+            _scanner()?.RequestImmediateScan();
+            Report("Scanning around you now; new observations appear above within a second.");
+            Refresh();
+        });
+        AddButton(gui, "Reload rules", left + (half * 1.5f), y, half - 4f, 26f, () =>
         {
             Report(_execute(new[] { "reload" }));
             Refresh();
         });
+        y -= 30f;
+
+        AddButton(gui, "Accept all", left + (half * 0.5f), y, half - 4f, 26f, () => ConfirmedBulk("accept"));
+        AddButton(gui, "Reject all", left + (half * 1.5f), y, half - 4f, 26f, () => ConfirmedBulk("reject"));
         y -= 34f;
 
         _output = AddBody(gui, font, "", 12, Color.white, ref y, 44f);
@@ -108,6 +133,24 @@ internal sealed class SurveyPanel : CcSidePanel
 
         _pendingConfirm = "";
         Refresh();
+    }
+
+    public override void HandleFrame()
+    {
+        base.HandleFrame();
+        if (!IsVisible)
+        {
+            return;
+        }
+
+        // The status line carries live facts (last scan age, pending
+        // arrivals from the background cadence); refresh once a second.
+        _refreshElapsed += Time.unscaledDeltaTime;
+        if (_refreshElapsed >= 1f)
+        {
+            _refreshElapsed = 0f;
+            Refresh();
+        }
     }
 
     private void RowAction(int index, bool accept)
@@ -141,8 +184,31 @@ internal sealed class SurveyPanel : CcSidePanel
         IReadOnlyList<SurveyEngine.Observation> observations = _observations();
         if (_status != null)
         {
-            _status.text = $"{observations.Count} pending observation(s). " +
-                (_settings.SurveyRulesEnabled.Value ? "Scanning is ON." : "Scanning is OFF.");
+            SurveyEngine engine = _engine();
+            SurveyScanner? scanner = _scanner();
+            string scanState;
+            if (scanner is { DisabledForSession: true })
+            {
+                scanState = "Scanner FAILED this session (see log)";
+            }
+            else if (!_settings.SurveyRulesEnabled.Value)
+            {
+                scanState = "Scanning OFF — enable above to start";
+            }
+            else
+            {
+                scanState = $"Scanning ON (every {_settings.SurveyScanIntervalSeconds.Value:0}s, {_settings.SurveyScanRadius.Value:0} m around you)";
+            }
+
+            string lastScan = scanner?.LastScanUtc is DateTime last
+                ? $"Last scan {Math.Max(0, (int)(DateTime.UtcNow - last).TotalSeconds)}s ago: {scanner.LastScanExamined} object(s) checked, {scanner.LastScanAdded} new"
+                : "Last scan: none yet this session";
+
+            _status.text = scanState +
+                $"\n{engine.Rules.Rules.Count} rule(s), {engine.Rules.Blacklist.Count} blocked pattern(s) (survey-rules.tsv)" +
+                $"\n{lastScan}" +
+                $"\n{observations.Count} pending observation(s)" +
+                (observations.Count > 0 ? " — accept (+) to pin, reject (-) to drop:" : "");
         }
 
         for (int index = 0; index < Slots; index++)
