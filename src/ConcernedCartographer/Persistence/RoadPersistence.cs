@@ -51,6 +51,23 @@ internal sealed class RoadPersistence
             }
 
             var atlas = new RoadAtlas(result.Strokes);
+
+            // RC8 road-source-authority migration: strokes recorded by the
+            // retired passive sources (traversal walking, chunk recovery —
+            // including every pre-source v1 row) are cleaned out once, with
+            // the original file kept beside the sidecar. Explicit
+            // Pathen/Paved construction strokes survive untouched.
+            RoadAtlas.MigrationResult authority = atlas.RemoveNonConstructionStrokes();
+            if (authority.RemovedStrokes > 0)
+            {
+                TakeAuthorityMigrationBackup(path);
+                _log.LogInfo(
+                    $"Road source authority (v1): removed {authority.RemovedStrokes} passive stroke(s) " +
+                    $"({authority.RemovedPoints} point(s)) recorded by traversal/chunk recovery; " +
+                    $"{atlas.Strokes.Count} explicit construction stroke(s) remain. " +
+                    "The pre-migration file was kept as .pre-authority.bak.");
+            }
+
             RoadAtlas.MaintenanceResult maintenance = atlas.PerformMaintenance();
             if (maintenance.MergedStrokes > 0 || maintenance.RemovedPoints > 0)
             {
@@ -106,6 +123,27 @@ internal sealed class RoadPersistence
             _rateLimited.Error("atlas-save", $"Could not save road atlas to {path}: {exception}");
             TryDelete(temporaryPath);
             return false;
+        }
+    }
+
+    /// <summary>One-time safety copy before the road-source-authority
+    /// migration rewrites a sidecar: the first migration for a world keeps
+    /// the original as .pre-authority.bak and never overwrites an existing
+    /// backup, so the pre-RC8 atlas stays recoverable by hand.</summary>
+    private void TakeAuthorityMigrationBackup(string path)
+    {
+        try
+        {
+            string backupPath = path + ".pre-authority.bak";
+            if (File.Exists(path) && !File.Exists(backupPath))
+            {
+                File.Copy(path, backupPath);
+                _log.LogInfo($"Backed up the pre-migration road atlas to {backupPath}.");
+            }
+        }
+        catch (Exception exception)
+        {
+            _rateLimited.Error("authority-backup", $"Could not back up the road atlas before the authority migration: {exception}");
         }
     }
 

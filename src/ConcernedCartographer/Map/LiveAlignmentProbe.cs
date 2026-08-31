@@ -34,12 +34,12 @@ internal static class LiveAlignmentProbe
             : "terrain: no road paint classified under the player");
 
         info.Append('\n').Append(latestSample is { } sample
-            ? Invariant($"latest traversal sample: ({sample.Position.x:0.00}, {sample.Position.z:0.00}) classified={(sample.Classified ? sample.Kind.ToString() : "no")} accepted={(sample.Accepted ? "yes" : "no")}")
-            : "latest traversal sample: none yet (surveyor has not sampled)");
+            ? Invariant($"latest traversal sample: ({sample.Position.x:0.00}, {sample.Position.z:0.00}) classified={(sample.Classified ? sample.Kind.ToString() : "no")} onRecordedRoad={(sample.OnRecordedRoad ? "yes" : "no")}")
+            : "latest traversal sample: none yet (sampler has not run)");
 
         info.Append('\n').Append(lastAccepted is { } accepted
-            ? Invariant($"latest accepted pipeline point: {accepted.Source}/{accepted.Kind} ({accepted.Position.X:0.00}, {accepted.Position.Z:0.00})")
-            : "latest accepted pipeline point: none this session");
+            ? Invariant($"latest recorded construction point: {accepted.Source}/{accepted.Kind} ({accepted.Position.X:0.00}, {accepted.Position.Z:0.00})")
+            : "latest recorded construction point: none this session");
 
         info.Append('\n').Append(hasNearest
             ? Invariant($"nearest stored road point: ({nearestPoint.X:0.00}, {nearestPoint.Z:0.00}) at {nearestDistanceMeters:0.00} m")

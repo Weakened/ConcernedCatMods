@@ -45,12 +45,59 @@ public class AlignmentVerdictsTests
     }
 
     [Fact]
-    public void A_StandingWithNoStoredPoint_FailsTowardObservationPipeline()
+    public void A_StandingWithNoStoredPoint_ReportsNoData_AndNamesTheV1Rule()
     {
         string line = Lines(hasNearest: false)[0];
 
-        Assert.Contains("FAIL", line);
-        Assert.Contains("NO stored road point", line);
+        Assert.Contains("NO DATA", line);
+        Assert.Contains("Pathen/Paved", line);
+    }
+
+    [Fact]
+    public void Guidance_MapClosedAndOffRoad_TellsPlayerBothSteps()
+    {
+        string report = AlignmentVerdicts.Evaluate(
+            standingOnRoad: false, hasNearestRoadPoint: false, nearestRoadDistanceMeters: 0f,
+            hasProjectionDelta: false, projectionDeltaTexels: 0f,
+            screenPixelsPerTexel: 0f, vectorLayerActive: false,
+            hasMarkerDelta: false, markerDeltaPixels: 0f);
+
+        Assert.Contains("OPEN THE LARGE MAP", report);
+        Assert.Contains("STAND ON", report);
+        Assert.Contains("Pathen or Paved", report);
+    }
+
+    [Fact]
+    public void Guidance_OffRoadOnly_TellsPlayerToStandOnAnExplicitRoad()
+    {
+        string report = AlignmentVerdicts.Evaluate(
+            standingOnRoad: false, hasNearestRoadPoint: false, nearestRoadDistanceMeters: 0f,
+            hasProjectionDelta: true, projectionDeltaTexels: 0.2f,
+            screenPixelsPerTexel: 2f, vectorLayerActive: true,
+            hasMarkerDelta: true, markerDeltaPixels: 0.5f);
+
+        Assert.Contains("STAND ON", report);
+        Assert.DoesNotContain("OPEN THE LARGE MAP", report);
+    }
+
+    [Fact]
+    public void Guidance_MapClosedOnly_TellsPlayerToOpenTheLargeMap()
+    {
+        string report = AlignmentVerdicts.Evaluate(
+            standingOnRoad: true, hasNearestRoadPoint: true, nearestRoadDistanceMeters: 1f,
+            hasProjectionDelta: true, projectionDeltaTexels: 0.2f,
+            screenPixelsPerTexel: 2f, vectorLayerActive: false,
+            hasMarkerDelta: false, markerDeltaPixels: 0f);
+
+        Assert.Contains("OPEN THE LARGE MAP", report);
+        Assert.DoesNotContain("STAND ON", report);
+    }
+
+    [Fact]
+    public void Guidance_AllPreconditionsMet_AddsNothing()
+    {
+        Assert.Equal(4, Lines().Length);
+        Assert.Equal("", AlignmentVerdicts.BuildGuidance(standingOnRoad: true, markerAvailable: true));
     }
 
     [Theory]

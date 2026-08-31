@@ -33,6 +33,19 @@ internal sealed class RoadOverlayRenderer
     private readonly RateLimitedLog _rateLimited;
     private readonly RoadVectorLayer _vectorLayer;
 
+    // The player's layer choice (drawer/saved views/console). The texture
+    // overlay's EFFECTIVE visibility additionally suppresses while the
+    // vector layer draws (RC8-1): only one road presentation may ink the
+    // large map at a time, and only one map view (large or minimap) is ever
+    // on screen, so suppressing the whole overlay while the vector layer is
+    // live hides exactly the duplicate large-map texture ink. The texture
+    // returns the moment the map closes (minimap) or the vector layer is
+    // disabled/fails (fail-safe).
+    private bool _userDirtEnabled = true;
+    private bool _userPavedEnabled = true;
+    private bool? _appliedDirtEnabled;
+    private bool? _appliedPavedEnabled;
+
     public RoadOverlayRenderer(CartographerSettings settings, ManualLogSource log)
     {
         _settings = settings;
@@ -46,10 +59,48 @@ internal sealed class RoadOverlayRenderer
     public bool VectorLayerActive => _vectorLayer.IsActive;
 
     /// <summary>Per-frame drive for the high-precision large-map layer.
-    /// Safe to call every tick; all gating happens inside.</summary>
+    /// Safe to call every tick; all gating happens inside. Also keeps the
+    /// texture overlay's effective visibility in step with the vector
+    /// layer's health (RC8-1) — a state change applies within one tick.</summary>
     public void TickVectorLayer(float unscaledDeltaTime, RoadAtlas atlas)
     {
         _vectorLayer.Tick(unscaledDeltaTime, atlas, DirtColor, PavedColor);
+        ApplyTextureVisibility();
+    }
+
+    /// <summary>Disabled-mod housekeeping: tears down the vector layer and
+    /// restores the texture overlays to the player's own layer choice, so a
+    /// mid-session disable can never strand the map with suppressed ink.</summary>
+    public void EnsureTextureFallback()
+    {
+        _vectorLayer.ForceInactive();
+        ApplyTextureVisibility();
+    }
+
+    private void ApplyTextureVisibility()
+    {
+        bool suppress = _vectorLayer.IsActive;
+        SetTextureOverlayEnabled(RoadKind.Dirt, _userDirtEnabled && !suppress, ref _appliedDirtEnabled);
+        SetTextureOverlayEnabled(RoadKind.Paved, _userPavedEnabled && !suppress, ref _appliedPavedEnabled);
+    }
+
+    private void SetTextureOverlayEnabled(RoadKind kind, bool enabled, ref bool? applied)
+    {
+        if (applied == enabled)
+        {
+            return;
+        }
+
+        try
+        {
+            string overlayName = kind == RoadKind.Dirt ? DirtOverlayName : PavedOverlayName;
+            MinimapManager.Instance.GetMapOverlay(overlayName).Enabled = enabled;
+            applied = enabled;
+        }
+        catch (Exception exception)
+        {
+            _rateLimited.Warning("overlay-toggle", $"Could not toggle the {kind} overlay: {exception.Message}");
+        }
     }
 
     public void RedrawAll(RoadAtlas atlas)
@@ -359,20 +410,22 @@ internal sealed class RoadOverlayRenderer
         _vectorLayer.MarkDataDirty();
     }
 
-    /// <summary>Shows or hides one road layer (the same switch as Jötunn's
-    /// overlay toggle panel).</summary>
+    /// <summary>Shows or hides one road layer: the player's intent for both
+    /// presentations. The vector layer follows it directly; the texture
+    /// overlay follows it through the effective-visibility rule (RC8-1).</summary>
     public void SetOverlayEnabled(RoadKind kind, bool enabled)
     {
         _vectorLayer.SetKindEnabled(kind, enabled);
-        try
+        if (kind == RoadKind.Dirt)
         {
-            string overlayName = kind == RoadKind.Dirt ? DirtOverlayName : PavedOverlayName;
-            MinimapManager.Instance.GetMapOverlay(overlayName).Enabled = enabled;
+            _userDirtEnabled = enabled;
         }
-        catch (Exception exception)
+        else
         {
-            _rateLimited.Warning("overlay-toggle", $"Could not toggle the {kind} overlay: {exception.Message}");
+            _userPavedEnabled = enabled;
         }
+
+        ApplyTextureVisibility();
     }
 
     /// <summary>Draws a single observation point as a dot, for sources whose

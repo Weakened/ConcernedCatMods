@@ -58,7 +58,6 @@ internal sealed class RoadVectorLayer
     private Color32 _bakedDirtColor;
     private Color32 _bakedPavedColor;
     private bool _disabledForSession;
-    private bool _truncationWarned;
 
     public RoadVectorLayer(CartographerSettings settings, ManualLogSource log)
     {
@@ -283,7 +282,7 @@ internal sealed class RoadVectorLayer
                 {
                     if (quads >= MaxQuads)
                     {
-                        WarnTruncated();
+                        DisableOverBudget();
                         return;
                     }
 
@@ -296,7 +295,7 @@ internal sealed class RoadVectorLayer
                     // path; mirror them.
                     if (quads >= MaxQuads)
                     {
-                        WarnTruncated();
+                        DisableOverBudget();
                         return;
                     }
 
@@ -315,17 +314,25 @@ internal sealed class RoadVectorLayer
         _pavedGraphic.CommitQuads();
     }
 
-    private void WarnTruncated()
+    /// <summary>Budget overflow (RC8-1): a PARTIAL vector bake may not ship
+    /// — the suppressed texture overlay would hide whatever fell over the
+    /// budget. The layer disables itself for the session instead, so the
+    /// complete texture presentation returns as the single road view.</summary>
+    private void DisableOverBudget()
     {
-        _dirtGraphic?.CommitQuads();
-        _pavedGraphic?.CommitQuads();
-        if (!_truncationWarned)
-        {
-            _truncationWarned = true;
-            _log.LogWarning(
-                $"High-precision road layer reached its {MaxQuads} segment budget; " +
-                "remaining roads render through the texture overlay only.");
-        }
+        _disabledForSession = true;
+        _log.LogWarning(
+            $"High-precision road layer exceeded its {MaxQuads} segment budget and is disabled " +
+            "for this session; the complete texture overlay remains the road view.");
+        DestroyContainer();
+    }
+
+    /// <summary>External teardown (mod disabled mid-session): destroys the
+    /// layer's objects without marking the session failed, so re-enabling
+    /// rebuilds cleanly.</summary>
+    public void ForceInactive()
+    {
+        DestroyContainer();
     }
 
     private void ReleaseDeadReferences()

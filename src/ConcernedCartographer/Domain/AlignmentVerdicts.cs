@@ -38,11 +38,11 @@ internal static class AlignmentVerdicts
 
         if (!standingOnRoad)
         {
-            report.Append("A observation: N/A — no road paint classified under the player (stand on the road to test).");
+            report.Append("A observation: N/A — no road paint classified under the player.");
         }
         else if (!hasNearestRoadPoint)
         {
-            report.Append("A observation: FAIL — standing on road paint but NO stored road point nearby (observation/source pipeline).");
+            report.Append("A observation: NO DATA — road paint under the player but no stored road point nearby. Only ground you explicitly Pathen/Paved is recorded (v1 rule); native or walked-on paint is never a road.");
         }
         else if (nearestRoadDistanceMeters <= ObservationPassMeters)
         {
@@ -95,7 +95,40 @@ internal static class AlignmentVerdicts
             report.Append(Invariant($"D marker anchor: FAIL — live player marker is {markerDeltaPixels:0.00} px from the canonical projection; the marker anchor itself is offset."));
         }
 
+        string guidance = BuildGuidance(standingOnRoad, hasMarkerDelta);
+        if (guidance.Length > 0)
+        {
+            report.Append('\n').Append(guidance);
+        }
+
         return report.ToString();
+    }
+
+    /// <summary>Actionable next step when preconditions kept part of the
+    /// diagnostic at N/A: the full A/B/C/D check needs the LARGE MAP OPEN
+    /// and the player STANDING ON a road they explicitly built with
+    /// Pathen/Paved. Honest about which half is missing.</summary>
+    public static string BuildGuidance(bool standingOnRoad, bool markerAvailable)
+    {
+        if (standingOnRoad && markerAvailable)
+        {
+            return "";
+        }
+
+        if (!standingOnRoad && !markerAvailable)
+        {
+            return "For the full A/B/C/D check: OPEN THE LARGE MAP and STAND ON a road you explicitly built " +
+                "(Pathen or Paved), then run 'cc_roads align live' again.";
+        }
+
+        if (!standingOnRoad)
+        {
+            return "For the full A/B/C/D check: STAND ON a road you explicitly built (Pathen or Paved) — " +
+                "only explicit player construction is recorded — then run 'cc_roads align live' again.";
+        }
+
+        return "For the full A/B/C/D check: OPEN THE LARGE MAP (D needs the live player marker), " +
+            "then run 'cc_roads align live' again.";
     }
 
     private static string Invariant(FormattableString text)

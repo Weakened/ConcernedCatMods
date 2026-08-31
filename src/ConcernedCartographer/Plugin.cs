@@ -133,8 +133,6 @@ public sealed class Plugin : BaseUnityPlugin
                 $"Enabled={settings.Enabled.Value}, " +
                 $"CaptureConstructionActions={settings.CaptureConstructionActions.Value}, " +
                 $"ReconcileTerrainChanges={settings.ReconcileTerrainChanges.Value}, " +
-                $"RecoverLoadedChunks={settings.RecoverLoadedChunks.Value}, " +
-                $"RecoveryBudgetCellsPerFrame={settings.RecoveryBudgetCellsPerFrame.Value}, " +
                 $"SampleIntervalSeconds={settings.SampleIntervalSeconds.Value}, " +
                 $"MinimumPointSpacingMeters={settings.MinimumPointSpacingMeters.Value}, " +
                 $"MaximumStrokeGapMeters={settings.MaximumStrokeGapMeters.Value}, " +

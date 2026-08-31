@@ -88,46 +88,56 @@ public class TerrainIntentTests
         mask.AddExclusion(10f, 10f, 4f);
         var pipeline = new RoadObservationPipeline(atlas, mask);
 
-        pipeline.Observe(Obs(RoadObservationSource.Traversal, RoadKind.Paved, 10f, 10f), Rules, out _);
+        // RC8: construction is the only creating source; the mask never
+        // gates it, and Paved was never gated at all.
+        pipeline.Observe(Obs(RoadObservationSource.Construction, RoadKind.Paved, 10f, 10f), Rules, out _);
 
         Assert.Equal(1, atlas.PointCount);
     }
 
     [Fact]
-    public void PathenClearsExclusion_ThenTraversalRecordsDirtAgain()
+    public void PathenWins_ConstructionRecordsDirtDespiteThePriorExclusion()
     {
         var atlas = new RoadAtlas();
         var mask = new TerrainIntentMask();
         mask.AddExclusion(10f, 10f, 4f);
         var pipeline = new RoadObservationPipeline(atlas, mask);
 
+        // RC8 "later explicit Pathen/Paved wins": a passive sighting on the
+        // leveled pad records nothing (source rule), while the explicit
+        // Pathen observation lands regardless of the mask (the runtime also
+        // clears the brush footprint before observing).
         Assert.False(pipeline.Observe(Obs(RoadObservationSource.Traversal, RoadKind.Dirt, 10f, 10f), Rules, out _));
+        Assert.Equal(0, atlas.PointCount);
 
-        // The runtime clears the footprint on a successful Pathen op.
         mask.ClearExclusion(10f, 10f, 4f);
+        pipeline.Observe(Obs(RoadObservationSource.Construction, RoadKind.Dirt, 10f, 10f), Rules, out _);
 
-        Assert.True(pipeline.Observe(Obs(RoadObservationSource.Traversal, RoadKind.Dirt, 10f, 10f), Rules, out _) ||
-            atlas.PointCount == 1);
         Assert.Equal(1, atlas.PointCount);
+        Assert.Equal(RoadObservationSource.Construction, atlas.Strokes[0].Source);
     }
 
     [Fact]
-    public void ExclusionEndsActiveStroke_NoConnectorAcrossTheLeveledPad()
+    public void Construction_IsNeverGatedByTheMask_AndChainsAcrossIt()
     {
+        // RC8: the only creating source is construction, and the mask never
+        // gates it — a deliberate Pathen path laid across a previously
+        // leveled pad records as one continuous stroke. (The runtime also
+        // clears the mask under each brush footprint; even without that,
+        // the pipeline must not gate construction.)
         var atlas = new RoadAtlas();
         var mask = new TerrainIntentMask();
         mask.AddExclusion(4.5f, 0.5f, 1f);
         var pipeline = new RoadObservationPipeline(atlas, mask);
 
-        pipeline.Observe(Obs(RoadObservationSource.Traversal, RoadKind.Dirt, 0.5f, 0.5f), Rules, out _);
-        pipeline.Observe(Obs(RoadObservationSource.Traversal, RoadKind.Dirt, 2.5f, 0.5f), Rules, out _);
-        Assert.False(pipeline.Observe(Obs(RoadObservationSource.Traversal, RoadKind.Dirt, 4.5f, 0.5f), Rules, out _));
-        pipeline.Observe(Obs(RoadObservationSource.Traversal, RoadKind.Dirt, 6.5f, 0.5f), Rules, out _);
+        pipeline.Observe(Obs(RoadObservationSource.Construction, RoadKind.Dirt, 0.5f, 0.5f), Rules, out _);
+        pipeline.Observe(Obs(RoadObservationSource.Construction, RoadKind.Dirt, 2.5f, 0.5f), Rules, out _);
+        pipeline.Observe(Obs(RoadObservationSource.Construction, RoadKind.Dirt, 4.5f, 0.5f), Rules, out _);
+        pipeline.Observe(Obs(RoadObservationSource.Construction, RoadKind.Dirt, 6.5f, 0.5f), Rules, out _);
         pipeline.EndAllStrokes();
 
-        // Two separate strokes: the pad broke the polyline even though the
-        // 2 m hop is far below the 10 m gap rule.
-        Assert.Equal(2, atlas.Strokes.Count);
+        Assert.Single(atlas.Strokes);
+        Assert.Equal(4, atlas.Strokes[0].Points.Count);
     }
 
     [Fact]

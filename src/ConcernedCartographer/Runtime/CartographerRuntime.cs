@@ -19,14 +19,7 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly RoadOverlayRenderer _renderer;
     private readonly ConstructionCapture _constructionCapture;
     private readonly PinAdapter _pinAdapter;
-    private readonly ChunkRecoveryScanner _chunkRecovery;
     private readonly RateLimitedLog _rateLimited;
-
-    // Chunk recovery emits cells in row-major scan order, so only adjacent
-    // cells (~1 m apart, diagonal ~1.4 m) may chain into one stroke; a wider
-    // gap would draw connectors between separate parallel roads that happen
-    // to share a scan row.
-    private const float RecoveryMaxGapMeters = 2.5f;
 
     // Removing ink requires a full overlay rebuild (pixels cannot be
     // un-drawn incrementally); coalesce bursts of hoe swings into one
@@ -183,8 +176,10 @@ internal sealed class CartographerRuntime : IDisposable
         _backupTools = new AtlasBackupTools(log);
         _constructionCapture = new ConstructionCapture(log);
         _constructionCapture.OperationCaptured += HandleTerrainOperation;
-        _chunkRecovery = new ChunkRecoveryScanner(settings, log);
-        _chunkRecovery.PaintObserved += HandleRecoveredPaint;
+
+        // RC8 road source authority: the chunk-recovery scanner is not
+        // constructed at all — passive road creation is disabled in v1.
+        // Roads come exclusively from the player's own Pathen/Paved ops.
     }
 
     public void OnMapAvailable()
@@ -251,8 +246,15 @@ internal sealed class CartographerRuntime : IDisposable
             // Disabled mid-session: the vanilla controls must come back
             // even though the rest of the runtime is dormant, and no CC
             // surface may linger un-closeable (its Escape handling is
-            // gated behind this branch).
+            // gated behind this branch). The road texture overlays return
+            // to the player's own layer choice too (RC8-1) — a disabled
+            // mod may never strand the map with suppressed ink.
             MapInputGate.ConsumeClicks = false;
+            if (!_settings.Enabled.Value)
+            {
+                _renderer.EnsureTextureFallback();
+            }
+
             if (Minimap.IsOpen())
             {
                 EnforceVanillaPaletteVisibility();
@@ -387,7 +389,6 @@ internal sealed class CartographerRuntime : IDisposable
             MapInputGate.ConsumeClicks = false;
             _quickPinArmed = false;
             _pipeline?.EndAllStrokes();
-            _chunkRecovery.Reset();
             _displayController.Reset();
             _mapUi.Reset();
             _palettePanel.Reset();
@@ -398,16 +399,14 @@ internal sealed class CartographerRuntime : IDisposable
             return;
         }
 
-        if (_surveyor.Tick(unscaledDeltaTime, out RoadSegment segment))
-        {
-            _renderer.DrawSegment(segment);
-        }
+        // Diagnostics-only traversal sampling (RC8): feeds `cc_roads align
+        // live`, never the atlas. Road data is created only by construction.
+        _surveyor.Tick(unscaledDeltaTime);
 
         // DEF-v1.0-006: the sub-texel large-map road layer follows pan/zoom
         // every frame and rebakes only on data/zoom-step changes.
         _renderer.TickVectorLayer(unscaledDeltaTime, _atlas);
 
-        _chunkRecovery.Tick();
         _surveyScanner.Tick(unscaledDeltaTime, _surveyEngine, _pinStore);
 
         // Managed-from-birth (#96): claim a palette-placed pin the moment
@@ -605,7 +604,11 @@ internal sealed class CartographerRuntime : IDisposable
     {
         if (_quickPinCapture.TryCapture(_pinStore, out string quickPinMessage))
         {
-            ReapplyDisplay();
+            // RC8-10: the new store entity must gain its map rendering NOW,
+            // through the tracking-preserving targeted sync — ReapplyDisplay
+            // alone only re-filters what already renders, which left a quick
+            // pin invisible until some later resync.
+            ResyncPins();
         }
 
         if (quickPinMessage.Length > 0)
@@ -827,7 +830,9 @@ internal sealed class CartographerRuntime : IDisposable
             pin.Source = AtlasPinSource.Managed;
         });
         _palettePanel.NoteUsed(iconId);
-        ReapplyDisplay();
+        // Targeted sync (not just re-filtering): the icon-id mutation above
+        // may swap the rendering to a distinct CC sprite immediately.
+        ResyncPins();
         if (_settings.DebugLogging.Value)
         {
             _log.LogInfo($"Palette marker born managed: {managed.Id} icon {iconId} category \"{category}\".");
@@ -1195,7 +1200,7 @@ internal sealed class CartographerRuntime : IDisposable
                     supportUid,
                     Plugin.PluginVersion,
                     $"enabled={_settings.Enabled.Value}, capture={_settings.CaptureConstructionActions.Value}, " +
-                    $"reconcile={_settings.ReconcileTerrainChanges.Value}, recovery={_settings.RecoverLoadedChunks.Value}, " +
+                    $"reconcile={_settings.ReconcileTerrainChanges.Value}, " +
                     $"survey={_settings.SurveyRulesEnabled.Value}, cluster={_settings.DrawerCluster.Value}, " +
                     $"contrast={_settings.HighContrast.Value}, uiScale={_settings.UiScale.Value}");
                 return "Sanitized support report (no positions/names/notes) written to " + report;
@@ -1535,7 +1540,7 @@ internal sealed class CartographerRuntime : IDisposable
         if (_settings.ReconcileTerrainChanges.Value)
         {
             int removed = 0;
-            if (operation.RoadKind is RoadKind paintedKind)
+            if (operation.RoadKind is RoadKind paintedKind && !operation.IsTerraforming)
             {
                 // A kind change: new paint of one kind erases covered ink of
                 // the other. Same-kind ink stays put (suppression keeps it
@@ -1545,7 +1550,11 @@ internal sealed class CartographerRuntime : IDisposable
             }
             else
             {
-                // Cultivate/Reset erase road-ness entirely.
+                // Level/Raise/Cultivate/Reset create no roads and ERASE the
+                // covered road data of both kinds (RC8): a base pad leveled
+                // over an old road removes that stretch from the atlas. A
+                // later explicit Pathen/Paved over the same ground wins by
+                // clearing the intent mask and recording fresh construction.
                 removed = RemoveCoverageWithBackup(RoadKind.Dirt, center, operation.RadiusMeters)
                     + RemoveCoverageWithBackup(RoadKind.Paved, center, operation.RadiusMeters);
             }
@@ -1575,15 +1584,6 @@ internal sealed class CartographerRuntime : IDisposable
         // destructive change, so a reconciliation bug is recoverable.
         _persistence.BackupBeforeReconciliation(_worldUid!.Value);
         return _atlas.RemoveCoverage(kind, center, radiusMeters);
-    }
-
-    private void HandleRecoveredPaint(RoadKind kind, Vector3 position)
-    {
-        var rules = new RoadSamplingRules(
-            _settings.MinimumPointSpacingMeters.Value,
-            RecoveryMaxGapMeters,
-            _settings.DuplicateSuppressionMeters.Value);
-        ObserveAndDraw(RoadObservationSource.ChunkRecovery, kind, position, rules, "recovery-observed");
     }
 
     private void ObserveAndDraw(
@@ -1698,10 +1698,9 @@ internal sealed class CartographerRuntime : IDisposable
                 _persistence.BackupBeforeReconciliation(_worldUid.Value);
                 int removed = _atlas.RemoveCoverage(RoadKind.Dirt, position, rebuildRadius)
                     + _atlas.RemoveCoverage(RoadKind.Paved, position, rebuildRadius);
-                _chunkRecovery.Reset();
                 changed = removed > 0;
-                summary = $"Cleared {removed} road point(s) within {rebuildRadius:0.#} m; explored loaded terrain " +
-                    "will be re-scanned with the current detection settings.";
+                summary = $"Cleared {removed} road point(s) within {rebuildRadius:0.#} m. " +
+                    "Roads return only when you Pathen/Pave the ground again ('cc_roads undo' reverts).";
                 break;
             case "undo":
                 changed = _editor.Undo(out summary);
@@ -1801,8 +1800,6 @@ internal sealed class CartographerRuntime : IDisposable
         _pipeline?.EndAllStrokes();
         _constructionCapture.OperationCaptured -= HandleTerrainOperation;
         _constructionCapture.Dispose();
-        _chunkRecovery.PaintObserved -= HandleRecoveredPaint;
-        _chunkRecovery.Reset();
         _disposed = true;
     }
 
@@ -1843,8 +1840,7 @@ internal sealed class CartographerRuntime : IDisposable
             () => _routeRedrawPending = true);
         _pipeline = new RoadObservationPipeline(_atlas, _terrainIntent);
         _editor = new RoadAtlasEditor(_atlas);
-        _surveyor = new RoadSurveyor(_settings, _probe, _pipeline, _log);
-        _chunkRecovery.Reset();
+        _surveyor = new RoadSurveyor(_settings, _probe, _atlas, _log);
         _redrawPending = false;
         _autosaveElapsed = 0f;
     }

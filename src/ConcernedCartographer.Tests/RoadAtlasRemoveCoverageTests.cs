@@ -116,7 +116,7 @@ public class RoadAtlasRemoveCoverageTests
         for (float x = 17f; x <= 23f; x += 1.5f)
         {
             pipeline.Observe(
-                new RoadObservation(RoadObservationSource.Traversal, RoadKind.Dirt, P(x, 0.2f)),
+                new RoadObservation(RoadObservationSource.Construction, RoadKind.Dirt, P(x, 0.2f)),
                 DefaultRules,
                 out _);
         }

@@ -19,7 +19,7 @@ public class RoadObservationPipelineTests
         return new RoadObservation(source, kind, new RoadPoint(x, 30f, z));
     }
 
-    private static void WalkLine(
+    private static void BuildLine(
         RoadObservationPipeline pipeline,
         RoadObservationSource source,
         RoadKind kind,
@@ -40,11 +40,11 @@ public class RoadObservationPipelineTests
     {
         var atlas = new RoadAtlas();
         var pipeline = new RoadObservationPipeline(atlas);
-        WalkLine(pipeline, RoadObservationSource.Traversal, RoadKind.Dirt, 0f, 20f, 2f, 0f, SuppressionDisabledRules);
+        BuildLine(pipeline, RoadObservationSource.Construction, RoadKind.Dirt, 0f, 20f, 2f, 0f, SuppressionDisabledRules);
         pipeline.EndAllStrokes();
         int afterFirst = atlas.PointCount;
 
-        WalkLine(pipeline, RoadObservationSource.Traversal, RoadKind.Dirt, 0f, 20f, 2f, 0f, SuppressionDisabledRules);
+        BuildLine(pipeline, RoadObservationSource.Construction, RoadKind.Dirt, 0f, 20f, 2f, 0f, SuppressionDisabledRules);
 
         Assert.Equal(afterFirst, atlas.PointCount);
     }
@@ -54,14 +54,14 @@ public class RoadObservationPipelineTests
     {
         var atlas = new RoadAtlas();
         var pipeline = new RoadObservationPipeline(atlas);
-        WalkLine(pipeline, RoadObservationSource.Traversal, RoadKind.Dirt, 0f, 20f, 2f, 0f, SuppressionDisabledRules);
+        BuildLine(pipeline, RoadObservationSource.Construction, RoadKind.Dirt, 0f, 20f, 2f, 0f, SuppressionDisabledRules);
         pipeline.EndAllStrokes();
         int afterFirst = atlas.PointCount;
 
-        // Offset re-walk: same road, non-identical coordinates. With the
+        // Offset re-build: same road, non-identical coordinates. With the
         // configurable suppression off this must grow, proving the replay
         // epsilon only catches true replays.
-        WalkLine(pipeline, RoadObservationSource.Traversal, RoadKind.Dirt, 0.7f, 20.7f, 2f, 0.7f, SuppressionDisabledRules);
+        BuildLine(pipeline, RoadObservationSource.Construction, RoadKind.Dirt, 0.7f, 20.7f, 2f, 0.7f, SuppressionDisabledRules);
 
         Assert.True(atlas.PointCount > afterFirst);
     }
@@ -84,30 +84,11 @@ public class RoadObservationPipelineTests
     }
 
     [Fact]
-    public void InterleavedSources_BuildIndependentCoherentStrokes()
+    public void ConstructionOverExistingInk_IsSuppressed()
     {
         var atlas = new RoadAtlas();
         var pipeline = new RoadObservationPipeline(atlas);
-
-        for (float x = 0f; x <= 20f; x += 2f)
-        {
-            pipeline.Observe(Obs(RoadObservationSource.Traversal, RoadKind.Dirt, x, 0f), DefaultRules, out _);
-            pipeline.Observe(Obs(RoadObservationSource.Construction, RoadKind.Dirt, x, 50f), DefaultRules, out _);
-        }
-
-        Assert.Equal(2, atlas.Strokes.Count);
-        Assert.Equal(RoadObservationSource.Traversal, atlas.Strokes[0].Source);
-        Assert.Equal(RoadObservationSource.Construction, atlas.Strokes[1].Source);
-        Assert.Equal(11, atlas.Strokes[0].Points.Count);
-        Assert.Equal(11, atlas.Strokes[1].Points.Count);
-    }
-
-    [Fact]
-    public void ConstructionOverTraversedInk_IsSuppressed()
-    {
-        var atlas = new RoadAtlas();
-        var pipeline = new RoadObservationPipeline(atlas);
-        WalkLine(pipeline, RoadObservationSource.Traversal, RoadKind.Dirt, 0f, 20f, 2f, 0f, DefaultRules);
+        BuildLine(pipeline, RoadObservationSource.Construction, RoadKind.Dirt, 0f, 20f, 2f, 0f, DefaultRules);
         pipeline.EndAllStrokes();
         int before = atlas.PointCount;
 
@@ -117,72 +98,20 @@ public class RoadObservationPipelineTests
     }
 
     [Fact]
-    public void EndingOneSourcesStroke_DoesNotBreakAnother()
+    public void ReloadedStrokes_KeepSuppressingAcrossSessions()
     {
         var atlas = new RoadAtlas();
         var pipeline = new RoadObservationPipeline(atlas);
-        pipeline.Observe(Obs(RoadObservationSource.Traversal, RoadKind.Dirt, 0f, 0f), DefaultRules, out _);
-        pipeline.Observe(Obs(RoadObservationSource.Construction, RoadKind.Dirt, 0f, 50f), DefaultRules, out _);
-        pipeline.Observe(Obs(RoadObservationSource.Construction, RoadKind.Dirt, 2f, 50f), DefaultRules, out _);
-
-        // The traversal source loses its signal (probe failure, death) but
-        // construction keeps dabbing: its stroke must keep chaining.
-        pipeline.EndStroke(RoadObservationSource.Traversal);
-        pipeline.Observe(Obs(RoadObservationSource.Construction, RoadKind.Dirt, 4f, 50f), DefaultRules, out _);
-
-        Assert.Equal(2, atlas.Strokes.Count);
-        Assert.Equal(3, atlas.Strokes[1].Points.Count);
-    }
-
-    [Fact]
-    public void IsolatedObservations_AreOrderIndependent()
-    {
-        // Dabs spaced beyond the maximum gap become independent single-point
-        // strokes, so any arrival order (with replayed duplicates mixed in)
-        // must produce identical coverage.
-        var forward = new RoadAtlas();
-        var forwardPipeline = new RoadObservationPipeline(forward);
-        var reversed = new RoadAtlas();
-        var reversedPipeline = new RoadObservationPipeline(reversed);
-
-        var observations = new[]
-        {
-            Obs(RoadObservationSource.ChunkRecovery, RoadKind.Dirt, 0f, 0f),
-            Obs(RoadObservationSource.ChunkRecovery, RoadKind.Dirt, 20f, 0f),
-            Obs(RoadObservationSource.ChunkRecovery, RoadKind.Dirt, 40f, 0f),
-            Obs(RoadObservationSource.ChunkRecovery, RoadKind.Dirt, 20f, 0f),
-            Obs(RoadObservationSource.ChunkRecovery, RoadKind.Dirt, 60f, 0f),
-        };
-
-        foreach (RoadObservation observation in observations)
-        {
-            forwardPipeline.Observe(observation, DefaultRules, out _);
-        }
-
-        for (int index = observations.Length - 1; index >= 0; index--)
-        {
-            reversedPipeline.Observe(observations[index], DefaultRules, out _);
-        }
-
-        Assert.Equal(4, forward.PointCount);
-        Assert.Equal(forward.PointCount, reversed.PointCount);
-    }
-
-    [Fact]
-    public void ReloadedSourcedStrokes_KeepSuppressingAcrossSessions()
-    {
-        var atlas = new RoadAtlas();
-        var pipeline = new RoadObservationPipeline(atlas);
-        WalkLine(pipeline, RoadObservationSource.Construction, RoadKind.Paved, 0f, 20f, 2f, 0f, DefaultRules);
+        BuildLine(pipeline, RoadObservationSource.Construction, RoadKind.Paved, 0f, 20f, 2f, 0f, DefaultRules);
         pipeline.EndAllStrokes();
 
         var reloaded = new RoadAtlas(atlas.Strokes);
         var reloadedPipeline = new RoadObservationPipeline(reloaded);
         int before = reloaded.PointCount;
 
-        // Walking the paved road that construction capture already inked must
-        // not re-ink it.
-        WalkLine(reloadedPipeline, RoadObservationSource.Traversal, RoadKind.Paved, 0f, 20f, 2f, 0f, DefaultRules);
+        // Re-paving the road that construction capture already inked must
+        // not re-ink it after a restart.
+        BuildLine(reloadedPipeline, RoadObservationSource.Construction, RoadKind.Paved, 0f, 20f, 2f, 0f, DefaultRules);
 
         Assert.Equal(before, reloaded.PointCount);
         Assert.False(reloaded.IsDirty);
@@ -200,14 +129,14 @@ public class RoadObservationPipelineTests
     public void LastAccepted_RecordsTheAcceptedObservation()
     {
         var pipeline = new RoadObservationPipeline(new RoadAtlas());
-        RoadObservation observation = Obs(RoadObservationSource.Traversal, RoadKind.Dirt, 3f, 7f);
+        RoadObservation observation = Obs(RoadObservationSource.Construction, RoadKind.Dirt, 3f, 7f);
 
         pipeline.Observe(observation, DefaultRules, out _);
 
         Assert.NotNull(pipeline.LastAccepted);
         Assert.Equal(observation.Position.X, pipeline.LastAccepted.Value.Position.X);
         Assert.Equal(observation.Position.Z, pipeline.LastAccepted.Value.Position.Z);
-        Assert.Equal(RoadObservationSource.Traversal, pipeline.LastAccepted.Value.Source);
+        Assert.Equal(RoadObservationSource.Construction, pipeline.LastAccepted.Value.Source);
         Assert.Equal(RoadKind.Dirt, pipeline.LastAccepted.Value.Kind);
     }
 
@@ -215,16 +144,18 @@ public class RoadObservationPipelineTests
     public void LastAccepted_IsNotOverwrittenByRefusedObservations()
     {
         var pipeline = new RoadObservationPipeline(new RoadAtlas());
-        pipeline.Observe(Obs(RoadObservationSource.Traversal, RoadKind.Dirt, 3f, 7f), DefaultRules, out _);
+        pipeline.Observe(Obs(RoadObservationSource.Construction, RoadKind.Dirt, 3f, 7f), DefaultRules, out _);
         pipeline.EndAllStrokes();
 
-        // An exact replay and a suppressed near-duplicate are both refused;
-        // the diagnostic must keep pointing at the genuinely accepted point.
-        pipeline.Observe(Obs(RoadObservationSource.Traversal, RoadKind.Dirt, 3f, 7f), DefaultRules, out _);
-        pipeline.Observe(Obs(RoadObservationSource.ChunkRecovery, RoadKind.Dirt, 3.4f, 7f), DefaultRules, out _);
+        // An exact replay, a suppressed near-duplicate, and a passive-source
+        // observation are all refused; the diagnostic must keep pointing at
+        // the genuinely accepted point.
+        pipeline.Observe(Obs(RoadObservationSource.Construction, RoadKind.Dirt, 3f, 7f), DefaultRules, out _);
+        pipeline.Observe(Obs(RoadObservationSource.Construction, RoadKind.Dirt, 3.4f, 7f), DefaultRules, out _);
+        pipeline.Observe(Obs(RoadObservationSource.Traversal, RoadKind.Dirt, 90f, 90f), DefaultRules, out _);
 
         Assert.NotNull(pipeline.LastAccepted);
         Assert.Equal(3f, pipeline.LastAccepted.Value.Position.X);
-        Assert.Equal(RoadObservationSource.Traversal, pipeline.LastAccepted.Value.Source);
+        Assert.Equal(RoadObservationSource.Construction, pipeline.LastAccepted.Value.Source);
     }
 }
