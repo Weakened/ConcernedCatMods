@@ -19,23 +19,37 @@ internal sealed class RoadOverlayRenderer
 
     // Dark, fully opaque ink (cloud-layer contrast); the high-contrast
     // palette pushes dirt near black and paved near white for accessibility.
-    private Color32 DirtColor => _settings.HighContrast.Value
+    // The vector layer inherits the same palette so both road views agree.
+    internal Color32 DirtColor => _settings.HighContrast.Value
         ? new Color32(26, 15, 6, 255)
         : new Color32(94, 62, 34, 255);
 
-    private Color32 PavedColor => _settings.HighContrast.Value
+    internal Color32 PavedColor => _settings.HighContrast.Value
         ? new Color32(245, 245, 250, 255)
         : new Color32(88, 90, 96, 255);
 
     private readonly CartographerSettings _settings;
     private readonly ManualLogSource _log;
     private readonly RateLimitedLog _rateLimited;
+    private readonly RoadVectorLayer _vectorLayer;
 
     public RoadOverlayRenderer(CartographerSettings settings, ManualLogSource log)
     {
         _settings = settings;
         _log = log;
         _rateLimited = new RateLimitedLog(log, 5f);
+        _vectorLayer = new RoadVectorLayer(settings, log);
+    }
+
+    /// <summary>Whether the DEF-v1.0-006 sub-texel vector ink is currently
+    /// drawing on the large map (feeds the `align live` C verdict).</summary>
+    public bool VectorLayerActive => _vectorLayer.IsActive;
+
+    /// <summary>Per-frame drive for the high-precision large-map layer.
+    /// Safe to call every tick; all gating happens inside.</summary>
+    public void TickVectorLayer(float unscaledDeltaTime, RoadAtlas atlas)
+    {
+        _vectorLayer.Tick(unscaledDeltaTime, atlas, DirtColor, PavedColor);
     }
 
     public void RedrawAll(RoadAtlas atlas)
@@ -87,6 +101,8 @@ internal sealed class RoadOverlayRenderer
         {
             _log.LogError($"Could not rebuild road map overlays: {exception}");
         }
+
+        _vectorLayer.MarkDataDirty();
     }
 
     public void DrawCalibrationMarkers()
@@ -260,6 +276,25 @@ internal sealed class RoadOverlayRenderer
         ClearAlignmentPins();
     }
 
+    /// <summary>The exact projection the texture road ink uses (Jötunn's
+    /// WorldToOverlayCoords on the road overlay), for `align live`.</summary>
+    public bool TryGetOverlayProjection(Vector3 world, out Vector2 overlayCoords, out int overlaySize)
+    {
+        overlayCoords = default;
+        overlaySize = 0;
+        try
+        {
+            var overlay = MinimapManager.Instance.GetMapOverlay(DirtOverlayName);
+            overlaySize = overlay.TextureSize;
+            overlayCoords = MinimapManager.Instance.WorldToOverlayCoords(world, overlaySize);
+            return overlaySize > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static bool TryGetLatestDirtPoint(RoadAtlas atlas, out Vector3 world)
     {
         for (int index = atlas.Strokes.Count - 1; index >= 0; index--)
@@ -320,12 +355,15 @@ internal sealed class RoadOverlayRenderer
             // Every new sample retries this path, so keep the warning rate-limited.
             _rateLimited.Warning("draw-segment", $"Could not draw an incremental road segment: {exception.Message}");
         }
+
+        _vectorLayer.MarkDataDirty();
     }
 
     /// <summary>Shows or hides one road layer (the same switch as Jötunn's
     /// overlay toggle panel).</summary>
     public void SetOverlayEnabled(RoadKind kind, bool enabled)
     {
+        _vectorLayer.SetKindEnabled(kind, enabled);
         try
         {
             string overlayName = kind == RoadKind.Dirt ? DirtOverlayName : PavedOverlayName;

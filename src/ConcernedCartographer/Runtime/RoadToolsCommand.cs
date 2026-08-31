@@ -22,7 +22,8 @@ internal sealed class RoadToolsCommand : ConsoleCommand
         "Concerned Cartographer road tools. Subcommands: status, delete, kind, hide, unhide, " +
         "split, join, rebuild, undo. Each targets the recorded road nearest you; an optional " +
         "number sets the search radius in meters (e.g. 'cc_roads delete 20'). " +
-        "'align' runs the map-alignment diagnostic (native pin vs overlay cross); 'align clear' removes its pins.";
+        "'align' runs the map-alignment diagnostic (native pin vs overlay cross); 'align live' " +
+        "runs the end-to-end player-vs-road-ink diagnosis (A/B/C/D verdicts); 'align clear' removes the pins.";
 
     public override void Run(string[] args, Terminal context)
     {

@@ -395,6 +395,10 @@ internal sealed class CartographerRuntime : IDisposable
             _renderer.DrawSegment(segment);
         }
 
+        // DEF-v1.0-006: the sub-texel large-map road layer follows pan/zoom
+        // every frame and rebakes only on data/zoom-step changes.
+        _renderer.TickVectorLayer(unscaledDeltaTime, _atlas);
+
         _chunkRecovery.Tick();
         _surveyScanner.Tick(unscaledDeltaTime, _surveyEngine, _pinStore);
 
@@ -1692,6 +1696,27 @@ internal sealed class CartographerRuntime : IDisposable
                     _renderer.RedrawAll(_atlas);
                     _redrawPending = false;
                     return "Alignment markers removed.";
+                }
+
+                if (args.Length > 1 && string.Equals(args[1], "live", StringComparison.OrdinalIgnoreCase))
+                {
+                    // DEF-v1.0-006: end-to-end player-vs-road-ink diagnosis
+                    // with the four error classes answered separately.
+                    bool standingOnRoad = _probe.TryClassify(playerPosition, out RoadKind classifiedKind);
+                    bool hasNearest = _atlas.TryGetNearestPointOnRoads(
+                        position, 50f, out RoadPoint nearestPoint, out float nearestDistance);
+                    string liveReport = Map.LiveAlignmentProbe.BuildReport(
+                        playerPosition,
+                        standingOnRoad,
+                        classifiedKind,
+                        _surveyor?.LatestSample,
+                        _pipeline?.LastAccepted,
+                        hasNearest,
+                        nearestPoint,
+                        nearestDistance,
+                        _renderer);
+                    _log.LogInfo("cc_roads align live\n" + liveReport);
+                    return liveReport;
                 }
 
                 return _renderer.RunAlignmentProbe(playerPosition, _atlas);

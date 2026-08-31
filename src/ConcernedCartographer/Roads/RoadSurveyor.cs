@@ -15,6 +15,32 @@ internal sealed class RoadSurveyor
     private readonly RateLimitedLog _rateLimited;
     private float _elapsed;
 
+    /// <summary>The most recent traversal sampling attempt, for the
+    /// `cc_roads align live` diagnostic.</summary>
+    public readonly struct TraversalSample
+    {
+        public TraversalSample(Vector3 position, bool classified, RoadKind kind, bool accepted)
+        {
+            Position = position;
+            Classified = classified;
+            Kind = kind;
+            Accepted = accepted;
+        }
+
+        public Vector3 Position { get; }
+
+        /// <summary>Whether the paint probe saw road paint at the sample.</summary>
+        public bool Classified { get; }
+
+        public RoadKind Kind { get; }
+
+        /// <summary>Whether the pipeline recorded the sample into the atlas
+        /// (false also covers duplicate-suppressed re-walks).</summary>
+        public bool Accepted { get; }
+    }
+
+    public TraversalSample? LatestSample { get; private set; }
+
     public RoadSurveyor(
         CartographerSettings settings,
         GroundPaintProbe probe,
@@ -48,6 +74,7 @@ internal sealed class RoadSurveyor
         Vector3 position = player.transform.position;
         if (!_probe.TryClassify(position, out RoadKind kind))
         {
+            LatestSample = new TraversalSample(position, classified: false, default, accepted: false);
             _pipeline.EndStroke(RoadObservationSource.Traversal);
             return false;
         }
@@ -62,6 +89,7 @@ internal sealed class RoadSurveyor
             kind,
             new RoadPoint(position.x, position.y, position.z));
         bool recorded = _pipeline.Observe(observation, rules, out segment);
+        LatestSample = new TraversalSample(position, classified: true, kind, recorded);
 
         if (recorded && _settings.DebugLogging.Value)
         {

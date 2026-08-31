@@ -23,6 +23,11 @@ internal sealed class RoadObservationPipeline
         _terrainIntent = terrainIntent;
     }
 
+    /// <summary>The most recent observation the atlas actually accepted
+    /// (any source), for the `cc_roads align live` diagnostic. Refused or
+    /// suppressed observations never overwrite it.</summary>
+    public RoadObservation? LastAccepted { get; private set; }
+
     public bool Observe(in RoadObservation observation, RoadSamplingRules rules, out RoadSegment segment)
     {
         // DEF-v1.0-005: dirt paint inside explicitly-terraformed ground is a
@@ -47,12 +52,18 @@ internal sealed class RoadObservationPipeline
             return false;
         }
 
-        return _atlas.RecordSample(
+        bool accepted = _atlas.RecordSample(
             observation.Source,
             observation.Kind,
             observation.Position,
             rules,
             out segment);
+        if (accepted)
+        {
+            LastAccepted = observation;
+        }
+
+        return accepted;
     }
 
     /// <summary>Ends one source's active stroke, e.g. when that source loses

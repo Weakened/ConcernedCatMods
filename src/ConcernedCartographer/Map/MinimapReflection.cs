@@ -375,6 +375,35 @@ internal static class MinimapReflection
         }
     }
 
+    private static readonly MethodInfo? IsExploredMethod =
+        AccessTools.Method(typeof(Minimap), "IsExplored", new[] { typeof(Vector3) });
+
+    private static readonly FastInvokeHandler? IsExploredInvoker =
+        IsExploredMethod is null ? null : MethodInvoker.GetHandler(IsExploredMethod);
+
+    /// <summary>Whether the player has explored (unfogged) a world position.
+    /// The vector road layer draws above the map's fog compositing, so it
+    /// filters unexplored geometry at bake time to keep fog parity with the
+    /// texture overlay. Fails open (treated as explored) when unavailable.</summary>
+    public static bool TryIsExplored(Vector3 world, out bool explored)
+    {
+        explored = true;
+        if (IsExploredInvoker is null || Minimap.instance == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            explored = (bool)IsExploredInvoker(Minimap.instance, new object[] { world });
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static AccessTools.FieldRef<Minimap, float>? BuildLargeZoomRef()
     {
         try
