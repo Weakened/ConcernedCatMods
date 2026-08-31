@@ -52,18 +52,24 @@ internal sealed class RoadObservationPipeline
             return false;
         }
 
-        bool accepted = _atlas.RecordSample(
+        bool segmentProduced = _atlas.RecordSample(
             observation.Source,
             observation.Kind,
             observation.Position,
             rules,
             out segment);
-        if (accepted)
+
+        // RecordSample's bool means "a drawable segment exists", which is
+        // false for an accepted stroke-START point. The point was recorded
+        // exactly when it is now on recorded ground — the replay pre-check
+        // above already proved it was not there before this call.
+        if (segmentProduced ||
+            _atlas.ContainsPointNear(observation.Kind, observation.Position, ReplayEpsilonMeters))
         {
             LastAccepted = observation;
         }
 
-        return accepted;
+        return segmentProduced;
     }
 
     /// <summary>Ends one source's active stroke, e.g. when that source loses

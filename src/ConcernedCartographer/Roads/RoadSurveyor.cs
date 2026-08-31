@@ -89,7 +89,14 @@ internal sealed class RoadSurveyor
             kind,
             new RoadPoint(position.x, position.y, position.z));
         bool recorded = _pipeline.Observe(observation, rules, out segment);
-        LatestSample = new TraversalSample(position, classified: true, kind, recorded);
+        // "Accepted" answers the diagnostic question "is the ground I am
+        // standing on in the atlas?", which is also true for a stroke-start
+        // point that produced no drawable segment yet.
+        bool pointAccepted = recorded ||
+            (_pipeline.LastAccepted is { } last &&
+             last.Position.X == observation.Position.X &&
+             last.Position.Z == observation.Position.Z);
+        LatestSample = new TraversalSample(position, classified: true, kind, pointAccepted);
 
         if (recorded && _settings.DebugLogging.Value)
         {

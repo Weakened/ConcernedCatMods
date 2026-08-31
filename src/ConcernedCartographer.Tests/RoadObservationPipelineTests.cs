@@ -187,4 +187,44 @@ public class RoadObservationPipelineTests
         Assert.Equal(before, reloaded.PointCount);
         Assert.False(reloaded.IsDirty);
     }
+
+    [Fact]
+    public void LastAccepted_StartsEmpty()
+    {
+        var pipeline = new RoadObservationPipeline(new RoadAtlas());
+
+        Assert.Null(pipeline.LastAccepted);
+    }
+
+    [Fact]
+    public void LastAccepted_RecordsTheAcceptedObservation()
+    {
+        var pipeline = new RoadObservationPipeline(new RoadAtlas());
+        RoadObservation observation = Obs(RoadObservationSource.Traversal, RoadKind.Dirt, 3f, 7f);
+
+        pipeline.Observe(observation, DefaultRules, out _);
+
+        Assert.NotNull(pipeline.LastAccepted);
+        Assert.Equal(observation.Position.X, pipeline.LastAccepted.Value.Position.X);
+        Assert.Equal(observation.Position.Z, pipeline.LastAccepted.Value.Position.Z);
+        Assert.Equal(RoadObservationSource.Traversal, pipeline.LastAccepted.Value.Source);
+        Assert.Equal(RoadKind.Dirt, pipeline.LastAccepted.Value.Kind);
+    }
+
+    [Fact]
+    public void LastAccepted_IsNotOverwrittenByRefusedObservations()
+    {
+        var pipeline = new RoadObservationPipeline(new RoadAtlas());
+        pipeline.Observe(Obs(RoadObservationSource.Traversal, RoadKind.Dirt, 3f, 7f), DefaultRules, out _);
+        pipeline.EndAllStrokes();
+
+        // An exact replay and a suppressed near-duplicate are both refused;
+        // the diagnostic must keep pointing at the genuinely accepted point.
+        pipeline.Observe(Obs(RoadObservationSource.Traversal, RoadKind.Dirt, 3f, 7f), DefaultRules, out _);
+        pipeline.Observe(Obs(RoadObservationSource.ChunkRecovery, RoadKind.Dirt, 3.4f, 7f), DefaultRules, out _);
+
+        Assert.NotNull(pipeline.LastAccepted);
+        Assert.Equal(3f, pipeline.LastAccepted.Value.Position.X);
+        Assert.Equal(RoadObservationSource.Traversal, pipeline.LastAccepted.Value.Source);
+    }
 }
