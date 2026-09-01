@@ -5,7 +5,7 @@ schemaVersion = "0.0.1"
 namespace = "TheConcernedCat"
 name = "ConcernedCartographer"
 versionNumber = "1.0.0"
-description = "Builds a local Valheim road atlas by mapping player-traversed dirt Pathen and paved terrain onto the map."
+description = "The living atlas: your Pathen/Paved roads become durable map ink, with editable markers, routes, search, and sharing."
 websiteUrl = "https://github.com/Weakened/ConcernedCatMods"
 containsNsfwContent = false
 

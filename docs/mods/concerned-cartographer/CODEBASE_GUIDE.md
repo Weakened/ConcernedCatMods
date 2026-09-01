@@ -45,20 +45,24 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    A1[Player walks road] --> B[RoadSurveyor]
-    A2[Successful TerrainOp] --> C[ConstructionCapture]
-    A3[Loaded explored Heightmap] --> D[ChunkRecoveryScanner]
-    B --> E[RoadObservationPipeline]
-    C --> E
-    D --> E
+    A2[Successful local TerrainOp] --> C[ConstructionCapture]
+    C --> E[RoadObservationPipeline]
+    A1[Player position sampling] --> B[RoadSurveyor - diagnostics only]
+    B --> K[cc_roads align live]
     E --> F[RoadAtlas]
-    F --> G[RoadOverlayRenderer]
+    F --> G[RoadOverlayRenderer + RoadVectorLayer]
     F --> H[RoadPersistence]
     I[Road repair tools] --> J[RoadAtlasEditor]
     J --> F
 ```
 
-Every road source emits the same `RoadObservation`. The pipeline does not care whether the point came from walking, a construction action, or recovery.
+**RC8 STRICT ROAD SOURCE AUTHORITY**: only successful explicit LOCAL
+PLAYER construction (Pathen ⇒ Dirt, Paved ⇒ Paved) creates road atlas
+data. The pipeline refuses Traversal/ChunkRecovery observations at the
+single choke point; `RoadSurveyor` samples purely for the `align live`
+diagnostic and the chunk-recovery scanner was retired. Legacy passive
+strokes migrate away once at load (`.pre-authority.bak` kept), while
+construction strokes survive untouched.
 
 ### Pin flow
 
@@ -279,17 +283,19 @@ Source-neutral ingestion payload: source + kind + position.
 
 ### `RoadObservationPipeline.cs`
 
-Single entry point for all road sources.
+Single entry point for road creation.
 
 Guarantees:
 
-- exact-replay idempotency;
-- source-neutral atlas semantics;
+- **road source authority (RC8)**: observations from any source other
+  than `Construction` are refused outright and end that source's stroke —
+  the strict v1 product rule enforced at one choke point;
+- exact-replay idempotency for the accepted source;
 - per-source active stroke isolation;
-- one source can end/fail without breaking the others;
-- negative terrain intent (DEF-v1.0-005): Dirt observations from non-Construction sources are refused inside the world's `TerrainIntentMask` exclusion, and the refusing source's stroke ends so nothing connects across excluded ground.
+- negative terrain intent (DEF-v1.0-005) retained as defense in depth for
+  any future non-construction source.
 
-New road observers should feed this pipeline rather than write directly to `RoadAtlas` or the map.
+New road observers should feed this pipeline rather than write directly to `RoadAtlas` or the map — and must NOT be passive sources without a new product decision.
 
 ### `RoadAtlas.cs`
 
@@ -371,9 +377,10 @@ If a Valheim update changes terrain internals, fix this adapter first instead of
 
 ### `RoadSurveyor.cs`
 
-Traversal observation source.
-
-On a configured cadence it samples the local player, probes terrain and feeds `RoadObservationSource.Traversal` into the pipeline. It ends the traversal stroke when the signal disappears or the player cannot be sampled.
+Diagnostics-only traversal sampler (RC8). On a configured cadence it
+probes the terrain beneath the local player and records whether recorded
+road geometry sits nearby — feeding only `cc_roads align live`
+(`LatestSample`). It never creates road data.
 
 ### `CapturedTerrainOperation.cs`
 
@@ -389,20 +396,14 @@ The patch is observational. It must never mutate Valheim terrain.
 
 Failure should disable this source without taking traversal down.
 
-### `ChunkRecoveryScanner.cs`
+### Chunk recovery (retired in RC8)
 
-Incremental old-road recovery source.
-
-It:
-
-- scans loaded non-LOD heightmaps near the player;
-- uses a cells-per-frame budget;
-- checks exploration before revealing candidates;
-- applies shape heuristics;
-- emits ChunkRecovery observations;
-- resets scan state on world changes.
-
-This is a performance boundary. Never turn it into a whole-world scan.
+The `ChunkRecoveryScanner` adapter was removed with the road source
+authority rule — passive recovery of arbitrary terrain paint is exactly
+what v1 forbids. `RecoveryShapeHeuristic` (pure, tested) remains in the
+domain for a possible future explicit re-capture feature; any
+reintroduction needs a product decision and must not feed the pipeline
+passively.
 
 ## 7. Road/map rendering (`Map/`)
 
@@ -533,13 +534,17 @@ Pure decision core of the map pin adapter: owns the AtlasId↔rendering tracking
 
 ### `IconRegistry.cs`
 
-Append-only registry of stable namespaced icon IDs mapped to vanilla pin ordinals.
+Append-only registry of stable namespaced icon IDs. Every entry keeps a
+vanilla pin ordinal (what the saved pin persists as — uninstall/downgrade
+safety) and, for the 12 cc:* icons (RC8), a `SpriteKey` naming the
+embedded CC sprite that overrides the rendering in-session.
 
 Rules:
 
 - never reuse an existing ID for a new meaning;
 - unknown IDs are preserved even if rendered via fallback;
-- append new IDs rather than reordering/renaming old ones.
+- append new IDs rather than reordering/renaming old ones;
+- sprites are rendering-only — nothing about them is ever persisted.
 
 ### `PinQuery.cs`
 
@@ -710,6 +715,24 @@ Route list (stable AtlasId selection; name/kind/status/distance/lock/archive) pl
 
 The remaining feature panels: survey enable/pending/accept/reject/reload (nothing pinned until accepted), sharing status/share/inbox/preview-with-deletion-names/apply-mine-theirs/clear, settings (privacy, backup, confirmed restore, sanitized support bundle, road repair as Advanced, support email), and System Markers — the vanilla pin-type filters and visible-to-others toggle, driven exclusively through vanilla state (`ToggleIconFilter`, `SetPublicReferencePosition`), never by touching pins. The runtime hides the whole vanilla rail by default (`SetActive` only) and restores it on `Map/ShowVanillaMapControls`, a conflicting pin manager, any replacement-surface failure, disable, or dispose.
 
+### `Map/CcIconSprites.cs` (RC8)
+
+Loads and caches the embedded cc:* marker sprites (generated by
+`tools/generate_icon_sprites.py`, embedded as `CC.Icons.*.png`). Decodes
+the PNGs directly (the game's ImageConversionModule targets
+netstandard2.1 and cannot be referenced from net48). `PinAdapter` applies
+the sprite to `PinData.m_icon` on AddPin and rebuilds a kept rendering
+when the icon id changes within the same vanilla type; palette and
+workbench previews prefer these sprites. Fails soft to vanilla sprites.
+
+### `Map/MapPointerGuard.cs` (RC8-9)
+
+One place answers "is the pointer over CC UI?": any active top-level
+child of Jötunn's CustomGUIFront plus the registered large-map widgets
+(toolbar, context button, palette). The runtime feeds route-mode input
+only when the answer is no, so drawing happens exclusively on uncovered
+map. Fails open.
+
 ### `Map/MapInputGate.cs` (#101)
 
 Skippable Harmony prefixes on the public `Minimap.OnMapLeftClick`/`OnMapDblClick`, active only while a UI-owned route mode runs (`ConsumeClicks`); uninstalled on dispose. Right-click and ping are never patched.
@@ -876,7 +899,8 @@ The project compiles `Domain/**/*.cs` directly, so pure tests do not require Val
 | `RoadObservationPipelineTests.cs` | source neutrality and replay idempotency |
 | `RoadAtlasCodecTests.cs` | road serialization/legacy formats |
 | `RoadAtlasEditorTests.cs` | road correction operations/undo |
-| `RecoveryShapeHeuristicTests.cs` | path-like vs broad-area recovery |
+| `RoadSourceAuthorityTests.cs` | RC8: passive sources never create data, migration preserves construction, restart/reopen regressions |
+| `RecoveryShapeHeuristicTests.cs` | path-like vs broad-area recovery (heuristic retained for future explicit re-capture) |
 | `TerrainIntentTests.cs` | DEF-v1.0-005: exclusion blocks passive Dirt sources, Pathen clears, codec round-trip, bounds |
 | `PinStoreTests.cs` | identity, revisions, delete/restore/upsert |
 | `PinRenderingLedgerTests.cs` | DEF-v1.0-004: rendering lifecycle — adopt/edit/apply keeps one rendering, restart reconcile, claim strictness |
@@ -895,7 +919,7 @@ The project compiles `Domain/**/*.cs` directly, so pure tests do not require Val
 | `MigrationMatrixTests.cs` | every shipped sidecar format back-parses into the current readers |
 | `SecurityHardeningTests.cs` | SEC-1.0-001: decompression-bomb rejection, revision/float/string bounds, deletion-name previews, display sanitization |
 
-At the 1.0.0 RC5 the suite is 310 tests, all green, run without any game assemblies.
+At the 1.0.0 RC8 the suite is 356 tests, all green, run without any game assemblies.
 
 Game adapters still need real Valheim tests; unit tests cannot prove Harmony targets, private field names, overlay alignment or Unity UI behavior.
 

@@ -58,6 +58,11 @@ Rules:
 - Every edit mutates the stored entity in place: stable `cc:pin:<guid>` ID,
   monotonic revision bump, modified timestamp. Delete is a durable
   tombstone; restore undeletes.
+> **RC8 note**: pin Size and Color remain serialized/synced fields, but
+> they have no rendering in v1, so the Workbench UI shows NO controls for
+> them (no inert controls). `cc_pins size`/`color` still edit the stored
+> values; the fields round-trip untouched through the panel's edit buffer.
+
 - Fields: name, icon (namespaced registry ID), category, color, display
   size, notes, tags, status, checked, scope intent (private/table/server —
   intent only until v0.6 sync), plus read-only owner/source, coordinates,

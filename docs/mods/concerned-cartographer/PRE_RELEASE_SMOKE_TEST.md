@@ -5,13 +5,70 @@ manual-only verification deferred by the autonomous conveyor (OPS-001
 rev 2) from v0.3 onward and is finalized against the exact v1.0 RC. Rows
 marked **BLOCKS** must pass before publication; others are record-and-ship.
 
-> Status: FINAL for v1.0, amended 2026-08-31 (fifth amendment): RC5/RC6
-> were superseded before testing by RC7 — the full-UI map surface
-> (#99–#102 + audit fixes) and the DEF-v1.0-006 high-precision road
-> layer + `cc_roads align live` (#98). **Do NOT restart the full
-> 2.5–4 h checklist.** Start at section R3 below, continue with the new
-> section R4, then resume the shortened golden path from where the
-> second pass stopped. Test only the RC ZIP named in RELEASE_DOSSIER.md.
+> Status: FINAL for v1.0, amended 2026-08-31 (sixth amendment): **RC7
+> FAILED its human smoke** and is permanently retired — do not test,
+> tag, or upload it. RC8 addresses all twelve failure directives (road
+> source authority, single road presentation, real cc:* icons, survey,
+> routes input/strokes/styles, toolbar/settings/drawer/workbench layout,
+> quick-pin sync, align-live guidance). **Do NOT restart the full
+> 2.5–4 h checklist.** Run the NEW section **R5 (RC8 mini-smoke)**
+> first, then R3 A–L and R4 M–S (as amended for the RC8 road rule),
+> then resume the shortened golden path from where the second pass
+> stopped. Test only the RC ZIP named in RELEASE_DOSSIER.md.
+
+## R5. RC8 release-blocker mini-smoke — RUN FIRST (short)
+
+Every item below verifies one RC8 failure directive. All **BLOCK**.
+Prep: disposable world, hoe + stonecutter materials, one leveled pad.
+
+1. **Road rule — creation**: walk across world-generated dirt (spawn
+   circle or any native path) and across the leveled pad — NO road ink
+   appears, walking never records. Pathen a short path with the hoe and
+   pave a stretch with the stonecutter — both ink the map instantly.
+2. **Road rule — erase & win**: Level Ground across the middle of your
+   pathen road — the covered stretch disappears from the map. Pathen
+   over the same ground again — it re-inks (later explicit action wins).
+3. **Road rule — migration**: if this profile's world has a pre-RC8
+   atlas: on first load the log shows the authority migration line and a
+   `.pre-authority.bak` beside the sidecar; only your explicitly built
+   roads remain; restart — nothing passive returns.
+4. **Single road presentation**: large map open with vector ink healthy:
+   exactly ONE set of road lines (no doubled texture+vector ink).
+   Minimap still shows roads. `Map/HighPrecisionLargeMapRoads = false`:
+   the texture ink returns on the large map.
+5. **Icons**: [Markers] palette shows the 12 CC icons with DISTINCT
+   sprites (not vanilla duplicates) plus the vanilla five. Place one
+   cc:* marker — it renders its CC sprite on the map; restart — still
+   the CC sprite, exactly one rendering. Uninstall-degradation spot
+   check optional (record-and-ship): with the mod removed the pin shows
+   its vanilla fallback icon.
+6. **Toolbar**: at your resolution (and 1280x800 + 2560x1440 if
+   available) with UiScale 0.8/1.0/1.6, the toolbar sits clearly ABOVE
+   the vanilla Add pin/Cross off/Remove/Ping control tips — zero
+   overlap, at keyboard AND gamepad hint variants if available.
+7. **Settings panel**: click Back up / Restore (first click) / support
+   bundle / each Advanced road button — every response lands in the
+   framed middle status block; nothing ever overlays the buttons.
+8. **Pin Workbench**: NO Size stepper, NO Color hex field; everything
+   else edits and applies as before.
+9. **Survey**: enable in [Survey]; walk near berry bushes / a copper
+   node / a burial chamber; Scan now — observations appear with live
+   scanner/rules/last-scan/pending status; accept one — the pin appears
+   on the map IMMEDIATELY with its CC sprite.
+10. **Routes**: panel drags like the workbench. Free Draw: hold LMB
+    draws, release ends the stroke, a second hold starts a NEW route,
+    Finish exits. Pointer over the panel/toolbar NEVER adds points.
+    Erase removes ink only under the held brush. Set a route Dashed
+    then Dotted: real dash-gap pattern / separated dots at min and max
+    zoom. The selected-route line above the list matches your click.
+11. **Quick Pin**: F7 (or toolbar arming) on a rock/tree — the pin
+    appears on the map immediately, once; restart — still exactly one.
+12. **Align live**: map closed + off-road: `cc_roads align live` prints
+    the OPEN THE LARGE MAP / STAND ON guidance naming Pathen/Paved.
+    Standing on your built road with the map open: A/B/C/D all PASS.
+
+Only after R5 passes, run R3 A–L and R4 M–S (amended below), then the
+shortened golden path (sections 2, 4, 6, 7 onward).
 
 ## R3. RC5 mini-regression — RESUME SMOKE FROM HERE
 
@@ -253,6 +310,12 @@ Every block **BLOCKS** unless marked otherwise.
 
 ### R4-R. High-precision large-map roads (DEF-v1.0-006 acceptance)
 
+> RC8 amendment: "recorded road" now means a road YOU built with
+> Pathen/Paved (walking records nothing), and while the vector layer is
+> healthy it is the ONLY large-map road ink (the texture overlay stays
+> on the minimap and returns as the fallback) — so step 6's toggle also
+> swaps which presentation is visible rather than stacking them.
+
 1. Stand ON a recorded dirt road; open the large map and zoom to
    maximum useful zoom: the player marker sits ON the CC road
    centerline (≤ ~2 px). Walk 50–100 m along the road with the map
@@ -274,14 +337,17 @@ Every block **BLOCKS** unless marked otherwise.
 
 ### S. `cc_roads align live` diagnostic (#98)
 
-1. Standing ON a recorded road with the large map open, run
+1. Standing ON a road you built with the large map open, run
    `cc_roads align live`: the report prints player position, terrain
-   classification, latest traversal sample, latest accepted pipeline
-   point, nearest stored road point + distance, all three projections,
-   texture size / m-per-texel / zoom / screen-px-per-texel, the live
-   marker anchor vs expected, and four separated verdicts —
-   **A PASS, B PASS, C PASS (vector ACTIVE), D PASS**.
-2. Standing OFF road: A reads N/A with the stand-on-road hint.
+   classification, latest traversal sample (diagnostics-only), latest
+   recorded construction point, nearest stored road point + distance,
+   all three projections, texture size / m-per-texel / zoom /
+   screen-px-per-texel, the live marker anchor vs expected, and four
+   separated verdicts — **A PASS, B PASS, C PASS (vector ACTIVE),
+   D PASS**.
+2. Standing OFF road (or with the map closed): the report ends with the
+   explicit guidance to open the large map and stand on a road you
+   explicitly built (RC8-11).
 3. With `Map/HighPrecisionLargeMapRoads = false` at deep zoom: C reads
    FAIL naming the setting (honest resolution verdict), A/B/D
    unaffected.

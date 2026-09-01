@@ -1,8 +1,22 @@
 # Concerned Cartographer architecture
 
+> **RC8 AMENDMENT — v1 ROAD SOURCE AUTHORITY.** The sections below
+> describing the traversal and chunk-recovery *creation* sources are
+> historical rationale from v0.1–v0.4. Since RC8 the strict v1 product
+> rule applies: **only successful explicit local-player Pathen ⇒ Dirt
+> and Paved ⇒ Paved construction creates road atlas data.**
+> `RoadObservationPipeline` refuses every other source at the single
+> choke point; `RoadSurveyor` remains as a diagnostics-only sampler for
+> `cc_roads align live`; the `ChunkRecoveryScanner` adapter was removed
+> (`RecoveryShapeHeuristic` stays in the domain for a possible future
+> explicit re-capture feature). Legacy passive strokes are migrated away
+> once at load with a `.pre-authority.bak` backup. Level/Raise/
+> Cultivate/Reset create no roads and erase covered road data of both
+> kinds; a later explicit Pathen/Paved wins.
+
 ## Context
 
-The first release is a client-side BepInEx/Jötunn plugin targeting .NET Framework 4.8. It samples loaded terrain beneath the local player, records only path-like paint, stores data in a mod-owned sidecar file, and renders through Jötunn map overlays.
+The first release is a client-side BepInEx/Jötunn plugin targeting .NET Framework 4.8. It captures the local player's own successful road-construction actions, stores data in a mod-owned sidecar file, and renders through Jötunn map overlays plus the large-map vector layer.
 
 ## Components
 
@@ -10,15 +24,14 @@ The first release is a client-side BepInEx/Jötunn plugin targeting .NET Framewo
 Plugin
   ├─ CartographerSettings
   └─ CartographerRuntime
-       ├─ GroundPaintProbe        (game adapter)
-       ├─ RoadSurveyor            (game adapter: traversal source)
-       ├─ ConstructionCapture     (game adapter: construction source)
-       ├─ ChunkRecoveryScanner    (game adapter: chunk-recovery source)
-       ├─ RoadObservationPipeline (pure domain)
+       ├─ GroundPaintProbe        (game adapter, diagnostics)
+       ├─ RoadSurveyor            (game adapter: diagnostics-only sampler)
+       ├─ ConstructionCapture     (game adapter: THE road source)
+       ├─ RoadObservationPipeline (pure domain, source-authority gate)
        ├─ RoadAtlas               (pure domain)
        ├─ RoadAtlasCodec          (pure domain)
-       ├─ RoadPersistence         (IO adapter)
-       └─ RoadOverlayRenderer     (Jötunn adapter)
+       ├─ RoadPersistence         (IO adapter, authority migration)
+       └─ RoadOverlayRenderer     (Jötunn adapter + RoadVectorLayer)
 ```
 
 Pure domain types live under `src/ConcernedCartographer/Domain` (`RoadPoint`,

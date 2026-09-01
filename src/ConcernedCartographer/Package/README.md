@@ -6,20 +6,19 @@ Concerned Cartographer turns the roads your Viking actually traverses into a dur
 
 ## Features
 
-- **Roads**: detects dirt Pathen and paved terrain as you traverse it, captures your own hoe/stonecutter paint actions instantly, and recovers narrow road paint from loaded terrain you have explored. Separate dirt/paved layers on the large map and minimap. On the large map, roads render as **high-precision vector ink** that stays put at any zoom (the minimap keeps the classic texture overlay).
-- **Markers**: a searchable marker palette replaces the five raw vanilla icon buttons; markers placed through it are managed from birth. Existing vanilla pins upgrade in place ("Upgrade & Edit") and every property — name, icon, category, size, notes, tags, status, scope — is edited in the Pin Workbench without ever deleting and recreating a pin.
+- **Roads**: your own successful **Pathen (hoe)** and **Paved (stonecutter)** actions are captured instantly as durable road ink — and *only* those. Walking existing paint, world-generated dirt, spawn areas, or other players' roads never creates road data, so the atlas records exactly the road network you deliberately built. Separate dirt/paved layers on the large map and minimap. On the large map, roads render as **high-precision vector ink** that stays put at any zoom (the minimap keeps the classic texture overlay); the two presentations never draw on top of each other.
+- **Markers**: a searchable marker palette replaces the five raw vanilla icon buttons, with **12 distinct Concerned Cartographer icons** (road/junction, harbor, resource, danger, farm, mine, fishing, camp, travel, trader, dungeon, objective) alongside the vanilla five; markers placed through it are managed from birth. Existing vanilla pins upgrade in place ("Upgrade & Edit") and every property — name, icon, category, notes, tags, status, scope — is edited in the Pin Workbench without ever deleting and recreating a pin.
 - **Atlas Drawer**: layers, clustering, token search (`tag:iron`, `near:0,0,500`), saved views, System Markers (pin-type filters + visible-to-others), and Privacy.
 - **Routes**: free-draw and waypoint routes from the [Routes] panel with explicit on-map modes, snapping to your recorded roads, distance/time estimates, and full editing (rename, style, status, color, lock, archive, split, merge, undo/redo).
-- **Survey Rules** (opt-in): nearby loaded objects become reviewable observations — nothing is pinned until you accept it.
+- **Survey Rules** (opt-in): nearby loaded objects — berry bushes, ore deposits, dungeon entrances, boss runestones out of the box — become reviewable observations; nothing is pinned until you accept it, and an accepted observation appears on the map immediately.
 - **Sharing**: private/table/server scopes with a preview inbox — nothing from other players applies automatically, deletions are named before you accept them, and deleted entities can never resurrect.
 - **One toolbar**: [Atlas] [Markers] [Routes] [Survey] [Share] [Quick Pin] [Settings] on the large map. Every feature has a visible UI path; hotkeys and console commands stay as rebindable accelerators.
 
 ## Known limitations
 
-- Roads are discovered as **you walk along them after installing the mod**; the mod never scans the whole world at once.
-- World-generated dirt patches (such as the circle around the spawn stones) can be recorded when you walk on them — the mod cannot distinguish world-generated paint from roads. Your **own terraforming is understood**: ground you Level/Raise/Cultivate/Reset is remembered as explicitly-not-road (persistently, per world), and only a later deliberate Pathen/Paved action turns it into road ink.
+- Roads exist in the atlas only from **your own Pathen/Paved actions after installing the mod** — the strict v1 rule. Roads built before installing (or by other players) are added by re-paving them (one pass of the hoe/stonecutter over the existing surface re-captures them). Terraforming (Level/Raise/Cultivate/Reset) never creates roads and erases the road ink it covers; a later deliberate Pathen/Paved always wins.
 - The atlas lives inside the **active mod-manager profile's** BepInEx config folder. Each profile keeps its own atlas; copy the `ConcernedCatMods` config folder between profiles to carry one over.
-- Pin color and display size are stored, edited, and synced, but not yet rendered on the vanilla map (planned for a later release; no migration will be needed).
+- Pin color and display size are stored fields for forward compatibility, editable via `cc_pins`, but have no visual behavior in v1 — so the Pin Workbench deliberately shows no controls for them.
 - Sharing is peer-to-peer between online players; there is no dedicated-server-side store. MapRoutes routes coexist but are not imported.
 - On the minimap (and with `Map/HighPrecisionLargeMapRoads` off, on the large map too), a road line can sit up to ~6 m from its true position at maximum zoom — the native resolution of Valheim's 2048-pixel map texture.
 
@@ -29,8 +28,8 @@ Install with a Thunderstore-compatible mod manager. BepInExPack Valheim and Jöt
 
 ## Use
 
-1. Start the game modded, enter a world, and walk your roads — they appear on the map as you traverse them.
-2. Open the large map: the Concerned Cartographer toolbar sits at the bottom center.
+1. Start the game modded, enter a world, and build roads with the hoe's **Pathen** or the stonecutter's **Paved** — each successful action inks the map instantly. Re-pave an existing road once to capture it.
+2. Open the large map: the Concerned Cartographer toolbar sits at the bottom center, above the vanilla control tips.
 3. [Atlas] opens the drawer (layers, search, saved views, System Markers, Privacy). [Markers] opens the palette — pick an icon, double-click the map, done.
 4. Hover any of your markers and click **Edit Pin** / **Upgrade & Edit** to open the workbench.
 
@@ -62,12 +61,10 @@ Settings live in `BepInEx/config/com.theconcernedcat.valheim.concernedcartograph
 
 | Setting | Default | Purpose |
 |---|---|---|
-| General / Enabled | true | Master switch for surveying and overlays |
-| Sources / CaptureConstructionActions | true | Record your own successful hoe/stonecutter paint actions instantly |
-| Sources / ReconcileTerrainChanges | true | Cultivating/resetting removes covered road ink; repainting converts kind |
-| Sources / RecoverLoadedChunks | true | Recover narrow road paint from loaded terrain in explored areas |
-| Sources / RecoveryBudgetCellsPerFrame | 256 | Paint cells examined per frame by chunk recovery |
-| Survey / SampleIntervalSeconds | 0.35 | Seconds between terrain samples |
+| General / Enabled | true | Master switch for road capture and overlays |
+| Sources / CaptureConstructionActions | true | Record your own successful Pathen/Paved actions — the ONLY road source |
+| Sources / ReconcileTerrainChanges | true | Leveling/raising/cultivating/resetting removes covered road ink; repainting converts kind |
+| Survey / SampleIntervalSeconds | 0.35 | Seconds between diagnostic terrain samples (feeds `cc_roads align live`; never creates roads) |
 | Survey / MinimumPointSpacingMeters | 1.5 | Minimum distance before a new road point is stored |
 | Survey / MaximumStrokeGapMeters | 8.0 | Larger gaps start a new stroke instead of a connector line |
 | Survey / DuplicateSuppressionMeters | 2.0 | Skip samples near already-recorded ink (0 disables) |
@@ -107,7 +104,7 @@ Prefer the vanilla selector? Set `Pins/ShowVanillaPinPalette = true` (or `Pins/E
 
 Hover any marker on the large map and click the context button (or press `P`): managed markers open the editor, your existing vanilla markers offer **Upgrade & Edit** — it keeps the marker exactly where it is and enables editing, notes, categories, and atlas features. Foreign and system pins show read-only info. Every edit keeps the pin's identity — nothing is deleted and recreated — and deletes are recoverable tombstones.
 
-Visual properties are edited with pickers, not raw IDs: the icon field is a dropdown with the live pin sprite as preview ("Keep custom" preserves legacy IDs), category offers suggestions while staying free text, size is a stepper, and status/visibility are dropdown selects. Pin color is stored and synced but not yet rendered on the map, so it sits at the bottom of the panel labeled **metadata** rather than pretending to be visual.
+Visual properties are edited with pickers, not raw IDs: the icon field is a dropdown with the live sprite as preview — including the 12 distinct Concerned Cartographer icons ("Keep custom" preserves legacy IDs) — category offers suggestions while staying free text, and status/visibility are dropdown selects. Pin size and color are stored fields with no v1 rendering, so the panel deliberately has **no controls for them** (`cc_pins size`/`color` still edit the stored values).
 
 The `cc_pins` console command drives everything scriptably: `edit`, `status`, `list [filter]`, `adopt`, `adoptall confirm`, `create <name>`, field editors (`name`, `icon`, `category`, `color`, `size`, `note`, `tag+/tag-`, `setstatus`, `check/uncheck`, `scope`), `move`, `dup`, `archive/unarchive`, `delete`, `restore`, `deleted`, `dups`, `merge confirm`, `undo`, `redo`, and `coords`. Batch adoption and merges always preview first and require `confirm`.
 
@@ -119,13 +116,13 @@ Pins are stored per world next to the road atlas with crash-safe snapshot+journa
 
 ## Routes
 
-**[Routes]** lists your routes by name, kind, status, distance, and lock/archive state. **Free Draw** and **Waypoints** enter explicit on-map modes — no modifier key, the map does not pan while you draw, and waypoints snap to your recorded roads (toggleable). Finish/Undo/Redo sit next to the mode buttons; Escape ends the mode first, then closes the panel. Rename, style, status, ink color swatches, lock, archive, delete/restore, split, merge, and measure all operate on the selected route. Estimates use your configured on/off-road speeds. Console: `cc_routes` (scriptable alias, classic `Shift+LMB` modes included).
+**[Routes]** lists your routes by name, kind, style, status, distance, and lock/archive state; the panel is draggable like every CC panel. **Free Draw**: hold LMB on the map to draw, release ends that stroke (each stroke is its own route, numbered off your base name), Finish or Escape exits the mode. **Waypoints**: click the map to add points, snapping to your recorded roads (toggleable). The pointer over any panel or control never adds points — drawing happens only on uncovered map. Dashed and dotted styles pattern by real distance along the route, so they read as dashes/dots at every zoom. Rename, style, status, ink color swatches, lock, archive, delete/restore, split, merge, and measure all operate on the selected route (shown above the list). Estimates use your configured on/off-road speeds. Console: `cc_routes` (scriptable alias, classic `Shift+LMB` modes included).
 
 ## Survey Rules and Quick Pin
 
 **[Quick Pin]** on the toolbar closes the map and arms a one-shot capture: your next deliberate click (or `F7`) pins what you are looking at — never creatures, never duplicates within the configured radius; `Esc` cancels. `F7` in the world stays the instant path.
 
-Opt-in **Survey Rules** (`Survey/SurveyRulesEnabled`, plus a shareable `survey-rules.tsv`) turn nearby loaded objects into reviewable observations in the **[Survey]** panel — enable, review the pending list, accept or reject each (or all, with confirmation), reload rules. Nothing is pinned until you accept it. Console: `cc_survey`.
+Opt-in **Survey Rules** (`Survey/SurveyRulesEnabled`, plus a shareable `survey-rules.tsv`) turn nearby loaded objects into reviewable observations in the **[Survey]** panel. The starter rules are useful out of the box — berry bushes, mushrooms, thistle, copper/tin/silver/obsidian/iron deposits, burial chambers, sunken crypts, troll caves, and boss runestones, all duplicate- and expiry-bounded. The panel shows the scanner state, rule counts, last scan, and pending count live, with a **Scan now** button; accept or reject each observation (or all, with confirmation) — an accepted observation becomes a visible map pin immediately, and nothing is ever pinned without your accept. Console: `cc_survey`.
 
 ## Sharing
 
@@ -143,7 +140,7 @@ Opt-in **Survey Rules** (`Survey/SurveyRulesEnabled`, plus a shareable `survey-r
 | `cc_roads hide` / `unhide` | Hide a road from the map without deleting it |
 | `cc_roads split` | Split the nearest road at its closest interior point |
 | `cc_roads join [radius]` | Stitch the two nearest same-kind road ends |
-| `cc_roads rebuild [radius]` | Clear recorded roads nearby and re-scan explored terrain |
+| `cc_roads rebuild [radius]` | Clear recorded roads nearby (they return when you Pathen/Pave again) |
 | `cc_roads undo` | Undo the last tool operation (up to 20) |
 
 The tools edit only the mod's own atlas; they can never modify terrain or world saves. Before the first destructive change each session the sidecar is backed up to `.pre-reconcile.bak`.
