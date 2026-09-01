@@ -539,8 +539,9 @@ internal sealed class CartographerRuntime : IDisposable
         // Search results carry the stable AtlasId, so selection opens the
         // workbench for that exact pin — never proximity guessing.
         _drawerPanel.ResultClicked = OpenWorkbenchForId;
+        // Short enough for the drawer's status column at every UiScale.
         _drawerPanel.StatusLine = () =>
-            $"{_displayController.VisibleCount} shown · {_displayController.HiddenByFilter} filtered · {_displayController.ClusterCount} clusters";
+            $"{_displayController.VisibleCount} shown · {_displayController.HiddenByFilter} hidden · {_displayController.ClusterCount} grouped";
         _drawerPanel.TopResults = () =>
         {
             var results = new List<(string, AtlasId)>();
@@ -718,6 +719,7 @@ internal sealed class CartographerRuntime : IDisposable
 
         _hintElapsed = 0f;
         EnforceVanillaPaletteVisibility();
+        _mapUi.UpdateLayout();
 
         if (_workbenchPanel.IsVisible)
         {

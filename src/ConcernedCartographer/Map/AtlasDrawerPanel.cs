@@ -17,8 +17,27 @@ namespace TheConcernedCat.ConcernedCartographer.Map;
 /// controller-navigable.</summary>
 internal sealed class AtlasDrawerPanel
 {
-    private const int ResultSlots = 6;
-    private const int ViewSlots = 5;
+    private const int ResultSlots = 5;
+    private const int ViewSlots = 4;
+
+    // RC8-3 explicit layout grid (the DEF-v1.0-003 workbench discipline):
+    // every row is derived from these constants —
+    // | EdgePadding | content column(s) | EdgePadding |
+    // — and the vertical budget is accounted below, so no label, field,
+    // count, or footer control can overlap another or leave the panel.
+    // Vertical budget: 62 title + 28 hdr + 4·28 toggles + 6 + 28 hdr +
+    // 32 search + 30 clear/status + 5·28 results + 6 + 28 hdr + 32 save +
+    // 4·28 views = 616, footer reserve 78 → 694 ≤ PanelHeight 700.
+    private const float PanelWidth = 380f;
+    private const float PanelHeight = 700f;
+    private const float EdgePadding = 22f;
+    private const float ContentWidth = PanelWidth - (2f * EdgePadding);
+    private const float LeftEdge = (-PanelWidth / 2f) + EdgePadding;
+    private const float ToggleLabelWidth = 210f;
+    private const float ColumnGap = 8f;
+    private const float ActionButtonWidth = 56f;
+    private const float RowHeight = 28f;
+    private const float ClearButtonWidth = 120f;
 
     private readonly ManualLogSource _log;
 
@@ -91,7 +110,7 @@ internal sealed class AtlasDrawerPanel
             RefreshLists();
             _panel!.transform.localScale = Vector3.one * UiScale;
             ((RectTransform)_panel.transform).anchoredPosition =
-                new Vector2(-((380f * UiScale) / 2f) - 30f, 0f);
+                new Vector2(-((PanelWidth * UiScale) / 2f) - 30f, 0f);
             _panel.SetActive(true);
             UnityEngine.EventSystems.EventSystem.current?.SetSelectedGameObject(
                 _dirt != null ? _dirt.gameObject : null);
@@ -200,44 +219,45 @@ internal sealed class AtlasDrawerPanel
         _panel = gui.CreateWoodpanel(
             GUIManager.CustomGUIFront!.transform,
             new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
-            new Vector2(-220f, 0f), 380f, 680f, draggable: true);
+            new Vector2(-((PanelWidth / 2f) + 30f), 0f), PanelWidth, PanelHeight, draggable: true);
 
         gui.CreateText(AtlasStrings.Get("drawer.title"), _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -28f),
-            font, 20, header, true, Color.black, 340f, 30f, false);
+            font, 20, header, true, Color.black, ContentWidth, 30f, false);
 
         float y = -62f;
-        gui.CreateText(AtlasStrings.Get("drawer.layers"), _panel.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-130f, y),
-            font, 15, header, false, Color.black, 120f, 24f, false);
-        y -= 30f;
+        AddSectionHeader(gui, font, header, AtlasStrings.Get("drawer.layers"), ref y);
 
         _dirt = CreateToggleRow(gui, font, AtlasStrings.Get("drawer.dirtRoads"), ref y, value => { if (!_suppressToggleEvents) DirtToggled?.Invoke(value); });
         _paved = CreateToggleRow(gui, font, AtlasStrings.Get("drawer.pavedRoads"), ref y, value => { if (!_suppressToggleEvents) PavedToggled?.Invoke(value); });
         _pins = CreateToggleRow(gui, font, AtlasStrings.Get("drawer.pins"), ref y, value => { if (!_suppressToggleEvents) { PinsToggled?.Invoke(value); RefreshLists(); } });
         _cluster = CreateToggleRow(gui, font, AtlasStrings.Get("drawer.clustering"), ref y, value => { if (!_suppressToggleEvents) { ClusterToggled?.Invoke(value); RefreshLists(); } });
-        y -= 8f;
+        y -= 6f;
 
-        gui.CreateText(AtlasStrings.Get("drawer.search"), _panel.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-125f, y),
-            font, 15, header, false, Color.black, 120f, 24f, false);
-        y -= 30f;
+        AddSectionHeader(gui, font, header, AtlasStrings.Get("drawer.search"), ref y);
 
+        // Search row: | input (flex) | gap | Go |, all inside the grid.
+        float inputWidth = ContentWidth - ColumnGap - ActionButtonWidth;
         _query = gui.CreateInputField(
             _panel.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(-35f, y), InputField.ContentType.Standard, "name, tag:iron, near:…", 13, 250f, 28f)
+            new Vector2(LeftEdge + (inputWidth / 2f), y), InputField.ContentType.Standard, "name, tag:iron, near:…", 13, inputWidth, 28f)
             .GetComponent<InputField>();
         GameObject go = gui.CreateButton(AtlasStrings.Get("drawer.go"), _panel.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(135f, y), 55f, 28f);
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(LeftEdge + inputWidth + ColumnGap + (ActionButtonWidth / 2f), y), ActionButtonWidth, 28f);
         go.GetComponent<Button>().onClick.AddListener(() =>
         {
             QueryApplied?.Invoke(_query!.text);
             RefreshLists();
         });
-        y -= 34f;
+        y -= 32f;
 
+        // Clear + live counts share one row in two DERIVED columns:
+        // | Clear (fixed) | gap | status text (rest, truncating) | — the
+        // two rects cannot meet, and long counts truncate inside their box.
         GameObject clear = gui.CreateButton(AtlasStrings.Get("drawer.clearFilter"), _panel.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-95f, y), 130f, 26f);
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(LeftEdge + (ClearButtonWidth / 2f), y), ClearButtonWidth, 26f);
         clear.GetComponent<Button>().onClick.AddListener(() =>
         {
             _query!.text = "";
@@ -245,36 +265,39 @@ internal sealed class AtlasDrawerPanel
             RefreshLists();
         });
 
+        float statusWidth = ContentWidth - ClearButtonWidth - ColumnGap;
         _status = gui.CreateText("", _panel.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(70f, y),
-            font, 12, Color.white, false, Color.black, 200f, 26f, false)
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(LeftEdge + ClearButtonWidth + ColumnGap + (statusWidth / 2f), y),
+            font, 11, Color.white, false, Color.black, statusWidth, 26f, false)
             .GetComponent<Text>();
-        y -= 32f;
+        _status.alignment = TextAnchor.MiddleLeft;
+        _status.horizontalOverflow = HorizontalWrapMode.Wrap;
+        _status.verticalOverflow = VerticalWrapMode.Truncate;
+        y -= 30f;
 
         for (int index = 0; index < ResultSlots; index++)
         {
             int captured = index;
             GameObject result = gui.CreateButton("", _panel.transform,
-                new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, y), 330f, 26f);
+                new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, y), ContentWidth, 26f);
             _resultButtons[index] = result.GetComponent<Button>();
             _resultLabels[index] = result.GetComponentInChildren<Text>();
             _resultButtons[index].onClick.AddListener(() => ResultClicked?.Invoke(_resultIds[captured]));
             result.SetActive(false);
-            y -= 30f;
+            y -= RowHeight;
         }
 
         y -= 6f;
-        gui.CreateText(AtlasStrings.Get("drawer.views"), _panel.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-129f, y),
-            font, 15, header, false, Color.black, 120f, 24f, false);
-        y -= 30f;
+        AddSectionHeader(gui, font, header, AtlasStrings.Get("drawer.views"), ref y);
 
         _viewName = gui.CreateInputField(
             _panel.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(-35f, y), InputField.ContentType.Standard, "view name", 13, 250f, 28f)
+            new Vector2(LeftEdge + (inputWidth / 2f), y), InputField.ContentType.Standard, "view name", 13, inputWidth, 28f)
             .GetComponent<InputField>();
         GameObject save = gui.CreateButton(AtlasStrings.Get("drawer.save"), _panel.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(135f, y), 55f, 28f);
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(LeftEdge + inputWidth + ColumnGap + (ActionButtonWidth / 2f), y), ActionButtonWidth, 28f);
         save.GetComponent<Button>().onClick.AddListener(() =>
         {
             if (_viewName!.text.Trim().Length > 0)
@@ -283,13 +306,13 @@ internal sealed class AtlasDrawerPanel
                 RefreshLists();
             }
         });
-        y -= 34f;
+        y -= 32f;
 
         for (int index = 0; index < ViewSlots; index++)
         {
             int captured = index;
             GameObject view = gui.CreateButton("", _panel.transform,
-                new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, y), 330f, 26f);
+                new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, y), ContentWidth, 26f);
             _viewButtons[index] = view.GetComponent<Button>();
             _viewLabels[index] = view.GetComponentInChildren<Text>();
             _viewButtons[index].onClick.AddListener(() =>
@@ -298,37 +321,56 @@ internal sealed class AtlasDrawerPanel
                 RefreshLists();
             });
             view.SetActive(false);
-            y -= 30f;
+            y -= RowHeight;
         }
 
+        // Footer rows, bottom-anchored: hint text above the two buttons.
         gui.CreateText(AtlasStrings.Get("drawer.placeholders"),
             _panel.transform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 24f),
-            font, 11, new Color(1f, 1f, 1f, 0.6f), false, Color.black, 360f, 22f, false);
+            font, 11, new Color(1f, 1f, 1f, 0.6f), false, Color.black, ContentWidth, 22f, false);
 
-        // Settings → Privacy (#97) and Atlas → System Markers (#99).
+        // Settings → Privacy (#97) and Atlas → System Markers (#99): the
+        // two footer buttons split the content width evenly.
+        float footerHalf = (ContentWidth - ColumnGap) / 2f;
         GameObject privacy = gui.CreateButton(AtlasStrings.Get("drawer.privacy"), _panel.transform,
-            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-78f, 52f), 130f, 26f);
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(LeftEdge + (footerHalf / 2f), 52f), footerHalf, 26f);
         privacy.GetComponent<Button>().onClick.AddListener(() => PrivacyClicked?.Invoke());
         GameObject systemMarkers = gui.CreateButton(AtlasStrings.Get("system.title"), _panel.transform,
-            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(78f, 52f), 150f, 26f);
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(LeftEdge + footerHalf + ColumnGap + (footerHalf / 2f), 52f), footerHalf, 26f);
         systemMarkers.GetComponent<Button>().onClick.AddListener(() => SystemMarkersClicked?.Invoke());
 
         _panel.SetActive(false);
     }
 
+    private void AddSectionHeader(GUIManager gui, Font font, Color color, string text, ref float y)
+    {
+        Text headerText = gui.CreateText(text, _panel!.transform,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(LeftEdge + (ContentWidth / 2f), y),
+            font, 15, color, false, Color.black, ContentWidth, 24f, false)
+            .GetComponent<Text>();
+        headerText.alignment = TextAnchor.MiddleLeft;
+        y -= RowHeight;
+    }
+
     private Toggle CreateToggleRow(GUIManager gui, Font font, string label, ref float y, Action<bool> changed)
     {
-        gui.CreateText(label, _panel!.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-110f, y),
-            font, 13, Color.white, false, Color.black, 160f, 24f, false);
+        // | label (ToggleLabelWidth, left) | gap | toggle | inside the grid.
+        Text labelText = gui.CreateText(label, _panel!.transform,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(LeftEdge + (ToggleLabelWidth / 2f), y),
+            font, 13, Color.white, false, Color.black, ToggleLabelWidth, 24f, false)
+            .GetComponent<Text>();
+        labelText.alignment = TextAnchor.MiddleLeft;
         GameObject toggle = gui.CreateToggle(_panel.transform, 26f, 26f);
         var rect = (RectTransform)toggle.transform;
         rect.anchorMin = new Vector2(0.5f, 1f);
         rect.anchorMax = new Vector2(0.5f, 1f);
-        rect.anchoredPosition = new Vector2(60f, y);
+        rect.anchoredPosition = new Vector2(LeftEdge + ToggleLabelWidth + ColumnGap + 13f, y);
         Toggle component = toggle.GetComponentInChildren<Toggle>();
         component.onValueChanged.AddListener(value => changed(value));
-        y -= 30f;
+        y -= RowHeight;
         return component;
     }
 

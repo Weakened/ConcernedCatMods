@@ -20,6 +20,18 @@ namespace TheConcernedCat.ConcernedCartographer.Map;
 /// path.</summary>
 internal sealed class MapUiCoordinator
 {
+    // RC8-5: the toolbar sits ABOVE the vanilla bottom hint bars, at a
+    // height DERIVED from their live layout (Minimap.m_hints +
+    // m_sharedMapHint) rather than a fixed magic offset, so it can never
+    // overlap the Add pin/Cross off/Remove/Ping control tips at any
+    // resolution or hint variant (keyboard/gamepad). The hint text and the
+    // contextual button stack above it at fixed deltas.
+    private const float ToolbarHeight = 32f;
+    private const float HintClearanceMargin = 12f;
+    private const float FallbackToolbarY = 108f;
+    private const float HintTextDelta = 38f;
+    private const float ContextButtonDelta = 70f;
+
     private readonly ManualLogSource _log;
     private GameObject? _toolbar;
     private Text? _tooltipText;
@@ -28,6 +40,7 @@ internal sealed class MapUiCoordinator
     private Text? _contextLabel;
     private Action? _contextAction;
     private bool _pointerOverContext;
+    private float _appliedToolbarY = -1f;
     private bool _failed;
 
     private readonly List<(Func<bool> IsVisible, Action Close)> _surfaces = new();
@@ -155,13 +168,16 @@ internal sealed class MapUiCoordinator
 
             GUIManager gui = GUIManager.Instance;
 
+            float toolbarY = ComputeToolbarY(largeRoot);
+            _appliedToolbarY = toolbarY;
+
             _toolbar = new GameObject("CCToolbar", typeof(RectTransform));
             _toolbar.transform.SetParent(largeRoot.transform, worldPositionStays: false);
             var toolbarRect = (RectTransform)_toolbar.transform;
             toolbarRect.anchorMin = new Vector2(0.5f, 0f);
             toolbarRect.anchorMax = new Vector2(0.5f, 0f);
-            toolbarRect.anchoredPosition = new Vector2(0f, 62f);
-            toolbarRect.sizeDelta = new Vector2(720f, 32f);
+            toolbarRect.anchoredPosition = new Vector2(0f, toolbarY);
+            toolbarRect.sizeDelta = new Vector2(720f, ToolbarHeight);
 
             var buttons = new (string LabelKey, Func<Action?> Handler)[]
             {
@@ -190,7 +206,7 @@ internal sealed class MapUiCoordinator
             _tooltipText = gui.CreateText(
                 AtlasStrings.Format("hud.atlasTooltip", drawerHotkeyName),
                 largeRoot.transform,
-                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 100f),
+                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, toolbarY + HintTextDelta),
                 gui.AveriaSerifBold, 13, new Color(1f, 0.95f, 0.75f, 1f),
                 outline: true, Color.black, 700f, 24f, addContentSizeFitter: false)
                 .GetComponent<Text>();
@@ -206,7 +222,7 @@ internal sealed class MapUiCoordinator
 
             _hintText = gui.CreateText(
                 "", largeRoot.transform,
-                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 100f),
+                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, toolbarY + HintTextDelta),
                 gui.AveriaSerifBold, 15, new Color(1f, 0.95f, 0.75f, 1f),
                 outline: true, Color.black, 700f, 24f, addContentSizeFitter: false)
                 .GetComponent<Text>();
@@ -215,7 +231,7 @@ internal sealed class MapUiCoordinator
 
             _contextButton = gui.CreateButton(
                 "", largeRoot.transform,
-                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 132f), 220f, 32f);
+                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, toolbarY + ContextButtonDelta), 220f, 32f);
             _contextLabel = _contextButton.GetComponentInChildren<Text>();
             _contextButton.GetComponent<Button>().onClick.AddListener(() =>
             {
@@ -234,6 +250,137 @@ internal sealed class MapUiCoordinator
         {
             _failed = true;
             _log.LogError($"Map toolbar failed and is disabled for this session (hotkeys still work): {exception}");
+        }
+    }
+
+    /// <summary>The toolbar center height above the large root's bottom
+    /// edge: the top of the tallest ACTIVE vanilla bottom hint bar plus a
+    /// clearance margin, plus half the toolbar. Derived per call from the
+    /// live layout; falls back to a safe height when nothing is readable.</summary>
+    private static float ComputeToolbarY(GameObject largeRoot)
+    {
+        float hintsTop = 0f;
+        bool anyHint = false;
+
+        try
+        {
+            var rootRect = largeRoot.transform as RectTransform;
+            if (rootRect == null)
+            {
+                return FallbackToolbarY;
+            }
+
+            float rootBottom = rootRect.rect.yMin;
+            float rootHeight = rootRect.rect.height;
+            var candidates = new List<GameObject>();
+            Minimap minimap = Minimap.instance;
+            if (minimap != null)
+            {
+                if (minimap.m_hints != null)
+                {
+                    candidates.AddRange(minimap.m_hints);
+                }
+
+                if (minimap.m_sharedMapHint != null)
+                {
+                    candidates.Add(minimap.m_sharedMapHint);
+                }
+            }
+
+            var corners = new Vector3[4];
+            foreach (GameObject candidate in candidates)
+            {
+                if (candidate == null || !candidate.activeInHierarchy)
+                {
+                    continue;
+                }
+
+                var rect = candidate.transform as RectTransform;
+                if (rect == null)
+                {
+                    continue;
+                }
+
+                rect.GetWorldCorners(corners);
+                float top = float.MinValue;
+                float bottom = float.MaxValue;
+                for (int index = 0; index < 4; index++)
+                {
+                    float localY = rootRect.InverseTransformPoint(corners[index]).y - rootBottom;
+                    top = Mathf.Max(top, localY);
+                    bottom = Mathf.Min(bottom, localY);
+                }
+
+                // Only bars actually sitting in the lower part of the map
+                // count as "bottom hints" — a hint element parked elsewhere
+                // must not launch the toolbar to mid-screen.
+                if (rootHeight <= 0f || bottom > rootHeight * 0.4f)
+                {
+                    continue;
+                }
+
+                anyHint = true;
+                hintsTop = Mathf.Max(hintsTop, top);
+            }
+        }
+        catch
+        {
+            return FallbackToolbarY;
+        }
+
+        if (!anyHint)
+        {
+            return FallbackToolbarY;
+        }
+
+        return hintsTop + HintClearanceMargin + (ToolbarHeight / 2f);
+    }
+
+    /// <summary>Follows hint-layout changes (keyboard ↔ gamepad hint bars,
+    /// resolution changes) while the map is open. Called on the runtime's
+    /// throttled UI cadence; repositions only on a real change.</summary>
+    public void UpdateLayout()
+    {
+        if (_failed || _toolbar == null)
+        {
+            return;
+        }
+
+        try
+        {
+            GameObject? largeRoot = Minimap.instance != null ? Minimap.instance.m_largeRoot : null;
+            if (largeRoot == null || !largeRoot.activeInHierarchy)
+            {
+                return;
+            }
+
+            float toolbarY = ComputeToolbarY(largeRoot);
+            if (Mathf.Abs(toolbarY - _appliedToolbarY) < 0.5f)
+            {
+                return;
+            }
+
+            _appliedToolbarY = toolbarY;
+            ((RectTransform)_toolbar.transform).anchoredPosition = new Vector2(0f, toolbarY);
+            if (_tooltipText != null)
+            {
+                ((RectTransform)_tooltipText.transform).anchoredPosition = new Vector2(0f, toolbarY + HintTextDelta);
+            }
+
+            if (_hintText != null)
+            {
+                ((RectTransform)_hintText.transform).anchoredPosition = new Vector2(0f, toolbarY + HintTextDelta);
+            }
+
+            if (_contextButton != null)
+            {
+                ((RectTransform)_contextButton.transform).anchoredPosition = new Vector2(0f, toolbarY + ContextButtonDelta);
+            }
+        }
+        catch (Exception exception)
+        {
+            _failed = true;
+            _log.LogError($"Map toolbar layout failed and is disabled for this session: {exception}");
         }
     }
 
@@ -302,6 +449,7 @@ internal sealed class MapUiCoordinator
     /// <summary>Drops references so a new map root rebuilds everything.</summary>
     public void Reset()
     {
+        _appliedToolbarY = -1f;
         _toolbar = null;
         _tooltipText = null;
         _hintText = null;

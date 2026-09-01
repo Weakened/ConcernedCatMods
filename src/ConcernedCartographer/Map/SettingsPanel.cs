@@ -66,7 +66,34 @@ internal sealed class SettingsPanel : CcSidePanel
             _restoreArmed = false;
             Report(_executeAtlas(new[] { "support" }));
         });
-        y -= 38f;
+        y -= 36f;
+
+        // RC8-6: DEDICATED centered status block in the middle of the
+        // panel. Every action reports into this framed, fixed-size box —
+        // text truncates inside it and can never overlay the Advanced road
+        // buttons below (which sit at fixed rows underneath the block).
+        const float statusHeight = 150f;
+        var statusFrame = new GameObject("CCSettingsStatus", typeof(RectTransform), typeof(Image));
+        statusFrame.transform.SetParent(Panel!.transform, worldPositionStays: false);
+        var frameRect = (RectTransform)statusFrame.transform;
+        frameRect.anchorMin = new Vector2(0.5f, 1f);
+        frameRect.anchorMax = new Vector2(0.5f, 1f);
+        frameRect.anchoredPosition = new Vector2(0f, y - (statusHeight / 2f));
+        frameRect.sizeDelta = new Vector2(Width - 40f, statusHeight);
+        var frameImage = statusFrame.GetComponent<Image>();
+        frameImage.color = new Color(0f, 0f, 0f, 0.45f);
+        frameImage.raycastTarget = false;
+
+        _output = gui.CreateText(
+            "", statusFrame.transform,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 0f),
+            font, 11, Color.white, outline: false, Color.black, Width - 56f, statusHeight - 12f,
+            addContentSizeFitter: false)
+            .GetComponent<Text>();
+        _output.alignment = TextAnchor.UpperLeft;
+        _output.verticalOverflow = VerticalWrapMode.Truncate;
+        _output.horizontalOverflow = HorizontalWrapMode.Wrap;
+        y -= statusHeight + 10f;
 
         AddBody(gui, font, "Road repair (Advanced) — acts on the recorded road nearest your character:", 12, headerColor, ref y, 30f);
 
@@ -85,16 +112,15 @@ internal sealed class SettingsPanel : CcSidePanel
 
         y -= 60f;
         AddButton(gui, "Undo road edit", 0f, y, 160f, 26f, () => Report(_executeRoads(new[] { "undo" })));
-        y -= 34f;
+        y -= 32f;
 
-        _output = AddBody(gui, font, "", 11, Color.white, ref y, 160f);
         AddBody(gui, font, AtlasStrings.Get("settings.emailLine"), 11, new Color(1f, 1f, 1f, 0.7f), ref y, 22f);
     }
 
     protected override void OnShown()
     {
         _restoreArmed = false;
-        Report("");
+        Report("Action results appear here.");
     }
 
     private void Report(string message)
