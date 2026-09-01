@@ -35,6 +35,7 @@ internal sealed class RoutesPanel : CcSidePanel
     private InputField? _name;
     private Toggle? _snap;
     private Text? _modeStatus;
+    private Text? _selectionStatus;
     private Text? _output;
     private readonly Button[] _routeButtons = new Button[RouteSlots];
     private readonly Text[] _routeLabels = new Text[RouteSlots];
@@ -147,6 +148,7 @@ internal sealed class RoutesPanel : CcSidePanel
         y -= 34f;
 
         _modeStatus = AddBody(gui, font, "", 12, new Color(0.85f, 1f, 0.85f, 1f), ref y, 32f);
+        _selectionStatus = AddBody(gui, font, "", 12, new Color(1f, 0.95f, 0.75f, 1f), ref y, 20f);
 
         for (int index = 0; index < RouteSlots; index++)
         {
@@ -353,6 +355,13 @@ internal sealed class RoutesPanel : CcSidePanel
         {
             _hasSelection = false;
         }
+
+        if (_selectionStatus != null)
+        {
+            _selectionStatus.text = _hasSelection
+                ? $"Selected: {RouteName(_selected)} — Rename/Style/Status/ink apply to it"
+                : "No route selected — click a route below to select it";
+        }
     }
 
     private void RefreshMode()
@@ -365,9 +374,9 @@ internal sealed class RoutesPanel : CcSidePanel
         _modeStatus.text = handler.Mode switch
         {
             Runtime.RouteCommandHandler.MapMode.Draw =>
-                AtlasStrings.Format("routes.modeDraw", RouteName(handler.ActiveRouteId)),
+                AtlasStrings.Format("routes.modeDraw", handler.ActiveRouteDisplayName),
             Runtime.RouteCommandHandler.MapMode.Waypoint =>
-                AtlasStrings.Format("routes.modeWaypoint", RouteName(handler.ActiveRouteId)),
+                AtlasStrings.Format("routes.modeWaypoint", handler.ActiveRouteDisplayName),
             Runtime.RouteCommandHandler.MapMode.Erase => AtlasStrings.Get("routes.modeErase"),
             _ => "",
         };

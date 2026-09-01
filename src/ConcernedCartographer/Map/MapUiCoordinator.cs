@@ -47,6 +47,12 @@ internal sealed class MapUiCoordinator
 
     public bool PointerOverContext => _pointerOverContext;
 
+    /// <summary>The toolbar root, for the RC8-9 pointer guard.</summary>
+    public GameObject? ToolbarObject => _toolbar;
+
+    /// <summary>The contextual pin action button, for the pointer guard.</summary>
+    public GameObject? ContextButtonObject => _contextButton;
+
     /// <summary>True after a toolbar/hint/context failure disabled the
     /// coordinator for this session. Owners fall back (e.g. restore the
     /// vanilla rail, whose replacement is only reachable through here).</summary>

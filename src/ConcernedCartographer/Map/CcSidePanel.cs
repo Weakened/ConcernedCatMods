@@ -180,10 +180,12 @@ internal abstract class CcSidePanel
             Font font = gui.AveriaSerifBold;
             var headerColor = new Color(0.9f, 0.8f, 0.6f, 1f);
 
+            // Draggable like the Pin Workbench (RC8-9): every CC side panel
+            // can be moved off the map area the player is working on.
             _panel = gui.CreateWoodpanel(
                 GUIManager.CustomGUIFront!.transform,
                 new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
-                DockPosition(1f), _width, _height, draggable: false);
+                DockPosition(1f), _width, _height, draggable: true);
 
             _title = gui.CreateText(
                 AtlasStrings.Get(_titleKey), _panel.transform,

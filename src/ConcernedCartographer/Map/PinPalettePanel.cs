@@ -53,6 +53,9 @@ internal sealed class PinPalettePanel
 
     public string? SelectedIconId => _selectedIconId;
 
+    /// <summary>The palette panel root, for the RC8-9 pointer guard.</summary>
+    public GameObject? PanelObject => _panel;
+
     /// <summary>Builds the palette onto the open large map when needed;
     /// cheap after the first call, rebuilt automatically after teardown.
     /// Opened from the toolbar's [Markers] action (#100) — the panel

@@ -59,6 +59,32 @@ internal sealed class RouteCommandHandler
     /// behavior.</summary>
     public bool UiModeOwned { get; private set; }
 
+    // RC8-9 UI draw semantics: entering a UI mode creates NOTHING — the
+    // route entity is born on the first actual input, each Free Draw
+    // hold-drag is its own stroke (a separate route entity, numbered off
+    // the base name), and releasing LMB ends that stroke. No empty routes,
+    // no connectors between separate strokes.
+    private RouteKind _uiPendingKind = RouteKind.Freehand;
+    private string _uiBaseName = "";
+    private int _uiStrokeCount;
+    private bool _uiRouteStarted;
+    private bool _drawStrokeActive;
+
+    /// <summary>The name the panel shows for the active mode: the started
+    /// route's name, or the pending base name before any input landed.</summary>
+    public string ActiveRouteDisplayName
+    {
+        get
+        {
+            if (_uiRouteStarted && _store.TryGet(ActiveRouteId, out AtlasRoute route) && !route.Deleted)
+            {
+                return route.Name;
+            }
+
+            return _uiBaseName.Length > 0 ? _uiBaseName : "New route";
+        }
+    }
+
     // ------------------------------------------------------------------
     // Routes-panel surface (#101): identical operations to the console,
     // addressed by stable AtlasId — no player-proximity requirement.
@@ -66,24 +92,28 @@ internal sealed class RouteCommandHandler
 
     public string UiStart(RouteKind kind, string name)
     {
-        AtlasRoute started = _operations.StartRoute(
-            kind, name.Trim().Length == 0 ? "New route" : name.Trim());
-        ActiveRouteId = started.Id;
         Mode = kind == RouteKind.Freehand ? MapMode.Draw : MapMode.Waypoint;
         UiModeOwned = true;
-        return started.Name;
+        _uiPendingKind = kind;
+        _uiBaseName = name.Trim().Length == 0 ? "New route" : name.Trim();
+        _uiStrokeCount = 0;
+        _uiRouteStarted = false;
+        _drawStrokeActive = false;
+        return _uiBaseName;
     }
 
     public void UiStartErase()
     {
         Mode = MapMode.Erase;
         UiModeOwned = true;
+        _drawStrokeActive = false;
     }
 
     public void UiStop()
     {
         Mode = MapMode.None;
         UiModeOwned = false;
+        _drawStrokeActive = false;
         _redraw();
     }
 
@@ -109,7 +139,7 @@ internal sealed class RouteCommandHandler
                 _settings.RouteOnRoadSpeed.Value);
             string flags = (route.Locked ? " L" : "") + (route.Archived ? " A" : "");
             rows.Add((route.Id,
-                $"{route.Name} [{route.Kind}, {route.Status}]{flags} {estimate.DistanceMeters:0} m"));
+                $"{route.Name} [{route.Kind} · {route.Style} · {route.Status}]{flags} {estimate.DistanceMeters:0} m"));
         }
 
         return rows;
@@ -298,12 +328,28 @@ internal sealed class RouteCommandHandler
     }
 
     /// <summary>Interactive input while the large map is open and a mode is
-    /// active. Draw/erase act while held; waypoint acts on click.</summary>
+    /// active. Draw/erase act while held; waypoint acts on click. The
+    /// runtime feeds actionHeld=false whenever the pointer is over CC UI,
+    /// which ends the current Free Draw stroke (RC8-9) — returning to the
+    /// map starts a fresh stroke, never a connector.</summary>
     public void HandleMapFrame(RoadPoint cursorWorld, bool actionHeld, bool actionClicked)
     {
         switch (Mode)
         {
-            case MapMode.Draw when actionHeld:
+            case MapMode.Draw:
+                if (!actionHeld)
+                {
+                    // LMB released (or pointer left the map): this stroke is
+                    // done. The next hold starts a new one.
+                    _drawStrokeActive = false;
+                    break;
+                }
+
+                if (UiModeOwned && !_drawStrokeActive)
+                {
+                    StartUiStroke();
+                }
+
                 if (_operations.AppendPoint(ActiveRouteId, cursorWorld))
                 {
                     _redraw();
@@ -324,9 +370,31 @@ internal sealed class RouteCommandHandler
 
                 break;
             case MapMode.Waypoint when actionClicked:
+                if (UiModeOwned && !_uiRouteStarted)
+                {
+                    AtlasRoute startedWaypointRoute = _operations.StartRoute(RouteKind.Waypoint, _uiBaseName);
+                    ActiveRouteId = startedWaypointRoute.Id;
+                    _uiRouteStarted = true;
+                }
+
                 AddWaypoint(cursorWorld);
                 break;
         }
+    }
+
+    /// <summary>Each UI Free Draw hold-drag lands in its own route entity:
+    /// "Trail", "Trail 2", "Trail 3"… so releasing LMB genuinely ends a
+    /// stroke and every stroke stays individually manageable.</summary>
+    private void StartUiStroke()
+    {
+        _uiStrokeCount++;
+        string name = _uiStrokeCount == 1
+            ? _uiBaseName
+            : $"{_uiBaseName} {_uiStrokeCount}";
+        AtlasRoute started = _operations.StartRoute(RouteKind.Freehand, name);
+        ActiveRouteId = started.Id;
+        _uiRouteStarted = true;
+        _drawStrokeActive = true;
     }
 
     private void AddWaypoint(RoadPoint cursorWorld)
@@ -381,6 +449,9 @@ internal sealed class RouteCommandHandler
                 ActiveRouteId = started.Id;
                 Mode = subcommand == "draw" ? MapMode.Draw : MapMode.Waypoint;
                 UiModeOwned = false;
+                _uiBaseName = started.Name;
+                _uiRouteStarted = true;
+                _drawStrokeActive = false;
                 return subcommand == "draw"
                     ? $"Drawing \"{started.Name}\": open the large map and hold {_settings.RouteDrawModifier.Value}+LeftClick to draw. 'cc_routes stop' finishes."
                     : $"Waypoint route \"{started.Name}\": {_settings.RouteDrawModifier.Value}+LeftClick places waypoints (snap {(SnapEnabled ? "on" : "off")}). 'cc_routes stop' finishes.";

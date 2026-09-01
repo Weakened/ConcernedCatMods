@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using BepInEx.Logging;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedCartographer.Atlas;
@@ -9,12 +10,23 @@ using UnityEngine;
 namespace TheConcernedCat.ConcernedCartographer.Map;
 
 /// <summary>Draws routes on their own Jötunn overlay ("CC Routes", with its
-/// own toggle). Styles: solid lines, dashed (alternate segments), dotted
-/// (points only). Colors come from the route or its status defaults.
-/// Full-texture redraws only — route edits are debounced upstream.</summary>
+/// own toggle). Styles (RC8-9): solid lines; dashed and dotted use a
+/// GEOMETRIC cadence — a fixed on/off (or dot spacing) distance walked
+/// along the polyline in overlay texels, with the phase carried across
+/// vertices — never stored-point parity, so the pattern looks the same
+/// regardless of how the points happen to be spaced and stays a real
+/// dash/dot pattern at every zoom. Colors come from the route or its
+/// status defaults. Full-texture redraws only — route edits are debounced
+/// upstream.</summary>
 internal sealed class RouteOverlayRenderer
 {
     private const string OverlayName = "CC Routes";
+
+    // Pattern cadence in overlay texels (one texel ≈ 11.6 m of world on
+    // the default 2048 map): dashes 5 on / 4 off, dots every 4.
+    private const float DashOnTexels = 5f;
+    private const float DashOffTexels = 4f;
+    private const float DotSpacingTexels = 4f;
 
     private Color32 PlannedColor => _settings.HighContrast.Value
         ? new Color32(0, 220, 255, 255)
@@ -58,24 +70,27 @@ internal sealed class RouteOverlayRenderer
                     : route.Status == RouteStatus.Done ? DoneColor
                     : PlannedColor;
 
-                if (route.Points.Count == 1 || route.Style == RouteStyle.Dotted)
+                if (route.Points.Count == 1)
                 {
-                    foreach (RoadPoint point in route.Points)
-                    {
-                        DrawSegmentIntoBuffer(pixels, size, point, point, color);
-                    }
-
+                    DrawSegmentIntoBuffer(pixels, size, route.Points[0], route.Points[0], color);
                     continue;
                 }
 
-                for (int index = 1; index < route.Points.Count; index++)
+                switch (route.Style)
                 {
-                    if (route.Style == RouteStyle.Dashed && index % 2 == 0)
-                    {
-                        continue;
-                    }
+                    case RouteStyle.Dashed:
+                        DrawDashedPolyline(pixels, size, route.Points, color);
+                        break;
+                    case RouteStyle.Dotted:
+                        DrawDottedPolyline(pixels, size, route.Points, color);
+                        break;
+                    default:
+                        for (int index = 1; index < route.Points.Count; index++)
+                        {
+                            DrawSegmentIntoBuffer(pixels, size, route.Points[index - 1], route.Points[index], color);
+                        }
 
-                    DrawSegmentIntoBuffer(pixels, size, route.Points[index - 1], route.Points[index], color);
+                        break;
                 }
             }
 
@@ -100,10 +115,89 @@ internal sealed class RouteOverlayRenderer
         }
     }
 
+    /// <summary>Dash pattern walked by distance along the whole polyline;
+    /// the phase carries across vertices so dashes flow through corners.</summary>
+    private void DrawDashedPolyline(Color32[] pixels, int size, IReadOnlyList<RoadPoint> points, Color32 color)
+    {
+        const float cycle = DashOnTexels + DashOffTexels;
+        float phase = 0f;
+        Vector2 previous = Project(points[0], size);
+        for (int index = 1; index < points.Count; index++)
+        {
+            Vector2 current = Project(points[index], size);
+            float length = Vector2.Distance(previous, current);
+            if (length <= 0.001f)
+            {
+                continue;
+            }
+
+            Vector2 direction = (current - previous) / length;
+            float travelled = 0f;
+            while (travelled < length)
+            {
+                float positionInCycle = phase % cycle;
+                bool on = positionInCycle < DashOnTexels;
+                float remainingInState = on ? DashOnTexels - positionInCycle : cycle - positionInCycle;
+                float step = Mathf.Min(remainingInState, length - travelled);
+                if (on && step > 0.05f)
+                {
+                    DrawLineIntoBuffer(
+                        pixels, size,
+                        previous + (direction * travelled),
+                        previous + (direction * (travelled + step)),
+                        color);
+                }
+
+                travelled += step;
+                phase += step;
+            }
+
+            previous = current;
+        }
+    }
+
+    /// <summary>Separated dots stamped at a fixed geometric spacing along
+    /// the polyline, independent of stored point positions.</summary>
+    private void DrawDottedPolyline(Color32[] pixels, int size, IReadOnlyList<RoadPoint> points, Color32 color)
+    {
+        float untilNextDot = 0f;
+        Vector2 previous = Project(points[0], size);
+        for (int index = 1; index < points.Count; index++)
+        {
+            Vector2 current = Project(points[index], size);
+            float remaining = Vector2.Distance(previous, current);
+            if (remaining <= 0.001f)
+            {
+                continue;
+            }
+
+            Vector2 direction = (current - previous) / remaining;
+            Vector2 cursor = previous;
+            while (untilNextDot <= remaining)
+            {
+                cursor += direction * untilNextDot;
+                remaining -= untilNextDot;
+                DrawLineIntoBuffer(pixels, size, cursor, cursor, color);
+                untilNextDot = DotSpacingTexels;
+            }
+
+            untilNextDot -= remaining;
+            previous = current;
+        }
+    }
+
+    private static Vector2 Project(RoadPoint point, int size)
+    {
+        return MinimapManager.Instance.WorldToOverlayCoords(new Vector3(point.X, point.Y, point.Z), size);
+    }
+
     private void DrawSegmentIntoBuffer(Color32[] pixels, int size, RoadPoint start, RoadPoint end, Color32 color)
     {
-        Vector2 a = MinimapManager.Instance.WorldToOverlayCoords(new Vector3(start.X, start.Y, start.Z), size);
-        Vector2 b = MinimapManager.Instance.WorldToOverlayCoords(new Vector3(end.X, end.Y, end.Z), size);
+        DrawLineIntoBuffer(pixels, size, Project(start, size), Project(end, size), color);
+    }
+
+    private void DrawLineIntoBuffer(Color32[] pixels, int size, Vector2 a, Vector2 b, Color32 color)
+    {
         int x0 = Mathf.Clamp(Mathf.RoundToInt(a.x), 0, size - 1);
         int y0 = Mathf.Clamp(Mathf.RoundToInt(a.y), 0, size - 1);
         int x1 = Mathf.Clamp(Mathf.RoundToInt(b.x), 0, size - 1);

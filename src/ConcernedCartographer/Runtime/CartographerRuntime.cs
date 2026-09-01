@@ -160,6 +160,14 @@ internal sealed class CartographerRuntime : IDisposable
         _drawerPanel.PrivacyClicked = () => _consentPanel.ShowSettings();
         _drawerPanel.SystemMarkersClicked = () => OpenSidePanel(_systemMarkersToken, _systemMarkersPanel);
         MapInputGate.Install(log);
+
+        // RC8-9 pointer guard: the large-map widgets that block route
+        // input while the pointer is over them (side panels register
+        // implicitly through Jötunn's CustomGUIFront).
+        MapPointerGuard.Clear();
+        MapPointerGuard.RegisterWidget(() => _mapUi.ToolbarObject);
+        MapPointerGuard.RegisterWidget(() => _mapUi.ContextButtonObject);
+        MapPointerGuard.RegisterWidget(() => _palettePanel.PanelObject);
         _palettePanel.IconChosen = definition =>
         {
             // Vanilla placement does the rest: double-click creates the
@@ -366,10 +374,15 @@ internal sealed class CartographerRuntime : IDisposable
                 (uiRouteMode || Input.GetKey(_settings.RouteDrawModifier.Value)) &&
                 MinimapReflection.TryScreenToWorldPoint(Input.mousePosition, out Vector3 cursorWorld))
             {
+                // RC8-9: a pointer over any CC panel/control never adds
+                // route points. Feeding "not held" also ends the current
+                // Free Draw stroke, so re-entering the map draws a fresh
+                // stroke instead of a connector under the panel.
+                bool pointerOverUi = Map.MapPointerGuard.IsPointerOverCcUi(Input.mousePosition);
                 _routeCommands.HandleMapFrame(
                     new RoadPoint(cursorWorld.x, cursorWorld.y, cursorWorld.z),
-                    Input.GetMouseButton(0),
-                    Input.GetMouseButtonDown(0));
+                    Input.GetMouseButton(0) && !pointerOverUi,
+                    Input.GetMouseButtonDown(0) && !pointerOverUi);
             }
         }
 
@@ -1799,6 +1812,7 @@ internal sealed class CartographerRuntime : IDisposable
         _workbenchPanel.Close();
         RestoreVanillaPalette();
         MapInputGate.Uninstall();
+        MapPointerGuard.Clear();
         SaveIfDirty();
         SavePinsSnapshot();
         _pipeline?.EndAllStrokes();
