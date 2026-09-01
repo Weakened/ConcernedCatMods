@@ -7,48 +7,69 @@ The single remaining gate is the human smoke test
 ## 1–5. Release candidate identity
 
 - **Version:** 1.0.0 (unchanged — 1.0.0 has never been publicly tagged or published)
-- **RC commit:** `f493178c3264d8459ceb18f5426d13eee5766385` (**RC7**, on
-  `feat/cc-098-v1-completion` — the CC-098 v1 completion pass (#98–#102)
-  on top of RC6. RC7 adds: **(1) the full-UI map surface** (#99–#102,
-  landed as `75d9d01` and then audited line-by-line against the owner
-  directive with the game assembly as reference; the audit's eight gaps
-  are fixed in this RC — Escape parity for the [Markers] palette, UI
-  route modes end with their panel, vanilla-rail restore on toolbar or
-  drawer failure, the Quick Pin NoMap gate, panels close on
-  mid-session disable, honest drawer footer, onboarding format fix —
-  with the deliberate remaining bounds recorded in HUMAN_ATTENTION
-  2026-08-31); **(2) DEF-v1.0-006 (#98)**: the high-precision
-  large-map road layer (`RoadVectorLayer` — sub-texel vector ink baked
-  in zoom-independent map space, exact vanilla projection through
-  `RoadVectorMath`, fog-parity bake filter, fail-soft to the texture
-  overlay, `Map/HighPrecisionLargeMapRoads`) and the end-to-end
-  `cc_roads align live` diagnostic with separated A/B/C/D verdicts
-  (`AlignmentVerdicts`, `LiveAlignmentProbe`, new
-  `RoadSurveyor.LatestSample` / `RoadObservationPipeline.LastAccepted`
-  state); **(3) the v1 package README rewrite** with the full #102
-  shortcut-parity table, RC7 CHANGELOG entries, CODEBASE_GUIDE
-  coverage of every new file, and smoke section R4. RC6 content
-  (crash reporting #97 with the live DSN embedded and ingestion
-  pre-verified) is unchanged and included. **Supersedes RC6
-  `17b0524350` (ZIP `EE0F3A6E…`), RC5 `7881cbcd` (ZIP `1849C62E…`),
-  RC4 `35f20e1a` (ZIP `8B4B41AD…`), RC3 `86050cd2` (ZIP `710183B3…`),
-  all superseded before human testing; RC `7ed20fef` (ZIP `B47E7C9D…`,
-  FAILED the second human smoke pass); and RC `9eb65291` (ZIP
-  `9F1F4128…`). Do not test or upload those ZIPs.** Already-passed
-  evidence that remains valid: startup environment (Valheim 0.221.12 /
-  Unity 6000.0.61f1 / BepInEx 5.4.23.3 / Jötunn 2.29.2.0, clean 1.0.0
-  banner, no CC errors), the adoption input-trap fix (DEF-v1.0-001),
-  the workbench layout (DEF-v1.0-003), and overlay alignment
-  (DEF-v1.0-002, closed as PASS on logged residuals ≤ 1 texel —
-  same-coordinate projection compatibility; the remaining live error
-  classes that PASS could not rule out are exactly what DEF-v1.0-006
-  addresses, verified in smoke R4).)
+- **RC commit:** `a053369f503c13d51e0eeed650bd01fba9e1998e` (**RC8**, on
+  the CC-098 line — the RC8 release-blocker pass after **RC7
+  `f493178c`/`9b43e25` FAILED its human smoke** (owner failure prompt of
+  2026-08-31). RC8 delivers all twelve directives:
+  **(1) strict road source authority** — only successful explicit
+  local-player Pathen ⇒ Dirt / Paved ⇒ Paved construction creates road
+  atlas data; passive traversal/chunk-recovery creation is refused at
+  the pipeline choke point, the chunk-recovery adapter is retired, the
+  surveyor is diagnostics-only, existing passive strokes migrate away
+  once with a `.pre-authority.bak` backup (construction strokes and
+  identities preserved), Level/Raise/Cultivate/Reset create no roads
+  and erase covered ink of both kinds, later explicit Pathen/Paved
+  wins, with restart/reopen regression tests
+  (`RoadSourceAuthorityTests`);
+  **(2) single road presentation** — while the vector layer is healthy
+  it is the ONLY large-map road ink (texture suppressed; minimap keeps
+  texture; texture returns on disable/failure, and an over-budget bake
+  now fails soft to the complete texture view);
+  **(3) real cc:* marker sprites** — 12 distinct generated icons
+  (road/junction, harbor, resource, danger, farm, mine, fishing, camp,
+  travel, trader, dungeon, objective) embedded in the DLL with stable
+  IDs, vanilla fallback types for uninstall safety, unknown-ID
+  preserve/fallback intact (`tools/generate_icon_sprites.py` is the
+  reproducible source);
+  **(4) survey works out of the box** — useful bounded starter rules
+  (gatherables/ores/dungeons/runestones), untouched pre-RC8 starter
+  files upgrade in place, live scanner/rules/last-scan/pending status
+  plus Scan now in the panel, accepted observations pin immediately;
+  **(5) routes** — draggable panels, pointer-over-CC-UI never adds
+  points, Free Draw hold-to-draw/release-ends-stroke (each stroke its
+  own route, no empty routes), geometric dash/dot cadence at all zooms,
+  selected-route/style/status clarity;
+  **(6) quick pin** targeted sync (renders immediately, no duplicates,
+  ledger regression test);
+  **(7) UI layout** — toolbar height derived from the vanilla hints
+  layout (no magic offset, live re-check), Settings' dedicated middle
+  status block, Atlas Drawer explicit no-overlap grid with an accounted
+  vertical budget, Pin Workbench sheds the inert Size/Color controls
+  (values still round-trip);
+  **(8) align live** appends explicit open-map/stand-on-your-road
+  guidance. RC6 content (crash reporting #97 with the live DSN
+  embedded) and the RC7 full-UI surface / DEF-v1.0-006 vector layer are
+  included as amended by the directives above. **Retires RC7
+  `f493178c`/`9b43e25` (ZIP `8E76CD0A…`, FAILED human smoke) and
+  supersedes RC6 `17b0524350` (ZIP `EE0F3A6E…`), RC5 `7881cbcd` (ZIP
+  `1849C62E…`), RC4 `35f20e1a` (ZIP `8B4B41AD…`), RC3 `86050cd2` (ZIP
+  `710183B3…`), RC `7ed20fef` (ZIP `B47E7C9D…`, FAILED the second human
+  smoke pass), and RC `9eb65291` (ZIP `9F1F4128…`). Do not test, tag,
+  or upload ANY of those ZIPs.** Already-passed evidence that remains
+  valid: startup environment (Valheim 0.221.12 / Unity 6000.0.61f1 /
+  BepInEx 5.4.23.3 / Jötunn 2.29.2.0, clean 1.0.0 banner, no CC
+  errors), the adoption input-trap fix (DEF-v1.0-001), the workbench
+  two-column layout discipline (DEF-v1.0-003), and overlay projection
+  alignment (DEF-v1.0-002, residuals ≤ 1 texel). Everything the RC8
+  directives touched is re-verified by smoke section **R5** (then R3/R4
+  as amended).)
 - **ZIP:** `artifacts\thunderstore\TheConcernedCat-ConcernedCartographer-1.0.0.zip`
-  (built in the CC-098 session worktree; an identical copy is placed at
-  the same relative path in the main checkout — verify the hash below
-  before importing)
-- **ZIP SHA-256:** `8E76CD0AD1210ED7FA34F0985CBD34119A3B26E6D9F5BD99448C337B05106A50` (260,710 bytes)
-- **Plugin DLL SHA-256:** `CD8A35F046CEB9F13FBE944E18A0F431D98BD7E3971AC29C3705FF56DCE988B6` (370,688 bytes; the DLL inside the ZIP is hash-identical to the Release build output; informational version `1.0.0+f493178c…` verified in the DLL)
+  (built in the CC-098 session worktree at the RC commit; an identical
+  immutable copy is at
+  `artifacts\rc8\TheConcernedCat-ConcernedCartographer-1.0.0-RC8.zip` —
+  verify the hash below before importing)
+- **ZIP SHA-256:** `AF267AC26F23E7083F70339405311E9D6F10D93AB7E4E8A0EFAE63C26D1CEDB0` (272,222 bytes)
+- **Plugin DLL SHA-256:** `E9904771A52864892250A60D8459BD1DE27DE8C354BBEDD996D6B64DB33FB597` (388,096 bytes; the DLL inside the ZIP is hash-identical to the Release build output; informational version `1.0.0+a053369f…` verified in the DLL; the 12 `CC.Icons.cc-*.png` sprite resources verified embedded)
 - **Assembly metadata (verified in the DLL):** Company "The Concerned Cat",
   Product "Concerned Cartographer", Copyright © 2026 Eren Cansunar,
   RepositoryUrl embedded, informational version `1.0.0+<RC commit>`.
@@ -63,9 +84,10 @@ The single remaining gate is the human smoke test
 Every sprint v0.3→v1.0 shipped through its internal gate; all 42 child
 issues and 8 controllers (#8, #27–#81) are closed with evidence comments.
 Shipped versions on main with tags: 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0,
-0.8.0, 0.9.0. The RC6 line is on main; the RC7 completion pass
-(#98–#102) is on `feat/cc-098-v1-completion` awaiting its post-smoke
-merge and tag (section 19).
+0.8.0, 0.9.0. The RC6 line is on main; the CC-098 completion line (RC7,
+now retired, plus the RC8 release-blocker pass) is on
+`feat/cc-098-v1-completion` awaiting its post-smoke merge and tag
+(section 19).
 
 ## 7. Defects
 
@@ -134,6 +156,23 @@ implemented in RC7:
   the package README's shortcut-parity table. The #102 documentation
   clauses — the full shortcut audit table and the v1 README rewrite —
   were NOT delivered by `75d9d01` and are delivered in RC7.
+
+Owner smoke-failure pass (2026-08-31, RC8): the owner's human smoke
+FAILED RC7 on twelve directives (road source authority, doubled road
+presentation, alias-only cc:* icons, non-functional survey, routes
+input/stroke/style defects, toolbar/settings/drawer overlap, inert
+workbench controls, quick-pin visibility, align-live guidance). All
+twelve are implemented in RC8 (identity above). Gate evidence at the RC
+commit: **356 domain tests green** (new `RoadSourceAuthorityTests`
+restart/reopen suite, align-live guidance tests, icon-registry sprite
+contract, survey default-rule matching, quick-pin ledger regression),
+`validate_repo.py --require-binary` PASS, clean Release build, tcli
+package build, and the six-entry ZIP audit with hash-identical DLL.
+The RC8 UI layout matrix (resolutions 1280x800 / 1920x1080 / 2560x1440 /
+ultrawide × UiScale 0.8/1.0/1.6) is derivation-based in code (hint-layout
+toolbar, budgeted drawer grid, framed settings block, workbench columns)
+and is verified live by smoke R5 items 6–8 — a game UI cannot be
+screenshot-proven from the conveyor.
 
 Owner-approved v1 map UX direction (2026-08-28, #96), implemented in
 RC4 on top of the RC3 fixes: the map is button-first — [Atlas]
@@ -291,25 +330,25 @@ defaults.
 ## 18. Smoke test
 
 `docs/mods/concerned-cartographer/PRE_RELEASE_SMOKE_TEST.md` — **the
-owner resumes at its section R3 (blocks A–L), then runs the NEW section
-R4 (blocks M–S: toolbar/dock, rail replacement, routes panel,
-survey/share/settings panels, Quick Pin armed mode, the DEF-v1.0-006
-acceptance walk, and `cc_roads align live`), NOT at the top.** The full
-2.5–4 h checklist is not restarted; sections the earlier passes already
-completed stay completed. Only after R3 A–L and R4 M–S pass does the
-owner resume routes/world-isolation/multiplayer.
+owner starts at the NEW SHORT section R5 (the RC8 mini-smoke: twelve
+blocking items, one per failure directive), then runs R3 (blocks A–L)
+and R4 (blocks M–S, as amended for the road authority rule), NOT at the
+top.** The full 2.5–4 h checklist is not restarted; sections the
+earlier passes already completed stay completed. Only after R5 + R3 A–L
++ R4 M–S pass does the owner resume
+routes/world-isolation/multiplayer.
 
 ## 19. Remaining Git commands (run after the smoke test passes)
 
 The RC lives on `feat/cc-098-v1-completion` (not yet on main). After
-R3 + R4 pass:
+R5 + R3 + R4 pass:
 
 ```powershell
 # 1. Merge the completion branch to main (PR or fast-forward — owner's call):
 git checkout main; git merge feat/cc-098-v1-completion
 git push origin main
 # 2. Tag the RC commit (now in main history):
-git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" f493178c3264d8459ceb18f5426d13eee5766385
+git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" a053369f503c13d51e0eeed650bd01fba9e1998e
 git push origin concerned-cartographer/v1.0.0
 gh release create concerned-cartographer/v1.0.0 artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-1.0.0.zip --title "Concerned Cartographer 1.0.0" --notes-file src/ConcernedCartographer/Package/CHANGELOG.md
 ```
