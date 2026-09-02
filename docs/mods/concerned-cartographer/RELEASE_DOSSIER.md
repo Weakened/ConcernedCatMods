@@ -7,10 +7,84 @@ The single remaining gate is the human smoke test
 ## 1–5. Release candidate identity
 
 - **Version:** 1.0.0 (unchanged — 1.0.0 has never been publicly tagged or published)
-- **RC commit:** `a053369f503c13d51e0eeed650bd01fba9e1998e` (**RC8**, on
-  the CC-098 line — the RC8 release-blocker pass after **RC7
-  `f493178c`/`9b43e25` FAILED its human smoke** (owner failure prompt of
-  2026-08-31). RC8 delivers all twelve directives:
+- **RC commit:** RECORDED IN THE FINAL DOSSIER COMMIT BELOW (**RC10**, on
+  the CC-098 line — the consolidated smoke-feedback pass of 2026-09-01
+  after the owner's FOURTH road-authority report against RC8/RC9).
+  RC10 delivers all 23 owner feedback items:
+  **(P1, DEF-v1.0-007) road authority by ACTION IDENTITY** — the
+  live game places `mud_road_v2` for the hoe's "Level ground" and
+  `path_v2` for "Pathen" (verified in the owner's own Player.log and
+  the decompiled game assembly), both as smooth-and-paint-Dirt
+  TerrainOps with `m_level`/`m_raise` false, so the RC8 settings-flag
+  filter classified Level as road building. RC10 classifies by the
+  placed prefab identity + Piece token + selected-piece corroboration
+  in a pure, 17-test `TerrainActionClassifier` (paint must AGREE with
+  identity; PaintType.Dirt alone is never authority; the classifier
+  takes no settings flags at all, making the failure mode structurally
+  impossible). Level/Raise/Cultivate/Reset/digging/unknown ops create
+  zero road data, mark negative terrain intent, and erase covered ink
+  of both kinds; an always-on rate-limited "Terrain action classified"
+  log line names every action's classification. Pre-RC10 polluted ink
+  is Construction-tagged and indistinguishable in the data, so it is
+  NOT auto-deleted (explicit Pathen/Paved data must survive); it is
+  removed interactively — Level/re-pave over it once, or
+  `cc_roads delete` — and can never come back;
+  **(5/6) one large-map vector language** — road ink 2× wider (6 px),
+  routes render through the same screen-space vector system (per-route
+  color, geometric screen-pixel dash/dot cadence via the shared
+  `RoutePatternMath`, budget degrade to solid), route texture overlay
+  suppressed on the large map exactly like roads (minimap/fallback
+  kept), tightened minimap dot cadence;
+  **(7) honest overlay toggles** — Jötunn checkboxes hooked as real
+  layer switches driving BOTH presentations and the drawer settings,
+  checkbox visuals re-synced to user state after suppression writes
+  (pure `OverlayVisibilityRule`), the panel label renamed
+  "Mod Overlays" → "Map Overlays" (exact-match, reversible);
+  **(8/9/10) survey** — continuous bounded per-frame scanning
+  (~1 s discovery; `SurveyScanIntervalSeconds` documented no-op),
+  top-left notices coalesced to one per ~10 s only on new finds,
+  status block lowered/enlarged with spaced result rows, starter rules
+  broadened (dandelion/flint/wild seeds/guck/beehives/frost caves/
+  runestones) with untouched RC8-era files upgraded in place;
+  **(11/12/13) markers** — palette draggable + scrolling with
+  collapsible category sections (row cap removed; search/recents
+  kept), palette placements wear their cc:* sprite from the FIRST
+  naming frame via the live icon element (never a temporary or
+  permanent Dot; adoption recognizes the pre-applied sprite), and all
+  12 sprites regenerated toward the hand-drawn map-icon language
+  (seeded wobble/tilt/soft edges/ink texture; silhouettes and IDs
+  unchanged; byte-reproducible generator);
+  **(14) typing safety** — a reference-counted Jötunn input block held
+  exactly while any CC text field is focused, all CC hotkey paths
+  check the same state, first Escape only blurs; nothing intercepted
+  when no field is focused;
+  **(15) quick-pin naming** — candidate-chain naming (hover first
+  line → ZNetView prefab → root) with technical-name sanitization and
+  the "Marked object" fallback;
+  **(16/17) routes framing** — explicit v1 planning-overlay copy in
+  panel and docs, NO autowalk, pointer guards unchanged;
+  **(18/19/20) UI** — Share panel on a strict two-column grid,
+  replaced vanilla rail hides its VALIDATED container (deepest common
+  ancestor of the seven rail buttons; never map image/hints/large
+  root; per-button fallback on any surprise; restored on
+  fallback/disable/teardown), layout re-audited by derivation with the
+  visual matrix in smoke R6.15.
+  **Retires RC8 `a053369`/`0241831` (ZIP `AF267AC2…`, road authority
+  still defective) and every earlier RC — RC7 `f493178c`/`9b43e25`
+  (ZIP `8E76CD0A…`, FAILED human smoke), RC6 `17b0524350` (ZIP
+  `EE0F3A6E…`), RC5 `7881cbcd` (ZIP `1849C62E…`), RC4 `35f20e1a` (ZIP
+  `8B4B41AD…`), RC3 `86050cd2` (ZIP `710183B3…`), RC `7ed20fef` (ZIP
+  `B47E7C9D…`), RC `9eb65291` (ZIP `9F1F4128…`). Do not test, tag, or
+  upload ANY of those ZIPs.** Already-passed evidence that remains
+  valid: startup environment (Valheim 0.221.12 / Unity 6000.0.61f1 /
+  BepInEx 5.4.23.3 / Jötunn 2.29.2.0, clean 1.0.0 banner, no CC
+  errors), the adoption input-trap fix (DEF-v1.0-001), the workbench
+  two-column layout discipline (DEF-v1.0-003), and overlay projection
+  alignment (DEF-v1.0-002, residuals ≤ 1 texel). Everything RC10
+  touched is re-verified by smoke section **R6** (then R5 4–12 and
+  R3/R4 as amended).
+- RC8's identity block is preserved below for the record; its twelve
+  directives remain in RC10 as amended:
   **(1) strict road source authority** — only successful explicit
   local-player Pathen ⇒ Dirt / Paved ⇒ Paved construction creates road
   atlas data; passive traversal/chunk-recovery creation is refused at
@@ -64,12 +138,18 @@ The single remaining gate is the human smoke test
   directives touched is re-verified by smoke section **R5** (then R3/R4
   as amended).)
 - **ZIP:** `artifacts\thunderstore\TheConcernedCat-ConcernedCartographer-1.0.0.zip`
-  (built in the CC-098 session worktree at the RC commit; an identical
-  immutable copy is at
-  `artifacts\rc8\TheConcernedCat-ConcernedCartographer-1.0.0-RC8.zip` —
-  verify the hash below before importing)
-- **ZIP SHA-256:** `AF267AC26F23E7083F70339405311E9D6F10D93AB7E4E8A0EFAE63C26D1CEDB0` (272,222 bytes)
-- **Plugin DLL SHA-256:** `E9904771A52864892250A60D8459BD1DE27DE8C354BBEDD996D6B64DB33FB597` (388,096 bytes; the DLL inside the ZIP is hash-identical to the Release build output; informational version `1.0.0+a053369f…` verified in the DLL; the 12 `CC.Icons.cc-*.png` sprite resources verified embedded)
+  (built at the RC commit; an identical immutable copy is at
+  `artifacts\rc10\TheConcernedCat-ConcernedCartographer-1.0.0-RC10.zip`
+  — verify the hash below before importing. The retired RC8 copy under
+  `artifacts\rc8\` — ZIP `AF267AC2…`, DLL `E9904771…` — must NOT be
+  tested or uploaded.)
+- **ZIP SHA-256:** RECORDED IN THE FINAL DOSSIER COMMIT (fresh RC10
+  bytes; never reuses the RC8 hash)
+- **Plugin DLL SHA-256:** RECORDED IN THE FINAL DOSSIER COMMIT (the DLL
+  inside the ZIP must be hash-identical to the Release build output;
+  informational version `1.0.0+<RC10 commit>`; the 12
+  `CC.Icons.cc-*.png` sprite resources re-verified embedded with the
+  RC10 hand-drawn art)
 - **Assembly metadata (verified in the DLL):** Company "The Concerned Cat",
   Product "Concerned Cartographer", Copyright © 2026 Eren Cansunar,
   RepositoryUrl embedded, informational version `1.0.0+<RC commit>`.
@@ -84,9 +164,9 @@ The single remaining gate is the human smoke test
 Every sprint v0.3→v1.0 shipped through its internal gate; all 42 child
 issues and 8 controllers (#8, #27–#81) are closed with evidence comments.
 Shipped versions on main with tags: 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0,
-0.8.0, 0.9.0. The RC6 line is on main; the CC-098 completion line (RC7,
-now retired, plus the RC8 release-blocker pass) is on
-`feat/cc-098-v1-completion` awaiting its post-smoke merge and tag
+0.8.0, 0.9.0. The RC6 line is on main; the CC-098 completion line (RC7
+and RC8, both now retired, plus the RC10 consolidated-feedback pass) is
+on `feat/cc-098-v1-completion` awaiting its post-smoke merge and tag
 (section 19).
 
 ## 7. Defects
@@ -162,16 +242,41 @@ FAILED RC7 on twelve directives (road source authority, doubled road
 presentation, alias-only cc:* icons, non-functional survey, routes
 input/stroke/style defects, toolbar/settings/drawer overlap, inert
 workbench controls, quick-pin visibility, align-live guidance). All
-twelve are implemented in RC8 (identity above). Gate evidence at the RC
-commit: **356 domain tests green** (new `RoadSourceAuthorityTests`
-restart/reopen suite, align-live guidance tests, icon-registry sprite
-contract, survey default-rule matching, quick-pin ledger regression),
-`validate_repo.py --require-binary` PASS, clean Release build, tcli
-package build, and the six-entry ZIP audit with hash-identical DLL.
-The RC8 UI layout matrix (resolutions 1280x800 / 1920x1080 / 2560x1440 /
-ultrawide × UiScale 0.8/1.0/1.6) is derivation-based in code (hint-layout
-toolbar, budgeted drawer grid, framed settings block, workbench columns)
-and is verified live by smoke R5 items 6–8 — a game UI cannot be
+twelve were implemented in RC8; RC8's road-authority mechanism was
+itself defective (below) and RC8 is retired.
+
+**Owner consolidated-feedback pass (2026-09-01, RC10) — DEF-v1.0-007
+(P1, the FOURTH road-authority report):** Level Ground STILL produced
+road ink under RC8. Root cause established against the live game, not
+another heuristic: the owner's own Player.log shows the hoe placing
+`mud_road_v2` for "Level ground" and `path_v2` for "Pathen" (the
+prefab names do not match the menu labels — a historical misnomer),
+and the decompiled `TerrainOp`/`Player.PlacePiece`/`TerrainComp`
+chain confirms both actions arrive as smooth-and-paint-Dirt operations
+with `m_level`/`m_raise` false — exactly the combination RC8's
+settings-flag filter classified as road construction. The fix removes
+settings flags from authority entirely: a pure
+`TerrainActionClassifier` (Domain, 17 regression tests including the
+exact failure mode) classifies by placed-prefab identity + Piece token
++ selected-piece corroboration, requires paint to AGREE with identity,
+and authorizes ONLY Pathen ⇒ Dirt and Paved road ⇒ Paved. Everything
+else — Level, Raise, Cultivate, Reset paint, pickaxe digging, unknown
+or modded ops, corroboration mismatches — creates zero road data,
+marks negative terrain intent, and erases the covered ink of both
+kinds. An always-on rate-limited "Terrain action classified" log line
+makes any future regression visible without a debug build. Migration
+honesty: pre-RC10 polluted strokes are Construction-tagged and
+indistinguishable from genuine Pathen ink in the data, so nothing is
+auto-deleted (the owner's explicit roads must survive); the pollution
+is removed interactively — one Level/re-pave pass over it, or
+`cc_roads delete` — and the fixed classifier prevents recurrence.
+The remaining 22 feedback items (rendering/toggles/survey/markers/
+input/quick-pin/routes-framing/share/chrome/audit/tests/docs) are
+delivered as itemized in the identity section above.
+
+Gate evidence at the RC10 commit is recorded in §8. The UI layout
+matrix (1080p/1440p × UiScale 0.8/1.0/1.6) remains derivation-based in
+code and is verified live by smoke R6.15 — a game UI cannot be
 screenshot-proven from the conveyor.
 
 Owner-approved v1 map UX direction (2026-08-28, #96), implemented in
@@ -250,8 +355,21 @@ release blockers, all addressed in the previous RC:
 
 ## 8. Automated evidence (at the RC commit)
 
-- **339/339 tests** in the game-free core suite (Release configuration,
-  re-run at the RC commit): everything below plus the DEF-v1.0-006
+- **419/419 tests** in the game-free core suite (Release configuration,
+  re-run at the RC10 commit): everything below plus the RC10 suites —
+  `TerrainActionClassifierTests` (17: the exact Level-carries-Dirt
+  failure mode, every terraform/unknown action refused, paint-identity
+  agreement, selection corroboration, token fallback, clone/name
+  normalization, diagnostics), `RoutePatternMathTests` +
+  `OverlayVisibilityRuleTests` (14: dash phase carry, vertex-density
+  invariance, corner flow, zoom-linear cadence, budgets, the
+  texture/vector/checkbox truth table), the broadened survey starter
+  matching + RC8-starter upgrade recognition, the every-cc:*-icon-
+  ships-a-sprite contract behind the instant-sprite placement fix, and
+  the quick-pin technical-name sanitization suite (candidate chains,
+  first-line hover, friendly fallback) — plus the RC8 suites
+  (`RoadSourceAuthorityTests` restart/reopen, align-live guidance,
+  icon-registry sprite contract, quick-pin ledger) and the DEF-v1.0-006
   suites (29 tests: the vector container transform reproduces vanilla's
   MapPointToLocalGuiPos for every map point across full-map, deep-zoom,
   panned, and aspect-corrected uv windows; width round-trip; half-a-
@@ -330,25 +448,26 @@ defaults.
 ## 18. Smoke test
 
 `docs/mods/concerned-cartographer/PRE_RELEASE_SMOKE_TEST.md` — **the
-owner starts at the NEW SHORT section R5 (the RC8 mini-smoke: twelve
-blocking items, one per failure directive), then runs R3 (blocks A–L)
-and R4 (blocks M–S, as amended for the road authority rule), NOT at the
+owner starts at the NEW SHORT section R6 (the RC10 mini-smoke: fifteen
+items, one per feedback directive, with extra weight on the
+fourth-report road-authority row), then R5 items 4–12 (R5.1–3 are
+superseded), then R3 (blocks A–L) and R4 (blocks M–S), NOT at the
 top.** The full 2.5–4 h checklist is not restarted; sections the
-earlier passes already completed stay completed. Only after R5 + R3 A–L
-+ R4 M–S pass does the owner resume
+earlier passes already completed stay completed. Only after R6 + R5 +
+R3 A–L + R4 M–S pass does the owner resume
 routes/world-isolation/multiplayer.
 
 ## 19. Remaining Git commands (run after the smoke test passes)
 
 The RC lives on `feat/cc-098-v1-completion` (not yet on main). After
-R5 + R3 + R4 pass:
+R6 + R5 + R3 + R4 pass:
 
 ```powershell
 # 1. Merge the completion branch to main (PR or fast-forward — owner's call):
 git checkout main; git merge feat/cc-098-v1-completion
 git push origin main
-# 2. Tag the RC commit (now in main history):
-git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" a053369f503c13d51e0eeed650bd01fba9e1998e
+# 2. Tag the RC10 commit named in the identity section (now in main history):
+git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" <RC10-commit-from-identity-section>
 git push origin concerned-cartographer/v1.0.0
 gh release create concerned-cartographer/v1.0.0 artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-1.0.0.zip --title "Concerned Cartographer 1.0.0" --notes-file src/ConcernedCartographer/Package/CHANGELOG.md
 ```

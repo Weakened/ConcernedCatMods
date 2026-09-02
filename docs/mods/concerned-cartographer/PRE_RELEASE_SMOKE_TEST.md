@@ -5,21 +5,104 @@ manual-only verification deferred by the autonomous conveyor (OPS-001
 rev 2) from v0.3 onward and is finalized against the exact v1.0 RC. Rows
 marked **BLOCKS** must pass before publication; others are record-and-ship.
 
-> Status: FINAL for v1.0, amended 2026-08-31 (sixth amendment): **RC7
-> FAILED its human smoke** and is permanently retired — do not test,
-> tag, or upload it. RC8 addresses all twelve failure directives (road
-> source authority, single road presentation, real cc:* icons, survey,
-> routes input/strokes/styles, toolbar/settings/drawer/workbench layout,
-> quick-pin sync, align-live guidance). **Do NOT restart the full
-> 2.5–4 h checklist.** Run the NEW section **R5 (RC8 mini-smoke)**
-> first, then R3 A–L and R4 M–S (as amended for the RC8 road rule),
-> then resume the shortened golden path from where the second pass
-> stopped. Test only the RC ZIP named in RELEASE_DOSSIER.md.
+> Status: FINAL for v1.0, amended 2026-09-01 (seventh amendment): the
+> owner's consolidated RC8/RC9 feedback (fourth road-authority report
+> plus 22 further items) is implemented in **RC10**; RC8 is retired —
+> do not test, tag, or upload it. **Do NOT restart the full 2.5–4 h
+> checklist.** Run the NEW section **R6 (RC10 mini-smoke)** first, then
+> R5 items not superseded by R6 (R5.1–3 road rows are superseded; the
+> rest still apply), then R3 A–L and R4 M–S as amended, then resume the
+> shortened golden path from where the second pass stopped. Test only
+> the RC ZIP named in RELEASE_DOSSIER.md.
 
-## R5. RC8 release-blocker mini-smoke — RUN FIRST (short)
+## R6. RC10 consolidated-feedback mini-smoke — RUN FIRST (short)
+
+Every item verifies one RC10 feedback directive. All **BLOCK** unless
+marked otherwise. Prep: disposable world, hoe (+ stone for Paved road),
+cultivator, pickaxe, a leveled pad, a few berry bushes nearby.
+
+1. **P1 Level Ground authority (identity-based)**: with the map open in
+   a corner of your eye, use each hoe action several times on fresh
+   ground: **Level ground** — NO road ink, and any covered CC road ink
+   disappears; **Raise ground** — NO ink; **Cultivate** (cultivator) —
+   NO ink, erases covered ink; **pickaxe digging** — NO ink; **Pathen**
+   — dirt ink instantly; **Paved road** — paved ink instantly.
+   `LogOutput.log` shows one rate-limited "Terrain action classified:"
+   line per action naming it correctly (level-ground (mud_road_v2) ⇒ no
+   road; pathen (path_v2) ⇒ Dirt road; …). This is the FOURTH report of
+   this defect: spend real time here — level aggressively around your
+   base, on native dirt, near sacrificial stones; nothing may ink.
+2. **Polluted-data cleanup**: wherever an earlier RC left Level-ground
+   ink on this world's map, Level (or re-pave then delete) over it once
+   — the false ink disappears and STAYS gone after a restart. Your real
+   Pathen/Paved roads survive untouched. (`cc_roads delete` near a
+   false stroke is the targeted alternative.)
+3. **Road width & shared route style**: large-map road ink reads about
+   twice as thick as RC8 and stays that thickness while zooming and
+   panning. Draw a route, set it Dashed then Dotted: the pattern is a
+   readable, tight cadence that looks the same at min and max zoom, the
+   route renders in the SAME crisp vector style as roads on the large
+   map, and there is exactly ONE set of route lines (minimap keeps the
+   texture presentation).
+4. **Map Overlays honesty**: the Jötunn overlay button reads **"Map
+   Overlays"**. Toggling "CC Dirt Paths" / "CC Paved Roads" /
+   "CC Routes" there hides/shows the CURRENT large-map vector ink AND
+   the minimap texture for that layer; the checkbox state always
+   matches whether the layer is visible; drawer toggles stay in sync.
+5. **Survey immediacy & notices**: enable Survey, walk toward berry
+   bushes — observations appear within ~1 s of coming into range (no
+   10 s wait), the top-left notice fires at most once per ~10 s and
+   only when something new was found, and the panel's header/note/
+   status/results never overlap (status block sits lower, rows spaced).
+6. **Broadened starters**: near dandelions/flint/seeds/beehive/a
+   runestone, matching observations arrive out of the box (fresh or
+   untouched starter rules file; an edited file is never modified).
+7. **Marker palette**: [Markers] never overflows the screen — the list
+   scrolls, category headers fold/unfold their sections, the panel
+   drags, search and Recent still work.
+8. **Custom marker placement**: select a cc:* marker (e.g. Road /
+   Junction, vanilla fallback = Dot), double-click the map — the pin
+   shows the CC sprite from the FIRST frame (never a Dot, not even
+   during naming), exactly one rendering, still correct after restart.
+9. **Icon art**: the 12 cc:* sprites read hand-drawn/soft (wobbly
+   edges, parchment ink) while staying mutually distinct and legible at
+   map size.
+10. **Typing safety**: focus the palette search (and the Routes name
+    field) and type `danger` and `wasdlmp` — only text appears: no
+    panels open/close, the map does not close, the character does
+    nothing. First Escape ends typing; second closes the panel. With no
+    field focused, all keys behave normally.
+11. **Quick Pin naming**: F7 on a chest/rock/beehive — the pin name is
+    the object's proper name (localized or cleaned prefab), NEVER
+    "Collider"/"trigger"-style engine names; an unnameable target pins
+    as "Marked object".
+12. **Routes framing**: the [Routes] panel opens with the planning-
+    overlay explainer visible and offers NO follow/autowalk anywhere.
+    Route clicks on any CC panel, chrome, or text field never draw.
+13. **Share grid**: [Share] status, instructions, inbox rows, and all
+    four buttons sit on a clean two-column grid — nothing overlaps or
+    overhangs the panel edge, including after a long preview.
+14. **Vanilla chrome**: with the CC toolbar owning the map, the right
+    rail is FULLY gone — no orphaned backplate/decor where the buttons
+    were — while the bottom control tips stay readable.
+    `Map/ShowVanillaMapControls = true` (and disabling the mod)
+    restores the rail pixel-perfect.
+15. **Layout audit** (record-and-ship at your resolution; BLOCKS only
+    on a real overlap): Atlas / Settings / Survey / Share / Routes /
+    Markers at 1080p and 1440p, UiScale 0.8 / 1.0 / 1.6 — no clipped
+    or overlapping content anywhere.
+
+Only after R6 passes, run the still-applicable R5 rows (4–12; R5.1–3
+are superseded by R6.1–2), then R3 A–L and R4 M–S, then the shortened
+golden path (sections 2, 4, 6, 7 onward).
+
+## R5. RC8 release-blocker mini-smoke (amended by R6)
 
 Every item below verifies one RC8 failure directive. All **BLOCK**.
-Prep: disposable world, hoe + stonecutter materials, one leveled pad.
+Rows 1–3 are SUPERSEDED by R6.1–2 (the RC8 road-rule fix was
+insufficient — Level Ground still inked; RC10 replaces the mechanism
+with action identity). Prep: disposable world, hoe + stonecutter
+materials, one leveled pad.
 
 1. **Road rule — creation**: walk across world-generated dirt (spawn
    circle or any native path) and across the leveled pad — NO road ink

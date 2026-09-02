@@ -382,19 +382,47 @@ probes the terrain beneath the local player and records whether recorded
 road geometry sits nearby — feeding only `cc_roads align live`
 (`LatestSample`). It never creates road data.
 
+### `TerrainActionClassifier.cs` / `TerrainActionCategory.cs` / `TerrainActionClassification.cs` / `TerrainPaintKind.cs` (Domain, RC10, DEF-v1.0-007)
+
+**The road source authority, identity edition.** Pure and fully tested
+(`TerrainActionClassifierTests`): a captured operation is classified by
+the ACTUAL player action — the placed TerrainOp's prefab name
+(`path_v2` = Pathen, `mud_road_v2` = Level ground: the prefab names do
+NOT match the hoe menu labels), the Piece localization token as
+fallback, and the selected build piece as corroboration. Settings flags
+(`m_level`/`m_raise`/`m_smooth`) are deliberately NOT inputs — in the
+live game Level ground and Pathen ship near-identical
+smooth-and-paint-Dirt settings, which is why every flag heuristic
+(RC8 and earlier) misclassified Level as road building. Only
+Pathen-with-Dirt-paint and PavedRoad-with-Paved-paint produce a
+`RoadKind`; everything else (Level, Raise, Cultivate, digging, unknown
+ops, selection mismatches) is a non-road paint op that erases covered
+ink. If a game update ever adds terrain actions, extend the prefab
+table here — never re-derive authority from paint or flags.
+
 ### `CapturedTerrainOperation.cs`
 
-Neutral value object containing the useful facts extracted from a Valheim `TerrainOp`: position, radius, road/removal kind and whether the operation is ordinary terraforming rather than intended road paint.
+Neutral value object containing the classified facts for one operation:
+authorized road kind (null for every non-road action), position, brush
+radius, the classified category, and the classifier's diagnostic
+description line.
 
 ### `ConstructionCapture.cs`
 
-Harmony/game adapter for successful terrain operations.
+Harmony/game adapter for successful terrain operations
+(`TerrainComp.ApplyOperation` postfix — runs exactly on the placing
+client, so only the local player's own actions are ever captured).
 
-It observes the confirmed game operation, classifies Dirt/Paved/Cultivate/Reset/terraforming and raises `CapturedTerrainOperation`.
+It reads the op's identity (GameObject name, Piece token, selected
+piece via `Player.GetBuildSelection`), maps the paint type to the
+domain `TerrainPaintKind`, delegates classification to
+`TerrainActionClassifier`, and raises `CapturedTerrainOperation`.
 
 The patch is observational. It must never mutate Valheim terrain.
 
-Failure should disable this source without taking traversal down.
+Failure disables this source for the session. The runtime logs an
+always-on rate-limited "Terrain action classified:" line per captured
+action so any future authority regression is visible in LogOutput.log.
 
 ### Chunk recovery (retired in RC8)
 
@@ -423,11 +451,60 @@ Responsibilities:
 
 Destructive road edits schedule/debounce a full redraw because pixels cannot be safely “un-drawn” incrementally.
 
+RC10 additions: overlay handles are cached (one `GetMapOverlay` per
+name per session), the Jötunn per-overlay checkboxes are hooked as real
+user layer switches (`OverlayUserToggleHook` + the pure
+`OverlayVisibilityRule`), suppression writes re-sync the checkbox to
+the USER state, and `UserToggledOverlay` lets the runtime mirror clicks
+into the drawer settings.
+
+### `RoadVectorLayer.cs` (DEF-v1.0-006; routes since RC10)
+
+The high-precision large-map vector layer for roads AND routes: one
+container transform reproduces vanilla pan/zoom exactly
+(`RoadVectorMath`), widths and dash/dot cadences are defined in screen
+pixels and re-derived at every rebake, route stamping walks the shared
+pure `RoutePatternMath` (identical geometry to the texture path), and
+per-quad vertex colors let all routes share one graphic. Routes render
+regardless of fog (the player's own plans); roads keep fog parity.
+Styled routes that would blow the stamp budget degrade to solid lines
+per route instead of taking the layer down.
+
+### `RouteOverlayRenderer.cs`
+
+The route texture overlay ("CC Routes"): minimap + fallback since RC10,
+suppressed on the large map while the vector layer draws routes (same
+`OverlayVisibilityRule` as roads), with its Jötunn checkbox hooked as
+the route layer's user switch. Colors resolve through `RouteInk`
+(shared with the vector layer); dash/dot walks `RoutePatternMath`.
+
+### `OverlayUserToggleHook.cs` / `OverlayPanelRelabel.cs` (RC10)
+
+The first attaches a listener to a Jötunn overlay checkbox (reflection
+over the internal `Toggle` field, fail-soft) so user clicks reach CC as
+layer intent, and re-syncs the checkbox visual after programmatic
+Enabled writes. The second renames the panel's visible "Mod Overlays"
+label to "Map Overlays" — exact-match only, remembered and restored on
+disable/teardown.
+
+### `CcTextFocus.cs` (RC10, feedback 14)
+
+Central typing-safety state: `AnyFieldFocused()` (the runtime holds a
+`ModalInputBlock` over Jötunn's `BlockInput` exactly while true, and
+every CC hotkey path checks it) and `EscapeShouldOnlyBlur()` (panels
+let the first Escape end typing). Nothing is intercepted when no field
+is focused.
+
 ### `MinimapReflection.cs`
 
 Centralizes reflection helpers for fragile/private `Minimap` state.
 
 Private-member access should be kept here or in equally narrow adapters and documented with the tested Valheim version.
+
+RC10 adds `TryGetVanillaRailContainer`: the validated deepest common
+ancestor of the seven rail buttons, so hiding the replaced rail also
+hides its backplate/decor — never the map image, hints, or large root;
+any surprise falls back to per-button hiding.
 
 ## 8. Pin domain (`Domain/Atlas/`)
 
@@ -576,6 +653,13 @@ Profile-level display preferences: query and layer/cluster flags. Applying a vie
 
 Pure object-name/type → suggested pin metadata policy. Keep suggestion heuristics here instead of inside the Unity raycast adapter.
 
+RC10 (feedback 15): the adapter passes a CANDIDATE CHAIN — hover
+target, ZNetView prefab root, transform root — and the suggester picks
+the first non-technical name (Collider/trigger/mesh/LOD/snap-point
+style engine names are sanitized away, hover text keeps only its first
+line, "Marked object" is the fallback). Keyword matching still sees
+every candidate.
+
 ### `SurveyRule` / `SurveyRuleSet.cs`
 
 Pure shareable Survey Rules format.
@@ -585,6 +669,20 @@ Rules support exact or prefix prefab patterns, blacklist patterns, icon/category
 ### `SurveyEngine.cs`
 
 Pure review-before-commit state for survey observations. A scan match is not automatically a permanent pin, preventing map flooding.
+
+The Unity-side `SurveyScanner` walks a fresh loaded-instance snapshot
+CONTINUOUSLY on a bounded per-tick budget since RC10 (feedback 9) —
+matches surface within about a second — and coalesces the top-left
+notice to one per ~10 s, only when something was collected.
+`SurveyScanIntervalSeconds` is a documented no-op.
+
+### `RoutePatternMath.cs` / `OverlayVisibilityRule.cs` (RC10)
+
+Pure and tested: the single geometric dash/dot cadence walker both
+route presentations stamp through (phase carried across vertices;
+vertex density invisible; budgets respected), and the
+texture-vs-vector one-presentation truth table with the honest-checkbox
+rule.
 
 ## 8b. Route domain (`Domain/Atlas/`, v0.5)
 
