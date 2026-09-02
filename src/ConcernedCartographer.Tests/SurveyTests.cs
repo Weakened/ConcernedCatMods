@@ -168,8 +168,9 @@ public class SurveyEngineTests
         }
 
         engine.Offer("rock4_copper", P(500f, 0f), pins, _now);
-        Assert.Equal(1, engine.RejectAll());
+        Assert.Equal(1, engine.RejectAll(_now));
         Assert.Empty(engine.Observations);
+        Assert.Single(engine.Rejected);
     }
 
     [Fact]

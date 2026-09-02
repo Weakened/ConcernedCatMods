@@ -77,6 +77,7 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly SurveyEngine _surveyEngine = new();
     private readonly SurveyScanner _surveyScanner;
     private readonly SurveyRulePersistence _surveyRulePersistence;
+    private readonly SurveyRejectedPersistence _surveyRejectedPersistence;
     private readonly RoutePersistence _routePersistence;
     private readonly RouteOverlayRenderer _routeRenderer;
     private readonly OverlayPanelRelabel _overlayRelabel;
@@ -192,6 +193,7 @@ internal sealed class CartographerRuntime : IDisposable
         _palettePanel.SelectionCleared = () => _birthTracker.Disarm();
         _quickPinCapture = new QuickPinCapture(settings, log);
         _surveyRulePersistence = new SurveyRulePersistence(log);
+        _surveyRejectedPersistence = new SurveyRejectedPersistence(log);
         _surveyEngine.Rules = _surveyRulePersistence.LoadOrCreate();
         _surveyScanner = new SurveyScanner(settings, log);
         _routePersistence = new RoutePersistence(log);
@@ -530,6 +532,7 @@ internal sealed class CartographerRuntime : IDisposable
             _pinAdapter.AbsorbVanillaChanges(_pinStore);
             _pinPersistence.FlushJournal();
             _routePersistence.FlushJournal();
+            SaveRejectedIfDirty();
         }
     }
 
@@ -1435,25 +1438,132 @@ internal sealed class CartographerRuntime : IDisposable
 
                 return "Usage: cc_survey accept <n|all>";
             case "reject":
+                // RC11 blocker 9: rejection is durable — the entry moves to
+                // the Rejected list and its object stays suppressed.
                 if (remainder == "all")
                 {
-                    return $"Rejected {_surveyEngine.RejectAll()} observation(s).";
+                    int rejected = _surveyEngine.RejectAll(DateTime.UtcNow);
+                    SaveRejectedIfDirty();
+                    return $"Rejected {rejected} observation(s); they moved to the Rejected list.";
                 }
 
                 if (int.TryParse(remainder, out int rejectIndex) && rejectIndex >= 1 && rejectIndex <= observations.Count)
                 {
-                    _surveyEngine.Reject(observations[rejectIndex - 1].Id);
-                    return $"Rejected observation {rejectIndex}.";
+                    _surveyEngine.Reject(observations[rejectIndex - 1].Id, DateTime.UtcNow);
+                    SaveRejectedIfDirty();
+                    return $"Rejected observation {rejectIndex}; it moved to the Rejected list.";
                 }
 
                 return "Usage: cc_survey reject <n|all>";
+            case "rejected":
+                if (_surveyEngine.Rejected.Count == 0)
+                {
+                    return "The Rejected list is empty.";
+                }
+
+                var rejectedBuilder = new System.Text.StringBuilder($"{_surveyEngine.Rejected.Count} rejected:");
+                for (int index = 0; index < _surveyEngine.Rejected.Count && index < 15; index++)
+                {
+                    SurveyEngine.RejectedObservation entry = _surveyEngine.Rejected[index];
+                    rejectedBuilder.Append($"\n  {index + 1}. {entry.SuggestedName} [{entry.Category}] at ({entry.Position.X:0}, {entry.Position.Z:0})");
+                }
+
+                if (_surveyEngine.Rejected.Count > 15)
+                {
+                    rejectedBuilder.Append($"\n  ... and {_surveyEngine.Rejected.Count - 15} more.");
+                }
+
+                return rejectedBuilder.ToString();
+            case "restore":
+                if (remainder == "all")
+                {
+                    int restored = _surveyEngine.RestoreAllRejected(DateTime.UtcNow);
+                    SaveRejectedIfDirty();
+                    return $"Restored {restored} rejected observation(s) to pending review.";
+                }
+
+                if (int.TryParse(remainder, out int restoreIndex) &&
+                    _surveyEngine.RestoreRejected(restoreIndex - 1, DateTime.UtcNow))
+                {
+                    SaveRejectedIfDirty();
+                    return $"Restored rejected entry {restoreIndex} to pending review.";
+                }
+
+                return "Usage: cc_survey restore <n|all>";
+            case "acceptrejected":
+                if (int.TryParse(remainder, out int acceptRejectedIndex) &&
+                    _surveyEngine.AcceptRejected(acceptRejectedIndex - 1, _pinStore))
+                {
+                    ResyncPins();
+                    SaveRejectedIfDirty();
+                    return $"Accepted rejected entry {acceptRejectedIndex} as a pin.";
+                }
+
+                return "Usage: cc_survey acceptrejected <n>";
+            case "rules":
+                if (_surveyEngine.Rules.Rules.Count == 0)
+                {
+                    return "No survey rules. Add one from the Survey panel's Rules view.";
+                }
+
+                var rulesBuilder = new System.Text.StringBuilder($"{_surveyEngine.Rules.Rules.Count} rule(s):");
+                for (int index = 0; index < _surveyEngine.Rules.Rules.Count; index++)
+                {
+                    SurveyRule rule = _surveyEngine.Rules.Rules[index];
+                    rulesBuilder.Append(
+                        $"\n  {index + 1}. [{(rule.Enabled ? "on " : "OFF")}] {rule.Pattern} → {rule.Category} ({rule.IconId})");
+                }
+
+                return rulesBuilder.ToString();
+            case "ruleon":
+            case "ruleoff":
+                if (int.TryParse(remainder, out int toggleIndex) &&
+                    _surveyEngine.Rules.SetRuleEnabled(toggleIndex - 1, subcommand == "ruleon") is SurveyRule toggled)
+                {
+                    _surveyRulePersistence.Save(_surveyEngine.Rules);
+                    return $"Rule \"{toggled.Pattern}\" is now {(toggled.Enabled ? "enabled" : "disabled")}.";
+                }
+
+                return "Usage: cc_survey ruleon <n> / ruleoff <n>";
+            case "ruledel":
+                if (int.TryParse(remainder, out int deleteIndex) &&
+                    _surveyEngine.Rules.RemoveRuleAt(deleteIndex - 1) is SurveyRule removed)
+                {
+                    _surveyRulePersistence.Save(_surveyEngine.Rules);
+                    return $"Removed rule \"{removed.Pattern}\".";
+                }
+
+                return "Usage: cc_survey ruledel <n>";
+            case "ruleadd":
+                string pattern = SurveyRuleSet.Clean(remainder);
+                if (pattern.Length == 0 || pattern == "*")
+                {
+                    return "Usage: cc_survey ruleadd <prefab-pattern> ('bush*' matches prefixes)";
+                }
+
+                string icon = args.Length > 2 ? args[2] : "cc:resource";
+                string category = args.Length > 3 ? string.Join(" ", args, 3, args.Length - 3) : "Resources";
+                _surveyEngine.Rules.AddRule(new SurveyRule(pattern, icon, category, 30f, 120f));
+                _surveyRulePersistence.Save(_surveyEngine.Rules);
+                return $"Added rule \"{pattern}\" → {category} ({icon}).";
             case "reload":
                 _surveyEngine.Rules = _surveyRulePersistence.LoadOrCreate();
                 return $"Reloaded {_surveyEngine.Rules.Rules.Count} rule(s) and {_surveyEngine.Rules.Blacklist.Count} blacklist pattern(s).";
             case "path":
                 return SurveyRulePersistence.RulePath + " (the file is the shareable import/export format)";
             default:
-                return "Usage: cc_survey [status|list|accept <n|all>|reject <n|all>|reload|path]";
+                return "Usage: cc_survey [status|list|accept <n|all>|reject <n|all>|rejected|restore <n|all>|acceptrejected <n>|rules|ruleon/ruleoff/ruledel <n>|ruleadd <pattern> [icon] [category]|reload|path]";
+        }
+    }
+
+    private void SaveRejectedIfDirty()
+    {
+        if (_surveyEngine.RejectedDirty && _worldUid is long uid)
+        {
+            if (_surveyRejectedPersistence.Save(uid, _surveyEngine.Rejected))
+            {
+                _surveyEngine.MarkRejectedClean();
+            }
         }
     }
 
@@ -1965,6 +2075,7 @@ internal sealed class CartographerRuntime : IDisposable
         MapPointerGuard.Clear();
         SaveIfDirty();
         SavePinsSnapshot();
+        SaveRejectedIfDirty();
         _pipeline?.EndAllStrokes();
         _constructionCapture.OperationCaptured -= HandleTerrainOperation;
         _constructionCapture.Dispose();
@@ -1978,6 +2089,7 @@ internal sealed class CartographerRuntime : IDisposable
             return;
         }
 
+        SaveRejectedIfDirty();
         SaveIfDirty();
         SavePinsSnapshot();
 
@@ -1985,6 +2097,8 @@ internal sealed class CartographerRuntime : IDisposable
         _atlas = _persistence.Load(uid);
         _terrainIntent = _terrainIntentPersistence.Load(uid);
         _pinStore = _pinPersistence.Load(uid);
+        _surveyEngine.ResetSession();
+        _surveyEngine.LoadRejected(_surveyRejectedPersistence.Load(uid));
         _pinStore.LocalAuthor = _authorId;
         _pinStore.Changed += _pinPersistence.QueueJournal;
         _pinAdapter.Reset();

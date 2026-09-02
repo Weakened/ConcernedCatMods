@@ -119,7 +119,15 @@ internal static class QuickPinSuggester
             string cleaned = CleanObjectName(candidate);
             if (cleaned.Length > 0 && !IsTechnicalName(cleaned))
             {
-                return char.ToUpperInvariant(cleaned[0]) + cleaned.Substring(1).ToLowerInvariant();
+                // RC11 blockers 11/14: the shared humanizer — case/underscore
+                // splitting, noise-token removal, compound expansion — so a
+                // prefab fallback reads "Raspberry Bush", never
+                // "Raspberrybush".
+                string humanized = NameHumanizer.Humanize(cleaned);
+                if (humanized.Length > 0)
+                {
+                    return humanized;
+                }
             }
         }
 

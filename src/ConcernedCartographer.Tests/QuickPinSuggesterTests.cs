@@ -29,12 +29,15 @@ public class QuickPinSuggesterTests
     }
 
     [Theory]
-    [InlineData(null, "TreasureChest_meadows(Clone)", "Treasurechest meadows")]
-    [InlineData("", "portal_wood(Clone)", "Portal wood")]
-    [InlineData("$piece_workbench", "piece_workbench(Clone)", "Piece workbench")]
+    [InlineData(null, "TreasureChest_meadows(Clone)", "Treasure Chest Meadows")]
+    [InlineData("", "portal_wood(Clone)", "Portal Wood")]
+    [InlineData("$piece_workbench", "piece_workbench(Clone)", "Workbench")]
+    [InlineData(null, "RaspberryBush(Clone)", "Raspberry Bush")]
     [InlineData(null, null, "Marked object")]
-    public void PrefabFallback_CleansClonesUnderscoresAndTokens(string? hover, string? prefab, string expected)
+    public void PrefabFallback_HumanizesClonesUnderscoresCaseAndTokens(string? hover, string? prefab, string expected)
     {
+        // RC11 blockers 11/14: prefab fallbacks go through the shared
+        // humanizer — "Raspberry Bush", never "Raspberrybush".
         Assert.Equal(expected, QuickPinSuggester.CleanName(hover, prefab));
     }
 
@@ -60,7 +63,7 @@ public class QuickPinSuggesterTests
             hoverName: null,
             new[] { technical, "TreasureChest_meadows(Clone)", "SomeRoot" });
 
-        Assert.Equal("Treasurechest meadows", suggestion.Name);
+        Assert.Equal("Treasure Chest Meadows", suggestion.Name);
         Assert.True(QuickPinSuggester.IsTechnicalName(technical));
     }
 
@@ -80,7 +83,7 @@ public class QuickPinSuggesterTests
             hoverName: null, new[] { "Collider (1)", "portal_wood(Clone)" });
 
         Assert.Equal("vanilla:portal", suggestion.IconId);
-        Assert.Equal("Portal wood", suggestion.Name);
+        Assert.Equal("Portal Wood", suggestion.Name);
     }
 
     [Fact]

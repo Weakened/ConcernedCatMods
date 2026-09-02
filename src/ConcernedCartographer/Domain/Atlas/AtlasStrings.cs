@@ -104,7 +104,7 @@ internal static class AtlasStrings
         ["hud.quickPinCreature"] = "Creatures are not pinned.",
         ["hud.quickPinned"] = "Pinned \"{0}\".",
         ["hud.quickPinDuplicate"] = "\"{0}\" is already pinned {1} m away.",
-        ["hud.surveyObservations"] = "Survey: {0} new observation(s) — review with cc_survey",
+        ["hud.surveyObservations"] = "Survey: {0} new observation(s) — review in [Survey]",
         ["hud.syncReceived"] = "Atlas share received from {0} — review with cc_sync preview",
         ["hud.onboarding"] = "Concerned Cartographer: use the Atlas and marker palette buttons on the large map. Select any marker to edit it.",
         ["hud.atlasButton"] = "Atlas",

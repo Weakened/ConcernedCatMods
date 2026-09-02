@@ -62,6 +62,24 @@ internal sealed class SurveyRulePersistence
         }
     }
 
+    /// <summary>Writes the current rule set back to the shareable file
+    /// (RC11 blocker 10: the Survey UI edits rules; the file remains the
+    /// import/export format).</summary>
+    public bool Save(SurveyRuleSet rules)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(RulePath)!);
+            File.WriteAllLines(RulePath, rules.Serialize());
+            return true;
+        }
+        catch (Exception exception)
+        {
+            _log.LogError($"Could not save the survey rules to {RulePath}: {exception}");
+            return false;
+        }
+    }
+
     private static string Normalize(System.Collections.Generic.IEnumerable<string> lines)
     {
         var builder = new System.Text.StringBuilder();
