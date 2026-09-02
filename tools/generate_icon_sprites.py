@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 """Deterministically renders the Concerned Cartographer cc:* map-marker
-sprites (RC8) into src/ConcernedCartographer/Assets/Icons/*.png.
+sprites into src/ConcernedCartographer/Assets/Icons/*.png.
 
 Pure standard library: a tiny signed-distance-field rasterizer plus a
 minimal PNG writer, so the sprites are reproducible from source with no
 image-editing tools, no external assets, and no licensing questions.
 Style matches vanilla pin readability: warm parchment glyph, near-black
 outline, transparent background, 48x48 with 3x3 supersampling.
+
+RC10 (feedback 13): the glyphs lean toward Valheim's hand-drawn map-icon
+language — every shape passes through a deterministic per-glyph domain
+wobble (low-frequency sine displacement seeded from the sprite name), a
+tiny seeded rotation, soft antialiased edges, and a faint ink-texture
+modulation of the fill. Silhouettes are unchanged and stay mutually
+distinct; regeneration is byte-for-byte reproducible.
 
 Run from the repository root:
     python ./tools/generate_icon_sprites.py
@@ -21,7 +28,15 @@ from pathlib import Path
 
 SIZE = 48
 SUPER = 3  # 3x3 samples per pixel
-OUTLINE_WIDTH = 2.2
+OUTLINE_WIDTH = 2.3
+
+# Hand-drawn pass tuning (RC10): keep amplitudes small enough that every
+# silhouette reads exactly as before at map size.
+WOBBLE_AMPLITUDE = 0.85
+WOBBLE_FREQUENCY = 0.33
+MAX_TILT_DEGREES = 2.4
+EDGE_SOFTNESS = 0.55
+INK_TEXTURE = 0.055
 
 GLYPH_RGB = (238, 232, 213)
 OUTLINE_RGB = (24, 18, 12)
@@ -254,36 +269,94 @@ GLYPHS = {
 
 
 # ----------------------------------------------------------------------
+# Hand-drawn pass (RC10): deterministic per-glyph imperfection.
+# ----------------------------------------------------------------------
+
+def glyph_seed(name):
+    """Stable across runs and Python versions (never the builtin hash)."""
+    return zlib.crc32(name.encode("utf-8"))
+
+
+def hand_drawn(sdf, name):
+    """Wraps an SDF in a seeded tiny rotation plus a low-frequency domain
+    wobble, so edges undulate gently like brush strokes while the shape
+    and its silhouette stay put."""
+    seed = glyph_seed(name)
+    phases = [((seed >> (i * 5)) % 977) / 977.0 * 2.0 * math.pi for i in range(6)]
+    tilt = math.radians((((seed >> 11) % 1009) / 1009.0 * 2.0 - 1.0) * MAX_TILT_DEGREES)
+    cos_t, sin_t = math.cos(tilt), math.sin(tilt)
+
+    def warped(x, y):
+        # Seeded rotation around the canvas center.
+        cx, cy = x - 24.0, y - 24.0
+        rx = 24.0 + cx * cos_t - cy * sin_t
+        ry = 24.0 + cx * sin_t + cy * cos_t
+
+        # Two-octave sine displacement: irregular, but smooth and small.
+        dx = WOBBLE_AMPLITUDE * (
+            0.62 * math.sin(ry * WOBBLE_FREQUENCY + phases[0])
+            + 0.38 * math.sin((rx + ry) * WOBBLE_FREQUENCY * 0.71 + phases[1]))
+        dy = WOBBLE_AMPLITUDE * (
+            0.62 * math.sin(rx * WOBBLE_FREQUENCY + phases[2])
+            + 0.38 * math.sin((rx - ry) * WOBBLE_FREQUENCY * 0.83 + phases[3]))
+        return sdf(rx + dx, ry + dy)
+
+    return warped, phases
+
+
+def ink_shade(x, y, phases):
+    """Faint parchment-ink unevenness for the glyph fill."""
+    wave = (
+        math.sin(x * 0.61 + phases[4]) * math.sin(y * 0.53 + phases[5])
+        + 0.5 * math.sin((x + y) * 0.29 + phases[0]))
+    return 1.0 + INK_TEXTURE * wave
+
+
+# ----------------------------------------------------------------------
 # Rasterization + PNG writing.
 # ----------------------------------------------------------------------
 
-def render(sdf):
+def soft_coverage(d):
+    """0..1 coverage with a soft edge band around d = 0."""
+    if d <= -EDGE_SOFTNESS:
+        return 1.0
+    if d >= EDGE_SOFTNESS:
+        return 0.0
+    return 0.5 - d / (2.0 * EDGE_SOFTNESS)
+
+
+def render(sdf, name):
+    warped, phases = hand_drawn(sdf, name)
     rows = []
     step = 1.0 / SUPER
     offset = step / 2.0
     for py in range(SIZE):
         row = bytearray()
         for px in range(SIZE):
-            fill_hits = 0
-            outline_hits = 0
+            fill = 0.0
+            outline = 0.0
             for sy in range(SUPER):
                 for sx in range(SUPER):
-                    d = sdf(px + offset + sx * step, py + offset + sy * step)
-                    if d <= 0.0:
-                        fill_hits += 1
-                    elif d <= OUTLINE_WIDTH:
-                        outline_hits += 1
+                    d = warped(px + offset + sx * step, py + offset + sy * step)
+                    fill_cov = soft_coverage(d)
+                    band_cov = soft_coverage(d - OUTLINE_WIDTH)
+                    fill += fill_cov
+                    outline += band_cov - fill_cov
             total = SUPER * SUPER
-            fill = fill_hits / total
-            outline = outline_hits / total
+            fill /= total
+            outline /= total
             alpha = fill + outline
-            if alpha <= 0.0:
+            if alpha <= 0.003:
                 row.extend((0, 0, 0, 0))
                 continue
-            r = (GLYPH_RGB[0] * fill + OUTLINE_RGB[0] * outline) / alpha
-            g = (GLYPH_RGB[1] * fill + OUTLINE_RGB[1] * outline) / alpha
-            b = (GLYPH_RGB[2] * fill + OUTLINE_RGB[2] * outline) / alpha
-            row.extend((round(r), round(g), round(b), round(alpha * 255)))
+            shade = ink_shade(px, py, phases)
+            fr = min(255.0, GLYPH_RGB[0] * shade)
+            fg = min(255.0, GLYPH_RGB[1] * shade)
+            fb = min(255.0, GLYPH_RGB[2] * shade)
+            r = (fr * fill + OUTLINE_RGB[0] * outline) / alpha
+            g = (fg * fill + OUTLINE_RGB[1] * outline) / alpha
+            b = (fb * fill + OUTLINE_RGB[2] * outline) / alpha
+            row.extend((round(r), round(g), round(b), round(min(1.0, alpha) * 255)))
         rows.append(bytes(row))
     return rows
 
@@ -308,7 +381,7 @@ def write_png(path, rows):
 def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for name, factory in sorted(GLYPHS.items()):
-        write_png(OUT_DIR / f"{name}.png", render(factory()))
+        write_png(OUT_DIR / f"{name}.png", render(factory(), name))
         print(f"wrote {name}.png")
     print(f"{len(GLYPHS)} sprites in {OUT_DIR}")
 
