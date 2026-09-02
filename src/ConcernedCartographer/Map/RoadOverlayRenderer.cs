@@ -46,8 +46,6 @@ internal sealed class RoadOverlayRenderer
     // re-synced to the user state after suppression writes.
     private bool _userDirtEnabled = true;
     private bool _userPavedEnabled = true;
-    private bool? _appliedDirtEnabled;
-    private bool? _appliedPavedEnabled;
     private readonly OverlayUserToggleHook _dirtToggleHook = new();
     private readonly OverlayUserToggleHook _pavedToggleHook = new();
     private MinimapManager.MapOverlay? _dirtOverlay;
@@ -128,9 +126,9 @@ internal sealed class RoadOverlayRenderer
     {
         bool suppress = _vectorLayer.IsActive;
         SetTextureOverlayEnabled(
-            RoadKind.Dirt, Atlas.OverlayVisibilityRule.EffectiveTexture(_userDirtEnabled, suppress), ref _appliedDirtEnabled);
+            RoadKind.Dirt, Atlas.OverlayVisibilityRule.EffectiveTexture(_userDirtEnabled, suppress));
         SetTextureOverlayEnabled(
-            RoadKind.Paved, Atlas.OverlayVisibilityRule.EffectiveTexture(_userPavedEnabled, suppress), ref _appliedPavedEnabled);
+            RoadKind.Paved, Atlas.OverlayVisibilityRule.EffectiveTexture(_userPavedEnabled, suppress));
 
         // A suppression write moved the Jötunn checkbox with it; put the
         // visual back on the USER's layer state so the panel stays honest.
@@ -138,13 +136,14 @@ internal sealed class RoadOverlayRenderer
         _pavedToggleHook.SyncCheckbox(Atlas.OverlayVisibilityRule.CheckboxShows(_userPavedEnabled));
     }
 
-    private void SetTextureOverlayEnabled(RoadKind kind, bool enabled, ref bool? applied)
+    private void SetTextureOverlayEnabled(RoadKind kind, bool enabled)
     {
-        if (applied == enabled)
-        {
-            return;
-        }
-
+        // RC11 feedback 1: NO applied-state cache. Jötunn's own panel
+        // listener writes Enabled before ours runs, so any local cache
+        // diverges exactly then — and a skipped corrective write left the
+        // texture enabled UNDER the live vector ink (the doubled-roads
+        // report). The Jötunn setter no-ops on unchanged values, so the
+        // unconditional write costs nothing.
         if (!TryGetOverlay(kind, out MinimapManager.MapOverlay? overlay))
         {
             return;
@@ -153,7 +152,6 @@ internal sealed class RoadOverlayRenderer
         try
         {
             overlay!.Enabled = enabled;
-            applied = enabled;
         }
         catch (Exception exception)
         {

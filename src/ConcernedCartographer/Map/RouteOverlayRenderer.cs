@@ -38,7 +38,6 @@ internal sealed class RouteOverlayRenderer
     private readonly OverlayUserToggleHook _toggleHook = new();
     private MinimapManager.MapOverlay? _overlay;
     private bool _userEnabled = true;
-    private bool? _appliedEnabled;
     private bool _lastSuppressed;
 
     public RouteOverlayRenderer(CartographerSettings settings, ManualLogSource log)
@@ -75,13 +74,17 @@ internal sealed class RouteOverlayRenderer
 
     private void ApplyVisibility()
     {
+        // RC11 feedback 1: unconditional write, no applied-state cache —
+        // Jötunn's own listener writes Enabled first on checkbox clicks,
+        // so a cache diverges exactly when it matters (see
+        // RoadOverlayRenderer.SetTextureOverlayEnabled). The setter no-ops
+        // on unchanged values.
         bool effective = OverlayVisibilityRule.EffectiveTexture(_userEnabled, _lastSuppressed);
-        if (_appliedEnabled != effective && TryGetOverlay(out MinimapManager.MapOverlay? overlay))
+        if (TryGetOverlay(out MinimapManager.MapOverlay? overlay))
         {
             try
             {
                 overlay!.Enabled = effective;
-                _appliedEnabled = effective;
             }
             catch (Exception exception)
             {

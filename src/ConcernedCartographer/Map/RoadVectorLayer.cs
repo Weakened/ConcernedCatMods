@@ -50,20 +50,14 @@ internal sealed class RoadVectorLayer
     private const int MaxRouteQuads = 20_000;
     private const int MaxQuadsPerRoute = 4_000;
 
-    private const float RebuildDebounceSeconds = 0.5f;
-
-    /// <summary>Rebake when the uv window width drifts one zoom step from
-    /// the baked width (positions stay exact through the transform; only
-    /// the on-screen ink width drifts between rebakes).</summary>
-    private const float ZoomStepRatio = 1.25f;
-
-    /// <summary>Slow parity rebake: picks up newly explored fog cells and
-    /// resolution changes even when road data is quiet.</summary>
-    private const float PeriodicRebuildSeconds = 30f;
-
     private readonly CartographerSettings _settings;
     private readonly ManualLogSource _log;
     private readonly RateLimitedLog _rateLimited;
+
+    // RC11 feedback 3: the rebake decision is a pure, sweep-tested state
+    // machine so no zoom band or invalidation window can leave roads
+    // undrawn.
+    private readonly VectorBakeScheduler _scheduler = new();
 
     private RectTransform? _container;
     private RoadVectorGraphic? _dirtGraphic;
@@ -73,10 +67,7 @@ internal sealed class RoadVectorLayer
     private bool _pavedVisible = true;
     private bool _routesVisible = true;
     private bool _routeBudgetWarned;
-    private bool _dataDirty = true;
-    private float _debounceElapsed;
-    private float _periodicElapsed;
-    private float _bakedUvWidth = -1f;
+    private bool _bakeIncompleteWarned;
     private Color32 _bakedDirtColor;
     private Color32 _bakedPavedColor;
     private bool _disabledForSession;
@@ -98,7 +89,7 @@ internal sealed class RoadVectorLayer
 
     public void MarkDataDirty()
     {
-        _dataDirty = true;
+        _scheduler.MarkDataDirty();
     }
 
     /// <summary>Mirrors the texture overlay's dirt/paved visibility (same
@@ -160,8 +151,7 @@ internal sealed class RoadVectorLayer
                 return;
             }
 
-            _debounceElapsed += unscaledDeltaTime;
-            _periodicElapsed += unscaledDeltaTime;
+            _scheduler.Advance(unscaledDeltaTime);
 
             if (minimap.m_largeRoot == null || !minimap.m_largeRoot.activeInHierarchy)
             {
@@ -195,13 +185,8 @@ internal sealed class RoadVectorLayer
                 _routeGraphic.enabled = _routesVisible;
             }
 
-            bool zoomStepChanged = _bakedUvWidth > 0f &&
-                (uvRect.width > _bakedUvWidth * ZoomStepRatio || uvRect.width < _bakedUvWidth / ZoomStepRatio);
             bool colorsChanged = !_bakedDirtColor.Equals(dirtColor) || !_bakedPavedColor.Equals(pavedColor);
-            bool debouncedData = _dataDirty && _debounceElapsed >= RebuildDebounceSeconds;
-            bool periodic = _periodicElapsed >= PeriodicRebuildSeconds;
-
-            if (_bakedUvWidth < 0f || debouncedData || zoomStepChanged || colorsChanged || periodic)
+            if (_scheduler.ShouldRebake(uvRect.width, colorsChanged))
             {
                 Rebake(atlas, routes, highContrast, image, uvRect, rect, dirtColor, pavedColor);
             }
@@ -239,8 +224,7 @@ internal sealed class RoadVectorLayer
         _dirtGraphic = CreateGraphic("CcRoadVectorDirt", _container);
         _pavedGraphic = CreateGraphic("CcRoadVectorPaved", _container);
         _routeGraphic = CreateGraphic("CcRouteVector", _container);
-        _bakedUvWidth = -1f;
-        _dataDirty = true;
+        _scheduler.Invalidate();
     }
 
     private static RoadVectorGraphic CreateGraphic(string name, RectTransform parent)
@@ -250,8 +234,15 @@ internal sealed class RoadVectorLayer
         rectTransform.SetParent(parent, worldPositionStays: false);
         rectTransform.anchorMin = Vector2.zero;
         rectTransform.anchorMax = Vector2.zero;
-        rectTransform.pivot = Vector2.zero;
-        rectTransform.sizeDelta = Vector2.zero;
+        rectTransform.pivot = new Vector2(0.5f, 0.5f);
+        // RC11 feedback 3: a REAL rect covering the whole baked map extent
+        // (±ReferenceSize/2 around the container origin). Mesh geometry
+        // ignores the rect, but rect-based clippers (RectMask2D from
+        // vanilla or any other mod) CULL a graphic whose rect misses the
+        // clip area — with the old zero-size rect that depended on where
+        // the container origin happened to sit at the current pan/zoom,
+        // which read as roads vanishing in zoom bands.
+        rectTransform.sizeDelta = new Vector2(RoadVectorMath.ReferenceSize, RoadVectorMath.ReferenceSize);
         rectTransform.anchoredPosition = Vector2.zero;
 
         var graphic = graphicObject.AddComponent<RoadVectorGraphic>();
@@ -259,14 +250,13 @@ internal sealed class RoadVectorLayer
         return graphic;
     }
 
+    private int _bakeProjectionFailures;
+
     private void Rebake(
         RoadAtlas atlas, Atlas.RouteStore? routes, bool highContrast, RawImage image,
         Rect uvRect, Rect rect, Color32 dirtColor, Color32 pavedColor)
     {
-        _dataDirty = false;
-        _debounceElapsed = 0f;
-        _periodicElapsed = 0f;
-        _bakedUvWidth = uvRect.width;
+        _bakeProjectionFailures = 0;
         _bakedDirtColor = dirtColor;
         _bakedPavedColor = pavedColor;
 
@@ -314,6 +304,9 @@ internal sealed class RoadVectorLayer
                 if (!MinimapReflection.TryWorldToMapPoint(world, out float mapX, out float mapY))
                 {
                     // No native projection, no vector layer: never guess.
+                    // The scheduler keeps this bake uncommitted so it
+                    // retries within a quarter second (RC11 feedback 3).
+                    _bakeProjectionFailures++;
                     hasPrevious = false;
                     continue;
                 }
@@ -361,6 +354,22 @@ internal sealed class RoadVectorLayer
         _pavedGraphic.CommitQuads();
 
         BakeRoutes(routes, highContrast, halfWidth, bakedUnitsPerScreenPixel);
+
+        if (_bakeProjectionFailures > 0)
+        {
+            _scheduler.OnBakeIncomplete();
+            if (!_bakeIncompleteWarned)
+            {
+                _bakeIncompleteWarned = true;
+                _log.LogWarning(
+                    $"Vector bake could not project {_bakeProjectionFailures} point(s); " +
+                    "showing the partial result and retrying (logged once per session).");
+            }
+        }
+        else
+        {
+            _scheduler.OnBakeCommitted(uvRect.width);
+        }
     }
 
     /// <summary>Bakes route polylines into the shared vector container with
@@ -403,6 +412,7 @@ internal sealed class RoadVectorLayer
             {
                 if (!MinimapReflection.TryWorldToMapPoint(new Vector3(point.X, point.Y, point.Z), out float mapX, out float mapY))
                 {
+                    _bakeProjectionFailures++;
                     continue;
                 }
 
