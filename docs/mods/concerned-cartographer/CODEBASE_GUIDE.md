@@ -458,6 +458,16 @@ user layer switches (`OverlayUserToggleHook` + the pure
 the USER state, and `UserToggledOverlay` lets the runtime mirror clicks
 into the drawer settings.
 
+### `VectorBakeScheduler.cs` (Domain, RC11 blocker 3)
+
+The vector layer's rebake decision as a pure, sweep-tested state
+machine: first-bake, zoom-step threshold (both directions), data
+debounce, periodic parity, container invalidation, and the incomplete-
+bake retry (an unprojectable bake commits nothing and retries within
+0.25 s — previously it cleared the dirty flag and left roads invisible
+until the next zoom step or 30 s tick). Change rebake behavior HERE,
+with tests, never inline in the Unity layer.
+
 ### `RoadVectorLayer.cs` (DEF-v1.0-006; routes since RC10)
 
 The high-precision large-map vector layer for roads AND routes: one
@@ -501,10 +511,21 @@ Centralizes reflection helpers for fragile/private `Minimap` state.
 
 Private-member access should be kept here or in equally narrow adapters and documented with the tested Valheim version.
 
-RC10 adds `TryGetVanillaRailContainer`: the validated deepest common
-ancestor of the seven rail buttons, so hiding the replaced rail also
-hides its backplate/decor — never the map image, hints, or large root;
-any surprise falls back to per-button hiding.
+RC11 blocker 2 replaces RC10's single-ancestor rail discovery with
+`TryGetVanillaRailContainers`: per-button-group deepest common
+ancestors (five selectors; death/boss filters) with a shared-panel path
+that hides only when every control is replaced, validated against the
+map image, hint bars, shared-map hint, and (reflected) pin roots. The
+verdict string is logged once per change by the runtime ("Vanilla rail
+chrome: …") so smoke runs can see what was hidden or why a per-button
+fallback ran. Restore paths unhide the containers first.
+
+`MapInputGate` also owns the RC11 blocker-7 wheel guard: a
+prefix/postfix on `Minimap.UpdateMap` snapshots and restores both zoom
+levels AND both uv windows while the runtime-supplied `WheelGuard`
+(pointer over CC UI / CC field focused) is true, so a wheel event
+scrolls only the UI. Fails soft to RC10 behavior without the zoom
+fields.
 
 ## 8. Pin domain (`Domain/Atlas/`)
 
@@ -682,7 +703,34 @@ Pure and tested: the single geometric dash/dot cadence walker both
 route presentations stamp through (phase carried across vertices;
 vertex density invisible; budgets respected), and the
 texture-vs-vector one-presentation truth table with the honest-checkbox
-rule.
+rule. RC11 blocker 1: the renderers write the rule's result to
+`MapOverlay.Enabled` UNCONDITIONALLY — Jötunn's own checkbox listener
+writes Enabled before CC's, so any applied-state cache diverges exactly
+then (the doubled-ink report); the Jötunn setter no-ops on unchanged
+values, so caching is pointless anyway.
+
+### `FreeDrawStrokeGate.cs` (Domain, RC11 blocker 4)
+
+Pure stroke state machine for UI Free Draw: a route entity is created
+only once a hold has travelled the freehand point spacing; click-
+twitches and pointer-over-UI holds buffer one point and evaporate.
+`RouteCommandHandler` obeys its decisions and never creates routes
+directly from raw input.
+
+### `NameHumanizer.cs` (Domain, RC11 blockers 11/14)
+
+The one prefab-name → display-name policy (case/underscore/digit
+splitting, noise-token removal, known-compound expansion). Survey
+suggested names and quick-pin prefab fallbacks both route through it;
+new name-bearing surfaces must too.
+
+### `SurveyRejectedCodec.cs` + `Persistence/SurveyRejectedPersistence.cs` (RC11 blocker 9)
+
+Pure TSV codec and per-world sidecar (`<uid>.survey-rejected.tsv`) for
+the durable Rejected list; `SurveyEngine` suppresses rejected
+identities (`IdentityKey` = cleaned prefab + world cell) from every
+future sweep until restored/accepted. Saved on autosave, world switch,
+and dispose when dirty.
 
 ## 8b. Route domain (`Domain/Atlas/`, v0.5)
 

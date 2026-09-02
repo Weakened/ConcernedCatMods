@@ -7,12 +7,59 @@ The single remaining gate is the human smoke test
 ## 1–5. Release candidate identity
 
 - **Version:** 1.0.0 (unchanged — 1.0.0 has never been publicly tagged or published)
-- **RC commit:** `16ce394bda3aef1563047b7e4df576152b2e5da9` (**RC10**, on
-  the CC-098 line — the consolidated smoke-feedback pass of 2026-09-01
-  after the owner's FOURTH road-authority report against RC8/RC9; the
-  package below was built at exactly this commit with a clean tree, and
-  the DLL's informational version embeds it).
-  RC10 delivers all 23 owner feedback items:
+- **RC commit:** RECORDED IN THE FINAL DOSSIER COMMIT (**RC11**, on the
+  CC-098 line — the smoke-fix pass of 2026-09-02 addressing all 15
+  release blockers from the owner's RC10 smoke).
+  RC11 delivers, on top of RC10:
+  **(1) authoritative overlay visibility** — the texture overlays are
+  written unconditionally from `OverlayVisibilityRule` (Jötunn's own
+  checkbox listener races any cached write; the doubled/stale ink on
+  Map Overlays toggling is gone; the Jötunn setter self-no-ops);
+  **(3) roads at every zoom** — the rebake decision extracted into the
+  pure sweep-tested `VectorBakeScheduler` (full 0.01–1.0 zoom sweep in
+  wheel steps, thresholds both directions, debounce, periodic,
+  invalidation), incomplete bakes (projection unavailable) retry within
+  0.25 s instead of clearing the dirty flag, and the vector graphics
+  carry real full-map rects so rect clippers can never cull the layer
+  in pan/zoom bands;
+  **(7) modal wheel** — a `Minimap.UpdateMap` prefix/postfix restores
+  both zoom levels and uv windows while the pointer is over CC UI or a
+  CC field is focused, so the wheel scrolls only the UI;
+  **(4/5) routes** — `FreeDrawStrokeGate` (pure, tested) creates a
+  route only for a stroke that actually travelled (fragment spam
+  impossible), stable list order + overflow count, deterministic
+  restore-latest by DeletedUtc, Snap in the bottom control area beside
+  a confirmed Clear all routes, panel 672 with an explicit no-overlap
+  budget; **(6)** RC10 vector style/cadence untouched;
+  **(9/13) durable survey rejection** — rejected observations move to a
+  persistent per-world Rejected list (`<uid>.survey-rejected.tsv`,
+  bounded 500, pure codec) with stable prefab+cell identities
+  suppressed from all future sweeps until restored/accepted from the
+  new Rejected view; the identity also dedupes repeated sweeps even
+  for zero-radius rules;
+  **(10) rules in the UI** — the Survey panel's Rules view lists,
+  enables/disables, deletes, and adds rules (enabled rules keep the
+  5-field RC10 file shape; disabled rows carry "off"; the tsv remains
+  the shareable import/export with Reload as advanced tooling);
+  **(8/12) survey copy/UI** — no player-facing console pointers, the
+  top-left notice points at [Survey], three-view layout with deliberate
+  spacing and paging;
+  **(11/14) humanized names** — the shared `NameHumanizer`
+  (case/underscore/digit splitting, compound expansion) behind survey
+  rows, survey pins, and quick pins: "Raspberry Bush", never
+  "Raspberrybush";
+  **(2) vanilla chrome** — per-button-group validated rail containers
+  (shared-panel path included) hide backplates/decor/raycast objects
+  with a once-per-change diagnostic log and pixel-perfect restore;
+  **(15)** RC10's action-identity road authority, marker art, typing
+  safety, quick-pin candidates, shared vector rendering, and palette
+  are preserved (spot-checked by smoke R7.13).
+  **Retires RC10 `16ce394b`/`98a1947` (ZIP `EA523400…`, failed the
+  owner's RC10 smoke on the 15 blockers above).**
+- RC10's identity block is preserved below for the record; its 23
+  feedback items remain in RC11 as amended:
+- (RC10) **RC commit** `16ce394bda3aef1563047b7e4df576152b2e5da9` —
+  delivered all 23 owner feedback items:
   **(P1, DEF-v1.0-007) road authority by ACTION IDENTITY** — the
   live game places `mud_road_v2` for the hoe's "Level ground" and
   `path_v2` for "Pathen" (verified in the owner's own Player.log and
@@ -141,19 +188,17 @@ The single remaining gate is the human smoke test
   as amended).)
 - **ZIP:** `artifacts\thunderstore\TheConcernedCat-ConcernedCartographer-1.0.0.zip`
   (built at the RC commit; an identical immutable copy is at
-  `artifacts\rc10\TheConcernedCat-ConcernedCartographer-1.0.0-RC10.zip`
-  — verify the hash below before importing. The retired RC8 copy under
-  `artifacts\rc8\` — ZIP `AF267AC2…`, DLL `E9904771…` — must NOT be
+  `artifacts\rc11\TheConcernedCat-ConcernedCartographer-1.0.0-RC11.zip`
+  — verify the hash below before importing. The retired copies under
+  `artifacts\rc10\` (ZIP `EA523400…`, DLL `A350D0CE…`) and
+  `artifacts\rc8\` (ZIP `AF267AC2…`, DLL `E9904771…`) must NOT be
   tested or uploaded.)
-- **ZIP SHA-256:** `EA52340042D6FB29DA52FB516E7BC2E44EAA0320C93768EDA9BF67E431EAC274`
-  (304,418 bytes — fresh RC10 bytes; the retired RC8 ZIP `AF267AC2…` is
-  never reused)
-- **Plugin DLL SHA-256:** `A350D0CE0B13A9A1C4BC686EBD514F5DFE65B32C8F07F203DC8708D9F552B9AA`
-  (431,616 bytes; the DLL inside the ZIP verified hash-identical to the
-  Release build output; informational version
-  `1.0.0+16ce394bda3aef1563047b7e4df576152b2e5da9` verified in the DLL;
-  the 12 `CC.Icons.cc-*.png` sprite resources re-verified embedded with
-  the RC10 hand-drawn art)
+- **ZIP SHA-256:** RECORDED IN THE FINAL DOSSIER COMMIT (fresh RC11
+  bytes; retired hashes are never reused)
+- **Plugin DLL SHA-256:** RECORDED IN THE FINAL DOSSIER COMMIT (the DLL
+  inside the ZIP must be hash-identical to the Release build output;
+  informational version `1.0.0+<RC11 commit>`; the 12
+  `CC.Icons.cc-*.png` sprite resources re-verified embedded)
 - **Assembly metadata (verified in the DLL):** Company "The Concerned Cat",
   Product "Concerned Cartographer", Copyright © 2026 Eren Cansunar,
   RepositoryUrl embedded, informational version `1.0.0+<RC commit>`.
@@ -283,6 +328,25 @@ matrix (1080p/1440p × UiScale 0.8/1.0/1.6) remains derivation-based in
 code and is verified live by smoke R6.15 — a game UI cannot be
 screenshot-proven from the conveyor.
 
+**Owner RC10 smoke-fix pass (2026-09-02, RC11) — 15 release blockers,
+all fixed:** the RC10 smoke confirmed the P1 road-authority fix live
+(the owner's LogOutput.log shows "Terrain action classified:
+level-ground (mud_road_v2) … => no road" and "pathen (path_v2) … =>
+Dirt road" exactly as designed) but failed on overlay toggle
+double-render/stale ink, zoom-band road holes, wheel-over-UI zooming,
+route fragment spam and list churn, routes-panel overlap, remaining
+vanilla backplates, survey reject amnesia and duplicate observations,
+console-pointing survey copy, file-only rule editing, and raw prefab
+names ("Raspberrybush"). Root causes and fixes are itemized in the
+RC11 identity above; each carries focused regression tests where the
+logic is pure (`VectorBakeSchedulerTests`, `FreeDrawStrokeGateTests`,
+`SurveyRc11Tests`, `NameHumanizerTests`, updated
+`QuickPinSuggesterTests`/`SurveyTests`), and the Unity-side fixes
+(unconditional overlay writes, graphic rects, wheel snapshot/restore,
+rail containers) are smoke rows R7.1–3/12 with a once-per-change
+"Vanilla rail chrome:" diagnostic so the smoke run records WHAT was
+hidden.
+
 Owner-approved v1 map UX direction (2026-08-28, #96), implemented in
 RC4 on top of the RC3 fixes: the map is button-first — [Atlas]
 button with tooltip, contextual **Upgrade & Edit** (adoptable vanilla;
@@ -359,8 +423,18 @@ release blockers, all addressed in the previous RC:
 
 ## 8. Automated evidence (at the RC commit)
 
-- **419/419 tests** in the game-free core suite (Release configuration,
-  re-run at the RC10 commit): everything below plus the RC10 suites —
+- **462/462 tests** in the game-free core suite (Release configuration,
+  re-run at the RC11 commit): everything below plus the RC11 suites —
+  `VectorBakeSchedulerTests` (9: full zoom sweep in wheel steps,
+  threshold boundaries both directions, debounce, periodic,
+  incomplete-bake retry, invalidation), `FreeDrawStrokeGateTests` (6:
+  twitch-discard, travel threshold with first-point carry,
+  pointer-over-UI stroke end, hold-without-movement, reset),
+  `SurveyRc11Tests` + `NameHumanizerTests` (28: durable rejection and
+  restore/accept, identity dedupe incl. zero-radius rules, rejected
+  codec round-trip + malformed rows, rule enable/disable file
+  round-trip, session reset semantics, the humanizer matrix, humanized
+  names flowing into pins) — and the RC10 suites —
   `TerrainActionClassifierTests` (17: the exact Level-carries-Dirt
   failure mode, every terraform/unknown action refused, paint-identity
   agreement, selection corroboration, token fallback, clone/name
@@ -452,26 +526,25 @@ defaults.
 ## 18. Smoke test
 
 `docs/mods/concerned-cartographer/PRE_RELEASE_SMOKE_TEST.md` — **the
-owner starts at the NEW SHORT section R6 (the RC10 mini-smoke: fifteen
-items, one per feedback directive, with extra weight on the
-fourth-report road-authority row), then R5 items 4–12 (R5.1–3 are
-superseded), then R3 (blocks A–L) and R4 (blocks M–S), NOT at the
-top.** The full 2.5–4 h checklist is not restarted; sections the
-earlier passes already completed stay completed. Only after R6 + R5 +
-R3 A–L + R4 M–S pass does the owner resume
-routes/world-isolation/multiplayer.
+owner starts at the NEW SHORT section R7 (the RC11 smoke-fix: thirteen
+rows, one per blocker cluster), then the still-applicable R6 rows
+(1, 2, 6, 7, 9–12, 15), then R5 items 4–12, then R3 (blocks A–L) and
+R4 (blocks M–S), NOT at the top.** The full 2.5–4 h checklist is not
+restarted; sections the earlier passes already completed stay
+completed. Only after R7 + R6 + R5 + R3 A–L + R4 M–S pass does the
+owner resume routes/world-isolation/multiplayer.
 
 ## 19. Remaining Git commands (run after the smoke test passes)
 
 The RC lives on `feat/cc-098-v1-completion` (not yet on main). After
-R6 + R5 + R3 + R4 pass:
+R7 + R6 + R5 + R3 + R4 pass:
 
 ```powershell
 # 1. Merge the completion branch to main (PR or fast-forward — owner's call):
 git checkout main; git merge feat/cc-098-v1-completion
 git push origin main
-# 2. Tag the RC10 commit named in the identity section (now in main history):
-git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" 16ce394bda3aef1563047b7e4df576152b2e5da9
+# 2. Tag the RC11 commit named in the identity section (now in main history):
+git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" <RC11-commit-from-identity-section>
 git push origin concerned-cartographer/v1.0.0
 gh release create concerned-cartographer/v1.0.0 artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-1.0.0.zip --title "Concerned Cartographer 1.0.0" --notes-file src/ConcernedCartographer/Package/CHANGELOG.md
 ```

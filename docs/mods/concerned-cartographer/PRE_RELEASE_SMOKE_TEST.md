@@ -5,17 +5,89 @@ manual-only verification deferred by the autonomous conveyor (OPS-001
 rev 2) from v0.3 onward and is finalized against the exact v1.0 RC. Rows
 marked **BLOCKS** must pass before publication; others are record-and-ship.
 
-> Status: FINAL for v1.0, amended 2026-09-01 (seventh amendment): the
-> owner's consolidated RC8/RC9 feedback (fourth road-authority report
-> plus 22 further items) is implemented in **RC10**; RC8 is retired —
-> do not test, tag, or upload it. **Do NOT restart the full 2.5–4 h
-> checklist.** Run the NEW section **R6 (RC10 mini-smoke)** first, then
-> R5 items not superseded by R6 (R5.1–3 road rows are superseded; the
-> rest still apply), then R3 A–L and R4 M–S as amended, then resume the
-> shortened golden path from where the second pass stopped. Test only
-> the RC ZIP named in RELEASE_DOSSIER.md.
+> Status: FINAL for v1.0, amended 2026-09-02 (eighth amendment): the
+> owner's RC10 smoke found 15 release blockers, implemented in **RC11**;
+> RC10 is retired — do not test, tag, or upload it. **Do NOT restart
+> the full 2.5–4 h checklist.** Run the NEW section **R7 (RC11
+> smoke-fix)** first, then the still-applicable R6 rows (R6.3–5, 8, 13,
+> 14 are superseded by R7), then R5 items 4–12, then R3 A–L and R4 M–S
+> as amended, then resume the shortened golden path from where the
+> second pass stopped. Test only the RC ZIP named in
+> RELEASE_DOSSIER.md.
 
-## R6. RC10 consolidated-feedback mini-smoke — RUN FIRST (short)
+## R7. RC11 smoke-fix mini-smoke — RUN FIRST (short)
+
+Every item verifies one RC11 blocker. All **BLOCK** unless marked
+otherwise. Prep: the RC10 disposable world (its roads/routes/survey
+data make the regressions visible), hoe, cultivator, berry bushes.
+
+1. **Overlay toggles clean**: on the large map with roads and a route
+   visible, toggle each of "CC Dirt Paths" / "CC Paved Roads" /
+   "CC Routes" in **Map Overlays** OFF and ON several times, fast and
+   slow, map open and after reopening — at every moment there is
+   exactly ONE presentation of each layer: no doubled ink, no stale
+   ink left behind while a layer is off, and the checkbox always
+   matches what is visible.
+2. **Road zoom sweep**: stand on a freshly built Pathen road. Fully
+   zoom IN, then wheel out one step at a time to fully zoomed OUT,
+   then back — the road (and a paved stretch) is visibly present at
+   EVERY step, including 4+ steps out. Pan far away and back at
+   several zooms — no zoom band or pan position may make roads vanish.
+3. **Wheel over UI**: open each panel (Markers, Survey, Routes, Atlas,
+   Share, Settings) and scroll the wheel with the pointer over the
+   panel, over its lists, and inside a focused text field — the panel
+   scrolls (where it scrolls), the map underneath NEVER zooms, and no
+   zoom jitter appears. Wheel over the open map still zooms normally.
+4. **Route fragments gone**: in Free Draw, click the map a dozen times
+   without dragging — NO routes appear in the list. Draw three real
+   strokes — exactly three routes, stable alphabetical order that does
+   not shuffle between refreshes. Delete two — they leave the list and
+   STAY gone (including after restart); Restore brings back the most
+   recently deleted one.
+5. **Routes panel layout**: with a route selected and a long status
+   message showing, nothing overlaps — mode line, selection line,
+   list, operation buttons, color swatches, output, and the bottom row
+   (Snap to roads + Clear all routes) each in their own space at
+   UiScale 0.8/1.0/1.6. Clear all requires the click-again confirm and
+   empties the list.
+6. **Route/road style preserved**: large-map roads and routes still
+   share the RC10 vector look — same width family, tight dotted
+   cadence, zoom-stable dashes; minimap unchanged.
+7. **Survey reject is durable**: enable Survey near berry bushes;
+   reject an observation — it moves to the **Rejected** view and does
+   NOT reappear in Pending while you stand there (watch two sweep
+   cycles), nor after a restart. Restore it — it returns to Pending
+   once; Accept from Rejected pins it directly.
+8. **No duplicate observations**: stand still among several bushes for
+   a minute — each physical bush appears at most once in Pending, ever.
+9. **Rules in the UI**: in the **Rules** view, disable a rule (its
+   matches stop arriving), re-enable it, delete one, and add
+   `greydwarf_root*` with a cycled category — all without touching
+   survey-rules.tsv; the file reflects the edits afterwards
+   (record-and-ship: open it once to confirm).
+10. **Names are human**: survey rows, accepted survey pins, and Quick
+    Pins read "Raspberry Bush" / "Silver Vein" / "Treasure Chest
+    Meadows" style names — no "Raspberrybush", no prefab ids anywhere
+    a player can see.
+11. **Survey copy & spacing**: no Survey panel text mentions cc_survey
+    or any console command; the top-left notice points at [Survey];
+    header, note, status, and result rows sit clearly apart in all
+    three views at UiScale 0.8/1.0/1.6.
+12. **Vanilla chrome fully gone**: with CC owning the map, the right
+    side shows NO orphaned backplate, decor, or dead click-blockers
+    where the vanilla rail was (the log prints one "Vanilla rail
+    chrome:" line naming what was hidden). Bottom control tips stay.
+    `Map/ShowVanillaMapControls = true` and disabling the mod restore
+    the vanilla rail pixel-perfect.
+13. **RC10 behavior intact**: spot-check Level ground (still never
+    inks; classifier log line still appears), marker art, typing
+    safety in fields, palette drag/scroll, instant cc:* sprite on
+    placement.
+
+Only after R7 passes, run the still-applicable R6 rows (1, 2, 6, 7,
+9–12, 15), then R5 items 4–12, then R3 A–L and R4 M–S.
+
+## R6. RC10 consolidated-feedback mini-smoke (amended by R7)
 
 Every item verifies one RC10 feedback directive. All **BLOCK** unless
 marked otherwise. Prep: disposable world, hoe (+ stone for Paved road),
