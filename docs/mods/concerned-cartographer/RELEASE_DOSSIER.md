@@ -7,9 +7,11 @@ The single remaining gate is the human smoke test
 ## 1–5. Release candidate identity
 
 - **Version:** 1.0.0 (unchanged — 1.0.0 has never been publicly tagged or published)
-- **RC commit:** RECORDED IN THE FINAL DOSSIER COMMIT BELOW (**RC10**, on
+- **RC commit:** `16ce394bda3aef1563047b7e4df576152b2e5da9` (**RC10**, on
   the CC-098 line — the consolidated smoke-feedback pass of 2026-09-01
-  after the owner's FOURTH road-authority report against RC8/RC9).
+  after the owner's FOURTH road-authority report against RC8/RC9; the
+  package below was built at exactly this commit with a clean tree, and
+  the DLL's informational version embeds it).
   RC10 delivers all 23 owner feedback items:
   **(P1, DEF-v1.0-007) road authority by ACTION IDENTITY** — the
   live game places `mud_road_v2` for the hoe's "Level ground" and
@@ -143,13 +145,15 @@ The single remaining gate is the human smoke test
   — verify the hash below before importing. The retired RC8 copy under
   `artifacts\rc8\` — ZIP `AF267AC2…`, DLL `E9904771…` — must NOT be
   tested or uploaded.)
-- **ZIP SHA-256:** RECORDED IN THE FINAL DOSSIER COMMIT (fresh RC10
-  bytes; never reuses the RC8 hash)
-- **Plugin DLL SHA-256:** RECORDED IN THE FINAL DOSSIER COMMIT (the DLL
-  inside the ZIP must be hash-identical to the Release build output;
-  informational version `1.0.0+<RC10 commit>`; the 12
-  `CC.Icons.cc-*.png` sprite resources re-verified embedded with the
-  RC10 hand-drawn art)
+- **ZIP SHA-256:** `EA52340042D6FB29DA52FB516E7BC2E44EAA0320C93768EDA9BF67E431EAC274`
+  (304,418 bytes — fresh RC10 bytes; the retired RC8 ZIP `AF267AC2…` is
+  never reused)
+- **Plugin DLL SHA-256:** `A350D0CE0B13A9A1C4BC686EBD514F5DFE65B32C8F07F203DC8708D9F552B9AA`
+  (431,616 bytes; the DLL inside the ZIP verified hash-identical to the
+  Release build output; informational version
+  `1.0.0+16ce394bda3aef1563047b7e4df576152b2e5da9` verified in the DLL;
+  the 12 `CC.Icons.cc-*.png` sprite resources re-verified embedded with
+  the RC10 hand-drawn art)
 - **Assembly metadata (verified in the DLL):** Company "The Concerned Cat",
   Product "Concerned Cartographer", Copyright © 2026 Eren Cansunar,
   RepositoryUrl embedded, informational version `1.0.0+<RC commit>`.
@@ -467,7 +471,7 @@ R6 + R5 + R3 + R4 pass:
 git checkout main; git merge feat/cc-098-v1-completion
 git push origin main
 # 2. Tag the RC10 commit named in the identity section (now in main history):
-git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" <RC10-commit-from-identity-section>
+git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" 16ce394bda3aef1563047b7e4df576152b2e5da9
 git push origin concerned-cartographer/v1.0.0
 gh release create concerned-cartographer/v1.0.0 artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-1.0.0.zip --title "Concerned Cartographer 1.0.0" --notes-file src/ConcernedCartographer/Package/CHANGELOG.md
 ```
