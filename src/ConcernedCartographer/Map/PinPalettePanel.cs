@@ -207,7 +207,7 @@ internal sealed class PinPalettePanel
     /// root, so only Escape needs handling here.</summary>
     public void HandleFrame()
     {
-        if (IsVisible && Input.GetKeyDown(KeyCode.Escape))
+        if (IsVisible && Input.GetKeyDown(KeyCode.Escape) && !CcTextFocus.EscapeShouldOnlyBlur())
         {
             Hide();
         }

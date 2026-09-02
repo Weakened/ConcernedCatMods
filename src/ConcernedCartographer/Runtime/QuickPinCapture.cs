@@ -61,7 +61,23 @@ internal sealed class QuickPinCapture
                 }
             }
 
-            QuickPinSuggester.Suggestion suggestion = QuickPinSuggester.Suggest(hoverName, target.name);
+            // RC10 feedback 15: offer every identity in preference order —
+            // the raw hover object, the owning ZNetView prefab root, the
+            // transform root — so a technical child name ("Collider (1)")
+            // never becomes the pin name while the real prefab still can.
+            var nameCandidates = new System.Collections.Generic.List<string?> { target.name };
+            var view = target.GetComponentInParent<ZNetView>();
+            if (view != null && view.gameObject != null)
+            {
+                nameCandidates.Add(view.gameObject.name);
+            }
+
+            if (target.transform.root != null)
+            {
+                nameCandidates.Add(target.transform.root.name);
+            }
+
+            QuickPinSuggester.Suggestion suggestion = QuickPinSuggester.Suggest(hoverName, nameCandidates);
             Vector3 position = target.transform.position;
             var point = new RoadPoint(position.x, position.y, position.z);
 

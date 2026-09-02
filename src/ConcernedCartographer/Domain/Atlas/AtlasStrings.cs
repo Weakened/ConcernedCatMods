@@ -64,6 +64,7 @@ internal static class AtlasStrings
         ["system.visibleToOthers"] = "Visible to other players",
         ["system.death"] = "Death markers",
         ["system.boss"] = "Boss markers",
+        ["share.instructions"] = "Broadcast your shared scope; preview an inbox entry, then apply with an explicit conflict choice.",
         ["routes.title"] = "Routes",
         ["routes.explainer"] = "Routes are map planning overlays: draw or waypoint a plan, style and share it. They never move your character.",
         ["routes.nameHint"] = "new route name",

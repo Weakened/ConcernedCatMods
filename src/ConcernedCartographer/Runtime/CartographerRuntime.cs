@@ -21,6 +21,11 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly PinAdapter _pinAdapter;
     private readonly RateLimitedLog _rateLimited;
 
+    // RC10 feedback 14: held exactly while a CC text field is focused so
+    // typing can never fire Valheim keys. Balanced by construction
+    // (ModalInputBlock owns at most one Jötunn BlockInput request).
+    private readonly ModalInputBlock _textFocusBlock = new(Jotunn.Managers.GUIManager.BlockInput);
+
     // Removing ink requires a full overlay rebuild (pixels cannot be
     // un-drawn incrementally); coalesce bursts of hoe swings into one
     // redraw at most this often.
@@ -284,6 +289,7 @@ internal sealed class CartographerRuntime : IDisposable
             // to the player's own layer choice too (RC8-1) — a disabled
             // mod may never strand the map with suppressed ink.
             MapInputGate.ConsumeClicks = false;
+            _textFocusBlock.Release();
             if (!_settings.Enabled.Value)
             {
                 _renderer.EnsureTextureFallback();
@@ -306,7 +312,23 @@ internal sealed class CartographerRuntime : IDisposable
         }
 
         _drawerPanel.HandleFrame();
-        if (!Minimap.IsOpen() && !Minimap.InTextInput())
+
+        // RC10 feedback 14: while any CC text field is focused, typing is
+        // text — a Jötunn input block suppresses Valheim keys (movement,
+        // map toggle) for exactly that long, and the CC hotkey blocks
+        // below consult the same state. Blur releases within one frame;
+        // nothing is held when no field is focused.
+        bool typingInField = CcTextFocus.AnyFieldFocused();
+        if (typingInField)
+        {
+            _textFocusBlock.Acquire();
+        }
+        else
+        {
+            _textFocusBlock.Release();
+        }
+
+        if (!Minimap.IsOpen() && !Minimap.InTextInput() && !typingInField)
         {
             if (_quickPinArmed)
             {
@@ -331,7 +353,7 @@ internal sealed class CartographerRuntime : IDisposable
             }
         }
 
-        if (Minimap.IsOpen() && !Minimap.InTextInput())
+        if (Minimap.IsOpen() && !Minimap.InTextInput() && !typingInField)
         {
             // The CC map surface (#96/#100): toolbar, contextual pin
             // actions, the enhanced pin palette, and the edit hint — on
@@ -429,6 +451,7 @@ internal sealed class CartographerRuntime : IDisposable
             _workbenchPanel.Close();
             _mapUi.CloseAllSurfaces();
             MapInputGate.ConsumeClicks = false;
+            _textFocusBlock.Release();
             _quickPinArmed = false;
             _pipeline?.EndAllStrokes();
             _displayController.Reset();
@@ -959,6 +982,18 @@ internal sealed class CartographerRuntime : IDisposable
         {
             // Missing toggle just stays vanilla.
         }
+
+        // RC10 feedback 19: when EVERY rail control is replaced, hide the
+        // rail's own validated container too, so no orphaned backplate or
+        // decor lingers. Any layout surprise falls back to the per-button
+        // behavior above; the container comes back through this same path
+        // the moment any control should show again.
+        bool wantContainerVisible = wantPlaceablesVisible || wantRailVisible;
+        if (MinimapReflection.TryGetVanillaRailContainer(out GameObject railContainer) &&
+            railContainer.activeSelf != wantContainerVisible)
+        {
+            railContainer.SetActive(wantContainerVisible);
+        }
     }
 
     /// <summary>Unconditional vanilla-rail restore for teardown.</summary>
@@ -966,6 +1001,12 @@ internal sealed class CartographerRuntime : IDisposable
     {
         try
         {
+            if (MinimapReflection.TryGetVanillaRailContainer(out GameObject railContainer) &&
+                !railContainer.activeSelf)
+            {
+                railContainer.SetActive(true);
+            }
+
             foreach (GameObject button in MinimapReflection.GetPlaceableIconButtons())
             {
                 if (button != null && !button.activeSelf)
@@ -1872,6 +1913,7 @@ internal sealed class CartographerRuntime : IDisposable
         _workbenchPanel.Close();
         RestoreVanillaPalette();
         _overlayRelabel.Restore();
+        _textFocusBlock.Release();
         MapInputGate.Uninstall();
         MapPointerGuard.Clear();
         SaveIfDirty();

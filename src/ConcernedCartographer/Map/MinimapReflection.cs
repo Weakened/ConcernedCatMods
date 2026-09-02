@@ -319,6 +319,111 @@ internal static class MinimapReflection
         }
     }
 
+    /// <summary>RC10 feedback 19: the vanilla right rail's own container —
+    /// the deepest common ancestor of every rail control (five placeable
+    /// selectors, death/boss filters, the visible-to-others toggle) — so
+    /// hiding the rail also hides its backplate and decor, not just the
+    /// child buttons. Strictly validated: the ancestor must live under the
+    /// large root, must not be the large root itself, and must not contain
+    /// the map image or any bottom hint bar; anything unexpected returns
+    /// false and callers keep the per-button fallback. No fake covers, no
+    /// destruction — one SetActive on a vanilla object, fully restored by
+    /// the same path.</summary>
+    public static bool TryGetVanillaRailContainer(out GameObject container)
+    {
+        container = null!;
+        try
+        {
+            Minimap minimap = Minimap.instance;
+            if (minimap == null || minimap.m_largeRoot == null)
+            {
+                return false;
+            }
+
+            var members = new System.Collections.Generic.List<Transform>();
+            foreach (GameObject button in GetPlaceableIconButtons())
+            {
+                if (button != null)
+                {
+                    members.Add(button.transform);
+                }
+            }
+
+            foreach (GameObject button in GetSystemFilterButtons())
+            {
+                if (button != null)
+                {
+                    members.Add(button.transform);
+                }
+            }
+
+            // All seven rail buttons must be present; a partial rail means
+            // an unexpected layout and the fallback is safer. The
+            // visible-to-others toggle is deliberately NOT part of the
+            // ancestor computation — it lives outside the icon rail in
+            // some layouts and keeps its own per-object visibility.
+            if (members.Count < 7)
+            {
+                return false;
+            }
+
+            Transform? ancestor = members[0].parent;
+            while (ancestor != null)
+            {
+                bool containsAll = true;
+                foreach (Transform member in members)
+                {
+                    if (!member.IsChildOf(ancestor))
+                    {
+                        containsAll = false;
+                        break;
+                    }
+                }
+
+                if (containsAll)
+                {
+                    break;
+                }
+
+                ancestor = ancestor.parent;
+            }
+
+            Transform largeRoot = minimap.m_largeRoot.transform;
+            if (ancestor == null || ancestor == largeRoot || !ancestor.IsChildOf(largeRoot))
+            {
+                return false;
+            }
+
+            if (minimap.m_mapImageLarge != null && minimap.m_mapImageLarge.transform.IsChildOf(ancestor))
+            {
+                return false;
+            }
+
+            if (minimap.m_sharedMapHint != null && minimap.m_sharedMapHint.transform.IsChildOf(ancestor))
+            {
+                return false;
+            }
+
+            if (minimap.m_hints != null)
+            {
+                foreach (GameObject hint in minimap.m_hints)
+                {
+                    if (hint != null && hint.transform.IsChildOf(ancestor))
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            container = ancestor.gameObject;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     /// <summary>The death/boss filter buttons on the vanilla rail (parents
     /// of the public highlight images), for the full-rail replacement.</summary>
     public static System.Collections.Generic.List<GameObject> GetSystemFilterButtons()

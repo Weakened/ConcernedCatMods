@@ -172,7 +172,7 @@ internal sealed class AtlasDrawerPanel
 
     public void HandleFrame()
     {
-        if (IsVisible && Input.GetKeyDown(KeyCode.Escape))
+        if (IsVisible && Input.GetKeyDown(KeyCode.Escape) && !CcTextFocus.EscapeShouldOnlyBlur())
         {
             Hide();
         }

@@ -29,7 +29,7 @@ internal sealed class SharePanel : CcSidePanel
     private string _selectedAuthor = "";
 
     public SharePanel(ManualLogSource log, Func<string[], string> execute, Func<List<string>> inboxAuthors)
-        : base(log, "share.title", 384f, 560f)
+        : base(log, "share.title", 384f, 584f)
     {
         _execute = execute;
         _inboxAuthors = inboxAuthors;
@@ -37,15 +37,28 @@ internal sealed class SharePanel : CcSidePanel
 
     protected override void BuildContent(GUIManager gui, Font font, Color headerColor, ref float y)
     {
-        _status = AddBody(gui, font, "", 12, Color.white, ref y, 60f);
+        // RC10 feedback 18: a clear two-column grid. Every button sits on
+        // one of two column centers (±quarter of the content width) with a
+        // shared width, so nothing can overlap or overhang the panel edge,
+        // and the status block gets room for its full multi-line text.
+        float contentWidth = Width - 44f;
+        float columnLeft = -contentWidth / 4f;
+        float columnRight = contentWidth / 4f;
+        float columnWidth = (contentWidth / 2f) - 8f;
 
-        float left = -(Width - 44f) / 2f;
-        AddButton(gui, AtlasStrings.Get("share.now"), left + 80f, y, 160f, 28f, () =>
+        Text instructions = AddBody(
+            gui, font, AtlasStrings.Get("share.instructions"), 11,
+            new Color(0.85f, 0.82f, 0.7f, 1f), ref y, 30f);
+        instructions.alignment = TextAnchor.UpperCenter;
+
+        _status = AddBody(gui, font, "", 12, Color.white, ref y, 76f);
+
+        AddButton(gui, AtlasStrings.Get("share.now"), columnLeft, y, columnWidth, 28f, () =>
         {
             Report(_execute(new[] { "share" }));
             RefreshStatus();
         });
-        AddButton(gui, "Clear inbox", left + 250f, y, 130f, 28f, () =>
+        AddButton(gui, "Clear inbox", columnRight, y, columnWidth, 28f, () =>
         {
             Report(_execute(new[] { "clear" }));
             _selectedAuthor = "";
@@ -57,7 +70,7 @@ internal sealed class SharePanel : CcSidePanel
         {
             int captured = index;
             GameObject row = gui.CreateButton("", Panel!.transform,
-                new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, y), Width - 44f, 24f);
+                new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, y), contentWidth, 24f);
             _rows[index] = row;
             _rowLabels[index] = row.GetComponentInChildren<Text>();
             row.GetComponent<Button>().onClick.AddListener(() =>
@@ -71,11 +84,11 @@ internal sealed class SharePanel : CcSidePanel
         }
 
         y -= 8f;
-        AddButton(gui, "Apply (keep mine)", left + 92f, y, 184f, 28f, () => Apply("mine"));
-        AddButton(gui, "Apply (take theirs)", left + 284f, y, 184f, 28f, () => Apply("theirs"));
+        AddButton(gui, "Apply (keep mine)", columnLeft, y, columnWidth, 28f, () => Apply("mine"));
+        AddButton(gui, "Apply (take theirs)", columnRight, y, columnWidth, 28f, () => Apply("theirs"));
         y -= 36f;
 
-        _output = AddBody(gui, font, "", 11, Color.white, ref y, 190f);
+        _output = AddBody(gui, font, "", 11, Color.white, ref y, 150f);
     }
 
     protected override void OnShown()

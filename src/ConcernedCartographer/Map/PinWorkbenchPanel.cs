@@ -196,7 +196,7 @@ internal sealed class PinWorkbenchPanel
                 return;
             }
 
-            if (Input.GetKeyDown(KeyCode.Escape))
+            if (Input.GetKeyDown(KeyCode.Escape) && !CcTextFocus.EscapeShouldOnlyBlur())
             {
                 Close();
             }

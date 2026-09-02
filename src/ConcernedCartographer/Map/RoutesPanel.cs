@@ -64,8 +64,9 @@ internal sealed class RoutesPanel : CcSidePanel
     public override void HandleFrame()
     {
         // Escape first ends an active draw mode; only then does it close
-        // the panel (base behavior).
-        if (IsVisible && ModeActive && Input.GetKeyDown(KeyCode.Escape))
+        // the panel (base behavior). Typing in a field outranks both.
+        if (IsVisible && ModeActive && Input.GetKeyDown(KeyCode.Escape) &&
+            !CcTextFocus.EscapeShouldOnlyBlur())
         {
             _handler()?.UiStop();
             RefreshMode();

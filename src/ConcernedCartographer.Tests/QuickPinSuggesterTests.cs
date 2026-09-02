@@ -20,19 +20,75 @@ public class QuickPinSuggesterTests
     }
 
     [Fact]
-    public void HoverName_MarkupAndNewlines_AreStripped()
+    public void HoverName_KeepsOnlyTheFirstLine_WithoutMarkup()
     {
+        // Interaction prompts live on later hover lines; they must never
+        // leak into a pin name (RC10 feedback 15).
         string name = QuickPinSuggester.CleanName("Silver vein\n<color=yellow>[E] Mine</color>", "rock_silver(Clone)");
-        Assert.Equal("Silver vein[E] Mine", name.Replace("  ", " ").Trim());
+        Assert.Equal("Silver vein", name);
     }
 
     [Theory]
     [InlineData(null, "TreasureChest_meadows(Clone)", "Treasurechest meadows")]
     [InlineData("", "portal_wood(Clone)", "Portal wood")]
     [InlineData("$piece_workbench", "piece_workbench(Clone)", "Piece workbench")]
-    [InlineData(null, null, "Marked spot")]
+    [InlineData(null, null, "Marked object")]
     public void PrefabFallback_CleansClonesUnderscoresAndTokens(string? hover, string? prefab, string expected)
     {
         Assert.Equal(expected, QuickPinSuggester.CleanName(hover, prefab));
+    }
+
+    [Theory]
+    [InlineData("Collider (1)")]
+    [InlineData("Collider")]
+    [InlineData("collider2")]
+    [InlineData("trigger")]
+    [InlineData("mesh")]
+    [InlineData("Cube")]
+    [InlineData("LOD1")]
+    [InlineData("snappoint (3)")]
+    [InlineData("attach")]
+    [InlineData("GameObject (7)")]
+    [InlineData("(Clone)")]
+    [InlineData("  ")]
+    public void TechnicalEngineNames_AreNeverPinNames(string technical)
+    {
+        // THE RC10 feedback 15 regression: hovering a chest's collider
+        // child must name the pin after the chest's prefab, not the
+        // collider.
+        QuickPinSuggester.Suggestion suggestion = QuickPinSuggester.Suggest(
+            hoverName: null,
+            new[] { technical, "TreasureChest_meadows(Clone)", "SomeRoot" });
+
+        Assert.Equal("Treasurechest meadows", suggestion.Name);
+        Assert.True(QuickPinSuggester.IsTechnicalName(technical));
+    }
+
+    [Fact]
+    public void AllCandidatesTechnical_FallsBackToFriendlyName()
+    {
+        QuickPinSuggester.Suggestion suggestion = QuickPinSuggester.Suggest(
+            hoverName: null, new[] { "Collider (1)", "mesh", (string?)null });
+
+        Assert.Equal(QuickPinSuggester.FallbackName, suggestion.Name);
+    }
+
+    [Fact]
+    public void TechnicalChildName_StillFeedsKeywordMatching_ThroughDeeperCandidates()
+    {
+        QuickPinSuggester.Suggestion suggestion = QuickPinSuggester.Suggest(
+            hoverName: null, new[] { "Collider (1)", "portal_wood(Clone)" });
+
+        Assert.Equal("vanilla:portal", suggestion.IconId);
+        Assert.Equal("Portal wood", suggestion.Name);
+    }
+
+    [Fact]
+    public void LocalizedHoverName_OutranksEveryObjectName()
+    {
+        QuickPinSuggester.Suggestion suggestion = QuickPinSuggester.Suggest(
+            "Treasure chest", new[] { "Collider (1)", "TreasureChest_meadows(Clone)" });
+
+        Assert.Equal("Treasure chest", suggestion.Name);
     }
 }

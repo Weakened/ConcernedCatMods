@@ -125,7 +125,10 @@ internal abstract class CcSidePanel
 
         try
         {
-            if (!Minimap.IsOpen() || Input.GetKeyDown(KeyCode.Escape))
+            // Escape while typing in a field only ends the typing (RC10
+            // feedback 14); the next Escape closes the panel.
+            if (!Minimap.IsOpen() ||
+                (Input.GetKeyDown(KeyCode.Escape) && !CcTextFocus.EscapeShouldOnlyBlur()))
             {
                 Hide();
             }
