@@ -7,9 +7,11 @@ The single remaining gate is the human smoke test
 ## 1–5. Release candidate identity
 
 - **Version:** 1.0.0 (unchanged — 1.0.0 has never been publicly tagged or published)
-- **RC commit:** RECORDED IN THE FINAL DOSSIER COMMIT (**RC11**, on the
-  CC-098 line — the smoke-fix pass of 2026-09-02 addressing all 15
-  release blockers from the owner's RC10 smoke).
+- **RC commit:** `be0af44eb0b5fc8812b89d26333c8762741ec3e5` (**RC11**,
+  on the CC-098 line — the smoke-fix pass of 2026-09-02 addressing all
+  15 release blockers from the owner's RC10 smoke; the package below
+  was built at exactly this commit with a clean tree, and the DLL's
+  informational version embeds it).
   RC11 delivers, on top of RC10:
   **(1) authoritative overlay visibility** — the texture overlays are
   written unconditionally from `OverlayVisibilityRule` (Jötunn's own
@@ -193,12 +195,13 @@ The single remaining gate is the human smoke test
   `artifacts\rc10\` (ZIP `EA523400…`, DLL `A350D0CE…`) and
   `artifacts\rc8\` (ZIP `AF267AC2…`, DLL `E9904771…`) must NOT be
   tested or uploaded.)
-- **ZIP SHA-256:** RECORDED IN THE FINAL DOSSIER COMMIT (fresh RC11
-  bytes; retired hashes are never reused)
-- **Plugin DLL SHA-256:** RECORDED IN THE FINAL DOSSIER COMMIT (the DLL
-  inside the ZIP must be hash-identical to the Release build output;
-  informational version `1.0.0+<RC11 commit>`; the 12
-  `CC.Icons.cc-*.png` sprite resources re-verified embedded)
+- **ZIP SHA-256:** `C08BBBB1C89C8D10509ABB3F164EE50F66AAFE3D2A413FF65109C227B898C7E2`
+  (314,718 bytes — fresh RC11 bytes; retired hashes are never reused)
+- **Plugin DLL SHA-256:** `8C5233A426AFC0FE94E2F9AD7FC90F518F25BEF491D1FF4F9EEF29C05B722065`
+  (455,168 bytes; the DLL inside the ZIP verified hash-identical to the
+  Release build output; informational version
+  `1.0.0+be0af44eb0b5fc8812b89d26333c8762741ec3e5` verified in the DLL;
+  the 12 `CC.Icons.cc-*.png` sprite resources re-verified embedded)
 - **Assembly metadata (verified in the DLL):** Company "The Concerned Cat",
   Product "Concerned Cartographer", Copyright © 2026 Eren Cansunar,
   RepositoryUrl embedded, informational version `1.0.0+<RC commit>`.
@@ -544,7 +547,7 @@ R7 + R6 + R5 + R3 + R4 pass:
 git checkout main; git merge feat/cc-098-v1-completion
 git push origin main
 # 2. Tag the RC11 commit named in the identity section (now in main history):
-git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" <RC11-commit-from-identity-section>
+git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" be0af44eb0b5fc8812b89d26333c8762741ec3e5
 git push origin concerned-cartographer/v1.0.0
 gh release create concerned-cartographer/v1.0.0 artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-1.0.0.zip --title "Concerned Cartographer 1.0.0" --notes-file src/ConcernedCartographer/Package/CHANGELOG.md
 ```
