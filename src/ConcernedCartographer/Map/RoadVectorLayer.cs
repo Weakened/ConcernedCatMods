@@ -409,13 +409,13 @@ internal sealed class RoadVectorLayer
                 (float bakedX, float bakedY) = RoadVectorMath.Bake(mapX, mapY);
                 if (_routeBaked.Count > 0)
                 {
-                    Vector2 previous = _routeBaked[_routeBaked.Count - 1];
+                    (float previousX, float previousY) = _routeBaked[_routeBaked.Count - 1];
                     bakedLength += Mathf.Sqrt(
-                        ((bakedX - previous.x) * (bakedX - previous.x)) +
-                        ((bakedY - previous.y) * (bakedY - previous.y)));
+                        ((bakedX - previousX) * (bakedX - previousX)) +
+                        ((bakedY - previousY) * (bakedY - previousY)));
                 }
 
-                _routeBaked.Add(new Vector2(bakedX, bakedY));
+                _routeBaked.Add((bakedX, bakedY));
             }
 
             if (_routeBaked.Count == 0)
@@ -427,7 +427,7 @@ internal sealed class RoadVectorLayer
             if (_routeBaked.Count == 1)
             {
                 _routeGraphic.AddSegmentQuad(
-                    _routeBaked[0].x, _routeBaked[0].y, _routeBaked[0].x, _routeBaked[0].y, halfWidth, color);
+                    _routeBaked[0].X, _routeBaked[0].Y, _routeBaked[0].X, _routeBaked[0].Y, halfWidth, color);
                 totalQuads++;
                 continue;
             }
@@ -449,20 +449,29 @@ internal sealed class RoadVectorLayer
                 }
             }
 
+            // Shared cadence math (RC10 feedback 5/6): both the vector and
+            // texture presentations walk RoutePatternMath, so their
+            // dash/dot geometry can never drift apart.
+            int budget = Mathf.Min(MaxQuadsPerRoute, MaxRouteQuads - totalQuads);
             switch (style)
             {
                 case Atlas.RouteStyle.Dashed:
-                    totalQuads += BakeDashedPolyline(color, halfWidth, dashOn, dashOff);
+                    totalQuads += Atlas.RoutePatternMath.WalkDashes(
+                        _routeBaked, dashOn, dashOff, budget,
+                        (fromX, fromY, toX, toY) =>
+                            _routeGraphic.AddSegmentQuad(fromX, fromY, toX, toY, halfWidth, color));
                     break;
                 case Atlas.RouteStyle.Dotted:
-                    totalQuads += BakeDottedPolyline(color, halfWidth, dotSpacing);
+                    totalQuads += Atlas.RoutePatternMath.WalkDots(
+                        _routeBaked, dotSpacing, budget,
+                        (x, y) => _routeGraphic.AddSegmentQuad(x, y, x, y, halfWidth, color));
                     break;
                 default:
                     for (int index = 1; index < _routeBaked.Count && totalQuads < MaxRouteQuads; index++)
                     {
                         _routeGraphic.AddSegmentQuad(
-                            _routeBaked[index - 1].x, _routeBaked[index - 1].y,
-                            _routeBaked[index].x, _routeBaked[index].y, halfWidth, color);
+                            _routeBaked[index - 1].X, _routeBaked[index - 1].Y,
+                            _routeBaked[index].X, _routeBaked[index].Y, halfWidth, color);
                         totalQuads++;
                     }
 
@@ -473,92 +482,7 @@ internal sealed class RoadVectorLayer
         _routeGraphic.CommitQuads();
     }
 
-    private readonly List<Vector2> _routeBaked = new();
-
-    /// <summary>Dash pattern walked by distance along the whole polyline in
-    /// baked units; the phase carries across vertices so dashes flow
-    /// through corners. Returns the quad count added.</summary>
-    private int BakeDashedPolyline(Color32 color, float halfWidth, float dashOn, float dashOff)
-    {
-        float cycle = dashOn + dashOff;
-        if (cycle <= 0f)
-        {
-            return 0;
-        }
-
-        int quads = 0;
-        float phase = 0f;
-        for (int index = 1; index < _routeBaked.Count; index++)
-        {
-            Vector2 previous = _routeBaked[index - 1];
-            Vector2 current = _routeBaked[index];
-            float length = Vector2.Distance(previous, current);
-            if (length <= 1e-5f)
-            {
-                continue;
-            }
-
-            Vector2 direction = (current - previous) / length;
-            float travelled = 0f;
-            while (travelled < length && quads < MaxQuadsPerRoute)
-            {
-                float positionInCycle = phase % cycle;
-                bool on = positionInCycle < dashOn;
-                float remainingInState = on ? dashOn - positionInCycle : cycle - positionInCycle;
-                float step = Mathf.Min(remainingInState, length - travelled);
-                if (on && step > 1e-4f)
-                {
-                    Vector2 from = previous + (direction * travelled);
-                    Vector2 to = previous + (direction * (travelled + step));
-                    _routeGraphic!.AddSegmentQuad(from.x, from.y, to.x, to.y, halfWidth, color);
-                    quads++;
-                }
-
-                travelled += step;
-                phase += step;
-            }
-        }
-
-        return quads;
-    }
-
-    /// <summary>Round-count dots stamped at a fixed geometric spacing along
-    /// the polyline in baked units. Returns the quad count added.</summary>
-    private int BakeDottedPolyline(Color32 color, float halfWidth, float dotSpacing)
-    {
-        if (dotSpacing <= 0f)
-        {
-            return 0;
-        }
-
-        int quads = 0;
-        float untilNextDot = 0f;
-        for (int index = 1; index < _routeBaked.Count; index++)
-        {
-            Vector2 previous = _routeBaked[index - 1];
-            Vector2 current = _routeBaked[index];
-            float remaining = Vector2.Distance(previous, current);
-            if (remaining <= 1e-5f)
-            {
-                continue;
-            }
-
-            Vector2 direction = (current - previous) / remaining;
-            Vector2 cursor = previous;
-            while (untilNextDot <= remaining && quads < MaxQuadsPerRoute)
-            {
-                cursor += direction * untilNextDot;
-                remaining -= untilNextDot;
-                _routeGraphic!.AddSegmentQuad(cursor.x, cursor.y, cursor.x, cursor.y, halfWidth, color);
-                quads++;
-                untilNextDot = dotSpacing;
-            }
-
-            untilNextDot -= remaining;
-        }
-
-        return quads;
-    }
+    private readonly List<(float X, float Y)> _routeBaked = new();
 
     /// <summary>Budget overflow (RC8-1): a PARTIAL vector bake may not ship
     /// — the suppressed texture overlay would hide whatever fell over the

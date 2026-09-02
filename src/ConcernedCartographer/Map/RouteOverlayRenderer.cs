@@ -75,7 +75,7 @@ internal sealed class RouteOverlayRenderer
 
     private void ApplyVisibility()
     {
-        bool effective = _userEnabled && !_lastSuppressed;
+        bool effective = OverlayVisibilityRule.EffectiveTexture(_userEnabled, _lastSuppressed);
         if (_appliedEnabled != effective && TryGetOverlay(out MinimapManager.MapOverlay? overlay))
         {
             try
@@ -89,7 +89,7 @@ internal sealed class RouteOverlayRenderer
             }
         }
 
-        _toggleHook.SyncCheckbox(_userEnabled);
+        _toggleHook.SyncCheckbox(OverlayVisibilityRule.CheckboxShows(_userEnabled));
     }
 
     private bool TryGetOverlay(out MinimapManager.MapOverlay? overlay)
@@ -175,75 +175,38 @@ internal sealed class RouteOverlayRenderer
         ApplyVisibility();
     }
 
-    /// <summary>Dash pattern walked by distance along the whole polyline;
-    /// the phase carries across vertices so dashes flow through corners.</summary>
-    private void DrawDashedPolyline(Color32[] pixels, int size, IReadOnlyList<RoadPoint> points, Color32 color)
+    // Projection buffer reused per route (full redraws only).
+    private readonly List<(float X, float Y)> _projected = new();
+
+    private void ProjectPolyline(IReadOnlyList<RoadPoint> points, int size)
     {
-        const float cycle = DashOnTexels + DashOffTexels;
-        float phase = 0f;
-        Vector2 previous = Project(points[0], size);
-        for (int index = 1; index < points.Count; index++)
+        _projected.Clear();
+        foreach (RoadPoint point in points)
         {
-            Vector2 current = Project(points[index], size);
-            float length = Vector2.Distance(previous, current);
-            if (length <= 0.001f)
-            {
-                continue;
-            }
-
-            Vector2 direction = (current - previous) / length;
-            float travelled = 0f;
-            while (travelled < length)
-            {
-                float positionInCycle = phase % cycle;
-                bool on = positionInCycle < DashOnTexels;
-                float remainingInState = on ? DashOnTexels - positionInCycle : cycle - positionInCycle;
-                float step = Mathf.Min(remainingInState, length - travelled);
-                if (on && step > 0.05f)
-                {
-                    DrawLineIntoBuffer(
-                        pixels, size,
-                        previous + (direction * travelled),
-                        previous + (direction * (travelled + step)),
-                        color);
-                }
-
-                travelled += step;
-                phase += step;
-            }
-
-            previous = current;
+            Vector2 projected = Project(point, size);
+            _projected.Add((projected.x, projected.y));
         }
     }
 
-    /// <summary>Separated dots stamped at a fixed geometric spacing along
-    /// the polyline, independent of stored point positions.</summary>
+    /// <summary>Dash pattern via the shared <see cref="RoutePatternMath"/>
+    /// walker (RC10): identical geometry to the vector presentation.</summary>
+    private void DrawDashedPolyline(Color32[] pixels, int size, IReadOnlyList<RoadPoint> points, Color32 color)
+    {
+        ProjectPolyline(points, size);
+        RoutePatternMath.WalkDashes(
+            _projected, DashOnTexels, DashOffTexels, int.MaxValue,
+            (fromX, fromY, toX, toY) => DrawLineIntoBuffer(
+                pixels, size, new Vector2(fromX, fromY), new Vector2(toX, toY), color));
+    }
+
+    /// <summary>Dots via the shared <see cref="RoutePatternMath"/> walker:
+    /// fixed geometric spacing, independent of stored point positions.</summary>
     private void DrawDottedPolyline(Color32[] pixels, int size, IReadOnlyList<RoadPoint> points, Color32 color)
     {
-        float untilNextDot = 0f;
-        Vector2 previous = Project(points[0], size);
-        for (int index = 1; index < points.Count; index++)
-        {
-            Vector2 current = Project(points[index], size);
-            float remaining = Vector2.Distance(previous, current);
-            if (remaining <= 0.001f)
-            {
-                continue;
-            }
-
-            Vector2 direction = (current - previous) / remaining;
-            Vector2 cursor = previous;
-            while (untilNextDot <= remaining)
-            {
-                cursor += direction * untilNextDot;
-                remaining -= untilNextDot;
-                DrawLineIntoBuffer(pixels, size, cursor, cursor, color);
-                untilNextDot = DotSpacingTexels;
-            }
-
-            untilNextDot -= remaining;
-            previous = current;
-        }
+        ProjectPolyline(points, size);
+        RoutePatternMath.WalkDots(
+            _projected, DotSpacingTexels, int.MaxValue,
+            (x, y) => DrawLineIntoBuffer(pixels, size, new Vector2(x, y), new Vector2(x, y), color));
     }
 
     private static Vector2 Project(RoadPoint point, int size)

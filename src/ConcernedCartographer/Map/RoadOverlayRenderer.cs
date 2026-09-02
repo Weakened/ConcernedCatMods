@@ -127,13 +127,15 @@ internal sealed class RoadOverlayRenderer
     private void ApplyTextureVisibility()
     {
         bool suppress = _vectorLayer.IsActive;
-        SetTextureOverlayEnabled(RoadKind.Dirt, _userDirtEnabled && !suppress, ref _appliedDirtEnabled);
-        SetTextureOverlayEnabled(RoadKind.Paved, _userPavedEnabled && !suppress, ref _appliedPavedEnabled);
+        SetTextureOverlayEnabled(
+            RoadKind.Dirt, Atlas.OverlayVisibilityRule.EffectiveTexture(_userDirtEnabled, suppress), ref _appliedDirtEnabled);
+        SetTextureOverlayEnabled(
+            RoadKind.Paved, Atlas.OverlayVisibilityRule.EffectiveTexture(_userPavedEnabled, suppress), ref _appliedPavedEnabled);
 
         // A suppression write moved the Jötunn checkbox with it; put the
         // visual back on the USER's layer state so the panel stays honest.
-        _dirtToggleHook.SyncCheckbox(_userDirtEnabled);
-        _pavedToggleHook.SyncCheckbox(_userPavedEnabled);
+        _dirtToggleHook.SyncCheckbox(Atlas.OverlayVisibilityRule.CheckboxShows(_userDirtEnabled));
+        _pavedToggleHook.SyncCheckbox(Atlas.OverlayVisibilityRule.CheckboxShows(_userPavedEnabled));
     }
 
     private void SetTextureOverlayEnabled(RoadKind kind, bool enabled, ref bool? applied)
