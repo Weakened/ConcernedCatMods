@@ -1531,16 +1531,26 @@ internal sealed class CartographerRuntime : IDisposable
             return;
         }
 
+        // DEF-v1.0-007: always-on identity diagnostic (rate-limited per
+        // action). A future authority regression shows up in LogOutput.log
+        // as e.g. "level-ground (mud_road_v2) … => Dirt road" without any
+        // debug switch.
+        _rateLimited.Info(
+            "terrain-action-" + operation.Category,
+            $"Terrain action classified: {operation.ActionDescription} at " +
+            $"({operation.Position.x:0.#}, {operation.Position.z:0.#}) r={operation.RadiusMeters:0.#}m.");
+
         var center = new RoadPoint(operation.Position.x, operation.Position.y, operation.Position.z);
 
-        // DEF-v1.0-005: persistent negative terrain intent. Level/Raise
-        // (terraforming side-effect paint) and Cultivate/Reset mark their
-        // brush footprint as explicitly-not-road, so traversal and chunk
-        // recovery can never rediscover the leftover dirt paint as a road —
-        // this session or any later one. A deliberate Pathen/Paved op
-        // clears the footprint it covers before its observation lands.
+        // DEF-v1.0-005: persistent negative terrain intent. Every
+        // non-road paint op (Level/Raise side-effect paint, Cultivate,
+        // Reset, digging, unknown ops) marks its brush footprint as
+        // explicitly-not-road, so no passive signal can ever rediscover the
+        // leftover paint as a road — this session or any later one. A
+        // deliberate Pathen/Paved op clears the footprint it covers before
+        // its observation lands.
         float intentRadius = operation.RadiusMeters + TerrainIntentMask.BrushMarginMeters;
-        if (operation.IsTerraforming || operation.RoadKind is null)
+        if (operation.RoadKind is null)
         {
             int excluded = _terrainIntent.AddExclusion(center.X, center.Z, intentRadius);
             if (excluded > 0 && _settings.DebugLogging.Value)
@@ -1559,7 +1569,7 @@ internal sealed class CartographerRuntime : IDisposable
         if (_settings.ReconcileTerrainChanges.Value)
         {
             int removed = 0;
-            if (operation.RoadKind is RoadKind paintedKind && !operation.IsTerraforming)
+            if (operation.RoadKind is RoadKind paintedKind)
             {
                 // A kind change: new paint of one kind erases covered ink of
                 // the other. Same-kind ink stays put (suppression keeps it
@@ -1569,11 +1579,13 @@ internal sealed class CartographerRuntime : IDisposable
             }
             else
             {
-                // Level/Raise/Cultivate/Reset create no roads and ERASE the
-                // covered road data of both kinds (RC8): a base pad leveled
-                // over an old road removes that stretch from the atlas. A
-                // later explicit Pathen/Paved over the same ground wins by
-                // clearing the intent mask and recording fresh construction.
+                // Level/Raise/Cultivate/Reset (and any unknown paint op)
+                // create no roads and ERASE the covered road data of both
+                // kinds: a base pad leveled over an old road removes that
+                // stretch from the atlas — including pre-RC10 ink polluted
+                // by the Level misclassification. A later explicit
+                // Pathen/Paved over the same ground wins by clearing the
+                // intent mask and recording fresh construction.
                 removed = RemoveCoverageWithBackup(RoadKind.Dirt, center, operation.RadiusMeters)
                     + RemoveCoverageWithBackup(RoadKind.Paved, center, operation.RadiusMeters);
             }
@@ -1582,12 +1594,13 @@ internal sealed class CartographerRuntime : IDisposable
             {
                 _redrawPending = true;
                 _log.LogInfo(
-                    $"Reconciled a terrain change at ({operation.Position.x:0.#}, {operation.Position.z:0.#}) " +
+                    $"Reconciled a terrain change ({operation.ActionDescription}) at " +
+                    $"({operation.Position.x:0.#}, {operation.Position.z:0.#}) " +
                     $"r={operation.RadiusMeters:0.#}m: removed {removed} road point(s).");
             }
         }
 
-        if (operation.RoadKind is RoadKind kind && !operation.IsTerraforming && _settings.CaptureConstructionActions.Value)
+        if (operation.RoadKind is RoadKind kind && _settings.CaptureConstructionActions.Value)
         {
             var rules = new RoadSamplingRules(
                 _settings.MinimumPointSpacingMeters.Value,
