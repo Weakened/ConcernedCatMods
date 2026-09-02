@@ -168,6 +168,12 @@ internal sealed class CartographerRuntime : IDisposable
         _drawerPanel.SystemMarkersClicked = () => OpenSidePanel(_systemMarkersToken, _systemMarkersPanel);
         MapInputGate.Install(log);
 
+        // RC11 blocker 7: the wheel over any CC panel/list/field scrolls
+        // that UI only — the map zoom underneath nets to zero.
+        MapInputGate.WheelGuard = () =>
+            Minimap.IsOpen() &&
+            (MapPointerGuard.IsPointerOverCcUi(Input.mousePosition) || CcTextFocus.AnyFieldFocused());
+
         // RC8-9 pointer guard: the large-map widgets that block route
         // input while the pointer is over them (side panels register
         // implicitly through Jötunn's CustomGUIFront).
@@ -983,16 +989,49 @@ internal sealed class CartographerRuntime : IDisposable
             // Missing toggle just stays vanilla.
         }
 
-        // RC10 feedback 19: when EVERY rail control is replaced, hide the
-        // rail's own validated container too, so no orphaned backplate or
-        // decor lingers. Any layout surprise falls back to the per-button
-        // behavior above; the container comes back through this same path
-        // the moment any control should show again.
-        bool wantContainerVisible = wantPlaceablesVisible || wantRailVisible;
-        if (MinimapReflection.TryGetVanillaRailContainer(out GameObject railContainer) &&
-            railContainer.activeSelf != wantContainerVisible)
+        // RC11 blocker 2: hide the rail's own validated container(s) —
+        // per button group — so no orphaned backplate, decor, or raycast
+        // object lingers. A shared panel hides only when BOTH groups are
+        // replaced; separate panels follow their own group. Any layout
+        // surprise falls back to the per-button behavior above, and the
+        // discovery result is logged once per change so a smoke run can
+        // see exactly what was (or could not be) hidden.
+        if (MinimapReflection.TryGetVanillaRailContainers(
+                out GameObject? selectorsContainer, out GameObject? filtersContainer,
+                out bool sharedRailContainer, out string railDiagnostics))
         {
-            railContainer.SetActive(wantContainerVisible);
+            if (sharedRailContainer)
+            {
+                SetRailContainerActive(selectorsContainer!, wantPlaceablesVisible || wantRailVisible);
+            }
+            else
+            {
+                if (selectorsContainer != null)
+                {
+                    SetRailContainerActive(selectorsContainer, wantPlaceablesVisible);
+                }
+
+                if (filtersContainer != null)
+                {
+                    SetRailContainerActive(filtersContainer, wantRailVisible);
+                }
+            }
+        }
+
+        if (!string.Equals(railDiagnostics, _lastRailDiagnostics, StringComparison.Ordinal))
+        {
+            _lastRailDiagnostics = railDiagnostics;
+            _log.LogInfo($"Vanilla rail chrome: {railDiagnostics}.");
+        }
+    }
+
+    private string _lastRailDiagnostics = "";
+
+    private static void SetRailContainerActive(GameObject container, bool visible)
+    {
+        if (container.activeSelf != visible)
+        {
+            container.SetActive(visible);
         }
     }
 
@@ -1001,10 +1040,18 @@ internal sealed class CartographerRuntime : IDisposable
     {
         try
         {
-            if (MinimapReflection.TryGetVanillaRailContainer(out GameObject railContainer) &&
-                !railContainer.activeSelf)
+            if (MinimapReflection.TryGetVanillaRailContainers(
+                    out GameObject? selectorsContainer, out GameObject? filtersContainer, out _, out _))
             {
-                railContainer.SetActive(true);
+                if (selectorsContainer != null && !selectorsContainer.activeSelf)
+                {
+                    selectorsContainer.SetActive(true);
+                }
+
+                if (filtersContainer != null && !filtersContainer.activeSelf)
+                {
+                    filtersContainer.SetActive(true);
+                }
             }
 
             foreach (GameObject button in MinimapReflection.GetPlaceableIconButtons())
