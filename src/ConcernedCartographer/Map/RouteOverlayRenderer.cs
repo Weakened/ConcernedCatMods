@@ -10,38 +10,36 @@ using UnityEngine;
 namespace TheConcernedCat.ConcernedCartographer.Map;
 
 /// <summary>Draws routes on their own Jötunn overlay ("CC Routes", with its
-/// own toggle). Styles (RC8-9): solid lines; dashed and dotted use a
-/// GEOMETRIC cadence — a fixed on/off (or dot spacing) distance walked
-/// along the polyline in overlay texels, with the phase carried across
-/// vertices — never stored-point parity, so the pattern looks the same
-/// regardless of how the points happen to be spaced and stays a real
-/// dash/dot pattern at every zoom. Colors come from the route or its
-/// status defaults. Full-texture redraws only — route edits are debounced
-/// upstream.</summary>
+/// own toggle) — since RC10 this texture is the MINIMAP + fallback
+/// presentation, suppressed on the large map while the shared vector layer
+/// (RoadVectorLayer) draws routes in screen-space width/cadence there
+/// (feedback 5: one route presentation at a time, exactly like roads).
+/// Styles (RC8-9): solid lines; dashed and dotted use a GEOMETRIC cadence
+/// — a fixed on/off (or dot spacing) distance walked along the polyline
+/// in overlay texels, with the phase carried across vertices — never
+/// stored-point parity, so the pattern looks the same regardless of how
+/// the points happen to be spaced. Colors come from <see cref="RouteInk"/>
+/// (shared with the vector layer). Full-texture redraws only — route
+/// edits are debounced upstream. The Jötunn checkbox is hooked as the
+/// route layer's real user switch (feedback 7).</summary>
 internal sealed class RouteOverlayRenderer
 {
     private const string OverlayName = "CC Routes";
 
     // Pattern cadence in overlay texels (one texel ≈ 11.6 m of world on
-    // the default 2048 map): dashes 5 on / 4 off, dots every 4.
+    // the default 2048 map): dashes 5 on / 4 off, dots every 3 (RC10
+    // feedback 6 tightened dots from 4 for a readable continuous cadence).
     private const float DashOnTexels = 5f;
     private const float DashOffTexels = 4f;
-    private const float DotSpacingTexels = 4f;
-
-    private Color32 PlannedColor => _settings.HighContrast.Value
-        ? new Color32(0, 220, 255, 255)
-        : new Color32(210, 210, 235, 255);
-
-    private Color32 ActiveColor => _settings.HighContrast.Value
-        ? new Color32(255, 160, 0, 255)
-        : new Color32(255, 200, 80, 255);
-
-    private Color32 DoneColor => _settings.HighContrast.Value
-        ? new Color32(200, 200, 200, 255)
-        : new Color32(135, 135, 135, 255);
+    private const float DotSpacingTexels = 3f;
 
     private readonly CartographerSettings _settings;
     private readonly RateLimitedLog _rateLimited;
+    private readonly OverlayUserToggleHook _toggleHook = new();
+    private MinimapManager.MapOverlay? _overlay;
+    private bool _userEnabled = true;
+    private bool? _appliedEnabled;
+    private bool _lastSuppressed;
 
     public RouteOverlayRenderer(CartographerSettings settings, ManualLogSource log)
     {
@@ -49,12 +47,82 @@ internal sealed class RouteOverlayRenderer
         _rateLimited = new RateLimitedLog(log, 5f);
     }
 
+    /// <summary>Raised when the player flips the CC Routes checkbox in
+    /// Jötunn's overlay panel, so the runtime can mirror it into the
+    /// vector route presentation.</summary>
+    public event Action<bool>? UserToggled;
+
+    /// <summary>Per-frame visibility drive: hooks the Jötunn checkbox as
+    /// the user switch and applies the RC8-1 one-presentation rule (the
+    /// texture hides on the large map while the vector layer draws
+    /// routes, and returns for the minimap/fallback).</summary>
+    public void TickVisibility(bool vectorRoutesActive)
+    {
+        _lastSuppressed = vectorRoutesActive;
+        if (TryGetOverlay(out MinimapManager.MapOverlay? overlay))
+        {
+            _toggleHook.Maintain(overlay!, _userEnabled, HandleUserToggle);
+        }
+
+        ApplyVisibility();
+    }
+
+    private void HandleUserToggle(bool enabled)
+    {
+        SetEnabled(enabled);
+        UserToggled?.Invoke(enabled);
+    }
+
+    private void ApplyVisibility()
+    {
+        bool effective = _userEnabled && !_lastSuppressed;
+        if (_appliedEnabled != effective && TryGetOverlay(out MinimapManager.MapOverlay? overlay))
+        {
+            try
+            {
+                overlay!.Enabled = effective;
+                _appliedEnabled = effective;
+            }
+            catch (Exception exception)
+            {
+                _rateLimited.Warning("route-toggle", $"Could not toggle the route overlay: {exception.Message}");
+            }
+        }
+
+        _toggleHook.SyncCheckbox(_userEnabled);
+    }
+
+    private bool TryGetOverlay(out MinimapManager.MapOverlay? overlay)
+    {
+        overlay = _overlay;
+        if (overlay is not null)
+        {
+            return true;
+        }
+
+        try
+        {
+            overlay = MinimapManager.Instance.GetMapOverlay(OverlayName);
+            _overlay = overlay;
+            return overlay is not null;
+        }
+        catch (Exception exception)
+        {
+            _rateLimited.Warning("route-overlay-get", $"Could not resolve the route overlay: {exception.Message}");
+            return false;
+        }
+    }
+
     public void RedrawAll(RouteStore routes)
     {
         try
         {
-            var overlay = MinimapManager.Instance.GetMapOverlay(OverlayName);
-            int size = overlay.TextureSize;
+            if (!TryGetOverlay(out MinimapManager.MapOverlay? overlay))
+            {
+                return;
+            }
+
+            int size = overlay!.TextureSize;
             Color32[] pixels = new Color32[size * size];
 
             foreach (AtlasRoute route in routes.Living)
@@ -64,11 +132,7 @@ internal sealed class RouteOverlayRenderer
                     continue;
                 }
 
-                Color32 color = route.ColorArgb is int argb
-                    ? FromArgb(argb)
-                    : route.Status == RouteStatus.Active ? ActiveColor
-                    : route.Status == RouteStatus.Done ? DoneColor
-                    : PlannedColor;
+                Color32 color = RouteInk.Resolve(route, _settings.HighContrast.Value);
 
                 if (route.Points.Count == 1)
                 {
@@ -103,16 +167,12 @@ internal sealed class RouteOverlayRenderer
         }
     }
 
+    /// <summary>The route layer's USER switch (checkbox/console): the
+    /// texture follows through the effective-visibility rule.</summary>
     public void SetEnabled(bool enabled)
     {
-        try
-        {
-            MinimapManager.Instance.GetMapOverlay(OverlayName).Enabled = enabled;
-        }
-        catch (Exception exception)
-        {
-            _rateLimited.Warning("route-toggle", $"Could not toggle the route overlay: {exception.Message}");
-        }
+        _userEnabled = enabled;
+        ApplyVisibility();
     }
 
     /// <summary>Dash pattern walked by distance along the whole polyline;
@@ -248,14 +308,5 @@ internal sealed class RouteOverlayRenderer
                 y0 += sy;
             }
         }
-    }
-
-    private static Color32 FromArgb(int argb)
-    {
-        return new Color32(
-            (byte)((argb >> 16) & 0xFF),
-            (byte)((argb >> 8) & 0xFF),
-            (byte)(argb & 0xFF),
-            (byte)((argb >> 24) & 0xFF));
     }
 }

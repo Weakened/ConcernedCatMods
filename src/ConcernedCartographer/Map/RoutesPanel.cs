@@ -99,6 +99,12 @@ internal sealed class RoutesPanel : CcSidePanel
 
     protected override void BuildContent(GUIManager gui, Font font, Color headerColor, ref float y)
     {
+        // v1 product framing (RC10 feedback 16): routes are manual map
+        // planning/navigation overlays, never character automation.
+        Text explainer = AddBody(gui, font, AtlasStrings.Get("routes.explainer"), 11,
+            new Color(0.85f, 0.82f, 0.7f, 1f), ref y, 28f);
+        explainer.alignment = TextAnchor.UpperCenter;
+
         GameObject nameField = gui.CreateInputField(
             Panel!.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, y),

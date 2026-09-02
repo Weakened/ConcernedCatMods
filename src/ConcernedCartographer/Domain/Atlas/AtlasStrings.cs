@@ -65,6 +65,7 @@ internal static class AtlasStrings
         ["system.death"] = "Death markers",
         ["system.boss"] = "Boss markers",
         ["routes.title"] = "Routes",
+        ["routes.explainer"] = "Routes are map planning overlays: draw or waypoint a plan, style and share it. They never move your character.",
         ["routes.nameHint"] = "new route name",
         ["routes.freeDraw"] = "Free Draw",
         ["routes.waypoints"] = "Waypoints",

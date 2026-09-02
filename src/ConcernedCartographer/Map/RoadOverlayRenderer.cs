@@ -33,18 +33,25 @@ internal sealed class RoadOverlayRenderer
     private readonly RateLimitedLog _rateLimited;
     private readonly RoadVectorLayer _vectorLayer;
 
-    // The player's layer choice (drawer/saved views/console). The texture
-    // overlay's EFFECTIVE visibility additionally suppresses while the
-    // vector layer draws (RC8-1): only one road presentation may ink the
-    // large map at a time, and only one map view (large or minimap) is ever
-    // on screen, so suppressing the whole overlay while the vector layer is
-    // live hides exactly the duplicate large-map texture ink. The texture
-    // returns the moment the map closes (minimap) or the vector layer is
-    // disabled/fails (fail-safe).
+    // The player's layer choice (drawer/saved views/console/Jötunn panel
+    // checkbox). The texture overlay's EFFECTIVE visibility additionally
+    // suppresses while the vector layer draws (RC8-1): only one road
+    // presentation may ink the large map at a time, and only one map view
+    // (large or minimap) is ever on screen, so suppressing the whole
+    // overlay while the vector layer is live hides exactly the duplicate
+    // large-map texture ink. The texture returns the moment the map closes
+    // (minimap) or the vector layer is disabled/fails (fail-safe). RC10
+    // feedback 7: the Jötunn checkboxes are hooked as REAL user switches —
+    // a click drives the vector presentation too — and their visuals are
+    // re-synced to the user state after suppression writes.
     private bool _userDirtEnabled = true;
     private bool _userPavedEnabled = true;
     private bool? _appliedDirtEnabled;
     private bool? _appliedPavedEnabled;
+    private readonly OverlayUserToggleHook _dirtToggleHook = new();
+    private readonly OverlayUserToggleHook _pavedToggleHook = new();
+    private MinimapManager.MapOverlay? _dirtOverlay;
+    private MinimapManager.MapOverlay? _pavedOverlay;
 
     public RoadOverlayRenderer(CartographerSettings settings, ManualLogSource log)
     {
@@ -54,18 +61,58 @@ internal sealed class RoadOverlayRenderer
         _vectorLayer = new RoadVectorLayer(settings, log);
     }
 
+    /// <summary>Raised when the player flips a CC road checkbox in Jötunn's
+    /// overlay panel, so the owning runtime can mirror the choice into the
+    /// drawer settings.</summary>
+    public event Action<RoadKind, bool>? UserToggledOverlay;
+
     /// <summary>Whether the DEF-v1.0-006 sub-texel vector ink is currently
     /// drawing on the large map (feeds the `align live` C verdict).</summary>
     public bool VectorLayerActive => _vectorLayer.IsActive;
+
+    /// <summary>Route data changed; the shared vector layer rebakes on its
+    /// debounce.</summary>
+    public void MarkVectorDataDirty()
+    {
+        _vectorLayer.MarkDataDirty();
+    }
+
+    /// <summary>Mirrors the route layer switch into the shared vector
+    /// presentation (RC10 feedback 5/7).</summary>
+    public void SetRouteVectorVisible(bool visible)
+    {
+        _vectorLayer.SetRoutesEnabled(visible);
+    }
 
     /// <summary>Per-frame drive for the high-precision large-map layer.
     /// Safe to call every tick; all gating happens inside. Also keeps the
     /// texture overlay's effective visibility in step with the vector
     /// layer's health (RC8-1) — a state change applies within one tick.</summary>
-    public void TickVectorLayer(float unscaledDeltaTime, RoadAtlas atlas)
+    public void TickVectorLayer(float unscaledDeltaTime, RoadAtlas atlas, Atlas.RouteStore? routes)
     {
-        _vectorLayer.Tick(unscaledDeltaTime, atlas, DirtColor, PavedColor);
+        MaintainToggleHooks();
+        _vectorLayer.Tick(
+            unscaledDeltaTime, atlas, routes, _settings.HighContrast.Value, DirtColor, PavedColor);
         ApplyTextureVisibility();
+    }
+
+    private void MaintainToggleHooks()
+    {
+        if (TryGetOverlay(RoadKind.Dirt, out MinimapManager.MapOverlay? dirt))
+        {
+            _dirtToggleHook.Maintain(dirt!, _userDirtEnabled, value => HandleUserToggle(RoadKind.Dirt, value));
+        }
+
+        if (TryGetOverlay(RoadKind.Paved, out MinimapManager.MapOverlay? paved))
+        {
+            _pavedToggleHook.Maintain(paved!, _userPavedEnabled, value => HandleUserToggle(RoadKind.Paved, value));
+        }
+    }
+
+    private void HandleUserToggle(RoadKind kind, bool enabled)
+    {
+        SetOverlayEnabled(kind, enabled);
+        UserToggledOverlay?.Invoke(kind, enabled);
     }
 
     /// <summary>Disabled-mod housekeeping: tears down the vector layer and
@@ -82,6 +129,11 @@ internal sealed class RoadOverlayRenderer
         bool suppress = _vectorLayer.IsActive;
         SetTextureOverlayEnabled(RoadKind.Dirt, _userDirtEnabled && !suppress, ref _appliedDirtEnabled);
         SetTextureOverlayEnabled(RoadKind.Paved, _userPavedEnabled && !suppress, ref _appliedPavedEnabled);
+
+        // A suppression write moved the Jötunn checkbox with it; put the
+        // visual back on the USER's layer state so the panel stays honest.
+        _dirtToggleHook.SyncCheckbox(_userDirtEnabled);
+        _pavedToggleHook.SyncCheckbox(_userPavedEnabled);
     }
 
     private void SetTextureOverlayEnabled(RoadKind kind, bool enabled, ref bool? applied)
@@ -91,10 +143,14 @@ internal sealed class RoadOverlayRenderer
             return;
         }
 
+        if (!TryGetOverlay(kind, out MinimapManager.MapOverlay? overlay))
+        {
+            return;
+        }
+
         try
         {
-            string overlayName = kind == RoadKind.Dirt ? DirtOverlayName : PavedOverlayName;
-            MinimapManager.Instance.GetMapOverlay(overlayName).Enabled = enabled;
+            overlay!.Enabled = enabled;
             applied = enabled;
         }
         catch (Exception exception)
@@ -103,13 +159,49 @@ internal sealed class RoadOverlayRenderer
         }
     }
 
+    /// <summary>Cached overlay lookup: GetMapOverlay logs per call and the
+    /// handles stay valid for the session, so resolve each once.</summary>
+    private bool TryGetOverlay(RoadKind kind, out MinimapManager.MapOverlay? overlay)
+    {
+        overlay = kind == RoadKind.Dirt ? _dirtOverlay : _pavedOverlay;
+        if (overlay is not null)
+        {
+            return true;
+        }
+
+        try
+        {
+            overlay = MinimapManager.Instance.GetMapOverlay(
+                kind == RoadKind.Dirt ? DirtOverlayName : PavedOverlayName);
+            if (kind == RoadKind.Dirt)
+            {
+                _dirtOverlay = overlay;
+            }
+            else
+            {
+                _pavedOverlay = overlay;
+            }
+
+            return overlay is not null;
+        }
+        catch (Exception exception)
+        {
+            _rateLimited.Warning("overlay-get", $"Could not resolve the {kind} overlay: {exception.Message}");
+            return false;
+        }
+    }
+
     public void RedrawAll(RoadAtlas atlas)
     {
         try
         {
-            var dirtOverlay = MinimapManager.Instance.GetMapOverlay(DirtOverlayName);
-            var pavedOverlay = MinimapManager.Instance.GetMapOverlay(PavedOverlayName);
-            int textureSize = dirtOverlay.TextureSize;
+            if (!TryGetOverlay(RoadKind.Dirt, out MinimapManager.MapOverlay? dirtOverlay) ||
+                !TryGetOverlay(RoadKind.Paved, out MinimapManager.MapOverlay? pavedOverlay))
+            {
+                return;
+            }
+
+            int textureSize = dirtOverlay!.TextureSize;
 
             Color32[] dirtPixels = new Color32[textureSize * textureSize];
             Color32[] pavedPixels = new Color32[textureSize * textureSize];
@@ -144,7 +236,7 @@ internal sealed class RoadOverlayRenderer
             }
 
             dirtOverlay.OverlayTex.SetPixels32(dirtPixels);
-            pavedOverlay.OverlayTex.SetPixels32(pavedPixels);
+            pavedOverlay!.OverlayTex.SetPixels32(pavedPixels);
             dirtOverlay.OverlayTex.Apply(false);
             pavedOverlay.OverlayTex.Apply(false);
         }
@@ -384,10 +476,14 @@ internal sealed class RoadOverlayRenderer
     {
         try
         {
-            string overlayName = segment.Kind == RoadKind.Dirt ? DirtOverlayName : PavedOverlayName;
+            if (!TryGetOverlay(segment.Kind, out MinimapManager.MapOverlay? overlay))
+            {
+                _vectorLayer.MarkDataDirty();
+                return;
+            }
+
             Color32 color = segment.Kind == RoadKind.Dirt ? DirtColor : PavedColor;
-            var overlay = MinimapManager.Instance.GetMapOverlay(overlayName);
-            int size = overlay.TextureSize;
+            int size = overlay!.TextureSize;
 
             Vector2 start = MinimapManager.Instance.WorldToOverlayCoords(ToVector3(segment.Start), size);
             Vector2 end = MinimapManager.Instance.WorldToOverlayCoords(ToVector3(segment.End), size);

@@ -74,6 +74,8 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly SurveyRulePersistence _surveyRulePersistence;
     private readonly RoutePersistence _routePersistence;
     private readonly RouteOverlayRenderer _routeRenderer;
+    private readonly OverlayPanelRelabel _overlayRelabel;
+    private float _relabelElapsed;
     private RouteStore _routeStore = new();
     private RouteCommandHandler? _routeCommands;
     private bool _routeRedrawPending;
@@ -183,6 +185,25 @@ internal sealed class CartographerRuntime : IDisposable
         _surveyScanner = new SurveyScanner(settings, log);
         _routePersistence = new RoutePersistence(log);
         _routeRenderer = new RouteOverlayRenderer(settings, log);
+        _overlayRelabel = new OverlayPanelRelabel(log);
+
+        // RC10 feedback 7: the Jötunn checkboxes are real layer switches.
+        // A road checkbox click mirrors into the drawer settings (whose
+        // change handlers drive both presentations); the Routes checkbox
+        // mirrors into the vector route presentation.
+        _renderer.UserToggledOverlay += (kind, enabled) =>
+        {
+            if (kind == RoadKind.Dirt)
+            {
+                _settings.DrawerShowDirt.Value = enabled;
+            }
+            else
+            {
+                _settings.DrawerShowPaved.Value = enabled;
+            }
+        };
+        _routeRenderer.UserToggled += enabled => _renderer.SetRouteVectorVisible(enabled);
+
         _authorId = AuthorIdentity.Get(log);
         _syncTransport = new SyncTransport(log, _syncInbox) { LocalAuthorId = _authorId };
         _backupTools = new AtlasBackupTools(log);
@@ -218,6 +239,7 @@ internal sealed class CartographerRuntime : IDisposable
         _displayController.ClusterEnabled = _settings.DrawerCluster.Value;
         _displayController.Apply(_pinStore, _pinAdapter);
         _routeRenderer.RedrawAll(_routeStore);
+        _renderer.MarkVectorDataDirty();
         _syncTransport.EnsureRegistered();
         _compatibility.Evaluate(_log);
         ShowOnboardingOnce();
@@ -265,6 +287,8 @@ internal sealed class CartographerRuntime : IDisposable
             if (!_settings.Enabled.Value)
             {
                 _renderer.EnsureTextureFallback();
+                _routeRenderer.TickVisibility(vectorRoutesActive: false);
+                _overlayRelabel.Restore();
             }
 
             if (Minimap.IsOpen())
@@ -392,6 +416,7 @@ internal sealed class CartographerRuntime : IDisposable
             _routeRedrawElapsed = 0f;
             _routeRedrawPending = false;
             _routeRenderer.RedrawAll(_routeStore);
+            _renderer.MarkVectorDataDirty();
         }
 
         if (!WorldContext.TryGetWorldUid(out long uid) || _worldUid != uid)
@@ -420,9 +445,22 @@ internal sealed class CartographerRuntime : IDisposable
         // live`, never the atlas. Road data is created only by construction.
         _surveyor.Tick(unscaledDeltaTime);
 
-        // DEF-v1.0-006: the sub-texel large-map road layer follows pan/zoom
-        // every frame and rebakes only on data/zoom-step changes.
-        _renderer.TickVectorLayer(unscaledDeltaTime, _atlas);
+        // DEF-v1.0-006: the sub-texel large-map road+route layer follows
+        // pan/zoom every frame and rebakes only on data/zoom-step changes.
+        _renderer.TickVectorLayer(unscaledDeltaTime, _atlas, _routeStore);
+        _routeRenderer.TickVisibility(_renderer.VectorLayerActive);
+
+        // RC10 feedback 7: keep Jötunn's overlay button reading
+        // "Map Overlays" (reversible, exact-match rename; ~1 Hz).
+        _relabelElapsed += unscaledDeltaTime;
+        if (_relabelElapsed >= 1f)
+        {
+            _relabelElapsed = 0f;
+            if (Minimap.IsOpen())
+            {
+                _overlayRelabel.EnsureApplied();
+            }
+        }
 
         _surveyScanner.Tick(unscaledDeltaTime, _surveyEngine, _pinStore);
 
@@ -1826,6 +1864,7 @@ internal sealed class CartographerRuntime : IDisposable
 
         _workbenchPanel.Close();
         RestoreVanillaPalette();
+        _overlayRelabel.Restore();
         MapInputGate.Uninstall();
         MapPointerGuard.Clear();
         SaveIfDirty();

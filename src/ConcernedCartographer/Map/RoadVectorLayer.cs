@@ -8,28 +8,47 @@ using UnityEngine.UI;
 
 namespace TheConcernedCat.ConcernedCartographer.Map;
 
-/// <summary>High-precision large-map road layer (DEF-v1.0-006): batched
-/// vector quads baked once in zoom-independent map space and placed under
-/// the vanilla large-map image, above Jötunn's overlay (its first child)
-/// and below pins and the player marker. The RoadAtlas stays the source of
-/// truth and the 2048-texel texture overlay keeps rendering (minimap +
+/// <summary>High-precision large-map vector layer (DEF-v1.0-006; RC10
+/// feedback 5/6 extends it to routes): batched vector quads baked once in
+/// zoom-independent map space and placed under the vanilla large-map
+/// image, above Jötunn's overlay (its first child) and below pins and the
+/// player marker. The RoadAtlas and RouteStore stay the sources of truth
+/// and the 2048-texel texture overlays keep rendering (minimap +
 /// fallback). Pan/zoom is a per-frame container-transform update that
 /// reproduces vanilla's ((m − uvMin)/uvSize)·rectSize exactly
-/// (RoadVectorMath) — no magic offsets; geometry rebakes only on road-data
-/// changes, zoom-step changes, or a slow parity timer. Unexplored segments
-/// are skipped at bake (the layer draws above fog compositing). Fails
-/// soft: any error disables the layer for the session and texture
-/// rendering continues untouched.</summary>
+/// (RoadVectorMath) — no magic offsets; geometry rebakes only on data
+/// changes, zoom-step changes, or a slow parity timer. Roads and routes
+/// share ONE screen-space width/style system: widths and dash/dot
+/// cadences are defined in screen pixels and re-derived at every rebake,
+/// so they stay readable at every zoom. Unexplored road segments are
+/// skipped at bake (the layer draws above fog compositing); routes are
+/// the player's own plans and render regardless of fog, matching the
+/// texture path. Fails soft: any error disables the layer for the session
+/// and texture rendering continues untouched.</summary>
 internal sealed class RoadVectorLayer
 {
     private const string ContainerName = "CcRoadVectorLayer";
 
-    /// <summary>Target on-screen ink width. Constant by design: the layer
+    /// <summary>Target on-screen ink width for roads AND routes (RC10
+    /// feedback 5: 2× the RC8 value of 3). Constant by design: the layer
     /// exists for sub-texel *positioning*; width is cosmetic.</summary>
-    private const float TargetScreenWidthPixels = 3f;
+    private const float TargetScreenWidthPixels = 6f;
+
+    // Route dash/dot cadence in SCREEN pixels (RC10 feedback 6): geometric
+    // distances walked along the polyline, re-derived from the live zoom at
+    // every rebake, so the pattern reads the same at every zoom level.
+    private const float DashOnScreenPixels = 12f;
+    private const float DashOffScreenPixels = 8f;
+    private const float DotSpacingScreenPixels = 9f;
 
     // 16-bit UI mesh indices allow 65 535 vertices; 4 per quad.
     private const int MaxQuads = 16_000;
+
+    /// <summary>Separate stamp budget for routes: a dotted route at close
+    /// zoom stamps many quads; a route that would exceed its share degrades
+    /// to a solid line instead of killing the whole layer.</summary>
+    private const int MaxRouteQuads = 20_000;
+    private const int MaxQuadsPerRoute = 4_000;
 
     private const float RebuildDebounceSeconds = 0.5f;
 
@@ -49,8 +68,11 @@ internal sealed class RoadVectorLayer
     private RectTransform? _container;
     private RoadVectorGraphic? _dirtGraphic;
     private RoadVectorGraphic? _pavedGraphic;
+    private RoadVectorGraphic? _routeGraphic;
     private bool _dirtVisible = true;
     private bool _pavedVisible = true;
+    private bool _routesVisible = true;
+    private bool _routeBudgetWarned;
     private bool _dataDirty = true;
     private float _debounceElapsed;
     private float _periodicElapsed;
@@ -93,10 +115,23 @@ internal sealed class RoadVectorLayer
         }
     }
 
+    /// <summary>Mirrors the route overlay's visibility (RC10 feedback 5/7):
+    /// the same switch the Routes toggle and Jötunn's panel drive.</summary>
+    public void SetRoutesEnabled(bool enabled)
+    {
+        _routesVisible = enabled;
+    }
+
     /// <summary>Per-frame drive. Cheap when the large map is closed or the
     /// feature is off; the container transform update is a handful of
     /// float ops per open-map frame.</summary>
-    public void Tick(float unscaledDeltaTime, RoadAtlas atlas, Color32 dirtColor, Color32 pavedColor)
+    public void Tick(
+        float unscaledDeltaTime,
+        RoadAtlas atlas,
+        Atlas.RouteStore? routes,
+        bool highContrast,
+        Color32 dirtColor,
+        Color32 pavedColor)
     {
         if (_disabledForSession)
         {
@@ -155,6 +190,10 @@ internal sealed class RoadVectorLayer
 
             _dirtGraphic.enabled = _dirtVisible;
             _pavedGraphic.enabled = _pavedVisible;
+            if (_routeGraphic != null)
+            {
+                _routeGraphic.enabled = _routesVisible;
+            }
 
             bool zoomStepChanged = _bakedUvWidth > 0f &&
                 (uvRect.width > _bakedUvWidth * ZoomStepRatio || uvRect.width < _bakedUvWidth / ZoomStepRatio);
@@ -164,7 +203,7 @@ internal sealed class RoadVectorLayer
 
             if (_bakedUvWidth < 0f || debouncedData || zoomStepChanged || colorsChanged || periodic)
             {
-                Rebake(atlas, image, uvRect, rect, dirtColor, pavedColor);
+                Rebake(atlas, routes, highContrast, image, uvRect, rect, dirtColor, pavedColor);
             }
         }
         catch (Exception exception)
@@ -199,6 +238,7 @@ internal sealed class RoadVectorLayer
 
         _dirtGraphic = CreateGraphic("CcRoadVectorDirt", _container);
         _pavedGraphic = CreateGraphic("CcRoadVectorPaved", _container);
+        _routeGraphic = CreateGraphic("CcRouteVector", _container);
         _bakedUvWidth = -1f;
         _dataDirty = true;
     }
@@ -220,7 +260,8 @@ internal sealed class RoadVectorLayer
     }
 
     private void Rebake(
-        RoadAtlas atlas, RawImage image, Rect uvRect, Rect rect, Color32 dirtColor, Color32 pavedColor)
+        RoadAtlas atlas, Atlas.RouteStore? routes, bool highContrast, RawImage image,
+        Rect uvRect, Rect rect, Color32 dirtColor, Color32 pavedColor)
     {
         _dataDirty = false;
         _debounceElapsed = 0f;
@@ -231,17 +272,23 @@ internal sealed class RoadVectorLayer
 
         // Width target in the image's GUI units, so BakedHalfWidth (which
         // works in rect units) hits TargetScreenWidthPixels on screen.
-        float widthGuiUnits = TargetScreenWidthPixels;
+        float pixelToGuiUnits = 1f;
         if (MapScreenMath.TryGetPixelsPerGuiUnit(image, out float pixelsPerGuiUnit) && pixelsPerGuiUnit > 0f)
         {
-            widthGuiUnits = TargetScreenWidthPixels / pixelsPerGuiUnit;
+            pixelToGuiUnits = 1f / pixelsPerGuiUnit;
         }
 
+        float widthGuiUnits = TargetScreenWidthPixels * pixelToGuiUnits;
         float halfWidth = RoadVectorMath.BakedHalfWidth(widthGuiUnits, uvRect.width, rect.width);
         if (halfWidth <= 0f)
         {
             return;
         }
+
+        // One screen pixel expressed in baked map units at the CURRENT
+        // zoom: the shared conversion behind widths and dash/dot cadence.
+        float bakedUnitsPerScreenPixel = RoadVectorMath.BakedHalfWidth(
+            pixelToGuiUnits, uvRect.width, rect.width) * 2f;
 
         _dirtGraphic!.BeginQuads(dirtColor);
         _pavedGraphic!.BeginQuads(pavedColor);
@@ -312,6 +359,205 @@ internal sealed class RoadVectorLayer
 
         _dirtGraphic.CommitQuads();
         _pavedGraphic.CommitQuads();
+
+        BakeRoutes(routes, highContrast, halfWidth, bakedUnitsPerScreenPixel);
+    }
+
+    /// <summary>Bakes route polylines into the shared vector container with
+    /// the SAME width system as roads and screen-space dash/dot cadence
+    /// (RC10 feedback 5/6). Routes are the player's own plans: no fog
+    /// filtering, matching the texture presentation. A route whose styled
+    /// stamps would blow the budget falls back to a solid line; it never
+    /// takes the road layer down.</summary>
+    private void BakeRoutes(
+        Atlas.RouteStore? routes, bool highContrast, float halfWidth, float bakedUnitsPerScreenPixel)
+    {
+        if (_routeGraphic == null)
+        {
+            return;
+        }
+
+        _routeGraphic.BeginQuads(new Color32(255, 255, 255, 255));
+        if (routes is null || bakedUnitsPerScreenPixel <= 0f)
+        {
+            _routeGraphic.CommitQuads();
+            return;
+        }
+
+        float dashOn = DashOnScreenPixels * bakedUnitsPerScreenPixel;
+        float dashOff = DashOffScreenPixels * bakedUnitsPerScreenPixel;
+        float dotSpacing = DotSpacingScreenPixels * bakedUnitsPerScreenPixel;
+
+        int totalQuads = 0;
+        _routeBaked.Clear();
+        foreach (Atlas.AtlasRoute route in routes.Living)
+        {
+            if (route.Archived || route.Points.Count == 0 || totalQuads >= MaxRouteQuads)
+            {
+                continue;
+            }
+
+            _routeBaked.Clear();
+            float bakedLength = 0f;
+            foreach (RoadPoint point in route.Points)
+            {
+                if (!MinimapReflection.TryWorldToMapPoint(new Vector3(point.X, point.Y, point.Z), out float mapX, out float mapY))
+                {
+                    continue;
+                }
+
+                (float bakedX, float bakedY) = RoadVectorMath.Bake(mapX, mapY);
+                if (_routeBaked.Count > 0)
+                {
+                    Vector2 previous = _routeBaked[_routeBaked.Count - 1];
+                    bakedLength += Mathf.Sqrt(
+                        ((bakedX - previous.x) * (bakedX - previous.x)) +
+                        ((bakedY - previous.y) * (bakedY - previous.y)));
+                }
+
+                _routeBaked.Add(new Vector2(bakedX, bakedY));
+            }
+
+            if (_routeBaked.Count == 0)
+            {
+                continue;
+            }
+
+            Color32 color = RouteInk.Resolve(route, highContrast);
+            if (_routeBaked.Count == 1)
+            {
+                _routeGraphic.AddSegmentQuad(
+                    _routeBaked[0].x, _routeBaked[0].y, _routeBaked[0].x, _routeBaked[0].y, halfWidth, color);
+                totalQuads++;
+                continue;
+            }
+
+            Atlas.RouteStyle style = route.Style;
+            if (style != Atlas.RouteStyle.Solid)
+            {
+                float cadence = style == Atlas.RouteStyle.Dotted ? dotSpacing : dashOn + dashOff;
+                int estimatedStamps = cadence > 0f ? (int)(bakedLength / cadence) + _routeBaked.Count : int.MaxValue;
+                if (estimatedStamps > MaxQuadsPerRoute || totalQuads + estimatedStamps > MaxRouteQuads)
+                {
+                    style = Atlas.RouteStyle.Solid;
+                    if (!_routeBudgetWarned)
+                    {
+                        _routeBudgetWarned = true;
+                        _log.LogInfo(
+                            "A styled route exceeds the vector stamp budget at this zoom and renders solid instead.");
+                    }
+                }
+            }
+
+            switch (style)
+            {
+                case Atlas.RouteStyle.Dashed:
+                    totalQuads += BakeDashedPolyline(color, halfWidth, dashOn, dashOff);
+                    break;
+                case Atlas.RouteStyle.Dotted:
+                    totalQuads += BakeDottedPolyline(color, halfWidth, dotSpacing);
+                    break;
+                default:
+                    for (int index = 1; index < _routeBaked.Count && totalQuads < MaxRouteQuads; index++)
+                    {
+                        _routeGraphic.AddSegmentQuad(
+                            _routeBaked[index - 1].x, _routeBaked[index - 1].y,
+                            _routeBaked[index].x, _routeBaked[index].y, halfWidth, color);
+                        totalQuads++;
+                    }
+
+                    break;
+            }
+        }
+
+        _routeGraphic.CommitQuads();
+    }
+
+    private readonly List<Vector2> _routeBaked = new();
+
+    /// <summary>Dash pattern walked by distance along the whole polyline in
+    /// baked units; the phase carries across vertices so dashes flow
+    /// through corners. Returns the quad count added.</summary>
+    private int BakeDashedPolyline(Color32 color, float halfWidth, float dashOn, float dashOff)
+    {
+        float cycle = dashOn + dashOff;
+        if (cycle <= 0f)
+        {
+            return 0;
+        }
+
+        int quads = 0;
+        float phase = 0f;
+        for (int index = 1; index < _routeBaked.Count; index++)
+        {
+            Vector2 previous = _routeBaked[index - 1];
+            Vector2 current = _routeBaked[index];
+            float length = Vector2.Distance(previous, current);
+            if (length <= 1e-5f)
+            {
+                continue;
+            }
+
+            Vector2 direction = (current - previous) / length;
+            float travelled = 0f;
+            while (travelled < length && quads < MaxQuadsPerRoute)
+            {
+                float positionInCycle = phase % cycle;
+                bool on = positionInCycle < dashOn;
+                float remainingInState = on ? dashOn - positionInCycle : cycle - positionInCycle;
+                float step = Mathf.Min(remainingInState, length - travelled);
+                if (on && step > 1e-4f)
+                {
+                    Vector2 from = previous + (direction * travelled);
+                    Vector2 to = previous + (direction * (travelled + step));
+                    _routeGraphic!.AddSegmentQuad(from.x, from.y, to.x, to.y, halfWidth, color);
+                    quads++;
+                }
+
+                travelled += step;
+                phase += step;
+            }
+        }
+
+        return quads;
+    }
+
+    /// <summary>Round-count dots stamped at a fixed geometric spacing along
+    /// the polyline in baked units. Returns the quad count added.</summary>
+    private int BakeDottedPolyline(Color32 color, float halfWidth, float dotSpacing)
+    {
+        if (dotSpacing <= 0f)
+        {
+            return 0;
+        }
+
+        int quads = 0;
+        float untilNextDot = 0f;
+        for (int index = 1; index < _routeBaked.Count; index++)
+        {
+            Vector2 previous = _routeBaked[index - 1];
+            Vector2 current = _routeBaked[index];
+            float remaining = Vector2.Distance(previous, current);
+            if (remaining <= 1e-5f)
+            {
+                continue;
+            }
+
+            Vector2 direction = (current - previous) / remaining;
+            Vector2 cursor = previous;
+            while (untilNextDot <= remaining && quads < MaxQuadsPerRoute)
+            {
+                cursor += direction * untilNextDot;
+                remaining -= untilNextDot;
+                _routeGraphic!.AddSegmentQuad(cursor.x, cursor.y, cursor.x, cursor.y, halfWidth, color);
+                quads++;
+                untilNextDot = dotSpacing;
+            }
+
+            untilNextDot -= remaining;
+        }
+
+        return quads;
     }
 
     /// <summary>Budget overflow (RC8-1): a PARTIAL vector bake may not ship
@@ -340,6 +586,7 @@ internal sealed class RoadVectorLayer
         _container = null;
         _dirtGraphic = null;
         _pavedGraphic = null;
+        _routeGraphic = null;
     }
 
     private void DestroyContainer()
@@ -358,6 +605,7 @@ internal sealed class RoadVectorLayer
     private sealed class RoadVectorGraphic : MaskableGraphic
     {
         private readonly List<Vector2> _quadCorners = new();
+        private readonly List<Color32> _quadColors = new();
         private Color32 _inkColor;
         private bool _building;
 
@@ -365,10 +613,19 @@ internal sealed class RoadVectorLayer
         {
             _inkColor = inkColor;
             _quadCorners.Clear();
+            _quadColors.Clear();
             _building = true;
         }
 
         public void AddSegmentQuad(float startX, float startY, float endX, float endY, float halfWidth)
+        {
+            AddSegmentQuad(startX, startY, endX, endY, halfWidth, _inkColor);
+        }
+
+        /// <summary>Per-quad-color variant for the route batch, where every
+        /// route wears its own ink in one shared graphic.</summary>
+        public void AddSegmentQuad(
+            float startX, float startY, float endX, float endY, float halfWidth, Color32 color)
         {
             if (!_building)
             {
@@ -400,6 +657,7 @@ internal sealed class RoadVectorLayer
             _quadCorners.Add(new Vector2(endX + directionX + normalX, endY + directionY + normalY));
             _quadCorners.Add(new Vector2(endX + directionX - normalX, endY + directionY - normalY));
             _quadCorners.Add(new Vector2(startX - directionX - normalX, startY - directionY - normalY));
+            _quadColors.Add(color);
         }
 
         public void CommitQuads()
@@ -412,11 +670,11 @@ internal sealed class RoadVectorLayer
         {
             vh.Clear();
             UIVertex vertex = UIVertex.simpleVert;
-            vertex.color = _inkColor;
 
             for (int index = 0; index + 3 < _quadCorners.Count; index += 4)
             {
                 int baseIndex = vh.currentVertCount;
+                vertex.color = _quadColors[index / 4];
                 for (int corner = 0; corner < 4; corner++)
                 {
                     vertex.position = _quadCorners[index + corner];
