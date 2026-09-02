@@ -266,7 +266,9 @@ internal abstract class CcSidePanel
         return component;
     }
 
-    protected Toggle AddToggle(GUIManager gui, Font font, Color color, string label, float x, float y, Action<bool> onChanged)
+    protected Toggle AddToggle(
+        GUIManager gui, Font font, Color color, string label, float x, float y,
+        Action<bool> onChanged, float labelWidth = 190f)
     {
         GameObject toggle = gui.CreateToggle(_panel!.transform, 24f, 24f);
         var rect = (RectTransform)toggle.transform;
@@ -275,10 +277,11 @@ internal abstract class CcSidePanel
         rect.anchoredPosition = new Vector2(x, y);
         Text text = gui.CreateText(
             label, _panel.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(x + 108f, y),
-            font, 13, color, outline: false, Color.black, 190f, 26f, addContentSizeFitter: false)
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(x + 18f + (labelWidth / 2f), y),
+            font, 13, color, outline: false, Color.black, labelWidth, 26f, addContentSizeFitter: false)
             .GetComponent<Text>();
         text.alignment = TextAnchor.MiddleLeft;
+        text.raycastTarget = false;
         Toggle component = toggle.GetComponentInChildren<Toggle>();
         component.onValueChanged.AddListener(value =>
         {

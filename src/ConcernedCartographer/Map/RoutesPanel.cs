@@ -45,7 +45,7 @@ internal sealed class RoutesPanel : CcSidePanel
     private bool _mergeArmed;
 
     public RoutesPanel(ManualLogSource log, Func<Runtime.RouteCommandHandler?> handler)
-        : base(log, "routes.title", 384f, 648f)
+        : base(log, "routes.title", 384f, 672f)
     {
         _handler = handler;
     }
@@ -126,13 +126,17 @@ internal sealed class RoutesPanel : CcSidePanel
         });
         y -= 34f;
 
-        AddButton(gui, AtlasStrings.Get("routes.finish"), left + 45f, y, 90f, 28f, () =>
+        // RC11 blocker 5: an explicit vertical budget — every block gets
+        // room for its full (wrapped) text, so status/selection lines can
+        // never overlap the list or the color swatches at any UI scale.
+        float thirdWide = (Width - 44f) / 3f;
+        AddButton(gui, AtlasStrings.Get("routes.finish"), left + (thirdWide * 0.5f), y, thirdWide - 4f, 28f, () =>
         {
             _handler()?.UiStop();
             RefreshMode();
             RefreshList();
         });
-        AddButton(gui, "Undo", left + 45f + 94f, y, 70f, 28f, () =>
+        AddButton(gui, "Undo", left + (thirdWide * 1.5f), y, thirdWide - 4f, 28f, () =>
         {
             if (_handler() is { } handler)
             {
@@ -141,7 +145,7 @@ internal sealed class RoutesPanel : CcSidePanel
                 RefreshList();
             }
         });
-        AddButton(gui, "Redo", left + 45f + 94f + 74f, y, 70f, 28f, () =>
+        AddButton(gui, "Redo", left + (thirdWide * 2.5f), y, thirdWide - 4f, 28f, () =>
         {
             if (_handler() is { } handler)
             {
@@ -150,12 +154,10 @@ internal sealed class RoutesPanel : CcSidePanel
                 RefreshList();
             }
         });
-        _snap = AddToggle(gui, font, Color.white, AtlasStrings.Get("routes.snap"), left + 258f, y, value =>
-            _handler()?.UiSetSnap(value));
         y -= 34f;
 
-        _modeStatus = AddBody(gui, font, "", 12, new Color(0.85f, 1f, 0.85f, 1f), ref y, 32f);
-        _selectionStatus = AddBody(gui, font, "", 12, new Color(1f, 0.95f, 0.75f, 1f), ref y, 20f);
+        _modeStatus = AddBody(gui, font, "", 12, new Color(0.85f, 1f, 0.85f, 1f), ref y, 30f);
+        _selectionStatus = AddBody(gui, font, "", 12, new Color(1f, 0.95f, 0.75f, 1f), ref y, 30f);
 
         for (int index = 0; index < RouteSlots; index++)
         {
@@ -211,8 +213,35 @@ internal sealed class RoutesPanel : CcSidePanel
         });
         y -= 30f;
 
-        _output = AddBody(gui, font, "", 12, Color.white, ref y, 46f);
+        _output = AddBody(gui, font, "", 12, Color.white, ref y, 36f);
+
+        // RC11 blocker 4: bottom control area — Snap lives here now, and
+        // the confirmed Clear all sits beside it for fragment cleanup.
+        _snap = AddToggle(gui, font, Color.white, AtlasStrings.Get("routes.snap"), left + 12f, y, value =>
+            _handler()?.UiSetSnap(value), labelWidth: 110f);
+        AddButton(gui, "Clear all routes", left + 262f, y, 150f, 26f, () =>
+        {
+            if (_handler() is not { } handler)
+            {
+                return;
+            }
+
+            if (!_clearAllArmed)
+            {
+                _clearAllArmed = true;
+                Report($"Click again to delete ALL {handler.LivingRouteCount()} route(s). Restore/Undo can bring them back.");
+                return;
+            }
+
+            _clearAllArmed = false;
+            Report(handler.UiClearAll());
+            _hasSelection = false;
+            RefreshList();
+        });
+        y -= 30f;
     }
+
+    private bool _clearAllArmed;
 
     protected override void OnShown()
     {
@@ -222,6 +251,7 @@ internal sealed class RoutesPanel : CcSidePanel
         }
 
         _mergeArmed = false;
+        _clearAllArmed = false;
         RefreshList();
         RefreshMode();
     }
@@ -365,9 +395,11 @@ internal sealed class RoutesPanel : CcSidePanel
 
         if (_selectionStatus != null)
         {
-            _selectionStatus.text = _hasSelection
-                ? $"Selected: {RouteName(_selected)} — Rename/Style/Status/ink apply to it"
-                : "No route selected — click a route below to select it";
+            int living = _handler()?.LivingRouteCount() ?? rows.Count;
+            string overflow = living > rows.Count ? $" ({living - rows.Count} more not shown)" : "";
+            _selectionStatus.text = (_hasSelection
+                ? $"Selected: {RouteName(_selected)}"
+                : "Click a route below to select it") + overflow;
         }
     }
 
