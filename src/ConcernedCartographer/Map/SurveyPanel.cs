@@ -41,7 +41,7 @@ internal sealed class SurveyPanel : CcSidePanel
         Func<IReadOnlyList<SurveyEngine.Observation>> observations,
         Func<SurveyEngine> engine,
         Func<SurveyScanner?> scanner)
-        : base(log, "survey.title", 384f, 600f)
+        : base(log, "survey.title", 384f, 648f)
     {
         _settings = settings;
         _execute = execute;
@@ -57,12 +57,16 @@ internal sealed class SurveyPanel : CcSidePanel
             _settings.SurveyRulesEnabled.Value = value;
             Refresh();
         });
-        y -= 32f;
+        y -= 34f;
 
-        AddBody(gui, font, AtlasStrings.Get("survey.note"), 12, Color.white, ref y, 32f);
+        AddBody(gui, font, AtlasStrings.Get("survey.note"), 12, Color.white, ref y, 36f);
 
-        // Dedicated status block: scanner state, rules, last scan, pending.
-        _status = AddBody(gui, font, "", 12, new Color(0.85f, 1f, 0.85f, 1f), ref y, 64f);
+        // RC10 feedback 8: the status block sits lower with its own room —
+        // up to five wrapped lines — so header/note/status/results can
+        // never overlap, and result rows get comfortable spacing.
+        y -= 6f;
+        _status = AddBody(gui, font, "", 12, new Color(0.85f, 1f, 0.85f, 1f), ref y, 92f);
+        y -= 8f;
 
         float left = -(Width - 44f) / 2f;
         for (int index = 0; index < Slots; index++)
@@ -93,7 +97,7 @@ internal sealed class SurveyPanel : CcSidePanel
 
             _rows[index] = row;
             row.SetActive(false);
-            y -= 30f;
+            y -= 34f;
         }
 
         y -= 8f;
@@ -197,12 +201,12 @@ internal sealed class SurveyPanel : CcSidePanel
             }
             else
             {
-                scanState = $"Scanning ON (every {_settings.SurveyScanIntervalSeconds.Value:0}s, {_settings.SurveyScanRadius.Value:0} m around you)";
+                scanState = $"Scanning continuously ({_settings.SurveyScanRadius.Value:0} m around you)";
             }
 
             string lastScan = scanner?.LastScanUtc is DateTime last
-                ? $"Last scan {Math.Max(0, (int)(DateTime.UtcNow - last).TotalSeconds)}s ago: {scanner.LastScanExamined} object(s) checked, {scanner.LastScanAdded} new"
-                : "Last scan: none yet this session";
+                ? $"Last sweep {Math.Max(0, (int)(DateTime.UtcNow - last).TotalSeconds)}s ago: {scanner.LastScanExamined} object(s) checked, {scanner.LastScanAdded} new"
+                : "Last sweep: none finished yet this session";
 
             _status.text = scanState +
                 $"\n{engine.Rules.Rules.Count} rule(s), {engine.Rules.Blacklist.Count} blocked pattern(s) (survey-rules.tsv)" +

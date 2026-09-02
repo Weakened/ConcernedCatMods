@@ -8,10 +8,10 @@ namespace TheConcernedCat.ConcernedCartographer.Persistence;
 
 /// <summary>Loads the shareable survey-rules file, writing the starter set
 /// on first use. The file is the import/export format: plain patterns and
-/// suggestions, no machine paths or secrets. An UNTOUCHED pre-RC8 starter
-/// file (whose four conservative rules matched almost nothing in normal
-/// play) is upgraded in place to the useful RC8 starter set; any file the
-/// player edited is never modified.</summary>
+/// suggestions, no machine paths or secrets. An UNTOUCHED starter file
+/// from an earlier RC (the sparse pre-RC8 set or the RC8/RC9 set) is
+/// upgraded in place to the current broadened starter set; any file the
+/// player edited never matches and is never modified.</summary>
 internal sealed class SurveyRulePersistence
 {
     private readonly ManualLogSource _log;
@@ -34,13 +34,17 @@ internal sealed class SurveyRulePersistence
                 File.WriteAllLines(RulePath, SurveyRuleSet.Default().Serialize());
                 _log.LogInfo($"Wrote the starter survey rules to {RulePath}.");
             }
-            else if (Normalize(File.ReadAllLines(RulePath)) ==
-                     Normalize(SurveyRuleSet.LegacyStarterSet().Serialize()))
+            else
             {
-                File.WriteAllLines(RulePath, SurveyRuleSet.Default().Serialize());
-                _log.LogInfo(
-                    $"Upgraded the untouched pre-RC8 starter survey rules in {RulePath} to the v1 starter set " +
-                    "(edited files are never touched).");
+                string current = Normalize(File.ReadAllLines(RulePath));
+                if (current == Normalize(SurveyRuleSet.LegacyStarterSet().Serialize()) ||
+                    current == Normalize(SurveyRuleSet.Rc8StarterSet().Serialize()))
+                {
+                    File.WriteAllLines(RulePath, SurveyRuleSet.Default().Serialize());
+                    _log.LogInfo(
+                        $"Upgraded the untouched starter survey rules in {RulePath} to the v1 starter set " +
+                        "(edited files are never touched).");
+                }
             }
 
             SurveyRuleSet rules = SurveyRuleSet.Parse(File.ReadAllLines(RulePath), out int malformed);

@@ -191,7 +191,8 @@ internal sealed class CartographerSettings
             config.Bind("Survey", "SurveyRulesEnabled", false,
                 "Opt-in survey rules: nearby loaded objects matching survey-rules.tsv become reviewable observations (never pins directly)."),
             config.Bind("Survey", "SurveyScanIntervalSeconds", 10f, new ConfigDescription(
-                "Seconds between survey scans.", new AcceptableValueRange<float>(2f, 60f))),
+                "Legacy, no effect since v1.0 RC10: the survey scans continuously on a bounded per-frame budget. Kept so existing config files load cleanly.",
+                new AcceptableValueRange<float>(2f, 60f))),
             config.Bind("Survey", "SurveyScanRadius", 40f, new ConfigDescription(
                 "Survey scan radius around the player in meters.", new AcceptableValueRange<float>(10f, 100f))),
             config.Bind("Survey", "SurveyBaseExclusionRadius", 30f, new ConfigDescription(

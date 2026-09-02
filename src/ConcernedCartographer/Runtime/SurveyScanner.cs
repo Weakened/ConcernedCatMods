@@ -8,14 +8,21 @@ using UnityEngine;
 
 namespace TheConcernedCat.ConcernedCartographer.Runtime;
 
-/// <summary>Feeds nearby loaded objects to the survey engine on a slow,
-/// budgeted cadence. Disabled by default; never scans the world database —
-/// only already-instantiated ZNetViews within the configured radius, at
-/// most <see cref="ScanBudget"/> per scan, skipping characters entirely.
-/// The engine enforces every anti-flood bound on top.</summary>
+/// <summary>Feeds nearby loaded objects to the survey engine CONTINUOUSLY
+/// on a small per-tick budget (RC10 feedback 9): a fresh instance snapshot
+/// is walked a slice at a time every frame, so a matching object near the
+/// player becomes an observation within about a second instead of waiting
+/// out a 10-second timer, while the per-frame cost stays flat and bounded.
+/// Disabled by default; never scans the world database — only
+/// already-instantiated ZNetViews within the configured radius, skipping
+/// characters entirely. The engine enforces every anti-flood bound on top.
+/// The top-left "new survey observations" toast is COALESCED to at most
+/// one per <see cref="NotifyCoalesceSeconds"/>, and only when new
+/// observations were actually collected.</summary>
 internal sealed class SurveyScanner
 {
-    private const int ScanBudget = 300;
+    private const int PerTickExamineBudget = 48;
+    private const float NotifyCoalesceSeconds = 10f;
 
     private static readonly AccessTools.FieldRef<ZNetScene, Dictionary<ZDO, ZNetView>>? InstancesField =
         BuildInstancesRef();
@@ -23,8 +30,11 @@ internal sealed class SurveyScanner
     private readonly CartographerSettings _settings;
     private readonly ManualLogSource _log;
     private readonly List<ZNetView> _buffer = new();
-    private float _elapsed;
     private int _cursor;
+    private int _sweepExamined;
+    private int _sweepAdded;
+    private float _notifyElapsed = NotifyCoalesceSeconds;
+    private int _unnotifiedAdded;
     private bool _disabledForSession;
 
     public SurveyScanner(CartographerSettings settings, ManualLogSource log)
@@ -33,25 +43,26 @@ internal sealed class SurveyScanner
         _log = log;
     }
 
-    /// <summary>When the last scan pass ran (UTC), or null before the
-    /// first. Feeds the Survey panel status.</summary>
+    /// <summary>When the last full sweep over the loaded instances
+    /// completed (UTC), or null before the first. Feeds the panel status.</summary>
     public DateTime? LastScanUtc { get; private set; }
 
-    /// <summary>Loaded objects examined by the last scan pass.</summary>
+    /// <summary>Loaded objects examined by the last completed sweep.</summary>
     public int LastScanExamined { get; private set; }
 
-    /// <summary>Observations the last scan pass added.</summary>
+    /// <summary>Observations the last completed sweep added.</summary>
     public int LastScanAdded { get; private set; }
 
     /// <summary>True after a scanner failure disabled it for this session
     /// (the panel shows this honestly instead of a silent "no results").</summary>
     public bool DisabledForSession => _disabledForSession;
 
-    /// <summary>Makes the next enabled tick scan immediately instead of
-    /// waiting out the cadence — the Survey panel's "Scan now".</summary>
+    /// <summary>Restarts the sweep against a fresh snapshot — the Survey
+    /// panel's "Scan now". With continuous scanning this mostly resets the
+    /// cursor; results were already arriving every frame.</summary>
     public void RequestImmediateScan()
     {
-        _elapsed = float.MaxValue;
+        _buffer.Clear();
     }
 
     public void Tick(float deltaTime, SurveyEngine engine, PinStore pins)
@@ -61,13 +72,7 @@ internal sealed class SurveyScanner
             return;
         }
 
-        _elapsed += deltaTime;
-        if (_elapsed < _settings.SurveyScanIntervalSeconds.Value)
-        {
-            return;
-        }
-
-        _elapsed = 0f;
+        _notifyElapsed += deltaTime;
         try
         {
             Player player = Player.m_localPlayer;
@@ -76,26 +81,43 @@ internal sealed class SurveyScanner
                 return;
             }
 
-            engine.MaxObservations = (int)_settings.SurveyMaxObservations.Value;
-            engine.BaseExclusionRadiusMeters = _settings.SurveyBaseExclusionRadius.Value;
             DateTime now = DateTime.UtcNow;
-            engine.Prune(now);
-
-            _buffer.Clear();
-            foreach (KeyValuePair<ZDO, ZNetView> entry in InstancesField(ZNetScene.instance))
+            if (_buffer.Count == 0 || _cursor >= _buffer.Count)
             {
-                _buffer.Add(entry.Value);
+                // Sweep boundary: publish the finished sweep's stats, apply
+                // live bounds, prune expiries, snapshot fresh instances.
+                if (_buffer.Count > 0)
+                {
+                    LastScanUtc = now;
+                    LastScanExamined = _sweepExamined;
+                    LastScanAdded = _sweepAdded;
+                }
+
+                _sweepExamined = 0;
+                _sweepAdded = 0;
+                _cursor = 0;
+                engine.MaxObservations = (int)_settings.SurveyMaxObservations.Value;
+                engine.BaseExclusionRadiusMeters = _settings.SurveyBaseExclusionRadius.Value;
+                engine.Prune(now);
+
+                _buffer.Clear();
+                foreach (KeyValuePair<ZDO, ZNetView> entry in InstancesField(ZNetScene.instance))
+                {
+                    _buffer.Add(entry.Value);
+                }
+
+                if (_buffer.Count == 0)
+                {
+                    return;
+                }
             }
 
             Vector3 playerPosition = player.transform.position;
             float radius = _settings.SurveyScanRadius.Value;
-            LastScanUtc = now;
-            int added = 0;
-            int examined = 0;
-            while (examined < ScanBudget && _buffer.Count > 0)
+            int sliceEnd = Math.Min(_cursor + PerTickExamineBudget, _buffer.Count);
+            for (; _cursor < sliceEnd; _cursor++)
             {
-                examined++;
-                _cursor = (_cursor + 1) % _buffer.Count;
+                _sweepExamined++;
                 ZNetView view = _buffer[_cursor];
                 if (view == null || view.gameObject == null)
                 {
@@ -116,21 +138,23 @@ internal sealed class SurveyScanner
                     now);
                 if (result == SurveyEngine.OfferResult.Added)
                 {
-                    added++;
+                    _sweepAdded++;
+                    _unnotifiedAdded++;
                 }
                 else if (result == SurveyEngine.OfferResult.CapReached)
                 {
+                    _cursor = _buffer.Count;
                     break;
                 }
             }
 
-            LastScanExamined = examined;
-            LastScanAdded = added;
-            if (added > 0)
+            if (_unnotifiedAdded > 0 && _notifyElapsed >= NotifyCoalesceSeconds)
             {
                 player.Message(
                     MessageHud.MessageType.TopLeft,
-                    AtlasStrings.Format("hud.surveyObservations", added));
+                    AtlasStrings.Format("hud.surveyObservations", _unnotifiedAdded));
+                _unnotifiedAdded = 0;
+                _notifyElapsed = 0f;
             }
         }
         catch (Exception exception)

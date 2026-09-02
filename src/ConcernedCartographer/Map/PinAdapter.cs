@@ -417,6 +417,40 @@ internal sealed class PinAdapter
         }
     }
 
+    /// <summary>RC10 feedback 12: a palette-armed newborn wears its chosen
+    /// CC sprite from the first frame of the vanilla naming flow — never a
+    /// temporary vanilla Dot. Sets both the pin's sprite and the LIVE map
+    /// element's sprite (m_icon alone only affects future elements), and
+    /// records the applied sprite so the adoption sync recognizes it
+    /// instead of rebuilding the rendering. Visual-only; the saved pin
+    /// still persists its vanilla type.</summary>
+    public void ApplyImmediateSprite(Minimap.PinData pin, string iconId)
+    {
+        try
+        {
+            if (pin is null || !CcIconSprites.TryGet(iconId, out Sprite sprite))
+            {
+                return;
+            }
+
+            if (!ReferenceEquals(pin.m_icon, sprite))
+            {
+                pin.m_icon = sprite;
+                _customSpriteByRendering[pin] = iconId;
+            }
+
+            if (pin.m_iconElement != null && !ReferenceEquals(pin.m_iconElement.sprite, sprite))
+            {
+                pin.m_iconElement.sprite = sprite;
+            }
+        }
+        catch
+        {
+            // Per-frame cosmetic path: the adoption sync still applies the
+            // sprite at naming close, so failing silent here is safe.
+        }
+    }
+
     /// <summary>A kept rendering whose icon id changed to (or from) a
     /// custom-sprite icon of the SAME vanilla fallback type is invisible to
     /// the ledger's type comparison; rebuild it so the element picks up the

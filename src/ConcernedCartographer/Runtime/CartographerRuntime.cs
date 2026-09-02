@@ -476,6 +476,13 @@ internal sealed class CartographerRuntime : IDisposable
             {
                 HandlePaletteBirth(born);
             }
+
+            // RC10 feedback 12: a palette-armed newborn shows its chosen
+            // cc:* sprite from the first naming frame, never a Dot.
+            if (namingPin is not null && _birthTracker.IsArmed)
+            {
+                _pinAdapter.ApplyImmediateSprite(namingPin, _birthTracker.IconId);
+            }
         }
 
         _redrawElapsed += unscaledDeltaTime;

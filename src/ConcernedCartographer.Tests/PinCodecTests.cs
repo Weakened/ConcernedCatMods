@@ -220,6 +220,23 @@ public class IconRegistryTests
     }
 
     [Fact]
+    public void EveryCcIcon_HasItsOwnSprite_SoPlacementCanNeverDegradeToADot()
+    {
+        // RC10 feedback 12: the immediate-sprite path renders the chosen
+        // cc:* visual from the first naming frame. That only holds if every
+        // present AND future cc:* entry ships a sprite key.
+        foreach (var definition in IconRegistry.All)
+        {
+            if (definition.Id.StartsWith("cc:", StringComparison.Ordinal))
+            {
+                Assert.True(definition.HasCustomSprite,
+                    $"{definition.Id} must define a SpriteKey; without one a palette placement " +
+                    "renders its vanilla fallback (the Dot bug).");
+            }
+        }
+    }
+
+    [Fact]
     public void Rc8_VanillaIcons_KeepVanillaRendering()
     {
         foreach (string id in new[] { "vanilla:fire", "vanilla:house", "vanilla:hammer", "vanilla:dot", "vanilla:portal" })

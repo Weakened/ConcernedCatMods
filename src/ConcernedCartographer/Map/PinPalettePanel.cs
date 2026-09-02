@@ -21,10 +21,11 @@ namespace TheConcernedCat.ConcernedCartographer.Map;
 internal sealed class PinPalettePanel
 {
     private const float PanelWidth = 232f;
-    private const float PanelHeight = 632f;
+    private const float PanelHeight = 560f;
     private const float RowHeight = 24f;
-    private const float RowWidth = PanelWidth - 24f;
-    private const int MaxRows = 16;
+    private const float RowWidth = PanelWidth - 40f;
+    private const float ListTop = 108f;
+    private const float ListBottomMargin = 18f;
     private const int MaxRecents = 3;
 
     private readonly ManualLogSource _log;
@@ -32,8 +33,13 @@ internal sealed class PinPalettePanel
     private InputField? _search;
     private Text? _status;
     private GameObject? _listRoot;
+    private ScrollRect? _scroll;
     private string? _selectedIconId;
     private readonly List<string> _recents = new();
+
+    // RC10 feedback 11: collapsible category sections. Collapsed state is
+    // session UI state keyed by category name.
+    private readonly HashSet<string> _collapsedCategories = new();
     private bool _failed;
 
     /// <summary>Raised when the player picks a marker; the runtime selects
@@ -77,12 +83,13 @@ internal sealed class PinPalettePanel
 
             GUIManager gui = GUIManager.Instance;
 
+            // RC10 feedback 11: draggable, like every other CC surface.
             _panel = gui.CreateWoodpanel(
                 largeRoot.transform,
                 new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
                 new Vector2(-((PanelWidth * UiScale) / 2f) - 30f, 0f),
                 PanelWidth, PanelHeight,
-                draggable: false);
+                draggable: true);
             _panel.transform.localScale = Vector3.one * UiScale;
             _panel.SetActive(false);
 
@@ -107,13 +114,67 @@ internal sealed class PinPalettePanel
                 .GetComponent<Text>();
             _status.alignment = TextAnchor.UpperCenter;
 
-            _listRoot = new GameObject("CCPaletteList", typeof(RectTransform));
-            _listRoot.transform.SetParent(_panel.transform, worldPositionStays: false);
-            var listRect = (RectTransform)_listRoot.transform;
-            listRect.anchorMin = Vector2.zero;
-            listRect.anchorMax = Vector2.one;
-            listRect.offsetMin = Vector2.zero;
-            listRect.offsetMax = Vector2.zero;
+            // RC10 feedback 11: the marker list lives in a scroll view, so
+            // the palette can never overflow the screen no matter how many
+            // markers the registry grows.
+            float listHeight = PanelHeight - ListTop - ListBottomMargin;
+            GameObject scrollRoot = gui.CreateScrollView(
+                _panel.transform,
+                showHorizontalScrollbar: false, showVerticalScrollbar: true,
+                handleSize: 8f, handleDistanceToBorder: 2f,
+                GUIManager.Instance.ValheimScrollbarHandleColorBlock,
+                new Color(0f, 0f, 0f, 0.35f),
+                PanelWidth - 20f, listHeight);
+            var scrollRect = (RectTransform)scrollRoot.transform;
+            scrollRect.anchorMin = new Vector2(0.5f, 1f);
+            scrollRect.anchorMax = new Vector2(0.5f, 1f);
+            scrollRect.pivot = new Vector2(0.5f, 1f);
+            scrollRect.anchoredPosition = new Vector2(0f, -ListTop);
+
+            Transform scrollView = scrollRoot.transform.Find("Scroll View");
+            _scroll = scrollView != null ? scrollView.GetComponent<ScrollRect>() : null;
+            if (_scroll == null)
+            {
+                throw new InvalidOperationException("Jötunn scroll view layout changed; palette cannot build.");
+            }
+
+            // The scroll chrome ships an opaque black backdrop; soften it so
+            // the wood panel shows through.
+            var backdrop = scrollView!.GetComponent<Image>();
+            if (backdrop != null)
+            {
+                backdrop.color = new Color(0f, 0f, 0f, 0.25f);
+            }
+
+            // Rows are positioned manually (same math as RC8); the stock
+            // vertical layout group would fight that.
+            GameObject content = _scroll.content != null ? _scroll.content.gameObject : null!;
+            if (content == null)
+            {
+                Transform found = scrollView.Find("Viewport/Content");
+                content = found != null ? found.gameObject : throw new InvalidOperationException(
+                    "Jötunn scroll view content missing; palette cannot build.");
+                _scroll.content = (RectTransform)found!;
+            }
+
+            foreach (var component in content.GetComponents<UnityEngine.UI.LayoutGroup>())
+            {
+                UnityEngine.Object.DestroyImmediate(component);
+            }
+
+            var fitter = content.GetComponent<ContentSizeFitter>();
+            if (fitter != null)
+            {
+                UnityEngine.Object.DestroyImmediate(fitter);
+            }
+
+            var contentRect = (RectTransform)content.transform;
+            contentRect.anchorMin = new Vector2(0f, 1f);
+            contentRect.anchorMax = new Vector2(1f, 1f);
+            contentRect.pivot = new Vector2(0.5f, 1f);
+            contentRect.offsetMin = new Vector2(0f, contentRect.offsetMin.y);
+            contentRect.offsetMax = new Vector2(0f, contentRect.offsetMax.y);
+            _listRoot = content;
 
             RebuildList();
         }
@@ -191,6 +252,7 @@ internal sealed class PinPalettePanel
         _search = null;
         _status = null;
         _listRoot = null;
+        _scroll = null;
     }
 
     private void RebuildList()
@@ -211,8 +273,7 @@ internal sealed class PinPalettePanel
             GUIManager gui = GUIManager.Instance;
             Font font = gui.AveriaSerifBold;
             var headerColor = new Color(0.8f, 0.7f, 0.5f, 1f);
-            float y = -108f;
-            int rows = 0;
+            float y = -4f;
 
             string query = _search != null ? _search.text.Trim() : "";
             if (query.Length == 0)
@@ -231,18 +292,13 @@ internal sealed class PinPalettePanel
                     AddHeader(gui, font, headerColor, AtlasStrings.Get("palette.recent"), ref y);
                     foreach (IconRegistry.IconDefinition definition in recentDefinitions)
                     {
-                        if (rows >= MaxRows)
-                        {
-                            break;
-                        }
-
                         AddIconRow(gui, definition, ref y);
-                        rows++;
                     }
                 }
 
-                // Category grouping; search flattens it. Rows are capped to
-                // the panel; the search field covers registry growth.
+                // Collapsible category sections in a scrolling list (RC10
+                // feedback 11): every marker is reachable, nothing is
+                // capped away, and big sections fold out of the way.
                 var seenCategories = new List<string>();
                 foreach (IconRegistry.IconDefinition definition in IconRegistry.All)
                 {
@@ -254,42 +310,42 @@ internal sealed class PinPalettePanel
 
                 foreach (string category in seenCategories)
                 {
-                    if (rows >= MaxRows)
-                    {
-                        break;
-                    }
-
-                    AddHeader(gui, font, headerColor, "— " + category + " —", ref y);
+                    int count = 0;
                     foreach (IconRegistry.IconDefinition definition in IconRegistry.All)
                     {
-                        if (definition.DefaultCategory != category)
+                        if (definition.DefaultCategory == category)
                         {
-                            continue;
+                            count++;
                         }
+                    }
 
-                        if (rows >= MaxRows)
+                    bool collapsed = _collapsedCategories.Contains(category);
+                    AddCategoryHeader(gui, category, count, collapsed, ref y);
+                    if (collapsed)
+                    {
+                        continue;
+                    }
+
+                    foreach (IconRegistry.IconDefinition definition in IconRegistry.All)
+                    {
+                        if (definition.DefaultCategory == category)
                         {
-                            break;
+                            AddIconRow(gui, definition, ref y);
                         }
-
-                        AddIconRow(gui, definition, ref y);
-                        rows++;
                     }
                 }
             }
             else
             {
+                // Search flattens the grouping and ignores collapse state.
                 foreach (IconRegistry.IconDefinition definition in IconRegistry.Search(query))
                 {
-                    if (rows >= MaxRows)
-                    {
-                        break;
-                    }
-
                     AddIconRow(gui, definition, ref y);
-                    rows++;
                 }
             }
+
+            var contentRect = (RectTransform)_listRoot.transform;
+            contentRect.sizeDelta = new Vector2(contentRect.sizeDelta.x, Mathf.Max(-y + 6f, 10f));
         }
         catch (Exception exception)
         {
@@ -305,6 +361,33 @@ internal sealed class PinPalettePanel
             font, 11, color, outline: false, Color.black, RowWidth, 16f, addContentSizeFitter: false)
             .GetComponent<Text>().alignment = TextAnchor.MiddleCenter;
         y -= 18f;
+    }
+
+    /// <summary>A clickable section header that folds its category.</summary>
+    private void AddCategoryHeader(GUIManager gui, string category, int count, bool collapsed, ref float y)
+    {
+        GameObject header = gui.CreateButton(
+            $"{(collapsed ? "▸" : "▾")} {category} ({count})",
+            _listRoot!.transform,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, y),
+            RowWidth, 20f);
+        Text label = header.GetComponentInChildren<Text>();
+        if (label != null)
+        {
+            label.fontSize = 11;
+            label.color = new Color(0.85f, 0.75f, 0.55f, 1f);
+        }
+
+        header.GetComponent<Button>().onClick.AddListener(() =>
+        {
+            if (!_collapsedCategories.Remove(category))
+            {
+                _collapsedCategories.Add(category);
+            }
+
+            RebuildList();
+        });
+        y -= 23f;
     }
 
     private void AddIconRow(GUIManager gui, IconRegistry.IconDefinition definition, ref float y)

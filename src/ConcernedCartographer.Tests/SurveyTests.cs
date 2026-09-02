@@ -203,6 +203,14 @@ public class SurveyEngineTests
             ("SunkenCrypt4(Clone)", "cc:dungeon", "Dungeons"),
             ("TrollCave02(Clone)", "cc:dungeon", "Dungeons"),
             ("Vegvisir_Eikthyr(Clone)", "cc:objective", "Points of interest"),
+            // RC10 feedback 10: broadened starter coverage.
+            ("Pickable_Dandelion(Clone)", "cc:resource", "Resources"),
+            ("Pickable_Flint(Clone)", "cc:resource", "Resources"),
+            ("Pickable_SeedCarrot(Clone)", "cc:resource", "Resources"),
+            ("GuckSack(Clone)", "cc:resource", "Resources"),
+            ("Beehive(Clone)", "cc:resource", "Resources"),
+            ("MountainCave02(Clone)", "cc:dungeon", "Dungeons"),
+            ("RuneStone_Boars(Clone)", "cc:objective", "Points of interest"),
         })
         {
             x += 500f; // outside every duplicate radius
@@ -253,5 +261,19 @@ public class SurveyEngineTests
         SurveyRuleSet.Parse(defaultLines, out int malformedDefault);
         Assert.Equal(0, malformedLegacy);
         Assert.Equal(0, malformedDefault);
+    }
+
+    [Fact]
+    public void Rc8StarterSet_DiffersFromTheBroadenedDefaults()
+    {
+        // The in-place upgrade recognizes an untouched RC8/RC9 starter file
+        // by exact content; the sets must serialize differently and both
+        // must parse cleanly (RC10 feedback 10).
+        var rc8Lines = new List<string>(SurveyRuleSet.Rc8StarterSet().Serialize());
+        var defaultLines = new List<string>(SurveyRuleSet.Default().Serialize());
+
+        Assert.NotEqual(rc8Lines, defaultLines);
+        SurveyRuleSet.Parse(rc8Lines, out int malformedRc8);
+        Assert.Equal(0, malformedRc8);
     }
 }
