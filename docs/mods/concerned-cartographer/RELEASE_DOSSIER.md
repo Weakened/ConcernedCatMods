@@ -18,10 +18,29 @@ The single remaining gate is the human smoke test
   decision recorded in section 19). Data and schema formats are
   unchanged from RC12; upgrading this beta to 1.0.0 later is automatic
   and lossless.
-- **RC commit:** `e4abe1f60996284eb879b9d917eed6d096b68ccc` (**RC15b**,
-  the CC-098 privacy-audit revision of RC15, 2026-09-03; the package
-  below was built at exactly this commit with a clean tree, and the
-  DLL's informational version embeds it). The RC15 functional work was
+- **RC commit:** `87a0fecbe184fac7480ec7611dc9dfe96d1203ae` (**RC15c**,
+  the owner-directed Thunderstore-README revision of RC15b, 2026-09-03;
+  the package below was built at exactly this commit with a clean tree,
+  and the DLL's informational version embeds it). RC15c changes ONLY
+  the packaged `README.md` — the owner-supplied storefront copy
+  (shorter, capability-focused, with the beta-status/support/privacy
+  section). No source file, data, schema, or diagnostic line changed;
+  the DLL was rebuilt at this commit per packaging doctrine, so its
+  bytes differ from RC15b's only by the embedded commit identity
+  (size unchanged, 478,720 bytes). A fresh authorship-trace/leak scan
+  of the packaged bytes at this commit found no AI-authorship traces
+  in source or DLL (ASCII and UTF-16), no PDB file, and no
+  machine-username paths (the embedded CodeView path is the same
+  `C:\code\...` shape the RC15b audit accepted).
+  **Retires the RC15b build `e4abe1f6`/`c31746a` (ZIP `8AC3A779…`,
+  DLL `BA8975CA…`, immutable copy in `artifacts\rc15b\`) — do not
+  test, tag, or upload it.** All RC15b privacy-audit guarantees and
+  RC15/RC14-good behavior are unchanged; smoke **R11 runs on the
+  RC15c ZIP**.
+- RC15b's identity block is preserved below for the record:
+- (RC15b) **RC commit** `e4abe1f60996284eb879b9d917eed6d096b68ccc`
+  (the CC-098 privacy-audit revision of RC15, 2026-09-03; built at
+  exactly that commit with a clean tree). The RC15 functional work was
   green, but final acceptance failed its privacy audit: the mod's own
   log lines and the support report still carried identifiers. RC15b
   changes ONLY the privacy of emitted diagnostics — behavior, data,
@@ -483,9 +502,12 @@ The single remaining gate is the human smoke test
   directives touched is re-verified by smoke section **R5** (then R3/R4
   as amended).)
 - **ZIP:** `artifacts\thunderstore\TheConcernedCat-ConcernedCartographer-0.9.0.zip`
-  (built at the RC15b commit; an identical immutable copy is at
-  `artifacts\rc15b\TheConcernedCat-ConcernedCartographer-0.9.0-RC15b.zip`
-  — verify the hash below before importing. The retired pre-audit RC15
+  (built at the RC15c commit; an identical immutable copy is at
+  `artifacts\rc15c\TheConcernedCat-ConcernedCartographer-0.9.0-RC15c.zip`
+  — verify the hash below before importing. The retired RC15b package
+  (ZIP `8AC3A779…`, DLL `BA8975CA…`) survives as
+  `artifacts\rc15b\TheConcernedCat-ConcernedCartographer-0.9.0-RC15b.zip`;
+  the retired pre-audit RC15
   package (ZIP `F89AAD13…`, DLL `DA62990C…`) survives as
   `artifacts\rc15\TheConcernedCat-ConcernedCartographer-0.9.0-RC15.zip`
   and a same-named copy in `artifacts\thunderstore\superseded\`; the
@@ -498,24 +520,24 @@ The single remaining gate is the human smoke test
   `artifacts\thunderstore\superseded\` alongside the never-published
   INTERNAL 0.9.0 milestone ZIP (`…-0.9.0-internal-milestone.zip`) —
   the internal file shares only the version number, never the bytes.
-  The retired copies under `artifacts\rc15\`, `artifacts\rc14\`,
+  The retired copies under `artifacts\rc15b\`, `artifacts\rc15\`,
+  `artifacts\rc14\`,
   `artifacts\rc13\`, `artifacts\rc12\`,
   `artifacts\rc11\` (ZIP `C08BBBB1…`, DLL `8C5233A4…`),
   `artifacts\rc10\` (ZIP `EA523400…`, DLL `A350D0CE…`) and
   `artifacts\rc8\` (ZIP `AF267AC2…`, DLL `E9904771…`) must NOT be
   tested or uploaded.)
-- **ZIP SHA-256:** `8AC3A77925C17474E2464DA5E13616530E6DB22D7AEB6B9EBA2D72ABC34B1DC0`
-  (328,729 bytes — fresh RC15b / 0.9.0-beta bytes; retired hashes
-  (RC15 `F89AAD13…` included) are never reused; the immutable rc15b
-  copy verified byte-identical to the staging ZIP)
-- **Plugin DLL SHA-256:** `BA8975CA2934810FF13F424A64ABAFEF3D41D515BFEADF60378A4CAD2DA7306F`
-  (478,720 bytes; the DLL inside the ZIP verified hash-identical to the
-  Release build output; informational version
-  `0.9.0+e4abe1f60996284eb879b9d917eed6d096b68ccc` verified in the DLL;
+- **ZIP SHA-256:** `036DBD3920158D7452B9586563AD7F4E1419519BAF370373F41E7D0415D421BE`
+  (319,566 bytes — fresh RC15c / 0.9.0-beta bytes; retired hashes
+  (RC15b `8AC3A779…` and RC15 `F89AAD13…` included) are never reused;
+  the immutable rc15c copy verified byte-identical to the staging ZIP)
+- **Plugin DLL SHA-256:** `58BDD2264D9C1B3C9A910A57849D0EC2926A01786B05C0A3821FA2B61459FB18`
+  (478,720 bytes; informational version
+  `0.9.0+87a0fecbe184fac7480ec7611dc9dfe96d1203ae` verified in the DLL;
   the 12 `CC.Icons.cc-*.png` sprite resources re-verified embedded)
 - **Assembly metadata (verified in the DLL):** Company "The Concerned Cat",
   Product "Concerned Cartographer", Copyright © 2026 Eren Cansunar,
-  RepositoryUrl embedded, informational version `0.9.0+<RC15b commit>`,
+  RepositoryUrl embedded, informational version `0.9.0+<RC15c commit>`,
   FileVersion 0.9.0.0.
 - **Package audit:** ZIP root contains exactly `manifest.json`, `README.md`,
   `CHANGELOG.md`, `LICENSE`, `icon.png` (256×256),
@@ -877,7 +899,7 @@ release blockers, all addressed in the previous RC:
 ## 8. Automated evidence (at the RC commit)
 
 - **568/568 tests** in the game-free core suite (Release configuration,
-  re-run at the RC15b commit): everything below plus the RC15b suite —
+  re-run at the RC15c commit): everything below plus the RC15b suite —
   `SupportReportPrivacyTests` (11: the composed support report has no
   `world-uid` field and no uid-shaped digit run; pin/road sidecar rows
   carrying a name, notes, category, tag, and real coordinates reduce
@@ -1054,13 +1076,14 @@ tombstone-once-and-recoverable, the retained System Markers
 verifies the CC-098 privacy audit: the whole LogOutput.log free of
 world UIDs/paths/names/coordinates, and the support report free of
 the `world-uid` line), and redraw teardown hardening), NOT at the
-top, on the exact RC15b beta ZIP named above.** After R11, re-run R10 rows 1/2/5 on the same ZIP (their
+top, on the exact RC15c beta ZIP named above.** After R11, re-run R10 rows 1/2/5 on the same ZIP (their
 surfaces changed in RC15), then complete whichever R10 → R9 → R8 →
 R7 → R6 → R5 → R3/R4 rows (as previously amended) earlier smokes did
 not finish — rows already passed stay passed, because RC15
 deliberately changed only the relog/tombstone lifecycle, the redraw
-teardown path, and diagnostics, and RC15b changes only the privacy of
-emitted log/support text (no behavior). The full 2.5–4 h checklist is
+teardown path, and diagnostics, RC15b changes only the privacy of
+emitted log/support text (no behavior), and RC15c changes only the
+packaged Thunderstore README (no code). The full 2.5–4 h checklist is
 not restarted.
 
 ## 19. Remaining Git commands (run after the smoke test passes)
@@ -1079,8 +1102,8 @@ prefers a different scheme, substitute it consistently.
 # 1. Merge the completion branch to main (PR or fast-forward — owner's call):
 git checkout main; git merge feat/cc-098-v1-completion
 git push origin main
-# 2. Tag the RC15b commit named in the identity section (now in main history):
-git tag -a concerned-cartographer/v0.9.0-beta -m "Concerned Cartographer 0.9.0 (Public Beta) - Stable Living Atlas beta" e4abe1f60996284eb879b9d917eed6d096b68ccc
+# 2. Tag the RC15c commit named in the identity section (now in main history):
+git tag -a concerned-cartographer/v0.9.0-beta -m "Concerned Cartographer 0.9.0 (Public Beta) - Stable Living Atlas beta" 87a0fecbe184fac7480ec7611dc9dfe96d1203ae
 git push origin concerned-cartographer/v0.9.0-beta
 gh release create concerned-cartographer/v0.9.0-beta artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-0.9.0.zip --title "Concerned Cartographer 0.9.0 (Public Beta)" --prerelease --notes-file src/ConcernedCartographer/Package/CHANGELOG.md
 ```
