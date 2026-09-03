@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.9.0 (Public Beta)
+## 0.10.0 (Public Beta)
 
 **The Stable Living Atlas — public beta.** The roads your Vikings actually build become a durable, searchable, shareable map — and everything on it can be trusted. This is the feature-complete candidate for the 1.0.0 release, published as a beta for wider testing; upgrading from this beta to 1.0.0 will be automatic and lossless, like every Concerned Cartographer upgrade.
 
