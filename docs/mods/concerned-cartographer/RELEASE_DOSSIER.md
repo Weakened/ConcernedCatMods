@@ -7,9 +7,11 @@ The single remaining gate is the human smoke test
 ## 1–5. Release candidate identity
 
 - **Version:** 1.0.0 (unchanged — 1.0.0 has never been publicly tagged or published)
-- **RC commit:** RECORDED IN THE FINAL DOSSIER COMMIT (**RC12**, on the
-  CC-098 line — the owner-feedback pass of 2026-09-02 addressing all 6
-  feedback items (4 release blockers) from the owner's RC11 smoke).
+- **RC commit:** `846e9dbc2dbaff7d766eb3be36413ed9d8118eb8` (**RC12**,
+  on the CC-098 line — the owner-feedback pass of 2026-09-02 addressing
+  all 6 feedback items (4 release blockers) from the owner's RC11
+  smoke; the package below was built at exactly this commit with a
+  clean tree, and the DLL's informational version embeds it).
   RC12 delivers, on top of RC11:
   **(1) paved ink reads lighter than dirt** — the shared road palette's
   normal-mode paved ink is now a light stone gray (176,180,190) so
@@ -268,12 +270,13 @@ The single remaining gate is the human smoke test
   `artifacts\rc10\` (ZIP `EA523400…`, DLL `A350D0CE…`) and
   `artifacts\rc8\` (ZIP `AF267AC2…`, DLL `E9904771…`) must NOT be
   tested or uploaded.)
-- **ZIP SHA-256:** RECORDED IN THE FINAL DOSSIER COMMIT
-  (fresh RC12 bytes; retired hashes are never reused)
-- **Plugin DLL SHA-256:** RECORDED IN THE FINAL DOSSIER COMMIT
-  (the DLL inside the ZIP verified hash-identical to the Release build
-  output; informational version `1.0.0+<RC12 commit>`; the 12
-  `CC.Icons.cc-*.png` sprite resources re-verified embedded)
+- **ZIP SHA-256:** `7A027F7BE112A3FE5840C44D1612916EB61A7EBFE519C60CF336D24A8D50B384`
+  (317,731 bytes — fresh RC12 bytes; retired hashes are never reused)
+- **Plugin DLL SHA-256:** `FD6DB99C1979B3EB42D19A8B20AD091BDE9BCB052A59E322DC33125E47A60927`
+  (459,264 bytes; the DLL inside the ZIP verified hash-identical to the
+  Release build output; informational version
+  `1.0.0+846e9dbc2dbaff7d766eb3be36413ed9d8118eb8` verified in the DLL;
+  the 12 `CC.Icons.cc-*.png` sprite resources re-verified embedded)
 - **Assembly metadata (verified in the DLL):** Company "The Concerned Cat",
   Product "Concerned Cartographer", Copyright © 2026 Eren Cansunar,
   RepositoryUrl embedded, informational version `1.0.0+<RC commit>`.
@@ -658,7 +661,7 @@ R8 + R7 + R6 + R5 + R3 + R4 pass:
 git checkout main; git merge feat/cc-098-v1-completion
 git push origin main
 # 2. Tag the RC12 commit named in the identity section (now in main history):
-git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" <RC12-commit-from-identity-section>
+git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" 846e9dbc2dbaff7d766eb3be36413ed9d8118eb8
 git push origin concerned-cartographer/v1.0.0
 gh release create concerned-cartographer/v1.0.0 artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-1.0.0.zip --title "Concerned Cartographer 1.0.0" --notes-file src/ConcernedCartographer/Package/CHANGELOG.md
 ```
