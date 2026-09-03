@@ -1,195 +1,38 @@
 # Concerned Cartographer
 
-**The living atlas for Valheim, by The Concerned Cat.**
+**Public beta by The Concerned Cat. Actively maintained on the road to v1.0 and beyond.**
 
-Concerned Cartographer turns the roads your Viking actually traverses into a durable, editable, shareable atlas: dirt and paved road layers, fully editable markers, routes, search, and cartography-table sharing — all local files, never modifying Valheim's terrain or world save, always uninstall-safe.
+Concerned Cartographer turns Valheim’s map into a living atlas.
 
-> **Public beta (0.9.0).** This is the feature-complete candidate for the 1.0.0 release. Data formats are final: upgrading from this beta to 1.0.0 will be automatic and lossless. Please report anything odd — see *Feedback, privacy, and security* below.
+The roads your Vikings build can map themselves. Existing pins can become durable, editable entries with notes, categories, tags, search, saved views, and recoverable deletion. Routes can follow your recorded road network, and selected atlas information can be shared with other players through an explicit preview-and-apply process.
 
-## Features
+## Highlights
 
-- **Roads**: your own successful hoe **Pathen** and **Paved road** actions are captured instantly as durable road ink — and *only* those, identified by the actual action you performed (never by what the terrain paint happens to look like). Level ground, Raise ground, Cultivate, digging, walking existing paint, world-generated dirt, spawn areas, and other players' roads never create road data, so the atlas records exactly the road network you deliberately built. Separate dirt/paved layers on the large map and minimap. On the large map, roads AND routes render as **high-precision vector ink** that stays put at any zoom (the minimap keeps the classic texture overlay); road lines wear a softly feathered edge that suits the map's hand-drawn style while routes stay crisp, the two presentations never draw on top of each other, and the map's **Map Overlays** checkboxes genuinely show/hide each layer in both presentations.
-- **Markers**: a searchable, scrollable marker palette (draggable, with collapsible category sections) replaces the five raw vanilla icon buttons, with **12 distinct hand-drawn-style Concerned Cartographer icons** (road/junction, harbor, resource, danger, farm, mine, fishing, camp, travel, trader, dungeon, objective) alongside the vanilla five; markers placed through it are managed from birth and wear their chosen icon from the very first frame. Existing vanilla pins upgrade in place ("Upgrade & Edit") and every property — name, icon, category, notes, tags, status, scope — is edited in the Pin Workbench without ever deleting and recreating a pin.
-- **Atlas Drawer**: layers, clustering, token search (`tag:iron`, `near:0,0,500`), saved views, System Markers (pin-type filters + visible-to-others), and Privacy.
-- **Routes**: manual **map planning and navigation overlays** — free-draw and waypoint routes from the [Routes] panel with explicit on-map modes, snapping to your recorded roads, distance/time estimates, and full editing (rename, style, status, color, lock, archive, split, merge, undo/redo). Routes never move your character; they are drawn plans, not autopilot.
-- **Survey Rules** (opt-in): nearby loaded objects — berries, mushrooms, wild seeds, flint, guck, beehives, ore deposits, dungeon entrances, lore runestones and boss vegvisirs out of the box — become reviewable observations within about a second of coming near them; nothing is pinned until you accept it, and an accepted observation appears on the map immediately with a proper human name ("Raspberry Bush", never a prefab id). Rejecting is durable: rejected observations move to a persistent Rejected view where you can restore or accept them later — they never re-offer on their own — and the rules themselves are viewed, added, removed, and toggled right in the Survey panel.
-- **Sharing**: private/table/server scopes with a preview inbox — nothing from other players applies automatically, deletions are named before you accept them, and deleted entities can never resurrect.
-- **One toolbar**: [Atlas] [Markers] [Routes] [Survey] [Share] [Quick Pin] [Settings] on the large map. Every feature has a visible UI path; hotkeys and console commands stay as rebindable accelerators.
+* Dirt paths and paved roads appear as separate map layers.
+* Roads are captured as you build, walk, or rediscover them.
+* Existing vanilla pins can be upgraded and edited without being recreated.
+* The Atlas Drawer provides search, filtering, clustering, and saved views.
+* Freehand and waypoint routes can follow recorded roads.
+* Backups, restoration, migration, and sanitized support reports are built in.
+* Multiplayer sharing is deliberate: nothing is applied without review.
+* Fog of war is respected.
+* World saves are never modified.
+* Removing the mod leaves managed pins usable as ordinary vanilla pins.
 
-## Known limitations
+## Beta status and support
 
-- Roads exist in the atlas only from **your own Pathen/Paved actions after installing the mod** — the strict v1 rule. Roads built before installing (or by other players) are added by re-paving them (one pass of the hoe/stonecutter over the existing surface re-captures them). Terraforming (Level/Raise/Cultivate/Reset) never creates roads and erases the road ink it covers; a later deliberate Pathen/Paved always wins.
-- The atlas lives inside the **active mod-manager profile's** BepInEx config folder. Each profile keeps its own atlas; copy the `ConcernedCatMods` config folder between profiles to carry one over.
-- Pin color and display size are stored fields for forward compatibility, editable via `cc_pins`, but have no visual behavior in v1 — so the Pin Workbench deliberately shows no controls for them.
-- Sharing is peer-to-peer between online players; there is no dedicated-server-side store. MapRoutes routes coexist but are not imported.
-- On the minimap (and with `Map/HighPrecisionLargeMapRoads` off, on the large map too), a road line can sit up to ~6 m from its true position at maximum zoom — the native resolution of Valheim's 2048-pixel map texture.
+This is a real public release, but it is also the first large-scale community test of the complete atlas.
 
-## Installation
+Development and compatibility support will continue through the stable v1.0 milestone and beyond. Confirmed crashes, data-loss risks, installation failures, stuck input, duplicated pins, and multiplayer consistency problems receive the highest priority.
 
-Install with a Thunderstore-compatible mod manager. BepInExPack Valheim and Jötunn are declared dependencies and should install automatically.
+Report ordinary bugs and compatibility problems through the GitHub issue tracker:
 
-## Use
+https://github.com/Weakened/ConcernedCatMods/issues
 
-1. Start the game modded, enter a world, and build roads with the hoe's **Pathen** or the stonecutter's **Paved** — each successful action inks the map instantly. Re-pave an existing road once to capture it.
-2. Open the large map: the Concerned Cartographer toolbar sits at the bottom center, above the vanilla control tips, and the **[Markers]** palette opens as the starting side panel (close it or switch panels and it stays out of your way until the next map open).
-3. [Atlas] opens the drawer (layers, search, saved views, System Markers, Privacy). [Markers] reopens the palette — pick an icon, double-click the map, done.
-4. Hover any of your markers and click **Edit Pin** / **Upgrade & Edit** to open the workbench.
+Run `cc_atlas support` to create a sanitized report containing versions, settings, and counts—but never coordinates, names, pins, routes, or notes.
 
-## Controls and shortcut parity
+For security vulnerabilities, privacy questions, or sensitive logs:
 
-Everything is reachable with the mouse from the large map. Hotkeys are rebindable accelerators — every one of them has a visible UI path that does the same thing:
+[support@theconcernedcat.com](mailto:support@theconcernedcat.com)
 
-| Feature | Shortcut | Visible UI path | Shortcut still works |
-|---|---|---|---|
-| Atlas Drawer | `L` | Toolbar **[Atlas]** | ✓ |
-| Marker palette | — | Toolbar **[Markers]** (Escape closes) | — |
-| Edit / upgrade the hovered pin | `P` | Hover a marker → context button **Edit Pin** / **Upgrade & Edit** | ✓ |
-| Quick Pin what you look at | `F7` | Toolbar **[Quick Pin]** — the map closes, your next click (or `F7`) captures one-shot; `Esc` cancels | ✓ (instant, no arming) |
-| Routes: draw, waypoints, erase, edit ops | `Shift+LMB` after a `cc_routes` mode | Toolbar **[Routes]** — Free Draw / Waypoints / Erase buttons enter explicit modes (no modifier needed; map drag is consumed; Finish/Undo/Redo/Escape) | ✓ (console modes keep the modifier) |
-| Survey review | `cc_survey` console | Toolbar **[Survey]** — enable, pending list, accept/reject, bulk with confirm, reload | ✓ |
-| Sharing | `cc_sync` console | Toolbar **[Share]** — status, share now, inbox, preview (deletions named), apply mine/theirs, clear | ✓ |
-| Privacy, backup/restore, support bundle, road repair | `cc_atlas` / `cc_roads` console | Toolbar **[Settings]** — privacy, backup, confirmed restore (most recent backup), sanitized support bundle, road repair under Advanced | ✓ |
-| Pin-type filters, visible-to-others | vanilla rail (hidden by default) | **[Atlas] → System Markers** — vanilla state, never touches pins; `Map/ShowVanillaMapControls = true` brings the vanilla rail back | ✓ (when rail shown) |
-| Close the active panel | `Esc` | Every panel's Close button | ✓ |
-| Gamepad | `Accessibility/*GamepadButton` bindings | Panels select their first control on open | opt-in |
-
-Console-only (scriptable/advanced, by design): `cc_pins` batch and recovery operations (`list`, `move`, `dup`, `archive`, `merge`, `restore`, `deleted`, `undo`, `redo`, `coords`, `create`, `adoptall`), `cc_atlas view del` / `compat` / `restore <n>` for older backups, `cc_survey path`, and arbitrary hex route colors. The [Routes] **Restore** button recovers the most recently deleted route.
-
-Right-click pin delete, Cross Off, Remove, Ping, and double-click placement remain pure vanilla input. By default the vanilla right-side map rail (icon selectors, death/boss filters, visible-to-others) is hidden because the toolbar and System Markers replace it — set `Map/ShowVanillaMapControls = true` to show it alongside, and it comes back automatically if a conflicting pin manager is detected, any CC surface fails, or the mod is disabled.
-
-## Configuration
-
-Settings live in `BepInEx/config/com.theconcernedcat.valheim.concernedcartographer.cfg`. Out-of-range values are clamped to the documented range; effective values are logged once at startup.
-
-| Setting | Default | Purpose |
-|---|---|---|
-| General / Enabled | true | Master switch for road capture and overlays |
-| Sources / CaptureConstructionActions | true | Record your own successful Pathen/Paved actions — the ONLY road source |
-| Sources / ReconcileTerrainChanges | true | Leveling/raising/cultivating/resetting removes covered road ink; repainting converts kind |
-| Survey / SampleIntervalSeconds | 0.35 | Seconds between diagnostic terrain samples (feeds `cc_roads align live`; never creates roads) |
-| Survey / MinimumPointSpacingMeters | 1.5 | Minimum distance before a new road point is stored |
-| Survey / MaximumStrokeGapMeters | 8.0 | Larger gaps start a new stroke instead of a connector line |
-| Survey / DuplicateSuppressionMeters | 2.0 | Skip samples near already-recorded ink (0 disables) |
-| Survey / SurveyRulesEnabled | false | Opt-in survey observations (accept/reject review) |
-| Survey / SurveyScanRadius, SurveyBaseExclusionRadius, SurveyMaxObservations | 40 / 30 / 200 | Survey radius, base exclusion, hard cap (scanning itself is continuous on a bounded per-frame budget; SurveyScanIntervalSeconds is legacy and has no effect) |
-| Persistence / AutosaveIntervalSeconds | 15 | Seconds between dirty-atlas autosaves |
-| Detection / PaintThreshold | 0.40 | Minimum averaged paint value that counts as road |
-| Detection / PaintSampleRadius | 1 | Paint pixels averaged around the player |
-| Map / LineWidthPixels | 1 | Texture-overlay road width in map texels (~11.6 m each) |
-| Map / HighPrecisionLargeMapRoads | true | Sub-texel vector road ink on the large map (texture overlay stays for the minimap and as fallback) |
-| Map / ShowVanillaMapControls | false | Show Valheim's own right-side map rail alongside the CC toolbar |
-| Workbench / WorkbenchHotkey | P | Edit/upgrade the hovered pin |
-| Workbench / QuickPinHotkey | F7 | Instant quick pin (also fires an armed [Quick Pin]) |
-| Workbench / QuickPinDuplicateRadius | 25 | Suppress duplicate quick pins within this range |
-| Drawer / DrawerHotkey | L | Atlas Drawer toggle |
-| Drawer / ShowDirtRoads, ShowPavedRoads, ShowPins, Clustering | true | Layer defaults |
-| Drawer / PanelPosition | (empty) | Internal: the drawer's last dragged position — written automatically, restored clamped on-screen; empty means the default dock |
-| Pins / EnhancedPinPalette | true | The managed marker palette (managed-from-birth placement) |
-| Pins / ShowVanillaPinPalette | false | Keep Valheim's five icon buttons visible (auto-true with a conflicting pin manager) |
-| Routes / RouteDrawModifier | LeftShift | Modifier for console-entered map modes (panel modes need none) |
-| Routes / RouteEraseRadius, RouteSnapRadius, RouteOnRoadTolerance | 8 / 15 / 6 | Erase brush, road snapping, on-road tolerance (meters) |
-| Routes / RouteOffRoadSpeed, RouteOnRoadSpeed | 2.5 / 5 | Travel speeds (m/s) for time estimates |
-| Accessibility / UiScale | 1.0 | Panel scale 0.8–1.6 |
-| Accessibility / HighContrast | false | Near-black dirt / near-white paved ink, brighter route colors |
-| Accessibility / WorkbenchGamepadButton, DrawerGamepadButton | (empty) | Opt-in ZInput bindings |
-| Privacy / SendCrashReports | Unknown | Tri-state crash-report consent (asked once on first large-map open) |
-| Privacy / SentryDsn | (empty) | Advanced: override the crash-report ingestion key — never put an auth token here |
-| Diagnostics / DebugLogging | false | Opt-in, rate-limited classification/recording diagnostics |
-| Diagnostics / DrawCalibrationMarkers | false | Overlay alignment calibration crosses (development aid) |
-
-## Enhanced Pin Palette
-
-The palette opens automatically as the starting side panel whenever you open the large map, and **[Markers]** reopens it anytime: a searchable, scrollable palette with icon previews, human names, collapsible category sections, and your recent picks; the panel is draggable like every CC surface, and closing or switching panels is always respected for the rest of that map visit. Choose a marker, double-click the map, name it — the pin wears its chosen icon immediately and is a managed Concerned Cartographer marker from birth, rendered as one ordinary saved vanilla pin (uninstall-safe as always). While you are typing in any Concerned Cartographer text field, keystrokes only type — they never trigger game actions or mod hotkeys, and normal input returns the moment the field loses focus. The mouse wheel over any Concerned Cartographer panel scrolls that panel only; the map underneath never zooms.
-
-Prefer the vanilla selector? Set `Pins/ShowVanillaPinPalette = true` (or `Pins/EnhancedPinPalette = false`) — the vanilla buttons come back instantly and everything else keeps working. When a known conflicting pin manager is installed, the vanilla selector stays automatically. Death, boss, bed, and other system pins are never touched.
-
-## Pin Workbench
-
-Hover any marker on the large map and click the context button (or press `P`): managed markers open the editor, your existing vanilla markers offer **Upgrade & Edit** — it keeps the marker exactly where it is and enables editing, notes, categories, and atlas features. Foreign and system pins show read-only info. Every edit keeps the pin's identity — nothing is deleted and recreated — and deletes are recoverable tombstones.
-
-Visual properties are edited with pickers, not raw IDs: the icon field is a dropdown with the live sprite as preview — including the 12 distinct Concerned Cartographer icons ("Keep custom" preserves legacy IDs) — category offers suggestions while staying free text, and status/visibility are dropdown selects. Pin size and color are stored fields with no v1 rendering, so the panel deliberately has **no controls for them** (`cc_pins size`/`color` still edit the stored values).
-
-The `cc_pins` console command drives everything scriptably: `edit`, `status`, `list [filter]`, `adopt`, `adoptall confirm`, `create <name>`, field editors (`name`, `icon`, `category`, `color`, `size`, `note`, `tag+/tag-`, `setstatus`, `check/uncheck`, `scope`), `move`, `dup`, `archive/unarchive`, `delete`, `restore`, `deleted`, `dups`, `merge confirm`, `undo`, `redo`, and `coords`. Batch adoption and merges always preview first and require `confirm`.
-
-Pins are stored per world next to the road atlas with crash-safe snapshot+journal persistence. Removing the mod leaves every managed pin on the map as a plain vanilla pin.
-
-## Atlas Drawer, search, and clustering
-
-**[Atlas]** (or `L`) opens the drawer: toggle road/pin layers and clustering, search the atlas (plain words, or tokens like `tag:iron`, `category:travel`, `is:unchecked`, `near:0,0,500`), click a result to edit it, and save the current filter/layer state as a named view. **System Markers** hosts the vanilla pin-type filters and the visible-to-others toggle; **Privacy** hosts crash-report consent. Zoomed out, crowded pins fold into cluster markers; filters and clusters are display-only and never change stored data. Console: `cc_atlas`.
-
-## Routes
-
-Routes are **manual map planning and navigation overlays**: draw a plan, style it, track its status, share it — the route never moves your character. **[Routes]** lists your routes in a stable alphabetical order (active before archived, with a count of any that exceed the visible slots); the panel is draggable like every CC panel. **Free Draw**: hold LMB on the map to draw, release ends that stroke (each real stroke is its own route, numbered off your base name — a stray click never creates one), Finish or Escape exits the mode. **Snap to roads** and a confirmed **Clear all routes** live in the bottom control area. **Waypoints**: click the map to add points, snapping to your recorded roads (toggleable). The pointer over any panel or control never adds points — drawing happens only on uncovered map. Dashed and dotted styles pattern by real distance along the route, so they read as dashes/dots at every zoom. Rename, style, status, ink color swatches, lock, archive, delete/restore, split, merge, and measure all operate on the selected route (shown above the list). Estimates use your configured on/off-road speeds. Console: `cc_routes` (scriptable alias, classic `Shift+LMB` modes included).
-
-## Survey Rules and Quick Pin
-
-**[Quick Pin]** on the toolbar closes the map and arms a one-shot capture: your next deliberate click (or `F7`) pins what you are looking at — never creatures, never duplicates within the configured radius; `Esc` cancels. `F7` in the world stays the instant path. Pin names come from the object's localized name (or its real prefab identity when there is none) — internal engine names like "Collider" can never become a pin name, and a truly nameless target pins as "Marked object".
-
-Opt-in **Survey Rules** (`Survey/SurveyRulesEnabled`) turn nearby loaded objects into reviewable observations in the **[Survey]** panel. Scanning is continuous on a bounded per-frame budget, so a matching object near you surfaces within about a second, the top-left notice arrives at most once every ~10 seconds (and only when something was actually found), and the same physical object can never fill the list twice. The starter rules are useful out of the box — berries, mushrooms, thistle, dandelions, flint, wild carrot/turnip/onion seeds, guck sacks, beehives, copper/tin/silver/obsidian/iron deposits, burial chambers, sunken crypts, troll caves, frost caves, lore runestones, and boss vegvisirs, all duplicate- and expiry-bounded.
-
-The panel has three views. **Pending** shows live scanner status and the observations awaiting review — accept (+) pins one immediately with a humanized name, reject (−) sets it aside; nothing is ever pinned without your accept. **Rejected** is durable: rejected observations stay listed there across sessions, never re-offer on their own, and can be restored to review or accepted directly whenever you change your mind. **Rules** edits the rule set itself — enable/disable, delete, or add a rule (prefab pattern plus a cycling icon/category) without leaving the game; `survey-rules.tsv` remains the shareable import/export format for advanced use, with **Reload file** to pick up external edits. Console: `cc_survey` (scriptable alias over the same paths).
-
-## Sharing
-
-**[Share]** shows scoped entity counts, shares your table/server-scoped entities, and previews the inbox: every incoming share lists what it changes — including, by name, anything it would delete — before you apply mine-wins or theirs-wins. Nothing ever applies automatically. Deleted entities are durable tombstones: a stale client cannot resurrect them. Console: `cc_sync`.
-
-## Road repair tools
-
-**[Settings] → Road repair (Advanced)** offers the full toolset; the console equivalent is `cc_roads` — every operation targets the recorded road nearest your character, and an optional number widens the search radius in meters:
-
-| Command | Effect |
-|---|---|
-| `cc_roads status` | Atlas totals and the nearest road's kind/size/source |
-| `cc_roads delete [radius]` | Delete the nearest road (undoable) |
-| `cc_roads kind` | Toggle the nearest road between Dirt and Paved |
-| `cc_roads hide` / `unhide` | Hide a road from the map without deleting it |
-| `cc_roads split` | Split the nearest road at its closest interior point |
-| `cc_roads join [radius]` | Stitch the two nearest same-kind road ends |
-| `cc_roads rebuild [radius]` | Clear recorded roads nearby (they return when you Pathen/Pave again) |
-| `cc_roads undo` | Undo the last tool operation (up to 20) |
-
-The tools edit only the mod's own atlas; they can never modify terrain or world saves. Before the first destructive change each session the sidecar is backed up to `.pre-reconcile.bak`.
-
-## Feedback, privacy, and security
-
-Found a problem? Open an issue at https://github.com/Weakened/ConcernedCatMods/issues and attach the file from **[Settings] → support bundle** (or `cc_atlas support`) — it is sanitized by construction (versions, settings, and counts only; never positions, names, notes, world identifiers, or file paths). The mod's own log lines follow the same rule, so the Concerned Cartographer lines of `LogOutput.log` are safe to share too. For security vulnerabilities, privacy questions, or logs you should not post publicly: **support@theconcernedcat.com**.
-
-**Privacy**: everything the mod records stays in local files under your BepInEx config folder. Nothing is uploaded anywhere. Sharing happens only between players on your server, only for entities you explicitly scope, and only after the receiver reviews and applies it.
-
-**Optional crash reporting (off by default)**: on your first large-map open the mod asks once whether to send anonymous crash reports when Concerned Cartographer itself hits an internal error. If you say yes, a report carries only mod/game versions, the affected subsystem, the exception type, and a sanitized stack trace — never your identity, world/character names, seeds, coordinates, pins/routes, server details, saves, or logs (automated tests enforce this, and the provider is configured not to store IPs). Change your answer anytime under **[Atlas] → Privacy**. Full policy: `PRIVACY.md` in the repository. No gameplay analytics, ever.
-
-**Security model**: incoming shares are size-capped (including bounded decompression, so oversized payloads are rejected before they can use memory), parsed with malformed-row skipping and sanity bounds on every field, and never applied automatically. The sync preview names any entity a share would delete so you can review deletions before accepting them. Deletions are durable — a stale or misbehaving client cannot resurrect them. Author labels identify who edited what but are not cryptographic proof of identity.
-
-## Data and uninstall safety
-
-The atlas is a per-world sidecar family:
-
-```text
-BepInEx/config/ConcernedCatMods/ConcernedCartographer/<world-uid>.roads.tsv
-                                                      <world-uid>.pins.tsv (+ journal)
-                                                      <world-uid>.routes.tsv (+ journal)
-                                                      <world-uid>.terrain-intent.tsv
-```
-
-The mod does not edit the Valheim world file. Removing the DLL stops surveying/rendering and leaves managed pins as plain vanilla pins; deleting the sidecar folder removes the locally recorded atlas.
-
-## Compatibility
-
-Client-side only. In enhanced mode the mod replaces the vanilla right-side map rail with its own toolbar and panels — reversibly, using only show/hide, with automatic fallback: when a known conflicting pin manager is detected the vanilla controls stay, and `Map/ShowVanillaMapControls` / `Pins/ShowVanillaPinPalette` bring them back at any time. Verified compatible with **Pinnacle 1.16.0** and **MapRoutes 1.1.0** in the same profile — road layers, pins, and both mods' routes coexist. Report conflicts with a BepInEx log and the exact mod versions installed.
-
-## AI disclosure
-
-AI coding agents materially assisted implementation and review. Releases are manually reviewed and tested in game before publication, and the package uses Thunderstore's **AI Generated** category.
-
-## Support and source
-
-Use the GitHub issue tracker linked by the package website for bugs and feature requests. Include the game version, mod version, profile mod list, reproduction steps, and a `BepInEx/LogOutput.log` excerpt. For security vulnerabilities, privacy questions, or anything that should not be public: **support@theconcernedcat.com** (human support only — crash reports are never sent by email).
-
-<!-- CC-PACKAGE-ATTRIBUTION -->
-## Original project, source, and contributions
-
-Concerned Cartographer is created and maintained by **Eren Cansunar / The Concerned Cat**. AI coding agents materially assisted implementation, tests, research and documentation; releases use the appropriate AI disclosure and are validated through the project's release process.
-
-Source, technical documentation, issue tracker, and contribution guide are available in the canonical repository: `Weakened/ConcernedCatMods`.
-
-The source-code license is in `LICENSE`. Original project attribution/provenance is documented in `NOTICE.md` and `AUTHORS.md`.
+Crash reporting is optional, disabled until the player explicitly opts in, and contains no gameplay analytics.
