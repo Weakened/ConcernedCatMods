@@ -18,13 +18,61 @@ The single remaining gate is the human smoke test
   decision recorded in section 19). Data and schema formats are
   unchanged from RC12; upgrading this beta to 1.0.0 later is automatic
   and lossless.
-- **RC commit:** `392ab9382f9088b72e65d9e6a530bbe030c526d6` (**RC13**,
-  on the CC-098 line — the owner-approved final beta polish pass of
-  2026-09-02, implementing exactly the four presentation/UX items from
-  the owner's RC12 smoke feedback, plus the 0.9.0 re-version; the
+- **RC commit:** `7a160d4601d52d6c8589089be814157f0952322d` (**RC14**,
+  on the CC-098 line — the final-smoke corrective pass of 2026-09-03,
+  fixing exactly the 5 defects from the owner's final RC13 smoke; the
   package below was built at exactly this commit with a clean tree,
   and the DLL's informational version embeds it).
-  RC13 delivers, on top of RC12:
+  RC14 delivers, on top of RC13:
+  **(1) custom cc:* markers survive relog** — session boundaries clear
+  the pin adapter/display fail-soft latches (previously
+  process-permanent), the sprite rebind decision is the pure tested
+  `SpriteRebindRule` (restart-claimed cc:* renderings rebuild to
+  regain their art; genuine vanilla pins are never repainted),
+  `AddManagedPin` applies sprites to same-frame UI elements, cluster
+  markers wear their dominant cc:* sprite, and `CcIconSprites` scopes
+  its failure blacklist per session with `DontUnloadUnusedAsset`
+  sprites;
+  **(2) Atlas drawer position persists** — noted every visible frame,
+  captured on close/boundary/quit into the new `Drawer/PanelPosition`
+  setting, restored through the pure `PanelPositionRule` on-screen
+  clamp (resolution/UI-scale safe; malformed/empty falls back to the
+  default dock; `Toggle()` no longer re-docks unconditionally);
+  `CcSidePanel` UI scale now survives scene-change rebuilds;
+  **(3) armed Quick Pin owns its input** — the pure `QuickPinInputGate`
+  (armed lifetime + owned-press frame, tick-order independent, cancel
+  wins over capture, immediate external release) applied through
+  `PlayerInputGate`'s two narrow skippable prefixes on
+  `Humanoid.StartAttack` (local player only) and `Menu.Update` (only
+  while the menu is closed) — capture clicks cannot attack, Escape
+  cancels without opening the pause menu, fail-soft and uninstalled on
+  dispose; RC10 typing safety untouched;
+  **(4) persisted roads render on the minimap after relog** — overlay
+  handle caches are liveness-checked through the pure
+  `OverlayHandleRule` (Jötunn destroys overlay textures on Minimap
+  teardown; presence alone was the bug), `ResetMapSession()` runs at
+  map-available before the redraws on both renderers, and
+  `RoadVectorLayer`'s fail-soft session disable resets per session
+  instead of lasting the process;
+  **(5) the Sentry pin-update NullReferenceException is fixed at its
+  lifecycle root** — every `PinAdapter`/`PinDisplayController` map
+  write path is a lifecycle-guarded no-op without a live Minimap
+  (teardown frames), with no blanket catch added anywhere; the next
+  map-available reconcile repairs every rendering (§7 defect 5 has the
+  full analysis).
+  **Retires RC13 `392ab938`/`2e0dbfb` (ZIP `19ADD2E5…`) — do not
+  test, tag, or upload it.** The owner's RC13 smoke evidence remains
+  valid for everything it passed; the five defects above are exactly
+  what failed, each is re-verified by the NEW smoke section **R10**,
+  and RC14 deliberately changes nothing else. Data and schema formats
+  are unchanged from RC12/RC13 (the new panel-position value lives in
+  the BepInEx config file, not in any sidecar format).
+- RC13's identity block is preserved below for the record:
+- (RC13) **RC commit** `392ab9382f9088b72e65d9e6a530bbe030c526d6`
+  (the owner-approved final beta polish pass of 2026-09-02,
+  implementing exactly the four presentation/UX items from the owner's
+  RC12 smoke feedback, plus the 0.9.0 re-version).
+  RC13 delivered, on top of RC12:
   **(1) feathered large-map road ink** — Dirt/Paved vector quads widen
   4/3 and stretch a 1×64 alpha-gradient texture across their width
   (pure `RoadInkSoftening`: opaque core, symmetric monotone falloff,
@@ -313,28 +361,33 @@ The single remaining gate is the human smoke test
   directives touched is re-verified by smoke section **R5** (then R3/R4
   as amended).)
 - **ZIP:** `artifacts\thunderstore\TheConcernedCat-ConcernedCartographer-0.9.0.zip`
-  (built at the RC13 commit; an identical immutable copy is at
+  (built at the RC14 commit; an identical immutable copy is at
+  `artifacts\rc14\TheConcernedCat-ConcernedCartographer-0.9.0-RC14.zip`
+  — verify the hash below before importing. The retired RC13 package
+  (ZIP `19ADD2E5…`, DLL `CE783057…`) survives only as
   `artifacts\rc13\TheConcernedCat-ConcernedCartographer-0.9.0-RC13.zip`
-  — verify the hash below before importing. The retired RC12 package
-  (ZIP `7A027F7B…`, DLL `FD6DB99C…`) was moved to
+  — its staging copy was overwritten by this rebuild. The RC12 package
+  (ZIP `7A027F7B…`, DLL `FD6DB99C…`) remains in
   `artifacts\thunderstore\superseded\` alongside the never-published
   INTERNAL 0.9.0 milestone ZIP (`…-0.9.0-internal-milestone.zip`) —
   the internal file shares only the version number, never the bytes.
-  The retired copies under `artifacts\rc12\`, `artifacts\rc11\` (ZIP
-  `C08BBBB1…`, DLL `8C5233A4…`), `artifacts\rc10\` (ZIP `EA523400…`,
-  DLL `A350D0CE…`) and `artifacts\rc8\` (ZIP `AF267AC2…`, DLL
-  `E9904771…`) must NOT be tested or uploaded.)
-- **ZIP SHA-256:** `19ADD2E56C0B9CDF4A69772D862D630A9E9BB35749EDE8C177B579EC8123E0ED`
-  (321,833 bytes — fresh RC13 / 0.9.0-beta bytes; retired hashes are
-  never reused; the immutable rc13 copy verified hash-identical)
-- **Plugin DLL SHA-256:** `CE783057743E8E9990DAE5167F09133CDE051ED911DC10278F3C675869536BDD`
-  (465,408 bytes; the DLL inside the ZIP verified hash-identical to the
+  The retired copies under `artifacts\rc13\`, `artifacts\rc12\`,
+  `artifacts\rc11\` (ZIP `C08BBBB1…`, DLL `8C5233A4…`),
+  `artifacts\rc10\` (ZIP `EA523400…`, DLL `A350D0CE…`) and
+  `artifacts\rc8\` (ZIP `AF267AC2…`, DLL `E9904771…`) must NOT be
+  tested or uploaded.)
+- **ZIP SHA-256:** `49DBB8479BEE0C9A51DD48BFA74B63203EEE31EBBCBF0BE3794ABDEFA0366478`
+  (324,969 bytes — fresh RC14 / 0.9.0-beta bytes; retired hashes are
+  never reused; the immutable rc14 copy verified byte-identical to the
+  staging ZIP)
+- **Plugin DLL SHA-256:** `9DA6786FC490C8961A134BEB48A273DE8F1F986D6CC628305A8FEF3CC24D5856`
+  (470,016 bytes; the DLL inside the ZIP verified hash-identical to the
   Release build output; informational version
-  `0.9.0+392ab9382f9088b72e65d9e6a530bbe030c526d6` verified in the DLL;
+  `0.9.0+7a160d4601d52d6c8589089be814157f0952322d` verified in the DLL;
   the 12 `CC.Icons.cc-*.png` sprite resources re-verified embedded)
 - **Assembly metadata (verified in the DLL):** Company "The Concerned Cat",
   Product "Concerned Cartographer", Copyright © 2026 Eren Cansunar,
-  RepositoryUrl embedded, informational version `0.9.0+<RC13 commit>`,
+  RepositoryUrl embedded, informational version `0.9.0+<RC14 commit>`,
   FileVersion 0.9.0.0.
 - **Package audit:** ZIP root contains exactly `manifest.json`, `README.md`,
   `CHANGELOG.md`, `LICENSE`, `icon.png` (256×256),
@@ -350,9 +403,9 @@ Every sprint v0.3→v1.0 shipped through its internal gate; all 42 child
 issues and 8 controllers (#8, #27–#81) are closed with evidence comments.
 Shipped versions on main with tags: 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0,
 0.8.0, 0.9.0. The RC6 line is on main; the CC-098 completion line (RC7,
-RC8, RC10, and RC11 — all now retired — plus the RC12 owner-feedback
-pass) is on `feat/cc-098-v1-completion` awaiting its post-smoke merge
-and tag (section 19).
+RC8, RC10, RC11, RC12, and RC13 — all now retired — plus the RC14
+final-smoke corrective pass) is on `feat/cc-098-v1-completion` awaiting
+its post-smoke merge and tag (section 19).
 
 ## 7. Defects
 
@@ -827,8 +880,8 @@ prefers a different scheme, substitute it consistently.
 # 1. Merge the completion branch to main (PR or fast-forward — owner's call):
 git checkout main; git merge feat/cc-098-v1-completion
 git push origin main
-# 2. Tag the RC13 commit named in the identity section (now in main history):
-git tag -a concerned-cartographer/v0.9.0-beta -m "Concerned Cartographer 0.9.0 (Public Beta) - Stable Living Atlas beta" 392ab9382f9088b72e65d9e6a530bbe030c526d6
+# 2. Tag the RC14 commit named in the identity section (now in main history):
+git tag -a concerned-cartographer/v0.9.0-beta -m "Concerned Cartographer 0.9.0 (Public Beta) - Stable Living Atlas beta" 7a160d4601d52d6c8589089be814157f0952322d
 git push origin concerned-cartographer/v0.9.0-beta
 gh release create concerned-cartographer/v0.9.0-beta artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-0.9.0.zip --title "Concerned Cartographer 0.9.0 (Public Beta)" --prerelease --notes-file src/ConcernedCartographer/Package/CHANGELOG.md
 ```
