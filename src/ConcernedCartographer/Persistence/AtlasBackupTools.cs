@@ -4,8 +4,7 @@ using System.Globalization;
 using System.IO;
 using BepInEx;
 using BepInEx.Logging;
-using TheConcernedCat.ConcernedCartographer.Atlas;
-using TheConcernedCat.ConcernedCartographer.Roads;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 
 namespace TheConcernedCat.ConcernedCartographer.Persistence;
 
@@ -13,9 +12,11 @@ namespace TheConcernedCat.ConcernedCartographer.Persistence;
 /// one world's sidecar family. Backups/exports are plain folder copies of
 /// the mod's own files (never world saves); restore copies them back and
 /// takes a safety backup of the current state first. The support report is
-/// sanitized by construction: versions, settings, row counts, and file
-/// sizes — never coordinates, names, notes, or world identifiers beyond
-/// the numeric UID.</summary>
+/// sanitized by construction (privacy audit, CC-098): versions, settings,
+/// row counts, and file sizes — never coordinates, names, notes, world
+/// identifiers (including the numeric world UID), or file paths. The
+/// world UID is used here only to LOCATE files on disk; it is never
+/// passed to the report composer and never logged.</summary>
 internal sealed class AtlasBackupTools
 {
     private readonly ManualLogSource _log;
@@ -53,7 +54,9 @@ internal sealed class AtlasBackupTools
             }
         }
 
-        _log.LogInfo($"Atlas backup: {copied} file(s) to {target}");
+        // Privacy: the folder name carries the world UID, so the log line
+        // reports the count only; the console return shows the location.
+        _log.LogInfo($"Atlas backup: {copied} file(s) copied into a new backup folder.");
         return target;
     }
 
@@ -106,77 +109,41 @@ internal sealed class AtlasBackupTools
             }
         }
 
-        _log.LogInfo($"Atlas restore: {restored} file(s) from {backupPath}");
+        _log.LogInfo($"Atlas restore: {restored} file(s) restored from the chosen backup.");
         return $"Restored {restored} file(s) from {Path.GetFileName(backupPath)} " +
             "(a pre-restore safety backup was taken). Log out and back in to load the restored atlas.";
     }
 
     /// <summary>The sanitized support report: safe to paste in a bug
-    /// report.</summary>
+    /// report. This wrapper only locates files; every content line comes
+    /// from the pure, unit-tested <see cref="SupportReportComposer"/>,
+    /// whose signature cannot receive the world UID or any path.</summary>
     public string WriteSupportReport(long worldUid, string pluginVersion, string effectiveConfig)
     {
         string path = Path.Combine(DataDirectory, "support-report.txt");
-        var lines = new List<string>
-        {
-            "# Concerned Cartographer support report (sanitized: no positions, names, or notes)",
-            $"generated-utc: {DateTime.UtcNow:o}",
-            $"plugin-version: {pluginVersion}",
-            $"world-uid: {worldUid}",
-            $"config: {effectiveConfig}",
-        };
-
+        var sidecars = new List<(string Suffix, string Status)>();
         foreach (string suffix in SidecarSuffixes)
         {
             string file = Path.Combine(DataDirectory, worldUid.ToString(CultureInfo.InvariantCulture) + suffix);
             if (!File.Exists(file))
             {
-                lines.Add($"{suffix}: absent");
+                sidecars.Add((suffix, SupportReportComposer.AbsentStatus));
                 continue;
             }
 
-            long size = new FileInfo(file).Length;
-            string counts;
             try
             {
-                string[] content = File.ReadAllLines(file);
-                counts = suffix switch
-                {
-                    ".roads.tsv" => Describe(RoadAtlasCodec.Parse(content)),
-                    ".pins.tsv" => Describe(PinCodec.Parse(content)),
-                    _ => Describe(RouteCodec.Parse(content)),
-                };
+                sidecars.Add((suffix, SupportReportComposer.DescribeSidecar(
+                    suffix, File.ReadAllLines(file), new FileInfo(file).Length)));
             }
             catch (Exception exception)
             {
-                counts = "unreadable: " + exception.GetType().Name;
+                sidecars.Add((suffix, SupportReportComposer.UnreadableStatus(exception)));
             }
-
-            lines.Add($"{suffix}: {size} bytes, {counts}");
         }
 
-        lines.Add($"backups: {ListBackups(worldUid).Count}");
-        File.WriteAllLines(path, lines);
+        File.WriteAllLines(path, SupportReportComposer.Compose(
+            DateTime.UtcNow, pluginVersion, effectiveConfig, sidecars, ListBackups(worldUid).Count));
         return path;
-    }
-
-    private static string Describe(RoadAtlasCodec.ParseResult result)
-    {
-        int points = 0;
-        foreach (RoadStroke stroke in result.Strokes)
-        {
-            points += stroke.Points.Count;
-        }
-
-        return $"{result.Strokes.Count} strokes, {points} points, {result.MalformedRows} malformed";
-    }
-
-    private static string Describe(PinCodec.ParseResult result)
-    {
-        return $"{result.Pins.Count} pins, {result.MalformedRows} malformed";
-    }
-
-    private static string Describe(RouteCodec.ParseResult result)
-    {
-        return $"{result.Routes.Count} routes, {result.MalformedRows} malformed";
     }
 }

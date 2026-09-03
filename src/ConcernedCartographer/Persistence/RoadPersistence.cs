@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using BepInEx;
 using BepInEx.Logging;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using TheConcernedCat.ConcernedCartographer.Roads;
 
 namespace TheConcernedCat.ConcernedCartographer.Persistence;
@@ -39,18 +40,35 @@ internal sealed class RoadPersistence
             RoadAtlasCodec.ParseResult result = RoadAtlasCodec.Parse(File.ReadLines(path));
             if (result.MalformedRows > 0)
             {
-                _log.LogWarning($"Skipped {result.MalformedRows} malformed road-atlas row(s) in {path}.");
+                _log.LogWarning($"Skipped {result.MalformedRows} malformed road-atlas row(s) in this world's sidecar.");
             }
 
             if (result.LegacyRows > 0)
             {
                 _legacyPathsAwaitingBackup.Add(path);
                 _log.LogInfo(
-                    $"Road atlas {path} uses the v1 format ({result.LegacyRows} row(s)); " +
+                    $"This world's road atlas uses the v1 format ({result.LegacyRows} row(s)); " +
                     "the original will be kept as .v1.bak when it is first rewritten in v2.");
             }
 
             var atlas = new RoadAtlas(result.Strokes);
+
+            // RC8 road-source-authority migration: strokes recorded by the
+            // retired passive sources (traversal walking, chunk recovery —
+            // including every pre-source v1 row) are cleaned out once, with
+            // the original file kept beside the sidecar. Explicit
+            // Pathen/Paved construction strokes survive untouched.
+            RoadAtlas.MigrationResult authority = atlas.RemoveNonConstructionStrokes();
+            if (authority.RemovedStrokes > 0)
+            {
+                TakeAuthorityMigrationBackup(path);
+                _log.LogInfo(
+                    $"Road source authority (v1): removed {authority.RemovedStrokes} passive stroke(s) " +
+                    $"({authority.RemovedPoints} point(s)) recorded by traversal/chunk recovery; " +
+                    $"{atlas.Strokes.Count} explicit construction stroke(s) remain. " +
+                    "The pre-migration file was kept as .pre-authority.bak.");
+            }
+
             RoadAtlas.MaintenanceResult maintenance = atlas.PerformMaintenance();
             if (maintenance.MergedStrokes > 0 || maintenance.RemovedPoints > 0)
             {
@@ -64,7 +82,7 @@ internal sealed class RoadPersistence
         }
         catch (Exception exception)
         {
-            _log.LogError($"Could not load road atlas from {path}: {exception}");
+            _log.LogError($"Could not load road atlas from disk: {SafeLogText.Describe(exception)}");
             return new RoadAtlas();
         }
     }
@@ -83,7 +101,7 @@ internal sealed class RoadPersistence
                 if (!File.Exists(backupPath))
                 {
                     File.Copy(path, backupPath);
-                    _log.LogInfo($"Backed up v1 road atlas to {backupPath} before the first v2 save.");
+                    _log.LogInfo("Backed up the v1 road atlas beside its sidecar (.v1.bak) before the first v2 save.");
                 }
 
                 _legacyPathsAwaitingBackup.Remove(path);
@@ -103,9 +121,30 @@ internal sealed class RoadPersistence
         }
         catch (Exception exception)
         {
-            _rateLimited.Error("atlas-save", $"Could not save road atlas to {path}: {exception}");
+            _rateLimited.Error("atlas-save", $"Could not save road atlas to disk: {SafeLogText.Describe(exception)}");
             TryDelete(temporaryPath);
             return false;
+        }
+    }
+
+    /// <summary>One-time safety copy before the road-source-authority
+    /// migration rewrites a sidecar: the first migration for a world keeps
+    /// the original as .pre-authority.bak and never overwrites an existing
+    /// backup, so the pre-RC8 atlas stays recoverable by hand.</summary>
+    private void TakeAuthorityMigrationBackup(string path)
+    {
+        try
+        {
+            string backupPath = path + ".pre-authority.bak";
+            if (File.Exists(path) && !File.Exists(backupPath))
+            {
+                File.Copy(path, backupPath);
+                _log.LogInfo("Backed up the pre-migration road atlas beside its sidecar (.pre-authority.bak).");
+            }
+        }
+        catch (Exception exception)
+        {
+            _rateLimited.Error("authority-backup", $"Could not back up the road atlas before the authority migration: {SafeLogText.Describe(exception)}");
         }
     }
 
@@ -128,12 +167,12 @@ internal sealed class RoadPersistence
             if (File.Exists(path))
             {
                 File.Copy(path, path + ".pre-reconcile.bak", overwrite: true);
-                _log.LogInfo($"Backed up road atlas to {path}.pre-reconcile.bak before this session's first reconciliation.");
+                _log.LogInfo("Backed up the road atlas beside its sidecar (.pre-reconcile.bak) before this session's first reconciliation.");
             }
         }
         catch (Exception exception)
         {
-            _rateLimited.Error("reconcile-backup", $"Could not back up the road atlas before reconciliation: {exception}");
+            _rateLimited.Error("reconcile-backup", $"Could not back up the road atlas before reconciliation: {SafeLogText.Describe(exception)}");
         }
     }
 

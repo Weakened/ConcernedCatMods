@@ -2,25 +2,41 @@ using UnityEngine;
 
 namespace TheConcernedCat.ConcernedCartographer.Roads;
 
-/// <summary>A successful terrain-paint operation captured on the placing
-/// client: what road paint it lays down (null for Cultivate/Reset, which
-/// erase road-ness), where, and the brush radius used for reconciliation.</summary>
+/// <summary>A successful paint-clearing terrain operation captured on the
+/// placing client, already classified by actual action identity
+/// (DEF-v1.0-007): the road kind it is authorized to create (null for
+/// Level/Raise/Cultivate/Reset/unknown, which only erase road-ness), where,
+/// the brush radius used for reconciliation, and the classified identity
+/// for the diagnostic log.</summary>
 internal readonly struct CapturedTerrainOperation
 {
-    public CapturedTerrainOperation(RoadKind? roadKind, Vector3 position, float radiusMeters, bool isTerraforming)
+    public CapturedTerrainOperation(
+        RoadKind? roadKind,
+        Vector3 position,
+        float radiusMeters,
+        TerrainActionCategory category,
+        string actionDescription)
     {
         RoadKind = roadKind;
         Position = position;
         RadiusMeters = radiusMeters;
-        IsTerraforming = isTerraforming;
+        Category = category;
+        ActionDescription = actionDescription;
     }
 
+    /// <summary>Non-null ONLY for explicit local-player Pathen (Dirt) or
+    /// Paved road (Paved) construction; every other action is null and
+    /// acts as a road-erasure signal.</summary>
     public RoadKind? RoadKind { get; }
+
     public Vector3 Position { get; }
     public float RadiusMeters { get; }
 
-    /// <summary>True for level/raise ops. Their dirt paint is a side effect
-    /// of terraforming, not road building, so they reconcile covered
-    /// other-kind ink but never record road observations themselves.</summary>
-    public bool IsTerraforming { get; }
+    /// <summary>The classified player action (Level, Raise, Pathen…), for
+    /// branching diagnostics.</summary>
+    public TerrainActionCategory Category { get; }
+
+    /// <summary>The classifier's identity line for the always-on
+    /// rate-limited diagnostic log.</summary>
+    public string ActionDescription { get; }
 }

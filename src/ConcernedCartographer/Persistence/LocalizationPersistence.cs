@@ -4,6 +4,7 @@ using System.IO;
 using BepInEx;
 using BepInEx.Logging;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 
 namespace TheConcernedCat.ConcernedCartographer.Persistence;
 
@@ -30,13 +31,13 @@ internal static class LocalizationPersistence
                 Dictionary<string, string> overrides =
                     AtlasStrings.ParseOverrides(File.ReadAllLines(OverridePath), out int skipped);
                 AtlasStrings.LoadOverrides(overrides);
-                log.LogInfo($"Loaded {overrides.Count} translated string(s) from {OverridePath}" +
+                log.LogInfo($"Loaded {overrides.Count} translated string(s) from cartographer-strings.tsv" +
                     (skipped > 0 ? $" ({skipped} row(s) skipped)." : "."));
             }
         }
         catch (Exception exception)
         {
-            log.LogWarning($"Localization stayed at English defaults: {exception.Message}");
+            log.LogWarning($"Localization stayed at English defaults: {SafeLogText.Brief(exception)}");
         }
     }
 }

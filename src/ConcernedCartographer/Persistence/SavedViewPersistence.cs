@@ -3,6 +3,7 @@ using System.IO;
 using BepInEx;
 using BepInEx.Logging;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 
 namespace TheConcernedCat.ConcernedCartographer.Persistence;
 
@@ -31,14 +32,14 @@ internal sealed class SavedViewPersistence
             SavedViewStore store = SavedViewStore.Parse(File.ReadAllLines(path), out int malformed);
             if (malformed > 0)
             {
-                _log.LogWarning($"Skipped {malformed} malformed saved-view row(s) in {path}.");
+                _log.LogWarning($"Skipped {malformed} malformed saved-view row(s) in the saved-views file.");
             }
 
             return store;
         }
         catch (Exception exception)
         {
-            _log.LogError($"Could not load saved views: {exception}");
+            _log.LogError($"Could not load saved views: {SafeLogText.Describe(exception)}");
             return new SavedViewStore();
         }
     }
@@ -62,7 +63,7 @@ internal sealed class SavedViewPersistence
         }
         catch (Exception exception)
         {
-            _log.LogError($"Could not save views: {exception}");
+            _log.LogError($"Could not save views: {SafeLogText.Describe(exception)}");
         }
     }
 

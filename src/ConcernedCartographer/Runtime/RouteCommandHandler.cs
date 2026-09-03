@@ -52,14 +52,384 @@ internal sealed class RouteCommandHandler
     public bool SnapEnabled { get; private set; } = true;
     public RouteOperations Operations => _operations;
 
+    /// <summary>The store's change counter (RC12 blocker 2): the Routes
+    /// panel polls this per frame so the list refreshes on ANY route
+    /// change — drawing, erasing, console edits, sync — not only after
+    /// its own buttons.</summary>
+    public long ChangeStamp => _store.ChangeStamp;
+
+    /// <summary>True when the current map mode was entered through the
+    /// Routes panel (#101): the runtime then feeds map input WITHOUT the
+    /// draw modifier and consumes vanilla click/drag while it lasts. The
+    /// console path leaves this false, keeping the classic Shift+LMB
+    /// behavior.</summary>
+    public bool UiModeOwned { get; private set; }
+
+    // RC8-9 UI draw semantics: entering a UI mode creates NOTHING — the
+    // route entity is born on the first actual input, each Free Draw
+    // hold-drag is its own stroke (a separate route entity, numbered off
+    // the base name), and releasing LMB ends that stroke. No empty routes,
+    // no connectors between separate strokes.
+    private RouteKind _uiPendingKind = RouteKind.Freehand;
+    private string _uiBaseName = "";
+    private int _uiStrokeCount;
+    private readonly FreeDrawStrokeGate _strokeGate = new();
+    private bool _uiRouteStarted;
+
+    /// <summary>The name the panel shows for the active mode: the started
+    /// route's name, or the pending base name before any input landed.</summary>
+    public string ActiveRouteDisplayName
+    {
+        get
+        {
+            if (_uiRouteStarted && _store.TryGet(ActiveRouteId, out AtlasRoute route) && !route.Deleted)
+            {
+                return route.Name;
+            }
+
+            return _uiBaseName.Length > 0 ? _uiBaseName : "New route";
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Routes-panel surface (#101): identical operations to the console,
+    // addressed by stable AtlasId — no player-proximity requirement.
+    // ------------------------------------------------------------------
+
+    public string UiStart(RouteKind kind, string name)
+    {
+        Mode = kind == RouteKind.Freehand ? MapMode.Draw : MapMode.Waypoint;
+        UiModeOwned = true;
+        _uiPendingKind = kind;
+        _uiBaseName = name.Trim().Length == 0 ? "New route" : name.Trim();
+        _uiStrokeCount = 0;
+        _uiRouteStarted = false;
+        _strokeGate.Reset();
+        return _uiBaseName;
+    }
+
+    public void UiStartErase()
+    {
+        Mode = MapMode.Erase;
+        UiModeOwned = true;
+        _strokeGate.Reset();
+    }
+
+    public void UiStop()
+    {
+        Mode = MapMode.None;
+        UiModeOwned = false;
+        _strokeGate.Reset();
+        _redraw();
+    }
+
+    public void UiSetSnap(bool enabled)
+    {
+        SnapEnabled = enabled;
+    }
+
+    public List<(AtlasId Id, string Label)> UiListRoutes(int max)
+    {
+        // RC11 blocker 4: a STABLE presentation order (active before
+        // archived, then name, then id) — the store's dictionary order
+        // shuffled rows between refreshes, which read as list churn and
+        // as "deleted routes coming back" whenever a hidden row rotated
+        // into the visible slots.
+        var living = new List<AtlasRoute>(_store.Living);
+        living.Sort((left, right) =>
+        {
+            int byArchived = left.Archived.CompareTo(right.Archived);
+            if (byArchived != 0)
+            {
+                return byArchived;
+            }
+
+            int byName = string.Compare(left.Name, right.Name, StringComparison.OrdinalIgnoreCase);
+            return byName != 0 ? byName : left.Id.Value.CompareTo(right.Id.Value);
+        });
+
+        var rows = new List<(AtlasId, string)>();
+        foreach (AtlasRoute route in living)
+        {
+            if (rows.Count >= max)
+            {
+                break;
+            }
+
+            RouteEstimator.Estimate estimate = RouteEstimator.Compute(
+                route.Points, _roads,
+                _settings.RouteOnRoadTolerance.Value,
+                _settings.RouteOffRoadSpeed.Value,
+                _settings.RouteOnRoadSpeed.Value);
+            string flags = (route.Locked ? " L" : "") + (route.Archived ? " A" : "");
+            rows.Add((route.Id,
+                $"{route.Name} [{route.Kind} · {route.Style} · {route.Status}]{flags} {estimate.DistanceMeters:0} m"));
+        }
+
+        return rows;
+    }
+
+    /// <summary>How many living routes exist beyond what the panel shows.</summary>
+    public int LivingRouteCount()
+    {
+        int count = 0;
+        foreach (AtlasRoute _ in _store.Living)
+        {
+            count++;
+        }
+
+        return count;
+    }
+
+    /// <summary>RC11 blocker 4: confirmed bulk cleanup. Tombstones every
+    /// living route (undo/restore still work one at a time).</summary>
+    public string UiClearAll()
+    {
+        if (Mode != MapMode.None)
+        {
+            UiStop();
+        }
+
+        var ids = new List<AtlasId>();
+        foreach (AtlasRoute route in _store.Living)
+        {
+            ids.Add(route.Id);
+        }
+
+        foreach (AtlasId id in ids)
+        {
+            _operations.Delete(id);
+        }
+
+        _redraw();
+        return ids.Count == 0
+            ? "No routes to clear."
+            : $"Deleted {ids.Count} route(s). Restore or Undo brings them back one at a time.";
+    }
+
+    public string UiRename(AtlasId id, string name)
+    {
+        return UiEdit(id, route => route.Name = name.Trim(), $"renamed to \"{name.Trim()}\"");
+    }
+
+    public string UiCycleStyle(AtlasId id)
+    {
+        if (!_store.TryGet(id, out AtlasRoute route) || route.Deleted)
+        {
+            return "Route no longer exists.";
+        }
+
+        RouteStyle next = route.Style == RouteStyle.Dotted ? RouteStyle.Solid : route.Style + 1;
+        return UiEdit(id, r => r.Style = next, $"style {next}");
+    }
+
+    public string UiCycleStatus(AtlasId id)
+    {
+        if (!_store.TryGet(id, out AtlasRoute route) || route.Deleted)
+        {
+            return "Route no longer exists.";
+        }
+
+        RouteStatus next = route.Status == RouteStatus.Done ? RouteStatus.Planned : route.Status + 1;
+        return UiEdit(id, r => r.Status = next, $"status {next}");
+    }
+
+    public string UiSetColor(AtlasId id, int? argb)
+    {
+        return UiEdit(id, route => route.ColorArgb = argb, argb is null ? "color cleared" : "color set");
+    }
+
+    public string UiToggleLock(AtlasId id)
+    {
+        if (!_store.TryGet(id, out AtlasRoute route) || route.Deleted)
+        {
+            return "Route no longer exists.";
+        }
+
+        bool locked = !route.Locked;
+        _operations.SetLocked(id, locked);
+        return $"\"{route.Name}\" {(locked ? "locked (geometry edits rejected)" : "unlocked")}.";
+    }
+
+    public string UiToggleArchive(AtlasId id)
+    {
+        if (!_store.TryGet(id, out AtlasRoute route) || route.Deleted)
+        {
+            return "Route no longer exists.";
+        }
+
+        bool archived = !route.Archived;
+        _operations.SetArchived(id, archived);
+        _redraw();
+        return $"\"{route.Name}\" {(archived ? "archived (hidden from the map)" : "unarchived")}.";
+    }
+
+    public string UiDelete(AtlasId id)
+    {
+        if (!_store.TryGet(id, out AtlasRoute route) || route.Deleted)
+        {
+            return "Route no longer exists.";
+        }
+
+        if (Mode != MapMode.None && ActiveRouteId.Equals(id))
+        {
+            UiStop();
+        }
+
+        _operations.Delete(id);
+        _redraw();
+        return $"Deleted \"{route.Name}\". Restore or Undo reverts.";
+    }
+
+    public string UiRestoreLatest()
+    {
+        // Deterministic: the MOST RECENTLY deleted route, not dictionary
+        // order (RC11 blocker 4).
+        AtlasRoute? latest = null;
+        foreach (AtlasRoute route in _store.All)
+        {
+            if (route.Deleted &&
+                (latest is null || (route.DeletedUtc ?? DateTime.MinValue) > (latest.DeletedUtc ?? DateTime.MinValue)))
+            {
+                latest = route;
+            }
+        }
+
+        if (latest is not null)
+        {
+            _operations.RestoreDeleted(latest.Id);
+            _redraw();
+            return $"Restored \"{latest.Name}\".";
+        }
+
+        return "No deleted route to restore.";
+    }
+
+    public string UiSplit(AtlasId id)
+    {
+        if (!_store.TryGet(id, out AtlasRoute route) || route.Deleted)
+        {
+            return "Route no longer exists.";
+        }
+
+        if (route.Points.Count < 3)
+        {
+            return "That route is too short to split.";
+        }
+
+        AtlasRoute? tail = _operations.Split(id, route.Points.Count / 2);
+        if (tail is null)
+        {
+            return route.Locked ? "The route is locked." : "Split failed.";
+        }
+
+        _redraw();
+        return $"Split \"{route.Name}\" at its midpoint.";
+    }
+
+    public string UiMerge(AtlasId keep, AtlasId absorbed)
+    {
+        if (keep.Equals(absorbed))
+        {
+            return "Pick two different routes to merge.";
+        }
+
+        if (!_store.TryGet(keep, out AtlasRoute keepRoute) || !_store.TryGet(absorbed, out AtlasRoute absorbedRoute))
+        {
+            return "Route no longer exists.";
+        }
+
+        if (!_operations.Merge(keep, absorbed))
+        {
+            return "Merge failed (locked or empty route).";
+        }
+
+        _redraw();
+        return $"Merged \"{absorbedRoute.Name}\" into \"{keepRoute.Name}\". Undo reverts.";
+    }
+
+    public string UiMeasure(AtlasId id)
+    {
+        if (!_store.TryGet(id, out AtlasRoute route) || route.Deleted)
+        {
+            return "Route no longer exists.";
+        }
+
+        RouteEstimator.Estimate estimate = RouteEstimator.Compute(
+            route.Points, _roads,
+            _settings.RouteOnRoadTolerance.Value,
+            _settings.RouteOffRoadSpeed.Value,
+            _settings.RouteOnRoadSpeed.Value);
+        return $"\"{route.Name}\": {estimate.DistanceMeters:0} m, {estimate.OnRoadFraction:P0} on roads, " +
+            $"≈{estimate.EstimatedMinutes:0.#} min.";
+    }
+
+    public bool UiUndo(out string summary)
+    {
+        bool changed = _operations.Undo(out summary);
+        if (changed)
+        {
+            _redraw();
+        }
+
+        return changed;
+    }
+
+    public bool UiRedo(out string summary)
+    {
+        bool changed = _operations.Redo(out summary);
+        if (changed)
+        {
+            _redraw();
+        }
+
+        return changed;
+    }
+
+    private string UiEdit(AtlasId id, Action<AtlasRoute> edit, string description)
+    {
+        if (!_store.TryGet(id, out AtlasRoute route) || route.Deleted)
+        {
+            return "Route no longer exists.";
+        }
+
+        _operations.EditMetadata(id, edit, description);
+        _redraw();
+        return $"\"{route.Name}\": {description}.";
+    }
+
     /// <summary>Interactive input while the large map is open and a mode is
-    /// active. Draw/erase act while held; waypoint acts on click.</summary>
+    /// active. Draw/erase act while held; waypoint acts on click. The
+    /// runtime feeds actionHeld=false whenever the pointer is over CC UI,
+    /// which ends the current Free Draw stroke (RC8-9) — returning to the
+    /// map starts a fresh stroke, never a connector.</summary>
     public void HandleMapFrame(RoadPoint cursorWorld, bool actionHeld, bool actionClicked)
     {
         switch (Mode)
         {
-            case MapMode.Draw when actionHeld:
-                if (_operations.AppendPoint(ActiveRouteId, cursorWorld))
+            case MapMode.Draw when !UiModeOwned:
+                // Console-entered draw appends into its preselected route.
+                if (actionHeld && _operations.AppendPoint(ActiveRouteId, cursorWorld))
+                {
+                    _redraw();
+                }
+
+                break;
+            case MapMode.Draw:
+                // RC11 blocker 4: the gate creates a route only for a REAL
+                // stroke (travelled at least the freehand spacing) — a
+                // click-twitch or a hold over CC UI evaporates without
+                // ever creating an entity, so no fragment spam.
+                FreeDrawStrokeGate.Decision decision = _strokeGate.Observe(actionHeld, cursorWorld);
+                if (decision.Kind == FreeDrawStrokeGate.DecisionKind.StartStroke)
+                {
+                    StartUiStroke();
+                    _operations.AppendPoint(ActiveRouteId, decision.StrokeStart);
+                    _operations.AppendPoint(ActiveRouteId, cursorWorld);
+                    _redraw();
+                }
+                else if (decision.Kind == FreeDrawStrokeGate.DecisionKind.Append &&
+                    _operations.AppendPoint(ActiveRouteId, cursorWorld))
                 {
                     _redraw();
                 }
@@ -79,9 +449,31 @@ internal sealed class RouteCommandHandler
 
                 break;
             case MapMode.Waypoint when actionClicked:
+                if (UiModeOwned && !_uiRouteStarted)
+                {
+                    AtlasRoute startedWaypointRoute = _operations.StartRoute(RouteKind.Waypoint, _uiBaseName);
+                    ActiveRouteId = startedWaypointRoute.Id;
+                    _uiRouteStarted = true;
+                }
+
                 AddWaypoint(cursorWorld);
                 break;
         }
+    }
+
+    /// <summary>Each REAL UI Free Draw stroke lands in its own route
+    /// entity: "Trail", "Trail 2", "Trail 3"… so releasing LMB genuinely
+    /// ends a stroke and every stroke stays individually manageable. The
+    /// gate guarantees this is only called once a stroke proved real.</summary>
+    private void StartUiStroke()
+    {
+        _uiStrokeCount++;
+        string name = _uiStrokeCount == 1
+            ? _uiBaseName
+            : $"{_uiBaseName} {_uiStrokeCount}";
+        AtlasRoute started = _operations.StartRoute(RouteKind.Freehand, name);
+        ActiveRouteId = started.Id;
+        _uiRouteStarted = true;
     }
 
     private void AddWaypoint(RoadPoint cursorWorld)
@@ -135,15 +527,21 @@ internal sealed class RouteCommandHandler
                     remainder.Trim().Length == 0 ? "New route" : remainder.Trim());
                 ActiveRouteId = started.Id;
                 Mode = subcommand == "draw" ? MapMode.Draw : MapMode.Waypoint;
+                UiModeOwned = false;
+                _uiBaseName = started.Name;
+                _uiRouteStarted = true;
+                _strokeGate.Reset();
                 return subcommand == "draw"
                     ? $"Drawing \"{started.Name}\": open the large map and hold {_settings.RouteDrawModifier.Value}+LeftClick to draw. 'cc_routes stop' finishes."
                     : $"Waypoint route \"{started.Name}\": {_settings.RouteDrawModifier.Value}+LeftClick places waypoints (snap {(SnapEnabled ? "on" : "off")}). 'cc_routes stop' finishes.";
             case "erase":
                 Mode = MapMode.Erase;
+                UiModeOwned = false;
                 return $"Erase mode: hold {_settings.RouteDrawModifier.Value}+LeftClick on the map to erase route ink " +
                     $"({_settings.RouteEraseRadius.Value:0.#} m radius). 'cc_routes stop' finishes.";
             case "stop":
                 Mode = MapMode.None;
+                UiModeOwned = false;
                 _redraw();
                 return "Route mode off.";
             case "snap":

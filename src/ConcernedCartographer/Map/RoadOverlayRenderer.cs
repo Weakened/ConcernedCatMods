@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text;
 using BepInEx.Logging;
 using Jotunn.Managers;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using TheConcernedCat.ConcernedCartographer.Roads;
 using TheConcernedCat.ConcernedCartographer.Runtime;
 using UnityEngine;
@@ -17,38 +18,249 @@ internal sealed class RoadOverlayRenderer
     private const string DirtOverlayName = "CC Dirt Paths";
     private const string PavedOverlayName = "CC Paved Roads";
 
-    // Dark, fully opaque ink (cloud-layer contrast); the high-contrast
-    // palette pushes dirt near black and paved near white for accessibility.
-    private Color32 DirtColor => _settings.HighContrast.Value
+    // Fully opaque ink (cloud-layer contrast); the high-contrast palette
+    // pushes dirt near black and paved near white for accessibility. The
+    // vector layer inherits the same palette so both road views agree.
+    // RC12 feedback 1: paved wears a LIGHT stone gray in both palettes, so
+    // paved always reads lighter than dirt at identical width/style —
+    // the old dark slate read as dark as the dirt brown on the parchment
+    // map, which made the two kinds hard to tell apart.
+    internal Color32 DirtColor => _settings.HighContrast.Value
         ? new Color32(26, 15, 6, 255)
         : new Color32(94, 62, 34, 255);
 
-    private Color32 PavedColor => _settings.HighContrast.Value
+    internal Color32 PavedColor => _settings.HighContrast.Value
         ? new Color32(245, 245, 250, 255)
-        : new Color32(88, 90, 96, 255);
+        : new Color32(176, 180, 190, 255);
 
     private readonly CartographerSettings _settings;
     private readonly ManualLogSource _log;
     private readonly RateLimitedLog _rateLimited;
+    private readonly RoadVectorLayer _vectorLayer;
+
+    // The player's layer choice (drawer/saved views/console/Jötunn panel
+    // checkbox). The texture overlay's EFFECTIVE visibility additionally
+    // suppresses while the vector layer draws (RC8-1): only one road
+    // presentation may ink the large map at a time, and only one map view
+    // (large or minimap) is ever on screen, so suppressing the whole
+    // overlay while the vector layer is live hides exactly the duplicate
+    // large-map texture ink. The texture returns the moment the map closes
+    // (minimap) or the vector layer is disabled/fails (fail-safe). RC10
+    // feedback 7: the Jötunn checkboxes are hooked as REAL user switches —
+    // a click drives the vector presentation too — and their visuals are
+    // re-synced to the user state after suppression writes.
+    private bool _userDirtEnabled = true;
+    private bool _userPavedEnabled = true;
+    private readonly OverlayUserToggleHook _dirtToggleHook = new();
+    private readonly OverlayUserToggleHook _pavedToggleHook = new();
+    private MinimapManager.MapOverlay? _dirtOverlay;
+    private MinimapManager.MapOverlay? _pavedOverlay;
 
     public RoadOverlayRenderer(CartographerSettings settings, ManualLogSource log)
     {
         _settings = settings;
         _log = log;
         _rateLimited = new RateLimitedLog(log, 5f);
+        _vectorLayer = new RoadVectorLayer(settings, log);
+    }
+
+    /// <summary>Raised when the player flips a CC road checkbox in Jötunn's
+    /// overlay panel, so the owning runtime can mirror the choice into the
+    /// drawer settings.</summary>
+    public event Action<RoadKind, bool>? UserToggledOverlay;
+
+    /// <summary>Whether the DEF-v1.0-006 sub-texel vector ink is currently
+    /// drawing on the large map (feeds the `align live` C verdict).</summary>
+    public bool VectorLayerActive => _vectorLayer.IsActive;
+
+    /// <summary>Route data changed; the shared vector layer rebakes on its
+    /// debounce.</summary>
+    public void MarkVectorDataDirty()
+    {
+        _vectorLayer.MarkDataDirty();
+    }
+
+    /// <summary>RC14 fix 4: a fresh Minimap means every prior overlay
+    /// handle is dead (Jötunn destroyed the textures with the old map).
+    /// Drops both cached handles so the next use re-resolves against the
+    /// new map, and un-latches the vector layer's per-session fail-soft
+    /// disable. Called from the map-available path.</summary>
+    public void ResetMapSession()
+    {
+        _dirtOverlay = null;
+        _pavedOverlay = null;
+        _vectorLayer.ResetSession();
+        // RC15 lifecycle diagnostics (success trace, so debug-gated).
+        if (_settings.DebugLogging.Value)
+        {
+            _log.LogInfo("Road overlay lifecycle: map session reset; cached overlay handles dropped.");
+        }
+    }
+
+    /// <summary>Mirrors the route layer switch into the shared vector
+    /// presentation (RC10 feedback 5/7).</summary>
+    public void SetRouteVectorVisible(bool visible)
+    {
+        _vectorLayer.SetRoutesEnabled(visible);
+    }
+
+    /// <summary>Per-frame drive for the high-precision large-map layer.
+    /// Safe to call every tick; all gating happens inside. Also keeps the
+    /// texture overlay's effective visibility in step with the vector
+    /// layer's health (RC8-1) — a state change applies within one tick.</summary>
+    public void TickVectorLayer(float unscaledDeltaTime, RoadAtlas atlas, Atlas.RouteStore? routes)
+    {
+        MaintainToggleHooks();
+        _vectorLayer.Tick(
+            unscaledDeltaTime, atlas, routes, _settings.HighContrast.Value, DirtColor, PavedColor);
+        ApplyTextureVisibility();
+    }
+
+    private void MaintainToggleHooks()
+    {
+        if (TryGetOverlay(RoadKind.Dirt, out MinimapManager.MapOverlay? dirt))
+        {
+            _dirtToggleHook.Maintain(dirt!, _userDirtEnabled, value => HandleUserToggle(RoadKind.Dirt, value));
+        }
+
+        if (TryGetOverlay(RoadKind.Paved, out MinimapManager.MapOverlay? paved))
+        {
+            _pavedToggleHook.Maintain(paved!, _userPavedEnabled, value => HandleUserToggle(RoadKind.Paved, value));
+        }
+    }
+
+    private void HandleUserToggle(RoadKind kind, bool enabled)
+    {
+        SetOverlayEnabled(kind, enabled);
+        UserToggledOverlay?.Invoke(kind, enabled);
+    }
+
+    /// <summary>Disabled-mod housekeeping: tears down the vector layer and
+    /// restores the texture overlays to the player's own layer choice, so a
+    /// mid-session disable can never strand the map with suppressed ink.</summary>
+    public void EnsureTextureFallback()
+    {
+        _vectorLayer.ForceInactive();
+        ApplyTextureVisibility();
+    }
+
+    private void ApplyTextureVisibility()
+    {
+        bool suppress = _vectorLayer.IsActive;
+        SetTextureOverlayEnabled(
+            RoadKind.Dirt, Atlas.OverlayVisibilityRule.EffectiveTexture(_userDirtEnabled, suppress));
+        SetTextureOverlayEnabled(
+            RoadKind.Paved, Atlas.OverlayVisibilityRule.EffectiveTexture(_userPavedEnabled, suppress));
+
+        // A suppression write moved the Jötunn checkbox with it; put the
+        // visual back on the USER's layer state so the panel stays honest.
+        _dirtToggleHook.SyncCheckbox(Atlas.OverlayVisibilityRule.CheckboxShows(_userDirtEnabled));
+        _pavedToggleHook.SyncCheckbox(Atlas.OverlayVisibilityRule.CheckboxShows(_userPavedEnabled));
+    }
+
+    private void SetTextureOverlayEnabled(RoadKind kind, bool enabled)
+    {
+        // RC11 feedback 1: NO applied-state cache. Jötunn's own panel
+        // listener writes Enabled before ours runs, so any local cache
+        // diverges exactly then — and a skipped corrective write left the
+        // texture enabled UNDER the live vector ink (the doubled-roads
+        // report). The Jötunn setter no-ops on unchanged values, so the
+        // unconditional write costs nothing.
+        if (!TryGetOverlay(kind, out MinimapManager.MapOverlay? overlay))
+        {
+            return;
+        }
+
+        try
+        {
+            overlay!.Enabled = enabled;
+        }
+        catch (Exception exception)
+        {
+            _rateLimited.Warning("overlay-toggle", $"Could not toggle the {kind} overlay: {SafeLogText.Brief(exception)}");
+        }
+    }
+
+    /// <summary>Liveness-checked cached overlay lookup (RC14 fix 4):
+    /// GetMapOverlay logs per call, so each handle resolves once per MAP
+    /// session — but Jötunn destroys every overlay texture on Minimap
+    /// teardown and clears its registry, so a handle can never be trusted
+    /// on presence alone (the RC13 cache made session 2 paint persisted
+    /// roads into a dead texture — the "roads gone after relog" report).
+    /// A dead handle re-resolves, which re-creates the layer fresh.</summary>
+    private bool TryGetOverlay(RoadKind kind, out MinimapManager.MapOverlay? overlay)
+    {
+        overlay = kind == RoadKind.Dirt ? _dirtOverlay : _pavedOverlay;
+        if (!Atlas.OverlayHandleRule.MustReresolve(
+                overlay is not null,
+                overlay is not null && overlay.OverlayTex != null))
+        {
+            return true;
+        }
+
+        try
+        {
+            overlay = MinimapManager.Instance.GetMapOverlay(
+                kind == RoadKind.Dirt ? DirtOverlayName : PavedOverlayName);
+            if (kind == RoadKind.Dirt)
+            {
+                _dirtOverlay = overlay;
+            }
+            else
+            {
+                _pavedOverlay = overlay;
+            }
+
+            // RC15 lifecycle diagnostics: resolve state + texture
+            // liveness/size (success trace, so debug-gated).
+            if (overlay is not null && _settings.DebugLogging.Value)
+            {
+                bool alive = overlay.OverlayTex != null;
+                _log.LogInfo(
+                    $"Road overlay lifecycle: {kind} overlay resolved (texture alive={alive}" +
+                    (alive ? $", size={overlay.TextureSize}px)." : ")."));
+            }
+
+            return overlay is not null;
+        }
+        catch (Exception exception)
+        {
+            _rateLimited.Warning("overlay-get", $"Could not resolve the {kind} overlay: {SafeLogText.Brief(exception)}");
+            return false;
+        }
     }
 
     public void RedrawAll(RoadAtlas atlas)
     {
         try
         {
-            var dirtOverlay = MinimapManager.Instance.GetMapOverlay(DirtOverlayName);
-            var pavedOverlay = MinimapManager.Instance.GetMapOverlay(PavedOverlayName);
+            if (!TryGetOverlay(RoadKind.Dirt, out MinimapManager.MapOverlay? dirtOverlay) ||
+                !TryGetOverlay(RoadKind.Paved, out MinimapManager.MapOverlay? pavedOverlay))
+            {
+                return;
+            }
+
+            // RC15 item 8: capture the live Texture2D handles NOW. The
+            // stroke loop below is the long window in which map teardown
+            // destroyed the textures behind the RC13 Sentry event (NRE at
+            // Texture2D.SetPixels32 during "rebuild road map"); the
+            // captured references are re-checked immediately before the
+            // writes so a mid-redraw teardown fails soft, never fatally.
+            Texture2D? dirtTexture = dirtOverlay!.OverlayTex;
+            Texture2D? pavedTexture = pavedOverlay!.OverlayTex;
+            bool aliveAtResolve = dirtTexture != null && pavedTexture != null;
+            if (!aliveAtResolve)
+            {
+                HandleRedrawTeardown("at resolve");
+                return;
+            }
+
             int textureSize = dirtOverlay.TextureSize;
 
             Color32[] dirtPixels = new Color32[textureSize * textureSize];
             Color32[] pavedPixels = new Color32[textureSize * textureSize];
 
+            int drawnStrokes = 0;
             foreach (RoadStroke stroke in atlas.Strokes)
             {
                 if (stroke.Points.Count == 0 || stroke.Hidden)
@@ -58,6 +270,7 @@ internal sealed class RoadOverlayRenderer
 
                 Color32[] target = stroke.Kind == RoadKind.Dirt ? dirtPixels : pavedPixels;
                 Color32 color = stroke.Kind == RoadKind.Dirt ? DirtColor : PavedColor;
+                drawnStrokes++;
 
                 if (stroke.Points.Count == 1)
                 {
@@ -78,15 +291,52 @@ internal sealed class RoadOverlayRenderer
                 }
             }
 
-            dirtOverlay.OverlayTex.SetPixels32(dirtPixels);
-            pavedOverlay.OverlayTex.SetPixels32(pavedPixels);
-            dirtOverlay.OverlayTex.Apply(false);
-            pavedOverlay.OverlayTex.Apply(false);
+            // RC15 item 8: the write may only proceed if the textures are
+            // STILL alive (pure OverlayHandleRule.MayWrite). Unity's
+            // overloaded null-check reports a destroyed texture as null,
+            // so this is a decisive liveness test on the same frame.
+            if (!Atlas.OverlayHandleRule.MayWrite(
+                    aliveAtResolve, dirtTexture != null && pavedTexture != null))
+            {
+                HandleRedrawTeardown("between resolve and write");
+                return;
+            }
+
+            dirtTexture!.SetPixels32(dirtPixels);
+            pavedTexture!.SetPixels32(pavedPixels);
+            dirtTexture.Apply(false);
+            pavedTexture.Apply(false);
+
+            // RC15 lifecycle diagnostics (success trace, so debug-gated).
+            if (_settings.DebugLogging.Value)
+            {
+                _log.LogInfo(
+                    $"Road overlay lifecycle: full redraw complete ({drawnStrokes} stroke(s) into {textureSize}px textures).");
+            }
         }
         catch (Exception exception)
         {
-            _log.LogError($"Could not rebuild road map overlays: {exception}");
+            _log.LogError($"Could not rebuild road map overlays: {SafeLogText.Describe(exception)}");
         }
+
+        _vectorLayer.MarkDataDirty();
+    }
+
+    /// <summary>RC15 item 8 fail-soft: a map teardown invalidated the
+    /// overlay textures around a full redraw. Drops the cached handles so
+    /// the next use re-resolves, and logs ONE privacy-safe lifecycle line
+    /// (rate-limited Warning, never an Error — the crash-reporting hub
+    /// forwards Errors to Sentry, and a teardown race is not a fault).
+    /// The redraw itself retries on the next valid map session, whose
+    /// map-available path always runs ResetMapSession + RedrawAll.</summary>
+    private void HandleRedrawTeardown(string phase)
+    {
+        _dirtOverlay = null;
+        _pavedOverlay = null;
+        _rateLimited.Warning(
+            "redraw-teardown",
+            $"Road overlay lifecycle: overlay texture torn down {phase} during a full redraw; " +
+            "handles reset, redraw deferred to the next valid map session.");
     }
 
     public void DrawCalibrationMarkers()
@@ -102,7 +352,7 @@ internal sealed class RoadOverlayRenderer
         }
         catch (Exception exception)
         {
-            _log.LogWarning($"Could not draw calibration markers: {exception.Message}");
+            _log.LogWarning($"Could not draw calibration markers: {SafeLogText.Brief(exception)}");
         }
     }
 
@@ -114,7 +364,9 @@ internal sealed class RoadOverlayRenderer
         int centerY = Mathf.RoundToInt(coords.y);
         StampCrossAt(texture, size, centerX, centerY, color);
 
-        _log.LogInfo($"Calibration marker {label}: world ({world.x:0.#}, {world.z:0.#}) -> overlay pixel ({centerX}, {centerY}) of {size}.");
+        // Privacy audit (CC-098): the label already names the fixed probe
+        // constant, so the world pair (coordinate-shaped text) stays out.
+        _log.LogInfo($"Calibration marker {label}: overlay pixel ({centerX}, {centerY}) of {size}.");
     }
 
     private static void StampCrossAt(Texture2D texture, int size, int centerX, int centerY, Color32 color, int armTexels = 4)
@@ -192,7 +444,7 @@ internal sealed class RoadOverlayRenderer
                 }
                 catch (Exception exception)
                 {
-                    _log.LogWarning($"Alignment probe '{label}': could not add the native pin: {exception.Message}");
+                    _log.LogWarning($"Alignment probe '{label}': could not add the native pin: {SafeLogText.Brief(exception)}");
                 }
 
                 // The exact projection used by DrawSegment/DrawIntoBuffer.
@@ -243,12 +495,16 @@ internal sealed class RoadOverlayRenderer
                     $"ALIGNMENT {(maxResidual <= 1f ? "PASS" : "FAIL")}: max residual {maxResidual:0.00} texels");
 
             string report = table.ToString() + "\n" + context + "\n" + verdict;
-            _log.LogInfo("cc_roads align\n" + report);
+            // Privacy audit (CC-098): probe rows carry world coordinates
+            // (player position, latest road point) and print to the console
+            // only; the log keeps the coordinate-free verdict + projection
+            // context as the pass/fail evidence.
+            _log.LogInfo("cc_roads align: " + verdict + " (" + context + "). Probe rows are on the console; positions are never logged.");
             return report + "\n'cc_roads align clear' removes the markers.";
         }
         catch (Exception exception)
         {
-            _log.LogWarning($"Alignment probe failed: {exception}");
+            _log.LogWarning($"Alignment probe failed: {SafeLogText.Describe(exception)}");
             return "Alignment probe failed: " + exception.Message;
         }
     }
@@ -258,6 +514,25 @@ internal sealed class RoadOverlayRenderer
     public void ClearAlignmentProbe()
     {
         ClearAlignmentPins();
+    }
+
+    /// <summary>The exact projection the texture road ink uses (Jötunn's
+    /// WorldToOverlayCoords on the road overlay), for `align live`.</summary>
+    public bool TryGetOverlayProjection(Vector3 world, out Vector2 overlayCoords, out int overlaySize)
+    {
+        overlayCoords = default;
+        overlaySize = 0;
+        try
+        {
+            var overlay = MinimapManager.Instance.GetMapOverlay(DirtOverlayName);
+            overlaySize = overlay.TextureSize;
+            overlayCoords = MinimapManager.Instance.WorldToOverlayCoords(world, overlaySize);
+            return overlaySize > 0;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static bool TryGetLatestDirtPoint(RoadAtlas atlas, out Vector3 world)
@@ -298,10 +573,14 @@ internal sealed class RoadOverlayRenderer
     {
         try
         {
-            string overlayName = segment.Kind == RoadKind.Dirt ? DirtOverlayName : PavedOverlayName;
+            if (!TryGetOverlay(segment.Kind, out MinimapManager.MapOverlay? overlay))
+            {
+                _vectorLayer.MarkDataDirty();
+                return;
+            }
+
             Color32 color = segment.Kind == RoadKind.Dirt ? DirtColor : PavedColor;
-            var overlay = MinimapManager.Instance.GetMapOverlay(overlayName);
-            int size = overlay.TextureSize;
+            int size = overlay!.TextureSize;
 
             Vector2 start = MinimapManager.Instance.WorldToOverlayCoords(ToVector3(segment.Start), size);
             Vector2 end = MinimapManager.Instance.WorldToOverlayCoords(ToVector3(segment.End), size);
@@ -318,23 +597,28 @@ internal sealed class RoadOverlayRenderer
         catch (Exception exception)
         {
             // Every new sample retries this path, so keep the warning rate-limited.
-            _rateLimited.Warning("draw-segment", $"Could not draw an incremental road segment: {exception.Message}");
+            _rateLimited.Warning("draw-segment", $"Could not draw an incremental road segment: {SafeLogText.Brief(exception)}");
         }
+
+        _vectorLayer.MarkDataDirty();
     }
 
-    /// <summary>Shows or hides one road layer (the same switch as Jötunn's
-    /// overlay toggle panel).</summary>
+    /// <summary>Shows or hides one road layer: the player's intent for both
+    /// presentations. The vector layer follows it directly; the texture
+    /// overlay follows it through the effective-visibility rule (RC8-1).</summary>
     public void SetOverlayEnabled(RoadKind kind, bool enabled)
     {
-        try
+        _vectorLayer.SetKindEnabled(kind, enabled);
+        if (kind == RoadKind.Dirt)
         {
-            string overlayName = kind == RoadKind.Dirt ? DirtOverlayName : PavedOverlayName;
-            MinimapManager.Instance.GetMapOverlay(overlayName).Enabled = enabled;
+            _userDirtEnabled = enabled;
         }
-        catch (Exception exception)
+        else
         {
-            _rateLimited.Warning("overlay-toggle", $"Could not toggle the {kind} overlay: {exception.Message}");
+            _userPavedEnabled = enabled;
         }
+
+        ApplyTextureVisibility();
     }
 
     /// <summary>Draws a single observation point as a dot, for sources whose

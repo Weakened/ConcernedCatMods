@@ -1,3 +1,4 @@
+using System;
 using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
@@ -238,6 +239,346 @@ internal static class MinimapReflection
         return buttons;
     }
 
+    private static readonly AccessTools.FieldRef<Minimap, bool[]>? VisibleIconTypesField =
+        BuildFieldRef<bool[]>("m_visibleIconTypes");
+
+    private static readonly MethodInfo? ToggleIconFilterMethod =
+        AccessTools.Method(typeof(Minimap), "ToggleIconFilter", new[] { typeof(Minimap.PinType) });
+
+    private static readonly FastInvokeHandler? ToggleIconFilterInvoker =
+        ToggleIconFilterMethod is null ? null : MethodInvoker.GetHandler(ToggleIconFilterMethod);
+
+    private static readonly AccessTools.FieldRef<Minimap, bool>? DragViewField =
+        BuildFieldRef<bool>("m_dragView");
+
+    /// <summary>Reads the vanilla per-pin-type visibility filter state.</summary>
+    public static bool TryGetIconFilterVisible(int vanillaType, out bool visible)
+    {
+        visible = true;
+        if (VisibleIconTypesField is null || Minimap.instance == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            bool[] types = VisibleIconTypesField(Minimap.instance);
+            if (types is null || vanillaType < 0 || vanillaType >= types.Length)
+            {
+                return false;
+            }
+
+            visible = types[vanillaType];
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Toggles a vanilla pin-type filter through the game's own
+    /// ToggleIconFilter, so state and (possibly hidden) highlights stay
+    /// canonical. Filtering never touches pin data.</summary>
+    public static bool TryToggleIconFilter(int vanillaType)
+    {
+        if (ToggleIconFilterInvoker is null || Minimap.instance == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            ToggleIconFilterInvoker(Minimap.instance, new object[] { (Minimap.PinType)vanillaType });
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Suppresses vanilla left-drag map panning for this frame
+    /// (route drawing consumes the drag). Called every frame while an
+    /// explicit CC map mode is active; vanilla behavior returns the moment
+    /// the calls stop.</summary>
+    public static bool TrySuppressMapDragThisFrame()
+    {
+        if (DragViewField is null || Minimap.instance == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            DragViewField(Minimap.instance) = false;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static readonly AccessTools.FieldRef<Minimap, RectTransform>? PinRootLargeField =
+        BuildFieldRef<RectTransform>("m_pinRootLarge");
+
+    private static readonly AccessTools.FieldRef<Minimap, RectTransform>? PinNameRootLargeField =
+        BuildFieldRef<RectTransform>("m_pinNameRootLarge");
+
+    /// <summary>RC11 blocker 2 (refines RC10 feedback 19): the vanilla
+    /// right rail's own container(s) — computed PER GROUP (the five
+    /// placeable selectors; the death/boss filters) as each group's
+    /// deepest common ancestor — so hiding the rail hides its backplate,
+    /// decor, and raycast targets, not just the child buttons. The RC10
+    /// all-seven ancestor failed silently whenever the two groups did not
+    /// share a tight container. Each candidate is strictly validated: it
+    /// must live under the large root, must not BE the large root, and
+    /// must not contain the map image, any bottom hint bar, the shared-map
+    /// hint, the pin roots, or a member of the OTHER group (which may need
+    /// to stay visible). Failures report a reason so the smoke run can see
+    /// WHY a fallback happened. No fake covers, no destruction — SetActive
+    /// on vanilla objects, fully restored by the same path.</summary>
+    public static bool TryGetVanillaRailContainers(
+        out GameObject? placeablesContainer, out GameObject? filtersContainer,
+        out bool sharedContainer, out string diagnostics)
+    {
+        placeablesContainer = null;
+        filtersContainer = null;
+        sharedContainer = false;
+        diagnostics = "";
+        try
+        {
+            Minimap minimap = Minimap.instance;
+            if (minimap == null || minimap.m_largeRoot == null)
+            {
+                diagnostics = "minimap not ready";
+                return false;
+            }
+
+            var placeables = ToTransforms(GetPlaceableIconButtons());
+            var filters = ToTransforms(GetSystemFilterButtons());
+            if (placeables.Count < 5 || filters.Count < 2)
+            {
+                diagnostics = $"rail incomplete ({placeables.Count}/5 selectors, {filters.Count}/2 filters)";
+                return false;
+            }
+
+            Transform largeRoot = minimap.m_largeRoot.transform;
+            Transform? placeablesAncestor = DeepestCommonAncestor(placeables, largeRoot);
+            Transform? filtersAncestor = DeepestCommonAncestor(filters, largeRoot);
+            var none = new System.Collections.Generic.List<Transform>();
+
+            if (placeablesAncestor != null && placeablesAncestor == filtersAncestor)
+            {
+                // One panel holds the whole rail: it may only hide when
+                // EVERY control in it is replaced (the caller gates on
+                // both groups).
+                string sharedReason = ValidateRailContainer(minimap, placeablesAncestor, largeRoot, none);
+                if (sharedReason.Length != 0)
+                {
+                    diagnostics = $"shared rail container: {sharedReason}";
+                    return false;
+                }
+
+                placeablesContainer = placeablesAncestor.gameObject;
+                filtersContainer = placeablesAncestor.gameObject;
+                sharedContainer = true;
+                diagnostics = $"shared rail container '{placeablesAncestor.name}'";
+                return true;
+            }
+
+            string placeablesReason = ValidateRailContainer(minimap, placeablesAncestor, largeRoot, filters);
+            string filtersReason = ValidateRailContainer(minimap, filtersAncestor, largeRoot, placeables);
+            if (placeablesReason.Length == 0)
+            {
+                placeablesContainer = placeablesAncestor!.gameObject;
+            }
+
+            if (filtersReason.Length == 0)
+            {
+                filtersContainer = filtersAncestor!.gameObject;
+            }
+
+            diagnostics =
+                $"selectors: {(placeablesReason.Length == 0 ? $"'{placeablesAncestor!.name}'" : placeablesReason)}; " +
+                $"filters: {(filtersReason.Length == 0 ? $"'{filtersAncestor!.name}'" : filtersReason)}";
+            return placeablesContainer != null || filtersContainer != null;
+        }
+        catch (Exception exception)
+        {
+            diagnostics = exception.Message;
+            return false;
+        }
+    }
+
+    private static System.Collections.Generic.List<Transform> ToTransforms(
+        System.Collections.Generic.List<GameObject> objects)
+    {
+        var transforms = new System.Collections.Generic.List<Transform>();
+        foreach (GameObject candidate in objects)
+        {
+            if (candidate != null)
+            {
+                transforms.Add(candidate.transform);
+            }
+        }
+
+        return transforms;
+    }
+
+    private static Transform? DeepestCommonAncestor(
+        System.Collections.Generic.List<Transform> members, Transform stopAt)
+    {
+        Transform? ancestor = members[0].parent;
+        while (ancestor != null && ancestor != stopAt)
+        {
+            bool containsAll = true;
+            foreach (Transform member in members)
+            {
+                if (!member.IsChildOf(ancestor))
+                {
+                    containsAll = false;
+                    break;
+                }
+            }
+
+            if (containsAll)
+            {
+                return ancestor;
+            }
+
+            ancestor = ancestor.parent;
+        }
+
+        return null;
+    }
+
+    /// <summary>Empty string when the candidate is safely hideable;
+    /// otherwise the reason it is not.</summary>
+    private static string ValidateRailContainer(
+        Minimap minimap, Transform? candidate, Transform largeRoot,
+        System.Collections.Generic.List<Transform> otherGroup)
+    {
+        if (candidate == null)
+        {
+            return "no common ancestor below the large root";
+        }
+
+        if (candidate == largeRoot || !candidate.IsChildOf(largeRoot))
+        {
+            return "ancestor is (or escapes) the large root";
+        }
+
+        if (minimap.m_mapImageLarge != null && minimap.m_mapImageLarge.transform.IsChildOf(candidate))
+        {
+            return "would hide the map image";
+        }
+
+        if (minimap.m_sharedMapHint != null && minimap.m_sharedMapHint.transform.IsChildOf(candidate))
+        {
+            return "would hide the shared-map hint";
+        }
+
+        if (minimap.m_hints != null)
+        {
+            foreach (GameObject hint in minimap.m_hints)
+            {
+                if (hint != null && hint.transform.IsChildOf(candidate))
+                {
+                    return "would hide a bottom hint bar";
+                }
+            }
+        }
+
+        RectTransform? pinRoot = PinRootLargeField is not null ? PinRootLargeField(minimap) : null;
+        if (pinRoot != null && pinRoot.IsChildOf(candidate))
+        {
+            return "would hide the pin root";
+        }
+
+        RectTransform? pinNameRoot = PinNameRootLargeField is not null ? PinNameRootLargeField(minimap) : null;
+        if (pinNameRoot != null && pinNameRoot.IsChildOf(candidate))
+        {
+            return "would hide the pin name root";
+        }
+
+        foreach (Transform other in otherGroup)
+        {
+            if (other.IsChildOf(candidate))
+            {
+                return "contains the other button group";
+            }
+        }
+
+        return "";
+    }
+
+
+    private static readonly AccessTools.FieldRef<Minimap, UnityEngine.UI.Text>? BiomeNameLargeField =
+        BuildFieldRef<UnityEngine.UI.Text>("m_biomeNameLarge");
+
+    /// <summary>The large map's pin roots and biome label, so the RC13
+    /// orphan-chrome sweep can refuse any candidate that frames them.
+    /// Each output is independently null when unavailable — callers
+    /// treat missing references as "nothing to protect here", which
+    /// fails toward keeping vanilla objects visible only through the
+    /// sweep's other checks.</summary>
+    public static void GetLargeMapProtectedRoots(
+        out RectTransform? pinRoot, out RectTransform? pinNameRoot, out Transform? biomeLabel)
+    {
+        pinRoot = null;
+        pinNameRoot = null;
+        biomeLabel = null;
+        Minimap minimap = Minimap.instance;
+        if (minimap == null)
+        {
+            return;
+        }
+
+        try
+        {
+            pinRoot = PinRootLargeField is not null ? PinRootLargeField(minimap) : null;
+            pinNameRoot = PinNameRootLargeField is not null ? PinNameRootLargeField(minimap) : null;
+            UnityEngine.UI.Text? biome = BiomeNameLargeField is not null ? BiomeNameLargeField(minimap) : null;
+            biomeLabel = biome != null ? biome.transform : null;
+        }
+        catch
+        {
+            // Fail soft: missing protected roots only reduce what the
+            // sweep can rule out; every other guard still applies.
+        }
+    }
+
+    /// <summary>The death/boss filter buttons on the vanilla rail (parents
+    /// of the public highlight images), for the full-rail replacement.</summary>
+    public static System.Collections.Generic.List<GameObject> GetSystemFilterButtons()
+    {
+        var buttons = new System.Collections.Generic.List<GameObject>();
+        Minimap minimap = Minimap.instance;
+        if (minimap == null)
+        {
+            return buttons;
+        }
+
+        try
+        {
+            foreach (UnityEngine.UI.Image image in new[] { minimap.m_selectedIconDeath, minimap.m_selectedIconBoss })
+            {
+                if (image != null && image.transform.parent != null)
+                {
+                    buttons.Add(image.transform.parent.gameObject);
+                }
+            }
+        }
+        catch
+        {
+            // Fail soft: vanilla stays visible.
+        }
+
+        return buttons;
+    }
+
     private static readonly MethodInfo? GetSpriteMethod =
         AccessTools.Method(typeof(Minimap), "GetSprite", new[] { typeof(Minimap.PinType) });
 
@@ -258,6 +599,35 @@ internal static class MinimapReflection
         {
             sprite = GetSpriteInvoker(Minimap.instance, new object[] { (Minimap.PinType)vanillaType }) as Sprite;
             return sprite != null;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static readonly MethodInfo? IsExploredMethod =
+        AccessTools.Method(typeof(Minimap), "IsExplored", new[] { typeof(Vector3) });
+
+    private static readonly FastInvokeHandler? IsExploredInvoker =
+        IsExploredMethod is null ? null : MethodInvoker.GetHandler(IsExploredMethod);
+
+    /// <summary>Whether the player has explored (unfogged) a world position.
+    /// The vector road layer draws above the map's fog compositing, so it
+    /// filters unexplored geometry at bake time to keep fog parity with the
+    /// texture overlay. Fails open (treated as explored) when unavailable.</summary>
+    public static bool TryIsExplored(Vector3 world, out bool explored)
+    {
+        explored = true;
+        if (IsExploredInvoker is null || Minimap.instance == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            explored = (bool)IsExploredInvoker(Minimap.instance, new object[] { world });
+            return true;
         }
         catch
         {

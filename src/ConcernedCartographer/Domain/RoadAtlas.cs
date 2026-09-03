@@ -222,6 +222,53 @@ internal sealed class RoadAtlas
         return removedPoints;
     }
 
+    /// <summary>RC8 road-source-authority migration: removes every stroke
+    /// whose provenance is NOT explicit construction (Traversal and
+    /// ChunkRecovery strokes recorded by earlier versions from arbitrary
+    /// terrain paint). Explicit Pathen/Paved construction strokes are
+    /// preserved untouched, identities included. Ends all active strokes
+    /// and rebuilds the index. Returns the removed stroke/point counts so
+    /// the caller can log and back up honestly.</summary>
+    public MigrationResult RemoveNonConstructionStrokes()
+    {
+        EndAllStrokes();
+
+        int removedStrokes = 0;
+        int removedPoints = 0;
+        for (int index = Strokes.Count - 1; index >= 0; index--)
+        {
+            RoadStroke stroke = Strokes[index];
+            if (stroke.Source == RoadObservationSource.Construction)
+            {
+                continue;
+            }
+
+            removedStrokes++;
+            removedPoints += stroke.Points.Count;
+            Strokes.RemoveAt(index);
+        }
+
+        if (removedStrokes > 0)
+        {
+            RebuildIndex();
+            IsDirty = true;
+        }
+
+        return new MigrationResult(removedStrokes, removedPoints);
+    }
+
+    public readonly struct MigrationResult
+    {
+        public MigrationResult(int removedStrokes, int removedPoints)
+        {
+            RemovedStrokes = removedStrokes;
+            RemovedPoints = removedPoints;
+        }
+
+        public int RemovedStrokes { get; }
+        public int RemovedPoints { get; }
+    }
+
     /// <summary>Compacts the atlas: joins same-kind, same-source strokes
     /// whose endpoints sit within <see cref="JoinToleranceMeters"/> (healing
     /// fragmentation from suppression breaks and scan order, never bridging

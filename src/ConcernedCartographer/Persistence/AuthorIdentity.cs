@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using BepInEx;
 using BepInEx.Logging;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 
 namespace TheConcernedCat.ConcernedCartographer.Persistence;
 
@@ -41,7 +42,7 @@ internal static class AuthorIdentity
         }
         catch (Exception exception)
         {
-            log.LogWarning($"Could not persist an author identity; audit labels stay empty this session: {exception.Message}");
+            log.LogWarning($"Could not persist an author identity; audit labels stay empty this session: {SafeLogText.Brief(exception)}");
             _cached = "";
             return "";
         }

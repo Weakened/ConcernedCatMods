@@ -4,6 +4,7 @@ using System.Globalization;
 using BepInEx.Logging;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -18,8 +19,12 @@ namespace TheConcernedCat.ConcernedCartographer.Map;
 /// Visual properties use pickers instead of developer free-text (#94):
 /// icon = sprite preview + dropdown list over the stable IconRegistry IDs
 /// (unknown legacy IDs preserved and offered as "Keep custom"), category =
-/// free text + suggestion dropdown, size = stepper. Pin color is not map-
-/// rendered in v1, so it lives at the bottom labeled metadata-only.
+/// free text + suggestion dropdown.
+///
+/// RC8-7: pin Size and Color are serialized metadata with NO visible v1
+/// behavior, so they have no controls here — an inert control is a lie.
+/// The stored values round-trip untouched through the edit buffer for
+/// backward compatibility; cc_pins remains the power-user path.
 ///
 /// Fail-closed: any UI exception hides the panel and leaves the console
 /// workbench as the fallback; store data can never be harmed because every
@@ -27,7 +32,7 @@ namespace TheConcernedCat.ConcernedCartographer.Map;
 internal sealed class PinWorkbenchPanel
 {
     private const float PanelWidth = 460f;
-    private const float PanelHeight = 640f;
+    private const float PanelHeight = 560f;
 
     // Explicit two-column edit layout (DEF-v1.0-003). Every row is derived
     // from these constants, so no label or control can leave the panel:
@@ -45,10 +50,6 @@ internal sealed class PinWorkbenchPanel
     // it stays fully on screen at every configured UiScale.
     private const float ScreenEdgeMargin = 30f;
 
-    private const float SizeStep = 0.25f;
-    private const float SizeMin = 0.5f;
-    private const float SizeMax = 2f;
-
     private readonly ManualLogSource _log;
     private readonly PinWorkbenchController _controller = new();
 
@@ -63,7 +64,6 @@ internal sealed class PinWorkbenchPanel
     private Text? _info;
     private InputField? _name;
     private InputField? _category;
-    private InputField? _color;
     private InputField? _tags;
     private InputField? _notes;
     private Toggle? _checked;
@@ -78,7 +78,6 @@ internal sealed class PinWorkbenchPanel
     private GameObject? _categoryDropdown;
     private GameObject? _statusDropdown;
     private GameObject? _scopeDropdown;
-    private Text? _sizeValueLabel;
     private float _iconRowY;
     private float _categoryRowY;
     private float _statusRowY;
@@ -91,8 +90,6 @@ internal sealed class PinWorkbenchPanel
     /// know: the dropdown then offers "Keep custom" so the identity is
     /// never lost by merely opening the editor.</summary>
     private string? _customIconId;
-
-    private float _sizeValue = 1f;
 
     private PinOperations? _operations;
     private Action? _onApplied;
@@ -200,7 +197,7 @@ internal sealed class PinWorkbenchPanel
                 return;
             }
 
-            if (Input.GetKeyDown(KeyCode.Escape))
+            if (Input.GetKeyDown(KeyCode.Escape) && !CcTextFocus.EscapeShouldOnlyBlur())
             {
                 Close();
             }
@@ -229,7 +226,9 @@ internal sealed class PinWorkbenchPanel
             ReadWidgetsIntoBuffer();
             if (_controller.TryApply(_operations, out string message))
             {
-                _log.LogInfo($"Workbench: {message}");
+                // Privacy audit (CC-098): the controller message can echo
+                // user-typed field text; the log records the outcome only.
+                _log.LogInfo($"Workbench: applied changes to {_controller.TargetId}.");
                 Show(false);
                 _onApplied?.Invoke();
             }
@@ -284,7 +283,6 @@ internal sealed class PinWorkbenchPanel
     {
         _name!.text = _controller.NameField;
         _category!.text = _controller.CategoryField;
-        _color!.text = _controller.ColorField;
         _tags!.text = _controller.TagsField;
         _notes!.text = _controller.NotesField;
         _checked!.isOn = _controller.CheckedField;
@@ -296,12 +294,6 @@ internal sealed class PinWorkbenchPanel
             : _controller.IconField.Trim();
         _customIconId = IconRegistry.TryResolve(_selectedIconId, out _) ? null : _selectedIconId;
         UpdateIconWidgets();
-
-        _sizeValue = float.TryParse(
-            _controller.SizeField.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out float parsedSize)
-            ? Mathf.Clamp(parsedSize, SizeMin, SizeMax)
-            : 1f;
-        UpdateSizeLabel();
     }
 
     private void ReadWidgetsIntoBuffer()
@@ -309,12 +301,13 @@ internal sealed class PinWorkbenchPanel
         _controller.NameField = _name!.text;
         _controller.IconField = _selectedIconId;
         _controller.CategoryField = _category!.text;
-        _controller.ColorField = _color!.text;
-        _controller.SizeField = _sizeValue.ToString("0.##", CultureInfo.InvariantCulture);
         _controller.TagsField = _tags!.text;
         _controller.NotesField = _notes!.text;
         _controller.CheckedField = _checked!.isOn;
-        // Status and scope are already in the controller via the cycle buttons.
+        // Status and scope are already in the controller via the cycle
+        // buttons. Size and Color (RC8-7: metadata without v1 behavior)
+        // are deliberately untouched — the buffer round-trips the stored
+        // values unchanged; cc_pins can still edit them.
     }
 
     private void SetMode(bool edit, bool adopt)
@@ -432,7 +425,6 @@ internal sealed class PinWorkbenchPanel
         _name = CreateRow(gui, font, labelColor, AtlasStrings.Get("workbench.name"), ref y);
         BuildIconRow(gui, font, labelColor, ref y);
         BuildCategoryRow(gui, font, labelColor, ref y);
-        BuildSizeRow(gui, font, labelColor, ref y);
         _tags = CreateRow(gui, font, labelColor, AtlasStrings.Get("workbench.tags"), ref y);
 
         CreateLabel(gui, font, labelColor, AtlasStrings.Get("workbench.notes"), new Vector2(LabelCenterX, y));
@@ -472,16 +464,8 @@ internal sealed class PinWorkbenchPanel
         _checked = toggle.GetComponentInChildren<Toggle>();
         y -= 40f;
 
-        // Metadata-only footer: pin color is stored/synced but NOT rendered
-        // on the map in v1, so it must not masquerade as a visual control
-        // (#94). Raw hex entry is the advanced fallback by design.
-        CreateLabel(gui, font, labelColor, AtlasStrings.Get("workbench.colorMeta"), new Vector2(LabelCenterX, y));
-        GameObject colorField = gui.CreateInputField(
-            _editRows.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(FieldCenterX, y),
-            InputField.ContentType.Standard, AtlasStrings.Get("workbench.colorMeta"), 14, FieldColumnWidth, 28f);
-        _color = colorField.GetComponent<InputField>();
-        y -= 36f;
+        // RC8-7: no Size/Color controls — both are stored metadata with no
+        // visible v1 behavior. Their values round-trip untouched.
 
         const float actionButtonWidth = 110f;
         GameObject apply = gui.CreateButton(
@@ -558,57 +542,6 @@ internal sealed class PinWorkbenchPanel
         y -= 36f;
     }
 
-    private void BuildSizeRow(GUIManager gui, Font font, Color labelColor, ref float y)
-    {
-        CreateLabel(gui, font, labelColor, AtlasStrings.Get("workbench.sizeMeta"), new Vector2(LabelCenterX, y));
-
-        float x = FieldLeftEdge;
-        GameObject minus = gui.CreateButton(
-            "-", _editRows!.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(x + 14f, y), 28f, 28f);
-        minus.GetComponent<Button>().onClick.AddListener(() => NudgeSize(-SizeStep));
-        x += 32f;
-
-        _sizeValueLabel = gui.CreateText(
-            "", _editRows.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(x + 28f, y),
-            font, 14, Color.white, outline: false, Color.black, 56f, 28f, addContentSizeFitter: false)
-            .GetComponent<Text>();
-        _sizeValueLabel.alignment = TextAnchor.MiddleCenter;
-        x += 60f;
-
-        GameObject plus = gui.CreateButton(
-            "+", _editRows.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(x + 14f, y), 28f, 28f);
-        plus.GetComponent<Button>().onClick.AddListener(() => NudgeSize(SizeStep));
-        x += 40f;
-
-        float resetWidth = FieldColumnWidth - (x - FieldLeftEdge);
-        GameObject reset = gui.CreateButton(
-            AtlasStrings.Get("workbench.reset"), _editRows.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(x + (resetWidth / 2f), y), resetWidth, 28f);
-        reset.GetComponent<Button>().onClick.AddListener(() =>
-        {
-            _sizeValue = 1f;
-            UpdateSizeLabel();
-        });
-        y -= 36f;
-    }
-
-    private void NudgeSize(float delta)
-    {
-        _sizeValue = Mathf.Clamp(_sizeValue + delta, SizeMin, SizeMax);
-        UpdateSizeLabel();
-    }
-
-    private void UpdateSizeLabel()
-    {
-        if (_sizeValueLabel != null)
-        {
-            _sizeValueLabel.text = "×" + _sizeValue.ToString("0.##", CultureInfo.InvariantCulture);
-        }
-    }
-
     private void UpdateIconWidgets()
     {
         bool known = IconRegistry.TryResolve(_selectedIconId, out IconRegistry.IconDefinition definition);
@@ -621,7 +554,12 @@ internal sealed class PinWorkbenchPanel
 
         if (_iconPreview != null)
         {
-            if (MinimapReflection.TryGetPinSprite(IconRegistry.ResolveVanillaType(_selectedIconId), out Sprite? sprite))
+            if (CcIconSprites.TryGet(_selectedIconId, out Sprite ccSprite))
+            {
+                _iconPreview.sprite = ccSprite;
+                _iconPreview.enabled = true;
+            }
+            else if (MinimapReflection.TryGetPinSprite(IconRegistry.ResolveVanillaType(_selectedIconId), out Sprite? sprite))
             {
                 _iconPreview.sprite = sprite;
                 _iconPreview.enabled = true;
@@ -904,7 +842,7 @@ internal sealed class PinWorkbenchPanel
         // Release only a block this panel actually owns: an unconditional
         // BlockInput(false) here could steal another mod's request.
         _inputBlock.Release();
-        _log.LogError($"Workbench panel failed and was disabled for this session (cc_pins console remains available): {exception}");
+        _log.LogError($"Workbench panel failed and was disabled for this session (cc_pins console remains available): {SafeLogText.Describe(exception)}");
     }
 
     private static string Truncate(string text, int max)

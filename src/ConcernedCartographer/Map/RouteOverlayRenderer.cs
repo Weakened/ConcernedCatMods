@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using BepInEx.Logging;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using TheConcernedCat.ConcernedCartographer.Roads;
 using TheConcernedCat.ConcernedCartographer.Runtime;
 using UnityEngine;
@@ -9,27 +11,43 @@ using UnityEngine;
 namespace TheConcernedCat.ConcernedCartographer.Map;
 
 /// <summary>Draws routes on their own Jötunn overlay ("CC Routes", with its
-/// own toggle). Styles: solid lines, dashed (alternate segments), dotted
-/// (points only). Colors come from the route or its status defaults.
-/// Full-texture redraws only — route edits are debounced upstream.</summary>
+/// own toggle) — since RC10 this texture is the MINIMAP + fallback
+/// presentation, suppressed on the large map while the shared vector layer
+/// (RoadVectorLayer) draws routes in screen-space width/cadence there
+/// (feedback 5: one route presentation at a time, exactly like roads).
+/// Styles (RC8-9): solid lines; dashed and dotted use a GEOMETRIC cadence
+/// — a fixed on/off (or dot spacing) distance walked along the polyline
+/// in overlay texels, with the phase carried across vertices — never
+/// stored-point parity, so the pattern looks the same regardless of how
+/// the points happen to be spaced. Colors come from <see cref="RouteInk"/>
+/// (shared with the vector layer). Full-texture redraws only — route
+/// edits are debounced upstream. The Jötunn checkbox is hooked as the
+/// route layer's real user switch (feedback 7).</summary>
 internal sealed class RouteOverlayRenderer
 {
     private const string OverlayName = "CC Routes";
 
-    private Color32 PlannedColor => _settings.HighContrast.Value
-        ? new Color32(0, 220, 255, 255)
-        : new Color32(210, 210, 235, 255);
+    // Pattern cadence in overlay texels (one texel ≈ 11.6 m of world on
+    // the default 2048 map): dashes 5 on / 4 off, dots every 3 (RC10
+    // feedback 6 tightened dots from 4 for a readable continuous cadence).
+    private const float DashOnTexels = 5f;
+    private const float DashOffTexels = 4f;
+    private const float DotSpacingTexels = 3f;
 
-    private Color32 ActiveColor => _settings.HighContrast.Value
-        ? new Color32(255, 160, 0, 255)
-        : new Color32(255, 200, 80, 255);
-
-    private Color32 DoneColor => _settings.HighContrast.Value
-        ? new Color32(200, 200, 200, 255)
-        : new Color32(135, 135, 135, 255);
+    /// <summary>RC12 blocker 3: a REAL per-route stamp budget for the
+    /// texture pattern walk (int.MaxValue before, which let corrupt or
+    /// absurdly long geometry spin the walker for seconds). A full 2048²
+    /// texture diagonal is ~2 900 texels ≈ 1 000 dots; 24 000 covers any
+    /// legitimate route many times over and keeps the worst case bounded
+    /// to a few milliseconds.</summary>
+    private const int MaxPatternStampsPerRoute = 24_000;
 
     private readonly CartographerSettings _settings;
     private readonly RateLimitedLog _rateLimited;
+    private readonly OverlayUserToggleHook _toggleHook = new();
+    private MinimapManager.MapOverlay? _overlay;
+    private bool _userEnabled = true;
+    private bool _lastSuppressed;
 
     public RouteOverlayRenderer(CartographerSettings settings, ManualLogSource log)
     {
@@ -37,13 +55,129 @@ internal sealed class RouteOverlayRenderer
         _rateLimited = new RateLimitedLog(log, 5f);
     }
 
+    /// <summary>Raised when the player flips the CC Routes checkbox in
+    /// Jötunn's overlay panel, so the runtime can mirror it into the
+    /// vector route presentation.</summary>
+    public event Action<bool>? UserToggled;
+
+    /// <summary>RC14 fix 4: drops the cached overlay handle at a fresh
+    /// Minimap so the next use re-resolves (mirrors
+    /// RoadOverlayRenderer.ResetMapSession).</summary>
+    public void ResetMapSession()
+    {
+        _overlay = null;
+    }
+
+    /// <summary>Per-frame visibility drive: hooks the Jötunn checkbox as
+    /// the user switch and applies the RC8-1 one-presentation rule (the
+    /// texture hides on the large map while the vector layer draws
+    /// routes, and returns for the minimap/fallback).</summary>
+    public void TickVisibility(bool vectorRoutesActive)
+    {
+        _lastSuppressed = vectorRoutesActive;
+        if (TryGetOverlay(out MinimapManager.MapOverlay? overlay))
+        {
+            _toggleHook.Maintain(overlay!, _userEnabled, HandleUserToggle);
+        }
+
+        ApplyVisibility();
+    }
+
+    private void HandleUserToggle(bool enabled)
+    {
+        SetEnabled(enabled);
+        UserToggled?.Invoke(enabled);
+    }
+
+    private void ApplyVisibility()
+    {
+        // RC11 feedback 1: unconditional write, no applied-state cache —
+        // Jötunn's own listener writes Enabled first on checkbox clicks,
+        // so a cache diverges exactly when it matters (see
+        // RoadOverlayRenderer.SetTextureOverlayEnabled). The setter no-ops
+        // on unchanged values.
+        bool effective = OverlayVisibilityRule.EffectiveTexture(_userEnabled, _lastSuppressed);
+        if (TryGetOverlay(out MinimapManager.MapOverlay? overlay))
+        {
+            try
+            {
+                overlay!.Enabled = effective;
+            }
+            catch (Exception exception)
+            {
+                _rateLimited.Warning("route-toggle", $"Could not toggle the route overlay: {SafeLogText.Brief(exception)}");
+            }
+        }
+
+        _toggleHook.SyncCheckbox(OverlayVisibilityRule.CheckboxShows(_userEnabled));
+    }
+
+    private bool TryGetOverlay(out MinimapManager.MapOverlay? overlay)
+    {
+        // RC14 fix 4: presence is not liveness — Jötunn destroys the
+        // overlay texture on Minimap teardown, so a handle cached in the
+        // previous game session must re-resolve (same rule as roads).
+        overlay = _overlay;
+        if (!OverlayHandleRule.MustReresolve(
+                overlay is not null,
+                overlay is not null && overlay.OverlayTex != null))
+        {
+            return true;
+        }
+
+        try
+        {
+            overlay = MinimapManager.Instance.GetMapOverlay(OverlayName);
+            _overlay = overlay;
+            return overlay is not null;
+        }
+        catch (Exception exception)
+        {
+            _rateLimited.Warning("route-overlay-get", $"Could not resolve the route overlay: {SafeLogText.Brief(exception)}");
+            return false;
+        }
+    }
+
     public void RedrawAll(RouteStore routes)
     {
         try
         {
-            var overlay = MinimapManager.Instance.GetMapOverlay(OverlayName);
+            if (!TryGetOverlay(out MinimapManager.MapOverlay? overlay))
+            {
+                return;
+            }
+
+            // RC15 item 8 (mirrors RoadOverlayRenderer.RedrawAll): capture
+            // the live texture at resolve and re-check it before the write,
+            // so a map teardown mid-redraw fails soft instead of throwing.
+            Texture2D? texture = overlay!.OverlayTex;
+            if (texture == null)
+            {
+                _overlay = null;
+                _rateLimited.Warning(
+                    "route-redraw-teardown",
+                    "Route overlay lifecycle: overlay texture torn down at resolve during a full redraw; " +
+                    "handle reset, redraw deferred to the next valid map session.");
+                return;
+            }
+
             int size = overlay.TextureSize;
-            Color32[] pixels = new Color32[size * size];
+
+            // RC12 blocker 3: reuse one pixel buffer across redraws. A
+            // 2048² texture is a 16 MB Color32[]; allocating it per redraw
+            // made repeated style changes stutter through GC spikes.
+            Color32[] pixels;
+            if (_pixelBuffer is not null && _pixelBufferSize == size)
+            {
+                pixels = _pixelBuffer;
+                Array.Clear(pixels, 0, pixels.Length);
+            }
+            else
+            {
+                pixels = new Color32[size * size];
+                _pixelBuffer = pixels;
+                _pixelBufferSize = size;
+            }
 
             foreach (AtlasRoute route in routes.Living)
             {
@@ -52,58 +186,112 @@ internal sealed class RouteOverlayRenderer
                     continue;
                 }
 
-                Color32 color = route.ColorArgb is int argb
-                    ? FromArgb(argb)
-                    : route.Status == RouteStatus.Active ? ActiveColor
-                    : route.Status == RouteStatus.Done ? DoneColor
-                    : PlannedColor;
+                Color32 color = RouteInk.Resolve(route, _settings.HighContrast.Value);
 
-                if (route.Points.Count == 1 || route.Style == RouteStyle.Dotted)
+                if (route.Points.Count == 1)
                 {
-                    foreach (RoadPoint point in route.Points)
-                    {
-                        DrawSegmentIntoBuffer(pixels, size, point, point, color);
-                    }
-
+                    DrawSegmentIntoBuffer(pixels, size, route.Points[0], route.Points[0], color);
                     continue;
                 }
 
-                for (int index = 1; index < route.Points.Count; index++)
+                switch (route.Style)
                 {
-                    if (route.Style == RouteStyle.Dashed && index % 2 == 0)
-                    {
-                        continue;
-                    }
+                    case RouteStyle.Dashed:
+                        DrawDashedPolyline(pixels, size, route.Points, color);
+                        break;
+                    case RouteStyle.Dotted:
+                        DrawDottedPolyline(pixels, size, route.Points, color);
+                        break;
+                    default:
+                        for (int index = 1; index < route.Points.Count; index++)
+                        {
+                            DrawSegmentIntoBuffer(pixels, size, route.Points[index - 1], route.Points[index], color);
+                        }
 
-                    DrawSegmentIntoBuffer(pixels, size, route.Points[index - 1], route.Points[index], color);
+                        break;
                 }
             }
 
-            overlay.OverlayTex.SetPixels32(pixels);
-            overlay.OverlayTex.Apply(false);
+            // RC15 item 8: liveness must still hold at write time
+            // (OverlayHandleRule.MayWrite) — the route walk above is a
+            // teardown-sized window too.
+            if (!OverlayHandleRule.MayWrite(textureAliveAtResolve: true, textureAliveAtWrite: texture != null))
+            {
+                _overlay = null;
+                _rateLimited.Warning(
+                    "route-redraw-teardown",
+                    "Route overlay lifecycle: overlay texture torn down between resolve and write during a " +
+                    "full redraw; handle reset, redraw deferred to the next valid map session.");
+                return;
+            }
+
+            texture!.SetPixels32(pixels);
+            texture.Apply(false);
         }
         catch (Exception exception)
         {
-            _rateLimited.Warning("route-redraw", $"Could not redraw routes: {exception.Message}");
+            _rateLimited.Warning("route-redraw", $"Could not redraw routes: {SafeLogText.Brief(exception)}");
         }
     }
 
+    /// <summary>The route layer's USER switch (checkbox/console): the
+    /// texture follows through the effective-visibility rule.</summary>
     public void SetEnabled(bool enabled)
     {
-        try
+        _userEnabled = enabled;
+        ApplyVisibility();
+    }
+
+    // Projection buffer reused per route (full redraws only).
+    private readonly List<(float X, float Y)> _projected = new();
+
+    // Reused full-texture pixel buffer (RC12 blocker 3).
+    private Color32[]? _pixelBuffer;
+    private int _pixelBufferSize;
+
+    private void ProjectPolyline(IReadOnlyList<RoadPoint> points, int size)
+    {
+        _projected.Clear();
+        foreach (RoadPoint point in points)
         {
-            MinimapManager.Instance.GetMapOverlay(OverlayName).Enabled = enabled;
+            Vector2 projected = Project(point, size);
+            _projected.Add((projected.x, projected.y));
         }
-        catch (Exception exception)
-        {
-            _rateLimited.Warning("route-toggle", $"Could not toggle the route overlay: {exception.Message}");
-        }
+    }
+
+    /// <summary>Dash pattern via the shared <see cref="RoutePatternMath"/>
+    /// walker (RC10): identical geometry to the vector presentation.</summary>
+    private void DrawDashedPolyline(Color32[] pixels, int size, IReadOnlyList<RoadPoint> points, Color32 color)
+    {
+        ProjectPolyline(points, size);
+        RoutePatternMath.WalkDashes(
+            _projected, DashOnTexels, DashOffTexels, MaxPatternStampsPerRoute,
+            (fromX, fromY, toX, toY) => DrawLineIntoBuffer(
+                pixels, size, new Vector2(fromX, fromY), new Vector2(toX, toY), color));
+    }
+
+    /// <summary>Dots via the shared <see cref="RoutePatternMath"/> walker:
+    /// fixed geometric spacing, independent of stored point positions.</summary>
+    private void DrawDottedPolyline(Color32[] pixels, int size, IReadOnlyList<RoadPoint> points, Color32 color)
+    {
+        ProjectPolyline(points, size);
+        RoutePatternMath.WalkDots(
+            _projected, DotSpacingTexels, MaxPatternStampsPerRoute,
+            (x, y) => DrawLineIntoBuffer(pixels, size, new Vector2(x, y), new Vector2(x, y), color));
+    }
+
+    private static Vector2 Project(RoadPoint point, int size)
+    {
+        return MinimapManager.Instance.WorldToOverlayCoords(new Vector3(point.X, point.Y, point.Z), size);
     }
 
     private void DrawSegmentIntoBuffer(Color32[] pixels, int size, RoadPoint start, RoadPoint end, Color32 color)
     {
-        Vector2 a = MinimapManager.Instance.WorldToOverlayCoords(new Vector3(start.X, start.Y, start.Z), size);
-        Vector2 b = MinimapManager.Instance.WorldToOverlayCoords(new Vector3(end.X, end.Y, end.Z), size);
+        DrawLineIntoBuffer(pixels, size, Project(start, size), Project(end, size), color);
+    }
+
+    private void DrawLineIntoBuffer(Color32[] pixels, int size, Vector2 a, Vector2 b, Color32 color)
+    {
         int x0 = Mathf.Clamp(Mathf.RoundToInt(a.x), 0, size - 1);
         int y0 = Mathf.Clamp(Mathf.RoundToInt(a.y), 0, size - 1);
         int x1 = Mathf.Clamp(Mathf.RoundToInt(b.x), 0, size - 1);
@@ -154,14 +342,5 @@ internal sealed class RouteOverlayRenderer
                 y0 += sy;
             }
         }
-    }
-
-    private static Color32 FromArgb(int argb)
-    {
-        return new Color32(
-            (byte)((argb >> 16) & 0xFF),
-            (byte)((argb >> 8) & 0xFF),
-            (byte)(argb & 0xFF),
-            (byte)((argb >> 24) & 0xFF));
     }
 }

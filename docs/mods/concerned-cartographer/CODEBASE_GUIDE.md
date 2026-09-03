@@ -2,7 +2,7 @@
 
 > **Audience:** maintainers, contributors, reviewers, and anyone trying to understand or extend the mod.
 >
-> **Snapshot:** originally written against 0.4.0; updated for the Concerned Cartographer **1.0.0 release candidate** (repository `main`, RC lineage commit `53f371c60da8b6b5b69d590b918657d0ecbe4026`). Sections 8b–8e cover the v0.5–v1.0 additions (routes, collaboration/sync, localization/accessibility, compatibility/backup, and the SEC-1.0-001 hardening layer). This document remains a living map: update it in the same PR whenever source files or responsibilities change.
+> **Snapshot:** originally written against 0.4.0; updated for the Concerned Cartographer **1.0-line release candidates** (repository `main`, RC lineage commit `53f371c60da8b6b5b69d590b918657d0ecbe4026`), whose public package identity ships as **0.9.0 (Public Beta)** since RC13. Sections 8b–8e cover the v0.5–v1.0 additions (routes, collaboration/sync, localization/accessibility, compatibility/backup, and the SEC-1.0-001 hardening layer). This document remains a living map: update it in the same PR whenever source files or responsibilities change.
 
 ## 1. Architectural model
 
@@ -45,20 +45,24 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    A1[Player walks road] --> B[RoadSurveyor]
-    A2[Successful TerrainOp] --> C[ConstructionCapture]
-    A3[Loaded explored Heightmap] --> D[ChunkRecoveryScanner]
-    B --> E[RoadObservationPipeline]
-    C --> E
-    D --> E
+    A2[Successful local TerrainOp] --> C[ConstructionCapture]
+    C --> E[RoadObservationPipeline]
+    A1[Player position sampling] --> B[RoadSurveyor - diagnostics only]
+    B --> K[cc_roads align live]
     E --> F[RoadAtlas]
-    F --> G[RoadOverlayRenderer]
+    F --> G[RoadOverlayRenderer + RoadVectorLayer]
     F --> H[RoadPersistence]
     I[Road repair tools] --> J[RoadAtlasEditor]
     J --> F
 ```
 
-Every road source emits the same `RoadObservation`. The pipeline does not care whether the point came from walking, a construction action, or recovery.
+**RC8 STRICT ROAD SOURCE AUTHORITY**: only successful explicit LOCAL
+PLAYER construction (Pathen ⇒ Dirt, Paved ⇒ Paved) creates road atlas
+data. The pipeline refuses Traversal/ChunkRecovery observations at the
+single choke point; `RoadSurveyor` samples purely for the `align live`
+diagnostic and the chunk-recovery scanner was retired. Legacy passive
+strokes migrate away once at load (`.pre-authority.bak` kept), while
+construction strokes survive untouched.
 
 ### Pin flow
 
@@ -279,17 +283,19 @@ Source-neutral ingestion payload: source + kind + position.
 
 ### `RoadObservationPipeline.cs`
 
-Single entry point for all road sources.
+Single entry point for road creation.
 
 Guarantees:
 
-- exact-replay idempotency;
-- source-neutral atlas semantics;
+- **road source authority (RC8)**: observations from any source other
+  than `Construction` are refused outright and end that source's stroke —
+  the strict v1 product rule enforced at one choke point;
+- exact-replay idempotency for the accepted source;
 - per-source active stroke isolation;
-- one source can end/fail without breaking the others;
-- negative terrain intent (DEF-v1.0-005): Dirt observations from non-Construction sources are refused inside the world's `TerrainIntentMask` exclusion, and the refusing source's stroke ends so nothing connects across excluded ground.
+- negative terrain intent (DEF-v1.0-005) retained as defense in depth for
+  any future non-construction source.
 
-New road observers should feed this pipeline rather than write directly to `RoadAtlas` or the map.
+New road observers should feed this pipeline rather than write directly to `RoadAtlas` or the map — and must NOT be passive sources without a new product decision.
 
 ### `RoadAtlas.cs`
 
@@ -371,38 +377,61 @@ If a Valheim update changes terrain internals, fix this adapter first instead of
 
 ### `RoadSurveyor.cs`
 
-Traversal observation source.
+Diagnostics-only traversal sampler (RC8). On a configured cadence it
+probes the terrain beneath the local player and records whether recorded
+road geometry sits nearby — feeding only `cc_roads align live`
+(`LatestSample`). It never creates road data.
 
-On a configured cadence it samples the local player, probes terrain and feeds `RoadObservationSource.Traversal` into the pipeline. It ends the traversal stroke when the signal disappears or the player cannot be sampled.
+### `TerrainActionClassifier.cs` / `TerrainActionCategory.cs` / `TerrainActionClassification.cs` / `TerrainPaintKind.cs` (Domain, RC10, DEF-v1.0-007)
+
+**The road source authority, identity edition.** Pure and fully tested
+(`TerrainActionClassifierTests`): a captured operation is classified by
+the ACTUAL player action — the placed TerrainOp's prefab name
+(`path_v2` = Pathen, `mud_road_v2` = Level ground: the prefab names do
+NOT match the hoe menu labels), the Piece localization token as
+fallback, and the selected build piece as corroboration. Settings flags
+(`m_level`/`m_raise`/`m_smooth`) are deliberately NOT inputs — in the
+live game Level ground and Pathen ship near-identical
+smooth-and-paint-Dirt settings, which is why every flag heuristic
+(RC8 and earlier) misclassified Level as road building. Only
+Pathen-with-Dirt-paint and PavedRoad-with-Paved-paint produce a
+`RoadKind`; everything else (Level, Raise, Cultivate, digging, unknown
+ops, selection mismatches) is a non-road paint op that erases covered
+ink. If a game update ever adds terrain actions, extend the prefab
+table here — never re-derive authority from paint or flags.
 
 ### `CapturedTerrainOperation.cs`
 
-Neutral value object containing the useful facts extracted from a Valheim `TerrainOp`: position, radius, road/removal kind and whether the operation is ordinary terraforming rather than intended road paint.
+Neutral value object containing the classified facts for one operation:
+authorized road kind (null for every non-road action), position, brush
+radius, the classified category, and the classifier's diagnostic
+description line.
 
 ### `ConstructionCapture.cs`
 
-Harmony/game adapter for successful terrain operations.
+Harmony/game adapter for successful terrain operations
+(`TerrainComp.ApplyOperation` postfix — runs exactly on the placing
+client, so only the local player's own actions are ever captured).
 
-It observes the confirmed game operation, classifies Dirt/Paved/Cultivate/Reset/terraforming and raises `CapturedTerrainOperation`.
+It reads the op's identity (GameObject name, Piece token, selected
+piece via `Player.GetBuildSelection`), maps the paint type to the
+domain `TerrainPaintKind`, delegates classification to
+`TerrainActionClassifier`, and raises `CapturedTerrainOperation`.
 
 The patch is observational. It must never mutate Valheim terrain.
 
-Failure should disable this source without taking traversal down.
+Failure disables this source for the session. The runtime logs an
+always-on rate-limited "Terrain action classified:" line per captured
+action so any future authority regression is visible in LogOutput.log.
 
-### `ChunkRecoveryScanner.cs`
+### Chunk recovery (retired in RC8)
 
-Incremental old-road recovery source.
-
-It:
-
-- scans loaded non-LOD heightmaps near the player;
-- uses a cells-per-frame budget;
-- checks exploration before revealing candidates;
-- applies shape heuristics;
-- emits ChunkRecovery observations;
-- resets scan state on world changes.
-
-This is a performance boundary. Never turn it into a whole-world scan.
+The `ChunkRecoveryScanner` adapter was removed with the road source
+authority rule — passive recovery of arbitrary terrain paint is exactly
+what v1 forbids. `RecoveryShapeHeuristic` (pure, tested) remains in the
+domain for a possible future explicit re-capture feature; any
+reintroduction needs a product decision and must not feed the pipeline
+passively.
 
 ## 7. Road/map rendering (`Map/`)
 
@@ -422,11 +451,114 @@ Responsibilities:
 
 Destructive road edits schedule/debounce a full redraw because pixels cannot be safely “un-drawn” incrementally.
 
+RC10 additions: overlay handles are cached (one `GetMapOverlay` per
+name per session), the Jötunn per-overlay checkboxes are hooked as real
+user layer switches (`OverlayUserToggleHook` + the pure
+`OverlayVisibilityRule`), suppression writes re-sync the checkbox to
+the USER state, and `UserToggledOverlay` lets the runtime mirror clicks
+into the drawer settings.
+
+RC14 fix 4: the handle cache is **liveness-checked** through the pure
+`OverlayHandleRule` — Jötunn destroys every overlay texture on
+`Minimap.OnDestroy` and clears its registry, so a handle cached in one
+game session painted persisted roads into a dead texture in the next
+(the beta "roads gone from the minimap after relog" report). A handle
+is only trusted while its `OverlayTex` is Unity-alive; anything else
+re-resolves against the current Minimap. `ResetMapSession()` (called
+from the runtime's map-available path, also on `RouteOverlayRenderer`)
+additionally drops both handles and un-latches the vector layer's
+per-session fail-soft disable via `RoadVectorLayer.ResetSession()` —
+previously that "session" latch silently lasted the whole process.
+
+### `VectorBakeScheduler.cs` (Domain, RC11 blocker 3)
+
+The vector layer's rebake decision as a pure, sweep-tested state
+machine: first-bake, zoom-step threshold (both directions), data
+debounce, periodic parity, container invalidation, and the incomplete-
+bake retry (an unprojectable bake commits nothing and retries within
+0.25 s — previously it cleared the dirty flag and left roads invisible
+until the next zoom step or 30 s tick). Change rebake behavior HERE,
+with tests, never inline in the Unity layer.
+
+### `RoadVectorLayer.cs` (DEF-v1.0-006; routes since RC10)
+
+The high-precision large-map vector layer for roads AND routes: one
+container transform reproduces vanilla pan/zoom exactly
+(`RoadVectorMath`), widths and dash/dot cadences are defined in screen
+pixels and re-derived at every rebake, route stamping walks the shared
+pure `RoutePatternMath` (identical geometry to the texture path), and
+per-quad vertex colors let all routes share one graphic. Routes render
+regardless of fog (the player's own plans); roads keep fog parity.
+Styled routes that would blow the stamp budget degrade to solid lines
+per route instead of taking the layer down.
+
+### `RoadInkSoftening.cs` (Domain, RC13 polish 1)
+
+The pure feathered-edge profile for large-map road ink: an opaque color
+core, a symmetric monotonic alpha falloff, and a 4/3 quad widen factor
+chosen so the 50%-alpha extent equals the crisp RC12 width exactly
+(perceived width preserved). `RoadVectorLayer` samples it into one
+1×64 gradient texture that dirt/paved quads stretch across their width
+via per-vertex uv — same quad count and budget, no under-stroke, no
+double-render; routes keep the default white texture and stay crisp.
+
+### `RouteOverlayRenderer.cs`
+
+The route texture overlay ("CC Routes"): minimap + fallback since RC10,
+suppressed on the large map while the vector layer draws routes (same
+`OverlayVisibilityRule` as roads), with its Jötunn checkbox hooked as
+the route layer's user switch. Colors resolve through `RouteInk`
+(shared with the vector layer); dash/dot walks `RoutePatternMath`.
+
+### `OverlayUserToggleHook.cs` / `OverlayPanelRelabel.cs` (RC10)
+
+The first attaches a listener to a Jötunn overlay checkbox (reflection
+over the internal `Toggle` field, fail-soft) so user clicks reach CC as
+layer intent, and re-syncs the checkbox visual after programmatic
+Enabled writes. The second renames the panel's visible "Mod Overlays"
+label to "Map Overlays" — exact-match only, remembered and restored on
+disable/teardown.
+
+### `CcTextFocus.cs` (RC10, feedback 14)
+
+Central typing-safety state: `AnyFieldFocused()` (the runtime holds a
+`ModalInputBlock` over Jötunn's `BlockInput` exactly while true, and
+every CC hotkey path checks it) and `EscapeShouldOnlyBlur()` (panels
+let the first Escape end typing). Nothing is intercepted when no field
+is focused.
+
 ### `MinimapReflection.cs`
 
 Centralizes reflection helpers for fragile/private `Minimap` state.
 
 Private-member access should be kept here or in equally narrow adapters and documented with the tested Valheim version.
+
+RC11 blocker 2 replaces RC10's single-ancestor rail discovery with
+`TryGetVanillaRailContainers`: per-button-group deepest common
+ancestors (five selectors; death/boss filters) with a shared-panel path
+that hides only when every control is replaced, validated against the
+map image, hint bars, shared-map hint, and (reflected) pin roots. The
+verdict string is logged once per change by the runtime ("Vanilla rail
+chrome: …") so smoke runs can see what was hidden or why a per-button
+fallback ran. Restore paths unhide the containers first.
+
+RC13 polish 3 adds `Map/OrphanChromeSweep.cs` + the pure
+`Domain/Atlas/OrphanChromeRule.cs`: from every rail object CC already
+hid, a bounded parent climb hides the HIGHEST ancestor the rule proves
+is empty decoration (no map image / hint bars / shared-map hint / pin
+roots / biome label in the subtree, no would-be-visible control, no
+text-bearing graphic) — catching backplates that frame the replaced
+controls from OUTSIDE both button groups, like the visible-to-others
+toggle's plate. SetActive only, everything tracked and restored on any
+fallback and teardown, decisions logged once per change as
+"Vanilla chrome sweep: …".
+
+`MapInputGate` also owns the RC11 blocker-7 wheel guard: a
+prefix/postfix on `Minimap.UpdateMap` snapshots and restores both zoom
+levels AND both uv windows while the runtime-supplied `WheelGuard`
+(pointer over CC UI / CC field focused) is true, so a wheel event
+scrolls only the UI. Fails soft to RC10 behavior without the zoom
+fields.
 
 ## 8. Pin domain (`Domain/Atlas/`)
 
@@ -533,13 +665,17 @@ Pure decision core of the map pin adapter: owns the AtlasId↔rendering tracking
 
 ### `IconRegistry.cs`
 
-Append-only registry of stable namespaced icon IDs mapped to vanilla pin ordinals.
+Append-only registry of stable namespaced icon IDs. Every entry keeps a
+vanilla pin ordinal (what the saved pin persists as — uninstall/downgrade
+safety) and, for the 12 cc:* icons (RC8), a `SpriteKey` naming the
+embedded CC sprite that overrides the rendering in-session.
 
 Rules:
 
 - never reuse an existing ID for a new meaning;
 - unknown IDs are preserved even if rendered via fallback;
-- append new IDs rather than reordering/renaming old ones.
+- append new IDs rather than reordering/renaming old ones;
+- sprites are rendering-only — nothing about them is ever persisted.
 
 ### `PinQuery.cs`
 
@@ -571,6 +707,13 @@ Profile-level display preferences: query and layer/cluster flags. Applying a vie
 
 Pure object-name/type → suggested pin metadata policy. Keep suggestion heuristics here instead of inside the Unity raycast adapter.
 
+RC10 (feedback 15): the adapter passes a CANDIDATE CHAIN — hover
+target, ZNetView prefab root, transform root — and the suggester picks
+the first non-technical name (Collider/trigger/mesh/LOD/snap-point
+style engine names are sanitized away, hover text keeps only its first
+line, "Marked object" is the fallback). Keyword matching still sees
+every candidate.
+
 ### `SurveyRule` / `SurveyRuleSet.cs`
 
 Pure shareable Survey Rules format.
@@ -580,6 +723,47 @@ Rules support exact or prefix prefab patterns, blacklist patterns, icon/category
 ### `SurveyEngine.cs`
 
 Pure review-before-commit state for survey observations. A scan match is not automatically a permanent pin, preventing map flooding.
+
+The Unity-side `SurveyScanner` walks a fresh loaded-instance snapshot
+CONTINUOUSLY on a bounded per-tick budget since RC10 (feedback 9) —
+matches surface within about a second — and coalesces the top-left
+notice to one per ~10 s, only when something was collected.
+`SurveyScanIntervalSeconds` is a documented no-op.
+
+### `RoutePatternMath.cs` / `OverlayVisibilityRule.cs` (RC10)
+
+Pure and tested: the single geometric dash/dot cadence walker both
+route presentations stamp through (phase carried across vertices;
+vertex density invisible; budgets respected), and the
+texture-vs-vector one-presentation truth table with the honest-checkbox
+rule. RC11 blocker 1: the renderers write the rule's result to
+`MapOverlay.Enabled` UNCONDITIONALLY — Jötunn's own checkbox listener
+writes Enabled before CC's, so any applied-state cache diverges exactly
+then (the doubled-ink report); the Jötunn setter no-ops on unchanged
+values, so caching is pointless anyway.
+
+### `FreeDrawStrokeGate.cs` (Domain, RC11 blocker 4)
+
+Pure stroke state machine for UI Free Draw: a route entity is created
+only once a hold has travelled the freehand point spacing; click-
+twitches and pointer-over-UI holds buffer one point and evaporate.
+`RouteCommandHandler` obeys its decisions and never creates routes
+directly from raw input.
+
+### `NameHumanizer.cs` (Domain, RC11 blockers 11/14)
+
+The one prefab-name → display-name policy (case/underscore/digit
+splitting, noise-token removal, known-compound expansion). Survey
+suggested names and quick-pin prefab fallbacks both route through it;
+new name-bearing surfaces must too.
+
+### `SurveyRejectedCodec.cs` + `Persistence/SurveyRejectedPersistence.cs` (RC11 blocker 9)
+
+Pure TSV codec and per-world sidecar (`<uid>.survey-rejected.tsv`) for
+the durable Rejected list; `SurveyEngine` suppresses rejected
+identities (`IdentityKey` = cleaned prefab + world cell) from every
+future sweep until restored/accepted. Saved on autosave, world switch,
+and dispose when dirty.
 
 ## 8b. Route domain (`Domain/Atlas/`, v0.5)
 
@@ -671,12 +855,34 @@ Responsibilities:
 - add renderings for unmatched living pins;
 - remove renderings for deleted/archived pins;
 - sync atlas edits to the map;
-- absorb vanilla checked/deleted changes back into `PinStore`;
+- absorb vanilla cross-off changes back into `PinStore`;
+- tombstone on EXPLICIT vanilla deletions only (RC15: fed by
+  `PinDeletionWatch` through `HandleExplicitVanillaDelete`; a missing
+  rendering is never deletion evidence — it unlinks and raises
+  `NeedsRebind` for the next reconcile);
 - track atlas-ID ↔ map-object relationships.
 
 Tracking and decisions live in the pure `PinRenderingLedger` (DEF-v1.0-004); the adapter only executes them against the real Minimap. In-session mutations go through the targeted `SyncPin`/`SyncAllPins` path, which preserves tracking; `ReconcileOnMapReady` (reset + claim) is reserved for map/world reconstruction.
 
 Managed pins intentionally render as ordinary saved vanilla pins, which improves disable/uninstall safety.
+
+RC14 fixes 1/5: every map WRITE path (`SyncPin`, `AddManagedPin`,
+`DisplayHide`, `EnsureCustomSprite`, the reconcile removals) is now
+lifecycle-guarded — with no live `Minimap` (login/logout teardown
+frames) the operation is a no-op instead of a NullReferenceException
+(the Sentry pin-update crash), and the next map-available reconcile
+repairs every rendering. `Reset()` and `ReconcileOnMapReady` also
+clear `_disabledForSession`: the adapter object outlives every game
+session, so the previously-uncleared latch turned ONE teardown-frame
+failure into "every cc:* marker renders as its vanilla fallback (Dot)
+forever after" — the beta marker-relog report. The sprite-rebind
+decision itself is the pure, tested `SpriteRebindRule`, and
+`AddManagedPin` now applies sprites through `ApplyImmediateSprite`
+(both `m_icon` and a same-frame UI element). `PinDisplayController`
+gained the same latch-clearing/lifecycle guards, and its cluster
+markers now wear the dominant cc:* icon's sprite. `CcIconSprites`
+scopes its load-failure blacklist per session (`ResetSession`) and
+marks sprites `DontUnloadUnusedAsset`.
 
 ### `Map/PinDisplayController.cs`
 
@@ -694,13 +900,159 @@ Unity/Jötunn presentation for managed edit, vanilla adoption prompt and foreign
 
 It should drive `PinWorkbenchController` / `PinOperations`, not persistence directly.
 
-### `Map/LargeMapControls.cs` (#95, #96)
+### `Map/MapUiCoordinator.cs` (#100, replaced `LargeMapControls.cs`)
 
-Discoverability layer on `Minimap.m_largeRoot`: the [Atlas] button with hover tooltip (routes through the same NoMap-gated drawer toggle as the hotkey), the contextual pin action button ("Upgrade & Edit" for adoptable vanilla markers, "Edit Pin" for managed ones — kept alive via pointer-hover plus a grace window while the mouse travels to it), and the "P — Edit with Concerned Cartographer" accelerator hint. Fail-closed; rebuilt automatically after map teardown; never touches vanilla map input.
+The large-map UI coordinator on `Minimap.m_largeRoot`: the persistent compact toolbar ([Atlas] [Markers] [Routes] [Survey] [Share] [Quick Pin] [Settings]), the contextual pin action button ("Upgrade & Edit" / "Edit Pin", kept alive via pointer-hover plus a grace window), the hover tooltip, and the accelerator hint. It also owns the one-major-side-surface-at-a-time rule: every panel registers with `RegisterSurface`, `OpenExclusive` closes the rest before opening one, and `CloseAllSurfaces` runs on world switch, disable, and Quick Pin arming. `HasFailed` feeds the vanilla-rail restore (#99): if the toolbar dies, the rail comes back, because the toolbar is the only route to the replacement surfaces. Fail-closed; rebuilt automatically after map teardown; never touches vanilla map input.
+
+### `Map/CcSidePanel.cs` (#100)
+
+The shared side-panel base: every panel docks at the Pin Workbench right-edge reference, speaks the wood-panel language, scales with `Accessibility/UiScale` (re-docking so the edge margin stays constant), closes on Escape and on map close (`HandleFrame`), selects its first interactable on open (controller entry), and fail-closes via `HasFailed`. Subclasses implement `BuildContent` and the `OnShown`/`OnHidden` hooks.
+
+### `Map/RoutesPanel.cs` (#101)
+
+Route list (stable AtlasId selection; name/kind/status/distance/lock/archive) plus the full operation surface: Free Draw / Waypoints / Erase enter explicit UI-owned map modes (`RouteCommandHandler.UiModeOwned`) — no modifier key, vanilla map drag suppressed per frame, map clicks consumed via `MapInputGate` — with Finish/Undo/Redo/snap, rename/style/status/ink swatches/lock/archive/delete/restore-latest/split/merge/measure. `OnHidden` ends any UI-owned mode so a hidden panel can never keep consuming map input. Console `cc_routes` remains the scriptable alias with the classic modifier behavior.
+
+### `Map/SurveyPanel.cs`, `Map/SharePanel.cs`, `Map/SettingsPanel.cs`, `Map/SystemMarkersPanel.cs` (#99, #102)
+
+The remaining feature panels: survey enable/pending/accept/reject/reload (nothing pinned until accepted), sharing status/share/inbox/preview-with-deletion-names/apply-mine-theirs/clear, settings (privacy, backup, confirmed restore, sanitized support bundle, road repair as Advanced, support email), and System Markers — the vanilla pin-type filters and visible-to-others toggle, driven exclusively through vanilla state (`ToggleIconFilter`, `SetPublicReferencePosition`), never by touching pins. The runtime hides the whole vanilla rail by default (`SetActive` only) and restores it on `Map/ShowVanillaMapControls`, a conflicting pin manager, any replacement-surface failure, disable, or dispose.
+
+### `Map/CcIconSprites.cs` (RC8)
+
+Loads and caches the embedded cc:* marker sprites (generated by
+`tools/generate_icon_sprites.py`, embedded as `CC.Icons.*.png`). Decodes
+the PNGs directly (the game's ImageConversionModule targets
+netstandard2.1 and cannot be referenced from net48). `PinAdapter` applies
+the sprite to `PinData.m_icon` on AddPin and rebuilds a kept rendering
+when the icon id changes within the same vanilla type; palette and
+workbench previews prefer these sprites. Fails soft to vanilla sprites.
+
+### `Map/MapPointerGuard.cs` (RC8-9)
+
+One place answers "is the pointer over CC UI?": any active top-level
+child of Jötunn's CustomGUIFront plus the registered large-map widgets
+(toolbar, context button, palette). The runtime feeds route-mode input
+only when the answer is no, so drawing happens exclusively on uncovered
+map. Fails open.
+
+### `Map/MapInputGate.cs` (#101)
+
+Skippable Harmony prefixes on the public `Minimap.OnMapLeftClick`/`OnMapDblClick`, active only while a UI-owned route mode runs (`ConsumeClicks`); uninstalled on dispose. Right-click and ping are never patched.
+
+### `Map/RoadVectorLayer.cs` (#98, DEF-v1.0-006)
+
+The high-precision large-map road layer: road vertices are baked once into zoom-independent map space (`Domain/RoadVectorMath`) as batched quads under `m_mapImageLarge` — above Jötunn's overlay (its first child), below pins and the player marker — and a per-frame container transform reproduces vanilla's `((m − uvMin)/uvSize)·rectSize` exactly for any pan/zoom. Rebakes only on road-data changes (debounced), zoom-step drift, palette change, or a slow fog/resolution parity timer; unexplored segments are skipped at bake. Kind-split visibility mirrors `SetOverlayEnabled`. Budgeted (16k quads), fail-soft: any error disables the layer for the session and the texture overlay continues. `Map/HighPrecisionLargeMapRoads` toggles it.
+
+### `Map/LiveAlignmentProbe.cs` + `Domain/AlignmentVerdicts.cs` + `Domain/RoadVectorMath.cs` (#98)
+
+`cc_roads align live`: gathers player position, terrain classification, latest traversal sample (`RoadSurveyor.LatestSample`), latest accepted pipeline point (`RoadObservationPipeline.LastAccepted`), nearest stored road point, all three projections (native `WorldToPixel`/`WorldToMapPoint`, CC overlay), texture size / m-per-texel / zoom / screen-px-per-texel, and the live player-marker anchor versus the canonical projection (screen pixels, via `Map/MapScreenMath`), then hands the measurements to the pure `AlignmentVerdicts` for the separated A (observation) / B (projection) / C (render resolution) / D (marker anchor) verdicts. Read-only, fails soft to n/a per quantity.
+
+### `PaletteScrollTuning.cs` / `DefaultPanelRule.cs` (Domain/Atlas, RC13 polish 2/4)
+
+Two small pure pieces behind the RC13 UX polish. `PaletteScrollTuning`
+pins the palette's wheel step (3× the stock ScrollRect sensitivity,
+floored at three rows per notch) so the owner's 2–3× target is a
+regression test, not a feel. `DefaultPanelRule` is the
+once-per-fresh-map-open state machine that opens the Markers panel as
+the initial CC side surface: armed while the map is closed, disarmed
+the moment it fires OR the moment any surface is already visible OR
+the palette is unavailable (setting/conflict/failure/NoMap) — so
+closing or switching panels is never fought for the rest of that
+map-open, and unavailability can never pop a panel late.
+
+### `PanelPositionRule.cs` / `OverlayHandleRule.cs` / `QuickPinInputGate.cs` / `SpriteRebindRule.cs` (Domain/Atlas, RC14 final smoke)
+
+The four pure rules behind the RC14 final-smoke corrective pass
+(regressions in `Rc14FinalSmokeTests.cs`):
+
+- `PanelPositionRule` — the Atlas drawer's dragged position as a durable
+  preference: invariant-culture "x,y" round-trip (malformed reads as
+  "nothing stored" → default dock), and an on-screen clamp for the
+  current canvas and UI scale so an old coordinate can never strand the
+  panel (axes where the scaled panel exceeds the canvas center instead).
+- `OverlayHandleRule` — when a cached Jötunn overlay handle may be
+  trusted (exists AND its texture is alive); presence alone was exactly
+  the roads-gone-after-relog bug.
+- `QuickPinInputGate` — input ownership for armed Quick Pin as a
+  frame-based state machine: the capture click must not attack, Escape
+  cancels without also opening the pause menu, the owned press stays
+  swallowed for its whole frame (mod-vs-vanilla update order is
+  undefined), and external `Disarm` releases everything immediately.
+- `SpriteRebindRule` — when a pin rendering must rebuild to show the
+  right sprite: a restart-claimed cc:* rendering (wanted sprite, none
+  recorded) rebuilds to regain its art, genuine vanilla pins are never
+  repainted, and a Unity-destroyed sprite counts as not applied.
+
+### `PinTombstoneRule.cs` / `MapSessionTracker.cs` (Domain/Atlas, RC15 relog persistence)
+
+The pure core of the RC15 final beta blocker fix (regressions in
+`Rc15RelogPersistenceTests.cs`):
+
+- `PinTombstoneRule` — the single decision point for "may a managed pin
+  be tombstoned as vanilla-deleted?": only an EXPLICIT vanilla delete
+  event (captured at the RemovePin choke point, never inferred from a
+  rendering's absence) during a stable, fully-bound map session
+  (reconcile completed for the current map generation), and at most
+  once per entity. Everything else — map open/close, logout/login,
+  world load/unload, Minimap rebuild, reconcile, sprite destruction,
+  fallback-type remapping — resolves to keep-and-rebind. This inverts
+  the RC14 absorber, whose absence-inference rewrote live cc:* pins
+  Deleted=1 whenever vanilla rebuilt the pin list during login
+  (`Minimap.LoadMapData → SetMapData → ClearPins`, decompile-verified).
+- `MapSessionTracker` — the lifecycle-diagnostics generation counter:
+  every reconstruction transition (map-available, map-data-loaded,
+  world-unloaded) advances the generation and unbinds; a completed
+  reconcile binds. Log lines carry only the generation number and the
+  transition reason.
+- `OverlayHandleRule.MayWrite` (same file as the RC14 rule) — item 8 of
+  the RC15 directive: a full-texture redraw may write pixels only if
+  the captured textures were alive at resolve AND are still alive
+  immediately before `SetPixels32`/`Apply`; the
+  alive-at-resolve/destroyed-before-write case (the RC13 Sentry NRE
+  during "rebuild road map") aborts, resets the cached handles, logs a
+  rate-limited privacy-safe Warning, and retries next map session.
+
+### `Map/PinDeletionWatch.cs` (RC15)
+
+The explicit-delete capture behind `PinTombstoneRule`, mirroring the
+`PlayerInputGate` pattern (install in the runtime constructor,
+`Uninstall()` on dispose, fail-soft with one warning). One Harmony
+prefix on `Minimap.RemovePin(PinData)` reports every non-self removal
+to the runtime; decompile-verified: the user-facing delete paths
+(large-map right click, gamepad JoyTabRight) both route through
+`RemovePin(Vector3, float) → RemovePin(PinData)`, while map
+reconstruction (`ClearPins`) bypasses `RemovePin` entirely, so a
+rebuild can never masquerade as a deletion. The adapter's own
+maintenance removals run inside `BeginSelfRemoval()` scopes. If the
+patch cannot install, deletions are never captured and a
+vanilla-deleted managed pin is restored by the next reconcile instead
+of tombstoned — data-keeping is the safe degraded direction.
+
+The runtime side: `PinAdapter.HandleExplicitVanillaDelete` is the only
+code path that writes a vanilla-caused tombstone;
+`PinAdapter.AbsorbVanillaChanges` now only absorbs cross-offs and, on
+rendering loss, unlinks + raises `NeedsRebind` (repaired by a
+`ReconcileOnMapReady("rendering-loss-repair")` on the autosave
+cadence). `CartographerRuntime.OnMapDataReconstructed` — subscribed to
+Jötunn's `MinimapManager.OnVanillaMapDataLoaded` (a
+`Minimap.LoadMapData` postfix) — re-reconciles right after vanilla
+rebuilds the pin list from the character save, so every living cc:*
+pin regains exactly one rendering wearing its CC sprite.
+
+### `Map/PlayerInputGate.cs` (RC14 fix 3)
+
+The narrow Harmony chokes behind `QuickPinInputGate`, mirroring the
+`MapInputGate` pattern (runtime-supplied guards, pass-through when off,
+`Uninstall()` on dispose): a skippable prefix on
+`Humanoid.StartAttack` (local player only — the single entry every
+player attack goes through; `Player` declares no override) and one on
+`Menu.Update` (skipped only while the guard holds AND the menu is not
+already visible). Fail-soft: missing members after a game update log
+one warning and leave the gate uninstalled — armed Quick Pin then
+works as in RC13, without input ownership.
 
 ### `Map/PinPalettePanel.cs` (#96)
 
-The Enhanced Pin Palette on the large map: a searchable, sprite-previewed, human-labeled marker browser over the stable IconRegistry (session recents, collapse toggle, no raw IDs). Choosing a marker selects the mapped vanilla icon type through the game's own `SelectIcon` and arms the runtime's `PaletteBirthTracker`; vanilla double-click + naming then creates the pin and the runtime associates the AtlasPin when naming closes — managed from birth, exactly one rendering. The runtime hides the five vanilla placeable icon buttons (`SetActive` only, per-cycle enforcement) and restores them on `Pins/ShowVanillaPinPalette`, `EnhancedPinPalette=false`, a detected conflicting pin manager, palette failure, mod disable, or dispose.
+The Enhanced Pin Palette on the large map: a searchable, sprite-previewed, human-labeled marker browser over the stable IconRegistry (session recents, collapse toggle, no raw IDs). Choosing a marker selects the mapped vanilla icon type through the game's own `SelectIcon` and arms the runtime's `PaletteBirthTracker`; vanilla double-click + naming then creates the pin and the runtime associates the AtlasPin when naming closes — managed from birth, exactly one rendering. The runtime hides the five vanilla placeable icon buttons (`SetActive` only, per-cycle enforcement) and restores them on `Pins/ShowVanillaPinPalette`, `EnhancedPinPalette=false`, a detected conflicting pin manager, palette or toolbar failure, mod disable, or dispose. Since #100 the palette starts hidden, opens from the toolbar's [Markers] button as a registered exclusive surface, and closes on Escape (`HandleFrame`).
 
 ### `Domain/Atlas/PaletteBirthTracker.cs` (#96)
 
@@ -784,7 +1136,7 @@ Loads `cartographer-strings.tsv` overrides into `AtlasStrings` and can write a t
 
 ### `Persistence/AtlasBackupTools.cs` (v0.8)
 
-`cc_atlas backup/backups/restore <n>` — timestamped snapshot folders of the whole atlas (which double as the export/import format), pre-restore safety backup plus journal clearing, and `cc_atlas support`, a sanitized report (versions, settings, counts, sizes — never positions, names or notes).
+`cc_atlas backup/backups/restore <n>` — timestamped snapshot folders of the whole atlas (which double as the export/import format), pre-restore safety backup plus journal clearing, and `cc_atlas support`, a sanitized report (versions, settings, counts, sizes — never positions, names, notes, world identifiers, or file paths; content lines come from the pure `SupportReportComposer`, whose signature cannot receive the world UID, with every line scrubbed through `CrashReportSanitizer` as defense in depth).
 
 ## 11. Runtime commands and scanning
 
@@ -852,7 +1204,8 @@ The project compiles `Domain/**/*.cs` directly, so pure tests do not require Val
 | `RoadObservationPipelineTests.cs` | source neutrality and replay idempotency |
 | `RoadAtlasCodecTests.cs` | road serialization/legacy formats |
 | `RoadAtlasEditorTests.cs` | road correction operations/undo |
-| `RecoveryShapeHeuristicTests.cs` | path-like vs broad-area recovery |
+| `RoadSourceAuthorityTests.cs` | RC8: passive sources never create data, migration preserves construction, restart/reopen regressions |
+| `RecoveryShapeHeuristicTests.cs` | path-like vs broad-area recovery (heuristic retained for future explicit re-capture) |
 | `TerrainIntentTests.cs` | DEF-v1.0-005: exclusion blocks passive Dirt sources, Pathen clears, codec round-trip, bounds |
 | `PinStoreTests.cs` | identity, revisions, delete/restore/upsert |
 | `PinRenderingLedgerTests.cs` | DEF-v1.0-004: rendering lifecycle — adopt/edit/apply keeps one rendering, restart reconcile, claim strictness |
@@ -870,8 +1223,10 @@ The project compiles `Domain/**/*.cs` directly, so pure tests do not require Val
 | `AtlasStringsTests.cs` | localization catalog/override safety |
 | `MigrationMatrixTests.cs` | every shipped sidecar format back-parses into the current readers |
 | `SecurityHardeningTests.cs` | SEC-1.0-001: decompression-bomb rejection, revision/float/string bounds, deletion-name previews, display sanitization |
+| `Rc13PolishTests.cs` | RC13 / 0.9.0 beta polish: road ink feather profile invariants (opaque core, symmetry, monotone falloff, preserved perceived width), palette wheel 2–3× window + floor, default-panel once-per-map-open/never-fight rules, orphan-chrome hide/restore truth table |
+| `Rc14FinalSmokeTests.cs` | RC14 / 0.9.0 beta final smoke fixes: panel position round-trip/clamp (off-screen, UI-scale, oversized-panel centering), overlay-handle liveness truth table (dead-texture relog regression), Quick Pin input-gate ownership (owned frames, cancel-over-capture, one-shot, immediate external release), sprite-rebind rule (restart claim regains cc:* art, vanilla never repainted, destroyed sprite rebuilds) |
 
-At the 1.0.0 RC5 the suite is 310 tests, all green, run without any game assemblies.
+At the RC15 / 0.9.0 public-beta candidate the suite is 557 tests, all green, run without any game assemblies.
 
 Game adapters still need real Valheim tests; unit tests cannot prove Harmony targets, private field names, overlay alignment or Unity UI behavior.
 

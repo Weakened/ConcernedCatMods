@@ -9,8 +9,6 @@ internal sealed class CartographerSettings
         ConfigEntry<bool> enabled,
         ConfigEntry<bool> captureConstructionActions,
         ConfigEntry<bool> reconcileTerrainChanges,
-        ConfigEntry<bool> recoverLoadedChunks,
-        ConfigEntry<int> recoveryBudgetCellsPerFrame,
         ConfigEntry<float> sampleIntervalSeconds,
         ConfigEntry<float> minimumPointSpacingMeters,
         ConfigEntry<float> maximumStrokeGapMeters,
@@ -27,6 +25,7 @@ internal sealed class CartographerSettings
         ConfigEntry<bool> drawerShowPaved,
         ConfigEntry<bool> drawerShowPins,
         ConfigEntry<bool> drawerCluster,
+        ConfigEntry<string> drawerPanelPosition,
         ConfigEntry<KeyCode> quickPinHotkey,
         ConfigEntry<float> quickPinDuplicateRadius,
         ConfigEntry<bool> surveyRulesEnabled,
@@ -48,13 +47,13 @@ internal sealed class CartographerSettings
         ConfigEntry<bool> showVanillaPinPalette,
         ConfigEntry<CrashConsentState> crashReportingConsent,
         ConfigEntry<int> acceptedPrivacyPolicyVersion,
-        ConfigEntry<string> sentryDsn)
+        ConfigEntry<string> sentryDsn,
+        ConfigEntry<bool> showVanillaMapControls,
+        ConfigEntry<bool> highPrecisionLargeMapRoads)
     {
         Enabled = enabled;
         CaptureConstructionActions = captureConstructionActions;
         ReconcileTerrainChanges = reconcileTerrainChanges;
-        RecoverLoadedChunks = recoverLoadedChunks;
-        RecoveryBudgetCellsPerFrame = recoveryBudgetCellsPerFrame;
         SampleIntervalSeconds = sampleIntervalSeconds;
         MinimumPointSpacingMeters = minimumPointSpacingMeters;
         MaximumStrokeGapMeters = maximumStrokeGapMeters;
@@ -71,6 +70,7 @@ internal sealed class CartographerSettings
         DrawerShowPaved = drawerShowPaved;
         DrawerShowPins = drawerShowPins;
         DrawerCluster = drawerCluster;
+        DrawerPanelPosition = drawerPanelPosition;
         QuickPinHotkey = quickPinHotkey;
         QuickPinDuplicateRadius = quickPinDuplicateRadius;
         SurveyRulesEnabled = surveyRulesEnabled;
@@ -93,13 +93,13 @@ internal sealed class CartographerSettings
         CrashReportingConsent = crashReportingConsent;
         AcceptedPrivacyPolicyVersion = acceptedPrivacyPolicyVersion;
         SentryDsn = sentryDsn;
+        ShowVanillaMapControls = showVanillaMapControls;
+        HighPrecisionLargeMapRoads = highPrecisionLargeMapRoads;
     }
 
     public ConfigEntry<bool> Enabled { get; }
     public ConfigEntry<bool> CaptureConstructionActions { get; }
     public ConfigEntry<bool> ReconcileTerrainChanges { get; }
-    public ConfigEntry<bool> RecoverLoadedChunks { get; }
-    public ConfigEntry<int> RecoveryBudgetCellsPerFrame { get; }
     public ConfigEntry<float> SampleIntervalSeconds { get; }
     public ConfigEntry<float> MinimumPointSpacingMeters { get; }
     public ConfigEntry<float> MaximumStrokeGapMeters { get; }
@@ -116,6 +116,7 @@ internal sealed class CartographerSettings
     public ConfigEntry<bool> DrawerShowPaved { get; }
     public ConfigEntry<bool> DrawerShowPins { get; }
     public ConfigEntry<bool> DrawerCluster { get; }
+    public ConfigEntry<string> DrawerPanelPosition { get; }
     public ConfigEntry<KeyCode> QuickPinHotkey { get; }
     public ConfigEntry<float> QuickPinDuplicateRadius { get; }
     public ConfigEntry<bool> SurveyRulesEnabled { get; }
@@ -138,22 +139,19 @@ internal sealed class CartographerSettings
     public ConfigEntry<CrashConsentState> CrashReportingConsent { get; }
     public ConfigEntry<int> AcceptedPrivacyPolicyVersion { get; }
     public ConfigEntry<string> SentryDsn { get; }
+    public ConfigEntry<bool> ShowVanillaMapControls { get; }
+    public ConfigEntry<bool> HighPrecisionLargeMapRoads { get; }
 
     public static CartographerSettings Bind(ConfigFile config)
     {
         return new CartographerSettings(
             config.Bind("General", "Enabled", true, "Enable road surveying and map overlays."),
             config.Bind("Sources", "CaptureConstructionActions", true,
-                "Record roads from your own successful hoe/cultivator/stonecutter paint actions immediately, without walking them."),
+                "Record roads from your own successful Pathen (hoe) and Paved (cultivator/stonecutter) actions. This is the ONLY road source: walking existing paint never creates roads."),
             config.Bind("Sources", "ReconcileTerrainChanges", true,
-                "When you cultivate, reset, or repaint terrain, remove the covered road ink from the atlas so no ghost roads remain."),
-            config.Bind("Sources", "RecoverLoadedChunks", true,
-                "Recover narrow road paint from already-loaded terrain near you, limited to map areas you have explored."),
-            config.Bind("Sources", "RecoveryBudgetCellsPerFrame", 256, new ConfigDescription(
-                "Terrain paint cells examined per frame by chunk recovery. Higher recovers faster at more CPU cost.",
-                new AcceptableValueRange<int>(32, 8192))),
+                "When you level, raise, cultivate, reset, or repaint terrain, remove the covered road ink from the atlas so no ghost roads remain."),
             config.Bind("Survey", "SampleIntervalSeconds", 0.35f, new ConfigDescription(
-                "Seconds between terrain samples.",
+                "Seconds between diagnostic terrain samples under the player (feeds 'cc_roads align live'; never creates roads).",
                 new AcceptableValueRange<float>(0.10f, 5.0f))),
             config.Bind("Survey", "MinimumPointSpacingMeters", 1.5f, new ConfigDescription(
                 "Minimum horizontal distance before a new road point is stored.",
@@ -188,6 +186,8 @@ internal sealed class CartographerSettings
             config.Bind("Drawer", "ShowPins", true, "Show managed pins on the map."),
             config.Bind("Drawer", "Clustering", true,
                 "Fold crowded pins into cluster markers when zoomed out (display only; never changes stored pins)."),
+            config.Bind("Drawer", "PanelPosition", "",
+                "Internal: the Atlas drawer's last dragged position as \"x,y\" canvas offsets from its right-center anchor. Written when the drawer closes; empty uses the default dock. Restored positions are clamped on-screen, so editing this can never strand the panel."),
             config.Bind("Workbench", "QuickPinHotkey", KeyCode.F7,
                 "Key that pins the object you are looking at (set to None to disable). Never pins creatures."),
             config.Bind("Workbench", "QuickPinDuplicateRadius", 25f, new ConfigDescription(
@@ -196,7 +196,8 @@ internal sealed class CartographerSettings
             config.Bind("Survey", "SurveyRulesEnabled", false,
                 "Opt-in survey rules: nearby loaded objects matching survey-rules.tsv become reviewable observations (never pins directly)."),
             config.Bind("Survey", "SurveyScanIntervalSeconds", 10f, new ConfigDescription(
-                "Seconds between survey scans.", new AcceptableValueRange<float>(2f, 60f))),
+                "Legacy, no effect since v1.0 RC10: the survey scans continuously on a bounded per-frame budget. Kept so existing config files load cleanly.",
+                new AcceptableValueRange<float>(2f, 60f))),
             config.Bind("Survey", "SurveyScanRadius", 40f, new ConfigDescription(
                 "Survey scan radius around the player in meters.", new AcceptableValueRange<float>(10f, 100f))),
             config.Bind("Survey", "SurveyBaseExclusionRadius", 30f, new ConfigDescription(
@@ -234,6 +235,10 @@ internal sealed class CartographerSettings
             config.Bind("Privacy", "AcceptedPrivacyPolicyVersion", 0,
                 "Internal: the crash-reporting policy version the player answered. Re-prompts only if the collected data categories materially change in a future release."),
             config.Bind("Privacy", "SentryDsn", "",
-                "Advanced: override the embedded crash-report ingestion DSN (a public event-submission key). Empty uses the built-in value; if both are empty, crash reporting is fully inert. NEVER put a Sentry auth token here."));
+                "Advanced: override the embedded crash-report ingestion DSN (a public event-submission key). Empty uses the built-in value; if both are empty, crash reporting is fully inert. NEVER put a Sentry auth token here."),
+            config.Bind("Map", "ShowVanillaMapControls", false,
+                "Show Valheim's own right-side map control rail (pin icon selectors, death/boss filter buttons, visible-to-others toggle) alongside the Concerned Cartographer toolbar. Default: the CC toolbar and Atlas System Markers replace it. Automatically treated as true when a known conflicting pin manager is installed."),
+            config.Bind("Map", "HighPrecisionLargeMapRoads", true,
+                "Render roads on the LARGE map as sub-texel vector geometry that pans/zooms with the map (DEF-v1.0-006), instead of only the 2048-texel texture overlay (which stays for the minimap and as fallback)."));
     }
 }

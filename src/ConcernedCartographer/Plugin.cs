@@ -1,5 +1,6 @@
 using BepInEx;
 using Jotunn.Managers;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using TheConcernedCat.ConcernedCartographer.Runtime;
 
 namespace TheConcernedCat.ConcernedCartographer;
@@ -10,7 +11,7 @@ public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernedcartographer";
     public const string PluginName = "Concerned Cartographer";
-    public const string PluginVersion = "1.0.0";
+    public const string PluginVersion = "0.9.0";
 
     private CartographerRuntime? _runtime;
     private CrashReportingHub? _crashHub;
@@ -31,12 +32,18 @@ public sealed class Plugin : BaseUnityPlugin
         catch (System.Exception exception)
         {
             _crashHub = null;
-            Logger.LogWarning($"Crash reporting unavailable this session: {exception.Message}");
+            Logger.LogWarning($"Crash reporting unavailable this session: {SafeLogText.Brief(exception)}");
         }
 
         _runtime = new CartographerRuntime(settings, Logger);
 
         MinimapManager.OnVanillaMapAvailable += HandleMapAvailable;
+        // RC15: vanilla loads the character's saved map AFTER Minimap.Start
+        // (LoadMapData → SetMapData → ClearPins + re-AddPin), destroying
+        // every pin rendering the map-available pass created. This second
+        // hook fires right after that reconstruction so managed markers
+        // re-claim their saved renderings and rebind their cc:* sprites.
+        MinimapManager.OnVanillaMapDataLoaded += HandleMapDataLoaded;
         CommandManager.Instance.AddConsoleCommand(new RoadToolsCommand(_runtime));
         CommandManager.Instance.AddConsoleCommand(new PinToolsCommand(_runtime));
         CommandManager.Instance.AddConsoleCommand(new AtlasToolsCommand(_runtime));
@@ -47,19 +54,28 @@ public sealed class Plugin : BaseUnityPlugin
         LogEnvironment(settings);
     }
 
-    private Reporting.CrashReportContext BuildCrashContext()
+    /// <summary>The release identity including the build commit (SDK stamps
+    /// InformationalVersion as "0.9.0+&lt;sha&gt;"). Shared by the crash
+    /// context and the RC15 lifecycle log line, and safe to log: it names
+    /// this build of the mod and nothing about the player.</summary>
+    private static string ResolveInformationalVersion()
     {
-        string informational = PluginVersion;
         try
         {
-            informational = System.Reflection.CustomAttributeExtensions
+            return System.Reflection.CustomAttributeExtensions
                 .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(Plugin).Assembly)
                 ?.InformationalVersion ?? PluginVersion;
         }
         catch
         {
             // The plain version is an acceptable release identity fallback.
+            return PluginVersion;
         }
+    }
+
+    private Reporting.CrashReportContext BuildCrashContext()
+    {
+        string informational = ResolveInformationalVersion();
 
         string bepInExVersion = "unknown";
         string jotunnVersion = "unknown";
@@ -128,13 +144,15 @@ public sealed class Plugin : BaseUnityPlugin
             Logger.LogInfo(
                 $"Environment: Valheim {gameVersion}, Unity {UnityEngine.Application.unityVersion}, " +
                 $"BepInEx {bepInExVersion}, Jotunn {jotunnVersion}.");
+            // RC15 lifecycle diagnostics: the exact build (version+commit)
+            // at the top of every LogOutput, so support bundles identify
+            // the binary without any player data.
+            Logger.LogInfo($"Release: ConcernedCartographer@{ResolveInformationalVersion()}.");
             Logger.LogInfo(
                 "Effective config (out-of-range values are clamped to documented ranges): " +
                 $"Enabled={settings.Enabled.Value}, " +
                 $"CaptureConstructionActions={settings.CaptureConstructionActions.Value}, " +
                 $"ReconcileTerrainChanges={settings.ReconcileTerrainChanges.Value}, " +
-                $"RecoverLoadedChunks={settings.RecoverLoadedChunks.Value}, " +
-                $"RecoveryBudgetCellsPerFrame={settings.RecoveryBudgetCellsPerFrame.Value}, " +
                 $"SampleIntervalSeconds={settings.SampleIntervalSeconds.Value}, " +
                 $"MinimumPointSpacingMeters={settings.MinimumPointSpacingMeters.Value}, " +
                 $"MaximumStrokeGapMeters={settings.MaximumStrokeGapMeters.Value}, " +
@@ -148,7 +166,7 @@ public sealed class Plugin : BaseUnityPlugin
         }
         catch (System.Exception exception)
         {
-            Logger.LogWarning($"Could not record environment versions: {exception.Message}");
+            Logger.LogWarning($"Could not record environment versions: {SafeLogText.Brief(exception)}");
         }
     }
 
@@ -205,6 +223,11 @@ public sealed class Plugin : BaseUnityPlugin
         _runtime?.OnMapAvailable();
     }
 
+    private void HandleMapDataLoaded()
+    {
+        _runtime?.OnMapDataReconstructed();
+    }
+
     private void Update()
     {
         _runtime?.Tick(UnityEngine.Time.unscaledDeltaTime);
@@ -218,6 +241,7 @@ public sealed class Plugin : BaseUnityPlugin
     private void OnDestroy()
     {
         MinimapManager.OnVanillaMapAvailable -= HandleMapAvailable;
+        MinimapManager.OnVanillaMapDataLoaded -= HandleMapDataLoaded;
         _runtime?.Dispose();
         _runtime = null;
 

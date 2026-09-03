@@ -4,75 +4,84 @@ using UnityEngine;
 
 namespace TheConcernedCat.ConcernedCartographer.Roads;
 
-/// <summary>The traversal observation source: samples the terrain beneath
-/// the local player and feeds sightings into the shared pipeline.</summary>
+/// <summary>Traversal sampler, diagnostics-only since RC8: it still probes
+/// the terrain beneath the local player on the configured cadence, but its
+/// samples feed ONLY the `cc_roads align live` diagnostic. Road atlas data
+/// is created exclusively by explicit local-player Pathen/Paved
+/// construction (see <see cref="RoadObservationPipeline"/>); walking any
+/// painted ground never records anything.</summary>
 internal sealed class RoadSurveyor
 {
     private readonly CartographerSettings _settings;
     private readonly GroundPaintProbe _probe;
-    private readonly RoadObservationPipeline _pipeline;
-    private readonly ManualLogSource _log;
-    private readonly RateLimitedLog _rateLimited;
+    private readonly RoadAtlas _atlas;
     private float _elapsed;
+
+    /// <summary>The most recent traversal sampling attempt, for the
+    /// `cc_roads align live` diagnostic.</summary>
+    public readonly struct TraversalSample
+    {
+        public TraversalSample(Vector3 position, bool classified, RoadKind kind, bool onRecordedRoad)
+        {
+            Position = position;
+            Classified = classified;
+            Kind = kind;
+            OnRecordedRoad = onRecordedRoad;
+        }
+
+        public Vector3 Position { get; }
+
+        /// <summary>Whether the paint probe saw road paint at the sample.</summary>
+        public bool Classified { get; }
+
+        public RoadKind Kind { get; }
+
+        /// <summary>Whether recorded road geometry of the classified kind
+        /// passes near the sample — i.e. the ground under the player is in
+        /// the atlas (within the A-verdict tolerance).</summary>
+        public bool OnRecordedRoad { get; }
+    }
+
+    public TraversalSample? LatestSample { get; private set; }
 
     public RoadSurveyor(
         CartographerSettings settings,
         GroundPaintProbe probe,
-        RoadObservationPipeline pipeline,
+        RoadAtlas atlas,
         ManualLogSource log)
     {
         _settings = settings;
         _probe = probe;
-        _pipeline = pipeline;
-        _log = log;
-        _rateLimited = new RateLimitedLog(log, 5f);
+        _atlas = atlas;
+        _ = log;
     }
 
-    public bool Tick(float deltaTime, out RoadSegment segment)
+    public void Tick(float deltaTime)
     {
-        segment = default;
         _elapsed += deltaTime;
         if (_elapsed < _settings.SampleIntervalSeconds.Value)
         {
-            return false;
+            return;
         }
 
         _elapsed = 0f;
         Player player = Player.m_localPlayer;
         if (player is null || player.IsDead())
         {
-            _pipeline.EndStroke(RoadObservationSource.Traversal);
-            return false;
+            return;
         }
 
         Vector3 position = player.transform.position;
         if (!_probe.TryClassify(position, out RoadKind kind))
         {
-            _pipeline.EndStroke(RoadObservationSource.Traversal);
-            return false;
+            LatestSample = new TraversalSample(position, classified: false, default, onRecordedRoad: false);
+            return;
         }
 
-        var rules = new RoadSamplingRules(
-            _settings.MinimumPointSpacingMeters.Value,
-            _settings.MaximumStrokeGapMeters.Value,
-            _settings.DuplicateSuppressionMeters.Value);
-
-        var observation = new RoadObservation(
-            RoadObservationSource.Traversal,
+        bool recorded = _atlas.ContainsPointNear(
             kind,
-            new RoadPoint(position.x, position.y, position.z));
-        bool recorded = _pipeline.Observe(observation, rules, out segment);
-
-        if (recorded && _settings.DebugLogging.Value)
-        {
-            _rateLimited.Info("segment-recorded", $"Recorded {observation} segment from {segment.Start} to {segment.End}.");
-        }
-
-        return recorded;
-    }
-
-    public void EndStroke()
-    {
-        _pipeline.EndStroke(RoadObservationSource.Traversal);
+            new RoadPoint(position.x, position.y, position.z),
+            AlignmentVerdicts.ObservationPassMeters);
+        LatestSample = new TraversalSample(position, classified: true, kind, recorded);
     }
 }

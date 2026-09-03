@@ -31,6 +31,13 @@ internal sealed class RouteStore
 
     public bool IsDirty { get; private set; }
 
+    /// <summary>Monotonic counter bumped on EVERY published change (create,
+    /// mutate, delete, restore, upsert). UI lists poll it per frame to
+    /// refresh the moment the table changes through ANY path — map draw
+    /// strokes, erase, console commands, sync — instead of only after
+    /// their own button clicks (RC12 blocker 2).</summary>
+    public long ChangeStamp { get; private set; }
+
     /// <summary>The local author identity stamped onto creations and edits.</summary>
     public string LocalAuthor { get; set; } = "";
 
@@ -143,6 +150,7 @@ internal sealed class RouteStore
     private void Publish(AtlasRoute route)
     {
         IsDirty = true;
+        ChangeStamp++;
         Changed?.Invoke(route);
     }
 }

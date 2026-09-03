@@ -19,14 +19,12 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly RoadOverlayRenderer _renderer;
     private readonly ConstructionCapture _constructionCapture;
     private readonly PinAdapter _pinAdapter;
-    private readonly ChunkRecoveryScanner _chunkRecovery;
     private readonly RateLimitedLog _rateLimited;
 
-    // Chunk recovery emits cells in row-major scan order, so only adjacent
-    // cells (~1 m apart, diagonal ~1.4 m) may chain into one stroke; a wider
-    // gap would draw connectors between separate parallel roads that happen
-    // to share a scan row.
-    private const float RecoveryMaxGapMeters = 2.5f;
+    // RC10 feedback 14: held exactly while a CC text field is focused so
+    // typing can never fire Valheim keys. Balanced by construction
+    // (ModalInputBlock owns at most one Jötunn BlockInput request).
+    private readonly ModalInputBlock _textFocusBlock = new(Jotunn.Managers.GUIManager.BlockInput);
 
     // Removing ink requires a full overlay rebuild (pixels cannot be
     // un-drawn incrementally); coalesce bursts of hoe swings into one
@@ -49,12 +47,37 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly AtlasDrawerPanel _drawerPanel;
     private readonly SavedViewPersistence _savedViewPersistence;
     private SavedViewStore _savedViews = new();
-    private readonly LargeMapControls _mapControls;
+    private readonly MapUiCoordinator _mapUi;
     private readonly CrashConsentPanel _consentPanel;
     private bool _consentPromptChecked;
     private readonly PinPalettePanel _palettePanel;
+    private readonly RoutesPanel _routesPanel;
+    private readonly SurveyPanel _surveyPanel;
+    private readonly SharePanel _sharePanel;
+    private readonly SettingsPanel _settingsPanel;
+    private readonly SystemMarkersPanel _systemMarkersPanel;
+    private int _drawerToken;
+    private int _paletteToken;
+    private int _routesToken;
+    private int _surveyToken;
+    private int _shareToken;
+    private int _settingsToken;
+    private int _systemMarkersToken;
+    private int _workbenchToken;
+
+    // RC14 fix 3: armed Quick Pin owns its input (capture click must not
+    // attack; Escape cancels without also opening the pause menu). The
+    // pure gate carries the armed state and the per-frame suppression
+    // decisions; PlayerInputGate holds the narrow Harmony chokes.
+    private readonly QuickPinInputGate _quickPinGate = new();
     private readonly PaletteBirthTracker<Minimap.PinData> _birthTracker = new();
     private float _hintElapsed;
+
+    // RC13 polish 3/4: the orphaned-backplate sweep behind the RC11 rail
+    // hiding, and the once-per-fresh-map-open Markers default panel.
+    private readonly OrphanChromeSweep _chromeSweep = new();
+    private string _lastChromeSweepDiagnostics = "";
+    private readonly DefaultPanelRule _defaultPanel = new();
 
     // The context button sits away from the hovered pin, so the action
     // stays alive briefly (and while the pointer is over the button) to
@@ -65,8 +88,11 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly SurveyEngine _surveyEngine = new();
     private readonly SurveyScanner _surveyScanner;
     private readonly SurveyRulePersistence _surveyRulePersistence;
+    private readonly SurveyRejectedPersistence _surveyRejectedPersistence;
     private readonly RoutePersistence _routePersistence;
     private readonly RouteOverlayRenderer _routeRenderer;
+    private readonly OverlayPanelRelabel _overlayRelabel;
+    private float _relabelElapsed;
     private RouteStore _routeStore = new();
     private RouteCommandHandler? _routeCommands;
     private bool _routeRedrawPending;
@@ -80,6 +106,11 @@ internal sealed class CartographerRuntime : IDisposable
     private bool _mapReady;
     private float _autosaveElapsed;
     private bool _disposed;
+
+    // RC15 lifecycle diagnostics: the map-session generation counter that
+    // stamps every reconstruction transition in the log (privacy-safe:
+    // generation number + reason only).
+    private readonly MapSessionTracker _mapSession = new();
 
     public CartographerRuntime(CartographerSettings settings, ManualLogSource log)
     {
@@ -98,10 +129,87 @@ internal sealed class CartographerRuntime : IDisposable
         _savedViews = _savedViewPersistence.Load();
         _drawerPanel = new AtlasDrawerPanel(log);
         WireDrawer();
-        _mapControls = new LargeMapControls(log) { AtlasButtonClicked = ToggleDrawer };
+        _mapUi = new MapUiCoordinator(log);
         _consentPanel = new CrashConsentPanel(log, settings);
-        _drawerPanel.PrivacyClicked = () => _consentPanel.ShowSettings();
         _palettePanel = new PinPalettePanel(log);
+        _routesPanel = new RoutesPanel(log, () => _routeCommands);
+        _surveyPanel = new SurveyPanel(
+            log, settings, ExecuteSurveyCommand,
+            () => _surveyEngine.Observations,
+            () => _surveyEngine,
+            () => _surveyScanner);
+        _sharePanel = new SharePanel(log, ExecuteSyncCommand, () =>
+        {
+            var authors = new List<string>();
+            foreach (SyncInbox.Envelope envelope in _syncInbox.Envelopes)
+            {
+                authors.Add(envelope.AuthorName);
+            }
+
+            return authors;
+        });
+        _settingsPanel = new SettingsPanel(log, ExecuteAtlasCommand, ExecuteRoadCommand, () => _consentPanel.ShowSettings());
+        _systemMarkersPanel = new SystemMarkersPanel(log);
+
+        // One major side surface at a time (#100).
+        _drawerToken = _mapUi.RegisterSurface(() => _drawerPanel.IsVisible, _drawerPanel.Hide);
+        _paletteToken = _mapUi.RegisterSurface(() => _palettePanel.IsVisible, _palettePanel.Hide);
+        _routesToken = _mapUi.RegisterSurface(() => _routesPanel.IsVisible, _routesPanel.Hide);
+        _surveyToken = _mapUi.RegisterSurface(() => _surveyPanel.IsVisible, _surveyPanel.Hide);
+        _shareToken = _mapUi.RegisterSurface(() => _sharePanel.IsVisible, _sharePanel.Hide);
+        _settingsToken = _mapUi.RegisterSurface(() => _settingsPanel.IsVisible, _settingsPanel.Hide);
+        _systemMarkersToken = _mapUi.RegisterSurface(() => _systemMarkersPanel.IsVisible, _systemMarkersPanel.Hide);
+        _workbenchToken = _mapUi.RegisterSurface(() => _workbenchPanel.IsVisible, _workbenchPanel.Close);
+
+        _mapUi.AtlasClicked = () => _mapUi.OpenExclusive(_drawerToken, ToggleDrawer);
+        _mapUi.MarkersClicked = () =>
+        {
+            if (PaletteActive())
+            {
+                _palettePanel.UiScale = _settings.UiScale.Value;
+                _palettePanel.EnsureBuilt();
+                _mapUi.OpenExclusive(_paletteToken, _palettePanel.Toggle);
+            }
+            else
+            {
+                Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft,
+                    "The enhanced marker palette is disabled (setting or a conflicting pin manager); the vanilla selector is shown instead.");
+            }
+        };
+        _mapUi.RoutesClicked = () => OpenSidePanel(_routesToken, _routesPanel);
+        _mapUi.SurveyClicked = () => OpenSidePanel(_surveyToken, _surveyPanel);
+        _mapUi.ShareClicked = () => OpenSidePanel(_shareToken, _sharePanel);
+        _mapUi.SettingsClicked = () => OpenSidePanel(_settingsToken, _settingsPanel);
+        _mapUi.QuickPinClicked = ArmQuickPin;
+        _drawerPanel.PrivacyClicked = () => _consentPanel.ShowSettings();
+        _drawerPanel.SystemMarkersClicked = () => OpenSidePanel(_systemMarkersToken, _systemMarkersPanel);
+        MapInputGate.Install(log);
+
+        // RC14 fix 3: narrow input ownership for armed Quick Pin, active
+        // exactly while the gate holds (plus the owned press's frame).
+        PlayerInputGate.Install(log);
+        PlayerInputGate.SuppressAttack = () => _quickPinGate.SuppressAttack(Time.frameCount);
+        PlayerInputGate.SuppressMenu = () => _quickPinGate.SuppressMenu(Time.frameCount);
+
+        // RC15: explicit vanilla pin deletions are captured at the
+        // RemovePin choke point — the ONLY evidence that may tombstone a
+        // managed pin. Absence of a rendering never tombstones again.
+        PinDeletionWatch.Install(log);
+        PinDeletionWatch.ExplicitDelete = HandleExplicitVanillaDelete;
+
+        // RC11 blocker 7: the wheel over any CC panel/list/field scrolls
+        // that UI only — the map zoom underneath nets to zero.
+        MapInputGate.WheelGuard = () =>
+            Minimap.IsOpen() &&
+            (MapPointerGuard.IsPointerOverCcUi(Input.mousePosition) || CcTextFocus.AnyFieldFocused());
+
+        // RC8-9 pointer guard: the large-map widgets that block route
+        // input while the pointer is over them (side panels register
+        // implicitly through Jötunn's CustomGUIFront).
+        MapPointerGuard.Clear();
+        MapPointerGuard.RegisterWidget(() => _mapUi.ToolbarObject);
+        MapPointerGuard.RegisterWidget(() => _mapUi.ContextButtonObject);
+        MapPointerGuard.RegisterWidget(() => _palettePanel.PanelObject);
         _palettePanel.IconChosen = definition =>
         {
             // Vanilla placement does the rest: double-click creates the
@@ -113,17 +221,39 @@ internal sealed class CartographerRuntime : IDisposable
         _palettePanel.SelectionCleared = () => _birthTracker.Disarm();
         _quickPinCapture = new QuickPinCapture(settings, log);
         _surveyRulePersistence = new SurveyRulePersistence(log);
+        _surveyRejectedPersistence = new SurveyRejectedPersistence(log);
         _surveyEngine.Rules = _surveyRulePersistence.LoadOrCreate();
         _surveyScanner = new SurveyScanner(settings, log);
         _routePersistence = new RoutePersistence(log);
         _routeRenderer = new RouteOverlayRenderer(settings, log);
+        _overlayRelabel = new OverlayPanelRelabel(log);
+
+        // RC10 feedback 7: the Jötunn checkboxes are real layer switches.
+        // A road checkbox click mirrors into the drawer settings (whose
+        // change handlers drive both presentations); the Routes checkbox
+        // mirrors into the vector route presentation.
+        _renderer.UserToggledOverlay += (kind, enabled) =>
+        {
+            if (kind == RoadKind.Dirt)
+            {
+                _settings.DrawerShowDirt.Value = enabled;
+            }
+            else
+            {
+                _settings.DrawerShowPaved.Value = enabled;
+            }
+        };
+        _routeRenderer.UserToggled += enabled => _renderer.SetRouteVectorVisible(enabled);
+
         _authorId = AuthorIdentity.Get(log);
         _syncTransport = new SyncTransport(log, _syncInbox) { LocalAuthorId = _authorId };
         _backupTools = new AtlasBackupTools(log);
         _constructionCapture = new ConstructionCapture(log);
         _constructionCapture.OperationCaptured += HandleTerrainOperation;
-        _chunkRecovery = new ChunkRecoveryScanner(settings, log);
-        _chunkRecovery.PaintObserved += HandleRecoveredPaint;
+
+        // RC8 road source authority: the chunk-recovery scanner is not
+        // constructed at all — passive road creation is disabled in v1.
+        // Roads come exclusively from the player's own Pathen/Paved ops.
     }
 
     public void OnMapAvailable()
@@ -142,14 +272,31 @@ internal sealed class CartographerRuntime : IDisposable
 
         SwitchWorld(uid);
         _mapReady = true;
+        // RC15 lifecycle diagnostics: stamp the reconstruction boundary
+        // (generation + reason only — never world/character data).
+        _log.LogInfo($"Map session lifecycle: generation {_mapSession.NoteTransition("map-available")} (map-available).");
+        // RC14 fix 4: this event fires for a FRESH Minimap — every overlay
+        // handle cached against the previous map is dead (Jötunn destroyed
+        // the textures on Minimap teardown), and the vector layer's
+        // per-session fail-soft latch belongs to the old session. Reset
+        // BEFORE the redraws below so persisted roads/routes rebuild into
+        // the live map instead of the destroyed one.
+        _renderer.ResetMapSession();
+        _routeRenderer.ResetMapSession();
+        // RC14 fix 1: sprite load failures were session-scoped by intent;
+        // forget them so a transient teardown failure cannot degrade cc:*
+        // icons in this fresh session.
+        CcIconSprites.ResetSession();
         _renderer.RedrawAll(_atlas);
-        _pinAdapter.ReconcileOnMapReady(_pinStore);
+        _pinAdapter.ReconcileOnMapReady(_pinStore, "map-available");
+        _mapSession.NoteBound();
         _renderer.SetOverlayEnabled(RoadKind.Dirt, _settings.DrawerShowDirt.Value);
         _renderer.SetOverlayEnabled(RoadKind.Paved, _settings.DrawerShowPaved.Value);
         _displayController.ShowPins = _settings.DrawerShowPins.Value;
         _displayController.ClusterEnabled = _settings.DrawerCluster.Value;
         _displayController.Apply(_pinStore, _pinAdapter);
         _routeRenderer.RedrawAll(_routeStore);
+        _renderer.MarkVectorDataDirty();
         _syncTransport.EnsureRegistered();
         _compatibility.Evaluate(_log);
         ShowOnboardingOnce();
@@ -158,7 +305,53 @@ internal sealed class CartographerRuntime : IDisposable
             _renderer.DrawCalibrationMarkers();
         }
 
-        _log.LogInfo($"Road atlas ready for world {uid}: {_atlas.Strokes.Count} stroke(s), {_atlas.PointCount} point(s).");
+        // Privacy audit (CC-098): the world UID identifies a specific world
+        // and never appears in the log; aggregate counts carry the signal.
+        _log.LogInfo($"Road atlas ready: {_atlas.Strokes.Count} stroke(s), {_atlas.PointCount} point(s).");
+    }
+
+    /// <summary>RC15 root fix, rebind leg: Jötunn's OnVanillaMapDataLoaded
+    /// (Minimap.LoadMapData postfix). Vanilla loads the character's saved
+    /// map AFTER Minimap.Start — SetMapData runs ClearPins and re-adds
+    /// every saved pin (decompile-verified), silently destroying the
+    /// renderings the map-available reconcile created. This handler runs
+    /// right after that reconstruction: it re-claims the freshly loaded
+    /// saved pins (position + name), rebinds their cc:* sprites through
+    /// the RC14 SpriteRebindRule path, and re-binds the session — so a
+    /// live pin regains exactly one rendering with its CC art and its
+    /// persisted vanilla fallback type never becomes the visible icon.</summary>
+    public void OnMapDataReconstructed()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (!_mapReady)
+        {
+            // The world UID could not be resolved at map-available time;
+            // by map-data-load the world is certainly up — bind fully now.
+            OnMapAvailable();
+            return;
+        }
+
+        _log.LogInfo($"Map session lifecycle: generation {_mapSession.NoteTransition("map-data-loaded")} (map-data-loaded).");
+        _pinAdapter.ReconcileOnMapReady(_pinStore, "map-data-loaded");
+        _mapSession.NoteBound();
+        ReapplyDisplay();
+    }
+
+    /// <summary>RC15: sink for <see cref="Map.PinDeletionWatch"/> — the
+    /// explicit vanilla RemovePin event, the only evidence that may
+    /// tombstone a managed pin.</summary>
+    private void HandleExplicitVanillaDelete(Minimap.PinData pin)
+    {
+        if (_disposed || !_mapReady)
+        {
+            return;
+        }
+
+        _pinAdapter.HandleExplicitVanillaDelete(_pinStore, pin);
     }
 
     public void Tick(float unscaledDeltaTime)
@@ -174,42 +367,113 @@ internal sealed class CartographerRuntime : IDisposable
         // even when the mod is disabled mid-session or the world tears down.
         _workbenchPanel.HandleFrame();
         _consentPanel.HandleFrame();
+        _routesPanel.HandleFrame();
+        _surveyPanel.HandleFrame();
+        _sharePanel.HandleFrame();
+        _settingsPanel.HandleFrame();
+        _systemMarkersPanel.HandleFrame();
+        _palettePanel.HandleFrame();
+        if (!Minimap.IsOpen())
+        {
+            MapInputGate.ConsumeClicks = false;
+        }
 
         if (!_settings.Enabled.Value || !_mapReady || _surveyor is null)
         {
-            // Disabled mid-session: the vanilla pin selector must come
-            // back even though the rest of the runtime is dormant.
+            // Disabled mid-session: the vanilla controls must come back
+            // even though the rest of the runtime is dormant, and no CC
+            // surface may linger un-closeable (its Escape handling is
+            // gated behind this branch). The road texture overlays return
+            // to the player's own layer choice too (RC8-1) — a disabled
+            // mod may never strand the map with suppressed ink.
+            MapInputGate.ConsumeClicks = false;
+            _textFocusBlock.Release();
+            // RC14 fix 3: a dormant runtime may never keep owning attack or
+            // menu input (the armed flag previously leaked through this
+            // branch; with the gate that would leak suppression too).
+            _quickPinGate.Disarm();
+            if (!_settings.Enabled.Value)
+            {
+                _renderer.EnsureTextureFallback();
+                _routeRenderer.TickVisibility(vectorRoutesActive: false);
+                _overlayRelabel.Restore();
+            }
+
             if (Minimap.IsOpen())
             {
                 EnforceVanillaPaletteVisibility();
-                _palettePanel.SetVisible(false);
+                _palettePanel.SetUnavailable();
+            }
+
+            if (_mapUi.AnySurfaceVisible)
+            {
+                _mapUi.CloseAllSurfaces();
             }
 
             return;
         }
 
         _drawerPanel.HandleFrame();
-        if (!Minimap.IsOpen() && !Minimap.InTextInput() &&
-            _settings.QuickPinHotkey.Value != KeyCode.None &&
-            Input.GetKeyDown(_settings.QuickPinHotkey.Value))
-        {
-            if (_quickPinCapture.TryCapture(_pinStore, out string quickPinMessage))
-            {
-                ReapplyDisplay();
-            }
 
-            if (quickPinMessage.Length > 0)
+        // RC10 feedback 14: while any CC text field is focused, typing is
+        // text — a Jötunn input block suppresses Valheim keys (movement,
+        // map toggle) for exactly that long, and the CC hotkey blocks
+        // below consult the same state. Blur releases within one frame;
+        // nothing is held when no field is focused.
+        bool typingInField = CcTextFocus.AnyFieldFocused();
+        if (typingInField)
+        {
+            _textFocusBlock.Acquire();
+        }
+        else
+        {
+            _textFocusBlock.Release();
+        }
+
+        if (!Minimap.IsOpen() && !Minimap.InTextInput() && !typingInField)
+        {
+            if (_quickPinGate.Armed)
             {
-                Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, quickPinMessage);
+                // One-shot armed capture from the toolbar (#102). RC14
+                // fix 3: the gate owns these presses — the same click no
+                // longer attacks and the same Escape no longer opens the
+                // pause menu (PlayerInputGate suppresses both through the
+                // owned frame, regardless of vanilla's update order).
+                QuickPinInputGate.FrameAction action = _quickPinGate.HandleFrame(
+                    Time.frameCount,
+                    cancelPressed: Input.GetKeyDown(KeyCode.Escape),
+                    capturePressed: Input.GetMouseButtonDown(0) ||
+                        (_settings.QuickPinHotkey.Value != KeyCode.None && Input.GetKeyDown(_settings.QuickPinHotkey.Value)) ||
+                        GamepadDown(_settings.WorkbenchGamepadButton.Value));
+                if (action == QuickPinInputGate.FrameAction.Cancel)
+                {
+                    Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, AtlasStrings.Get("quickpin.cancelled"));
+                }
+                else if (action == QuickPinInputGate.FrameAction.Capture)
+                {
+                    CaptureQuickPin();
+                }
+            }
+            else if (_settings.QuickPinHotkey.Value != KeyCode.None &&
+                Input.GetKeyDown(_settings.QuickPinHotkey.Value))
+            {
+                CaptureQuickPin();
             }
         }
 
-        if (Minimap.IsOpen() && !Minimap.InTextInput())
+        // RC13 polish 4: every frame the large map is closed re-arms the
+        // Markers default panel for the next FRESH map-open.
+        if (!Minimap.IsOpen())
         {
-            // Discoverability (#95/#96): the Atlas button, contextual pin
+            _defaultPanel.NoteMapClosed();
+        }
+
+        if (Minimap.IsOpen() && !Minimap.InTextInput() && !typingInField)
+        {
+            // The CC map surface (#96/#100): toolbar, contextual pin
             // actions, the enhanced pin palette, and the edit hint — on
             // top of (never instead of) the rebindable hotkeys.
-            _mapControls.EnsureBuilt(_settings.DrawerHotkey.Value.ToString());
+            _mapUi.EnsureBuilt(_settings.DrawerHotkey.Value.ToString());
 
             // One-time crash-reporting consent (#97): offered on the first
             // large-map open only, never on the title screen, never again
@@ -223,15 +487,38 @@ internal sealed class CartographerRuntime : IDisposable
                 }
             }
 
-            bool paletteActive = _settings.EnhancedPinPalette.Value &&
-                !_compatibility.PinManagerPresent && !_palettePanel.HasFailed;
-            if (paletteActive)
+            if (PaletteActive())
             {
                 _palettePanel.UiScale = _settings.UiScale.Value;
                 _palettePanel.EnsureBuilt();
             }
+            else
+            {
+                _palettePanel.SetUnavailable();
+            }
 
-            _palettePanel.SetVisible(paletteActive);
+            // RC13 polish 4: the Markers panel is the initial CC side
+            // surface on a fresh map-open — once per open, only when the
+            // enhanced palette is genuinely available (setting, conflict,
+            // failure, toolbar health, NoMap gate) and no surface is
+            // already up. The pure rule disarms itself, so closing or
+            // switching panels is never fought for the rest of this
+            // map-open.
+            if (_defaultPanel.IsArmed && _defaultPanel.ShouldAutoOpen(
+                    PaletteActive() && !_mapUi.HasFailed && AtlasAccessAllowed(out _),
+                    _mapUi.AnySurfaceVisible))
+            {
+                _palettePanel.UiScale = _settings.UiScale.Value;
+                _palettePanel.EnsureBuilt();
+                _mapUi.OpenExclusive(_paletteToken, () =>
+                {
+                    if (!_palettePanel.IsVisible)
+                    {
+                        _palettePanel.Toggle();
+                    }
+                });
+            }
+
             UpdateEditHint(unscaledDeltaTime);
 
             if (_pinCommands is not null && !_workbenchPanel.IsVisible &&
@@ -244,7 +531,7 @@ internal sealed class CartographerRuntime : IDisposable
             if (Input.GetKeyDown(_settings.DrawerHotkey.Value) ||
                 GamepadDown(_settings.DrawerGamepadButton.Value))
             {
-                ToggleDrawer();
+                _mapUi.OpenExclusive(_drawerToken, ToggleDrawer);
             }
 
             if (_displayController.ZoomTierChanged())
@@ -252,14 +539,33 @@ internal sealed class CartographerRuntime : IDisposable
                 _displayController.Apply(_pinStore, _pinAdapter);
             }
 
+            // Route map modes (#101): a mode entered through the Routes
+            // panel works with plain mouse input and consumes vanilla map
+            // drag/clicks for its duration; the console path keeps the
+            // classic modifier+LMB behavior. Vanilla input returns the
+            // instant no UI-owned mode is active.
+            bool uiRouteMode = _routeCommands is not null &&
+                _routeCommands.Mode != RouteCommandHandler.MapMode.None &&
+                _routeCommands.UiModeOwned;
+            MapInputGate.ConsumeClicks = uiRouteMode;
+            if (uiRouteMode)
+            {
+                MinimapReflection.TrySuppressMapDragThisFrame();
+            }
+
             if (_routeCommands is not null && _routeCommands.Mode != RouteCommandHandler.MapMode.None &&
-                Input.GetKey(_settings.RouteDrawModifier.Value) &&
+                (uiRouteMode || Input.GetKey(_settings.RouteDrawModifier.Value)) &&
                 MinimapReflection.TryScreenToWorldPoint(Input.mousePosition, out Vector3 cursorWorld))
             {
+                // RC8-9: a pointer over any CC panel/control never adds
+                // route points. Feeding "not held" also ends the current
+                // Free Draw stroke, so re-entering the map draws a fresh
+                // stroke instead of a connector under the panel.
+                bool pointerOverUi = Map.MapPointerGuard.IsPointerOverCcUi(Input.mousePosition);
                 _routeCommands.HandleMapFrame(
                     new RoadPoint(cursorWorld.x, cursorWorld.y, cursorWorld.z),
-                    Input.GetMouseButton(0),
-                    Input.GetMouseButtonDown(0));
+                    Input.GetMouseButton(0) && !pointerOverUi,
+                    Input.GetMouseButtonDown(0) && !pointerOverUi);
             }
         }
 
@@ -269,6 +575,7 @@ internal sealed class CartographerRuntime : IDisposable
             _routeRedrawElapsed = 0f;
             _routeRedrawPending = false;
             _routeRenderer.RedrawAll(_routeStore);
+            _renderer.MarkVectorDataDirty();
         }
 
         if (!WorldContext.TryGetWorldUid(out long uid) || _worldUid != uid)
@@ -278,12 +585,25 @@ internal sealed class CartographerRuntime : IDisposable
             // The workbench must close here too — it can never carry an
             // input block across a world boundary.
             _mapReady = false;
+            // RC15 lifecycle diagnostics: the teardown boundary, stamped
+            // once (subsequent ticks early-return on !_mapReady).
+            _log.LogInfo($"Map session lifecycle: generation {_mapSession.NoteTransition("world-unloaded")} (world-unloaded).");
             _workbenchPanel.Close();
+            _mapUi.CloseAllSurfaces();
+            // RC14 fix 2: the drawer RectTransform dies with this scene;
+            // persist the cached drag position before it is lost.
+            _drawerPanel.FlushPosition();
+            MapInputGate.ConsumeClicks = false;
+            _textFocusBlock.Release();
+            _quickPinGate.Disarm();
             _pipeline?.EndAllStrokes();
-            _chunkRecovery.Reset();
             _displayController.Reset();
-            _mapControls.Reset();
+            _mapUi.Reset();
             _palettePanel.Reset();
+            // RC13 polish 3: drop (and where still alive, restore) any
+            // hidden chrome across the world boundary; the next map
+            // hierarchy is swept fresh.
+            _chromeSweep.RestoreAll();
             _birthTracker.Reset();
             _pinAdapter.Reset();
             SaveIfDirty();
@@ -291,12 +611,27 @@ internal sealed class CartographerRuntime : IDisposable
             return;
         }
 
-        if (_surveyor.Tick(unscaledDeltaTime, out RoadSegment segment))
+        // Diagnostics-only traversal sampling (RC8): feeds `cc_roads align
+        // live`, never the atlas. Road data is created only by construction.
+        _surveyor.Tick(unscaledDeltaTime);
+
+        // DEF-v1.0-006: the sub-texel large-map road+route layer follows
+        // pan/zoom every frame and rebakes only on data/zoom-step changes.
+        _renderer.TickVectorLayer(unscaledDeltaTime, _atlas, _routeStore);
+        _routeRenderer.TickVisibility(_renderer.VectorLayerActive);
+
+        // RC10 feedback 7: keep Jötunn's overlay button reading
+        // "Map Overlays" (reversible, exact-match rename; ~1 Hz).
+        _relabelElapsed += unscaledDeltaTime;
+        if (_relabelElapsed >= 1f)
         {
-            _renderer.DrawSegment(segment);
+            _relabelElapsed = 0f;
+            if (Minimap.IsOpen())
+            {
+                _overlayRelabel.EnsureApplied();
+            }
         }
 
-        _chunkRecovery.Tick();
         _surveyScanner.Tick(unscaledDeltaTime, _surveyEngine, _pinStore);
 
         // Managed-from-birth (#96): claim a palette-placed pin the moment
@@ -310,6 +645,13 @@ internal sealed class CartographerRuntime : IDisposable
             if (born is not null)
             {
                 HandlePaletteBirth(born);
+            }
+
+            // RC10 feedback 12: a palette-armed newborn shows its chosen
+            // cc:* sprite from the first naming frame, never a Dot.
+            if (namingPin is not null && _birthTracker.IsArmed)
+            {
+                _pinAdapter.ApplyImmediateSprite(namingPin, _birthTracker.IconId);
             }
         }
 
@@ -327,8 +669,21 @@ internal sealed class CartographerRuntime : IDisposable
             _autosaveElapsed = 0f;
             SaveIfDirty();
             _pinAdapter.AbsorbVanillaChanges(_pinStore);
+
+            // RC15 fallback repair: renderings vanished without an
+            // explicit vanilla delete (a reconstruction path the
+            // map-data-loaded hook did not cover) — reconcile instead of
+            // ever inferring deletions.
+            if (_pinAdapter.NeedsRebind && _pinAdapter.IsOperational)
+            {
+                _pinAdapter.ReconcileOnMapReady(_pinStore, "rendering-loss-repair");
+                _mapSession.NoteBound();
+                ReapplyDisplay();
+            }
+
             _pinPersistence.FlushJournal();
             _routePersistence.FlushJournal();
+            SaveRejectedIfDirty();
         }
     }
 
@@ -370,6 +725,10 @@ internal sealed class CartographerRuntime : IDisposable
 
     private void WireDrawer()
     {
+        // RC14 fix 2: the drawer's dragged position is a durable
+        // preference (Drawer/PanelPosition); restore clamps on-screen.
+        _drawerPanel.LoadPosition = () => _settings.DrawerPanelPosition.Value;
+        _drawerPanel.PositionCaptured = stored => _settings.DrawerPanelPosition.Value = stored;
         _drawerPanel.DirtToggled = value =>
         {
             _settings.DrawerShowDirt.Value = value;
@@ -412,8 +771,9 @@ internal sealed class CartographerRuntime : IDisposable
         // Search results carry the stable AtlasId, so selection opens the
         // workbench for that exact pin — never proximity guessing.
         _drawerPanel.ResultClicked = OpenWorkbenchForId;
+        // Short enough for the drawer's status column at every UiScale.
         _drawerPanel.StatusLine = () =>
-            $"{_displayController.VisibleCount} shown · {_displayController.HiddenByFilter} filtered · {_displayController.ClusterCount} clusters";
+            $"{_displayController.VisibleCount} shown · {_displayController.HiddenByFilter} hidden · {_displayController.ClusterCount} grouped";
         _drawerPanel.TopResults = () =>
         {
             var results = new List<(string, AtlasId)>();
@@ -490,6 +850,80 @@ internal sealed class CartographerRuntime : IDisposable
         ReapplyDisplay();
     }
 
+    private void CaptureQuickPin()
+    {
+        if (_quickPinCapture.TryCapture(_pinStore, out string quickPinMessage, out AtlasPin? quickPin))
+        {
+            // RC12 blockers 5/6: the fresh pin renders as itself — never
+            // folded or filtered away the moment it appears.
+            if (quickPin is not null)
+            {
+                _displayController.MarkStickyVisible(quickPin.Id);
+            }
+
+            // RC8-10: the new store entity must gain its map rendering NOW,
+            // through the tracking-preserving targeted sync — ReapplyDisplay
+            // alone only re-filters what already renders, which left a quick
+            // pin invisible until some later resync.
+            ResyncPins();
+        }
+
+        if (quickPinMessage.Length > 0)
+        {
+            Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, quickPinMessage);
+        }
+    }
+
+    private bool PaletteActive()
+    {
+        return _settings.EnhancedPinPalette.Value && !_compatibility.PinManagerPresent && !_palettePanel.HasFailed;
+    }
+
+    /// <summary>Opens one CC side panel exclusively at the shared dock,
+    /// with the NoMap cartography-table gate applied.</summary>
+    private void OpenSidePanel(int token, Map.CcSidePanel panel)
+    {
+        if (!AtlasAccessAllowed(out string denial))
+        {
+            Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, denial);
+            return;
+        }
+
+        panel.UiScale = _settings.UiScale.Value;
+        _mapUi.OpenExclusive(token, panel.Toggle);
+    }
+
+    /// <summary>Toolbar [Quick Pin] (#102): closes the map and arms a
+    /// one-shot capture — the next deliberate click (or the quick-pin
+    /// hotkey) captures what the player is looking at through the
+    /// existing QuickPinCapture (creature refusal and duplicate
+    /// protection included). Esc cancels; F7 remains the instant path.</summary>
+    private void ArmQuickPin()
+    {
+        // The same NoMap cartography-table gate every other panel entry
+        // uses: arming is an atlas write path (it creates a pin).
+        if (!AtlasAccessAllowed(out string denial))
+        {
+            Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, denial);
+            return;
+        }
+
+        try
+        {
+            _mapUi.CloseAllSurfaces();
+            Minimap.instance?.SetMapMode(Minimap.MapMode.Small);
+        }
+        catch
+        {
+            // If the map cannot close, the armed mode still works later.
+        }
+
+        // RC14 fix 3: the arming frame is owned too — the toolbar click
+        // that armed must not become an attack as the map closes.
+        _quickPinGate.Arm(Time.frameCount);
+        Player.m_localPlayer?.Message(MessageHud.MessageType.Center, AtlasStrings.Get("quickpin.armed"));
+    }
+
     /// <summary>Drawer toggle shared by the hotkey and the large-map
     /// button, with the NoMap cartography-table gate applied to both.</summary>
     private void ToggleDrawer()
@@ -526,11 +960,12 @@ internal sealed class CartographerRuntime : IDisposable
 
         _hintElapsed = 0f;
         EnforceVanillaPaletteVisibility();
+        _mapUi.UpdateLayout();
 
         if (_workbenchPanel.IsVisible)
         {
-            _mapControls.SetHint(null);
-            _mapControls.SetContext(null, null);
+            _mapUi.SetHint(null);
+            _mapUi.SetContext(null, null);
             return;
         }
 
@@ -541,22 +976,22 @@ internal sealed class CartographerRuntime : IDisposable
         if (hovering && _pinAdapter.TryGetManagedId(hoverPin!, out AtlasId managedId))
         {
             _contextGrace = ContextGraceSeconds;
-            _mapControls.SetHint(AtlasStrings.Format("hud.editHint", _settings.WorkbenchHotkey.Value));
+            _mapUi.SetHint(AtlasStrings.Format("hud.editHint", _settings.WorkbenchHotkey.Value));
             AtlasId captured = managedId;
-            _mapControls.SetContext(AtlasStrings.Get("hud.editPin"), () => OpenWorkbenchForId(captured));
+            _mapUi.SetContext(AtlasStrings.Get("hud.editPin"), () => OpenWorkbenchForId(captured));
             return;
         }
 
         if (hovering && _pinAdapter.IsAdoptableVanilla(hoverPin!) && !_compatibility.PinManagerPresent)
         {
             _contextGrace = ContextGraceSeconds;
-            _mapControls.SetHint(AtlasStrings.Format("hud.editHint", _settings.WorkbenchHotkey.Value));
+            _mapUi.SetHint(AtlasStrings.Format("hud.editHint", _settings.WorkbenchHotkey.Value));
             Minimap.PinData capturedPin = hoverPin!;
-            _mapControls.SetContext(AtlasStrings.Get("hud.upgradeEdit"), () => UpgradeAndEdit(capturedPin));
+            _mapUi.SetContext(AtlasStrings.Get("hud.upgradeEdit"), () => UpgradeAndEdit(capturedPin));
             return;
         }
 
-        if (_mapControls.PointerOverContext)
+        if (_mapUi.PointerOverContext)
         {
             return;
         }
@@ -567,8 +1002,8 @@ internal sealed class CartographerRuntime : IDisposable
             return;
         }
 
-        _mapControls.SetHint(null);
-        _mapControls.SetContext(null, null);
+        _mapUi.SetHint(null);
+        _mapUi.SetContext(null, null);
     }
 
     /// <summary>Opens the Pin Workbench for a known managed pin by its
@@ -587,7 +1022,8 @@ internal sealed class CartographerRuntime : IDisposable
         }
 
         _workbenchPanel.UiScale = _settings.UiScale.Value;
-        _workbenchPanel.OpenForManaged(pin, _pinCommands.Operations, ResyncPins);
+        _mapUi.OpenExclusive(_workbenchToken,
+            () => _workbenchPanel.OpenForManaged(pin, _pinCommands.Operations, ResyncPins));
     }
 
     /// <summary>The "Upgrade &amp; Edit" context action: converts an
@@ -619,22 +1055,69 @@ internal sealed class CartographerRuntime : IDisposable
         }
 
         _workbenchPanel.UiScale = _settings.UiScale.Value;
-        _workbenchPanel.OpenForManaged(managed, _pinCommands.Operations, ResyncPins);
+        _mapUi.OpenExclusive(_workbenchToken,
+            () => _workbenchPanel.OpenForManaged(managed, _pinCommands.Operations, ResyncPins));
     }
 
     /// <summary>A palette-placed pin finished its vanilla naming flow:
     /// associate the AtlasPin now, with the palette's icon identity and
-    /// default category. Exactly one rendering and one entity — the
-    /// existing rendering is tracked, never replaced (#96).</summary>
+    /// default category. RC12 blocker 5: a CONFIRMED marker must survive
+    /// no matter how the naming close treated the rendering. The pure
+    /// <see cref="PaletteBirthResolution"/> rule decides between adopting
+    /// the rendering in place (normal path), adopting a same-spot
+    /// replacement pin, or recreating the marker from the newborn's
+    /// committed state; only a genuine cancel (no name, no rendering)
+    /// creates nothing. The resulting entity is sticky-visible so no
+    /// search filter or cluster fold can hide it the same frame — the
+    /// player always sees exactly one managed marker.</summary>
     private void HandlePaletteBirth(Minimap.PinData born)
     {
-        if (!_pinAdapter.ContainsPin(born) || !_pinAdapter.IsAdoptableVanilla(born))
+        string committedName = born.m_name ?? "";
+        bool onMap = _pinAdapter.ContainsPin(born);
+        Minimap.PinData? replacement = onMap
+            ? null
+            : _pinAdapter.TryFindAdoptableAt(born.m_pos, committedName);
+
+        PaletteBirthResolution.Action action = PaletteBirthResolution.Decide(
+            onMap, onMap && _pinAdapter.IsAdoptableVanilla(born), replacement is not null, committedName);
+
+        AtlasPin? managed;
+        switch (action)
         {
-            // Removed (or claimed by something else) during naming.
-            return;
+            case PaletteBirthResolution.Action.AdoptBorn:
+                managed = _pinAdapter.Adopt(_pinStore, born);
+                break;
+            case PaletteBirthResolution.Action.AdoptReplacement:
+                managed = _pinAdapter.Adopt(_pinStore, replacement!);
+                _log.LogInfo(
+                    "Palette birth: the naming close replaced the pin object; adopted the replacement at the same spot (RC12 blocker 5).");
+                break;
+            case PaletteBirthResolution.Action.RecreateManaged:
+                var position = new RoadPoint(born.m_pos.x, born.m_pos.y, born.m_pos.z);
+                int bornType = (int)born.m_type;
+                managed = _pinStore.Create(pin =>
+                {
+                    pin.Name = committedName;
+                    pin.IconId = IconRegistry.FromVanillaType(bornType);
+                    pin.Source = AtlasPinSource.Managed;
+                    pin.Position = position;
+                });
+                _log.LogInfo(
+                    "Palette birth: the named pin's rendering vanished at naming close; recreated it as a managed marker (RC12 blocker 5).");
+                break;
+            case PaletteBirthResolution.Action.DropForeign:
+                _log.LogInfo("Palette birth: the named pin is not adoptable (foreign or already tracked); left untouched.");
+                return;
+            default:
+                // DropCancelled: honor the cancel.
+                if (_settings.DebugLogging.Value)
+                {
+                    _log.LogInfo("Palette birth: naming was cancelled; nothing created.");
+                }
+
+                return;
         }
 
-        AtlasPin? managed = _pinAdapter.Adopt(_pinStore, born);
         if (managed is null)
         {
             return;
@@ -653,44 +1136,205 @@ internal sealed class CartographerRuntime : IDisposable
             pin.Source = AtlasPinSource.Managed;
         });
         _palettePanel.NoteUsed(iconId);
-        ReapplyDisplay();
+        // RC12 blockers 5/6: the newborn renders as itself — never folded
+        // into a cluster or dropped by a search filter — until the player
+        // changes the zoom tier.
+        _displayController.MarkStickyVisible(managed.Id);
+        // Targeted sync (not just re-filtering): the icon-id mutation above
+        // may swap the rendering to a distinct CC sprite immediately, and
+        // the recreate path gains its map rendering here.
+        ResyncPins();
         if (_settings.DebugLogging.Value)
         {
             _log.LogInfo($"Palette marker born managed: {managed.Id} icon {iconId} category \"{category}\".");
         }
     }
 
-    /// <summary>Keeps the five vanilla placeable icon buttons hidden while
-    /// the enhanced palette owns pin creation, and restores them the
-    /// moment any fallback applies (setting, compat, failure, disable).
-    /// Only SetActive is ever used — nothing vanilla is destroyed.</summary>
+    /// <summary>Keeps the vanilla right-side map rail hidden while CC owns
+    /// its functionality, and restores it the moment any fallback applies
+    /// (settings, conflicting pin manager, CC UI failure, disable). The
+    /// five placeable icon selectors follow the enhanced-palette rules; the
+    /// death/boss filter buttons and the visible-to-others toggle follow
+    /// Map/ShowVanillaMapControls (their behavior lives on in Atlas →
+    /// System Markers, driven through vanilla state). Only SetActive is
+    /// ever used — nothing vanilla is destroyed (#99).</summary>
     private void EnforceVanillaPaletteVisibility()
     {
-        bool wantVisible = !_settings.Enabled.Value ||
+        bool wantPlaceablesVisible = !_settings.Enabled.Value ||
             !_settings.EnhancedPinPalette.Value ||
             _settings.ShowVanillaPinPalette.Value ||
+            _settings.ShowVanillaMapControls.Value ||
             _compatibility.PinManagerPresent ||
-            _palettePanel.HasFailed;
+            _palettePanel.HasFailed ||
+            _mapUi.HasFailed;
         foreach (GameObject button in MinimapReflection.GetPlaceableIconButtons())
         {
-            if (button != null && button.activeSelf != wantVisible)
+            if (button != null && button.activeSelf != wantPlaceablesVisible)
             {
-                button.SetActive(wantVisible);
+                button.SetActive(wantPlaceablesVisible);
+            }
+        }
+
+        // The toolbar is the only route to every replacement surface, and
+        // the drawer is the only route to System Markers — either failing
+        // means the vanilla rail must come back (#99 "CC UI failure").
+        bool wantRailVisible = !_settings.Enabled.Value ||
+            _settings.ShowVanillaMapControls.Value ||
+            _compatibility.PinManagerPresent ||
+            _systemMarkersPanel.HasFailed ||
+            _drawerPanel.HasFailed ||
+            _mapUi.HasFailed;
+        foreach (GameObject button in MinimapReflection.GetSystemFilterButtons())
+        {
+            if (button != null && button.activeSelf != wantRailVisible)
+            {
+                button.SetActive(wantRailVisible);
+            }
+        }
+
+        GameObject? publicPosition = null;
+        try
+        {
+            publicPosition = Minimap.instance != null && Minimap.instance.m_publicPosition != null
+                ? Minimap.instance.m_publicPosition.gameObject
+                : null;
+            if (publicPosition != null && publicPosition.activeSelf != wantRailVisible)
+            {
+                publicPosition.SetActive(wantRailVisible);
+            }
+        }
+        catch
+        {
+            // Missing toggle just stays vanilla.
+        }
+
+        // RC11 blocker 2: hide the rail's own validated container(s) —
+        // per button group — so no orphaned backplate, decor, or raycast
+        // object lingers. A shared panel hides only when BOTH groups are
+        // replaced; separate panels follow their own group. Any layout
+        // surprise falls back to the per-button behavior above, and the
+        // discovery result is logged once per change so a smoke run can
+        // see exactly what was (or could not be) hidden.
+        if (MinimapReflection.TryGetVanillaRailContainers(
+                out GameObject? selectorsContainer, out GameObject? filtersContainer,
+                out bool sharedRailContainer, out string railDiagnostics))
+        {
+            if (sharedRailContainer)
+            {
+                SetRailContainerActive(selectorsContainer!, wantPlaceablesVisible || wantRailVisible);
+            }
+            else
+            {
+                if (selectorsContainer != null)
+                {
+                    SetRailContainerActive(selectorsContainer, wantPlaceablesVisible);
+                }
+
+                if (filtersContainer != null)
+                {
+                    SetRailContainerActive(filtersContainer, wantRailVisible);
+                }
+            }
+        }
+
+        if (!string.Equals(railDiagnostics, _lastRailDiagnostics, StringComparison.Ordinal))
+        {
+            _lastRailDiagnostics = railDiagnostics;
+            _log.LogInfo($"Vanilla rail chrome: {railDiagnostics}.");
+        }
+
+        // RC13 polish 3: with the rail fully replaced, an orphaned
+        // decorative backplate can frame the hidden controls from OUTSIDE
+        // both button groups (the empty rectangle at the bottom-right of
+        // the owner's RC12 smoke). Climb from every hidden rail object
+        // and hide only what the pure OrphanChromeRule proves is empty
+        // decoration; the moment ANY vanilla fallback applies, everything
+        // is restored exactly. Bottom control hints are protected inside
+        // the rule's facts.
+        if (OrphanChromeRule.MustRestore(wantPlaceablesVisible || wantRailVisible))
+        {
+            _chromeSweep.RestoreAll();
+        }
+        else
+        {
+            var chromeSeeds = new List<GameObject?> { selectorsContainer, filtersContainer, publicPosition };
+            foreach (GameObject button in MinimapReflection.GetPlaceableIconButtons())
+            {
+                chromeSeeds.Add(button);
+            }
+
+            foreach (GameObject button in MinimapReflection.GetSystemFilterButtons())
+            {
+                chromeSeeds.Add(button);
+            }
+
+            _chromeSweep.Sweep(chromeSeeds);
+        }
+
+        if (!string.Equals(_chromeSweep.LastDiagnostics, _lastChromeSweepDiagnostics, StringComparison.Ordinal))
+        {
+            _lastChromeSweepDiagnostics = _chromeSweep.LastDiagnostics;
+            if (_lastChromeSweepDiagnostics.Length > 0)
+            {
+                _log.LogInfo($"Vanilla chrome sweep: {_lastChromeSweepDiagnostics}.");
             }
         }
     }
 
-    /// <summary>Unconditional vanilla-selector restore for teardown.</summary>
+    private string _lastRailDiagnostics = "";
+
+    private static void SetRailContainerActive(GameObject container, bool visible)
+    {
+        if (container.activeSelf != visible)
+        {
+            container.SetActive(visible);
+        }
+    }
+
+    /// <summary>Unconditional vanilla-rail restore for teardown.</summary>
     private void RestoreVanillaPalette()
     {
         try
         {
+            // RC13 polish 3: the sweep's chrome is the outermost layer —
+            // restore it first so the containers and buttons below come
+            // back into a visible hierarchy.
+            _chromeSweep.RestoreAll();
+
+            if (MinimapReflection.TryGetVanillaRailContainers(
+                    out GameObject? selectorsContainer, out GameObject? filtersContainer, out _, out _))
+            {
+                if (selectorsContainer != null && !selectorsContainer.activeSelf)
+                {
+                    selectorsContainer.SetActive(true);
+                }
+
+                if (filtersContainer != null && !filtersContainer.activeSelf)
+                {
+                    filtersContainer.SetActive(true);
+                }
+            }
+
             foreach (GameObject button in MinimapReflection.GetPlaceableIconButtons())
             {
                 if (button != null && !button.activeSelf)
                 {
                     button.SetActive(true);
                 }
+            }
+
+            foreach (GameObject button in MinimapReflection.GetSystemFilterButtons())
+            {
+                if (button != null && !button.activeSelf)
+                {
+                    button.SetActive(true);
+                }
+            }
+
+            if (Minimap.instance != null && Minimap.instance.m_publicPosition != null &&
+                !Minimap.instance.m_publicPosition.gameObject.activeSelf)
+            {
+                Minimap.instance.m_publicPosition.gameObject.SetActive(true);
             }
         }
         catch
@@ -768,7 +1412,7 @@ internal sealed class CartographerRuntime : IDisposable
             System.IO.File.WriteAllText(path, DateTime.UtcNow.ToString("o"));
             Player.m_localPlayer?.Message(
                 MessageHud.MessageType.Center,
-                AtlasStrings.Format("hud.onboarding", _settings.DrawerHotkey.Value, _settings.WorkbenchHotkey.Value));
+                AtlasStrings.Get("hud.onboarding"));
         }
         catch
         {
@@ -830,7 +1474,9 @@ internal sealed class CartographerRuntime : IDisposable
 
         if (nearestManaged is not null)
         {
-            _workbenchPanel.OpenForManaged(nearestManaged, operations, resync);
+            AtlasPin captured = nearestManaged;
+            _mapUi.OpenExclusive(_workbenchToken,
+                () => _workbenchPanel.OpenForManaged(captured, operations, resync));
             return;
         }
 
@@ -865,6 +1511,7 @@ internal sealed class CartographerRuntime : IDisposable
     /// <summary>Roads, pins, and views together, for quit/teardown paths.</summary>
     public void SaveAll()
     {
+        _drawerPanel.FlushPosition();
         SaveIfDirty();
         SavePinsSnapshot();
         _savedViewPersistence.Save(_savedViews);
@@ -967,10 +1614,10 @@ internal sealed class CartographerRuntime : IDisposable
                     supportUid,
                     Plugin.PluginVersion,
                     $"enabled={_settings.Enabled.Value}, capture={_settings.CaptureConstructionActions.Value}, " +
-                    $"reconcile={_settings.ReconcileTerrainChanges.Value}, recovery={_settings.RecoverLoadedChunks.Value}, " +
+                    $"reconcile={_settings.ReconcileTerrainChanges.Value}, " +
                     $"survey={_settings.SurveyRulesEnabled.Value}, cluster={_settings.DrawerCluster.Value}, " +
                     $"contrast={_settings.HighContrast.Value}, uiScale={_settings.UiScale.Value}");
-                return "Sanitized support report (no positions/names/notes) written to " + report;
+                return "Sanitized support report (no positions/names/notes/world ids/paths) written to " + report;
             case "views":
                 var names = new System.Text.StringBuilder("Saved views:");
                 if (_savedViews.Views.Count == 0)
@@ -1005,6 +1652,11 @@ internal sealed class CartographerRuntime : IDisposable
 
         string subcommand = args.Length == 0 ? "status" : args[0].ToLowerInvariant();
         string remainder = args.Length > 1 ? args[1].ToLowerInvariant() : "";
+        // RC12 blocker 6: the Survey panel addresses rows by stable id
+        // ("id:<guid>") or identity ("key:<identity>") instead of a
+        // 1-based index a background sweep could shift under the click.
+        // Identity keys are case-sensitive, so keep the raw argument.
+        string rawRemainder = args.Length > 1 ? args[1] : "";
         IReadOnlyList<SurveyEngine.Observation> observations = _surveyEngine.Observations;
 
         switch (subcommand)
@@ -1036,39 +1688,216 @@ internal sealed class CartographerRuntime : IDisposable
             case "accept":
                 if (remainder == "all")
                 {
-                    int accepted = _surveyEngine.AcceptAll(_pinStore);
+                    // RC12 blocker 6: every accepted marker is sticky-visible
+                    // so no filter or cluster fold can hide it on creation.
+                    int accepted = _surveyEngine.AcceptAll(
+                        _pinStore, created => _displayController.MarkStickyVisible(created.Id));
                     ResyncPins();
-                    return $"Accepted {accepted} observation(s) as pins.";
+                    return $"Accepted {accepted} observation(s) as markers.";
                 }
 
-                if (int.TryParse(remainder, out int acceptIndex) && acceptIndex >= 1 && acceptIndex <= observations.Count)
+                Guid? acceptTarget = null;
+                if (rawRemainder.StartsWith("id:", StringComparison.OrdinalIgnoreCase) &&
+                    Guid.TryParse(rawRemainder.Substring(3), out Guid acceptParsed))
                 {
-                    _surveyEngine.Accept(observations[acceptIndex - 1].Id, _pinStore);
+                    acceptTarget = acceptParsed;
+                }
+                else if (int.TryParse(remainder, out int acceptIndex) && acceptIndex >= 1 && acceptIndex <= observations.Count)
+                {
+                    acceptTarget = observations[acceptIndex - 1].Id;
+                }
+
+                if (acceptTarget is Guid acceptGuid)
+                {
+                    if (!_surveyEngine.Accept(acceptGuid, _pinStore, out AtlasPin? acceptedPin))
+                    {
+                        return "That observation is no longer pending — the list just updated.";
+                    }
+
+                    if (acceptedPin is not null)
+                    {
+                        _displayController.MarkStickyVisible(acceptedPin.Id);
+                    }
+
                     ResyncPins();
-                    return $"Accepted observation {acceptIndex}.";
+                    return $"Accepted \"{acceptedPin?.Name}\" as a marker.";
                 }
 
                 return "Usage: cc_survey accept <n|all>";
             case "reject":
+                // RC11 blocker 9: rejection is durable — the entry moves to
+                // the Rejected list and its object stays suppressed.
                 if (remainder == "all")
                 {
-                    return $"Rejected {_surveyEngine.RejectAll()} observation(s).";
+                    int rejected = _surveyEngine.RejectAll(DateTime.UtcNow);
+                    SaveRejectedIfDirty();
+                    return $"Rejected {rejected} observation(s); they moved to the Rejected list.";
                 }
 
-                if (int.TryParse(remainder, out int rejectIndex) && rejectIndex >= 1 && rejectIndex <= observations.Count)
+                Guid? rejectTarget = null;
+                if (rawRemainder.StartsWith("id:", StringComparison.OrdinalIgnoreCase) &&
+                    Guid.TryParse(rawRemainder.Substring(3), out Guid rejectParsed))
                 {
-                    _surveyEngine.Reject(observations[rejectIndex - 1].Id);
-                    return $"Rejected observation {rejectIndex}.";
+                    rejectTarget = rejectParsed;
+                }
+                else if (int.TryParse(remainder, out int rejectIndex) && rejectIndex >= 1 && rejectIndex <= observations.Count)
+                {
+                    rejectTarget = observations[rejectIndex - 1].Id;
+                }
+
+                if (rejectTarget is Guid rejectGuid)
+                {
+                    if (!_surveyEngine.Reject(rejectGuid, DateTime.UtcNow))
+                    {
+                        return "That observation is no longer pending — the list just updated.";
+                    }
+
+                    SaveRejectedIfDirty();
+                    return "Rejected; it moved to the Rejected list.";
                 }
 
                 return "Usage: cc_survey reject <n|all>";
+            case "rejected":
+                if (_surveyEngine.Rejected.Count == 0)
+                {
+                    return "The Rejected list is empty.";
+                }
+
+                var rejectedBuilder = new System.Text.StringBuilder($"{_surveyEngine.Rejected.Count} rejected:");
+                for (int index = 0; index < _surveyEngine.Rejected.Count && index < 15; index++)
+                {
+                    SurveyEngine.RejectedObservation entry = _surveyEngine.Rejected[index];
+                    rejectedBuilder.Append($"\n  {index + 1}. {entry.SuggestedName} [{entry.Category}] at ({entry.Position.X:0}, {entry.Position.Z:0})");
+                }
+
+                if (_surveyEngine.Rejected.Count > 15)
+                {
+                    rejectedBuilder.Append($"\n  ... and {_surveyEngine.Rejected.Count - 15} more.");
+                }
+
+                return rejectedBuilder.ToString();
+            case "restore":
+                if (remainder == "all")
+                {
+                    int restored = _surveyEngine.RestoreAllRejected(DateTime.UtcNow);
+                    SaveRejectedIfDirty();
+                    return $"Restored {restored} rejected observation(s) to pending review.";
+                }
+
+                int restoreTarget = -1;
+                if (rawRemainder.StartsWith("key:", StringComparison.OrdinalIgnoreCase))
+                {
+                    restoreTarget = _surveyEngine.FindRejectedIndex(rawRemainder.Substring(4));
+                    if (restoreTarget < 0)
+                    {
+                        return "That rejected entry is no longer listed — the list just updated.";
+                    }
+                }
+                else if (int.TryParse(remainder, out int restoreIndex))
+                {
+                    restoreTarget = restoreIndex - 1;
+                }
+
+                if (restoreTarget >= 0 && _surveyEngine.RestoreRejected(restoreTarget, DateTime.UtcNow))
+                {
+                    SaveRejectedIfDirty();
+                    return "Restored the rejected entry to pending review.";
+                }
+
+                return "Usage: cc_survey restore <n|all>";
+            case "acceptrejected":
+                int acceptRejectedTarget = -1;
+                if (rawRemainder.StartsWith("key:", StringComparison.OrdinalIgnoreCase))
+                {
+                    acceptRejectedTarget = _surveyEngine.FindRejectedIndex(rawRemainder.Substring(4));
+                    if (acceptRejectedTarget < 0)
+                    {
+                        return "That rejected entry is no longer listed — the list just updated.";
+                    }
+                }
+                else if (int.TryParse(remainder, out int acceptRejectedIndex))
+                {
+                    acceptRejectedTarget = acceptRejectedIndex - 1;
+                }
+
+                if (acceptRejectedTarget >= 0 &&
+                    _surveyEngine.AcceptRejected(acceptRejectedTarget, _pinStore, out AtlasPin? rejectedAccepted))
+                {
+                    if (rejectedAccepted is not null)
+                    {
+                        _displayController.MarkStickyVisible(rejectedAccepted.Id);
+                    }
+
+                    ResyncPins();
+                    SaveRejectedIfDirty();
+                    return $"Accepted \"{rejectedAccepted?.Name}\" as a marker.";
+                }
+
+                return "Usage: cc_survey acceptrejected <n>";
+            case "rules":
+                if (_surveyEngine.Rules.Rules.Count == 0)
+                {
+                    return "No survey rules. Add one from the Survey panel's Rules view.";
+                }
+
+                var rulesBuilder = new System.Text.StringBuilder($"{_surveyEngine.Rules.Rules.Count} rule(s):");
+                for (int index = 0; index < _surveyEngine.Rules.Rules.Count; index++)
+                {
+                    SurveyRule rule = _surveyEngine.Rules.Rules[index];
+                    rulesBuilder.Append(
+                        $"\n  {index + 1}. [{(rule.Enabled ? "on " : "OFF")}] {rule.Pattern} → {rule.Category} ({rule.IconId})");
+                }
+
+                return rulesBuilder.ToString();
+            case "ruleon":
+            case "ruleoff":
+                if (int.TryParse(remainder, out int toggleIndex) &&
+                    _surveyEngine.Rules.SetRuleEnabled(toggleIndex - 1, subcommand == "ruleon") is SurveyRule toggled)
+                {
+                    _surveyRulePersistence.Save(_surveyEngine.Rules);
+                    return $"Rule \"{toggled.Pattern}\" is now {(toggled.Enabled ? "enabled" : "disabled")}.";
+                }
+
+                return "Usage: cc_survey ruleon <n> / ruleoff <n>";
+            case "ruledel":
+                if (int.TryParse(remainder, out int deleteIndex) &&
+                    _surveyEngine.Rules.RemoveRuleAt(deleteIndex - 1) is SurveyRule removed)
+                {
+                    _surveyRulePersistence.Save(_surveyEngine.Rules);
+                    return $"Removed rule \"{removed.Pattern}\".";
+                }
+
+                return "Usage: cc_survey ruledel <n>";
+            case "ruleadd":
+                string pattern = SurveyRuleSet.Clean(remainder);
+                if (pattern.Length == 0 || pattern == "*")
+                {
+                    return "Usage: cc_survey ruleadd <prefab-pattern> ('bush*' matches prefixes)";
+                }
+
+                string icon = args.Length > 2 ? args[2] : "cc:resource";
+                string category = args.Length > 3 ? string.Join(" ", args, 3, args.Length - 3) : "Resources";
+                _surveyEngine.Rules.AddRule(new SurveyRule(pattern, icon, category, 30f, 120f));
+                _surveyRulePersistence.Save(_surveyEngine.Rules);
+                return $"Added rule \"{pattern}\" → {category} ({icon}).";
             case "reload":
                 _surveyEngine.Rules = _surveyRulePersistence.LoadOrCreate();
                 return $"Reloaded {_surveyEngine.Rules.Rules.Count} rule(s) and {_surveyEngine.Rules.Blacklist.Count} blacklist pattern(s).";
             case "path":
                 return SurveyRulePersistence.RulePath + " (the file is the shareable import/export format)";
             default:
-                return "Usage: cc_survey [status|list|accept <n|all>|reject <n|all>|reload|path]";
+                return "Usage: cc_survey [status|list|accept <n|all>|reject <n|all>|rejected|restore <n|all>|acceptrejected <n>|rules|ruleon/ruleoff/ruledel <n>|ruleadd <pattern> [icon] [category]|reload|path]";
+        }
+    }
+
+    private void SaveRejectedIfDirty()
+    {
+        if (_surveyEngine.RejectedDirty && _worldUid is long uid)
+        {
+            if (_surveyRejectedPersistence.Save(uid, _surveyEngine.Rejected))
+            {
+                _surveyEngine.MarkRejectedClean();
+            }
         }
     }
 
@@ -1239,7 +2068,9 @@ internal sealed class CartographerRuntime : IDisposable
                 ResyncPins();
                 _routeRedrawPending = true;
                 SavePinsSnapshot();
-                _log.LogInfo($"Sync apply from {envelope.AuthorName}: {applied} change(s); {plan.Summary()}");
+                // Privacy: author names are player names — console feedback
+                // below names the author, the log keeps counts only.
+                _log.LogInfo($"Sync apply: {applied} change(s); {plan.Summary()}");
                 return $"Applied {applied} change(s) from {envelope.AuthorName} " +
                     $"({(takeRemote ? "conflicts took their side" : "conflicts kept your side")}). {plan.Summary()}";
             case "clear":
@@ -1279,23 +2110,33 @@ internal sealed class CartographerRuntime : IDisposable
             return;
         }
 
+        // DEF-v1.0-007: always-on identity diagnostic (rate-limited per
+        // action). A future authority regression shows up in LogOutput.log
+        // as e.g. "level-ground (mud_road_v2) … => Dirt road" without any
+        // debug switch. Privacy audit (CC-098): the action identity is the
+        // signal — the position is a player location and stays out.
+        _rateLimited.Info(
+            "terrain-action-" + operation.Category,
+            $"Terrain action classified: {operation.ActionDescription} r={operation.RadiusMeters:0.#}m.");
+
         var center = new RoadPoint(operation.Position.x, operation.Position.y, operation.Position.z);
 
-        // DEF-v1.0-005: persistent negative terrain intent. Level/Raise
-        // (terraforming side-effect paint) and Cultivate/Reset mark their
-        // brush footprint as explicitly-not-road, so traversal and chunk
-        // recovery can never rediscover the leftover dirt paint as a road —
-        // this session or any later one. A deliberate Pathen/Paved op
-        // clears the footprint it covers before its observation lands.
+        // DEF-v1.0-005: persistent negative terrain intent. Every
+        // non-road paint op (Level/Raise side-effect paint, Cultivate,
+        // Reset, digging, unknown ops) marks its brush footprint as
+        // explicitly-not-road, so no passive signal can ever rediscover the
+        // leftover paint as a road — this session or any later one. A
+        // deliberate Pathen/Paved op clears the footprint it covers before
+        // its observation lands.
         float intentRadius = operation.RadiusMeters + TerrainIntentMask.BrushMarginMeters;
-        if (operation.IsTerraforming || operation.RoadKind is null)
+        if (operation.RoadKind is null)
         {
             int excluded = _terrainIntent.AddExclusion(center.X, center.Z, intentRadius);
             if (excluded > 0 && _settings.DebugLogging.Value)
             {
                 _rateLimited.Info(
                     "terrain-intent-add",
-                    $"Terraforming at ({center.X:0.#}, {center.Z:0.#}) r={operation.RadiusMeters:0.#}m: " +
+                    $"Terraforming r={operation.RadiusMeters:0.#}m: " +
                     $"{excluded} cell(s) marked not-road ({_terrainIntent.Count} total).");
             }
         }
@@ -1317,7 +2158,13 @@ internal sealed class CartographerRuntime : IDisposable
             }
             else
             {
-                // Cultivate/Reset erase road-ness entirely.
+                // Level/Raise/Cultivate/Reset (and any unknown paint op)
+                // create no roads and ERASE the covered road data of both
+                // kinds: a base pad leveled over an old road removes that
+                // stretch from the atlas — including pre-RC10 ink polluted
+                // by the Level misclassification. A later explicit
+                // Pathen/Paved over the same ground wins by clearing the
+                // intent mask and recording fresh construction.
                 removed = RemoveCoverageWithBackup(RoadKind.Dirt, center, operation.RadiusMeters)
                     + RemoveCoverageWithBackup(RoadKind.Paved, center, operation.RadiusMeters);
             }
@@ -1325,13 +2172,16 @@ internal sealed class CartographerRuntime : IDisposable
             if (removed > 0)
             {
                 _redrawPending = true;
+                // Privacy audit (CC-098): the operation position is a player
+                // location and stays out of the log; radius + removed count
+                // keep the reconciliation diagnosable.
                 _log.LogInfo(
-                    $"Reconciled a terrain change at ({operation.Position.x:0.#}, {operation.Position.z:0.#}) " +
+                    $"Reconciled a terrain change ({operation.ActionDescription}) " +
                     $"r={operation.RadiusMeters:0.#}m: removed {removed} road point(s).");
             }
         }
 
-        if (operation.RoadKind is RoadKind kind && !operation.IsTerraforming && _settings.CaptureConstructionActions.Value)
+        if (operation.RoadKind is RoadKind kind && _settings.CaptureConstructionActions.Value)
         {
             var rules = new RoadSamplingRules(
                 _settings.MinimumPointSpacingMeters.Value,
@@ -1347,15 +2197,6 @@ internal sealed class CartographerRuntime : IDisposable
         // destructive change, so a reconciliation bug is recoverable.
         _persistence.BackupBeforeReconciliation(_worldUid!.Value);
         return _atlas.RemoveCoverage(kind, center, radiusMeters);
-    }
-
-    private void HandleRecoveredPaint(RoadKind kind, Vector3 position)
-    {
-        var rules = new RoadSamplingRules(
-            _settings.MinimumPointSpacingMeters.Value,
-            RecoveryMaxGapMeters,
-            _settings.DuplicateSuppressionMeters.Value);
-        ObserveAndDraw(RoadObservationSource.ChunkRecovery, kind, position, rules, "recovery-observed");
     }
 
     private void ObserveAndDraw(
@@ -1389,7 +2230,9 @@ internal sealed class CartographerRuntime : IDisposable
 
         if (_settings.DebugLogging.Value)
         {
-            _rateLimited.Info(debugKey, $"Observed {observation}.");
+            // Privacy audit (CC-098): the observation's ToString carries its
+            // position; the log keeps source/kind identity only.
+            _rateLimited.Info(debugKey, $"Observed {observation.Source}/{observation.Kind}.");
         }
     }
 
@@ -1470,10 +2313,9 @@ internal sealed class CartographerRuntime : IDisposable
                 _persistence.BackupBeforeReconciliation(_worldUid.Value);
                 int removed = _atlas.RemoveCoverage(RoadKind.Dirt, position, rebuildRadius)
                     + _atlas.RemoveCoverage(RoadKind.Paved, position, rebuildRadius);
-                _chunkRecovery.Reset();
                 changed = removed > 0;
-                summary = $"Cleared {removed} road point(s) within {rebuildRadius:0.#} m; explored loaded terrain " +
-                    "will be re-scanned with the current detection settings.";
+                summary = $"Cleared {removed} road point(s) within {rebuildRadius:0.#} m. " +
+                    "Roads return only when you Pathen/Pave the ground again ('cc_roads undo' reverts).";
                 break;
             case "undo":
                 changed = _editor.Undo(out summary);
@@ -1490,6 +2332,29 @@ internal sealed class CartographerRuntime : IDisposable
                     _renderer.RedrawAll(_atlas);
                     _redrawPending = false;
                     return "Alignment markers removed.";
+                }
+
+                if (args.Length > 1 && string.Equals(args[1], "live", StringComparison.OrdinalIgnoreCase))
+                {
+                    // DEF-v1.0-006: end-to-end player-vs-road-ink diagnosis
+                    // with the four error classes answered separately.
+                    bool standingOnRoad = _probe.TryClassify(playerPosition, out RoadKind classifiedKind);
+                    bool hasNearest = _atlas.TryGetNearestPointOnRoads(
+                        position, 50f, out RoadPoint nearestPoint, out float nearestDistance);
+                    string liveReport = Map.LiveAlignmentProbe.BuildReport(
+                        playerPosition,
+                        standingOnRoad,
+                        classifiedKind,
+                        _surveyor?.LatestSample,
+                        _pipeline?.LastAccepted,
+                        hasNearest,
+                        nearestPoint,
+                        nearestDistance,
+                        _renderer);
+                    // Privacy audit (CC-098): the live report contains player
+                    // and road positions, so it prints to the console only.
+                    _log.LogInfo("cc_roads align live: diagnostic report written to the console (positions are never logged).");
+                    return liveReport;
                 }
 
                 return _renderer.RunAlignmentProbe(playerPosition, _atlas);
@@ -1546,13 +2411,19 @@ internal sealed class CartographerRuntime : IDisposable
 
         _workbenchPanel.Close();
         RestoreVanillaPalette();
+        _overlayRelabel.Restore();
+        _textFocusBlock.Release();
+        _quickPinGate.Disarm();
+        MapInputGate.Uninstall();
+        PlayerInputGate.Uninstall();
+        PinDeletionWatch.Uninstall();
+        MapPointerGuard.Clear();
         SaveIfDirty();
         SavePinsSnapshot();
+        SaveRejectedIfDirty();
         _pipeline?.EndAllStrokes();
         _constructionCapture.OperationCaptured -= HandleTerrainOperation;
         _constructionCapture.Dispose();
-        _chunkRecovery.PaintObserved -= HandleRecoveredPaint;
-        _chunkRecovery.Reset();
         _disposed = true;
     }
 
@@ -1563,6 +2434,7 @@ internal sealed class CartographerRuntime : IDisposable
             return;
         }
 
+        SaveRejectedIfDirty();
         SaveIfDirty();
         SavePinsSnapshot();
 
@@ -1570,6 +2442,8 @@ internal sealed class CartographerRuntime : IDisposable
         _atlas = _persistence.Load(uid);
         _terrainIntent = _terrainIntentPersistence.Load(uid);
         _pinStore = _pinPersistence.Load(uid);
+        _surveyEngine.ResetSession();
+        _surveyEngine.LoadRejected(_surveyRejectedPersistence.Load(uid));
         _pinStore.LocalAuthor = _authorId;
         _pinStore.Changed += _pinPersistence.QueueJournal;
         _pinAdapter.Reset();
@@ -1593,8 +2467,7 @@ internal sealed class CartographerRuntime : IDisposable
             () => _routeRedrawPending = true);
         _pipeline = new RoadObservationPipeline(_atlas, _terrainIntent);
         _editor = new RoadAtlasEditor(_atlas);
-        _surveyor = new RoadSurveyor(_settings, _probe, _pipeline, _log);
-        _chunkRecovery.Reset();
+        _surveyor = new RoadSurveyor(_settings, _probe, _atlas, _log);
         _redrawPending = false;
         _autosaveElapsed = 0f;
     }

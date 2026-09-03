@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using UnityEngine;
 
 namespace TheConcernedCat.ConcernedCartographer.Map;
@@ -26,6 +27,15 @@ internal sealed class PinDisplayController
     private readonly ManualLogSource _log;
     private readonly List<Minimap.PinData> _clusterMarkers = new();
     private readonly HashSet<Guid> _displayHidden = new();
+
+    // RC12 blockers 5/6: pins the player JUST created (palette birth,
+    // survey accept, quick pin) that must stay individually visible —
+    // exempt from query filtering and cluster folding — until the player
+    // changes the zoom tier or the display state resets. Without this, a
+    // marker born next to existing pins folded into a cluster (or fell to
+    // an active search filter) the same frame its creation flow closed,
+    // which read as the marker disappearing.
+    private readonly HashSet<Guid> _stickyVisible = new();
     private bool _disabledForSession;
     private int _lastTier = -1;
 
@@ -55,11 +65,31 @@ internal sealed class PinDisplayController
         return _displayHidden.Contains(pin.Id.Value);
     }
 
+    /// <summary>Marks a just-created pin as sticky-visible (RC12 blockers
+    /// 5/6): it renders as itself — never folded into a cluster, never
+    /// dropped by the search filter — until the zoom tier changes or the
+    /// display state resets. Call before the Apply that follows the
+    /// creating operation.</summary>
+    public void MarkStickyVisible(AtlasId id)
+    {
+        _stickyVisible.Add(id.Value);
+    }
+
     /// <summary>Recomputes what the map shows. Idempotent; call after any
     /// filter/toggle change, store resync, or zoom-tier change.</summary>
     public void Apply(PinStore store, PinAdapter adapter)
     {
         if (_disabledForSession)
+        {
+            return;
+        }
+
+        // RC14 fix 5: on teardown frames no Minimap exists; adding cluster
+        // markers through it anyway threw NullReferenceException and
+        // latched the session disable. A missing map makes Apply a no-op —
+        // the map-available path re-applies against the fresh map.
+        Minimap map = Minimap.instance;
+        if (map == null)
         {
             return;
         }
@@ -78,7 +108,10 @@ internal sealed class PinDisplayController
                     continue;
                 }
 
-                if (!ShowPins || (!query.IsEmpty && !query.Matches(pin)))
+                // Sticky pins bypass the query filter (RC12 blockers 5/6);
+                // the ShowPins master switch still applies to everything.
+                bool sticky = _stickyVisible.Contains(pin.Id.Value);
+                if (!ShowPins || (!sticky && !query.IsEmpty && !query.Matches(pin)))
                 {
                     HiddenByFilter++;
                     continue;
@@ -95,7 +128,8 @@ internal sealed class PinDisplayController
                     : 0f;
             }
 
-            PinClusterer.Result clustered = PinClusterer.Compute(wanted, cell);
+            PinClusterer.Result clustered = PinClusterer.Compute(
+                wanted, cell, alwaysVisible: _stickyVisible.Count > 0 ? _stickyVisible : null);
 
             var visibleIds = new HashSet<Guid>();
             foreach (AtlasPin pin in clustered.Singles)
@@ -133,7 +167,23 @@ internal sealed class PinDisplayController
                     : $"{cluster.Members.Count} pins";
                 var position = new Vector3(cluster.Center.X, 0f, cluster.Center.Z);
                 var type = (Minimap.PinType)IconRegistry.ResolveVanillaType(cluster.DominantIconId);
-                Minimap.PinData marker = Minimap.instance.AddPin(position, type, label, save: false, isChecked: false);
+                Minimap.PinData marker = map.AddPin(position, type, label, save: false, isChecked: false);
+
+                // RC14 fix 1: a cluster dominated by a cc:* icon wears that
+                // icon's CC sprite too — previously it fell back to the
+                // saved vanilla type, which for several cc:* icons is the
+                // Dot (part of the "markers become Dots" report). Unsaved
+                // marker, so the sprite stays rendering-only by
+                // construction.
+                if (CcIconSprites.TryGet(cluster.DominantIconId, out Sprite clusterSprite))
+                {
+                    marker.m_icon = clusterSprite;
+                    if (marker.m_iconElement != null)
+                    {
+                        marker.m_iconElement.sprite = clusterSprite;
+                    }
+                }
+
                 _clusterMarkers.Add(marker);
             }
 
@@ -161,20 +211,29 @@ internal sealed class PinDisplayController
             return false;
         }
 
+        // A deliberate zoom-tier change ends the sticky-visibility grace of
+        // just-created pins (RC12 blockers 5/6): normal folding resumes.
+        _stickyVisible.Clear();
         _lastTier = tier;
         return true;
     }
 
     /// <summary>Removes cluster markers and forgets display state (e.g., on
-    /// world switch). Store data is untouched.</summary>
+    /// world switch). Store data is untouched. RC14 fix 5: a world/map
+    /// boundary also un-latches the fail-soft session disable — the
+    /// controller outlives every game session, and an uncleared latch kept
+    /// filtering/clustering dead (and cluster markers un-sprited) for the
+    /// rest of the process after one teardown-frame failure.</summary>
     public void Reset()
     {
         ClearClusterMarkers();
         _displayHidden.Clear();
+        _stickyVisible.Clear();
         _lastTier = -1;
         VisibleCount = 0;
         HiddenByFilter = 0;
         ClusterCount = 0;
+        _disabledForSession = false;
     }
 
     private void ClearClusterMarkers()
@@ -198,7 +257,7 @@ internal sealed class PinDisplayController
     private void Disable(PinStore store, Exception exception)
     {
         _disabledForSession = true;
-        _log.LogError($"Pin display controller failed and was disabled for this session (all pins will render plainly): {exception}");
+        _log.LogError($"Pin display controller failed and was disabled for this session (all pins will render plainly): {SafeLogText.Describe(exception)}");
         try
         {
             ClearClusterMarkers();

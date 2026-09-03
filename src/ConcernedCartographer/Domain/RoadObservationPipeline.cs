@@ -1,11 +1,20 @@
 namespace TheConcernedCat.ConcernedCartographer.Roads;
 
-/// <summary>The single entry point through which every detection source
-/// (traversal, construction capture, chunk recovery) feeds the atlas.
-/// Guarantees source-neutral semantics: per-source stroke building, shared
-/// duplicate suppression across sources, and exact-replay idempotency.
-/// Enforces negative terrain intent (DEF-v1.0-005): Dirt sightings by the
-/// passive sources are refused inside the world's exclusion mask.</summary>
+/// <summary>The single entry point through which road detection feeds the
+/// atlas.
+///
+/// v1 ROAD SOURCE AUTHORITY (RC8): only successful explicit LOCAL PLAYER
+/// road construction — Pathen ⇒ Dirt, Paved ⇒ Paved, captured as
+/// <see cref="RoadObservationSource.Construction"/> — may create road atlas
+/// data. The passive sources (Traversal, ChunkRecovery) are refused
+/// outright: arbitrary terrain paint (native world dirt, spawn areas,
+/// sacrificial-stone surroundings, Level Ground side-effect paint) must
+/// never become a road. The refusal is enforced HERE, at the single choke
+/// point, so no adapter wiring mistake can reintroduce passive creation.
+///
+/// For the accepted source it still guarantees exact-replay idempotency,
+/// and the negative terrain intent mask (DEF-v1.0-005) remains as defense
+/// in depth for any hypothetical future non-construction source.</summary>
 internal sealed class RoadObservationPipeline
 {
     // An observation replayed with identical coordinates must never grow the
@@ -23,14 +32,28 @@ internal sealed class RoadObservationPipeline
         _terrainIntent = terrainIntent;
     }
 
+    /// <summary>The most recent observation the atlas actually accepted,
+    /// for the `cc_roads align live` diagnostic. Refused or suppressed
+    /// observations never overwrite it.</summary>
+    public RoadObservation? LastAccepted { get; private set; }
+
     public bool Observe(in RoadObservation observation, RoadSamplingRules rules, out RoadSegment segment)
     {
-        // DEF-v1.0-005: dirt paint inside explicitly-terraformed ground is a
-        // leveling side effect, not a road. Only the passive sources are
-        // gated — an explicit Pathen/Paved op (Construction) is deliberate
-        // road building and has already cleared its own footprint. The
-        // active stroke ends so no connector is ever drawn across the
-        // excluded ground.
+        // RC8 STRICT PRODUCT RULE: passive sources create no road data —
+        // ever. Any legacy active stroke of that source ends too, so nothing
+        // can connect through a refusal.
+        if (observation.Source != RoadObservationSource.Construction)
+        {
+            _atlas.EndStroke(observation.Source);
+            segment = default;
+            return false;
+        }
+
+        // DEF-v1.0-005 defense in depth for future non-construction sources:
+        // dirt paint inside explicitly-terraformed ground is a leveling side
+        // effect, not a road. Construction never reaches this check with an
+        // excluded cell because its op clears its own footprint first, and
+        // the source gate above refuses everything else already.
         if (_terrainIntent is not null &&
             observation.Kind == RoadKind.Dirt &&
             observation.Source != RoadObservationSource.Construction &&
@@ -47,12 +70,24 @@ internal sealed class RoadObservationPipeline
             return false;
         }
 
-        return _atlas.RecordSample(
+        bool segmentProduced = _atlas.RecordSample(
             observation.Source,
             observation.Kind,
             observation.Position,
             rules,
             out segment);
+
+        // RecordSample's bool means "a drawable segment exists", which is
+        // false for an accepted stroke-START point. The point was recorded
+        // exactly when it is now on recorded ground — the replay pre-check
+        // above already proved it was not there before this call.
+        if (segmentProduced ||
+            _atlas.ContainsPointNear(observation.Kind, observation.Position, ReplayEpsilonMeters))
+        {
+            LastAccepted = observation;
+        }
+
+        return segmentProduced;
     }
 
     /// <summary>Ends one source's active stroke, e.g. when that source loses

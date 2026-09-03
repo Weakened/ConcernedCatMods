@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using TheConcernedCat.ConcernedCartographer.Runtime;
 using UnityEngine;
 
@@ -96,7 +97,7 @@ internal sealed class GroundPaintProbe
             if (!_failureLogged)
             {
                 _failureLogged = true;
-                _log.LogError($"Terrain paint probing failed and was disabled for this session: {exception}");
+                _log.LogError($"Terrain paint probing failed and was disabled for this session: {SafeLogText.Describe(exception)}");
             }
 
             return false;

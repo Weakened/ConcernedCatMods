@@ -352,4 +352,38 @@ public class PinRenderingLedgerTests
         Assert.Equal(0, map.Ledger.TrackedCount);
         Assert.False(map.Ledger.TryGetRendering(id, out _));
     }
+
+    [Fact]
+    public void QuickPinCapture_TargetedSync_RendersImmediately_NoDuplicates_SurvivesRestart()
+    {
+        // RC8-10 regression: TryCapture creates the store entity; the
+        // runtime must then run the targeted sync path so the rendering
+        // appears IMMEDIATELY — and repeating the sync (autosave, later
+        // edits) must never duplicate it.
+        var map = new FakeMap();
+        var store = new PinStore();
+
+        AtlasPin quick = store.Create(pin =>
+        {
+            pin.Name = "Copper deposit";
+            pin.IconId = "cc:resource";
+            pin.Category = "Resources";
+            pin.Source = AtlasPinSource.Generated;
+            pin.Position = new RoadPoint(120f, 30f, -45f);
+        });
+
+        map.SyncAll(store);
+        Assert.Single(map.Renderings);
+        Assert.Equal("Copper deposit", map.Renderings[0].Name);
+
+        map.SyncAll(store);
+        map.SyncAll(store);
+        Assert.Single(map.Renderings);
+
+        // Restart: reconcile claims the saved rendering back — still one.
+        map.Reconcile(store);
+        Assert.Single(map.Renderings);
+        Assert.True(map.Ledger.TryGetRendering(quick.Id, out FakeRendering linked));
+        Assert.Equal("Copper deposit", linked.Name);
+    }
 }

@@ -61,11 +61,31 @@ internal static class QuickPinSuggester
         ("kiln", "vanilla:hammer", "Work"),
     };
 
+    /// <summary>The friendly fallback when nothing human-readable exists
+    /// (RC10 feedback 15).</summary>
+    public const string FallbackName = "Marked object";
+
     public static Suggestion Suggest(string? hoverName, string? prefabName)
     {
-        string display = CleanName(hoverName, prefabName);
-        string haystack = ((hoverName ?? "") + " " + (prefabName ?? "")).ToLowerInvariant();
+        return Suggest(hoverName, new[] { prefabName });
+    }
 
+    /// <summary>RC10 feedback 15: the adapter passes every identity it can
+    /// see — the raw hover object, its ZNetView prefab root, the transform
+    /// root — in that order. Technical engine names (Collider (1), trigger,
+    /// mesh…) are skipped for the display name but still feed keyword
+    /// matching, so a chest's "Collider" child still pins as the chest.</summary>
+    public static Suggestion Suggest(string? hoverName, IReadOnlyList<string?> objectNameCandidates)
+    {
+        string display = CleanName(hoverName, objectNameCandidates);
+
+        var haystackBuilder = new System.Text.StringBuilder((hoverName ?? "").ToLowerInvariant());
+        foreach (string? candidate in objectNameCandidates)
+        {
+            haystackBuilder.Append(' ').Append((candidate ?? "").ToLowerInvariant());
+        }
+
+        string haystack = haystackBuilder.ToString();
         foreach ((string keyword, string iconId, string category) in Rules)
         {
             if (haystack.Contains(keyword))
@@ -77,24 +97,169 @@ internal static class QuickPinSuggester
         return new Suggestion(display, IconRegistry.DefaultIconId, "Explore");
     }
 
-    /// <summary>Prefers the localized hover name; falls back to a cleaned
-    /// prefab name ("TreasureChest_meadows(Clone)" → "Treasurechest
-    /// meadows").</summary>
     public static string CleanName(string? hoverName, string? prefabName)
     {
-        string hover = StripMarkup(hoverName ?? "").Trim();
+        return CleanName(hoverName, new[] { prefabName });
+    }
+
+    /// <summary>Prefers the localized hover name's FIRST LINE (interaction
+    /// prompts live on later lines); then the first non-technical object
+    /// name, cleaned ("TreasureChest_meadows(Clone)" → "Treasurechest
+    /// meadows"); then the friendly fallback.</summary>
+    public static string CleanName(string? hoverName, IReadOnlyList<string?> objectNameCandidates)
+    {
+        string hover = StripMarkup(FirstLine(hoverName ?? "")).Trim();
         if (hover.Length > 0 && !hover.StartsWith("$", StringComparison.Ordinal))
         {
             return hover;
         }
 
-        string prefab = (prefabName ?? "").Replace("(Clone)", "").Replace('_', ' ').Trim();
-        if (prefab.Length == 0)
+        foreach (string? candidate in objectNameCandidates)
         {
-            return "Marked spot";
+            string cleaned = CleanObjectName(candidate);
+            if (cleaned.Length > 0 && !IsTechnicalName(cleaned))
+            {
+                // RC11 blockers 11/14: the shared humanizer — case/underscore
+                // splitting, noise-token removal, compound expansion — so a
+                // prefab fallback reads "Raspberry Bush", never
+                // "Raspberrybush".
+                string humanized = NameHumanizer.Humanize(cleaned);
+                if (humanized.Length > 0)
+                {
+                    return humanized;
+                }
+            }
         }
 
-        return char.ToUpperInvariant(prefab[0]) + prefab.Substring(1).ToLowerInvariant();
+        return FallbackName;
+    }
+
+    /// <summary>True for generic engine/child object names that must never
+    /// become a pin name: colliders, triggers, meshes, LOD nodes, attach
+    /// and snap points, primitive shapes, bare clones.</summary>
+    public static bool IsTechnicalName(string? objectName)
+    {
+        string name = CleanObjectName(objectName).ToLowerInvariant();
+        if (name.Length == 0)
+        {
+            return true;
+        }
+
+        // Trailing digits never make a technical name meaningful
+        // ("collider2", "lod1").
+        string stem = name.TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ' ');
+        switch (stem)
+        {
+            case "collider":
+            case "colliders":
+            case "collision":
+            case "trigger":
+            case "mesh":
+            case "meshes":
+            case "model":
+            case "instance":
+            case "clone":
+            case "root":
+            case "gameobject":
+            case "new gameobject":
+            case "new game object":
+            case "cube":
+            case "capsule":
+            case "cylinder":
+            case "sphere":
+            case "quad":
+            case "plane":
+            case "hitbox":
+            case "attach":
+            case "attachpoint":
+            case "attach point":
+            case "pivot":
+            case "snappoint":
+            case "snap point":
+            case "visual":
+            case "graphics":
+            case "gfx":
+            case "default":
+            case "lod":
+                return true;
+            default:
+                return stem.StartsWith("snappoint", StringComparison.Ordinal) ||
+                    stem.StartsWith("attachpoint", StringComparison.Ordinal) ||
+                    stem.StartsWith("lod ", StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>Strips "(Clone)" suffixes, trailing "(1)"-style counters,
+    /// and underscores; collapses whitespace.</summary>
+    public static string CleanObjectName(string? objectName)
+    {
+        string name = (objectName ?? "").Trim();
+        bool changed = true;
+        while (changed && name.Length > 0)
+        {
+            changed = false;
+            if (name.EndsWith("(Clone)", StringComparison.OrdinalIgnoreCase))
+            {
+                name = name.Substring(0, name.Length - "(Clone)".Length).TrimEnd();
+                changed = true;
+            }
+            else if (name.EndsWith(")", StringComparison.Ordinal))
+            {
+                int open = name.LastIndexOf('(');
+                if (open >= 0 && IsDigitsOrSpaces(name, open + 1, name.Length - 1))
+                {
+                    name = name.Substring(0, open).TrimEnd();
+                    changed = true;
+                }
+            }
+        }
+
+        var builder = new System.Text.StringBuilder(name.Length);
+        bool pendingSpace = false;
+        foreach (char character in name)
+        {
+            char mapped = character == '_' ? ' ' : character;
+            if (mapped == ' ')
+            {
+                pendingSpace = builder.Length > 0;
+                continue;
+            }
+
+            if (pendingSpace)
+            {
+                builder.Append(' ');
+                pendingSpace = false;
+            }
+
+            builder.Append(mapped);
+        }
+
+        return builder.ToString();
+    }
+
+    private static bool IsDigitsOrSpaces(string text, int start, int endExclusive)
+    {
+        bool sawDigit = false;
+        for (int index = start; index < endExclusive; index++)
+        {
+            char character = text[index];
+            if (char.IsDigit(character))
+            {
+                sawDigit = true;
+            }
+            else if (character != ' ')
+            {
+                return false;
+            }
+        }
+
+        return sawDigit;
+    }
+
+    private static string FirstLine(string text)
+    {
+        int newline = text.IndexOfAny(new[] { '\n', '\r' });
+        return newline < 0 ? text : text.Substring(0, newline);
     }
 
     private static string StripMarkup(string text)

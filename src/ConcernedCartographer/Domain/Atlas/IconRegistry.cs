@@ -18,24 +18,36 @@ internal static class IconRegistry
 
     public sealed class IconDefinition
     {
-        public IconDefinition(string id, string displayName, string defaultCategory, int vanillaType, string keywords)
+        public IconDefinition(string id, string displayName, string defaultCategory, int vanillaType, string keywords, string spriteKey = "")
         {
             Id = id;
             DisplayName = displayName;
             DefaultCategory = defaultCategory;
             VanillaType = vanillaType;
             Keywords = keywords;
+            SpriteKey = spriteKey;
         }
 
         public string Id { get; }
         public string DisplayName { get; }
         public string DefaultCategory { get; }
 
-        /// <summary>Ordinal of the vanilla Minimap.PinType used to render
-        /// this icon.</summary>
+        /// <summary>Ordinal of the vanilla Minimap.PinType this icon SAVES
+        /// as (and renders as wherever the CC sprite is unavailable). The
+        /// saved vanilla pin keeps this type, so disable/uninstall — or an
+        /// older mod version reading the atlas — degrades to a sensible
+        /// vanilla icon instead of losing the pin.</summary>
         public int VanillaType { get; }
 
         public string Keywords { get; }
+
+        /// <summary>Embedded CC sprite name for icons with a distinct
+        /// visual of their own (RC8: every cc:* icon), or "" for icons that
+        /// render the vanilla sprite. The sprite is a session rendering
+        /// override only — nothing about it is written into saves.</summary>
+        public string SpriteKey { get; }
+
+        public bool HasCustomSprite => SpriteKey.Length > 0;
     }
 
     // Append-only. Never reorder, rename, or reuse an Id.
@@ -46,11 +58,19 @@ internal static class IconRegistry
         new("vanilla:hammer", "Hammer", "Work", 2, "hammer crafting work mine quarry"),
         new("vanilla:dot", "Dot", "General", 3, "dot ball marker generic default"),
         new("vanilla:portal", "Portal", "Travel", 6, "portal travel teleport gate"),
-        new("cc:road", "Road", "Infrastructure", 3, "road path street junction crossing"),
-        new("cc:harbor", "Harbor", "Travel", 3, "harbor port dock ship boat"),
-        new("cc:resource", "Resource", "Resources", 2, "resource ore wood berries deposit"),
-        new("cc:danger", "Danger", "Danger", 0, "danger enemy spawner warning"),
-        new("cc:farm", "Farm", "Base", 1, "farm crops cultivated animals"),
+        new("cc:road", "Road / Junction", "Infrastructure", 3, "road path street junction crossing signpost", "cc-road"),
+        new("cc:harbor", "Harbor / Anchor", "Travel", 3, "harbor port dock ship boat anchor", "cc-harbor"),
+        new("cc:resource", "Resource", "Resources", 2, "resource ore wood berries deposit gather", "cc-resource"),
+        new("cc:danger", "Danger", "Danger", 0, "danger enemy spawner warning skull", "cc-danger"),
+        new("cc:farm", "Farm", "Base", 1, "farm crops cultivated animals sprout", "cc-farm"),
+        // RC8 additions — real distinct CC visuals with stable identities.
+        new("cc:mine", "Mine", "Resources", 2, "mine pickaxe quarry ore tunnel", "cc-mine"),
+        new("cc:fishing", "Fishing", "Resources", 3, "fishing fish spot water catch", "cc-fishing"),
+        new("cc:camp", "Camp", "Camp", 0, "camp tent shelter rest outpost", "cc-camp"),
+        new("cc:travel", "Travel", "Travel", 6, "travel route direction arrow waypoint", "cc-travel"),
+        new("cc:trader", "Trader / Shop", "Points of interest", 1, "trader shop merchant haldor coins", "cc-trader"),
+        new("cc:dungeon", "Dungeon / Cave", "Dungeons", 0, "dungeon cave crypt entrance burial", "cc-dungeon"),
+        new("cc:objective", "Objective / Star", "Points of interest", 3, "objective star goal quest important", "cc-objective"),
     };
 
     private static readonly Dictionary<string, IconDefinition> ById = BuildIndex();

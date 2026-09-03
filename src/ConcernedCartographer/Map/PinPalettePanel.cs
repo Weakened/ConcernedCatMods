@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BepInEx.Logging;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -20,21 +21,26 @@ namespace TheConcernedCat.ConcernedCartographer.Map;
 /// and the vanilla selector is restored by the runtime.</summary>
 internal sealed class PinPalettePanel
 {
-    private const float PanelWidth = 216f;
-    private const float PanelHeight = 500f;
+    private const float PanelWidth = 232f;
+    private const float PanelHeight = 560f;
     private const float RowHeight = 24f;
-    private const float RowWidth = PanelWidth - 24f;
-    private const int MaxRows = 14;
+    private const float RowWidth = PanelWidth - 40f;
+    private const float ListTop = 108f;
+    private const float ListBottomMargin = 18f;
     private const int MaxRecents = 3;
 
     private readonly ManualLogSource _log;
-    private GameObject? _toggleButton;
     private GameObject? _panel;
     private InputField? _search;
     private Text? _status;
     private GameObject? _listRoot;
+    private ScrollRect? _scroll;
     private string? _selectedIconId;
     private readonly List<string> _recents = new();
+
+    // RC10 feedback 11: collapsible category sections. Collapsed state is
+    // session UI state keyed by category name.
+    private readonly HashSet<string> _collapsedCategories = new();
     private bool _failed;
 
     /// <summary>Raised when the player picks a marker; the runtime selects
@@ -54,11 +60,16 @@ internal sealed class PinPalettePanel
 
     public string? SelectedIconId => _selectedIconId;
 
+    /// <summary>The palette panel root, for the RC8-9 pointer guard.</summary>
+    public GameObject? PanelObject => _panel;
+
     /// <summary>Builds the palette onto the open large map when needed;
-    /// cheap after the first call, rebuilt automatically after teardown.</summary>
+    /// cheap after the first call, rebuilt automatically after teardown.
+    /// Opened from the toolbar's [Markers] action (#100) — the panel
+    /// starts hidden and docks at the shared right-edge position.</summary>
     public void EnsureBuilt()
     {
-        if (_failed || _toggleButton != null)
+        if (_failed || _panel != null)
         {
             return;
         }
@@ -73,27 +84,15 @@ internal sealed class PinPalettePanel
 
             GUIManager gui = GUIManager.Instance;
 
-            _toggleButton = gui.CreateButton(
-                AtlasStrings.Get("palette.toggle"),
-                largeRoot.transform,
-                new Vector2(1f, 0f), new Vector2(1f, 0f),
-                new Vector2(-110f, 128f), 170f, 30f);
-            _toggleButton.transform.localScale = Vector3.one * UiScale;
-            _toggleButton.GetComponent<Button>().onClick.AddListener(() =>
-            {
-                if (_panel != null)
-                {
-                    _panel.SetActive(!_panel.activeSelf);
-                }
-            });
-
+            // RC10 feedback 11: draggable, like every other CC surface.
             _panel = gui.CreateWoodpanel(
                 largeRoot.transform,
                 new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
-                new Vector2(-((PanelWidth * UiScale) / 2f) - 12f, 40f),
+                new Vector2(-((PanelWidth * UiScale) / 2f) - 30f, 0f),
                 PanelWidth, PanelHeight,
-                draggable: false);
+                draggable: true);
             _panel.transform.localScale = Vector3.one * UiScale;
+            _panel.SetActive(false);
 
             Font font = gui.AveriaSerifBold;
             var labelColor = new Color(0.9f, 0.8f, 0.6f, 1f);
@@ -116,13 +115,73 @@ internal sealed class PinPalettePanel
                 .GetComponent<Text>();
             _status.alignment = TextAnchor.UpperCenter;
 
-            _listRoot = new GameObject("CCPaletteList", typeof(RectTransform));
-            _listRoot.transform.SetParent(_panel.transform, worldPositionStays: false);
-            var listRect = (RectTransform)_listRoot.transform;
-            listRect.anchorMin = Vector2.zero;
-            listRect.anchorMax = Vector2.one;
-            listRect.offsetMin = Vector2.zero;
-            listRect.offsetMax = Vector2.zero;
+            // RC10 feedback 11: the marker list lives in a scroll view, so
+            // the palette can never overflow the screen no matter how many
+            // markers the registry grows.
+            float listHeight = PanelHeight - ListTop - ListBottomMargin;
+            GameObject scrollRoot = gui.CreateScrollView(
+                _panel.transform,
+                showHorizontalScrollbar: false, showVerticalScrollbar: true,
+                handleSize: 8f, handleDistanceToBorder: 2f,
+                GUIManager.Instance.ValheimScrollbarHandleColorBlock,
+                new Color(0f, 0f, 0f, 0.35f),
+                PanelWidth - 20f, listHeight);
+            var scrollRect = (RectTransform)scrollRoot.transform;
+            scrollRect.anchorMin = new Vector2(0.5f, 1f);
+            scrollRect.anchorMax = new Vector2(0.5f, 1f);
+            scrollRect.pivot = new Vector2(0.5f, 1f);
+            scrollRect.anchoredPosition = new Vector2(0f, -ListTop);
+
+            Transform scrollView = scrollRoot.transform.Find("Scroll View");
+            _scroll = scrollView != null ? scrollView.GetComponent<ScrollRect>() : null;
+            if (_scroll == null)
+            {
+                throw new InvalidOperationException("Jötunn scroll view layout changed; palette cannot build.");
+            }
+
+            // RC13 polish 2: the wheel step ships at PaletteScrollTuning's
+            // multiple of the stock sensitivity (owner: RC12 scrolled too
+            // slowly). Bounds and the RC11 map-zoom wheel guard are
+            // untouched.
+            _scroll.scrollSensitivity = PaletteScrollTuning.Scaled(_scroll.scrollSensitivity);
+
+            // The scroll chrome ships an opaque black backdrop; soften it so
+            // the wood panel shows through.
+            var backdrop = scrollView!.GetComponent<Image>();
+            if (backdrop != null)
+            {
+                backdrop.color = new Color(0f, 0f, 0f, 0.25f);
+            }
+
+            // Rows are positioned manually (same math as RC8); the stock
+            // vertical layout group would fight that.
+            GameObject content = _scroll.content != null ? _scroll.content.gameObject : null!;
+            if (content == null)
+            {
+                Transform found = scrollView.Find("Viewport/Content");
+                content = found != null ? found.gameObject : throw new InvalidOperationException(
+                    "Jötunn scroll view content missing; palette cannot build.");
+                _scroll.content = (RectTransform)found!;
+            }
+
+            foreach (var component in content.GetComponents<UnityEngine.UI.LayoutGroup>())
+            {
+                UnityEngine.Object.DestroyImmediate(component);
+            }
+
+            var fitter = content.GetComponent<ContentSizeFitter>();
+            if (fitter != null)
+            {
+                UnityEngine.Object.DestroyImmediate(fitter);
+            }
+
+            var contentRect = (RectTransform)content.transform;
+            contentRect.anchorMin = new Vector2(0f, 1f);
+            contentRect.anchorMax = new Vector2(1f, 1f);
+            contentRect.pivot = new Vector2(0.5f, 1f);
+            contentRect.offsetMin = new Vector2(0f, contentRect.offsetMin.y);
+            contentRect.offsetMax = new Vector2(0f, contentRect.offsetMax.y);
+            _listRoot = content;
 
             RebuildList();
         }
@@ -132,21 +191,42 @@ internal sealed class PinPalettePanel
         }
     }
 
-    /// <summary>Master visibility (EnhancedPinPalette setting / compat
-    /// fallback). Hiding also clears any armed selection.</summary>
-    public void SetVisible(bool visible)
-    {
-        if (_toggleButton != null && _toggleButton.activeSelf != visible)
-        {
-            _toggleButton.SetActive(visible);
-        }
+    public bool IsVisible => _panel != null && _panel.activeSelf;
 
-        if (!visible && _panel != null && _panel.activeSelf)
+    public void Toggle()
+    {
+        if (_panel != null)
+        {
+            _panel.SetActive(!_panel.activeSelf);
+        }
+    }
+
+    public void Hide()
+    {
+        if (_panel != null && _panel.activeSelf)
         {
             _panel.SetActive(false);
         }
+    }
 
-        if (!visible && _selectedIconId is not null)
+    /// <summary>Escape closes the palette like every other major surface
+    /// (#100). Call every tick; a closed large map hides the panel with its
+    /// root, so only Escape needs handling here.</summary>
+    public void HandleFrame()
+    {
+        if (IsVisible && Input.GetKeyDown(KeyCode.Escape) && !CcTextFocus.EscapeShouldOnlyBlur())
+        {
+            Hide();
+        }
+    }
+
+    /// <summary>Called when the enhanced palette becomes unavailable
+    /// (setting off, conflicting pin manager, failure): hides the panel
+    /// and clears any armed selection.</summary>
+    public void SetUnavailable()
+    {
+        Hide();
+        if (_selectedIconId is not null)
         {
             _selectedIconId = null;
             SelectionCleared?.Invoke();
@@ -175,11 +255,11 @@ internal sealed class PinPalettePanel
     /// by the owner via SelectionCleared flows.</summary>
     public void Reset()
     {
-        _toggleButton = null;
         _panel = null;
         _search = null;
         _status = null;
         _listRoot = null;
+        _scroll = null;
     }
 
     private void RebuildList()
@@ -200,8 +280,7 @@ internal sealed class PinPalettePanel
             GUIManager gui = GUIManager.Instance;
             Font font = gui.AveriaSerifBold;
             var headerColor = new Color(0.8f, 0.7f, 0.5f, 1f);
-            float y = -108f;
-            int rows = 0;
+            float y = -4f;
 
             string query = _search != null ? _search.text.Trim() : "";
             if (query.Length == 0)
@@ -220,41 +299,60 @@ internal sealed class PinPalettePanel
                     AddHeader(gui, font, headerColor, AtlasStrings.Get("palette.recent"), ref y);
                     foreach (IconRegistry.IconDefinition definition in recentDefinitions)
                     {
-                        if (rows >= MaxRows)
-                        {
-                            break;
-                        }
-
                         AddIconRow(gui, definition, ref y);
-                        rows++;
                     }
                 }
 
-                AddHeader(gui, font, headerColor, AtlasStrings.Get("palette.all"), ref y);
+                // Collapsible category sections in a scrolling list (RC10
+                // feedback 11): every marker is reachable, nothing is
+                // capped away, and big sections fold out of the way.
+                var seenCategories = new List<string>();
                 foreach (IconRegistry.IconDefinition definition in IconRegistry.All)
                 {
-                    if (rows >= MaxRows)
+                    if (!seenCategories.Contains(definition.DefaultCategory))
                     {
-                        break;
+                        seenCategories.Add(definition.DefaultCategory);
+                    }
+                }
+
+                foreach (string category in seenCategories)
+                {
+                    int count = 0;
+                    foreach (IconRegistry.IconDefinition definition in IconRegistry.All)
+                    {
+                        if (definition.DefaultCategory == category)
+                        {
+                            count++;
+                        }
                     }
 
-                    AddIconRow(gui, definition, ref y);
-                    rows++;
+                    bool collapsed = _collapsedCategories.Contains(category);
+                    AddCategoryHeader(gui, category, count, collapsed, ref y);
+                    if (collapsed)
+                    {
+                        continue;
+                    }
+
+                    foreach (IconRegistry.IconDefinition definition in IconRegistry.All)
+                    {
+                        if (definition.DefaultCategory == category)
+                        {
+                            AddIconRow(gui, definition, ref y);
+                        }
+                    }
                 }
             }
             else
             {
+                // Search flattens the grouping and ignores collapse state.
                 foreach (IconRegistry.IconDefinition definition in IconRegistry.Search(query))
                 {
-                    if (rows >= MaxRows)
-                    {
-                        break;
-                    }
-
                     AddIconRow(gui, definition, ref y);
-                    rows++;
                 }
             }
+
+            var contentRect = (RectTransform)_listRoot.transform;
+            contentRect.sizeDelta = new Vector2(contentRect.sizeDelta.x, Mathf.Max(-y + 6f, 10f));
         }
         catch (Exception exception)
         {
@@ -272,6 +370,33 @@ internal sealed class PinPalettePanel
         y -= 18f;
     }
 
+    /// <summary>A clickable section header that folds its category.</summary>
+    private void AddCategoryHeader(GUIManager gui, string category, int count, bool collapsed, ref float y)
+    {
+        GameObject header = gui.CreateButton(
+            $"{(collapsed ? "▸" : "▾")} {category} ({count})",
+            _listRoot!.transform,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, y),
+            RowWidth, 20f);
+        Text label = header.GetComponentInChildren<Text>();
+        if (label != null)
+        {
+            label.fontSize = 11;
+            label.color = new Color(0.85f, 0.75f, 0.55f, 1f);
+        }
+
+        header.GetComponent<Button>().onClick.AddListener(() =>
+        {
+            if (!_collapsedCategories.Remove(category))
+            {
+                _collapsedCategories.Add(category);
+            }
+
+            RebuildList();
+        });
+        y -= 23f;
+    }
+
     private void AddIconRow(GUIManager gui, IconRegistry.IconDefinition definition, ref float y)
     {
         bool selected = string.Equals(definition.Id, _selectedIconId, StringComparison.Ordinal);
@@ -281,7 +406,8 @@ internal sealed class PinPalettePanel
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, y),
             RowWidth, RowHeight);
 
-        if (MinimapReflection.TryGetPinSprite(definition.VanillaType, out Sprite? sprite))
+        Sprite? sprite = CcIconSprites.TryGet(definition.Id, out Sprite ccSprite) ? ccSprite : null;
+        if (sprite != null || MinimapReflection.TryGetPinSprite(definition.VanillaType, out sprite))
         {
             var previewHolder = new GameObject("CCPalettePreview", typeof(RectTransform), typeof(Image));
             previewHolder.transform.SetParent(row.transform, worldPositionStays: false);
@@ -341,12 +467,7 @@ internal sealed class PinPalettePanel
             _panel.SetActive(false);
         }
 
-        if (_toggleButton != null)
-        {
-            _toggleButton.SetActive(false);
-        }
-
-        _log.LogError($"Enhanced pin palette failed and was disabled for this session (vanilla pin selector remains available): {exception}");
+        _log.LogError($"Enhanced pin palette failed and was disabled for this session (vanilla pin selector remains available): {SafeLogText.Describe(exception)}");
     }
 
     /// <summary>True once the palette has failed; the runtime restores the

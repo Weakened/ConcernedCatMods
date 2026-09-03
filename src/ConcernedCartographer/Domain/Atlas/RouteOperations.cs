@@ -104,6 +104,15 @@ internal sealed class RouteOperations
             }
         });
 
+        if (runs.Count == 0)
+        {
+            // RC12 blocker 2: erasing the LAST of a route's ink tombstones
+            // the route instead of leaving a ghost zero-point entry in the
+            // list. The snapshot above restores both points and liveness on
+            // undo.
+            _store.Delete(id);
+        }
+
         for (int index = 1; index < runs.Count; index++)
         {
             List<RoadPoint> run = runs[index];

@@ -53,3 +53,6 @@ Desktop.ini
 # Local Thunderstore service tokens or generated manifests
 TCLI_AUTH_TOKEN*
 manifest.json
+
+# Claude Code local session state (worktrees must never become gitlinks)
+.claude/

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using BepInEx.Logging;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 
 namespace TheConcernedCat.ConcernedCartographer.Runtime;
 
@@ -198,20 +199,22 @@ internal sealed class SyncTransport
             Player.m_localPlayer?.Message(
                 MessageHud.MessageType.TopLeft,
                 AtlasStrings.Format("hud.syncReceived", authorName));
-            _log.LogInfo($"Atlas share received from {authorName} ({pins.Pins.Count} pin(s), {routes.Routes.Count} route(s), " +
-                $"{pins.MalformedRows + routes.MalformedRows} malformed row(s) skipped).");
+            // Privacy audit (CC-098): the author name is a player name — the
+            // HUD message above names them, the log keeps counts only.
+            _log.LogInfo($"Atlas share received: {pins.Pins.Count} pin(s), {routes.Routes.Count} route(s), " +
+                $"{pins.MalformedRows + routes.MalformedRows} malformed row(s) skipped.");
         }
         catch (Exception exception)
         {
             // A hostile envelope must never take the transport down silently
             // forever; log and keep listening, but disable after repeats.
-            _log.LogWarning($"Failed to read an atlas share: {exception.Message}");
+            _log.LogWarning($"Failed to read an atlas share: {SafeLogText.Brief(exception)}");
         }
     }
 
     private void Disable(Exception exception)
     {
         _disabledForSession = true;
-        _log.LogError($"Sync transport failed and was disabled for this session: {exception}");
+        _log.LogError($"Sync transport failed and was disabled for this session: {SafeLogText.Describe(exception)}");
     }
 }
