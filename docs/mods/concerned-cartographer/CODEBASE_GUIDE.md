@@ -1136,7 +1136,7 @@ Loads `cartographer-strings.tsv` overrides into `AtlasStrings` and can write a t
 
 ### `Persistence/AtlasBackupTools.cs` (v0.8)
 
-`cc_atlas backup/backups/restore <n>` — timestamped snapshot folders of the whole atlas (which double as the export/import format), pre-restore safety backup plus journal clearing, and `cc_atlas support`, a sanitized report (versions, settings, counts, sizes — never positions, names or notes).
+`cc_atlas backup/backups/restore <n>` — timestamped snapshot folders of the whole atlas (which double as the export/import format), pre-restore safety backup plus journal clearing, and `cc_atlas support`, a sanitized report (versions, settings, counts, sizes — never positions, names, notes, world identifiers, or file paths; content lines come from the pure `SupportReportComposer`, whose signature cannot receive the world UID, with every line scrubbed through `CrashReportSanitizer` as defense in depth).
 
 ## 11. Runtime commands and scanning
 

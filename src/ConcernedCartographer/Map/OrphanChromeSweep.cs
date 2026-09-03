@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -99,7 +100,9 @@ internal sealed class OrphanChromeSweep
         }
         catch (Exception exception)
         {
-            LastDiagnostics = $"sweep failed: {exception.Message}";
+            // LastDiagnostics is echoed into the log by the runtime, so the
+            // exception text follows the CC-098 scrubbing contract.
+            LastDiagnostics = $"sweep failed: {SafeLogText.Brief(exception)}";
         }
     }
 

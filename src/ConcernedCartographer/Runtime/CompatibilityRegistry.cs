@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BepInEx.Bootstrap;
 using BepInEx.Logging;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 
 namespace TheConcernedCat.ConcernedCartographer.Runtime;
 
@@ -88,7 +89,7 @@ internal sealed class CompatibilityRegistry
         }
         catch (Exception exception)
         {
-            log.LogWarning($"Compatibility detection failed harmlessly: {exception.Message}");
+            log.LogWarning($"Compatibility detection failed harmlessly: {SafeLogText.Brief(exception)}");
         }
     }
 

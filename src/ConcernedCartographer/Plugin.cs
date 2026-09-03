@@ -1,5 +1,6 @@
 using BepInEx;
 using Jotunn.Managers;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using TheConcernedCat.ConcernedCartographer.Runtime;
 
 namespace TheConcernedCat.ConcernedCartographer;
@@ -31,7 +32,7 @@ public sealed class Plugin : BaseUnityPlugin
         catch (System.Exception exception)
         {
             _crashHub = null;
-            Logger.LogWarning($"Crash reporting unavailable this session: {exception.Message}");
+            Logger.LogWarning($"Crash reporting unavailable this session: {SafeLogText.Brief(exception)}");
         }
 
         _runtime = new CartographerRuntime(settings, Logger);
@@ -165,7 +166,7 @@ public sealed class Plugin : BaseUnityPlugin
         }
         catch (System.Exception exception)
         {
-            Logger.LogWarning($"Could not record environment versions: {exception.Message}");
+            Logger.LogWarning($"Could not record environment versions: {SafeLogText.Brief(exception)}");
         }
     }
 

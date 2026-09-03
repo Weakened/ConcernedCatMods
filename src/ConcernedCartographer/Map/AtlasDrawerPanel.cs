@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BepInEx.Logging;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -466,7 +467,7 @@ internal sealed class AtlasDrawerPanel
             _panel.SetActive(false);
         }
 
-        _log.LogError($"Atlas drawer failed and was disabled for this session (cc_atlas console remains available): {exception}");
+        _log.LogError($"Atlas drawer failed and was disabled for this session (cc_atlas console remains available): {SafeLogText.Describe(exception)}");
     }
 
     private static string Truncate(string text, int max)

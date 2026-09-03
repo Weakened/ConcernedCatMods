@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BepInEx.Logging;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -115,7 +116,7 @@ internal sealed class MapUiCoordinator
         }
         catch (Exception exception)
         {
-            _log.LogWarning($"Map surface switch failed: {exception.Message}");
+            _log.LogWarning($"Map surface switch failed: {SafeLogText.Brief(exception)}");
         }
     }
 
@@ -249,7 +250,7 @@ internal sealed class MapUiCoordinator
         catch (Exception exception)
         {
             _failed = true;
-            _log.LogError($"Map toolbar failed and is disabled for this session (hotkeys still work): {exception}");
+            _log.LogError($"Map toolbar failed and is disabled for this session (hotkeys still work): {SafeLogText.Describe(exception)}");
         }
     }
 
@@ -380,7 +381,7 @@ internal sealed class MapUiCoordinator
         catch (Exception exception)
         {
             _failed = true;
-            _log.LogError($"Map toolbar layout failed and is disabled for this session: {exception}");
+            _log.LogError($"Map toolbar layout failed and is disabled for this session: {SafeLogText.Describe(exception)}");
         }
     }
 
@@ -408,7 +409,7 @@ internal sealed class MapUiCoordinator
         catch (Exception exception)
         {
             _failed = true;
-            _log.LogError($"Map hint failed and is disabled for this session: {exception}");
+            _log.LogError($"Map hint failed and is disabled for this session: {SafeLogText.Describe(exception)}");
         }
     }
 
@@ -442,7 +443,7 @@ internal sealed class MapUiCoordinator
         catch (Exception exception)
         {
             _failed = true;
-            _log.LogError($"Map context action failed and is disabled for this session: {exception}");
+            _log.LogError($"Map context action failed and is disabled for this session: {SafeLogText.Describe(exception)}");
         }
     }
 

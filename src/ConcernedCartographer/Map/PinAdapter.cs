@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BepInEx.Logging;
 using HarmonyLib;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using TheConcernedCat.ConcernedCartographer.Roads;
 using UnityEngine;
 
@@ -707,7 +708,7 @@ internal sealed class PinAdapter
         // RC15: a broken adapter is not a bound session — explicit deletes
         // may not tombstone until a clean reconcile completes again.
         _sessionBound = false;
-        _log.LogError($"Pin adapter failed and was disabled for this session (store data is safe): {exception}");
+        _log.LogError($"Pin adapter failed and was disabled for this session (store data is safe): {SafeLogText.Describe(exception)}");
     }
 
     private static AccessTools.FieldRef<Minimap, List<Minimap.PinData>>? BuildPinsFieldRef()

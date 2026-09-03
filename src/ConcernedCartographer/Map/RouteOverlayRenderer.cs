@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BepInEx.Logging;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using TheConcernedCat.ConcernedCartographer.Roads;
 using TheConcernedCat.ConcernedCartographer.Runtime;
 using UnityEngine;
@@ -104,7 +105,7 @@ internal sealed class RouteOverlayRenderer
             }
             catch (Exception exception)
             {
-                _rateLimited.Warning("route-toggle", $"Could not toggle the route overlay: {exception.Message}");
+                _rateLimited.Warning("route-toggle", $"Could not toggle the route overlay: {SafeLogText.Brief(exception)}");
             }
         }
 
@@ -132,7 +133,7 @@ internal sealed class RouteOverlayRenderer
         }
         catch (Exception exception)
         {
-            _rateLimited.Warning("route-overlay-get", $"Could not resolve the route overlay: {exception.Message}");
+            _rateLimited.Warning("route-overlay-get", $"Could not resolve the route overlay: {SafeLogText.Brief(exception)}");
             return false;
         }
     }
@@ -229,7 +230,7 @@ internal sealed class RouteOverlayRenderer
         }
         catch (Exception exception)
         {
-            _rateLimited.Warning("route-redraw", $"Could not redraw routes: {exception.Message}");
+            _rateLimited.Warning("route-redraw", $"Could not redraw routes: {SafeLogText.Brief(exception)}");
         }
     }
 

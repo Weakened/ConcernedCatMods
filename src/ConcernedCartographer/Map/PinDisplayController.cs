@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using UnityEngine;
 
 namespace TheConcernedCat.ConcernedCartographer.Map;
@@ -256,7 +257,7 @@ internal sealed class PinDisplayController
     private void Disable(PinStore store, Exception exception)
     {
         _disabledForSession = true;
-        _log.LogError($"Pin display controller failed and was disabled for this session (all pins will render plainly): {exception}");
+        _log.LogError($"Pin display controller failed and was disabled for this session (all pins will render plainly): {SafeLogText.Describe(exception)}");
         try
         {
             ClearClusterMarkers();

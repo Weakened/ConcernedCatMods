@@ -2,6 +2,7 @@ using System;
 using BepInEx.Logging;
 using HarmonyLib;
 using UnityEngine;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 
 namespace TheConcernedCat.ConcernedCartographer.Roads;
 
@@ -45,7 +46,7 @@ internal sealed class ConstructionCapture : IDisposable
         catch (Exception exception)
         {
             _harmony = null;
-            _log.LogError($"Construction capture could not be installed and is disabled for this session: {exception}");
+            _log.LogError($"Construction capture could not be installed and is disabled for this session: {SafeLogText.Describe(exception)}");
         }
     }
 
@@ -90,7 +91,7 @@ internal sealed class ConstructionCapture : IDisposable
             // Fail closed: never let a capture bug interfere with terrain
             // placement, and never spam the log from a hot path.
             active._disabledForSession = true;
-            active._log.LogError($"Construction capture failed and is disabled for this session: {exception}");
+            active._log.LogError($"Construction capture failed and is disabled for this session: {SafeLogText.Describe(exception)}");
         }
     }
 

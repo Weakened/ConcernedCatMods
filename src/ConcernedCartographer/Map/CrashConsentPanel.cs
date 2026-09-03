@@ -2,6 +2,7 @@ using System;
 using BepInEx.Logging;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using TheConcernedCat.ConcernedCartographer.Runtime;
 using UnityEngine;
 using UnityEngine.UI;
@@ -135,7 +136,7 @@ internal sealed class CrashConsentPanel
         }
         catch (Exception exception)
         {
-            _log.LogWarning($"Could not persist the crash-reporting choice: {exception.Message}");
+            _log.LogWarning($"Could not persist the crash-reporting choice: {SafeLogText.Brief(exception)}");
         }
 
         Hide();
@@ -153,7 +154,7 @@ internal sealed class CrashConsentPanel
         }
         catch (Exception exception)
         {
-            _log.LogWarning($"Could not persist the crash-reporting choice: {exception.Message}");
+            _log.LogWarning($"Could not persist the crash-reporting choice: {SafeLogText.Brief(exception)}");
         }
 
         UpdateStateWidgets();
@@ -305,6 +306,6 @@ internal sealed class CrashConsentPanel
             _panel.SetActive(false);
         }
 
-        _log.LogError($"Crash-reporting consent panel failed and was disabled for this session (reporting stays off until answered elsewhere): {exception}");
+        _log.LogError($"Crash-reporting consent panel failed and was disabled for this session (reporting stays off until answered elsewhere): {SafeLogText.Describe(exception)}");
     }
 }

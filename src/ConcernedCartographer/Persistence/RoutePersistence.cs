@@ -5,6 +5,7 @@ using System.IO;
 using BepInEx;
 using BepInEx.Logging;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 
 namespace TheConcernedCat.ConcernedCartographer.Persistence;
 
@@ -50,13 +51,13 @@ internal sealed class RoutePersistence
             RouteCodec.ParseResult result = RouteCodec.Parse(lines);
             if (result.MalformedRows > 0)
             {
-                _log.LogWarning($"Skipped {result.MalformedRows} malformed route row(s) for world {worldUid}.");
+                _log.LogWarning($"Skipped {result.MalformedRows} malformed route row(s) for this world.");
             }
 
             var store = new RouteStore(result.Routes);
             if (replayed)
             {
-                _log.LogInfo($"Recovered route journal for world {worldUid}: {result.Routes.Count} route(s) after replay.");
+                _log.LogInfo($"Recovered route journal for this world: {result.Routes.Count} route(s) after replay.");
                 Save(worldUid, store, force: true);
             }
 
@@ -64,7 +65,7 @@ internal sealed class RoutePersistence
         }
         catch (Exception exception)
         {
-            _log.LogError($"Could not load routes for world {worldUid}: {exception}");
+            _log.LogError($"Could not load routes for this world: {SafeLogText.Describe(exception)}");
             return new RouteStore();
         }
     }
@@ -96,7 +97,7 @@ internal sealed class RoutePersistence
         }
         catch (Exception exception)
         {
-            _rateLimited.Error("route-journal", $"Could not append the route journal: {exception}");
+            _rateLimited.Error("route-journal", $"Could not append the route journal: {SafeLogText.Describe(exception)}");
         }
     }
 
@@ -129,7 +130,7 @@ internal sealed class RoutePersistence
         }
         catch (Exception exception)
         {
-            _rateLimited.Error("route-save", $"Could not save routes for world {worldUid}: {exception}");
+            _rateLimited.Error("route-save", $"Could not save routes for this world: {SafeLogText.Describe(exception)}");
             TryDelete(temporaryPath);
             return false;
         }

@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using BepInEx;
 using BepInEx.Logging;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using TheConcernedCat.ConcernedCartographer.Roads;
 
 namespace TheConcernedCat.ConcernedCartographer.Persistence;
@@ -36,19 +37,19 @@ internal sealed class TerrainIntentPersistence
             if (result.UnsupportedVersion)
             {
                 _log.LogWarning(
-                    $"Terrain-intent sidecar {path} has an unsupported header (written by a newer version?); " +
+                    "This world's terrain-intent sidecar has an unsupported header (written by a newer version?); " +
                     "starting with no exclusions for this session. The file is rewritten in v1 on the next save.");
             }
             else if (result.MalformedRows > 0)
             {
-                _log.LogWarning($"Skipped {result.MalformedRows} malformed terrain-intent row(s) in {path}.");
+                _log.LogWarning($"Skipped {result.MalformedRows} malformed terrain-intent row(s) in this world's sidecar.");
             }
 
             return result.Mask;
         }
         catch (Exception exception)
         {
-            _log.LogError($"Could not load terrain intent from {path}: {exception}");
+            _log.LogError($"Could not load terrain intent from disk: {SafeLogText.Describe(exception)}");
             return new TerrainIntentMask();
         }
     }
@@ -75,7 +76,7 @@ internal sealed class TerrainIntentPersistence
         }
         catch (Exception exception)
         {
-            _rateLimited.Error("terrain-intent-save", $"Could not save terrain intent to {path}: {exception}");
+            _rateLimited.Error("terrain-intent-save", $"Could not save terrain intent to disk: {SafeLogText.Describe(exception)}");
             TryDelete(temporaryPath);
             return false;
         }

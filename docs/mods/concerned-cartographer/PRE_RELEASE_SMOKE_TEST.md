@@ -19,9 +19,16 @@ marked **BLOCKS** must pass before publication; others are record-and-ship.
 > at vanilla's map-data load), hardens the road/route full redraws
 > against texture teardown between resolve and write (the RC13 Sentry
 > NRE), and adds privacy-safe lifecycle diagnostics (release+commit, map
-> session generations, overlay/reconcile/rebind aggregates). Same public
-> identity: **0.9.0 Public Beta**; earlier RC ZIPs are retired — do not
-> test, tag, or upload them. **Do NOT restart the full 2.5–4 h
+> session generations, overlay/reconcile/rebind aggregates). The RC15
+> build was then revised once more after the CC-098 privacy audit found
+> identifier leakage in the older log lines and the support report: the
+> revised build scrubs EVERY Concerned Cartographer log line and the
+> whole support report of world UIDs, file paths, machine usernames,
+> coordinates, player/pin/route names, and exception-embedded
+> identifiers (row 4 below verifies this on the live log). Same public
+> identity: **0.9.0 Public Beta**; earlier RC ZIPs — including the
+> pre-audit RC15 build e9615b00 — are retired; do not test, tag, or
+> upload them. **Do NOT restart the full 2.5–4 h
 > checklist.** Run the NEW section **R11 (RC15 relog persistence)**
 > first on the exact RC15 0.9.0 beta ZIP named in RELEASE_DOSSIER.md,
 > re-run R10 rows 1/2/5 on the same ZIP (their surfaces changed), then
@@ -76,10 +83,17 @@ owner's Sentry console open.
    lifecycle lines (session reset, overlay resolved with texture
    liveness/size, full redraw complete with stroke count), and
    "Pin reconcile (…)" aggregate lines with claim/add/rebind counts.
-   None of the NEW lines contain world/character/player/server names or
-   IDs, coordinates, pin or route names, file paths, or IPs. No CC
-   Error line and no new Sentry event is produced by the whole
-   sequence. `cc_atlas support` output remains sanitized. **Then set
+   **Privacy (CC-098 audit)**: search the WHOLE LogOutput.log — no
+   Concerned Cartographer line (old or new, Info/Warning/Error alike)
+   contains the world UID (grep the log for your `<uid>` from the
+   sidecar file name: zero hits in CC lines), any absolute file path or
+   machine username, coordinates, player/world/server names, or pin or
+   route names ("Road atlas ready", persistence, sync, Quick Pin, and
+   terrain lines are aggregate-only now). Then run `cc_atlas support`
+   and open support-report.txt: it has NO `world-uid` line, no paths,
+   no names, no coordinates — only versions, settings, row counts,
+   sizes in KB, and the backup count. No CC Error line and no new
+   Sentry event is produced by the whole sequence. **Then set
    DebugLogging back to false (its default) before continuing.**
 5. **Redraw teardown hardening**: while flipping road/route layer
    toggles, relog and world-switch a few times in quick succession.
@@ -824,7 +838,7 @@ evidence and STOP the human test.
 | 2.3 | Recorded road | Cultivate/reset over part of it; pave over a dirt stretch | Covered ink vanishes; kind converts without doubles | Before/after screenshots | Yes |
 | 2.4 | Recorded roads | `cc_roads delete` then `cc_roads rebuild` | Road returns from terrain paint; unexplored regions stay empty | Log + screenshot | Yes |
 | 2.5 | Console | Run the cc_roads operation set (status/kind/hide/unhide/split/join/undo) | Summaries correct; map updates; undo reverts | Console screenshot | No |
-| 2.6 | Near a recorded road | `cc_roads align`, inspect map, then `cc_roads align clear` (DEF-v1.0-002 regression) | Every "CC align" dot pin sits on its magenta cross within one texel (~12 m) at all probe positions incl. the latest dirt point; clear removes the pins | "Alignment probe" log block + zoomed screenshot | Yes |
+| 2.6 | Near a recorded road | `cc_roads align`, inspect map, then `cc_roads align clear` (DEF-v1.0-002 regression) | Every "CC align" dot pin sits on its magenta cross within one texel (~12 m) at all probe positions incl. the latest dirt point; clear removes the pins | Console probe table screenshot + the coordinate-free "cc_roads align: ALIGNMENT …" verdict log line (CC-098: probe rows with positions print to the console only) | Yes |
 
 ## 3. Pin Workbench (v0.3)
 
@@ -903,7 +917,7 @@ evidence and STOP the human test.
 | 9.1 | TCC-Compat (Pinnacle + MapRoutes) | Play 15 min using both mods and CC | No conflicts/errors; `cc_atlas compat` lists both with policies; hotkey on a vanilla pin shows read-only info (Pinnacle present) | LogOutput.log | Yes |
 | 9.2 | Any world with data | `cc_atlas backup`, delete a few pins, `cc_atlas restore 1`, relog | Atlas back to the snapshot; a pre-restore backup also exists | Console output | Yes |
 | 9.3 | 9.2 | Copy a backup folder to another PC/profile and restore there | Atlas travels (export/import path) | Console output | No |
-| 9.4 | Any world | `cc_atlas support`; open the file | Only versions/settings/counts/sizes — no coordinates, names, or notes | The file | Yes |
+| 9.4 | Any world | `cc_atlas support`; open the file | Only versions/settings/counts/sizes — no coordinates, names, notes, world UIDs, or file paths (no `world-uid` line at all) | The file | Yes |
 | 9.5 | Large real atlas | Map open/pan/zoom/search feel at your biggest world | No perceptible hitching | Subjective + clip | Yes |
 
 ## 10. Upgrade, migration, and uninstall (v0.9/v1.0)

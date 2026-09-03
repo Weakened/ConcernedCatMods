@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BepInEx.Logging;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -466,7 +467,7 @@ internal sealed class PinPalettePanel
             _panel.SetActive(false);
         }
 
-        _log.LogError($"Enhanced pin palette failed and was disabled for this session (vanilla pin selector remains available): {exception}");
+        _log.LogError($"Enhanced pin palette failed and was disabled for this session (vanilla pin selector remains available): {SafeLogText.Describe(exception)}");
     }
 
     /// <summary>True once the palette has failed; the runtime restores the

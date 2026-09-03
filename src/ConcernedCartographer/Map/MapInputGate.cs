@@ -2,6 +2,7 @@ using System;
 using BepInEx.Logging;
 using HarmonyLib;
 using UnityEngine;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 
 namespace TheConcernedCat.ConcernedCartographer.Map;
 
@@ -75,7 +76,7 @@ internal static class MapInputGate
         }
         catch (Exception exception)
         {
-            log.LogWarning($"Map input gate unavailable (route drawing may also toggle pins under the cursor): {exception.Message}");
+            log.LogWarning($"Map input gate unavailable (route drawing may also toggle pins under the cursor): {SafeLogText.Brief(exception)}");
         }
     }
 

@@ -4,6 +4,7 @@ using System.Globalization;
 using BepInEx.Logging;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -225,7 +226,9 @@ internal sealed class PinWorkbenchPanel
             ReadWidgetsIntoBuffer();
             if (_controller.TryApply(_operations, out string message))
             {
-                _log.LogInfo($"Workbench: {message}");
+                // Privacy audit (CC-098): the controller message can echo
+                // user-typed field text; the log records the outcome only.
+                _log.LogInfo($"Workbench: applied changes to {_controller.TargetId}.");
                 Show(false);
                 _onApplied?.Invoke();
             }
@@ -839,7 +842,7 @@ internal sealed class PinWorkbenchPanel
         // Release only a block this panel actually owns: an unconditional
         // BlockInput(false) here could steal another mod's request.
         _inputBlock.Release();
-        _log.LogError($"Workbench panel failed and was disabled for this session (cc_pins console remains available): {exception}");
+        _log.LogError($"Workbench panel failed and was disabled for this session (cc_pins console remains available): {SafeLogText.Describe(exception)}");
     }
 
     private static string Truncate(string text, int max)

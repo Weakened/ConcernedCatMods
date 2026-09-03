@@ -1,6 +1,7 @@
 using System;
 using BepInEx.Logging;
 using HarmonyLib;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 
 namespace TheConcernedCat.ConcernedCartographer.Map;
 
@@ -66,7 +67,7 @@ internal static class PlayerInputGate
         }
         catch (Exception exception)
         {
-            log.LogWarning($"Quick Pin input ownership unavailable: {exception.Message}");
+            log.LogWarning($"Quick Pin input ownership unavailable: {SafeLogText.Brief(exception)}");
             _harmony = null;
         }
     }

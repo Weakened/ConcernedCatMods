@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BepInEx.Logging;
 using UnityEngine;
 using UnityEngine.UI;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 
 namespace TheConcernedCat.ConcernedCartographer.Map;
 
@@ -79,7 +80,7 @@ internal sealed class OverlayPanelRelabel
         catch (Exception exception)
         {
             _missingLogged = true;
-            _log.LogWarning($"Could not rename the overlay panel label: {exception.Message}");
+            _log.LogWarning($"Could not rename the overlay panel label: {SafeLogText.Brief(exception)}");
         }
     }
 

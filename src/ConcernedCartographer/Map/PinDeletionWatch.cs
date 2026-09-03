@@ -1,6 +1,7 @@
 using System;
 using BepInEx.Logging;
 using HarmonyLib;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 
 namespace TheConcernedCat.ConcernedCartographer.Map;
 
@@ -71,7 +72,7 @@ internal static class PinDeletionWatch
         catch (Exception exception)
         {
             log.LogWarning(
-                $"Vanilla pin-delete detection unavailable ({exception.Message}); " +
+                $"Vanilla pin-delete detection unavailable ({SafeLogText.Brief(exception)}); " +
                 "vanilla-deleted managed markers will be restored by the atlas instead of tombstoned.");
             _harmony = null;
         }

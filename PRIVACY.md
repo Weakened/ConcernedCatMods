@@ -88,9 +88,15 @@ retries, and silent failure when offline.
 - Opt out (or never opt in): choose **No thanks** in the dialog, or set
   **CC Atlas → Privacy → Send anonymous crash reports** to off.
 - A crash-reporting alternative that shares nothing automatically:
-  `cc_atlas support` writes a sanitized report (versions, settings,
-  counts — never positions, names, or notes) you can attach to a GitHub
-  issue yourself.
+  `cc_atlas support` writes a sanitized report (versions, settings, row
+  counts, and sizes — never positions, names, notes, world identifiers,
+  or file paths) you can attach to a GitHub issue yourself.
+- The mod's own log lines follow the same discipline: no world UIDs,
+  file paths, machine usernames, coordinates, player or pin/route
+  names, or IPs — and exception text that reaches the log is scrubbed
+  by the same sanitizer as crash reports — so sharing the Concerned
+  Cartographer lines of `LogOutput.log` does not identify you or your
+  worlds.
 - Ordinary bugs and feature requests: the GitHub issue tracker —
   https://github.com/Weakened/ConcernedCatMods/issues
 - Privacy or crash-reporting questions, or anything you should not post

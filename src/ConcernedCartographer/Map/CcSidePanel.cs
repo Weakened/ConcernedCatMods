@@ -2,6 +2,7 @@ using System;
 using BepInEx.Logging;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -233,7 +234,7 @@ internal abstract class CcSidePanel
             _panel.SetActive(false);
         }
 
-        Log.LogError($"{GetType().Name} failed and was disabled for this session (console commands remain available): {exception}");
+        Log.LogError($"{GetType().Name} failed and was disabled for this session (console commands remain available): {SafeLogText.Describe(exception)}");
     }
 
     // ------------------------------------------------------------------

@@ -5,6 +5,7 @@ using System.IO;
 using BepInEx;
 using BepInEx.Logging;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 
 namespace TheConcernedCat.ConcernedCartographer.Persistence;
 
@@ -54,14 +55,14 @@ internal sealed class PinPersistence
             PinCodec.ParseResult result = PinCodec.Parse(lines);
             if (result.MalformedRows > 0)
             {
-                _log.LogWarning($"Skipped {result.MalformedRows} malformed pin row(s) for world {worldUid}.");
+                _log.LogWarning($"Skipped {result.MalformedRows} malformed pin row(s) for this world.");
             }
 
             var store = new PinStore(result.Pins);
             if (replayedJournal)
             {
                 _log.LogInfo(
-                    $"Recovered pin journal for world {worldUid}: {result.Pins.Count} pin(s) after replay " +
+                    $"Recovered pin journal for this world: {result.Pins.Count} pin(s) after replay " +
                     $"({result.SupersededRows} superseded row(s)); compacting into a fresh snapshot.");
                 Save(worldUid, store, force: true);
             }
@@ -70,7 +71,7 @@ internal sealed class PinPersistence
         }
         catch (Exception exception)
         {
-            _log.LogError($"Could not load pins for world {worldUid}: {exception}");
+            _log.LogError($"Could not load pins for this world: {SafeLogText.Describe(exception)}");
             return new PinStore();
         }
     }
@@ -100,7 +101,7 @@ internal sealed class PinPersistence
         }
         catch (Exception exception)
         {
-            _rateLimited.Error("pin-journal", $"Could not append the pin journal for world {_journalWorldUid}: {exception}");
+            _rateLimited.Error("pin-journal", $"Could not append the pin journal for this world: {SafeLogText.Describe(exception)}");
         }
     }
 
@@ -137,7 +138,7 @@ internal sealed class PinPersistence
         }
         catch (Exception exception)
         {
-            _rateLimited.Error("pin-save", $"Could not save pins for world {worldUid}: {exception}");
+            _rateLimited.Error("pin-save", $"Could not save pins for this world: {SafeLogText.Describe(exception)}");
             TryDelete(temporaryPath);
             return false;
         }

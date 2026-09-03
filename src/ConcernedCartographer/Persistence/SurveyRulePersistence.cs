@@ -3,6 +3,7 @@ using System.IO;
 using BepInEx;
 using BepInEx.Logging;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 
 namespace TheConcernedCat.ConcernedCartographer.Persistence;
 
@@ -32,7 +33,7 @@ internal sealed class SurveyRulePersistence
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(RulePath)!);
                 File.WriteAllLines(RulePath, SurveyRuleSet.Default().Serialize());
-                _log.LogInfo($"Wrote the starter survey rules to {RulePath}.");
+                _log.LogInfo("Wrote the starter survey rules to survey-rules.tsv.");
             }
             else
             {
@@ -42,7 +43,7 @@ internal sealed class SurveyRulePersistence
                 {
                     File.WriteAllLines(RulePath, SurveyRuleSet.Default().Serialize());
                     _log.LogInfo(
-                        $"Upgraded the untouched starter survey rules in {RulePath} to the v1 starter set " +
+                        "Upgraded the untouched starter survey rules (survey-rules.tsv) to the v1 starter set " +
                         "(edited files are never touched).");
                 }
             }
@@ -50,14 +51,14 @@ internal sealed class SurveyRulePersistence
             SurveyRuleSet rules = SurveyRuleSet.Parse(File.ReadAllLines(RulePath), out int malformed);
             if (malformed > 0)
             {
-                _log.LogWarning($"Skipped {malformed} malformed survey rule(s) in {RulePath}.");
+                _log.LogWarning($"Skipped {malformed} malformed survey rule(s) in survey-rules.tsv.");
             }
 
             return rules;
         }
         catch (Exception exception)
         {
-            _log.LogError($"Could not load survey rules; the survey stays inactive: {exception}");
+            _log.LogError($"Could not load survey rules; the survey stays inactive: {SafeLogText.Describe(exception)}");
             return new SurveyRuleSet();
         }
     }
@@ -75,7 +76,7 @@ internal sealed class SurveyRulePersistence
         }
         catch (Exception exception)
         {
-            _log.LogError($"Could not save the survey rules to {RulePath}: {exception}");
+            _log.LogError($"Could not save the survey rules to disk: {SafeLogText.Describe(exception)}");
             return false;
         }
     }

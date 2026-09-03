@@ -152,7 +152,7 @@ The tools edit only the mod's own atlas; they can never modify terrain or world 
 
 ## Feedback, privacy, and security
 
-Found a problem? Open an issue at https://github.com/Weakened/ConcernedCatMods/issues and attach the file from **[Settings] → support bundle** (or `cc_atlas support`) — it is sanitized by construction (versions, settings, and counts only; never positions, names, or notes). For security vulnerabilities, privacy questions, or logs you should not post publicly: **support@theconcernedcat.com**.
+Found a problem? Open an issue at https://github.com/Weakened/ConcernedCatMods/issues and attach the file from **[Settings] → support bundle** (or `cc_atlas support`) — it is sanitized by construction (versions, settings, and counts only; never positions, names, notes, world identifiers, or file paths). The mod's own log lines follow the same rule, so the Concerned Cartographer lines of `LogOutput.log` are safe to share too. For security vulnerabilities, privacy questions, or logs you should not post publicly: **support@theconcernedcat.com**.
 
 **Privacy**: everything the mod records stays in local files under your BepInEx config folder. Nothing is uploaded anywhere. Sharing happens only between players on your server, only for entities you explicitly scope, and only after the receiver reviews and applies it.
 

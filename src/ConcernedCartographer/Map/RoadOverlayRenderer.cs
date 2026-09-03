@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text;
 using BepInEx.Logging;
 using Jotunn.Managers;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using TheConcernedCat.ConcernedCartographer.Roads;
 using TheConcernedCat.ConcernedCartographer.Runtime;
 using UnityEngine;
@@ -176,7 +177,7 @@ internal sealed class RoadOverlayRenderer
         }
         catch (Exception exception)
         {
-            _rateLimited.Warning("overlay-toggle", $"Could not toggle the {kind} overlay: {exception.Message}");
+            _rateLimited.Warning("overlay-toggle", $"Could not toggle the {kind} overlay: {SafeLogText.Brief(exception)}");
         }
     }
 
@@ -224,7 +225,7 @@ internal sealed class RoadOverlayRenderer
         }
         catch (Exception exception)
         {
-            _rateLimited.Warning("overlay-get", $"Could not resolve the {kind} overlay: {exception.Message}");
+            _rateLimited.Warning("overlay-get", $"Could not resolve the {kind} overlay: {SafeLogText.Brief(exception)}");
             return false;
         }
     }
@@ -315,7 +316,7 @@ internal sealed class RoadOverlayRenderer
         }
         catch (Exception exception)
         {
-            _log.LogError($"Could not rebuild road map overlays: {exception}");
+            _log.LogError($"Could not rebuild road map overlays: {SafeLogText.Describe(exception)}");
         }
 
         _vectorLayer.MarkDataDirty();
@@ -351,7 +352,7 @@ internal sealed class RoadOverlayRenderer
         }
         catch (Exception exception)
         {
-            _log.LogWarning($"Could not draw calibration markers: {exception.Message}");
+            _log.LogWarning($"Could not draw calibration markers: {SafeLogText.Brief(exception)}");
         }
     }
 
@@ -363,7 +364,9 @@ internal sealed class RoadOverlayRenderer
         int centerY = Mathf.RoundToInt(coords.y);
         StampCrossAt(texture, size, centerX, centerY, color);
 
-        _log.LogInfo($"Calibration marker {label}: world ({world.x:0.#}, {world.z:0.#}) -> overlay pixel ({centerX}, {centerY}) of {size}.");
+        // Privacy audit (CC-098): the label already names the fixed probe
+        // constant, so the world pair (coordinate-shaped text) stays out.
+        _log.LogInfo($"Calibration marker {label}: overlay pixel ({centerX}, {centerY}) of {size}.");
     }
 
     private static void StampCrossAt(Texture2D texture, int size, int centerX, int centerY, Color32 color, int armTexels = 4)
@@ -441,7 +444,7 @@ internal sealed class RoadOverlayRenderer
                 }
                 catch (Exception exception)
                 {
-                    _log.LogWarning($"Alignment probe '{label}': could not add the native pin: {exception.Message}");
+                    _log.LogWarning($"Alignment probe '{label}': could not add the native pin: {SafeLogText.Brief(exception)}");
                 }
 
                 // The exact projection used by DrawSegment/DrawIntoBuffer.
@@ -492,12 +495,16 @@ internal sealed class RoadOverlayRenderer
                     $"ALIGNMENT {(maxResidual <= 1f ? "PASS" : "FAIL")}: max residual {maxResidual:0.00} texels");
 
             string report = table.ToString() + "\n" + context + "\n" + verdict;
-            _log.LogInfo("cc_roads align\n" + report);
+            // Privacy audit (CC-098): probe rows carry world coordinates
+            // (player position, latest road point) and print to the console
+            // only; the log keeps the coordinate-free verdict + projection
+            // context as the pass/fail evidence.
+            _log.LogInfo("cc_roads align: " + verdict + " (" + context + "). Probe rows are on the console; positions are never logged.");
             return report + "\n'cc_roads align clear' removes the markers.";
         }
         catch (Exception exception)
         {
-            _log.LogWarning($"Alignment probe failed: {exception}");
+            _log.LogWarning($"Alignment probe failed: {SafeLogText.Describe(exception)}");
             return "Alignment probe failed: " + exception.Message;
         }
     }
@@ -590,7 +597,7 @@ internal sealed class RoadOverlayRenderer
         catch (Exception exception)
         {
             // Every new sample retries this path, so keep the warning rate-limited.
-            _rateLimited.Warning("draw-segment", $"Could not draw an incremental road segment: {exception.Message}");
+            _rateLimited.Warning("draw-segment", $"Could not draw an incremental road segment: {SafeLogText.Brief(exception)}");
         }
 
         _vectorLayer.MarkDataDirty();

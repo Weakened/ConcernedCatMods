@@ -5,6 +5,7 @@ using System.IO;
 using BepInEx;
 using BepInEx.Logging;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 
 namespace TheConcernedCat.ConcernedCartographer.Persistence;
 
@@ -37,14 +38,14 @@ internal sealed class SurveyRejectedPersistence
                 SurveyRejectedCodec.Parse(File.ReadLines(path), out int malformed);
             if (malformed > 0)
             {
-                _log.LogWarning($"Skipped {malformed} malformed rejected-survey row(s) in {path}.");
+                _log.LogWarning($"Skipped {malformed} malformed rejected-survey row(s) in this world's sidecar.");
             }
 
             return entries;
         }
         catch (Exception exception)
         {
-            _log.LogError($"Could not load the rejected-survey list from {path}: {exception}");
+            _log.LogError($"Could not load the rejected-survey list from disk: {SafeLogText.Describe(exception)}");
             return new List<SurveyEngine.RejectedObservation>();
         }
     }
@@ -63,7 +64,7 @@ internal sealed class SurveyRejectedPersistence
         }
         catch (Exception exception)
         {
-            _rateLimited.Error("survey-rejected-save", $"Could not save the rejected-survey list to {path}: {exception}");
+            _rateLimited.Error("survey-rejected-save", $"Could not save the rejected-survey list to disk: {SafeLogText.Describe(exception)}");
             return false;
         }
     }

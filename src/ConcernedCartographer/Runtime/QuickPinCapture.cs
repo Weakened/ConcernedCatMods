@@ -1,6 +1,7 @@
 using System;
 using BepInEx.Logging;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using TheConcernedCat.ConcernedCartographer.Roads;
 using UnityEngine;
 
@@ -108,13 +109,15 @@ internal sealed class QuickPinCapture
             });
             created = pin;
 
-            _log.LogInfo($"Quick pin {pin.Id}: \"{suggestion.Name}\" ({suggestion.IconId}).");
+            // Privacy audit (CC-098): the suggested name is pin content and
+            // stays out of the log; the random id + icon id carry the trace.
+            _log.LogInfo($"Quick pin {pin.Id}: {suggestion.IconId}.");
             message = AtlasStrings.Format("hud.quickPinned", suggestion.Name);
             return true;
         }
         catch (Exception exception)
         {
-            _log.LogError($"Quick pin failed: {exception}");
+            _log.LogError($"Quick pin failed: {SafeLogText.Describe(exception)}");
             message = "Quick pin failed; see the log.";
             return false;
         }

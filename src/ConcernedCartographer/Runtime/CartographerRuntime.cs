@@ -305,7 +305,9 @@ internal sealed class CartographerRuntime : IDisposable
             _renderer.DrawCalibrationMarkers();
         }
 
-        _log.LogInfo($"Road atlas ready for world {uid}: {_atlas.Strokes.Count} stroke(s), {_atlas.PointCount} point(s).");
+        // Privacy audit (CC-098): the world UID identifies a specific world
+        // and never appears in the log; aggregate counts carry the signal.
+        _log.LogInfo($"Road atlas ready: {_atlas.Strokes.Count} stroke(s), {_atlas.PointCount} point(s).");
     }
 
     /// <summary>RC15 root fix, rebind leg: Jötunn's OnVanillaMapDataLoaded
@@ -1101,7 +1103,7 @@ internal sealed class CartographerRuntime : IDisposable
                     pin.Position = position;
                 });
                 _log.LogInfo(
-                    $"Palette birth: the named pin's rendering vanished at naming close; recreated \"{committedName}\" as a managed marker (RC12 blocker 5).");
+                    "Palette birth: the named pin's rendering vanished at naming close; recreated it as a managed marker (RC12 blocker 5).");
                 break;
             case PaletteBirthResolution.Action.DropForeign:
                 _log.LogInfo("Palette birth: the named pin is not adoptable (foreign or already tracked); left untouched.");
@@ -1615,7 +1617,7 @@ internal sealed class CartographerRuntime : IDisposable
                     $"reconcile={_settings.ReconcileTerrainChanges.Value}, " +
                     $"survey={_settings.SurveyRulesEnabled.Value}, cluster={_settings.DrawerCluster.Value}, " +
                     $"contrast={_settings.HighContrast.Value}, uiScale={_settings.UiScale.Value}");
-                return "Sanitized support report (no positions/names/notes) written to " + report;
+                return "Sanitized support report (no positions/names/notes/world ids/paths) written to " + report;
             case "views":
                 var names = new System.Text.StringBuilder("Saved views:");
                 if (_savedViews.Views.Count == 0)
@@ -2066,7 +2068,9 @@ internal sealed class CartographerRuntime : IDisposable
                 ResyncPins();
                 _routeRedrawPending = true;
                 SavePinsSnapshot();
-                _log.LogInfo($"Sync apply from {envelope.AuthorName}: {applied} change(s); {plan.Summary()}");
+                // Privacy: author names are player names — console feedback
+                // below names the author, the log keeps counts only.
+                _log.LogInfo($"Sync apply: {applied} change(s); {plan.Summary()}");
                 return $"Applied {applied} change(s) from {envelope.AuthorName} " +
                     $"({(takeRemote ? "conflicts took their side" : "conflicts kept your side")}). {plan.Summary()}";
             case "clear":
@@ -2109,11 +2113,11 @@ internal sealed class CartographerRuntime : IDisposable
         // DEF-v1.0-007: always-on identity diagnostic (rate-limited per
         // action). A future authority regression shows up in LogOutput.log
         // as e.g. "level-ground (mud_road_v2) … => Dirt road" without any
-        // debug switch.
+        // debug switch. Privacy audit (CC-098): the action identity is the
+        // signal — the position is a player location and stays out.
         _rateLimited.Info(
             "terrain-action-" + operation.Category,
-            $"Terrain action classified: {operation.ActionDescription} at " +
-            $"({operation.Position.x:0.#}, {operation.Position.z:0.#}) r={operation.RadiusMeters:0.#}m.");
+            $"Terrain action classified: {operation.ActionDescription} r={operation.RadiusMeters:0.#}m.");
 
         var center = new RoadPoint(operation.Position.x, operation.Position.y, operation.Position.z);
 
@@ -2132,7 +2136,7 @@ internal sealed class CartographerRuntime : IDisposable
             {
                 _rateLimited.Info(
                     "terrain-intent-add",
-                    $"Terraforming at ({center.X:0.#}, {center.Z:0.#}) r={operation.RadiusMeters:0.#}m: " +
+                    $"Terraforming r={operation.RadiusMeters:0.#}m: " +
                     $"{excluded} cell(s) marked not-road ({_terrainIntent.Count} total).");
             }
         }
@@ -2168,9 +2172,11 @@ internal sealed class CartographerRuntime : IDisposable
             if (removed > 0)
             {
                 _redrawPending = true;
+                // Privacy audit (CC-098): the operation position is a player
+                // location and stays out of the log; radius + removed count
+                // keep the reconciliation diagnosable.
                 _log.LogInfo(
-                    $"Reconciled a terrain change ({operation.ActionDescription}) at " +
-                    $"({operation.Position.x:0.#}, {operation.Position.z:0.#}) " +
+                    $"Reconciled a terrain change ({operation.ActionDescription}) " +
                     $"r={operation.RadiusMeters:0.#}m: removed {removed} road point(s).");
             }
         }
@@ -2224,7 +2230,9 @@ internal sealed class CartographerRuntime : IDisposable
 
         if (_settings.DebugLogging.Value)
         {
-            _rateLimited.Info(debugKey, $"Observed {observation}.");
+            // Privacy audit (CC-098): the observation's ToString carries its
+            // position; the log keeps source/kind identity only.
+            _rateLimited.Info(debugKey, $"Observed {observation.Source}/{observation.Kind}.");
         }
     }
 
@@ -2343,7 +2351,9 @@ internal sealed class CartographerRuntime : IDisposable
                         nearestPoint,
                         nearestDistance,
                         _renderer);
-                    _log.LogInfo("cc_roads align live\n" + liveReport);
+                    // Privacy audit (CC-098): the live report contains player
+                    // and road positions, so it prints to the console only.
+                    _log.LogInfo("cc_roads align live: diagnostic report written to the console (positions are never logged).");
                     return liveReport;
                 }
 

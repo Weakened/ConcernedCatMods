@@ -130,7 +130,7 @@ Check on both clients:
 
 - `cc_routes status` summarizes the route atlas; routes have their own sidecar (`<world-uid>.routes-atlas.tsv` + journal) with the same snapshot/journal recovery as pins.
 - `cc_atlas backups` lists snapshots; `cc_atlas restore <n>` takes a safety backup first. After a restore, relog so the restored snapshot is authoritative.
-- `cc_atlas support` writes a sanitized report (versions, settings, counts, sizes only) safe to attach to a bug report.
+- `cc_atlas support` writes a sanitized report (versions, settings, counts, sizes only — no world UIDs, paths, positions, names, or notes) safe to attach to a bug report.
 
 ## Sidecar corruption
 

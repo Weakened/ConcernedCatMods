@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BepInEx.Logging;
 using HarmonyLib;
 using TheConcernedCat.ConcernedCartographer.Atlas;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using TheConcernedCat.ConcernedCartographer.Roads;
 using UnityEngine;
 
@@ -160,7 +161,7 @@ internal sealed class SurveyScanner
         catch (Exception exception)
         {
             _disabledForSession = true;
-            _log.LogError($"Survey scanner failed and was disabled for this session: {exception}");
+            _log.LogError($"Survey scanner failed and was disabled for this session: {SafeLogText.Describe(exception)}");
         }
     }
 

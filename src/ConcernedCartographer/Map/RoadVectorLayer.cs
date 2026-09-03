@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using TheConcernedCat.ConcernedCartographer.Roads;
 using TheConcernedCat.ConcernedCartographer.Runtime;
 using UnityEngine;
@@ -210,7 +211,7 @@ internal sealed class RoadVectorLayer
         {
             // Fail soft, once: the texture overlay remains the road view.
             _disabledForSession = true;
-            _log.LogError($"High-precision road layer disabled for this session: {exception}");
+            _log.LogError($"High-precision road layer disabled for this session: {SafeLogText.Describe(exception)}");
             DestroyContainer();
         }
     }
