@@ -80,8 +80,21 @@ internal sealed class RoutesPanel : CcSidePanel
             _handler()?.UiStop();
         }
 
+        // RC12 blocker 2: the list mirrors the store LIVE. Any change to
+        // the route table — a draw stroke landing, erase removing a route,
+        // console/sync edits, undo — refreshes the visible list the same
+        // frame, so rows can never go stale or pile up.
+        if (IsVisible && _handler() is { } liveHandler && liveHandler.ChangeStamp != _renderedStamp)
+        {
+            _renderedStamp = liveHandler.ChangeStamp;
+            RefreshList();
+            RefreshMode();
+        }
+
         base.HandleFrame();
     }
+
+    private long _renderedStamp = -1;
 
     /// <summary>A hidden panel must never leave a UI-owned mode running
     /// (#101 "explicit visible modes"): whatever hides the panel — Escape,
@@ -105,6 +118,10 @@ internal sealed class RoutesPanel : CcSidePanel
         Text explainer = AddBody(gui, font, AtlasStrings.Get("routes.explainer"), 11,
             new Color(0.85f, 0.82f, 0.7f, 1f), ref y, 28f);
         explainer.alignment = TextAnchor.UpperCenter;
+
+        // RC12 blocker 4 clearance: center-pivot controls following a body
+        // block reach half their height above their y.
+        y -= 12f;
 
         GameObject nameField = gui.CreateInputField(
             Panel!.transform,
@@ -158,6 +175,7 @@ internal sealed class RoutesPanel : CcSidePanel
 
         _modeStatus = AddBody(gui, font, "", 12, new Color(0.85f, 1f, 0.85f, 1f), ref y, 30f);
         _selectionStatus = AddBody(gui, font, "", 12, new Color(1f, 0.95f, 0.75f, 1f), ref y, 30f);
+        y -= 10f;
 
         for (int index = 0; index < RouteSlots; index++)
         {
@@ -214,6 +232,7 @@ internal sealed class RoutesPanel : CcSidePanel
         y -= 30f;
 
         _output = AddBody(gui, font, "", 12, Color.white, ref y, 36f);
+        y -= 10f;
 
         // RC11 blocker 4: bottom control area — Snap lives here now, and
         // the confirmed Clear all sits beside it for fragment cleanup.
@@ -252,6 +271,7 @@ internal sealed class RoutesPanel : CcSidePanel
 
         _mergeArmed = false;
         _clearAllArmed = false;
+        _renderedStamp = _handler()?.ChangeStamp ?? -1;
         RefreshList();
         RefreshMode();
     }

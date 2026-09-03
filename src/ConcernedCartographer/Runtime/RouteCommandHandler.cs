@@ -52,6 +52,12 @@ internal sealed class RouteCommandHandler
     public bool SnapEnabled { get; private set; } = true;
     public RouteOperations Operations => _operations;
 
+    /// <summary>The store's change counter (RC12 blocker 2): the Routes
+    /// panel polls this per frame so the list refreshes on ANY route
+    /// change — drawing, erasing, console edits, sync — not only after
+    /// its own buttons.</summary>
+    public long ChangeStamp => _store.ChangeStamp;
+
     /// <summary>True when the current map mode was entered through the
     /// Routes panel (#101): the runtime then feeds map input WITHOUT the
     /// draw modifier and consumes vanilla click/drag while it lasts. The

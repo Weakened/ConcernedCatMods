@@ -11,7 +11,15 @@ namespace TheConcernedCat.ConcernedCartographer.Atlas;
 /// never on how the stored points happen to be spaced. Units are the
 /// caller's (screen-derived baked units on the vector path, texels on the
 /// texture path); zoom stability comes from the caller deriving the
-/// cadence from the live zoom.</summary>
+/// cadence from the live zoom.
+///
+/// RC12 blocker 3: both walkers are structurally terminating. Dots are
+/// stamped from an INTEGER per-segment count (never a float countdown
+/// that can stall below float precision on huge coordinates), the dash
+/// walk carries its phase modulo one cycle and aborts on any non-advancing
+/// step, and segments with non-finite geometry are skipped. Combined with
+/// real maxStamps budgets from every caller, no route data — however long
+/// or corrupt — can spin these loops long enough to stall a frame.</summary>
 internal static class RoutePatternMath
 {
     public delegate void StampSegment(float startX, float startY, float endX, float endY);
@@ -29,7 +37,8 @@ internal static class RoutePatternMath
         StampSegment stamp)
     {
         float cycle = dashOn + dashOff;
-        if (points is null || points.Count < 2 || dashOn <= 0f || cycle <= 0f || stamp is null)
+        if (points is null || points.Count < 2 || stamp is null ||
+            !IsFinitePositive(dashOn) || !IsFinitePositive(cycle))
         {
             return 0;
         }
@@ -43,8 +52,9 @@ internal static class RoutePatternMath
             float deltaX = currentX - previousX;
             float deltaY = currentY - previousY;
             float length = (float)Math.Sqrt((deltaX * deltaX) + (deltaY * deltaY));
-            if (length <= 1e-6f)
+            if (!IsFinitePositive(length) || length <= 1e-6f)
             {
+                // Zero-length or non-finite segment: no distance to pattern.
                 continue;
             }
 
@@ -53,9 +63,8 @@ internal static class RoutePatternMath
             float travelled = 0f;
             while (travelled < length && stamps < maxStamps)
             {
-                float positionInCycle = phase % cycle;
-                bool on = positionInCycle < dashOn;
-                float remainingInState = on ? dashOn - positionInCycle : cycle - positionInCycle;
+                bool on = phase < dashOn;
+                float remainingInState = on ? dashOn - phase : cycle - phase;
                 float step = Math.Min(remainingInState, length - travelled);
                 if (on && step > 1e-4f)
                 {
@@ -67,8 +76,17 @@ internal static class RoutePatternMath
                     stamps++;
                 }
 
-                travelled += step;
-                phase += step;
+                float advanced = travelled + step;
+                if (!(advanced > travelled))
+                {
+                    // Float precision exhausted (astronomical coordinates):
+                    // the walk can no longer advance; abandon this segment
+                    // rather than spinning forever.
+                    break;
+                }
+
+                travelled = advanced;
+                phase = (phase + step) % cycle;
             }
 
             if (stamps >= maxStamps)
@@ -89,7 +107,7 @@ internal static class RoutePatternMath
         int maxStamps,
         StampDot stamp)
     {
-        if (points is null || points.Count < 2 || spacing <= 0f || stamp is null)
+        if (points is null || points.Count < 2 || stamp is null || !IsFinitePositive(spacing))
         {
             return 0;
         }
@@ -102,29 +120,41 @@ internal static class RoutePatternMath
             (float currentX, float currentY) = points[index];
             float deltaX = currentX - previousX;
             float deltaY = currentY - previousY;
-            float remaining = (float)Math.Sqrt((deltaX * deltaX) + (deltaY * deltaY));
-            if (remaining <= 1e-6f)
+            float length = (float)Math.Sqrt((deltaX * deltaX) + (deltaY * deltaY));
+            if (!IsFinitePositive(length) || length <= 1e-6f)
             {
                 continue;
             }
 
-            float directionX = deltaX / remaining;
-            float directionY = deltaY / remaining;
-            float cursorX = previousX;
-            float cursorY = previousY;
-            while (untilNextDot <= remaining && stamps < maxStamps)
+            if (untilNextDot > length)
             {
-                cursorX += directionX * untilNextDot;
-                cursorY += directionY * untilNextDot;
-                remaining -= untilNextDot;
-                stamp(cursorX, cursorY);
-                stamps++;
-                untilNextDot = spacing;
+                untilNextDot -= length;
+                continue;
             }
 
-            untilNextDot -= remaining;
+            // Integer dot count for this segment, capped by the remaining
+            // budget: each dot's position is computed from the segment
+            // START, so precision never degrades along the walk and the
+            // loop bound is a plain int.
+            float directionX = deltaX / length;
+            float directionY = deltaY / length;
+            double dotsThatFit = Math.Floor((length - untilNextDot) / (double)spacing) + 1d;
+            int count = (int)Math.Min(dotsThatFit, maxStamps - stamps);
+            for (int dot = 0; dot < count; dot++)
+            {
+                float along = untilNextDot + (spacing * dot);
+                stamp(previousX + (directionX * along), previousY + (directionY * along));
+                stamps++;
+            }
+
+            untilNextDot = untilNextDot + (spacing * count) - length;
         }
 
         return stamps;
+    }
+
+    private static bool IsFinitePositive(float value)
+    {
+        return value > 0f && !float.IsInfinity(value);
     }
 }

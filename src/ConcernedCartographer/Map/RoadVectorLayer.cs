@@ -417,6 +417,17 @@ internal sealed class RoadVectorLayer
                 }
 
                 (float bakedX, float bakedY) = RoadVectorMath.Bake(mapX, mapY);
+                if (float.IsNaN(bakedX) || float.IsInfinity(bakedX) ||
+                    float.IsNaN(bakedY) || float.IsInfinity(bakedY))
+                {
+                    // RC12 blocker 3: a corrupt point must not poison the
+                    // baked length (NaN/∞ there defeated the stamp-budget
+                    // estimate) or the mesh. Treat it like a failed
+                    // projection.
+                    _bakeProjectionFailures++;
+                    continue;
+                }
+
                 if (_routeBaked.Count > 0)
                 {
                     (float previousX, float previousY) = _routeBaked[_routeBaked.Count - 1];
@@ -445,9 +456,16 @@ internal sealed class RoadVectorLayer
             Atlas.RouteStyle style = route.Style;
             if (style != Atlas.RouteStyle.Solid)
             {
+                // RC12 blocker 3: estimate in float and compare NEGATED so
+                // NaN/overflow degrades to solid. The old (int) cast of a
+                // huge float wrapped negative and waved the route through
+                // the budget with a near-zero cadence — a per-frame stall.
                 float cadence = style == Atlas.RouteStyle.Dotted ? dotSpacing : dashOn + dashOff;
-                int estimatedStamps = cadence > 0f ? (int)(bakedLength / cadence) + _routeBaked.Count : int.MaxValue;
-                if (estimatedStamps > MaxQuadsPerRoute || totalQuads + estimatedStamps > MaxRouteQuads)
+                float estimatedStamps = cadence > 0f
+                    ? (bakedLength / cadence) + _routeBaked.Count
+                    : float.PositiveInfinity;
+                if (!(estimatedStamps <= MaxQuadsPerRoute) ||
+                    !(totalQuads + estimatedStamps <= MaxRouteQuads))
                 {
                     style = Atlas.RouteStyle.Solid;
                     if (!_routeBudgetWarned)

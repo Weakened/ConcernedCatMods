@@ -33,6 +33,14 @@ internal sealed class RouteOverlayRenderer
     private const float DashOffTexels = 4f;
     private const float DotSpacingTexels = 3f;
 
+    /// <summary>RC12 blocker 3: a REAL per-route stamp budget for the
+    /// texture pattern walk (int.MaxValue before, which let corrupt or
+    /// absurdly long geometry spin the walker for seconds). A full 2048²
+    /// texture diagonal is ~2 900 texels ≈ 1 000 dots; 24 000 covers any
+    /// legitimate route many times over and keeps the worst case bounded
+    /// to a few milliseconds.</summary>
+    private const int MaxPatternStampsPerRoute = 24_000;
+
     private readonly CartographerSettings _settings;
     private readonly RateLimitedLog _rateLimited;
     private readonly OverlayUserToggleHook _toggleHook = new();
@@ -126,7 +134,22 @@ internal sealed class RouteOverlayRenderer
             }
 
             int size = overlay!.TextureSize;
-            Color32[] pixels = new Color32[size * size];
+
+            // RC12 blocker 3: reuse one pixel buffer across redraws. A
+            // 2048² texture is a 16 MB Color32[]; allocating it per redraw
+            // made repeated style changes stutter through GC spikes.
+            Color32[] pixels;
+            if (_pixelBuffer is not null && _pixelBufferSize == size)
+            {
+                pixels = _pixelBuffer;
+                Array.Clear(pixels, 0, pixels.Length);
+            }
+            else
+            {
+                pixels = new Color32[size * size];
+                _pixelBuffer = pixels;
+                _pixelBufferSize = size;
+            }
 
             foreach (AtlasRoute route in routes.Living)
             {
@@ -181,6 +204,10 @@ internal sealed class RouteOverlayRenderer
     // Projection buffer reused per route (full redraws only).
     private readonly List<(float X, float Y)> _projected = new();
 
+    // Reused full-texture pixel buffer (RC12 blocker 3).
+    private Color32[]? _pixelBuffer;
+    private int _pixelBufferSize;
+
     private void ProjectPolyline(IReadOnlyList<RoadPoint> points, int size)
     {
         _projected.Clear();
@@ -197,7 +224,7 @@ internal sealed class RouteOverlayRenderer
     {
         ProjectPolyline(points, size);
         RoutePatternMath.WalkDashes(
-            _projected, DashOnTexels, DashOffTexels, int.MaxValue,
+            _projected, DashOnTexels, DashOffTexels, MaxPatternStampsPerRoute,
             (fromX, fromY, toX, toY) => DrawLineIntoBuffer(
                 pixels, size, new Vector2(fromX, fromY), new Vector2(toX, toY), color));
     }
@@ -208,7 +235,7 @@ internal sealed class RouteOverlayRenderer
     {
         ProjectPolyline(points, size);
         RoutePatternMath.WalkDots(
-            _projected, DotSpacingTexels, int.MaxValue,
+            _projected, DotSpacingTexels, MaxPatternStampsPerRoute,
             (x, y) => DrawLineIntoBuffer(pixels, size, new Vector2(x, y), new Vector2(x, y), color));
     }
 
