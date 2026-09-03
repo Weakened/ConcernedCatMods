@@ -5,7 +5,9 @@ manual-only verification deferred by the autonomous conveyor (OPS-001
 rev 2) from v0.3 onward and is finalized against the exact v1.0-line RC. Rows
 marked **BLOCKS** must pass before publication; others are record-and-ship.
 
-> Status: FINAL for the 0.9.0 public beta, amended 2026-09-03 (twelfth
+> Status: FINAL for the 0.9.0 public beta, amended 2026-09-03
+> (thirteenth amendment — the CC-098 privacy-audit revision, RC15b;
+> previously the twelfth
 > amendment): the owner reproduced ONE remaining release blocker on the
 > exact RC14 DLL — managed cc:* markers rendered as their vanilla
 > fallback icons (camp→Fire, route→Portal) after relog while the sidecar
@@ -30,7 +32,7 @@ marked **BLOCKS** must pass before publication; others are record-and-ship.
 > pre-audit RC15 build e9615b00 — are retired; do not test, tag, or
 > upload them. **Do NOT restart the full 2.5–4 h
 > checklist.** Run the NEW section **R11 (RC15 relog persistence)**
-> first on the exact RC15 0.9.0 beta ZIP named in RELEASE_DOSSIER.md,
+> first on the exact RC15b 0.9.0 beta ZIP named in RELEASE_DOSSIER.md,
 > re-run R10 rows 1/2/5 on the same ZIP (their surfaces changed), then
 > complete any remaining R10 → R9 → R8 → R7 → R6 → R5 → R3/R4 rows not
 > yet finished.

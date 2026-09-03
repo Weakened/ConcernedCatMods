@@ -18,10 +18,58 @@ The single remaining gate is the human smoke test
   decision recorded in section 19). Data and schema formats are
   unchanged from RC12; upgrading this beta to 1.0.0 later is automatic
   and lossless.
-- **RC commit:** `e9615b00759631d1dcc35928dd7f7ffce2c3bf00` (**RC15**,
-  on the CC-098 line — the owner-directed final beta blocker pass of
-  2026-09-03; the package below was built at exactly this commit with
-  a clean tree, and the DLL's informational version embeds it).
+- **RC commit:** `e4abe1f60996284eb879b9d917eed6d096b68ccc` (**RC15b**,
+  the CC-098 privacy-audit revision of RC15, 2026-09-03; the package
+  below was built at exactly this commit with a clean tree, and the
+  DLL's informational version embeds it). The RC15 functional work was
+  green, but final acceptance failed its privacy audit: the mod's own
+  log lines and the support report still carried identifiers. RC15b
+  changes ONLY the privacy of emitted diagnostics — behavior, data,
+  and schema formats are untouched:
+  **(1) no world UIDs in any log line** — "Road atlas ready", the
+  pin/route persistence skip/recover/load/save/journal lines, and the
+  atlas backup/restore lines are aggregate-only now; sidecar
+  filenames and the internal world-key behavior are unchanged (the
+  UID still locates files, it just never reaches the log);
+  **(2) no filesystem paths** (they embed machine usernames) in any
+  persistence/backup/migration/survey/saved-views/localization line —
+  fixed sidecar suffixes name the file instead;
+  **(3) no names or contents** — player names left the sync
+  share/apply lines (HUD/console still name the author), suggested
+  names left the Quick Pin line, the workbench logs outcome + id
+  instead of a message that can echo user-typed text;
+  **(4) no positions** — the terrain-classification (DEF-v1.0-007),
+  terrain-intent, reconciliation, observation-debug, and calibration
+  lines are position-free; the `cc_roads align` / `align live` probe
+  tables (live positions) print to the console only, with a
+  coordinate-free "ALIGNMENT PASS/FAIL + projection context" log line
+  kept as evidence (smoke rows updated accordingly);
+  **(5) exception text is scrubbed** — everything interpolated into
+  the log now routes through the new `SafeLogText` (Describe/Brief)
+  over the tested #97 `CrashReportSanitizer`, so IO errors can no
+  longer echo profile paths, uid-bearing file names, save names, IPs,
+  or URLs into LogOutput.log (`CrashSubsystems.Infer` keyword shapes
+  preserved);
+  **(6) the support report is sanitized by construction AND by
+  scrubbing** — rebuilt around the pure `SupportReportComposer`
+  (Domain, unit-tested): the `world-uid` line is GONE; versions,
+  settings, row counts, sizes in KB, and the backup count only;
+  `AtlasBackupTools` merely locates files — the composer's signature
+  cannot receive the UID or a path, and every emitted line passes
+  through the sanitizer as defense in depth. The new
+  `SupportReportPrivacyTests` (11 tests; suite now **568**) plant
+  pin/road content, world UIDs, paths, usernames, coordinates, save
+  names, URLs, and IPs and prove none can appear.
+  **Retires the pre-audit RC15 build `e9615b00`/`ae902a2` (ZIP
+  `F89AAD13…`) — do not test, tag, or upload it.** The RC15
+  relog/tombstone lifecycle, map-data-loaded rebind, System Markers
+  "Visible to other players", redraw teardown hardening, and all
+  RC14-good behavior are unchanged; smoke **R11 runs on the RC15b
+  ZIP** (row 4 now verifies the whole log and the support report).
+- RC15's identity block is preserved below for the record:
+- (RC15) **RC commit** `e9615b00759631d1dcc35928dd7f7ffce2c3bf00`
+  (on the CC-098 line — the owner-directed final beta blocker pass of
+  2026-09-03).
   RC15 delivers, on top of RC14:
   **(1) the false relog tombstone is fixed at its lifecycle root** —
   the owner reproduced on the exact RC14 DLL: cc:camp rendered as
@@ -435,10 +483,13 @@ The single remaining gate is the human smoke test
   directives touched is re-verified by smoke section **R5** (then R3/R4
   as amended).)
 - **ZIP:** `artifacts\thunderstore\TheConcernedCat-ConcernedCartographer-0.9.0.zip`
-  (built at the RC15 commit; an identical immutable copy is at
+  (built at the RC15b commit; an identical immutable copy is at
+  `artifacts\rc15b\TheConcernedCat-ConcernedCartographer-0.9.0-RC15b.zip`
+  — verify the hash below before importing. The retired pre-audit RC15
+  package (ZIP `F89AAD13…`, DLL `DA62990C…`) survives as
   `artifacts\rc15\TheConcernedCat-ConcernedCartographer-0.9.0-RC15.zip`
-  — verify the hash below before importing. The retired RC14 package
-  (ZIP `49DBB847…`, DLL `9DA6786F…`) survives as
+  and a same-named copy in `artifacts\thunderstore\superseded\`; the
+  retired RC14 package (ZIP `49DBB847…`, DLL `9DA6786F…`) as
   `artifacts\rc14\TheConcernedCat-ConcernedCartographer-0.9.0-RC14.zip`
   and a same-named copy in `artifacts\thunderstore\superseded\`; the
   retired RC13 package (ZIP `19ADD2E5…`, DLL `CE783057…`) as
@@ -447,24 +498,24 @@ The single remaining gate is the human smoke test
   `artifacts\thunderstore\superseded\` alongside the never-published
   INTERNAL 0.9.0 milestone ZIP (`…-0.9.0-internal-milestone.zip`) —
   the internal file shares only the version number, never the bytes.
-  The retired copies under `artifacts\rc14\`, `artifacts\rc13\`,
-  `artifacts\rc12\`,
+  The retired copies under `artifacts\rc15\`, `artifacts\rc14\`,
+  `artifacts\rc13\`, `artifacts\rc12\`,
   `artifacts\rc11\` (ZIP `C08BBBB1…`, DLL `8C5233A4…`),
   `artifacts\rc10\` (ZIP `EA523400…`, DLL `A350D0CE…`) and
   `artifacts\rc8\` (ZIP `AF267AC2…`, DLL `E9904771…`) must NOT be
   tested or uploaded.)
-- **ZIP SHA-256:** `F89AAD13FC2278D5F0FF94779EA0CF90DCE850276A1A108343D28178DABD2899`
-  (327,840 bytes — fresh RC15 / 0.9.0-beta bytes; retired hashes are
-  never reused; the immutable rc15 copy verified byte-identical to the
-  staging ZIP)
-- **Plugin DLL SHA-256:** `DA62990C2738D093EB111A8CCFBA9E1064E42DA6B09837AE7ECBBCFEE1E33C24`
-  (477,184 bytes; the DLL inside the ZIP verified hash-identical to the
+- **ZIP SHA-256:** `8AC3A77925C17474E2464DA5E13616530E6DB22D7AEB6B9EBA2D72ABC34B1DC0`
+  (328,729 bytes — fresh RC15b / 0.9.0-beta bytes; retired hashes
+  (RC15 `F89AAD13…` included) are never reused; the immutable rc15b
+  copy verified byte-identical to the staging ZIP)
+- **Plugin DLL SHA-256:** `BA8975CA2934810FF13F424A64ABAFEF3D41D515BFEADF60378A4CAD2DA7306F`
+  (478,720 bytes; the DLL inside the ZIP verified hash-identical to the
   Release build output; informational version
-  `0.9.0+e9615b00759631d1dcc35928dd7f7ffce2c3bf00` verified in the DLL;
+  `0.9.0+e4abe1f60996284eb879b9d917eed6d096b68ccc` verified in the DLL;
   the 12 `CC.Icons.cc-*.png` sprite resources re-verified embedded)
 - **Assembly metadata (verified in the DLL):** Company "The Concerned Cat",
   Product "Concerned Cartographer", Copyright © 2026 Eren Cansunar,
-  RepositoryUrl embedded, informational version `0.9.0+<RC15 commit>`,
+  RepositoryUrl embedded, informational version `0.9.0+<RC15b commit>`,
   FileVersion 0.9.0.0.
 - **Package audit:** ZIP root contains exactly `manifest.json`, `README.md`,
   `CHANGELOG.md`, `LICENSE`, `icon.png` (256×256),
@@ -825,8 +876,21 @@ release blockers, all addressed in the previous RC:
 
 ## 8. Automated evidence (at the RC commit)
 
-- **557/557 tests** in the game-free core suite (Release configuration,
-  re-run at the RC15 commit): everything below plus the RC15 suite —
+- **568/568 tests** in the game-free core suite (Release configuration,
+  re-run at the RC15b commit): everything below plus the RC15b suite —
+  `SupportReportPrivacyTests` (11: the composed support report has no
+  `world-uid` field and no uid-shaped digit run; pin/road sidecar rows
+  carrying a name, notes, category, tag, and real coordinates reduce
+  to counts only; no filesystem-path fragments; identifiers planted
+  into the caller's version/config strings (path with username, world
+  uid, coordinates, save-file name, URL) are scrubbed by the
+  defense-in-depth pass; aggregate diagnostics — counts, sizes in KB,
+  settings, timestamp, backup count — survive un-mangled; the
+  route-codec describe path; unreadable-file statuses name only the
+  exception type; and `SafeLogText` Describe/Brief scrub paths,
+  usernames, world UIDs, save names, coordinates, and IPs out of
+  exception text while keeping the exception type, with null
+  tolerance) — plus the RC15 suite —
   `Rc15RelogPersistenceTests` (19: the tombstone rule truth table —
   explicit delete in a bound session tombstones, absence NEVER does
   regardless of session state, unbound-session deletes keep the pin,
@@ -986,15 +1050,18 @@ relog-persistence pass: five rows — the false-tombstone relog
 reproduction with sidecar `Deleted=0` verification, genuine-delete
 tombstone-once-and-recoverable, the retained System Markers
 "Visible to other players" row, the 2026-09-03 logging/lifecycle row
-(DebugLogging temporarily on, then back to default), and redraw
-teardown hardening), NOT at the top, on the exact RC15 beta ZIP named
-above.** After R11, re-run R10 rows 1/2/5 on the same ZIP (their
+(DebugLogging temporarily on, then back to default — row 4 now ALSO
+verifies the CC-098 privacy audit: the whole LogOutput.log free of
+world UIDs/paths/names/coordinates, and the support report free of
+the `world-uid` line), and redraw teardown hardening), NOT at the
+top, on the exact RC15b beta ZIP named above.** After R11, re-run R10 rows 1/2/5 on the same ZIP (their
 surfaces changed in RC15), then complete whichever R10 → R9 → R8 →
 R7 → R6 → R5 → R3/R4 rows (as previously amended) earlier smokes did
 not finish — rows already passed stay passed, because RC15
-deliberately changes only the relog/tombstone lifecycle, the redraw
-teardown path, and diagnostics. The full 2.5–4 h checklist is not
-restarted.
+deliberately changed only the relog/tombstone lifecycle, the redraw
+teardown path, and diagnostics, and RC15b changes only the privacy of
+emitted log/support text (no behavior). The full 2.5–4 h checklist is
+not restarted.
 
 ## 19. Remaining Git commands (run after the smoke test passes)
 
@@ -1012,8 +1079,8 @@ prefers a different scheme, substitute it consistently.
 # 1. Merge the completion branch to main (PR or fast-forward — owner's call):
 git checkout main; git merge feat/cc-098-v1-completion
 git push origin main
-# 2. Tag the RC15 commit named in the identity section (now in main history):
-git tag -a concerned-cartographer/v0.9.0-beta -m "Concerned Cartographer 0.9.0 (Public Beta) - Stable Living Atlas beta" e9615b00759631d1dcc35928dd7f7ffce2c3bf00
+# 2. Tag the RC15b commit named in the identity section (now in main history):
+git tag -a concerned-cartographer/v0.9.0-beta -m "Concerned Cartographer 0.9.0 (Public Beta) - Stable Living Atlas beta" e4abe1f60996284eb879b9d917eed6d096b68ccc
 git push origin concerned-cartographer/v0.9.0-beta
 gh release create concerned-cartographer/v0.9.0-beta artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-0.9.0.zip --title "Concerned Cartographer 0.9.0 (Public Beta)" --prerelease --notes-file src/ConcernedCartographer/Package/CHANGELOG.md
 ```
