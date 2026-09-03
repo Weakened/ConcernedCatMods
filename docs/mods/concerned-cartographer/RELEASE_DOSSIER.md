@@ -1,4 +1,4 @@
-# Concerned Cartographer v1.0 — Release Dossier
+# Concerned Cartographer v1.0 line — Release Dossier (0.9.0 Public Beta)
 
 Prepared by the autonomous conveyor (Tankard Olafsson) per OPS-001 rev 2.
 The single remaining gate is the human smoke test
@@ -6,13 +6,63 @@ The single remaining gate is the human smoke test
 
 ## 1–5. Release candidate identity
 
-- **Version:** 1.0.0 (unchanged — 1.0.0 has never been publicly tagged or published)
-- **RC commit:** `846e9dbc2dbaff7d766eb3be36413ed9d8118eb8` (**RC12**,
-  on the CC-098 line — the owner-feedback pass of 2026-09-02 addressing
-  all 6 feedback items (4 release blockers) from the owner's RC11
-  smoke; the package below was built at exactly this commit with a
-  clean tree, and the DLL's informational version embeds it).
-  RC12 delivers, on top of RC11:
+- **Version:** **0.9.0 (Public Beta)** — the owner-approved RC13
+  re-version of the public package identity: the feature-complete v1
+  candidate ships first as a public beta, and 1.0.0 stays reserved for
+  the stable release. Nothing has ever been uploaded to Thunderstore
+  under any version, so the 0.9.0 package identity is free there.
+  ⚠ The GIT tag namespace is NOT free: the public repo already carries
+  `concerned-cartographer/v0.9.0` pointing at the never-published
+  INTERNAL 0.9 hardening milestone (commit `4931020e`) — the
+  post-smoke tag for this beta therefore needs a distinct name (owner
+  decision recorded in section 19). Data and schema formats are
+  unchanged from RC12; upgrading this beta to 1.0.0 later is automatic
+  and lossless.
+- **RC commit:** `392ab9382f9088b72e65d9e6a530bbe030c526d6` (**RC13**,
+  on the CC-098 line — the owner-approved final beta polish pass of
+  2026-09-02, implementing exactly the four presentation/UX items from
+  the owner's RC12 smoke feedback, plus the 0.9.0 re-version; the
+  package below was built at exactly this commit with a clean tree,
+  and the DLL's informational version embeds it).
+  RC13 delivers, on top of RC12:
+  **(1) feathered large-map road ink** — Dirt/Paved vector quads widen
+  4/3 and stretch a 1×64 alpha-gradient texture across their width
+  (pure `RoadInkSoftening`: opaque core, symmetric monotone falloff,
+  50%-alpha extent exactly the crisp RC12 width), so the large map
+  matches the minimap's softer look with the same centerline,
+  perceived width, colors, quad count, and budget — no under-stroke,
+  no double-render; routes stay crisp by design;
+  **(2) 3× palette wheel** — the [Markers] list wheel step is
+  `PaletteScrollTuning.Scaled` (3× the stock ScrollRect sensitivity,
+  floored at three rows per notch), inside the owner's 2–3× target
+  window by regression test; bounds and the RC11 map-zoom wheel guard
+  untouched;
+  **(3) orphan chrome sweep** — `OrphanChromeSweep` + the pure
+  `OrphanChromeRule` climb a bounded number of parents from every rail
+  object CC already hid and hide the highest ancestor provably empty
+  decoration (map image / hint bars / shared-map hint / pin roots /
+  biome label protected; any would-be-visible control or text blocks),
+  catching the backplate that framed the replaced controls from
+  outside both button groups — the empty rectangle at the bottom-right
+  of the owner's RC12 screenshot. SetActive only; tracked exact
+  restore on ShowVanillaMapControls, conflict, CC UI failure, disable,
+  and teardown; "Vanilla chrome sweep:" logged once per change;
+  **(4) Markers default panel** — `DefaultPanelRule` opens the palette
+  as the initial CC side panel exactly once per fresh large-map open;
+  firing, any already-visible surface, or palette unavailability
+  (setting, conflicting pin manager, palette/toolbar failure, NoMap
+  gate) disarms it for the rest of that map-open, so the user's
+  close/switch is never fought and nothing pops late.
+  **Retires RC12 `846e9dbc`/`061ab4a` (ZIP `7A027F7B…`) — do not
+  test, tag, or upload it.** The owner's RC12 smoke approved RC12
+  behavior as the baseline (that evidence remains valid); everything
+  RC13 touched is verified by the NEW smoke section **R9**, and RC13
+  deliberately changes nothing else.
+- RC12's identity block is preserved below for the record:
+- (RC12) **RC commit** `846e9dbc2dbaff7d766eb3be36413ed9d8118eb8`
+  (the owner-feedback pass of 2026-09-02 addressing all 6 feedback
+  items (4 release blockers) from the owner's RC11 smoke).
+  RC12 delivered, on top of RC11:
   **(1) paved ink reads lighter than dirt** — the shared road palette's
   normal-mode paved ink is now a light stone gray (176,180,190) so
   paved is unmistakably the lighter kind at identical width/style in
@@ -262,29 +312,37 @@ The single remaining gate is the human smoke test
   alignment (DEF-v1.0-002, residuals ≤ 1 texel). Everything the RC8
   directives touched is re-verified by smoke section **R5** (then R3/R4
   as amended).)
-- **ZIP:** `artifacts\thunderstore\TheConcernedCat-ConcernedCartographer-1.0.0.zip`
-  (built at the RC commit; an identical immutable copy is at
-  `artifacts\rc12\TheConcernedCat-ConcernedCartographer-1.0.0-RC12.zip`
-  — verify the hash below before importing. The retired copies under
-  `artifacts\rc11\` (ZIP `C08BBBB1…`, DLL `8C5233A4…`),
-  `artifacts\rc10\` (ZIP `EA523400…`, DLL `A350D0CE…`) and
-  `artifacts\rc8\` (ZIP `AF267AC2…`, DLL `E9904771…`) must NOT be
-  tested or uploaded.)
-- **ZIP SHA-256:** `7A027F7BE112A3FE5840C44D1612916EB61A7EBFE519C60CF336D24A8D50B384`
-  (317,731 bytes — fresh RC12 bytes; retired hashes are never reused)
-- **Plugin DLL SHA-256:** `FD6DB99C1979B3EB42D19A8B20AD091BDE9BCB052A59E322DC33125E47A60927`
-  (459,264 bytes; the DLL inside the ZIP verified hash-identical to the
+- **ZIP:** `artifacts\thunderstore\TheConcernedCat-ConcernedCartographer-0.9.0.zip`
+  (built at the RC13 commit; an identical immutable copy is at
+  `artifacts\rc13\TheConcernedCat-ConcernedCartographer-0.9.0-RC13.zip`
+  — verify the hash below before importing. The retired RC12 package
+  (ZIP `7A027F7B…`, DLL `FD6DB99C…`) was moved to
+  `artifacts\thunderstore\superseded\` alongside the never-published
+  INTERNAL 0.9.0 milestone ZIP (`…-0.9.0-internal-milestone.zip`) —
+  the internal file shares only the version number, never the bytes.
+  The retired copies under `artifacts\rc12\`, `artifacts\rc11\` (ZIP
+  `C08BBBB1…`, DLL `8C5233A4…`), `artifacts\rc10\` (ZIP `EA523400…`,
+  DLL `A350D0CE…`) and `artifacts\rc8\` (ZIP `AF267AC2…`, DLL
+  `E9904771…`) must NOT be tested or uploaded.)
+- **ZIP SHA-256:** `19ADD2E56C0B9CDF4A69772D862D630A9E9BB35749EDE8C177B579EC8123E0ED`
+  (321,833 bytes — fresh RC13 / 0.9.0-beta bytes; retired hashes are
+  never reused; the immutable rc13 copy verified hash-identical)
+- **Plugin DLL SHA-256:** `CE783057743E8E9990DAE5167F09133CDE051ED911DC10278F3C675869536BDD`
+  (465,408 bytes; the DLL inside the ZIP verified hash-identical to the
   Release build output; informational version
-  `1.0.0+846e9dbc2dbaff7d766eb3be36413ed9d8118eb8` verified in the DLL;
+  `0.9.0+392ab9382f9088b72e65d9e6a530bbe030c526d6` verified in the DLL;
   the 12 `CC.Icons.cc-*.png` sprite resources re-verified embedded)
 - **Assembly metadata (verified in the DLL):** Company "The Concerned Cat",
   Product "Concerned Cartographer", Copyright © 2026 Eren Cansunar,
-  RepositoryUrl embedded, informational version `1.0.0+<RC commit>`.
+  RepositoryUrl embedded, informational version `0.9.0+<RC13 commit>`,
+  FileVersion 0.9.0.0.
 - **Package audit:** ZIP root contains exactly `manifest.json`, `README.md`,
   `CHANGELOG.md`, `LICENSE`, `icon.png` (256×256),
   `plugins/TheConcernedCat.ConcernedCartographer.dll`. No PDBs, game DLLs,
   saves, logs, or secrets. Dependencies pinned:
-  denikson-BepInExPack_Valheim 5.4.2333, ValheimModding-Jotunn 2.29.2.
+  denikson-BepInExPack_Valheim 5.4.2333, ValheimModding-Jotunn 2.29.2;
+  manifest `version_number` 0.9.0 matches Plugin.cs and the csproj
+  (validator-enforced).
 
 ## 6. Sprints and issues
 
@@ -529,8 +587,21 @@ release blockers, all addressed in the previous RC:
 
 ## 8. Automated evidence (at the RC commit)
 
-- **483/483 tests** in the game-free core suite (Release configuration,
-  re-run at the RC12 commit): everything below plus the RC12 suites —
+- **508/508 tests** in the game-free core suite (Release configuration,
+  re-run at the RC13 commit): everything below plus the RC13 suite —
+  `Rc13PolishTests` (26: the road-ink feather profile's opaque core,
+  full-transparency edge, symmetry, monotone falloff, the
+  preserved-perceived-width invariant (50% alpha exactly at the crisp
+  half width) and modest-widen bounds; the palette wheel factor held
+  in the owner's 2–3× window with multiplicative scaling, the
+  three-rows-per-notch floor, and monotonicity; the default-panel
+  rule's exactly-once-per-fresh-open, first-open-of-session,
+  never-fight-after-close/switch, disarm-on-busy-surface,
+  disarm-on-unavailable-with-no-late-pop, re-arm-on-close, and the
+  IsArmed gating contract; and the orphan-chrome truth table — empty
+  decoration hides, large root / protected objects / live controls /
+  live text each block, fallback forces restore, bounded climb) —
+  plus the RC12 suites —
   `Rc12RouteTests` (10: change-stamp bump on every published change and
   none on rejected ones, full-erase tombstone with undo restoring ink
   and liveness, partial-erase survival, dot/dash termination at the
@@ -589,8 +660,9 @@ release blockers, all addressed in the previous RC:
   deletion-name previews, display sanitization), and the DEF-v1.0-001
   modal-input-block ownership suite (balance under re-entry,
   double-close, arbitrary sequences, throwing backend).
-- Validator green with `--expected-version 1.0.0`; solution builds with
-  0 errors (1 known benign MSB3245).
+- Validator green with the 0.9.0 identity (csproj = thunderstore.toml =
+  Plugin.cs enforced); solution builds with 0 errors (1 known benign
+  MSB3245).
 - Scale: 10,000-pin suites (<200 ms total), 10 km road compaction
   (6,667→186 pts, 8 ms), 10k query <500 ms bound (measured far lower).
 
@@ -642,39 +714,47 @@ defaults.
 ## 18. Smoke test
 
 `docs/mods/concerned-cartographer/PRE_RELEASE_SMOKE_TEST.md` — **the
-owner starts at the NEW SHORT section R8 (the RC12 owner-feedback
-pass: seven rows, one per feedback fix), then R7 (rows 5 and 11
-superseded by R8), then the still-applicable R6 rows (1, 2, 6, 7,
-9–12, 15), then R5 items 4–12, then R3 (blocks A–L) and R4 (blocks
-M–S), NOT at the top.** The full 2.5–4 h checklist is not restarted;
-sections the earlier passes already completed stay completed. Only
-after R8 + R7 + R6 + R5 + R3 A–L + R4 M–S pass does the owner resume
-routes/world-isolation/multiplayer.
+owner starts at the NEW SHORT section R9 (the RC13 / 0.9.0-beta
+final-polish pass: four rows, one per polish item, each with its
+restore/fallback paths), NOT at the top, on the exact beta ZIP named
+above.** After R9, complete whichever R8 → R7 → R6 → R5 → R3/R4 rows
+(as previously amended) the RC12 smoke did not finish — rows the RC12
+smoke already passed stay passed, because RC13 deliberately changes
+only the four polish behaviors. The full 2.5–4 h checklist is not
+restarted.
 
 ## 19. Remaining Git commands (run after the smoke test passes)
 
 The RC lives on `feat/cc-098-v1-completion` (not yet on main). After
-R8 + R7 + R6 + R5 + R3 + R4 pass:
+R9 and the remaining amended sections pass:
+
+⚠ **Tag-name decision needed first**: `concerned-cartographer/v0.9.0`
+already exists on the public remote, pointing at the internal 0.9
+hardening milestone (`4931020e`). Never force-move a published tag.
+The commands below use the collision-free name
+`concerned-cartographer/v0.9.0-beta` for this beta; if the owner
+prefers a different scheme, substitute it consistently.
 
 ```powershell
 # 1. Merge the completion branch to main (PR or fast-forward — owner's call):
 git checkout main; git merge feat/cc-098-v1-completion
 git push origin main
-# 2. Tag the RC12 commit named in the identity section (now in main history):
-git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" 846e9dbc2dbaff7d766eb3be36413ed9d8118eb8
-git push origin concerned-cartographer/v1.0.0
-gh release create concerned-cartographer/v1.0.0 artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-1.0.0.zip --title "Concerned Cartographer 1.0.0" --notes-file src/ConcernedCartographer/Package/CHANGELOG.md
+# 2. Tag the RC13 commit named in the identity section (now in main history):
+git tag -a concerned-cartographer/v0.9.0-beta -m "Concerned Cartographer 0.9.0 (Public Beta) - Stable Living Atlas beta" 392ab9382f9088b72e65d9e6a530bbe030c526d6
+git push origin concerned-cartographer/v0.9.0-beta
+gh release create concerned-cartographer/v0.9.0-beta artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-0.9.0.zip --title "Concerned Cartographer 0.9.0 (Public Beta)" --prerelease --notes-file src/ConcernedCartographer/Package/CHANGELOG.md
 ```
 
 ## 20. Thunderstore upload data (owner-only)
 
-- File: `TheConcernedCat-ConcernedCartographer-1.0.0.zip`
+- File: `TheConcernedCat-ConcernedCartographer-0.9.0.zip`
 - Team/namespace: **TheConcernedCat** · Community: **valheim**
 - Categories: **mods, client-side, utility, ai-generated**
 - Dependencies: denikson-BepInExPack_Valheim 5.4.2333, ValheimModding-Jotunn 2.29.2
-- Version: 1.0.0 · Upload via thunderstore.io web UI, or
-  `pwsh ./scripts/publish.ps1 -Version 1.0.0` with `TCLI_AUTH_TOKEN` set
-  only in that shell.
+- Version: 0.9.0 (Thunderstore has no earlier upload; the number is
+  free there despite the internal git history) · Upload via
+  thunderstore.io web UI, or `pwsh ./scripts/publish.ps1 -Version 0.9.0`
+  with `TCLI_AUTH_TOKEN` set only in that shell.
 
 ## 21. DO NOT RELEASE IF
 
