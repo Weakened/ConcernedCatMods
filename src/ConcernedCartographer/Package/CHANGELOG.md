@@ -1,10 +1,17 @@
 # Changelog
 
-## 1.0.0
+## 0.9.0 (Public Beta)
 
-**The Stable Living Atlas.** The roads your Vikings actually build become a durable, searchable, shareable map — and everything on it can be trusted.
+**The Stable Living Atlas — public beta.** The roads your Vikings actually build become a durable, searchable, shareable map — and everything on it can be trusted. This is the feature-complete candidate for the 1.0.0 release, published as a beta for wider testing; upgrading from this beta to 1.0.0 will be automatic and lossless, like every Concerned Cartographer upgrade.
 
-Highlights across the 1.0 line:
+Final beta polish (RC13):
+
+- **Softer large-map road ink**: the high-precision Dirt/Paved road lines on the large map now wear a gently feathered edge, matching the minimap's softer presentation the way the map's hand-drawn style intends — same centerline, same perceived width, same colors, zoom-stable, no extra rendering cost. Routes intentionally stay crisp (they are drawn plans, not terrain ink).
+- **Faster palette scrolling**: the mouse wheel moves the [Markers] palette list about three times as far per notch — still smooth, still bounded, and the map underneath still never zooms.
+- **The last orphaned map decoration is gone**: the empty vanilla backplate that lingered at the bottom-right of the large map after its controls were replaced is now hidden with the rest of the rail — only ever shown/hidden, never destroyed, and restored exactly under `Map/ShowVanillaMapControls`, a conflicting pin manager, any CC UI failure, disable, or uninstall. The bottom control tips are untouched.
+- **Markers open with the map**: the [Markers] palette now opens automatically as the starting side panel on every fresh large-map open (when the enhanced palette is active). Close it or switch panels and it stays out of your way for the rest of that map visit; the next map open starts fresh. Disabled palette, conflicting pin managers, and fallback cases are respected — nothing auto-opens then.
+
+Highlights across the line (developed as the internal 1.0 release candidates):
 
 - **Roads map themselves as you build them**: every successful Pathen/Paved action inks the map instantly — and nothing else ever does — with ghost-free reconciliation and a self-compacting atlas.
 - **Pins with memory**: adopt your vanilla pins, edit everything in place, batch, merge, undo — durable identities, recoverable deletes, uninstall-safe by construction.
@@ -29,9 +36,10 @@ Highlights across the 1.0 line:
 - **Second smoke-pass fixes (RC3)**: editing an adopted/managed pin now updates its single map rendering in place — renames and icon changes never leave a duplicate or orphan pin, in-session or after restart. Ground you **Level/Raise/Cultivate/Reset is remembered per world as explicitly-not-road**, so leveling a base never becomes road ink (walked or recovered, this session or later); a deliberate Pathen/Paved action always wins and re-inks normally. The Pin Workbench gained an icon picker with live sprite preview, category suggestions, and a size stepper — color stays raw hex at the bottom, honestly labeled metadata-only until pins can truly render it. A visible **CC Atlas** button and a contextual **P — Edit** hint make the panels discoverable without reading docs. The alignment diagnostic is smaller and quieter and prints one PASS/FAIL residual table; overlay alignment itself was verified in game (max residual ≤ 1 map texel) and its defect closed.
 
 Upgrading from any earlier version is automatic and lossless.
-## 0.9.0
 
-Public beta hardening: no new features, everything sturdier.
+## 0.9.0 internal hardening milestone
+
+(An internal, never-published milestone that happened to share the 0.9.0 number — kept for the development record; the public beta above supersedes it.) Public beta hardening: no new features, everything sturdier.
 
 - Feature freeze: 0.9.x is hardening-only on the road to 1.0.
 - Automated migration matrix across every format the mod has ever written.

@@ -1,20 +1,67 @@
-# Pre-release smoke test — Concerned Cartographer v1.0
+# Pre-release smoke test — Concerned Cartographer v1.0 line (0.9.0 public beta)
 
 The single-session human release checklist. This document accumulates every
 manual-only verification deferred by the autonomous conveyor (OPS-001
-rev 2) from v0.3 onward and is finalized against the exact v1.0 RC. Rows
+rev 2) from v0.3 onward and is finalized against the exact v1.0-line RC. Rows
 marked **BLOCKS** must pass before publication; others are record-and-ship.
 
-> Status: FINAL for v1.0, amended 2026-09-02 (ninth amendment): the
-> owner's RC11 smoke reported 6 feedback items (4 release blockers),
-> implemented in **RC12**; RC11 is retired — do not test, tag, or
-> upload it. **Do NOT restart the full 2.5–4 h checklist.** Run the
-> NEW section **R8 (RC12 owner-feedback)** first, then R7 (rows 5 and
-> 11 are superseded by R8), then the still-applicable R6 rows
-> (R6.3–5, 8, 13, 14 are superseded by R7), then R5 items 4–12, then
-> R3 A–L and R4 M–S as amended, then resume the shortened golden path
-> from where the second pass stopped. Test only the RC ZIP named in
-> RELEASE_DOSSIER.md.
+> Status: FINAL for the 0.9.0 public beta, amended 2026-09-02 (tenth
+> amendment): the owner's RC12 smoke approved RC12 behavior as the
+> baseline and requested 4 presentation/UX polish items, implemented in
+> **RC13** — which is also the re-version of the public package
+> identity to **0.9.0 (Public Beta)**; earlier RC ZIPs are retired —
+> do not test, tag, or upload them. **Do NOT restart the full
+> 2.5–4 h checklist.** Run the NEW section **R9 (RC13 final beta
+> polish)** first on the exact 0.9.0 beta ZIP named in
+> RELEASE_DOSSIER.md, then complete any R8 → R7 → R6 → R5 → R3/R4
+> rows (as previously amended) that the RC12 smoke did not finish. R9
+> supersedes no earlier row — RC13 deliberately changes only the four
+> polish behaviors below.
+
+## R9. RC13 / 0.9.0 Beta final-polish mini-smoke — RUN FIRST (short)
+
+Every item verifies one RC13 polish change and its restore/fallback
+paths. All **BLOCK** the beta. Prep: the existing disposable world with
+roads (dirt AND paved), routes (one dashed, one dotted), pins, and the
+usual hoe/stone kit.
+
+1. **Feathered road ink (large map)**: dirt and paved lines on the
+   large map now show a gently feathered edge instead of the
+   razor-sharp vector edge — closer to the minimap's soft look — while
+   staying clearly readable: the centerline still sits exactly where
+   you walk (player marker on the line), perceived width and colors
+   match RC12 (paved still reads lighter), and the softness stays
+   proportionate while zooming fully in and out (no shimmer, no
+   doubled ink with the texture overlay, no visible performance
+   change). Routes stay CRISP by design. The minimap is unchanged.
+   With `Accessibility/HighContrast = true` the palette swaps but the
+   ink stays readable; with `Map/HighPrecisionLargeMapRoads = false`
+   the texture fallback looks exactly like RC12.
+2. **Palette wheel speed**: open [Markers] and wheel-scroll the list —
+   it travels roughly three times as far per notch as RC12, smoothly,
+   stopping cleanly at both ends, and the map underneath never zooms
+   while the pointer is over the palette (RC11 guard still holds).
+3. **No orphaned backplate**: with default settings, the empty
+   rectangular vanilla decoration at the bottom-right of the large map
+   is gone, while the bottom control tips, the shared-map hint, and
+   the biome label are untouched; the log prints one
+   "Vanilla chrome sweep: hid '…'" line naming what was hidden (record
+   the name). Set `Map/ShowVanillaMapControls = true` — the FULL
+   vanilla rail returns exactly, including that backplate; set it back
+   to false — hidden again. Set `General/Enabled = false` mid-session
+   with the map open — all vanilla chrome returns; re-enable —
+   replaced again. If the sweep instead logs "no orphan above …",
+   record the line verbatim and treat this row as FAILED (the plate
+   was not identified).
+4. **Markers panel opens with the map**: opening the large map opens
+   the [Markers] palette as the starting side panel. Close it (Escape
+   or its close path) — it stays closed for the rest of this map
+   visit. Reopen the map — it is back. Open the map and switch to
+   [Routes] — Markers never reopens on its own that visit. With
+   `Pins/EnhancedPinPalette = false` (or a conflicting pin manager
+   installed), nothing auto-opens and the vanilla selector shows as
+   before. On a `nomap` world away from a cartography table, nothing
+   auto-opens.
 
 ## R8. RC12 owner-feedback mini-smoke — RUN FIRST (short)
 

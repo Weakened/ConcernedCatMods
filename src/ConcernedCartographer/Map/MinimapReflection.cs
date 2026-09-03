@@ -515,6 +515,41 @@ internal static class MinimapReflection
     }
 
 
+    private static readonly AccessTools.FieldRef<Minimap, UnityEngine.UI.Text>? BiomeNameLargeField =
+        BuildFieldRef<UnityEngine.UI.Text>("m_biomeNameLarge");
+
+    /// <summary>The large map's pin roots and biome label, so the RC13
+    /// orphan-chrome sweep can refuse any candidate that frames them.
+    /// Each output is independently null when unavailable — callers
+    /// treat missing references as "nothing to protect here", which
+    /// fails toward keeping vanilla objects visible only through the
+    /// sweep's other checks.</summary>
+    public static void GetLargeMapProtectedRoots(
+        out RectTransform? pinRoot, out RectTransform? pinNameRoot, out Transform? biomeLabel)
+    {
+        pinRoot = null;
+        pinNameRoot = null;
+        biomeLabel = null;
+        Minimap minimap = Minimap.instance;
+        if (minimap == null)
+        {
+            return;
+        }
+
+        try
+        {
+            pinRoot = PinRootLargeField is not null ? PinRootLargeField(minimap) : null;
+            pinNameRoot = PinNameRootLargeField is not null ? PinNameRootLargeField(minimap) : null;
+            UnityEngine.UI.Text? biome = BiomeNameLargeField is not null ? BiomeNameLargeField(minimap) : null;
+            biomeLabel = biome != null ? biome.transform : null;
+        }
+        catch
+        {
+            // Fail soft: missing protected roots only reduce what the
+            // sweep can rule out; every other guard still applies.
+        }
+    }
+
     /// <summary>The death/boss filter buttons on the vanilla rail (parents
     /// of the public highlight images), for the full-rail replacement.</summary>
     public static System.Collections.Generic.List<GameObject> GetSystemFilterButtons()

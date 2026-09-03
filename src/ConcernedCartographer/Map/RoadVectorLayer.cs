@@ -221,13 +221,53 @@ internal sealed class RoadVectorLayer
         _container.sizeDelta = Vector2.zero;
         _container.anchoredPosition = Vector2.zero;
 
-        _dirtGraphic = CreateGraphic("CcRoadVectorDirt", _container);
-        _pavedGraphic = CreateGraphic("CcRoadVectorPaved", _container);
-        _routeGraphic = CreateGraphic("CcRouteVector", _container);
+        // RC13 polish 1: roads wear the feathered ink profile; routes keep
+        // the crisp edge (they are plans, not terrain ink).
+        Texture2D featherTexture = GetFeatherTexture();
+        _dirtGraphic = CreateGraphic("CcRoadVectorDirt", _container, featherTexture);
+        _pavedGraphic = CreateGraphic("CcRoadVectorPaved", _container, featherTexture);
+        _routeGraphic = CreateGraphic("CcRouteVector", _container, featherTexture: null);
         _scheduler.Invalidate();
     }
 
-    private static RoadVectorGraphic CreateGraphic(string name, RectTransform parent)
+    /// <summary>The shared 1×64 alpha column sampled across every road
+    /// quad's width (RC13 polish 1): white with the pure
+    /// <see cref="RoadInkSoftening"/> profile, so the GPU's bilinear
+    /// filtering renders the feathered edge with zero extra geometry.
+    /// Built once per session; failure surfaces in Tick's fail-soft
+    /// catch like any other layer error.</summary>
+    private static Texture2D? _featherTexture;
+
+    private static Texture2D GetFeatherTexture()
+    {
+        if (_featherTexture != null)
+        {
+            return _featherTexture;
+        }
+
+        const int height = 64;
+        var texture = new Texture2D(1, height, TextureFormat.RGBA32, mipChain: false)
+        {
+            wrapMode = TextureWrapMode.Clamp,
+            filterMode = FilterMode.Bilinear,
+        };
+        for (int texel = 0; texel < height; texel++)
+        {
+            // Texel center in v, mapped to a signed offset from the quad
+            // centerline; the outermost texels are forced fully clear so
+            // clamp sampling can never leave a hard rim.
+            float v = (texel + 0.5f) / height;
+            float offset = Mathf.Abs((v * 2f) - 1f);
+            float alpha = texel == 0 || texel == height - 1 ? 0f : RoadInkSoftening.Alpha(offset);
+            texture.SetPixel(0, texel, new Color(1f, 1f, 1f, alpha));
+        }
+
+        texture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
+        _featherTexture = texture;
+        return texture;
+    }
+
+    private static RoadVectorGraphic CreateGraphic(string name, RectTransform parent, Texture2D? featherTexture)
     {
         var graphicObject = new GameObject(name, typeof(RectTransform));
         var rectTransform = (RectTransform)graphicObject.transform;
@@ -247,6 +287,7 @@ internal sealed class RoadVectorLayer
 
         var graphic = graphicObject.AddComponent<RoadVectorGraphic>();
         graphic.raycastTarget = false;
+        graphic.FeatherTexture = featherTexture;
         return graphic;
     }
 
@@ -274,6 +315,12 @@ internal sealed class RoadVectorLayer
         {
             return;
         }
+
+        // RC13 polish 1: road quads widen symmetrically for the feathered
+        // edge; the alpha profile crosses 0.5 exactly at the original
+        // half width, so the centerline and the perceived RC12 width are
+        // both preserved at every zoom. Routes keep the crisp halfWidth.
+        float roadHalfWidth = halfWidth * RoadInkSoftening.WidenFactor;
 
         // One screen pixel expressed in baked map units at the CURRENT
         // zoom: the shared conversion behind widths and dash/dot cadence.
@@ -326,7 +373,7 @@ internal sealed class RoadVectorLayer
                         return;
                     }
 
-                    graphic.AddSegmentQuad(previousX, previousY, bakedX, bakedY, halfWidth);
+                    graphic.AddSegmentQuad(previousX, previousY, bakedX, bakedY, roadHalfWidth);
                     quads++;
                 }
                 else if (!hasPrevious && stroke.Points.Count == 1 && explored)
@@ -339,7 +386,7 @@ internal sealed class RoadVectorLayer
                         return;
                     }
 
-                    graphic.AddSegmentQuad(bakedX, bakedY, bakedX, bakedY, halfWidth);
+                    graphic.AddSegmentQuad(bakedX, bakedY, bakedX, bakedY, roadHalfWidth);
                     quads++;
                 }
 
@@ -561,6 +608,14 @@ internal sealed class RoadVectorLayer
         private Color32 _inkColor;
         private bool _building;
 
+        /// <summary>Non-null makes this graphic sample the feather column
+        /// across each quad's width (RC13 polish 1: roads). Null keeps
+        /// the default white texture — the crisp RC12 edge (routes).</summary>
+        public Texture2D? FeatherTexture;
+
+        public override Texture mainTexture =>
+            FeatherTexture != null ? FeatherTexture : base.mainTexture;
+
         public void BeginQuads(Color32 inkColor)
         {
             _inkColor = inkColor;
@@ -623,6 +678,13 @@ internal sealed class RoadVectorLayer
             vh.Clear();
             UIVertex vertex = UIVertex.simpleVert;
 
+            // Quad corners are appended as [start+n, end+n, end−n,
+            // start−n]: the first pair sits on one width edge, the second
+            // on the other. The feather uv spans the texture column
+            // across exactly that axis; with the default white texture
+            // the uv is harmless.
+            bool feathered = FeatherTexture != null;
+
             for (int index = 0; index + 3 < _quadCorners.Count; index += 4)
             {
                 int baseIndex = vh.currentVertCount;
@@ -630,6 +692,11 @@ internal sealed class RoadVectorLayer
                 for (int corner = 0; corner < 4; corner++)
                 {
                     vertex.position = _quadCorners[index + corner];
+                    if (feathered)
+                    {
+                        vertex.uv0 = new Vector2(0.5f, corner < 2 ? 1f : 0f);
+                    }
+
                     vh.AddVert(vertex);
                 }
 

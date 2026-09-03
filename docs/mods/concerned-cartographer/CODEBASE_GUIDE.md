@@ -2,7 +2,7 @@
 
 > **Audience:** maintainers, contributors, reviewers, and anyone trying to understand or extend the mod.
 >
-> **Snapshot:** originally written against 0.4.0; updated for the Concerned Cartographer **1.0.0 release candidate** (repository `main`, RC lineage commit `53f371c60da8b6b5b69d590b918657d0ecbe4026`). Sections 8b–8e cover the v0.5–v1.0 additions (routes, collaboration/sync, localization/accessibility, compatibility/backup, and the SEC-1.0-001 hardening layer). This document remains a living map: update it in the same PR whenever source files or responsibilities change.
+> **Snapshot:** originally written against 0.4.0; updated for the Concerned Cartographer **1.0-line release candidates** (repository `main`, RC lineage commit `53f371c60da8b6b5b69d590b918657d0ecbe4026`), whose public package identity ships as **0.9.0 (Public Beta)** since RC13. Sections 8b–8e cover the v0.5–v1.0 additions (routes, collaboration/sync, localization/accessibility, compatibility/backup, and the SEC-1.0-001 hardening layer). This document remains a living map: update it in the same PR whenever source files or responsibilities change.
 
 ## 1. Architectural model
 
@@ -480,6 +480,16 @@ regardless of fog (the player's own plans); roads keep fog parity.
 Styled routes that would blow the stamp budget degrade to solid lines
 per route instead of taking the layer down.
 
+### `RoadInkSoftening.cs` (Domain, RC13 polish 1)
+
+The pure feathered-edge profile for large-map road ink: an opaque color
+core, a symmetric monotonic alpha falloff, and a 4/3 quad widen factor
+chosen so the 50%-alpha extent equals the crisp RC12 width exactly
+(perceived width preserved). `RoadVectorLayer` samples it into one
+1×64 gradient texture that dirt/paved quads stretch across their width
+via per-vertex uv — same quad count and budget, no under-stroke, no
+double-render; routes keep the default white texture and stay crisp.
+
 ### `RouteOverlayRenderer.cs`
 
 The route texture overlay ("CC Routes"): minimap + fallback since RC10,
@@ -519,6 +529,17 @@ map image, hint bars, shared-map hint, and (reflected) pin roots. The
 verdict string is logged once per change by the runtime ("Vanilla rail
 chrome: …") so smoke runs can see what was hidden or why a per-button
 fallback ran. Restore paths unhide the containers first.
+
+RC13 polish 3 adds `Map/OrphanChromeSweep.cs` + the pure
+`Domain/Atlas/OrphanChromeRule.cs`: from every rail object CC already
+hid, a bounded parent climb hides the HIGHEST ancestor the rule proves
+is empty decoration (no map image / hint bars / shared-map hint / pin
+roots / biome label in the subtree, no would-be-visible control, no
+text-bearing graphic) — catching backplates that frame the replaced
+controls from OUTSIDE both button groups, like the visible-to-others
+toggle's plate. SetActive only, everything tracked and restored on any
+fallback and teardown, decisions logged once per change as
+"Vanilla chrome sweep: …".
 
 `MapInputGate` also owns the RC11 blocker-7 wheel guard: a
 prefix/postfix on `Minimap.UpdateMap` snapshots and restores both zoom
@@ -891,6 +912,19 @@ The high-precision large-map road layer: road vertices are baked once into zoom-
 
 `cc_roads align live`: gathers player position, terrain classification, latest traversal sample (`RoadSurveyor.LatestSample`), latest accepted pipeline point (`RoadObservationPipeline.LastAccepted`), nearest stored road point, all three projections (native `WorldToPixel`/`WorldToMapPoint`, CC overlay), texture size / m-per-texel / zoom / screen-px-per-texel, and the live player-marker anchor versus the canonical projection (screen pixels, via `Map/MapScreenMath`), then hands the measurements to the pure `AlignmentVerdicts` for the separated A (observation) / B (projection) / C (render resolution) / D (marker anchor) verdicts. Read-only, fails soft to n/a per quantity.
 
+### `PaletteScrollTuning.cs` / `DefaultPanelRule.cs` (Domain/Atlas, RC13 polish 2/4)
+
+Two small pure pieces behind the RC13 UX polish. `PaletteScrollTuning`
+pins the palette's wheel step (3× the stock ScrollRect sensitivity,
+floored at three rows per notch) so the owner's 2–3× target is a
+regression test, not a feel. `DefaultPanelRule` is the
+once-per-fresh-map-open state machine that opens the Markers panel as
+the initial CC side surface: armed while the map is closed, disarmed
+the moment it fires OR the moment any surface is already visible OR
+the palette is unavailable (setting/conflict/failure/NoMap) — so
+closing or switching panels is never fought for the rest of that
+map-open, and unavailability can never pop a panel late.
+
 ### `Map/PinPalettePanel.cs` (#96)
 
 The Enhanced Pin Palette on the large map: a searchable, sprite-previewed, human-labeled marker browser over the stable IconRegistry (session recents, collapse toggle, no raw IDs). Choosing a marker selects the mapped vanilla icon type through the game's own `SelectIcon` and arms the runtime's `PaletteBirthTracker`; vanilla double-click + naming then creates the pin and the runtime associates the AtlasPin when naming closes — managed from birth, exactly one rendering. The runtime hides the five vanilla placeable icon buttons (`SetActive` only, per-cycle enforcement) and restores them on `Pins/ShowVanillaPinPalette`, `EnhancedPinPalette=false`, a detected conflicting pin manager, palette or toolbar failure, mod disable, or dispose. Since #100 the palette starts hidden, opens from the toolbar's [Markers] button as a registered exclusive surface, and closes on Escape (`HandleFrame`).
@@ -1064,8 +1098,9 @@ The project compiles `Domain/**/*.cs` directly, so pure tests do not require Val
 | `AtlasStringsTests.cs` | localization catalog/override safety |
 | `MigrationMatrixTests.cs` | every shipped sidecar format back-parses into the current readers |
 | `SecurityHardeningTests.cs` | SEC-1.0-001: decompression-bomb rejection, revision/float/string bounds, deletion-name previews, display sanitization |
+| `Rc13PolishTests.cs` | RC13 / 0.9.0 beta polish: road ink feather profile invariants (opaque core, symmetry, monotone falloff, preserved perceived width), palette wheel 2–3× window + floor, default-panel once-per-map-open/never-fight rules, orphan-chrome hide/restore truth table |
 
-At the 1.0.0 RC8 the suite is 356 tests, all green, run without any game assemblies.
+At the RC13 / 0.9.0 public-beta candidate the suite is 508 tests, all green, run without any game assemblies.
 
 Game adapters still need real Valheim tests; unit tests cannot prove Harmony targets, private field names, overlay alignment or Unity UI behavior.
 

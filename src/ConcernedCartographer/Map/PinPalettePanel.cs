@@ -138,6 +138,12 @@ internal sealed class PinPalettePanel
                 throw new InvalidOperationException("Jötunn scroll view layout changed; palette cannot build.");
             }
 
+            // RC13 polish 2: the wheel step ships at PaletteScrollTuning's
+            // multiple of the stock sensitivity (owner: RC12 scrolled too
+            // slowly). Bounds and the RC11 map-zoom wheel guard are
+            // untouched.
+            _scroll.scrollSensitivity = PaletteScrollTuning.Scaled(_scroll.scrollSensitivity);
+
             // The scroll chrome ships an opaque black backdrop; soften it so
             // the wood panel shows through.
             var backdrop = scrollView!.GetComponent<Image>();

@@ -68,6 +68,12 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly PaletteBirthTracker<Minimap.PinData> _birthTracker = new();
     private float _hintElapsed;
 
+    // RC13 polish 3/4: the orphaned-backplate sweep behind the RC11 rail
+    // hiding, and the once-per-fresh-map-open Markers default panel.
+    private readonly OrphanChromeSweep _chromeSweep = new();
+    private string _lastChromeSweepDiagnostics = "";
+    private readonly DefaultPanelRule _defaultPanel = new();
+
     // The context button sits away from the hovered pin, so the action
     // stays alive briefly (and while the pointer is over the button) to
     // survive the mouse travel from pin to button.
@@ -361,6 +367,13 @@ internal sealed class CartographerRuntime : IDisposable
             }
         }
 
+        // RC13 polish 4: every frame the large map is closed re-arms the
+        // Markers default panel for the next FRESH map-open.
+        if (!Minimap.IsOpen())
+        {
+            _defaultPanel.NoteMapClosed();
+        }
+
         if (Minimap.IsOpen() && !Minimap.InTextInput() && !typingInField)
         {
             // The CC map surface (#96/#100): toolbar, contextual pin
@@ -388,6 +401,28 @@ internal sealed class CartographerRuntime : IDisposable
             else
             {
                 _palettePanel.SetUnavailable();
+            }
+
+            // RC13 polish 4: the Markers panel is the initial CC side
+            // surface on a fresh map-open — once per open, only when the
+            // enhanced palette is genuinely available (setting, conflict,
+            // failure, toolbar health, NoMap gate) and no surface is
+            // already up. The pure rule disarms itself, so closing or
+            // switching panels is never fought for the rest of this
+            // map-open.
+            if (_defaultPanel.IsArmed && _defaultPanel.ShouldAutoOpen(
+                    PaletteActive() && !_mapUi.HasFailed && AtlasAccessAllowed(out _),
+                    _mapUi.AnySurfaceVisible))
+            {
+                _palettePanel.UiScale = _settings.UiScale.Value;
+                _palettePanel.EnsureBuilt();
+                _mapUi.OpenExclusive(_paletteToken, () =>
+                {
+                    if (!_palettePanel.IsVisible)
+                    {
+                        _palettePanel.Toggle();
+                    }
+                });
             }
 
             UpdateEditHint(unscaledDeltaTime);
@@ -465,6 +500,10 @@ internal sealed class CartographerRuntime : IDisposable
             _displayController.Reset();
             _mapUi.Reset();
             _palettePanel.Reset();
+            // RC13 polish 3: drop (and where still alive, restore) any
+            // hidden chrome across the world boundary; the next map
+            // hierarchy is swept fresh.
+            _chromeSweep.RestoreAll();
             _birthTracker.Reset();
             _pinAdapter.Reset();
             SaveIfDirty();
@@ -1035,9 +1074,10 @@ internal sealed class CartographerRuntime : IDisposable
             }
         }
 
+        GameObject? publicPosition = null;
         try
         {
-            GameObject? publicPosition = Minimap.instance != null && Minimap.instance.m_publicPosition != null
+            publicPosition = Minimap.instance != null && Minimap.instance.m_publicPosition != null
                 ? Minimap.instance.m_publicPosition.gameObject
                 : null;
             if (publicPosition != null && publicPosition.activeSelf != wantRailVisible)
@@ -1084,6 +1124,43 @@ internal sealed class CartographerRuntime : IDisposable
             _lastRailDiagnostics = railDiagnostics;
             _log.LogInfo($"Vanilla rail chrome: {railDiagnostics}.");
         }
+
+        // RC13 polish 3: with the rail fully replaced, an orphaned
+        // decorative backplate can frame the hidden controls from OUTSIDE
+        // both button groups (the empty rectangle at the bottom-right of
+        // the owner's RC12 smoke). Climb from every hidden rail object
+        // and hide only what the pure OrphanChromeRule proves is empty
+        // decoration; the moment ANY vanilla fallback applies, everything
+        // is restored exactly. Bottom control hints are protected inside
+        // the rule's facts.
+        if (OrphanChromeRule.MustRestore(wantPlaceablesVisible || wantRailVisible))
+        {
+            _chromeSweep.RestoreAll();
+        }
+        else
+        {
+            var chromeSeeds = new List<GameObject?> { selectorsContainer, filtersContainer, publicPosition };
+            foreach (GameObject button in MinimapReflection.GetPlaceableIconButtons())
+            {
+                chromeSeeds.Add(button);
+            }
+
+            foreach (GameObject button in MinimapReflection.GetSystemFilterButtons())
+            {
+                chromeSeeds.Add(button);
+            }
+
+            _chromeSweep.Sweep(chromeSeeds);
+        }
+
+        if (!string.Equals(_chromeSweep.LastDiagnostics, _lastChromeSweepDiagnostics, StringComparison.Ordinal))
+        {
+            _lastChromeSweepDiagnostics = _chromeSweep.LastDiagnostics;
+            if (_lastChromeSweepDiagnostics.Length > 0)
+            {
+                _log.LogInfo($"Vanilla chrome sweep: {_lastChromeSweepDiagnostics}.");
+            }
+        }
     }
 
     private string _lastRailDiagnostics = "";
@@ -1101,6 +1178,11 @@ internal sealed class CartographerRuntime : IDisposable
     {
         try
         {
+            // RC13 polish 3: the sweep's chrome is the outermost layer —
+            // restore it first so the containers and buttons below come
+            // back into a visible hierarchy.
+            _chromeSweep.RestoreAll();
+
             if (MinimapReflection.TryGetVanillaRailContainers(
                     out GameObject? selectorsContainer, out GameObject? filtersContainer, out _, out _))
             {
