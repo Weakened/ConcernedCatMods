@@ -41,6 +41,11 @@ internal sealed class AtlasDrawerPanel
 
     private readonly ManualLogSource _log;
 
+    // RC14 fix 2: position persistence callbacks (wired by the runtime to
+    // the Drawer/PanelPosition setting). The panel stays BepInEx-free.
+    public Func<string>? LoadPosition;
+    public Action<string>? PositionCaptured;
+
     public Action<bool>? DirtToggled;
     public Action<bool>? PavedToggled;
     public Action<bool>? PinsToggled;
@@ -70,6 +75,15 @@ internal sealed class AtlasDrawerPanel
     private readonly Text[] _viewLabels = new Text[ViewSlots];
     private bool _failed;
     private bool _suppressToggleEvents;
+
+    // RC14 fix 2: the last observed drag position, noted every visible
+    // frame — the RectTransform dies with the scene on relog, so persisting
+    // from a cached copy is the only reliable capture point.
+    private bool _hasLivePosition;
+    private float _liveX;
+    private float _liveY;
+    private float _openedAtX;
+    private float _openedAtY;
 
     public AtlasDrawerPanel(ManualLogSource log)
     {
@@ -109,8 +123,10 @@ internal sealed class AtlasDrawerPanel
             _suppressToggleEvents = false;
             RefreshLists();
             _panel!.transform.localScale = Vector3.one * UiScale;
-            ((RectTransform)_panel.transform).anchoredPosition =
-                new Vector2(-((PanelWidth * UiScale) / 2f) - 30f, 0f);
+            Vector2 openPosition = ResolveOpenPosition();
+            ((RectTransform)_panel.transform).anchoredPosition = openPosition;
+            _openedAtX = openPosition.x;
+            _openedAtY = openPosition.y;
             _panel.SetActive(true);
             UnityEngine.EventSystems.EventSystem.current?.SetSelectedGameObject(
                 _dirt != null ? _dirt.gameObject : null);
@@ -125,7 +141,69 @@ internal sealed class AtlasDrawerPanel
     {
         if (_panel != null)
         {
+            NotePosition();
             _panel.SetActive(false);
+        }
+
+        FlushPosition();
+    }
+
+    /// <summary>RC14 fix 2: persists the last observed drag position if the
+    /// panel was moved this visit. Safe to call after the panel GameObject
+    /// died (scene change) — it flushes the per-frame cached copy.</summary>
+    public void FlushPosition()
+    {
+        if (!_hasLivePosition)
+        {
+            return;
+        }
+
+        _hasLivePosition = false;
+        PositionCaptured?.Invoke(PanelPositionRule.Serialize(_liveX, _liveY));
+    }
+
+    /// <summary>The drawer opens at the persisted drag position, clamped
+    /// fully on-screen for the current canvas and UI scale
+    /// (RC14 fix 2); the default right-edge dock applies when nothing is
+    /// stored or the canvas is unavailable.</summary>
+    private Vector2 ResolveOpenPosition()
+    {
+        var defaultDock = new Vector2(-((PanelWidth * UiScale) / 2f) - 30f, 0f);
+        if (!PanelPositionRule.TryParse(LoadPosition?.Invoke(), out float storedX, out float storedY))
+        {
+            return defaultDock;
+        }
+
+        RectTransform? canvas = GUIManager.CustomGUIFront != null
+            ? GUIManager.CustomGUIFront.transform as RectTransform
+            : null;
+        if (canvas == null)
+        {
+            return defaultDock;
+        }
+
+        (float clampedX, float clampedY) = PanelPositionRule.Clamp(
+            storedX, storedY, PanelWidth, PanelHeight, UiScale,
+            canvas.rect.width, canvas.rect.height);
+        return new Vector2(clampedX, clampedY);
+    }
+
+    /// <summary>Caches the current anchored position, marking it dirty only
+    /// once the panel actually moved from where this visit opened it — an
+    /// untouched drawer never overwrites "use the default dock".</summary>
+    private void NotePosition()
+    {
+        if (_panel == null)
+        {
+            return;
+        }
+
+        Vector2 position = ((RectTransform)_panel.transform).anchoredPosition;
+        _liveX = position.x;
+        _liveY = position.y;
+        if (Mathf.Abs(position.x - _openedAtX) > 0.5f || Mathf.Abs(position.y - _openedAtY) > 0.5f)
+        {
+            _hasLivePosition = true;
         }
     }
 
@@ -172,7 +250,13 @@ internal sealed class AtlasDrawerPanel
 
     public void HandleFrame()
     {
-        if (IsVisible && Input.GetKeyDown(KeyCode.Escape) && !CcTextFocus.EscapeShouldOnlyBlur())
+        if (!IsVisible)
+        {
+            return;
+        }
+
+        NotePosition();
+        if (Input.GetKeyDown(KeyCode.Escape) && !CcTextFocus.EscapeShouldOnlyBlur())
         {
             Hide();
         }

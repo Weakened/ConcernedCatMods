@@ -5,20 +5,82 @@ manual-only verification deferred by the autonomous conveyor (OPS-001
 rev 2) from v0.3 onward and is finalized against the exact v1.0-line RC. Rows
 marked **BLOCKS** must pass before publication; others are record-and-ship.
 
-> Status: FINAL for the 0.9.0 public beta, amended 2026-09-02 (tenth
-> amendment): the owner's RC12 smoke approved RC12 behavior as the
-> baseline and requested 4 presentation/UX polish items, implemented in
-> **RC13** — which is also the re-version of the public package
-> identity to **0.9.0 (Public Beta)**; earlier RC ZIPs are retired —
+> Status: FINAL for the 0.9.0 public beta, amended 2026-09-03 (eleventh
+> amendment): the owner's final RC13 smoke found 5 defects — custom
+> markers degrading to Dots after relog, roads missing from the minimap
+> after relog, the Atlas drawer forgetting its dragged position, armed
+> Quick Pin leaking clicks/Escape to vanilla combat and the pause menu,
+> and a Sentry-captured NullReferenceException during pin updates
+> (CONCERNED-CARTOGRAPHER-2). All five are fixed in **RC14** (same
+> public identity: **0.9.0 Public Beta**); earlier RC ZIPs are retired —
 > do not test, tag, or upload them. **Do NOT restart the full
-> 2.5–4 h checklist.** Run the NEW section **R9 (RC13 final beta
-> polish)** first on the exact 0.9.0 beta ZIP named in
-> RELEASE_DOSSIER.md, then complete any R8 → R7 → R6 → R5 → R3/R4
-> rows (as previously amended) that the RC12 smoke did not finish. R9
-> supersedes no earlier row — RC13 deliberately changes only the four
-> polish behaviors below.
+> 2.5–4 h checklist.** Run the NEW section **R10 (RC14 final smoke
+> fixes)** first on the exact RC14 0.9.0 beta ZIP named in
+> RELEASE_DOSSIER.md, re-verify any R9 row whose surface you touch along
+> the way, then complete any remaining R9 → R8 → R7 → R6 → R5 → R3/R4
+> rows not yet finished. R10 supersedes no earlier row — RC14
+> deliberately changes only the five lifecycle/input behaviors below.
 
-## R9. RC13 / 0.9.0 Beta final-polish mini-smoke — RUN FIRST (short)
+## R10. RC14 / 0.9.0 Beta final-smoke-fix mini-smoke — RUN FIRST (short)
+
+Every item verifies one RC14 fix and its restore/fallback paths. All
+**BLOCK** the beta. Prep: the existing disposable world with roads (dirt
+AND paved on the minimap-visible scale), several cc:* markers (at least
+one road/harbor/fishing/objective — the Dot-fallback set), pins near a
+cluster, one dragged panel, and Sentry reachable (owner console open).
+
+1. **Custom markers survive relog**: with several cc:* markers placed
+   (include the ones whose vanilla fallback is the Dot: road, harbor,
+   fishing, objective), log out to the main menu and back into the same
+   world — every cc:* marker still wears its Concerned Cartographer art
+   on the large map AND the minimap, with the right name and position.
+   Genuine vanilla pins you never adopted still show their vanilla
+   icons — no repainting. Zoom out until the cc:* markers fold into a
+   cluster — a cluster dominated by a cc:* icon shows that icon's CC
+   art (not a vanilla Dot). Restart the game fully and re-enter — same
+   result. `cc_pins status` counts are unchanged throughout.
+2. **Roads survive relog on the minimap**: with dirt AND paved roads
+   recorded, log out and back in — both road kinds render on the
+   minimap immediately (no rebuild command, no map open needed) and on
+   the large map, with paved still lighter than dirt. The log's "Road
+   atlas ready" line shows the same stroke/point counts, and there is
+   NO "Could not rebuild road map overlays" line. Toggle each road
+   layer off/on in the drawer and Jötunn's Map Overlays panel — both
+   work; with `Map/HighPrecisionLargeMapRoads = false` the texture
+   fallback renders on the large map too. Re-walk a recorded road —
+   the ink never thickens (authority/suppression intact). Repeat the
+   relog once more — no duplicates, no doubled ink.
+3. **Atlas drawer position persists**: open [Atlas], drag the drawer
+   somewhere distinctly non-default, close it (Escape), reopen — it is
+   where you left it. Log out and back in, reopen — still there.
+   Restart the game — still there. Drag it half off-screen, relog —
+   it comes back fully on-screen (clamped). Set `Accessibility/UiScale`
+   to 1.6 and reopen — the drawer is scaled AND fully on-screen. Clear
+   `Drawer/PanelPosition` in the config — the default right-edge dock
+   returns. Other side panels still re-dock as before and keep their
+   UI scale after a relog.
+4. **Quick Pin owns its input**: with a weapon equipped, arm Quick Pin
+   from the toolbar ([Quick Pin] closes the map) — the arming click
+   never swings the weapon. Look at a rock and left-click: the marker
+   is created and the click does NOT attack (no swing, no stamina
+   loss). Re-arm, press Escape: the armed mode cancels, the pause menu
+   does NOT open, and gameplay input is back the very next moment
+   (click swings again, Esc opens the menu normally). Re-arm and
+   press F7 — capture works; re-arm and switch worlds/log out — no
+   input suppression leaks into the next session. Typing in any CC
+   text field still suppresses Valheim keys exactly as before
+   (RC10 behavior unchanged).
+5. **No pin-update exception recurrence**: with markers, roads, and
+   clusters present, perform several rapid logout→login cycles and one
+   mid-session world switch; open/close the large map around each
+   boundary. LogOutput.log contains NO "Pin adapter failed",
+   "Pin display controller failed", or NullReferenceException lines,
+   and the owner's Sentry project shows NO new
+   CONCERNED-CARTOGRAPHER-2 events (or any new CC exception) during
+   the whole session. Markers/roads render correctly after every
+   cycle (the disable-latch can no longer eat a session silently).
+
+## R9. RC13 / 0.9.0 Beta final-polish mini-smoke (short)
 
 Every item verifies one RC13 polish change and its restore/fallback
 paths. All **BLOCK** the beta. Prep: the existing disposable world with

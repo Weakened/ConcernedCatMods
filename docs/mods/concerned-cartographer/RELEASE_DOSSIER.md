@@ -464,6 +464,80 @@ matrix (1080p/1440p × UiScale 0.8/1.0/1.6) remains derivation-based in
 code and is verified live by smoke R6.15 — a game UI cannot be
 screenshot-proven from the conveyor.
 
+**Owner final-smoke pass (2026-09-03, RC14) — 5 defects from the
+owner's final RC13 smoke, all lifecycle/input class, all fixed:**
+
+1. **Custom cc:* markers degraded to vanilla Dots after relog.** Root
+   cause: the pin adapter's fail-soft `_disabledForSession` latch was
+   never cleared by `Reset()` and the adapter object outlives every
+   game session, so one teardown-frame failure (defect 5) silently
+   disabled sprite rebinding for the rest of the process — and four
+   cc:* icons' saved vanilla fallback IS the Dot. Fixed as one
+   coherent lifecycle repair with defect 5: session boundaries
+   (`Reset`/`ReconcileOnMapReady`) clear the latch, the rebind
+   decision is the pure tested `SpriteRebindRule` (restart-claimed
+   cc:* renderings rebuild to regain their art; genuine vanilla pins
+   are NEVER repainted), `AddManagedPin` applies sprites to same-frame
+   UI elements too, cluster markers wear their dominant cc:* sprite,
+   and `CcIconSprites` scopes its failure blacklist per session and
+   marks sprites `DontUnloadUnusedAsset`.
+2. **Atlas drawer forgot its dragged position on relog** (and even on
+   every reopen — `Toggle()` re-docked unconditionally). Nothing ever
+   read the dragged RectTransform back, and Jötunn rebuilds
+   `CustomGUIFront` every scene change. Fixed: the position is noted
+   every visible frame, captured on close/boundary/quit into the new
+   `Drawer/PanelPosition` setting, and restored through the pure
+   `PanelPositionRule` clamp (fully on-screen for the current canvas
+   and UI scale; malformed/empty stored values fall back to the
+   default dock). Adjacent relog defect fixed with it: `CcSidePanel`'s
+   `_appliedScale` survived the scene change, so rebuilt side panels
+   lost a non-default UI scale.
+3. **Armed Quick Pin leaked input to vanilla** — the capture click
+   also swung the weapon and Escape also opened the pause menu. The
+   RC13 armed mode was a passive raw-Input observer. Fixed: the pure
+   `QuickPinInputGate` owns the interaction (armed lifetime + the
+   owned press's whole frame, tick-order independent; cancel wins
+   over capture; external disarm releases immediately) and the new
+   `PlayerInputGate` applies it through two narrow skippable Harmony
+   prefixes — `Humanoid.StartAttack` (local player only) and
+   `Menu.Update` (only while the menu is closed) — fail-soft,
+   uninstalled on dispose. Text-field typing suppression (RC10
+   feedback 14) is untouched.
+4. **Persisted roads did not render on the minimap after relog.**
+   Persistence was fine (the "Road atlas ready" line showed full
+   counts); the renderer's cached Jötunn overlay handles are
+   process-lifetime while Jötunn destroys every overlay texture on
+   `Minimap.OnDestroy` — session 2 painted into a dead texture
+   ("Could not rebuild road map overlays" once per redraw). Fixed:
+   handle caches are liveness-checked through the pure
+   `OverlayHandleRule` (verified against Jötunn 2.29.2 IL: a
+   destroyed `OverlayTex` stays reference-non-null and does NOT
+   lazily recreate, so the Unity-null check is decisive) and
+   re-resolve against the live map; `ResetMapSession()` on both
+   renderers runs at map-available BEFORE the redraws; and
+   `RoadVectorLayer`'s fail-soft "session" disable — which actually
+   lasted the process — now resets per session. Road source
+   authority, Dirt/Paved identity, hidden strokes, and the honest
+   checkbox rule are untouched.
+5. **Sentry CONCERNED-CARTOGRAPHER-2 (event #109, 2026-09-03): a real
+   NullReferenceException during a pin update on 0.9.0.** The
+   reported frame names do not exist in this codebase (hand-scrubbed
+   before filing; CC has no `Minimap.UpdatePins` patch — its only
+   Minimap patches are the RC11 wheel guard and click gate, both
+   fully wrapped). The demonstrable in-code source matching the
+   signature: `PinAdapter`/`PinDisplayController` wrote through
+   `Minimap.instance` unguarded on six pin-update paths, and the
+   runtime's map-open block runs before its world-boundary check, so
+   teardown frames dereferenced a destroyed map; the caught NRE was
+   re-emitted via `LogError`, which `CrashReportingHub` forwards to
+   Sentry as a fatal subsystem failure — proving, incidentally, that
+   the #97 capture pipeline works end-to-end in the field. Fixed with
+   defect 1's lifecycle repair: every pin write path is now a
+   lifecycle-guarded no-op without a live map, and the next
+   map-available reconcile repairs every rendering. No blanket catch
+   was added anywhere. Smoke R10.5 watches for recurrence on the
+   owner's Sentry project.
+
 **Owner RC11 smoke-feedback pass (2026-09-02, RC12) — 6 items, 4
 release blockers, all fixed:** the owner's RC11 smoke (reported via a
 separate thread) found paved ink reading as dark as dirt, a route list
@@ -587,8 +661,20 @@ release blockers, all addressed in the previous RC:
 
 ## 8. Automated evidence (at the RC commit)
 
-- **508/508 tests** in the game-free core suite (Release configuration,
-  re-run at the RC13 commit): everything below plus the RC13 suite —
+- **538/538 tests** in the game-free core suite (Release configuration,
+  re-run at the RC14 commit): everything below plus the RC14 suite —
+  `Rc14FinalSmokeTests` (30: the panel-position "x,y" round-trip with
+  malformed/non-finite input degrading to "nothing stored"; the
+  on-screen clamp for in-bounds, off-screen, and UI-scaled restores
+  plus the oversized-panel centering case; the overlay-handle liveness
+  truth table with the dead-texture relog regression named; the Quick
+  Pin input gate's owned arming/cancel/capture frames,
+  whole-armed-lifetime suppression, cancel-over-capture, one-shot
+  capture, unarmed pass-through, and immediate external-disarm
+  release; and the sprite-rebind rule — restart claim regains cc:*
+  art, vanilla pins never repainted, destroyed sprite rebuilds,
+  cc:*-to-cc:* changes sharing one vanilla fallback rebuild) —
+  plus the RC13 suite —
   `Rc13PolishTests` (26: the road-ink feather profile's opaque core,
   full-transparency edge, symmetry, monotone falloff, the
   preserved-perceived-width invariant (50% alpha exactly at the crisp
@@ -714,19 +800,21 @@ defaults.
 ## 18. Smoke test
 
 `docs/mods/concerned-cartographer/PRE_RELEASE_SMOKE_TEST.md` — **the
-owner starts at the NEW SHORT section R9 (the RC13 / 0.9.0-beta
-final-polish pass: four rows, one per polish item, each with its
-restore/fallback paths), NOT at the top, on the exact beta ZIP named
-above.** After R9, complete whichever R8 → R7 → R6 → R5 → R3/R4 rows
-(as previously amended) the RC12 smoke did not finish — rows the RC12
-smoke already passed stay passed, because RC13 deliberately changes
-only the four polish behaviors. The full 2.5–4 h checklist is not
-restarted.
+owner starts at the NEW SHORT section R10 (the RC14 / 0.9.0-beta
+final-smoke-fix pass: five rows — marker relog, road-minimap relog,
+drawer position, Quick Pin input ownership, no Sentry pin-exception
+recurrence — each with its restore/fallback paths), NOT at the top, on
+the exact RC14 beta ZIP named above.** After R10, re-verify any R9 row
+whose surface the pass touched, then complete whichever R9 → R8 → R7 →
+R6 → R5 → R3/R4 rows (as previously amended) earlier smokes did not
+finish — rows already passed stay passed, because RC14 deliberately
+changes only the five lifecycle/input behaviors. The full 2.5–4 h
+checklist is not restarted.
 
 ## 19. Remaining Git commands (run after the smoke test passes)
 
 The RC lives on `feat/cc-098-v1-completion` (not yet on main). After
-R9 and the remaining amended sections pass:
+R10 and the remaining amended sections pass:
 
 ⚠ **Tag-name decision needed first**: `concerned-cartographer/v0.9.0`
 already exists on the public remote, pointing at the internal 0.9

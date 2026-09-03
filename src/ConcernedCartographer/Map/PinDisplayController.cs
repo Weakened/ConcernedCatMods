@@ -83,6 +83,16 @@ internal sealed class PinDisplayController
             return;
         }
 
+        // RC14 fix 5: on teardown frames no Minimap exists; adding cluster
+        // markers through it anyway threw NullReferenceException and
+        // latched the session disable. A missing map makes Apply a no-op —
+        // the map-available path re-applies against the fresh map.
+        Minimap map = Minimap.instance;
+        if (map == null)
+        {
+            return;
+        }
+
         try
         {
             ClearClusterMarkers();
@@ -156,7 +166,23 @@ internal sealed class PinDisplayController
                     : $"{cluster.Members.Count} pins";
                 var position = new Vector3(cluster.Center.X, 0f, cluster.Center.Z);
                 var type = (Minimap.PinType)IconRegistry.ResolveVanillaType(cluster.DominantIconId);
-                Minimap.PinData marker = Minimap.instance.AddPin(position, type, label, save: false, isChecked: false);
+                Minimap.PinData marker = map.AddPin(position, type, label, save: false, isChecked: false);
+
+                // RC14 fix 1: a cluster dominated by a cc:* icon wears that
+                // icon's CC sprite too — previously it fell back to the
+                // saved vanilla type, which for several cc:* icons is the
+                // Dot (part of the "markers become Dots" report). Unsaved
+                // marker, so the sprite stays rendering-only by
+                // construction.
+                if (CcIconSprites.TryGet(cluster.DominantIconId, out Sprite clusterSprite))
+                {
+                    marker.m_icon = clusterSprite;
+                    if (marker.m_iconElement != null)
+                    {
+                        marker.m_iconElement.sprite = clusterSprite;
+                    }
+                }
+
                 _clusterMarkers.Add(marker);
             }
 
@@ -192,7 +218,11 @@ internal sealed class PinDisplayController
     }
 
     /// <summary>Removes cluster markers and forgets display state (e.g., on
-    /// world switch). Store data is untouched.</summary>
+    /// world switch). Store data is untouched. RC14 fix 5: a world/map
+    /// boundary also un-latches the fail-soft session disable — the
+    /// controller outlives every game session, and an uncleared latch kept
+    /// filtering/clustering dead (and cluster markers un-sprited) for the
+    /// rest of the process after one teardown-frame failure.</summary>
     public void Reset()
     {
         ClearClusterMarkers();
@@ -202,6 +232,7 @@ internal sealed class PinDisplayController
         VisibleCount = 0;
         HiddenByFilter = 0;
         ClusterCount = 0;
+        _disabledForSession = false;
     }
 
     private void ClearClusterMarkers()

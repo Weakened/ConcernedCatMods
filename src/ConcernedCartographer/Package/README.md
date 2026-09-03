@@ -83,6 +83,7 @@ Settings live in `BepInEx/config/com.theconcernedcat.valheim.concernedcartograph
 | Workbench / QuickPinDuplicateRadius | 25 | Suppress duplicate quick pins within this range |
 | Drawer / DrawerHotkey | L | Atlas Drawer toggle |
 | Drawer / ShowDirtRoads, ShowPavedRoads, ShowPins, Clustering | true | Layer defaults |
+| Drawer / PanelPosition | (empty) | Internal: the drawer's last dragged position — written automatically, restored clamped on-screen; empty means the default dock |
 | Pins / EnhancedPinPalette | true | The managed marker palette (managed-from-birth placement) |
 | Pins / ShowVanillaPinPalette | false | Keep Valheim's five icon buttons visible (auto-true with a conflicting pin manager) |
 | Routes / RouteDrawModifier | LeftShift | Modifier for console-entered map modes (panel modes need none) |

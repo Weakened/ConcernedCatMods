@@ -28,6 +28,16 @@ internal static class CcIconSprites
     private static readonly Dictionary<string, Sprite> Cache = new();
     private static readonly HashSet<string> Failed = new();
 
+    /// <summary>RC14 fix 1: forgets load failures at a fresh map session.
+    /// The blacklist exists to stop per-frame decode retries WITHIN a
+    /// session; keeping it for the process lifetime meant one transient
+    /// scene-teardown failure degraded those icons to vanilla fallbacks in
+    /// every later session too.</summary>
+    public static void ResetSession()
+    {
+        Failed.Clear();
+    }
+
     /// <summary>The distinct CC sprite for an icon id, when the id is a
     /// registry entry that ships one and it loaded successfully.</summary>
     public static bool TryGet(string? iconId, out Sprite sprite)
@@ -89,6 +99,10 @@ internal static class CcIconSprites
                 name = "CCIcon_" + key,
                 filterMode = FilterMode.Bilinear,
                 wrapMode = TextureWrapMode.Clamp,
+                // RC14 fix 1: pin renderings reference these across scene
+                // loads; without the flag an asset-unload sweep between
+                // logout and login could destroy them mid-reference.
+                hideFlags = HideFlags.DontUnloadUnusedAsset,
             };
             texture.SetPixels32(pixels);
             texture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
@@ -99,6 +113,7 @@ internal static class CcIconSprites
                 new Vector2(0.5f, 0.5f),
                 100f);
             sprite.name = "CCIcon_" + key;
+            sprite.hideFlags = HideFlags.DontUnloadUnusedAsset;
             return sprite;
         }
         catch (Exception)

@@ -59,6 +59,14 @@ internal sealed class RouteOverlayRenderer
     /// vector route presentation.</summary>
     public event Action<bool>? UserToggled;
 
+    /// <summary>RC14 fix 4: drops the cached overlay handle at a fresh
+    /// Minimap so the next use re-resolves (mirrors
+    /// RoadOverlayRenderer.ResetMapSession).</summary>
+    public void ResetMapSession()
+    {
+        _overlay = null;
+    }
+
     /// <summary>Per-frame visibility drive: hooks the Jötunn checkbox as
     /// the user switch and applies the RC8-1 one-presentation rule (the
     /// texture hides on the large map while the vector layer draws
@@ -105,8 +113,13 @@ internal sealed class RouteOverlayRenderer
 
     private bool TryGetOverlay(out MinimapManager.MapOverlay? overlay)
     {
+        // RC14 fix 4: presence is not liveness — Jötunn destroys the
+        // overlay texture on Minimap teardown, so a handle cached in the
+        // previous game session must re-resolve (same rule as roads).
         overlay = _overlay;
-        if (overlay is not null)
+        if (!OverlayHandleRule.MustReresolve(
+                overlay is not null,
+                overlay is not null && overlay.OverlayTex != null))
         {
             return true;
         }

@@ -79,6 +79,18 @@ internal sealed class RoadOverlayRenderer
         _vectorLayer.MarkDataDirty();
     }
 
+    /// <summary>RC14 fix 4: a fresh Minimap means every prior overlay
+    /// handle is dead (Jötunn destroyed the textures with the old map).
+    /// Drops both cached handles so the next use re-resolves against the
+    /// new map, and un-latches the vector layer's per-session fail-soft
+    /// disable. Called from the map-available path.</summary>
+    public void ResetMapSession()
+    {
+        _dirtOverlay = null;
+        _pavedOverlay = null;
+        _vectorLayer.ResetSession();
+    }
+
     /// <summary>Mirrors the route layer switch into the shared vector
     /// presentation (RC10 feedback 5/7).</summary>
     public void SetRouteVectorVisible(bool visible)
@@ -163,12 +175,19 @@ internal sealed class RoadOverlayRenderer
         }
     }
 
-    /// <summary>Cached overlay lookup: GetMapOverlay logs per call and the
-    /// handles stay valid for the session, so resolve each once.</summary>
+    /// <summary>Liveness-checked cached overlay lookup (RC14 fix 4):
+    /// GetMapOverlay logs per call, so each handle resolves once per MAP
+    /// session — but Jötunn destroys every overlay texture on Minimap
+    /// teardown and clears its registry, so a handle can never be trusted
+    /// on presence alone (the RC13 cache made session 2 paint persisted
+    /// roads into a dead texture — the "roads gone after relog" report).
+    /// A dead handle re-resolves, which re-creates the layer fresh.</summary>
     private bool TryGetOverlay(RoadKind kind, out MinimapManager.MapOverlay? overlay)
     {
         overlay = kind == RoadKind.Dirt ? _dirtOverlay : _pavedOverlay;
-        if (overlay is not null)
+        if (!Atlas.OverlayHandleRule.MustReresolve(
+                overlay is not null,
+                overlay is not null && overlay.OverlayTex != null))
         {
             return true;
         }

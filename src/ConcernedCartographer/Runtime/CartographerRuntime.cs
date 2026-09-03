@@ -64,7 +64,12 @@ internal sealed class CartographerRuntime : IDisposable
     private int _settingsToken;
     private int _systemMarkersToken;
     private int _workbenchToken;
-    private bool _quickPinArmed;
+
+    // RC14 fix 3: armed Quick Pin owns its input (capture click must not
+    // attack; Escape cancels without also opening the pause menu). The
+    // pure gate carries the armed state and the per-frame suppression
+    // decisions; PlayerInputGate holds the narrow Harmony chokes.
+    private readonly QuickPinInputGate _quickPinGate = new();
     private readonly PaletteBirthTracker<Minimap.PinData> _birthTracker = new();
     private float _hintElapsed;
 
@@ -175,6 +180,12 @@ internal sealed class CartographerRuntime : IDisposable
         _drawerPanel.SystemMarkersClicked = () => OpenSidePanel(_systemMarkersToken, _systemMarkersPanel);
         MapInputGate.Install(log);
 
+        // RC14 fix 3: narrow input ownership for armed Quick Pin, active
+        // exactly while the gate holds (plus the owned press's frame).
+        PlayerInputGate.Install(log);
+        PlayerInputGate.SuppressAttack = () => _quickPinGate.SuppressAttack(Time.frameCount);
+        PlayerInputGate.SuppressMenu = () => _quickPinGate.SuppressMenu(Time.frameCount);
+
         // RC11 blocker 7: the wheel over any CC panel/list/field scrolls
         // that UI only — the map zoom underneath nets to zero.
         MapInputGate.WheelGuard = () =>
@@ -250,6 +261,18 @@ internal sealed class CartographerRuntime : IDisposable
 
         SwitchWorld(uid);
         _mapReady = true;
+        // RC14 fix 4: this event fires for a FRESH Minimap — every overlay
+        // handle cached against the previous map is dead (Jötunn destroyed
+        // the textures on Minimap teardown), and the vector layer's
+        // per-session fail-soft latch belongs to the old session. Reset
+        // BEFORE the redraws below so persisted roads/routes rebuild into
+        // the live map instead of the destroyed one.
+        _renderer.ResetMapSession();
+        _routeRenderer.ResetMapSession();
+        // RC14 fix 1: sprite load failures were session-scoped by intent;
+        // forget them so a transient teardown failure cannot degrade cc:*
+        // icons in this fresh session.
+        CcIconSprites.ResetSession();
         _renderer.RedrawAll(_atlas);
         _pinAdapter.ReconcileOnMapReady(_pinStore);
         _renderer.SetOverlayEnabled(RoadKind.Dirt, _settings.DrawerShowDirt.Value);
@@ -304,6 +327,10 @@ internal sealed class CartographerRuntime : IDisposable
             // mod may never strand the map with suppressed ink.
             MapInputGate.ConsumeClicks = false;
             _textFocusBlock.Release();
+            // RC14 fix 3: a dormant runtime may never keep owning attack or
+            // menu input (the armed flag previously leaked through this
+            // branch; with the gate that would leak suppression too).
+            _quickPinGate.Disarm();
             if (!_settings.Enabled.Value)
             {
                 _renderer.EnsureTextureFallback();
@@ -344,19 +371,25 @@ internal sealed class CartographerRuntime : IDisposable
 
         if (!Minimap.IsOpen() && !Minimap.InTextInput() && !typingInField)
         {
-            if (_quickPinArmed)
+            if (_quickPinGate.Armed)
             {
-                // One-shot armed capture from the toolbar (#102).
-                if (Input.GetKeyDown(KeyCode.Escape))
+                // One-shot armed capture from the toolbar (#102). RC14
+                // fix 3: the gate owns these presses — the same click no
+                // longer attacks and the same Escape no longer opens the
+                // pause menu (PlayerInputGate suppresses both through the
+                // owned frame, regardless of vanilla's update order).
+                QuickPinInputGate.FrameAction action = _quickPinGate.HandleFrame(
+                    Time.frameCount,
+                    cancelPressed: Input.GetKeyDown(KeyCode.Escape),
+                    capturePressed: Input.GetMouseButtonDown(0) ||
+                        (_settings.QuickPinHotkey.Value != KeyCode.None && Input.GetKeyDown(_settings.QuickPinHotkey.Value)) ||
+                        GamepadDown(_settings.WorkbenchGamepadButton.Value));
+                if (action == QuickPinInputGate.FrameAction.Cancel)
                 {
-                    _quickPinArmed = false;
                     Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, AtlasStrings.Get("quickpin.cancelled"));
                 }
-                else if (Input.GetMouseButtonDown(0) ||
-                    (_settings.QuickPinHotkey.Value != KeyCode.None && Input.GetKeyDown(_settings.QuickPinHotkey.Value)) ||
-                    GamepadDown(_settings.WorkbenchGamepadButton.Value))
+                else if (action == QuickPinInputGate.FrameAction.Capture)
                 {
-                    _quickPinArmed = false;
                     CaptureQuickPin();
                 }
             }
@@ -493,9 +526,12 @@ internal sealed class CartographerRuntime : IDisposable
             _mapReady = false;
             _workbenchPanel.Close();
             _mapUi.CloseAllSurfaces();
+            // RC14 fix 2: the drawer RectTransform dies with this scene;
+            // persist the cached drag position before it is lost.
+            _drawerPanel.FlushPosition();
             MapInputGate.ConsumeClicks = false;
             _textFocusBlock.Release();
-            _quickPinArmed = false;
+            _quickPinGate.Disarm();
             _pipeline?.EndAllStrokes();
             _displayController.Reset();
             _mapUi.Reset();
@@ -613,6 +649,10 @@ internal sealed class CartographerRuntime : IDisposable
 
     private void WireDrawer()
     {
+        // RC14 fix 2: the drawer's dragged position is a durable
+        // preference (Drawer/PanelPosition); restore clamps on-screen.
+        _drawerPanel.LoadPosition = () => _settings.DrawerPanelPosition.Value;
+        _drawerPanel.PositionCaptured = stored => _settings.DrawerPanelPosition.Value = stored;
         _drawerPanel.DirtToggled = value =>
         {
             _settings.DrawerShowDirt.Value = value;
@@ -802,7 +842,9 @@ internal sealed class CartographerRuntime : IDisposable
             // If the map cannot close, the armed mode still works later.
         }
 
-        _quickPinArmed = true;
+        // RC14 fix 3: the arming frame is owned too — the toolbar click
+        // that armed must not become an attack as the map closes.
+        _quickPinGate.Arm(Time.frameCount);
         Player.m_localPlayer?.Message(MessageHud.MessageType.Center, AtlasStrings.Get("quickpin.armed"));
     }
 
@@ -1393,6 +1435,7 @@ internal sealed class CartographerRuntime : IDisposable
     /// <summary>Roads, pins, and views together, for quit/teardown paths.</summary>
     public void SaveAll()
     {
+        _drawerPanel.FlushPosition();
         SaveIfDirty();
         SavePinsSnapshot();
         _savedViewPersistence.Save(_savedViews);
@@ -2286,7 +2329,9 @@ internal sealed class CartographerRuntime : IDisposable
         RestoreVanillaPalette();
         _overlayRelabel.Restore();
         _textFocusBlock.Release();
+        _quickPinGate.Disarm();
         MapInputGate.Uninstall();
+        PlayerInputGate.Uninstall();
         MapPointerGuard.Clear();
         SaveIfDirty();
         SavePinsSnapshot();

@@ -25,6 +25,7 @@ internal sealed class CartographerSettings
         ConfigEntry<bool> drawerShowPaved,
         ConfigEntry<bool> drawerShowPins,
         ConfigEntry<bool> drawerCluster,
+        ConfigEntry<string> drawerPanelPosition,
         ConfigEntry<KeyCode> quickPinHotkey,
         ConfigEntry<float> quickPinDuplicateRadius,
         ConfigEntry<bool> surveyRulesEnabled,
@@ -69,6 +70,7 @@ internal sealed class CartographerSettings
         DrawerShowPaved = drawerShowPaved;
         DrawerShowPins = drawerShowPins;
         DrawerCluster = drawerCluster;
+        DrawerPanelPosition = drawerPanelPosition;
         QuickPinHotkey = quickPinHotkey;
         QuickPinDuplicateRadius = quickPinDuplicateRadius;
         SurveyRulesEnabled = surveyRulesEnabled;
@@ -114,6 +116,7 @@ internal sealed class CartographerSettings
     public ConfigEntry<bool> DrawerShowPaved { get; }
     public ConfigEntry<bool> DrawerShowPins { get; }
     public ConfigEntry<bool> DrawerCluster { get; }
+    public ConfigEntry<string> DrawerPanelPosition { get; }
     public ConfigEntry<KeyCode> QuickPinHotkey { get; }
     public ConfigEntry<float> QuickPinDuplicateRadius { get; }
     public ConfigEntry<bool> SurveyRulesEnabled { get; }
@@ -183,6 +186,8 @@ internal sealed class CartographerSettings
             config.Bind("Drawer", "ShowPins", true, "Show managed pins on the map."),
             config.Bind("Drawer", "Clustering", true,
                 "Fold crowded pins into cluster markers when zoomed out (display only; never changes stored pins)."),
+            config.Bind("Drawer", "PanelPosition", "",
+                "Internal: the Atlas drawer's last dragged position as \"x,y\" canvas offsets from its right-center anchor. Written when the drawer closes; empty uses the default dock. Restored positions are clamped on-screen, so editing this can never strand the panel."),
             config.Bind("Workbench", "QuickPinHotkey", KeyCode.F7,
                 "Key that pins the object you are looking at (set to None to disable). Never pins creatures."),
             config.Bind("Workbench", "QuickPinDuplicateRadius", 25f, new ConfigDescription(

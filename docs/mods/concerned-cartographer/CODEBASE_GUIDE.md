@@ -458,6 +458,18 @@ user layer switches (`OverlayUserToggleHook` + the pure
 the USER state, and `UserToggledOverlay` lets the runtime mirror clicks
 into the drawer settings.
 
+RC14 fix 4: the handle cache is **liveness-checked** through the pure
+`OverlayHandleRule` — Jötunn destroys every overlay texture on
+`Minimap.OnDestroy` and clears its registry, so a handle cached in one
+game session painted persisted roads into a dead texture in the next
+(the beta "roads gone from the minimap after relog" report). A handle
+is only trusted while its `OverlayTex` is Unity-alive; anything else
+re-resolves against the current Minimap. `ResetMapSession()` (called
+from the runtime's map-available path, also on `RouteOverlayRenderer`)
+additionally drops both handles and un-latches the vector layer's
+per-session fail-soft disable via `RoadVectorLayer.ResetSession()` —
+previously that "session" latch silently lasted the whole process.
+
 ### `VectorBakeScheduler.cs` (Domain, RC11 blocker 3)
 
 The vector layer's rebake decision as a pure, sweep-tested state
@@ -850,6 +862,24 @@ Tracking and decisions live in the pure `PinRenderingLedger` (DEF-v1.0-004); the
 
 Managed pins intentionally render as ordinary saved vanilla pins, which improves disable/uninstall safety.
 
+RC14 fixes 1/5: every map WRITE path (`SyncPin`, `AddManagedPin`,
+`DisplayHide`, `EnsureCustomSprite`, the reconcile removals) is now
+lifecycle-guarded — with no live `Minimap` (login/logout teardown
+frames) the operation is a no-op instead of a NullReferenceException
+(the Sentry pin-update crash), and the next map-available reconcile
+repairs every rendering. `Reset()` and `ReconcileOnMapReady` also
+clear `_disabledForSession`: the adapter object outlives every game
+session, so the previously-uncleared latch turned ONE teardown-frame
+failure into "every cc:* marker renders as its vanilla fallback (Dot)
+forever after" — the beta marker-relog report. The sprite-rebind
+decision itself is the pure, tested `SpriteRebindRule`, and
+`AddManagedPin` now applies sprites through `ApplyImmediateSprite`
+(both `m_icon` and a same-frame UI element). `PinDisplayController`
+gained the same latch-clearing/lifecycle guards, and its cluster
+markers now wear the dominant cc:* icon's sprite. `CcIconSprites`
+scopes its load-failure blacklist per session (`ResetSession`) and
+marks sprites `DontUnloadUnusedAsset`.
+
 ### `Map/PinDisplayController.cs`
 
 Display-only filtering, semantic zoom and clustering.
@@ -924,6 +954,41 @@ the moment it fires OR the moment any surface is already visible OR
 the palette is unavailable (setting/conflict/failure/NoMap) — so
 closing or switching panels is never fought for the rest of that
 map-open, and unavailability can never pop a panel late.
+
+### `PanelPositionRule.cs` / `OverlayHandleRule.cs` / `QuickPinInputGate.cs` / `SpriteRebindRule.cs` (Domain/Atlas, RC14 final smoke)
+
+The four pure rules behind the RC14 final-smoke corrective pass
+(regressions in `Rc14FinalSmokeTests.cs`):
+
+- `PanelPositionRule` — the Atlas drawer's dragged position as a durable
+  preference: invariant-culture "x,y" round-trip (malformed reads as
+  "nothing stored" → default dock), and an on-screen clamp for the
+  current canvas and UI scale so an old coordinate can never strand the
+  panel (axes where the scaled panel exceeds the canvas center instead).
+- `OverlayHandleRule` — when a cached Jötunn overlay handle may be
+  trusted (exists AND its texture is alive); presence alone was exactly
+  the roads-gone-after-relog bug.
+- `QuickPinInputGate` — input ownership for armed Quick Pin as a
+  frame-based state machine: the capture click must not attack, Escape
+  cancels without also opening the pause menu, the owned press stays
+  swallowed for its whole frame (mod-vs-vanilla update order is
+  undefined), and external `Disarm` releases everything immediately.
+- `SpriteRebindRule` — when a pin rendering must rebuild to show the
+  right sprite: a restart-claimed cc:* rendering (wanted sprite, none
+  recorded) rebuilds to regain its art, genuine vanilla pins are never
+  repainted, and a Unity-destroyed sprite counts as not applied.
+
+### `Map/PlayerInputGate.cs` (RC14 fix 3)
+
+The narrow Harmony chokes behind `QuickPinInputGate`, mirroring the
+`MapInputGate` pattern (runtime-supplied guards, pass-through when off,
+`Uninstall()` on dispose): a skippable prefix on
+`Humanoid.StartAttack` (local player only — the single entry every
+player attack goes through; `Player` declares no override) and one on
+`Menu.Update` (skipped only while the guard holds AND the menu is not
+already visible). Fail-soft: missing members after a game update log
+one warning and leave the gate uninstalled — armed Quick Pin then
+works as in RC13, without input ownership.
 
 ### `Map/PinPalettePanel.cs` (#96)
 
@@ -1099,8 +1164,9 @@ The project compiles `Domain/**/*.cs` directly, so pure tests do not require Val
 | `MigrationMatrixTests.cs` | every shipped sidecar format back-parses into the current readers |
 | `SecurityHardeningTests.cs` | SEC-1.0-001: decompression-bomb rejection, revision/float/string bounds, deletion-name previews, display sanitization |
 | `Rc13PolishTests.cs` | RC13 / 0.9.0 beta polish: road ink feather profile invariants (opaque core, symmetry, monotone falloff, preserved perceived width), palette wheel 2–3× window + floor, default-panel once-per-map-open/never-fight rules, orphan-chrome hide/restore truth table |
+| `Rc14FinalSmokeTests.cs` | RC14 / 0.9.0 beta final smoke fixes: panel position round-trip/clamp (off-screen, UI-scale, oversized-panel centering), overlay-handle liveness truth table (dead-texture relog regression), Quick Pin input-gate ownership (owned frames, cancel-over-capture, one-shot, immediate external release), sprite-rebind rule (restart claim regains cc:* art, vanilla never repainted, destroyed sprite rebuilds) |
 
-At the RC13 / 0.9.0 public-beta candidate the suite is 508 tests, all green, run without any game assemblies.
+At the RC14 / 0.9.0 public-beta candidate the suite is 538 tests, all green, run without any game assemblies.
 
 Game adapters still need real Valheim tests; unit tests cannot prove Harmony targets, private field names, overlay alignment or Unity UI behavior.
 

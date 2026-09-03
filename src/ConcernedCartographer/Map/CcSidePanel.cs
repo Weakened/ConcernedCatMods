@@ -190,6 +190,12 @@ internal abstract class CcSidePanel
                 new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
                 DockPosition(1f), _width, _height, draggable: true);
 
+            // RC14 fix 2 (adjacent relog defect): this GameObject dies with
+            // every scene change while the C# panel object survives — a
+            // stale _appliedScale would make Show() skip re-applying a
+            // non-default UI scale to the fresh build.
+            _appliedScale = 1f;
+
             _title = gui.CreateText(
                 AtlasStrings.Get(_titleKey), _panel.transform,
                 new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -28f),

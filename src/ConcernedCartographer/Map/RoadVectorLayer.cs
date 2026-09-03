@@ -92,6 +92,21 @@ internal sealed class RoadVectorLayer
         _scheduler.MarkDataDirty();
     }
 
+    /// <summary>RC14 fix 4: a fresh map session un-latches the fail-soft
+    /// disable. The layer object outlives every game session, so
+    /// "disabled for this session" previously meant "disabled for the
+    /// process" — one budget overflow or teardown-frame exception in
+    /// session 1 kept large-map roads invisible in every later session.
+    /// Called from the map-available path; a genuinely broken layer
+    /// re-latches within one tick.</summary>
+    public void ResetSession()
+    {
+        _disabledForSession = false;
+        _routeBudgetWarned = false;
+        _bakeIncompleteWarned = false;
+        _scheduler.Invalidate();
+    }
+
     /// <summary>Mirrors the texture overlay's dirt/paved visibility (same
     /// switch the drawer, saved views, and Jötunn's toggle panel drive).</summary>
     public void SetKindEnabled(RoadKind kind, bool enabled)

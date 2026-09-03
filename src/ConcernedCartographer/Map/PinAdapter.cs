@@ -57,11 +57,17 @@ internal sealed class PinAdapter
     public bool IsOperational => !_disabledForSession && PinsField is not null;
 
     /// <summary>Clears map-object tracking on world switch. Store data is
-    /// untouched.</summary>
+    /// untouched. RC14 fix 5: a world/map boundary also un-latches the
+    /// fail-soft session disable — the adapter object outlives every game
+    /// session, so a latch that nothing cleared turned one teardown-frame
+    /// failure into "every cc:* marker renders as its vanilla fallback
+    /// (Dot) forever after". A genuinely broken adapter re-latches on its
+    /// next failure.</summary>
     public void Reset()
     {
         _ledger.Reset();
         _customSpriteByRendering.Clear();
+        _disabledForSession = false;
     }
 
     /// <summary>Vanilla pins the player could adopt right now.</summary>
@@ -128,10 +134,10 @@ internal sealed class PinAdapter
     /// must go through <see cref="SyncPin"/>/<see cref="SyncAllPins"/>.</summary>
     public void ReconcileOnMapReady(PinStore store)
     {
-        if (_disabledForSession)
-        {
-            return;
-        }
+        // RC14 fix 5: map reconstruction begins a fresh session, so the
+        // previous session's fail-soft latch never survives into it (the
+        // relog leg of the "custom markers become Dots" report).
+        _disabledForSession = false;
 
         try
         {
@@ -150,6 +156,10 @@ internal sealed class PinAdapter
                 }
             }
 
+            // TryGetPins proved the map alive this frame; keep one live
+            // reference for the writes below (RC14 fix 5).
+            Minimap map = Minimap.instance;
+
             int added = 0;
             int removed = 0;
             foreach (AtlasPin managed in store.All)
@@ -160,7 +170,7 @@ internal sealed class PinAdapter
                 {
                     if (match is not null)
                     {
-                        Minimap.instance.RemovePin(match);
+                        map.RemovePin(match);
                         removed++;
                     }
 
@@ -201,6 +211,17 @@ internal sealed class PinAdapter
             return;
         }
 
+        // RC14 fix 5: on login/logout teardown frames no Minimap exists;
+        // writing through it anyway threw NullReferenceException (the
+        // Sentry pin-update event) and latched the session disable. A
+        // missing map makes the sync a no-op — the next map-available
+        // reconcile repairs every rendering.
+        Minimap map = Minimap.instance;
+        if (map == null)
+        {
+            return;
+        }
+
         try
         {
             if (!store.TryGet(id, out AtlasPin managed))
@@ -215,11 +236,11 @@ internal sealed class PinAdapter
                     AddManagedPin(managed);
                     break;
                 case PinRenderingLedger<Minimap.PinData>.SyncDecision.Remove:
-                    Minimap.instance.RemovePin(existing);
+                    map.RemovePin(existing);
                     ForgetRendering(existing!);
                     break;
                 case PinRenderingLedger<Minimap.PinData>.SyncDecision.Replace:
-                    Minimap.instance.RemovePin(existing);
+                    map.RemovePin(existing);
                     ForgetRendering(existing!);
                     AddManagedPin(managed);
                     break;
@@ -337,7 +358,13 @@ internal sealed class PinAdapter
             if (_ledger.TryGetRendering(id, out Minimap.PinData rendered))
             {
                 ForgetRendering(rendered);
-                Minimap.instance.RemovePin(rendered);
+                // RC14 fix 5: with no live map the rendering died with it;
+                // untracking above is the whole job.
+                Minimap map = Minimap.instance;
+                if (map != null)
+                {
+                    map.RemovePin(rendered);
+                }
             }
         }
         catch (Exception exception)
@@ -431,19 +458,25 @@ internal sealed class PinAdapter
 
     private void AddManagedPin(AtlasPin managed)
     {
+        // RC14 fix 5: no live map (teardown frame) makes this a no-op; the
+        // next map-available reconcile adds the rendering.
+        Minimap map = Minimap.instance;
+        if (map == null)
+        {
+            return;
+        }
+
         var position = new Vector3(managed.Position.X, managed.Position.Y, managed.Position.Z);
         var type = (Minimap.PinType)IconRegistry.ResolveVanillaType(managed.IconId);
-        Minimap.PinData created = Minimap.instance.AddPin(position, type, managed.Name, save: true, managed.Checked);
+        Minimap.PinData created = map.AddPin(position, type, managed.Name, save: true, managed.Checked);
         _ledger.Track(created, managed.Id);
 
-        // RC8: overriding m_icon BEFORE the UI element exists makes the
-        // element render the CC sprite; the saved pin still persists only
-        // its vanilla type, keeping disable/uninstall degradation intact.
-        if (CcIconSprites.TryGet(managed.IconId, out Sprite sprite))
-        {
-            created.m_icon = sprite;
-            _customSpriteByRendering[created] = managed.IconId;
-        }
+        // RC8 (hardened by RC14 fix 1): the saved pin persists only its
+        // vanilla type — the CC sprite is rendering-only. Applying through
+        // ApplyImmediateSprite sets BOTH m_icon and, when the UI element
+        // already exists this frame, the live element's sprite; m_icon
+        // alone only affects elements built later.
+        ApplyImmediateSprite(created, managed.IconId);
     }
 
     /// <summary>RC10 feedback 12: a palette-armed newborn wears its chosen
@@ -489,12 +522,24 @@ internal sealed class PinAdapter
     {
         string? wanted = CcIconSprites.TryGet(managed.IconId, out _) ? managed.IconId : null;
         string? applied = _customSpriteByRendering.TryGetValue(rendering, out string current) ? current : null;
-        if (string.Equals(wanted, applied, StringComparison.Ordinal))
+
+        // RC14 fix 1: the rebuild decision is the pure, tested
+        // SpriteRebindRule — a restart-claimed cc:* rendering (wanted
+        // sprite, none applied) rebuilds to regain its art, a genuine
+        // vanilla pin never does, and a sprite Unity destroyed across a
+        // scene change counts as not applied.
+        if (!SpriteRebindRule.MustRebuild(wanted, applied, rendering.m_icon != null))
         {
             return;
         }
 
-        Minimap.instance.RemovePin(rendering);
+        Minimap map = Minimap.instance;
+        if (map == null)
+        {
+            return;
+        }
+
+        map.RemovePin(rendering);
         ForgetRendering(rendering);
         AddManagedPin(managed);
     }
