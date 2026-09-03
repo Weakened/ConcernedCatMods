@@ -18,11 +18,85 @@ The single remaining gate is the human smoke test
   decision recorded in section 19). Data and schema formats are
   unchanged from RC12; upgrading this beta to 1.0.0 later is automatic
   and lossless.
-- **RC commit:** `7a160d4601d52d6c8589089be814157f0952322d` (**RC14**,
-  on the CC-098 line — the final-smoke corrective pass of 2026-09-03,
-  fixing exactly the 5 defects from the owner's final RC13 smoke; the
-  package below was built at exactly this commit with a clean tree,
-  and the DLL's informational version embeds it).
+- **RC commit:** `e9615b00759631d1dcc35928dd7f7ffce2c3bf00` (**RC15**,
+  on the CC-098 line — the owner-directed final beta blocker pass of
+  2026-09-03; the package below was built at exactly this commit with
+  a clean tree, and the DLL's informational version embeds it).
+  RC15 delivers, on top of RC14:
+  **(1) the false relog tombstone is fixed at its lifecycle root** —
+  the owner reproduced on the exact RC14 DLL: cc:camp rendered as
+  vanilla Fire and cc:travel as vanilla Portal after relog while the
+  sidecar rewrote the same records `Deleted=1` ("deleted through
+  vanilla UI" immediately after reconcile). Root cause
+  (decompile-verified, deterministic): vanilla loads the character's
+  saved map AFTER `Minimap.Start` — `LoadMapData → SetMapData →
+  ClearPins + re-AddPin` rebuilds the whole pin list in place,
+  destroying every rendering the map-available reconcile had created;
+  the vanilla-edit absorber then inferred mass deletion from the
+  renderings' absence, and the save-file copies stayed behind as plain
+  Fire/Portal pins. The fix inverts the burden of proof: a missing
+  rendering is NEVER deletion evidence — `AbsorbVanillaChanges` now
+  only unlinks lost renderings and raises `NeedsRebind` (repaired by a
+  `rendering-loss-repair` reconcile on the autosave cadence). A
+  tombstone is written exclusively by the new explicit-delete path:
+  `PinDeletionWatch` (Harmony prefix on `Minimap.RemovePin(PinData)`;
+  the user-facing delete paths — large-map right click and gamepad
+  JoyTabRight — both route through `RemovePin(Vector3,float)`, while
+  `ClearPins` bypasses `RemovePin` entirely, so a rebuild can never
+  masquerade as a deletion; adapter self-removals run in
+  `BeginSelfRemoval` scopes) feeding
+  `PinAdapter.HandleExplicitVanillaDelete`, decided by the pure
+  `PinTombstoneRule` — explicit event AND stable fully-bound session
+  (reconcile completed for the current map generation) AND at most
+  once per entity; anything else keeps the pin and rebinds. Fail-soft:
+  if the patch cannot install, deletions are never captured and a
+  vanilla-deleted managed pin is restored by the next reconcile
+  instead of tombstoned (data-keeping is the safe degraded direction;
+  one startup warning documents it).
+  **(2) the rebind leg** — the runtime now also subscribes Jötunn's
+  `OnVanillaMapDataLoaded` (a `Minimap.LoadMapData` postfix):
+  `OnMapDataReconstructed` re-reconciles right after vanilla rebuilds
+  the pin list from the character save, so every living cc:* pin
+  regains exactly one rendering wearing its CC sprite via the RC14
+  `SpriteRebindRule` path — the persisted vanilla fallback type stays
+  uninstall-safe underneath and never becomes the visible in-mod icon.
+  A re-claimed own rendering that already wears the wanted live sprite
+  re-records instead of rebuilding (no flicker).
+  **(3) full redraws survive teardown races (directive item 8)** —
+  `RoadOverlayRenderer.RedrawAll` and `RouteOverlayRenderer.RedrawAll`
+  capture their live `Texture2D` handles at resolve and re-verify them
+  through the pure `OverlayHandleRule.MayWrite` immediately before
+  `SetPixels32`/`Apply` (the RC13 Sentry event
+  `84529651470a47f2873d254cb15b7442` was an NRE at
+  `Texture2D.SetPixels32` during "rebuild road map"); a teardown
+  mid-redraw resets the cached handles, logs one rate-limited
+  privacy-safe Warning (never an Error — the crash hub forwards Errors
+  to Sentry), and retries on the next valid map session (whose
+  map-available path always runs `ResetMapSession` + `RedrawAll`).
+  **(4) privacy-safe lifecycle diagnostics (directive item 7)** — the
+  log now records the exact build
+  (`Release: ConcernedCartographer@0.9.0+<commit>`), numbered map
+  session transitions via the pure `MapSessionTracker`
+  ("Map session lifecycle: generation N (map-available /
+  map-data-loaded / world-unloaded)"), aggregate pin reconcile lines
+  ("Pin reconcile (<reason>): linked/claimed/added/removed/sprite
+  rebinds"), tombstone cause lines, and overlay
+  resolve/reset/redraw state with texture liveness/size — never
+  world/character/player/server names or IDs, coordinates, pin/route
+  contents, paths, tokens, or IPs. Verbose success traces stay behind
+  `Diagnostics/DebugLogging` (default off; smoke R11.4 verifies and
+  returns it to default).
+  **Retires RC14 `7a160d46`/`93646d5` (ZIP `49DBB847…`) — do not
+  test, tag, or upload it.** The owner's smoke evidence for surfaces
+  RC15 does not touch remains valid; the relog/tombstone lifecycle,
+  redraw hardening, and diagnostics are verified by the NEW smoke
+  section **R11** (plus re-runs of R10 rows 1/2/5), and RC15
+  deliberately changes nothing else. Data and schema formats are
+  unchanged from RC12/RC13/RC14.
+- RC14's identity block is preserved below for the record:
+- (RC14) **RC commit** `7a160d4601d52d6c8589089be814157f0952322d`
+  (the final-smoke corrective pass of 2026-09-03,
+  fixing exactly the 5 defects from the owner's final RC13 smoke).
   RC14 delivers, on top of RC13:
   **(1) custom cc:* markers survive relog** — session boundaries clear
   the pin adapter/display fail-soft latches (previously
@@ -361,33 +435,36 @@ The single remaining gate is the human smoke test
   directives touched is re-verified by smoke section **R5** (then R3/R4
   as amended).)
 - **ZIP:** `artifacts\thunderstore\TheConcernedCat-ConcernedCartographer-0.9.0.zip`
-  (built at the RC14 commit; an identical immutable copy is at
+  (built at the RC15 commit; an identical immutable copy is at
+  `artifacts\rc15\TheConcernedCat-ConcernedCartographer-0.9.0-RC15.zip`
+  — verify the hash below before importing. The retired RC14 package
+  (ZIP `49DBB847…`, DLL `9DA6786F…`) survives as
   `artifacts\rc14\TheConcernedCat-ConcernedCartographer-0.9.0-RC14.zip`
-  — verify the hash below before importing. The retired RC13 package
-  (ZIP `19ADD2E5…`, DLL `CE783057…`) survives only as
-  `artifacts\rc13\TheConcernedCat-ConcernedCartographer-0.9.0-RC13.zip`
-  — its staging copy was overwritten by this rebuild. The RC12 package
-  (ZIP `7A027F7B…`, DLL `FD6DB99C…`) remains in
+  and a same-named copy in `artifacts\thunderstore\superseded\`; the
+  retired RC13 package (ZIP `19ADD2E5…`, DLL `CE783057…`) as
+  `artifacts\rc13\TheConcernedCat-ConcernedCartographer-0.9.0-RC13.zip`.
+  The RC12 package (ZIP `7A027F7B…`, DLL `FD6DB99C…`) remains in
   `artifacts\thunderstore\superseded\` alongside the never-published
   INTERNAL 0.9.0 milestone ZIP (`…-0.9.0-internal-milestone.zip`) —
   the internal file shares only the version number, never the bytes.
-  The retired copies under `artifacts\rc13\`, `artifacts\rc12\`,
+  The retired copies under `artifacts\rc14\`, `artifacts\rc13\`,
+  `artifacts\rc12\`,
   `artifacts\rc11\` (ZIP `C08BBBB1…`, DLL `8C5233A4…`),
   `artifacts\rc10\` (ZIP `EA523400…`, DLL `A350D0CE…`) and
   `artifacts\rc8\` (ZIP `AF267AC2…`, DLL `E9904771…`) must NOT be
   tested or uploaded.)
-- **ZIP SHA-256:** `49DBB8479BEE0C9A51DD48BFA74B63203EEE31EBBCBF0BE3794ABDEFA0366478`
-  (324,969 bytes — fresh RC14 / 0.9.0-beta bytes; retired hashes are
-  never reused; the immutable rc14 copy verified byte-identical to the
+- **ZIP SHA-256:** `F89AAD13FC2278D5F0FF94779EA0CF90DCE850276A1A108343D28178DABD2899`
+  (327,840 bytes — fresh RC15 / 0.9.0-beta bytes; retired hashes are
+  never reused; the immutable rc15 copy verified byte-identical to the
   staging ZIP)
-- **Plugin DLL SHA-256:** `9DA6786FC490C8961A134BEB48A273DE8F1F986D6CC628305A8FEF3CC24D5856`
-  (470,016 bytes; the DLL inside the ZIP verified hash-identical to the
+- **Plugin DLL SHA-256:** `DA62990C2738D093EB111A8CCFBA9E1064E42DA6B09837AE7ECBBCFEE1E33C24`
+  (477,184 bytes; the DLL inside the ZIP verified hash-identical to the
   Release build output; informational version
-  `0.9.0+7a160d4601d52d6c8589089be814157f0952322d` verified in the DLL;
+  `0.9.0+e9615b00759631d1dcc35928dd7f7ffce2c3bf00` verified in the DLL;
   the 12 `CC.Icons.cc-*.png` sprite resources re-verified embedded)
 - **Assembly metadata (verified in the DLL):** Company "The Concerned Cat",
   Product "Concerned Cartographer", Copyright © 2026 Eren Cansunar,
-  RepositoryUrl embedded, informational version `0.9.0+<RC14 commit>`,
+  RepositoryUrl embedded, informational version `0.9.0+<RC15 commit>`,
   FileVersion 0.9.0.0.
 - **Package audit:** ZIP root contains exactly `manifest.json`, `README.md`,
   `CHANGELOG.md`, `LICENSE`, `icon.png` (256×256),
@@ -403,9 +480,9 @@ Every sprint v0.3→v1.0 shipped through its internal gate; all 42 child
 issues and 8 controllers (#8, #27–#81) are closed with evidence comments.
 Shipped versions on main with tags: 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0,
 0.8.0, 0.9.0. The RC6 line is on main; the CC-098 completion line (RC7,
-RC8, RC10, RC11, RC12, and RC13 — all now retired — plus the RC14
-final-smoke corrective pass) is on `feat/cc-098-v1-completion` awaiting
-its post-smoke merge and tag (section 19).
+RC8, RC10, RC11, RC12, RC13, and RC14 — all now retired — plus the
+RC15 relog-persistence blocker pass) is on `feat/cc-098-v1-completion`
+awaiting its post-smoke merge and tag (section 19).
 
 ## 7. Defects
 
@@ -516,6 +593,40 @@ Gate evidence at the RC10 commit is recorded in §8. The UI layout
 matrix (1080p/1440p × UiScale 0.8/1.0/1.6) remains derivation-based in
 code and is verified live by smoke R6.15 — a game UI cannot be
 screenshot-proven from the conveyor.
+
+**Owner final-blocker pass (2026-09-03, RC15) — 1 release blocker
+reproduced on the exact RC14 DLL, fixed at its lifecycle root:**
+
+1. **Managed pins falsely tombstoned by relog / map reconstruction.**
+   Observed: after logout/login, the cc:camp marker "camp" rendered as
+   vanilla Fire and the cc:travel marker "route" as vanilla Portal;
+   the sidecar proved `IconId` persisted correctly, yet the SAME
+   records were rewritten `Deleted=1`, with "deleted through vanilla
+   UI" logged immediately after reconcile. NOT an icon-persistence
+   loss: a false vanilla-delete inference. Deterministic mechanism
+   (decompile-verified): Jötunn fires `OnVanillaMapAvailable` from a
+   `Minimap.Start` postfix, so the reconcile ran BEFORE vanilla loaded
+   the character's saved pins; the first `Minimap.Update` then ran
+   `LoadMapData → SetMapData → ClearPins + re-AddPin`, destroying every
+   tracked rendering in place and re-adding the save's plain
+   fallback-type pins — the absorber's absence check read that rebuild
+   as the player deleting every managed pin in vanilla, tombstoned them
+   all, and left the unclaimed Fire/Portal save copies on screen.
+   Fixed by inverting the burden of proof (see the RC15 identity block
+   for the full design): absence never tombstones (unlink + rebind
+   only); tombstones come exclusively from the explicit vanilla
+   `RemovePin` event captured by `PinDeletionWatch` and decided by the
+   pure `PinTombstoneRule` (explicit + bound session + at-most-once);
+   and a second reconcile at Jötunn's `OnVanillaMapDataLoaded` rebinds
+   every living cc:* pin to exactly one CC-sprited rendering right
+   after the reconstruction. A genuine right-click/gamepad delete
+   still tombstones exactly once and remains recoverable
+   (`PinStore.Restore`/undo). Regressions: `Rc15RelogPersistenceTests`
+   replays cc:camp→Fire and cc:travel→Portal across
+   teardown/rebuild/reconcile against the shipping pure pieces.
+   Directive items 7–9 (lifecycle diagnostics, RedrawAll teardown
+   hardening, the R11.4 smoke row) shipped in the same pass — see the
+   identity block.
 
 **Owner final-smoke pass (2026-09-03, RC14) — 5 defects from the
 owner's final RC13 smoke, all lifecycle/input class, all fixed:**
@@ -714,8 +825,25 @@ release blockers, all addressed in the previous RC:
 
 ## 8. Automated evidence (at the RC commit)
 
-- **538/538 tests** in the game-free core suite (Release configuration,
-  re-run at the RC14 commit): everything below plus the RC14 suite —
+- **557/557 tests** in the game-free core suite (Release configuration,
+  re-run at the RC15 commit): everything below plus the RC15 suite —
+  `Rc15RelogPersistenceTests` (19: the tombstone rule truth table —
+  explicit delete in a bound session tombstones, absence NEVER does
+  regardless of session state, unbound-session deletes keep the pin,
+  already-deleted entities are never re-tombstoned; the map-session
+  tracker's generation/bind transitions; the overlay write guard incl.
+  the exact alive-at-resolve/destroyed-before-write Sentry case; and
+  the full relog replay against the shipping pure pieces — cc:camp
+  persists Fire (0) and cc:travel persists Portal (6), the
+  ClearPins-style rebuild keeps both `Deleted=false` and rebinds both
+  CC sprites onto exactly one rendering each, five rapid
+  teardown/rebuild cycles never tombstone/duplicate/churn revisions,
+  a mid-session list rebuild resolves to rebind-not-tombstone, a
+  genuine stable-session delete tombstones exactly once with one
+  revision bump / survives reconcile without resurrection / restores
+  with its cc:* art, and a re-claimed own rendering with the correct
+  live sprite re-records instead of rebuilding) —
+  plus the RC14 suite —
   `Rc14FinalSmokeTests` (30: the panel-position "x,y" round-trip with
   malformed/non-finite input degrading to "nothing stored"; the
   on-screen clamp for in-bounds, off-screen, and UI-scaled restores
@@ -853,21 +981,25 @@ defaults.
 ## 18. Smoke test
 
 `docs/mods/concerned-cartographer/PRE_RELEASE_SMOKE_TEST.md` — **the
-owner starts at the NEW SHORT section R10 (the RC14 / 0.9.0-beta
-final-smoke-fix pass: five rows — marker relog, road-minimap relog,
-drawer position, Quick Pin input ownership, no Sentry pin-exception
-recurrence — each with its restore/fallback paths), NOT at the top, on
-the exact RC14 beta ZIP named above.** After R10, re-verify any R9 row
-whose surface the pass touched, then complete whichever R9 → R8 → R7 →
-R6 → R5 → R3/R4 rows (as previously amended) earlier smokes did not
-finish — rows already passed stay passed, because RC14 deliberately
-changes only the five lifecycle/input behaviors. The full 2.5–4 h
-checklist is not restarted.
+owner starts at the NEW SHORT section R11 (the RC15 / 0.9.0-beta
+relog-persistence pass: five rows — the false-tombstone relog
+reproduction with sidecar `Deleted=0` verification, genuine-delete
+tombstone-once-and-recoverable, the retained System Markers
+"Visible to other players" row, the 2026-09-03 logging/lifecycle row
+(DebugLogging temporarily on, then back to default), and redraw
+teardown hardening), NOT at the top, on the exact RC15 beta ZIP named
+above.** After R11, re-run R10 rows 1/2/5 on the same ZIP (their
+surfaces changed in RC15), then complete whichever R10 → R9 → R8 →
+R7 → R6 → R5 → R3/R4 rows (as previously amended) earlier smokes did
+not finish — rows already passed stay passed, because RC15
+deliberately changes only the relog/tombstone lifecycle, the redraw
+teardown path, and diagnostics. The full 2.5–4 h checklist is not
+restarted.
 
 ## 19. Remaining Git commands (run after the smoke test passes)
 
 The RC lives on `feat/cc-098-v1-completion` (not yet on main). After
-R10 and the remaining amended sections pass:
+R11 (plus the R10 re-runs) and the remaining amended sections pass:
 
 ⚠ **Tag-name decision needed first**: `concerned-cartographer/v0.9.0`
 already exists on the public remote, pointing at the internal 0.9
@@ -880,8 +1012,8 @@ prefers a different scheme, substitute it consistently.
 # 1. Merge the completion branch to main (PR or fast-forward — owner's call):
 git checkout main; git merge feat/cc-098-v1-completion
 git push origin main
-# 2. Tag the RC14 commit named in the identity section (now in main history):
-git tag -a concerned-cartographer/v0.9.0-beta -m "Concerned Cartographer 0.9.0 (Public Beta) - Stable Living Atlas beta" 7a160d4601d52d6c8589089be814157f0952322d
+# 2. Tag the RC15 commit named in the identity section (now in main history):
+git tag -a concerned-cartographer/v0.9.0-beta -m "Concerned Cartographer 0.9.0 (Public Beta) - Stable Living Atlas beta" e9615b00759631d1dcc35928dd7f7ffce2c3bf00
 git push origin concerned-cartographer/v0.9.0-beta
 gh release create concerned-cartographer/v0.9.0-beta artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-0.9.0.zip --title "Concerned Cartographer 0.9.0 (Public Beta)" --prerelease --notes-file src/ConcernedCartographer/Package/CHANGELOG.md
 ```
