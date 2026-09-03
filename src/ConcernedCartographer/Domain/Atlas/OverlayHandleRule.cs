@@ -18,4 +18,17 @@ internal static class OverlayHandleRule
     {
         return !hasCachedHandle || !cachedTextureAlive;
     }
+
+    /// <summary>RC15 item 8: may a full-texture write (SetPixels32/Apply)
+    /// proceed? A redraw resolves its handles first, spends CPU time
+    /// building pixel buffers, and only then writes — map teardown in that
+    /// window destroys the texture between resolve and write (the RC13
+    /// Sentry NullReferenceException at Texture2D.SetPixels32 during
+    /// "rebuild road map"). Liveness must therefore hold at BOTH ends:
+    /// anything else aborts the write, resets the cached handles, and
+    /// retries on the next valid map session instead of throwing.</summary>
+    public static bool MayWrite(bool textureAliveAtResolve, bool textureAliveAtWrite)
+    {
+        return textureAliveAtResolve && textureAliveAtWrite;
+    }
 }

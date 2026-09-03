@@ -49,12 +49,27 @@ internal sealed class PinAdapter
     private readonly Dictionary<Minimap.PinData, string> _customSpriteByRendering = new();
     private bool _disabledForSession;
 
+    // RC15: true only between a COMPLETED reconcile and the next map/world
+    // transition — the "stable, fully-bound map session" the tombstone
+    // rule requires before an explicit vanilla delete may tombstone.
+    private bool _sessionBound;
+
+    // RC15 lifecycle diagnostics: sprite rebuilds performed by the current
+    // reconcile pass (aggregate count only; no pin data is ever logged).
+    private int _spriteRebinds;
+
     public PinAdapter(ManualLogSource log)
     {
         _log = log;
     }
 
     public bool IsOperational => !_disabledForSession && PinsField is not null;
+
+    /// <summary>RC15: set when tracked renderings disappeared WITHOUT an
+    /// explicit vanilla delete event — vanilla rebuilt the pin list (map
+    /// reconstruction), so the runtime must re-reconcile to re-link the
+    /// markers. Cleared by a completed reconcile.</summary>
+    public bool NeedsRebind { get; private set; }
 
     /// <summary>Clears map-object tracking on world switch. Store data is
     /// untouched. RC14 fix 5: a world/map boundary also un-latches the
@@ -68,6 +83,10 @@ internal sealed class PinAdapter
         _ledger.Reset();
         _customSpriteByRendering.Clear();
         _disabledForSession = false;
+        // RC15: a transition boundary ends the bound session; explicit
+        // deletes recorded from here on may not tombstone until the next
+        // reconcile completes.
+        _sessionBound = false;
     }
 
     /// <summary>Vanilla pins the player could adopt right now.</summary>
@@ -131,8 +150,14 @@ internal sealed class PinAdapter
     /// Map/world reconstruction ONLY (DEF-v1.0-004): the reset discards
     /// tracking, and claim-by-name cannot re-link a rendering whose pin was
     /// renamed since the rendering was last synced. In-session mutations
-    /// must go through <see cref="SyncPin"/>/<see cref="SyncAllPins"/>.</summary>
-    public void ReconcileOnMapReady(PinStore store)
+    /// must go through <see cref="SyncPin"/>/<see cref="SyncAllPins"/>.
+    ///
+    /// RC15: reason names the lifecycle transition for the aggregate
+    /// diagnostic line ("map-available", "map-data-loaded",
+    /// "rendering-loss-repair"); a completed pass binds the session, which
+    /// re-arms explicit-delete tombstoning and clears any pending rebind
+    /// request.</summary>
+    public void ReconcileOnMapReady(PinStore store, string reason = "map-available")
     {
         // RC14 fix 5: map reconstruction begins a fresh session, so the
         // previous session's fail-soft latch never survives into it (the
@@ -142,6 +167,7 @@ internal sealed class PinAdapter
         try
         {
             Reset();
+            _spriteRebinds = 0;
             if (!TryGetPins(out List<Minimap.PinData> pins))
             {
                 return;
@@ -160,6 +186,7 @@ internal sealed class PinAdapter
             // reference for the writes below (RC14 fix 5).
             Minimap map = Minimap.instance;
 
+            int claimed = 0;
             int added = 0;
             int removed = 0;
             foreach (AtlasPin managed in store.All)
@@ -170,7 +197,7 @@ internal sealed class PinAdapter
                 {
                     if (match is not null)
                     {
-                        map.RemovePin(match);
+                        RemoveRenderingFromMap(map, match);
                         removed++;
                     }
 
@@ -180,6 +207,7 @@ internal sealed class PinAdapter
                 if (match is not null)
                 {
                     _ledger.Track(match, managed.Id);
+                    claimed++;
                     SyncPin(store, managed.Id);
                 }
                 else
@@ -189,10 +217,20 @@ internal sealed class PinAdapter
                 }
             }
 
-            if (added > 0 || removed > 0)
+            if (!_disabledForSession)
             {
-                _log.LogInfo($"Pin reconcile: linked {_ledger.TrackedCount} managed pin(s), added {added}, removed {removed} stale rendering(s).");
+                // RC15: only a COMPLETED pass counts as a bound session
+                // and satisfies a pending rebind request.
+                _sessionBound = true;
+                NeedsRebind = false;
             }
+
+            // RC15 lifecycle diagnostics: aggregate counts only, once per
+            // reconstruction event — never pin names, ids, or positions.
+            _log.LogInfo(
+                $"Pin reconcile ({reason}): linked {_ledger.TrackedCount} managed pin(s) " +
+                $"(claimed {claimed}, added {added}), removed {removed} stale rendering(s), " +
+                $"custom sprite rebinds {_spriteRebinds}.");
         }
         catch (Exception exception)
         {
@@ -236,11 +274,11 @@ internal sealed class PinAdapter
                     AddManagedPin(managed);
                     break;
                 case PinRenderingLedger<Minimap.PinData>.SyncDecision.Remove:
-                    map.RemovePin(existing);
+                    RemoveRenderingFromMap(map, existing!);
                     ForgetRendering(existing!);
                     break;
                 case PinRenderingLedger<Minimap.PinData>.SyncDecision.Replace:
-                    map.RemovePin(existing);
+                    RemoveRenderingFromMap(map, existing!);
                     ForgetRendering(existing!);
                     AddManagedPin(managed);
                     break;
@@ -291,9 +329,19 @@ internal sealed class PinAdapter
     }
 
     /// <summary>Absorbs edits the player made through vanilla UI into the
-    /// store: cross-off toggles become metadata edits, and vanilla-side
-    /// deletion of a tracked pin becomes a store tombstone. Runs on the
-    /// autosave cadence.</summary>
+    /// store: cross-off toggles become metadata edits. Runs on the
+    /// autosave cadence.
+    ///
+    /// RC15 final beta blocker: a tracked rendering MISSING from the live
+    /// pin list is NEVER treated as a deletion anymore. Vanilla rebuilds
+    /// m_pins wholesale during login (LoadMapData → SetMapData →
+    /// ClearPins + re-AddPin, decompile-verified) and that reconstruction
+    /// made this absorber rewrite live cc:* pins Deleted=1 ("deleted
+    /// through vanilla UI") while their save-file copies rendered as
+    /// plain Fire/Portal markers. Absence now only drops the stale link
+    /// and requests a rebind; tombstones are written exclusively by
+    /// <see cref="HandleExplicitVanillaDelete"/> from the RemovePin choke
+    /// point (<see cref="PinDeletionWatch"/>).</summary>
     public void AbsorbVanillaChanges(PinStore store)
     {
         if (_disabledForSession || _ledger.TrackedCount == 0)
@@ -326,14 +374,68 @@ internal sealed class PinAdapter
                 }
             }
 
-            foreach (Minimap.PinData gone in vanished)
+            if (vanished.Count > 0)
             {
-                if (_ledger.TryGetId(gone, out AtlasId id))
+                foreach (Minimap.PinData gone in vanished)
                 {
-                    store.Delete(id);
                     ForgetRendering(gone);
-                    _log.LogInfo($"Managed pin {id} was deleted through vanilla UI; tombstoned in the atlas.");
                 }
+
+                NeedsRebind = true;
+                _sessionBound = false;
+                // Aggregate count only — no pin data. Info because this is
+                // the expected signature of a vanilla map rebuild.
+                _log.LogInfo(
+                    $"Pin lifecycle: {vanished.Count} tracked rendering(s) disappeared without an explicit " +
+                    "vanilla delete (map rebuild assumed); no tombstones written, markers will rebind.");
+            }
+        }
+        catch (Exception exception)
+        {
+            Disable(exception);
+        }
+    }
+
+    /// <summary>RC15: the ONLY path that turns a vanilla-side action into a
+    /// store tombstone. Fed by <see cref="PinDeletionWatch"/> from the
+    /// vanilla RemovePin choke point at the moment of deletion, so the
+    /// evidence is the event itself — never an inference from absence. The
+    /// pure <see cref="PinTombstoneRule"/> additionally requires a bound
+    /// session (reconcile completed for the current map generation) and
+    /// tombstones an entity at most once; anything else just unlinks the
+    /// rendering and lets the next reconcile repair it.</summary>
+    public void HandleExplicitVanillaDelete(PinStore store, Minimap.PinData pin)
+    {
+        if (_disabledForSession || pin is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!_ledger.TryGetId(pin, out AtlasId id) || !store.TryGet(id, out AtlasPin managed))
+            {
+                return;
+            }
+
+            if (PinTombstoneRule.Decide(
+                    explicitVanillaDelete: true,
+                    sessionBound: _sessionBound,
+                    alreadyDeleted: managed.Deleted) == PinTombstoneRule.Verdict.Tombstone)
+            {
+                store.Delete(id);
+                ForgetRendering(pin);
+                _log.LogInfo(
+                    "Pin lifecycle: managed pin tombstoned (cause: explicit vanilla delete in a bound map session).");
+            }
+            else
+            {
+                // Unbound session (mid-reconstruction) or already deleted:
+                // drop the link only; the next reconcile decides rendering.
+                ForgetRendering(pin);
+                NeedsRebind = true;
+                _log.LogInfo(
+                    "Pin lifecycle: vanilla delete observed outside a bound map session; kept the atlas entry and will rebind.");
             }
         }
         catch (Exception exception)
@@ -363,7 +465,7 @@ internal sealed class PinAdapter
                 Minimap map = Minimap.instance;
                 if (map != null)
                 {
-                    map.RemovePin(rendered);
+                    RemoveRenderingFromMap(map, rendered);
                 }
             }
         }
@@ -520,8 +622,19 @@ internal sealed class PinAdapter
     /// the save file after a restart.</summary>
     private void EnsureCustomSprite(Minimap.PinData rendering, AtlasPin managed)
     {
-        string? wanted = CcIconSprites.TryGet(managed.IconId, out _) ? managed.IconId : null;
+        string? wanted = CcIconSprites.TryGet(managed.IconId, out Sprite wantedSprite) ? managed.IconId : null;
         string? applied = _customSpriteByRendering.TryGetValue(rendering, out string current) ? current : null;
+
+        // RC15: a claimed rendering that ALREADY wears the wanted live CC
+        // sprite (typically our own rendering re-claimed after a reconcile
+        // reset dropped the applied-sprite record) just re-records — a
+        // remove/re-add rebuild would be pure flicker.
+        if (wanted is not null && applied is null &&
+            wantedSprite != null && ReferenceEquals(rendering.m_icon, wantedSprite))
+        {
+            _customSpriteByRendering[rendering] = wanted;
+            return;
+        }
 
         // RC14 fix 1: the rebuild decision is the pure, tested
         // SpriteRebindRule — a restart-claimed cc:* rendering (wanted
@@ -539,9 +652,24 @@ internal sealed class PinAdapter
             return;
         }
 
-        map.RemovePin(rendering);
+        RemoveRenderingFromMap(map, rendering);
         ForgetRendering(rendering);
         AddManagedPin(managed);
+        // RC15 lifecycle diagnostics: aggregate rebind count for the
+        // reconcile summary line.
+        _spriteRebinds++;
+    }
+
+    /// <summary>Every adapter-initiated RemovePin runs inside a
+    /// <see cref="PinDeletionWatch"/> self-removal scope, so the explicit
+    /// vanilla-delete capture can never mistake our own rendering
+    /// maintenance for a player deletion (RC15).</summary>
+    private static void RemoveRenderingFromMap(Minimap map, Minimap.PinData rendering)
+    {
+        using (PinDeletionWatch.BeginSelfRemoval())
+        {
+            map.RemovePin(rendering);
+        }
     }
 
     private void ForgetRendering(Minimap.PinData rendering)
@@ -576,6 +704,9 @@ internal sealed class PinAdapter
     private void Disable(Exception exception)
     {
         _disabledForSession = true;
+        // RC15: a broken adapter is not a bound session — explicit deletes
+        // may not tombstone until a clean reconcile completes again.
+        _sessionBound = false;
         _log.LogError($"Pin adapter failed and was disabled for this session (store data is safe): {exception}");
     }
 

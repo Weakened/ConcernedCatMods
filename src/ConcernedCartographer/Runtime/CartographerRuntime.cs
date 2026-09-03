@@ -107,6 +107,11 @@ internal sealed class CartographerRuntime : IDisposable
     private float _autosaveElapsed;
     private bool _disposed;
 
+    // RC15 lifecycle diagnostics: the map-session generation counter that
+    // stamps every reconstruction transition in the log (privacy-safe:
+    // generation number + reason only).
+    private readonly MapSessionTracker _mapSession = new();
+
     public CartographerRuntime(CartographerSettings settings, ManualLogSource log)
     {
         _settings = settings;
@@ -186,6 +191,12 @@ internal sealed class CartographerRuntime : IDisposable
         PlayerInputGate.SuppressAttack = () => _quickPinGate.SuppressAttack(Time.frameCount);
         PlayerInputGate.SuppressMenu = () => _quickPinGate.SuppressMenu(Time.frameCount);
 
+        // RC15: explicit vanilla pin deletions are captured at the
+        // RemovePin choke point — the ONLY evidence that may tombstone a
+        // managed pin. Absence of a rendering never tombstones again.
+        PinDeletionWatch.Install(log);
+        PinDeletionWatch.ExplicitDelete = HandleExplicitVanillaDelete;
+
         // RC11 blocker 7: the wheel over any CC panel/list/field scrolls
         // that UI only — the map zoom underneath nets to zero.
         MapInputGate.WheelGuard = () =>
@@ -261,6 +272,9 @@ internal sealed class CartographerRuntime : IDisposable
 
         SwitchWorld(uid);
         _mapReady = true;
+        // RC15 lifecycle diagnostics: stamp the reconstruction boundary
+        // (generation + reason only — never world/character data).
+        _log.LogInfo($"Map session lifecycle: generation {_mapSession.NoteTransition("map-available")} (map-available).");
         // RC14 fix 4: this event fires for a FRESH Minimap — every overlay
         // handle cached against the previous map is dead (Jötunn destroyed
         // the textures on Minimap teardown), and the vector layer's
@@ -274,7 +288,8 @@ internal sealed class CartographerRuntime : IDisposable
         // icons in this fresh session.
         CcIconSprites.ResetSession();
         _renderer.RedrawAll(_atlas);
-        _pinAdapter.ReconcileOnMapReady(_pinStore);
+        _pinAdapter.ReconcileOnMapReady(_pinStore, "map-available");
+        _mapSession.NoteBound();
         _renderer.SetOverlayEnabled(RoadKind.Dirt, _settings.DrawerShowDirt.Value);
         _renderer.SetOverlayEnabled(RoadKind.Paved, _settings.DrawerShowPaved.Value);
         _displayController.ShowPins = _settings.DrawerShowPins.Value;
@@ -291,6 +306,50 @@ internal sealed class CartographerRuntime : IDisposable
         }
 
         _log.LogInfo($"Road atlas ready for world {uid}: {_atlas.Strokes.Count} stroke(s), {_atlas.PointCount} point(s).");
+    }
+
+    /// <summary>RC15 root fix, rebind leg: Jötunn's OnVanillaMapDataLoaded
+    /// (Minimap.LoadMapData postfix). Vanilla loads the character's saved
+    /// map AFTER Minimap.Start — SetMapData runs ClearPins and re-adds
+    /// every saved pin (decompile-verified), silently destroying the
+    /// renderings the map-available reconcile created. This handler runs
+    /// right after that reconstruction: it re-claims the freshly loaded
+    /// saved pins (position + name), rebinds their cc:* sprites through
+    /// the RC14 SpriteRebindRule path, and re-binds the session — so a
+    /// live pin regains exactly one rendering with its CC art and its
+    /// persisted vanilla fallback type never becomes the visible icon.</summary>
+    public void OnMapDataReconstructed()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (!_mapReady)
+        {
+            // The world UID could not be resolved at map-available time;
+            // by map-data-load the world is certainly up — bind fully now.
+            OnMapAvailable();
+            return;
+        }
+
+        _log.LogInfo($"Map session lifecycle: generation {_mapSession.NoteTransition("map-data-loaded")} (map-data-loaded).");
+        _pinAdapter.ReconcileOnMapReady(_pinStore, "map-data-loaded");
+        _mapSession.NoteBound();
+        ReapplyDisplay();
+    }
+
+    /// <summary>RC15: sink for <see cref="Map.PinDeletionWatch"/> — the
+    /// explicit vanilla RemovePin event, the only evidence that may
+    /// tombstone a managed pin.</summary>
+    private void HandleExplicitVanillaDelete(Minimap.PinData pin)
+    {
+        if (_disposed || !_mapReady)
+        {
+            return;
+        }
+
+        _pinAdapter.HandleExplicitVanillaDelete(_pinStore, pin);
     }
 
     public void Tick(float unscaledDeltaTime)
@@ -524,6 +583,9 @@ internal sealed class CartographerRuntime : IDisposable
             // The workbench must close here too — it can never carry an
             // input block across a world boundary.
             _mapReady = false;
+            // RC15 lifecycle diagnostics: the teardown boundary, stamped
+            // once (subsequent ticks early-return on !_mapReady).
+            _log.LogInfo($"Map session lifecycle: generation {_mapSession.NoteTransition("world-unloaded")} (world-unloaded).");
             _workbenchPanel.Close();
             _mapUi.CloseAllSurfaces();
             // RC14 fix 2: the drawer RectTransform dies with this scene;
@@ -605,6 +667,18 @@ internal sealed class CartographerRuntime : IDisposable
             _autosaveElapsed = 0f;
             SaveIfDirty();
             _pinAdapter.AbsorbVanillaChanges(_pinStore);
+
+            // RC15 fallback repair: renderings vanished without an
+            // explicit vanilla delete (a reconstruction path the
+            // map-data-loaded hook did not cover) — reconcile instead of
+            // ever inferring deletions.
+            if (_pinAdapter.NeedsRebind && _pinAdapter.IsOperational)
+            {
+                _pinAdapter.ReconcileOnMapReady(_pinStore, "rendering-loss-repair");
+                _mapSession.NoteBound();
+                ReapplyDisplay();
+            }
+
             _pinPersistence.FlushJournal();
             _routePersistence.FlushJournal();
             SaveRejectedIfDirty();
@@ -2332,6 +2406,7 @@ internal sealed class CartographerRuntime : IDisposable
         _quickPinGate.Disarm();
         MapInputGate.Uninstall();
         PlayerInputGate.Uninstall();
+        PinDeletionWatch.Uninstall();
         MapPointerGuard.Clear();
         SaveIfDirty();
         SavePinsSnapshot();

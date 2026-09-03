@@ -855,7 +855,11 @@ Responsibilities:
 - add renderings for unmatched living pins;
 - remove renderings for deleted/archived pins;
 - sync atlas edits to the map;
-- absorb vanilla checked/deleted changes back into `PinStore`;
+- absorb vanilla cross-off changes back into `PinStore`;
+- tombstone on EXPLICIT vanilla deletions only (RC15: fed by
+  `PinDeletionWatch` through `HandleExplicitVanillaDelete`; a missing
+  rendering is never deletion evidence — it unlinks and raises
+  `NeedsRebind` for the next reconcile);
 - track atlas-ID ↔ map-object relationships.
 
 Tracking and decisions live in the pure `PinRenderingLedger` (DEF-v1.0-004); the adapter only executes them against the real Minimap. In-session mutations go through the targeted `SyncPin`/`SyncAllPins` path, which preserves tracking; `ReconcileOnMapReady` (reset + claim) is reserved for map/world reconstruction.
@@ -977,6 +981,62 @@ The four pure rules behind the RC14 final-smoke corrective pass
   right sprite: a restart-claimed cc:* rendering (wanted sprite, none
   recorded) rebuilds to regain its art, genuine vanilla pins are never
   repainted, and a Unity-destroyed sprite counts as not applied.
+
+### `PinTombstoneRule.cs` / `MapSessionTracker.cs` (Domain/Atlas, RC15 relog persistence)
+
+The pure core of the RC15 final beta blocker fix (regressions in
+`Rc15RelogPersistenceTests.cs`):
+
+- `PinTombstoneRule` — the single decision point for "may a managed pin
+  be tombstoned as vanilla-deleted?": only an EXPLICIT vanilla delete
+  event (captured at the RemovePin choke point, never inferred from a
+  rendering's absence) during a stable, fully-bound map session
+  (reconcile completed for the current map generation), and at most
+  once per entity. Everything else — map open/close, logout/login,
+  world load/unload, Minimap rebuild, reconcile, sprite destruction,
+  fallback-type remapping — resolves to keep-and-rebind. This inverts
+  the RC14 absorber, whose absence-inference rewrote live cc:* pins
+  Deleted=1 whenever vanilla rebuilt the pin list during login
+  (`Minimap.LoadMapData → SetMapData → ClearPins`, decompile-verified).
+- `MapSessionTracker` — the lifecycle-diagnostics generation counter:
+  every reconstruction transition (map-available, map-data-loaded,
+  world-unloaded) advances the generation and unbinds; a completed
+  reconcile binds. Log lines carry only the generation number and the
+  transition reason.
+- `OverlayHandleRule.MayWrite` (same file as the RC14 rule) — item 8 of
+  the RC15 directive: a full-texture redraw may write pixels only if
+  the captured textures were alive at resolve AND are still alive
+  immediately before `SetPixels32`/`Apply`; the
+  alive-at-resolve/destroyed-before-write case (the RC13 Sentry NRE
+  during "rebuild road map") aborts, resets the cached handles, logs a
+  rate-limited privacy-safe Warning, and retries next map session.
+
+### `Map/PinDeletionWatch.cs` (RC15)
+
+The explicit-delete capture behind `PinTombstoneRule`, mirroring the
+`PlayerInputGate` pattern (install in the runtime constructor,
+`Uninstall()` on dispose, fail-soft with one warning). One Harmony
+prefix on `Minimap.RemovePin(PinData)` reports every non-self removal
+to the runtime; decompile-verified: the user-facing delete paths
+(large-map right click, gamepad JoyTabRight) both route through
+`RemovePin(Vector3, float) → RemovePin(PinData)`, while map
+reconstruction (`ClearPins`) bypasses `RemovePin` entirely, so a
+rebuild can never masquerade as a deletion. The adapter's own
+maintenance removals run inside `BeginSelfRemoval()` scopes. If the
+patch cannot install, deletions are never captured and a
+vanilla-deleted managed pin is restored by the next reconcile instead
+of tombstoned — data-keeping is the safe degraded direction.
+
+The runtime side: `PinAdapter.HandleExplicitVanillaDelete` is the only
+code path that writes a vanilla-caused tombstone;
+`PinAdapter.AbsorbVanillaChanges` now only absorbs cross-offs and, on
+rendering loss, unlinks + raises `NeedsRebind` (repaired by a
+`ReconcileOnMapReady("rendering-loss-repair")` on the autosave
+cadence). `CartographerRuntime.OnMapDataReconstructed` — subscribed to
+Jötunn's `MinimapManager.OnVanillaMapDataLoaded` (a
+`Minimap.LoadMapData` postfix) — re-reconciles right after vanilla
+rebuilds the pin list from the character save, so every living cc:*
+pin regains exactly one rendering wearing its CC sprite.
 
 ### `Map/PlayerInputGate.cs` (RC14 fix 3)
 
@@ -1166,7 +1226,7 @@ The project compiles `Domain/**/*.cs` directly, so pure tests do not require Val
 | `Rc13PolishTests.cs` | RC13 / 0.9.0 beta polish: road ink feather profile invariants (opaque core, symmetry, monotone falloff, preserved perceived width), palette wheel 2–3× window + floor, default-panel once-per-map-open/never-fight rules, orphan-chrome hide/restore truth table |
 | `Rc14FinalSmokeTests.cs` | RC14 / 0.9.0 beta final smoke fixes: panel position round-trip/clamp (off-screen, UI-scale, oversized-panel centering), overlay-handle liveness truth table (dead-texture relog regression), Quick Pin input-gate ownership (owned frames, cancel-over-capture, one-shot, immediate external release), sprite-rebind rule (restart claim regains cc:* art, vanilla never repainted, destroyed sprite rebuilds) |
 
-At the RC14 / 0.9.0 public-beta candidate the suite is 538 tests, all green, run without any game assemblies.
+At the RC15 / 0.9.0 public-beta candidate the suite is 557 tests, all green, run without any game assemblies.
 
 Game adapters still need real Valheim tests; unit tests cannot prove Harmony targets, private field names, overlay alignment or Unity UI behavior.
 

@@ -146,7 +146,21 @@ internal sealed class RouteOverlayRenderer
                 return;
             }
 
-            int size = overlay!.TextureSize;
+            // RC15 item 8 (mirrors RoadOverlayRenderer.RedrawAll): capture
+            // the live texture at resolve and re-check it before the write,
+            // so a map teardown mid-redraw fails soft instead of throwing.
+            Texture2D? texture = overlay!.OverlayTex;
+            if (texture == null)
+            {
+                _overlay = null;
+                _rateLimited.Warning(
+                    "route-redraw-teardown",
+                    "Route overlay lifecycle: overlay texture torn down at resolve during a full redraw; " +
+                    "handle reset, redraw deferred to the next valid map session.");
+                return;
+            }
+
+            int size = overlay.TextureSize;
 
             // RC12 blocker 3: reuse one pixel buffer across redraws. A
             // 2048² texture is a 16 MB Color32[]; allocating it per redraw
@@ -197,8 +211,21 @@ internal sealed class RouteOverlayRenderer
                 }
             }
 
-            overlay.OverlayTex.SetPixels32(pixels);
-            overlay.OverlayTex.Apply(false);
+            // RC15 item 8: liveness must still hold at write time
+            // (OverlayHandleRule.MayWrite) — the route walk above is a
+            // teardown-sized window too.
+            if (!OverlayHandleRule.MayWrite(textureAliveAtResolve: true, textureAliveAtWrite: texture != null))
+            {
+                _overlay = null;
+                _rateLimited.Warning(
+                    "route-redraw-teardown",
+                    "Route overlay lifecycle: overlay texture torn down between resolve and write during a " +
+                    "full redraw; handle reset, redraw deferred to the next valid map session.");
+                return;
+            }
+
+            texture!.SetPixels32(pixels);
+            texture.Apply(false);
         }
         catch (Exception exception)
         {

@@ -89,6 +89,11 @@ internal sealed class RoadOverlayRenderer
         _dirtOverlay = null;
         _pavedOverlay = null;
         _vectorLayer.ResetSession();
+        // RC15 lifecycle diagnostics (success trace, so debug-gated).
+        if (_settings.DebugLogging.Value)
+        {
+            _log.LogInfo("Road overlay lifecycle: map session reset; cached overlay handles dropped.");
+        }
     }
 
     /// <summary>Mirrors the route layer switch into the shared vector
@@ -205,6 +210,16 @@ internal sealed class RoadOverlayRenderer
                 _pavedOverlay = overlay;
             }
 
+            // RC15 lifecycle diagnostics: resolve state + texture
+            // liveness/size (success trace, so debug-gated).
+            if (overlay is not null && _settings.DebugLogging.Value)
+            {
+                bool alive = overlay.OverlayTex != null;
+                _log.LogInfo(
+                    $"Road overlay lifecycle: {kind} overlay resolved (texture alive={alive}" +
+                    (alive ? $", size={overlay.TextureSize}px)." : ")."));
+            }
+
             return overlay is not null;
         }
         catch (Exception exception)
@@ -224,11 +239,27 @@ internal sealed class RoadOverlayRenderer
                 return;
             }
 
-            int textureSize = dirtOverlay!.TextureSize;
+            // RC15 item 8: capture the live Texture2D handles NOW. The
+            // stroke loop below is the long window in which map teardown
+            // destroyed the textures behind the RC13 Sentry event (NRE at
+            // Texture2D.SetPixels32 during "rebuild road map"); the
+            // captured references are re-checked immediately before the
+            // writes so a mid-redraw teardown fails soft, never fatally.
+            Texture2D? dirtTexture = dirtOverlay!.OverlayTex;
+            Texture2D? pavedTexture = pavedOverlay!.OverlayTex;
+            bool aliveAtResolve = dirtTexture != null && pavedTexture != null;
+            if (!aliveAtResolve)
+            {
+                HandleRedrawTeardown("at resolve");
+                return;
+            }
+
+            int textureSize = dirtOverlay.TextureSize;
 
             Color32[] dirtPixels = new Color32[textureSize * textureSize];
             Color32[] pavedPixels = new Color32[textureSize * textureSize];
 
+            int drawnStrokes = 0;
             foreach (RoadStroke stroke in atlas.Strokes)
             {
                 if (stroke.Points.Count == 0 || stroke.Hidden)
@@ -238,6 +269,7 @@ internal sealed class RoadOverlayRenderer
 
                 Color32[] target = stroke.Kind == RoadKind.Dirt ? dirtPixels : pavedPixels;
                 Color32 color = stroke.Kind == RoadKind.Dirt ? DirtColor : PavedColor;
+                drawnStrokes++;
 
                 if (stroke.Points.Count == 1)
                 {
@@ -258,10 +290,28 @@ internal sealed class RoadOverlayRenderer
                 }
             }
 
-            dirtOverlay.OverlayTex.SetPixels32(dirtPixels);
-            pavedOverlay!.OverlayTex.SetPixels32(pavedPixels);
-            dirtOverlay.OverlayTex.Apply(false);
-            pavedOverlay.OverlayTex.Apply(false);
+            // RC15 item 8: the write may only proceed if the textures are
+            // STILL alive (pure OverlayHandleRule.MayWrite). Unity's
+            // overloaded null-check reports a destroyed texture as null,
+            // so this is a decisive liveness test on the same frame.
+            if (!Atlas.OverlayHandleRule.MayWrite(
+                    aliveAtResolve, dirtTexture != null && pavedTexture != null))
+            {
+                HandleRedrawTeardown("between resolve and write");
+                return;
+            }
+
+            dirtTexture!.SetPixels32(dirtPixels);
+            pavedTexture!.SetPixels32(pavedPixels);
+            dirtTexture.Apply(false);
+            pavedTexture.Apply(false);
+
+            // RC15 lifecycle diagnostics (success trace, so debug-gated).
+            if (_settings.DebugLogging.Value)
+            {
+                _log.LogInfo(
+                    $"Road overlay lifecycle: full redraw complete ({drawnStrokes} stroke(s) into {textureSize}px textures).");
+            }
         }
         catch (Exception exception)
         {
@@ -269,6 +319,23 @@ internal sealed class RoadOverlayRenderer
         }
 
         _vectorLayer.MarkDataDirty();
+    }
+
+    /// <summary>RC15 item 8 fail-soft: a map teardown invalidated the
+    /// overlay textures around a full redraw. Drops the cached handles so
+    /// the next use re-resolves, and logs ONE privacy-safe lifecycle line
+    /// (rate-limited Warning, never an Error — the crash-reporting hub
+    /// forwards Errors to Sentry, and a teardown race is not a fault).
+    /// The redraw itself retries on the next valid map session, whose
+    /// map-available path always runs ResetMapSession + RedrawAll.</summary>
+    private void HandleRedrawTeardown(string phase)
+    {
+        _dirtOverlay = null;
+        _pavedOverlay = null;
+        _rateLimited.Warning(
+            "redraw-teardown",
+            $"Road overlay lifecycle: overlay texture torn down {phase} during a full redraw; " +
+            "handles reset, redraw deferred to the next valid map session.");
     }
 
     public void DrawCalibrationMarkers()

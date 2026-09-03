@@ -5,23 +5,91 @@ manual-only verification deferred by the autonomous conveyor (OPS-001
 rev 2) from v0.3 onward and is finalized against the exact v1.0-line RC. Rows
 marked **BLOCKS** must pass before publication; others are record-and-ship.
 
-> Status: FINAL for the 0.9.0 public beta, amended 2026-09-03 (eleventh
-> amendment): the owner's final RC13 smoke found 5 defects — custom
-> markers degrading to Dots after relog, roads missing from the minimap
-> after relog, the Atlas drawer forgetting its dragged position, armed
-> Quick Pin leaking clicks/Escape to vanilla combat and the pause menu,
-> and a Sentry-captured NullReferenceException during pin updates
-> (CONCERNED-CARTOGRAPHER-2). All five are fixed in **RC14** (same
-> public identity: **0.9.0 Public Beta**); earlier RC ZIPs are retired —
-> do not test, tag, or upload them. **Do NOT restart the full
-> 2.5–4 h checklist.** Run the NEW section **R10 (RC14 final smoke
-> fixes)** first on the exact RC14 0.9.0 beta ZIP named in
-> RELEASE_DOSSIER.md, re-verify any R9 row whose surface you touch along
-> the way, then complete any remaining R9 → R8 → R7 → R6 → R5 → R3/R4
-> rows not yet finished. R10 supersedes no earlier row — RC14
-> deliberately changes only the five lifecycle/input behaviors below.
+> Status: FINAL for the 0.9.0 public beta, amended 2026-09-03 (twelfth
+> amendment): the owner reproduced ONE remaining release blocker on the
+> exact RC14 DLL — managed cc:* markers rendered as their vanilla
+> fallback icons (camp→Fire, route→Portal) after relog while the sidecar
+> rewrote the same records Deleted=1 ("deleted through vanilla UI"
+> immediately after reconcile). Root cause: vanilla rebuilds the whole
+> pin list during login (LoadMapData → SetMapData → ClearPins), and the
+> absorber inferred deletions from renderings that were merely rebuilt.
+> **RC15** fixes the lifecycle at root (absence never tombstones; only an
+> explicit vanilla RemovePin event during a stable, fully-bound map
+> session may — captured at the choke point; a second reconcile now runs
+> at vanilla's map-data load), hardens the road/route full redraws
+> against texture teardown between resolve and write (the RC13 Sentry
+> NRE), and adds privacy-safe lifecycle diagnostics (release+commit, map
+> session generations, overlay/reconcile/rebind aggregates). Same public
+> identity: **0.9.0 Public Beta**; earlier RC ZIPs are retired — do not
+> test, tag, or upload them. **Do NOT restart the full 2.5–4 h
+> checklist.** Run the NEW section **R11 (RC15 relog persistence)**
+> first on the exact RC15 0.9.0 beta ZIP named in RELEASE_DOSSIER.md,
+> re-run R10 rows 1/2/5 on the same ZIP (their surfaces changed), then
+> complete any remaining R10 → R9 → R8 → R7 → R6 → R5 → R3/R4 rows not
+> yet finished.
 
-## R10. RC14 / 0.9.0 Beta final-smoke-fix mini-smoke — RUN FIRST (short)
+## R11. RC15 / 0.9.0 Beta relog-persistence mini-smoke — RUN FIRST (short)
+
+Every item verifies the RC15 root fix and its fallback paths. All
+**BLOCK** the beta. Prep: the existing disposable world with several
+cc:* markers — include one **cc:camp** named "camp" and one **cc:travel**
+named "route" (the owner's exact reproduction; their persisted vanilla
+fallbacks are Fire and Portal) plus at least one Dot-fallback marker
+(road/harbor/fishing/objective) — roads on the minimap scale, and the
+owner's Sentry console open.
+
+1. **The false relog tombstone is gone (the RC15 blocker)**: note
+   `cc_pins status` counts, then log out to the main menu and back into
+   the same world. Every cc:* marker wears its Concerned Cartographer
+   art (never Fire/Portal/Dot fallback), exactly once — no duplicates.
+   Open `<uid>.pins.tsv` in the profile config folder: the "camp" and
+   "route" rows (and every other managed row) still carry Deleted=0.
+   LogOutput.log contains NO "deleted through vanilla UI" and NO
+   "tombstoned" line, and DOES contain a
+   "Pin reconcile (map-data-loaded)" line whose linked count matches
+   your marker count. Repeat the relog three times in quick succession,
+   then restart the game fully — same result every time, and
+   `cc_pins status` counts never change.
+2. **A genuine vanilla delete still tombstones exactly once, and stays
+   recoverable**: during a stable session (map open, well after login),
+   right-click one managed cc:* marker on the large map. It disappears;
+   the log prints ONE "managed pin tombstoned (cause: explicit vanilla
+   delete in a bound map session)" line. Relog: it STAYS deleted (no
+   resurrection), all other markers unaffected. `cc_pins undo` (or the
+   store restore path) brings it back with its cc:* art — then delete it
+   again if you don't want it. Gamepad users: JoyTabRight deletion
+   behaves identically.
+3. **System Markers still owns position sharing**: [Atlas] → System
+   Markers exposes **"Visible to other players"**; toggling it flips
+   Valheim's real public-position state (verify via the position-share
+   behavior, or a second client if handy) and the checkbox resyncs from
+   the game state every time the panel opens. The vanilla right-rail —
+   including the vanilla visible-to-others toggle — remains hidden with
+   default config (no PublicPanel reintroduction), and
+   `Map/ShowVanillaMapControls = true` still brings all of it back.
+4. **Logging and lifecycle (2026-09-03 directive item 9)**: set
+   `Diagnostics/DebugLogging = true` temporarily. Relog once, then open,
+   close, and reopen the large map. LogOutput.log shows, clearly and in
+   order: the "Release: ConcernedCartographer@0.9.0+…" identity line,
+   "Map session lifecycle: generation N (map-available /
+   map-data-loaded / world-unloaded)" transitions, road overlay
+   lifecycle lines (session reset, overlay resolved with texture
+   liveness/size, full redraw complete with stroke count), and
+   "Pin reconcile (…)" aggregate lines with claim/add/rebind counts.
+   None of the NEW lines contain world/character/player/server names or
+   IDs, coordinates, pin or route names, file paths, or IPs. No CC
+   Error line and no new Sentry event is produced by the whole
+   sequence. `cc_atlas support` output remains sanitized. **Then set
+   DebugLogging back to false (its default) before continuing.**
+5. **Redraw teardown hardening**: while flipping road/route layer
+   toggles, relog and world-switch a few times in quick succession.
+   The log contains NO "Could not rebuild road map overlays" Error. A
+   rare "overlay texture torn down … redraw deferred to the next valid
+   map session" Warning is acceptable ONLY if roads/routes render
+   correctly in the following session. The owner's Sentry project shows
+   no new events for the whole session.
+
+## R10. RC14 / 0.9.0 Beta final-smoke-fix mini-smoke (short)
 
 Every item verifies one RC14 fix and its restore/fallback paths. All
 **BLOCK** the beta. Prep: the existing disposable world with roads (dirt
@@ -731,7 +799,7 @@ evidence and STOP the human test.
 
 ## 0. RC identity
 
-- Version: **1.0.0**
+- Version: **0.9.0 (Public Beta, v1.0 line)**
 - RC commit, ZIP path, and ZIP SHA-256: see
   `docs/mods/concerned-cartographer/RELEASE_DOSSIER.md` (written against
   the exact final package).
