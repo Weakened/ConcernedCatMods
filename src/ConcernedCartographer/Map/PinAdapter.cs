@@ -359,6 +359,35 @@ internal sealed class PinAdapter
         return TryGetPins(out List<Minimap.PinData> pins) && pins.Contains(pin);
     }
 
+    /// <summary>The adoptable vanilla pin standing where a vanished newborn
+    /// stood (RC12 blocker 5): if the naming close replaced the PinData
+    /// object, the replacement is adopted instead of duplicating the
+    /// marker. Same 0.5 m horizontal tolerance as the reconcile claim; a
+    /// name match is preferred when several candidates crowd the spot.</summary>
+    public Minimap.PinData? TryFindAdoptableAt(Vector3 position, string preferredName)
+    {
+        const float toleranceSquared = 0.25f;
+        Minimap.PinData? candidate = null;
+        foreach (Minimap.PinData pin in ListAdoptable())
+        {
+            float dx = pin.m_pos.x - position.x;
+            float dz = pin.m_pos.z - position.z;
+            if ((dx * dx) + (dz * dz) > toleranceSquared)
+            {
+                continue;
+            }
+
+            if (string.Equals(pin.m_name ?? "", preferredName, StringComparison.Ordinal))
+            {
+                return pin;
+            }
+
+            candidate ??= pin;
+        }
+
+        return candidate;
+    }
+
     /// <summary>The nearest map pin to a world position with its class, for
     /// selection and status displays. Foreign pins are reported but marked
     /// read-only.</summary>

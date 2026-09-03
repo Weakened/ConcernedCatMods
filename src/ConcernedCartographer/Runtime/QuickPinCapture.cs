@@ -22,10 +22,12 @@ internal sealed class QuickPinCapture
     }
 
     /// <summary>Attempts a quick pin for the local player's hover target.
-    /// Returns true when a pin was created.</summary>
-    public bool TryCapture(PinStore store, out string message)
+    /// Returns true when a pin was created; the created entity is surfaced
+    /// so the runtime can guarantee its visibility (RC12 blockers 5/6).</summary>
+    public bool TryCapture(PinStore store, out string message, out AtlasPin? created)
     {
         message = "";
+        created = null;
         try
         {
             Player player = Player.m_localPlayer;
@@ -96,14 +98,15 @@ internal sealed class QuickPinCapture
                 }
             }
 
-            AtlasPin pin = store.Create(created =>
+            AtlasPin pin = store.Create(newPin =>
             {
-                created.Name = suggestion.Name;
-                created.IconId = suggestion.IconId;
-                created.Category = suggestion.Category;
-                created.Source = AtlasPinSource.Generated;
-                created.Position = point;
+                newPin.Name = suggestion.Name;
+                newPin.IconId = suggestion.IconId;
+                newPin.Category = suggestion.Category;
+                newPin.Source = AtlasPinSource.Generated;
+                newPin.Position = point;
             });
+            created = pin;
 
             _log.LogInfo($"Quick pin {pin.Id}: \"{suggestion.Name}\" ({suggestion.IconId}).");
             message = AtlasStrings.Format("hud.quickPinned", suggestion.Name);

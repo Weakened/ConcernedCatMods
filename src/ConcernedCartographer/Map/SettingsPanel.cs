@@ -97,6 +97,10 @@ internal sealed class SettingsPanel : CcSidePanel
 
         AddBody(gui, font, "Road repair (Advanced) — acts on the recorded road nearest your character:", 12, headerColor, ref y, 30f);
 
+        // RC12 blocker 4 clearance: center-pivot buttons reach half their
+        // height above their y.
+        y -= 10f;
+
         string[] row1 = { "Status", "Kind", "Hide", "Unhide" };
         string[] row2 = { "Delete", "Split", "Join", "Rebuild" };
         float quarter = (Width - 44f) / 4f;

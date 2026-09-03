@@ -17,16 +17,20 @@ internal sealed class RoadOverlayRenderer
     private const string DirtOverlayName = "CC Dirt Paths";
     private const string PavedOverlayName = "CC Paved Roads";
 
-    // Dark, fully opaque ink (cloud-layer contrast); the high-contrast
-    // palette pushes dirt near black and paved near white for accessibility.
-    // The vector layer inherits the same palette so both road views agree.
+    // Fully opaque ink (cloud-layer contrast); the high-contrast palette
+    // pushes dirt near black and paved near white for accessibility. The
+    // vector layer inherits the same palette so both road views agree.
+    // RC12 feedback 1: paved wears a LIGHT stone gray in both palettes, so
+    // paved always reads lighter than dirt at identical width/style —
+    // the old dark slate read as dark as the dirt brown on the parchment
+    // map, which made the two kinds hard to tell apart.
     internal Color32 DirtColor => _settings.HighContrast.Value
         ? new Color32(26, 15, 6, 255)
         : new Color32(94, 62, 34, 255);
 
     internal Color32 PavedColor => _settings.HighContrast.Value
         ? new Color32(245, 245, 250, 255)
-        : new Color32(88, 90, 96, 255);
+        : new Color32(176, 180, 190, 255);
 
     private readonly CartographerSettings _settings;
     private readonly ManualLogSource _log;

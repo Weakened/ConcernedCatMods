@@ -38,6 +38,10 @@ internal sealed class SystemMarkersPanel : CcSidePanel
     {
         AddBody(gui, font, AtlasStrings.Get("system.note"), 12, Color.white, ref y, 34f);
 
+        // RC12 blocker 4 clearance: center-pivot toggles reach half their
+        // height above their y.
+        y -= 8f;
+
         foreach ((string labelKey, string? registryIcon, int vanillaType) in FilterRows)
         {
             string label = labelKey.Length > 0

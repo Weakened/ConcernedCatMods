@@ -26,6 +26,15 @@ internal sealed class PinDisplayController
     private readonly ManualLogSource _log;
     private readonly List<Minimap.PinData> _clusterMarkers = new();
     private readonly HashSet<Guid> _displayHidden = new();
+
+    // RC12 blockers 5/6: pins the player JUST created (palette birth,
+    // survey accept, quick pin) that must stay individually visible —
+    // exempt from query filtering and cluster folding — until the player
+    // changes the zoom tier or the display state resets. Without this, a
+    // marker born next to existing pins folded into a cluster (or fell to
+    // an active search filter) the same frame its creation flow closed,
+    // which read as the marker disappearing.
+    private readonly HashSet<Guid> _stickyVisible = new();
     private bool _disabledForSession;
     private int _lastTier = -1;
 
@@ -55,6 +64,16 @@ internal sealed class PinDisplayController
         return _displayHidden.Contains(pin.Id.Value);
     }
 
+    /// <summary>Marks a just-created pin as sticky-visible (RC12 blockers
+    /// 5/6): it renders as itself — never folded into a cluster, never
+    /// dropped by the search filter — until the zoom tier changes or the
+    /// display state resets. Call before the Apply that follows the
+    /// creating operation.</summary>
+    public void MarkStickyVisible(AtlasId id)
+    {
+        _stickyVisible.Add(id.Value);
+    }
+
     /// <summary>Recomputes what the map shows. Idempotent; call after any
     /// filter/toggle change, store resync, or zoom-tier change.</summary>
     public void Apply(PinStore store, PinAdapter adapter)
@@ -78,7 +97,10 @@ internal sealed class PinDisplayController
                     continue;
                 }
 
-                if (!ShowPins || (!query.IsEmpty && !query.Matches(pin)))
+                // Sticky pins bypass the query filter (RC12 blockers 5/6);
+                // the ShowPins master switch still applies to everything.
+                bool sticky = _stickyVisible.Contains(pin.Id.Value);
+                if (!ShowPins || (!sticky && !query.IsEmpty && !query.Matches(pin)))
                 {
                     HiddenByFilter++;
                     continue;
@@ -95,7 +117,8 @@ internal sealed class PinDisplayController
                     : 0f;
             }
 
-            PinClusterer.Result clustered = PinClusterer.Compute(wanted, cell);
+            PinClusterer.Result clustered = PinClusterer.Compute(
+                wanted, cell, alwaysVisible: _stickyVisible.Count > 0 ? _stickyVisible : null);
 
             var visibleIds = new HashSet<Guid>();
             foreach (AtlasPin pin in clustered.Singles)
@@ -161,6 +184,9 @@ internal sealed class PinDisplayController
             return false;
         }
 
+        // A deliberate zoom-tier change ends the sticky-visibility grace of
+        // just-created pins (RC12 blockers 5/6): normal folding resumes.
+        _stickyVisible.Clear();
         _lastTier = tier;
         return true;
     }
@@ -171,6 +197,7 @@ internal sealed class PinDisplayController
     {
         ClearClusterMarkers();
         _displayHidden.Clear();
+        _stickyVisible.Clear();
         _lastTier = -1;
         VisibleCount = 0;
         HiddenByFilter = 0;

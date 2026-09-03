@@ -234,14 +234,23 @@ internal abstract class CcSidePanel
     // Shared construction helpers
     // ------------------------------------------------------------------
 
+    /// <summary>A body text block that OWNS the vertical band [y, y-height]
+    /// exactly. RC12 blocker 4: the rect is placed so its TOP edge sits at
+    /// y (Jötunn text rects pivot at their center, so a taller block after
+    /// a shorter one used to reach half its height ABOVE the reserved band
+    /// and paint over the previous block), and overflowing lines truncate
+    /// inside the band instead of spilling into the next one. Content must
+    /// therefore fit its reserved height — panels keep their strings within
+    /// the line budget.</summary>
     protected Text AddBody(GUIManager gui, Font font, string text, int size, Color color, ref float y, float height)
     {
         Text body = gui.CreateText(
             text, _panel!.transform,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, y),
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, y - (height / 2f)),
             font, size, color, outline: false, Color.black, _width - 40f, height, addContentSizeFitter: false)
             .GetComponent<Text>();
         body.alignment = TextAnchor.UpperLeft;
+        body.verticalOverflow = VerticalWrapMode.Truncate;
         y -= height + 6f;
         return body;
     }

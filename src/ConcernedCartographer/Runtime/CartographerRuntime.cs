@@ -697,8 +697,15 @@ internal sealed class CartographerRuntime : IDisposable
 
     private void CaptureQuickPin()
     {
-        if (_quickPinCapture.TryCapture(_pinStore, out string quickPinMessage))
+        if (_quickPinCapture.TryCapture(_pinStore, out string quickPinMessage, out AtlasPin? quickPin))
         {
+            // RC12 blockers 5/6: the fresh pin renders as itself — never
+            // folded or filtered away the moment it appears.
+            if (quickPin is not null)
+            {
+                _displayController.MarkStickyVisible(quickPin.Id);
+            }
+
             // RC8-10: the new store entity must gain its map rendering NOW,
             // through the tracking-preserving targeted sync — ReapplyDisplay
             // alone only re-filters what already renders, which left a quick
@@ -897,17 +904,63 @@ internal sealed class CartographerRuntime : IDisposable
 
     /// <summary>A palette-placed pin finished its vanilla naming flow:
     /// associate the AtlasPin now, with the palette's icon identity and
-    /// default category. Exactly one rendering and one entity — the
-    /// existing rendering is tracked, never replaced (#96).</summary>
+    /// default category. RC12 blocker 5: a CONFIRMED marker must survive
+    /// no matter how the naming close treated the rendering. The pure
+    /// <see cref="PaletteBirthResolution"/> rule decides between adopting
+    /// the rendering in place (normal path), adopting a same-spot
+    /// replacement pin, or recreating the marker from the newborn's
+    /// committed state; only a genuine cancel (no name, no rendering)
+    /// creates nothing. The resulting entity is sticky-visible so no
+    /// search filter or cluster fold can hide it the same frame — the
+    /// player always sees exactly one managed marker.</summary>
     private void HandlePaletteBirth(Minimap.PinData born)
     {
-        if (!_pinAdapter.ContainsPin(born) || !_pinAdapter.IsAdoptableVanilla(born))
+        string committedName = born.m_name ?? "";
+        bool onMap = _pinAdapter.ContainsPin(born);
+        Minimap.PinData? replacement = onMap
+            ? null
+            : _pinAdapter.TryFindAdoptableAt(born.m_pos, committedName);
+
+        PaletteBirthResolution.Action action = PaletteBirthResolution.Decide(
+            onMap, onMap && _pinAdapter.IsAdoptableVanilla(born), replacement is not null, committedName);
+
+        AtlasPin? managed;
+        switch (action)
         {
-            // Removed (or claimed by something else) during naming.
-            return;
+            case PaletteBirthResolution.Action.AdoptBorn:
+                managed = _pinAdapter.Adopt(_pinStore, born);
+                break;
+            case PaletteBirthResolution.Action.AdoptReplacement:
+                managed = _pinAdapter.Adopt(_pinStore, replacement!);
+                _log.LogInfo(
+                    "Palette birth: the naming close replaced the pin object; adopted the replacement at the same spot (RC12 blocker 5).");
+                break;
+            case PaletteBirthResolution.Action.RecreateManaged:
+                var position = new RoadPoint(born.m_pos.x, born.m_pos.y, born.m_pos.z);
+                int bornType = (int)born.m_type;
+                managed = _pinStore.Create(pin =>
+                {
+                    pin.Name = committedName;
+                    pin.IconId = IconRegistry.FromVanillaType(bornType);
+                    pin.Source = AtlasPinSource.Managed;
+                    pin.Position = position;
+                });
+                _log.LogInfo(
+                    $"Palette birth: the named pin's rendering vanished at naming close; recreated \"{committedName}\" as a managed marker (RC12 blocker 5).");
+                break;
+            case PaletteBirthResolution.Action.DropForeign:
+                _log.LogInfo("Palette birth: the named pin is not adoptable (foreign or already tracked); left untouched.");
+                return;
+            default:
+                // DropCancelled: honor the cancel.
+                if (_settings.DebugLogging.Value)
+                {
+                    _log.LogInfo("Palette birth: naming was cancelled; nothing created.");
+                }
+
+                return;
         }
 
-        AtlasPin? managed = _pinAdapter.Adopt(_pinStore, born);
         if (managed is null)
         {
             return;
@@ -926,8 +979,13 @@ internal sealed class CartographerRuntime : IDisposable
             pin.Source = AtlasPinSource.Managed;
         });
         _palettePanel.NoteUsed(iconId);
+        // RC12 blockers 5/6: the newborn renders as itself — never folded
+        // into a cluster or dropped by a search filter — until the player
+        // changes the zoom tier.
+        _displayController.MarkStickyVisible(managed.Id);
         // Targeted sync (not just re-filtering): the icon-id mutation above
-        // may swap the rendering to a distinct CC sprite immediately.
+        // may swap the rendering to a distinct CC sprite immediately, and
+        // the recreate path gains its map rendering here.
         ResyncPins();
         if (_settings.DebugLogging.Value)
         {
@@ -1393,6 +1451,11 @@ internal sealed class CartographerRuntime : IDisposable
 
         string subcommand = args.Length == 0 ? "status" : args[0].ToLowerInvariant();
         string remainder = args.Length > 1 ? args[1].ToLowerInvariant() : "";
+        // RC12 blocker 6: the Survey panel addresses rows by stable id
+        // ("id:<guid>") or identity ("key:<identity>") instead of a
+        // 1-based index a background sweep could shift under the click.
+        // Identity keys are case-sensitive, so keep the raw argument.
+        string rawRemainder = args.Length > 1 ? args[1] : "";
         IReadOnlyList<SurveyEngine.Observation> observations = _surveyEngine.Observations;
 
         switch (subcommand)
@@ -1424,16 +1487,39 @@ internal sealed class CartographerRuntime : IDisposable
             case "accept":
                 if (remainder == "all")
                 {
-                    int accepted = _surveyEngine.AcceptAll(_pinStore);
+                    // RC12 blocker 6: every accepted marker is sticky-visible
+                    // so no filter or cluster fold can hide it on creation.
+                    int accepted = _surveyEngine.AcceptAll(
+                        _pinStore, created => _displayController.MarkStickyVisible(created.Id));
                     ResyncPins();
-                    return $"Accepted {accepted} observation(s) as pins.";
+                    return $"Accepted {accepted} observation(s) as markers.";
                 }
 
-                if (int.TryParse(remainder, out int acceptIndex) && acceptIndex >= 1 && acceptIndex <= observations.Count)
+                Guid? acceptTarget = null;
+                if (rawRemainder.StartsWith("id:", StringComparison.OrdinalIgnoreCase) &&
+                    Guid.TryParse(rawRemainder.Substring(3), out Guid acceptParsed))
                 {
-                    _surveyEngine.Accept(observations[acceptIndex - 1].Id, _pinStore);
+                    acceptTarget = acceptParsed;
+                }
+                else if (int.TryParse(remainder, out int acceptIndex) && acceptIndex >= 1 && acceptIndex <= observations.Count)
+                {
+                    acceptTarget = observations[acceptIndex - 1].Id;
+                }
+
+                if (acceptTarget is Guid acceptGuid)
+                {
+                    if (!_surveyEngine.Accept(acceptGuid, _pinStore, out AtlasPin? acceptedPin))
+                    {
+                        return "That observation is no longer pending — the list just updated.";
+                    }
+
+                    if (acceptedPin is not null)
+                    {
+                        _displayController.MarkStickyVisible(acceptedPin.Id);
+                    }
+
                     ResyncPins();
-                    return $"Accepted observation {acceptIndex}.";
+                    return $"Accepted \"{acceptedPin?.Name}\" as a marker.";
                 }
 
                 return "Usage: cc_survey accept <n|all>";
@@ -1447,11 +1533,26 @@ internal sealed class CartographerRuntime : IDisposable
                     return $"Rejected {rejected} observation(s); they moved to the Rejected list.";
                 }
 
-                if (int.TryParse(remainder, out int rejectIndex) && rejectIndex >= 1 && rejectIndex <= observations.Count)
+                Guid? rejectTarget = null;
+                if (rawRemainder.StartsWith("id:", StringComparison.OrdinalIgnoreCase) &&
+                    Guid.TryParse(rawRemainder.Substring(3), out Guid rejectParsed))
                 {
-                    _surveyEngine.Reject(observations[rejectIndex - 1].Id, DateTime.UtcNow);
+                    rejectTarget = rejectParsed;
+                }
+                else if (int.TryParse(remainder, out int rejectIndex) && rejectIndex >= 1 && rejectIndex <= observations.Count)
+                {
+                    rejectTarget = observations[rejectIndex - 1].Id;
+                }
+
+                if (rejectTarget is Guid rejectGuid)
+                {
+                    if (!_surveyEngine.Reject(rejectGuid, DateTime.UtcNow))
+                    {
+                        return "That observation is no longer pending — the list just updated.";
+                    }
+
                     SaveRejectedIfDirty();
-                    return $"Rejected observation {rejectIndex}; it moved to the Rejected list.";
+                    return "Rejected; it moved to the Rejected list.";
                 }
 
                 return "Usage: cc_survey reject <n|all>";
@@ -1482,21 +1583,53 @@ internal sealed class CartographerRuntime : IDisposable
                     return $"Restored {restored} rejected observation(s) to pending review.";
                 }
 
-                if (int.TryParse(remainder, out int restoreIndex) &&
-                    _surveyEngine.RestoreRejected(restoreIndex - 1, DateTime.UtcNow))
+                int restoreTarget = -1;
+                if (rawRemainder.StartsWith("key:", StringComparison.OrdinalIgnoreCase))
+                {
+                    restoreTarget = _surveyEngine.FindRejectedIndex(rawRemainder.Substring(4));
+                    if (restoreTarget < 0)
+                    {
+                        return "That rejected entry is no longer listed — the list just updated.";
+                    }
+                }
+                else if (int.TryParse(remainder, out int restoreIndex))
+                {
+                    restoreTarget = restoreIndex - 1;
+                }
+
+                if (restoreTarget >= 0 && _surveyEngine.RestoreRejected(restoreTarget, DateTime.UtcNow))
                 {
                     SaveRejectedIfDirty();
-                    return $"Restored rejected entry {restoreIndex} to pending review.";
+                    return "Restored the rejected entry to pending review.";
                 }
 
                 return "Usage: cc_survey restore <n|all>";
             case "acceptrejected":
-                if (int.TryParse(remainder, out int acceptRejectedIndex) &&
-                    _surveyEngine.AcceptRejected(acceptRejectedIndex - 1, _pinStore))
+                int acceptRejectedTarget = -1;
+                if (rawRemainder.StartsWith("key:", StringComparison.OrdinalIgnoreCase))
                 {
+                    acceptRejectedTarget = _surveyEngine.FindRejectedIndex(rawRemainder.Substring(4));
+                    if (acceptRejectedTarget < 0)
+                    {
+                        return "That rejected entry is no longer listed — the list just updated.";
+                    }
+                }
+                else if (int.TryParse(remainder, out int acceptRejectedIndex))
+                {
+                    acceptRejectedTarget = acceptRejectedIndex - 1;
+                }
+
+                if (acceptRejectedTarget >= 0 &&
+                    _surveyEngine.AcceptRejected(acceptRejectedTarget, _pinStore, out AtlasPin? rejectedAccepted))
+                {
+                    if (rejectedAccepted is not null)
+                    {
+                        _displayController.MarkStickyVisible(rejectedAccepted.Id);
+                    }
+
                     ResyncPins();
                     SaveRejectedIfDirty();
-                    return $"Accepted rejected entry {acceptRejectedIndex} as a pin.";
+                    return $"Accepted \"{rejectedAccepted?.Name}\" as a marker.";
                 }
 
                 return "Usage: cc_survey acceptrejected <n>";

@@ -57,6 +57,14 @@ internal sealed class SurveyPanel : CcSidePanel
     private readonly Text[] _rowLabels = new Text[Slots];
     private readonly Text[] _rowButtonALabels = new Text[Slots];
     private readonly Text[] _rowButtonBLabels = new Text[Slots];
+
+    // RC12 blocker 6: each visible row remembers WHICH observation it
+    // shows (stable id / identity key), so a click acts on exactly that
+    // entry even when a background sweep shifted the list since the last
+    // one-second refresh. Index-addressed clicks could accept a different
+    // observation than the one on the row.
+    private readonly Guid[] _rowObservationIds = new Guid[Slots];
+    private readonly string[] _rowRejectedKeys = new string[Slots];
     private readonly Button[] _viewButtons = new Button[3];
     private GameObject? _scanNowButton;
     private GameObject? _acceptAllButton;
@@ -122,11 +130,12 @@ internal sealed class SurveyPanel : CcSidePanel
 
         _note = AddBody(gui, font, "", 12, Color.white, ref y, 30f);
 
-        // RC11 blocker 8: the status block sits below the note with its own
-        // reserved height, and the result rows start below IT — the four
-        // zones can never overlap.
-        _status = AddBody(gui, font, "", 12, new Color(0.85f, 1f, 0.85f, 1f), ref y, 60f);
-        y -= 8f;
+        // RC11 blocker 8 / RC12 blocker 4: the status block owns a band
+        // sized for its full four-line worst case, the rows start with
+        // clearance below it, and every status string is kept within the
+        // line budget — the zones can never overlap at any UiScale.
+        _status = AddBody(gui, font, "", 12, new Color(0.85f, 1f, 0.85f, 1f), ref y, 66f);
+        y -= 12f;
 
         for (int index = 0; index < Slots; index++)
         {
@@ -281,10 +290,16 @@ internal sealed class SurveyPanel : CcSidePanel
         switch (_view)
         {
             case View.Pending:
-                Report(_execute(new[] { primary ? "accept" : "reject", itemIndex.ToString() }));
+                Report(_execute(new[]
+                {
+                    primary ? "accept" : "reject", "id:" + _rowObservationIds[index].ToString("N"),
+                }));
                 break;
             case View.Rejected:
-                Report(_execute(new[] { primary ? "restore" : "acceptrejected", itemIndex.ToString() }));
+                Report(_execute(new[]
+                {
+                    primary ? "restore" : "acceptrejected", "key:" + _rowRejectedKeys[index],
+                }));
                 break;
             case View.Rules:
                 if (primary)
@@ -411,24 +426,27 @@ internal sealed class SurveyPanel : CcSidePanel
                     scanState = $"Scanning continuously ({_settings.SurveyScanRadius.Value:0} m around you)";
                 }
 
+                // RC12 blocker 4: every status line is short enough not to
+                // wrap at the panel width, so the block never exceeds its
+                // reserved four-line band.
                 string lastScan = scanner?.LastScanUtc is DateTime last
-                    ? $"Last sweep {Math.Max(0, (int)(DateTime.UtcNow - last).TotalSeconds)}s ago: {scanner.LastScanExamined} checked, {scanner.LastScanAdded} new"
-                    : "Last sweep: none finished yet this session";
+                    ? $"Sweep {Math.Max(0, (int)(DateTime.UtcNow - last).TotalSeconds)}s ago: {scanner.LastScanExamined} checked, {scanner.LastScanAdded} new"
+                    : "No sweep finished yet this session";
 
                 _status.text = scanState +
                     $"\n{lastScan}" +
                     $"\n{itemCount} pending{pageSuffix}" +
-                    (itemCount > 0 ? " — accept (+) to pin, reject (−) to set aside:" : "");
+                    (itemCount > 0 ? "\n+ accepts as a marker · − rejects" : "");
                 break;
             case View.Rejected:
                 _status.text = $"{itemCount} rejected{pageSuffix}" +
-                    (itemCount > 0 ? " — restore (↩) sends one back to review; accept (+) pins it:" : "");
+                    (itemCount > 0 ? "\n↩ returns to review · + accepts as a marker" : "");
                 break;
             default:
                 _status.text =
-                    $"{engine.Rules.Rules.Count} rule(s), {engine.Rules.Blacklist.Count} blocked pattern(s){pageSuffix}" +
-                    "\nToggle (⏻) or delete (✕) below; add with the pattern box." +
-                    "\nsurvey-rules.tsv stays the shareable import/export.";
+                    $"{engine.Rules.Rules.Count} rule(s), {engine.Rules.Blacklist.Count} blocked{pageSuffix}" +
+                    "\n⏻ toggles · ✕ deletes · add below." +
+                    "\nsurvey-rules.tsv stays the import/export.";
                 break;
         }
     }
@@ -447,6 +465,7 @@ internal sealed class SurveyPanel : CcSidePanel
                     if (used)
                     {
                         SurveyEngine.Observation observation = observations[itemIndex];
+                        _rowObservationIds[index] = observation.Id;
                         _rowLabels[index].text = $"{observation.SuggestedName} [{observation.Category}]";
                         _rowButtonALabels[index].text = "+";
                         _rowButtonBLabels[index].text = "−";
@@ -458,6 +477,7 @@ internal sealed class SurveyPanel : CcSidePanel
                     if (used)
                     {
                         SurveyEngine.RejectedObservation entry = engine.Rejected[itemIndex];
+                        _rowRejectedKeys[index] = SurveyEngine.IdentityKey(entry.PrefabName, entry.Position);
                         _rowLabels[index].text = $"{entry.SuggestedName} [{entry.Category}]";
                         _rowButtonALabels[index].text = "↩";
                         _rowButtonBLabels[index].text = "+";

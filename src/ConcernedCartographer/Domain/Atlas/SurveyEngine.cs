@@ -205,13 +205,22 @@ internal sealed class SurveyEngine
 
     public bool Accept(Guid id, PinStore pins)
     {
+        return Accept(id, pins, out _);
+    }
+
+    /// <summary>Accepts one observation into a pin. RC12 blocker 6: the
+    /// created pin is surfaced so the caller can guarantee its rendering
+    /// (sticky visibility) the same frame.</summary>
+    public bool Accept(Guid id, PinStore pins, out AtlasPin? created)
+    {
+        created = null;
         Observation? observation = Find(id);
         if (observation is null)
         {
             return false;
         }
 
-        CreatePin(pins, observation.SuggestedName, observation.IconId, observation.Category, observation.Position);
+        created = CreatePin(pins, observation.SuggestedName, observation.IconId, observation.Category, observation.Position);
         string key = IdentityKey(observation.PrefabName, observation.Position);
         _pendingKeys.Remove(key);
         _acceptedKeys.Add(key);
@@ -219,14 +228,18 @@ internal sealed class SurveyEngine
         return true;
     }
 
-    public int AcceptAll(PinStore pins)
+    public int AcceptAll(PinStore pins, Action<AtlasPin>? onCreated = null)
     {
         int accepted = 0;
         foreach (Observation observation in _observations.ToArray())
         {
-            if (Accept(observation.Id, pins))
+            if (Accept(observation.Id, pins, out AtlasPin? created))
             {
                 accepted++;
+                if (created is not null)
+                {
+                    onCreated?.Invoke(created);
+                }
             }
         }
 
@@ -299,6 +312,14 @@ internal sealed class SurveyEngine
     /// mind): creates the pin and retires the identity.</summary>
     public bool AcceptRejected(int index, PinStore pins)
     {
+        return AcceptRejected(index, pins, out _);
+    }
+
+    /// <summary>RC12 blocker 6: the created pin is surfaced so the caller
+    /// can guarantee its rendering the same frame.</summary>
+    public bool AcceptRejected(int index, PinStore pins, out AtlasPin? created)
+    {
+        created = null;
         if (index < 0 || index >= _rejected.Count)
         {
             return false;
@@ -306,9 +327,28 @@ internal sealed class SurveyEngine
 
         RejectedObservation entry = _rejected[index];
         RemoveRejectedAt(index);
-        CreatePin(pins, entry.SuggestedName, entry.IconId, entry.Category, entry.Position);
+        created = CreatePin(pins, entry.SuggestedName, entry.IconId, entry.Category, entry.Position);
         _acceptedKeys.Add(IdentityKey(entry.PrefabName, entry.Position));
         return true;
+    }
+
+    /// <summary>The current index of a rejected entry by its stable
+    /// location identity, or -1. RC12 blocker 6: the Survey panel
+    /// addresses rows by identity instead of by a 1-based index that a
+    /// background change could shift between refreshes.</summary>
+    public int FindRejectedIndex(string identityKey)
+    {
+        for (int index = 0; index < _rejected.Count; index++)
+        {
+            if (string.Equals(
+                IdentityKey(_rejected[index].PrefabName, _rejected[index].Position),
+                identityKey, StringComparison.Ordinal))
+            {
+                return index;
+            }
+        }
+
+        return -1;
     }
 
     /// <summary>Loads the persisted rejected list (world switch). Replaces
@@ -360,9 +400,9 @@ internal sealed class SurveyEngine
         RejectedDirty = true;
     }
 
-    private static void CreatePin(PinStore pins, string name, string iconId, string category, RoadPoint position)
+    private static AtlasPin CreatePin(PinStore pins, string name, string iconId, string category, RoadPoint position)
     {
-        pins.Create(pin =>
+        return pins.Create(pin =>
         {
             pin.Name = name;
             pin.IconId = iconId;

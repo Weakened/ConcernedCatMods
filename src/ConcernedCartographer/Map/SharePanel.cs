@@ -53,6 +53,10 @@ internal sealed class SharePanel : CcSidePanel
 
         _status = AddBody(gui, font, "", 12, Color.white, ref y, 76f);
 
+        // RC12 blocker 4 clearance: center-pivot buttons reach half their
+        // height above their y.
+        y -= 10f;
+
         AddButton(gui, AtlasStrings.Get("share.now"), columnLeft, y, columnWidth, 28f, () =>
         {
             Report(_execute(new[] { "share" }));
