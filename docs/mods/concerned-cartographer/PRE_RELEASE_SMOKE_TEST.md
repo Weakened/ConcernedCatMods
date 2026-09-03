@@ -5,17 +5,83 @@ manual-only verification deferred by the autonomous conveyor (OPS-001
 rev 2) from v0.3 onward and is finalized against the exact v1.0 RC. Rows
 marked **BLOCKS** must pass before publication; others are record-and-ship.
 
-> Status: FINAL for v1.0, amended 2026-09-02 (eighth amendment): the
-> owner's RC10 smoke found 15 release blockers, implemented in **RC11**;
-> RC10 is retired — do not test, tag, or upload it. **Do NOT restart
-> the full 2.5–4 h checklist.** Run the NEW section **R7 (RC11
-> smoke-fix)** first, then the still-applicable R6 rows (R6.3–5, 8, 13,
-> 14 are superseded by R7), then R5 items 4–12, then R3 A–L and R4 M–S
-> as amended, then resume the shortened golden path from where the
-> second pass stopped. Test only the RC ZIP named in
+> Status: FINAL for v1.0, amended 2026-09-02 (ninth amendment): the
+> owner's RC11 smoke reported 6 feedback items (4 release blockers),
+> implemented in **RC12**; RC11 is retired — do not test, tag, or
+> upload it. **Do NOT restart the full 2.5–4 h checklist.** Run the
+> NEW section **R8 (RC12 owner-feedback)** first, then R7 (rows 5 and
+> 11 are superseded by R8), then the still-applicable R6 rows
+> (R6.3–5, 8, 13, 14 are superseded by R7), then R5 items 4–12, then
+> R3 A–L and R4 M–S as amended, then resume the shortened golden path
+> from where the second pass stopped. Test only the RC ZIP named in
 > RELEASE_DOSSIER.md.
 
-## R7. RC11 smoke-fix mini-smoke — RUN FIRST (short)
+## R8. RC12 owner-feedback mini-smoke — RUN FIRST (short)
+
+Every item verifies one RC12 feedback fix. All **BLOCK** unless marked
+otherwise. Prep: the RC10/RC11 disposable world (existing roads, routes,
+pins, and survey data make the regressions visible), hoe + stone
+(Paved), cultivator, berry bushes, several existing markers clustered
+near a base.
+
+1. **Paved reads lighter than dirt**: with a dirt and a paved stretch
+   side by side, paved ink is clearly the LIGHTER of the two on the
+   large map (vector), on the minimap (texture), and at every zoom —
+   in the normal palette AND with `Accessibility/HighContrast = true`
+   (near-black dirt, near-white paved). Width and dash/dot styling are
+   unchanged from RC11.
+2. **Route list is live**: with the Routes panel open, watch the list
+   while you (a) draw two Free Draw strokes — each appears the moment
+   the stroke lands; (b) erase one route's ink completely — its row
+   leaves the list immediately, with no zero-point ghost; (c) erase
+   the MIDDLE of another — the "(part)" tail appears immediately;
+   (d) delete, split, merge, and Restore — the list updates the same
+   moment every time, with no stale rows ever accumulating. Undo of
+   the full erase brings the route back into the list with its ink.
+3. **Dotted style never stalls**: draw one very long Free Draw route
+   (crossing several map screens). Cycle its Style
+   solid→dashed→dotted repeatedly (a dozen fast clicks), zoom fully
+   in and out on the dotted route, and pan across it — the game never
+   hitches or freezes, and the dotted cadence stays readable. Leave
+   it dotted over a restart; the map still opens smoothly.
+4. **Survey panel layout**: in all three Survey views (Pending /
+   Rejected / Rules) with rows present and a long output message
+   showing, the header, enable toggle, view buttons, note, status
+   block, result rows, bulk-action buttons, output, and Close each
+   sit in their own space — zero overlap at UiScale 0.8, 1.0, and
+   1.6. Repeat once with the sweep status line at its longest (right
+   after a scan).
+5. **Marker naming leaves exactly one marker**: open [Markers], pick
+   a marker type, double-click the map, type a name, press Enter —
+   exactly ONE marker with that name and the chosen cc:* art is on
+   the map, and it STAYS after the naming box closes, after closing
+   and reopening the map, and after a restart. Repeat once placing
+   the new marker RIGHT NEXT TO the existing base marker cluster
+   while zoomed out enough that clustering is active — the new
+   marker still shows as itself (it may fold into a cluster only
+   after you change zoom). Cancelling the naming flow (Escape)
+   creates no managed marker. If the log prints any "Palette birth:"
+   fallback line, record which.
+6. **Survey accept creates the marker immediately**: in Survey →
+   Pending, accept one observation — its row leaves Pending the same
+   moment and exactly ONE managed marker appears on the map
+   immediately (no map close/reopen needed), wearing the rule's icon
+   and a human name. Repeat for an observation next to your existing
+   pin cluster while zoomed out — the accepted marker still shows as
+   itself. Accept one from the Rejected view — same immediate
+   result. Accept all with several pending — every marker appears at
+   once and Pending empties.
+7. **Sticky grace ends on zoom change** (record-and-ship): after row
+   5/6, change the map zoom across a tier (zoom well out) — a
+   just-created marker MAY now fold into a neighboring cluster like
+   any other pin; zooming back in unfolds it. This is the intended
+   end of the "just created" visibility grace.
+
+Only after R8 passes, run R7 (rows 5 and 11 superseded by R8), then
+the still-applicable R6 rows (1, 2, 6, 7, 9–12, 15), then R5 items
+4–12, then R3 A–L and R4 M–S.
+
+## R7. RC11 smoke-fix mini-smoke (amended by R8)
 
 Every item verifies one RC11 blocker. All **BLOCK** unless marked
 otherwise. Prep: the RC10 disposable world (its roads/routes/survey

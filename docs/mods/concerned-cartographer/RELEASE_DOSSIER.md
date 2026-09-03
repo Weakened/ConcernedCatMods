@@ -7,12 +7,84 @@ The single remaining gate is the human smoke test
 ## 1–5. Release candidate identity
 
 - **Version:** 1.0.0 (unchanged — 1.0.0 has never been publicly tagged or published)
-- **RC commit:** `be0af44eb0b5fc8812b89d26333c8762741ec3e5` (**RC11**,
-  on the CC-098 line — the smoke-fix pass of 2026-09-02 addressing all
-  15 release blockers from the owner's RC10 smoke; the package below
-  was built at exactly this commit with a clean tree, and the DLL's
-  informational version embeds it).
-  RC11 delivers, on top of RC10:
+- **RC commit:** RECORDED IN THE FINAL DOSSIER COMMIT (**RC12**, on the
+  CC-098 line — the owner-feedback pass of 2026-09-02 addressing all 6
+  feedback items (4 release blockers) from the owner's RC11 smoke).
+  RC12 delivers, on top of RC11:
+  **(1) paved ink reads lighter than dirt** — the shared road palette's
+  normal-mode paved ink is now a light stone gray (176,180,190) so
+  paved is unmistakably the lighter kind at identical width/style in
+  BOTH presentations (one `DirtColor`/`PavedColor` source drives the
+  texture overlay and the vector layer); high contrast keeps near-black
+  dirt / near-white paved unchanged;
+  **(2, blocker) live route list** — `RouteStore` gained a monotonic
+  `ChangeStamp` bumped on every published change, and the Routes panel
+  polls it per visible frame: draw strokes, erase, delete, split,
+  merge, restore, console edits, sync, and undo/redo all update the
+  visible list the same frame through any path. Erasing the LAST of a
+  route's ink tombstones the route inside the same undoable erase step
+  (no more ghost zero-point rows), and the RC11 stable sort keeps row
+  order deterministic;
+  **(3, blocker) dotted style can never stall** — the shared
+  `RoutePatternMath` walkers are structurally terminating: dots are
+  stamped from an INTEGER per-segment count (the old float countdown
+  stalled below float precision on huge segments — `1e9f - 3f == 1e9f`
+  — an infinite loop and hard game freeze), the dash walk carries its
+  phase modulo one cycle and aborts on any non-advancing step, and
+  non-finite segments/cadences are skipped. The texture path passes a
+  real 24 000-stamp per-route budget (was `int.MaxValue`) and reuses
+  ONE 16 MB pixel buffer across redraws (repeated style changes used to
+  allocate it every redraw — GC hitches); the vector path estimates
+  styled stamp counts in float with NaN-safe negated comparisons (the
+  old `(int)` cast wrapped negative on huge lengths and waved near-zero
+  cadences through the budget) and treats non-finite baked points as
+  projection failures;
+  **(4) survey layout on exact vertical bands** — the shared
+  `CcSidePanel.AddBody` now places every body rect so its TOP edge sits
+  at the reserved y and truncates overflow inside its band (the
+  center-pivot rects used to reach half their height ABOVE the band —
+  the root cause of the recurring survey text overlap: any taller block
+  after a shorter one, like the 60 px status after the 30 px note,
+  painted over it); Survey/Share/Settings/SystemMarkers/Routes panels
+  carry matching clearance offsets, the survey status block owns a
+  four-line band with every status string kept within it, and the
+  whole system is scale-invariant so 0.8/1.0/1.6 behave identically;
+  **(5, blocker) naming always leaves one visible managed marker** —
+  palette births resolve through the pure `PaletteBirthResolution`
+  rule: adopt the surviving rendering in place (normal), adopt an
+  adoptable replacement standing at the same spot (naming close
+  replaced the object), or RECREATE the managed marker from the
+  newborn's committed state whenever a non-empty name lost its
+  rendering — only a genuine cancel creates nothing, and every
+  fallback logs a "Palette birth:" line for smoke evidence;
+  **(5/6, blockers) just-created markers cannot vanish** —
+  `PinClusterer`'s existing `alwaysVisible` exemption is finally WIRED:
+  palette births, survey accepts, and quick pins mark their new pin
+  sticky-visible in the display controller (exempt from cluster
+  folding and search filters; the master ShowPins switch still
+  applies) until the player changes the zoom tier — previously a
+  marker born next to existing pins folded into a cluster (or fell to
+  an active search filter) the same frame its creation flow closed,
+  which read as the marker disappearing;
+  **(6, blocker) survey accept is exact and immediate** —
+  `SurveyEngine.Accept`/`AcceptRejected` surface the created pin so
+  the runtime guarantees its rendering in the same `ResyncPins`, and
+  Survey panel rows address observations by stable id (`id:<guid>`)
+  and rejected entries by identity key (`key:<prefab|x|z>`) instead of
+  1-based indexes a background sweep could shift between the panel's
+  one-second refreshes — a click acts on exactly the row shown, and a
+  stale target reports "the list just updated" instead of acting on a
+  neighbor.
+  **Retires RC11 `be0af44e`/`078de40` (ZIP `C08BBBB1…`, failed the
+  owner's RC11 smoke on the 6 items above). Do not test, tag, or
+  upload it.** Already-passed evidence that remains valid: startup
+  environment, DEF-v1.0-001/002/003, and the RC10 P1 road-authority
+  fix confirmed live in the owner's RC10 smoke. Everything RC12
+  touched is re-verified by smoke section **R8** (then R7 as amended).
+- RC11's identity block is preserved below for the record; its 15
+  blockers remain in RC12 as amended:
+- (RC11) **RC commit** `be0af44eb0b5fc8812b89d26333c8762741ec3e5` —
+  delivered, on top of RC10:
   **(1) authoritative overlay visibility** — the texture overlays are
   written unconditionally from `OverlayVisibilityRule` (Jötunn's own
   checkbox listener races any cached write; the doubled/stale ink on
@@ -190,18 +262,18 @@ The single remaining gate is the human smoke test
   as amended).)
 - **ZIP:** `artifacts\thunderstore\TheConcernedCat-ConcernedCartographer-1.0.0.zip`
   (built at the RC commit; an identical immutable copy is at
-  `artifacts\rc11\TheConcernedCat-ConcernedCartographer-1.0.0-RC11.zip`
+  `artifacts\rc12\TheConcernedCat-ConcernedCartographer-1.0.0-RC12.zip`
   — verify the hash below before importing. The retired copies under
+  `artifacts\rc11\` (ZIP `C08BBBB1…`, DLL `8C5233A4…`),
   `artifacts\rc10\` (ZIP `EA523400…`, DLL `A350D0CE…`) and
   `artifacts\rc8\` (ZIP `AF267AC2…`, DLL `E9904771…`) must NOT be
   tested or uploaded.)
-- **ZIP SHA-256:** `C08BBBB1C89C8D10509ABB3F164EE50F66AAFE3D2A413FF65109C227B898C7E2`
-  (314,718 bytes — fresh RC11 bytes; retired hashes are never reused)
-- **Plugin DLL SHA-256:** `8C5233A426AFC0FE94E2F9AD7FC90F518F25BEF491D1FF4F9EEF29C05B722065`
-  (455,168 bytes; the DLL inside the ZIP verified hash-identical to the
-  Release build output; informational version
-  `1.0.0+be0af44eb0b5fc8812b89d26333c8762741ec3e5` verified in the DLL;
-  the 12 `CC.Icons.cc-*.png` sprite resources re-verified embedded)
+- **ZIP SHA-256:** RECORDED IN THE FINAL DOSSIER COMMIT
+  (fresh RC12 bytes; retired hashes are never reused)
+- **Plugin DLL SHA-256:** RECORDED IN THE FINAL DOSSIER COMMIT
+  (the DLL inside the ZIP verified hash-identical to the Release build
+  output; informational version `1.0.0+<RC12 commit>`; the 12
+  `CC.Icons.cc-*.png` sprite resources re-verified embedded)
 - **Assembly metadata (verified in the DLL):** Company "The Concerned Cat",
   Product "Concerned Cartographer", Copyright © 2026 Eren Cansunar,
   RepositoryUrl embedded, informational version `1.0.0+<RC commit>`.
@@ -216,10 +288,10 @@ The single remaining gate is the human smoke test
 Every sprint v0.3→v1.0 shipped through its internal gate; all 42 child
 issues and 8 controllers (#8, #27–#81) are closed with evidence comments.
 Shipped versions on main with tags: 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0,
-0.8.0, 0.9.0. The RC6 line is on main; the CC-098 completion line (RC7
-and RC8, both now retired, plus the RC10 consolidated-feedback pass) is
-on `feat/cc-098-v1-completion` awaiting its post-smoke merge and tag
-(section 19).
+0.8.0, 0.9.0. The RC6 line is on main; the CC-098 completion line (RC7,
+RC8, RC10, and RC11 — all now retired — plus the RC12 owner-feedback
+pass) is on `feat/cc-098-v1-completion` awaiting its post-smoke merge
+and tag (section 19).
 
 ## 7. Defects
 
@@ -331,6 +403,34 @@ matrix (1080p/1440p × UiScale 0.8/1.0/1.6) remains derivation-based in
 code and is verified live by smoke R6.15 — a game UI cannot be
 screenshot-proven from the conveyor.
 
+**Owner RC11 smoke-feedback pass (2026-09-02, RC12) — 6 items, 4
+release blockers, all fixed:** the owner's RC11 smoke (reported via a
+separate thread) found paved ink reading as dark as dirt, a route list
+that only refreshed after the panel's own buttons (stale rows piling
+up), the dotted route style freezing the game on long routes and
+repeated style changes, survey text still overlapping, and both
+marker-creation regressions: a palette marker vanishing after its
+naming flow closed, and survey accept not producing a visible marker.
+Root causes were located, not guessed: the `AddBody` helper reserved
+`[y, y-height]` but centered its rect ON y, so any taller body block
+after a shorter one physically overlapped it (the recurring survey
+overlap); `WalkDots` counted distance down in float and stalled below
+float precision on long segments (a real infinite loop), while the
+vector budget estimate's `(int)` cast wrapped negative on huge lengths;
+the route panel had no store-change signal at all; and the pin
+clusterer's `alwaysVisible` exemption existed but was never wired, so a
+newborn marker folded into a neighboring cluster (or fell to a search
+filter) the same frame its creation flow closed. Fixes are itemized in
+the RC12 identity above; each carries focused regression tests where
+the logic is pure (`Rc12RouteTests`: change-stamp semantics, erase
+tombstone + undo, walker termination on huge/non-finite/tiny-cadence
+inputs; `Rc12PinSurveyTests`: sticky clusterer exemption, every
+`PaletteBirthResolution` branch, accept surfacing + identity-addressed
+rejected rows), and the runtime-only behaviors (ink shade, live-list
+feel, no-stall feel, layout at scale, the two creation flows) are smoke
+rows R8.1–7 with "Palette birth:" fallback diagnostics logged for the
+record.
+
 **Owner RC10 smoke-fix pass (2026-09-02, RC11) — 15 release blockers,
 all fixed:** the RC10 smoke confirmed the P1 road-authority fix live
 (the owner's LogOutput.log shows "Terrain action classified:
@@ -426,8 +526,18 @@ release blockers, all addressed in the previous RC:
 
 ## 8. Automated evidence (at the RC commit)
 
-- **462/462 tests** in the game-free core suite (Release configuration,
-  re-run at the RC11 commit): everything below plus the RC11 suites —
+- **483/483 tests** in the game-free core suite (Release configuration,
+  re-run at the RC12 commit): everything below plus the RC12 suites —
+  `Rc12RouteTests` (10: change-stamp bump on every published change and
+  none on rejected ones, full-erase tombstone with undo restoring ink
+  and liveness, partial-erase survival, dot/dash termination at the
+  budget on 1e9-length segments, non-finite segment/cadence skipping,
+  tiny-cadence budget bounding) and `Rc12PinSurveyTests` (11: sticky
+  pins never fold while neighbors still cluster, the un-sticky control
+  case, all five `PaletteBirthResolution` branches, accept surfacing
+  the created pin and emptying Pending, unknown-id refusal,
+  accept-all reporting every pin, rejected rows resolving by identity
+  after the list shifts) — plus the RC11 suites —
   `VectorBakeSchedulerTests` (9: full zoom sweep in wheel steps,
   threshold boundaries both directions, debounce, periodic,
   incomplete-bake retry, invalidation), `FreeDrawStrokeGateTests` (6:
@@ -529,25 +639,26 @@ defaults.
 ## 18. Smoke test
 
 `docs/mods/concerned-cartographer/PRE_RELEASE_SMOKE_TEST.md` — **the
-owner starts at the NEW SHORT section R7 (the RC11 smoke-fix: thirteen
-rows, one per blocker cluster), then the still-applicable R6 rows
-(1, 2, 6, 7, 9–12, 15), then R5 items 4–12, then R3 (blocks A–L) and
-R4 (blocks M–S), NOT at the top.** The full 2.5–4 h checklist is not
-restarted; sections the earlier passes already completed stay
-completed. Only after R7 + R6 + R5 + R3 A–L + R4 M–S pass does the
-owner resume routes/world-isolation/multiplayer.
+owner starts at the NEW SHORT section R8 (the RC12 owner-feedback
+pass: seven rows, one per feedback fix), then R7 (rows 5 and 11
+superseded by R8), then the still-applicable R6 rows (1, 2, 6, 7,
+9–12, 15), then R5 items 4–12, then R3 (blocks A–L) and R4 (blocks
+M–S), NOT at the top.** The full 2.5–4 h checklist is not restarted;
+sections the earlier passes already completed stay completed. Only
+after R8 + R7 + R6 + R5 + R3 A–L + R4 M–S pass does the owner resume
+routes/world-isolation/multiplayer.
 
 ## 19. Remaining Git commands (run after the smoke test passes)
 
 The RC lives on `feat/cc-098-v1-completion` (not yet on main). After
-R7 + R6 + R5 + R3 + R4 pass:
+R8 + R7 + R6 + R5 + R3 + R4 pass:
 
 ```powershell
 # 1. Merge the completion branch to main (PR or fast-forward — owner's call):
 git checkout main; git merge feat/cc-098-v1-completion
 git push origin main
-# 2. Tag the RC11 commit named in the identity section (now in main history):
-git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" be0af44eb0b5fc8812b89d26333c8762741ec3e5
+# 2. Tag the RC12 commit named in the identity section (now in main history):
+git tag -a concerned-cartographer/v1.0.0 -m "Concerned Cartographer 1.0.0 - Stable Living Atlas" <RC12-commit-from-identity-section>
 git push origin concerned-cartographer/v1.0.0
 gh release create concerned-cartographer/v1.0.0 artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-1.0.0.zip --title "Concerned Cartographer 1.0.0" --notes-file src/ConcernedCartographer/Package/CHANGELOG.md
 ```
