@@ -12,6 +12,7 @@ public sealed class CartSnapshot
         string cartId,
         float baseMass,
         float cargoWeight,
+        bool cargoDataAvailable,
         float itemWeightMassFactor,
         float totalMass,
         bool isAttached,
@@ -20,6 +21,7 @@ public sealed class CartSnapshot
         CartId = cartId;
         BaseMass = baseMass;
         CargoWeight = cargoWeight;
+        CargoDataAvailable = cargoDataAvailable;
         ItemWeightMassFactor = itemWeightMassFactor;
         TotalMass = totalMass;
         IsAttached = isAttached;
@@ -34,8 +36,15 @@ public sealed class CartSnapshot
     public float BaseMass { get; }
 
     /// <summary>Total weight of the cargo container's inventory — the exact
-    /// number the game feeds into cart mass.</summary>
+    /// number the game feeds into cart mass. Meaningful only when
+    /// <see cref="CargoDataAvailable"/>.</summary>
     public float CargoWeight { get; }
+
+    /// <summary>False when the cart exposed no cargo container (CT-003:
+    /// unobtainable is flagged, never silently defaulted). Then
+    /// <see cref="CargoWeight"/> is 0 and <see cref="TotalMass"/> equals
+    /// <see cref="BaseMass"/> by construction, not by measurement.</summary>
+    public bool CargoDataAvailable { get; }
 
     /// <summary>The game's cargo-weight-to-mass multiplier.</summary>
     public float ItemWeightMassFactor { get; }
@@ -59,16 +68,19 @@ public sealed class CartSnapshot
         string? cartId,
         float baseMass,
         float cargoWeight,
+        bool cargoDataAvailable,
         float itemWeightMassFactor,
         bool isAttached,
         bool isPulledByLocalPlayer)
     {
+        float effectiveCargoWeight = cargoDataAvailable ? cargoWeight : 0f;
         return new CartSnapshot(
             cartId ?? string.Empty,
             baseMass,
-            cargoWeight,
+            effectiveCargoWeight,
+            cargoDataAvailable,
             itemWeightMassFactor,
-            baseMass + cargoWeight * itemWeightMassFactor,
+            baseMass + effectiveCargoWeight * itemWeightMassFactor,
             isAttached,
             isPulledByLocalPlayer);
     }

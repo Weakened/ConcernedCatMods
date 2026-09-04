@@ -63,6 +63,26 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-04 — CT-003 in-game telemetry spot check pending
+
+- Version / issue: v0.1 / CT-003 (#111)
+- Question: the displayed-vs-expected cargo-weight spot check and a live
+  telemetry debug-summary log excerpt require a game session with a cart,
+  which needs the TCT profiles (CT-043) and an interactive launch.
+- Safe reversible default selected: ship the sampler verified off-game — 31
+  new unit tests over scheduling, budget, rotation, store cap, eviction,
+  reset, and zero-allocation fast paths; the cargo number itself is the
+  game's own `GetTotalWeight()` relayed unmodified, with availability
+  flagged when no container exists.
+- Why work continued: telemetry is read-only and fails closed (capability
+  gate, per-cart null results, no logging in the sample path); a wrong
+  number would be a display defect, not a world-safety risk.
+- Risk / alternative: none beyond a possible calibration surprise; the spot
+  check joins the v0.1 RC in-game campaign (CT-005) and the vanilla-truth
+  baseline of the test plan.
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.

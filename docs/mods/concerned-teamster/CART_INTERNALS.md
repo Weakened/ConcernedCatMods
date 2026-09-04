@@ -1,4 +1,4 @@
-# Valheim cart internals — verified findings (CT-002)
+# Valheim cart internals — verified findings (CT-002, extended CT-003)
 
 This document records the **verified** surface of Valheim's cart implementation
 that Concerned Teamster depends on. Nothing here is guessed: every member was
@@ -36,7 +36,7 @@ declared in `assembly_valheim.dll` (no namespace). The vanilla cart prefab
 carries this component; Teamster never depends on prefab names, only on the
 component type and its static instance registry.
 
-### Members the CT-002 adapter reads (all public)
+### Members the CT-002/CT-003 adapter reads
 
 | Member | Verified signature | Semantics (decompiled) |
 |---|---|---|
@@ -45,6 +45,7 @@ component type and its static instance registry.
 | `m_container` | `public Container m_container` | The cart's cargo container; may be null on malformed prefabs. |
 | `IsAttached()` | `public bool IsAttached()` | True when a local `ConfigurableJoint` (`m_attachJoin`) exists; otherwise falls back to the replicated ZDO bool `ZDOVars.s_attachJointHash`, so **observers see remote attachment state**. |
 | `IsAttached(Character)` | `public bool IsAttached(Character character)` | Local-truth check: compares `m_attachJoin.connectedBody.gameObject` with the character's GameObject. Only meaningful on the client that owns the joint (pulling is client-local physics). |
+| `m_instances` | `private static List<Vagon> m_instances` | CT-003 discovery: every live networked cart registers in `Awake` (skipped when its ZDO is null — ghost/placement copies never appear) and unregisters in `OnDestroy`. No world scans needed. Private: compile-time access via the publicized reference, presence probed at startup. |
 
 ### Supporting members (all public, other Valheim types)
 
@@ -56,7 +57,20 @@ component type and its static instance registry.
 | `ZDOID.ToString()` | `public override string ToString()` → `GetUserID(UserKey) + ":" + ID` | Stable `"<userId>:<id>"` identity string used as the snapshot `CartId`. |
 | `Container.GetInventory()` | `public Inventory GetInventory()` | Cargo inventory access. |
 | `Inventory.GetTotalWeight()` | `public float GetTotalWeight()` | Total cargo weight — the exact number vanilla feeds into cart mass. |
-| `Player.m_localPlayer` | `public static Player m_localPlayer` | Local player for the pull-state check; `Player : Humanoid : Character` (verified), so it is assignable to `IsAttached(Character)`. |
+| `Player.m_localPlayer` | `public static Player m_localPlayer` | Local player for the pull-state check; `Player : Humanoid : Character` (verified), so it is assignable to `IsAttached(Character)`. CT-003 also uses it as the session signal (null in menus and between worlds → telemetry reset) and as the discovery origin (`transform.position`). |
+
+### Unity engine members the CT-003 adapter reads (verified on this build)
+
+Verified by metadata dump of the game's own Unity modules on 2026-09-04
+(`UnityEngine.PhysicsModule.dll` / `UnityEngine.CoreModule.dll`, Unity
+6000.0.61f1):
+
+| Member | Verified signature | Use |
+|---|---|---|
+| `Rigidbody.linearVelocity` | `public Vector3 linearVelocity { get; set; }` — **the pre-Unity-6 `velocity` property still exists but is `[Obsolete]` on this build** | Cart motion (read only): speed magnitude and vertical component. Probed at startup like game members, resolved from `UnityEngine.PhysicsModule`. |
+| `Rigidbody.mass` | `public float mass { get; set; }` | Not read yet; reserved with the owner-lag caveat above. |
+| `Time.unscaledTimeAsDouble` | `public static double unscaledTimeAsDouble { get; }` | Sampler clock (unscaled: telemetry staleness keeps advancing while the game is paused). Core Unity API, compile-verified. |
+| `Component.GetComponent<T>()` / `Component.transform.position` | core Unity API | Rigidbody/ZNetView lookup and distance filtering; compile-verified, not probed. |
 
 ### Verified semantics that shape the domain model
 
@@ -91,9 +105,8 @@ component type and its static instance registry.
 
 | Member | Verified signature | Reserved for |
 |---|---|---|
-| `Vagon.m_instances` | `private static List<Vagon> m_instances` — populated in `Awake` (only when the ZDO exists), removed in `OnDestroy` | CT-003 cart discovery without world scans. Private: needs publicized-assembly access and its own probe entry. |
 | `Vagon.m_name` | `public string m_name` (default `"Wagon"`) | Display name (localization token comes from the prefab). |
-| `Vagon.m_body` / `m_bodies` | `private Rigidbody m_body` / `private Rigidbody[] m_bodies` | CT-003 velocity and physics-mass telemetry (private; own probe entries). |
+| `Vagon.m_body` / `m_bodies` | `private Rigidbody m_body` / `private Rigidbody[] m_bodies` | Physics-mass telemetry if ever needed. CT-003 reads velocity through public `GetComponent<Rigidbody>()` instead — `Awake` proves it is the same root body (`m_body = GetComponent<Rigidbody>()`). |
 | `Vagon.m_attachJoin` | `private ConfigurableJoint m_attachJoin` | Note the game's spelling: **`m_attachJoin`**, not `m_attachJoint`. |
 | `Vagon.m_attachedObject` | `private GameObject m_attachedObject` | Identifying the puller GameObject. |
 | `Vagon.InUse()` | `public bool InUse()` | Container-open or attached check (calls `Container.IsInUse()`). |
@@ -114,8 +127,16 @@ component type and its static instance registry.
   `== null` checks (not `is null`) on Unity objects and wraps every read in a
   fail-closed try/catch.
 - The dump shows `Rigidbody`-typed members under Unity 6000; Unity 6 renamed
-  `Rigidbody.velocity` to `linearVelocity`. CT-003 must verify the exact
-  property against `UnityEngine.PhysicsModule.dll` before reading velocity.
+  `Rigidbody.velocity` to `linearVelocity`. Resolved in CT-003: verified
+  `linearVelocity` exists and legacy `velocity` is `[Obsolete]` on this build
+  (see the Unity members table above); the adapter reads `linearVelocity`
+  and probes it at startup.
+- The CT-003 capability is deliberately all-or-nothing: if any probed member
+  (including `linearVelocity`) goes missing after a game update, all cart
+  telemetry disables with the one WARN line. Per-cart runtime gaps (a cart
+  with no container or no rigidbody) are instead flagged per field
+  (`CargoDataAvailable`, `VelocityAvailable`) — "unavailable", never a
+  defaulted number presented as truth.
 
 ## Re-verification procedure (game updates)
 

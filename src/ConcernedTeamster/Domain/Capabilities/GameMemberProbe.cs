@@ -130,6 +130,29 @@ public static class GameMemberProbe
                 return null;
             }
 
+            case GameMemberKind.InstanceProperty:
+            {
+                PropertyInfo? property = requirement.OwnerType.GetProperty(
+                    requirement.MemberName,
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                if (property is null)
+                {
+                    return "property not found";
+                }
+
+                if (property.GetMethod is null)
+                {
+                    return "property has no getter";
+                }
+
+                if (requirement.ExpectedType is not null && property.PropertyType != requirement.ExpectedType)
+                {
+                    return $"property type is {property.PropertyType.Name}, expected {requirement.ExpectedType.Name}";
+                }
+
+                return null;
+            }
+
             default:
                 return $"unsupported member kind {requirement.Kind}";
         }
