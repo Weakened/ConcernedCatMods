@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 """Static repository and Thunderstore package-source validation.
 
-This intentionally does not require Valheim or its licensed assemblies.
+Validates every product in the monorepo (Concerned Cartographer and
+Concerned Teamster) on every run. This intentionally does not require
+Valheim or its licensed assemblies.
+
+``--product`` scopes only the binary/version flags (``--require-binary``,
+``--expected-version``) and defaults to ``cartographer`` so historical
+invocations keep their exact meaning; static validation always covers all
+products.
 """
 
 from __future__ import annotations
@@ -15,10 +22,31 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PACKAGE = ROOT / "src" / "ConcernedCartographer" / "Package"
-CSPROJ = ROOT / "src" / "ConcernedCartographer" / "ConcernedCartographer.csproj"
-PLUGIN = ROOT / "src" / "ConcernedCartographer" / "Plugin.cs"
-BINARY = ROOT / "src" / "ConcernedCartographer" / "bin" / "Release" / "net48" / "TheConcernedCat.ConcernedCartographer.dll"
+
+PRODUCTS: dict[str, dict[str, object]] = {
+    "cartographer": {
+        "display": "Concerned Cartographer",
+        "project_dir": ROOT / "src" / "ConcernedCartographer",
+        "csproj": "ConcernedCartographer.csproj",
+        "package_name": "ConcernedCartographer",
+        "dll_name": "TheConcernedCat.ConcernedCartographer.dll",
+    },
+    "teamster": {
+        "display": "Concerned Teamster",
+        "project_dir": ROOT / "src" / "ConcernedTeamster",
+        "csproj": "ConcernedTeamster.csproj",
+        "package_name": "ConcernedTeamster",
+        "dll_name": "TheConcernedCat.ConcernedTeamster.dll",
+    },
+}
+
+EXPECTED_NAMESPACE = "TheConcernedCat"
+EXPECTED_WEBSITE = "https://github.com/Weakened/ConcernedCatMods"
+EXPECTED_DEPENDENCIES = {
+    "denikson-BepInExPack_Valheim": "5.4.2333",
+    "ValheimModding-Jotunn": "2.29.2",
+}
+EXPECTED_CATEGORIES = ("mods", "client-side", "utility", "ai-generated")
 
 
 def fail(message: str, errors: list[str]) -> None:
@@ -32,96 +60,93 @@ def png_dimensions(path: Path) -> tuple[int, int]:
     return struct.unpack(">II", data[16:24])
 
 
-def read_csproj_version() -> str:
-    tree = ET.parse(CSPROJ)
+def read_csproj_version(csproj: Path) -> str:
+    tree = ET.parse(csproj)
     root = tree.getroot()
     node = root.find(".//Version")
     if node is None or not node.text:
-        raise ValueError("<Version> is missing from the C# project")
+        raise ValueError(f"<Version> is missing from {csproj.relative_to(ROOT)}")
     return node.text.strip()
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--require-binary", action="store_true")
-    parser.add_argument("--expected-version")
-    args = parser.parse_args()
-
-    errors: list[str] = []
+def validate_product(key: str, errors: list[str], require_binary: bool,
+                     expected_version: str | None) -> list[str]:
+    """Runs every static check for one product; returns its report lines."""
+    spec = PRODUCTS[key]
+    project_dir: Path = spec["project_dir"]  # type: ignore[assignment]
+    package = project_dir / "Package"
+    csproj = project_dir / str(spec["csproj"])
+    plugin = project_dir / "Plugin.cs"
+    dll_name = str(spec["dll_name"])
+    binary = project_dir / "bin" / "Release" / "net48" / dll_name
+    prefix = f"[{key}]"
 
     required = [
-        ROOT / "README.md",
-        ROOT / "LICENSE",
-        ROOT / "AGENTS.md",
-        ROOT / "CLAUDE.md",
-        ROOT / "Environment.props.example",
-        ROOT / "DoPrebuild.props",
-        PACKAGE / "thunderstore.toml",
-        PACKAGE / "README.md",
-        PACKAGE / "CHANGELOG.md",
-        PACKAGE / "icon.png",
+        csproj,
+        plugin,
+        package / "thunderstore.toml",
+        package / "README.md",
+        package / "CHANGELOG.md",
+        package / "icon.png",
     ]
-    for path in required:
-        if not path.is_file():
-            fail(f"Missing required file: {path.relative_to(ROOT)}", errors)
+    missing = [path for path in required if not path.is_file()]
+    for path in missing:
+        fail(f"{prefix} Missing required file: {path.relative_to(ROOT)}", errors)
+    if missing:
+        return []
 
-    if errors:
-        for error in errors:
-            print(f"ERROR: {error}", file=sys.stderr)
-        return 1
-
+    width = height = 0
     try:
-        width, height = png_dimensions(PACKAGE / "icon.png")
+        width, height = png_dimensions(package / "icon.png")
         if (width, height) != (256, 256):
-            fail(f"icon.png must be 256x256, found {width}x{height}", errors)
+            fail(f"{prefix} icon.png must be 256x256, found {width}x{height}", errors)
     except Exception as exc:
-        fail(f"Could not validate icon.png: {exc}", errors)
+        fail(f"{prefix} Could not validate icon.png: {exc}", errors)
 
     try:
-        config = tomllib.loads((PACKAGE / "thunderstore.toml").read_text(encoding="utf-8"))
+        config = tomllib.loads((package / "thunderstore.toml").read_text(encoding="utf-8"))
     except Exception as exc:
-        fail(f"Invalid thunderstore.toml: {exc}", errors)
+        fail(f"{prefix} Invalid thunderstore.toml: {exc}", errors)
         config = {}
 
-    package = config.get("package", {})
+    package_table = config.get("package", {})
     build = config.get("build", {})
     publish = config.get("publish", {})
-    dependencies = package.get("dependencies", {})
+    dependencies = package_table.get("dependencies", {})
 
     expected_identity = {
-        "namespace": "TheConcernedCat",
-        "name": "ConcernedCartographer",
-        "websiteUrl": "https://github.com/Weakened/ConcernedCatMods",
+        "namespace": EXPECTED_NAMESPACE,
+        "name": str(spec["package_name"]),
+        "websiteUrl": EXPECTED_WEBSITE,
     }
-    for key, expected in expected_identity.items():
-        if package.get(key) != expected:
-            fail(f"package.{key} must be {expected!r}", errors)
+    for toml_key, expected in expected_identity.items():
+        if package_table.get(toml_key) != expected:
+            fail(f"{prefix} package.{toml_key} must be {expected!r}", errors)
 
-    description = package.get("description", "")
+    description = package_table.get("description", "")
     if not description or len(description) > 250:
-        fail("Thunderstore description must be 1-250 characters", errors)
+        fail(f"{prefix} Thunderstore description must be 1-250 characters", errors)
 
-    if dependencies.get("denikson-BepInExPack_Valheim") != "5.4.2333":
-        fail("BepInExPack dependency must be pinned to 5.4.2333", errors)
-    if dependencies.get("ValheimModding-Jotunn") != "2.29.2":
-        fail("Jotunn dependency must be pinned to 2.29.2", errors)
+    for dependency, pin in EXPECTED_DEPENDENCIES.items():
+        if dependencies.get(dependency) != pin:
+            fail(f"{prefix} {dependency} dependency must be pinned to {pin}", errors)
 
     categories = publish.get("categories", {}).get("valheim", [])
-    for category in ("mods", "client-side", "utility", "ai-generated"):
+    for category in EXPECTED_CATEGORIES:
         if category not in categories:
-            fail(f"Missing Valheim publish category: {category}", errors)
+            fail(f"{prefix} Missing Valheim publish category: {category}", errors)
 
     if publish.get("communities") != ["valheim"]:
-        fail("Publish communities must be exactly ['valheim']", errors)
+        fail(f"{prefix} Publish communities must be exactly ['valheim']", errors)
 
     try:
-        csproj_version = read_csproj_version()
+        csproj_version = read_csproj_version(csproj)
     except Exception as exc:
-        fail(str(exc), errors)
+        fail(f"{prefix} {exc}", errors)
         csproj_version = ""
 
-    toml_version = package.get("versionNumber", "")
-    plugin_text = PLUGIN.read_text(encoding="utf-8")
+    toml_version = package_table.get("versionNumber", "")
+    plugin_text = plugin.read_text(encoding="utf-8")
     match = re.search(r'PluginVersion\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"', plugin_text)
     plugin_version = match.group(1) if match else ""
 
@@ -131,28 +156,77 @@ def main() -> int:
         "Plugin.cs": plugin_version,
     }
     if len(set(versions.values())) != 1 or not all(versions.values()):
-        fail(f"Version mismatch: {versions}", errors)
+        fail(f"{prefix} Version mismatch: {versions}", errors)
 
-    if args.expected_version and any(value != args.expected_version for value in versions.values()):
-        fail(f"Expected version {args.expected_version}, found {versions}", errors)
+    if expected_version and any(value != expected_version for value in versions.values()):
+        fail(f"{prefix} Expected version {expected_version}, found {versions}", errors)
 
     copy_entries = build.get("copy", [])
     targets = {entry.get("target") for entry in copy_entries}
     expected_targets = {
-        "plugins/TheConcernedCat.ConcernedCartographer.dll",
+        f"plugins/{dll_name}",
         "CHANGELOG.md",
         "LICENSE",
     }
     if not expected_targets.issubset(targets):
-        fail(f"Missing build.copy target(s): {sorted(expected_targets - targets)}", errors)
+        fail(f"{prefix} Missing build.copy target(s): {sorted(expected_targets - targets)}", errors)
 
-    if args.require_binary and not BINARY.is_file():
-        fail(f"Release binary is missing: {BINARY.relative_to(ROOT)}", errors)
+    # Exactly one DLL may ship: the product's own plugin. A second DLL in the
+    # copy list would smuggle a foreign or cross-product binary into the ZIP.
+    for entry in copy_entries:
+        target = str(entry.get("target", ""))
+        source = str(entry.get("source", ""))
+        for value in (target, source):
+            if value.lower().endswith(".dll") and not value.endswith(dll_name):
+                fail(f"{prefix} build.copy may only ship {dll_name}, found {value!r}", errors)
+
+    if require_binary and not binary.is_file():
+        fail(f"{prefix} Release binary is missing: {binary.relative_to(ROOT)}", errors)
+
+    return [
+        f"{prefix} Package identity: "
+        f"{package_table.get('namespace', '?')}-{package_table.get('name', '?')}-"
+        f"{package_table.get('versionNumber', '?')}",
+        f"{prefix} Icon: {width}x{height}; description: {len(description)} characters",
+    ]
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--product", choices=[*PRODUCTS.keys(), "all"], default="cartographer",
+        help="Which product --require-binary/--expected-version apply to "
+             "(static validation always covers all products).")
+    parser.add_argument("--require-binary", action="store_true")
+    parser.add_argument("--expected-version")
+    args = parser.parse_args()
+
+    scoped = list(PRODUCTS.keys()) if args.product == "all" else [args.product]
+    errors: list[str] = []
+
+    required_root_files = [
+        ROOT / "README.md",
+        ROOT / "LICENSE",
+        ROOT / "AGENTS.md",
+        ROOT / "CLAUDE.md",
+        ROOT / "Environment.props.example",
+        ROOT / "DoPrebuild.props",
+    ]
+    for path in required_root_files:
+        if not path.is_file():
+            fail(f"Missing required file: {path.relative_to(ROOT)}", errors)
+
+    report: list[str] = []
+    for key in PRODUCTS:
+        report.extend(validate_product(
+            key,
+            errors,
+            require_binary=args.require_binary and key in scoped,
+            expected_version=args.expected_version if key in scoped else None,
+        ))
 
     prohibited = []
     for path in ROOT.rglob("*.dll"):
-        if path == BINARY and args.require_binary:
-            continue
         # Any checked-in/source-tree DLL is suspicious; bin/obj are ignored and only local.
         if "bin" not in path.parts and "obj" not in path.parts:
             prohibited.append(path.relative_to(ROOT))
@@ -165,8 +239,8 @@ def main() -> int:
         return 1
 
     print("Repository validation passed.")
-    print(f"Package identity: {package['namespace']}-{package['name']}-{package['versionNumber']}")
-    print(f"Icon: {width}x{height}; description: {len(description)} characters")
+    for line in report:
+        print(line)
     return 0
 
 

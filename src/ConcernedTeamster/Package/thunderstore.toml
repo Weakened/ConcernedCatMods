@@ -1,0 +1,38 @@
+[config]
+schemaVersion = "0.0.1"
+
+[package]
+namespace = "TheConcernedCat"
+name = "ConcernedTeamster"
+versionNumber = "0.1.0"
+description = "Cart truth for haulers: measures cart mass, cargo weight, grade, and pull state, and explains hauling risk - while vanilla cart physics stay untouched by default."
+websiteUrl = "https://github.com/Weakened/ConcernedCatMods"
+containsNsfwContent = false
+
+[package.dependencies]
+denikson-BepInExPack_Valheim = "5.4.2333"
+ValheimModding-Jotunn = "2.29.2"
+
+[build]
+icon = "./icon.png"
+readme = "./README.md"
+outdir = "../../../artifacts/thunderstore"
+
+[[build.copy]]
+source = "../bin/Release/net48/TheConcernedCat.ConcernedTeamster.dll"
+target = "plugins/TheConcernedCat.ConcernedTeamster.dll"
+
+[[build.copy]]
+source = "./CHANGELOG.md"
+target = "CHANGELOG.md"
+
+[[build.copy]]
+source = "../../../LICENSE"
+target = "LICENSE"
+
+[publish]
+repository = "https://thunderstore.io"
+communities = ["valheim"]
+
+[publish.categories]
+valheim = ["mods", "client-side", "utility", "ai-generated"]

@@ -9,5 +9,10 @@
 
     <!-- Debug builds are deployed here. This must be the TCC-Dev profile's plugins folder. -->
     <MOD_DEPLOYPATH>C:\REPLACE_ME\TCC-Dev\BepInEx\plugins</MOD_DEPLOYPATH>
+
+    <!-- Concerned Teamster debug builds are deployed here (deploy.ps1 -Product
+         ConcernedTeamster). This must be the TCT-Dev profile's plugins folder.
+         Optional until you develop Concerned Teamster on this machine. -->
+    <TEAMSTER_DEPLOYPATH>C:\REPLACE_ME\TCT-Dev\BepInEx\plugins</TEAMSTER_DEPLOYPATH>
   </PropertyGroup>
 </Project>

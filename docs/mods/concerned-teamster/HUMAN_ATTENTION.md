@@ -25,7 +25,23 @@ only for non-blocking uncertainty.
 
 ## Open items
 
-None yet.
+### 2026-09-04 — Generated placeholder package icon
+
+- Version / issue: v0.1 / CT-001 (#109)
+- Question: the Thunderstore package needs a 256x256 `icon.png` from day one
+  (validation and packaging require it), but final storefront art is an
+  owner-taste decision and Cartographer's icon was owner-provided artwork.
+- Safe reversible default selected: a deterministic, license-clean cart glyph
+  rendered by `tools/generate_teamster_icon.py` (pure stdlib, reproducible
+  byte-for-byte), visually consistent with the Cartographer sprite language.
+- Why work continued: the placeholder ships in no public release before v0.9;
+  replacing `icon.png` is a one-file swap with no code impact, and CT-042
+  (public docs/media audit) explicitly covers final storefront media.
+- Risk / alternative: the owner may want commissioned/AI artwork matching the
+  Cartographer icon's style before anything public; keeping the generated
+  glyph is also viable.
+- Must resolve before public release: Yes
+- Status: Open
 
 ## Resolved items
 
