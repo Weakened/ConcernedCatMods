@@ -124,6 +124,26 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-04 — CT-006 in-game manifest-vs-container check pending
+
+- Version / issue: v0.2 / CT-006 (#115)
+- Question: the manifest-vs-container screenshot (same items, counts, and
+  weights as the vanilla container UI shows) needs a live session; also
+  whether quality-scaled weights (worn gear in a cart) display exactly as
+  vanilla charges them.
+- Safe reversible default selected: line weights come from the game's own
+  `GetWeight()`/`GetNonStackedWeight()` (quality scaling included, verified
+  by decompile), totals are the audited sum of known lines, and unknown or
+  broken items become explicit markers — 14 unit tests over totals,
+  ordering, immutability, fallbacks, and tracker call-count bounds.
+- Why work continued: read-only container access cannot alter cargo; a
+  display mismatch would be a defect caught by the v0.2 RC campaign
+  (CT-010) with the manifest UI from CT-007.
+- Risk / alternative: none beyond display accuracy; the check joins the
+  v0.2 RC campaign and the owner smoke checklist.
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.
