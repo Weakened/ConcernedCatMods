@@ -2,17 +2,15 @@
 
 ## Mission
 
-Ship small, stable, testable Valheim mods. The current priority is **Concerned Cartographer**. Work from an issue and satisfy only that issue's acceptance criteria.
+Ship small, stable, testable Valheim mods. The active implementation target is **Concerned Teamster** (issue key `CT`). **Concerned Cartographer** is in public beta: open Cartographer P0/P1 regressions preempt Teamster work; other Cartographer changes happen only through Cartographer issues. Work from an issue and satisfy only that issue's acceptance criteria.
 
 ## Read first
 
-Before changing Concerned Cartographer, read:
+Before changing a product, read `docs/NAMING_CONVENTIONS.md`, then that product's documents:
 
-1. `docs/NAMING_CONVENTIONS.md`
-2. `docs/mods/concerned-cartographer/PROJECT.md`
-3. `docs/mods/concerned-cartographer/ARCHITECTURE.md`
-4. `docs/mods/concerned-cartographer/TEST_PLAN.md`
-5. the relevant GitHub issue and its Definition of Done
+- Concerned Teamster: `docs/mods/concerned-teamster/PROJECT.md`, `ARCHITECTURE.md`, `TEST_PLAN.md`, `AUTONOMOUS_EXECUTION.md`
+- Concerned Cartographer: `docs/mods/concerned-cartographer/PROJECT.md`, `ARCHITECTURE.md`, `TEST_PLAN.md`
+- the relevant GitHub issue and its Definition of Done
 
 ## Hard rules
 
@@ -24,10 +22,12 @@ Before changing Concerned Cartographer, read:
 - Do not let two agents edit the same working tree at the same time.
 - Preserve client-side behavior until a multiplayer-sync design is approved.
 - Treat Valheim internal APIs as unstable. Keep them behind narrow adapters and log actionable failures.
+- Products never reference each other at compile time; cross-product integration is runtime capability detection only.
+- Teamster: preserve vanilla cart mass and physics by default. No zero-weight defaults, cart teleports, recovery cheats, stamina bypass, pathfinding, world-save mutation, or server-authority takeover. Behavior-mutating features must be explicit, reversible, fail-closed, and authorized by their own issue.
 
 ## Required workflow
 
-1. Create or use a dedicated branch: `feat/<issue>-<slug>`, `fix/<issue>-<slug>`, or `chore/<issue>-<slug>`.
+1. Create or use a dedicated branch: `feat/<issue>-<slug>`, `fix/<issue>-<slug>`, or `chore/<issue>-<slug>` (issue keys: `cc-###` Cartographer, `ct-###` Teamster).
 2. Make the smallest coherent change.
 3. Run `pwsh ./scripts/build.ps1` when the local game dependencies are available.
 4. Run `python ./tools/validate_repo.py` on every machine.
@@ -38,11 +38,12 @@ Before changing Concerned Cartographer, read:
 
 1. Game startup and world safety
 2. Cross-world data isolation
-3. Overlay lifecycle across login/logout
-4. Performance and allocations in `Update`
-5. Compatibility with Pinnacle and MapRoutes
+3. Lifecycle across login/logout/world switch (map overlays; cart telemetry and panels)
+4. Performance and allocations in `Update`/sampling paths
+5. Compatibility (Cartographer: Pinnacle and MapRoutes; Teamster: researched cart-mod targets, no invented names)
 6. Package correctness and version synchronization
+7. Teamster only: vanilla physics preservation and fail-closed mutation paths
 
 ## Versioning
 
-Thunderstore accepts numeric `Major.Minor.Patch` versions. Use namespaced Git tags such as `concerned-cartographer/v0.1.0`.
+Thunderstore accepts numeric `Major.Minor.Patch` versions. Use namespaced Git tags such as `concerned-cartographer/v0.1.0` and `concerned-teamster/v0.1.0`. Each product versions and releases independently.

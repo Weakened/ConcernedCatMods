@@ -1,12 +1,12 @@
 # ConcernedCatMods: end-to-end setup, development, and publishing guide
 
-This is the authoritative Windows workflow for creating the repository, installing the toolchain, running Claude Code and Codex safely, testing Concerned Cartographer, and publishing an independently versioned Thunderstore package.
+This is the authoritative Windows workflow for creating the repository, installing the toolchain, running Claude Code and Codex safely, testing Concerned Cartographer, and publishing an independently versioned Thunderstore package. Sections 2-16 were written for the first product, Concerned Cartographer, and remain the reference workflow; section 17 covers the second product, Concerned Teamster, which follows the same workflow with its own identity, profiles, and issue conveyor.
 
 ## 1. Repository decision
 
 Use **one monorepo now**: `Weakened/ConcernedCatMods`.
 
-This is the right tradeoff while one owner maintains a small catalog because build scripts, agent rules, release validation, documentation, and issue conventions can be shared. Every mod must still have its own:
+This is the right tradeoff while one owner maintains a small catalog because build scripts, agent rules, release validation, documentation, and issue conventions can be shared. The catalog currently contains **Concerned Cartographer** (public beta) and **Concerned Teamster** (active development). Every mod must still have its own:
 
 - C# project and DLL;
 - plugin GUID;
@@ -357,3 +357,27 @@ Do not publish until all are true:
 - README accurately states limitations;
 - the Thunderstore **AI Generated** category is included because agents significantly assisted development;
 - human review confirms the package contains no secrets, saves, game DLLs, or unrelated files.
+
+## 17. Concerned Teamster
+
+Concerned Teamster is the second independent product in the monorepo: it makes carts understandable, predictable, and safer while preserving vanilla cart mass and physics by default. It has its own project (`src/ConcernedTeamster` plus `src/ConcernedTeamster.Tests`), plugin GUID (`com.theconcernedcat.valheim.concernedteamster`), package (`TheConcernedCat-ConcernedTeamster`), changelog, tags (`concerned-teamster/vX.Y.Z`), and issue key (`CT`). It never references Concerned Cartographer at compile time; the v0.5 integration is runtime capability detection.
+
+Read before working on it:
+
+1. `docs/mods/concerned-teamster/PROJECT.md`
+2. `docs/mods/concerned-teamster/ARCHITECTURE.md`
+3. `docs/mods/concerned-teamster/TEST_PLAN.md`
+4. `docs/mods/concerned-teamster/AUTONOMOUS_EXECUTION.md` (conveyor selection and workflow)
+5. `docs/mods/concerned-teamster/HUMAN_ATTENTION.md` (non-blocking owner questions)
+
+Key differences from the Cartographer sections above:
+
+- **Profiles.** Teamster uses its own mod-manager profile family: `TCT-Clean`, `TCT-Dev`, `TCT-Compat`, and later `TCT-Dedicated`, with a disposable world such as `TCT_Mod_Test`. Deployment for Teamster targets the `TCT-Dev` profile's `BepInEx\plugins`.
+- **Issues.** Labels and the full v0.1-v1.0 issue graph (ten `SPRINT Teamster vX.Y` controllers plus leaves `CT-001`..`CT-050`) are generated idempotently by:
+
+```powershell
+pwsh ./scripts/setup-teamster-github.ps1 -Repository "Weakened/ConcernedCatMods"
+```
+
+- **Execution.** Work is selected per `AUTONOMOUS_EXECUTION.md`: the lowest-numbered open unblocked `CT` leaf, one issue per branch and PR, evidence-commented closure. Open Cartographer public-beta P0/P1 regressions preempt Teamster work. Intermediate sprint gates are internal; the v0.9 public beta and v1.0 release are sealed as RCs, and every Thunderstore publication remains owner-only.
+- **Safety.** Teamster never ships zero-weight defaults, cart teleports, recovery cheats, stamina bypass, pathfinding, world-save mutation, or server-authority takeover. Behavior-mutating features (the parking brake) are explicit, reversible, fail-closed, and separately authorized by their issues.
