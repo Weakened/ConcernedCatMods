@@ -25,10 +25,35 @@ public sealed class Plugin : BaseUnityPlugin
             $"DebugLogging={settings.DebugLogging.Value}.");
 
         LogCartCapability(settings);
+        ArmTelemetry(settings);
 
-        // CT-002 delivers the read-only cart adapter and its startup
-        // capability probe only. Telemetry sampling and panels arrive with
-        // CT-003..CT-005; nothing observes or mutates carts yet.
+        // CT-003 delivers read-only telemetry sampling. Panels and terrain
+        // grade arrive with CT-004/CT-005; nothing mutates carts.
+    }
+
+    /// <summary>Starts the telemetry pump only when the master switch is on
+    /// and the capability probe verified the game surface — otherwise no cart
+    /// observation code runs at all (fail closed), which the log states.</summary>
+    private void ArmTelemetry(TeamsterSettings settings)
+    {
+        if (!settings.Enabled.Value)
+        {
+            Logger.LogInfo("Concerned Teamster is disabled by config; no cart observation runs.");
+            return;
+        }
+
+        if (!CartAdapter.CapabilityEnabled)
+        {
+            // The capability WARN above already explains why; nothing runs.
+            return;
+        }
+
+        CartTelemetryPump pump = gameObject.AddComponent<CartTelemetryPump>();
+        Domain.Carts.TelemetrySamplerOptions options = pump.Initialize(settings, Logger);
+        Logger.LogInfo(
+            $"Cart telemetry sampler armed: interval {options.SampleIntervalSeconds:0.##} s, " +
+            $"radius {options.SearchRadiusMeters:0.#} m, {options.MaxCartsPerTick} carts/tick, " +
+            $"{options.MaxTrackedCarts} tracked max, evict after {options.EvictAfterSeconds:0.#} s.");
     }
 
     /// <summary>Runs the cart capability probe once and reports the outcome

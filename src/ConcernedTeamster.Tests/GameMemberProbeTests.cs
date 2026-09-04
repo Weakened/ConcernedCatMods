@@ -53,6 +53,8 @@ public class GameMemberProbeTests
 
     private sealed class FakeVagon
     {
+        public static List<FakeVagon> m_instances = new();
+
         public float m_baseMass = 0f;
         public float m_itemWeightMassFactor = 0f;
         public FakeContainer? m_container = null;
@@ -60,6 +62,21 @@ public class GameMemberProbeTests
         public bool IsAttached() => false;
 
         public bool IsAttached(FakeCharacter character) => character is null;
+    }
+
+    private struct FakeVector3 { }
+
+    private sealed class FakeRigidbody
+    {
+        public FakeVector3 linearVelocity => default;
+    }
+
+    private sealed class FakeRigidbodySetOnly
+    {
+        public FakeVector3 linearVelocity
+        {
+            set { }
+        }
     }
 
     private sealed class FakeVagonWrongFieldType
@@ -90,6 +107,8 @@ public class GameMemberProbeTests
             new("ZNetView", typeof(FakeNetView), "GetZDO", GameMemberKind.InstanceMethod, typeof(FakeZdo)),
             new("ZDO", typeof(FakeZdo), "m_uid", GameMemberKind.InstanceField, typeof(FakeZdoId)),
             new("Player", typeof(FakePlayer), "m_localPlayer", GameMemberKind.StaticField, typeof(FakePlayer)),
+            new("Vagon", typeof(FakeVagon), "m_instances", GameMemberKind.StaticField, typeof(List<FakeVagon>)),
+            new("Rigidbody", typeof(FakeRigidbody), "linearVelocity", GameMemberKind.InstanceProperty, typeof(FakeVector3)),
         };
     }
 
@@ -100,9 +119,69 @@ public class GameMemberProbeTests
 
         Assert.True(report.Enabled);
         Assert.Empty(report.MissingMembers);
-        Assert.Equal(11, report.VerifiedMembers.Count);
+        Assert.Equal(13, report.VerifiedMembers.Count);
         Assert.Contains("Vagon.m_baseMass", report.VerifiedMembers);
         Assert.Contains("Player.m_localPlayer", report.VerifiedMembers);
+        Assert.Contains("Rigidbody.linearVelocity", report.VerifiedMembers);
+    }
+
+    [Fact]
+    public void Probe_MissingProperty_Disables()
+    {
+        var requirements = new List<GameMemberRequirement>
+        {
+            new("Rigidbody", typeof(FakeCharacter), "linearVelocity", GameMemberKind.InstanceProperty, typeof(FakeVector3)),
+        };
+
+        GameCapabilityReport report = GameMemberProbe.Probe(requirements);
+
+        Assert.False(report.Enabled);
+        Assert.Contains("Rigidbody.linearVelocity (property not found)", report.MissingMembers);
+    }
+
+    [Fact]
+    public void Probe_PropertyWithoutGetter_Disables()
+    {
+        var requirements = new List<GameMemberRequirement>
+        {
+            new("Rigidbody", typeof(FakeRigidbodySetOnly), "linearVelocity", GameMemberKind.InstanceProperty, typeof(FakeVector3)),
+        };
+
+        GameCapabilityReport report = GameMemberProbe.Probe(requirements);
+
+        Assert.False(report.Enabled);
+        Assert.Contains("Rigidbody.linearVelocity (property has no getter)", report.MissingMembers);
+    }
+
+    [Fact]
+    public void Probe_WrongPropertyType_Disables()
+    {
+        var requirements = new List<GameMemberRequirement>
+        {
+            new("Rigidbody", typeof(FakeRigidbody), "linearVelocity", GameMemberKind.InstanceProperty, typeof(float)),
+        };
+
+        GameCapabilityReport report = GameMemberProbe.Probe(requirements);
+
+        Assert.False(report.Enabled);
+        Assert.Contains("Rigidbody.linearVelocity (property type is FakeVector3, expected Single)", report.MissingMembers);
+    }
+
+    [Fact]
+    public void Probe_GenericStaticFieldWithWrongItemType_Disables()
+    {
+        // Mirrors the registry check: List<FakeVagon> expected, so a
+        // List<object> (as if the game changed the registry's item type)
+        // must fail the probe.
+        var requirements = new List<GameMemberRequirement>
+        {
+            new("Vagon", typeof(FakeVagon), "m_instances", GameMemberKind.StaticField, typeof(List<object>)),
+        };
+
+        GameCapabilityReport report = GameMemberProbe.Probe(requirements);
+
+        Assert.False(report.Enabled);
+        Assert.Single(report.MissingMembers);
     }
 
     [Fact]

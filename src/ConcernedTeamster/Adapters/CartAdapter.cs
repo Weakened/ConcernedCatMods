@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using TheConcernedCat.ConcernedTeamster.Domain.Capabilities;
 using TheConcernedCat.ConcernedTeamster.Domain.Carts;
+using UnityEngine;
 
 namespace TheConcernedCat.ConcernedTeamster.Adapters;
 
@@ -51,9 +52,26 @@ public static class CartAdapter
                 return new GameCapabilityReport(Array.Empty<string>(), missingTypes);
             }
 
-            // This table and CreateSnapshotCore must change together: every
-            // game member the accessor touches appears here, and both must
-            // match the verified table in CART_INTERNALS.md.
+            // CT-003: the cart registry's exact List<Vagon> shape, and the
+            // Unity 6 velocity property (the pre-6 "velocity" name is
+            // [Obsolete] on this build — see CART_INTERNALS.md). Unity types
+            // are resolved by name for the same reason game types are: the
+            // probe path must never contain a type token that could fail to
+            // load before the probe can report.
+            Type vagonList = typeof(List<>).MakeGenericType(vagon!);
+            Type? rigidbody = ResolveNamedType(
+                "UnityEngine.Rigidbody, UnityEngine.PhysicsModule", "UnityEngine.Rigidbody", missingTypes);
+            Type? vector3 = ResolveNamedType(
+                "UnityEngine.Vector3, UnityEngine.CoreModule", "UnityEngine.Vector3", missingTypes);
+            if (missingTypes.Count > 0)
+            {
+                return new GameCapabilityReport(Array.Empty<string>(), missingTypes);
+            }
+
+            // This table and the accessor cores (CreateSnapshotCore,
+            // TryReadVelocityCore, CollectNearbyCartsCore, HasLocalPlayerCore)
+            // must change together: every game member any core touches
+            // appears here, and both must match CART_INTERNALS.md.
             var requirements = new List<GameMemberRequirement>
             {
                 new("Vagon", vagon, "m_baseMass", GameMemberKind.InstanceField, typeof(float)),
@@ -67,6 +85,8 @@ public static class CartAdapter
                 new("ZNetView", netView, "GetZDO", GameMemberKind.InstanceMethod, zdo),
                 new("ZDO", zdo, "m_uid", GameMemberKind.InstanceField, zdoid),
                 new("Player", player, "m_localPlayer", GameMemberKind.StaticField, player),
+                new("Vagon", vagon, "m_instances", GameMemberKind.StaticField, vagonList),
+                new("Rigidbody", rigidbody, "linearVelocity", GameMemberKind.InstanceProperty, vector3),
             };
             return GameMemberProbe.Probe(requirements);
         }
@@ -80,10 +100,15 @@ public static class CartAdapter
 
     private static Type? ResolveGameType(string typeName, List<string> missingTypes)
     {
+        return ResolveNamedType(typeName + ", assembly_valheim", typeName, missingTypes);
+    }
+
+    private static Type? ResolveNamedType(string assemblyQualifiedName, string label, List<string> missingTypes)
+    {
         Type? resolved = null;
         try
         {
-            resolved = Type.GetType(typeName + ", assembly_valheim", throwOnError: false);
+            resolved = Type.GetType(assemblyQualifiedName, throwOnError: false);
         }
         catch
         {
@@ -92,7 +117,7 @@ public static class CartAdapter
 
         if (resolved is null)
         {
-            missingTypes.Add($"{typeName} (type not found)");
+            missingTypes.Add($"{label} (type not found)");
         }
 
         return resolved;
@@ -152,6 +177,7 @@ public static class CartAdapter
         float itemWeightMassFactor = vagon.m_itemWeightMassFactor;
 
         float cargoWeight = 0f;
+        bool cargoDataAvailable = false;
         Container container = vagon.m_container;
         if (container != null)
         {
@@ -159,6 +185,7 @@ public static class CartAdapter
             if (cargo is not null)
             {
                 cargoWeight = cargo.GetTotalWeight();
+                cargoDataAvailable = true;
             }
         }
 
@@ -174,8 +201,175 @@ public static class CartAdapter
             cartId,
             baseMass,
             cargoWeight,
+            cargoDataAvailable,
             itemWeightMassFactor,
             isAttached,
             isPulledByLocalPlayer);
+    }
+
+    /// <summary>Maps one cart component to full telemetry (snapshot plus
+    /// motion plus timestamp), or null when the cart is gone or unreadable.
+    /// Shaped to plug directly into the domain sampler. Never throws.</summary>
+    public static CartTelemetry? TrySampleCart(object? cartComponent, double sampleTimeSeconds)
+    {
+        if (cartComponent is null || !CapabilityEnabled)
+        {
+            return null;
+        }
+
+        try
+        {
+            CartSnapshot? snapshot = CreateSnapshotCore(cartComponent);
+            if (snapshot is null)
+            {
+                return null;
+            }
+
+            bool velocityAvailable = TryReadVelocityCore(
+                cartComponent, out float speedMetersPerSecond, out float verticalSpeedMetersPerSecond);
+            return CartTelemetry.Create(
+                snapshot, velocityAvailable, speedMetersPerSecond, verticalSpeedMetersPerSecond, sampleTimeSeconds);
+        }
+        catch
+        {
+            // Fail closed, same contract as TryCreateSnapshot.
+            return null;
+        }
+    }
+
+    /// <summary>Fills the (cleared) buffer with live carts within the options
+    /// radius of the local player, nearest first, at most MaxTrackedCarts.
+    /// Leaves the buffer empty when there is no local player or the
+    /// capability is off. Never throws.</summary>
+    public static void CollectNearbyCarts(List<object> buffer, TelemetrySamplerOptions options)
+    {
+        if (!CapabilityEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            CollectNearbyCartsCore(buffer, options);
+        }
+        catch
+        {
+            // A partial buffer is fine: every entry is re-validated by
+            // TrySampleCart, and the next tick retries.
+        }
+    }
+
+    /// <summary>True while a local player exists — the pump's session signal:
+    /// its false-transition (logout, world switch) resets the sampler so no
+    /// other world's carts can ever be shown. Never throws.</summary>
+    public static bool HasLocalPlayer()
+    {
+        if (!CapabilityEnabled)
+        {
+            return false;
+        }
+
+        try
+        {
+            return HasLocalPlayerCore();
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static bool HasLocalPlayerCore()
+    {
+        return Player.m_localPlayer != null;
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static bool TryReadVelocityCore(
+        object cartComponent, out float speedMetersPerSecond, out float verticalSpeedMetersPerSecond)
+    {
+        speedMetersPerSecond = 0f;
+        verticalSpeedMetersPerSecond = 0f;
+        Vagon? vagon = cartComponent as Vagon;
+        if (vagon == null)
+        {
+            return false;
+        }
+
+        // The root rigidbody is the same object the cart caches privately in
+        // Awake (verified in CART_INTERNALS.md), reachable via public API.
+        Rigidbody body = vagon.GetComponent<Rigidbody>();
+        if (body == null)
+        {
+            return false;
+        }
+
+        Vector3 velocity = body.linearVelocity;
+        speedMetersPerSecond = velocity.magnitude;
+        verticalSpeedMetersPerSecond = velocity.y;
+        return true;
+    }
+
+    private static readonly List<float> DistanceBuffer = new();
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void CollectNearbyCartsCore(List<object> buffer, TelemetrySamplerOptions options)
+    {
+        Player localPlayer = Player.m_localPlayer;
+        if (localPlayer == null)
+        {
+            return;
+        }
+
+        List<Vagon> instances = Vagon.m_instances;
+        if (instances is null)
+        {
+            return;
+        }
+
+        Vector3 origin = localPlayer.transform.position;
+        float radiusSquared = options.SearchRadiusMeters * options.SearchRadiusMeters;
+        int cap = options.MaxTrackedCarts;
+
+        // Bounded nearest-first insertion with a reused parallel distance
+        // list: no sort delegates, no per-tick allocations once capacities
+        // are grown. Main-thread only, like all Unity access.
+        DistanceBuffer.Clear();
+        for (int index = 0; index < instances.Count; index++)
+        {
+            Vagon cart = instances[index];
+            if (cart == null)
+            {
+                continue;
+            }
+
+            float distanceSquared = (cart.transform.position - origin).sqrMagnitude;
+            if (distanceSquared > radiusSquared)
+            {
+                continue;
+            }
+
+            int insertAt = buffer.Count;
+            while (insertAt > 0 && DistanceBuffer[insertAt - 1] > distanceSquared)
+            {
+                insertAt--;
+            }
+
+            if (insertAt >= cap)
+            {
+                continue;
+            }
+
+            buffer.Insert(insertAt, cart);
+            DistanceBuffer.Insert(insertAt, distanceSquared);
+            if (buffer.Count > cap)
+            {
+                buffer.RemoveAt(buffer.Count - 1);
+                DistanceBuffer.RemoveAt(DistanceBuffer.Count - 1);
+            }
+        }
+
+        DistanceBuffer.Clear();
     }
 }
