@@ -12,6 +12,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     throw "GitHub CLI (gh) is required. Install it and run 'gh auth login'."
@@ -1528,7 +1529,7 @@ if (-not $DryRun) {
         $controllerNumber = $keyToNumber["SPRINT-$v"]
         if ($null -eq $controllerNumber -or $controllerNumber -eq 0) { continue }
         $desired = Build-ControllerBody -Sprint $sprint -WithChildNumbers $true
-        $current = gh issue view $controllerNumber --repo $Repository --json body -q .body
+        $current = (@(gh issue view $controllerNumber --repo $Repository --json body -q .body) -join "`n")
         if (($current -replace "`r`n", "`n").TrimEnd() -eq $desired.TrimEnd()) {
             Write-Host "Controller #$controllerNumber body current."
             continue
