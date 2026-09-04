@@ -163,6 +163,28 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-04 — CT-008 calibration protocol runs pending
+
+- Version / issue: v0.2 / CT-008 (#117)
+- Question: the calibration data file ships with zero Measured rows — the
+  protocol's set×ramp runs (5 cargo sets × 3 graded ramps, two reps) need
+  interactive play in TCT-Clean/TCT-Dev profiles (CT-043). Also gravity is
+  assumed (Unity default 9.81) in the derived joint-break bounds, each of
+  which states the minimum gravity for which it still holds (≥4.4 m/s²).
+- Safe reversible default selected: the shipped rows are labeled exactly
+  what they are (Prior flat-pullability assumptions + DerivedConstant
+  physics bounds from the verified break force); the dominance model
+  answers "Unknown" everywhere else and never interpolates, so no player
+  ever sees fake precision. Appending Measured rows sharpens verdicts with
+  zero code changes (versioned data, not constants).
+- Why work continued: an advisory model that says "uncalibrated" is safe;
+  in-game runs are inherently owner/manual and the protocol document makes
+  them reproducible.
+- Risk / alternative: the owner may prefer different cargo sets or ramp
+  targets; the protocol is a doc-only change.
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.

@@ -20,6 +20,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- CT-008: versioned calibration data ships inside the DLL; the same
+         file is embedded into the test assembly so tests prove the shipped
+         bytes. The stable logical name decouples the resource from folder
+         renames. -->
+    <EmbeddedResource Include="Data\CartLoadCalibration.txt" LogicalName="CT.Data.CartLoadCalibration" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="JotunnLib" Version="2.29.2" />
   </ItemGroup>
 </Project>
