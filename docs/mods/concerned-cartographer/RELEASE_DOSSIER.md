@@ -2,7 +2,83 @@
 
 Prepared by the autonomous conveyor (Tankard Olafsson) per OPS-001 rev 2.
 The single remaining gate is the human smoke test
-(`PRE_RELEASE_SMOKE_TEST.md`); nothing has been published.
+(`PRE_RELEASE_SMOKE_TEST.md`); nothing is publicly visible yet.
+
+## 0. RC16 THUNDERSTORE STATUS (2026-09-03): uploaded, auto-rejected — MODERATION STATE, NOT A PACKAGING DEFECT
+
+The 0.10.0 (RC16) ZIP was uploaded to Thunderstore and its package page
+now shows the red REJECTED banner. Assessment, corrected against the
+official documentation and re-verified against the sealed RC16 bytes:
+
+- **This is a post-upload moderation state.** Per
+  `wiki.thunderstore.io/mods/mod-not-visible` ("Package rejected"), a
+  rejected page is accessible only to moderators and the uploading
+  team. The upload itself SUCCEEDED — the package passed Thunderstore's
+  upload validation, including its manifest checks. Per
+  `wiki.thunderstore.io/moderation/community-moderators`, automatic
+  moderation flags packages into a Review Queue, "many of the packages
+  flagged in this queue are false positives, and moderators are
+  encouraged to manually approve them after confirming that they are
+  safe"; automated rejections record a rejection reason that is
+  **visible to the uploading team on the package page**.
+- **The manifest is NOT a defect.** The RC16 manifest carries the five
+  official fields plus `namespace` and `FullName`; both extras are
+  intentional output of the official Thunderstore CLI (tcli 0.2.4,
+  `PackageManifestV1.cs` — `FullName` is its computed property). An
+  earlier hypothesis blaming these fields is WITHDRAWN; no manifest
+  rewrite, no RC17, and no repackaging is warranted or performed.
+- **The archive re-verified structurally valid (2026-09-03, sealed
+  copy `artifacts\rc16\…-RC16.zip`):** ZIP integrity OK; exactly the
+  six audited entries (manifest.json, README.md, CHANGELOG.md,
+  LICENSE, icon.png 256×256, our single plugin DLL — no PDBs, no
+  saves, no game files, and none of the wiki's most common rejection
+  cause, "files from another mod"); ZIP SHA-256 `362AE442…` and DLL
+  SHA-256 `8BC05431…` match §1–5 and `artifacts\rc16\SHA256SUMS.txt`;
+  DLL InformationalVersion `0.10.0+a23bef0…`; a URL-string scan of the
+  DLL (ASCII and UTF-16) surfaces only the public GitHub repository
+  URL.
+- **Version 0.10.0 is consumed by the existing upload.** The path
+  forward is REAPPROVAL of the existing package page, not a re-upload.
+  Do not delete the page and do not upload new bytes unless a
+  moderator explicitly asks for a changed package (only then would a
+  new version number, e.g. 0.10.1, come into play).
+
+**Exact reapproval steps (owner-only):**
+
+1. Open the package page while logged in as the TheConcernedCat team
+   (`https://thunderstore.io/c/valheim/p/TheConcernedCat/ConcernedCartographer/`)
+   and read the **rejection reason** shown there — it is recorded for
+   the uploading team and states why the automated system (or a
+   moderator) rejected it.
+2. Create a post in the **rejected-uploads forum** of the Thunderstore
+   Discord (`https://discord.thunderstore.io/`, forum channel
+   `#rejected-uploads`, direct link
+   `discord.com/channels/809128887366975518/1193275177782493254`)
+   requesting review and reapproval. Suggested post:
+
+   > **Package:** TheConcernedCat/ConcernedCartographer 0.10.0
+   > (Valheim community), uploaded 2026-09-03, now showing the
+   > rejected state. Rejection reason shown on our page: *[paste it
+   > here]*.
+   > This is a client-side BepInEx/Jötunn map mod (dependencies
+   > pinned: denikson-BepInExPack_Valheim-5.4.2333,
+   > ValheimModding-Jotunn-2.29.2), built with the official tcli
+   > 0.2.4, uploaded by its author's new team as a first release. Full
+   > source: https://github.com/Weakened/ConcernedCatMods (MIT). The
+   > ZIP contains only manifest/README/CHANGELOG/LICENSE/icon and our
+   > own plugin DLL — ZIP SHA-256 362AE442386CC6CC5B348F4B177D6DE452
+   > DCD0A01597A58D7BEB5C1D8046368F. The AI-assisted development is
+   > disclosed via the ai-generated category and in the README. Crash
+   > reporting is opt-in-only and documented in the repo's PRIVACY.md.
+   > Happy to provide anything else needed — could this be manually
+   > reviewed and reapproved?
+
+3. If a moderator instead requires changed bytes, come back to the
+   conveyor for a 0.10.1 build; otherwise NOTHING is rebuilt (§21: the
+   sealed ZIP hash must keep matching this dossier).
+4. After reapproval: the listing may take minutes to hours to appear
+   in searches and mod managers (API caching); the post-publication
+   smoke (§13) then proceeds unchanged.
 
 ## 1–5. Release candidate identity
 
@@ -10,8 +86,10 @@ The single remaining gate is the human smoke test
   re-version (2026-09-03, at RC16) of the earlier owner-approved 0.9.0
   beta identity: the feature-complete v1 candidate ships first as a
   public beta, and 1.0.0 stays reserved for the stable release.
-  Nothing has ever been uploaded to Thunderstore under any version, so
-  the 0.10.0 package identity is free there, and it no longer shares a
+  0.10.0 was UPLOADED to Thunderstore on 2026-09-03 and is currently in
+  the rejected/review moderation state (see §0 — reapprove, do not
+  re-upload); the version number is therefore consumed by that upload.
+  It no longer shares a
   number with the never-published INTERNAL 0.9 hardening milestone
   (commit `4931020e`, git tag `concerned-cartographer/v0.9.0`). The
   never-published DRAFT GitHub Release created hours before this
@@ -1144,10 +1222,12 @@ install check before any announcement.
 - Team/namespace: **TheConcernedCat** · Community: **valheim**
 - Categories: **mods, client-side, utility, ai-generated**
 - Dependencies: denikson-BepInExPack_Valheim 5.4.2333, ValheimModding-Jotunn 2.29.2
-- Version: 0.9.0 (Thunderstore has no earlier upload; the number is
-  free there despite the internal git history) · Upload via
-  thunderstore.io web UI, or `pwsh ./scripts/publish.ps1 -Version 0.9.0`
-  with `TCLI_AUTH_TOKEN` set only in that shell.
+- Version: 0.10.0 — **already uploaded 2026-09-03; currently in the
+  rejected/review moderation state. Do NOT upload again: follow the §0
+  reapproval steps (read the team-visible rejection reason on the
+  package page, then post in the Thunderstore Discord
+  #rejected-uploads forum).** A fresh upload (0.10.1) happens only if
+  a moderator explicitly requires changed bytes.
 
 ## 21. DO NOT RELEASE IF
 
