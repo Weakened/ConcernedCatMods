@@ -1,0 +1,156 @@
+# Concerned Teamster architecture
+
+## Context
+
+Concerned Teamster is a BepInEx/Jötunn client mod that observes Valheim carts and
+explains them. The architecture enforces three boundaries:
+
+1. **Deterministic domain core** — pure .NET math and models (grade, load,
+   risk, road quality) with no Unity, BepInEx, Jötunn, or Valheim references,
+   compiled into the plugin and exercised directly by `ConcernedTeamster.Tests`
+   on any machine.
+2. **Narrow capability-checked adapters** — the only code that touches Valheim
+   internals. Every adapter verifies the members it needs at startup via
+   reflection-safe checks and disables its capability with one actionable log
+   line when the game changes.
+3. **Presentation** — buttons, panels, and warnings built on the same proven
+   UI stack Cartographer uses. Presenters consume domain snapshots; no UI code
+   reads game objects directly.
+
+Concerned Cartographer and Concerned Teamster never reference each other at
+compile time. The v0.5 integration is a runtime capability probe.
+
+## Solution layout
+
+```text
+src/ConcernedTeamster/                  ConcernedTeamster.csproj (net48)
+  Plugin.cs                             BepInEx entry point, wiring, config
+  Domain/                               pure deterministic core (no game types)
+  Adapters/                             Valheim-facing capability adapters
+  Ui/                                   panels, buttons, presenters
+  Persistence/                          per-world sidecar IO (from v0.4)
+  Package/                              thunderstore.toml, README, CHANGELOG, icon
+src/ConcernedTeamster.Tests/            ConcernedTeamster.Tests.csproj
+```
+
+`Domain/**` sources are compiled into the shipped DLL and source-linked into the
+test project, following the pattern proven in Cartographer (one shipped DLL, CI
+tests without game assemblies).
+
+## Components
+
+### Plugin
+
+BepInEx `BaseUnityPlugin` with GUID `com.theconcernedcat.valheim.concernedteamster`.
+Owns configuration binding, adapter capability probing at startup, component
+wiring, and the environment banner log line. Failure of any adapter capability
+must not prevent plugin load; it disables the dependent features.
+
+### CartAdapter
+
+The single seam over Valheim's cart implementation (the `Vagon` component and
+its container/attachment members — the exact surface is verified against the
+current game build in CT-002 and recorded there; nothing outside `Adapters/`
+may name Valheim cart types). Exposes a stable snapshot record: cart identity,
+base and total mass, cargo weight, attachment state, local-player pull state,
+velocity, and wheel/ground contact where obtainable.
+
+### TerrainAdapter
+
+Reads ground height and surface normals near the cart through supported
+Valheim/Jötunn surfaces (verified in CT-004). Produces sample points for the
+domain grade math. No terrain writes, ever.
+
+### Telemetry pipeline
+
+A bounded sampler (configurable interval, minimum spacing, hard per-frame
+budget) that turns adapter snapshots into domain `CartTelemetry` values.
+Allocation-conscious: reuses buffers, no per-frame LINQ, no logging in the
+sample path.
+
+### Domain core
+
+- **GradeMath** — deterministic slope/grade computation from terrain samples,
+  with unit tests over synthetic terrain fixtures.
+- **LoadModel** — cargo mass aggregation and safe-load estimation for the
+  current grade (calibrated empirically in CT-008; calibration constants are
+  data, not code guesses).
+- **RiskModel** (v0.3) — descent/runaway risk from grade, mass, and speed.
+- **RoadQuality** (v0.4) — roughness/grade/drag scoring over recorded trips.
+
+All domain types are immutable snapshots or pure functions; every model states
+its inputs, outputs, and calibration source.
+
+### Ui
+
+Cart Status panel first (CT-005), then manifest, warnings, trip history, and
+recovery guidance panels in later sprints. Panels open from visible buttons;
+shortcuts are optional accelerators. Presenters read domain snapshots through
+an interface so tests can drive them headlessly.
+
+### Persistence (from v0.4)
+
+Per-world sidecar files under the BepInEx config path, named by world UID with
+a `teamster` infix so they can never collide with Cartographer sidecars.
+Atomic writes (temp file + rename), versioned headers, malformed-row skipping,
+and backup-before-migration — the same rules Cartographer's persistence proved.
+No writes to Valheim save files.
+
+### Integration adapters (v0.5+)
+
+`CartographerCapability` probes for Concerned Cartographer at runtime by GUID
+and version; when present and compatible, Teamster can read route geometry for
+profiling. Absence, version mismatch, or probe failure all degrade to "feature
+hidden" — never an error dialog, never a crash.
+
+### Multiplayer posture (v0.6)
+
+Client-side observational until the v0.6 trust/authority design. Teamster never
+takes authority over a cart it does not own under vanilla rules, never grants
+force, and treats network data as untrusted input (bounds-checked, fail-closed,
+privacy-reviewed) — the posture Cartographer's sync hardening established.
+
+## Lifecycle
+
+### Plugin load
+
+Bind config, probe adapter capabilities, log one environment banner, register
+UI buttons. No world state touched.
+
+### World enter
+
+Reset telemetry state; locate no carts eagerly (carts are discovered when the
+player interacts with or approaches them within the sampler's bounded search).
+
+### Runtime
+
+Sampler ticks on its configured interval; panels update from the latest
+snapshot; warnings evaluate on new snapshots only.
+
+### World exit / shutdown
+
+Stop sampling, flush any dirty sidecar data (v0.4+), drop references to game
+objects. Re-entering a world must never show stale data from another world.
+
+## Performance constraints
+
+- No whole-world scans, no per-frame allocations in steady state, no logging
+  in the sample path.
+- Sampling interval and search radius are configurable with safe defaults and
+  hard upper bounds.
+- Panel updates are event/interval driven, not per-frame rebuilds.
+- Budgets are validated per sprint RC (and formally in CT-048).
+
+## Failure policy
+
+- Missing/changed Valheim member → capability disabled, one WARN line naming
+  the feature and the fix expectation, mod keeps running.
+- Malformed sidecar row → skip row, keep valid rows, log once per file.
+- Any uncertainty in mutating features (parking brake) → refuse the mutation
+  and say why (fail closed).
+
+## Future extension seams
+
+- Additional cart-like vehicles behind `CartAdapter` if the game adds them.
+- Server-side trust extensions behind the v0.6 policy layer.
+- Deeper Cartographer exchange behind `CartographerCapability`.
