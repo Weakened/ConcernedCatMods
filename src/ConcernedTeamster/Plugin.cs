@@ -54,6 +54,10 @@ public sealed class Plugin : BaseUnityPlugin
             $"Cart telemetry sampler armed: interval {options.SampleIntervalSeconds:0.##} s, " +
             $"radius {options.SearchRadiusMeters:0.#} m, {options.MaxCartsPerTick} carts/tick, " +
             $"{options.MaxTrackedCarts} tracked max, evict after {options.EvictAfterSeconds:0.#} s.");
+
+        Ui.CartStatusHudController hud = gameObject.AddComponent<Ui.CartStatusHudController>();
+        hud.Initialize(settings, Logger, pump);
+        Logger.LogInfo("Cart Status panel armed: visible Cart button at the right screen edge while in a world.");
     }
 
     /// <summary>Runs the cart capability probe once and reports the outcome
