@@ -428,6 +428,65 @@ public static class CartAdapter
         return CargoManifest.Create(entries, captureTimeSeconds);
     }
 
+    /// <summary>Finds a live tracked cart by its snapshot cart id, or null.
+    /// Bounded by the instance registry size; callers keep it off the
+    /// per-frame path (the manifest tracker calls at most once per second).
+    /// Never throws.</summary>
+    public static object? TryFindCartById(string? cartId)
+    {
+        if (string.IsNullOrEmpty(cartId) || !CapabilityEnabled)
+        {
+            return null;
+        }
+
+        try
+        {
+            return FindCartByIdCore(cartId!);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static object? FindCartByIdCore(string cartId)
+    {
+        List<Vagon> instances = Vagon.m_instances;
+        if (instances is null)
+        {
+            return null;
+        }
+
+        for (int index = 0; index < instances.Count; index++)
+        {
+            Vagon cart = instances[index];
+            if (cart == null)
+            {
+                continue;
+            }
+
+            ZNetView view = cart.GetComponent<ZNetView>();
+            if (view == null || !view.IsValid())
+            {
+                continue;
+            }
+
+            ZDO? zdo = view.GetZDO();
+            if (zdo is null)
+            {
+                continue;
+            }
+
+            if (zdo.m_uid.ToString() == cartId)
+            {
+                return cart;
+            }
+        }
+
+        return null;
+    }
+
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static bool HasLocalPlayerCore()
     {

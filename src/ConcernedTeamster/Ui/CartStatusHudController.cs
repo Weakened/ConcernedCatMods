@@ -28,6 +28,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
     private TeamsterSettings? _settings;
     private ManualLogSource? _log;
     private CartTelemetryPump? _pump;
+    private CargoManifestPanel? _manifestPanel;
     private bool _failed;
 
     private GameObject? _button;
@@ -35,12 +36,14 @@ internal sealed class CartStatusHudController : MonoBehaviour
     private Text[] _rows = Array.Empty<Text>();
     private string? _selectedCartId;
     private double _nextRefreshTime;
+    private double _nextSelectionRefreshTime;
 
     internal void Initialize(TeamsterSettings settings, ManualLogSource log, CartTelemetryPump? pump)
     {
         _settings = settings;
         _log = log;
         _pump = pump;
+        _manifestPanel = new CargoManifestPanel(log);
     }
 
     private void Update()
@@ -62,6 +65,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
                     _panel.SetActive(false);
                 }
 
+                _manifestPanel?.Reset();
                 _selectedCartId = null;
                 return;
             }
@@ -71,21 +75,33 @@ internal sealed class CartStatusHudController : MonoBehaviour
                 TogglePanel();
             }
 
-            if (_panel != null && _panel.activeSelf)
+            double now = Time.unscaledTimeAsDouble;
+            bool statusVisible = _panel != null && _panel.activeSelf;
+            if (statusVisible)
             {
                 if (Input.GetKeyDown(KeyCode.Escape))
                 {
-                    _panel.SetActive(false);
+                    _panel!.SetActive(false);
                     return;
                 }
 
-                double now = Time.unscaledTimeAsDouble;
                 if (now >= _nextRefreshTime)
                 {
                     _nextRefreshTime = now + RefreshPeriodSeconds;
                     RefreshPanel(now);
                 }
             }
+            else if (_manifestPanel is { IsVisible: true } && now >= _nextSelectionRefreshTime)
+            {
+                // The manifest follows the same sticky selection the status
+                // panel shows; keep it current even with the status closed.
+                _nextSelectionRefreshTime = now + 1.0;
+                CartStatusViewModel selection = CartStatusPresenter.Present(
+                    _pump?.Telemetry, _selectedCartId, now, telemetryActive: _pump is not null);
+                _selectedCartId = selection.SelectedCartId.Length > 0 ? selection.SelectedCartId : null;
+            }
+
+            _manifestPanel?.HandleFrame(now, _selectedCartId);
         }
         catch (Exception exception)
         {
@@ -180,9 +196,14 @@ internal sealed class CartStatusHudController : MonoBehaviour
             y -= RowHeight;
         }
 
+        GameObject manifest = gui.CreateButton(
+            "Manifest", _panel.transform,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-62f, 28f), 110f, 30f);
+        manifest.GetComponent<Button>().onClick.AddListener(() => _manifestPanel?.Toggle());
+
         GameObject close = gui.CreateButton(
             "Close", _panel.transform,
-            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 28f), 110f, 30f);
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(62f, 28f), 110f, 30f);
         close.GetComponent<Button>().onClick.AddListener(() => _panel!.SetActive(false));
 
         _panel.SetActive(false);
@@ -223,6 +244,8 @@ internal sealed class CartStatusHudController : MonoBehaviour
             {
                 _button.SetActive(false);
             }
+
+            _manifestPanel?.Hide();
         }
         catch
         {

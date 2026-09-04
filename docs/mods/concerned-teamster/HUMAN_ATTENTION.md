@@ -144,6 +144,25 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-04 — CT-007 manifest panel screenshot pending
+
+- Version / issue: v0.2 / CT-007 (#116)
+- Question: the manifest panel screenshot (sorting, filter typing, localized
+  item names, full-cart responsiveness feel) needs a live session with a
+  loaded cart.
+- Safe reversible default selected: every behavior is proven headlessly (20
+  presenter tests: full sort matrix, tie stability, case-insensitive
+  filter incl. localized names, explicit states, localizer fallbacks), the
+  UI re-renders only on data/sort/filter changes plus a 1 Hz tick, and the
+  game localizer is reflective and falls back to raw tokens.
+- Why work continued: read-only UI over tracker-bounded reads; worst case
+  is a layout blemish, adjustable by constants (CT-033 owns polish).
+- Risk / alternative: sort-arrow glyphs (▲▼) depend on the game font's
+  glyph coverage; if missing they render as boxes — cosmetic, and the RC
+  campaign will catch it.
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.
