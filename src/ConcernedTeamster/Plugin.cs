@@ -1,5 +1,7 @@
 using BepInEx;
+using TheConcernedCat.ConcernedTeamster.Adapters;
 using TheConcernedCat.ConcernedTeamster.Domain;
+using TheConcernedCat.ConcernedTeamster.Domain.Capabilities;
 
 namespace TheConcernedCat.ConcernedTeamster;
 
@@ -22,9 +24,37 @@ public sealed class Plugin : BaseUnityPlugin
             $"Enabled={settings.Enabled.Value}, " +
             $"DebugLogging={settings.DebugLogging.Value}.");
 
-        // CT-001 is the product bootstrap: identity, config, and lifecycle
-        // only. Cart adapters and telemetry arrive with CT-002/CT-003 and no
-        // gameplay observation or mutation happens before them.
+        LogCartCapability(settings);
+
+        // CT-002 delivers the read-only cart adapter and its startup
+        // capability probe only. Telemetry sampling and panels arrive with
+        // CT-003..CT-005; nothing observes or mutates carts yet.
+    }
+
+    /// <summary>Runs the cart capability probe once and reports the outcome
+    /// as one line: INFO when every verified member is present, one
+    /// actionable WARN naming each missing member otherwise. The probe reads
+    /// type metadata only — no world or cart state is touched.</summary>
+    private void LogCartCapability(TeamsterSettings settings)
+    {
+        GameCapabilityReport report = CartAdapter.ProbeCapability();
+        if (report.Enabled)
+        {
+            Logger.LogInfo(
+                $"Cart telemetry capability ENABLED: {report.VerifiedMembers.Count} game members verified.");
+            if (settings.DebugLogging.Value)
+            {
+                Logger.LogDebug("Verified cart members: " + string.Join(", ", report.VerifiedMembers));
+            }
+        }
+        else
+        {
+            Logger.LogWarning(
+                "Cart telemetry capability DISABLED: missing " +
+                string.Join(", ", report.MissingMembers) +
+                ". A Valheim update likely changed cart internals; cart features stay off until a " +
+                "Concerned Teamster update, and everything else keeps working.");
+        }
     }
 
     private void LogEnvironmentBanner()
@@ -45,7 +75,7 @@ public sealed class Plugin : BaseUnityPlugin
 
         Logger.LogInfo(EnvironmentBanner.Compose(
             "ConcernedTeamster@" + ResolveInformationalVersion(),
-            ResolveGameVersion(),
+            GameVersionResolver.Resolve(),
             unityVersion,
             bepInExVersion,
             jotunnVersion));
@@ -67,54 +97,5 @@ public sealed class Plugin : BaseUnityPlugin
             // The plain version is an acceptable release identity fallback.
             return PluginVersion;
         }
-    }
-
-    private static string ResolveGameVersion()
-    {
-        // Version.GetVersionString() bound at compile time can throw
-        // MissingMethodException when the publicized reference assembly and
-        // the live game assembly disagree (observed on Concerned
-        // Cartographer), so the game version is resolved reflectively.
-        try
-        {
-            System.Type versionType = typeof(global::Version);
-            const System.Reflection.BindingFlags publicStatic =
-                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static;
-
-            object? currentVersion =
-                versionType.GetField("CurrentVersion", publicStatic)?.GetValue(null) ??
-                versionType.GetProperty("CurrentVersion", publicStatic)?.GetValue(null);
-            if (currentVersion is not null)
-            {
-                return currentVersion.ToString();
-            }
-
-            foreach (System.Reflection.MethodInfo method in versionType.GetMethods(publicStatic))
-            {
-                if (method.Name != "GetVersionString" || method.ReturnType != typeof(string))
-                {
-                    continue;
-                }
-
-                System.Reflection.ParameterInfo[] parameters = method.GetParameters();
-                object?[] arguments = new object?[parameters.Length];
-                for (int index = 0; index < parameters.Length; index++)
-                {
-                    arguments[index] = parameters[index].HasDefaultValue
-                        ? parameters[index].DefaultValue
-                        : parameters[index].ParameterType.IsValueType
-                            ? System.Activator.CreateInstance(parameters[index].ParameterType)
-                            : null;
-                }
-
-                return method.Invoke(null, arguments) as string ?? EnvironmentBanner.Unknown;
-            }
-        }
-        catch
-        {
-            // The version banner is cosmetic; never fail startup over it.
-        }
-
-        return EnvironmentBanner.Unknown;
     }
 }

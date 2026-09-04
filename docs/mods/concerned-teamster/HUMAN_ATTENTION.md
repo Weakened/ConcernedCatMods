@@ -43,6 +43,26 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-04 — CT-002 startup probe log excerpt pending first in-game run
+
+- Version / issue: v0.1 / CT-002 (#110)
+- Question: the capability probe's startup log line (expected: "Cart
+  telemetry capability ENABLED: 11 game members verified.") has not been
+  observed in a live game session, because no TCT-Dev profile exists yet
+  (profile automation is CT-043) and game launches are owner-interactive.
+- Safe reversible default selected: ship the probe verified three other ways —
+  members compiled against the publicized assemblies of the exact local build
+  (0.221.12, see CART_INTERNALS.md), 14 unit tests over the probe mechanism
+  including every simulated-missing-member path, and read-only adapter code
+  that fails closed to null snapshots.
+- Why work continued: the probe touches type metadata only; a wrong outcome
+  cannot corrupt anything — worst case is a spurious WARN line or a disabled
+  feature, both visible in the first real log.
+- Risk / alternative: none beyond a cosmetic log surprise; the excerpt joins
+  the v0.1 RC in-game campaign (CT-005) and the owner smoke checklist.
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.
