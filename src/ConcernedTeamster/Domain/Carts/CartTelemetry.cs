@@ -1,10 +1,12 @@
+using TheConcernedCat.ConcernedTeamster.Domain.Terrain;
+
 namespace TheConcernedCat.ConcernedTeamster.Domain.Carts;
 
-/// <summary>Immutable telemetry for one cart at one sample instant (CT-003).
-/// Composes the adapter's <see cref="CartSnapshot"/> with motion data and a
-/// timestamp. Fields the adapter could not obtain are explicitly flagged
-/// unavailable — consumers must check the flag instead of trusting a
-/// defaulted number.</summary>
+/// <summary>Immutable telemetry for one cart at one sample instant (CT-003,
+/// grade and surface added in CT-004). Composes the adapter's
+/// <see cref="CartSnapshot"/> with motion, terrain, and a timestamp. Fields
+/// the adapter could not obtain are explicitly flagged unavailable —
+/// consumers must check the flag instead of trusting a defaulted number.</summary>
 public sealed class CartTelemetry
 {
     private CartTelemetry(
@@ -19,6 +21,11 @@ public sealed class CartTelemetry
         bool velocityAvailable,
         float speedMetersPerSecond,
         float verticalSpeedMetersPerSecond,
+        bool gradeAvailable,
+        float instantGradePercent,
+        float smoothedGradePercent,
+        GradeDirection gradeDirection,
+        TerrainSurfaceKind surface,
         double sampleTimeSeconds)
     {
         CartId = cartId;
@@ -32,6 +39,11 @@ public sealed class CartTelemetry
         VelocityAvailable = velocityAvailable;
         SpeedMetersPerSecond = speedMetersPerSecond;
         VerticalSpeedMetersPerSecond = verticalSpeedMetersPerSecond;
+        GradeAvailable = gradeAvailable;
+        InstantGradePercent = instantGradePercent;
+        SmoothedGradePercent = smoothedGradePercent;
+        GradeDirection = gradeDirection;
+        Surface = surface;
         SampleTimeSeconds = sampleTimeSeconds;
     }
 
@@ -69,6 +81,28 @@ public sealed class CartTelemetry
     /// <see cref="VelocityAvailable"/>.</summary>
     public float VerticalSpeedMetersPerSecond { get; }
 
+    /// <summary>False when ground heights along the cart heading could not
+    /// be sampled (unloaded terrain, flipped cart); then both grade values
+    /// are 0 and the direction is Level — "unknown", not "flat".</summary>
+    public bool GradeAvailable { get; }
+
+    /// <summary>Raw grade percent of this sample (positive = uphill toward
+    /// the heading). Meaningful only when <see cref="GradeAvailable"/>.</summary>
+    public float InstantGradePercent { get; }
+
+    /// <summary>EMA-smoothed grade percent (the display value; smoothing spec
+    /// in GradeMath). Meaningful only when <see cref="GradeAvailable"/>.</summary>
+    public float SmoothedGradePercent { get; }
+
+    /// <summary>Hysteresis-classified slope state relative to the cart
+    /// heading. Meaningful only when <see cref="GradeAvailable"/>.</summary>
+    public GradeDirection GradeDirection { get; }
+
+    /// <summary>Ground surface kind under the cart, with its own
+    /// <see cref="TerrainSurfaceKind.Unavailable"/> state — independent of
+    /// grade availability.</summary>
+    public TerrainSurfaceKind Surface { get; }
+
     /// <summary>The sampler clock (seconds) at sampling time; used for
     /// staleness eviction and panel freshness.</summary>
     public double SampleTimeSeconds { get; }
@@ -78,6 +112,11 @@ public sealed class CartTelemetry
         bool velocityAvailable,
         float speedMetersPerSecond,
         float verticalSpeedMetersPerSecond,
+        bool gradeAvailable,
+        float instantGradePercent,
+        float smoothedGradePercent,
+        GradeDirection gradeDirection,
+        TerrainSurfaceKind surface,
         double sampleTimeSeconds)
     {
         return new CartTelemetry(
@@ -92,6 +131,11 @@ public sealed class CartTelemetry
             velocityAvailable,
             velocityAvailable ? speedMetersPerSecond : 0f,
             velocityAvailable ? verticalSpeedMetersPerSecond : 0f,
+            gradeAvailable,
+            gradeAvailable ? instantGradePercent : 0f,
+            gradeAvailable ? smoothedGradePercent : 0f,
+            gradeAvailable ? gradeDirection : GradeDirection.Level,
+            surface,
             sampleTimeSeconds);
     }
 }

@@ -1,4 +1,4 @@
-# Valheim cart internals — verified findings (CT-002, extended CT-003)
+# Valheim cart internals — verified findings (CT-002, extended CT-003/CT-004)
 
 This document records the **verified** surface of Valheim's cart implementation
 that Concerned Teamster depends on. Nothing here is guessed: every member was
@@ -58,6 +58,27 @@ component type and its static instance registry.
 | `Container.GetInventory()` | `public Inventory GetInventory()` | Cargo inventory access. |
 | `Inventory.GetTotalWeight()` | `public float GetTotalWeight()` | Total cargo weight — the exact number vanilla feeds into cart mass. |
 | `Player.m_localPlayer` | `public static Player m_localPlayer` | Local player for the pull-state check; `Player : Humanoid : Character` (verified), so it is assignable to `IsAttached(Character)`. CT-003 also uses it as the session signal (null in menus and between worlds → telemetry reset) and as the discovery origin (`transform.position`). |
+
+### Terrain members the CT-004 adapter reads (`Heightmap`, all public)
+
+Verified by decompiling `Heightmap` from the same assembly on 2026-09-04.
+`Heightmap` is the game's terrain tile component; **Teamster touches only
+getters — no terrain write member is referenced anywhere** (the adapter has
+no write path, enforced by review and the read-only member list below).
+
+| Member | Verified signature | Semantics (decompiled) |
+|---|---|---|
+| `Heightmap.GetHeight` | `public static bool GetHeight(Vector3 worldPos, out float height)` | Finds the loaded heightmap containing the point and reads the **live** world height (terrain modifications included). Returns false (height 0) when no heightmap is loaded there — the adapter's grade-unavailable path. |
+| `Heightmap.FindHeightmap` | `public static Heightmap FindHeightmap(Vector3 point)` | Returns the loaded tile containing the point, or null → surface unavailable. (The `(point, radius, List)` overload exists too; Cartographer uses it.) |
+| `Heightmap.WorldToVertex` | `public void WorldToVertex(Vector3 worldPos, out int x, out int y)` | World position → vertex coordinates on that tile. |
+| `Heightmap.GetPaintMask(int, int)` | `public Color GetPaintMask(int x, int y)` | Bounds-checked pixel read of the paint mask; out-of-range returns black — which is also the game's own "nothing painted" value (`m_paintMaskNothing`), so the edge case reads as untouched ground. |
+| Paint channel constants | `public static Color m_paintMaskDirt = (1,0,0,1)`, `m_paintMaskCultivated = (0,1,0,1)`, `m_paintMaskPaved = (0,0,1,1)`, `m_paintMaskNothing = (0,0,0,1)` | The channel encoding Teamster's `TerrainPaint.Classify` mirrors (red = dirt, green = cultivated, blue = paved). Constants are documented truth; the adapter reads raw channels, not these fields. |
+
+Grade geometry: heights are sampled 1.5 m ahead of and behind the cart
+center along its heading — the XZ direction from cart center to the pull
+handle (`m_attachPoint`, semantics-anchored "front"), falling back to the
+transform's forward axis; a cart lying on its side (both axes vertical)
+reports grade unavailable. Grade % = rise over the 3 m horizontal run × 100.
 
 ### Unity engine members the CT-003 adapter reads (verified on this build)
 
