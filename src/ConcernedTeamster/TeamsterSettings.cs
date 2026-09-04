@@ -17,7 +17,8 @@ internal sealed class TeamsterSettings
         ConfigEntry<float> sampleIntervalSeconds,
         ConfigEntry<float> searchRadiusMeters,
         ConfigEntry<int> maxCartsPerTick,
-        ConfigEntry<int> maxTrackedCarts)
+        ConfigEntry<int> maxTrackedCarts,
+        ConfigEntry<KeyboardShortcut> panelShortcut)
     {
         Enabled = enabled;
         DebugLogging = debugLogging;
@@ -25,6 +26,7 @@ internal sealed class TeamsterSettings
         SearchRadiusMeters = searchRadiusMeters;
         MaxCartsPerTick = maxCartsPerTick;
         MaxTrackedCarts = maxTrackedCarts;
+        PanelShortcut = panelShortcut;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -33,6 +35,7 @@ internal sealed class TeamsterSettings
     public ConfigEntry<float> SearchRadiusMeters { get; }
     public ConfigEntry<int> MaxCartsPerTick { get; }
     public ConfigEntry<int> MaxTrackedCarts { get; }
+    public ConfigEntry<KeyboardShortcut> PanelShortcut { get; }
 
     public static TeamsterSettings Bind(ConfigFile config)
     {
@@ -68,6 +71,8 @@ internal sealed class TeamsterSettings
                     "Hard cap of carts kept in the telemetry table at once.",
                     new AcceptableValueRange<int>(
                         TelemetrySamplerOptions.MinMaxTrackedCarts,
-                        TelemetrySamplerOptions.MaxMaxTrackedCarts))));
+                        TelemetrySamplerOptions.MaxMaxTrackedCarts))),
+            config.Bind("Ui", "PanelShortcut", KeyboardShortcut.Empty,
+                "Optional keyboard accelerator that toggles the Cart Status panel. The visible Cart button is always the primary path; leave empty for no shortcut."));
     }
 }

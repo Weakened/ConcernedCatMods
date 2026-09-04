@@ -103,6 +103,27 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-04 — CT-005 panel visual check and v0.1 in-game campaign pending
+
+- Version / issue: v0.1 / CT-005 (#113)
+- Question: the Cart Status panel's visual placement (right-edge button at
+  (-70, +170) from the right-center anchor, panel docked beside it), wood-
+  panel readability, and the full v0.1 in-game campaign (vanilla truth
+  baseline, cart/world lifecycle, uninstall safety, 30-minute perf session)
+  need a real game session with TCT profiles (CT-043).
+- Safe reversible default selected: ship the RC with every string and state
+  proven headlessly (22 presenter tests), UI built on the exact GUIManager
+  calls Cartographer ships in production, fail-closed session-disable on
+  any UI exception, and the panel default-hidden until the player clicks
+  the button. The RC is internal; nothing publishes.
+- Why work continued: UI construction cannot touch world state; the worst
+  visual outcome is an awkwardly placed button, a one-constant fix.
+- Risk / alternative: button may overlap other HUD mods' elements;
+  position constants are trivially adjustable and CT-033 owns UI polish.
+  The full pending list is itemized in RELEASE_DOSSIER.md (v0.1 RC1).
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.
