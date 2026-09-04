@@ -23,13 +23,20 @@ function Get-EnvironmentValues {
     $bepInEx = [string]$group.BEPINEX_PATH
     $deploy = [string]$group.MOD_DEPLOYPATH
 
+    # Optional (added with Concerned Teamster): older Environment.props files
+    # legitimately omit it, so read it without tripping strict mode.
+    $teamsterNode = $group.SelectSingleNode("TEAMSTER_DEPLOYPATH")
+    $teamsterDeploy = if ($null -ne $teamsterNode) { [string]$teamsterNode.InnerText } else { "" }
+
     $bepInEx = $bepInEx.Replace('$(VALHEIM_INSTALL)', $valheim)
     $deploy = $deploy.Replace('$(VALHEIM_INSTALL)', $valheim).Replace('$(BEPINEX_PATH)', $bepInEx)
+    $teamsterDeploy = $teamsterDeploy.Replace('$(VALHEIM_INSTALL)', $valheim)
 
     return [pscustomobject]@{
         ValheimInstall = $valheim
         BepInExPath = $bepInEx
         ModDeployPath = $deploy
+        TeamsterDeployPath = $teamsterDeploy
     }
 }
 
