@@ -191,6 +191,48 @@ def validate_product(key: str, errors: list[str], require_binary: bool,
     ]
 
 
+# CT-002 architecture rule: only src/ConcernedTeamster/Adapters/ may name
+# Valheim types. The tokens are unambiguous Valheim identifiers; generic
+# names (Container, Inventory, Player, Character, Version) are excluded to
+# avoid false positives — real coupling to them requires one of the listed
+# gateway identifiers or a publicized game reference anyway, and the domain
+# layer is additionally proven game-free by compiling into the net10 test
+# project without game assemblies.
+TEAMSTER_GAME_TOKENS = (
+    "Vagon",
+    "ZNetView",
+    "ZDOID",
+    "ZDOVars",
+    "ZDO",
+    "Humanoid",
+    "ItemDrop",
+    "ZSFX",
+    "Heightmap",
+    "ZLog",
+    "MessageHud",
+    "m_localPlayer",
+)
+
+
+def check_teamster_adapter_isolation(errors: list[str]) -> None:
+    """Fails on Valheim identifiers outside Adapters/ (comments included:
+    the rule is absolute so the check can stay simple and unarguable)."""
+    project_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    pattern = re.compile(
+        r"global::Version|\b(?:" + "|".join(TEAMSTER_GAME_TOKENS) + r")\b")
+    for path in sorted(project_dir.rglob("*.cs")):
+        parts = path.relative_to(project_dir).parts
+        if parts[0] in ("obj", "bin", "Adapters"):
+            continue
+        for number, line in enumerate(
+                path.read_text(encoding="utf-8").splitlines(), start=1):
+            match = pattern.search(line)
+            if match:
+                fail(
+                    f"[teamster] Valheim identifier {match.group(0)!r} outside "
+                    f"Adapters/: {path.relative_to(ROOT)}:{number}", errors)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -224,6 +266,8 @@ def main() -> int:
             require_binary=args.require_binary and key in scoped,
             expected_version=args.expected_version if key in scoped else None,
         ))
+
+    check_teamster_adapter_isolation(errors)
 
     prohibited = []
     for path in ROOT.rglob("*.dll"):
