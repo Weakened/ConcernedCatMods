@@ -30,9 +30,13 @@ public class TelemetrySamplerTests
             }
         }
 
-        public CartTelemetry? Sample(object cart, double nowSeconds)
+        public IReadOnlyDictionary<string, CartTelemetry>? LastSeenPreviousStore;
+
+        public CartTelemetry? Sample(
+            object cart, double nowSeconds, IReadOnlyDictionary<string, CartTelemetry> previousByCartId)
         {
             SampleAttempts++;
+            LastSeenPreviousStore = previousByCartId;
             string cartId = (string)cart;
             AttemptLog.Add(cartId);
             if (Unreadable.Contains(cartId))
@@ -45,6 +49,9 @@ public class TelemetrySamplerTests
                 itemWeightMassFactor: 1f, isAttached: false, isPulledByLocalPlayer: false);
             return CartTelemetry.Create(snapshot, velocityAvailable: true,
                 speedMetersPerSecond: 1f, verticalSpeedMetersPerSecond: 0f,
+                gradeAvailable: false, instantGradePercent: 0f, smoothedGradePercent: 0f,
+                gradeDirection: TheConcernedCat.ConcernedTeamster.Domain.Terrain.GradeDirection.Level,
+                surface: TheConcernedCat.ConcernedTeamster.Domain.Terrain.TerrainSurfaceKind.Unavailable,
                 sampleTimeSeconds: nowSeconds);
         }
     }
@@ -184,6 +191,19 @@ public class TelemetrySamplerTests
         sampler.Tick(0.5);
 
         Assert.Equal(0.5d, sampler.TelemetryByCartId["1:1"].SampleTimeSeconds);
+    }
+
+    [Fact]
+    public void Tick_PassesTheLiveStoreToTheSampleCallback()
+    {
+        // CT-004 grade smoothing reads the previous sample from the store;
+        // the sampler must hand its own live dictionary to the callback.
+        var world = new FakeCartWorld { NearbyCartIds = { "1:1" } };
+        TelemetrySampler sampler = CreateSampler(world);
+
+        sampler.Tick(0.0);
+
+        Assert.Same(sampler.TelemetryByCartId, world.LastSeenPreviousStore);
     }
 
     [Fact]

@@ -8,5 +8,6 @@ public enum GameMemberKind
     InstanceField,
     StaticField,
     InstanceMethod,
+    StaticMethod,
     InstanceProperty,
 }

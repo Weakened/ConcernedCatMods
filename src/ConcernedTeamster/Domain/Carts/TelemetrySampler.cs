@@ -13,7 +13,7 @@ public sealed class TelemetrySampler
 {
     private readonly TelemetrySamplerOptions _options;
     private readonly Action<List<object>, TelemetrySamplerOptions> _collectNearbyCarts;
-    private readonly Func<object, double, CartTelemetry?> _sampleCart;
+    private readonly Func<object, double, IReadOnlyDictionary<string, CartTelemetry>, CartTelemetry?> _sampleCart;
     private readonly List<object> _cartBuffer = new();
     private readonly List<string> _staleKeyBuffer = new();
     private readonly Dictionary<string, CartTelemetry> _telemetryByCartId = new();
@@ -24,11 +24,14 @@ public sealed class TelemetrySampler
     /// components near the local player, nearest first, bounded by the
     /// options. Must not throw; the adapter fails closed.</param>
     /// <param name="sampleCart">Maps one cart component to telemetry, or null
-    /// when the cart is gone or unreadable. Must not throw.</param>
+    /// when the cart is gone or unreadable. Receives the live store so
+    /// stateful derivations (CT-004 grade smoothing) can read the cart's
+    /// previous sample — and inherit reset/eviction lifecycle for free.
+    /// Must not throw and must not mutate the store.</param>
     public TelemetrySampler(
         TelemetrySamplerOptions options,
         Action<List<object>, TelemetrySamplerOptions> collectNearbyCarts,
-        Func<object, double, CartTelemetry?> sampleCart)
+        Func<object, double, IReadOnlyDictionary<string, CartTelemetry>, CartTelemetry?> sampleCart)
     {
         _options = options;
         _collectNearbyCarts = collectNearbyCarts;
@@ -78,7 +81,7 @@ public sealed class TelemetrySampler
             {
                 object cart = _cartBuffer[(start + offset) % cartCount];
                 attempts++;
-                CartTelemetry? telemetry = _sampleCart(cart, nowSeconds);
+                CartTelemetry? telemetry = _sampleCart(cart, nowSeconds, _telemetryByCartId);
                 if (telemetry is null)
                 {
                     continue;

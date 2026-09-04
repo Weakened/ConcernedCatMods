@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using TheConcernedCat.ConcernedTeamster.Domain.Capabilities;
 using TheConcernedCat.ConcernedTeamster.Domain.Carts;
+using TheConcernedCat.ConcernedTeamster.Domain.Terrain;
 using UnityEngine;
 
 namespace TheConcernedCat.ConcernedTeamster.Adapters;
@@ -63,6 +64,13 @@ public static class CartAdapter
                 "UnityEngine.Rigidbody, UnityEngine.PhysicsModule", "UnityEngine.Rigidbody", missingTypes);
             Type? vector3 = ResolveNamedType(
                 "UnityEngine.Vector3, UnityEngine.CoreModule", "UnityEngine.Vector3", missingTypes);
+            // CT-004 terrain members (heights + paint; verified in
+            // CART_INTERNALS.md).
+            Type? heightmap = ResolveGameType("Heightmap", missingTypes);
+            Type? transform = ResolveNamedType(
+                "UnityEngine.Transform, UnityEngine.CoreModule", "UnityEngine.Transform", missingTypes);
+            Type? color = ResolveNamedType(
+                "UnityEngine.Color, UnityEngine.CoreModule", "UnityEngine.Color", missingTypes);
             if (missingTypes.Count > 0)
             {
                 return new GameCapabilityReport(Array.Empty<string>(), missingTypes);
@@ -87,6 +95,15 @@ public static class CartAdapter
                 new("Player", player, "m_localPlayer", GameMemberKind.StaticField, player),
                 new("Vagon", vagon, "m_instances", GameMemberKind.StaticField, vagonList),
                 new("Rigidbody", rigidbody, "linearVelocity", GameMemberKind.InstanceProperty, vector3),
+                new("Vagon", vagon, "m_attachPoint", GameMemberKind.InstanceField, transform),
+                new("Heightmap", heightmap, "GetHeight", GameMemberKind.StaticMethod, typeof(bool),
+                    new[] { vector3, typeof(float).MakeByRefType() }),
+                new("Heightmap", heightmap, "FindHeightmap", GameMemberKind.StaticMethod, heightmap,
+                    new[] { vector3 }),
+                new("Heightmap", heightmap, "WorldToVertex", GameMemberKind.InstanceMethod, typeof(void),
+                    new[] { vector3, typeof(int).MakeByRefType(), typeof(int).MakeByRefType() }),
+                new("Heightmap", heightmap, "GetPaintMask", GameMemberKind.InstanceMethod, color,
+                    new[] { typeof(int), typeof(int) }),
             };
             return GameMemberProbe.Probe(requirements);
         }
@@ -207,10 +224,15 @@ public static class CartAdapter
             isPulledByLocalPlayer);
     }
 
-    /// <summary>Maps one cart component to full telemetry (snapshot plus
-    /// motion plus timestamp), or null when the cart is gone or unreadable.
-    /// Shaped to plug directly into the domain sampler. Never throws.</summary>
-    public static CartTelemetry? TrySampleCart(object? cartComponent, double sampleTimeSeconds)
+    /// <summary>Maps one cart component to full telemetry (snapshot, motion,
+    /// terrain, timestamp), or null when the cart is gone or unreadable.
+    /// Shaped to plug directly into the domain sampler, whose store supplies
+    /// the previous sample for grade smoothing — so smoothing state inherits
+    /// the sampler's reset and eviction lifecycle. Never throws.</summary>
+    public static CartTelemetry? TrySampleCart(
+        object? cartComponent,
+        double sampleTimeSeconds,
+        IReadOnlyDictionary<string, CartTelemetry> previousByCartId)
     {
         if (cartComponent is null || !CapabilityEnabled)
         {
@@ -227,8 +249,32 @@ public static class CartAdapter
 
             bool velocityAvailable = TryReadVelocityCore(
                 cartComponent, out float speedMetersPerSecond, out float verticalSpeedMetersPerSecond);
+
+            TerrainAdapter.GroundReading ground = TerrainAdapter.TryReadGround(cartComponent);
+            float previousSmoothedPercent = float.NaN;
+            GradeDirection previousDirection = GradeDirection.Level;
+            if (previousByCartId is not null &&
+                previousByCartId.TryGetValue(snapshot.CartId, out CartTelemetry previous) &&
+                previous.GradeAvailable)
+            {
+                previousSmoothedPercent = previous.SmoothedGradePercent;
+                previousDirection = previous.GradeDirection;
+            }
+
+            float smoothedGradePercent = GradeMath.Smooth(previousSmoothedPercent, ground.InstantGradePercent);
+            GradeDirection gradeDirection = GradeMath.ClassifyDirection(smoothedGradePercent, previousDirection);
+
             return CartTelemetry.Create(
-                snapshot, velocityAvailable, speedMetersPerSecond, verticalSpeedMetersPerSecond, sampleTimeSeconds);
+                snapshot,
+                velocityAvailable,
+                speedMetersPerSecond,
+                verticalSpeedMetersPerSecond,
+                ground.GradeAvailable,
+                ground.InstantGradePercent,
+                smoothedGradePercent,
+                gradeDirection,
+                ground.Surface,
+                sampleTimeSeconds);
         }
         catch
         {

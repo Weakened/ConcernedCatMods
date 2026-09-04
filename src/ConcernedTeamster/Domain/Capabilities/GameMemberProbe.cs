@@ -90,6 +90,7 @@ public static class GameMemberProbe
             }
 
             case GameMemberKind.InstanceMethod:
+            case GameMemberKind.StaticMethod:
             {
                 Type[] parameters;
                 if (requirement.ParameterTypes is null)
@@ -111,9 +112,13 @@ public static class GameMemberProbe
                     }
                 }
 
+                BindingFlags methodFlags = BindingFlags.Public | BindingFlags.NonPublic |
+                    (requirement.Kind == GameMemberKind.StaticMethod
+                        ? BindingFlags.Static | BindingFlags.FlattenHierarchy
+                        : BindingFlags.Instance);
                 MethodInfo? method = requirement.OwnerType.GetMethod(
                     requirement.MemberName,
-                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
+                    methodFlags,
                     binder: null,
                     parameters,
                     modifiers: null);

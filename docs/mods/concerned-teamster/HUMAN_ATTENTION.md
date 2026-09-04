@@ -83,6 +83,26 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-04 — CT-004 in-game grade/surface spot check pending
+
+- Version / issue: v0.1 / CT-004 (#112)
+- Question: the built-dirt-slope-vs-flat-ground grade spot check and a live
+  surface classification screenshot need an interactive game session (TCT
+  profiles arrive with CT-043).
+- Safe reversible default selected: grade math and paint classification are
+  fully fixture-tested off-game (flat, uniform slopes, crest, dip, noisy
+  no-oscillation, channel table); the game-facing reads reuse the exact
+  members Cartographer's shipped paint probe already exercises in
+  production, plus `Heightmap.GetHeight`, all decompile-verified.
+- Why work continued: read-only terrain getters cannot alter anything; a
+  wrong grade would be a display defect caught by the RC campaign's
+  marked-slope scenario.
+- Risk / alternative: heading is anchored to the pull handle direction; if
+  the vanilla prefab ever places the handle sideways the sign convention
+  would need revisiting — the RC spot check covers exactly this.
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.

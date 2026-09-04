@@ -58,6 +58,7 @@ public class GameMemberProbeTests
         public float m_baseMass = 0f;
         public float m_itemWeightMassFactor = 0f;
         public FakeContainer? m_container = null;
+        public FakeTransform? m_attachPoint = null;
 
         public bool IsAttached() => false;
 
@@ -65,6 +66,29 @@ public class GameMemberProbeTests
     }
 
     private struct FakeVector3 { }
+
+    private struct FakeColor { }
+
+    private sealed class FakeTransform { }
+
+    private sealed class FakeHeightmap
+    {
+        public static bool GetHeight(FakeVector3 worldPos, out float height)
+        {
+            height = 0f;
+            return false;
+        }
+
+        public static FakeHeightmap? FindHeightmap(FakeVector3 point) => null;
+
+        public void WorldToVertex(FakeVector3 worldPos, out int x, out int y)
+        {
+            x = 0;
+            y = 0;
+        }
+
+        public FakeColor GetPaintMask(int x, int y) => default;
+    }
 
     private sealed class FakeRigidbody
     {
@@ -109,6 +133,15 @@ public class GameMemberProbeTests
             new("Player", typeof(FakePlayer), "m_localPlayer", GameMemberKind.StaticField, typeof(FakePlayer)),
             new("Vagon", typeof(FakeVagon), "m_instances", GameMemberKind.StaticField, typeof(List<FakeVagon>)),
             new("Rigidbody", typeof(FakeRigidbody), "linearVelocity", GameMemberKind.InstanceProperty, typeof(FakeVector3)),
+            new("Vagon", typeof(FakeVagon), "m_attachPoint", GameMemberKind.InstanceField, typeof(FakeTransform)),
+            new("Heightmap", typeof(FakeHeightmap), "GetHeight", GameMemberKind.StaticMethod, typeof(bool),
+                new Type?[] { typeof(FakeVector3), typeof(float).MakeByRefType() }),
+            new("Heightmap", typeof(FakeHeightmap), "FindHeightmap", GameMemberKind.StaticMethod, typeof(FakeHeightmap),
+                new Type?[] { typeof(FakeVector3) }),
+            new("Heightmap", typeof(FakeHeightmap), "WorldToVertex", GameMemberKind.InstanceMethod, typeof(void),
+                new Type?[] { typeof(FakeVector3), typeof(int).MakeByRefType(), typeof(int).MakeByRefType() }),
+            new("Heightmap", typeof(FakeHeightmap), "GetPaintMask", GameMemberKind.InstanceMethod, typeof(FakeColor),
+                new Type?[] { typeof(int), typeof(int) }),
         };
     }
 
@@ -119,10 +152,60 @@ public class GameMemberProbeTests
 
         Assert.True(report.Enabled);
         Assert.Empty(report.MissingMembers);
-        Assert.Equal(13, report.VerifiedMembers.Count);
+        Assert.Equal(18, report.VerifiedMembers.Count);
         Assert.Contains("Vagon.m_baseMass", report.VerifiedMembers);
         Assert.Contains("Player.m_localPlayer", report.VerifiedMembers);
         Assert.Contains("Rigidbody.linearVelocity", report.VerifiedMembers);
+        Assert.Contains("Heightmap.GetHeight", report.VerifiedMembers);
+    }
+
+    [Fact]
+    public void Probe_MissingStaticMethod_Disables()
+    {
+        var requirements = new List<GameMemberRequirement>
+        {
+            new("Heightmap", typeof(FakeCharacter), "GetHeight", GameMemberKind.StaticMethod, typeof(bool),
+                new Type?[] { typeof(FakeVector3), typeof(float).MakeByRefType() }),
+        };
+
+        GameCapabilityReport report = GameMemberProbe.Probe(requirements);
+
+        Assert.False(report.Enabled);
+        Assert.Contains("Heightmap.GetHeight (method not found)", report.MissingMembers);
+    }
+
+    [Fact]
+    public void Probe_StaticMethodRequirementForInstanceMethod_Disables()
+    {
+        // WorldToVertex is an instance method; a StaticMethod requirement
+        // must not find it.
+        var requirements = new List<GameMemberRequirement>
+        {
+            new("Heightmap", typeof(FakeHeightmap), "WorldToVertex", GameMemberKind.StaticMethod, typeof(void),
+                new Type?[] { typeof(FakeVector3), typeof(int).MakeByRefType(), typeof(int).MakeByRefType() }),
+        };
+
+        GameCapabilityReport report = GameMemberProbe.Probe(requirements);
+
+        Assert.False(report.Enabled);
+        Assert.Contains("Heightmap.WorldToVertex (method not found)", report.MissingMembers);
+    }
+
+    [Fact]
+    public void Probe_ByRefParameterShapeMismatch_Disables()
+    {
+        // GetHeight takes (FakeVector3, out float); probing with a plain
+        // float parameter must fail — by-ref shapes are part of the truth.
+        var requirements = new List<GameMemberRequirement>
+        {
+            new("Heightmap", typeof(FakeHeightmap), "GetHeight", GameMemberKind.StaticMethod, typeof(bool),
+                new Type?[] { typeof(FakeVector3), typeof(float) }),
+        };
+
+        GameCapabilityReport report = GameMemberProbe.Probe(requirements);
+
+        Assert.False(report.Enabled);
+        Assert.Contains("Heightmap.GetHeight (method not found)", report.MissingMembers);
     }
 
     [Fact]
