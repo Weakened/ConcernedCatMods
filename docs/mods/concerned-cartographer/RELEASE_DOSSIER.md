@@ -1,4 +1,4 @@
-# Concerned Cartographer v1.0 line — Release Dossier (0.10.0 Public Beta)
+# Concerned Cartographer v1.0 line — Release Dossier (0.10.x Public Beta)
 
 Prepared by the autonomous conveyor (Tankard Olafsson) per OPS-001 rev 2.
 The single remaining gate is the human smoke test
@@ -82,13 +82,19 @@ official documentation and re-verified against the sealed RC16 bytes:
 
 ## 1–5. Release candidate identity
 
-- **Version:** **0.10.0 (Public Beta)** — the owner's final pre-upload
-  re-version (2026-09-03, at RC16) of the earlier owner-approved 0.9.0
-  beta identity: the feature-complete v1 candidate ships first as a
-  public beta, and 1.0.0 stays reserved for the stable release.
-  0.10.0 was UPLOADED to Thunderstore on 2026-09-03 and is currently in
-  the rejected/review moderation state (see §0 — reapprove, do not
-  re-upload); the version number is therefore consumed by that upload.
+- **Version:** **0.10.1 (Public Beta)** — the storefront-media refresh
+  of the live 0.10.0 public beta (2026-09-04, at RC17; presentation
+  only: corrected thumbnail, README screenshot gallery, version
+  metadata — no gameplay, dependency, privacy, synchronization, or
+  data-format change). **0.10.0 remains the LIVE published Thunderstore
+  version** (uploaded 2026-09-03, cleared the §0 moderation state); its
+  number is consumed and its page must not be modified or deprecated.
+  0.10.1 is prepared on branch `chore/cc-103-thunderstore-media-0101`
+  (PR pending owner review) and is NOT merged, tagged, released, or
+  uploaded. Earlier history: 0.10.0 was itself the owner's pre-upload
+  re-version (2026-09-03, at RC16) of the owner-approved 0.9.0 beta
+  identity — the feature-complete v1 candidate ships first as a public
+  beta, and 1.0.0 stays reserved for the stable release.
   It no longer shares a
   number with the never-published INTERNAL 0.9 hardening milestone
   (commit `4931020e`, git tag `concerned-cartographer/v0.9.0`). The
@@ -100,10 +106,28 @@ official documentation and re-verified against the sealed RC16 bytes:
   tag is `concerned-cartographer/v0.10.0-beta` (section 19). Data and
   schema formats are unchanged from RC12; upgrading this beta to
   1.0.0 later is automatic and lossless.
-- **RC commit:** `a23bef007a75b84282c3aa0e0043b9be468f3301` (**RC16**,
-  the owner-directed 0.9.0 → 0.10.0 re-version of RC15c, 2026-09-03,
+- **RC commit:** `dcac78dc10b70f4844064e934fca350386a9c687` (**RC17**,
+  the 0.10.1 storefront-media refresh, 2026-09-04, on branch
+  `chore/cc-103-thunderstore-media-0101`; the package below was built
+  at exactly this commit with a clean tree, and the DLL's
+  informational version embeds it). RC17 changes ONLY presentation:
+  the corrected owner-approved 256×256 icon (mechanical Lanczos
+  downscale of the supplied 1254×1254 master — artwork untouched;
+  compass N/W/E/S only, seal intact and clear of the title verified
+  at 256), a README screenshot gallery (8 GitHub-hosted images under
+  `docs/media/concerned-cartographer/` — media are NOT packaged), the
+  0.10.1 version metadata, and this dossier. **Byte-diff evidence
+  against the live 0.10.0 DLL: same 478,720 bytes, 58 differing
+  regions totalling 160 bytes — PE timestamp, PE checksum, module
+  MVID, and the version strings. No code change.** The live 0.10.0
+  package is NOT retired: it stays the published version until the
+  owner merges this PR and uploads 0.10.1 (README image URLs point at
+  `main`, so the merge must precede the upload).
+- RC16's identity block is preserved below for the record:
+- (RC16) **RC commit** `a23bef007a75b84282c3aa0e0043b9be468f3301`
+  (the owner-directed 0.9.0 → 0.10.0 re-version of RC15c, 2026-09-03,
   committed directly to `main` after PR #105 landed the completion
-  line; the package below was built at exactly this commit with a
+  line; its package was built at exactly that commit with a
   clean tree, and the DLL's informational version embeds it). RC16
   changes ONLY version identity metadata — csproj `Version`,
   `PluginVersion`, `thunderstore.toml` `versionNumber`, the CHANGELOG
@@ -600,10 +624,14 @@ official documentation and re-verified against the sealed RC16 bytes:
   alignment (DEF-v1.0-002, residuals ≤ 1 texel). Everything the RC8
   directives touched is re-verified by smoke section **R5** (then R3/R4
   as amended).)
-- **ZIP:** `artifacts\thunderstore\TheConcernedCat-ConcernedCartographer-0.10.0.zip`
-  (built at the RC16 commit; an identical immutable copy is at
+- **ZIP:** `artifacts\thunderstore\TheConcernedCat-ConcernedCartographer-0.10.1.zip`
+  (built at the RC17 commit; an identical immutable copy is at
+  `artifacts\rc17\TheConcernedCat-ConcernedCartographer-0.10.1-RC17.zip`
+  — verify the hash below before importing. The rc16 package
+  (ZIP `362AE442…`, DLL `8BC05431…`) at
   `artifacts\rc16\TheConcernedCat-ConcernedCartographer-0.10.0-RC16.zip`
-  — verify the hash below before importing. The retired RC15c package
+  is the LIVE PUBLISHED 0.10.0 — keep it as release evidence; never
+  re-upload it and never modify its live page. The retired RC15c package
   (ZIP `036DBD39…`, DLL `58BDD226…`) survives as
   `artifacts\rc15c\TheConcernedCat-ConcernedCartographer-0.9.0-RC15c.zip`
   and a same-named `…-0.9.0.zip` copy in
@@ -630,19 +658,21 @@ official documentation and re-verified against the sealed RC16 bytes:
   `artifacts\rc10\` (ZIP `EA523400…`, DLL `A350D0CE…`) and
   `artifacts\rc8\` (ZIP `AF267AC2…`, DLL `E9904771…`) must NOT be
   tested or uploaded.)
-- **ZIP SHA-256:** `362AE442386CC6CC5B348F4B177D6DE452DCD0A01597A58D7BEB5C1D8046368F`
-  (319,549 bytes — fresh RC16 / 0.10.0-beta bytes; retired hashes
-  (RC15c `036DBD39…`, RC15b `8AC3A779…` and RC15 `F89AAD13…` included)
-  are never reused; the immutable rc16 copy verified byte-identical to
-  the staging ZIP; `artifacts\rc16\SHA256SUMS.txt` carries both lines)
-- **Plugin DLL SHA-256:** `8BC0543109042BF888E27C279E6DB68AD42C5B58F511C65A6C33F6F9B5049B36`
+- **ZIP SHA-256:** `A367491E7F3445753AC6B4AAD40D50E593FBE2C5D4BCB1C47FA0E280C0BCD547`
+  (382,486 bytes — fresh RC17 / 0.10.1 bytes; the live 0.10.0 hash
+  `362AE442…` and all retired hashes are never reused; the immutable
+  rc17 copy verified byte-identical to the staging ZIP;
+  `artifacts\rc17\SHA256SUMS.txt` carries both lines)
+- **Plugin DLL SHA-256:** `9374201C0CA0B8DA08D37D46B6A91A3BEC8E5856E14C4A01F6BA9814F832C9B4`
   (478,720 bytes; informational version
-  `0.10.0+a23bef007a75b84282c3aa0e0043b9be468f3301` verified in the DLL;
-  the 12 `CC.Icons.cc-*.png` sprite resources re-verified embedded)
+  `0.10.1+dcac78dc10b70f4844064e934fca350386a9c687` verified in the DLL;
+  the 12 `CC.Icons.cc-*.png` sprite resources re-verified embedded;
+  byte-diff vs the live 0.10.0 DLL: 160 bytes across 58 regions —
+  PE timestamp/checksum, MVID, version strings only)
 - **Assembly metadata (verified in the DLL):** Company "The Concerned Cat",
   Product "Concerned Cartographer", Copyright © 2026 Eren Cansunar,
-  RepositoryUrl embedded, informational version `0.10.0+<RC16 commit>`,
-  FileVersion 0.10.0.0.
+  RepositoryUrl embedded, informational version `0.10.1+<RC17 commit>`,
+  FileVersion 0.10.1.0.
 - **Package audit:** ZIP root contains exactly `manifest.json`, `README.md`,
   `CHANGELOG.md`, `LICENSE`, `icon.png` (256×256),
   `plugins/TheConcernedCat.ConcernedCartographer.dll`. No PDBs, game DLLs,
@@ -1003,7 +1033,7 @@ release blockers, all addressed in the previous RC:
 ## 8. Automated evidence (at the RC commit)
 
 - **568/568 tests** in the game-free core suite (Release configuration,
-  re-run at the RC15c commit): everything below plus the RC15b suite —
+  re-run at the RC17 commit): everything below plus the RC15b suite —
   `SupportReportPrivacyTests` (11: the composed support report has no
   `world-uid` field and no uid-shaped digit run; pin/road sidecar rows
   carrying a name, notes, category, tag, and real coordinates reduce
@@ -1217,8 +1247,11 @@ install check before any announcement.
 
 ## 20. Thunderstore upload data (owner-only)
 
-- File: `TheConcernedCat-ConcernedCartographer-0.10.0.zip` (identical
-  sealed copy: `artifacts\rc16\TheConcernedCat-ConcernedCartographer-0.10.0-RC16.zip`)
+- File: `TheConcernedCat-ConcernedCartographer-0.10.1.zip` (identical
+  sealed copy: `artifacts\rc17\TheConcernedCat-ConcernedCartographer-0.10.1-RC17.zip`)
+  — upload only AFTER the media PR merges to `main`, because the
+  packaged README's image URLs point at `main`. (The live 0.10.0
+  upload used the rc16 file recorded in its identity block.)
 - Team/namespace: **TheConcernedCat** · Community: **valheim**
 - Categories: **mods, client-side, utility, ai-generated**
 - Dependencies: denikson-BepInExPack_Valheim 5.4.2333, ValheimModding-Jotunn 2.29.2
