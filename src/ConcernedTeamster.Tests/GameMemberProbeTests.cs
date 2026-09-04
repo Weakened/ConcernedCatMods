@@ -27,9 +27,29 @@ public class GameMemberProbeTests
         public static FakePlayer2Base? m_localPlayer = null;
     }
 
+    private sealed class FakeGameObject { }
+
+    private sealed class FakeSharedData
+    {
+        public string m_name = string.Empty;
+    }
+
+    private sealed class FakeItemData
+    {
+        public int m_stack = 1;
+        public FakeSharedData? m_shared = null;
+        public FakeGameObject? m_dropPrefab = null;
+
+        public float GetWeight(int stackOverride) => stackOverride;
+
+        public float GetNonStackedWeight() => 0f;
+    }
+
     private sealed class FakeInventory
     {
         public float GetTotalWeight() => 0f;
+
+        public List<FakeItemData> GetAllItems() => new();
     }
 
     private sealed class FakeContainer
@@ -142,6 +162,15 @@ public class GameMemberProbeTests
                 new Type?[] { typeof(FakeVector3), typeof(int).MakeByRefType(), typeof(int).MakeByRefType() }),
             new("Heightmap", typeof(FakeHeightmap), "GetPaintMask", GameMemberKind.InstanceMethod, typeof(FakeColor),
                 new Type?[] { typeof(int), typeof(int) }),
+            new("Inventory", typeof(FakeInventory), "GetAllItems", GameMemberKind.InstanceMethod,
+                typeof(List<FakeItemData>)),
+            new("ItemData", typeof(FakeItemData), "m_stack", GameMemberKind.InstanceField, typeof(int)),
+            new("ItemData", typeof(FakeItemData), "m_shared", GameMemberKind.InstanceField, typeof(FakeSharedData)),
+            new("ItemData", typeof(FakeItemData), "m_dropPrefab", GameMemberKind.InstanceField, typeof(FakeGameObject)),
+            new("ItemData", typeof(FakeItemData), "GetWeight", GameMemberKind.InstanceMethod, typeof(float),
+                new Type?[] { typeof(int) }),
+            new("ItemData", typeof(FakeItemData), "GetNonStackedWeight", GameMemberKind.InstanceMethod, typeof(float)),
+            new("SharedData", typeof(FakeSharedData), "m_name", GameMemberKind.InstanceField, typeof(string)),
         };
     }
 
@@ -152,11 +181,13 @@ public class GameMemberProbeTests
 
         Assert.True(report.Enabled);
         Assert.Empty(report.MissingMembers);
-        Assert.Equal(18, report.VerifiedMembers.Count);
+        Assert.Equal(25, report.VerifiedMembers.Count);
         Assert.Contains("Vagon.m_baseMass", report.VerifiedMembers);
         Assert.Contains("Player.m_localPlayer", report.VerifiedMembers);
         Assert.Contains("Rigidbody.linearVelocity", report.VerifiedMembers);
         Assert.Contains("Heightmap.GetHeight", report.VerifiedMembers);
+        Assert.Contains("ItemData.GetWeight", report.VerifiedMembers);
+        Assert.Contains("SharedData.m_name", report.VerifiedMembers);
     }
 
     [Fact]

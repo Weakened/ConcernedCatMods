@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using TheConcernedCat.ConcernedTeamster.Domain.Capabilities;
+using TheConcernedCat.ConcernedTeamster.Domain.Cargo;
 using TheConcernedCat.ConcernedTeamster.Domain.Carts;
 using TheConcernedCat.ConcernedTeamster.Domain.Terrain;
 using UnityEngine;
@@ -71,15 +72,23 @@ public static class CartAdapter
                 "UnityEngine.Transform, UnityEngine.CoreModule", "UnityEngine.Transform", missingTypes);
             Type? color = ResolveNamedType(
                 "UnityEngine.Color, UnityEngine.CoreModule", "UnityEngine.Color", missingTypes);
+            // CT-006 cargo manifest members.
+            Type? itemData = ResolveGameType("ItemDrop+ItemData", missingTypes);
+            Type? sharedData = ResolveGameType("ItemDrop+ItemData+SharedData", missingTypes);
+            Type? gameObjectType = ResolveNamedType(
+                "UnityEngine.GameObject, UnityEngine.CoreModule", "UnityEngine.GameObject", missingTypes);
             if (missingTypes.Count > 0)
             {
                 return new GameCapabilityReport(Array.Empty<string>(), missingTypes);
             }
 
+            Type itemDataList = typeof(List<>).MakeGenericType(itemData!);
+
             // This table and the accessor cores (CreateSnapshotCore,
-            // TryReadVelocityCore, CollectNearbyCartsCore, HasLocalPlayerCore)
-            // must change together: every game member any core touches
-            // appears here, and both must match CART_INTERNALS.md.
+            // TryReadVelocityCore, CollectNearbyCartsCore, HasLocalPlayerCore,
+            // ReadManifestCore, TerrainAdapter.ReadGroundCore) must change
+            // together: every game member any core touches appears here, and
+            // both must match CART_INTERNALS.md.
             var requirements = new List<GameMemberRequirement>
             {
                 new("Vagon", vagon, "m_baseMass", GameMemberKind.InstanceField, typeof(float)),
@@ -104,6 +113,14 @@ public static class CartAdapter
                     new[] { vector3, typeof(int).MakeByRefType(), typeof(int).MakeByRefType() }),
                 new("Heightmap", heightmap, "GetPaintMask", GameMemberKind.InstanceMethod, color,
                     new[] { typeof(int), typeof(int) }),
+                new("Inventory", inventory, "GetAllItems", GameMemberKind.InstanceMethod, itemDataList),
+                new("ItemData", itemData, "m_stack", GameMemberKind.InstanceField, typeof(int)),
+                new("ItemData", itemData, "m_shared", GameMemberKind.InstanceField, sharedData),
+                new("ItemData", itemData, "m_dropPrefab", GameMemberKind.InstanceField, gameObjectType),
+                new("ItemData", itemData, "GetWeight", GameMemberKind.InstanceMethod, typeof(float),
+                    new[] { typeof(int) }),
+                new("ItemData", itemData, "GetNonStackedWeight", GameMemberKind.InstanceMethod, typeof(float)),
+                new("SharedData", sharedData, "m_name", GameMemberKind.InstanceField, typeof(string)),
             };
             return GameMemberProbe.Probe(requirements);
         }
@@ -323,6 +340,92 @@ public static class CartAdapter
         {
             return false;
         }
+    }
+
+    /// <summary>Reads the cart container into an immutable manifest, or
+    /// null when the cart or its container is unreadable (no container is
+    /// different from an empty one, which yields an empty manifest).
+    /// Individual broken items become explicit unreadable-slot markers
+    /// instead of skewing totals. Read-only: no container, inventory, stack,
+    /// or item member is ever written. Never throws.</summary>
+    public static CargoManifest? TryReadManifest(object? cartComponent, double captureTimeSeconds)
+    {
+        if (cartComponent is null || !CapabilityEnabled)
+        {
+            return null;
+        }
+
+        try
+        {
+            return ReadManifestCore(cartComponent, captureTimeSeconds);
+        }
+        catch
+        {
+            // Fail closed, same contract as TryCreateSnapshot.
+            return null;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static CargoManifest? ReadManifestCore(object cartComponent, double captureTimeSeconds)
+    {
+        Vagon? vagon = cartComponent as Vagon;
+        if (vagon == null)
+        {
+            return null;
+        }
+
+        Container container = vagon.m_container;
+        if (container == null)
+        {
+            return null;
+        }
+
+        Inventory? inventory = container.GetInventory();
+        if (inventory is null)
+        {
+            return null;
+        }
+
+        List<ItemDrop.ItemData>? items = inventory.GetAllItems();
+        if (items is null || items.Count == 0)
+        {
+            return CargoManifest.CreateEmpty(captureTimeSeconds);
+        }
+
+        var entries = new List<CargoEntry>(items.Count);
+        for (int index = 0; index < items.Count; index++)
+        {
+            ItemDrop.ItemData? item = items[index];
+            if (item is null)
+            {
+                continue;
+            }
+
+            try
+            {
+                string? token = item.m_shared?.m_name;
+                // The prefab is an asset reference; its name is the stable
+                // item id. Reading .name allocates, which is why manifest
+                // refreshes are tracker-bounded, never per-frame.
+                string? itemId = item.m_dropPrefab != null ? item.m_dropPrefab.name : null;
+                entries.Add(CargoEntry.Create(
+                    itemId ?? token,
+                    token,
+                    item.m_stack,
+                    item.GetNonStackedWeight(),
+                    item.GetWeight(),
+                    weightKnown: true));
+            }
+            catch
+            {
+                // A broken modded item must not hide the rest of the cargo
+                // nor silently skew totals.
+                entries.Add(CargoEntry.CreateUnreadable(index));
+            }
+        }
+
+        return CargoManifest.Create(entries, captureTimeSeconds);
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]

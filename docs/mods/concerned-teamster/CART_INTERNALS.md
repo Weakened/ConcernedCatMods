@@ -1,4 +1,4 @@
-# Valheim cart internals — verified findings (CT-002, extended CT-003/CT-004)
+# Valheim cart internals — verified findings (CT-002, extended CT-003..CT-006)
 
 This document records the **verified** surface of Valheim's cart implementation
 that Concerned Teamster depends on. Nothing here is guessed: every member was
@@ -58,6 +58,26 @@ component type and its static instance registry.
 | `Container.GetInventory()` | `public Inventory GetInventory()` | Cargo inventory access. |
 | `Inventory.GetTotalWeight()` | `public float GetTotalWeight()` | Total cargo weight — the exact number vanilla feeds into cart mass. |
 | `Player.m_localPlayer` | `public static Player m_localPlayer` | Local player for the pull-state check; `Player : Humanoid : Character` (verified), so it is assignable to `IsAttached(Character)`. CT-003 also uses it as the session signal (null in menus and between worlds → telemetry reset) and as the discovery origin (`transform.position`). |
+
+### Cargo members the CT-006 adapter reads (all public)
+
+Verified by decompiling `ItemDrop` from the same assembly on 2026-09-04.
+Read-only: no container, inventory, stack, or item member is written.
+
+| Member | Verified signature | Semantics (decompiled) |
+|---|---|---|
+| `Inventory.GetAllItems()` | `public List<ItemDrop.ItemData> GetAllItems()` | The container's live item list (occupied slots). Also has `(string, List)` / `(ItemType, List)` overloads; the parameterless one is probed exactly. |
+| `ItemDrop.ItemData.m_stack` | `public int m_stack = 1` | Stack count. |
+| `ItemDrop.ItemData.m_shared` | `public SharedData m_shared` | Shared item definition; may be broken on modded items → per-item try/catch yields an explicit unreadable-slot marker. |
+| `ItemDrop.ItemData.m_dropPrefab` | `public GameObject m_dropPrefab` | Prefab asset reference; its `.name` is the stable item id. May be null → id falls back to the name token. |
+| `ItemDrop.ItemData.GetWeight` | `public float GetWeight(int stackOverride = -1)` | **The stack's true weight as vanilla charges it**: `m_shared.m_weight * stack`, plus quality scaling when `m_scaleWeightByQuality != 0`. Used for line weights so manifest totals match the game's own accounting. |
+| `ItemDrop.ItemData.GetNonStackedWeight` | `public float GetNonStackedWeight()` | Per-unit weight with the same quality scaling; used for the unit-weight column. |
+| `ItemDrop.ItemData.SharedData.m_name` | `public string m_name = ""` | Localization token (for example `$item_stone`); displayed via token→id→"unknown item" fallback. |
+
+Consistency note: `Inventory.GetTotalWeight()` (CT-003's cargo weight) and a
+manifest's sum of `GetWeight()` values describe the same cargo; tiny
+float-summation-order differences are possible and documented rather than
+hidden.
 
 ### Terrain members the CT-004 adapter reads (`Heightmap`, all public)
 
