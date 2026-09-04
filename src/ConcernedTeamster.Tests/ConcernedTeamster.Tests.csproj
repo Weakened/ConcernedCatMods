@@ -12,6 +12,10 @@
          they have no Unity/BepInEx dependencies, and shipping stays a single
          plugin DLL because no extra domain assembly exists. -->
     <Compile Include="..\ConcernedTeamster\Domain\**\*.cs" LinkBase="Domain" />
+    <!-- CT-008: the exact calibration file the plugin ships, embedded under
+         the same logical name so LoadCalibrationSource resolves it in both
+         assemblies and tests prove the shipped bytes. -->
+    <EmbeddedResource Include="..\ConcernedTeamster\Data\CartLoadCalibration.txt" LogicalName="CT.Data.CartLoadCalibration" />
   </ItemGroup>
 
   <ItemGroup>

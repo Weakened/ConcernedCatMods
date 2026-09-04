@@ -58,6 +58,29 @@ public sealed class Plugin : BaseUnityPlugin
         Ui.CartStatusHudController hud = gameObject.AddComponent<Ui.CartStatusHudController>();
         hud.Initialize(settings, Logger, pump);
         Logger.LogInfo("Cart Status panel armed: visible Cart button at the right screen edge while in a world.");
+
+        LogLoadCalibration();
+    }
+
+    /// <summary>Loads the embedded calibration data once and reports its
+    /// provenance in one line (CT-008). Failure only disables load advice
+    /// (CT-009 consumers check for the model); everything else runs.</summary>
+    private void LogLoadCalibration()
+    {
+        Domain.Load.LoadCalibrationData? calibration = Domain.Load.LoadCalibrationSource.TryLoadEmbedded();
+        if (calibration is null || calibration.DataVersion <= 0)
+        {
+            Logger.LogWarning(
+                "Load calibration data missing or unreadable; load advice stays off, all telemetry keeps working.");
+            return;
+        }
+
+        Logger.LogInfo(
+            $"Load calibration v{calibration.DataVersion} loaded: {calibration.Rows.Count} rows " +
+            $"({calibration.MeasuredRowCount} measured) for game {calibration.GameVersion}; " +
+            (calibration.Errors.Count == 0
+                ? "no parse errors."
+                : $"{calibration.Errors.Count} malformed line(s) skipped."));
     }
 
     /// <summary>Runs the cart capability probe once and reports the outcome
