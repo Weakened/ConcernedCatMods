@@ -197,7 +197,7 @@ public class TripPersistenceTests
     public void Sidecar_UnknownFormatVersion_IsRefused_MigrationStub()
     {
         string text = TripSidecar.Compose(new[] { MakeTrip(6) }, 42L, "0.4.0")
-            .Replace("format-version: 1", "format-version: 99");
+            .Replace("format-version: 2", "format-version: 99");
 
         TripSidecar.ParseResult parsed = TripSidecar.Parse(text, 42L);
 

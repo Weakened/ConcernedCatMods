@@ -308,6 +308,25 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-04 — CT-017 real-trip score sanity check pending
+
+- Version / issue: v0.4 / CT-017 (#129)
+- Question: whether scores from real hauls look sane (a smooth built road
+  scoring less rough than raw meadows; a mud/water crossing showing a
+  lower drag-proxy speed) needs recorded real trips.
+- Safe reversible default selected: formulas are deterministic, documented
+  in ARCHITECTURE.md with explicit limits (grade-jitter roughness, not
+  height noise; mass-agnostic drag proxy), and proven on synthetic trips
+  (9 tests incl. byte-identical incremental-vs-batch and the v1→v2
+  migration recompute).
+- Why work continued: scores are derived data in Teamster's own sidecar;
+  wrong-looking scores are a calibration/interpretation issue for CT-019,
+  not a safety issue.
+- Risk / alternative: the 8 m cell size and 3% level band are design
+  constants; real data may suggest different values (doc-only change).
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.
