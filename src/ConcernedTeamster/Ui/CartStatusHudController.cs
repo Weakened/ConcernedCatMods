@@ -22,10 +22,10 @@ namespace TheConcernedCat.ConcernedTeamster.Ui;
 internal sealed class CartStatusHudController : MonoBehaviour
 {
     private const float PanelWidth = 320f;
-    private const float PanelHeight = 380f;
+    private const float PanelHeight = 410f;
     private const float RowHeight = 26f;
     private const float RefreshPeriodSeconds = 0.25f;
-    private const int RowCount = 8;
+    private const int RowCount = 9;
 
     private TeamsterSettings? _settings;
     private ManualLogSource? _log;
@@ -278,6 +278,18 @@ internal sealed class CartStatusHudController : MonoBehaviour
         }
 
         _rows[7].text = warningLine;
+
+        // CT-013: the stuck diagnosis for the pulled cart (the sticky
+        // selection prefers it). Read-only; evaluation lives in the pump.
+        string diagnosticLine = string.Empty;
+        if (_pump?.LatestDiagnostic is { } diagnostic &&
+            viewModel.SelectedCartId.Length > 0 &&
+            _pump.LatestDescentRisk?.CartId == viewModel.SelectedCartId)
+        {
+            diagnosticLine = diagnostic.ComposeLine();
+        }
+
+        _rows[8].text = diagnosticLine;
         RefreshBrakeButton(viewModel.SelectedCartId);
     }
 

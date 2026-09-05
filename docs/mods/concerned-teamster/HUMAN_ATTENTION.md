@@ -249,6 +249,27 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-04 — CT-013 staged stuck scenarios pending
+
+- Version / issue: v0.3 / CT-013 (#124)
+- Question: staged in-game stuck scenarios (wheel against a rock on flat
+  ground, chassis grounded on a terrain lip, genuine overload stall on a
+  built ramp) and the panel screenshot with a live diagnosis need
+  interactive sessions.
+- Safe reversible default selected: the classifier is a fixed evidence
+  table over already-shipped telemetry (no new game members), fires only
+  after 2.5 s of pulled near-zero speed, does zero work for parked carts
+  (pump gate + detector gate both tested), and answers "cause unclear"
+  whenever evidence conflicts — 9 tests including the class confusion
+  matrix.
+- Why work continued: diagnostics are advisory text; a wrong class is a
+  wording defect, not a safety issue, and the thresholds are documented
+  constants.
+- Risk / alternative: the mild-grade obstruction threshold (±8%) and the
+  15% steep boundary are design priors pending real stuck scenarios.
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.
