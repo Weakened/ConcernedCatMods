@@ -106,6 +106,17 @@ recovery guidance panels in later sprints. Panels open from visible buttons;
 shortcuts are optional accelerators. Presenters read domain snapshots through
 an interface so tests can drive them headlessly.
 
+The route picker (CT-022) follows the same shape: a "Routes" button and panel
+that exist only when the Cartographer capability probe reported Available.
+Eligibility rule: a route is selectable when it is not archived and has at
+least two points; archived routes are hidden, too-short routes are listed
+with an explicit "(no usable geometry)" reason. Selection is Teamster-held
+state keyed by the route's stable id — renames follow the id, while deletion,
+archiving, geometry loss, unreadable catalogs, and world exit invalidate it
+with an explicit status (fail closed, never a stale ghost). Refreshes are
+ChangeStamp-driven at 1 Hz while the panel is open; nothing is ever written
+toward Cartographer.
+
 ### Persistence (from v0.4)
 
 Per-world sidecar files under the BepInEx config path, named by world UID with

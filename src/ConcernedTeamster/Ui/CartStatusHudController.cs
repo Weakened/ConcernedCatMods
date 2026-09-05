@@ -33,6 +33,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
     private CargoManifestPanel? _manifestPanel;
     private RecoveryGuidancePanel? _guidancePanel;
     private TripHistoryPanel? _tripPanel;
+    private RoutePickerPanel? _routePanel;
     private bool _failed;
 
     private GameObject? _button;
@@ -78,6 +79,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
                 _manifestPanel?.Reset();
                 _guidancePanel?.Hide();
                 _tripPanel?.Hide();
+                _routePanel?.Hide();
                 _selectedCartId = null;
                 if (_hudHint != null && _hudHint.gameObject.activeSelf)
                 {
@@ -123,6 +125,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
             _manifestPanel?.HandleFrame(now, _selectedCartId);
             _guidancePanel?.HandleFrame(now, _pump);
             _tripPanel?.HandleFrame(now, _pump);
+            _routePanel?.HandleFrame(now);
             UpdateHudHint();
         }
         catch (Exception exception)
@@ -235,6 +238,21 @@ internal sealed class CartStatusHudController : MonoBehaviour
             "Trips", _panel.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(90f, 62f), 110f, 30f);
         trips.GetComponent<Button>().onClick.AddListener(() => _tripPanel?.Toggle(_pump));
+
+        // CT-022: the route picker exists only when the Cartographer probe
+        // reported Available (this panel is built lazily in-world, long
+        // after the first-Update probe). Absent/incompatible/failed →
+        // no button, no panel instance, no stub.
+        if (CartographerCapability.IsAvailable && _log is not null)
+        {
+            // ??= so a picker that fail-closed stays disabled for the whole
+            // session instead of resetting with each world's panel rebuild.
+            _routePanel ??= new RoutePickerPanel(_log);
+            GameObject routesButton = gui.CreateButton(
+                "Routes", _panel.transform,
+                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(90f, 96f), 110f, 30f);
+            routesButton.GetComponent<Button>().onClick.AddListener(() => _routePanel?.Toggle());
+        }
 
         // CT-012: the explicit, visible brake control. Hidden unless the
         // selected cart is under local vanilla authority (fail closed).
@@ -413,6 +431,10 @@ internal sealed class CartStatusHudController : MonoBehaviour
             _manifestPanel?.Hide();
             _guidancePanel?.Hide();
             _tripPanel?.Hide();
+            // Hide() also clears the route selection — with this controller
+            // dead the !inWorld sweep never runs again, and a selected id
+            // must not outlive the world it belongs to.
+            _routePanel?.Hide();
         }
         catch
         {

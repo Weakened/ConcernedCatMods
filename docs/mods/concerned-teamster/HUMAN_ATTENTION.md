@@ -396,6 +396,30 @@ only for non-blocking uncertainty.
 - Must resolve before public release: No
 - Status: Open
 
+### 2026-09-05 — CT-022 in-game route picker checks pending
+
+- Version / issue: v0.5 / CT-022 (#135)
+- Question: the picker screenshot with Cartographer installed (routes
+  listed, one selected, ineligible route showing its reason) and the
+  absent-case check (no Routes button anywhere without Cartographer) need
+  interactive sessions with both TCT profiles and a Cartographer install.
+- Safe reversible default selected: every listing, eligibility, selection,
+  and invalidation behavior is proven headlessly (13 presenter tests over
+  fake catalogs including mid-session deletion/archive/rename/geometry-loss
+  and unreadable-catalog paths); the panel is built on the same GUIManager
+  calls every shipped Teamster panel uses, is created only when the
+  capability probe reported Available, fails closed on any UI exception,
+  and holds selection in Teamster only (zero writes — the surface exposes
+  no mutating call).
+- Why work continued: a read-only list panel cannot touch world or atlas
+  state; the worst visual outcome is layout polish owned by CT-033, and
+  the absent case is structural (the panel class is never instantiated).
+- Risk / alternative: with more routes than fit one page the panel shows
+  "+N more" instead of scrolling — acceptable for v0.5, revisit with the
+  UX sprint if real worlds overflow it.
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.
