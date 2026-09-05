@@ -5,6 +5,70 @@ split between automated evidence and pending manual claims, following the
 dossier discipline proven on Concerned Cartographer. Publication of anything
 is owner-only, always.
 
+## v0.6 RC1 — "Multiplayer Trust and Authority" (sealed 2026-09-05)
+
+| Item | Value |
+|---|---|
+| Version | 0.6.0 (internal; no publication) |
+| Source commit | `12dbd1617160e1433ac3320c22e568b66c182cc1` (branch `chore/ct-030-v06-rc`; version-sync + changelog committed before the RC rebuild so the shipped DLL names this exact commit). Sealed on merge to main via PR #199. |
+| ZIP | `artifacts/thunderstore/TheConcernedCat-ConcernedTeamster-0.6.0.zip` (`.sha256` sidecar written beside it) |
+| ZIP SHA-256 | `b1929a245a2b347651adb86536b2f3b0555e6dfca7300a7502e360cacd2da100` (117,197 B) |
+| DLL SHA-256 | `439025e1018f0059f0031c2d4941c9b6f93a3bc824f58834dc2d535b5b302c49` (183,808 B) |
+| DLL identity | AssemblyVersion 0.6.0.0, InformationalVersion `0.6.0+12dbd1617160e1433ac3320c22e568b66c182cc1` |
+| ZIP contents (6 entries) | manifest.json, icon.png (256×256), README.md (refreshed to v0.6 scope), CHANGELOG.md, LICENSE, plugins/TheConcernedCat.ConcernedTeamster.dll — **own DLL only**, no PDB, no foreign DLL |
+| Built against | Valheim 0.221.12 (buildid 21981559 — Steam manifest at seal time), Unity 6000.0.61f1, BepInExPack 5.4.2333, Jötunn 2.29.2 |
+| Version sync | 0.6.0 across csproj/Plugin.cs/thunderstore.toml + the CHANGELOG `## 0.6.0` section, all validator-asserted (`--expected-version 0.6.0 --require-binary`) |
+
+### Sprint scope sealed in this RC
+
+CT-026 enforced authority policy (single-source-of-truth matrix; brake
+mutation gated to live local authority; fail-closed Unknown; owner-fresh
+observations remote-labeled) · CT-027 player-hosted + dedicated-server
+authority scenarios proven at the logic layer (topology-independent) ·
+CT-028 cooperative push/pull diagnostics (helping/hindering/idle +
+combined-effort explanation) with a zero-force audit · CT-029 network-input
+hardening (bounds/validate/fuzz) + committed privacy inventory · CT-030
+integration and this seal.
+
+### v0.6 campaign results (automated)
+
+| Campaign item | Method | Result |
+|---|---|---|
+| Static validation + version sync | `validate_repo.py --product teamster --expected-version 0.6.0 --require-binary` | PASS |
+| Solution build | `build.ps1 -Configuration Release` | PASS — 0 errors (8 pre-existing benign warnings) |
+| Teamster unit tests | `dotnet test ConcernedTeamster.Tests` (Release) | **458/458 PASS** — +87 executed cases over the v0.5 baseline of 371 (CT-026 policy, CT-027 scenarios, CT-028 coop, CT-029 hardening incl. a 10k-iteration seeded fuzz sweep) |
+| Cartographer regression | `dotnet test ConcernedCartographer.Tests` (Release) | **568/568 PASS** — unchanged with the v0.6 work present |
+| Authority policy audit | `validate_repo.py` interop line | PASS — 9 features documented, no outbound-network/ownership calls (0 violations) |
+| No-force / no-teleport audit | `validate_repo.py` interop line | PASS — 112 source files, no force/impulse/velocity-write/teleport calls (0 violations) |
+| Cross-product independence + Cartographer contract + integration read-only | `validate_repo.py` interop lines | PASS — 4 trees independent, contract 12/12, 9 integration files read-only |
+| Package build + audit | `package.ps1 -Product ConcernedTeamster` + ZIP listing | PASS — hashes above, own-DLL-only (0 foreign/PDB entries) |
+| Full multiplayer campaign on both topologies (CT-027 scenarios + co-op + hardening spot checks, live) | in-game, TCT-Dedicated + player-hosted | **MANUAL — pending** (the authority/coop/hardening LOGIC is unit-proven off-game; the live two-client and dedicated-server runs are pending by design for an internal RC) |
+
+### Multiplayer campaign — automated coverage vs pending live rows
+
+Every v0.6 acceptance criterion that can be decided without a running server
+is green (policy matrix, brake authority gate, handoff logic, coop
+classification, input bounds/fuzz, privacy audit). The rows that require a
+real session — authority actually moving between two clients, an unmodded
+peer observed as unaffected, join/leave/disconnect mid-haul, and the staged
+co-op scenario — are itemized pending in HUMAN_ATTENTION.md (CT-021..CT-029
+entries) and carried to the owner smoke checklist. No manual row is marked
+PASS.
+
+### Defects
+
+No defect filed against `sprint:teamster-v0.6`; none open with the sprint
+label at seal time. The one open Teamster defect, #189 DEF-teamster-v0.4-001
+(P3), is sidecar-file backup hardening scoped to v0.4 — not network input,
+not in any v0.6 leaf's scope — and remains deferred to a dedicated leaf by
+its own rationale.
+
+### Gate decision
+
+All automatable v0.6 gates are green; the live two-topology multiplayer
+campaign rows are pending by design for an internal RC. Sprint controller
+#139 closes with this seal.
+
 ## v0.5 RC1 — "Optional Cartographer Integration" (sealed 2026-09-05)
 
 | Item | Value |

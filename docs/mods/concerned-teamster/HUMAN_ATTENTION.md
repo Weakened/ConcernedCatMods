@@ -589,6 +589,27 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-05 — CT-030 v0.6 RC sealed; live two-topology campaign pending
+
+- Version / issue: v0.6 / CT-030 (#144)
+- Question: the v0.6 RC integrates the multiplayer sprint, but the full live
+  campaign on both topologies (player-hosted two-client + dedicated server:
+  authority handoff, coop diagnostics, hardening spot checks, unmodded-peer
+  coexistence) needs interactive sessions the owner runs.
+- Safe reversible default selected: seal the internal RC with every
+  automatable gate green — 458 Teamster + 568 Cartographer tests, five
+  interop audits (independence, contract, read-only, authority/no-network,
+  no-force/no-teleport), version-synced package with recorded hashes — and
+  carry the live rows as pending (they aggregate the CT-021..CT-029 pending
+  entries). Nothing publishes; publication is owner-only.
+- Why work continued: the sprint's logic is unit-proven and fail-closed by
+  construction; the live rows confirm behavior a running server produces,
+  which cannot be automated on this machine.
+- Risk / alternative: none beyond confirming the pending rows in game; the
+  RC is internal.
+- Must resolve before public release: Yes (the v0.9 beta gate consumes these)
+- Status: Open
+
 ## Resolved items
 
 None yet.
