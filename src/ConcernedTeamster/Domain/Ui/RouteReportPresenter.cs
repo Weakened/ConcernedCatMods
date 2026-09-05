@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using TheConcernedCat.ConcernedTeamster.Domain.Load;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using TheConcernedCat.ConcernedTeamster.Domain.Routes;
 
 namespace TheConcernedCat.ConcernedTeamster.Domain.Ui;
@@ -40,12 +41,13 @@ public static class RouteReportPresenter
     public static ViewModel Present(
         string routeName, RouteProfile? profile, LoadModel? model, float? cartTotalMass)
     {
-        string title = "Route report: " + (routeName.Length > 0 ? routeName : "(unnamed route)");
+        string title = TeamsterStrings.Format(
+            "report.title", routeName.Length > 0 ? routeName : TeamsterStrings.Get("routes.unnamed"));
         if (profile is null)
         {
             return new ViewModel(
                 title, false,
-                new[] { "Select a route and let it finish profiling first." });
+                new[] { TeamsterStrings.Get("report.needProfile") });
         }
 
         var lines = new List<string>(20);
@@ -89,15 +91,15 @@ public static class RouteReportPresenter
 
         if (rank == 0)
         {
-            lines.Add("No problem sections: every sampled grade stays under " +
-                ProblemGradePercent.ToString("F0", CultureInfo.InvariantCulture) +
-                "% and nothing went unsampled.");
+            lines.Add(TeamsterStrings.Format(
+                "report.noProblems",
+                ProblemGradePercent.ToString("F0", CultureInfo.InvariantCulture)));
         }
 
         // -- overall load recommendation (verbatim LoadModel answers) --
         if (model is null)
         {
-            lines.Add("Load advice unavailable: no calibration data loaded.");
+            lines.Add(TeamsterStrings.Get("report.loadUnavailableNoModel"));
         }
         else
         {
@@ -105,7 +107,7 @@ public static class RouteReportPresenter
                 RouteLoadBottleneck.Evaluate(profile, model, cartTotalMass);
             if (!bottleneck.HasGradeData)
             {
-                lines.Add("Load advice unavailable: no sampled grade data yet.");
+                lines.Add(TeamsterStrings.Get("report.loadUnavailableNoGrade"));
             }
             else
             {

@@ -637,6 +637,36 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-05 — CT-032 localization framework delivered; full-UI externalization is progressive
+
+- Version / issue: v0.7 / CT-032 (#147)
+- Question: CT-032's scope is "externalize every user-facing string across all
+  UI/warnings/guidance" plus a repo-wide hardcoded-string audit. A faithful
+  one-shot migration is ~343 literal sites across ten presenters (many
+  piecewise-composed), with 32 test files asserting exact output — a large,
+  review-hostile change that risks behavior/test drift if rushed, against the
+  contract's "small enough for independent review".
+- Safe reversible default selected: land the durable localization FRAMEWORK
+  as the reviewable slice — catalog + English defaults + override/template +
+  English fallback + once-only missing-key report + placeholder validation
+  (9 framework tests), the file adapter, the translator guide (LOCALIZATION.md)
+  — and migrate the newest surfaces (route picker + route report) through it
+  output-preservingly (existing tests stay green, keys are live not dead).
+  The remaining panels (status, manifest, warnings, guidance, trips) are
+  externalized progressively in follow-up work, at which point the repo-wide
+  hardcoded-string audit gate is added. English is the shipped language, so
+  no user-facing regression exists in the interim.
+- Why work continued: the framework is additive and behavior-preserving; the
+  worst interim state is that some panels are not yet translatable, never a
+  wrong or missing string (English fallback everywhere).
+- Risk / alternative: the owner may prefer one large externalization PR over
+  progressive per-surface migration; either reaches the same end. #147 stays
+  OPEN until the full externalization + audit land — this leaf advanced it,
+  it did not complete it.
+- Must resolve before public release: Yes (the v0.9 beta expects full
+  localization coverage + the audit gate)
+- Status: Open
+
 ## Resolved items
 
 None yet.

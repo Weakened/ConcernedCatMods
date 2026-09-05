@@ -118,6 +118,17 @@ recovery guidance panels in later sprints. Panels open from visible buttons;
 shortcuts are optional accelerators. Presenters read domain snapshots through
 an interface so tests can drive them headlessly.
 
+Localization (CT-032) mirrors Cartographer's proven pattern in pure domain:
+`Domain/Localization/TeamsterStrings` is the catalog — English defaults keyed
+by stable, surface-namespaced keys, override loading from a translator `.tsv`,
+a template generator, English fallback, a once-only missing-key report, and
+placeholder validation that rejects a translation whose `{n}` slots do not
+match the English. `Adapters/LocalizationFiles` writes the template and loads
+`teamster-strings.tsv` under the mod's config path. The route picker and route
+report surfaces resolve their strings through the catalog; the remaining
+panels are externalized progressively (see HUMAN_ATTENTION), and the
+translator guide is `LOCALIZATION.md`.
+
 Controller navigation and rebindable accelerators (CT-031) sit in pure
 domain so they are testable off-game. `Domain/Ui/Navigation` holds a
 `NavigationCatalog` — the deterministic focus order of every panel, the
