@@ -118,6 +118,22 @@ recovery guidance panels in later sprints. Panels open from visible buttons;
 shortcuts are optional accelerators. Presenters read domain snapshots through
 an interface so tests can drive them headlessly.
 
+Controller navigation and rebindable accelerators (CT-031) sit in pure
+domain so they are testable off-game. `Domain/Ui/Navigation` holds a
+`NavigationCatalog` — the deterministic focus order of every panel, the
+single source of truth a controller walks — and a `FocusRing` that traverses
+it (Next/Previous wrap, focus-by-id, reset), which the panel binds to a
+visible focus indicator. `Domain/Input` holds `AcceleratorBinding` (a
+normalized chord, so "Shift+M" and "m + shift" compare equal) and
+`BindingConflictChecker`, which reports external conflicts (a Teamster chord
+colliding with a caller-supplied reserved chord — vanilla or a researched mod
+default; no mod name is invented) and internal conflicts (two Teamster
+actions on one chord). Conflicts are reported, never resolved by override —
+Teamster never silently steals a key. Buttons-first is enforced by a test
+over the catalog: every panel offers a button and no element is
+accelerator-only. Live gamepad input reading is adapter-bound and staged (see
+HUMAN_ATTENTION).
+
 The route picker (CT-022) follows the same shape: a "Routes" button and panel
 that exist only when the Cartographer capability probe reported Available.
 Eligibility rule: a route is selectable when it is not archived and has at
