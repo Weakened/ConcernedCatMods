@@ -32,6 +32,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
     private CartTelemetryPump? _pump;
     private CargoManifestPanel? _manifestPanel;
     private RecoveryGuidancePanel? _guidancePanel;
+    private TripHistoryPanel? _tripPanel;
     private bool _failed;
 
     private GameObject? _button;
@@ -51,6 +52,8 @@ internal sealed class CartStatusHudController : MonoBehaviour
         _pump = pump;
         _manifestPanel = new CargoManifestPanel(log);
         _guidancePanel = new RecoveryGuidancePanel(log);
+        _tripPanel = new TripHistoryPanel(log);
+        _tripPanel.BindPump(pump);
     }
 
     private void Update()
@@ -74,6 +77,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
 
                 _manifestPanel?.Reset();
                 _guidancePanel?.Hide();
+                _tripPanel?.Hide();
                 _selectedCartId = null;
                 if (_hudHint != null && _hudHint.gameObject.activeSelf)
                 {
@@ -118,6 +122,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
 
             _manifestPanel?.HandleFrame(now, _selectedCartId);
             _guidancePanel?.HandleFrame(now, _pump);
+            _tripPanel?.HandleFrame(now, _pump);
             UpdateHudHint();
         }
         catch (Exception exception)
@@ -224,11 +229,18 @@ internal sealed class CartStatusHudController : MonoBehaviour
             y -= RowHeight;
         }
 
+        // CT-018: trip history is world-scoped, not cart-scoped, so its
+        // button lives beside the brake row.
+        GameObject trips = gui.CreateButton(
+            "Trips", _panel.transform,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(90f, 62f), 110f, 30f);
+        trips.GetComponent<Button>().onClick.AddListener(() => _tripPanel?.Toggle(_pump));
+
         // CT-012: the explicit, visible brake control. Hidden unless the
         // selected cart is under local vanilla authority (fail closed).
         _brakeButton = gui.CreateButton(
             "Engage brake", _panel.transform,
-            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 62f), 170f, 30f);
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-70f, 62f), 150f, 30f);
         _brakeButtonText = _brakeButton.GetComponentInChildren<Text>();
         _brakeButton.GetComponent<Button>().onClick.AddListener(() =>
         {
@@ -400,6 +412,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
 
             _manifestPanel?.Hide();
             _guidancePanel?.Hide();
+            _tripPanel?.Hide();
         }
         catch
         {

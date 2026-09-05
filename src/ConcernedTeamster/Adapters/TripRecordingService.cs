@@ -157,6 +157,74 @@ internal sealed class TripRecordingService
         }
     }
 
+    /// <summary>Loads this world's persisted trips for the history UI
+    /// (CT-018). Empty on any failure; refused files stay untouched.</summary>
+    public (System.Collections.Generic.IReadOnlyList<Trip> Trips, long WorldUid) LoadTripsForCurrentWorld()
+    {
+        if (!WorldContextAdapter.TryGetWorldUid(out long worldUid))
+        {
+            return (System.Array.Empty<Trip>(), 0L);
+        }
+
+        string? text = SidecarFileStore.TryRead(SidecarPathFor(worldUid), out _);
+        TripSidecar.ParseResult parsed = TripSidecar.Parse(text, worldUid);
+        return parsed.Refused
+            ? ((System.Collections.Generic.IReadOnlyList<Trip>)System.Array.Empty<Trip>(), worldUid)
+            : (parsed.Trips, worldUid);
+    }
+
+    /// <summary>Deletes one trip's raw record (its data only — the
+    /// cumulative road-quality segments are documented history and stay).
+    /// Atomic rewrite; ids renumber densely afterwards.</summary>
+    public bool DeleteTrip(int tripId)
+    {
+        if (!WorldContextAdapter.TryGetWorldUid(out long worldUid))
+        {
+            return false;
+        }
+
+        string path = SidecarPathFor(worldUid);
+        string? text = SidecarFileStore.TryRead(path, out string? readError);
+        if (readError is not null || text is null)
+        {
+            return false;
+        }
+
+        TripSidecar.ParseResult parsed = TripSidecar.Parse(text, worldUid);
+        if (parsed.Refused)
+        {
+            return false;
+        }
+
+        var remaining = new List<Trip>();
+        bool removed = false;
+        foreach (Trip trip in parsed.Trips)
+        {
+            if (trip.Id == tripId && !removed)
+            {
+                removed = true;
+                continue;
+            }
+
+            remaining.Add(trip);
+        }
+
+        if (!removed)
+        {
+            return false;
+        }
+
+        IReadOnlyList<Trip> renumbered = TripSidecar.Prune(remaining, int.MaxValue);
+        string composed = TripSidecar.Compose(renumbered, worldUid, _pluginVersion, parsed.Segments);
+        if (!SidecarFileStore.TryWriteAtomic(path, composed, out string? writeError))
+        {
+            WarnIoOnce("sidecar write failed during delete: " + writeError);
+            return false;
+        }
+
+        return true;
+    }
+
     private void WarnIoOnce(string message)
     {
         if (_ioFailureLogged)
