@@ -10,4 +10,5 @@ public enum GameMemberKind
     InstanceMethod,
     StaticMethod,
     InstanceProperty,
+    StaticProperty,
 }

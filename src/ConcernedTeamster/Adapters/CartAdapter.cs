@@ -77,6 +77,8 @@ public static class CartAdapter
             Type? sharedData = ResolveGameType("ItemDrop+ItemData+SharedData", missingTypes);
             Type? gameObjectType = ResolveNamedType(
                 "UnityEngine.GameObject, UnityEngine.CoreModule", "UnityEngine.GameObject", missingTypes);
+            // CT-016 world identity for sidecar keying.
+            Type? znet = ResolveGameType("ZNet", missingTypes);
             if (missingTypes.Count > 0)
             {
                 return new GameCapabilityReport(Array.Empty<string>(), missingTypes);
@@ -128,6 +130,8 @@ public static class CartAdapter
                     ResolveNamedType(
                         "UnityEngine.RigidbodyConstraints, UnityEngine.PhysicsModule",
                         "UnityEngine.RigidbodyConstraints", missingTypes)),
+                new("ZNet", znet, "instance", GameMemberKind.StaticProperty, znet),
+                new("ZNet", znet, "GetWorldUID", GameMemberKind.InstanceMethod, typeof(long)),
             };
             if (missingTypes.Count > 0)
             {
@@ -278,6 +282,7 @@ public static class CartAdapter
 
             bool velocityAvailable = TryReadVelocityCore(
                 cartComponent, out float speedMetersPerSecond, out float verticalSpeedMetersPerSecond);
+            TryReadPositionCore(cartComponent, out float positionX, out float positionZ);
 
             TerrainAdapter.GroundReading ground = TerrainAdapter.TryReadGround(cartComponent);
             float previousSmoothedPercent = float.NaN;
@@ -303,7 +308,9 @@ public static class CartAdapter
                 smoothedGradePercent,
                 gradeDirection,
                 ground.Surface,
-                sampleTimeSeconds);
+                sampleTimeSeconds,
+                positionX,
+                positionZ);
         }
         catch
         {
@@ -497,6 +504,22 @@ public static class CartAdapter
         }
 
         return null;
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void TryReadPositionCore(object cartComponent, out float positionX, out float positionZ)
+    {
+        positionX = 0f;
+        positionZ = 0f;
+        Vagon? vagon = cartComponent as Vagon;
+        if (vagon == null)
+        {
+            return;
+        }
+
+        Vector3 position = vagon.transform.position;
+        positionX = position.x;
+        positionZ = position.z;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]

@@ -26,7 +26,9 @@ public sealed class CartTelemetry
         float smoothedGradePercent,
         GradeDirection gradeDirection,
         TerrainSurfaceKind surface,
-        double sampleTimeSeconds)
+        double sampleTimeSeconds,
+        float positionX,
+        float positionZ)
     {
         CartId = cartId;
         BaseMass = baseMass;
@@ -45,6 +47,8 @@ public sealed class CartTelemetry
         GradeDirection = gradeDirection;
         Surface = surface;
         SampleTimeSeconds = sampleTimeSeconds;
+        PositionX = positionX;
+        PositionZ = positionZ;
     }
 
     /// <summary>Network-stable cart identity from the snapshot.</summary>
@@ -107,6 +111,13 @@ public sealed class CartTelemetry
     /// staleness eviction and panel freshness.</summary>
     public double SampleTimeSeconds { get; }
 
+    /// <summary>World-space X of the cart at sampling time (CT-016 trip
+    /// recording).</summary>
+    public float PositionX { get; }
+
+    /// <summary>World-space Z of the cart at sampling time.</summary>
+    public float PositionZ { get; }
+
     public static CartTelemetry Create(
         CartSnapshot snapshot,
         bool velocityAvailable,
@@ -117,7 +128,9 @@ public sealed class CartTelemetry
         float smoothedGradePercent,
         GradeDirection gradeDirection,
         TerrainSurfaceKind surface,
-        double sampleTimeSeconds)
+        double sampleTimeSeconds,
+        float positionX = 0f,
+        float positionZ = 0f)
     {
         return new CartTelemetry(
             snapshot.CartId,
@@ -136,6 +149,8 @@ public sealed class CartTelemetry
             gradeAvailable ? smoothedGradePercent : 0f,
             gradeAvailable ? gradeDirection : GradeDirection.Level,
             surface,
-            sampleTimeSeconds);
+            sampleTimeSeconds,
+            positionX,
+            positionZ);
     }
 }

@@ -136,10 +136,15 @@ public static class GameMemberProbe
             }
 
             case GameMemberKind.InstanceProperty:
+            case GameMemberKind.StaticProperty:
             {
+                BindingFlags propertyFlags = BindingFlags.Public | BindingFlags.NonPublic |
+                    (requirement.Kind == GameMemberKind.StaticProperty
+                        ? BindingFlags.Static | BindingFlags.FlattenHierarchy
+                        : BindingFlags.Instance);
                 PropertyInfo? property = requirement.OwnerType.GetProperty(
                     requirement.MemberName,
-                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                    propertyFlags);
                 if (property is null)
                 {
                     return "property not found";

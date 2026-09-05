@@ -288,6 +288,26 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-04 — CT-016 in-game trip recording check pending
+
+- Version / issue: v0.4 / CT-016 (#128)
+- Question: a real haul producing a sidecar file (attach, pull a route,
+  detach, inspect the file; logout flush; world-switch isolation) needs an
+  interactive session.
+- Safe reversible default selected: the entire pipeline is proven off-game
+  (13 persistence tests: recorder state machine incl. cap-splitting and
+  debounce, codec round-trip with NaN markers, malformed-row skip,
+  wrong-world and unknown-version refusals, prune renumbering, real-
+  filesystem atomic-write crash simulation, backup-before-refusal); writes
+  go only to Teamster's own config-path folder; Trips.Enabled=false turns
+  the recorder off entirely.
+- Why work continued: worst case is an empty or refused sidecar file —
+  world saves cannot be touched by construction.
+- Risk / alternative: sample cadence (1 s default) may want tuning once
+  CT-017 scoring consumes real trips.
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.

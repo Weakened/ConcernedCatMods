@@ -40,6 +40,8 @@ internal sealed class CartTelemetryPump : MonoBehaviour
     public BrakeService? Brake { get; private set; }
 
     private StuckDetector? _stuckDetector;
+    private TripRecordingService? _trips;
+    private long _lastKnownWorldUid;
 
     /// <summary>The calibrated load model, exposed read-only for guidance
     /// presenters (CT-014); null when calibration failed to load.</summary>
@@ -88,6 +90,15 @@ internal sealed class CartTelemetryPump : MonoBehaviour
         Brake = settings.BrakeEnabled.Value ? new BrakeService(log) : null;
         _stuckDetector = new StuckDetector(loadModel);
         LoadModel = loadModel;
+        _trips = settings.TripsEnabled.Value
+            ? new TripRecordingService(
+                Domain.Trips.TripRecorderOptions.CreateClamped(
+                    settings.TripRecordSpacingSeconds.Value,
+                    settings.TripMaxSamplesPerTrip.Value,
+                    settings.TripMaxTripsRetained.Value),
+                log,
+                Plugin.PluginVersion)
+            : null;
         return options;
     }
 
@@ -109,6 +120,8 @@ internal sealed class CartTelemetryPump : MonoBehaviour
                 _stuckDetector?.Reset();
                 LatestDiagnostic = null;
                 Brake?.ReleaseNow("left the world");
+                _trips?.FlushAndReset(_lastKnownWorldUid);
+                _lastKnownWorldUid = 0L;
                 _resetWhileNoLocalPlayer = true;
             }
 
@@ -170,6 +183,9 @@ internal sealed class CartTelemetryPump : MonoBehaviour
             // snapshot gate — parked and unattended carts never reach the
             // detector.
             LatestDiagnostic = _stuckDetector?.Update(entry.Value);
+
+            // CT-016: trip recording, same gate.
+            _trips?.FeedPulled(entry.Value);
             break;
         }
 
@@ -178,6 +194,14 @@ internal sealed class CartTelemetryPump : MonoBehaviour
             LatestDescentRisk = null;
             LatestDiagnostic = null;
             _stuckDetector?.Reset();
+            _trips?.NotifyNotPulled(now);
+        }
+
+        // CT-016: remember the world identity while it is queryable, so the
+        // exit flush can still file the last trip correctly.
+        if (_trips is not null && WorldContextAdapter.TryGetWorldUid(out long worldUid))
+        {
+            _lastKnownWorldUid = worldUid;
         }
 
         // CT-012: the brake re-validates its engaged cart on every due tick.
@@ -195,7 +219,9 @@ internal sealed class CartTelemetryPump : MonoBehaviour
 
     private void OnDestroy()
     {
-        // Plugin shutdown must never leave a frozen cart behind.
+        // Plugin shutdown must never leave a frozen cart behind, and the
+        // open trip flushes rather than vanishing.
         Brake?.ReleaseNow("plugin shutdown");
+        _trips?.FlushAndReset(_lastKnownWorldUid);
     }
 }

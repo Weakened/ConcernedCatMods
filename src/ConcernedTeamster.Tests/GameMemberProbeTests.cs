@@ -69,6 +69,17 @@ public class GameMemberProbeTests
         public bool IsValid() => false;
 
         public FakeZdo GetZDO() => new();
+
+        public bool IsOwner() => false;
+    }
+
+    private struct FakeConstraints { }
+
+    private sealed class FakeZNet
+    {
+        public static FakeZNet? instance => null;
+
+        public long GetWorldUID() => 0L;
     }
 
     private sealed class FakeVagon
@@ -113,6 +124,8 @@ public class GameMemberProbeTests
     private sealed class FakeRigidbody
     {
         public FakeVector3 linearVelocity => default;
+
+        public FakeConstraints constraints { get; set; }
     }
 
     private sealed class FakeRigidbodySetOnly
@@ -171,6 +184,10 @@ public class GameMemberProbeTests
                 new Type?[] { typeof(int) }),
             new("ItemData", typeof(FakeItemData), "GetNonStackedWeight", GameMemberKind.InstanceMethod, typeof(float)),
             new("SharedData", typeof(FakeSharedData), "m_name", GameMemberKind.InstanceField, typeof(string)),
+            new("ZNetView", typeof(FakeNetView), "IsOwner", GameMemberKind.InstanceMethod, typeof(bool)),
+            new("Rigidbody", typeof(FakeRigidbody), "constraints", GameMemberKind.InstanceProperty, typeof(FakeConstraints)),
+            new("ZNet", typeof(FakeZNet), "instance", GameMemberKind.StaticProperty, typeof(FakeZNet)),
+            new("ZNet", typeof(FakeZNet), "GetWorldUID", GameMemberKind.InstanceMethod, typeof(long)),
         };
     }
 
@@ -181,7 +198,7 @@ public class GameMemberProbeTests
 
         Assert.True(report.Enabled);
         Assert.Empty(report.MissingMembers);
-        Assert.Equal(25, report.VerifiedMembers.Count);
+        Assert.Equal(29, report.VerifiedMembers.Count);
         Assert.Contains("Vagon.m_baseMass", report.VerifiedMembers);
         Assert.Contains("Player.m_localPlayer", report.VerifiedMembers);
         Assert.Contains("Rigidbody.linearVelocity", report.VerifiedMembers);
@@ -237,6 +254,21 @@ public class GameMemberProbeTests
 
         Assert.False(report.Enabled);
         Assert.Contains("Heightmap.GetHeight (method not found)", report.MissingMembers);
+    }
+
+    [Fact]
+    public void Probe_StaticPropertyRequirementForInstanceProperty_Disables()
+    {
+        var requirements = new List<GameMemberRequirement>
+        {
+            new("Rigidbody", typeof(FakeRigidbody), "constraints", GameMemberKind.StaticProperty,
+                typeof(FakeConstraints)),
+        };
+
+        GameCapabilityReport report = GameMemberProbe.Probe(requirements);
+
+        Assert.False(report.Enabled);
+        Assert.Contains("Rigidbody.constraints (property not found)", report.MissingMembers);
     }
 
     [Fact]
