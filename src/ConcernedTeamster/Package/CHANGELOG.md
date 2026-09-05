@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0 (Internal — unreleased)
+
+**Multiplayer Trust and Authority (CT-026..CT-030).** The sixth internal release candidate: a written, enforced policy for who may read, act, and observe each feature in multiplayer — with the parking brake the only mutating feature, gated to live local authority, and every network-derived input treated as hostile. Client-side throughout; Teamster sends nothing and takes no ownership.
+
+- **Authority policy (CT-026).** Every shipped feature is classified observation or mutation. Only the parking brake mutates, and only when this client owns the cart under vanilla rules right now; any authority ambiguity fails closed. The brake enforces its right to act through the policy itself, so the documented matrix and the code cannot drift. Owner-fresh observations (mass, grade, pull state) are labeled remote when viewed without local authority.
+- **Topology validation (CT-027).** The authority scenarios — player-hosted and dedicated-server, including cart authority handoff mid-haul — are proven at the logic layer (topology is not an input to the decision); the live in-game rows are listed for the owner smoke test.
+- **Cooperative diagnostics (CT-028).** When crews haul together, Teamster describes who is helping, hindering, or idle and why the cart still will not move — pairing the crew context with the physical stuck verdict without ever changing it, and without adding a single newton of force (audited).
+- **Input hardening + privacy (CT-029).** Every network-derived number is bounded to a finite, in-range value (garbage in, safe value out — never a NaN or negative cart mass); a fuzz sweep proves it. A committed privacy inventory confirms nothing Teamster produces ever leaves the machine, and player names are never logged.
+- **Safety posture unchanged.** No force, no teleport, no ownership takeover, no world-save mutation; validator audits fail the build on any of these. Removing the mod leaves worlds and carts exactly as vanilla made them.
+
 ## 0.5.0 (Internal — unreleased)
 
 **Optional Cartographer Integration (CT-021..CT-025).** The fifth internal release candidate: when Concerned Cartographer is installed, its drawn routes can be profiled for cart safety — with zero hard dependency in either direction and zero writes into Cartographer's atlas.

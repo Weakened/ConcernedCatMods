@@ -4,7 +4,7 @@ schemaVersion = "0.0.1"
 [package]
 namespace = "TheConcernedCat"
 name = "ConcernedTeamster"
-versionNumber = "0.5.0"
+versionNumber = "0.6.0"
 description = "Cart truth for haulers: live mass, cargo, grade, and risk readouts, plus recorded trips that score road quality and locate route bottlenecks - while vanilla cart physics stay untouched by default."
 websiteUrl = "https://github.com/Weakened/ConcernedCatMods"
 containsNsfwContent = false
