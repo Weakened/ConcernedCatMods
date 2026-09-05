@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using TheConcernedCat.ConcernedTeamster.Domain.Load;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using TheConcernedCat.ConcernedTeamster.Domain.RoadQuality;
 using TheConcernedCat.ConcernedTeamster.Domain.Trips;
 
@@ -41,7 +42,7 @@ public static class RouteBottleneckPresenter
         if (trip is null)
         {
             return new ViewModel(false,
-                "Select trip [A] to analyze its bottlenecks.", Array.Empty<string>());
+                TeamsterStrings.Get("bottleneck.selectTripA"), Array.Empty<string>());
         }
 
         if (!TryParseMass(hypotheticalMassText, out float mass, out string massProblem))
@@ -71,8 +72,10 @@ public static class RouteBottleneckPresenter
         };
 
         return new ViewModel(true,
-            "Bottlenecks for trip #" + trip.Id.ToString(CultureInfo.InvariantCulture) +
-            " at mass " + mass.ToString("F0", CultureInfo.InvariantCulture) + ":",
+            TeamsterStrings.Format(
+                "bottleneck.header",
+                trip.Id.ToString(CultureInfo.InvariantCulture),
+                mass.ToString("F0", CultureInfo.InvariantCulture)),
             lines);
     }
 
@@ -83,14 +86,14 @@ public static class RouteBottleneckPresenter
         string trimmed = text?.Trim() ?? string.Empty;
         if (trimmed.Length == 0)
         {
-            problem = "Enter a cargo total mass to test (for example 220).";
+            problem = TeamsterStrings.Get("bottleneck.enterMass");
             return false;
         }
 
         if (!float.TryParse(trimmed, NumberStyles.Float, CultureInfo.InvariantCulture, out mass) ||
             float.IsNaN(mass) || float.IsInfinity(mass) || mass <= 0f)
         {
-            problem = "\"" + trimmed + "\" is not a usable mass — enter a positive number.";
+            problem = TeamsterStrings.Format("bottleneck.badMass", trimmed);
             return false;
         }
 
@@ -113,12 +116,13 @@ public static class RouteBottleneckPresenter
 
         if (worstIndex < 0)
         {
-            return "Grade: no grade data on this trip.";
+            return TeamsterStrings.Get("bottleneck.noGradeData");
         }
 
-        return "Grade constraint: steepest point is " +
-            trip.Samples[worstIndex].GradePercent.ToString("F1", CultureInfo.InvariantCulture) +
-            "% at " + Locate(cumulative, worstIndex, total) + ".";
+        return TeamsterStrings.Format(
+            "bottleneck.gradeConstraint",
+            trip.Samples[worstIndex].GradePercent.ToString("F1", CultureInfo.InvariantCulture),
+            Locate(cumulative, worstIndex, total));
     }
 
     private static string DescribeWorstQuality(
@@ -126,7 +130,7 @@ public static class RouteBottleneckPresenter
     {
         if (segments is null || segments.Segments.Count == 0)
         {
-            return "Quality: no scored segments yet for this world.";
+            return TeamsterStrings.Get("bottleneck.noScoredSegments");
         }
 
         float worstRoughness = float.NaN;
@@ -154,14 +158,15 @@ public static class RouteBottleneckPresenter
 
         if (worstIndex < 0)
         {
-            return "Quality: crossed segments have no roughness scores yet.";
+            return TeamsterStrings.Get("bottleneck.noRoughness");
         }
 
-        return "Quality constraint: roughest crossed segment (jitter " +
-            worstRoughness.ToString("F1", CultureInfo.InvariantCulture) + "%) enters at " +
-            Locate(cumulative, worstIndex, total) +
-            " (cell " + worstKey.CellX.ToString(CultureInfo.InvariantCulture) +
-            "," + worstKey.CellZ.ToString(CultureInfo.InvariantCulture) + ").";
+        return TeamsterStrings.Format(
+            "bottleneck.qualityConstraint",
+            worstRoughness.ToString("F1", CultureInfo.InvariantCulture),
+            Locate(cumulative, worstIndex, total),
+            worstKey.CellX.ToString(CultureInfo.InvariantCulture),
+            worstKey.CellZ.ToString(CultureInfo.InvariantCulture));
     }
 
     private static string DescribeLoadBinding(
@@ -169,7 +174,7 @@ public static class RouteBottleneckPresenter
     {
         if (loadModel is null)
         {
-            return "Load: no calibration data — cannot test a load against this route.";
+            return TeamsterStrings.Get("bottleneck.noCalibration");
         }
 
         int climbPoints = 0;
@@ -215,45 +220,51 @@ public static class RouteBottleneckPresenter
 
         if (climbPoints == 0)
         {
-            return "Load: this route never climbs — mass " +
-                mass.ToString("F0", CultureInfo.InvariantCulture) + " is not grade-limited here.";
+            return TeamsterStrings.Format(
+                "bottleneck.neverClimbs", mass.ToString("F0", CultureInfo.InvariantCulture));
         }
 
         if (bindingIndex >= 0)
         {
-            return "Load constraint BINDS: mass " + mass.ToString("F0", CultureInfo.InvariantCulture) +
-                " is proven to fail at " + Locate(cumulative, bindingIndex, total) +
-                " (" + bindingVerdict!.Explanation + "). Lighten below the proven limit or reroute.";
+            return TeamsterStrings.Format(
+                "bottleneck.binds",
+                mass.ToString("F0", CultureInfo.InvariantCulture),
+                Locate(cumulative, bindingIndex, total),
+                bindingVerdict!.Explanation);
         }
 
         if (marginalIndex >= 0)
         {
-            return "Load constraint is marginal at " + Locate(cumulative, marginalIndex, total) +
-                " (" + marginalVerdict!.Explanation + ").";
+            return TeamsterStrings.Format(
+                "bottleneck.marginal",
+                Locate(cumulative, marginalIndex, total),
+                marginalVerdict!.Explanation);
         }
 
         if (unknownPoints > 0)
         {
-            return "Load: no proven blocker, but " +
-                unknownPoints.ToString(CultureInfo.InvariantCulture) + " of " +
-                climbPoints.ToString(CultureInfo.InvariantCulture) +
-                " climb points are uncalibrated — run the protocol to firm this up.";
+            return TeamsterStrings.Format(
+                "bottleneck.uncalibratedPoints",
+                unknownPoints.ToString(CultureInfo.InvariantCulture),
+                climbPoints.ToString(CultureInfo.InvariantCulture));
         }
 
-        return "Load: every climb point is proven passable at mass " +
-            mass.ToString("F0", CultureInfo.InvariantCulture) + ".";
+        return TeamsterStrings.Format(
+            "bottleneck.allProven", mass.ToString("F0", CultureInfo.InvariantCulture));
     }
 
     private static string Locate(float[] cumulative, int index, float total)
     {
         float at = cumulative[index];
-        string meters = at.ToString("F0", CultureInfo.InvariantCulture) + " m";
+        string meters = TeamsterStrings.Format(
+            "unit.meters", at.ToString("F0", CultureInfo.InvariantCulture));
         if (total <= 0f)
         {
             return meters;
         }
 
         float percent = at / total * 100f;
-        return meters + " (" + percent.ToString("F0", CultureInfo.InvariantCulture) + "% of the route)";
+        return TeamsterStrings.Format(
+            "bottleneck.locate", meters, percent.ToString("F0", CultureInfo.InvariantCulture));
     }
 }

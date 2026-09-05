@@ -116,10 +116,13 @@ public static class RoutePickerPresenter
                 selectedName = DisplayName(route);
             }
 
-            string text = (isSelected ? "[SEL] " : "      ") + DisplayName(route) +
+            string text = (isSelected ? TeamsterStrings.Get("routes.selectedMarker") + " " : "      ") +
+                DisplayName(route) +
                 (eligible
-                    ? "  " + HorizontalLengthMeters(route.Points).ToString("F0", CultureInfo.InvariantCulture) +
-                        " m  (" + route.Points.Count.ToString(CultureInfo.InvariantCulture) + " pts)"
+                    ? "  " + TeamsterStrings.Format(
+                        "routes.rowGeometry",
+                        HorizontalLengthMeters(route.Points).ToString("F0", CultureInfo.InvariantCulture),
+                        route.Points.Count.ToString(CultureInfo.InvariantCulture))
                     : "  " + TeamsterStrings.Get("routes.noGeometry"));
             rows[index] = new Row(route.Id, text, eligible);
         }

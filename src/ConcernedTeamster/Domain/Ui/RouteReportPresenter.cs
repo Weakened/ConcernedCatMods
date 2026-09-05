@@ -53,9 +53,12 @@ public static class RouteReportPresenter
         var lines = new List<string>(20);
 
         // -- summary --
-        lines.Add("Distance " + Meters(profile.TotalDistanceMeters) +
-            " — sampled " + Meters(profile.SampledMeters) +
-            (profile.UnsampledMeters > 0.05f ? ", UNSAMPLED " + Meters(profile.UnsampledMeters) : ""));
+        lines.Add(profile.UnsampledMeters > 0.05f
+            ? TeamsterStrings.Format(
+                "report.summaryUnsampled", Meters(profile.TotalDistanceMeters),
+                Meters(profile.SampledMeters), Meters(profile.UnsampledMeters))
+            : TeamsterStrings.Format(
+                "report.summary", Meters(profile.TotalDistanceMeters), Meters(profile.SampledMeters)));
         lines.Add(GradeMixLine(profile));
 
         // -- ranked problem sections: steep grades first, then gaps --
@@ -69,10 +72,11 @@ public static class RouteReportPresenter
 
             rank++;
             bool climb = segment.GradePercent >= 0f;
-            lines.Add(rank.ToString(CultureInfo.InvariantCulture) + ". Steep " +
-                (climb ? "climb " : "descent ") +
-                segment.GradePercent.ToString("+0.0;-0.0", CultureInfo.InvariantCulture) + "% at " +
-                Meters(segment.StartMeters) + ", " + Meters(segment.LengthMeters) + " long");
+            lines.Add(TeamsterStrings.Format(
+                climb ? "report.steepClimbSection" : "report.steepDescentSection",
+                rank.ToString(CultureInfo.InvariantCulture),
+                segment.GradePercent.ToString("+0.0;-0.0", CultureInfo.InvariantCulture),
+                Meters(segment.StartMeters), Meters(segment.LengthMeters)));
 
             string? advice = SectionAdvice(segment, climb, model, cartTotalMass);
             if (advice is not null)
@@ -84,9 +88,10 @@ public static class RouteReportPresenter
         foreach (RouteProfileSegment span in profile.UnsampledSpans)
         {
             rank++;
-            lines.Add(rank.ToString(CultureInfo.InvariantCulture) + ". Unprofiled " +
-                Meters(span.LengthMeters) + " starting at " + Meters(span.StartMeters) +
-                " — nothing was measured there");
+            lines.Add(TeamsterStrings.Format(
+                "report.gapSection",
+                rank.ToString(CultureInfo.InvariantCulture),
+                Meters(span.LengthMeters), Meters(span.StartMeters)));
         }
 
         if (rank == 0)
@@ -113,16 +118,18 @@ public static class RouteReportPresenter
             {
                 string grade = bottleneck.BottleneckGradePercent.ToString("F0", CultureInfo.InvariantCulture) + "%";
                 lines.Add(bottleneck.ProvenMaxMass is null
-                    ? "Bottleneck " + grade + ": no proven safe load — outside calibrated coverage."
-                    : "Bottleneck " + grade + ": keep total mass at or under " +
-                        bottleneck.ProvenMaxMass.TotalMass.ToString("F0", CultureInfo.InvariantCulture) +
-                        " (" + bottleneck.ProvenMaxMass.Basis + " calibration).");
+                    ? TeamsterStrings.Format("report.bottleneckNoProven", grade)
+                    : TeamsterStrings.Format(
+                        "report.bottleneckKeepUnder", grade,
+                        bottleneck.ProvenMaxMass.TotalMass.ToString("F0", CultureInfo.InvariantCulture),
+                        LoadText.BasisWord(bottleneck.ProvenMaxMass.Basis)));
                 if (bottleneck.Verdict is not null)
                 {
-                    lines.Add("Your cart (" +
-                        bottleneck.QueriedMass.ToString("F0", CultureInfo.InvariantCulture) + " mass): " +
-                        VerdictWord(bottleneck.Verdict.Climbability) + " — " +
-                        bottleneck.Verdict.Explanation + ".");
+                    lines.Add(TeamsterStrings.Format(
+                        "report.yourCart",
+                        bottleneck.QueriedMass.ToString("F0", CultureInfo.InvariantCulture),
+                        VerdictWord(bottleneck.Verdict.Climbability),
+                        bottleneck.Verdict.Explanation));
                 }
             }
         }
@@ -143,23 +150,24 @@ public static class RouteReportPresenter
         }
 
         float gradeMagnitude = Math.Abs(segment.GradePercent);
-        string prefix = climb ? "Here: " : "As the return climb: ";
         if (cartTotalMass.HasValue)
         {
             LoadVerdict verdict = model.Query(gradeMagnitude, cartTotalMass.Value);
             if (verdict.Climbability != Climbability.Unknown)
             {
-                return prefix + "your cart is " + VerdictWord(verdict.Climbability) +
-                    " — " + verdict.Explanation + ".";
+                return TeamsterStrings.Format(
+                    climb ? "report.adviceVerdictHere" : "report.adviceVerdictReturn",
+                    VerdictWord(verdict.Climbability), verdict.Explanation);
             }
         }
 
         LoadRecommendation? proven = model.RecommendedMaxMass(gradeMagnitude);
         if (proven is not null)
         {
-            return prefix + "keep total mass at or under " +
-                proven.TotalMass.ToString("F0", CultureInfo.InvariantCulture) +
-                " (" + proven.Basis + " calibration).";
+            return TeamsterStrings.Format(
+                climb ? "report.adviceProvenHere" : "report.adviceProvenReturn",
+                proven.TotalMass.ToString("F0", CultureInfo.InvariantCulture),
+                LoadText.BasisWord(proven.Basis));
         }
 
         return null;
@@ -175,32 +183,32 @@ public static class RouteReportPresenter
 
         if (graded <= 0f)
         {
-            return "Grades: no sampled grade data.";
+            return TeamsterStrings.Get("report.gradeMixNoData");
         }
 
         string worst = float.IsNaN(profile.MaxAbsGradePercent)
             ? "?"
             : profile.MaxAbsGradePercent.ToString("F1", CultureInfo.InvariantCulture) + "%";
         float steep = profile.GradeBandMeters[3] + profile.GradeBandMeters[4];
-        return "Steepest sampled grade " + worst + "; " +
-            (steep > 0f
-                ? Meters(steep) + " of the route is 15% or steeper."
-                : "no sampled stretch reaches 15%.");
+        return steep > 0f
+            ? TeamsterStrings.Format("report.gradeMixSteep", worst, Meters(steep))
+            : TeamsterStrings.Format("report.gradeMixNoSteep", worst);
     }
 
     private static string VerdictWord(Climbability climbability)
     {
-        return climbability switch
+        return TeamsterStrings.Get(climbability switch
         {
-            Climbability.Yes => "OK",
-            Climbability.Marginal => "MARGINAL",
-            Climbability.No => "TOO HEAVY",
-            _ => "UNKNOWN",
-        };
+            Climbability.Yes => "verdict.ok",
+            Climbability.Marginal => "verdict.marginal",
+            Climbability.No => "verdict.tooHeavy",
+            _ => "verdict.unknown",
+        });
     }
 
     private static string Meters(float value)
     {
-        return value.ToString("F0", CultureInfo.InvariantCulture) + " m";
+        return TeamsterStrings.Format(
+            "unit.meters", value.ToString("F0", CultureInfo.InvariantCulture));
     }
 }

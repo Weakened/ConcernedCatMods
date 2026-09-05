@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Globalization;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using TheConcernedCat.ConcernedTeamster.Domain.Routes;
 using TheConcernedCat.ConcernedTeamster.Domain.Terrain;
 
@@ -36,17 +37,21 @@ public static class RouteProfilePresenter
 
         if (profiling || profile is null)
         {
-            lines[0] = "Profiling route… " +
-                positionsProbed.ToString(CultureInfo.InvariantCulture) + "/" +
-                positionCount.ToString(CultureInfo.InvariantCulture) + " samples";
+            lines[0] = TeamsterStrings.Format(
+                "profile.profiling",
+                positionsProbed.ToString(CultureInfo.InvariantCulture),
+                positionCount.ToString(CultureInfo.InvariantCulture));
             return lines;
         }
 
-        lines[0] = "Route " + Meters(profile.TotalDistanceMeters) +
-            ": sampled " + Meters(profile.SampledMeters) +
-            (profile.UnsampledMeters > 0.05f
-                ? ", UNSAMPLED " + Meters(profile.UnsampledMeters) + " (unloaded terrain)"
-                : "");
+        lines[0] = profile.UnsampledMeters > 0.05f
+            ? TeamsterStrings.Format(
+                "profile.summaryUnsampled",
+                Meters(profile.TotalDistanceMeters), Meters(profile.SampledMeters),
+                Meters(profile.UnsampledMeters))
+            : TeamsterStrings.Format(
+                "profile.summary",
+                Meters(profile.TotalDistanceMeters), Meters(profile.SampledMeters));
 
         lines[1] = SurfaceLine(profile);
         lines[2] = WorstLine(profile);
@@ -59,7 +64,7 @@ public static class RouteProfilePresenter
     {
         if (profile.SampledMeters <= 0f)
         {
-            return "Surfaces: none sampled";
+            return TeamsterStrings.Get("profile.surfacesNoneSampled");
         }
 
         var parts = new List<string>(5);
@@ -71,30 +76,46 @@ public static class RouteProfilePresenter
         {
             if (profile.SurfaceMeters.TryGetValue(kind, out float meters) && meters > 0f)
             {
-                parts.Add(kind.ToString().ToLowerInvariant() + " " + Percent(meters, profile.SampledMeters));
+                parts.Add(SurfaceWord(kind) + " " + Percent(meters, profile.SampledMeters));
             }
         }
 
         if (profile.SurfaceUnknownMeters > 0f)
         {
-            parts.Add("unknown " + Percent(profile.SurfaceUnknownMeters, profile.SampledMeters));
+            parts.Add(TeamsterStrings.Get("profile.surfaceUnknown") + " " +
+                Percent(profile.SurfaceUnknownMeters, profile.SampledMeters));
         }
 
-        return "Surfaces: " + (parts.Count == 0 ? "none classified" : string.Join(", ", parts));
+        return TeamsterStrings.Format(
+            "profile.surfaces",
+            parts.Count == 0
+                ? TeamsterStrings.Get("profile.surfacesNoneClassified")
+                : string.Join(", ", parts));
+    }
+
+    private static string SurfaceWord(TerrainSurfaceKind kind)
+    {
+        return TeamsterStrings.Get(kind switch
+        {
+            TerrainSurfaceKind.Paved => "profile.surfacePaved",
+            TerrainSurfaceKind.Dirt => "profile.surfaceDirt",
+            TerrainSurfaceKind.Cultivated => "profile.surfaceCultivated",
+            _ => "profile.surfaceUntouched",
+        });
     }
 
     private static string WorstLine(RouteProfile profile)
     {
         if (float.IsNaN(profile.MaxAbsGradePercent) || profile.WorstSegments.Count == 0)
         {
-            return "Grades: no sampled grade data";
+            return TeamsterStrings.Get("profile.gradesNoData");
         }
 
         RouteProfileSegment worst = profile.WorstSegments[0];
-        string direction = worst.GradePercent >= 0f ? "climb" : "descent";
-        return "Worst " + direction + " " +
-            worst.GradePercent.ToString("+0.0;-0.0", CultureInfo.InvariantCulture) + "% at " +
-            Meters(worst.StartMeters) + " from start";
+        return TeamsterStrings.Format(
+            worst.GradePercent >= 0f ? "profile.worstClimb" : "profile.worstDescent",
+            worst.GradePercent.ToString("+0.0;-0.0", CultureInfo.InvariantCulture),
+            Meters(worst.StartMeters));
     }
 
     private static string BandLine(RouteProfile profile)
@@ -120,51 +141,56 @@ public static class RouteProfilePresenter
             }
         }
 
-        return "Grade mix: " + string.Join(", ", parts);
+        return TeamsterStrings.Format("profile.gradeMix", string.Join(", ", parts));
     }
 
     private static string BottleneckLine(RouteLoadBottleneck.Result? bottleneck)
     {
         if (bottleneck is null)
         {
-            return "Load check: no load model available";
+            return TeamsterStrings.Get("profile.loadNoModel");
         }
 
         if (!bottleneck.HasGradeData)
         {
-            return "Load check: no grade data yet";
+            return TeamsterStrings.Get("profile.loadNoGrade");
         }
 
         string grade = bottleneck.BottleneckGradePercent.ToString("F0", CultureInfo.InvariantCulture) + "%";
         string proven = bottleneck.ProvenMaxMass is null
-            ? "no proven load at " + grade
-            : "proven " + bottleneck.ProvenMaxMass.TotalMass.ToString("F0", CultureInfo.InvariantCulture) +
-                " mass at " + grade + " (" + bottleneck.ProvenMaxMass.Basis + ")";
+            ? TeamsterStrings.Format("profile.loadNoProven", grade)
+            : TeamsterStrings.Format(
+                "profile.loadProven",
+                bottleneck.ProvenMaxMass.TotalMass.ToString("F0", CultureInfo.InvariantCulture),
+                grade,
+                Load.LoadText.BasisWord(bottleneck.ProvenMaxMass.Basis));
 
         if (bottleneck.Verdict is null)
         {
-            return "Load check: " + proven;
+            return TeamsterStrings.Format("profile.loadCheck", proven);
         }
 
-        return "Load check: " + proven + " · your cart (" +
-            bottleneck.QueriedMass.ToString("F0", CultureInfo.InvariantCulture) + "): " +
-            VerdictWord(bottleneck.Verdict);
+        return TeamsterStrings.Format(
+            "profile.loadCheckWithVerdict", proven,
+            bottleneck.QueriedMass.ToString("F0", CultureInfo.InvariantCulture),
+            VerdictWord(bottleneck.Verdict));
     }
 
     private static string VerdictWord(Load.LoadVerdict verdict)
     {
-        return verdict.Climbability switch
+        return TeamsterStrings.Get(verdict.Climbability switch
         {
-            Load.Climbability.Yes => "OK",
-            Load.Climbability.Marginal => "MARGINAL",
-            Load.Climbability.No => "TOO HEAVY",
-            _ => "UNKNOWN",
-        };
+            Load.Climbability.Yes => "verdict.ok",
+            Load.Climbability.Marginal => "verdict.marginal",
+            Load.Climbability.No => "verdict.tooHeavy",
+            _ => "verdict.unknown",
+        });
     }
 
     private static string Meters(float value)
     {
-        return value.ToString("F0", CultureInfo.InvariantCulture) + " m";
+        return TeamsterStrings.Format(
+            "unit.meters", value.ToString("F0", CultureInfo.InvariantCulture));
     }
 
     private static string Percent(float part, float whole)

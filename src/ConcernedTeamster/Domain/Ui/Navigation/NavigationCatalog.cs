@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 
 namespace TheConcernedCat.ConcernedTeamster.Domain.Ui.Navigation;
 
@@ -21,47 +22,53 @@ public static class NavigationCatalog
     public const string RoutePickerPanel = "route-picker";
     public const string RouteReportPanel = "route-report";
 
+    // Labels resolve through the catalog when the dictionary builds and are
+    // then baked (beforefieldinit: the CLR may run this initializer any time
+    // before first use, and a mid-session override reload would not re-bake).
+    // Acceptable while no production consumer exists; when the gamepad wiring
+    // lands, prefer resolving labels at read time (e.g. in RingFor or a
+    // Label getter) so translations always apply.
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<FocusItem>> Panels =
         new Dictionary<string, IReadOnlyList<FocusItem>>
         {
             [CartStatusPanel] = new[]
             {
-                new FocusItem("status.trips", "Trips", isButton: true),
-                new FocusItem("status.routes", "Routes", isButton: true),
-                new FocusItem("status.brake", "Engage/Release brake", isButton: true),
-                new FocusItem("status.manifest", "Manifest", isButton: true),
-                new FocusItem("status.guidance", "Guidance", isButton: true),
-                new FocusItem("status.close", "Close", isButton: true),
+                new FocusItem("status.trips", TeamsterStrings.Get("nav.trips"), isButton: true),
+                new FocusItem("status.routes", TeamsterStrings.Get("nav.routes"), isButton: true),
+                new FocusItem("status.brake", TeamsterStrings.Get("nav.brake"), isButton: true),
+                new FocusItem("status.manifest", TeamsterStrings.Get("nav.manifest"), isButton: true),
+                new FocusItem("status.guidance", TeamsterStrings.Get("nav.guidance"), isButton: true),
+                new FocusItem("status.close", TeamsterStrings.Get("nav.close"), isButton: true),
             },
             [CargoManifestPanel] = new[]
             {
-                new FocusItem("manifest.sort", "Sort column", isButton: true),
-                new FocusItem("manifest.filter", "Filter", isButton: false), // text field
-                new FocusItem("manifest.close", "Close", isButton: true),
+                new FocusItem("manifest.sort", TeamsterStrings.Get("nav.sortColumn"), isButton: true),
+                new FocusItem("manifest.filter", TeamsterStrings.Get("nav.filter"), isButton: false), // text field
+                new FocusItem("manifest.close", TeamsterStrings.Get("nav.close"), isButton: true),
             },
             [TripHistoryPanel] = new[]
             {
-                new FocusItem("trips.sort", "Sort column", isButton: true),
-                new FocusItem("trips.mass", "Hypothetical mass", isButton: false), // text field
-                new FocusItem("trips.selectA", "Select A", isButton: true),
-                new FocusItem("trips.selectB", "Select B", isButton: true),
-                new FocusItem("trips.delete", "Delete", isButton: true),
-                new FocusItem("trips.close", "Close", isButton: true),
+                new FocusItem("trips.sort", TeamsterStrings.Get("nav.sortColumn"), isButton: true),
+                new FocusItem("trips.mass", TeamsterStrings.Get("nav.hypotheticalMass"), isButton: false), // text field
+                new FocusItem("trips.selectA", TeamsterStrings.Get("nav.selectA"), isButton: true),
+                new FocusItem("trips.selectB", TeamsterStrings.Get("nav.selectB"), isButton: true),
+                new FocusItem("trips.delete", TeamsterStrings.Get("nav.delete"), isButton: true),
+                new FocusItem("trips.close", TeamsterStrings.Get("nav.close"), isButton: true),
             },
             [RecoveryGuidancePanel] = new[]
             {
-                new FocusItem("guidance.close", "Close", isButton: true),
+                new FocusItem("guidance.close", TeamsterStrings.Get("nav.close"), isButton: true),
             },
             [RoutePickerPanel] = new[]
             {
-                new FocusItem("routes.list", "Route list", isButton: true),
-                new FocusItem("routes.clear", "Clear", isButton: true),
-                new FocusItem("routes.report", "Report", isButton: true),
-                new FocusItem("routes.close", "Close", isButton: true),
+                new FocusItem("routes.list", TeamsterStrings.Get("nav.routeList"), isButton: true),
+                new FocusItem("routes.clear", TeamsterStrings.Get("nav.clear"), isButton: true),
+                new FocusItem("routes.report", TeamsterStrings.Get("nav.report"), isButton: true),
+                new FocusItem("routes.close", TeamsterStrings.Get("nav.close"), isButton: true),
             },
             [RouteReportPanel] = new[]
             {
-                new FocusItem("report.close", "Close", isButton: true),
+                new FocusItem("report.close", TeamsterStrings.Get("nav.close"), isButton: true),
             },
         };
 
