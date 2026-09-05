@@ -170,6 +170,20 @@ not own under vanilla rules, never grants force, and treats network data as
 untrusted input (bounds-checked, fail-closed, privacy-reviewed) — the posture
 Cartographer's sync hardening established.
 
+CT-029 treats every network-derived input as hostile. `Domain/Net/
+NetworkInputGuard` bounds each numeric a remote-owned cart replicates (mass,
+cargo, factor, speed, grade) to a finite, in-range value — non-finite and
+negative become safe defaults, absurd magnitudes clamp — and length-caps /
+control-strips network-derived labels; caps sit far above any real value so
+legitimate readings pass unchanged. `CartSnapshot.Create` runs mass fields
+through it so `TotalMass` can never be NaN or negative (a deliberate,
+documented tightening of CT-002's raw-relay for impossible values only).
+`OncePerKeyGate` makes a hardened path log a given rejection at most once
+(bounded, reset on world switch), and `RemoteStalenessPolicy` marks a
+remote-derived reading stale past an age threshold (local-authority readings
+are never stale). The full data-flow review is `PRIVACY_INVENTORY.md`: nothing
+Teamster produces leaves the machine.
+
 CT-028 adds cooperative diagnostics on the same footing: `Domain/Diagnostics/
 CooperativeEffortClassifier` classifies each observed nearby player as
 helping / hindering / idle / unclear from reduced read-only observations

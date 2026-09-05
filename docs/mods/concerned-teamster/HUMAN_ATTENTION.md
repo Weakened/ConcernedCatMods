@@ -564,6 +564,31 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-05 — CT-029 input hardening proven off-game; live lifecycle runs pending
+
+- Version / issue: v0.6 / CT-029 (#143)
+- Question: the network-input bounds/validity guards, single-shot logging,
+  and staleness policy are proven by an adversarial matrix and a seeded fuzz
+  sweep, but the live lifecycle rows (a teammate joining/leaving/disconnecting
+  mid-haul, a world switch during observation) producing no exceptions and no
+  stale mutating state need a real multiplayer session.
+- Safe reversible default selected: ship the hardening proven by 44 tests
+  (every hostile float → finite bounded output, a 10k-iteration seeded fuzz
+  sweep that never throws or escapes bounds, gate single-shot + bounded +
+  reset, staleness thresholds incl. fail-closed unknown age, and the snapshot
+  producing a finite non-negative mass from any input), plus the committed
+  PRIVACY_INVENTORY.md. Lifecycle resets (world switch clearing state) already
+  ship from earlier sprints; the guards fail closed by construction.
+- Why work continued: the guards only bound/drop values and the staleness
+  policy only labels — no path mutates or transmits, so a live-lifecycle
+  surprise can at worst show a stale-marked or bounded number, never corrupt
+  or leak anything.
+- Risk / alternative: the bound caps and the 5 s stale threshold are design
+  priors; real multiplayer play may argue for tuning (constant change). The
+  live join/leave/disconnect scenarios join the owner smoke checklist.
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.
