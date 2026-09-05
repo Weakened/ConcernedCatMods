@@ -21,7 +21,7 @@ namespace TheConcernedCat.ConcernedTeamster.Ui;
 internal sealed class TripHistoryPanel
 {
     private const float PanelWidth = 470f;
-    private const float PanelHeight = 620f;
+    private const float PanelHeight = 760f;
     private const float RowHeight = 26f;
     private const int VisibleRowCount = 10;
     private const double ConfirmWindowSeconds = 3.0;
@@ -40,7 +40,11 @@ internal sealed class TripHistoryPanel
     private Text?[] _compareLines = Array.Empty<Text?>();
 
     private IReadOnlyList<Trip> _trips = Array.Empty<Trip>();
+    private Domain.RoadQuality.RoadQualityIndex _segments = new();
     private List<TripSummary> _summaries = new();
+    private InputField? _massInput;
+    private Text?[] _bottleneckLines = Array.Empty<Text?>();
+    private Text? _bottleneckHeader;
     private TripHistoryPresenter.SortColumn _sortColumn = TripHistoryPresenter.SortColumn.StartTime;
     private bool _sortDescending = true;
     private int? _selectedAId;
@@ -120,8 +124,8 @@ internal sealed class TripHistoryPanel
 
     private void Reload(CartTelemetryPump? pump)
     {
-        (_trips, _) = pump?.Trips?.LoadTripsForCurrentWorld()
-            ?? ((IReadOnlyList<Trip>)Array.Empty<Trip>(), 0L);
+        (_trips, _segments, _) = pump?.Trips?.LoadWorldData()
+            ?? ((IReadOnlyList<Trip>)Array.Empty<Trip>(), new Domain.RoadQuality.RoadQualityIndex(), 0L);
 
         // Summaries compute once per load — the bounded cost at the
         // retention cap; everything after is sorting and formatting.
@@ -196,6 +200,8 @@ internal sealed class TripHistoryPanel
             int hidden = history.Rows.Count - shown;
             _overflow.text = hidden > 0 ? "… " + hidden + " more — sort to bring them up" : string.Empty;
         }
+
+        RenderBottlenecks(pumpUnused: null);
 
         TripComparisonPresenter.ViewModel comparison = TripComparisonPresenter.Present(
             _selectedAId is { } aid ? FindTrip(aid) : null,
@@ -299,6 +305,32 @@ internal sealed class TripHistoryPanel
         Reload(pump);
     }
 
+    /// <summary>CT-019: bottleneck lines for trip [A] at the entered
+    /// hypothetical mass — pure presenter math over already-loaded data.</summary>
+    private void RenderBottlenecks(object? pumpUnused)
+    {
+        Trip? tripA = _selectedAId is { } aid ? FindTrip(aid) : null;
+        RouteBottleneckPresenter.ViewModel viewModel = RouteBottleneckPresenter.Present(
+            tripA, _segments, _pumpForButtons?.LoadModel,
+            _massInput != null ? _massInput.text : null);
+
+        if (_bottleneckHeader != null)
+        {
+            _bottleneckHeader.text = viewModel.Available ? viewModel.Message : viewModel.Message;
+        }
+
+        for (int index = 0; index < _bottleneckLines.Length; index++)
+        {
+            if (_bottleneckLines[index] != null)
+            {
+                _bottleneckLines[index]!.text =
+                    viewModel.Available && index < viewModel.Lines.Count
+                        ? viewModel.Lines[index]
+                        : string.Empty;
+            }
+        }
+    }
+
     private void SetSort(TripHistoryPresenter.SortColumn column)
     {
         if (_sortColumn == column)
@@ -399,6 +431,27 @@ internal sealed class TripHistoryPanel
         for (int index = 0; index < _compareLines.Length; index++)
         {
             _compareLines[index] = CreateText(gui, font, bodyColor, 0f, y, PanelWidth - 40f, RowHeight);
+            y -= RowHeight;
+        }
+
+        // CT-019: hypothetical-load bottleneck block.
+        y -= 6f;
+        GameObject massObject = gui.CreateInputField(
+            _panel.transform,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-130f, y - 14f),
+            placeholderText: "test mass…", fontSize: 14, width: 150f, height: 26f);
+        _massInput = massObject.GetComponent<InputField>();
+        if (_massInput != null)
+        {
+            _massInput.onValueChanged.AddListener(_ => RenderBottlenecks(null));
+        }
+
+        _bottleneckHeader = CreateText(gui, font, headerColor, 90f, y, PanelWidth - 220f, RowHeight);
+        y -= RowHeight + 4f;
+        _bottleneckLines = new Text?[3];
+        for (int index = 0; index < _bottleneckLines.Length; index++)
+        {
+            _bottleneckLines[index] = CreateText(gui, font, bodyColor, 0f, y, PanelWidth - 40f, RowHeight);
             y -= RowHeight;
         }
 

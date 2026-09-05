@@ -346,6 +346,26 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-04 — CT-019 in-game bottleneck view pending
+
+- Version / issue: v0.4 / CT-019 (#131)
+- Question: the bottleneck block on real recorded routes (does the located
+  meter/percent point match where the haul actually struggled?) needs
+  real trips and an interactive session.
+- Safe reversible default selected: analysis is pure domain math over
+  already-recorded data (7 tests: planted worst-grade and planted rough
+  segment found and located exactly, load-binding verdicts equal direct
+  LoadModel queries, uncalibrated coverage counted honestly, all
+  no-data/invalid-mass paths explicit); recomputing for a hypothetical
+  mass reads no game state.
+- Why work continued: advisory text over sidecar data; a mislocated
+  bottleneck is a formula/interpretation defect, catchable in the RC
+  campaign.
+- Risk / alternative: with mostly-Prior calibration, the load line will
+  usually say "uncalibrated" until protocol runs land — by design.
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.
