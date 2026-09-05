@@ -270,6 +270,24 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-04 — CT-014 guidance walkthrough pending
+
+- Version / issue: v0.3 / CT-014 (#125)
+- Question: the in-game guidance walkthrough (stuck cart → Guidance panel
+  → follow the steps → cart freed) and the panel screenshot need staged
+  interactive scenarios (shared with the CT-013 list).
+- Safe reversible default selected: guidance is advisory text from a pure
+  presenter with no adapter references (mutation audit in the PR); the
+  quantitative unload step cites only proven load-model rows; 9 presenter
+  tests cover every class, the unclear case, quantity math, and brake-step
+  gating.
+- Why work continued: text cannot mutate anything; a wording defect is
+  the worst outcome.
+- Risk / alternative: step wording may need play-tested tuning (CT-033
+  readability pass also applies).
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.

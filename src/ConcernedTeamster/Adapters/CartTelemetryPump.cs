@@ -41,6 +41,10 @@ internal sealed class CartTelemetryPump : MonoBehaviour
 
     private StuckDetector? _stuckDetector;
 
+    /// <summary>The calibrated load model, exposed read-only for guidance
+    /// presenters (CT-014); null when calibration failed to load.</summary>
+    public LoadModel? LoadModel { get; private set; }
+
     /// <summary>Stuck diagnosis for the pulled cart from its most recent
     /// snapshot (CT-013); None-equivalent null when nothing is pulled.
     /// Read-only for consumers.</summary>
@@ -83,6 +87,7 @@ internal sealed class CartTelemetryPump : MonoBehaviour
         _lookaheadOptions = LookaheadOptions.CreateClamped(settings.RiskLookaheadPoints.Value);
         Brake = settings.BrakeEnabled.Value ? new BrakeService(log) : null;
         _stuckDetector = new StuckDetector(loadModel);
+        LoadModel = loadModel;
         return options;
     }
 

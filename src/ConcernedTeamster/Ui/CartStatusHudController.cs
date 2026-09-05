@@ -31,6 +31,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
     private ManualLogSource? _log;
     private CartTelemetryPump? _pump;
     private CargoManifestPanel? _manifestPanel;
+    private RecoveryGuidancePanel? _guidancePanel;
     private bool _failed;
 
     private GameObject? _button;
@@ -49,6 +50,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
         _log = log;
         _pump = pump;
         _manifestPanel = new CargoManifestPanel(log);
+        _guidancePanel = new RecoveryGuidancePanel(log);
     }
 
     private void Update()
@@ -71,6 +73,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
                 }
 
                 _manifestPanel?.Reset();
+                _guidancePanel?.Hide();
                 _selectedCartId = null;
                 if (_hudHint != null && _hudHint.gameObject.activeSelf)
                 {
@@ -114,6 +117,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
             }
 
             _manifestPanel?.HandleFrame(now, _selectedCartId);
+            _guidancePanel?.HandleFrame(now, _pump);
             UpdateHudHint();
         }
         catch (Exception exception)
@@ -235,12 +239,17 @@ internal sealed class CartStatusHudController : MonoBehaviour
 
         GameObject manifest = gui.CreateButton(
             "Manifest", _panel.transform,
-            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-62f, 28f), 110f, 30f);
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-102f, 28f), 96f, 30f);
         manifest.GetComponent<Button>().onClick.AddListener(() => _manifestPanel?.Toggle());
+
+        GameObject guidance = gui.CreateButton(
+            "Guidance", _panel.transform,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 28f), 96f, 30f);
+        guidance.GetComponent<Button>().onClick.AddListener(() => _guidancePanel?.Toggle());
 
         GameObject close = gui.CreateButton(
             "Close", _panel.transform,
-            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(62f, 28f), 110f, 30f);
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(102f, 28f), 96f, 30f);
         close.GetComponent<Button>().onClick.AddListener(() => _panel!.SetActive(false));
 
         _panel.SetActive(false);
@@ -390,6 +399,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
             }
 
             _manifestPanel?.Hide();
+            _guidancePanel?.Hide();
         }
         catch
         {
