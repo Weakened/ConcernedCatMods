@@ -24,13 +24,15 @@ public static class CartographerContract
 
     /// <summary>Oldest Cartographer this contract supports: 0.10.0, the first
     /// build ever distributed publicly (earlier versions exist only as
-    /// internal release candidates on the dev machine). The five contract
-    /// source files are byte-identical between 0.10.0 and the current tree,
-    /// so every member below is verified at the floor. Versions above the
-    /// floor are accepted only when every member still verifies at runtime —
-    /// the member probe, not optimism, is the forward-compatibility gate.
-    /// (System.Version is spelled out: Valheim ships a global Version type
-    /// that captures the bare name in the plugin build.)</summary>
+    /// internal release candidates on the dev machine). Verified at the
+    /// floor: the five runtime/domain contract files are byte-identical
+    /// between released 0.10.0 and the current tree, and Plugin.cs differs
+    /// only in its version constant and a comment, with the _runtime
+    /// declaration unchanged (details in CARTOGRAPHER_CONTRACT.md). Versions
+    /// above the floor are accepted only when every member still verifies at
+    /// runtime — the member probe, not optimism, is the forward-compatibility
+    /// gate. (System.Version is spelled out: Valheim ships a global Version
+    /// type that captures the bare name in the plugin build.)</summary>
     public static readonly System.Version FloorVersion = new System.Version(0, 10, 0);
 
     // Owner labels used in verified/missing report entries.

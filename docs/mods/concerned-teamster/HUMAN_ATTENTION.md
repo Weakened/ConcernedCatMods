@@ -377,9 +377,11 @@ only for non-blocking uncertainty.
   → route/id/point properties).
 - Safe reversible default selected: a written 12-member contract
   (CARTOGRAPHER_CONTRACT.md) with floor 0.10.0 (the first publicly
-  distributed Cartographer; the five contract files are byte-identical
-  between released 0.10.0 and the current tree), a full runtime member probe
-  that hides the integration with one INFO line on any mismatch, and two
+  distributed Cartographer; verified — the five runtime/domain contract
+  files are byte-identical between released 0.10.0 and the current tree,
+  and Plugin.cs differs only in its version constant and a comment, with
+  the `_runtime` declaration unchanged), a full runtime member probe that
+  hides the integration with one INFO line on any mismatch, and two
   validator gates: a bidirectional compile-time-independence audit and a
   source-level drift tripwire that fails the build if Cartographer renames a
   contract member.

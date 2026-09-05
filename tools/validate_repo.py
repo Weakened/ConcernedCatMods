@@ -253,10 +253,18 @@ CROSS_PRODUCT_RULES: tuple[tuple[str, str, str], ...] = (
 
 
 def check_cross_product_independence(errors: list[str]) -> list[str]:
-    """Fails on any compile-time reference between the two products."""
+    """Fails on any compile-time reference between the two products.
+
+    Csproj side: Compile (source-linking, the repo's own sharing idiom),
+    ProjectReference, Reference (Include AND child text, so a HintPath under
+    an innocuous Include is caught), and PackageReference. C# side: plain,
+    static, alias, and global `using` directives plus InternalsVisibleTo.
+    String literals (the CT-021 reflective contract) are allowed by design.
+    """
     using_pattern_by_target = {
         target: re.compile(
-            r"^\s*using\s+(?:static\s+)?TheConcernedCat\." + target + r"\b|"
+            r"^\s*(?:global\s+)?using\s+(?:static\s+)?(?:\w+\s*=\s*)?"
+            r"TheConcernedCat\." + target + r"\b|"
             r"InternalsVisibleTo\(\s*\"TheConcernedCat\." + target + r"\b")
         for target in {"ConcernedCartographer", "ConcernedTeamster"}
     }
@@ -276,10 +284,11 @@ def check_cross_product_independence(errors: list[str]) -> list[str]:
                 continue
             for node in tree.getroot().iter():
                 tag = node.tag.rsplit("}", 1)[-1]
-                if tag not in ("ProjectReference", "Reference", "PackageReference"):
+                if tag not in ("Compile", "ProjectReference", "Reference", "PackageReference"):
                     continue
                 include = node.attrib.get("Include", "")
-                if target in include:
+                inner_text = "".join(node.itertext())
+                if target in include or target in inner_text:
                     fail(
                         f"[{owner}] Forbidden compile-time reference to {target!r} "
                         f"in {csproj.relative_to(ROOT)}: <{tag} Include=\"{include}\">", errors)
@@ -290,7 +299,7 @@ def check_cross_product_independence(errors: list[str]) -> list[str]:
             if parts[0] in ("obj", "bin"):
                 continue
             for number, line in enumerate(
-                    path.read_text(encoding="utf-8").splitlines(), start=1):
+                    path.read_text(encoding="utf-8-sig").splitlines(), start=1):
                 if pattern.search(line):
                     fail(
                         f"[{owner}] Forbidden compile-time coupling onto {target}: "
@@ -309,31 +318,36 @@ def check_cross_product_independence(errors: list[str]) -> list[str]:
 # member below must fail validation and force a coordinated update (contract
 # class, contract document, version floor decision) instead of silently
 # breaking the shipped integration for users.
+# Each pattern pins the member KIND as well as its name: fields must be
+# followed by "=" or ";", properties by "{" (possibly on the next line — the
+# search runs over whole-file text and \s spans newlines). A property→field
+# refactor that keeps the name would break the runtime probe, so it must
+# break this tripwire too.
 TEAMSTER_CARTOGRAPHER_CONTRACT: tuple[tuple[str, str], ...] = (
     ("src/ConcernedCartographer/Plugin.cs",
-     r"private\s+CartographerRuntime\?\s+_runtime\b"),
+     r"private\s+CartographerRuntime\?\s+_runtime\s*[=;]"),
     ("src/ConcernedCartographer/Runtime/CartographerRuntime.cs",
-     r"private\s+RouteStore\s+_routeStore\b"),
+     r"private\s+RouteStore\s+_routeStore\s*[=;]"),
     ("src/ConcernedCartographer/Domain/Atlas/RouteStore.cs",
-     r"public\s+IEnumerable<AtlasRoute>\s+Living\b"),
+     r"public\s+IEnumerable<AtlasRoute>\s+Living\s*\{"),
     ("src/ConcernedCartographer/Domain/Atlas/RouteStore.cs",
-     r"public\s+long\s+ChangeStamp\b"),
+     r"public\s+long\s+ChangeStamp\s*\{"),
     ("src/ConcernedCartographer/Domain/Atlas/AtlasRoute.cs",
-     r"public\s+AtlasId\s+Id\b"),
+     r"public\s+AtlasId\s+Id\s*\{"),
     ("src/ConcernedCartographer/Domain/Atlas/AtlasRoute.cs",
-     r"public\s+string\s+Name\b"),
+     r"public\s+string\s+Name\s*\{"),
     ("src/ConcernedCartographer/Domain/Atlas/AtlasRoute.cs",
-     r"public\s+bool\s+Archived\b"),
+     r"public\s+bool\s+Archived\s*\{"),
     ("src/ConcernedCartographer/Domain/Atlas/AtlasRoute.cs",
-     r"public\s+List<RoadPoint>\s+Points\b"),
+     r"public\s+List<RoadPoint>\s+Points\s*\{"),
     ("src/ConcernedCartographer/Domain/Atlas/AtlasId.cs",
-     r"public\s+Guid\s+Value\b"),
+     r"public\s+Guid\s+Value\s*\{"),
     ("src/ConcernedCartographer/Domain/RoadPoint.cs",
-     r"public\s+float\s+X\b"),
+     r"public\s+float\s+X\s*\{"),
     ("src/ConcernedCartographer/Domain/RoadPoint.cs",
-     r"public\s+float\s+Y\b"),
+     r"public\s+float\s+Y\s*\{"),
     ("src/ConcernedCartographer/Domain/RoadPoint.cs",
-     r"public\s+float\s+Z\b"),
+     r"public\s+float\s+Z\s*\{"),
 )
 
 

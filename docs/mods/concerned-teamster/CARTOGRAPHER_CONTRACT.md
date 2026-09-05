@@ -20,9 +20,12 @@ entire agreement.
 **Why 0.10.0.** It is the first Cartographer build ever distributed publicly
 (the Thunderstore public beta); earlier versions exist only as internal
 release candidates on the dev machine, so no user can legitimately run one.
-The floor was verified against the sources: the five files carrying the
-contract members are byte-identical between the released 0.10.0 build
-(commit `a23bef0`) and the current tree (0.10.1).
+The floor was verified against the sources at commit `a23bef0` (the released
+0.10.0 build): the five runtime/domain contract files
+(`CartographerRuntime.cs`, `RouteStore.cs`, `AtlasRoute.cs`, `AtlasId.cs`,
+`RoadPoint.cs`) are byte-identical to the current tree (0.10.1), and
+`Plugin.cs` — owner of the `_runtime` member — differs only in its version
+constant and one comment, with the `_runtime` declaration unchanged.
 
 **Version policy.**
 
