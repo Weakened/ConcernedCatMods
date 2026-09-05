@@ -1,4 +1,4 @@
-# Valheim cart internals — verified findings (CT-002, extended CT-003..CT-012)
+# Valheim cart internals — verified findings (CT-002, extended CT-003..CT-016)
 
 This document records the **verified** surface of Valheim's cart implementation
 that Concerned Teamster depends on. Nothing here is guessed: every member was
@@ -104,6 +104,19 @@ Descent lookahead (CT-011) reuses exactly these members — `GetHeight` at
 the cart plus at 4 m-spaced points along the same heading (count bounded
 by config, hard max 5) — no new game surface; a single failed height query
 makes the whole reading unavailable rather than a partial guess.
+
+### World identity for sidecars (CT-016)
+
+Verified by decompile 2026-09-04 — the same surface Cartographer ships in
+production (`WorldContext`): `public static ZNet instance` (property over a
+private `m_instance` field) and `public long GetWorldUID()`. Probed at
+startup (capability now 29 members). Trip sidecars live under
+`BepInEx/config/ConcernedCatMods/ConcernedTeamster/teamster_trips_<uid>.txt`
+— a different folder AND a `teamster` filename infix versus Cartographer's
+`.../ConcernedCartographer/` family, so collision is impossible; the file
+header repeats the world UID and loading refuses a mismatched file, so
+cross-world isolation holds even against manual file copying. Teamster
+writes only this directory — never a Valheim save.
 
 ### The parking brake mechanism (CT-012 — Teamster's only mutation)
 

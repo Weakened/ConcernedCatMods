@@ -24,7 +24,11 @@ internal sealed class TeamsterSettings
         ConfigEntry<bool> hudWarningHintsEnabled,
         ConfigEntry<float> steepGradeCautionPercent,
         ConfigEntry<int> riskLookaheadPoints,
-        ConfigEntry<bool> brakeEnabled)
+        ConfigEntry<bool> brakeEnabled,
+        ConfigEntry<bool> tripsEnabled,
+        ConfigEntry<float> tripRecordSpacingSeconds,
+        ConfigEntry<int> tripMaxSamplesPerTrip,
+        ConfigEntry<int> tripMaxTripsRetained)
     {
         Enabled = enabled;
         DebugLogging = debugLogging;
@@ -38,6 +42,10 @@ internal sealed class TeamsterSettings
         SteepGradeCautionPercent = steepGradeCautionPercent;
         RiskLookaheadPoints = riskLookaheadPoints;
         BrakeEnabled = brakeEnabled;
+        TripsEnabled = tripsEnabled;
+        TripRecordSpacingSeconds = tripRecordSpacingSeconds;
+        TripMaxSamplesPerTrip = tripMaxSamplesPerTrip;
+        TripMaxTripsRetained = tripMaxTripsRetained;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -52,6 +60,10 @@ internal sealed class TeamsterSettings
     public ConfigEntry<float> SteepGradeCautionPercent { get; }
     public ConfigEntry<int> RiskLookaheadPoints { get; }
     public ConfigEntry<bool> BrakeEnabled { get; }
+    public ConfigEntry<bool> TripsEnabled { get; }
+    public ConfigEntry<float> TripRecordSpacingSeconds { get; }
+    public ConfigEntry<int> TripMaxSamplesPerTrip { get; }
+    public ConfigEntry<int> TripMaxTripsRetained { get; }
 
     public static TeamsterSettings Bind(ConfigFile config)
     {
@@ -109,6 +121,29 @@ internal sealed class TeamsterSettings
                         Domain.Risk.LookaheadOptions.MinPoints,
                         Domain.Risk.LookaheadOptions.MaxPoints))),
             config.Bind("Brake", "Enabled", true,
-                "The parking brake feature: a visible button that freezes a parked cart you control until you release it. Explicit per-use, always reversible, never saved into the world, and it releases itself on detach distance, world exit, shutdown, or any capability loss. Disable to remove the button entirely."));
+                "The parking brake feature: a visible button that freezes a parked cart you control until you release it. Explicit per-use, always reversible, never saved into the world, and it releases itself on detach distance, world exit, shutdown, or any capability loss. Disable to remove the button entirely."),
+            config.Bind("Trips", "Enabled", true,
+                "Record hauling trips (position, grade, speed, load while you pull) into Teamster's own per-world sidecar file under BepInEx/config. Never touches Valheim saves; delete the sidecar folder to erase all history."),
+            config.Bind("Trips", "RecordSpacingSeconds",
+                Domain.Trips.TripRecorderOptions.DefaultRecordSpacingSeconds,
+                new ConfigDescription(
+                    "Seconds between recorded trip samples while pulling.",
+                    new AcceptableValueRange<float>(
+                        Domain.Trips.TripRecorderOptions.MinRecordSpacingSeconds,
+                        Domain.Trips.TripRecorderOptions.MaxRecordSpacingSeconds))),
+            config.Bind("Trips", "MaxSamplesPerTrip",
+                Domain.Trips.TripRecorderOptions.DefaultMaxSamplesPerTrip,
+                new ConfigDescription(
+                    "Hard cap of samples in one trip; longer hauls split into segments.",
+                    new AcceptableValueRange<int>(
+                        Domain.Trips.TripRecorderOptions.MinMaxSamplesPerTrip,
+                        Domain.Trips.TripRecorderOptions.MaxMaxSamplesPerTrip))),
+            config.Bind("Trips", "MaxTripsRetained",
+                Domain.Trips.TripRecorderOptions.DefaultMaxTripsRetained,
+                new ConfigDescription(
+                    "Retention: how many trips each world's sidecar keeps; the oldest are pruned first.",
+                    new AcceptableValueRange<int>(
+                        Domain.Trips.TripRecorderOptions.MinMaxTripsRetained,
+                        Domain.Trips.TripRecorderOptions.MaxMaxTripsRetained))));
     }
 }
