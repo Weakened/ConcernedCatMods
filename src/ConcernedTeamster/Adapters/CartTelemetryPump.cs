@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using BepInEx.Logging;
 using TheConcernedCat.ConcernedTeamster.Domain.Carts;
+using TheConcernedCat.ConcernedTeamster.Domain.Diagnostics;
 using TheConcernedCat.ConcernedTeamster.Domain.Load;
 using TheConcernedCat.ConcernedTeamster.Domain.Risk;
 using TheConcernedCat.ConcernedTeamster.Domain.Warnings;
@@ -38,6 +39,13 @@ internal sealed class CartTelemetryPump : MonoBehaviour
     /// disabled by config.</summary>
     public BrakeService? Brake { get; private set; }
 
+    private StuckDetector? _stuckDetector;
+
+    /// <summary>Stuck diagnosis for the pulled cart from its most recent
+    /// snapshot (CT-013); None-equivalent null when nothing is pulled.
+    /// Read-only for consumers.</summary>
+    public CartDiagnostic? LatestDiagnostic { get; private set; }
+
     /// <summary>Latest telemetry by cart id for future consumers (CT-005
     /// panels); null until initialized.</summary>
     public IReadOnlyDictionary<string, CartTelemetry>? Telemetry => _sampler?.TelemetryByCartId;
@@ -74,6 +82,7 @@ internal sealed class CartTelemetryPump : MonoBehaviour
         _riskModel = riskModel;
         _lookaheadOptions = LookaheadOptions.CreateClamped(settings.RiskLookaheadPoints.Value);
         Brake = settings.BrakeEnabled.Value ? new BrakeService(log) : null;
+        _stuckDetector = new StuckDetector(loadModel);
         return options;
     }
 
@@ -92,6 +101,8 @@ internal sealed class CartTelemetryPump : MonoBehaviour
                 sampler.Reset();
                 _warnings?.Reset();
                 LatestDescentRisk = null;
+                _stuckDetector?.Reset();
+                LatestDiagnostic = null;
                 Brake?.ReleaseNow("left the world");
                 _resetWhileNoLocalPlayer = true;
             }
@@ -149,12 +160,19 @@ internal sealed class CartTelemetryPump : MonoBehaviour
                 _riskModel, entry.Value, look.Available, look.WorstDownGradePercent);
             LatestDescentRisk = new DescentRiskInfo(
                 entry.Key, current, look.Available, look.WorstDownGradePercent, ahead, now);
+
+            // CT-013: stuck diagnostics share the pulled-cart, fresh-
+            // snapshot gate — parked and unattended carts never reach the
+            // detector.
+            LatestDiagnostic = _stuckDetector?.Update(entry.Value);
             break;
         }
 
         if (!anyPulledTracked)
         {
             LatestDescentRisk = null;
+            LatestDiagnostic = null;
+            _stuckDetector?.Reset();
         }
 
         // CT-012: the brake re-validates its engaged cart on every due tick.
