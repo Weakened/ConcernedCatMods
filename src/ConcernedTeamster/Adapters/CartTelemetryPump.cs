@@ -43,6 +43,10 @@ internal sealed class CartTelemetryPump : MonoBehaviour
     private TripRecordingService? _trips;
     private long _lastKnownWorldUid;
 
+    /// <summary>Trip persistence owner for the history UI (CT-018); null
+    /// when trip recording is disabled by config.</summary>
+    public TripRecordingService? Trips => _trips;
+
     /// <summary>The calibrated load model, exposed read-only for guidance
     /// presenters (CT-014); null when calibration failed to load.</summary>
     public LoadModel? LoadModel { get; private set; }

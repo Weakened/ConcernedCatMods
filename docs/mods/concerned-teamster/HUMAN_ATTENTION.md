@@ -327,6 +327,25 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-04 — CT-018 history/comparison screenshot pending
+
+- Version / issue: v0.4 / CT-018 (#130)
+- Question: screenshots of the Trip History panel (sorting, A/B selection,
+  two-step deletion) and a real side-by-side comparison need recorded real
+  trips in an interactive session.
+- Safe reversible default selected: presenters are fully headless-tested
+  (14 tests: summary aggregates, 6-case sort matrix, text selection
+  markers, empty/missing-selection states, normalized-distance alignment
+  with a spike-position proof, invariant row formatting, deletion
+  keeps-exactly-the-rest with segments untouched); the panel summarizes
+  once per load so cost stays bounded at the 500-trip cap.
+- Why work continued: read-only UI over Teamster's own sidecar; deletion
+  is two-step confirmed, removes one raw trip, and is atomic.
+- Risk / alternative: layout niceties (column alignment, row density) wait
+  for CT-033.
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.
