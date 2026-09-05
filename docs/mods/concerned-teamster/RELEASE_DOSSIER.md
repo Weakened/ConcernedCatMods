@@ -5,6 +5,60 @@ split between automated evidence and pending manual claims, following the
 dossier discipline proven on Concerned Cartographer. Publication of anything
 is owner-only, always.
 
+## v0.3 RC1 — "Descent Safety and Recovery Guidance" (sealed 2026-09-04)
+
+| Item | Value |
+|---|---|
+| Version | 0.3.0 (internal; no publication) |
+| Source commit | `8d3898a62333213a0e8af67cd8cb6eb8245daf54` (branch `chore/ct-015-v03-rc`, merged to main via PR) |
+| ZIP | `artifacts/thunderstore/TheConcernedCat-ConcernedTeamster-0.3.0.zip` |
+| ZIP SHA-256 | `06358e856b17bc1d3f0cc1062b06c9d3d603a785c16f839fa7df6d33d6b3898c` |
+| DLL SHA-256 | `db4c4923e68026478e71d19034fde250a0a7bc9940ef5d1a9554c39c46b283ce` |
+| DLL identity | AssemblyVersion 0.3.0.0, InformationalVersion `0.3.0+8d3898a62333213a0e8af67cd8cb6eb8245daf54` |
+| ZIP contents (6 entries) | manifest.json, icon.png (256×256), README.md, CHANGELOG.md, LICENSE, plugins/TheConcernedCat.ConcernedTeamster.dll — **own DLL only**, no PDB |
+| Built against | Valheim 0.221.12 (network 36, buildid 21981559), Unity 6000.0.61f1, BepInExPack 5.4.2333, Jötunn 2.29.2 |
+| Version sync | 0.3.0 across csproj/Plugin.cs/thunderstore.toml/CHANGELOG — validator-asserted (`--expected-version 0.3.0 --require-binary`) |
+
+### Sprint scope sealed in this RC
+
+CT-011 descent/runaway risk model (3D dominance, bounded lookahead) ·
+CT-012 parking brake (explicit, reversible, save-proof by construction;
+capability now 27 probed members) · CT-013 stuck diagnostics (confusion-
+matrix classifier, Unclear honesty) · CT-014 recovery guidance
+(mutation-audited advisory steps with load-model-traced quantities).
+
+### v0.3 campaign results (automated)
+
+| Campaign item | Method | Result |
+|---|---|---|
+| Static validation + version sync | `validate_repo.py --product teamster --expected-version 0.3.0 --require-binary` | PASS |
+| Solution build | `build.ps1 -Configuration Release` | PASS — 0 errors |
+| Unit tests | `dotnet test ConcernedTeamster.Tests` (Release) | **241/241 PASS** — adds risk-model 3D monotonicity grid + shipped-descent-file reproducibility, brake lifecycle matrix (every engage refusal and release path), diagnostics confusion matrix, guidance presenter suite |
+| Cartographer regression | `dotnet test ConcernedCartographer.Tests` (Release) | 568/568 PASS |
+| Package build + audit | `package.ps1 -Product ConcernedTeamster` + ZIP listing | PASS — hashes above |
+| Brake persistence audit | grep for `ZDO.Set|SetOwner|InvokeRPC` in Teamster source | PASS — sole hit is the doc comment stating their absence; the one mutation is runtime `Rigidbody.constraints` |
+| Guidance mutation audit | grep for brake-adapter references in the guidance layer | PASS — 0 hits |
+
+Defects: no `DEF-teamster-v0.3-*` issues were needed; two in-scope test
+defects (a risk-test mass not dominated by its intended row; a stuck-test
+model whose Climbs row shadowed the Marginal region) were caught during
+implementation review and fixed before their PRs merged.
+
+### Pending manual claims added by v0.3
+
+1. Descent protocol runs (sets × ramps × entry speeds) for Measured rows
+   (CT-011 entry).
+2. Brake slope hold/release demonstration incl. wheel-joint behavior and
+   authority-handoff release (CT-012 entry).
+3. Staged stuck scenarios: blocked wheel, grounded chassis, true overload
+   (CT-013 entry).
+4. Guidance walkthrough from stuck to freed (CT-014 entry).
+
+### Gate decision
+
+All automatable v0.3 gates are green; manual items are pending by design
+for an internal RC. Sprint controller #120 closes with this seal.
+
 ## v0.2 RC1 — "Cargo and Load Planning" (sealed 2026-09-04)
 
 | Item | Value |
