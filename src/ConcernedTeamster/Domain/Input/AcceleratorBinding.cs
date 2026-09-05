@@ -38,7 +38,9 @@ public readonly struct AcceleratorBinding
         foreach (string part in parts)
         {
             string key = part.Trim().ToLowerInvariant();
-            if (key.Length > 0)
+            // Drop blanks and repeats so "m+m" and "m" — physically the same
+            // chord — normalize identically and cannot miss a conflict.
+            if (key.Length > 0 && !keys.Contains(key))
             {
                 keys.Add(key);
             }

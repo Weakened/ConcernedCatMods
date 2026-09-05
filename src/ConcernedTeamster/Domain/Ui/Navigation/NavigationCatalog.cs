@@ -7,7 +7,11 @@ namespace TheConcernedCat.ConcernedTeamster.Domain.Ui.Navigation;
 /// checks. Each panel lists its focusable elements in traversal order;
 /// building a <see cref="FocusRing"/> from one gives the live navigation.
 /// Adding a panel or a control means adding it here, so the reachability and
-/// buttons-first tests fail until the new element is placed in the order.</summary>
+/// buttons-first tests fail until the new element is placed in the order.
+/// The catalog is reconciled against the shipped panels: text-entry controls
+/// (the manifest filter, the trip test-mass field) are modeled with
+/// <c>isButton: false</c> so the buttons-first audit is real, not circular —
+/// every panel must still offer at least one button.</summary>
 public static class NavigationCatalog
 {
     public const string CartStatusPanel = "cart-status";
@@ -32,12 +36,13 @@ public static class NavigationCatalog
             [CargoManifestPanel] = new[]
             {
                 new FocusItem("manifest.sort", "Sort column", isButton: true),
-                new FocusItem("manifest.filter", "Filter", isButton: true),
+                new FocusItem("manifest.filter", "Filter", isButton: false), // text field
                 new FocusItem("manifest.close", "Close", isButton: true),
             },
             [TripHistoryPanel] = new[]
             {
                 new FocusItem("trips.sort", "Sort column", isButton: true),
+                new FocusItem("trips.mass", "Hypothetical mass", isButton: false), // text field
                 new FocusItem("trips.selectA", "Select A", isButton: true),
                 new FocusItem("trips.selectB", "Select B", isButton: true),
                 new FocusItem("trips.delete", "Delete", isButton: true),

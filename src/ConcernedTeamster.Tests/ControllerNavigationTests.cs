@@ -107,11 +107,12 @@ public class ControllerNavigationTests
 
             Assert.Equal(items.Count, reached.Count);
 
-            // Buttons-first: every panel offers at least one button, and in
-            // this UI every focusable IS a button (no accelerator-only or
-            // focus-trap read-only element).
+            // Buttons-first (the real rule, not a tautology): every panel
+            // must offer at least one button, so no feature set is reachable
+            // only through a non-button control or an accelerator. Non-button
+            // focusables (text-entry fields) are allowed to coexist but can
+            // never be a panel's ONLY operable element.
             Assert.Contains(items, item => item.IsButton);
-            Assert.All(items, item => Assert.True(item.IsButton, panelId + ":" + item.Id));
 
             // Every item carries a non-empty id and label (nothing unlabeled
             // for a screen the player must operate).
@@ -121,6 +122,18 @@ public class ControllerNavigationTests
                 Assert.False(string.IsNullOrEmpty(item.Label));
             });
         }
+    }
+
+    [Fact]
+    public void Catalog_ModelsTextFieldsAsNonButtons_SoTheAuditIsNotCircular()
+    {
+        // If every item were a button the buttons-first audit would be
+        // tautological. The catalog models the real text-entry controls as
+        // non-buttons, so the audit actually distinguishes them.
+        NavigationCatalog.TryGetOrder(NavigationCatalog.CargoManifestPanel, out var manifest);
+        NavigationCatalog.TryGetOrder(NavigationCatalog.TripHistoryPanel, out var trips);
+        Assert.Contains(manifest, item => !item.IsButton && item.Id == "manifest.filter");
+        Assert.Contains(trips, item => !item.IsButton && item.Id == "trips.mass");
     }
 
     [Fact]
@@ -140,9 +153,24 @@ public class ControllerNavigationTests
     [InlineData("M", "m")]
     [InlineData("", "")]
     [InlineData("   ", "")]
-    public void Chord_NormalizesCaseOrderAndWhitespace(string raw, string expected)
+    [InlineData("m+m", "m")]                 // repeats de-duped
+    [InlineData("Ctrl+K+ctrl", "ctrl+k")]    // repeat after case-fold
+    public void Chord_NormalizesCaseOrderWhitespaceAndRepeats(string raw, string expected)
     {
         Assert.Equal(expected, AcceleratorBinding.Normalize(raw));
+    }
+
+    [Fact]
+    public void External_RepeatedKeyChord_StillMatchesReserved()
+    {
+        IReadOnlyDictionary<string, string> reserved = BindingConflictChecker.BuildReserved(
+            new[] { new KeyValuePair<string, string>("m", "vanilla: Map") });
+
+        var bindings = new[] { new AcceleratorBinding("teamster.x", "m+m") };
+
+        BindingConflictChecker.ExternalConflict conflict = Assert.Single(
+            BindingConflictChecker.FindExternalConflicts(bindings, reserved));
+        Assert.Equal("vanilla: Map", conflict.ReservedLabel);
     }
 
     [Fact]
