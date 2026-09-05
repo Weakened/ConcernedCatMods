@@ -390,13 +390,22 @@ TEAMSTER_INTEGRATION_MUTATION_TOKENS = (
     "SetField",
     ".Invoke(",
     "GetMethod(",
+    "GetMethods(",
     "InvokeMember",
+    "Activator.CreateInstance",
+    "CreateDelegate",
 )
 
 
 def check_teamster_integration_readonly(errors: list[str]) -> list[str]:
     """Fails on mutating/invoking reflection anywhere in the integration path."""
-    paths = sorted((ROOT / "src" / "ConcernedTeamster" / "Domain" / "Cartographer").glob("*.cs"))
+    domain_files = sorted((ROOT / "src" / "ConcernedTeamster" / "Domain" / "Cartographer").glob("*.cs"))
+    if len(domain_files) < 8:
+        fail(
+            "[interop] CT-024 read-only audit: expected at least 8 files in "
+            f"src/ConcernedTeamster/Domain/Cartographer, found {len(domain_files)} — the audit "
+            "no longer covers the integration path (was the directory moved?)", errors)
+    paths = list(domain_files)
     paths.append(ROOT / "src" / "ConcernedTeamster" / "Adapters" / "CartographerCapability.cs")
     checked = 0
     for path in paths:

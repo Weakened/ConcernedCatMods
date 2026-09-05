@@ -131,8 +131,9 @@ toward Cartographer.
 
 The route report (CT-024) renders the profile as advice from a visible
 Report button: numbered problem sections (steep grades at or above 15%, and
-every unsampled span with its location — gaps are ranked problems, never
-hidden), plus load recommendations that quote LoadModel answers verbatim
+the three longest unsampled spans with their locations — the summary's
+UNSAMPLED total is always exact, so gaps can rank but never hide), plus load
+recommendations that quote LoadModel answers verbatim
 (section advice and the bottleneck line both come from Query /
 RecommendedMaxMass; descents are advised as the return climb). Sections
 without a model answer get facts, not advice. The whole CT-021..CT-024

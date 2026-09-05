@@ -96,6 +96,13 @@ internal sealed class RoutePickerPanel
             {
                 ForceRefresh();
             }
+            else
+            {
+                // The report is fed exclusively by this panel's refresh
+                // loop; left open without it, it would freeze into a stale
+                // ghost. Closing the picker closes the report.
+                _reportPanel.Hide();
+            }
         }
         catch (Exception exception)
         {
@@ -443,7 +450,11 @@ internal sealed class RoutePickerPanel
         GameObject close = gui.CreateButton(
             "Close", _panel.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(120f, 30f), 100f, 30f);
-        close.GetComponent<Button>().onClick.AddListener(() => _panel!.SetActive(false));
+        close.GetComponent<Button>().onClick.AddListener(() =>
+        {
+            _panel!.SetActive(false);
+            _reportPanel.Hide();
+        });
 
         _panel.SetActive(false);
         return true;

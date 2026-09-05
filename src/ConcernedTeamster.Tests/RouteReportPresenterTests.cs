@@ -133,9 +133,11 @@ public class RouteReportPresenterTests
         Assert.Contains(" long", first);
 
         LoadVerdict direct = model.Query(Math.Abs(profile.WorstSegments[0].GradePercent), mass);
+        bool traced = false;
         if (direct.Climbability != Climbability.Unknown)
         {
             Assert.Contains(viewModel.Lines, line => line.Contains(direct.Explanation));
+            traced = true;
         }
         else
         {
@@ -147,8 +149,94 @@ public class RouteReportPresenterTests
                     viewModel.Lines,
                     line => line.Contains("keep total mass at or under") &&
                         line.Contains(proven.TotalMass.ToString("F0")));
+                traced = true;
             }
         }
+
+        // Non-vacuous either way: when the model answers nothing at this
+        // grade, the report must carry no section advice at all.
+        if (!traced)
+        {
+            Assert.DoesNotContain(viewModel.Lines, line => line.Contains("Here:"));
+        }
+    }
+
+    [Fact]
+    public void Report_ExactlyFifteenPercent_RanksAndAgreesWithGradeMixLine()
+    {
+        // Constructed profile pins the boundary value exactly: 15.0% must
+        // rank as a problem AND count as "15% or steeper" in the mix line —
+        // a <= regression in either place would contradict the other.
+        var profile = new RouteProfile(
+            totalDistanceMeters: 8f,
+            sampledMeters: 8f,
+            unsampledMeters: 0f,
+            surfaceMeters: new Dictionary<TerrainSurfaceKind, float>(),
+            surfaceUnknownMeters: 8f,
+            gradeBandMeters: new[] { 0f, 0f, 0f, 8f, 0f },
+            worstUphillGradePercent: 15f,
+            worstDownhillGradePercent: float.NaN,
+            maxAbsGradePercent: 15f,
+            worstSegments: new[] { new RouteProfileSegment(0f, 4f, 15f) },
+            unsampledSpans: Array.Empty<RouteProfileSegment>(),
+            sampleSpacingMeters: 4f,
+            positionCount: 3,
+            sampledPositionCount: 3);
+
+        RouteReportPresenter.ViewModel viewModel =
+            RouteReportPresenter.Present("Boundary", profile, Model(), null);
+
+        Assert.Contains(
+            viewModel.Lines, line => line.StartsWith("1. Steep climb +15.0%", StringComparison.Ordinal));
+        Assert.Contains(viewModel.Lines, line => line.Contains("15% or steeper"));
+        Assert.DoesNotContain(
+            viewModel.Lines, line => line.StartsWith("No problem sections", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Report_GradesAndGaps_NumberingContinuesAcrossKinds()
+    {
+        var profile = new RouteProfile(
+            totalDistanceMeters: 100f,
+            sampledMeters: 60f,
+            unsampledMeters: 40f,
+            surfaceMeters: new Dictionary<TerrainSurfaceKind, float>(),
+            surfaceUnknownMeters: 60f,
+            gradeBandMeters: new[] { 0f, 0f, 0f, 60f, 0f },
+            worstUphillGradePercent: 18f,
+            worstDownhillGradePercent: -16f,
+            maxAbsGradePercent: 18f,
+            worstSegments: new[]
+            {
+                new RouteProfileSegment(10f, 4f, 18f),
+                new RouteProfileSegment(30f, 4f, -16f),
+            },
+            unsampledSpans: new[]
+            {
+                new RouteProfileSegment(50f, 30f, float.NaN),
+                new RouteProfileSegment(90f, 10f, float.NaN),
+            },
+            sampleSpacingMeters: 4f,
+            positionCount: 26,
+            sampledPositionCount: 16);
+
+        RouteReportPresenter.ViewModel viewModel =
+            RouteReportPresenter.Present("Mixed", profile, Model(), null);
+
+        Assert.Contains(
+            viewModel.Lines, line => line.StartsWith("1. Steep climb +18.0%", StringComparison.Ordinal));
+        Assert.Contains(
+            viewModel.Lines, line => line.StartsWith("2. Steep descent -16.0%", StringComparison.Ordinal));
+        Assert.Contains(
+            viewModel.Lines,
+            line => line.StartsWith("3. Unprofiled 30 m starting at 50 m", StringComparison.Ordinal));
+        Assert.Contains(
+            viewModel.Lines,
+            line => line.StartsWith("4. Unprofiled 10 m starting at 90 m", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            viewModel.Lines, line => line.StartsWith("No problem sections", StringComparison.Ordinal));
+        // Worst case must always fit the report panel's fixed 18 lines.
+        Assert.True(viewModel.Lines.Count <= 18);
     }
 
     [Fact]
