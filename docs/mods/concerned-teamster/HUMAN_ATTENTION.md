@@ -489,6 +489,28 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-05 — CT-026 authority policy proven off-game; live MP validation is CT-027
+
+- Version / issue: v0.6 / CT-026 (#140)
+- Question: the authority policy (who reads / acts / observes) is enforced
+  and unit-proven over fake authority states, but real player-hosted and
+  dedicated-server behavior — authority actually moving between clients, an
+  unmodded peer genuinely unaffected — is observed only in a live multiplayer
+  session, which is interactive and owner-run.
+- Safe reversible default selected: the policy is the single source of truth
+  the brake enforces through (test-asserted), resolution is fail-closed
+  (`Unknown` denies mutation), and two validator audits prove the backing
+  invariants (no outbound-network/ownership calls; every feature documented).
+  CT-027 owns the in-game player-hosted and dedicated-server validation; this
+  leaf deliberately stops at the enforced, audited policy.
+- Why work continued: the brake was already authority-gated and fail-closed
+  since CT-012; CT-026 formalizes and audits it without changing runtime
+  behavior, so there is no new in-game risk to gate on here.
+- Risk / alternative: none beyond confirming the matrix rows in a real
+  multiplayer session, which is exactly CT-027's scope.
+- Must resolve before public release: Yes (via CT-027's live validation)
+- Status: Open
+
 ## Resolved items
 
 None yet.

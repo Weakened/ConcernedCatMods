@@ -1,3 +1,5 @@
+using TheConcernedCat.ConcernedTeamster.Domain.Authority;
+
 namespace TheConcernedCat.ConcernedTeamster.Domain.Brake;
 
 /// <summary>The parking brake's entire decision logic (CT-012), pure and
@@ -62,7 +64,7 @@ public sealed class BrakeLifecycle
             return BrakeAction.None;
         }
 
-        if (!facts.IsLocalAuthority)
+        if (!CartAuthorityPolicy.MayMutate(TeamsterFeature.ParkingBrake, facts.Authority))
         {
             reason = "this client does not control the cart";
             return BrakeAction.None;
@@ -112,7 +114,7 @@ public sealed class BrakeLifecycle
             return BrakeAction.Release;
         }
 
-        if (!facts.IsLocalAuthority)
+        if (!CartAuthorityPolicy.MayMutate(TeamsterFeature.ParkingBrake, facts.Authority))
         {
             reason = "cart authority moved to another client";
             return BrakeAction.Release;

@@ -165,10 +165,24 @@ audit plus contract drift tripwire) live in `CARTOGRAPHER_CONTRACT.md`.
 
 ### Multiplayer posture (v0.6)
 
-Client-side observational until the v0.6 trust/authority design. Teamster never
-takes authority over a cart it does not own under vanilla rules, never grants
-force, and treats network data as untrusted input (bounds-checked, fail-closed,
-privacy-reviewed) — the posture Cartographer's sync hardening established.
+Client-side observational. Teamster never takes authority over a cart it does
+not own under vanilla rules, never grants force, and treats network data as
+untrusted input (bounds-checked, fail-closed, privacy-reviewed) — the posture
+Cartographer's sync hardening established.
+
+CT-026 makes this a written, enforced policy. `Domain/Authority/CartAuthorityPolicy`
+is the single source of truth: every shipped feature is classified Observation
+or Mutation, exactly one feature mutates (the parking brake, under live local
+authority only), and owner-fresh observations are labeled remote when viewed
+without local authority. `CartAuthority` resolves fail-closed from the game's
+ownership surface (`Unknown` = value 0 = deny). The brake enforces its right
+to act *through* `CartAuthorityPolicy.MayMutate` (test-asserted mapping), so
+document and code cannot drift. Two product invariants back the policy and are
+validator-audited: Teamster sends no network messages and takes no ownership
+(no RPC / `SetOwner` / `ZDO.Set` anywhere), so an unmodded peer's experience is
+provably unaltered; and the policy document must carry a row for every
+`TeamsterFeature`. The full matrix and per-actor summary live in
+`AUTHORITY_POLICY.md`.
 
 ## Lifecycle
 
