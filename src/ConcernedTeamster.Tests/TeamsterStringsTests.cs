@@ -43,6 +43,54 @@ public class TeamsterStringsTests
     }
 
     [Fact]
+    public void Get_UnknownKey_InvokesTheWiredReporterExactlyOnce()
+    {
+        var reported = new List<string>();
+        TeamsterStrings.MissingKeyReporter = reported.Add;
+        try
+        {
+            TeamsterStrings.Get("ct032.reporter.once");
+            TeamsterStrings.Get("ct032.reporter.once");
+            Assert.Equal(new[] { "ct032.reporter.once" }, reported);
+        }
+        finally
+        {
+            TeamsterStrings.MissingKeyReporter = null;
+        }
+    }
+
+    [Fact]
+    public void Get_ThrowingReporter_NeverBreaksResolution()
+    {
+        TeamsterStrings.MissingKeyReporter = _ => throw new System.InvalidOperationException("boom");
+        try
+        {
+            Assert.Equal("ct032.reporter.throws", TeamsterStrings.Get("ct032.reporter.throws"));
+        }
+        finally
+        {
+            TeamsterStrings.MissingKeyReporter = null;
+        }
+    }
+
+    [Fact]
+    public void Get_KnownKey_NeverInvokesTheReporter()
+    {
+        var reported = new List<string>();
+        TeamsterStrings.MissingKeyReporter = reported.Add;
+        try
+        {
+            TeamsterStrings.Get("status.noCart");
+            TeamsterStrings.Format("manifest.noMatch", "iron");
+            Assert.Empty(reported);
+        }
+        finally
+        {
+            TeamsterStrings.MissingKeyReporter = null;
+        }
+    }
+
+    [Fact]
     public void Format_AppliesPlaceholders_InvariantCulture()
     {
         Assert.Equal("Selected: Ore road", TeamsterStrings.Format("routes.selected", "Ore road"));

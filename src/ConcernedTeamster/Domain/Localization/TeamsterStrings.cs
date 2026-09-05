@@ -41,6 +41,62 @@ public static class TeamsterStrings
             "No problem sections: every sampled grade stays under {0}% and nothing went unsampled.",
         ["report.loadUnavailableNoModel"] = "Load advice unavailable: no calibration data loaded.",
         ["report.loadUnavailableNoGrade"] = "Load advice unavailable: no sampled grade data yet.",
+
+        // Shared panel chrome
+        ["ui.close"] = "Close",
+
+        // Cart Status surface (CT-005): presenter lines + panel chrome.
+        // Numbers arrive pre-formatted (invariant culture) so translations
+        // reorder words, never digits.
+        ["status.title"] = "Cart Status",
+        ["status.cartButton"] = "Cart",
+        ["status.tripsButton"] = "Trips",
+        ["status.routesButton"] = "Routes",
+        ["status.manifestButton"] = "Manifest",
+        ["status.guidanceButton"] = "Guidance",
+        ["status.engageBrake"] = "Engage brake",
+        ["status.releaseBrake"] = "Release brake",
+        ["status.telemetryOff"] = "Cart telemetry is unavailable — see the log for details.",
+        ["status.noCart"] = "No cart nearby.",
+        ["status.pullingThisCart"] = "Pulling this cart",
+        ["status.nearbyCart"] = "Nearby cart",
+        ["status.totalMass"] = "Total mass: {0}",
+        ["status.breakdownCargoUnknown"] = "Base {0} + cargo unknown",
+        ["status.breakdown"] = "Base {0} + cargo {1}",
+        ["status.breakdownScaled"] = "Base {0} + cargo {1} × {2}",
+        ["status.gradeUnavailable"] = "Grade: unavailable",
+        ["status.grade"] = "Grade: {0}% {1}",
+        ["status.gradeWordClimbing"] = "climbing",
+        ["status.gradeWordDescending"] = "descending",
+        ["status.gradeWordLevel"] = "level",
+        ["status.surface"] = "Surface: {0}",
+        ["status.surfaceUntouched"] = "untouched ground",
+        ["status.surfaceDirt"] = "dirt path",
+        ["status.surfaceCultivated"] = "cultivated soil",
+        ["status.surfacePaved"] = "paved road",
+        ["status.surfaceUnknown"] = "unknown",
+        ["status.pulledByYou"] = "Pulled by you",
+        ["status.attachedOtherPuller"] = "Attached to another puller",
+        ["status.notAttached"] = "Not attached",
+        ["status.stale"] = "STALE — last update {0} s ago",
+        ["status.updated"] = "Updated {0} s ago",
+
+        // Cargo manifest surface (CT-007): presenter lines + panel chrome.
+        ["manifest.title"] = "Cargo Manifest",
+        ["manifest.filterPlaceholder"] = "filter items…",
+        ["manifest.colItem"] = "Item",
+        ["manifest.colCount"] = "Count",
+        ["manifest.colUnit"] = "Unit",
+        ["manifest.colLine"] = "Line",
+        ["manifest.noContainer"] = "No cart container available.",
+        ["manifest.empty"] = "Cart is empty.",
+        ["manifest.noMatch"] = "No items match \"{0}\".",
+        ["manifest.totalLine"] = "Total weight: {0} · {1} items",
+        ["manifest.totalLineWithUnknown"] = "Total weight: {0} (+{1} unknown) · {2} items",
+        ["manifest.captured"] = "Captured {0} s ago",
+        ["manifest.capturedStale"] = "STALE — captured {0} s ago",
+        ["manifest.row"] = "{0}   ×{1}   unit {2}   line {3}",
+        ["manifest.overflow"] = "… {0} more — sort or filter to narrow",
     };
 
     private static Dictionary<string, string> _overrides = new(StringComparer.Ordinal);
@@ -49,6 +105,11 @@ public static class TeamsterStrings
     private static readonly Regex PlaceholderPattern = new(@"\{(\d+)\}", RegexOptions.Compiled);
 
     public static IReadOnlyDictionary<string, string> Defaults => English;
+
+    /// <summary>Sink for the once-only missing-English-key warning. The
+    /// adapter layer points this at the plugin log; the domain stays pure
+    /// (an unset or throwing reporter never affects string resolution).</summary>
+    public static Action<string>? MissingKeyReporter { get; set; }
 
     public static bool HasKey(string key) => English.ContainsKey(key);
 
@@ -59,14 +120,25 @@ public static class TeamsterStrings
 
     /// <summary>Resolves a key: a valid override wins, else the English
     /// default, else the key text itself. A key with no English default is a
-    /// programming error, not a translation gap — <paramref name="known"/>
-    /// exposes that so a caller MAY warn once (via
-    /// <see cref="ShouldReportMissing"/>); the presenters that resolve keys
-    /// today are pure and reference only existing keys, so the one-shot log
-    /// is wired as the broader presenter migration lands.</summary>
+    /// programming error, not a translation gap — it is reported ONCE
+    /// through <see cref="MissingKeyReporter"/> (wired to the plugin log by
+    /// the adapter layer), and the key text renders meanwhile so the UI is
+    /// never blank.</summary>
     public static string Get(string key, out bool known)
     {
         known = English.ContainsKey(key);
+        if (!known && ShouldReportMissing(key))
+        {
+            try
+            {
+                MissingKeyReporter?.Invoke(key);
+            }
+            catch
+            {
+                // A faulty reporter must never break string resolution.
+            }
+        }
+
         if (_overrides.TryGetValue(key, out string? translated) && !string.IsNullOrEmpty(translated))
         {
             return translated;

@@ -1,8 +1,10 @@
 using System;
+using System.Globalization;
 using BepInEx.Logging;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedTeamster.Adapters;
 using TheConcernedCat.ConcernedTeamster.Domain.Cargo;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using TheConcernedCat.ConcernedTeamster.Domain.Ui;
 using UnityEngine;
 using UnityEngine.UI;
@@ -180,10 +182,9 @@ internal sealed class CargoManifestPanel
             if (index < shown)
             {
                 CargoRowViewModel rowModel = viewModel.Rows[index];
-                row.text =
-                    rowModel.Name + "   ×" + rowModel.CountText +
-                    "   unit " + rowModel.UnitWeightText +
-                    "   line " + rowModel.LineWeightText;
+                row.text = TeamsterStrings.Format(
+                    "manifest.row", rowModel.Name, rowModel.CountText,
+                    rowModel.UnitWeightText, rowModel.LineWeightText);
             }
             else
             {
@@ -195,7 +196,8 @@ internal sealed class CargoManifestPanel
         {
             int hidden = viewModel.Rows.Count - shown;
             _overflow.text = hidden > 0
-                ? "… " + hidden + " more — sort or filter to narrow"
+                ? TeamsterStrings.Format(
+                    "manifest.overflow", hidden.ToString(CultureInfo.InvariantCulture))
                 : string.Empty;
         }
 
@@ -231,10 +233,14 @@ internal sealed class CargoManifestPanel
     private void UpdateSortButtonLabels()
     {
         string arrow = _sortDescending ? " ▼" : " ▲";
-        SetButtonLabel(_sortNameButton, "Item" + (_sortColumn == CargoSortColumn.Name ? arrow : string.Empty));
-        SetButtonLabel(_sortCountButton, "Count" + (_sortColumn == CargoSortColumn.Count ? arrow : string.Empty));
-        SetButtonLabel(_sortUnitButton, "Unit" + (_sortColumn == CargoSortColumn.UnitWeight ? arrow : string.Empty));
-        SetButtonLabel(_sortLineButton, "Line" + (_sortColumn == CargoSortColumn.LineWeight ? arrow : string.Empty));
+        SetButtonLabel(_sortNameButton, TeamsterStrings.Get("manifest.colItem") +
+            (_sortColumn == CargoSortColumn.Name ? arrow : string.Empty));
+        SetButtonLabel(_sortCountButton, TeamsterStrings.Get("manifest.colCount") +
+            (_sortColumn == CargoSortColumn.Count ? arrow : string.Empty));
+        SetButtonLabel(_sortUnitButton, TeamsterStrings.Get("manifest.colUnit") +
+            (_sortColumn == CargoSortColumn.UnitWeight ? arrow : string.Empty));
+        SetButtonLabel(_sortLineButton, TeamsterStrings.Get("manifest.colLine") +
+            (_sortColumn == CargoSortColumn.LineWeight ? arrow : string.Empty));
     }
 
     private static void SetButtonLabel(Button? button, string label)
@@ -269,7 +275,7 @@ internal sealed class CargoManifestPanel
             new Vector2(-(PanelWidth / 2f) - 380f, 0f), PanelWidth, PanelHeight, draggable: true);
 
         gui.CreateText(
-            "Cargo Manifest", _panel.transform,
+            TeamsterStrings.Get("manifest.title"), _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -28f),
             font, 19, headerColor, outline: true, Color.black, PanelWidth - 40f, 30f,
             addContentSizeFitter: false);
@@ -277,7 +283,8 @@ internal sealed class CargoManifestPanel
         GameObject filterObject = gui.CreateInputField(
             _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -62f),
-            placeholderText: "filter items…", fontSize: 15, width: PanelWidth - 60f, height: 28f);
+            placeholderText: TeamsterStrings.Get("manifest.filterPlaceholder"),
+            fontSize: 15, width: PanelWidth - 60f, height: 28f);
         _filter = filterObject.GetComponent<InputField>();
         if (_filter != null)
         {
@@ -310,7 +317,7 @@ internal sealed class CargoManifestPanel
         _freshness = CreateBodyText(gui, font, bodyColor, y - 2f * RowHeight, RowHeight);
 
         GameObject close = gui.CreateButton(
-            "Close", _panel.transform,
+            TeamsterStrings.Get("ui.close"), _panel.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 26f), 110f, 28f);
         close.GetComponent<Button>().onClick.AddListener(Hide);
 
