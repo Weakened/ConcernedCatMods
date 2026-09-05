@@ -8,16 +8,17 @@ Your cart stops being a mystery: Concerned Teamster measures load, grade, tracti
 
 Valheim shows no cart mass, no cargo weight total, no hint whether a loaded cart can climb the hill ahead, and no warning before a descent turns into a runaway. Most cart mods answer that pain by deleting it — weightless or physics-free carts. Concerned Teamster keeps the logistics gameplay and explains it instead.
 
-## What it does today (v0.1 — Cart Truth)
+## What it does today (v0.4 — Road Quality and Trip Profiles)
 
-* A visible **Cart** button (right screen edge, in-world) opens the **Cart Status panel**: total mass with its base + cargo breakdown, live terrain grade with climbing/descending state, ground surface, attachment/pull state, and data freshness. Stale or unavailable values say so — never wrong numbers.
+* **Cart Status panel.** A visible **Cart** button (right screen edge, in-world) shows total mass with its base + cargo breakdown, live terrain grade with climbing/descending state, ground surface, attachment/pull state, and data freshness. Stale or unavailable values say so — never wrong numbers.
+* **Cargo manifest and load planning (v0.2).** A sortable, filterable manifest of the cart's cargo using the game's own quality-scaled weights, a calibrated safe-load model that answers "uncalibrated" instead of faking precision, and live load/grade warnings with actionable non-color text.
+* **Descent safety and recovery (v0.3).** A calibrated descent-risk model with bounded lookahead, an explicit reversible parking brake (never written to saves — a reloaded world is always brake-free), stuck-cause diagnostics, and numbered vanilla-legal recovery steps — advice, never teleports or cheats.
+* **Trip recording and road quality (v0.4).** Pulled-cart trips are recorded to Teamster's own per-world sidecar (bounded, capped, atomic writes; world saves untouched); recorded trips score the roads in 8 m segments — roughness, grade, drag proxy — and a Trips panel lists, compares, and analyzes them, locating worst-grade points, roughest segments, and hypothetical-load bottlenecks on your real routes.
 * Read-only, bounded telemetry with hard performance caps; everything game-facing is verified at startup and fails closed with one actionable log line if a game update changes cart internals.
 
 ## What comes next (roadmap)
-* **Cargo and Load Planning (v0.2):** a sortable cargo manifest, safe-load estimates, and overload warnings.
-* **Descent Safety (v0.3):** runaway-risk warnings and recovery guidance — advice, never teleports or cheats.
-* **Road Quality and Trip Profiles (v0.4):** trip recording and road scoring for your hauling routes.
-* Later: optional Concerned Cartographer route integration, multiplayer trust, accessibility, and compatibility hardening.
+* **Optional Cartographer integration (v0.5):** profile Concerned Cartographer routes — no hard dependency.
+* Later: multiplayer trust and authority, accessibility and localization, and compatibility hardening.
 
 ## Principles
 
@@ -29,7 +30,7 @@ Valheim shows no cart mass, no cargo weight total, no hint whether a loaded cart
 
 ## Status
 
-Version 0.1.x is the internal **Cart Truth** line: verified cart telemetry and the Cart Status panel, with vanilla physics untouched. Features land issue by issue on the [GitHub tracker](https://github.com/Weakened/ConcernedCatMods/issues). The first public release will be the v0.9 beta after the full hardening pass.
+Version 0.4.x is the internal **Road Quality and Trip Profiles** line: cart truth, cargo and load planning, descent safety, and trip-based road scoring, with vanilla physics untouched by default. Features land issue by issue on the [GitHub tracker](https://github.com/Weakened/ConcernedCatMods/issues). The first public release will be the v0.9 beta after the full hardening pass.
 
 ## Support
 

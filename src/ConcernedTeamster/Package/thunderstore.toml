@@ -5,7 +5,7 @@ schemaVersion = "0.0.1"
 namespace = "TheConcernedCat"
 name = "ConcernedTeamster"
 versionNumber = "0.4.0"
-description = "Cart truth for haulers: measures cart mass, cargo weight, grade, and pull state, and explains hauling risk - while vanilla cart physics stay untouched by default."
+description = "Cart truth for haulers: live mass, cargo, grade, and risk readouts, plus recorded trips that score road quality and locate route bottlenecks - while vanilla cart physics stay untouched by default."
 websiteUrl = "https://github.com/Weakened/ConcernedCatMods"
 containsNsfwContent = false
 

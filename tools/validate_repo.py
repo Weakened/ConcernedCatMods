@@ -161,6 +161,11 @@ def validate_product(key: str, errors: list[str], require_binary: bool,
     if expected_version and any(value != expected_version for value in versions.values()):
         fail(f"{prefix} Expected version {expected_version}, found {versions}", errors)
 
+    if expected_version:
+        changelog_text = (package / "CHANGELOG.md").read_text(encoding="utf-8")
+        if not re.search(rf"^##\s+{re.escape(expected_version)}\b", changelog_text, re.MULTILINE):
+            fail(f"{prefix} CHANGELOG.md has no '## {expected_version}' section", errors)
+
     copy_entries = build.get("copy", [])
     targets = {entry.get("target") for entry in copy_entries}
     expected_targets = {

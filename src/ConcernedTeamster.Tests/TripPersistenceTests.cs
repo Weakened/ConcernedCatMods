@@ -226,12 +226,39 @@ public class TripPersistenceTests
 
     // -- atomic file store -------------------------------------------------
 
+    /// <summary>Shared temp-dir fixture for the real-filesystem tests. The
+    /// teardown tolerates a transient Windows file lock (antivirus/indexer
+    /// holding a just-written handle): a stranded ct*-GUID directory in
+    /// %TEMP% is harmless, while an exception thrown from finally would
+    /// replace the test's real assertion failure.</summary>
+    private static void RunInTempDir(string prefix, Action<string> body)
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(), prefix + "-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            body(directory);
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
     [Fact]
     public void FileStore_CrashBeforeSwap_LeavesThePreviousFileIntact()
     {
-        string directory = Path.Combine(Path.GetTempPath(), "ct016-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(directory);
-        try
+        RunInTempDir("ct016", directory =>
         {
             string path = Path.Combine(directory, "teamster_trips_42.txt");
             Assert.True(SidecarFileStore.TryWriteAtomic(path, "original", out _));
@@ -248,19 +275,13 @@ public class TripPersistenceTests
             Assert.True(SidecarFileStore.TryWriteAtomic(path, "second", out _));
             Assert.Equal("second", File.ReadAllText(path));
             Assert.False(File.Exists(path + ".tmp"));
-        }
-        finally
-        {
-            Directory.Delete(directory, recursive: true);
-        }
+        });
     }
 
     [Fact]
     public void FileStore_BackupBeforeMigration_CopiesTheFile()
     {
-        string directory = Path.Combine(Path.GetTempPath(), "ct016-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(directory);
-        try
+        RunInTempDir("ct016", directory =>
         {
             string path = Path.Combine(directory, "teamster_trips_42.txt");
             File.WriteAllText(path, "old format");
@@ -268,24 +289,20 @@ public class TripPersistenceTests
             Assert.True(SidecarFileStore.TryBackup(path, "refused", out _));
             Assert.Equal("old format", File.ReadAllText(path + ".bak-refused"));
             Assert.Equal("old format", File.ReadAllText(path));
-        }
-        finally
-        {
-            Directory.Delete(directory, recursive: true);
-        }
+        });
     }
 
     [Fact]
     public void Retention_ManySaveCycles_StaysBoundedKeepsNewestAndAccumulatesSegments()
     {
-        // CT-020 gate: the service's read-merge-prune-write cycle, run 200
-        // times against a real file with a 50-trip cap. Raw trips must stay
-        // at the cap (newest kept, ids dense), the file must not grow
-        // unboundedly, and segment scores must keep the full 200-trip
-        // history even as raw trips prune (the CT-017 documented property).
-        string directory = Path.Combine(Path.GetTempPath(), "ct020-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(directory);
-        try
+        // CT-020 gate: 200 read-merge-prune-write cycles against a real
+        // file at a 50-trip cap, where the merge step is the SAME production
+        // code the runtime service runs (TripSidecar.MergeAndCompose). Raw
+        // trips must stay at the cap (newest kept, ids dense), the file must
+        // not grow unboundedly, and segment scores must keep the full
+        // 200-trip history even as raw trips prune (the CT-017 documented
+        // property).
+        RunInTempDir("ct020", directory =>
         {
             string path = Path.Combine(directory, "teamster_trips_42.txt");
             const int maxTrips = 50;
@@ -299,15 +316,11 @@ public class TripPersistenceTests
                 Assert.False(existing.Refused);
                 Assert.Empty(existing.Errors);
 
-                RoadQualityIndex segments = existing.Segments;
                 Trip newTrip = MakeTrip(5, cartId: "c" + cycle, startTime: cycle * 100.0);
-                segments.AddTrip(newTrip);
-
-                var merged = new List<Trip>(existing.Trips) { newTrip };
-                IReadOnlyList<Trip> pruned = TripSidecar.Prune(merged, maxTrips);
-                Assert.True(SidecarFileStore.TryWriteAtomic(
-                    path, TripSidecar.Compose(pruned, 42L, "0.4.0", segments), out string? writeError));
-                Assert.Null(writeError);
+                string composed = TripSidecar.MergeAndCompose(
+                    existing, new[] { newTrip }, maxTrips, 42L, "0.4.0");
+                bool wrote = SidecarFileStore.TryWriteAtomic(path, composed, out string? writeError);
+                Assert.True(wrote, $"cycle {cycle} write failed: {writeError ?? "(no error detail)"}");
 
                 if (cycle == 60)
                 {
@@ -315,8 +328,9 @@ public class TripPersistenceTests
                 }
             }
 
-            TripSidecar.ParseResult final =
-                TripSidecar.Parse(SidecarFileStore.TryRead(path, out _), 42L);
+            string? finalText = SidecarFileStore.TryRead(path, out string? finalReadError);
+            Assert.Null(finalReadError);
+            TripSidecar.ParseResult final = TripSidecar.Parse(finalText, 42L);
             Assert.False(final.Refused);
             Assert.Empty(final.Errors);
 
@@ -339,11 +353,7 @@ public class TripPersistenceTests
             // samples although only 50 raw trips remain.
             RoadSegmentStats stats = Assert.Single(final.Segments.Segments).Value;
             Assert.Equal(1000, stats.SampleCount);
-        }
-        finally
-        {
-            Directory.Delete(directory, recursive: true);
-        }
+        });
     }
 
     [Fact]

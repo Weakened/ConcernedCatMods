@@ -274,6 +274,33 @@ public static class TripSidecar
         segments.RestoreSegment(new RoadSegmentKey(cellX, cellZ), stats);
     }
 
+    /// <summary>The complete save-merge step, shared by the runtime service
+    /// and the CT-020 retention gate test so the gate exercises production
+    /// code, not a mirror: recompute segments from the stored trips when the
+    /// parse flagged a v1 migration, fold the new trips into the segment
+    /// scores, append them to the stored trips, prune to the retention cap,
+    /// and compose the file text. Pure — no IO and no logging; refusal and
+    /// backup decisions stay with the caller, which must back the file up
+    /// BEFORE writing the result over a refused or migrating file.</summary>
+    public static string MergeAndCompose(
+        ParseResult existing, IReadOnlyList<Trip> newTrips, int maxTrips,
+        long worldUid, string pluginVersion)
+    {
+        RoadQualityIndex segments = existing.NeedsMigration
+            ? RoadQualityIndex.ComputeFromTrips(existing.Trips)
+            : existing.Segments;
+
+        foreach (Trip trip in newTrips)
+        {
+            segments.AddTrip(trip);
+        }
+
+        var merged = new List<Trip>(existing.Trips);
+        merged.AddRange(newTrips);
+        IReadOnlyList<Trip> pruned = Prune(merged, maxTrips);
+        return Compose(pruned, worldUid, pluginVersion, segments);
+    }
+
     /// <summary>Keeps the newest trips within the cap (oldest pruned) and
     /// renumbers ids densely from 1.</summary>
     public static IReadOnlyList<Trip> Prune(IReadOnlyList<Trip> trips, int maxTrips)

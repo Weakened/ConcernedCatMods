@@ -124,9 +124,8 @@ internal sealed class TripRecordingService
                 " malformed line(s); valid trips were kept.");
         }
 
-        // CT-017: restore persisted segment scores, or migrate a v1 file by
-        // recomputing them once from its trips — after backing it up.
-        Domain.RoadQuality.RoadQualityIndex segments = existing.Segments;
+        // CT-017: a v1 file is backed up before the rewrite would replace
+        // it; the recompute itself happens inside the shared merge step.
         if (existing.NeedsMigration)
         {
             if (!SidecarFileStore.TryBackup(path, "migrate-v1", out string? migrateBackupError))
@@ -135,22 +134,13 @@ internal sealed class TripRecordingService
                 return;
             }
 
-            segments = Domain.RoadQuality.RoadQualityIndex.ComputeFromTrips(existing.Trips);
             _log.LogInfo(
                 "Trip sidecar migrated from format v1: segment scores recomputed from " +
                 existing.Trips.Count + " stored trip(s); original backed up.");
         }
 
-        foreach (Trip trip in newTrips)
-        {
-            segments.AddTrip(trip);
-        }
-
-        var merged = new List<Trip>(existing.Trips);
-        merged.AddRange(newTrips);
-        IReadOnlyList<Trip> pruned = TripSidecar.Prune(merged, _options.MaxTripsRetained);
-
-        string composed = TripSidecar.Compose(pruned, worldUid, _pluginVersion, segments);
+        string composed = TripSidecar.MergeAndCompose(
+            existing, newTrips, _options.MaxTripsRetained, worldUid, _pluginVersion);
         if (!SidecarFileStore.TryWriteAtomic(path, composed, out string? writeError))
         {
             WarnIoOnce("sidecar write failed: " + writeError + "; previous file left intact");
