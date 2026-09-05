@@ -157,20 +157,30 @@ internal sealed class TripRecordingService
         }
     }
 
-    /// <summary>Loads this world's persisted trips for the history UI
-    /// (CT-018). Empty on any failure; refused files stay untouched.</summary>
-    public (System.Collections.Generic.IReadOnlyList<Trip> Trips, long WorldUid) LoadTripsForCurrentWorld()
+    /// <summary>Loads this world's persisted trips and segment scores for
+    /// the history/bottleneck UI (CT-018/CT-019). Empty on any failure;
+    /// refused files stay untouched.</summary>
+    public (System.Collections.Generic.IReadOnlyList<Trip> Trips,
+        Domain.RoadQuality.RoadQualityIndex Segments,
+        long WorldUid) LoadWorldData()
     {
+        var emptySegments = new Domain.RoadQuality.RoadQualityIndex();
         if (!WorldContextAdapter.TryGetWorldUid(out long worldUid))
         {
-            return (System.Array.Empty<Trip>(), 0L);
+            return (System.Array.Empty<Trip>(), emptySegments, 0L);
         }
 
         string? text = SidecarFileStore.TryRead(SidecarPathFor(worldUid), out _);
         TripSidecar.ParseResult parsed = TripSidecar.Parse(text, worldUid);
-        return parsed.Refused
-            ? ((System.Collections.Generic.IReadOnlyList<Trip>)System.Array.Empty<Trip>(), worldUid)
-            : (parsed.Trips, worldUid);
+        if (parsed.Refused)
+        {
+            return (System.Array.Empty<Trip>(), emptySegments, worldUid);
+        }
+
+        Domain.RoadQuality.RoadQualityIndex segments = parsed.NeedsMigration
+            ? Domain.RoadQuality.RoadQualityIndex.ComputeFromTrips(parsed.Trips)
+            : parsed.Segments;
+        return (parsed.Trips, segments, worldUid);
     }
 
     /// <summary>Deletes one trip's raw record (its data only — the
