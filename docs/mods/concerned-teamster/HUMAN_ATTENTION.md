@@ -227,6 +227,28 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-04 — CT-012 in-game brake demonstration pending
+
+- Version / issue: v0.3 / CT-012 (#123)
+- Question: the slope hold/release demonstration (engage on a grade, cart
+  holds; release restores vanilla rolling; wheels/joints behave while the
+  root body is frozen; multiplayer authority hand-off releases) needs
+  interactive sessions.
+- Safe reversible default selected: engage is explicit-button-only behind
+  five eligibility facts; every release path (player toggle, grab, walk-
+  away, authority loss, capability loss, world exit, plugin shutdown,
+  cart destruction) is unit-tested in the lifecycle matrix; the mutation
+  is a single runtime `constraints` assignment that Valheim's save format
+  cannot persist, so uninstall/reload is vanilla by construction.
+- Why work continued: the worst in-game surprise is visual jitter of a
+  frozen cart, reversible by the release button or any automatic path;
+  no save/world state can be affected.
+- Risk / alternative: freezing only the root body relies on wheel joints
+  to hold the wheels — if wheels visibly dangle in-game, freezing all
+  child bodies is a contained follow-up defect.
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.

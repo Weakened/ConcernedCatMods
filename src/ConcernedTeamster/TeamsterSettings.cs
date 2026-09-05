@@ -23,7 +23,8 @@ internal sealed class TeamsterSettings
         ConfigEntry<bool> panelWarningsEnabled,
         ConfigEntry<bool> hudWarningHintsEnabled,
         ConfigEntry<float> steepGradeCautionPercent,
-        ConfigEntry<int> riskLookaheadPoints)
+        ConfigEntry<int> riskLookaheadPoints,
+        ConfigEntry<bool> brakeEnabled)
     {
         Enabled = enabled;
         DebugLogging = debugLogging;
@@ -36,6 +37,7 @@ internal sealed class TeamsterSettings
         HudWarningHintsEnabled = hudWarningHintsEnabled;
         SteepGradeCautionPercent = steepGradeCautionPercent;
         RiskLookaheadPoints = riskLookaheadPoints;
+        BrakeEnabled = brakeEnabled;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -49,6 +51,7 @@ internal sealed class TeamsterSettings
     public ConfigEntry<bool> HudWarningHintsEnabled { get; }
     public ConfigEntry<float> SteepGradeCautionPercent { get; }
     public ConfigEntry<int> RiskLookaheadPoints { get; }
+    public ConfigEntry<bool> BrakeEnabled { get; }
 
     public static TeamsterSettings Bind(ConfigFile config)
     {
@@ -104,6 +107,8 @@ internal sealed class TeamsterSettings
                     "Terrain samples taken ahead of the pulled cart (4 m apart) to rate the upcoming descent. 0 disables lookahead. Each sample is one bounded ground-height read per telemetry tick.",
                     new AcceptableValueRange<int>(
                         Domain.Risk.LookaheadOptions.MinPoints,
-                        Domain.Risk.LookaheadOptions.MaxPoints))));
+                        Domain.Risk.LookaheadOptions.MaxPoints))),
+            config.Bind("Brake", "Enabled", true,
+                "The parking brake feature: a visible button that freezes a parked cart you control until you release it. Explicit per-use, always reversible, never saved into the world, and it releases itself on detach distance, world exit, shutdown, or any capability loss. Disable to remove the button entirely."));
     }
 }

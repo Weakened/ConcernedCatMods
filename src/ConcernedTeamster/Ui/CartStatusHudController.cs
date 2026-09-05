@@ -22,7 +22,7 @@ namespace TheConcernedCat.ConcernedTeamster.Ui;
 internal sealed class CartStatusHudController : MonoBehaviour
 {
     private const float PanelWidth = 320f;
-    private const float PanelHeight = 330f;
+    private const float PanelHeight = 380f;
     private const float RowHeight = 26f;
     private const float RefreshPeriodSeconds = 0.25f;
     private const int RowCount = 8;
@@ -36,6 +36,8 @@ internal sealed class CartStatusHudController : MonoBehaviour
     private GameObject? _button;
     private GameObject? _panel;
     private Text? _hudHint;
+    private GameObject? _brakeButton;
+    private Text? _brakeButtonText;
     private Text[] _rows = Array.Empty<Text>();
     private string? _selectedCartId;
     private double _nextRefreshTime;
@@ -218,6 +220,19 @@ internal sealed class CartStatusHudController : MonoBehaviour
             y -= RowHeight;
         }
 
+        // CT-012: the explicit, visible brake control. Hidden unless the
+        // selected cart is under local vanilla authority (fail closed).
+        _brakeButton = gui.CreateButton(
+            "Engage brake", _panel.transform,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 62f), 170f, 30f);
+        _brakeButtonText = _brakeButton.GetComponentInChildren<Text>();
+        _brakeButton.GetComponent<Button>().onClick.AddListener(() =>
+        {
+            _pump?.Brake?.RequestToggle(_selectedCartId);
+            RefreshPanel(Time.unscaledTimeAsDouble);
+        });
+        _brakeButton.SetActive(false);
+
         GameObject manifest = gui.CreateButton(
             "Manifest", _panel.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-62f, 28f), 110f, 30f);
@@ -263,6 +278,47 @@ internal sealed class CartStatusHudController : MonoBehaviour
         }
 
         _rows[7].text = warningLine;
+        RefreshBrakeButton(viewModel.SelectedCartId);
+    }
+
+    /// <summary>Shows the brake control only for a selected cart under
+    /// local vanilla authority and not being pulled (or when the brake is
+    /// engaged on it, so release is always reachable). Reads facts through
+    /// the fail-closed adapter; any doubt hides the control.</summary>
+    private void RefreshBrakeButton(string selectedCartId)
+    {
+        if (_brakeButton == null)
+        {
+            return;
+        }
+
+        BrakeService? brake = _pump?.Brake;
+        bool visible = false;
+        string label = "Engage brake";
+        if (brake is not null && selectedCartId.Length > 0)
+        {
+            if (brake.EngagedCartId == selectedCartId)
+            {
+                visible = true;
+                label = "Release brake";
+            }
+            else if (!brake.IsEngaged)
+            {
+                Domain.Brake.BrakeFacts facts = CartBrakeAdapter.ReadFacts(selectedCartId);
+                visible = facts.CartExists && facts.IsLocalAuthority && !facts.IsAttached &&
+                    facts.DistanceMeters <= Domain.Brake.BrakeLifecycle.EngageMaxDistanceMeters;
+            }
+        }
+
+        if (_brakeButton.activeSelf != visible)
+        {
+            _brakeButton.SetActive(visible);
+        }
+
+        if (visible && _brakeButtonText != null && _brakeButtonText.text != label)
+        {
+            _brakeButtonText.text = label;
+        }
     }
 
     /// <summary>Shows the current warning for the selected cart while it is

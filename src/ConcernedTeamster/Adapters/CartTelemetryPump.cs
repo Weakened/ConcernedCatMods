@@ -34,6 +34,10 @@ internal sealed class CartTelemetryPump : MonoBehaviour
     /// Read-only for consumers — evaluation happens on new snapshots only.</summary>
     public DescentRiskInfo? LatestDescentRisk { get; private set; }
 
+    /// <summary>The parking brake owner (CT-012); null when the brake is
+    /// disabled by config.</summary>
+    public BrakeService? Brake { get; private set; }
+
     /// <summary>Latest telemetry by cart id for future consumers (CT-005
     /// panels); null until initialized.</summary>
     public IReadOnlyDictionary<string, CartTelemetry>? Telemetry => _sampler?.TelemetryByCartId;
@@ -69,6 +73,7 @@ internal sealed class CartTelemetryPump : MonoBehaviour
             settings.HudWarningHintsEnabled.Value);
         _riskModel = riskModel;
         _lookaheadOptions = LookaheadOptions.CreateClamped(settings.RiskLookaheadPoints.Value);
+        Brake = settings.BrakeEnabled.Value ? new BrakeService(log) : null;
         return options;
     }
 
@@ -87,6 +92,7 @@ internal sealed class CartTelemetryPump : MonoBehaviour
                 sampler.Reset();
                 _warnings?.Reset();
                 LatestDescentRisk = null;
+                Brake?.ReleaseNow("left the world");
                 _resetWhileNoLocalPlayer = true;
             }
 
@@ -151,6 +157,9 @@ internal sealed class CartTelemetryPump : MonoBehaviour
             LatestDescentRisk = null;
         }
 
+        // CT-012: the brake re-validates its engaged cart on every due tick.
+        Brake?.Tick();
+
         if (_settings is { } settings && settings.DebugLogging.Value && now >= _nextDebugSummaryTime)
         {
             _nextDebugSummaryTime = now + DebugSummaryPeriodSeconds;
@@ -159,5 +168,11 @@ internal sealed class CartTelemetryPump : MonoBehaviour
                 $"{sampler.SampledOnLastDueTick} sampled this tick" +
                 (LatestDescentRisk is null ? "." : "; " + LatestDescentRisk.Describe() + "."));
         }
+    }
+
+    private void OnDestroy()
+    {
+        // Plugin shutdown must never leave a frozen cart behind.
+        Brake?.ReleaseNow("plugin shutdown");
     }
 }
