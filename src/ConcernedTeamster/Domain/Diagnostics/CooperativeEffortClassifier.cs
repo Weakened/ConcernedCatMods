@@ -16,7 +16,7 @@ public static class CooperativeEffortClassifier
     /// as no contribution (idle touch), not help or hindrance.</summary>
     public const float MeaningfulAlignment = 0.15f;
 
-    public static CoopEffort Classify(in CoopParticipant participant, bool cartMoving)
+    public static CoopEffort Classify(in CoopParticipant participant)
     {
         // Pulling the handle is help by definition — the puller is doing the
         // haul's work whether or not the cart is currently moving.
@@ -71,12 +71,12 @@ public static class CooperativeEffortClassifier
         public int Contributors => Helping + Hindering;
     }
 
-    public static EffortTally Tally(IReadOnlyList<CoopParticipant> participants, bool cartMoving)
+    public static EffortTally Tally(IReadOnlyList<CoopParticipant> participants)
     {
         int helping = 0, hindering = 0, idle = 0, unclear = 0;
         for (int index = 0; index < participants.Count; index++)
         {
-            switch (Classify(participants[index], cartMoving))
+            switch (Classify(participants[index]))
             {
                 case CoopEffort.Helping: helping++; break;
                 case CoopEffort.Hindering: hindering++; break;
@@ -92,9 +92,9 @@ public static class CooperativeEffortClassifier
     /// helping or hindering (no cooperation to describe). Names the
     /// helpers/hinderers using only their already-visible in-game names,
     /// capped so the line stays readable.</summary>
-    public static string Summarize(IReadOnlyList<CoopParticipant> participants, bool cartMoving)
+    public static string Summarize(IReadOnlyList<CoopParticipant> participants)
     {
-        EffortTally tally = Tally(participants, cartMoving);
+        EffortTally tally = Tally(participants);
         if (tally.Contributors == 0 && tally.Unclear == 0)
         {
             return string.Empty;
@@ -104,13 +104,13 @@ public static class CooperativeEffortClassifier
         if (tally.Helping > 0)
         {
             parts.Add(tally.Helping.ToString(CultureInfo.InvariantCulture) + " helping" +
-                NameList(participants, cartMoving, CoopEffort.Helping));
+                NameList(participants, CoopEffort.Helping));
         }
 
         if (tally.Hindering > 0)
         {
             parts.Add(tally.Hindering.ToString(CultureInfo.InvariantCulture) + " hindering" +
-                NameList(participants, cartMoving, CoopEffort.Hindering));
+                NameList(participants, CoopEffort.Hindering));
         }
 
         if (tally.Unclear > 0)
@@ -129,7 +129,7 @@ public static class CooperativeEffortClassifier
     public static string ExplainStuck(
         IReadOnlyList<CoopParticipant> participants, CartDiagnostic diagnosis)
     {
-        string coop = Summarize(participants, cartMoving: false);
+        string coop = Summarize(participants);
         string physical = diagnosis.ComposeLine();
 
         if (coop.Length == 0)
@@ -137,7 +137,7 @@ public static class CooperativeEffortClassifier
             return physical;
         }
 
-        EffortTally tally = Tally(participants, cartMoving: false);
+        EffortTally tally = Tally(participants);
         var builder = new StringBuilder();
         builder.Append("Crew: ").Append(coop).Append('.');
 
@@ -164,13 +164,13 @@ public static class CooperativeEffortClassifier
     }
 
     private static string NameList(
-        IReadOnlyList<CoopParticipant> participants, bool cartMoving, CoopEffort effort)
+        IReadOnlyList<CoopParticipant> participants, CoopEffort effort)
     {
         var names = new List<string>(2);
         for (int index = 0; index < participants.Count && names.Count < 2; index++)
         {
             CoopParticipant participant = participants[index];
-            if (Classify(participant, cartMoving) != effort)
+            if (Classify(participant) != effort)
             {
                 continue;
             }

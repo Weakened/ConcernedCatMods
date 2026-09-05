@@ -20,46 +20,47 @@ public class CooperativeEffortClassifierTests
     // -- single-participant classification matrix --
 
     [Fact]
-    public void AttachedPuller_IsHelping_WhetherMovingOrStuck()
+    public void AttachedPuller_IsHelping()
     {
-        var puller = P("Ana", attached: true, contact: true, alignment: 0f);
-        Assert.Equal(CoopEffort.Helping, CooperativeEffortClassifier.Classify(puller, cartMoving: true));
-        Assert.Equal(CoopEffort.Helping, CooperativeEffortClassifier.Classify(puller, cartMoving: false));
+        // Pulling the handle is help by definition — regardless of contact
+        // flag or motion reading, the attached check short-circuits first.
+        var puller = P("Ana", attached: true, contact: false, alignment: float.NaN);
+        Assert.Equal(CoopEffort.Helping, CooperativeEffortClassifier.Classify(puller));
     }
 
     [Fact]
     public void PushingAlong_IsHelping()
     {
         var pusher = P("Bo", attached: false, contact: true, alignment: 0.8f);
-        Assert.Equal(CoopEffort.Helping, CooperativeEffortClassifier.Classify(pusher, cartMoving: false));
+        Assert.Equal(CoopEffort.Helping, CooperativeEffortClassifier.Classify(pusher));
     }
 
     [Fact]
     public void PushingAgainst_IsHindering()
     {
         var blocker = P("Cy", attached: false, contact: true, alignment: -0.8f);
-        Assert.Equal(CoopEffort.Hindering, CooperativeEffortClassifier.Classify(blocker, cartMoving: false));
+        Assert.Equal(CoopEffort.Hindering, CooperativeEffortClassifier.Classify(blocker));
     }
 
     [Fact]
     public void ContactButNoMeaningfulMotion_IsIdle()
     {
         var leaning = P("Di", attached: false, contact: true, alignment: 0.05f);
-        Assert.Equal(CoopEffort.Idle, CooperativeEffortClassifier.Classify(leaning, cartMoving: false));
+        Assert.Equal(CoopEffort.Idle, CooperativeEffortClassifier.Classify(leaning));
     }
 
     [Fact]
     public void NotAttachedNotInContact_IsIdle()
     {
         var away = P("Ed", attached: false, contact: false, alignment: 0.9f);
-        Assert.Equal(CoopEffort.Idle, CooperativeEffortClassifier.Classify(away, cartMoving: false));
+        Assert.Equal(CoopEffort.Idle, CooperativeEffortClassifier.Classify(away));
     }
 
     [Fact]
     public void InContactUnknownMotion_IsUnclear()
     {
         var unknown = P("Fi", attached: false, contact: true, alignment: float.NaN);
-        Assert.Equal(CoopEffort.Unclear, CooperativeEffortClassifier.Classify(unknown, cartMoving: false));
+        Assert.Equal(CoopEffort.Unclear, CooperativeEffortClassifier.Classify(unknown));
     }
 
     [Theory]
@@ -70,7 +71,7 @@ public class CooperativeEffortClassifierTests
     public void AlignmentThreshold_IsHalfOpen(float alignment, CoopEffort expected)
     {
         var p = P("G", attached: false, contact: true, alignment: alignment);
-        Assert.Equal(expected, CooperativeEffortClassifier.Classify(p, cartMoving: false));
+        Assert.Equal(expected, CooperativeEffortClassifier.Classify(p));
     }
 
     // -- tally over a multi-actor trace --
@@ -89,7 +90,7 @@ public class CooperativeEffortClassifierTests
         };
 
         CooperativeEffortClassifier.EffortTally tally =
-            CooperativeEffortClassifier.Tally(crew, cartMoving: false);
+            CooperativeEffortClassifier.Tally(crew);
 
         Assert.Equal(2, tally.Helping);
         Assert.Equal(1, tally.Hindering);
@@ -109,7 +110,7 @@ public class CooperativeEffortClassifierTests
             P("Cy", attached: false, contact: true, alignment: -0.9f),
         };
 
-        string summary = CooperativeEffortClassifier.Summarize(crew, cartMoving: false);
+        string summary = CooperativeEffortClassifier.Summarize(crew);
 
         Assert.Contains("1 helping (Ana)", summary);
         Assert.Contains("1 hindering (Cy)", summary);
@@ -124,7 +125,7 @@ public class CooperativeEffortClassifierTests
             P("Di", attached: false, contact: true, alignment: 0f),
         };
 
-        Assert.Equal(string.Empty, CooperativeEffortClassifier.Summarize(crew, cartMoving: false));
+        Assert.Equal(string.Empty, CooperativeEffortClassifier.Summarize(crew));
     }
 
     [Fact]
@@ -136,7 +137,7 @@ public class CooperativeEffortClassifierTests
             P("", attached: false, contact: true, alignment: 0.9f),
         };
 
-        string summary = CooperativeEffortClassifier.Summarize(crew, cartMoving: false);
+        string summary = CooperativeEffortClassifier.Summarize(crew);
 
         Assert.Contains("you", summary);
         Assert.Contains("a teammate", summary);

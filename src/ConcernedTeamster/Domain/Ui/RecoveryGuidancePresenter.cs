@@ -101,11 +101,11 @@ public static class RecoveryGuidancePresenter
         // verdict above, and grants no force.
         if (participants is { Count: > 0 })
         {
-            string coop = CooperativeEffortClassifier.Summarize(participants, cartMoving: false);
+            string coop = CooperativeEffortClassifier.Summarize(participants);
             if (coop.Length > 0)
             {
                 CooperativeEffortClassifier.EffortTally tally =
-                    CooperativeEffortClassifier.Tally(participants, cartMoving: false);
+                    CooperativeEffortClassifier.Tally(participants);
                 steps.Insert(0, "Crew right now: " + coop + ".");
                 if (tally.Helping > 1 &&
                     (diagnostic.Diagnosis == CartDiagnosis.ImpossibleLoad ||

@@ -458,8 +458,11 @@ def _strip_cs_line_comment(line: str) -> str:
 # parking brake's constraint freeze/unfreeze (CT-012), which holds a cart in
 # place rather than pushing it. This audit fails on any force/impulse/
 # velocity-write API so a future change cannot quietly start pushing carts.
-# (WakeUp() is deliberately NOT listed: it re-activates a sleeping body so the
-# brake's constraint change takes effect; it injects no force.)
+# It also covers direct teleport writes (position/rotation assignment and the
+# kinematic Move* pair) because "no teleporting carts" is a sibling safety
+# invariant — the honest way to enforce both at once. (WakeUp() is
+# deliberately NOT listed: it re-activates a sleeping body so the brake's
+# constraint change takes effect; it injects no force and moves nothing.)
 TEAMSTER_FORCE_TOKENS = (
     "AddForce",
     "AddTorque",
@@ -476,6 +479,15 @@ TEAMSTER_FORCE_TOKENS = (
     ".AddImpulse",
     ".MovePosition",
     ".MoveRotation",
+    # Teleport writes (no cart teleports): direct transform/body position or
+    # rotation assignment. Reads (Vector3 p = t.position;) are untouched.
+    "transform.position =",
+    "transform.position=",
+    "transform.localPosition =",
+    "transform.localPosition=",
+    "transform.rotation =",
+    "transform.rotation=",
+    ".Teleport(",
 )
 
 
@@ -495,13 +507,14 @@ def check_teamster_no_force_injection(errors: list[str]) -> list[str]:
                 if token in code:
                     hits += 1
                     fail(
-                        f"[interop] CT-028 no-force audit: physics-force token {token!r} in "
+                        f"[interop] CT-028 no-force audit: force/teleport token {token!r} in "
                         f"{path.relative_to(ROOT)}:{number} — Teamster is observational; it applies "
-                        "no force, impulse, or velocity write (the brake only freezes constraints)", errors)
+                        "no force, impulse, velocity write, or teleport (the brake only freezes "
+                        "constraints)", errors)
 
     return [
         f"[interop] CT-028 no-force audit: {scanned} Teamster source files, "
-        f"no force/impulse/velocity-write calls ({hits} violations)",
+        f"no force/impulse/velocity-write/teleport calls ({hits} violations)",
     ]
 
 
