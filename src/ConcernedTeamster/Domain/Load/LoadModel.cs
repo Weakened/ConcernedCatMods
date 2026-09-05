@@ -1,4 +1,5 @@
 using System.Globalization;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 
 namespace TheConcernedCat.ConcernedTeamster.Domain.Load;
 
@@ -32,7 +33,8 @@ public sealed class LoadModel
         if (float.IsNaN(gradePercent) || float.IsInfinity(gradePercent) ||
             float.IsNaN(totalMass) || float.IsInfinity(totalMass) || totalMass <= 0f)
         {
-            return new LoadVerdict(Climbability.Unknown, null, "invalid grade or mass");
+            return new LoadVerdict(
+                Climbability.Unknown, null, TeamsterStrings.Get("load.invalidQuery"));
         }
 
         CalibrationRow? successWitness = null;
@@ -62,34 +64,32 @@ public sealed class LoadModel
         if (successWitness is not null && failureWitness is not null)
         {
             return new LoadVerdict(
-                Climbability.Unknown, null,
-                "contradictory calibration rows cover this query; re-run the protocol");
+                Climbability.Unknown, null, TeamsterStrings.Get("load.contradictory"));
         }
 
         if (failureWitness is not null)
         {
             return new LoadVerdict(
                 Climbability.No, failureWitness.Basis,
-                Describe("failed at", failureWitness));
+                Describe("load.verbFailedAt", failureWitness));
         }
 
         if (successWitness is not null)
         {
             return new LoadVerdict(
                 Climbability.Yes, successWitness.Basis,
-                Describe("climbed at", successWitness));
+                Describe("load.verbClimbedAt", successWitness));
         }
 
         if (marginalWitness is not null)
         {
             return new LoadVerdict(
                 Climbability.Marginal, marginalWitness.Basis,
-                Describe("was marginal at", marginalWitness));
+                Describe("load.verbMarginalAt", marginalWitness));
         }
 
         return new LoadVerdict(
-            Climbability.Unknown, null,
-            "outside calibrated coverage — no row answers this grade and mass");
+            Climbability.Unknown, null, TeamsterStrings.Get("load.outsideCoverage"));
     }
 
     /// <summary>The heaviest total mass with a proven Climbs row at this
@@ -125,10 +125,13 @@ public sealed class LoadModel
         return current is null || candidate.Basis > current.Basis ? candidate : current;
     }
 
-    private static string Describe(string verb, CalibrationRow row)
+    private static string Describe(string verbKey, CalibrationRow row)
     {
-        return "a " + row.Basis + " row " + verb + " " +
-            row.GradePercent.ToString("F0", CultureInfo.InvariantCulture) + "% with mass " +
-            row.TotalMass.ToString("F0", CultureInfo.InvariantCulture);
+        return TeamsterStrings.Format(
+            "load.rowDescribe",
+            LoadText.BasisWord(row.Basis),
+            TeamsterStrings.Get(verbKey),
+            row.GradePercent.ToString("F0", CultureInfo.InvariantCulture),
+            row.TotalMass.ToString("F0", CultureInfo.InvariantCulture));
     }
 }

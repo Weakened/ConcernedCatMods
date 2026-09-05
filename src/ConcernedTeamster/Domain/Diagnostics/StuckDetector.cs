@@ -1,6 +1,7 @@
 using System.Globalization;
 using TheConcernedCat.ConcernedTeamster.Domain.Carts;
 using TheConcernedCat.ConcernedTeamster.Domain.Load;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 
 namespace TheConcernedCat.ConcernedTeamster.Domain.Diagnostics;
 
@@ -96,8 +97,8 @@ public sealed class StuckDetector
         if (!telemetry.GradeAvailable)
         {
             return new CartDiagnostic(CartDiagnosis.Unclear,
-                "pulling with no movement and no terrain data.",
-                "Look for obstacles around the wheels.");
+                TeamsterStrings.Get("diag.noTerrainEvidence"),
+                TeamsterStrings.Get("diag.noTerrainAction"));
         }
 
         float grade = telemetry.SmoothedGradePercent;
@@ -106,15 +107,15 @@ public sealed class StuckDetector
         if (grade <= -ObstructionMaxGradePercent)
         {
             return new CartDiagnostic(CartDiagnosis.Unclear,
-                "not moving on a " + gradeText + " descent — stalls there are unusual.",
-                "Check for obstacles or a grounded chassis.");
+                TeamsterStrings.Format("diag.descentEvidence", gradeText),
+                TeamsterStrings.Get("diag.descentAction"));
         }
 
         if (grade < ObstructionMaxGradePercent)
         {
             return new CartDiagnostic(CartDiagnosis.Obstruction,
-                "near-level ground (" + gradeText + ") does not explain a stall.",
-                "Look for rocks, stumps, or a terrain lip at the wheels; back up and re-approach.");
+                TeamsterStrings.Format("diag.mildGradeEvidence", gradeText),
+                TeamsterStrings.Get("diag.mildGradeAction"));
         }
 
         if (_loadModel is not null)
@@ -124,29 +125,29 @@ public sealed class StuckDetector
             {
                 case Climbability.No:
                     return new CartDiagnostic(CartDiagnosis.ImpossibleLoad,
-                        verdict.Explanation + ".",
-                        "Lighten the load or find a shallower path.");
+                        TeamsterStrings.Format("diag.verdictEvidence", verdict.Explanation),
+                        TeamsterStrings.Get("diag.impossibleAction"));
                 case Climbability.Marginal:
                     return new CartDiagnostic(CartDiagnosis.MarginalLoad,
-                        verdict.Explanation + ".",
-                        "Drop some cargo and try again.");
+                        TeamsterStrings.Format("diag.verdictEvidence", verdict.Explanation),
+                        TeamsterStrings.Get("diag.marginalAction"));
                 case Climbability.Yes:
                     return new CartDiagnostic(CartDiagnosis.Obstruction,
-                        "this load is proven to climb " + gradeText +
-                        " (" + verdict.Explanation + "), yet the cart is not moving.",
-                        "Something blocks the cart — check the wheels and the ground line.");
+                        TeamsterStrings.Format(
+                            "diag.provenYetStuckEvidence", gradeText, verdict.Explanation),
+                        TeamsterStrings.Get("diag.provenYetStuckAction"));
             }
         }
 
         if (grade >= SteepClimbMinPercent)
         {
             return new CartDiagnostic(CartDiagnosis.SteepClimb,
-                "a " + gradeText + " climb with no calibration verdict.",
-                "Try a shallower route, or lighten the load and retry.");
+                TeamsterStrings.Format("diag.steepClimbEvidence", gradeText),
+                TeamsterStrings.Get("diag.steepClimbAction"));
         }
 
         return new CartDiagnostic(CartDiagnosis.Unclear,
-            "a " + gradeText + " climb; calibration has no verdict and the grade alone is not conclusive.",
-            "Check for obstacles first, then try with less cargo.");
+            TeamsterStrings.Format("diag.unclearClimbEvidence", gradeText),
+            TeamsterStrings.Get("diag.unclearClimbAction"));
     }
 }

@@ -1,3 +1,5 @@
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
+
 namespace TheConcernedCat.ConcernedTeamster.Domain.Diagnostics;
 
 /// <summary>One immutable diagnosis with its evidence and suggested action
@@ -28,14 +30,14 @@ public sealed class CartDiagnostic
             return string.Empty;
         }
 
-        string label = Diagnosis switch
+        string label = TeamsterStrings.Get(Diagnosis switch
         {
-            CartDiagnosis.ImpossibleLoad => "overloaded for this grade",
-            CartDiagnosis.MarginalLoad => "load is marginal here",
-            CartDiagnosis.SteepClimb => "steep climb",
-            CartDiagnosis.Obstruction => "obstruction or grounded chassis",
-            _ => "cause unclear",
-        };
-        return "[?] STUCK — " + label + ": " + Evidence + " " + Action;
+            CartDiagnosis.ImpossibleLoad => "diag.labelImpossibleLoad",
+            CartDiagnosis.MarginalLoad => "diag.labelMarginalLoad",
+            CartDiagnosis.SteepClimb => "diag.labelSteepClimb",
+            CartDiagnosis.Obstruction => "diag.labelObstruction",
+            _ => "diag.labelUnclear",
+        });
+        return TeamsterStrings.Format("diag.line", label, Evidence, Action);
     }
 }
