@@ -4,7 +4,7 @@ schemaVersion = "0.0.1"
 [package]
 namespace = "TheConcernedCat"
 name = "ConcernedTeamster"
-versionNumber = "0.1.0"
+versionNumber = "0.2.0"
 description = "Cart truth for haulers: measures cart mass, cargo weight, grade, and pull state, and explains hauling risk - while vanilla cart physics stay untouched by default."
 websiteUrl = "https://github.com/Weakened/ConcernedCatMods"
 containsNsfwContent = false

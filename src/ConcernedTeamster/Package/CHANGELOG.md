@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0 (Internal — unreleased)
+
+**Cargo and Load Planning (CT-006..CT-010).** The second internal release candidate: know what your cart carries and whether the hill ahead is provably safe — still read-only, still vanilla physics.
+
+- **Cargo Manifest panel (CT-006/CT-007).** A Manifest button on the Cart Status panel opens a sortable, filterable list of the cart's cargo: item, count, unit weight, line weight — weights taken from the game's own quality-scaled accounting. Sort by any column (stable, deterministic), filter by name (case-insensitive, localized names). Broken modded items appear as explicit unreadable markers instead of silently skewing totals; empty carts and filtered-to-nothing states say so.
+- **Calibrated load model (CT-008).** A written calibration protocol plus versioned data with full provenance. Verdicts come only from dominance over recorded rows — proven climbs, proven failures, physics bounds from the verified joint break force — and everything else answers "uncalibrated", never fake precision. No measured runs ship yet; the data file says exactly that.
+- **Live load/grade warnings (CT-009).** While climbing, the panel (and an optional off-by-default HUD hint) warns with actionable text and non-color cues: proven-impossible climbs are DANGER with the evidence quoted, marginal climbs are CAUTION, steep uncalibrated climbs get a terrain-fact caution. Anti-flicker hysteresis is fixed in code; uncalibrated verdicts never warn.
+- **Safety posture unchanged.** Read-only observation; no cart physics, inventory, stamina, or network behavior modified; nothing written to worlds or saves.
+
 ## 0.1.0 (Internal — unreleased)
 
 **Cart Truth (CT-001..CT-005).** The first internal release candidate of Concerned Teamster: read-only cart telemetry with a discoverable Cart Status panel, and vanilla cart physics untouched.
