@@ -610,6 +610,33 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes (the v0.9 beta gate consumes these)
 - Status: Open
 
+### 2026-09-05 — CT-031 navigation/binding logic proven; live controller wiring pending
+
+- Version / issue: v0.7 / CT-031 (#146)
+- Question: the focus-order navigation model and the accelerator
+  conflict checker are proven off-game, but the live controller walkthrough
+  (a gamepad actually moving focus through every panel with visible
+  indication, accelerators firing and their conflicts warning in game) needs
+  an interactive session, and the gamepad input read surface must be verified
+  against the current game/BepInEx build before the adapter wiring lands.
+- Safe reversible default selected: ship the deterministic focus catalog +
+  ring and the external/internal conflict checker proven by 18 tests
+  (traversal wrap, reachability, buttons-first over every panel, chord
+  normalization, conflict matrices); the reserved-chord set is caller-
+  supplied so no mod key is invented. Buttons-first already holds (every
+  feature has a visible button today), so no accelerator-only path exists
+  even before controller focus is wired.
+- Why work continued: navigation and conflict detection are pure decisions
+  over data; the worst outcome of the unwired state is that controller focus
+  is not yet driven in game — no safety or world impact — and buttons-first
+  keeps every feature operable by mouse meanwhile.
+- Risk / alternative: the focus orders and the vanilla reserved-key list are
+  design priors; the in-game walkthrough may argue for reordering or adding
+  reserved binds (data change). Verified against the real gamepad surface
+  before wiring, per "research, don't invent".
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.
