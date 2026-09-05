@@ -5,6 +5,65 @@ split between automated evidence and pending manual claims, following the
 dossier discipline proven on Concerned Cartographer. Publication of anything
 is owner-only, always.
 
+## v0.4 RC1 — "Road Quality and Trip Profiles" (sealed 2026-09-05)
+
+| Item | Value |
+|---|---|
+| Version | 0.4.0 (internal; no publication) |
+| Source commit | `6ad2c8f163bd370696a72b2f64df4ffe4505aeca` (branch `chore/ct-020-v04-rc`, merged to main via PR) |
+| ZIP | `artifacts/thunderstore/TheConcernedCat-ConcernedTeamster-0.4.0.zip` |
+| ZIP SHA-256 | `922b41e0a33ebe586d13296b4563a0ee9b4b4594638aa6e93bc2e2e14e2e2693` (97,152 B) |
+| DLL SHA-256 | `24d7d617a0bfadc168c62b859c5aada7a430b125077651c15d49d41c4122bbd7` (141,312 B) |
+| DLL identity | AssemblyVersion 0.4.0.0, InformationalVersion `0.4.0+6ad2c8f163bd370696a72b2f64df4ffe4505aeca` |
+| ZIP contents (6 entries) | manifest.json, icon.png (256×256), README.md, CHANGELOG.md, LICENSE, plugins/TheConcernedCat.ConcernedTeamster.dll — **own DLL only**, no PDB |
+| Built against | Valheim 0.221.12 (network 36, buildid 21981559 — re-verified in the Steam manifest at seal time), Unity 6000.0.61f1, BepInExPack 5.4.2333, Jötunn 2.29.2 |
+| Version sync | 0.4.0 across csproj/Plugin.cs/thunderstore.toml/CHANGELOG — validator-asserted (`--expected-version 0.4.0 --require-binary`) |
+
+### Sprint scope sealed in this RC
+
+CT-016 per-world sidecar trip recording (atomic writes, world-UID
+isolation, caps/pruning, retention setting) · CT-017 deterministic
+road-quality scoring (8 m segments, additive stats, format v2 + v1
+migration with backup) · CT-018 trip history and quintile-aligned A/B
+comparison UI · CT-019 route bottlenecks (worst grade, roughest segment,
+hypothetical-load binding point, honest Unknown coverage).
+
+### v0.4 campaign results (automated)
+
+| Campaign item | Method | Result |
+|---|---|---|
+| Static validation + version sync | `validate_repo.py --product teamster --expected-version 0.4.0 --require-binary` | PASS |
+| Solution build | `build.ps1 -Configuration Release` | PASS — 0 errors (8 pre-existing benign warnings) |
+| Unit tests | `dotnet test ConcernedTeamster.Tests` (Release) | **287/287 PASS** — adds the CT-020 retention gate test |
+| Cartographer regression | `dotnet test ConcernedCartographer.Tests` (Release) | 568/568 PASS |
+| Durability spot checks (kill-during-write, world isolation) | `dotnet test --filter FullyQualifiedName~TripPersistenceTests` (Release, real filesystem) | **15/15 PASS** — a simulated kill leaves the previous file intact and the next write swaps cleanly; a wrong-world file is refused untouched (filename AND header); unknown future versions refused; v1 files backed up before migration; malformed rows skipped and reported; pruning caps hold |
+| Retention over many trips | new gate test: 200 real read-merge-prune-write cycles at a 50-trip cap | PASS — cap held, newest trips kept, ids renumber densely, file size bounded (≤10% drift after the cap), segment scores keep all 200 trips' history while raw trips prune |
+| Package build + audit | `package.ps1 -Product ConcernedTeamster` + ZIP listing | PASS — hashes above, own-DLL-only confirmed |
+| Save/network mutation audit | grep `ZDO.Set\|SetOwner\|InvokeRPC` in Teamster source | PASS — sole hit is the CartBrakeAdapter doc comment stating their absence |
+| Sidecar write-path audit | grep every `File.*` write API + all `SidecarFileStore` callers | PASS — every write API lives in `SidecarFileStore.cs`; every caller path comes from `SidecarPathFor` → `BepInEx/config/ConcernedCatMods/ConcernedTeamster/`; no world-save write exists |
+| Real-trip campaign rows (record hauls; verify history/comparison/bottlenecks and score sanity against them) | in-game, interactive | **MANUAL — pending** (HUMAN_ATTENTION.md CT-016..CT-019 entries; listed below) |
+
+Defects: no `DEF-teamster-v0.4-*` issues were needed; at seal time the
+only open `sprint:teamster-v0.4` issues are this gate leaf and the
+controller — no open P0/P1.
+
+### Pending manual claims added by v0.4
+
+1. Real-haul sidecar recording check: attach → pull a route → detach →
+   inspect the file; logout flush; world-switch isolation (CT-016 entry).
+2. Real-trip score sanity: a smooth built road scores less rough than raw
+   meadows; a mud/water crossing shows a lower drag-proxy speed (CT-017
+   entry).
+3. Trip History panel screenshots: sorting, A/B selection, two-step
+   deletion, real side-by-side comparison (CT-018 entry).
+4. In-game bottleneck view on real recorded routes: located meter/percent
+   points match where the haul actually struggled (CT-019 entry).
+
+### Gate decision
+
+All automatable v0.4 gates are green; manual items are pending by design
+for an internal RC. Sprint controller #127 closes with this seal.
+
 ## v0.3 RC1 — "Descent Safety and Recovery Guidance" (sealed 2026-09-04)
 
 | Item | Value |
