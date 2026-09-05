@@ -71,7 +71,9 @@ without local authority.
 
 - `CartAuthorityPolicy.MayMutate(feature, authority)` — true only for
   `ParkingBrake` under `Local`. `BrakeLifecycle` calls it at engage and on
-  every tick; the adapter logs one line on refusal/release.
+  every tick; an engaged brake that loses authority releases with one log
+  line, and an engage-time refusal surfaces through the toggle's returned
+  reason (not the log).
 - `CartAuthorityPolicy.RequiresRemoteLabel(feature, authority)` — true for
   owner-fresh observations viewed without local authority.
 - `tools/validate_repo.py`: (a) asserts every `TeamsterFeature` value is

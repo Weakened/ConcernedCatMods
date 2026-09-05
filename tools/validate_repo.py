@@ -463,8 +463,11 @@ def check_teamster_authority_policy(errors: list[str]) -> list[str]:
     if not enum_file.is_file():
         fail(f"[interop] CT-026 authority audit: missing {enum_file.relative_to(ROOT)}", errors)
     else:
-        text = enum_file.read_text(encoding="utf-8")
-        match = re.search(r"enum\s+TeamsterFeature\s*\{(.*?)\}", text, re.DOTALL)
+        # Strip // comments first so a brace or member-shaped word inside a
+        # doc comment can neither truncate the enum body nor be miscounted.
+        code_only = "\n".join(_strip_cs_line_comment(line) for line in
+                              enum_file.read_text(encoding="utf-8").splitlines())
+        match = re.search(r"enum\s+TeamsterFeature\s*\{([^}]*)\}", code_only, re.DOTALL)
         if not match:
             fail("[interop] CT-026 authority audit: could not parse the TeamsterFeature enum", errors)
         else:
@@ -472,6 +475,10 @@ def check_teamster_authority_policy(errors: list[str]) -> list[str]:
                 member = re.match(r"\s*([A-Za-z_]\w*)\s*(?:=[^,]+)?,?\s*$", line)
                 if member:
                     features.append(member.group(1))
+            if not features:
+                fail(
+                    "[interop] CT-026 authority audit: parsed zero TeamsterFeature members — "
+                    "the enum format changed and the doc tripwire would be a false green", errors)
 
     if not policy_doc.is_file():
         fail(f"[interop] CT-026 authority audit: missing {policy_doc.relative_to(ROOT)}", errors)
@@ -488,9 +495,10 @@ def check_teamster_authority_policy(errors: list[str]) -> list[str]:
         if path.relative_to(teamster_dir).parts[0] in ("obj", "bin"):
             continue
         for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-            code = _strip_cs_line_comment(raw)
+            code = _strip_cs_line_comment(raw).lower()
             for token in TEAMSTER_NETWORK_OWNERSHIP_TOKENS:
-                if token in code:
+                # Case-insensitive so a lowercased `zdo.set(` cannot slip past.
+                if token.lower() in code:
                     net_hits += 1
                     fail(
                         f"[interop] CT-026 authority audit: outbound-network/ownership token "
