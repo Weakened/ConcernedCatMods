@@ -116,6 +116,23 @@ public class TeamsterStringsTests
             TeamsterStrings.Format("manifest.overflow", "3"));
     }
 
+    /// <summary>The warn/diag/coop suites assert with Contains/StartsWith,
+    /// so the composed-line separators live only in these values — pinned
+    /// byte-exact here (same rationale as the manifest composition keys).</summary>
+    [Fact]
+    public void ComposedLineSeparatorKeys_ArePinnedByteExact()
+    {
+        Assert.Equal("{0} — {1} {2}", TeamsterStrings.Get("warn.line"));
+        Assert.Equal("[?] STUCK — {0}: {1} {2}", TeamsterStrings.Get("diag.line"));
+        Assert.Equal("({0})", TeamsterStrings.Get("coop.nameList"));
+        Assert.Equal("{0}.", TeamsterStrings.Get("diag.verdictEvidence"));
+        Assert.Equal(
+            "[!] CAUTION — Steep climb ahead (19%) with cart mass 220. Check your load.",
+            TeamsterStrings.Format(
+                "warn.line", "[!] CAUTION",
+                "Steep climb ahead (19%) with cart mass 220.", "Check your load."));
+    }
+
     [Fact]
     public void Get_KnownKey_NeverInvokesTheReporter()
     {
