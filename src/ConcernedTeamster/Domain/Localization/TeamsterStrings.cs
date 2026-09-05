@@ -127,11 +127,14 @@ public static class TeamsterStrings
     public static string Get(string key, out bool known)
     {
         known = English.ContainsKey(key);
-        if (!known && ShouldReportMissing(key))
+        // The once-only flag is consumed only while a sink exists, so an
+        // unknown key resolved before the adapter wires the reporter still
+        // gets its one log line afterwards instead of vanishing.
+        if (!known && MissingKeyReporter is { } report && ShouldReportMissing(key))
         {
             try
             {
-                MissingKeyReporter?.Invoke(key);
+                report(key);
             }
             catch
             {
