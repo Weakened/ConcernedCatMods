@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using TheConcernedCat.ConcernedTeamster.Domain.Carts;
 using TheConcernedCat.ConcernedTeamster.Domain.Load;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 
 namespace TheConcernedCat.ConcernedTeamster.Domain.Warnings;
 
@@ -151,9 +152,9 @@ public sealed class CartWarningTracker
                 state.SteepCauseActive = false;
                 return (WarningLevel.Danger, new CartWarning(
                     telemetry.CartId, WarningLevel.Danger,
-                    "This load cannot climb this grade (" + gradeText + ", mass " + massText +
-                    "; " + verdict.Explanation + ").",
-                    "Lighten the load or find a shallower path."));
+                    TeamsterStrings.Format(
+                        "warn.impossibleSituation", gradeText, massText, verdict.Explanation),
+                    TeamsterStrings.Get("warn.impossibleAction")));
             }
 
             if (verdict.Climbability == Climbability.Marginal)
@@ -161,9 +162,9 @@ public sealed class CartWarningTracker
                 state.SteepCauseActive = false;
                 return (WarningLevel.Caution, new CartWarning(
                     telemetry.CartId, WarningLevel.Caution,
-                    "This climb is marginal (" + gradeText + ", mass " + massText +
-                    "; " + verdict.Explanation + ").",
-                    "Expect stalls — consider dropping some cargo."));
+                    TeamsterStrings.Format(
+                        "warn.marginalSituation", gradeText, massText, verdict.Explanation),
+                    TeamsterStrings.Get("warn.marginalAction")));
             }
 
             if (verdict.Climbability == Climbability.Yes)
@@ -184,8 +185,8 @@ public sealed class CartWarningTracker
         {
             return (WarningLevel.Caution, new CartWarning(
                 telemetry.CartId, WarningLevel.Caution,
-                "Steep climb ahead (" + gradeText + ") with cart mass " + massText + ".",
-                "Check your load before committing; calibration has no verdict here."));
+                TeamsterStrings.Format("warn.steepSituation", gradeText, massText),
+                TeamsterStrings.Get("warn.steepAction")));
         }
 
         return (WarningLevel.None, null);

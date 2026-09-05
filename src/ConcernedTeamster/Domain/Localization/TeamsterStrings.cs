@@ -97,6 +97,110 @@ public static class TeamsterStrings
         ["manifest.capturedStale"] = "STALE — captured {0} s ago",
         ["manifest.row"] = "{0}   ×{1}   unit {2}   line {3}",
         ["manifest.overflow"] = "… {0} more — sort or filter to narrow",
+
+        // Load model verdict text (CT-008) — quoted verbatim by warnings,
+        // diagnostics, guidance, and route reports.
+        ["load.invalidQuery"] = "invalid grade or mass",
+        ["load.contradictory"] = "contradictory calibration rows cover this query; re-run the protocol",
+        ["load.outsideCoverage"] = "outside calibrated coverage — no row answers this grade and mass",
+        ["load.rowDescribe"] = "a {0} row {1} {2}% with mass {3}",
+        ["load.verbFailedAt"] = "failed at",
+        ["load.verbClimbedAt"] = "climbed at",
+        ["load.verbMarginalAt"] = "was marginal at",
+        ["load.basisPrior"] = "Prior",
+        ["load.basisDerivedConstant"] = "DerivedConstant",
+        ["load.basisMeasured"] = "Measured",
+
+        // Warnings (CT-009): situation + action pairs and the composed line.
+        ["warn.cueDanger"] = "[!!] DANGER",
+        ["warn.cueCaution"] = "[!] CAUTION",
+        ["warn.line"] = "{0} — {1} {2}",
+        ["warn.impossibleSituation"] = "This load cannot climb this grade ({0}, mass {1}; {2}).",
+        ["warn.impossibleAction"] = "Lighten the load or find a shallower path.",
+        ["warn.marginalSituation"] = "This climb is marginal ({0}, mass {1}; {2}).",
+        ["warn.marginalAction"] = "Expect stalls — consider dropping some cargo.",
+        ["warn.steepSituation"] = "Steep climb ahead ({0}) with cart mass {1}.",
+        ["warn.steepAction"] = "Check your load before committing; calibration has no verdict here.",
+
+        // Stuck diagnostics (CT-013): the composed line, class labels, and
+        // evidence/action pairs.
+        ["diag.line"] = "[?] STUCK — {0}: {1} {2}",
+        ["diag.labelImpossibleLoad"] = "overloaded for this grade",
+        ["diag.labelMarginalLoad"] = "load is marginal here",
+        ["diag.labelSteepClimb"] = "steep climb",
+        ["diag.labelObstruction"] = "obstruction or grounded chassis",
+        ["diag.labelUnclear"] = "cause unclear",
+        ["diag.noTerrainEvidence"] = "pulling with no movement and no terrain data.",
+        ["diag.noTerrainAction"] = "Look for obstacles around the wheels.",
+        ["diag.descentEvidence"] = "not moving on a {0} descent — stalls there are unusual.",
+        ["diag.descentAction"] = "Check for obstacles or a grounded chassis.",
+        ["diag.mildGradeEvidence"] = "near-level ground ({0}) does not explain a stall.",
+        ["diag.mildGradeAction"] = "Look for rocks, stumps, or a terrain lip at the wheels; back up and re-approach.",
+        ["diag.verdictEvidence"] = "{0}.",
+        ["diag.impossibleAction"] = "Lighten the load or find a shallower path.",
+        ["diag.marginalAction"] = "Drop some cargo and try again.",
+        ["diag.provenYetStuckEvidence"] = "this load is proven to climb {0} ({1}), yet the cart is not moving.",
+        ["diag.provenYetStuckAction"] = "Something blocks the cart — check the wheels and the ground line.",
+        ["diag.steepClimbEvidence"] = "a {0} climb with no calibration verdict.",
+        ["diag.steepClimbAction"] = "Try a shallower route, or lighten the load and retry.",
+        ["diag.unclearClimbEvidence"] = "a {0} climb; calibration has no verdict and the grade alone is not conclusive.",
+        ["diag.unclearClimbAction"] = "Check for obstacles first, then try with less cargo.",
+
+        // Cooperative effort (CT-028). Values never begin or end with
+        // whitespace (the translator file trims line ends); joins live in
+        // code or in placeholders.
+        ["coop.helpingCount"] = "{0} helping",
+        ["coop.hinderingCount"] = "{0} hindering",
+        ["coop.unclearCount"] = "{0} unclear",
+        ["coop.nameList"] = "({0})",
+        ["coop.you"] = "you",
+        ["coop.teammate"] = "a teammate",
+        ["coop.crewLine"] = "Crew: {0}.",
+        ["coop.evenWithHelp"] = "Even with help, {0}",
+        ["coop.nobodyHelping"] = "Nobody is helping the cart along.",
+
+        // Recovery guidance (CT-014): panel chrome, titles, and steps.
+        ["recovery.title"] = "Recovery Guidance",
+        ["recovery.noDiagnosis"] = "No active diagnosis — guidance appears here when your cart is stuck.",
+        ["recovery.crewNow"] = "Crew right now: {0}.",
+        ["recovery.extraHands"] =
+            "Extra hands will not beat this — the fix is less weight or a shallower line, not more pushing.",
+        ["recovery.titleOverloaded"] = "Overloaded for this grade — the load must come down",
+        ["recovery.titleMarginal"] = "Marginal load — a lighter cart makes this climb",
+        ["recovery.titleSteep"] = "Steep, uncalibrated climb",
+        ["recovery.titleObstruction"] = "Something is physically blocking the cart",
+        ["recovery.titleUnclear"] = "Cause unclear — safe general steps",
+        ["recovery.stepBrakeHold"] = "Detach, then hold the cart with the parking brake while you work.",
+        ["recovery.stepRetryClimb"] = "Retry the climb straight uphill at a steady pace.",
+        ["recovery.stepRouteAround"] =
+            "If it still stalls, route around: a longer, shallower path beats a stuck cart.",
+        ["recovery.stepBackDown"] = "Back the cart down to level ground first.",
+        ["recovery.stepBrakeScout"] = "Use the parking brake to hold it while you scout.",
+        ["recovery.stepShallowerLine"] =
+            "Look for a shallower line — even a few degrees less grade helps more than pushing harder.",
+        ["recovery.stepSwitchback"] = "Cut the slope diagonally (switchback) instead of attacking it straight on.",
+        ["recovery.stepSecondTrip"] = "Unloading part of the cargo for a second trip is slower but certain.",
+        ["recovery.stepCheckWheels"] =
+            "Walk around the cart and check each wheel for rocks, stumps, or a terrain lip.",
+        ["recovery.stepBackUpAngle"] = "Back up two or three meters and approach again at a slight angle.",
+        ["recovery.stepHoe"] = "A hoe can level the offending lip — the vanilla tool is the intended fix.",
+        ["recovery.stepWheelHole"] =
+            "If a wheel dropped into a hole, pull backward out of it rather than forward through it.",
+        ["recovery.stepReattach"] = "Detach and re-attach the cart to reset the pull joint.",
+        ["recovery.stepDifferentLine"] = "Back up a few meters and try a slightly different line.",
+        ["recovery.stepCheckCaught"] =
+            "Check the wheels and the ground line for anything the cart could be caught on.",
+        ["recovery.stepBrakeInvestigate"] = "On a slope, hold the cart with the parking brake while you investigate.",
+        ["recovery.stepUnloadSome"] = "If nothing helps, unload some cargo — a lighter cart forgives more.",
+        ["recovery.unloadNothingProven"] =
+            "No load is proven to climb this grade yet — unload as much as you can carry, " +
+            "or pick a shallower path.",
+        ["recovery.unloadAtLeast"] =
+            "Unload at least {0} weight (down to total mass {1}, the heaviest load a {2} row " +
+            "proved at this grade).",
+        ["recovery.unloadAlreadyUnder"] =
+            "Your mass ({0}) is already at or under the proven {1} for this grade — the load is " +
+            "probably not the blocker; check for obstructions.",
     };
 
     private static Dictionary<string, string> _overrides = new(StringComparer.Ordinal);

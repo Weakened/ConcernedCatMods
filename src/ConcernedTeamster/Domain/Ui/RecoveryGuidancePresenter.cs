@@ -4,6 +4,7 @@ using System.Globalization;
 using TheConcernedCat.ConcernedTeamster.Domain.Carts;
 using TheConcernedCat.ConcernedTeamster.Domain.Diagnostics;
 using TheConcernedCat.ConcernedTeamster.Domain.Load;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 
 namespace TheConcernedCat.ConcernedTeamster.Domain.Ui;
 
@@ -31,7 +32,7 @@ public static class RecoveryGuidancePresenter
         {
             return new RecoveryGuidanceViewModel(
                 hasGuidance: false,
-                "No active diagnosis — guidance appears here when your cart is stuck.",
+                TeamsterStrings.Get("recovery.noDiagnosis"),
                 Array.Empty<string>());
         }
 
@@ -47,52 +48,51 @@ public static class RecoveryGuidancePresenter
             case CartDiagnosis.MarginalLoad:
             {
                 bool impossible = diagnostic.Diagnosis == CartDiagnosis.ImpossibleLoad;
-                title = impossible
-                    ? "Overloaded for this grade — the load must come down"
-                    : "Marginal load — a lighter cart makes this climb";
+                title = TeamsterStrings.Get(
+                    impossible ? "recovery.titleOverloaded" : "recovery.titleMarginal");
                 if (brakeStep)
                 {
-                    steps.Add("Detach, then hold the cart with the parking brake while you work.");
+                    steps.Add(TeamsterStrings.Get("recovery.stepBrakeHold"));
                 }
 
                 AddUnloadStep(steps, telemetry, loadModel, grade);
-                steps.Add("Retry the climb straight uphill at a steady pace.");
-                steps.Add("If it still stalls, route around: a longer, shallower path beats a stuck cart.");
+                steps.Add(TeamsterStrings.Get("recovery.stepRetryClimb"));
+                steps.Add(TeamsterStrings.Get("recovery.stepRouteAround"));
                 break;
             }
 
             case CartDiagnosis.SteepClimb:
-                title = "Steep, uncalibrated climb";
-                steps.Add("Back the cart down to level ground first.");
+                title = TeamsterStrings.Get("recovery.titleSteep");
+                steps.Add(TeamsterStrings.Get("recovery.stepBackDown"));
                 if (brakeStep)
                 {
-                    steps.Add("Use the parking brake to hold it while you scout.");
+                    steps.Add(TeamsterStrings.Get("recovery.stepBrakeScout"));
                 }
 
-                steps.Add("Look for a shallower line — even a few degrees less grade helps more than pushing harder.");
-                steps.Add("Cut the slope diagonally (switchback) instead of attacking it straight on.");
-                steps.Add("Unloading part of the cargo for a second trip is slower but certain.");
+                steps.Add(TeamsterStrings.Get("recovery.stepShallowerLine"));
+                steps.Add(TeamsterStrings.Get("recovery.stepSwitchback"));
+                steps.Add(TeamsterStrings.Get("recovery.stepSecondTrip"));
                 break;
 
             case CartDiagnosis.Obstruction:
-                title = "Something is physically blocking the cart";
-                steps.Add("Walk around the cart and check each wheel for rocks, stumps, or a terrain lip.");
-                steps.Add("Back up two or three meters and approach again at a slight angle.");
-                steps.Add("A hoe can level the offending lip — the vanilla tool is the intended fix.");
-                steps.Add("If a wheel dropped into a hole, pull backward out of it rather than forward through it.");
+                title = TeamsterStrings.Get("recovery.titleObstruction");
+                steps.Add(TeamsterStrings.Get("recovery.stepCheckWheels"));
+                steps.Add(TeamsterStrings.Get("recovery.stepBackUpAngle"));
+                steps.Add(TeamsterStrings.Get("recovery.stepHoe"));
+                steps.Add(TeamsterStrings.Get("recovery.stepWheelHole"));
                 break;
 
             default:
-                title = "Cause unclear — safe general steps";
-                steps.Add("Detach and re-attach the cart to reset the pull joint.");
-                steps.Add("Back up a few meters and try a slightly different line.");
-                steps.Add("Check the wheels and the ground line for anything the cart could be caught on.");
+                title = TeamsterStrings.Get("recovery.titleUnclear");
+                steps.Add(TeamsterStrings.Get("recovery.stepReattach"));
+                steps.Add(TeamsterStrings.Get("recovery.stepDifferentLine"));
+                steps.Add(TeamsterStrings.Get("recovery.stepCheckCaught"));
                 if (brakeStep)
                 {
-                    steps.Add("On a slope, hold the cart with the parking brake while you investigate.");
+                    steps.Add(TeamsterStrings.Get("recovery.stepBrakeInvestigate"));
                 }
 
-                steps.Add("If nothing helps, unload some cargo — a lighter cart forgives more.");
+                steps.Add(TeamsterStrings.Get("recovery.stepUnloadSome"));
                 break;
         }
 
@@ -106,14 +106,12 @@ public static class RecoveryGuidancePresenter
             {
                 CooperativeEffortClassifier.EffortTally tally =
                     CooperativeEffortClassifier.Tally(participants);
-                steps.Insert(0, "Crew right now: " + coop + ".");
+                steps.Insert(0, TeamsterStrings.Format("recovery.crewNow", coop));
                 if (tally.Helping > 1 &&
                     (diagnostic.Diagnosis == CartDiagnosis.ImpossibleLoad ||
                      diagnostic.Diagnosis == CartDiagnosis.SteepClimb))
                 {
-                    steps.Insert(1,
-                        "Extra hands will not beat this — the fix is less weight or a shallower " +
-                        "line, not more pushing.");
+                    steps.Insert(1, TeamsterStrings.Get("recovery.extraHands"));
                 }
             }
         }
@@ -131,28 +129,25 @@ public static class RecoveryGuidancePresenter
             telemetry.GradeAvailable ? loadModel?.RecommendedMaxMass(grade) : null;
         if (recommendation is null)
         {
-            steps.Add(
-                "No load is proven to climb this grade yet — unload as much as you can carry, " +
-                "or pick a shallower path.");
+            steps.Add(TeamsterStrings.Get("recovery.unloadNothingProven"));
             return;
         }
 
         float unload = telemetry.TotalMass - recommendation.TotalMass;
         if (unload > 0f)
         {
-            steps.Add(
-                "Unload at least " + unload.ToString("F0", CultureInfo.InvariantCulture) +
-                " weight (down to total mass " +
-                recommendation.TotalMass.ToString("F0", CultureInfo.InvariantCulture) +
-                ", the heaviest load a " + recommendation.Basis + " row proved at this grade).");
+            steps.Add(TeamsterStrings.Format(
+                "recovery.unloadAtLeast",
+                unload.ToString("F0", CultureInfo.InvariantCulture),
+                recommendation.TotalMass.ToString("F0", CultureInfo.InvariantCulture),
+                LoadText.BasisWord(recommendation.Basis)));
         }
         else
         {
-            steps.Add(
-                "Your mass (" + telemetry.TotalMass.ToString("F0", CultureInfo.InvariantCulture) +
-                ") is already at or under the proven " +
-                recommendation.TotalMass.ToString("F0", CultureInfo.InvariantCulture) +
-                " for this grade — the load is probably not the blocker; check for obstructions.");
+            steps.Add(TeamsterStrings.Format(
+                "recovery.unloadAlreadyUnder",
+                telemetry.TotalMass.ToString("F0", CultureInfo.InvariantCulture),
+                recommendation.TotalMass.ToString("F0", CultureInfo.InvariantCulture)));
         }
     }
 }

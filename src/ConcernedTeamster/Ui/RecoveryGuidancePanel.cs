@@ -2,6 +2,7 @@ using System;
 using BepInEx.Logging;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedTeamster.Adapters;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using TheConcernedCat.ConcernedTeamster.Domain.Ui;
 using UnityEngine;
 using UnityEngine.UI;
@@ -152,7 +153,7 @@ internal sealed class RecoveryGuidancePanel
             new Vector2(-(PanelWidth / 2f) - 380f, -120f), PanelWidth, PanelHeight, draggable: true);
 
         gui.CreateText(
-            "Recovery Guidance", _panel.transform,
+            TeamsterStrings.Get("recovery.title"), _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -28f),
             font, 19, headerColor, outline: true, Color.black, PanelWidth - 40f, 30f,
             addContentSizeFitter: false);
@@ -188,7 +189,7 @@ internal sealed class RecoveryGuidancePanel
         }
 
         GameObject close = gui.CreateButton(
-            "Close", _panel.transform,
+            TeamsterStrings.Get("ui.close"), _panel.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 26f), 110f, 28f);
         close.GetComponent<Button>().onClick.AddListener(Hide);
 

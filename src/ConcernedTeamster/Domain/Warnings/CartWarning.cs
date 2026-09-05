@@ -1,3 +1,5 @@
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
+
 namespace TheConcernedCat.ConcernedTeamster.Domain.Warnings;
 
 /// <summary>One immutable warning for one cart (CT-009). The composed line
@@ -34,7 +36,8 @@ public sealed class CartWarning
             return string.Empty;
         }
 
-        string cue = Level == WarningLevel.Danger ? "[!!] DANGER" : "[!] CAUTION";
-        return cue + " — " + Situation + " " + Action;
+        string cue = TeamsterStrings.Get(
+            Level == WarningLevel.Danger ? "warn.cueDanger" : "warn.cueCaution");
+        return TeamsterStrings.Format("warn.line", cue, Situation, Action);
     }
 }

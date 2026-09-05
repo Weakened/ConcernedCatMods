@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using TheConcernedCat.ConcernedTeamster.Domain.Net;
 
 namespace TheConcernedCat.ConcernedTeamster.Domain.Diagnostics;
@@ -104,19 +105,22 @@ public static class CooperativeEffortClassifier
         var parts = new List<string>(3);
         if (tally.Helping > 0)
         {
-            parts.Add(tally.Helping.ToString(CultureInfo.InvariantCulture) + " helping" +
+            parts.Add(TeamsterStrings.Format(
+                    "coop.helpingCount", tally.Helping.ToString(CultureInfo.InvariantCulture)) +
                 NameList(participants, CoopEffort.Helping));
         }
 
         if (tally.Hindering > 0)
         {
-            parts.Add(tally.Hindering.ToString(CultureInfo.InvariantCulture) + " hindering" +
+            parts.Add(TeamsterStrings.Format(
+                    "coop.hinderingCount", tally.Hindering.ToString(CultureInfo.InvariantCulture)) +
                 NameList(participants, CoopEffort.Hindering));
         }
 
         if (tally.Unclear > 0)
         {
-            parts.Add(tally.Unclear.ToString(CultureInfo.InvariantCulture) + " unclear");
+            parts.Add(TeamsterStrings.Format(
+                "coop.unclearCount", tally.Unclear.ToString(CultureInfo.InvariantCulture)));
         }
 
         return string.Join(", ", parts);
@@ -140,7 +144,7 @@ public static class CooperativeEffortClassifier
 
         EffortTally tally = Tally(participants);
         var builder = new StringBuilder();
-        builder.Append("Crew: ").Append(coop).Append('.');
+        builder.Append(TeamsterStrings.Format("coop.crewLine", coop));
 
         if (physical.Length > 0)
         {
@@ -151,14 +155,16 @@ public static class CooperativeEffortClassifier
                 (diagnosis.Diagnosis == CartDiagnosis.ImpossibleLoad ||
                  diagnosis.Diagnosis == CartDiagnosis.SteepClimb))
             {
-                builder.Append("Even with help, ");
+                builder.Append(TeamsterStrings.Format("coop.evenWithHelp", physical));
             }
-
-            builder.Append(physical);
+            else
+            {
+                builder.Append(physical);
+            }
         }
         else if (tally.Hindering > 0 && tally.Helping == 0)
         {
-            builder.Append(" Nobody is helping the cart along.");
+            builder.Append(' ').Append(TeamsterStrings.Get("coop.nobodyHelping"));
         }
 
         return builder.ToString();
@@ -181,9 +187,11 @@ public static class CooperativeEffortClassifier
             string safeName = NetworkInputGuard.Label(participant.DisplayName);
             names.Add(safeName.Length > 0
                 ? safeName
-                : (participant.IsLocalPlayer ? "you" : "a teammate"));
+                : TeamsterStrings.Get(participant.IsLocalPlayer ? "coop.you" : "coop.teammate"));
         }
 
-        return names.Count > 0 ? " (" + string.Join(", ", names) + ")" : string.Empty;
+        return names.Count > 0
+            ? " " + TeamsterStrings.Format("coop.nameList", string.Join(", ", names))
+            : string.Empty;
     }
 }
