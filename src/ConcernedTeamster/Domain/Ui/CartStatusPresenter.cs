@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using TheConcernedCat.ConcernedTeamster.Domain.Carts;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using TheConcernedCat.ConcernedTeamster.Domain.Terrain;
 
 namespace TheConcernedCat.ConcernedTeamster.Domain.Ui;
@@ -28,12 +29,12 @@ public static class CartStatusPresenter
         if (!telemetryActive)
         {
             return Message(CartStatusState.TelemetryOff,
-                "Cart telemetry is unavailable — see the log for details.");
+                TeamsterStrings.Get("status.telemetryOff"));
         }
 
         if (telemetryByCartId is null || telemetryByCartId.Count == 0)
         {
-            return Message(CartStatusState.NoCart, "No cart nearby.");
+            return Message(CartStatusState.NoCart, TeamsterStrings.Get("status.noCart"));
         }
 
         CartTelemetry selected = Select(telemetryByCartId, previouslySelectedCartId);
@@ -48,15 +49,16 @@ public static class CartStatusPresenter
 
         return new CartStatusViewModel(
             stale ? CartStatusState.Stale : CartStatusState.Live,
-            selected.IsPulledByLocalPlayer ? "Pulling this cart" : "Nearby cart",
-            "Total mass: " + selected.TotalMass.ToString("F1", CultureInfo.InvariantCulture),
+            TeamsterStrings.Get(selected.IsPulledByLocalPlayer ? "status.pullingThisCart" : "status.nearbyCart"),
+            TeamsterStrings.Format(
+                "status.totalMass", selected.TotalMass.ToString("F1", CultureInfo.InvariantCulture)),
             ComposeBreakdown(selected),
             ComposeGrade(selected),
-            "Surface: " + DescribeSurface(selected.Surface),
+            TeamsterStrings.Format("status.surface", DescribeSurface(selected.Surface)),
             ComposePull(selected),
-            stale
-                ? "STALE — last update " + ageSeconds.ToString("F1", CultureInfo.InvariantCulture) + " s ago"
-                : "Updated " + ageSeconds.ToString("F1", CultureInfo.InvariantCulture) + " s ago",
+            TeamsterStrings.Format(
+                stale ? "status.stale" : "status.updated",
+                ageSeconds.ToString("F1", CultureInfo.InvariantCulture)),
             selected.CartId);
     }
 
@@ -105,59 +107,62 @@ public static class CartStatusPresenter
 
     private static string ComposeBreakdown(CartTelemetry telemetry)
     {
-        string baseText = "Base " + telemetry.BaseMass.ToString("F1", CultureInfo.InvariantCulture);
+        string baseMass = telemetry.BaseMass.ToString("F1", CultureInfo.InvariantCulture);
         if (!telemetry.CargoDataAvailable)
         {
-            return baseText + " + cargo unknown";
+            return TeamsterStrings.Format("status.breakdownCargoUnknown", baseMass);
         }
 
-        string cargoText = baseText + " + cargo " +
-            telemetry.CargoWeight.ToString("F1", CultureInfo.InvariantCulture);
+        string cargo = telemetry.CargoWeight.ToString("F1", CultureInfo.InvariantCulture);
         if (telemetry.ItemWeightMassFactor != 1f)
         {
-            cargoText += " × " + telemetry.ItemWeightMassFactor.ToString("F2", CultureInfo.InvariantCulture);
+            return TeamsterStrings.Format(
+                "status.breakdownScaled", baseMass, cargo,
+                telemetry.ItemWeightMassFactor.ToString("F2", CultureInfo.InvariantCulture));
         }
 
-        return cargoText;
+        return TeamsterStrings.Format("status.breakdown", baseMass, cargo);
     }
 
     private static string ComposeGrade(CartTelemetry telemetry)
     {
         if (!telemetry.GradeAvailable)
         {
-            return "Grade: unavailable";
+            return TeamsterStrings.Get("status.gradeUnavailable");
         }
 
-        string word = telemetry.GradeDirection switch
+        string word = TeamsterStrings.Get(telemetry.GradeDirection switch
         {
-            GradeDirection.Climbing => "climbing",
-            GradeDirection.Descending => "descending",
-            _ => "level",
-        };
-        return "Grade: " +
-            telemetry.SmoothedGradePercent.ToString("F1", CultureInfo.InvariantCulture) +
-            "% " + word;
+            GradeDirection.Climbing => "status.gradeWordClimbing",
+            GradeDirection.Descending => "status.gradeWordDescending",
+            _ => "status.gradeWordLevel",
+        });
+        return TeamsterStrings.Format(
+            "status.grade",
+            telemetry.SmoothedGradePercent.ToString("F1", CultureInfo.InvariantCulture),
+            word);
     }
 
     private static string ComposePull(CartTelemetry telemetry)
     {
         if (telemetry.IsPulledByLocalPlayer)
         {
-            return "Pulled by you";
+            return TeamsterStrings.Get("status.pulledByYou");
         }
 
-        return telemetry.IsAttached ? "Attached to another puller" : "Not attached";
+        return TeamsterStrings.Get(
+            telemetry.IsAttached ? "status.attachedOtherPuller" : "status.notAttached");
     }
 
     private static string DescribeSurface(TerrainSurfaceKind surface)
     {
-        return surface switch
+        return TeamsterStrings.Get(surface switch
         {
-            TerrainSurfaceKind.Untouched => "untouched ground",
-            TerrainSurfaceKind.Dirt => "dirt path",
-            TerrainSurfaceKind.Cultivated => "cultivated soil",
-            TerrainSurfaceKind.Paved => "paved road",
-            _ => "unknown",
-        };
+            TerrainSurfaceKind.Untouched => "status.surfaceUntouched",
+            TerrainSurfaceKind.Dirt => "status.surfaceDirt",
+            TerrainSurfaceKind.Cultivated => "status.surfaceCultivated",
+            TerrainSurfaceKind.Paved => "status.surfacePaved",
+            _ => "status.surfaceUnknown",
+        });
     }
 }

@@ -23,6 +23,13 @@ public static class LocalizationFiles
 
     public static void Initialize(ManualLogSource log)
     {
+        // CT-032: a UI string resolving a key with no English default is a
+        // Teamster defect, not a translation gap — surface it exactly once
+        // per key per session (the key text renders meanwhile).
+        TeamsterStrings.MissingKeyReporter = key => log.LogWarning(
+            $"Localization key '{key}' has no English default; showing the raw key. " +
+            "This is a Concerned Teamster defect worth reporting.");
+
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(TemplatePath)!);

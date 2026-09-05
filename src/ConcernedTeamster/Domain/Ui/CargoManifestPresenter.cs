@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using TheConcernedCat.ConcernedTeamster.Domain.Cargo;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 
 namespace TheConcernedCat.ConcernedTeamster.Domain.Ui;
 
@@ -31,7 +32,7 @@ public static class CargoManifestPresenter
         {
             return new CargoManifestViewModel(
                 CargoManifestState.NoManifest,
-                "No cart container available.",
+                TeamsterStrings.Get("manifest.noContainer"),
                 Array.Empty<CargoRowViewModel>(),
                 string.Empty,
                 string.Empty);
@@ -45,13 +46,14 @@ public static class CargoManifestPresenter
         }
 
         bool stale = ageSeconds > StaleAfterSeconds;
-        string freshnessLine = (stale ? "STALE — captured " : "Captured ") +
-            ageSeconds.ToString("F1", CultureInfo.InvariantCulture) + " s ago";
+        string freshnessLine = TeamsterStrings.Format(
+            stale ? "manifest.capturedStale" : "manifest.captured",
+            ageSeconds.ToString("F1", CultureInfo.InvariantCulture));
 
         if (manifest.Entries.Count == 0)
         {
             return new CargoManifestViewModel(
-                CargoManifestState.Empty, "Cart is empty.",
+                CargoManifestState.Empty, TeamsterStrings.Get("manifest.empty"),
                 Array.Empty<CargoRowViewModel>(), totalLine, freshnessLine);
         }
 
@@ -66,7 +68,7 @@ public static class CargoManifestPresenter
             {
                 return new CargoManifestViewModel(
                     CargoManifestState.NoMatch,
-                    "No items match \"" + filter + "\".",
+                    TeamsterStrings.Format("manifest.noMatch", filter),
                     Array.Empty<CargoRowViewModel>(), totalLine, freshnessLine);
             }
         }
@@ -175,16 +177,15 @@ public static class CargoManifestPresenter
 
     private static string ComposeTotalLine(CargoManifest manifest)
     {
-        string total = "Total weight: " +
-            manifest.TotalKnownWeight.ToString("F1", CultureInfo.InvariantCulture);
+        string knownWeight = manifest.TotalKnownWeight.ToString("F1", CultureInfo.InvariantCulture);
+        string itemCount = manifest.TotalItemCount.ToString(CultureInfo.InvariantCulture);
         if (manifest.HasUnknownWeights)
         {
-            total += " (+" +
-                manifest.UnknownWeightEntryCount.ToString(CultureInfo.InvariantCulture) +
-                " unknown)";
+            return TeamsterStrings.Format(
+                "manifest.totalLineWithUnknown", knownWeight,
+                manifest.UnknownWeightEntryCount.ToString(CultureInfo.InvariantCulture), itemCount);
         }
 
-        return total + " · " +
-            manifest.TotalItemCount.ToString(CultureInfo.InvariantCulture) + " items";
+        return TeamsterStrings.Format("manifest.totalLine", knownWeight, itemCount);
     }
 }

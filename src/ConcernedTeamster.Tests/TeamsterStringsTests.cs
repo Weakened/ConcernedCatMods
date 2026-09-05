@@ -8,7 +8,14 @@ namespace ConcernedTeamster.Tests;
 /// fall back to English (and warn once) on a missing key, validate
 /// translation placeholders, and round-trip its template. These prove the
 /// framework; the translator doc and progressive presenter migration ride on
-/// top of it.</summary>
+/// top of it.
+///
+/// Isolation rule: TeamsterStrings is process-global static state and xUnit
+/// runs test classes in parallel, so tests here may only override
+/// `routes.*` keys (no other suite asserts those exact outputs) and every
+/// mutation restores the default in a finally/cleanup line. Overriding a
+/// `status.*`/`manifest.*` key would race the exact-output presenter
+/// suites.</summary>
 public class TeamsterStringsTests
 {
     [Fact]
@@ -40,6 +47,90 @@ public class TeamsterStringsTests
         // Once-only warning semantics: first report true, then false.
         Assert.True(TeamsterStrings.ShouldReportMissing("ct032.test.missonce"));
         Assert.False(TeamsterStrings.ShouldReportMissing("ct032.test.missonce"));
+    }
+
+    [Fact]
+    public void Get_UnknownKey_InvokesTheWiredReporterExactlyOnce()
+    {
+        var reported = new List<string>();
+        TeamsterStrings.MissingKeyReporter = reported.Add;
+        try
+        {
+            TeamsterStrings.Get("ct032.reporter.once");
+            TeamsterStrings.Get("ct032.reporter.once");
+            Assert.Equal(new[] { "ct032.reporter.once" }, reported);
+        }
+        finally
+        {
+            TeamsterStrings.MissingKeyReporter = null;
+        }
+    }
+
+    [Fact]
+    public void Get_ThrowingReporter_NeverBreaksResolution()
+    {
+        TeamsterStrings.MissingKeyReporter = _ => throw new System.InvalidOperationException("boom");
+        try
+        {
+            Assert.Equal("ct032.reporter.throws", TeamsterStrings.Get("ct032.reporter.throws"));
+        }
+        finally
+        {
+            TeamsterStrings.MissingKeyReporter = null;
+        }
+    }
+
+    [Fact]
+    public void Get_BeforeReporterIsWired_StillReportsOnceAfterWiring()
+    {
+        var reported = new List<string>();
+        try
+        {
+            // Resolved with no sink: must not consume the once-only slot.
+            TeamsterStrings.Get("ct032.reporter.prewire");
+            TeamsterStrings.MissingKeyReporter = reported.Add;
+            TeamsterStrings.Get("ct032.reporter.prewire");
+            TeamsterStrings.Get("ct032.reporter.prewire");
+            Assert.Equal(new[] { "ct032.reporter.prewire" }, reported);
+        }
+        finally
+        {
+            TeamsterStrings.MissingKeyReporter = null;
+        }
+    }
+
+    /// <summary>The manifest row and overflow lines are composed in the
+    /// game-linked panel (not compiled into this test project), so these two
+    /// catalog values are pinned here byte-exactly — they are the panel's
+    /// entire rendering contract.</summary>
+    [Fact]
+    public void ManifestPanelCompositionKeys_ArePinnedByteExact()
+    {
+        Assert.Equal("{0}   ×{1}   unit {2}   line {3}", TeamsterStrings.Get("manifest.row"));
+        Assert.Equal("… {0} more — sort or filter to narrow", TeamsterStrings.Get("manifest.overflow"));
+        Assert.Equal(
+            "Iron ore   ×12   unit 12.0   line 144.0",
+            TeamsterStrings.Format("manifest.row", "Iron ore", "12", "12.0", "144.0"));
+        Assert.Equal(
+            "… 3 more — sort or filter to narrow",
+            TeamsterStrings.Format("manifest.overflow", "3"));
+    }
+
+    [Fact]
+    public void Get_KnownKey_NeverInvokesTheReporter()
+    {
+        var reported = new List<string>();
+        TeamsterStrings.MissingKeyReporter = reported.Add;
+        try
+        {
+            TeamsterStrings.Get("status.noCart");
+            TeamsterStrings.Format("manifest.noMatch", "iron");
+            Assert.Empty(reported);
+        }
+        finally
+        {
+            TeamsterStrings.MissingKeyReporter = null;
+        }
     }
 
     [Fact]

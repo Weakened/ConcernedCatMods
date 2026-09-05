@@ -2,6 +2,7 @@ using System;
 using BepInEx.Logging;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedTeamster.Adapters;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using TheConcernedCat.ConcernedTeamster.Domain.Ui;
 using TheConcernedCat.ConcernedTeamster.Domain.Warnings;
 using UnityEngine;
@@ -163,7 +164,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
             }
 
             _button = GUIManager.Instance.CreateButton(
-                "Cart",
+                TeamsterStrings.Get("status.cartButton"),
                 GUIManager.CustomGUIFront.transform,
                 new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
                 new Vector2(-70f, 170f), 80f, 32f);
@@ -228,7 +229,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
             new Vector2(-(PanelWidth / 2f) - 30f, 0f), PanelWidth, PanelHeight, draggable: true);
 
         gui.CreateText(
-            "Cart Status", _panel.transform,
+            TeamsterStrings.Get("status.title"), _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -28f),
             font, 19, headerColor, outline: true, Color.black, PanelWidth - 40f, 30f,
             addContentSizeFitter: false);
@@ -251,7 +252,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
         // CT-018: trip history is world-scoped, not cart-scoped, so its
         // button lives beside the brake row.
         GameObject trips = gui.CreateButton(
-            "Trips", _panel.transform,
+            TeamsterStrings.Get("status.tripsButton"), _panel.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(90f, 62f), 110f, 30f);
         trips.GetComponent<Button>().onClick.AddListener(() => _tripPanel?.Toggle(_pump));
 
@@ -265,7 +266,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
             // session instead of resetting with each world's panel rebuild.
             _routePanel ??= new RoutePickerPanel(_log, _pump?.LoadModel, SelectedCartTotalMass);
             GameObject routesButton = gui.CreateButton(
-                "Routes", _panel.transform,
+                TeamsterStrings.Get("status.routesButton"), _panel.transform,
                 new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(90f, 96f), 110f, 30f);
             routesButton.GetComponent<Button>().onClick.AddListener(() => _routePanel?.Toggle());
         }
@@ -273,7 +274,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
         // CT-012: the explicit, visible brake control. Hidden unless the
         // selected cart is under local vanilla authority (fail closed).
         _brakeButton = gui.CreateButton(
-            "Engage brake", _panel.transform,
+            TeamsterStrings.Get("status.engageBrake"), _panel.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-70f, 62f), 150f, 30f);
         _brakeButtonText = _brakeButton.GetComponentInChildren<Text>();
         _brakeButton.GetComponent<Button>().onClick.AddListener(() =>
@@ -284,17 +285,17 @@ internal sealed class CartStatusHudController : MonoBehaviour
         _brakeButton.SetActive(false);
 
         GameObject manifest = gui.CreateButton(
-            "Manifest", _panel.transform,
+            TeamsterStrings.Get("status.manifestButton"), _panel.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-102f, 28f), 96f, 30f);
         manifest.GetComponent<Button>().onClick.AddListener(() => _manifestPanel?.Toggle());
 
         GameObject guidance = gui.CreateButton(
-            "Guidance", _panel.transform,
+            TeamsterStrings.Get("status.guidanceButton"), _panel.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 28f), 96f, 30f);
         guidance.GetComponent<Button>().onClick.AddListener(() => _guidancePanel?.Toggle());
 
         GameObject close = gui.CreateButton(
-            "Close", _panel.transform,
+            TeamsterStrings.Get("ui.close"), _panel.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(102f, 28f), 96f, 30f);
         close.GetComponent<Button>().onClick.AddListener(() => _panel!.SetActive(false));
 
@@ -361,13 +362,13 @@ internal sealed class CartStatusHudController : MonoBehaviour
 
         BrakeService? brake = _pump?.Brake;
         bool visible = false;
-        string label = "Engage brake";
+        string label = TeamsterStrings.Get("status.engageBrake");
         if (brake is not null && selectedCartId.Length > 0)
         {
             if (brake.EngagedCartId == selectedCartId)
             {
                 visible = true;
-                label = "Release brake";
+                label = TeamsterStrings.Get("status.releaseBrake");
             }
             else if (!brake.IsEngaged)
             {
