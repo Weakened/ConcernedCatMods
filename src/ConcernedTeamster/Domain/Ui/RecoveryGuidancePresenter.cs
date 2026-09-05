@@ -24,7 +24,8 @@ public static class RecoveryGuidancePresenter
         CartDiagnostic? diagnostic,
         CartTelemetry? telemetry,
         LoadModel? loadModel,
-        bool brakeFeatureEnabled)
+        bool brakeFeatureEnabled,
+        IReadOnlyList<CoopParticipant>? participants = null)
     {
         if (diagnostic is null || diagnostic.Diagnosis == CartDiagnosis.None || telemetry is null)
         {
@@ -93,6 +94,28 @@ public static class RecoveryGuidancePresenter
 
                 steps.Add("If nothing helps, unload some cargo — a lighter cart forgives more.");
                 break;
+        }
+
+        // CT-028: cooperative context, when other players are observed on
+        // the cart. Purely explanatory — it never changes the physical
+        // verdict above, and grants no force.
+        if (participants is { Count: > 0 })
+        {
+            string coop = CooperativeEffortClassifier.Summarize(participants, cartMoving: false);
+            if (coop.Length > 0)
+            {
+                CooperativeEffortClassifier.EffortTally tally =
+                    CooperativeEffortClassifier.Tally(participants, cartMoving: false);
+                steps.Insert(0, "Crew right now: " + coop + ".");
+                if (tally.Helping > 1 &&
+                    (diagnostic.Diagnosis == CartDiagnosis.ImpossibleLoad ||
+                     diagnostic.Diagnosis == CartDiagnosis.SteepClimb))
+                {
+                    steps.Insert(1,
+                        "Extra hands will not beat this — the fix is less weight or a shallower " +
+                        "line, not more pushing.");
+                }
+            }
         }
 
         return new RecoveryGuidanceViewModel(hasGuidance: true, title, steps);

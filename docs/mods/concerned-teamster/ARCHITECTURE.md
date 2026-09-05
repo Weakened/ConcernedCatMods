@@ -170,6 +170,20 @@ not own under vanilla rules, never grants force, and treats network data as
 untrusted input (bounds-checked, fail-closed, privacy-reviewed) — the posture
 Cartographer's sync hardening established.
 
+CT-028 adds cooperative diagnostics on the same footing: `Domain/Diagnostics/
+CooperativeEffortClassifier` classifies each observed nearby player as
+helping / hindering / idle / unclear from reduced read-only observations
+(handle attachment, contact, motion alignment) and composes a combined-effort
+explanation that pairs the crew context with the physical stuck verdict —
+without ever changing that verdict or granting a newton of force. Two audits
+back it: the CT-028 no-force validator scan (no `AddForce`/impulse/velocity
+write anywhere; the brake's constraint freeze is the only rigidbody touch),
+and privacy by construction (participants carry only the in-game name the
+player already sees, and Teamster transmits nothing). Live population of
+participants from game state is bounded by verified read-only surfaces and
+staged in-game (see HUMAN_ATTENTION); the decision logic and its guidance
+integration are proven off-game.
+
 CT-026 makes this a written, enforced policy. `Domain/Authority/CartAuthorityPolicy`
 is the single source of truth: every shipped feature is classified Observation
 or Mutation, exactly one feature mutates (the parking brake, under live local

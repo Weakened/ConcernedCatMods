@@ -452,6 +452,59 @@ def _strip_cs_line_comment(line: str) -> str:
     return line if index < 0 else line[:index]
 
 
+# CT-028: cooperative diagnostics help crews understand a cart without
+# adding "a newton of modded force". Teamster applies no physics force,
+# impulse, or velocity write anywhere — the only rigidbody touch is the
+# parking brake's constraint freeze/unfreeze (CT-012), which holds a cart in
+# place rather than pushing it. This audit fails on any force/impulse/
+# velocity-write API so a future change cannot quietly start pushing carts.
+# (WakeUp() is deliberately NOT listed: it re-activates a sleeping body so the
+# brake's constraint change takes effect; it injects no force.)
+TEAMSTER_FORCE_TOKENS = (
+    "AddForce",
+    "AddTorque",
+    "AddExplosionForce",
+    "AddRelativeForce",
+    "AddRelativeTorque",
+    "AddForceAtPosition",
+    ".velocity =",
+    ".velocity=",
+    ".angularVelocity =",
+    ".angularVelocity=",
+    ".linearVelocity =",
+    ".linearVelocity=",
+    ".AddImpulse",
+    ".MovePosition",
+    ".MoveRotation",
+)
+
+
+def check_teamster_no_force_injection(errors: list[str]) -> list[str]:
+    """Fails on any physics force/impulse/velocity write in Teamster source
+    (CT-028 zero-force guarantee). Comments are stripped so prose is fine."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    hits = 0
+    scanned = 0
+    for path in sorted(teamster_dir.rglob("*.cs")):
+        if path.relative_to(teamster_dir).parts[0] in ("obj", "bin"):
+            continue
+        scanned += 1
+        for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            code = _strip_cs_line_comment(raw)
+            for token in TEAMSTER_FORCE_TOKENS:
+                if token in code:
+                    hits += 1
+                    fail(
+                        f"[interop] CT-028 no-force audit: physics-force token {token!r} in "
+                        f"{path.relative_to(ROOT)}:{number} — Teamster is observational; it applies "
+                        "no force, impulse, or velocity write (the brake only freezes constraints)", errors)
+
+    return [
+        f"[interop] CT-028 no-force audit: {scanned} Teamster source files, "
+        f"no force/impulse/velocity-write calls ({hits} violations)",
+    ]
+
+
 def check_teamster_authority_policy(errors: list[str]) -> list[str]:
     """Fails if the policy doc omits a TeamsterFeature, or if any outbound
     network / ownership-takeover token appears in Teamster source."""
@@ -550,6 +603,7 @@ def main() -> int:
     report.extend(check_teamster_cartographer_contract(errors))
     report.extend(check_teamster_integration_readonly(errors))
     report.extend(check_teamster_authority_policy(errors))
+    report.extend(check_teamster_no_force_injection(errors))
 
     prohibited = []
     for path in ROOT.rglob("*.dll"):

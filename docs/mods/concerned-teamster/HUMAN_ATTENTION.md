@@ -535,6 +535,35 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-05 — CT-028 coop classifier proven; live participant feed + staged scenario pending
+
+- Version / issue: v0.6 / CT-028 (#142)
+- Question: the cooperative-effort classifier (helping/hindering/idle/unclear)
+  and its recovery-guidance integration are proven over synthetic multi-actor
+  traces, but two things need a live session: (a) the adapter that reduces
+  real nearby players into `CoopParticipant` observations from verified
+  read-only surfaces (attachment is already replicated; contact and motion
+  alignment need the exact multiplayer read surface validated in game before
+  wiring), and (b) the staged co-op scenario (two players, one pushing the
+  wrong way) confirming the classification matches what players see.
+- Safe reversible default selected: ship the decision logic + guidance
+  integration proven by 20 tests (full single-actor matrix, tally, name-safe
+  summary, combined-effort explanation that never overrides the physical
+  verdict), gated so the guidance shows crew context only when participants
+  are supplied — production supplies none until the read surface is validated,
+  so nothing can display a wrong co-op claim yet. Zero-force and
+  privacy are validator/design enforced (no force APIs; names already
+  visible; nothing transmitted).
+- Why work continued: the classifier is advisory text over observations and
+  applies no force by construction (audited); an unwired feed simply shows no
+  crew line — it cannot mislead or mutate.
+- Risk / alternative: the motion-alignment reduction and the 0.15 meaningful
+  threshold are design priors; the staged scenario may argue for tuning
+  (data/constant change). The contact/motion read surface must be verified in
+  game (not invented) before the adapter feed lands — tracked here.
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.
