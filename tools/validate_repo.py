@@ -378,6 +378,44 @@ def check_teamster_cartographer_contract(errors: list[str]) -> list[str]:
     return [f"[interop] CT-021 Cartographer contract: {present}/{total} members present at source level"]
 
 
+# CT-024: the whole Cartographer integration path (CT-021..CT-024) is
+# read-only by contract — Teamster reflects into Cartographer only through
+# GetField/GetProperty/GetValue reads. Any token that could mutate state or
+# invoke behavior appearing in these files must fail validation and force a
+# conscious, reviewed design change; it would break the no-atlas-mutation
+# promise. Comments count too: the rule is absolute so the check stays
+# simple and unarguable (same stance as the adapter-isolation scan).
+TEAMSTER_INTEGRATION_MUTATION_TOKENS = (
+    "SetValue",
+    "SetField",
+    ".Invoke(",
+    "GetMethod(",
+    "InvokeMember",
+)
+
+
+def check_teamster_integration_readonly(errors: list[str]) -> list[str]:
+    """Fails on mutating/invoking reflection anywhere in the integration path."""
+    paths = sorted((ROOT / "src" / "ConcernedTeamster" / "Domain" / "Cartographer").glob("*.cs"))
+    paths.append(ROOT / "src" / "ConcernedTeamster" / "Adapters" / "CartographerCapability.cs")
+    checked = 0
+    for path in paths:
+        if not path.is_file():
+            fail(f"[interop] CT-024 read-only audit: expected file missing: {path.relative_to(ROOT)}", errors)
+            continue
+        checked += 1
+        for number, line in enumerate(
+                path.read_text(encoding="utf-8").splitlines(), start=1):
+            for token in TEAMSTER_INTEGRATION_MUTATION_TOKENS:
+                if token in line:
+                    fail(
+                        f"[interop] CT-024 read-only audit: mutating/invoking reflection token "
+                        f"{token!r} in {path.relative_to(ROOT)}:{number} — the Cartographer "
+                        "integration must stay read-only (no atlas mutation)", errors)
+
+    return [f"[interop] CT-024 read-only audit: {checked} integration files free of mutating reflection"]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -415,6 +453,7 @@ def main() -> int:
     check_teamster_adapter_isolation(errors)
     report.extend(check_cross_product_independence(errors))
     report.extend(check_teamster_cartographer_contract(errors))
+    report.extend(check_teamster_integration_readonly(errors))
 
     prohibited = []
     for path in ROOT.rglob("*.dll"):
