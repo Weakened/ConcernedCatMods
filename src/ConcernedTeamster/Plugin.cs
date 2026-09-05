@@ -13,6 +13,8 @@ public sealed class Plugin : BaseUnityPlugin
     public const string PluginName = "Concerned Teamster";
     public const string PluginVersion = "0.4.0";
 
+    private bool _cartographerProbePending;
+
     private void Awake()
     {
         TeamsterSettings settings = TeamsterSettings.Bind(Config);
@@ -27,8 +29,23 @@ public sealed class Plugin : BaseUnityPlugin
         LogCartCapability(settings);
         ArmTelemetry(settings);
 
+        // CT-021: the Cartographer probe waits for the first Update tick —
+        // BepInEx fills PluginInfos in load order, so probing from Awake
+        // could misread a not-yet-loaded Cartographer as absent. Skipped
+        // entirely when the master switch is off (no features may appear).
+        _cartographerProbePending = settings.Enabled.Value;
+
         // Read-only telemetry, panels, manifest, and advisory warnings only;
         // nothing mutates carts.
+    }
+
+    private void Update()
+    {
+        if (_cartographerProbePending)
+        {
+            _cartographerProbePending = false;
+            CartographerCapability.EnsureProbed(Logger);
+        }
     }
 
     /// <summary>Starts the telemetry pump only when the master switch is on
