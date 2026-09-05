@@ -3,6 +3,7 @@ using BepInEx.Logging;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedTeamster.Adapters;
 using TheConcernedCat.ConcernedTeamster.Domain.Ui;
+using TheConcernedCat.ConcernedTeamster.Domain.Warnings;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -21,9 +22,10 @@ namespace TheConcernedCat.ConcernedTeamster.Ui;
 internal sealed class CartStatusHudController : MonoBehaviour
 {
     private const float PanelWidth = 320f;
-    private const float PanelHeight = 300f;
+    private const float PanelHeight = 330f;
     private const float RowHeight = 26f;
     private const float RefreshPeriodSeconds = 0.25f;
+    private const int RowCount = 8;
 
     private TeamsterSettings? _settings;
     private ManualLogSource? _log;
@@ -33,6 +35,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
 
     private GameObject? _button;
     private GameObject? _panel;
+    private Text? _hudHint;
     private Text[] _rows = Array.Empty<Text>();
     private string? _selectedCartId;
     private double _nextRefreshTime;
@@ -67,6 +70,11 @@ internal sealed class CartStatusHudController : MonoBehaviour
 
                 _manifestPanel?.Reset();
                 _selectedCartId = null;
+                if (_hudHint != null && _hudHint.gameObject.activeSelf)
+                {
+                    _hudHint.gameObject.SetActive(false);
+                }
+
                 return;
             }
 
@@ -91,10 +99,12 @@ internal sealed class CartStatusHudController : MonoBehaviour
                     RefreshPanel(now);
                 }
             }
-            else if (_manifestPanel is { IsVisible: true } && now >= _nextSelectionRefreshTime)
+            else if (now >= _nextSelectionRefreshTime &&
+                (_manifestPanel is { IsVisible: true } || _settings.HudWarningHintsEnabled.Value))
             {
-                // The manifest follows the same sticky selection the status
-                // panel shows; keep it current even with the status closed.
+                // The manifest and the HUD hint follow the same sticky
+                // selection the status panel shows; keep it current even
+                // with the status closed.
                 _nextSelectionRefreshTime = now + 1.0;
                 CartStatusViewModel selection = CartStatusPresenter.Present(
                     _pump?.Telemetry, _selectedCartId, now, telemetryActive: _pump is not null);
@@ -102,6 +112,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
             }
 
             _manifestPanel?.HandleFrame(now, _selectedCartId);
+            UpdateHudHint();
         }
         catch (Exception exception)
         {
@@ -127,6 +138,17 @@ internal sealed class CartStatusHudController : MonoBehaviour
                 new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
                 new Vector2(-70f, 170f), 80f, 32f);
             _button.GetComponent<Button>().onClick.AddListener(TogglePanel);
+
+            // The optional HUD warning hint lives under the button (CT-009);
+            // it stays empty and inactive unless enabled and warning.
+            _hudHint = GUIManager.Instance.CreateText(
+                string.Empty, GUIManager.CustomGUIFront.transform,
+                new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-160f, 140f),
+                GUIManager.Instance.AveriaSerifBold, 14, new Color(1f, 0.85f, 0.5f, 1f),
+                outline: true, Color.black, 300f, 40f, addContentSizeFitter: false)
+                .GetComponent<Text>();
+            _hudHint.alignment = TextAnchor.MiddleRight;
+            _hudHint.gameObject.SetActive(false);
         }
 
         if (_button.activeSelf != inWorld)
@@ -181,7 +203,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
             font, 19, headerColor, outline: true, Color.black, PanelWidth - 40f, 30f,
             addContentSizeFitter: false);
 
-        _rows = new Text[7];
+        _rows = new Text[RowCount];
         float y = -58f;
         for (int index = 0; index < _rows.Length; index++)
         {
@@ -216,7 +238,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
             _pump?.Telemetry, _selectedCartId, nowSeconds, telemetryActive: _pump is not null);
         _selectedCartId = viewModel.SelectedCartId.Length > 0 ? viewModel.SelectedCartId : null;
 
-        if (_rows.Length != 7 || _rows[0] == null)
+        if (_rows.Length != RowCount || _rows[0] == null)
         {
             return;
         }
@@ -228,6 +250,55 @@ internal sealed class CartStatusHudController : MonoBehaviour
         _rows[4].text = viewModel.SurfaceLine;
         _rows[5].text = viewModel.PullLine;
         _rows[6].text = viewModel.FreshnessLine;
+
+        string warningLine = string.Empty;
+        if (_pump is not null && _settings is not null && _settings.PanelWarningsEnabled.Value &&
+            viewModel.SelectedCartId.Length > 0)
+        {
+            CartWarning? warning = _pump.TryGetWarning(viewModel.SelectedCartId);
+            if (warning is not null)
+            {
+                warningLine = warning.ComposeLine();
+            }
+        }
+
+        _rows[7].text = warningLine;
+    }
+
+    /// <summary>Shows the current warning for the selected cart while it is
+    /// being pulled, when the HUD hint is enabled. Reads only — evaluation
+    /// happened on the snapshot inside the pump.</summary>
+    private void UpdateHudHint()
+    {
+        if (_hudHint == null)
+        {
+            return;
+        }
+
+        string text = string.Empty;
+        if (_settings is not null && _settings.HudWarningHintsEnabled.Value &&
+            _pump is not null && _selectedCartId is not null &&
+            _pump.Telemetry is { } telemetry &&
+            telemetry.TryGetValue(_selectedCartId, out Domain.Carts.CartTelemetry selected) &&
+            selected.IsPulledByLocalPlayer)
+        {
+            CartWarning? warning = _pump.TryGetWarning(_selectedCartId);
+            if (warning is not null)
+            {
+                text = warning.ComposeLine();
+            }
+        }
+
+        bool visible = text.Length > 0;
+        if (_hudHint.gameObject.activeSelf != visible)
+        {
+            _hudHint.gameObject.SetActive(visible);
+        }
+
+        if (visible && _hudHint.text != text)
+        {
+            _hudHint.text = text;
+        }
     }
 
     private void Fail(Exception exception)
@@ -243,6 +314,11 @@ internal sealed class CartStatusHudController : MonoBehaviour
             if (_button != null)
             {
                 _button.SetActive(false);
+            }
+
+            if (_hudHint != null)
+            {
+                _hudHint.gameObject.SetActive(false);
             }
 
             _manifestPanel?.Hide();

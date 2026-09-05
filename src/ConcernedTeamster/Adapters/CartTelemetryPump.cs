@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using BepInEx.Logging;
 using TheConcernedCat.ConcernedTeamster.Domain.Carts;
+using TheConcernedCat.ConcernedTeamster.Domain.Load;
+using TheConcernedCat.ConcernedTeamster.Domain.Warnings;
 using UnityEngine;
 
 namespace TheConcernedCat.ConcernedTeamster.Adapters;
@@ -19,6 +21,8 @@ internal sealed class CartTelemetryPump : MonoBehaviour
     private TelemetrySampler? _sampler;
     private TeamsterSettings? _settings;
     private ManualLogSource? _log;
+    private CartWarningTracker? _warnings;
+    private WarningOptions? _warningOptions;
     private bool _resetWhileNoLocalPlayer;
     private double _nextDebugSummaryTime;
 
@@ -26,9 +30,20 @@ internal sealed class CartTelemetryPump : MonoBehaviour
     /// panels); null until initialized.</summary>
     public IReadOnlyDictionary<string, CartTelemetry>? Telemetry => _sampler?.TelemetryByCartId;
 
-    /// <summary>Wires the sampler and returns the effective (clamped)
-    /// options so startup can log them.</summary>
-    internal TelemetrySamplerOptions Initialize(TeamsterSettings settings, ManualLogSource log)
+    /// <summary>Effective warning configuration; null until initialized.</summary>
+    public WarningOptions? WarningOptions => _warningOptions;
+
+    /// <summary>Current warning for a cart, or null. Read-only: evaluation
+    /// happens exclusively on new snapshots inside Update (CT-009).</summary>
+    public CartWarning? TryGetWarning(string? cartId)
+    {
+        return cartId is null ? null : _warnings?.TryGet(cartId);
+    }
+
+    /// <summary>Wires the sampler and warning evaluation, returning the
+    /// effective (clamped) sampler options so startup can log them.</summary>
+    internal TelemetrySamplerOptions Initialize(
+        TeamsterSettings settings, ManualLogSource log, LoadModel? loadModel)
     {
         _settings = settings;
         _log = log;
@@ -38,6 +53,11 @@ internal sealed class CartTelemetryPump : MonoBehaviour
             settings.MaxCartsPerTick.Value,
             settings.MaxTrackedCarts.Value);
         _sampler = new TelemetrySampler(options, CartAdapter.CollectNearbyCarts, CartAdapter.TrySampleCart);
+        _warnings = new CartWarningTracker(loadModel);
+        _warningOptions = Domain.Warnings.WarningOptions.CreateClamped(
+            settings.SteepGradeCautionPercent.Value,
+            settings.PanelWarningsEnabled.Value,
+            settings.HudWarningHintsEnabled.Value);
         return options;
     }
 
@@ -54,6 +74,7 @@ internal sealed class CartTelemetryPump : MonoBehaviour
             if (!_resetWhileNoLocalPlayer)
             {
                 sampler.Reset();
+                _warnings?.Reset();
                 _resetWhileNoLocalPlayer = true;
             }
 
@@ -66,6 +87,22 @@ internal sealed class CartTelemetryPump : MonoBehaviour
         if (!sampler.Tick(now))
         {
             return;
+        }
+
+        // CT-009: warnings evaluate exactly here — once per snapshot the
+        // due tick just produced (their SampleTimeSeconds equals this
+        // tick's clock), never from UI reads or extra polling.
+        if (_warnings is not null && _warningOptions is not null)
+        {
+            foreach (KeyValuePair<string, CartTelemetry> entry in sampler.TelemetryByCartId)
+            {
+                if (entry.Value.SampleTimeSeconds == now)
+                {
+                    _warnings.Update(entry.Value, _warningOptions);
+                }
+            }
+
+            _warnings.Sweep(now, sampler.Options.EvictAfterSeconds);
         }
 
         if (_settings is { } settings && settings.DebugLogging.Value && now >= _nextDebugSummaryTime)

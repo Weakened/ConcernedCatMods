@@ -1,5 +1,6 @@
 using BepInEx.Configuration;
 using TheConcernedCat.ConcernedTeamster.Domain.Carts;
+using TheConcernedCat.ConcernedTeamster.Domain.Warnings;
 
 namespace TheConcernedCat.ConcernedTeamster;
 
@@ -18,7 +19,10 @@ internal sealed class TeamsterSettings
         ConfigEntry<float> searchRadiusMeters,
         ConfigEntry<int> maxCartsPerTick,
         ConfigEntry<int> maxTrackedCarts,
-        ConfigEntry<KeyboardShortcut> panelShortcut)
+        ConfigEntry<KeyboardShortcut> panelShortcut,
+        ConfigEntry<bool> panelWarningsEnabled,
+        ConfigEntry<bool> hudWarningHintsEnabled,
+        ConfigEntry<float> steepGradeCautionPercent)
     {
         Enabled = enabled;
         DebugLogging = debugLogging;
@@ -27,6 +31,9 @@ internal sealed class TeamsterSettings
         MaxCartsPerTick = maxCartsPerTick;
         MaxTrackedCarts = maxTrackedCarts;
         PanelShortcut = panelShortcut;
+        PanelWarningsEnabled = panelWarningsEnabled;
+        HudWarningHintsEnabled = hudWarningHintsEnabled;
+        SteepGradeCautionPercent = steepGradeCautionPercent;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -36,6 +43,9 @@ internal sealed class TeamsterSettings
     public ConfigEntry<int> MaxCartsPerTick { get; }
     public ConfigEntry<int> MaxTrackedCarts { get; }
     public ConfigEntry<KeyboardShortcut> PanelShortcut { get; }
+    public ConfigEntry<bool> PanelWarningsEnabled { get; }
+    public ConfigEntry<bool> HudWarningHintsEnabled { get; }
+    public ConfigEntry<float> SteepGradeCautionPercent { get; }
 
     public static TeamsterSettings Bind(ConfigFile config)
     {
@@ -73,6 +83,17 @@ internal sealed class TeamsterSettings
                         TelemetrySamplerOptions.MinMaxTrackedCarts,
                         TelemetrySamplerOptions.MaxMaxTrackedCarts))),
             config.Bind("Ui", "PanelShortcut", KeyboardShortcut.Empty,
-                "Optional keyboard accelerator that toggles the Cart Status panel. The visible Cart button is always the primary path; leave empty for no shortcut."));
+                "Optional keyboard accelerator that toggles the Cart Status panel. The visible Cart button is always the primary path; leave empty for no shortcut."),
+            config.Bind("Warnings", "PanelWarningsEnabled", true,
+                "Show load/grade warnings in the Cart Status panel."),
+            config.Bind("Warnings", "HudWarningHintsEnabled", false,
+                "Also show the current warning as a small HUD hint under the Cart button while pulling. Off by default: the panel is the primary surface and HUD space is precious; enable if you haul with the panel closed."),
+            config.Bind("Warnings", "SteepGradeCautionPercent",
+                WarningOptions.DefaultSteepGradeCautionPercent,
+                new ConfigDescription(
+                    "Smoothed climbing grade (percent) that raises the steep-climb caution. Exit hysteresis and anti-flicker hold are fixed so no configuration can make warnings spam.",
+                    new AcceptableValueRange<float>(
+                        WarningOptions.MinSteepGradeCautionPercent,
+                        WarningOptions.MaxSteepGradeCautionPercent))));
     }
 }
