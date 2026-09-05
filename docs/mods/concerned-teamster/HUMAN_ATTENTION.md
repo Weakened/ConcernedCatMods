@@ -420,6 +420,29 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-05 — CT-023 in-game route profile check pending
+
+- Version / issue: v0.5 / CT-023 (#136)
+- Question: profiling a real drawn route in-game (numbers look sane against
+  the visible terrain; unloaded far stretches show as UNSAMPLED meters;
+  the load line matches the cart being pulled) needs an interactive
+  session with Cartographer installed and a drawn route.
+- Safe reversible default selected: the profiler is pure domain math proven
+  by 21 tests (budget/cancel bookkeeping exact, sampled+unsampled meters
+  partition the total by construction, gap and throwing-probe honesty,
+  surface attribution, fingerprint cache invalidation, bottleneck verdicts
+  asserted equal to direct LoadModel queries); the terrain probe reuses
+  exactly the height/paint members the startup capability probe already
+  verifies, read-only; per-frame work is capped at 24 samples.
+- Why work continued: read-only terrain sampling over an advisory panel —
+  the worst outcome is a wrong-looking number, catchable in the v0.5 RC
+  campaign (CT-025) with a staged route over known ramps.
+- Risk / alternative: 4 m sampling can miss sub-4 m spikes between
+  positions (documented spacing constant); the RC campaign's ramp check
+  covers whether the default needs tightening.
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.

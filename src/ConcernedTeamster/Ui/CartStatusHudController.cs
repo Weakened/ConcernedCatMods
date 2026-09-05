@@ -134,6 +134,22 @@ internal sealed class CartStatusHudController : MonoBehaviour
         }
     }
 
+    /// <summary>Total mass of the cart the status panel currently follows —
+    /// the route picker's load check binds to it (CT-023); null when no
+    /// cart is selected or its telemetry is gone.</summary>
+    private float? SelectedCartTotalMass()
+    {
+        System.Collections.Generic.IReadOnlyDictionary<string, Domain.Carts.CartTelemetry>? telemetry =
+            _pump?.Telemetry;
+        if (telemetry is null || _selectedCartId is null ||
+            !telemetry.TryGetValue(_selectedCartId, out Domain.Carts.CartTelemetry? cart) || cart is null)
+        {
+            return null;
+        }
+
+        return cart.TotalMass;
+    }
+
     private void EnsureButton(bool inWorld)
     {
         // Destroyed-on-scene-change GameObjects compare == null (Unity
@@ -247,7 +263,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
         {
             // ??= so a picker that fail-closed stays disabled for the whole
             // session instead of resetting with each world's panel rebuild.
-            _routePanel ??= new RoutePickerPanel(_log);
+            _routePanel ??= new RoutePickerPanel(_log, _pump?.LoadModel, SelectedCartTotalMass);
             GameObject routesButton = gui.CreateButton(
                 "Routes", _panel.transform,
                 new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(90f, 96f), 110f, 30f);
