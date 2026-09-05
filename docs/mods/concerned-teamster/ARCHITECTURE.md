@@ -96,6 +96,18 @@ sample path.
   subtract their contribution. Scoring cost per trip is O(samples)
   dictionary work — touched segments ≤ samples, measured in tests.
 
+- **RouteProfiler** (v0.5, CT-023) — incremental, budgeted terrain profiling
+  along a Cartographer route: positions at fixed spacing (capped at 4096 by
+  coarsening), each `Advance(budget)` probes at most the budget of positions
+  through a caller-supplied sampler, and cancellation abandons partial data.
+  The profile partitions every meter into sampled or unsampled — unloaded
+  terrain is reported, never guessed — and grades/surfaces come only from
+  fully sampled segments. The load bottleneck is the steepest sampled
+  section treated as a climb (routes are hauled both ways), answered
+  verbatim by `LoadModel` (equality is test-asserted). Profiles cache by
+  route id + geometry fingerprint, so any vertex edit invalidates and a
+  rename does not; the cache clears on world exit.
+
 All domain types are immutable snapshots or pure functions; every model states
 its inputs, outputs, and calibration source.
 

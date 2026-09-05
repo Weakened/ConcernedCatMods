@@ -190,6 +190,50 @@ public static class TerrainAdapter
         return new LookaheadReading(true, worstDownGradePercent);
     }
 
+    /// <summary>Samples ground height and surface at one world XZ position
+    /// for the route profiler (CT-023). Uses exactly the height/paint
+    /// members the startup capability probe verified (CT-002/CT-004) —
+    /// no new game surface. False when the capability is off or the terrain
+    /// there is not loaded; the profiler records that stretch as unsampled
+    /// instead of guessing. Height can succeed while surface stays
+    /// Unavailable (tile edge) — grade data without surface data, both
+    /// honest. Read-only; never throws.</summary>
+    public static bool TrySamplePoint(float x, float z, out float height, out TerrainSurfaceKind surface)
+    {
+        height = float.NaN;
+        surface = TerrainSurfaceKind.Unavailable;
+        if (!CartAdapter.CapabilityEnabled)
+        {
+            return false;
+        }
+
+        try
+        {
+            var position = new Vector3(x, 0f, z);
+            if (!Heightmap.GetHeight(position, out float sampledHeight))
+            {
+                return false;
+            }
+
+            height = sampledHeight;
+            Heightmap heightmap = Heightmap.FindHeightmap(position);
+            if (heightmap != null)
+            {
+                heightmap.WorldToVertex(position, out int vertexX, out int vertexY);
+                Color paint = heightmap.GetPaintMask(vertexX, vertexY);
+                surface = TerrainPaint.Classify(paint.r, paint.g, paint.b, TerrainPaint.DefaultThreshold);
+            }
+
+            return true;
+        }
+        catch
+        {
+            height = float.NaN;
+            surface = TerrainSurfaceKind.Unavailable;
+            return false;
+        }
+    }
+
     /// <summary>Unit XZ heading from cart center toward the pull handle;
     /// falls back to the transform's forward axis, and reports zero (grade
     /// unavailable) only when both are vertical — a flipped cart.</summary>

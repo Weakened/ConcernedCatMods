@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
 using BepInEx.Logging;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedTeamster.Adapters;
 using TheConcernedCat.ConcernedTeamster.Domain.Cartographer;
+using TheConcernedCat.ConcernedTeamster.Domain.Load;
+using TheConcernedCat.ConcernedTeamster.Domain.Routes;
 using TheConcernedCat.ConcernedTeamster.Domain.Ui;
 using UnityEngine;
 using UnityEngine.UI;
@@ -23,12 +26,27 @@ namespace TheConcernedCat.ConcernedTeamster.Ui;
 internal sealed class RoutePickerPanel
 {
     private const float PanelWidth = 380f;
-    private const float PanelHeight = 430f;
+    private const float PanelHeight = 570f;
     private const float RowHeight = 26f;
     private const int RowCount = 11;
     private const double RefreshPeriodSeconds = 1.0;
 
+    /// <summary>Terrain samples per frame while a profile is building
+    /// (CT-023): 24 keeps a fresh 4096-position worst case under ~3 s of
+    /// frames while each frame's game reads stay far below the telemetry
+    /// sampler's own per-tick work.</summary>
+    private const int ProfileSamplesPerFrame = 24;
+
     private readonly ManualLogSource _log;
+    private readonly LoadModel? _loadModel;
+    private readonly Func<float?> _cartMassProvider;
+    private readonly RouteProfileCache _profileCache = new();
+    private RouteProfiler? _profiler;
+    private Guid? _profileRouteId;
+    private ulong _profileFingerprint;
+    private RouteProfile? _shownProfile;
+    private RouteLoadBottleneck.Result? _shownBottleneck;
+    private Text[] _profileLines = Array.Empty<Text>();
     private bool _failed;
 
     private GameObject? _panel;
@@ -42,9 +60,11 @@ internal sealed class RoutePickerPanel
     private long _lastChangeStamp = long.MinValue;
     private double _nextRefreshTime;
 
-    internal RoutePickerPanel(ManualLogSource log)
+    internal RoutePickerPanel(ManualLogSource log, LoadModel? loadModel, Func<float?> cartMassProvider)
     {
         _log = log;
+        _loadModel = loadModel;
+        _cartMassProvider = cartMassProvider;
     }
 
     /// <summary>The validated selection for later leaves (CT-023); null when
@@ -89,29 +109,49 @@ internal sealed class RoutePickerPanel
 
         // World exit: the next world's route ids are a different catalog;
         // an id held across the boundary would be validated against it and
-        // could only mislead. Clear eagerly, fail closed.
+        // could only mislead. Clear eagerly, fail closed — profiles and the
+        // cache go with it (terrain and ids are world-scoped).
         _selectedRouteId = null;
         _lastChangeStamp = long.MinValue;
+        _profiler?.Cancel();
+        _profiler = null;
+        _profileRouteId = null;
+        _shownProfile = null;
+        _shownBottleneck = null;
+        _profileCache.Clear();
     }
 
     internal void HandleFrame(double nowSeconds)
     {
-        if (_failed || !IsVisible || nowSeconds < _nextRefreshTime)
+        if (_failed || !IsVisible)
         {
             return;
         }
 
         try
         {
-            _nextRefreshTime = nowSeconds + RefreshPeriodSeconds;
-            bool stampReadable = CartographerCapability.TryReadRouteChangeStamp(out long stamp);
-            if (stampReadable && stamp == _lastChangeStamp)
+            if (nowSeconds >= _nextRefreshTime)
             {
-                return;
+                _nextRefreshTime = nowSeconds + RefreshPeriodSeconds;
+                bool stampReadable = CartographerCapability.TryReadRouteChangeStamp(out long stamp);
+                if (!stampReadable || stamp != _lastChangeStamp)
+                {
+                    _lastChangeStamp = stampReadable ? stamp : long.MinValue;
+                    Refresh();
+                }
+                else
+                {
+                    // The cart's mass changes without any Cartographer edit;
+                    // the load line re-binds at 1 Hz regardless of the route
+                    // stamp so the verdict always answers the CURRENT cart.
+                    RecomputeBottleneck();
+                    RenderProfileLines();
+                }
             }
 
-            _lastChangeStamp = stampReadable ? stamp : long.MinValue;
-            Refresh();
+            // Profiling advances every frame (bounded), not just on the
+            // 1 Hz refresh — the budget is per frame by design (CT-023).
+            AdvanceProfiling();
         }
         catch (Exception exception)
         {
@@ -132,6 +172,10 @@ internal sealed class RoutePickerPanel
         RoutePickerPresenter.ViewModel viewModel =
             RoutePickerPresenter.Present(readable, readable ? routes : null, _selectedRouteId);
         _selectedRouteId = viewModel.EffectiveSelectedId;
+
+        SyncProfileTarget(
+            readable && _selectedRouteId is Guid selected ? FindRoute(routes, selected) : null);
+        RecomputeBottleneck();
 
         if (_statusLine == null || _rowTexts.Length != RowCount)
         {
@@ -159,6 +203,113 @@ internal sealed class RoutePickerPanel
                 ? "… +" + hidden.ToString(System.Globalization.CultureInfo.InvariantCulture) +
                     " more (rename in Cartographer to sort forward)"
                 : string.Empty;
+        }
+
+        RenderProfileLines();
+    }
+
+    private static CartographerRouteSnapshot? FindRoute(
+        IReadOnlyList<CartographerRouteSnapshot> routes, Guid routeId)
+    {
+        for (int index = 0; index < routes.Count; index++)
+        {
+            if (routes[index].Id == routeId)
+            {
+                return routes[index];
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Points the profiler at the selected route's CURRENT
+    /// geometry. Same id + same fingerprint → keep whatever is shown or in
+    /// flight; anything else cancels the old work (a stale profile is never
+    /// displayed) and serves from cache or starts a fresh bounded profiler.</summary>
+    private void SyncProfileTarget(CartographerRouteSnapshot? route)
+    {
+        if (route is null)
+        {
+            _profiler?.Cancel();
+            _profiler = null;
+            _profileRouteId = null;
+            _shownProfile = null;
+            _shownBottleneck = null;
+            return;
+        }
+
+        ulong fingerprint = RouteGeometry.Fingerprint(route.Points);
+        if (_profileRouteId == route.Id && _profileFingerprint == fingerprint &&
+            (_shownProfile is not null || _profiler is not null))
+        {
+            return;
+        }
+
+        _profiler?.Cancel();
+        _profiler = null;
+        _profileRouteId = route.Id;
+        _profileFingerprint = fingerprint;
+        _shownProfile = null;
+        _shownBottleneck = null;
+        if (_profileCache.TryGet(route.Id, fingerprint, out RouteProfile? cached))
+        {
+            _shownProfile = cached;
+            return;
+        }
+
+        _profiler = new RouteProfiler(route.Points, TerrainAdapter.TrySamplePoint);
+    }
+
+    private void AdvanceProfiling()
+    {
+        if (_profiler is null)
+        {
+            return;
+        }
+
+        _profiler.Advance(ProfileSamplesPerFrame);
+        if (_profiler.IsComplete)
+        {
+            RouteProfile? profile = _profiler.TryBuildProfile();
+            _profiler = null;
+            if (profile is not null && _profileRouteId is Guid routeId)
+            {
+                _profileCache.Store(routeId, _profileFingerprint, profile);
+                _shownProfile = profile;
+                RecomputeBottleneck();
+            }
+        }
+
+        RenderProfileLines();
+    }
+
+    /// <summary>Re-binds the load check to the current cart mass; called on
+    /// every 1 Hz refresh (cargo changes) and on profile completion. Cheap:
+    /// one dominance scan over the calibration rows.</summary>
+    private void RecomputeBottleneck()
+    {
+        _shownBottleneck = _loadModel is not null && _shownProfile is not null
+            ? RouteLoadBottleneck.Evaluate(_shownProfile, _loadModel, _cartMassProvider())
+            : null;
+    }
+
+    private void RenderProfileLines()
+    {
+        if (_profileLines.Length != RouteProfilePresenter.LineCount || _profileLines[0] == null)
+        {
+            return;
+        }
+
+        IReadOnlyList<string> lines = RouteProfilePresenter.Present(
+            _selectedRouteId is not null,
+            _profiler is not null,
+            _profiler?.PositionsProbed ?? 0,
+            _profiler?.PositionCount ?? 0,
+            _shownProfile,
+            _shownBottleneck);
+        for (int index = 0; index < _profileLines.Length; index++)
+        {
+            _profileLines[index].text = lines[index];
         }
     }
 
@@ -236,6 +387,21 @@ internal sealed class RoutePickerPanel
             font, 13, bodyColor, outline: false, Color.black, PanelWidth - 40f, 22f,
             addContentSizeFitter: false).GetComponent<Text>();
 
+        // CT-023: the profile block for the selected route, below the list.
+        _profileLines = new Text[RouteProfilePresenter.LineCount];
+        float profileY = -388f;
+        for (int index = 0; index < _profileLines.Length; index++)
+        {
+            _profileLines[index] = gui.CreateText(
+                string.Empty, _panel.transform,
+                new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, profileY - 10f),
+                font, 13, bodyColor, outline: false, Color.black, PanelWidth - 40f, 20f,
+                addContentSizeFitter: false).GetComponent<Text>();
+            _profileLines[index].alignment = TextAnchor.UpperLeft;
+            _profileLines[index].verticalOverflow = VerticalWrapMode.Truncate;
+            profileY -= 21f;
+        }
+
         GameObject clear = gui.CreateButton(
             "Clear selection", _panel.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-80f, 30f), 150f, 30f);
@@ -258,8 +424,15 @@ internal sealed class RoutePickerPanel
     {
         _failed = true;
         // A selection nobody can see or manage anymore must not linger for
-        // a later consumer (CT-023) — fail closed all the way.
+        // a later consumer (CT-023) — fail closed all the way, profiling
+        // included.
         _selectedRouteId = null;
+        _profiler?.Cancel();
+        _profiler = null;
+        _profileRouteId = null;
+        _shownProfile = null;
+        _shownBottleneck = null;
+        _profileCache.Clear();
         if (_panel != null)
         {
             _panel.SetActive(false);
