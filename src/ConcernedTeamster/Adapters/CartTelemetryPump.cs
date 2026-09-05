@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using BepInEx.Logging;
 using TheConcernedCat.ConcernedTeamster.Domain.Carts;
 using TheConcernedCat.ConcernedTeamster.Domain.Load;
+using TheConcernedCat.ConcernedTeamster.Domain.Risk;
 using TheConcernedCat.ConcernedTeamster.Domain.Warnings;
 using UnityEngine;
 
@@ -23,8 +24,15 @@ internal sealed class CartTelemetryPump : MonoBehaviour
     private ManualLogSource? _log;
     private CartWarningTracker? _warnings;
     private WarningOptions? _warningOptions;
+    private RiskModel? _riskModel;
+    private LookaheadOptions? _lookaheadOptions;
     private bool _resetWhileNoLocalPlayer;
     private double _nextDebugSummaryTime;
+
+    /// <summary>Descent risk for the cart the local player is pulling, from
+    /// the most recent snapshot of it; null when nothing is pulled (CT-011).
+    /// Read-only for consumers — evaluation happens on new snapshots only.</summary>
+    public DescentRiskInfo? LatestDescentRisk { get; private set; }
 
     /// <summary>Latest telemetry by cart id for future consumers (CT-005
     /// panels); null until initialized.</summary>
@@ -40,10 +48,11 @@ internal sealed class CartTelemetryPump : MonoBehaviour
         return cartId is null ? null : _warnings?.TryGet(cartId);
     }
 
-    /// <summary>Wires the sampler and warning evaluation, returning the
-    /// effective (clamped) sampler options so startup can log them.</summary>
+    /// <summary>Wires the sampler, warning evaluation, and descent risk
+    /// (CT-011), returning the effective (clamped) sampler options so
+    /// startup can log them.</summary>
     internal TelemetrySamplerOptions Initialize(
-        TeamsterSettings settings, ManualLogSource log, LoadModel? loadModel)
+        TeamsterSettings settings, ManualLogSource log, LoadModel? loadModel, RiskModel? riskModel)
     {
         _settings = settings;
         _log = log;
@@ -58,6 +67,8 @@ internal sealed class CartTelemetryPump : MonoBehaviour
             settings.SteepGradeCautionPercent.Value,
             settings.PanelWarningsEnabled.Value,
             settings.HudWarningHintsEnabled.Value);
+        _riskModel = riskModel;
+        _lookaheadOptions = LookaheadOptions.CreateClamped(settings.RiskLookaheadPoints.Value);
         return options;
     }
 
@@ -75,6 +86,7 @@ internal sealed class CartTelemetryPump : MonoBehaviour
             {
                 sampler.Reset();
                 _warnings?.Reset();
+                LatestDescentRisk = null;
                 _resetWhileNoLocalPlayer = true;
             }
 
@@ -105,12 +117,47 @@ internal sealed class CartTelemetryPump : MonoBehaviour
             _warnings.Sweep(now, sampler.Options.EvictAfterSeconds);
         }
 
+        // CT-011: descent risk for the pulled cart, evaluated on its fresh
+        // snapshot only; the lookahead pass is bounded by the options'
+        // fixed height-query budget.
+        bool anyPulledTracked = false;
+        foreach (KeyValuePair<string, CartTelemetry> entry in sampler.TelemetryByCartId)
+        {
+            if (!entry.Value.IsPulledByLocalPlayer)
+            {
+                continue;
+            }
+
+            anyPulledTracked = true;
+            if (entry.Value.SampleTimeSeconds != now || _lookaheadOptions is null)
+            {
+                continue;
+            }
+
+            object? cart = CartAdapter.TryFindCartById(entry.Key);
+            TerrainAdapter.LookaheadReading look = cart is null
+                ? TerrainAdapter.LookaheadReading.Unavailable
+                : TerrainAdapter.TryReadDescentLookahead(cart, _lookaheadOptions);
+            RiskVerdict current = DescentRiskEvaluator.EvaluateCurrent(_riskModel, entry.Value);
+            RiskVerdict? ahead = DescentRiskEvaluator.EvaluateLookahead(
+                _riskModel, entry.Value, look.Available, look.WorstDownGradePercent);
+            LatestDescentRisk = new DescentRiskInfo(
+                entry.Key, current, look.Available, look.WorstDownGradePercent, ahead, now);
+            break;
+        }
+
+        if (!anyPulledTracked)
+        {
+            LatestDescentRisk = null;
+        }
+
         if (_settings is { } settings && settings.DebugLogging.Value && now >= _nextDebugSummaryTime)
         {
             _nextDebugSummaryTime = now + DebugSummaryPeriodSeconds;
             _log?.LogDebug(
                 $"Cart telemetry: {sampler.TrackedCartCount} tracked, " +
-                $"{sampler.SampledOnLastDueTick} sampled this tick.");
+                $"{sampler.SampledOnLastDueTick} sampled this tick" +
+                (LatestDescentRisk is null ? "." : "; " + LatestDescentRisk.Describe() + "."));
         }
     }
 }

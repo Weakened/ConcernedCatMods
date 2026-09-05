@@ -25,6 +25,7 @@
          bytes. The stable logical name decouples the resource from folder
          renames. -->
     <EmbeddedResource Include="Data\CartLoadCalibration.txt" LogicalName="CT.Data.CartLoadCalibration" />
+    <EmbeddedResource Include="Data\CartDescentCalibration.txt" LogicalName="CT.Data.CartDescentCalibration" />
   </ItemGroup>
 
   <ItemGroup>

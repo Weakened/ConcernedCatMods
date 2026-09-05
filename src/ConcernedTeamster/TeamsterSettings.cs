@@ -22,7 +22,8 @@ internal sealed class TeamsterSettings
         ConfigEntry<KeyboardShortcut> panelShortcut,
         ConfigEntry<bool> panelWarningsEnabled,
         ConfigEntry<bool> hudWarningHintsEnabled,
-        ConfigEntry<float> steepGradeCautionPercent)
+        ConfigEntry<float> steepGradeCautionPercent,
+        ConfigEntry<int> riskLookaheadPoints)
     {
         Enabled = enabled;
         DebugLogging = debugLogging;
@@ -34,6 +35,7 @@ internal sealed class TeamsterSettings
         PanelWarningsEnabled = panelWarningsEnabled;
         HudWarningHintsEnabled = hudWarningHintsEnabled;
         SteepGradeCautionPercent = steepGradeCautionPercent;
+        RiskLookaheadPoints = riskLookaheadPoints;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -46,6 +48,7 @@ internal sealed class TeamsterSettings
     public ConfigEntry<bool> PanelWarningsEnabled { get; }
     public ConfigEntry<bool> HudWarningHintsEnabled { get; }
     public ConfigEntry<float> SteepGradeCautionPercent { get; }
+    public ConfigEntry<int> RiskLookaheadPoints { get; }
 
     public static TeamsterSettings Bind(ConfigFile config)
     {
@@ -94,6 +97,13 @@ internal sealed class TeamsterSettings
                     "Smoothed climbing grade (percent) that raises the steep-climb caution. Exit hysteresis and anti-flicker hold are fixed so no configuration can make warnings spam.",
                     new AcceptableValueRange<float>(
                         WarningOptions.MinSteepGradeCautionPercent,
-                        WarningOptions.MaxSteepGradeCautionPercent))));
+                        WarningOptions.MaxSteepGradeCautionPercent))),
+            config.Bind("Risk", "LookaheadPoints",
+                Domain.Risk.LookaheadOptions.DefaultPoints,
+                new ConfigDescription(
+                    "Terrain samples taken ahead of the pulled cart (4 m apart) to rate the upcoming descent. 0 disables lookahead. Each sample is one bounded ground-height read per telemetry tick.",
+                    new AcceptableValueRange<int>(
+                        Domain.Risk.LookaheadOptions.MinPoints,
+                        Domain.Risk.LookaheadOptions.MaxPoints))));
     }
 }

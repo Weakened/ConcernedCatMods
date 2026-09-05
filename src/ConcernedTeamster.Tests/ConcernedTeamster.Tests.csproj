@@ -16,6 +16,7 @@
          the same logical name so LoadCalibrationSource resolves it in both
          assemblies and tests prove the shipped bytes. -->
     <EmbeddedResource Include="..\ConcernedTeamster\Data\CartLoadCalibration.txt" LogicalName="CT.Data.CartLoadCalibration" />
+    <EmbeddedResource Include="..\ConcernedTeamster\Data\CartDescentCalibration.txt" LogicalName="CT.Data.CartDescentCalibration" />
   </ItemGroup>
 
   <ItemGroup>

@@ -100,6 +100,11 @@ handle (`m_attachPoint`, semantics-anchored "front"), falling back to the
 transform's forward axis; a cart lying on its side (both axes vertical)
 reports grade unavailable. Grade % = rise over the 3 m horizontal run × 100.
 
+Descent lookahead (CT-011) reuses exactly these members — `GetHeight` at
+the cart plus at 4 m-spaced points along the same heading (count bounded
+by config, hard max 5) — no new game surface; a single failed height query
+makes the whole reading unavailable rather than a partial guess.
+
 ### Unity engine members the CT-003 adapter reads (verified on this build)
 
 Verified by metadata dump of the game's own Unity modules on 2026-09-04

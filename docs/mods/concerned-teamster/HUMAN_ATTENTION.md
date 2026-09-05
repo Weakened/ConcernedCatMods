@@ -206,6 +206,27 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-04 — CT-011 descent calibration runs pending
+
+- Version / issue: v0.3 / CT-011 (#121)
+- Question: the descent data file ships with zero Measured rows — the
+  protocol's descent runs (5 sets × 3 ramps × 3 entry speeds, two reps)
+  need interactive play; the shipped rows are two stationary near-flat
+  Held priors and two joint-break physics bounds (same gravity-floor
+  notes as CT-008).
+- Safe reversible default selected: the three-dimensional dominance model
+  answers Unknown everywhere real descents live today, and the evaluator
+  reports "not descending"/"no calibration data" states explicitly; the
+  lookahead budget is fixed (≤ points+1 height reads per tick, config
+  0–5, default 3). Nothing warns or mutates from these verdicts yet
+  (CT-013/CT-014 own surfacing with their own hysteresis).
+- Why work continued: an advisory model that says "uncalibrated" is safe;
+  appending Measured rows sharpens verdicts with zero code changes.
+- Risk / alternative: entry-speed banding (stand/walk/run) may need
+  refinement after the first real runs; the protocol is a doc-only change.
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.
