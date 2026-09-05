@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace TheConcernedCat.ConcernedTeamster.Domain.Localization;
@@ -59,7 +60,10 @@ public static class TeamsterStrings
     /// <summary>Resolves a key: a valid override wins, else the English
     /// default, else the key text itself. A key with no English default is a
     /// programming error, not a translation gap — <paramref name="known"/>
-    /// reports it so the caller can warn once.</summary>
+    /// exposes that so a caller MAY warn once (via
+    /// <see cref="ShouldReportMissing"/>); the presenters that resolve keys
+    /// today are pure and reference only existing keys, so the one-shot log
+    /// is wired as the broader presenter migration lands.</summary>
     public static string Get(string key, out bool known)
     {
         known = English.ContainsKey(key);
@@ -168,13 +172,67 @@ public static class TeamsterStrings
         return overrides;
     }
 
+    // Percent-encoding (mirroring the invertible scheme proven in
+    // Concerned Cartographer's AtlasText — reimplemented here, not
+    // referenced, to keep the products independent). Single-pass and fully
+    // round-trippable: unlike sequential \-escapes, a backslash before a
+    // 't'/'n'/'r' cannot be mis-decoded because only "%HH" triples decode.
     private static string Escape(string value)
     {
-        return value.Replace("\\", "\\\\").Replace("\t", "\\t").Replace("\n", "\\n").Replace("\r", "\\r");
+        var builder = new StringBuilder(value.Length);
+        foreach (char character in value)
+        {
+            switch (character)
+            {
+                case '%': builder.Append("%25"); break;
+                case '\t': builder.Append("%09"); break;
+                case '\n': builder.Append("%0A"); break;
+                case '\r': builder.Append("%0D"); break;
+                default: builder.Append(character); break;
+            }
+        }
+
+        return builder.ToString();
     }
 
     private static string Unescape(string value)
     {
-        return value.Replace("\\r", "\r").Replace("\\n", "\n").Replace("\\t", "\t").Replace("\\\\", "\\");
+        var builder = new StringBuilder(value.Length);
+        for (int index = 0; index < value.Length; index++)
+        {
+            char character = value[index];
+            if (character == '%' && index + 2 < value.Length &&
+                TryParseHex(value[index + 1], value[index + 2], out char decoded))
+            {
+                builder.Append(decoded);
+                index += 2;
+                continue;
+            }
+
+            builder.Append(character);
+        }
+
+        return builder.ToString();
+    }
+
+    private static bool TryParseHex(char high, char low, out char value)
+    {
+        value = '\0';
+        if (!TryHexDigit(high, out int hi) || !TryHexDigit(low, out int lo))
+        {
+            return false;
+        }
+
+        value = (char)((hi << 4) | lo);
+        return true;
+    }
+
+    private static bool TryHexDigit(char c, out int value)
+    {
+        if (c >= '0' && c <= '9') { value = c - '0'; return true; }
+        if (c >= 'A' && c <= 'F') { value = c - 'A' + 10; return true; }
+        if (c >= 'a' && c <= 'f') { value = c - 'a' + 10; return true; }
+        value = 0;
+        return false;
     }
 }

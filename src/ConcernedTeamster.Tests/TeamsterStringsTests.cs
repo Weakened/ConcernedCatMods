@@ -88,6 +88,31 @@ public class TeamsterStringsTests
         Assert.Equal("Choisissez un itineraire.", overrides["routes.pick"]);
     }
 
+    [Theory]
+    [InlineData("C:\\temp\\notes")]      // backslash before 't'/'n' — the escape trap
+    [InlineData("line\nbreak\tand tab")] // real control chars
+    [InlineData("100% sure")]            // literal percent
+    [InlineData("plain")]
+    public void OverrideValues_RoundTripThroughTheTemplateEncoding(string value)
+    {
+        // A translated value with backslashes, control chars, or percents must
+        // survive template write → parse unchanged (the encoding is invertible).
+        var overrideLine = "routes.pick\t" + EscapeForTest(value);
+        Dictionary<string, string> parsed = TeamsterStrings.ParseOverrides(
+            new[] { overrideLine }, out int skipped);
+
+        Assert.Equal(0, skipped);
+        Assert.Equal(value, parsed["routes.pick"]);
+    }
+
+    // Mirrors the catalog's private Escape so the test drives the real
+    // Unescape path through ParseOverrides.
+    private static string EscapeForTest(string value)
+    {
+        return value
+            .Replace("%", "%25").Replace("\t", "%09").Replace("\n", "%0A").Replace("\r", "%0D");
+    }
+
     [Fact]
     public void PlaceholderIndices_ExtractsDistinctSortedSlots()
     {
