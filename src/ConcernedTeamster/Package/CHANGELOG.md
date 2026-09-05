@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 (Internal — unreleased)
+
+**Descent Safety and Recovery Guidance (CT-011..CT-015).** The third internal release candidate: know whether the hill down will stay controlled, hold a parked cart on purpose, and get told why a stuck cart is stuck — with vanilla physics untouched by default and every mutating convenience explicit and reversible.
+
+- **Descent risk model (CT-011).** A calibrated three-dimensional model (downgrade, mass, entry speed) rates the descent where you are and the worst descent within a bounded lookahead window ahead of your cart. Verdicts come only from recorded rows and physics bounds; uncalibrated descents say "unknown" instead of pretending.
+- **Parking brake (CT-012).** The first and only behavior mutation, under the strictest rules: a visible button freezes a parked cart you control; release is explicit or automatic (grab the handle, walk away, lose authority, leave the world, quit, or any capability loss). Nothing is ever written to saves — a reloaded world is always brake-free, and uninstalling restores pure vanilla.
+- **Stuck diagnostics (CT-013).** When a pulled cart stops moving, the panel says why — overloaded (with the calibration row as evidence), marginal load, steep uncalibrated climb, or a physical obstruction/grounded chassis — and honestly says "cause unclear" when signatures conflict. Parked carts cost nothing.
+- **Recovery guidance (CT-014).** A Guidance panel turns the diagnosis into numbered vanilla-legal steps — including exactly how much weight to unload, traced to proven calibration rows — never a button that moves the cart for you.
+- **Safety posture.** Read-only observation everywhere except the explicitly-invoked brake; no inventory, stamina, or network behavior touched; no world or save writes.
+
 ## 0.2.0 (Internal — unreleased)
 
 **Cargo and Load Planning (CT-006..CT-010).** The second internal release candidate: know what your cart carries and whether the hill ahead is provably safe — still read-only, still vanilla physics.
