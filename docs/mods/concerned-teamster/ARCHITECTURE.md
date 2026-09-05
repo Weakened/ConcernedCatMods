@@ -76,7 +76,25 @@ sample path.
   current grade (calibrated empirically in CT-008; calibration constants are
   data, not code guesses).
 - **RiskModel** (v0.3) — descent/runaway risk from grade, mass, and speed.
-- **RoadQuality** (v0.4) — roughness/grade/drag scoring over recorded trips.
+- **RoadQuality** (v0.4, CT-017) — deterministic per-segment scores over
+  recorded trips. The world is cut into fixed 8 m grid cells (stable keys);
+  every persisted stat is an additive accumulator (sums/counts/max), so
+  incremental updates equal batch recomputation by construction and
+  identical inputs produce byte-identical sidecar output (segments are
+  written cell-sorted). Formulas:
+  - `Roughness = Σ|Δgrade between consecutive in-segment samples| / pairs`
+    — grade jitter as the bumpiness proxy. **Limit:** height is not
+    recorded, so this measures slope noise, not literal height noise;
+    cross-cell deltas are deliberately dropped.
+  - `MeanGrade = Σgrade / gradeCount`, `MaxAbsGrade = max|grade|` over
+    samples with a finite grade.
+  - `DragProxySpeed = Σ(speed on |grade| < 3%) / levelCount` — mean
+    near-level speed; lower means something slows carts there. **Limit:**
+    mass-agnostic in this version; interpret with the trip's load in view
+    (CT-019).
+  Segments aggregate all recorded history; pruning old raw trips does not
+  subtract their contribution. Scoring cost per trip is O(samples)
+  dictionary work — touched segments ≤ samples, measured in tests.
 
 All domain types are immutable snapshots or pure functions; every model states
 its inputs, outputs, and calibration source.

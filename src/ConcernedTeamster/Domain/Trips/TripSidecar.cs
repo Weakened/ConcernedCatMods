@@ -2,45 +2,93 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using TheConcernedCat.ConcernedTeamster.Domain.RoadQuality;
 
 namespace TheConcernedCat.ConcernedTeamster.Domain.Trips;
 
-/// <summary>The trip sidecar text format (CT-016): versioned header with
-/// the owning world UID, trip blocks, sample rows. Parsing is fail-closed
-/// per row (malformed rows skipped and reported), refuses a file whose
-/// world UID does not match the requested one (cross-world isolation by
-/// construction, on top of the per-world filename), and refuses unknown
-/// format versions without touching the file (the caller backs it up
-/// before any migration ever rewrites it).</summary>
+/// <summary>The trip sidecar text format (CT-016; format-version 2 adds
+/// CT-017 road-quality segment rows): versioned header with the owning
+/// world UID, sorted segment rows, trip blocks, sample rows. Parsing is
+/// fail-closed per row (malformed rows skipped and reported), refuses a
+/// file whose world UID does not match the requested one (cross-world
+/// isolation by construction, on top of the per-world filename), refuses
+/// unknown future versions without touching the file, and flags known old
+/// versions for migration (the caller backs the file up before the rewrite).
+/// Segment rows persist additive accumulators, and composing sorts them by
+/// cell so identical inputs yield byte-identical output. Segments aggregate
+/// all recorded history — pruning old raw trips does not subtract their
+/// contribution (by design).</summary>
 public static class TripSidecar
 {
-    public const int FormatVersion = 1;
+    public const int FormatVersion = 2;
 
     public sealed class ParseResult
     {
-        public ParseResult(IReadOnlyList<Trip> trips, IReadOnlyList<string> errors, bool refused)
+        public ParseResult(
+            IReadOnlyList<Trip> trips,
+            RoadQualityIndex segments,
+            IReadOnlyList<string> errors,
+            bool refused,
+            bool needsMigration)
         {
             Trips = trips;
+            Segments = segments;
             Errors = errors;
             Refused = refused;
+            NeedsMigration = needsMigration;
         }
 
         public IReadOnlyList<Trip> Trips { get; }
 
+        public RoadQualityIndex Segments { get; }
+
         public IReadOnlyList<string> Errors { get; }
 
         /// <summary>True when the whole file was refused (wrong world,
-        /// unknown version) — the caller must not overwrite it blindly.</summary>
+        /// unknown future version) — the caller must not overwrite it
+        /// blindly.</summary>
         public bool Refused { get; }
+
+        /// <summary>True for a readable older format (version 1): trips
+        /// loaded, segments must be recomputed, and the caller backs the
+        /// file up before rewriting it in the current format.</summary>
+        public bool NeedsMigration { get; }
     }
 
-    public static string Compose(IReadOnlyList<Trip> trips, long worldUid, string pluginVersion)
+    public static string Compose(
+        IReadOnlyList<Trip> trips, long worldUid, string pluginVersion,
+        RoadQualityIndex? segments = null)
     {
         var builder = new StringBuilder();
         builder.Append("# Concerned Teamster trip sidecar\n");
         builder.Append("format-version: ").Append(FormatVersion.ToString(CultureInfo.InvariantCulture)).Append('\n');
         builder.Append("world-uid: ").Append(worldUid.ToString(CultureInfo.InvariantCulture)).Append('\n');
         builder.Append("plugin-version: ").Append(pluginVersion).Append('\n');
+
+        if (segments is not null)
+        {
+            // Sorted by cell for byte-identical output on identical input.
+            var keys = new List<RoadSegmentKey>(segments.Segments.Keys);
+            keys.Sort((left, right) =>
+                left.CellX != right.CellX
+                    ? left.CellX.CompareTo(right.CellX)
+                    : left.CellZ.CompareTo(right.CellZ));
+            foreach (RoadSegmentKey key in keys)
+            {
+                RoadSegmentStats stats = segments.Segments[key];
+                builder.Append("seg: ")
+                    .Append(key.CellX.ToString(CultureInfo.InvariantCulture)).Append(" | ")
+                    .Append(key.CellZ.ToString(CultureInfo.InvariantCulture)).Append(" | ")
+                    .Append(stats.SampleCount.ToString(CultureInfo.InvariantCulture)).Append(" | ")
+                    .Append(stats.PairCount.ToString(CultureInfo.InvariantCulture)).Append(" | ")
+                    .Append(stats.SumAbsGradeDelta.ToString("F3", CultureInfo.InvariantCulture)).Append(" | ")
+                    .Append(stats.GradeCount.ToString(CultureInfo.InvariantCulture)).Append(" | ")
+                    .Append(stats.SumGrade.ToString("F3", CultureInfo.InvariantCulture)).Append(" | ")
+                    .Append(stats.MaxAbsGrade.ToString("F3", CultureInfo.InvariantCulture)).Append(" | ")
+                    .Append(stats.LevelCount.ToString(CultureInfo.InvariantCulture)).Append(" | ")
+                    .Append(stats.SumLevelSpeed.ToString("F3", CultureInfo.InvariantCulture)).Append('\n');
+            }
+        }
 
         for (int index = 0; index < trips.Count; index++)
         {
@@ -73,9 +121,10 @@ public static class TripSidecar
     {
         var trips = new List<Trip>();
         var errors = new List<string>();
+        var segments = new RoadQualityIndex();
         if (string.IsNullOrEmpty(text))
         {
-            return new ParseResult(trips, errors, refused: false);
+            return new ParseResult(trips, segments, errors, refused: false, needsMigration: false);
         }
 
         int formatVersion = -1;
@@ -96,10 +145,11 @@ public static class TripSidecar
             {
                 int.TryParse(line.Substring(15).Trim(), NumberStyles.Integer,
                     CultureInfo.InvariantCulture, out formatVersion);
-                if (formatVersion != FormatVersion)
+                if (formatVersion != FormatVersion && formatVersion != 1)
                 {
                     errors.Add($"unsupported format-version {formatVersion}; file left untouched");
-                    return new ParseResult(Array.Empty<Trip>(), errors, refused: true);
+                    return new ParseResult(Array.Empty<Trip>(), segments, errors,
+                        refused: true, needsMigration: false);
                 }
 
                 continue;
@@ -112,9 +162,16 @@ public static class TripSidecar
                 if (worldUid != expectedWorldUid)
                 {
                     errors.Add($"world-uid {worldUid} does not match this world ({expectedWorldUid}); file refused");
-                    return new ParseResult(Array.Empty<Trip>(), errors, refused: true);
+                    return new ParseResult(Array.Empty<Trip>(), segments, errors,
+                        refused: true, needsMigration: false);
                 }
 
+                continue;
+            }
+
+            if (line.StartsWith("seg:", StringComparison.Ordinal))
+            {
+                ParseSegment(line.Substring(4), lineNumber + 1, segments, errors);
                 continue;
             }
 
@@ -182,7 +239,39 @@ public static class TripSidecar
             errors.Add("missing format-version header");
         }
 
-        return new ParseResult(trips, errors, refused: false);
+        return new ParseResult(trips, segments, errors, refused: false,
+            needsMigration: formatVersion == 1);
+    }
+
+    private static void ParseSegment(
+        string body, int lineNumber, RoadQualityIndex segments, List<string> errors)
+    {
+        string[] parts = body.Split('|');
+        if (parts.Length < 10)
+        {
+            errors.Add($"line {lineNumber}: segment needs 10 fields; skipped");
+            return;
+        }
+
+        if (!int.TryParse(parts[0].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int cellX) ||
+            !int.TryParse(parts[1].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int cellZ) ||
+            !int.TryParse(parts[2].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int samples) ||
+            !int.TryParse(parts[3].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int pairs) ||
+            !float.TryParse(parts[4].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out float sumAbsGradeDelta) ||
+            !int.TryParse(parts[5].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int gradeCount) ||
+            !float.TryParse(parts[6].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out float sumGrade) ||
+            !float.TryParse(parts[7].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out float maxAbsGrade) ||
+            !int.TryParse(parts[8].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int levelCount) ||
+            !float.TryParse(parts[9].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out float sumLevelSpeed))
+        {
+            errors.Add($"line {lineNumber}: malformed segment; skipped");
+            return;
+        }
+
+        var stats = new RoadSegmentStats();
+        stats.Restore(samples, pairs, sumAbsGradeDelta, gradeCount, sumGrade,
+            maxAbsGrade, levelCount, sumLevelSpeed);
+        segments.RestoreSegment(new RoadSegmentKey(cellX, cellZ), stats);
     }
 
     /// <summary>Keeps the newest trips within the cap (oldest pruned) and
