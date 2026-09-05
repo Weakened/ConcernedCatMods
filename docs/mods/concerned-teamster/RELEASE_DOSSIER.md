@@ -5,6 +5,62 @@ split between automated evidence and pending manual claims, following the
 dossier discipline proven on Concerned Cartographer. Publication of anything
 is owner-only, always.
 
+## v0.2 RC1 — "Cargo and Load Planning" (sealed 2026-09-04)
+
+| Item | Value |
+|---|---|
+| Version | 0.2.0 (internal; no publication) |
+| Source commit | `709a7dc23108ba22a5c0bf466b83380a0b1f36b2` (branch `chore/ct-010-v02-rc`, merged to main via PR) |
+| ZIP | `artifacts/thunderstore/TheConcernedCat-ConcernedTeamster-0.2.0.zip` |
+| ZIP SHA-256 | `9834c4faf98e2deed9038b6e4abc10ddb2d8a3bfde28580a159ae208feb8f60c` |
+| DLL SHA-256 | `3525219320db583ebacc31bc0b1b665a2bf9c2e807707aee068e78e4078d6fad` |
+| DLL identity | AssemblyVersion 0.2.0.0, InformationalVersion `0.2.0+709a7dc23108ba22a5c0bf466b83380a0b1f36b2` |
+| ZIP contents (6 entries) | `manifest.json`, `icon.png` (256×256), `README.md`, `CHANGELOG.md`, `LICENSE`, `plugins/TheConcernedCat.ConcernedTeamster.dll` — audited: **only Teamster's own DLL**, no game/framework binaries, no PDB |
+| Built against | Valheim 0.221.12 (network 36, buildid 21981559), Unity 6000.0.61f1, BepInExPack 5.4.2333, Jötunn 2.29.2 |
+| Version sync | 0.2.0 across csproj, `Plugin.cs`, `thunderstore.toml`, `CHANGELOG.md` — validator-asserted with `--expected-version 0.2.0 --require-binary` |
+
+### Sprint scope sealed in this RC
+
+CT-006 immutable cargo manifest (quality-scaled weights, unreadable-slot
+markers, tracker-bounded refresh) · CT-007 sortable/filterable manifest UI
+(deterministic sort matrix, localized filtering, explicit states) · CT-008
+calibration protocol + versioned data + dominance-only LoadModel (honest
+Unknown; 0 measured rows, stated) · CT-009 load/grade warnings
+(anti-flicker hysteresis, actionable non-color text, Unknown-never-warns).
+
+### v0.2 campaign results (automated)
+
+| Campaign item | Method | Result |
+|---|---|---|
+| Repository/package static validation | `python tools/validate_repo.py --product teamster --expected-version 0.2.0 --require-binary` | PASS |
+| Solution build | `pwsh ./scripts/build.ps1 -Configuration Release` | PASS — 0 errors |
+| Domain/adapter unit tests | `dotnet test ConcernedTeamster.Tests` (Release) | **186/186 PASS** — manifest totals/ordering/immutability, tracker call-count bounds, presenter sort/filter matrices, load model dominance + 9,801-query monotonicity grid + shipped-file reproducibility, warning hysteresis single-transition-pair + evaluation-count discipline |
+| Cartographer regression | `dotnet test ConcernedCartographer.Tests` (Release) | 568/568 PASS |
+| Package build + audit | `pwsh ./scripts/package.ps1 -Product ConcernedTeamster` + ZIP listing | PASS — hashes above, own-DLL-only confirmed |
+| Manifest-vs-vanilla-accounting consistency | code-level: line weights are the game's own `GetWeight()`; float-order caveat documented in CART_INTERNALS.md | PASS (by construction; in-game visual check pending) |
+
+Defects: no `DEF-teamster-v0.2-*` issues were needed (one in-scope test
+defect — an oscillation-test baseline off-by-one — was caught and fixed
+inside CT-009 before merge). No open P0/P1 with the sprint label.
+
+### Pending manual claims added by v0.2 (owner smoke checklist accumulator)
+
+Carried v0.1 items remain (dossier below). New:
+
+1. Manifest-vs-container screenshot: same items/counts/weights as the
+   vanilla container UI, including quality-scaled gear (CT-006 entry).
+2. Manifest panel UX: sorting, filter typing, localized names, full-cart
+   responsiveness feel, ▲▼ glyph rendering (CT-007 entry).
+3. Calibration protocol runs (5 sets × 3 ramps × 2 reps) to produce the
+   first `Measured` rows; gravity note (CT-008 entry).
+4. Warning transcript on a built test slope: caution rise/hold/release,
+   panel row, optional HUD hint while pulling (CT-009 entry).
+
+### Gate decision
+
+All automatable v0.2 gates are green; manual items are pending by design
+for an internal RC. Sprint controller #114 closes with this seal.
+
 ## v0.1 RC1 — "Cart Truth" (sealed 2026-09-04)
 
 | Item | Value |
