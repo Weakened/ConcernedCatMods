@@ -55,6 +55,28 @@ readout (CT-004) sampled at three points along each ramp:
 - `Stalls` — could not sustain progress.
 - `JointBreak` — the attach joint snapped (force exceeded `m_breakForce`).
 
+## Descent runs (CT-011)
+
+Descent calibration uses the same cargo sets and ramps, walked DOWN, plus
+an entry-speed dimension. Rows go to
+`src/ConcernedTeamster/Data/CartDescentCalibration.txt`.
+
+Procedure (per set × ramp × entry speed):
+
+1. Attach at the ramp top. Entry speeds: **stand** (0 m/s — controlled
+   release from stillness), **walk**, **run** (record the panel's speed
+   readout at the crest as the row's speed value).
+2. Descend the full ramp trying to stay in control (no sprint, no jumping).
+3. Record the outcome:
+   - `Held` — controlled the whole way; stopping mid-slope was possible.
+   - `Dragged` — the cart accelerated beyond control but the joint held
+     and control returned at the bottom.
+   - `Runaway` — detached/uncontrollable descent (joint broke from pull or
+     the cart forced a detach), or the cart left on its own.
+   - `JointBreak` — the attach joint snapped during the descent.
+4. Two repetitions minimum; a third on disagreement. Append rows with
+   `basis=Measured`, date, game version; bump `data-version`.
+
 ## What is calibrated today
 
 No measured rows exist yet (in-game runs are owner/manual work; the TCT

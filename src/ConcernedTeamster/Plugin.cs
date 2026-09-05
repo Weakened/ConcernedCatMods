@@ -49,9 +49,10 @@ public sealed class Plugin : BaseUnityPlugin
         }
 
         Domain.Load.LoadModel? loadModel = LoadCalibratedModel();
+        Domain.Risk.RiskModel? riskModel = LoadDescentModel();
 
         CartTelemetryPump pump = gameObject.AddComponent<CartTelemetryPump>();
-        Domain.Carts.TelemetrySamplerOptions options = pump.Initialize(settings, Logger, loadModel);
+        Domain.Carts.TelemetrySamplerOptions options = pump.Initialize(settings, Logger, loadModel, riskModel);
         Logger.LogInfo(
             $"Cart telemetry sampler armed: interval {options.SampleIntervalSeconds:0.##} s, " +
             $"radius {options.SearchRadiusMeters:0.#} m, {options.MaxCartsPerTick} carts/tick, " +
@@ -89,6 +90,28 @@ public sealed class Plugin : BaseUnityPlugin
                 ? "no parse errors."
                 : $"{calibration.Errors.Count} malformed line(s) skipped."));
         return new Domain.Load.LoadModel(calibration);
+    }
+
+    /// <summary>Loads the embedded descent calibration once and reports its
+    /// provenance in one line (CT-011). Failure only leaves descent risk at
+    /// Unknown; everything else runs.</summary>
+    private Domain.Risk.RiskModel? LoadDescentModel()
+    {
+        Domain.Risk.DescentCalibrationData? calibration = Domain.Risk.DescentCalibrationSource.TryLoadEmbedded();
+        if (calibration is null || calibration.DataVersion <= 0)
+        {
+            Logger.LogWarning(
+                "Descent calibration data missing or unreadable; descent risk stays Unknown, all telemetry keeps working.");
+            return null;
+        }
+
+        Logger.LogInfo(
+            $"Descent calibration v{calibration.DataVersion} loaded: {calibration.Rows.Count} rows " +
+            $"({calibration.MeasuredRowCount} measured) for game {calibration.GameVersion}; " +
+            (calibration.Errors.Count == 0
+                ? "no parse errors."
+                : $"{calibration.Errors.Count} malformed line(s) skipped."));
+        return new Domain.Risk.RiskModel(calibration);
     }
 
     /// <summary>Runs the cart capability probe once and reports the outcome

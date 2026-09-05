@@ -1,0 +1,36 @@
+# Concerned Teamster descent calibration data (CT-011).
+# Versioned data, not code: the RiskModel derives every verdict from the
+# rows below and answers "unknown" outside their coverage.
+#
+# Format:
+#   header lines   key: value
+#   data rows      row: <down-grade-percent> | <total-cart-mass> | <entry-speed-mps> | <outcome> | <basis> | <note>
+# down-grade-percent is the descent magnitude (positive = downhill ahead).
+# Outcomes: Held | Dragged | Runaway | JointBreak
+# Bases:    Measured (protocol descent runs only) | Prior (labeled assumption)
+#           | DerivedConstant (computed from decompile-verified constants)
+#
+# Provenance: no Measured rows exist yet — descent runs are owner/manual
+# work pending the TCT profiles (CT-043). Priors and derived bounds are
+# labeled as exactly what they are; see the protocol document.
+
+data-version: 1
+game-version: 0.221.12
+game-buildid: 21981559
+protocol: docs/mods/concerned-teamster/CALIBRATION_PROTOCOL.md
+generated: 2026-09-04
+
+# Stationary-on-flat safety priors: a cart with no descent ahead and no
+# speed does not run away (vanilla design intent; trivially observable).
+row: 0 | 220 | 0 | Held | Prior | flat, stationary, set C; protocol confirmation pending
+row: 1 | 70 | 0 | Held | Prior | near-flat controlled release, set B; protocol confirmation pending
+
+# Physical impossibility bounds from decompile-verified constants
+# (m_breakForce = 10000): merely holding the cart back on the slope
+# already exceeds the joint's break force (force >= mass * g *
+# sin(atan(grade/100))), independent of player strength or entry speed —
+# the joint snaps and the cart runs. Gravity is not read from the game,
+# so each bound states the minimum gravity for which it holds (Unity
+# default is 9.81, far above every threshold used here).
+row: 30 | 8000 | 0 | JointBreak | DerivedConstant | breaks for g >= 4.4 m/s^2 (8000 * 4.4 * 0.2873 > 10000)
+row: 45 | 6000 | 0 | JointBreak | DerivedConstant | breaks for g >= 4.1 m/s^2 (6000 * 4.1 * 0.4103 > 10000)

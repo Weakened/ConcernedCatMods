@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using TheConcernedCat.ConcernedTeamster.Domain.Risk;
 using TheConcernedCat.ConcernedTeamster.Domain.Terrain;
 using UnityEngine;
 
@@ -101,6 +102,92 @@ public static class TerrainAdapter
         }
 
         return new GroundReading(gradeAvailable, instantGradePercent, surface);
+    }
+
+    /// <summary>Result of one bounded lookahead pass (CT-011); grade and
+    /// availability fail together — a partial path is never reported.</summary>
+    public readonly struct LookaheadReading
+    {
+        public LookaheadReading(bool available, float worstDownGradePercent)
+        {
+            Available = available;
+            WorstDownGradePercent = worstDownGradePercent;
+        }
+
+        public bool Available { get; }
+
+        public float WorstDownGradePercent { get; }
+
+        public static LookaheadReading Unavailable => new(false, 0f);
+    }
+
+    /// <summary>Samples ground heights ahead of the cart along its heading
+    /// at the options' precomputed offsets — exactly
+    /// <c>options.MaxHeightQueriesPerEvaluation</c> height queries, no more
+    /// (the bounded-lookahead budget) — and returns the steepest upcoming
+    /// downgrade magnitude. Unavailable when disabled (0 points), the cart
+    /// is unreadable/flipped, or any height query fails. Read-only; never
+    /// throws.</summary>
+    public static LookaheadReading TryReadDescentLookahead(object? cartComponent, LookaheadOptions options)
+    {
+        if (cartComponent is null || options.Points == 0 || !CartAdapter.CapabilityEnabled)
+        {
+            return LookaheadReading.Unavailable;
+        }
+
+        try
+        {
+            return ReadDescentLookaheadCore(cartComponent, options);
+        }
+        catch
+        {
+            return LookaheadReading.Unavailable;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static LookaheadReading ReadDescentLookaheadCore(object cartComponent, LookaheadOptions options)
+    {
+        Vagon? vagon = cartComponent as Vagon;
+        if (vagon == null)
+        {
+            return LookaheadReading.Unavailable;
+        }
+
+        Vector3 heading = ResolveHeading(vagon);
+        if (heading.sqrMagnitude <= 0f)
+        {
+            return LookaheadReading.Unavailable;
+        }
+
+        Vector3 center = vagon.transform.position;
+        if (!Heightmap.GetHeight(center, out float previousHeight))
+        {
+            return LookaheadReading.Unavailable;
+        }
+
+        float worstDownGradePercent = 0f;
+        float[] offsets = options.OffsetsMeters;
+        for (int index = 0; index < offsets.Length; index++)
+        {
+            Vector3 point = center + heading * offsets[index];
+            if (!Heightmap.GetHeight(point, out float height))
+            {
+                return LookaheadReading.Unavailable;
+            }
+
+            float segmentGradePercent =
+                (height - previousHeight) / LookaheadOptions.SpacingMeters * 100f;
+            float downMagnitude = -segmentGradePercent;
+            if (downMagnitude > worstDownGradePercent)
+            {
+                worstDownGradePercent = downMagnitude;
+            }
+
+            previousHeight = height;
+        }
+
+        return new LookaheadReading(true, worstDownGradePercent);
     }
 
     /// <summary>Unit XZ heading from cart center toward the pull handle;
