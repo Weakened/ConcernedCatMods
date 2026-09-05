@@ -52,18 +52,39 @@ public class MultiplayerScenarioTests
     public void Handoff_ReceivingClientCannotEngageWhileRemote()
     {
         // From client B's POV before the handoff completes: B does not yet
-        // own the cart. Every engage attempt is refused — a mutating action
-        // never executes without authority.
+        // own the cart, so the engage is refused — a mutating action never
+        // executes without authority. (At the brake layer BrakeFacts only
+        // ever carries Local or Unknown; the Remote authority value itself
+        // is exercised against the policy in NoMutationWithoutAuthority.)
         var brake = new BrakeLifecycle();
-        foreach (CartAuthority _ in new[] { CartAuthority.Remote, CartAuthority.Unknown })
-        {
-            Assert.Equal(BrakeAction.None, brake.EvaluateToggle(Cart, Facts(localAuthority: false), out string reason));
-            Assert.Equal("this client does not control the cart", reason);
-            Assert.False(brake.IsEngaged);
-        }
+        Assert.Equal(BrakeAction.None, brake.EvaluateToggle(Cart, Facts(localAuthority: false), out string reason));
+        Assert.Equal("this client does not control the cart", reason);
+        Assert.False(brake.IsEngaged);
 
         // Once ownership actually arrives, B may engage.
         Assert.Equal(BrakeAction.Engage, brake.EvaluateToggle(Cart, Facts(localAuthority: true), out _));
+    }
+
+    [Fact]
+    public void Handoff_OwnerKeepsBrakeAcrossContinuedOwningTicks()
+    {
+        // The "keeps it while owning" direction: once engaged, the brake
+        // must SURVIVE ticks where this client still owns the cart — a
+        // spurious release under continued ownership would be a defect this
+        // scenario is here to catch (the flaps test only proves the safety
+        // direction, that it never holds without authority).
+        var brake = new BrakeLifecycle();
+        Assert.Equal(BrakeAction.Engage, brake.EvaluateToggle(Cart, Facts(localAuthority: true), out _));
+        brake.MarkEngaged(Cart);
+
+        for (int tick = 0; tick < 5; tick++)
+        {
+            Assert.Equal(BrakeAction.None, brake.EvaluateTick(Facts(localAuthority: true), out _));
+            Assert.True(brake.IsEngaged);
+        }
+
+        // And it still releases the moment ownership finally leaves.
+        Assert.Equal(BrakeAction.Release, brake.EvaluateTick(Facts(localAuthority: false), out _));
     }
 
     [Fact]
@@ -137,29 +158,33 @@ public class MultiplayerScenarioTests
         Assert.False(CartAuthorityPolicy.RequiresRemoteLabel(TeamsterFeature.CartTelemetry, CartAuthority.Local));
     }
 
-    // -- Scenario: dedicated server behaves as player-hosted at the logic layer --
+    // -- Scenario: the brake decision is a pure function of facts --
 
     [Fact]
-    public void DedicatedServer_ClientLogicIdenticalToPlayerHosted()
+    public void BrakeDecision_IsPureFunctionOfFacts_TopologyNotAnInput()
     {
-        // Teamster runs no server plugin; a client on a dedicated server sees
-        // the same authority facts as on a player-hosted world, so the brake
-        // decision is identical. This asserts the topology-independence the
-        // scenario matrix relies on: same facts → same decision.
-        var hosted = new BrakeLifecycle();
-        var dedicated = new BrakeLifecycle();
+        // Why this underwrites the "dedicated == player-hosted" row: neither
+        // the brake lifecycle nor the policy takes ANY topology input (no
+        // server-role flag, no ZNet query) — the decision is a pure function
+        // of BrakeFacts. So a dedicated-server client and a player-hosted
+        // client that report the same authority necessarily decide the same.
+        // This test pins that purity (same facts → same decision, no hidden
+        // shared state); the architectural half — that Teamster ships no
+        // server component and sends nothing — is enforced by the validator's
+        // CT-026 no-network/no-ownership audit, which the matrix row also
+        // cites. Determinism alone is not "topology equivalence"; the two
+        // together are.
         BrakeFacts owned = Facts(localAuthority: true);
-
         Assert.Equal(
-            hosted.EvaluateToggle(Cart, owned, out _),
-            dedicated.EvaluateToggle(Cart, owned, out _));
+            new BrakeLifecycle().EvaluateToggle(Cart, owned, out _),
+            new BrakeLifecycle().EvaluateToggle(Cart, owned, out _));
 
-        hosted.MarkEngaged(Cart);
-        dedicated.MarkEngaged(Cart);
-        BrakeFacts lost = Facts(localAuthority: false);
-        Assert.Equal(
-            hosted.EvaluateTick(lost, out string hostedReason),
-            dedicated.EvaluateTick(lost, out string dedicatedReason));
-        Assert.Equal(hostedReason, dedicatedReason);
+        // Same instance, repeated identical facts → identical answer (no
+        // internal drift), then the authority-gated transition still fires.
+        var brake = new BrakeLifecycle();
+        Assert.Equal(BrakeAction.Engage, brake.EvaluateToggle(Cart, owned, out _));
+        brake.MarkEngaged(Cart);
+        Assert.Equal(BrakeAction.None, brake.EvaluateTick(owned, out _));
+        Assert.Equal(BrakeAction.Release, brake.EvaluateTick(Facts(localAuthority: false), out _));
     }
 }
