@@ -5,6 +5,84 @@ split between automated evidence and pending manual claims, following the
 dossier discipline proven on Concerned Cartographer. Publication of anything
 is owner-only, always.
 
+## v0.5 RC1 — "Optional Cartographer Integration" (sealed 2026-09-05)
+
+| Item | Value |
+|---|---|
+| Version | 0.5.0 (internal; no publication) |
+| Source commit | `f74279f177bca6a7d8132a60a4a521f6a90210ca` (branch `chore/ct-025-v05-rc`; version-sync + changelog committed before the RC rebuild so the shipped DLL names this exact commit, not a dirty-tree build). Sealed on merge to main via PR #194. |
+| ZIP | `artifacts/thunderstore/TheConcernedCat-ConcernedTeamster-0.5.0.zip` (`.sha256` sidecar written beside it for drift detection) |
+| ZIP SHA-256 | `483b23899557a8e4e69cdcb9bd6e8cc6f498f7f565dcd6ce216635edc8a94654` (112,948 B) |
+| DLL SHA-256 | `d5d6d12390421b09dbd1e8ebbb7b8dea055ba00d5f7f8035f8f42db31fb73a52` (177,152 B) |
+| DLL identity | AssemblyVersion 0.5.0.0, InformationalVersion `0.5.0+f74279f177bca6a7d8132a60a4a521f6a90210ca` |
+| ZIP contents (6 entries) | manifest.json, icon.png (256×256), README.md (refreshed to v0.5 scope), CHANGELOG.md, LICENSE, plugins/TheConcernedCat.ConcernedTeamster.dll — **own DLL only**, no PDB, no foreign DLL |
+| Built against | Valheim 0.221.12 (buildid 21981559 — re-verified in the Steam manifest `appmanifest_892970.acf` at seal time), Unity 6000.0.61f1, BepInExPack 5.4.2333, Jötunn 2.29.2 |
+| Version sync | 0.5.0 across csproj/Plugin.cs/thunderstore.toml, validator-asserted (`--expected-version 0.5.0 --require-binary`); the CHANGELOG `## 0.5.0` section is validator-asserted too |
+
+### Sprint scope sealed in this RC
+
+CT-021 runtime Cartographer capability + version adapter (GUID/version
+floor 0.10.0, 12-member reflective read contract, four detection paths,
+no compile-time dependency either direction) · CT-022 route picker
+(eligibility rule, id-keyed selection surviving renames and invalidating
+explicitly) · CT-023 budgeted route profiler (per-frame-capped terrain
+sampling, honest sampled/unsampled partition, grade histogram, worst
+segments, LoadModel-verbatim bottleneck, geometry-fingerprint cache) ·
+CT-024 route report (numbered problem sections, located unsampled spans,
+model-traced recommendations) · CT-025 coexistence validation + this seal.
+
+### v0.5 campaign results (automated)
+
+| Campaign item | Method | Result |
+|---|---|---|
+| Static validation + version sync | `validate_repo.py --product teamster --expected-version 0.5.0 --require-binary` | PASS |
+| Solution build | `build.ps1 -Configuration Release` | PASS — 0 errors (8 pre-existing benign warnings) |
+| Teamster unit tests | `dotnet test ConcernedTeamster.Tests` (Release) | **371/371 PASS** (adds 79 v0.5 tests: 15 gate, 18 route reader, 25 profiler, 13 picker, 12 report — counts across CT-021..024) |
+| Cartographer regression | `dotnet test ConcernedCartographer.Tests` (Release) | **568/568 PASS** — unchanged with the Teamster integration present in the solution |
+| Cross-product independence audit | `validate_repo.py` interop line | PASS — 4 project trees, no ProjectReference/Reference/PackageReference/Compile/using/InternalsVisibleTo coupling either direction |
+| Cartographer contract drift tripwire | `validate_repo.py` interop line | PASS — 12/12 contract members present at source level (kind-pinned patterns) |
+| Integration read-only audit (CT-021..024 path) | `validate_repo.py` interop line | PASS — 9 integration files free of mutating/invoking reflection (SetValue/SetField/.Invoke(/GetMethod(/GetMethods(/InvokeMember/Activator.CreateInstance/CreateDelegate) |
+| Package build + audit | `package.ps1 -Product ConcernedTeamster` + ZIP listing | PASS — hashes above, own-DLL-only confirmed (0 foreign/PDB entries) |
+| Coexistence matrix (both mods in-game; Teamster alone; Cartographer alone; version-mismatch floor) | in-game, TCT-Compat profile | **MANUAL — pending** (see below; the four detection paths themselves are unit-proven off-game by the CT-021 gate tests) |
+
+### Coexistence matrix — automated coverage vs pending in-game rows
+
+| Row | What it proves | Automated evidence | In-game status |
+|---|---|---|---|
+| Both mods loaded, integration on | Detection → Available; routes list, profile, report | CT-021 `Evaluate_CompleteSurfaceAtFloorVersion_Available` + reader/picker/profiler/report suites over fake catalogs | pending |
+| Teamster alone | Integration hidden with one INFO line; no Routes button | CT-021 `Evaluate_NotFound_Absent`; picker/report never instantiated when `IsAvailable` is false | pending |
+| Cartographer alone | Unaffected by Teamster's presence | Cartographer 568/568 regression green with Teamster in the solution | pending |
+| Version mismatch | Below-floor / missing-version hides integration | CT-021 `Evaluate_VersionBelowFloor_VersionTooLow`, `Evaluate_MissingVersion_VersionTooLow` | pending |
+
+No new exceptions can arise in either mod's logs from the integration by
+construction — the whole path is reflection reads guarded to fail closed —
+but the "no new log exceptions during real coexistence runs" acceptance row
+is an in-game observation and stays pending.
+
+### Pending manual claims added by v0.5
+
+1. In-game coexistence matrix in TCT-Compat: all four rows behave per spec
+   with captured logs, and neither mod logs a new exception (CT-025).
+2. Cartographer-installed integration walkthrough: Routes button appears,
+   route picker lists and selects, profiler runs with UNSAMPLED shown over
+   unloaded terrain, report renders problem sections and a load line
+   matching the pulled cart (CT-021..024 HUMAN_ATTENTION entries).
+3. Cartographer-absent check: no Routes button, one INFO line stating the
+   integration is hidden (CT-021/022 entries).
+
+### Defects
+
+No defect filed against `sprint:teamster-v0.5`. No open P0/P1 with the
+sprint label at seal time. (The one open Teamster defect, #189
+DEF-teamster-v0.4-001, is P3, scoped to v0.4, and deferred to the v0.6
+hardening line by its own rationale.)
+
+### Gate decision
+
+All automatable v0.5 gates are green; the coexistence-matrix rows that
+require a running game are pending by design for an internal RC. Sprint
+controller #133 closes with this seal.
+
 ## v0.4 RC1 — "Road Quality and Trip Profiles" (sealed 2026-09-05)
 
 | Item | Value |

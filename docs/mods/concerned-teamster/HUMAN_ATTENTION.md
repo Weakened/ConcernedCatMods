@@ -465,6 +465,30 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-05 — CT-025 in-game coexistence matrix pending
+
+- Version / issue: v0.5 / CT-025 (#138)
+- Question: the v0.5 gate's coexistence matrix (both mods loaded with
+  integration on; Teamster alone with it hidden; Cartographer alone
+  unaffected; a version-mismatch floor simulation) and the "no new log
+  exceptions during real coexistence runs" row require an interactive
+  session in the TCT-Compat profile with Concerned Cartographer installed.
+- Safe reversible default selected: the four detection paths are unit-proven
+  off-game by the CT-021 gate tests (present / absent / version-too-low /
+  probe-failure), the Cartographer suite stays 568/568 green with Teamster
+  in the solution, and three validator audits (cross-product independence,
+  contract drift tripwire, integration read-only) enforce no coupling and
+  no atlas mutation. The RC is internal; nothing publishes.
+- Why work continued: the integration is reflection-reads-only and
+  fail-closed by construction, so a coexistence surprise can at worst
+  hide a feature plus one log line — never corrupt a world or mutate
+  Cartographer state; the seal is internal.
+- Risk / alternative: none beyond confirming the log lines and button
+  visibility in a real dual-mod launch; the rows join the owner smoke
+  checklist alongside the CT-021..024 pending items.
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.
