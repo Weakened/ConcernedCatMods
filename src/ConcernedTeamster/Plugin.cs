@@ -27,8 +27,8 @@ public sealed class Plugin : BaseUnityPlugin
         LogCartCapability(settings);
         ArmTelemetry(settings);
 
-        // CT-003 delivers read-only telemetry sampling. Panels and terrain
-        // grade arrive with CT-004/CT-005; nothing mutates carts.
+        // Read-only telemetry, panels, manifest, and advisory warnings only;
+        // nothing mutates carts.
     }
 
     /// <summary>Starts the telemetry pump only when the master switch is on
@@ -48,31 +48,38 @@ public sealed class Plugin : BaseUnityPlugin
             return;
         }
 
+        Domain.Load.LoadModel? loadModel = LoadCalibratedModel();
+
         CartTelemetryPump pump = gameObject.AddComponent<CartTelemetryPump>();
-        Domain.Carts.TelemetrySamplerOptions options = pump.Initialize(settings, Logger);
+        Domain.Carts.TelemetrySamplerOptions options = pump.Initialize(settings, Logger, loadModel);
         Logger.LogInfo(
             $"Cart telemetry sampler armed: interval {options.SampleIntervalSeconds:0.##} s, " +
             $"radius {options.SearchRadiusMeters:0.#} m, {options.MaxCartsPerTick} carts/tick, " +
             $"{options.MaxTrackedCarts} tracked max, evict after {options.EvictAfterSeconds:0.#} s.");
+        Logger.LogInfo(
+            "Warnings: panel " + (settings.PanelWarningsEnabled.Value ? "on" : "off") +
+            ", HUD hint " + (settings.HudWarningHintsEnabled.Value ? "on" : "off") +
+            $", steep-climb caution at {settings.SteepGradeCautionPercent.Value:0.#}% " +
+            $"(exit −{Domain.Warnings.WarningOptions.ExitBandPercent:0.#}%, " +
+            $"fall hold {Domain.Warnings.WarningOptions.FallHoldSeconds:0.#} s).");
 
         Ui.CartStatusHudController hud = gameObject.AddComponent<Ui.CartStatusHudController>();
         hud.Initialize(settings, Logger, pump);
         Logger.LogInfo("Cart Status panel armed: visible Cart button at the right screen edge while in a world.");
-
-        LogLoadCalibration();
     }
 
-    /// <summary>Loads the embedded calibration data once and reports its
-    /// provenance in one line (CT-008). Failure only disables load advice
-    /// (CT-009 consumers check for the model); everything else runs.</summary>
-    private void LogLoadCalibration()
+    /// <summary>Loads the embedded calibration data once, reports its
+    /// provenance in one line (CT-008), and builds the load model for the
+    /// warning evaluator (CT-009). Failure only disables load advice;
+    /// everything else runs.</summary>
+    private Domain.Load.LoadModel? LoadCalibratedModel()
     {
         Domain.Load.LoadCalibrationData? calibration = Domain.Load.LoadCalibrationSource.TryLoadEmbedded();
         if (calibration is null || calibration.DataVersion <= 0)
         {
             Logger.LogWarning(
                 "Load calibration data missing or unreadable; load advice stays off, all telemetry keeps working.");
-            return;
+            return null;
         }
 
         Logger.LogInfo(
@@ -81,6 +88,7 @@ public sealed class Plugin : BaseUnityPlugin
             (calibration.Errors.Count == 0
                 ? "no parse errors."
                 : $"{calibration.Errors.Count} malformed line(s) skipped."));
+        return new Domain.Load.LoadModel(calibration);
     }
 
     /// <summary>Runs the cart capability probe once and reports the outcome

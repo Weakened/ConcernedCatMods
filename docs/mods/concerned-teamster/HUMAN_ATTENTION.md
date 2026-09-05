@@ -185,6 +185,27 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-04 — CT-009 in-game warning transcript pending
+
+- Version / issue: v0.2 / CT-009 (#118)
+- Question: a live transcript/screenshot of warning states (steep-climb
+  caution rising and holding through grade dips, the panel warning row,
+  the optional HUD hint while pulling) needs an interactive session on
+  built test ramps.
+- Safe reversible default selected: warnings are advisory text only, off
+  the HUD by default, evaluated solely on new telemetry snapshots, with
+  fixed hysteresis (exit −3%, 4 s fall hold) proven by 11 unit tests
+  including the oscillation single-transition-pair property; Unknown
+  calibration verdicts never warn, so no player is scared by uncalibrated
+  guesses.
+- Why work continued: a wrong warning threshold is a config-tunable
+  display matter; nothing mutates carts and the RC campaign (CT-010)
+  covers the visual check.
+- Risk / alternative: the default 18% steep-caution threshold is a design
+  prior until calibration rows sharpen it; documented in the config text.
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.
