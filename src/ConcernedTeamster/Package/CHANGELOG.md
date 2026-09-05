@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.0 (Internal — unreleased)
+
+**Optional Cartographer Integration (CT-021..CT-025).** The fifth internal release candidate: when Concerned Cartographer is installed, its drawn routes can be profiled for cart safety — with zero hard dependency in either direction and zero writes into Cartographer's atlas.
+
+- **Runtime capability detection (CT-021).** Teamster detects Concerned Cartographer by plugin GUID and version at runtime (floor 0.10.0) and verifies a 12-member read contract before any integration feature can appear. Absence, an older version, or any contract mismatch hides the integration with one INFO line — nothing errors, and Teamster runs fully standalone. There is no compile-time reference between the mods, enforced by automated audits.
+- **Route picker (CT-022).** A **Routes** button (inside the Cart Status panel, only when Cartographer is detected) lists the current world's routes — name, ground length, point count. Archived routes are hidden; routes without usable geometry are listed with the reason. Selection is held by the route's stable id: renames follow it, while deletion, archiving, geometry loss, or an unreadable catalog invalidate it with an explicit message — never a stale ghost.
+- **Route profiling (CT-023).** The selected route is terrain-sampled in bounded per-frame chunks (cancellable, capped): total distance, sampled vs **unsampled** meters (unloaded terrain is reported, never guessed), surface composition, grade histogram, worst climb/descent, and the safe-load bottleneck — the steepest sampled section answered verbatim by the calibrated load model for your cart's current mass. Profiles cache by geometry and recompute only when the route actually changes.
+- **Route report (CT-024).** A **Report** button renders the profile as advice: numbered problem sections (steep grades, unsampled stretches with locations), and load recommendations quoted directly from the calibration model — sections the model cannot answer get facts, not invented advice.
+- **Read-only by construction (CT-025).** The whole integration reflects into Cartographer through reads only; a validator audit fails the build if any mutating or invoking reflection ever appears in the integration path. Cartographer's atlas, pins, routes, and files are never touched.
+
 ## 0.4.0 (Internal — unreleased)
 
 **Road Quality and Trip Profiles (CT-016..CT-020).** The fourth internal release candidate: recorded trips grade the roads themselves — roughness, drag, grade, and bottlenecks — so haulers improve routes with evidence instead of vibes.
