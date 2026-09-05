@@ -1,3 +1,5 @@
+using TheConcernedCat.ConcernedTeamster.Domain.Authority;
+
 namespace TheConcernedCat.ConcernedTeamster.Domain.Brake;
 
 /// <summary>The facts the brake lifecycle needs about one cart at one
@@ -31,6 +33,12 @@ public readonly struct BrakeFacts
     /// <summary>True only when the local client owns the cart under vanilla
     /// rules right now — the brake never takes or requests authority.</summary>
     public bool IsLocalAuthority { get; }
+
+    /// <summary>The cart authority as the CT-026 policy sees it: Local when
+    /// this client owns the cart, otherwise Unknown — the adapter collapses
+    /// remote and unverifiable ownership into "not local authority", and
+    /// Unknown is the fail-closed bucket that denies mutation.</summary>
+    public CartAuthority Authority => IsLocalAuthority ? CartAuthority.Local : CartAuthority.Unknown;
 
     public bool IsAttached { get; }
 

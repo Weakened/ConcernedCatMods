@@ -425,6 +425,84 @@ def check_teamster_integration_readonly(errors: list[str]) -> list[str]:
     return [f"[interop] CT-024 read-only audit: {checked} integration files free of mutating reflection"]
 
 
+# CT-026: the multiplayer authority policy document must list every
+# TeamsterFeature the enum defines, and the source must contain no
+# outbound-network or ownership-takeover call — Teamster is client-side,
+# read-only toward the game, and sends nothing, so an unmodded peer's
+# experience is provably unaltered. Both are tripwires: a new feature or an
+# accidental network/ownership call fails the build.
+TEAMSTER_NETWORK_OWNERSHIP_TOKENS = (
+    "InvokeRPC",
+    "ZRoutedRpc",
+    "RegisterRPC",
+    "SetOwner",
+    "ClaimOwnership",
+    "GetZDO().Set",
+    "ZDO.Set",
+    "m_nview.InvokeRPC",
+)
+
+
+def _strip_cs_line_comment(line: str) -> str:
+    """Everything from the first // (covers // and ///) removed. Teamster's
+    only network/ownership token mentions are in doc comments stating their
+    absence, so comment-stripping keeps the audit true without flagging them.
+    No // appears inside a string literal in the audited files (checked)."""
+    index = line.find("//")
+    return line if index < 0 else line[:index]
+
+
+def check_teamster_authority_policy(errors: list[str]) -> list[str]:
+    """Fails if the policy doc omits a TeamsterFeature, or if any outbound
+    network / ownership-takeover token appears in Teamster source."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    enum_file = teamster_dir / "Domain" / "Authority" / "TeamsterFeature.cs"
+    policy_doc = ROOT / "docs" / "mods" / "concerned-teamster" / "AUTHORITY_POLICY.md"
+
+    features: list[str] = []
+    if not enum_file.is_file():
+        fail(f"[interop] CT-026 authority audit: missing {enum_file.relative_to(ROOT)}", errors)
+    else:
+        text = enum_file.read_text(encoding="utf-8")
+        match = re.search(r"enum\s+TeamsterFeature\s*\{(.*?)\}", text, re.DOTALL)
+        if not match:
+            fail("[interop] CT-026 authority audit: could not parse the TeamsterFeature enum", errors)
+        else:
+            for line in match.group(1).splitlines():
+                member = re.match(r"\s*([A-Za-z_]\w*)\s*(?:=[^,]+)?,?\s*$", line)
+                if member:
+                    features.append(member.group(1))
+
+    if not policy_doc.is_file():
+        fail(f"[interop] CT-026 authority audit: missing {policy_doc.relative_to(ROOT)}", errors)
+    elif features:
+        doc_text = policy_doc.read_text(encoding="utf-8")
+        for feature in features:
+            if f"`{feature}`" not in doc_text:
+                fail(
+                    f"[interop] CT-026 authority audit: feature {feature!r} is not documented in "
+                    "AUTHORITY_POLICY.md — every TeamsterFeature needs a matrix row", errors)
+
+    net_hits = 0
+    for path in sorted(teamster_dir.rglob("*.cs")):
+        if path.relative_to(teamster_dir).parts[0] in ("obj", "bin"):
+            continue
+        for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            code = _strip_cs_line_comment(raw)
+            for token in TEAMSTER_NETWORK_OWNERSHIP_TOKENS:
+                if token in code:
+                    net_hits += 1
+                    fail(
+                        f"[interop] CT-026 authority audit: outbound-network/ownership token "
+                        f"{token!r} in {path.relative_to(ROOT)}:{number} — Teamster is client-side "
+                        "and read-only toward the game; it must send nothing and take no ownership", errors)
+
+    return [
+        f"[interop] CT-026 authority policy: {len(features)} features documented, "
+        f"no outbound-network/ownership calls in Teamster source ({net_hits} violations)",
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -463,6 +541,7 @@ def main() -> int:
     report.extend(check_cross_product_independence(errors))
     report.extend(check_teamster_cartographer_contract(errors))
     report.extend(check_teamster_integration_readonly(errors))
+    report.extend(check_teamster_authority_policy(errors))
 
     prohibited = []
     for path in ROOT.rglob("*.dll"):
