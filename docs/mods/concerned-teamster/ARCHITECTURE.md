@@ -177,12 +177,15 @@ negative become safe defaults, absurd magnitudes clamp — and length-caps /
 control-strips network-derived labels; caps sit far above any real value so
 legitimate readings pass unchanged. `CartSnapshot.Create` runs mass fields
 through it so `TotalMass` can never be NaN or negative (a deliberate,
-documented tightening of CT-002's raw-relay for impossible values only).
-`OncePerKeyGate` makes a hardened path log a given rejection at most once
-(bounded, reset on world switch), and `RemoteStalenessPolicy` marks a
-remote-derived reading stale past an age threshold (local-authority readings
-are never stale). The full data-flow review is `PRIVACY_INVENTORY.md`: nothing
-Teamster produces leaves the machine.
+documented tightening of CT-002's raw-relay for impossible values only), and
+`NetworkInputGuard.Label` sanitizes network-derived names on the
+cooperative-diagnostics display path. Two further tested primitives ship for
+the live remote paths to adopt as the multiplayer observation feed lands (the
+same staged-feed posture as CT-028): `OncePerKeyGate` (single-shot, bounded,
+reset-on-world-switch logging for a hardened path) and `RemoteStalenessPolicy`
+(marks a remote-derived reading stale past an age threshold; local-authority
+readings never stale). The full data-flow review is `PRIVACY_INVENTORY.md`:
+nothing Teamster produces leaves the machine.
 
 CT-028 adds cooperative diagnostics on the same footing: `Domain/Diagnostics/
 CooperativeEffortClassifier` classifies each observed nearby player as

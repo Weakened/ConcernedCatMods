@@ -16,9 +16,12 @@ public static class RemoteStalenessPolicy
     public const double DefaultStaleAfterSeconds = 5.0;
 
     /// <summary>True when a reading sampled at <paramref name="sampledAt"/>
-    /// is stale as of <paramref name="now"/>. A non-positive or backwards
-    /// age is treated as fresh (clock skew is not staleness); an infinite/NaN
-    /// age is stale (unknown age fails closed to "don't trust it").</summary>
+    /// is stale as of <paramref name="now"/> (age &gt;= the threshold). A
+    /// backwards age is treated as fresh (local clock skew is not staleness);
+    /// an infinite/NaN age is stale (unknown age fails closed). Callers must
+    /// stamp <paramref name="sampledAt"/> from the LOCAL clock at read time —
+    /// never from a remote-supplied timestamp — so a future-dated remote value
+    /// cannot mask its own staleness.</summary>
     public static bool IsStale(double sampledAt, double now, double staleAfterSeconds = DefaultStaleAfterSeconds)
     {
         double age = now - sampledAt;

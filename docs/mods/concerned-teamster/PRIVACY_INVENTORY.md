@@ -48,6 +48,9 @@ Reviewed line by line for sensitive content:
 - Cartographer integration probe (product name, version) — no player data.
 - Trip persistence outcomes (counts, file operation results) — no player
   data; never the sample contents.
+- Gated telemetry debug summary (only when DebugLogging is on): tracked/
+  sampled cart counts plus an advisory risk phrase — counts and advice
+  only, no ids, names, or positions.
 - Parking brake state changes: the **cart id** (`<ownerUserId>:<objectId>`)
   plus a reason string. The owner id here is Valheim's own numeric ZDO owner
   id (a network object id already present in the game's state), not a player
@@ -56,10 +59,11 @@ Reviewed line by line for sensitive content:
 - **Player character names are never logged.** Cooperative diagnostics keep
   names in UI text only.
 
-Hostile/oversized network-derived labels are length-capped and
-control-character-stripped before they could ever reach a log line
-(`NetworkInputGuard.Label`, CT-029), so a crafted name cannot inject newlines
-or bloat the log.
+Player character names are **never logged at all** — that is the primary
+guarantee. Where a network-derived name is *displayed* (cooperative
+diagnostics), it is length-capped and control-character-stripped first
+(`NetworkInputGuard.Label`, wired in `CooperativeEffortClassifier`), so a
+crafted name cannot inject newlines or bloat a panel line either.
 
 ## Data flow summary
 

@@ -4,11 +4,12 @@ namespace TheConcernedCat.ConcernedTeamster.Domain.Carts;
 /// (CT-002). Every value is copied out of the game by the cart adapter; the
 /// only derived value is <see cref="TotalMass"/>, computed here with the
 /// vanilla formula so panels can explain every number they show. Finite,
-/// non-negative raw values pass through unchanged — vanilla truth first, even
-/// when odd — while impossible network-derived values (NaN, infinite, or
-/// negative mass/weight) are bounded to a safe finite value (CT-029), since on
-/// a remote-owned cart these fields are replicated and may be corrupt. Each
-/// source member's semantics are recorded in CART_INTERNALS.md.</summary>
+/// non-negative, within-cap raw values pass through unchanged — vanilla truth
+/// first, even when odd — while impossible network-derived values (NaN,
+/// infinite, negative, or above the safety cap) are bounded to a safe finite
+/// value (CT-029), since on a remote-owned cart these fields are replicated
+/// and may be corrupt. Each source member's semantics are recorded in
+/// CART_INTERNALS.md.</summary>
 public sealed class CartSnapshot
 {
     private CartSnapshot(
