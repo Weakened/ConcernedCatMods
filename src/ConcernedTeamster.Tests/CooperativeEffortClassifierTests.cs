@@ -129,6 +129,24 @@ public class CooperativeEffortClassifierTests
     }
 
     [Fact]
+    public void Summarize_SanitizesHostileNetworkNames()
+    {
+        // A crafted name (control chars, over-long) is length-capped and
+        // control-stripped before it can reach the panel line (CT-029).
+        var crew = new List<CoopParticipant>
+        {
+            P("Ana\nDROP\tTABLE" + new string('x', 200), attached: true, contact: true, alignment: 0f),
+        };
+
+        string summary = CooperativeEffortClassifier.Summarize(crew);
+
+        Assert.DoesNotContain('\n', summary);
+        Assert.DoesNotContain('\t', summary);
+        // The 32-char cap keeps the whole line bounded well under the raw 200+.
+        Assert.True(summary.Length < 80);
+    }
+
+    [Fact]
     public void Summarize_FallsBackToVisiblePlaceholdersWhenNameMissing()
     {
         var crew = new List<CoopParticipant>

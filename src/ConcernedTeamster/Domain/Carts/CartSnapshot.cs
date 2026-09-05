@@ -3,9 +3,13 @@ namespace TheConcernedCat.ConcernedTeamster.Domain.Carts;
 /// <summary>Immutable, game-free observation of one cart at one instant
 /// (CT-002). Every value is copied out of the game by the cart adapter; the
 /// only derived value is <see cref="TotalMass"/>, computed here with the
-/// vanilla formula so panels can explain every number they show. Raw values
-/// pass through unchanged — vanilla truth first, even when it is odd — and
-/// the semantics of each source member are recorded in CART_INTERNALS.md.</summary>
+/// vanilla formula so panels can explain every number they show. Finite,
+/// non-negative, within-cap raw values pass through unchanged — vanilla truth
+/// first, even when odd — while impossible network-derived values (NaN,
+/// infinite, negative, or above the safety cap) are bounded to a safe finite
+/// value (CT-029), since on a remote-owned cart these fields are replicated
+/// and may be corrupt. Each source member's semantics are recorded in
+/// CART_INTERNALS.md.</summary>
 public sealed class CartSnapshot
 {
     private CartSnapshot(
@@ -73,14 +77,22 @@ public sealed class CartSnapshot
         bool isAttached,
         bool isPulledByLocalPlayer)
     {
-        float effectiveCargoWeight = cargoDataAvailable ? cargoWeight : 0f;
+        // CT-029: mass/cargo/factor are network-derived on a remote-owned
+        // cart (replicated state), so bound every one to a finite,
+        // non-negative, capped value before it can reach TotalMass. Caps sit
+        // far above any real cart, so legitimate readings pass unchanged;
+        // only garbage (NaN, negative, absurd) is corrected.
+        float safeBaseMass = Net.NetworkInputGuard.Mass(baseMass).Value;
+        float safeFactor = Net.NetworkInputGuard.MassFactor(itemWeightMassFactor).Value;
+        float safeCargoWeight = Net.NetworkInputGuard.Mass(cargoWeight).Value;
+        float effectiveCargoWeight = cargoDataAvailable ? safeCargoWeight : 0f;
         return new CartSnapshot(
             cartId ?? string.Empty,
-            baseMass,
+            safeBaseMass,
             effectiveCargoWeight,
             cargoDataAvailable,
-            itemWeightMassFactor,
-            baseMass + effectiveCargoWeight * itemWeightMassFactor,
+            safeFactor,
+            safeBaseMass + effectiveCargoWeight * safeFactor,
             isAttached,
             isPulledByLocalPlayer);
     }

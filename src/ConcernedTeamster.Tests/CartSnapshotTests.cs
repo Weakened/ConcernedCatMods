@@ -72,20 +72,39 @@ public class CartSnapshotTests
     }
 
     [Fact]
-    public void Create_OddGameValues_PassThroughRaw()
+    public void Create_OddButValidValues_PassThroughRaw()
     {
-        // Vanilla truth first: a modded or broken game surface may report
-        // negatives or NaN, and the snapshot must relay, not sanitize.
+        // Vanilla truth first: an unusual but FINITE, non-negative reading
+        // (a modded heavy cart, an odd multiplier) relays unchanged, so the
+        // panel can explain the real number.
+        CartSnapshot odd = CartSnapshot.Create(
+            "1:1", baseMass: 99999f, cargoWeight: 12345f, cargoDataAvailable: true,
+            itemWeightMassFactor: 3.5f, isAttached: false, isPulledByLocalPlayer: false);
+        Assert.Equal(99999f, odd.BaseMass);
+        Assert.Equal(12345f, odd.CargoWeight);
+        Assert.Equal(99999f + 12345f * 3.5f, odd.TotalMass);
+    }
+
+    [Fact]
+    public void Create_ImpossibleNetworkValues_AreBounded()
+    {
+        // CT-029: on a remote-owned cart these fields are network-derived, so
+        // impossible values (negative, NaN, infinite) are corruption, not
+        // vanilla truth — they are bounded to a finite, non-negative,
+        // never-NaN mass rather than relayed. This deliberately supersedes
+        // the old relay-everything behavior for impossible values only.
         CartSnapshot negative = CartSnapshot.Create(
             "1:1", baseMass: -5f, cargoWeight: -10f, cargoDataAvailable: true,
             itemWeightMassFactor: 2f, isAttached: false, isPulledByLocalPlayer: false);
-        Assert.Equal(-5f, negative.BaseMass);
-        Assert.Equal(-25f, negative.TotalMass);
+        Assert.Equal(0f, negative.BaseMass);
+        Assert.True(negative.TotalMass >= 0f);
+        Assert.False(float.IsNaN(negative.TotalMass));
 
         CartSnapshot notANumber = CartSnapshot.Create(
             "1:1", baseMass: 20f, cargoWeight: float.NaN, cargoDataAvailable: true,
             itemWeightMassFactor: 1f, isAttached: false, isPulledByLocalPlayer: false);
-        Assert.True(float.IsNaN(notANumber.CargoWeight));
-        Assert.True(float.IsNaN(notANumber.TotalMass));
+        Assert.False(float.IsNaN(notANumber.CargoWeight));
+        Assert.False(float.IsNaN(notANumber.TotalMass));
+        Assert.Equal(20f, notANumber.TotalMass); // 20 base + 0 (NaN cargo → 0)
     }
 }

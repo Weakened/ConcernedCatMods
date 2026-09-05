@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using TheConcernedCat.ConcernedTeamster.Domain.Net;
 
 namespace TheConcernedCat.ConcernedTeamster.Domain.Diagnostics;
 
@@ -175,8 +176,11 @@ public static class CooperativeEffortClassifier
                 continue;
             }
 
-            names.Add(participant.DisplayName.Length > 0
-                ? participant.DisplayName
+            // CT-029: the name is network-derived, so length-cap and
+            // control-strip it before it reaches a panel line.
+            string safeName = NetworkInputGuard.Label(participant.DisplayName);
+            names.Add(safeName.Length > 0
+                ? safeName
                 : (participant.IsLocalPlayer ? "you" : "a teammate"));
         }
 
