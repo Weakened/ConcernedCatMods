@@ -116,10 +116,18 @@ No writes to Valheim save files.
 
 ### Integration adapters (v0.5+)
 
-`CartographerCapability` probes for Concerned Cartographer at runtime by GUID
-and version; when present and compatible, Teamster can read route geometry for
-profiling. Absence, version mismatch, or probe failure all degrade to "feature
-hidden" — never an error dialog, never a crash.
+`CartographerCapability` (CT-021) probes for Concerned Cartographer at runtime
+by GUID and version; when present and compatible, Teamster can read route
+geometry for profiling. Absence, version mismatch, or probe failure all
+degrade to "feature hidden" with one INFO line — never an error dialog, never
+a crash. The mechanics mirror the CT-002 cart probe: a pure domain contract
+(`Domain/Cartographer/CartographerContract`) names every reflective member,
+`CartographerGate` decides availability through `GameMemberProbe`, and
+`CartographerRouteReader` copies living routes into immutable snapshots,
+re-walking the chain from the plugin instance on every call because
+Cartographer replaces its route store on world enter. The full member table,
+version floor (0.10.0), semantics, and enforcement (validator cross-product
+audit plus contract drift tripwire) live in `CARTOGRAPHER_CONTRACT.md`.
 
 ### Multiplayer posture (v0.6)
 

@@ -366,6 +366,36 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-05 — CT-021 integration reads Cartographer internals reflectively
+
+- Version / issue: v0.5 / CT-021 (#134)
+- Question: Teamster's route integration needs a read surface on Concerned
+  Cartographer, but Cartographer is in public beta and changes to it happen
+  only through its own issues — so CT-021 could not add a public API to
+  Cartographer and instead binds reflectively to internal members
+  (`Plugin._runtime` → `CartographerRuntime._routeStore` → `RouteStore.Living`
+  → route/id/point properties).
+- Safe reversible default selected: a written 12-member contract
+  (CARTOGRAPHER_CONTRACT.md) with floor 0.10.0 (the first publicly
+  distributed Cartographer; verified — the five runtime/domain contract
+  files are byte-identical between released 0.10.0 and the current tree,
+  and Plugin.cs differs only in its version constant and a comment, with
+  the `_runtime` declaration unchanged), a full runtime member probe that
+  hides the integration with one INFO line on any mismatch, and two
+  validator gates: a bidirectional compile-time-independence audit and a
+  source-level drift tripwire that fails the build if Cartographer renames a
+  contract member.
+- Why work continued: fail-closed by construction — the worst outcome of a
+  broken assumption is a hidden feature plus one log line, never an error or
+  atlas mutation; the monorepo tripwire converts silent breakage into a
+  loud validation failure at the moment of the rename.
+- Risk / alternative: the owner may prefer a small public, versioned
+  integration surface inside Cartographer (a Cartographer-side issue, e.g.
+  post-beta); the contract document plans that migration and only the
+  adapter seam would change.
+- Must resolve before public release: No
+- Status: Open
+
 ## Resolved items
 
 None yet.
