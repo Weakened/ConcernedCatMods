@@ -46,6 +46,7 @@ public sealed class RouteProfile
         float worstDownhillGradePercent,
         float maxAbsGradePercent,
         IReadOnlyList<RouteProfileSegment> worstSegments,
+        IReadOnlyList<RouteProfileSegment> unsampledSpans,
         float sampleSpacingMeters,
         int positionCount,
         int sampledPositionCount)
@@ -60,6 +61,7 @@ public sealed class RouteProfile
         WorstDownhillGradePercent = worstDownhillGradePercent;
         MaxAbsGradePercent = maxAbsGradePercent;
         WorstSegments = worstSegments;
+        UnsampledSpans = unsampledSpans;
         SampleSpacingMeters = sampleSpacingMeters;
         PositionCount = positionCount;
         SampledPositionCount = sampledPositionCount;
@@ -105,6 +107,13 @@ public sealed class RouteProfile
 
     /// <summary>Up to three steepest sampled sections, steepest first.</summary>
     public IReadOnlyList<RouteProfileSegment> WorstSegments { get; }
+
+    /// <summary>Up to three longest contiguous unsampled stretches, longest
+    /// first (CT-024: gap disclosure with locations). GradePercent is NaN —
+    /// nothing was measured there. Their lengths sum to at most
+    /// <see cref="UnsampledMeters"/>; the total is always exact even when
+    /// more than three spans exist.</summary>
+    public IReadOnlyList<RouteProfileSegment> UnsampledSpans { get; }
 
     public float SampleSpacingMeters { get; }
 

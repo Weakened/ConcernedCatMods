@@ -208,6 +208,9 @@ public sealed class RouteProfiler
         float worstDown = float.NaN;
         float maxAbs = float.NaN;
         var worst = new List<RouteProfileSegment>(WorstSegmentCount + 1);
+        var gaps = new List<RouteProfileSegment>(WorstSegmentCount + 1);
+        float gapStart = float.NaN;
+        float gapLength = 0f;
         int sampledPositions = 0;
 
         for (int index = 0; index < _positionT.Length; index++)
@@ -229,9 +232,18 @@ public sealed class RouteProfiler
             if (!_sampled[index - 1] || !_sampled[index])
             {
                 unsampledMeters += length;
+                // Consecutive unsampled segments are contiguous (ascending
+                // walk), so extending the open span merges them into one.
+                if (float.IsNaN(gapStart))
+                {
+                    gapStart = _positionT[index - 1];
+                }
+
+                gapLength += length;
                 continue;
             }
 
+            CloseGap(gaps, ref gapStart, ref gapLength);
             sampledMeters += length;
             float grade = (_heights[index] - _heights[index - 1]) / length * 100f;
 
@@ -266,6 +278,8 @@ public sealed class RouteProfiler
             InsertWorst(worst, new RouteProfileSegment(_positionT[index - 1], length, grade));
         }
 
+        CloseGap(gaps, ref gapStart, ref gapLength);
+
         return new RouteProfile(
             TotalDistanceMeters,
             sampledMeters,
@@ -277,6 +291,7 @@ public sealed class RouteProfiler
             worstDown,
             maxAbs,
             worst,
+            gaps,
             SampleSpacingMeters,
             _positionT.Length,
             sampledPositions);
@@ -294,6 +309,44 @@ public sealed class RouteProfiler
         }
 
         return bounds.Length;
+    }
+
+    /// <summary>Closes the open unsampled span, keeping only the longest
+    /// <see cref="WorstSegmentCount"/> spans (longest first). The span's
+    /// grade is NaN — nothing was measured there.</summary>
+    private static void CloseGap(List<RouteProfileSegment> gaps, ref float gapStart, ref float gapLength)
+    {
+        if (float.IsNaN(gapStart) || gapLength <= 0f)
+        {
+            gapStart = float.NaN;
+            gapLength = 0f;
+            return;
+        }
+
+        var span = new RouteProfileSegment(gapStart, gapLength, float.NaN);
+        gapStart = float.NaN;
+        gapLength = 0f;
+
+        int insertAt = gaps.Count;
+        for (int index = 0; index < gaps.Count; index++)
+        {
+            if (span.LengthMeters > gaps[index].LengthMeters)
+            {
+                insertAt = index;
+                break;
+            }
+        }
+
+        if (insertAt >= WorstSegmentCount)
+        {
+            return;
+        }
+
+        gaps.Insert(insertAt, span);
+        if (gaps.Count > WorstSegmentCount)
+        {
+            gaps.RemoveAt(gaps.Count - 1);
+        }
     }
 
     private static void InsertWorst(List<RouteProfileSegment> worst, RouteProfileSegment candidate)

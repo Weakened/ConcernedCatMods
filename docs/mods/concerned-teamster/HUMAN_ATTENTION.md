@@ -443,6 +443,28 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-05 — CT-024 in-game route report demonstration pending
+
+- Version / issue: v0.5 / CT-024 (#137)
+- Question: the report panel demonstration on a real route (numbered
+  problem sections matching the terrain, gap entries where terrain was
+  unloaded, load lines matching the pulled cart) needs an interactive
+  session with Cartographer installed.
+- Safe reversible default selected: every rendering path is proven
+  headlessly (10 presenter tests: all-clear, steep climb/descent, gap
+  ranking with locations, no-model/no-mass states, verbatim LoadModel
+  Explanation tracing); the panel is plain read-only text fed by the
+  picker; the validator now enforces the read-only integration contract
+  (mutating/invoking reflection tokens fail validation) so the
+  no-atlas-mutation promise is automated, not aspirational.
+- Why work continued: advisory text over already-computed profile data;
+  the worst outcome is wording polish, owned by CT-033.
+- Risk / alternative: the 15% problem threshold is a design constant
+  (aligned with CT-013's steep boundary); real hauling feedback in the
+  beta may argue for a config knob.
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.

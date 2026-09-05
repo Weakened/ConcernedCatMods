@@ -129,6 +129,17 @@ with an explicit status (fail closed, never a stale ghost). Refreshes are
 ChangeStamp-driven at 1 Hz while the panel is open; nothing is ever written
 toward Cartographer.
 
+The route report (CT-024) renders the profile as advice from a visible
+Report button: numbered problem sections (steep grades at or above 15%, and
+the three longest unsampled spans with their locations — the summary's
+UNSAMPLED total is always exact, so gaps can rank but never hide), plus load
+recommendations that quote LoadModel answers verbatim
+(section advice and the bottleneck line both come from Query /
+RecommendedMaxMass; descents are advised as the return climb). Sections
+without a model answer get facts, not advice. The whole CT-021..CT-024
+integration path is audited read-only by tools/validate_repo.py: any
+mutating or invoking reflection token in those files fails validation.
+
 ### Persistence (from v0.4)
 
 Per-world sidecar files under the BepInEx config path, named by world UID with

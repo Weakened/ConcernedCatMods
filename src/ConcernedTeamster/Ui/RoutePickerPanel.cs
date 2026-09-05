@@ -41,6 +41,8 @@ internal sealed class RoutePickerPanel
     private readonly LoadModel? _loadModel;
     private readonly Func<float?> _cartMassProvider;
     private readonly RouteProfileCache _profileCache = new();
+    private readonly RouteReportPanel _reportPanel;
+    private string _selectedRouteName = "";
     private RouteProfiler? _profiler;
     private Guid? _profileRouteId;
     private ulong _profileFingerprint;
@@ -65,6 +67,7 @@ internal sealed class RoutePickerPanel
         _log = log;
         _loadModel = loadModel;
         _cartMassProvider = cartMassProvider;
+        _reportPanel = new RouteReportPanel(log);
     }
 
     /// <summary>The validated selection for later leaves (CT-023); null when
@@ -93,6 +96,13 @@ internal sealed class RoutePickerPanel
             {
                 ForceRefresh();
             }
+            else
+            {
+                // The report is fed exclusively by this panel's refresh
+                // loop; left open without it, it would freeze into a stale
+                // ghost. Closing the picker closes the report.
+                _reportPanel.Hide();
+            }
         }
         catch (Exception exception)
         {
@@ -118,7 +128,9 @@ internal sealed class RoutePickerPanel
         _profileRouteId = null;
         _shownProfile = null;
         _shownBottleneck = null;
+        _selectedRouteName = "";
         _profileCache.Clear();
+        _reportPanel.Hide();
     }
 
     internal void HandleFrame(double nowSeconds)
@@ -235,9 +247,11 @@ internal sealed class RoutePickerPanel
             _profileRouteId = null;
             _shownProfile = null;
             _shownBottleneck = null;
+            _selectedRouteName = "";
             return;
         }
 
+        _selectedRouteName = route.Name;
         ulong fingerprint = RouteGeometry.Fingerprint(route.Points);
         if (_profileRouteId == route.Id && _profileFingerprint == fingerprint &&
             (_shownProfile is not null || _profiler is not null))
@@ -311,6 +325,18 @@ internal sealed class RoutePickerPanel
         {
             _profileLines[index].text = lines[index];
         }
+
+        // An open report follows the same cadence as the profile block.
+        if (_reportPanel.IsVisible)
+        {
+            _reportPanel.Render(BuildReportViewModel());
+        }
+    }
+
+    private RouteReportPresenter.ViewModel BuildReportViewModel()
+    {
+        return RouteReportPresenter.Present(
+            _selectedRouteName, _shownProfile, _loadModel, _cartMassProvider());
     }
 
     private void SelectRow(int index)
@@ -403,18 +429,32 @@ internal sealed class RoutePickerPanel
         }
 
         GameObject clear = gui.CreateButton(
-            "Clear selection", _panel.transform,
-            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-80f, 30f), 150f, 30f);
+            "Clear", _panel.transform,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-120f, 30f), 100f, 30f);
         clear.GetComponent<Button>().onClick.AddListener(() =>
         {
             _selectedRouteId = null;
             ForceRefresh();
         });
 
+        // CT-024: the report opens from a visible button and renders the
+        // same presenter state the profile block shows — buttons first.
+        GameObject report = gui.CreateButton(
+            "Report", _panel.transform,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 30f), 100f, 30f);
+        report.GetComponent<Button>().onClick.AddListener(() =>
+        {
+            _reportPanel.Toggle(BuildReportViewModel());
+        });
+
         GameObject close = gui.CreateButton(
             "Close", _panel.transform,
-            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(80f, 30f), 96f, 30f);
-        close.GetComponent<Button>().onClick.AddListener(() => _panel!.SetActive(false));
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(120f, 30f), 100f, 30f);
+        close.GetComponent<Button>().onClick.AddListener(() =>
+        {
+            _panel!.SetActive(false);
+            _reportPanel.Hide();
+        });
 
         _panel.SetActive(false);
         return true;
@@ -432,7 +472,9 @@ internal sealed class RoutePickerPanel
         _profileRouteId = null;
         _shownProfile = null;
         _shownBottleneck = null;
+        _selectedRouteName = "";
         _profileCache.Clear();
+        _reportPanel.Hide();
         if (_panel != null)
         {
             _panel.SetActive(false);
