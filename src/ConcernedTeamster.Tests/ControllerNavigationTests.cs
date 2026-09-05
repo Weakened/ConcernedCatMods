@@ -115,11 +115,14 @@ public class ControllerNavigationTests
             Assert.Contains(items, item => item.IsButton);
 
             // Every item carries a non-empty id and label (nothing unlabeled
-            // for a screen the player must operate).
+            // for a screen the player must operate). A label that still looks
+            // like a dotted catalog key means a typo'd nav.* key fell back to
+            // its own key text — that must fail here, not in game.
             Assert.All(items, item =>
             {
                 Assert.False(string.IsNullOrEmpty(item.Id));
                 Assert.False(string.IsNullOrEmpty(item.Label));
+                Assert.DoesNotMatch(@"^[a-z][a-zA-Z0-9]*(\.[a-zA-Z0-9]+)+$", item.Label);
             });
         }
     }

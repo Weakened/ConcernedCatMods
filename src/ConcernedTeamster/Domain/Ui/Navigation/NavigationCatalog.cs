@@ -22,9 +22,12 @@ public static class NavigationCatalog
     public const string RoutePickerPanel = "route-picker";
     public const string RouteReportPanel = "route-report";
 
-    // Labels resolve through the catalog when the dictionary first builds;
-    // the type initializes lazily on first navigation use, which in game is
-    // after Plugin.Awake has loaded any translation overrides.
+    // Labels resolve through the catalog when the dictionary builds and are
+    // then baked (beforefieldinit: the CLR may run this initializer any time
+    // before first use, and a mid-session override reload would not re-bake).
+    // Acceptable while no production consumer exists; when the gamepad wiring
+    // lands, prefer resolving labels at read time (e.g. in RingFor or a
+    // Label getter) so translations always apply.
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<FocusItem>> Panels =
         new Dictionary<string, IReadOnlyList<FocusItem>>
         {
