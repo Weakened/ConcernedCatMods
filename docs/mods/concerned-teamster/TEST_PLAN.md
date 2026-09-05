@@ -102,6 +102,50 @@ physics.
 - Dedicated server: no server plugin required; client behavior validated
   against a dedicated world in `TCT-Dedicated`.
 
+### CT-027 authority scenario matrix
+
+The authority POLICY logic (CT-026) is topology-independent — each client
+decides from its own live authority — so the sequences the real topologies
+produce are proven off-game by `MultiplayerScenarioTests`, and the in-game
+observation of the same rows is structured pending-manual (never PASS until
+observed on a real server). "Automated" rows cite the proving test.
+
+| Scenario row | Automated evidence | In-game (TCT profiles) |
+|---|---|---|
+| Owner keeps the brake across continued owning ticks | `Handoff_OwnerKeepsBrakeAcrossContinuedOwningTicks` (survives owning ticks, releases when ownership leaves) | pending |
+| No engaged brake ever persists on a non-authority tick | `Handoff_RapidOwnershipFlaps…` per-tick invariant (engaged ⇒ local authority) | pending |
+| Authority handoff mid-haul releases the brake same tick | `Handoff_OwnerEngagedThenAuthorityLeaves_BrakeReleasesSameTick` | pending |
+| Receiving client cannot engage a cart it does not yet own | `Handoff_ReceivingClientCannotEngageWhileRemote` | pending |
+| No mutating action executes without authority (any state) | `NoMutationWithoutAuthority_AcrossFeaturesAndAmbiguousStates` (policy, incl. Remote) | pending |
+| Observer of a remote cart: owner-fresh readouts labeled remote | `Observer_RemoteCartOwnerFreshReadingsAreLabeled` | pending |
+| Panel re-labels / brake control hides on live handoff | `Observer_RemoteCartOwnerFreshReadingsAreLabeled` (label decision); button-visibility observation is manual | pending |
+| Dedicated server: client logic identical to player-hosted | `BrakeDecision_IsPureFunctionOfFacts_TopologyNotAnInput` (purity) + validator CT-026 audit (no server component, sends nothing) | pending |
+| Unmodded peer sees fully vanilla behavior | validator CT-026 audit: Teamster sends nothing / takes no ownership | pending |
+
+### Topology-specific caveats (CT-027)
+
+- **Panel state on handoff is not stale by construction.** The engage control
+  becomes visible only when the live-authority gate holds
+  (`CartStatusHudController.RefreshBrakeButton`: `facts.IsLocalAuthority` plus
+  reach/attach checks), re-evaluated on each panel refresh (~4 Hz while the
+  panel is open); an already-engaged cart keeps showing a *Release* control
+  regardless of authority so release always stays reachable, and the brake
+  lifecycle auto-releases on the first tick after authority leaves. Crucially,
+  mutation is gated at toggle/tick time (`BrakeService`→`EvaluateToggle`/
+  `EvaluateTick`), not by button visibility, so even a ≤250 ms stale button
+  yields at most a no-op click, never an unauthorized mutation. Observation
+  panels keep showing the cart (observation is allowed from any client) with
+  owner-fresh values labeled remote. The in-game confirmation that the button
+  updates and the panel re-labels on a real handoff is pending-manual.
+- **Teamster ships no server component.** A dedicated server needs no Teamster
+  plugin; all decisions are client-side, so the dedicated and player-hosted
+  rows share one logic path (asserted). The only per-topology difference is
+  which client the game reports as owner — an input to the policy, not a
+  branch in it.
+- **Authority is read, never forced.** The handoff itself is vanilla; Teamster
+  only observes the resulting ownership. It cannot cause, delay, or block a
+  handoff.
+
 ## Package and release-candidate gate
 
 - `tools/validate_repo.py` passes (extended for Teamster in CT-001).

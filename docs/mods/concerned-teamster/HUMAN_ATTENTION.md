@@ -511,6 +511,30 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes (via CT-027's live validation)
 - Status: Open
 
+### 2026-09-05 — CT-027 live multiplayer scenario runs pending
+
+- Version / issue: v0.6 / CT-027 (#141)
+- Question: the authority scenario matrix (player-hosted two-client, dedicated
+  server via TCT-Dedicated, cart authority handoff mid-haul, observation
+  labeling, unmodded-peer coexistence) is proven at the logic layer but its
+  in-game observation on real servers — including that the brake button
+  disappears and panels re-label on a live handoff, and that an unmodded peer
+  genuinely sees vanilla — needs interactive multiplayer sessions with a
+  dedicated server and a second client.
+- Safe reversible default selected: the policy logic is topology-independent
+  (each client decides from its own authority) and is proven off-game by 7
+  `MultiplayerScenarioTests` driving the handoff/flap/observer sequences, plus
+  the CT-026 validator audit proving Teamster sends nothing and takes no
+  ownership. The scenario matrix in TEST_PLAN.md marks every in-game row
+  pending-manual with its proving test named.
+- Why work continued: Teamster runs no server component and only reads
+  authority; a real-topology surprise can at worst hide a feature or mislabel
+  an observation, never corrupt a world or mutate a cart without authority.
+- Risk / alternative: none beyond confirming the labeled rows on a real
+  server; the rows join the owner smoke checklist.
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 None yet.
