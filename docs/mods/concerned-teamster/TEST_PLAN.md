@@ -102,6 +102,42 @@ physics.
 - Dedicated server: no server plugin required; client behavior validated
   against a dedicated world in `TCT-Dedicated`.
 
+### CT-027 authority scenario matrix
+
+The authority POLICY logic (CT-026) is topology-independent — each client
+decides from its own live authority — so the sequences the real topologies
+produce are proven off-game by `MultiplayerScenarioTests`, and the in-game
+observation of the same rows is structured pending-manual (never PASS until
+observed on a real server). "Automated" rows cite the proving test.
+
+| Scenario row | Automated evidence | In-game (TCT profiles) |
+|---|---|---|
+| Player-hosted: owner engages brake, keeps it while owning | `Handoff_RapidOwnershipFlaps…` invariant (engaged ⇒ local authority) | pending |
+| Player-hosted: authority handoff mid-haul releases the brake same tick | `Handoff_OwnerEngagedThenAuthorityLeaves_BrakeReleasesSameTick` | pending |
+| Receiving client cannot engage a cart it does not yet own | `Handoff_ReceivingClientCannotEngageWhileRemote` | pending |
+| No mutating action executes without authority (any state) | `NoMutationWithoutAuthority_AcrossFeaturesAndAmbiguousStates` | pending |
+| Observer of a remote cart: owner-fresh readouts labeled remote | `Observer_RemoteCartOwnerFreshReadingsAreLabeled` | pending |
+| Dedicated server: client logic identical to player-hosted | `DedicatedServer_ClientLogicIdenticalToPlayerHosted` | pending |
+| Unmodded peer sees fully vanilla behavior | validator CT-026 audit: Teamster sends nothing / takes no ownership | pending |
+
+### Topology-specific caveats (CT-027)
+
+- **Panel state on handoff is not stale by construction.** The Cart Status
+  brake control re-checks live authority every frame
+  (`CartStatusHudController`: visible only when `facts.IsLocalAuthority`), and
+  the brake lifecycle releases on the same tick authority leaves. Observation
+  panels keep showing the cart (observation is allowed from any client) with
+  owner-fresh values labeled remote. The in-game confirmation that the button
+  disappears and the panel re-labels on a real handoff is pending-manual.
+- **Teamster ships no server component.** A dedicated server needs no Teamster
+  plugin; all decisions are client-side, so the dedicated and player-hosted
+  rows share one logic path (asserted). The only per-topology difference is
+  which client the game reports as owner — an input to the policy, not a
+  branch in it.
+- **Authority is read, never forced.** The handoff itself is vanilla; Teamster
+  only observes the resulting ownership. It cannot cause, delay, or block a
+  handoff.
+
 ## Package and release-candidate gate
 
 - `tools/validate_repo.py` passes (extended for Teamster in CT-001).
