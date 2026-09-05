@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 (Internal — unreleased)
+
+**Road Quality and Trip Profiles (CT-016..CT-020).** The fourth internal release candidate: recorded trips grade the roads themselves — roughness, drag, grade, and bottlenecks — so haulers improve routes with evidence instead of vibes.
+
+- **Per-world trip recording (CT-016).** Pulled-cart trips (position, grade, speed, load) are recorded as bounded sample sequences and persisted to Teamster's own sidecar file — never a Valheim save. Atomic temp-file writes survive a kill at any moment; a versioned header carries the owning world's UID, so world A's trips can never load into world B (filename and header both); malformed rows are skipped and reported; a foreign or future file is backed up first and then replaced with a fresh sidecar for this world — recording never silently destroys it. Trip count is capped with oldest-trip pruning and a visible retention setting.
+- **Road-quality scoring (CT-017).** Recorded trips score the world in fixed 8 m segments: roughness (mean absolute grade change), mean and worst grade, and a drag proxy (mean speed on near-level ground). Every stat is additive, so scores are deterministic regardless of trip order; segments aggregate all recorded history and survive raw-trip pruning by design. Format v2 sidecars persist the scores; v1 files are backed up and migrated by recomputation.
+- **Trip history and comparison UI (CT-018).** The Trips panel lists recorded trips with distance, duration, average speed, grade extremes, and cargo mass — sortable, deterministic, with explicit empty states — and compares any two trips (A/B, marked in text, never color alone) on shared distance-normalized quintiles so different-length routes align by fraction of the way. Individual trip records can be deleted.
+- **Route bottlenecks (CT-019).** For a recorded trip, the panel locates the worst-grade point, the roughest crossed segment, and — for a chosen hypothetical cargo mass — the point where the calibrated load model binds, each positioned by distance along the route and explained by naming its constraint. Unknown calibration coverage is reported honestly instead of pretending a clear verdict.
+- **Safety posture unchanged.** Recording observes only what the local player already pulls; no cart physics, inventory, stamina, or network behavior is touched; Teamster writes only its own sidecar directory under the BepInEx config path — Valheim world saves are never modified.
+
 ## 0.3.0 (Internal — unreleased)
 
 **Descent Safety and Recovery Guidance (CT-011..CT-015).** The third internal release candidate: know whether the hill down will stay controlled, hold a parked cart on purpose, and get told why a stuck cart is stuck — with vanilla physics untouched by default and every mutating convenience explicit and reversible.

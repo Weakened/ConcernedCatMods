@@ -1,4 +1,5 @@
 using TheConcernedCat.ConcernedTeamster.Domain.Carts;
+using TheConcernedCat.ConcernedTeamster.Domain.RoadQuality;
 using TheConcernedCat.ConcernedTeamster.Domain.Terrain;
 using TheConcernedCat.ConcernedTeamster.Domain.Trips;
 
@@ -225,12 +226,39 @@ public class TripPersistenceTests
 
     // -- atomic file store -------------------------------------------------
 
+    /// <summary>Shared temp-dir fixture for the real-filesystem tests. The
+    /// teardown tolerates a transient Windows file lock (antivirus/indexer
+    /// holding a just-written handle): a stranded ct*-GUID directory in
+    /// %TEMP% is harmless, while an exception thrown from finally would
+    /// replace the test's real assertion failure.</summary>
+    private static void RunInTempDir(string prefix, Action<string> body)
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(), prefix + "-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            body(directory);
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
     [Fact]
     public void FileStore_CrashBeforeSwap_LeavesThePreviousFileIntact()
     {
-        string directory = Path.Combine(Path.GetTempPath(), "ct016-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(directory);
-        try
+        RunInTempDir("ct016", directory =>
         {
             string path = Path.Combine(directory, "teamster_trips_42.txt");
             Assert.True(SidecarFileStore.TryWriteAtomic(path, "original", out _));
@@ -247,19 +275,13 @@ public class TripPersistenceTests
             Assert.True(SidecarFileStore.TryWriteAtomic(path, "second", out _));
             Assert.Equal("second", File.ReadAllText(path));
             Assert.False(File.Exists(path + ".tmp"));
-        }
-        finally
-        {
-            Directory.Delete(directory, recursive: true);
-        }
+        });
     }
 
     [Fact]
     public void FileStore_BackupBeforeMigration_CopiesTheFile()
     {
-        string directory = Path.Combine(Path.GetTempPath(), "ct016-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(directory);
-        try
+        RunInTempDir("ct016", directory =>
         {
             string path = Path.Combine(directory, "teamster_trips_42.txt");
             File.WriteAllText(path, "old format");
@@ -267,11 +289,71 @@ public class TripPersistenceTests
             Assert.True(SidecarFileStore.TryBackup(path, "refused", out _));
             Assert.Equal("old format", File.ReadAllText(path + ".bak-refused"));
             Assert.Equal("old format", File.ReadAllText(path));
-        }
-        finally
+        });
+    }
+
+    [Fact]
+    public void Retention_ManySaveCycles_StaysBoundedKeepsNewestAndAccumulatesSegments()
+    {
+        // CT-020 gate: 200 read-merge-prune-write cycles against a real
+        // file at a 50-trip cap, where the merge step is the SAME production
+        // code the runtime service runs (TripSidecar.MergeAndCompose). Raw
+        // trips must stay at the cap (newest kept, ids dense), the file must
+        // not grow unboundedly, and segment scores must keep the full
+        // 200-trip history even as raw trips prune (the CT-017 documented
+        // property).
+        RunInTempDir("ct020", directory =>
         {
-            Directory.Delete(directory, recursive: true);
-        }
+            string path = Path.Combine(directory, "teamster_trips_42.txt");
+            const int maxTrips = 50;
+            long sizeAfterCapSettled = 0;
+
+            for (int cycle = 1; cycle <= 200; cycle++)
+            {
+                string? text = SidecarFileStore.TryRead(path, out string? readError);
+                Assert.Null(readError);
+                TripSidecar.ParseResult existing = TripSidecar.Parse(text, 42L);
+                Assert.False(existing.Refused);
+                Assert.Empty(existing.Errors);
+
+                Trip newTrip = MakeTrip(5, cartId: "c" + cycle, startTime: cycle * 100.0);
+                string composed = TripSidecar.MergeAndCompose(
+                    existing, new[] { newTrip }, maxTrips, 42L, "0.4.0");
+                bool wrote = SidecarFileStore.TryWriteAtomic(path, composed, out string? writeError);
+                Assert.True(wrote, $"cycle {cycle} write failed: {writeError ?? "(no error detail)"}");
+
+                if (cycle == 60)
+                {
+                    sizeAfterCapSettled = new FileInfo(path).Length;
+                }
+            }
+
+            string? finalText = SidecarFileStore.TryRead(path, out string? finalReadError);
+            Assert.Null(finalReadError);
+            TripSidecar.ParseResult final = TripSidecar.Parse(finalText, 42L);
+            Assert.False(final.Refused);
+            Assert.Empty(final.Errors);
+
+            Assert.Equal(maxTrips, final.Trips.Count);
+            Assert.Equal("c151", final.Trips[0].CartId);  // oldest 150 pruned
+            Assert.Equal("c200", final.Trips[maxTrips - 1].CartId);
+            for (int index = 0; index < maxTrips; index++)
+            {
+                Assert.Equal(index + 1, final.Trips[index].Id);
+            }
+
+            // Bounded: once the cap is reached, later cycles only widen a
+            // few numeric fields — the file must not keep growing with trip
+            // count. 10% slack covers the digit-width drift.
+            long finalSize = new FileInfo(path).Length;
+            Assert.InRange(finalSize, 1, sizeAfterCapSettled * 11 / 10);
+
+            // Segments keep all 200 trips' history: every MakeTrip sample
+            // lands in the same 8 m cell, so one segment holds 200 × 5
+            // samples although only 50 raw trips remain.
+            RoadSegmentStats stats = Assert.Single(final.Segments.Segments).Value;
+            Assert.Equal(1000, stats.SampleCount);
+        });
     }
 
     [Fact]
