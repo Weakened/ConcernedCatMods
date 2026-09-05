@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using TheConcernedCat.ConcernedTeamster.Domain.Cartographer;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 
 namespace TheConcernedCat.ConcernedTeamster.Domain.Ui;
 
@@ -71,9 +72,7 @@ public static class RoutePickerPresenter
         if (!readable || routes is null)
         {
             return new ViewModel(
-                selectedId is null
-                    ? "Cartographer routes are not readable right now."
-                    : "Cartographer routes are not readable right now — selection cleared.",
+                TeamsterStrings.Get(selectedId is null ? "routes.unreadable" : "routes.unreadableCleared"),
                 Array.Empty<Row>(),
                 effectiveSelectedId: null,
                 selectionLost: selectedId is not null);
@@ -91,9 +90,7 @@ public static class RoutePickerPresenter
         if (visible.Count == 0)
         {
             return new ViewModel(
-                selectedId is null
-                    ? "No routes in this world yet — draw one in Cartographer."
-                    : "Selected route is no longer available in Cartographer — pick another.",
+                TeamsterStrings.Get(selectedId is null ? "routes.none" : "routes.lostSelection"),
                 Array.Empty<Row>(),
                 effectiveSelectedId: null,
                 selectionLost: selectedId is not null);
@@ -123,16 +120,16 @@ public static class RoutePickerPresenter
                 (eligible
                     ? "  " + HorizontalLengthMeters(route.Points).ToString("F0", CultureInfo.InvariantCulture) +
                         " m  (" + route.Points.Count.ToString(CultureInfo.InvariantCulture) + " pts)"
-                    : "  (no usable geometry)");
+                    : "  " + TeamsterStrings.Get("routes.noGeometry"));
             rows[index] = new Row(route.Id, text, eligible);
         }
 
         bool lost = selectedId is not null && effective is null;
         string status = lost
-            ? "Selected route is no longer available in Cartographer — pick another."
+            ? TeamsterStrings.Get("routes.lostSelection")
             : effective is null
-                ? "Pick a route to profile."
-                : "Selected: " + selectedName;
+                ? TeamsterStrings.Get("routes.pick")
+                : TeamsterStrings.Format("routes.selected", selectedName ?? "");
         return new ViewModel(status, rows, effective, lost);
     }
 
@@ -154,6 +151,6 @@ public static class RoutePickerPresenter
 
     private static string DisplayName(CartographerRouteSnapshot route)
     {
-        return route.Name.Length > 0 ? route.Name : "(unnamed route)";
+        return route.Name.Length > 0 ? route.Name : TeamsterStrings.Get("routes.unnamed");
     }
 }

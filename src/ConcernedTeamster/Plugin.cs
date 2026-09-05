@@ -19,6 +19,10 @@ public sealed class Plugin : BaseUnityPlugin
     {
         TeamsterSettings settings = TeamsterSettings.Bind(Config);
 
+        // CT-032: write the translator template and load any teamster-strings.tsv
+        // overrides before UI strings are resolved; English is the fallback.
+        Adapters.LocalizationFiles.Initialize(Logger);
+
         Logger.LogInfo($"{PluginName} {PluginVersion} loaded");
         LogEnvironmentBanner();
         Logger.LogInfo(
