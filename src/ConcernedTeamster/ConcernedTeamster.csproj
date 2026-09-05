@@ -4,7 +4,7 @@
     <OutputType>Library</OutputType>
     <RootNamespace>TheConcernedCat.ConcernedTeamster</RootNamespace>
     <AssemblyName>TheConcernedCat.ConcernedTeamster</AssemblyName>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
     <FileAlignment>512</FileAlignment>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
