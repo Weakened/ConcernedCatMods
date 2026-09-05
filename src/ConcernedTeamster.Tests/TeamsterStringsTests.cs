@@ -11,11 +11,11 @@ namespace ConcernedTeamster.Tests;
 /// top of it.
 ///
 /// Isolation rule: TeamsterStrings is process-global static state and xUnit
-/// runs test classes in parallel, so tests here may only override
-/// `routes.*` keys (no other suite asserts those exact outputs) and every
-/// mutation restores the default in a finally/cleanup line. Overriding a
-/// `status.*`/`manifest.*` key would race the exact-output presenter
-/// suites.</summary>
+/// runs test classes in parallel, so every mutation here restores the
+/// default in a finally/cleanup line, and this class shares a serialized
+/// collection with the suites that pin exact outputs of the keys it
+/// overrides (`routes.*` → RoutePickerPresenterTests).</summary>
+[Collection("TeamsterStrings shared statics")]
 public class TeamsterStringsTests
 {
     [Fact]

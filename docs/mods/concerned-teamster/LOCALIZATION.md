@@ -30,7 +30,15 @@ report.title	Rapport d'itinéraire : {0}
 
 - The part **before** the tab is the key — copy it exactly, never translate it.
 - The part **after** the tab is your translation.
-- Escapes: `\t` tab, `\n` newline, `\r` carriage return, `\\` backslash.
+- Encoding: a tab, newline, carriage return, or percent sign **inside a
+  translation** is written percent-encoded — `%09` tab, `%0A` newline, `%0D`
+  carriage return, `%25` percent. (Backslash sequences like `\n` are NOT
+  interpreted — they would show up literally in game.) A plain `%` that is
+  not followed by two hex digits is kept as-is, so ordinary text like
+  `100%` works either way.
+- Line ends are trimmed when the file loads, so a translation cannot begin
+  or end with a space — the English never does either; spacing around
+  inserted values lives inside the string, next to its placeholders.
 
 ## Placeholders
 
@@ -57,9 +65,37 @@ skipped.
   across patch releases, and new keys added in a release fall back to English
   until translated.
 
+## Coverage and what stays English
+
+Every player-facing panel string is externalized — Cart Status, Cargo
+Manifest, warnings, stuck diagnostics, cooperative-effort lines, recovery
+guidance, trip history/comparison/bottlenecks, route picker/profile/report,
+load-model verdict sentences, and the controller focus labels. A source-level
+audit test (`HardcodedStringAuditTests`) runs in CI and fails the build if a
+user-facing English literal is ever added to the presentation layer outside
+the catalog, if a catalog key goes dead, or if an externalized sentence is
+re-hardcoded.
+
+Deliberately **not** translatable, by design:
+
+- Console/log output, including the fail-closed session-disable lines and
+  the descent-risk debug summary (`Domain/Risk` verdict text surfaces only
+  in a debug log line today) — logs are a developer/support surface, and
+  support needs to read them regardless of the player's language.
+- BepInEx configuration entry names and descriptions — they live in the
+  user's `.cfg` file, which is a file format, not UI; translating them would
+  fork users' config files by language.
+- Language-neutral notation: numbers, `%`, `m`-style units inside composed
+  patterns the catalog controls, grade-band labels like `<3%`, the `?`/`—`
+  unknown markers, and alignment spacing.
+
 ## Notes
 
-- Console/debug log output stays English by design (it is a developer/support
-  surface, not a player-facing one).
-- Keys are grouped by surface (`routes.*`, `report.*`, …). The set grows as
-  more panels are externalized; the template always lists every current key.
+- Keys are grouped by surface (`status.*`, `manifest.*`, `warn.*`, `diag.*`,
+  `coop.*`, `recovery.*`, `load.*`, `trips.*`, `compare.*`, `bottleneck.*`,
+  `profile.*`, `report.*`, `routes.*`, `nav.*`, `unit.*`, `verdict.*`,
+  `ui.*`). The template always lists every current key.
+- The trip-selection markers must stay consistent as a set if you change
+  them: `trips.markerA`/`trips.markerB` (row markers), `trips.selectA`/
+  `trips.selectB` (row buttons), and the bracketed letters mentioned in
+  `compare.*` prompts all refer to the same two slots.
