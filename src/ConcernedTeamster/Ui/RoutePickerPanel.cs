@@ -139,6 +139,14 @@ internal sealed class RoutePickerPanel
                     _lastChangeStamp = stampReadable ? stamp : long.MinValue;
                     Refresh();
                 }
+                else
+                {
+                    // The cart's mass changes without any Cartographer edit;
+                    // the load line re-binds at 1 Hz regardless of the route
+                    // stamp so the verdict always answers the CURRENT cart.
+                    RecomputeBottleneck();
+                    RenderProfileLines();
+                }
             }
 
             // Profiling advances every frame (bounded), not just on the

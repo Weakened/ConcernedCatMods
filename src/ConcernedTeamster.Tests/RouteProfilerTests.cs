@@ -205,6 +205,43 @@ public class RouteProfilerTests
         Assert.Equal(140f, profile.SampledMeters, 2);
     }
 
+    [Theory]
+    [InlineData(102f)]   // tail 2 m > snap threshold → endpoint appended
+    [InlineData(100.3f)] // tail 0.3 m ≤ threshold → last position snapped
+    [InlineData(0.3f)]   // shorter than one step → single append, one segment
+    public void TailHandling_PartitionAlwaysExact(float lengthMeters)
+    {
+        var profiler = new RouteProfiler(StraightX(lengthMeters), FlatProbe);
+
+        while (!profiler.IsComplete)
+        {
+            profiler.Advance(64);
+        }
+
+        RouteProfile profile = profiler.TryBuildProfile()!;
+
+        Assert.Equal(lengthMeters, profile.TotalDistanceMeters, 2);
+        Assert.Equal(
+            profile.TotalDistanceMeters, profile.SampledMeters + profile.UnsampledMeters, 2);
+        Assert.Equal(0f, profile.UnsampledMeters, 2);
+    }
+
+    [Fact]
+    public void PoisonedCoordinates_DegradeToEmptyProfileNotAThrow()
+    {
+        var poisoned = new List<CartographerRoutePoint>
+        {
+            new(float.NaN, 0f, 0f),
+            new(4f, 0f, 0f),
+        };
+
+        var profiler = new RouteProfiler(poisoned, FlatProbe);
+
+        Assert.True(profiler.IsComplete);
+        Assert.Equal(0, profiler.PositionCount);
+        Assert.NotNull(profiler.TryBuildProfile());
+    }
+
     [Fact]
     public void DegenerateRoutes_CompleteImmediatelyWithEmptyProfile()
     {

@@ -71,7 +71,9 @@ public sealed class RouteProfiler
         }
 
         TotalDistanceMeters = total;
-        if (vertexCount < 2 || total <= 0f)
+        // !(total > 0f) also catches NaN from poisoned coordinates; either
+        // way the route degrades to an empty profile instead of throwing.
+        if (vertexCount < 2 || !(total > 0f) || float.IsInfinity(total))
         {
             _positionT = Array.Empty<float>();
             _sampled = Array.Empty<bool>();
@@ -99,8 +101,10 @@ public sealed class RouteProfiler
 
         // Close the route with its true endpoint unless the last step
         // already effectively reached it (tiny tail segments would produce
-        // noise grades over centimeters).
-        if (total - positions[positions.Count - 1] > 0.5f)
+        // noise grades over centimeters). A single-position list must
+        // append, never snap — snapping [0] to [total] would leave zero
+        // segments and break the sampled+unsampled == total partition.
+        if (positions.Count == 1 || total - positions[positions.Count - 1] > 0.5f)
         {
             positions.Add(total);
         }
