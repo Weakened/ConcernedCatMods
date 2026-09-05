@@ -121,7 +121,19 @@ public static class CartAdapter
                     new[] { typeof(int) }),
                 new("ItemData", itemData, "GetNonStackedWeight", GameMemberKind.InstanceMethod, typeof(float)),
                 new("SharedData", sharedData, "m_name", GameMemberKind.InstanceField, typeof(string)),
+                // CT-012 parking brake members: vanilla authority check and
+                // the runtime-only physics constraint property.
+                new("ZNetView", netView, "IsOwner", GameMemberKind.InstanceMethod, typeof(bool)),
+                new("Rigidbody", rigidbody, "constraints", GameMemberKind.InstanceProperty,
+                    ResolveNamedType(
+                        "UnityEngine.RigidbodyConstraints, UnityEngine.PhysicsModule",
+                        "UnityEngine.RigidbodyConstraints", missingTypes)),
             };
+            if (missingTypes.Count > 0)
+            {
+                return new GameCapabilityReport(Array.Empty<string>(), missingTypes);
+            }
+
             return GameMemberProbe.Probe(requirements);
         }
         catch (Exception exception)

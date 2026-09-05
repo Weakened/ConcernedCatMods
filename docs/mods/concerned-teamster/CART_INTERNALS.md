@@ -1,4 +1,4 @@
-# Valheim cart internals — verified findings (CT-002, extended CT-003..CT-006)
+# Valheim cart internals — verified findings (CT-002, extended CT-003..CT-012)
 
 This document records the **verified** surface of Valheim's cart implementation
 that Concerned Teamster depends on. Nothing here is guessed: every member was
@@ -104,6 +104,24 @@ Descent lookahead (CT-011) reuses exactly these members — `GetHeight` at
 the cart plus at 4 m-spaced points along the same heading (count bounded
 by config, hard max 5) — no new game surface; a single failed height query
 makes the whole reading unavailable rather than a partial guess.
+
+### The parking brake mechanism (CT-012 — Teamster's only mutation)
+
+Verified on this build's `UnityEngine.PhysicsModule.dll` (2026-09-04):
+`public RigidbodyConstraints constraints { get; set; }` on `Rigidbody`, and
+the `RigidbodyConstraints` enum (`None = 0` … `FreezeAll = 126`). While the
+brake is engaged, the cart's **root** rigidbody (the same public
+`GetComponent<Rigidbody>()` path used for velocity) gets `FreezeAll`; on
+release the captured pre-engage value is restored and the body woken
+(`WakeUp()`, already used by the game's own `Detach`). Authority is checked
+with `ZNetView.IsOwner()` (decompile-verified, now probed) — the brake
+never requests or transfers ownership.
+
+**Why a reloaded world is brake-free by construction:** Valheim persists
+ZDO data; `Rigidbody.constraints` is Unity component state rebuilt from the
+prefab on every load. The brake performs no `ZDO.Set`, no RPC, and no
+sidecar write — the only mutation in the entire adapter layer is this one
+property assignment, and it cannot reach a save file.
 
 ### Unity engine members the CT-003 adapter reads (verified on this build)
 
