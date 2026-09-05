@@ -37,7 +37,7 @@ model-traced recommendations) · CT-025 coexistence validation + this seal.
 |---|---|---|
 | Static validation + version sync | `validate_repo.py --product teamster --expected-version 0.5.0 --require-binary` | PASS |
 | Solution build | `build.ps1 -Configuration Release` | PASS — 0 errors (8 pre-existing benign warnings) |
-| Teamster unit tests | `dotnet test ConcernedTeamster.Tests` (Release) | **371/371 PASS** (adds 79 v0.5 tests: 15 gate, 18 route reader, 25 profiler, 13 picker, 12 report — counts across CT-021..024) |
+| Teamster unit tests | `dotnet test ConcernedTeamster.Tests` (Release) | **371/371 PASS** — +84 executed cases over the v0.4 baseline of 287, across the five new v0.5 test files (CT-021 gate + route-read contract, CT-022 picker, CT-023 profiler/cache/bottleneck, CT-024 report) |
 | Cartographer regression | `dotnet test ConcernedCartographer.Tests` (Release) | **568/568 PASS** — unchanged with the Teamster integration present in the solution |
 | Cross-product independence audit | `validate_repo.py` interop line | PASS — 4 project trees, no ProjectReference/Reference/PackageReference/Compile/using/InternalsVisibleTo coupling either direction |
 | Cartographer contract drift tripwire | `validate_repo.py` interop line | PASS — 12/12 contract members present at source level (kind-pinned patterns) |
