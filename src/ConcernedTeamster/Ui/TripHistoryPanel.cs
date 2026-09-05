@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using BepInEx.Logging;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedTeamster.Adapters;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using TheConcernedCat.ConcernedTeamster.Domain.Trips;
 using TheConcernedCat.ConcernedTeamster.Domain.Ui;
 using UnityEngine;
@@ -191,14 +193,19 @@ internal sealed class TripHistoryPanel
             if (active && _rowDelete[index] != null)
             {
                 SetButtonLabel(_rowDelete[index],
-                    _pendingDeleteId == history.Rows[index].TripId ? "Sure?" : "X");
+                    TeamsterStrings.Get(_pendingDeleteId == history.Rows[index].TripId
+                        ? "trips.deleteConfirm"
+                        : "trips.deleteButton"));
             }
         }
 
         if (_overflow != null)
         {
             int hidden = history.Rows.Count - shown;
-            _overflow.text = hidden > 0 ? "… " + hidden + " more — sort to bring them up" : string.Empty;
+            _overflow.text = hidden > 0
+                ? TeamsterStrings.Format(
+                    "trips.overflow", hidden.ToString(CultureInfo.InvariantCulture))
+                : string.Empty;
         }
 
         RenderBottlenecks(pumpUnused: null);
@@ -373,7 +380,7 @@ internal sealed class TripHistoryPanel
             new Vector2(0f, 0f), PanelWidth, PanelHeight, draggable: true);
 
         gui.CreateText(
-            "Trip History", _panel.transform,
+            TeamsterStrings.Get("trips.title"), _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -28f),
             font, 19, headerColor, outline: true, Color.black, PanelWidth - 40f, 30f,
             addContentSizeFitter: false);
@@ -381,11 +388,11 @@ internal sealed class TripHistoryPanel
         // Sort header buttons.
         (string Label, TripHistoryPresenter.SortColumn Column)[] sorts =
         {
-            ("Date", TripHistoryPresenter.SortColumn.StartTime),
-            ("Time", TripHistoryPresenter.SortColumn.Duration),
-            ("Dist", TripHistoryPresenter.SortColumn.Distance),
-            ("Load", TripHistoryPresenter.SortColumn.Load),
-            ("Grade", TripHistoryPresenter.SortColumn.WorstGrade),
+            (TeamsterStrings.Get("trips.colDate"), TripHistoryPresenter.SortColumn.StartTime),
+            (TeamsterStrings.Get("trips.colTime"), TripHistoryPresenter.SortColumn.Duration),
+            (TeamsterStrings.Get("trips.colDist"), TripHistoryPresenter.SortColumn.Distance),
+            (TeamsterStrings.Get("trips.colLoad"), TripHistoryPresenter.SortColumn.Load),
+            (TeamsterStrings.Get("trips.colGrade"), TripHistoryPresenter.SortColumn.WorstGrade),
         };
         float buttonWidth = (PanelWidth - 60f) / sorts.Length;
         float firstCenterX = -(PanelWidth - 60f) / 2f + buttonWidth / 2f;
@@ -410,11 +417,11 @@ internal sealed class TripHistoryPanel
         for (int index = 0; index < VisibleRowCount; index++)
         {
             int rowIndex = index;
-            _rowSelectA[index] = CreateRowButton(gui, "A", leftEdge, y,
+            _rowSelectA[index] = CreateRowButton(gui, TeamsterStrings.Get("trips.selectA"), leftEdge, y,
                 () => OnSelect(rowIndex, asA: true, _pumpForButtons));
-            _rowSelectB[index] = CreateRowButton(gui, "B", leftEdge + 30f, y,
+            _rowSelectB[index] = CreateRowButton(gui, TeamsterStrings.Get("trips.selectB"), leftEdge + 30f, y,
                 () => OnSelect(rowIndex, asA: false, _pumpForButtons));
-            _rowDelete[index] = CreateRowButton(gui, "X", leftEdge + 60f, y,
+            _rowDelete[index] = CreateRowButton(gui, TeamsterStrings.Get("trips.deleteButton"), leftEdge + 60f, y,
                 () => OnDelete(rowIndex, _pumpForButtons));
             _rowTexts[index] = CreateText(gui, font, bodyColor, 55f, y, PanelWidth - 150f, RowHeight);
             y -= RowHeight;
@@ -439,7 +446,8 @@ internal sealed class TripHistoryPanel
         GameObject massObject = gui.CreateInputField(
             _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-130f, y - 14f),
-            placeholderText: "test mass…", fontSize: 14, width: 150f, height: 26f);
+            placeholderText: TeamsterStrings.Get("trips.massPlaceholder"),
+            fontSize: 14, width: 150f, height: 26f);
         _massInput = massObject.GetComponent<InputField>();
         if (_massInput != null)
         {
@@ -456,7 +464,7 @@ internal sealed class TripHistoryPanel
         }
 
         GameObject close = gui.CreateButton(
-            "Close", _panel.transform,
+            TeamsterStrings.Get("ui.close"), _panel.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 26f), 110f, 28f);
         close.GetComponent<Button>().onClick.AddListener(Hide);
 

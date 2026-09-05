@@ -201,6 +201,130 @@ public static class TeamsterStrings
         ["recovery.unloadAlreadyUnder"] =
             "Your mass ({0}) is already at or under the proven {1} for this grade — the load is " +
             "probably not the blocker; check for obstructions.",
+
+        // Shared unit patterns and climbability verdict words.
+        ["unit.meters"] = "{0} m",
+        ["unit.metersPerSecond"] = "{0} m/s",
+        ["verdict.ok"] = "OK",
+        ["verdict.marginal"] = "MARGINAL",
+        ["verdict.tooHeavy"] = "TOO HEAVY",
+        ["verdict.unknown"] = "UNKNOWN",
+
+        // Trip history surface (CT-018): presenter lines + panel chrome.
+        ["trips.title"] = "Trip History",
+        ["trips.empty"] = "No trips recorded in this world yet — pull a cart!",
+        ["trips.markerA"] = "[A]",
+        ["trips.markerB"] = "[B]",
+        ["trips.row"] = "#{0}  {1}  {2} m  mass {3}  worst {4}  avg {5}",
+        ["trips.colDate"] = "Date",
+        ["trips.colTime"] = "Time",
+        ["trips.colDist"] = "Dist",
+        ["trips.colLoad"] = "Load",
+        ["trips.colGrade"] = "Grade",
+        ["trips.selectA"] = "A",
+        ["trips.selectB"] = "B",
+        ["trips.deleteButton"] = "X",
+        ["trips.deleteConfirm"] = "Sure?",
+        ["trips.overflow"] = "… {0} more — sort to bring them up",
+        ["trips.massPlaceholder"] = "test mass…",
+
+        // Trip comparison (CT-018).
+        ["compare.selectTwo"] = "Select two trips ([A] and [B]) to compare their profiles.",
+        ["compare.selectSecondVsA"] = "Select a second trip to compare against [A].",
+        ["compare.selectSecondVsB"] = "Select a second trip to compare against [B].",
+        ["compare.headerA"] = "A #{0}: {1}",
+        ["compare.headerB"] = "B #{0}: {1}",
+        ["compare.summary"] = "{0} m, mass {1}, worst {2}",
+        ["compare.bucketLine"] = "{0}–{1}%:  A {2} @ {3}   |   B {4} @ {5}",
+
+        // Trip bottleneck analysis (CT-019).
+        ["bottleneck.selectTripA"] = "Select trip [A] to analyze its bottlenecks.",
+        ["bottleneck.enterMass"] = "Enter a cargo total mass to test (for example 220).",
+        ["bottleneck.badMass"] = "\"{0}\" is not a usable mass — enter a positive number.",
+        ["bottleneck.header"] = "Bottlenecks for trip #{0} at mass {1}:",
+        ["bottleneck.noGradeData"] = "Grade: no grade data on this trip.",
+        ["bottleneck.gradeConstraint"] = "Grade constraint: steepest point is {0}% at {1}.",
+        ["bottleneck.noScoredSegments"] = "Quality: no scored segments yet for this world.",
+        ["bottleneck.noRoughness"] = "Quality: crossed segments have no roughness scores yet.",
+        ["bottleneck.qualityConstraint"] =
+            "Quality constraint: roughest crossed segment (jitter {0}%) enters at {1} (cell {2},{3}).",
+        ["bottleneck.noCalibration"] = "Load: no calibration data — cannot test a load against this route.",
+        ["bottleneck.neverClimbs"] = "Load: this route never climbs — mass {0} is not grade-limited here.",
+        ["bottleneck.binds"] =
+            "Load constraint BINDS: mass {0} is proven to fail at {1} ({2}). " +
+            "Lighten below the proven limit or reroute.",
+        ["bottleneck.marginal"] = "Load constraint is marginal at {0} ({1}).",
+        ["bottleneck.uncalibratedPoints"] =
+            "Load: no proven blocker, but {0} of {1} climb points are uncalibrated — " +
+            "run the protocol to firm this up.",
+        ["bottleneck.allProven"] = "Load: every climb point is proven passable at mass {0}.",
+        ["bottleneck.locate"] = "{0} ({1}% of the route)",
+
+        // Route profile lines in the picker (CT-023).
+        ["profile.profiling"] = "Profiling route… {0}/{1} samples",
+        ["profile.summary"] = "Route {0}: sampled {1}",
+        ["profile.summaryUnsampled"] = "Route {0}: sampled {1}, UNSAMPLED {2} (unloaded terrain)",
+        ["profile.surfacesNoneSampled"] = "Surfaces: none sampled",
+        ["profile.surfaces"] = "Surfaces: {0}",
+        ["profile.surfacesNoneClassified"] = "none classified",
+        ["profile.surfacePaved"] = "paved",
+        ["profile.surfaceDirt"] = "dirt",
+        ["profile.surfaceCultivated"] = "cultivated",
+        ["profile.surfaceUntouched"] = "untouched",
+        ["profile.surfaceUnknown"] = "unknown",
+        ["profile.gradesNoData"] = "Grades: no sampled grade data",
+        ["profile.worstClimb"] = "Worst climb {0}% at {1} from start",
+        ["profile.worstDescent"] = "Worst descent {0}% at {1} from start",
+        ["profile.gradeMix"] = "Grade mix: {0}",
+        ["profile.loadNoModel"] = "Load check: no load model available",
+        ["profile.loadNoGrade"] = "Load check: no grade data yet",
+        ["profile.loadNoProven"] = "no proven load at {0}",
+        ["profile.loadProven"] = "proven {0} mass at {1} ({2})",
+        ["profile.loadCheck"] = "Load check: {0}",
+        ["profile.loadCheckWithVerdict"] = "Load check: {0} · your cart ({1}): {2}",
+
+        // Route report body (CT-024) — title/empty/no-problem keys above.
+        ["report.summary"] = "Distance {0} — sampled {1}",
+        ["report.summaryUnsampled"] = "Distance {0} — sampled {1}, UNSAMPLED {2}",
+        ["report.gradeMixNoData"] = "Grades: no sampled grade data.",
+        ["report.gradeMixSteep"] = "Steepest sampled grade {0}; {1} of the route is 15% or steeper.",
+        ["report.gradeMixNoSteep"] = "Steepest sampled grade {0}; no sampled stretch reaches 15%.",
+        ["report.steepClimbSection"] = "{0}. Steep climb {1}% at {2}, {3} long",
+        ["report.steepDescentSection"] = "{0}. Steep descent {1}% at {2}, {3} long",
+        ["report.gapSection"] = "{0}. Unprofiled {1} starting at {2} — nothing was measured there",
+        ["report.adviceVerdictHere"] = "Here: your cart is {0} — {1}.",
+        ["report.adviceVerdictReturn"] = "As the return climb: your cart is {0} — {1}.",
+        ["report.adviceProvenHere"] = "Here: keep total mass at or under {0} ({1} calibration).",
+        ["report.adviceProvenReturn"] = "As the return climb: keep total mass at or under {0} ({1} calibration).",
+        ["report.bottleneckNoProven"] = "Bottleneck {0}: no proven safe load — outside calibrated coverage.",
+        ["report.bottleneckKeepUnder"] = "Bottleneck {0}: keep total mass at or under {1} ({2} calibration).",
+        ["report.yourCart"] = "Your cart ({0} mass): {1} — {2}.",
+
+        // Route picker panel chrome + row fragments (CT-022).
+        ["routes.title"] = "Cartographer Routes",
+        ["routes.clearButton"] = "Clear",
+        ["routes.reportButton"] = "Report",
+        ["routes.selectedMarker"] = "[SEL]",
+        ["routes.rowGeometry"] = "{0} m  ({1} pts)",
+        ["routes.overflow"] = "… +{0} more (rename in Cartographer to sort forward)",
+
+        // Controller-navigation focus labels (CT-031) — bound to the visible
+        // focus indicator when the gamepad wiring lands.
+        ["nav.trips"] = "Trips",
+        ["nav.routes"] = "Routes",
+        ["nav.brake"] = "Engage/Release brake",
+        ["nav.manifest"] = "Manifest",
+        ["nav.guidance"] = "Guidance",
+        ["nav.close"] = "Close",
+        ["nav.sortColumn"] = "Sort column",
+        ["nav.filter"] = "Filter",
+        ["nav.hypotheticalMass"] = "Hypothetical mass",
+        ["nav.selectA"] = "Select A",
+        ["nav.selectB"] = "Select B",
+        ["nav.delete"] = "Delete",
+        ["nav.routeList"] = "Route list",
+        ["nav.clear"] = "Clear",
+        ["nav.report"] = "Report",
     };
 
     private static Dictionary<string, string> _overrides = new(StringComparer.Ordinal);

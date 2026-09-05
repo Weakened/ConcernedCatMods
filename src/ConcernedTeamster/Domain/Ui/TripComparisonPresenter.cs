@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using TheConcernedCat.ConcernedTeamster.Domain.Trips;
 
 namespace TheConcernedCat.ConcernedTeamster.Domain.Ui;
@@ -46,14 +47,15 @@ public static class TripComparisonPresenter
         if (tripA is null && tripB is null)
         {
             return new ViewModel(false,
-                "Select two trips ([A] and [B]) to compare their profiles.",
+                TeamsterStrings.Get("compare.selectTwo"),
                 string.Empty, string.Empty, Array.Empty<string>());
         }
 
         if (tripA is null || tripB is null)
         {
             return new ViewModel(false,
-                "Select a second trip to compare against [" + (tripA is null ? "B" : "A") + "].",
+                TeamsterStrings.Get(
+                    tripA is null ? "compare.selectSecondVsB" : "compare.selectSecondVsA"),
                 string.Empty, string.Empty, Array.Empty<string>());
         }
 
@@ -69,18 +71,21 @@ public static class TripComparisonPresenter
         {
             int fromPercent = bucket * 100 / BucketCount;
             int toPercent = (bucket + 1) * 100 / BucketCount;
-            lines[bucket] =
-                fromPercent.ToString(CultureInfo.InvariantCulture) + "–" +
-                toPercent.ToString(CultureInfo.InvariantCulture) + "%:  " +
-                "A " + FormatGrade(gradesA[bucket]) + " @ " + FormatSpeed(speedsA[bucket]) +
-                "   |   B " + FormatGrade(gradesB[bucket]) + " @ " + FormatSpeed(speedsB[bucket]);
+            lines[bucket] = TeamsterStrings.Format(
+                "compare.bucketLine",
+                fromPercent.ToString(CultureInfo.InvariantCulture),
+                toPercent.ToString(CultureInfo.InvariantCulture),
+                FormatGrade(gradesA[bucket]), FormatSpeed(speedsA[bucket]),
+                FormatGrade(gradesB[bucket]), FormatSpeed(speedsB[bucket]));
         }
 
         return new ViewModel(
             true,
             string.Empty,
-            "A #" + tripA.Id + ": " + Describe(summaryA),
-            "B #" + tripB.Id + ": " + Describe(summaryB),
+            TeamsterStrings.Format(
+                "compare.headerA", tripA.Id.ToString(CultureInfo.InvariantCulture), Describe(summaryA)),
+            TeamsterStrings.Format(
+                "compare.headerB", tripB.Id.ToString(CultureInfo.InvariantCulture), Describe(summaryB)),
             lines);
     }
 
@@ -142,9 +147,11 @@ public static class TripComparisonPresenter
 
     private static string Describe(TripSummary summary)
     {
-        return summary.DistanceMeters.ToString("F0", CultureInfo.InvariantCulture) + " m, mass " +
-            summary.MeanMass.ToString("F0", CultureInfo.InvariantCulture) + ", worst " +
-            (float.IsNaN(summary.WorstAbsGradePercent)
+        return TeamsterStrings.Format(
+            "compare.summary",
+            summary.DistanceMeters.ToString("F0", CultureInfo.InvariantCulture),
+            summary.MeanMass.ToString("F0", CultureInfo.InvariantCulture),
+            float.IsNaN(summary.WorstAbsGradePercent)
                 ? "?"
                 : summary.WorstAbsGradePercent.ToString("F0", CultureInfo.InvariantCulture) + "%");
     }
@@ -156,6 +163,9 @@ public static class TripComparisonPresenter
 
     private static string FormatSpeed(float value)
     {
-        return float.IsNaN(value) ? "—" : value.ToString("F1", CultureInfo.InvariantCulture) + " m/s";
+        return float.IsNaN(value)
+            ? "—"
+            : TeamsterStrings.Format(
+                "unit.metersPerSecond", value.ToString("F1", CultureInfo.InvariantCulture));
     }
 }

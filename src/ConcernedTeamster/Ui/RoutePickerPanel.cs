@@ -212,8 +212,9 @@ internal sealed class RoutePickerPanel
         if (_overflowLine != null)
         {
             _overflowLine.text = hidden > 0
-                ? "… +" + hidden.ToString(System.Globalization.CultureInfo.InvariantCulture) +
-                    " more (rename in Cartographer to sort forward)"
+                ? Domain.Localization.TeamsterStrings.Format(
+                    "routes.overflow",
+                    hidden.ToString(System.Globalization.CultureInfo.InvariantCulture))
                 : string.Empty;
         }
 
@@ -376,7 +377,7 @@ internal sealed class RoutePickerPanel
             new Vector2(0f, 0f), PanelWidth, PanelHeight, draggable: true);
 
         gui.CreateText(
-            "Cartographer Routes", _panel.transform,
+            Domain.Localization.TeamsterStrings.Get("routes.title"), _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -28f),
             font, 19, headerColor, outline: true, Color.black, PanelWidth - 40f, 30f,
             addContentSizeFitter: false);
@@ -429,7 +430,7 @@ internal sealed class RoutePickerPanel
         }
 
         GameObject clear = gui.CreateButton(
-            "Clear", _panel.transform,
+            Domain.Localization.TeamsterStrings.Get("routes.clearButton"), _panel.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-120f, 30f), 100f, 30f);
         clear.GetComponent<Button>().onClick.AddListener(() =>
         {
@@ -440,7 +441,7 @@ internal sealed class RoutePickerPanel
         // CT-024: the report opens from a visible button and renders the
         // same presenter state the profile block shows — buttons first.
         GameObject report = gui.CreateButton(
-            "Report", _panel.transform,
+            Domain.Localization.TeamsterStrings.Get("routes.reportButton"), _panel.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 30f), 100f, 30f);
         report.GetComponent<Button>().onClick.AddListener(() =>
         {
@@ -448,7 +449,7 @@ internal sealed class RoutePickerPanel
         });
 
         GameObject close = gui.CreateButton(
-            "Close", _panel.transform,
+            Domain.Localization.TeamsterStrings.Get("ui.close"), _panel.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(120f, 30f), 100f, 30f);
         close.GetComponent<Button>().onClick.AddListener(() =>
         {

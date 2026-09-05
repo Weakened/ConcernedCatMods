@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using TheConcernedCat.ConcernedTeamster.Domain.Trips;
 
 namespace TheConcernedCat.ConcernedTeamster.Domain.Ui;
@@ -60,7 +61,7 @@ public static class TripHistoryPresenter
     {
         if (summaries.Count == 0)
         {
-            return new ViewModel(true, "No trips recorded in this world yet — pull a cart!", Array.Empty<Row>());
+            return new ViewModel(true, TeamsterStrings.Get("trips.empty"), Array.Empty<Row>());
         }
 
         var sorted = new List<TripSummary>(summaries);
@@ -86,8 +87,8 @@ public static class TripHistoryPresenter
         for (int index = 0; index < sorted.Count; index++)
         {
             TripSummary summary = sorted[index];
-            string marker = summary.TripId == selectedAId ? "[A] "
-                : summary.TripId == selectedBId ? "[B] "
+            string marker = summary.TripId == selectedAId ? TeamsterStrings.Get("trips.markerA") + " "
+                : summary.TripId == selectedBId ? TeamsterStrings.Get("trips.markerB") + " "
                 : "    ";
             rows[index] = new Row(summary.TripId, marker + Format(summary));
         }
@@ -112,16 +113,20 @@ public static class TripHistoryPresenter
 
     private static string Format(TripSummary summary)
     {
-        return "#" + summary.TripId.ToString(CultureInfo.InvariantCulture) +
-            "  " + FormatDuration(summary.DurationSeconds) +
-            "  " + summary.DistanceMeters.ToString("F0", CultureInfo.InvariantCulture) + " m" +
-            "  mass " + summary.MeanMass.ToString("F0", CultureInfo.InvariantCulture) +
-            "  worst " + (float.IsNaN(summary.WorstAbsGradePercent)
+        return TeamsterStrings.Format(
+            "trips.row",
+            summary.TripId.ToString(CultureInfo.InvariantCulture),
+            FormatDuration(summary.DurationSeconds),
+            summary.DistanceMeters.ToString("F0", CultureInfo.InvariantCulture),
+            summary.MeanMass.ToString("F0", CultureInfo.InvariantCulture),
+            float.IsNaN(summary.WorstAbsGradePercent)
                 ? "?"
-                : summary.WorstAbsGradePercent.ToString("F0", CultureInfo.InvariantCulture) + "%") +
-            "  avg " + (float.IsNaN(summary.MeanSpeedMetersPerSecond)
+                : summary.WorstAbsGradePercent.ToString("F0", CultureInfo.InvariantCulture) + "%",
+            float.IsNaN(summary.MeanSpeedMetersPerSecond)
                 ? "?"
-                : summary.MeanSpeedMetersPerSecond.ToString("F1", CultureInfo.InvariantCulture) + " m/s");
+                : TeamsterStrings.Format(
+                    "unit.metersPerSecond",
+                    summary.MeanSpeedMetersPerSecond.ToString("F1", CultureInfo.InvariantCulture)));
     }
 
     private static string FormatDuration(double seconds)

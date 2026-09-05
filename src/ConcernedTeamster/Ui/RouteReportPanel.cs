@@ -131,7 +131,7 @@ internal sealed class RouteReportPanel
         }
 
         GameObject close = gui.CreateButton(
-            "Close", _panel.transform,
+            Domain.Localization.TeamsterStrings.Get("ui.close"), _panel.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 28f), 96f, 30f);
         close.GetComponent<Button>().onClick.AddListener(() => _panel!.SetActive(false));
 
