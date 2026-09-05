@@ -245,7 +245,9 @@ internal sealed class CartStatusHudController : MonoBehaviour
         // no button, no panel instance, no stub.
         if (CartographerCapability.IsAvailable && _log is not null)
         {
-            _routePanel = new RoutePickerPanel(_log);
+            // ??= so a picker that fail-closed stays disabled for the whole
+            // session instead of resetting with each world's panel rebuild.
+            _routePanel ??= new RoutePickerPanel(_log);
             GameObject routesButton = gui.CreateButton(
                 "Routes", _panel.transform,
                 new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(90f, 96f), 110f, 30f);
@@ -429,6 +431,10 @@ internal sealed class CartStatusHudController : MonoBehaviour
             _manifestPanel?.Hide();
             _guidancePanel?.Hide();
             _tripPanel?.Hide();
+            // Hide() also clears the route selection — with this controller
+            // dead the !inWorld sweep never runs again, and a selected id
+            // must not outlive the world it belongs to.
+            _routePanel?.Hide();
         }
         catch
         {

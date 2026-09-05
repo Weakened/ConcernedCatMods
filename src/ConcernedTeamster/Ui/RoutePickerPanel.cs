@@ -232,7 +232,7 @@ internal sealed class RoutePickerPanel
 
         _overflowLine = gui.CreateText(
             string.Empty, _panel.transform,
-            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 66f),
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 48f),
             font, 13, bodyColor, outline: false, Color.black, PanelWidth - 40f, 22f,
             addContentSizeFitter: false).GetComponent<Text>();
 
@@ -257,6 +257,9 @@ internal sealed class RoutePickerPanel
     private void Fail(Exception exception)
     {
         _failed = true;
+        // A selection nobody can see or manage anymore must not linger for
+        // a later consumer (CT-023) — fail closed all the way.
+        _selectedRouteId = null;
         if (_panel != null)
         {
             _panel.SetActive(false);
