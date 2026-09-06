@@ -36,6 +36,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
     private RecoveryGuidancePanel? _guidancePanel;
     private TripHistoryPanel? _tripPanel;
     private RoutePickerPanel? _routePanel;
+    private CompatibilityPanel? _compatPanel;
     private bool _failed;
 
     private GameObject? _button;
@@ -58,6 +59,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
         _guidancePanel = new RecoveryGuidancePanel(log, CurrentUiScale);
         _tripPanel = new TripHistoryPanel(log, CurrentUiScale);
         _tripPanel.BindPump(pump);
+        _compatPanel = new CompatibilityPanel(log, CurrentUiScale);
     }
 
     /// <summary>Reads the config value fresh on every call (never cached) so
@@ -96,6 +98,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
                 _guidancePanel?.Hide();
                 _tripPanel?.Hide();
                 _routePanel?.Hide();
+                _compatPanel?.Hide();
                 _selectedCartId = null;
                 if (_hudHint != null && _hudHint.gameObject.activeSelf)
                 {
@@ -119,13 +122,17 @@ internal sealed class CartStatusHudController : MonoBehaviour
             bool statusVisible = _panel != null && _panel.activeSelf;
             if (statusVisible)
             {
+                // No early return on Escape (a pre-existing gap CT-036's
+                // new Compat panel exposed): the sub-panel HandleFrame
+                // calls below own their own Escape handling, and skipping
+                // them here left a sibling panel (Manifest/Guidance/Trips/
+                // Routes/Compat) visibly open after the main panel closed,
+                // needing a second Escape press to notice it.
                 if (Input.GetKeyDown(KeyCode.Escape))
                 {
                     _panel!.SetActive(false);
-                    return;
                 }
-
-                if (now >= _nextRefreshTime)
+                else if (now >= _nextRefreshTime)
                 {
                     _nextRefreshTime = now + RefreshPeriodSeconds;
                     RefreshPanel(now);
@@ -147,6 +154,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
             _guidancePanel?.HandleFrame(now, _pump);
             _tripPanel?.HandleFrame(now, _pump);
             _routePanel?.HandleFrame(now);
+            _compatPanel?.HandleFrame();
             UpdateHudHint();
             UpdateOnboardingHint();
         }
@@ -302,6 +310,14 @@ internal sealed class CartStatusHudController : MonoBehaviour
             TeamsterStrings.Get("status.tripsButton"), _panel.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(90f, 62f), 110f, 30f);
         trips.GetComponent<Button>().onClick.AddListener(() => _tripPanel?.Toggle(_pump));
+
+        // CT-036: compatibility status, always available (unlike Routes,
+        // never conditional on another mod's presence) — mirrors Routes'
+        // row on the opposite side.
+        GameObject compat = gui.CreateButton(
+            TeamsterStrings.Get("status.compatButton"), _panel.transform,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-90f, 96f), 110f, 30f);
+        compat.GetComponent<Button>().onClick.AddListener(() => _compatPanel?.Toggle());
 
         // CT-022: the route picker exists only when the Cartographer probe
         // reported Available (this panel is built lazily in-world, long
@@ -546,6 +562,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
             // dead the !inWorld sweep never runs again, and a selected id
             // must not outlive the world it belongs to.
             _routePanel?.Hide();
+            _compatPanel?.Hide();
         }
         catch
         {
