@@ -229,9 +229,20 @@ renders such advice substitutes a fixed "load advice unavailable" notice
 whenever it is not: cart warnings, stuck diagnosis (and the recovery
 guidance that inherits it), the route profile/report/trip-history bottleneck
 lines, and the descent-risk debug log. The parking brake needs no gate — its
-facts carry no mass field. Full design, and the research trail behind which
-real mod got registered (and which candidate did not, and why), in
-`COMPATIBILITY.md`.
+facts carry no mass field.
+
+CT-038 broadens the registry with a Thunderstore-wide research pass:
+ItemStacks (`Adapt`/`CartMassOrPhysics` — reduces every item's weight by a
+default 90%) and ValheimPlus (`Warn`/`AffectedAspect.None` — its optional
+Wagon section can change cart mass but ships disabled, reproducing vanilla
+math exactly when off). ValheimPlus is the framework's first live use of
+`CompatibilityPolicy.Warn`, and surfaces a real architectural limit worth
+naming here: detection is presence-only (`Chainloader.PluginInfos`), so a
+mod whose mass-altering behavior depends on its own runtime configuration —
+not just its installation — cannot be precisely gated without a new kind of
+probe this leaf did not build (tracked in `HUMAN_ATTENTION.md`). Full
+design, and the research trail behind which real mods got registered (and
+which candidates did not, and why), in `COMPATIBILITY.md`.
 
 ### Persistence (from v0.4)
 

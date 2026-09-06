@@ -23,15 +23,21 @@ Valheim shows no cart mass, no cargo weight total, no hint whether a loaded cart
 
 Teamster now detects a small, researched registry of known mods (by GUID,
 never guessed) and applies a documented policy: coexist quietly, adapt a
-reading, or warn. The one mod registered so far, **BetterCarts** by
-TastyChickenLegs, reduces cart mass by a default 20% — verified directly
-from its published source — so every load-advice surface (warnings, stuck
+reading, or warn. Three mods are registered so far, chosen from a
+Thunderstore-wide research pass by download count and directness of effect
+on cart mass or cargo weight. **BetterCarts** (TastyChickenLegs) and
+**ItemStacks** (mtnewton, 306,000+ downloads — reduces every item's weight
+by 90% by default) both alter cart mass out of the box, verified directly
+from their published source, so every load-advice surface (warnings, stuck
 diagnosis, recovery guidance, route bottlenecks) shows a plain "load advice
 unavailable" notice instead of a vanilla-calibrated number presented as
-truth while it's detected. A **Compat** button on the Cart Status panel
-always shows what was detected. This registry grows as more mods are
-researched (v0.8's remaining leaves); an unrecognized mod is always silent
-— nothing to configure, no false alarms.
+truth while either is detected. **ValheimPlus** ships an optional Wagon
+section that *can* change cart mass, but ships it off — disabled, its
+patch reproduces vanilla's mass math exactly — so it's flagged with a
+caution note pointing at that setting rather than suppressing advice for
+every install. A **Compat** button on the Cart Status panel always shows
+what was detected. This registry grows as more mods are researched; an
+unrecognized mod is always silent — nothing to configure, no false alarms.
 
 ## What comes next (roadmap)
 * Further compatibility research and recovery hardening (v0.8), then the public beta (v0.9).
