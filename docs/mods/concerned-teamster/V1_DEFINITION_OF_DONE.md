@@ -69,7 +69,7 @@ in-game visual/interaction rows deferred to `PRE_RELEASE_SMOKE_TEST.md`
 | Capability | Status | Where |
 |---|---|---|
 | Deterministic focus order + accelerator-conflict checking | Done\* | v0.7 (CT-031); 22 tests (traversal wrap, reachability, chord conflicts); live gamepad walkthrough is smoke §8 row 8.1 |
-| Full localization framework, English-complete catalog | Done | v0.7 (CT-032); 274+ keys, CI-gated hardcoded-string audit (planted literals/dead keys/re-hardcoded sentences all fail it) |
+| Full localization framework, English-complete catalog | Done | v0.7 (CT-032); 277 keys, CI-gated hardcoded-string audit (planted literals/dead keys/re-hardcoded sentences all fail it); no community translation exists yet to check for completeness against — see `V1_SIGNOFF.md` (CT-049) |
 | UI scale (0.8–1.3×) + WCAG AA contrast + non-color cues | Done\* | v0.7 (CT-033); geometric no-self-clip guarantee, contrast-ratio math, sensitivity check documented; live scale/contrast confirmation is smoke §8 rows 8.2–8.3 |
 | Onboarding + three config profiles, brake always opt-in | Done\* | v0.7 (CT-034); idempotence + brake-exclusion tested across all three profiles; live hint/profile-switch check is smoke §8 rows 8.4–8.6 |
 
@@ -120,7 +120,7 @@ in-game visual/interaction rows deferred to `PRE_RELEASE_SMOKE_TEST.md`
 
 | Capability | Status | Where |
 |---|---|---|
-| Domain unit tests + interop audits, every PR | Done | 622 Teamster + 568 Cartographer tests, three zero-violation interop audits (authority/no-network, no-force, no-internet-egress), every merge this whole conveyor |
+| Domain unit tests + interop audits, every PR | Done | 629 Teamster + 568 Cartographer tests (current as of CT-049; was 622 before CT-048's `PerformanceBudgetTests.cs`), three zero-violation interop audits (authority/no-network, no-force, no-internet-egress), every merge this whole conveyor |
 | Full automated suite reruns clean from a fresh checkout | Done | v1.0 (CT-047); `REGRESSION_REPORT_v1.0.md` — a separate `git clone` (not this conveyor's working tree), full build+test+package cycle, 622+568 tests, zero new defects |
 | Regression run against each of TCT-Clean/Dev/Compat/Dedicated specifically | **Done\* — automated layer only** | v1.0 (CT-047); `REGRESSION_REPORT_v1.0.md`'s campaign-rerun table — every profile's underlying test suite reruns clean; no TCT-* profile exists yet for the in-game layer, itemized pending per profile in the same report |
 
@@ -129,7 +129,7 @@ in-game visual/interaction rows deferred to `PRE_RELEASE_SMOKE_TEST.md`
 | Capability | Status | Where |
 |---|---|---|
 | Everything listed above under its own capability area | Done\* / Deferred as itemized above | — |
-| A consolidated final sign-off pass (re-verifying nothing regressed since each leaf's own seal) | **Not yet done — CT-049's own scope** | This leaf's matrix is the audit CT-049 re-verifies against, not a substitute for that leaf |
+| A consolidated final sign-off pass (re-verifying nothing regressed since each leaf's own seal) | Done | v1.0 (CT-049); `V1_SIGNOFF.md` — six explicit sign-off lines (docs truth, localization, controller, accessibility, migration, compatibility), each reran/rechecked fresh; 6 stale doc claims found and fixed (localization counts, a misleading version-scoped heading, compatibility version drift), zero production-code or test regressions |
 
 ## Deferred (recorded in HUMAN_ATTENTION.md)
 
@@ -159,8 +159,9 @@ specifically-itemized, cross-referenced pending in-game row (`Done\*`) —
 no capability has a blank, an unproven claim, or a claim resting on
 "it probably works." At CT-046 time the remaining gaps were exactly what
 the v1.0 sprint's own remaining leaves (CT-047 regression, CT-048 formal
-budgets, CT-049 final sign-off) existed to close; CT-047 and CT-048 have
-since closed theirs (see their own rows above), leaving CT-049's sign-off
-plus a small, honestly bounded set of owner-only actions (media capture,
-profile creation, supplying a third-party GUID) no autonomous leaf can
-complete on its own.
+budgets, CT-049 final sign-off) existed to close; all three have since
+closed theirs (see their own rows above). What remains is CT-050's own
+seal-and-owner-packet scope plus a small, honestly bounded set of
+owner-only actions (media capture, profile creation, supplying a
+third-party GUID, the actual in-game smoke checklist) no autonomous leaf
+can complete on its own.

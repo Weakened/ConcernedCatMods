@@ -294,6 +294,27 @@ third-party executable content warrants the owner's awareness first. This
 is recorded as a pending, non-blocking item (see `HUMAN_ATTENTION.md`)
 rather than guessed.
 
+## Version recheck (CT-049)
+
+CT-049's sign-off scope explicitly calls for rechecking versions against
+CT-038's evidence before finalizing the compatibility statement. Checked
+live against each mod's own Thunderstore package page on 2026-09-06:
+
+| Mod | Version at CT-037/038 | Version now (CT-049) | Change |
+|---|---|---|---|
+| BetterCarts | 1.0.6 | **1.1.0** | Real version bump. Not re-decompiled against the new build — see the caveat in `TEST_PLAN.md`'s compatibility matrix. The registry's GUID-based, presence-only detection is unaffected either way: it does not read or depend on the mod's version, only its identity. |
+| ItemStacks | 1.2.0 | **1.2.0** | Unchanged. |
+| ValheimPlus | cited as 0.9.9.11 | **9.9.11** (Thunderstore's own dependency string) | Formatting difference, not a functional rerelease — Thunderstore version strings are three numeric parts; "0.9.9.11" (four parts) was never a valid Thunderstore version and was likely transcribed from the mod's own in-game display string rather than its package version. More importantly: **this package is now shown as Deprecated on Thunderstore** ("This package has been deprecated and may no longer be maintained. We recommend looking for an alternative."). This does not change what the mod's currently-shipped code does — the Warn/None classification and its disabled-by-default Wagon section reasoning both still hold — but it is new, relevant risk context: a deprecated mod is less likely to receive a fix if a future Valheim/BepInEx update breaks it. |
+
+None of these changes alter any registry entry's `policy`/`affectedAspect`
+in `CompatibilityKnownMods.cs` — the evidence behind each classification
+(BetterCarts/ItemStacks default-on mass/weight reduction, ValheimPlus's
+disabled-by-default Wagon section) is about what each mod's *code* does,
+which a version-number check alone cannot confirm or refute without
+re-decompiling. BetterCarts' one real version bump is flagged above as an
+honest, unresolved re-verification gap rather than silently re-stamped
+onto the new version number.
+
 ## Known scope limits
 
 - No in-game coexistence matrix has been run yet, for any of the three

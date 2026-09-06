@@ -132,11 +132,17 @@ CT-038 researched the exact current cart/physics/inventory mod landscape
 before any compatibility claims (Thunderstore listings, selected by
 download count and directness of effect on cart mass/weight); the matrix:
 
+Versions rechecked live against Thunderstore at CT-049 (2026-09-06); see
+`COMPATIBILITY.md`'s "Version recheck (CT-049)" section for the full
+citation trail. Detection itself is GUID-based and presence-only —
+version-agnostic by construction — so none of the changes below affect
+whether the registry still correctly identifies each mod.
+
 | Mod (exact name/version) | Load together | Teamster readouts sane | Their features intact | Notes |
 |---|---|---|---|---|
-| BetterCarts (TastyChickenLegs) 1.0.6+ | pending in-game | pending in-game | pending in-game | Registered `Adapt`/`AffectedAspect.CartMassOrPhysics` (CT-037) — its `Vagon.SetMass` Harmony prefix reduces cart mass by a default 20% (`Patches/CartConfigs.cs`: `cartMassReduction = 0.2f`), so every load-advice consumer substitutes its "unavailable" notice while it is detected; the in-game row confirms this holds for real rather than deciding it. |
-| ItemStacks (mtnewton) 1.2.0 | pending in-game | pending in-game | pending in-game | Registered `Adapt`/`AffectedAspect.CartMassOrPhysics` (CT-038) — reduces every item's weight by a default 90% (`ItemTracker.SetWeight` overwrites `m_shared.m_weight` directly), on by default, so cargo weight and cart mass both drop to roughly a tenth of vanilla out of the box; 306,955 downloads, over 6x BetterCarts'. |
-| ValheimPlus (`org.bepinex.plugins.valheim_plus`) 0.9.9.11 | pending in-game | pending in-game | pending in-game | Registered `Warn`/`AffectedAspect.None` (CT-038) — its Wagon cart-mass section ships disabled and, disabled, its patch reproduces vanilla's mass formula exactly (verified from the patch, the section's own defaults, and the shipped config template); only an explicit player opt-in changes cart mass, which presence-only detection cannot observe, so this is a Compat-panel note rather than a gate trip. |
+| BetterCarts (TastyChickenLegs) **1.1.0** (was 1.0.6+; rechecked CT-049, real version bump) | pending in-game | pending in-game | pending in-game | Registered `Adapt`/`AffectedAspect.CartMassOrPhysics` (CT-037) — its `Vagon.SetMass` Harmony prefix reduced cart mass by a default 20% as of the version CT-037 decompiled (`Patches/CartConfigs.cs`: `cartMassReduction = 0.2f`); **not re-decompiled against 1.1.0** at CT-049 — the Adapt classification stands on the mod's core feature and download-visible changelog (no removal of mass-reduction implied), but the exact percentage is unconfirmed for this build. Every load-advice consumer substitutes its "unavailable" notice while it is detected regardless of the exact percentage. |
+| ItemStacks (mtnewton) **1.2.0** (rechecked CT-049, unchanged) | pending in-game | pending in-game | pending in-game | Registered `Adapt`/`AffectedAspect.CartMassOrPhysics` (CT-038) — reduces every item's weight by a default 90% (`ItemTracker.SetWeight` overwrites `m_shared.m_weight` directly), on by default, so cargo weight and cart mass both drop to roughly a tenth of vanilla out of the box; 306,955 downloads, over 6x BetterCarts'. |
+| ValheimPlus (`org.bepinex.plugins.valheim_plus`) **9.9.11** (was cited 0.9.9.11; rechecked CT-049 — Thunderstore's own dependency string omits the leading `0.`) — **now marked Deprecated on Thunderstore** ("may no longer be maintained") | pending in-game | pending in-game | pending in-game | Registered `Warn`/`AffectedAspect.None` (CT-038) — its Wagon cart-mass section ships disabled and, disabled, its patch reproduces vanilla's mass formula exactly (verified from the patch, the section's own defaults, and the shipped config template); only an explicit player opt-in changes cart mass, which presence-only detection cannot observe, so this is a Compat-panel note rather than a gate trip. Deprecation doesn't change current shipped behavior but is worth an owner's eye — a mod that stops receiving updates is more likely to drift from a future Valheim/BepInEx update without a fix arriving. |
 
 **Precedence policy (CT-037):** when a mod affecting cart mass or physics is
 present, Teamster must either measure the modified reality accurately or
@@ -293,6 +299,20 @@ acceptance-criteria evidence:
 | Campaign/compat/multiplayer reruns green or pending-listed with reasons | Automated layer reruns clean (compatibility 18/18, multiplayer/authority/network-hardening 86/86); in-game layer pending-listed per profile with the same already-established reason (no TCT-* profile exists) — never claimed passed |
 | Regression report committed and referenced by the DoD matrix | `REGRESSION_REPORT_v1.0.md`; `V1_DEFINITION_OF_DONE.md`'s regression rows updated to cite it |
 | Zero open P0/P1 | Confirmed — no new defect found or filed by this rerun |
+
+## Final sign-off (CT-049)
+
+Full detail in `V1_SIGNOFF.md`. Six explicit sign-off lines, each with a
+fresh rerun/recheck rather than a re-assertion of an earlier leaf's proof:
+
+| Area | Evidence |
+|---|---|
+| Docs truth | 6 stale claims found and fixed (localization counts, a misleading version-scoped heading, compatibility version drift) |
+| Localization completeness | 277-key catalog, 24 test cases across `HardcodedStringAuditTests`/`TeamsterStringsTests`, rerun green; explicitly scoped to the English catalog's own consistency — no community translation exists yet |
+| Controller navigation | `ControllerNavigationTests`, 22 executed cases, rerun green; one pre-existing cosmetic gap (`CompatibilityPanel` close button not in `NavigationCatalog`) confirmed still open, not silently resolved |
+| Accessibility | `AccessibilityTests`, 21 executed cases, rerun green — fresh baseline, nothing prior to reconcile |
+| Migration chain | Two real, shape-changing single-step transitions (config schema 0→1, trip sidecar format 1→2), both fixture-proven, not a v0.1–v0.9 ladder; rerun green |
+| Compatibility statement | Versions rechecked live against Thunderstore; BetterCarts bumped 1.0.6→1.1.0 (not re-decompiled, flagged), ItemStacks unchanged, ValheimPlus now Deprecated upstream (flagged); no registry classification changed; 18 test cases rerun green |
 
 ## Multiplayer (v0.6)
 

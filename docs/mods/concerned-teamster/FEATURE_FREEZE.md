@@ -35,7 +35,7 @@ See `Package/CHANGELOG.md` for the per-version delivery history and
    hostile input; Teamster sends nothing and takes no ownership.
 7. **UX, controller, accessibility, localization** (v0.7) — panel scaling
    (0.8–1.3×), WCAG AA contrast, non-color cues everywhere, full gamepad
-   focus/accelerator coverage, a 280+-key localization catalog with
+   focus/accelerator coverage, a 277-key localization catalog with
    English fallback, first-run onboarding, three settings presets.
 8. **Compatibility awareness** (v0.8) — a researched, GUID-only registry
    of known mods (BetterCarts, ItemStacks, ValheimPlus) with a documented
