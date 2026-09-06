@@ -933,6 +933,13 @@ only for non-blocking uncertainty.
   its configured cap (32) in a dense cluster — is a documented design
   tradeoff (freshness over coverage), not a defect; see
   `RELEASE_DOSSIER.md`'s v0.8 scale measurement table for the derivation.
+  This leaf's own independent review additionally found that the recorded
+  DLL/ZIP hashes do not reproduce across separate rebuilds/environments
+  (filed as DEF-teamster-v0.8-001, #214, P3, deferred) — a release-
+  engineering traceability gap present since the v0.1 RC, not a CT-040
+  regression, and with no safety/correctness/gameplay impact; the dossier
+  entry was corrected to record hashes as an honest build fingerprint
+  rather than a reproducibility claim.
 - Must resolve before public release: Yes (the v0.9 beta gate consumes
   these, same as every prior RC's live rows)
 - Status: Open

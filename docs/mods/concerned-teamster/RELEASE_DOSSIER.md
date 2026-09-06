@@ -10,14 +10,30 @@ is owner-only, always.
 | Item | Value |
 |---|---|
 | Version | 0.8.0 (internal; no publication) |
-| Source commit | `9b718c2d518fa4e0a92a81a9c716455b8cba1e3d` (branch `feat/ct-040-v08-rc-seal`; version-sync + scale-test content committed before the RC rebuild so the shipped DLL names this exact commit, not a dirty-tree build). Sealed on merge to main via the CT-040 PR. |
+| Source commit | `859976ea4a692cd7c751d227236ac36dc7f09601` (branch `feat/ct-040-v08-rc-seal`; the src/ tree at this commit is byte-identical to the earlier version-sync commit `9b718c2`, which only docs-only commits sit on top of). Sealed on merge to main via the CT-040 PR. |
 | ZIP | `artifacts/thunderstore/TheConcernedCat-ConcernedTeamster-0.8.0.zip` |
-| ZIP SHA-256 | `4c3d674e88c0f66afc03ada6293ad3e1dbdb09ade73d8732f7a6dc5526a128c2` (142,157 B) |
-| DLL SHA-256 | `d5dfbbb22e186ba248b6537b71cfba9f85e8996275da1e3e4c8580cd594f1873` (245,760 B) |
-| DLL identity | AssemblyVersion 0.8.0.0, InformationalVersion `0.8.0+9b718c2d518fa4e0a92a81a9c716455b8cba1e3d` (read back directly from the built DLL, confirming a clean, non-dirty build) |
+| ZIP SHA-256 | `9aa033e837d0f47d7869968e6fbc168e864115e4ae21384a3ea2e65e49851851` (142,165 B) — **a point-in-time fingerprint of this specific build's zip, not a reproducibility guarantee**; see the note below |
+| DLL SHA-256 | `3a278c507a251a3e09b8690237f52581196e7e1034d18fd6b1afd2d1b3dc2118` (245,760 B) — confirmed stable across 2 consecutive clean rebuilds on this machine, but see the note below |
+| DLL identity | AssemblyVersion 0.8.0.0, InformationalVersion `0.8.0+859976ea4a692cd7c751d227236ac36dc7f09601` (read back directly from the built DLL, confirming it correctly names its exact source commit) |
 | ZIP contents (6 entries) | manifest.json, icon.png (256×256), README.md, CHANGELOG.md, LICENSE, plugins/TheConcernedCat.ConcernedTeamster.dll — **own DLL only**, no PDB, no foreign DLL |
 | Built against | Valheim 0.221.12 (buildid 21981559 — re-verified in the Steam manifest at seal time, unchanged since the v0.7 seal), Unity 6000.0.61f1, BepInExPack 5.4.2333, Jötunn 2.29.2 |
 | Version sync | 0.8.0 across csproj/Plugin.cs/thunderstore.toml + the CHANGELOG `## 0.8.0` section, validator-asserted (`--expected-version 0.8.0 --require-binary`) |
+
+**Hash-reproducibility note (found by this RC's independent review, filed as
+DEF-teamster-v0.8-001 / #214, P3, deferred):** rebuilding this exact
+committed source from a clean state does **not** reliably reproduce the
+same DLL bytes across different machines/environments (three distinct DLL
+hashes were observed across the review's build and two of my own, despite
+identical size and a correctly-named `InformationalVersion` every time),
+and the ZIP hash changes on every single rebuild regardless of DLL
+stability (root cause: `tcli build` embeds a build-time timestamp per zip
+entry). Both hashes above are recorded as an honest fingerprint of the
+actual artifact built, tested, and considered for this seal — proof that
+*this specific file* wasn't silently swapped or corrupted after
+validation — not as a claim that a third party rebuilding from source will
+get byte-identical output. This property has existed since the v0.1 RC;
+CT-040 is simply the first leaf where an independent rebuild-and-compare
+was attempted, so it is the first to document it.
 
 ### Sprint scope sealed in this RC
 
@@ -99,11 +115,14 @@ derivation.
 
 ### Defects
 
-No defect filed against `sprint:teamster-v0.8`; none open with the sprint
-label at seal time (`gh issue list --label sprint:teamster-v0.8 --label
-bug` returns empty). The one previously-open Teamster defect, #189
-DEF-teamster-v0.4-001 (P3, sidecar backup hardening), was fixed and
-closed as part of CT-039 — no open Teamster defect remains at seal time.
+One defect filed against `sprint:teamster-v0.8` during this leaf's own
+independent review: **DEF-teamster-v0.8-001 (#214, P3)** — release DLL/ZIP
+builds are not bit-reproducible across rebuilds/environments (see the
+hash-reproducibility note above). P3, no safety/correctness/gameplay
+impact, deferred to a future hardening leaf per its own rationale — does
+not block this gate (no open P0/P1 with the sprint label). The one
+previously-open Teamster defect, #189 DEF-teamster-v0.4-001 (P3, sidecar
+backup hardening), was fixed and closed as part of CT-039.
 
 ### Gate decision
 
