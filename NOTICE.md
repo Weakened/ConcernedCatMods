@@ -2,7 +2,7 @@
 
 ## Original project
 
-**ConcernedCatMods** and **Concerned Cartographer** were created and are maintained by:
+**ConcernedCatMods**, **Concerned Cartographer**, and **Concerned Teamster** were created and are maintained by:
 
 **Eren Cansunar**  
 publishing as **The Concerned Cat**
@@ -47,4 +47,4 @@ The Concerned Cat name, logo and official release identity are project branding.
 
 Valheim, Iron Gate, Coffee Stain, Unity, BepInEx, Jötunn and other third-party names/assets remain the property of their respective owners.
 
-Concerned Cartographer is an unofficial mod and is not affiliated with or endorsed by Iron Gate.
+Concerned Cartographer and Concerned Teamster are unofficial mods and are not affiliated with or endorsed by Iron Gate.

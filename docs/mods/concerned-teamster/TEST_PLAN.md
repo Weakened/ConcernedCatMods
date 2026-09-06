@@ -198,6 +198,18 @@ No in-game observation of the Report a Bug button actually opening a
 browser has been run yet — pending (`HUMAN_ATTENTION.md`), never claimed
 PASS.
 
+## Public docs, media, and security audit (CT-042)
+
+Full detail in `SECURITY_AUDIT.md`. Summary of the acceptance-criteria
+evidence:
+
+| Criterion | Evidence |
+|---|---|
+| Every README claim traces to shipped behavior or is listed as a limitation | Package README's feature/compatibility/privacy sections cross-checked against `FEATURE_FREEZE.md`, `COMPATIBILITY.md`, and `PRIVACY_INVENTORY.md` during this leaf; no unverified claim added |
+| Media reflects the current build (no mockups) | No screenshots exist yet — none were fabricated. Real-gameplay capture is an owner task (`Prepare-TCC-Screenshot-Profile.ps1` exists for exactly this) and is recorded pending in `HUMAN_ATTENTION.md`, never claimed done |
+| Audit checklist committed with all findings resolved or filed as defects | `SECURITY_AUDIT.md` — 2 findings, 1 fixed inline (a doc-comment accuracy correction), 1 filed (DEF-teamster-v0.9-002 / #217, P2, deferred to CT-044) |
+| Validator passes with the final metadata | `validate_repo.py --product teamster` — unchanged pass, no metadata changed this leaf (categories were already correct; version stays 0.8.0 until CT-045's seal) |
+
 ## Multiplayer (v0.6)
 
 - Ownership: only the vanilla-authoritative controller's client mutates

@@ -980,6 +980,58 @@ only for non-blocking uncertainty.
   the owner smoke checklist once clicked in a real session.
 - Status: Open
 
+### 2026-09-06 — CT-042 public docs and security audit complete; real-gameplay media and the icon-art decision remain owner tasks
+
+- Version / issue: v0.9 / CT-042 (#159)
+- Question: CT-042's scope asks for "current screenshots (and GIF where
+  useful) produced from real gameplay" with the explicit constraint that
+  "media reflects the current build (no mockups)". No screenshot or GIF
+  of Concerned Teamster exists anywhere in this repo yet, and producing
+  one honestly requires an actual interactive Valheim session (launching
+  the game, loading a disposable world, positioning a cart, opening the
+  real panels) — not something safely automatable from this environment,
+  and exactly the kind of task `Prepare-TCC-Screenshot-Profile.ps1`
+  already exists, untracked, at the repo root to support.
+- Safe reversible default selected: complete every part of CT-042 that
+  does not require a live game session — the package README now has an
+  accurate feature list (cross-checked against `FEATURE_FREEZE.md`), a
+  privacy paragraph distilled from `PRIVACY_INVENTORY.md`, an AI-
+  assistance disclosure paragraph (repository-policy wording from
+  `AI_DEVELOPMENT.md`, adapted for Teamster), and its existing
+  compatibility section re-verified against `COMPATIBILITY.md`'s CT-038
+  evidence (no drift found). `NOTICE.md` and the root `README.md` had
+  Concerned Teamster added by name (both previously named only
+  ConcernedCatMods and Concerned Cartographer — a real, if minor,
+  pre-existing gap this leaf closed rather than left for later). A
+  committed security self-audit (`SECURITY_AUDIT.md`) checked dependency
+  pins, secrets, the package copy-list, and every `Adapters/` file's
+  fail-closed behavior; findings below. No screenshot/GIF was added, and
+  none was faked — the gap is recorded here instead.
+- Why work continued: every other CT-042 deliverable (README accuracy,
+  CHANGELOG completeness — already complete from v0.1, LICENSE
+  correctness — already correct, Thunderstore categories — already
+  correct, the security audit) is fully provable from the committed
+  source tree without a running game; only the media bullet needs one.
+- Risk / alternative: none beyond the pending media capture and the
+  `icon.png` art decision (carried from the CT-002 entry, which named
+  CT-042 as the leaf that would revisit it — dimensions are already
+  validator-compliant at 256×256; whether to commission different art is
+  a taste decision for the owner, not something this leaf can or should
+  decide unilaterally).
+- Security audit findings: (1) `SupportBundleExporter.Export`'s doc
+  comment overstated "never throws" — fixed inline, a 1-line comment
+  correction, no behavior change (the narrow theoretical exception was
+  already caught one layer up by `SupportBundlePanel`'s existing
+  try/catch). (2) `CartTelemetryPump.Update()`, the per-frame telemetry
+  driver, has no top-level fail-closed guard unlike every `Ui/*Panel.cs`
+  file — filed as DEF-teamster-v0.9-002 (#217, P2), deferred to CT-044
+  since fixing it is a core-adapter code change deserving its own
+  focused review, not something to bundle into a documentation leaf.
+- Must resolve before public release: Yes for the media capture (the
+  v0.9 beta gate expects real screenshots); the icon-art question is the
+  owner's call and does not block the internal RC seal either way.
+- Status: Open
+
 ## Resolved items
 
 ### 2026-09-05 — CT-032 localization framework delivered; full-UI externalization is progressive

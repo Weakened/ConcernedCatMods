@@ -51,6 +51,17 @@ lines — for sharing when reporting a problem. No world names, player
 names, or full file paths are included; nothing is sent anywhere by the
 mod itself.
 
+## Privacy
+
+Nothing Teamster produces leaves your machine. It sends no network
+messages and takes no ownership of anything (audited every release), runs
+no analytics or telemetry, and includes no crash reporter. What it stores
+locally: your per-world trip history (`BepInEx/config/ConcernedCatMods/
+ConcernedTeamster/`) and your plugin config — both yours to delete at any
+time, and neither is a Valheim save file. What it displays but never logs
+or stores: other players' in-game character names, shown only in
+cooperative haul diagnostics while you're actually playing with them.
+
 ## What comes next (roadmap)
 * The public beta (v0.9), after a full hardening pass: feature/defaults freeze, a privacy-safe feedback path, complete public docs and a security audit, automated standard profiles, and a beta-defect burn-down.
 
@@ -71,3 +82,12 @@ Version 0.8.x is the internal **Compatibility, Recovery, Scale** line: cart trut
 * Bugs and feature requests: the [GitHub issue tracker](https://github.com/Weakened/ConcernedCatMods/issues) — also one click away in-game via the **Report a Bug** button on the Cart Status panel's Support screen.
 * When reporting a problem, attach the sanitized bundle from the Support panel's **Export** button (versions, config, compatibility, sidecar summaries, recent log lines — no world names, player names, or full file paths). Never attach a world save file, a screenshot showing another player's name, or anything else you consider private.
 * Anything that should not be public: **support@theconcernedcat.com**.
+
+## About
+
+Concerned Teamster is created and maintained by Eren Cansunar / The
+Concerned Cat. AI coding agents materially assisted implementation,
+tests, research, and documentation. Releases are reviewed and validated
+through the project's test/release process before anything is published.
+Concerned Teamster is an unofficial mod and is not affiliated with or
+endorsed by Iron Gate.
