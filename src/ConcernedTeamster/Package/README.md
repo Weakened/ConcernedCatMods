@@ -17,7 +17,7 @@ Valheim shows no cart mass, no cargo weight total, no hint whether a loaded cart
 * **Optional Cartographer integration (v0.5).** If [Concerned Cartographer](https://thunderstore.io/c/valheim/) is installed (0.10.0+), a **Routes** button lists its drawn routes; pick one and Teamster terrain-profiles it in bounded chunks — distance, surfaces, grade histogram, worst sections, and the safe-load bottleneck for your cart's current mass — then renders a numbered problem report with load advice straight from the calibration model. Unloaded terrain is reported as UNSAMPLED, never guessed. Strictly read-only toward Cartographer (its atlas is never touched), no hard dependency in either direction, and without Cartographer the feature simply does not exist.
 * **Multiplayer trust and authority (v0.6).** A written, enforced policy decides who may read, act, and observe each feature: the parking brake — the only feature that changes a cart — works only when you own the cart under vanilla rules, and any doubt fails closed. Crews get cooperative diagnostics (who's helping, hindering, or idle, and why the cart still won't move) with zero added force, owner-fresh readings are labeled when you're only observing, and every network-derived value is bounded as hostile input. Teamster stays client-side: it sends nothing, takes no ownership, and an unmodded peer sees pure vanilla.
 * Read-only, bounded telemetry with hard performance caps; everything game-facing is verified at startup and fails closed with one actionable log line if a game update changes cart internals.
-* **UX, controller, accessibility, and localization (v0.7).** Every panel scales (0.8–1.3×), meets a WCAG AA contrast target, and never relies on color alone — every warning, diagnosis, and comparison already carries distinguishing text or a symbol. A gamepad focus order and accelerator-conflict checker keep every feature reachable by button first. All 244 user-facing strings resolve through a translator-friendly catalog with English fallback — see the [translator guide](https://github.com/Weakened/ConcernedCatMods/blob/main/docs/mods/concerned-teamster/LOCALIZATION.md) to contribute a language. New players get a short, dismissable pointer to the Cart button, and three documented settings presets (Minimal / Standard / EverythingObservational) cover common preferences without ever auto-enabling the parking brake.
+* **UX, controller, accessibility, and localization (v0.7).** Every panel scales (0.8–1.3×), meets a WCAG AA contrast target, and never relies on color alone — every warning, diagnosis, and comparison already carries distinguishing text or a symbol. A gamepad focus order and accelerator-conflict checker keep every feature reachable by button first. All 254 user-facing strings resolve through a translator-friendly catalog with English fallback — see the [translator guide](https://github.com/Weakened/ConcernedCatMods/blob/main/docs/mods/concerned-teamster/LOCALIZATION.md) to contribute a language. New players get a short, dismissable pointer to the Cart button, and three documented settings presets (Minimal / Standard / EverythingObservational) cover common preferences without ever auto-enabling the parking brake.
 
 ## Compatibility with other mods (v0.8, in progress)
 
@@ -38,6 +38,18 @@ caution note pointing at that setting rather than suppressing advice for
 every install. A **Compat** button on the Cart Status panel always shows
 what was detected. This registry grows as more mods are researched; an
 unrecognized mod is always silent — nothing to configure, no false alarms.
+
+## Recovery, migration, and support bundle (v0.8)
+
+Trip sidecar backups now rotate a bounded set of copies per event instead
+of overwriting the same file every time, so a second corruption or
+migration event never destroys the evidence of the first. A new
+**Support** button on the Cart Status panel exports a single sanitized
+diagnostic file — versions, config, compatibility status, sidecar
+summaries, this session's recovery events, and recent Teamster-only log
+lines — for sharing when reporting a problem. No world names, player
+names, or full file paths are included; nothing is sent anywhere by the
+mod itself.
 
 ## What comes next (roadmap)
 * Further compatibility research and recovery hardening (v0.8), then the public beta (v0.9).

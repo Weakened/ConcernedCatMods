@@ -252,6 +252,28 @@ Atomic writes (temp file + rename), versioned headers, malformed-row skipping,
 and backup-before-migration — the same rules Cartographer's persistence proved.
 No writes to Valheim save files.
 
+### Recovery, config migration, and support bundle (CT-039)
+
+Sidecar backups (`SidecarFileStore.TryBackup`) rotate a bounded set of
+generations per reason instead of overwriting one fixed name, and the
+backup-before-rewrite ordering itself is decided by a pure function
+(`Domain/Trips/TripPersistPlan.Decide`) rather than living only in
+`TripRecordingService.Persist`'s untestable control flow — the same
+"pure decision, mechanical executor" split `CompatibilityAdvisoryGate`
+established for the precedence gate, applied here to close
+DEF-teamster-v0.4-001. Config gets its first schema-version concept
+(`Domain/Config/ConfigSchemaVersion`/`ConfigSchemaMigration`), exercised by
+the one real migration every pre-CT-039 install goes through: introducing
+the version marker itself. The Support Bundle
+(`Domain/Support/SupportBundleComposer`/`SupportBundleSanitizer`,
+`Adapters/SupportBundleExporter`/`LogTailRecorder`) composes a sanitized
+diagnostic file the player exports on demand — every line, including
+recent Teamster-only log lines, passes through the same regex-based
+sanitizer regardless of source, the same defense-in-depth technique
+Concerned Cartographer's crash-report sanitizer uses, reimplemented
+independently since the products share no compile-time reference. Full
+design in `RECOVERY.md`.
+
 ### Integration adapters (v0.5+)
 
 `CartographerCapability` (CT-021) probes for Concerned Cartographer at runtime

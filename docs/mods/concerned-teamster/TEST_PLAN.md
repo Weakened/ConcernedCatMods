@@ -45,6 +45,13 @@ manually per the end-to-end guide. All in-game testing uses disposable worlds
   reset.
 - Persistence (v0.4+): round-trip, versioned migration, malformed-row skip,
   atomic-write failure injection, cross-world isolation.
+- Recovery and migration (CT-039): bounded backup rotation on a real
+  filesystem, the backup-before-rewrite decision (refused/malformed/
+  migrating all mandate a backup; clean does not), config schema migration
+  ladder.
+- Support bundle (CT-039): sanitization against realistic planted content
+  (paths, world UIDs, this mod's own real log-line shapes), composition
+  with and without data present.
 - UI presenters: headless rendering of panel view-models from fixed snapshots.
 
 ## Vanilla truth baseline (v0.1)
@@ -130,6 +137,22 @@ reason. Three real mass-relevant mods are now registered
 (`BetterCarts`, `ItemStacks`, `ValheimPlus`), but no in-game observation
 with any of them actually installed has run yet — pending
 (`HUMAN_ATTENTION.md`).
+
+## Recovery, migration, and support bundle (CT-039)
+
+Full design in `RECOVERY.md`. Summary of the acceptance-criteria evidence:
+
+| Criterion | Evidence |
+|---|---|
+| Old-version fixtures migrate with backups | `TripPersistenceTests` (sidecar v1→v2 backup-then-rewrite, real filesystem); `ConfigSchemaMigrationTests` (config version 0→1, the real migration every pre-CT-039 install goes through) |
+| Documented rollback | `RECOVERY.md`: restore the newest `.bak-<reason>-1` file over the live sidecar to undo a sidecar migration/refusal; config migration needs no rollback procedure because it cannot lose data (see `RECOVERY.md` for why) |
+| Injected corruption quarantines the bad file and preserves valid data | `TripPersistenceTests` (rotation keeps prior generations distinct instead of clobbering); `TripPersistPlanTests` (a backup is now mandated for the malformed-rows case too, closing the one scenario that previously took none) |
+| Recovery events surface to the user in plain language | `RecoveryEvent` shown in the Support Bundle panel's export, not just the BepInEx log |
+| Bundle sanitization test proves the exclusion list | `SupportBundleTests` — realistic planted world UIDs, paths, usernames, and this mod's own actual log-line shapes, asserted absent from the composed bundle |
+
+No in-game observation of an actual corrupted sidecar, a real v1→v2
+migration, or an opened/read exported bundle has been run yet — pending
+(`HUMAN_ATTENTION.md`), never claimed PASS.
 
 ## Multiplayer (v0.6)
 

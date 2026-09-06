@@ -18,10 +18,13 @@ namespace TheConcernedCat.ConcernedTeamster.Adapters;
 /// is ever touched.</summary>
 internal sealed class TripRecordingService
 {
+    private const int MaxRecoveryEventsRetained = 50;
+
     private readonly TripRecorder _recorder;
     private readonly TripRecorderOptions _options;
     private readonly ManualLogSource _log;
     private readonly string _pluginVersion;
+    private readonly List<RecoveryEvent> _recoveryEvents = new();
     private bool _ioFailureLogged;
     private bool _refusalLogged;
 
@@ -32,6 +35,12 @@ internal sealed class TripRecordingService
         _log = log;
         _pluginVersion = pluginVersion;
     }
+
+    /// <summary>Sidecar recovery events (backup/quarantine/migration) this
+    /// session, oldest first, for the Support Bundle panel (CT-039).
+    /// Bounded — a session that somehow saw more than this has bigger
+    /// problems than a long list would help with.</summary>
+    public IReadOnlyList<RecoveryEvent> RecoveryEvents => _recoveryEvents;
 
     public static string SidecarDirectory =>
         Path.Combine(Paths.ConfigPath, "ConcernedCatMods", "ConcernedTeamster");
@@ -98,45 +107,39 @@ internal sealed class TripRecordingService
         }
 
         TripSidecar.ParseResult existing = TripSidecar.Parse(existingText, worldUid);
-        if (existing.Refused)
-        {
-            // Foreign or future file: back it up once and start fresh —
-            // never silently destroy data.
-            if (!_refusalLogged)
-            {
-                _refusalLogged = true;
-                _log.LogWarning(
-                    "Trip sidecar at " + path + " was refused (" +
-                    string.Join("; ", existing.Errors) + "); backing it up and starting fresh.");
-            }
 
-            if (!SidecarFileStore.TryBackup(path, "refused", out string? backupError))
+        // CT-039 / DEF-teamster-v0.4-001: what to do this cycle is decided
+        // by a pure function (TripPersistPlan.Decide), not this method's
+        // own control flow — see that type for why. This method's only
+        // job is to execute the plan exactly: back up first when the plan
+        // says to, abort without writing if that backup fails, otherwise
+        // proceed. Nothing here decides whether a backup is warranted.
+        TripPersistPlan.Plan plan = TripPersistPlan.Decide(existing);
+        if (plan.BackupReason == "refused" && !_refusalLogged)
+        {
+            _refusalLogged = true;
+            _log.LogWarning("Trip sidecar at " + path + ": " + plan.LogWarning);
+        }
+        else if (plan.BackupReason == "malformed" && !_ioFailureLogged)
+        {
+            _ioFailureLogged = true;
+            _log.LogWarning(plan.LogWarning);
+        }
+
+        if (plan.LogInfo is not null)
+        {
+            _log.LogInfo(plan.LogInfo);
+        }
+
+        if (plan.BackupReason is not null)
+        {
+            if (!SidecarFileStore.TryBackup(path, plan.BackupReason, out string? backupError))
             {
                 WarnIoOnce("sidecar backup failed: " + backupError + "; trips held in memory");
                 return;
             }
-        }
-        else if (existing.Errors.Count > 0 && !_ioFailureLogged)
-        {
-            _ioFailureLogged = true;
-            _log.LogWarning(
-                "Trip sidecar had " + existing.Errors.Count +
-                " malformed line(s); valid trips were kept.");
-        }
 
-        // CT-017: a v1 file is backed up before the rewrite would replace
-        // it; the recompute itself happens inside the shared merge step.
-        if (existing.NeedsMigration)
-        {
-            if (!SidecarFileStore.TryBackup(path, "migrate-v1", out string? migrateBackupError))
-            {
-                WarnIoOnce("pre-migration backup failed: " + migrateBackupError + "; trips held in memory");
-                return;
-            }
-
-            _log.LogInfo(
-                "Trip sidecar migrated from format v1: segment scores recomputed from " +
-                existing.Trips.Count + " stored trip(s); original backed up.");
+            RecordRecoveryEvent(plan.BackupReason, path, plan.LogWarning ?? plan.LogInfo!);
         }
 
         string composed = TripSidecar.MergeAndCompose(
@@ -234,5 +237,15 @@ internal sealed class TripRecordingService
 
         _ioFailureLogged = true;
         _log.LogWarning("Trip recording: " + message + ".");
+    }
+
+    private void RecordRecoveryEvent(string reason, string path, string message)
+    {
+        if (_recoveryEvents.Count >= MaxRecoveryEventsRetained)
+        {
+            return;
+        }
+
+        _recoveryEvents.Add(new RecoveryEvent(reason, Path.GetFileName(path), message));
     }
 }

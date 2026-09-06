@@ -287,8 +287,73 @@ public class TripPersistenceTests
             File.WriteAllText(path, "old format");
 
             Assert.True(SidecarFileStore.TryBackup(path, "refused", out _));
-            Assert.Equal("old format", File.ReadAllText(path + ".bak-refused"));
+            Assert.Equal("old format", File.ReadAllText(path + ".bak-refused-1"));
             Assert.Equal("old format", File.ReadAllText(path));
+        });
+    }
+
+    // -- CT-039 / DEF-teamster-v0.4-001: bounded backup rotation ----------
+
+    [Fact]
+    public void FileStore_RepeatedBackups_RotateInsteadOfClobbering()
+    {
+        RunInTempDir("ct039", directory =>
+        {
+            string path = Path.Combine(directory, "teamster_trips_42.txt");
+
+            File.WriteAllText(path, "generation 1");
+            Assert.True(SidecarFileStore.TryBackup(path, "refused", out _));
+
+            File.WriteAllText(path, "generation 2");
+            Assert.True(SidecarFileStore.TryBackup(path, "refused", out _));
+
+            // Both generations survive, newest at -1 — a second refusal no
+            // longer destroys the evidence of the first (DEF-teamster-v0.4-001).
+            Assert.Equal("generation 2", File.ReadAllText(path + ".bak-refused-1"));
+            Assert.Equal("generation 1", File.ReadAllText(path + ".bak-refused-2"));
+        });
+    }
+
+    [Fact]
+    public void FileStore_BackupsBeyondTheCap_AreBoundedNotUnbounded()
+    {
+        RunInTempDir("ct039", directory =>
+        {
+            string path = Path.Combine(directory, "teamster_trips_42.txt");
+
+            for (int generation = 1; generation <= SidecarFileStore.MaxBackupGenerationsPerReason + 2; generation++)
+            {
+                File.WriteAllText(path, "generation " + generation);
+                Assert.True(SidecarFileStore.TryBackup(path, "refused", out _));
+            }
+
+            // Exactly the capped count of backup files exist for this
+            // reason — no unbounded accumulation across many events.
+            string[] backups = Directory.GetFiles(directory, "*.bak-refused-*");
+            Assert.Equal(SidecarFileStore.MaxBackupGenerationsPerReason, backups.Length);
+
+            // The newest generations survive; the oldest ones were evicted.
+            Assert.Equal(
+                "generation " + (SidecarFileStore.MaxBackupGenerationsPerReason + 2),
+                File.ReadAllText(path + ".bak-refused-1"));
+            Assert.False(File.Exists(
+                path + ".bak-refused-" + (SidecarFileStore.MaxBackupGenerationsPerReason + 1)));
+        });
+    }
+
+    [Fact]
+    public void FileStore_DifferentReasons_RotateIndependently()
+    {
+        RunInTempDir("ct039", directory =>
+        {
+            string path = Path.Combine(directory, "teamster_trips_42.txt");
+            File.WriteAllText(path, "content");
+
+            Assert.True(SidecarFileStore.TryBackup(path, "refused", out _));
+            Assert.True(SidecarFileStore.TryBackup(path, "migrate-v1", out _));
+
+            Assert.True(File.Exists(path + ".bak-refused-1"));
+            Assert.True(File.Exists(path + ".bak-migrate-v1-1"));
         });
     }
 

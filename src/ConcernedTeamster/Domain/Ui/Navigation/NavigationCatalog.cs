@@ -21,6 +21,7 @@ public static class NavigationCatalog
     public const string RecoveryGuidancePanel = "recovery-guidance";
     public const string RoutePickerPanel = "route-picker";
     public const string RouteReportPanel = "route-report";
+    public const string SupportBundlePanel = "support-bundle";
 
     // Labels resolve through the catalog when the dictionary builds and are
     // then baked (beforefieldinit: the CLR may run this initializer any time
@@ -38,6 +39,12 @@ public static class NavigationCatalog
                 new FocusItem("status.brake", TeamsterStrings.Get("nav.brake"), isButton: true),
                 new FocusItem("status.manifest", TeamsterStrings.Get("nav.manifest"), isButton: true),
                 new FocusItem("status.guidance", TeamsterStrings.Get("nav.guidance"), isButton: true),
+                // CT-039: status.compat existed since CT-036 but was never
+                // added here — a pre-existing gap noticed and fixed while
+                // adding this leaf's own status.support entry, not a defect
+                // introduced by this leaf.
+                new FocusItem("status.compat", TeamsterStrings.Get("nav.compat"), isButton: true),
+                new FocusItem("status.support", TeamsterStrings.Get("nav.support"), isButton: true),
                 new FocusItem("status.close", TeamsterStrings.Get("nav.close"), isButton: true),
             },
             [CargoManifestPanel] = new[]
@@ -69,6 +76,11 @@ public static class NavigationCatalog
             [RouteReportPanel] = new[]
             {
                 new FocusItem("report.close", TeamsterStrings.Get("nav.close"), isButton: true),
+            },
+            [SupportBundlePanel] = new[]
+            {
+                new FocusItem("support.export", TeamsterStrings.Get("nav.export"), isButton: true),
+                new FocusItem("support.close", TeamsterStrings.Get("nav.close"), isButton: true),
             },
         };
 
