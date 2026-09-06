@@ -778,6 +778,71 @@ only for non-blocking uncertainty.
   that live observation is now in place and unit-proven.
 - Status: Open
 
+### 2026-09-06 — CT-038 registered two more real mass-relevant mods; presence-only detection can't see another mod's live config
+
+- Version / issue: v0.8 / CT-038 (#154)
+- Question: research the current Thunderstore Valheim landscape (not just
+  re-litigate "Better Carts") for maintained mods touching carts, cart
+  physics, item weights, or container behavior, and register the
+  significant combinations. A broad sweep (cart-specific, item-weight-
+  specific, container-specific, and all-in-one-overhaul searches) surfaced:
+  **ItemStacks** (mtnewton, 306,955 downloads — GUID `net.mtnewton.itemstacks`
+  verified from `ItemStacksPlugin.cs`) reduces every item's weight by a
+  default 90%, on by default; **ValheimPlus** (186,034 downloads — GUID
+  `org.bepinex.plugins.valheim_plus` verified from `ValheimPlus.cs`) has an
+  optional Wagon section that can change cart mass, shipped disabled, and
+  disabled its patch reproduces vanilla's mass formula exactly (confirmed
+  from the patch's own disabled-branch logic, its config section's
+  defaults, and the shipped default config template — three independent
+  points, not one). A renewed attempt at We_Haul's "Better Cart" GUID
+  (1,793 downloads) again failed — still no linked source repository.
+  Several player-carry-capacity mods (SkilledCarryWeight,
+  FascinatingCarryWeight, "Skills Give More Carry Weight", PlecakDlaCweli,
+  InfinityInventory) and container-grid-sizing mods (CustomContainerSizes,
+  Bigger Chests) were found and ruled out as outside this compatibility
+  surface — documented with reasoning, not silently dropped.
+- Safe reversible default selected: register ItemStacks
+  `Adapt`/`AffectedAspect.CartMassOrPhysics` (same treatment as BetterCarts,
+  for the same reason — its default behavior demonstrably alters cargo
+  weight). For ValheimPlus, register `CompatibilityPolicy.Warn`/
+  `AffectedAspect.None` rather than `Adapt`/`CartMassOrPhysics` — its
+  cart-mass effect is not a shipped default but an explicit, separate
+  per-player config choice (`[Wagon] enabled=true`) that this framework's
+  presence-only detector cannot observe. Tagging it `CartMassOrPhysics`
+  would suppress accurate load advice for every install that never touches
+  that one optional section out of ValheimPlus's dozens of features — a
+  real cost given the mod's popularity, not a hypothetical one. `Warn`
+  still tells the (likely smaller) subset who *did* enable it to check
+  their own config, via the Compat panel description.
+- Why work continued: both registrations are backed by direct source
+  verification (GUID plus the exact behavior, not a README description
+  taken on faith — the exact gap that caused CT-037's own defect); the
+  We_Haul non-finding and the ruled-out categories are documented with
+  reasoning rather than silently omitted, matching this repo's evidence
+  standard.
+- Risk / alternative: **presence-only detection is a real, now-demonstrated
+  architectural limit.** ValheimPlus is the first registered mod whose
+  mass-relevance depends on another mod's own live configuration rather
+  than its mere installation — `Adapters/CompatibilityAdapter.Lookup` reads
+  only `Chainloader.PluginInfos` (is the mod present, what version), never
+  another mod's `ConfigEntry` values. A player who has both Teamster and a
+  Wagon-section-enabled ValheimPlus will see a `Warn`-level note, not a
+  suppressed reading — correctly cautious, but not as strong a guarantee as
+  the `Adapt` entries provide. Extending `CompatibilityAdapter` to probe a
+  specific known mod's specific config value (the same reflective-lookup
+  shape already used for presence) is a real, buildable follow-up, out of
+  scope for a research/registration leaf.
+- Must resolve before public release: Yes — the full in-game coexistence
+  matrix (per this issue's acceptance criteria) with ItemStacks and
+  ValheimPlus actually installed alongside Teamster (`TCT-Compat` profile,
+  ValheimPlus tested in both its default-disabled and an explicitly-enabled
+  Wagon-section configuration) must be run and captured before any public
+  release claims compatibility awareness for these entries. The We_Haul GUID
+  gap remains open across two research passes now — resolving it needs
+  either the owner supplying the real GUID or a future leaf explicitly
+  authorized to inspect the compiled binary.
+- Status: Open
+
 ## Resolved items
 
 ### 2026-09-05 — CT-032 localization framework delivered; full-UI externalization is progressive

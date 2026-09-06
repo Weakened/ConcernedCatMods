@@ -74,6 +74,15 @@ public static class TeamsterStrings
         ["compat.betterCartsDescription"] =
             "Quick attach/detach and multiplayer push convenience — but reduces cart mass by " +
             "default, so Teamster's load advice is shown as unavailable while it's detected.",
+        ["compat.itemStacksDescription"] =
+            "Reduces every item's weight by a default 90% and increases stack sizes — cargo " +
+            "weight is affected too, so Teamster's load advice is shown as unavailable while " +
+            "it's detected.",
+        ["compat.valheimPlusDescription"] =
+            "A large, configurable overhaul. Its own optional Wagon section is off by default " +
+            "(cart mass then matches vanilla exactly) but can be enabled to change cart base " +
+            "mass and cargo-to-mass scaling — if you've turned that section on, Teamster's " +
+            "readings may no longer match; check your valheim_plus.cfg [Wagon] settings.",
 
         // Cart Status surface (CT-005): presenter lines + panel chrome.
         // Numbers arrive pre-formatted (invariant culture) so translations

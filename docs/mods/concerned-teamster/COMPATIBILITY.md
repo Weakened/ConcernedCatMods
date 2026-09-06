@@ -120,19 +120,24 @@ and only those two, protects against. `Domain/Ui/CargoManifestPresenter.cs`
 has no reference to `LoadModel`, `RiskModel`, or `Climbability` (verified),
 confirming there is nothing there for the gate to touch.
 
-## Research: identifying "Better Carts" (CT-037)
+## Research: registered mods and considered candidates (CT-037/038)
 
 `PROJECT.md`'s market research names "Better Carts" generically ("Better
 Carts and similar cart mods change cart physics, weight handling, or
-pulling behavior directly") without pinning an exact Thunderstore package —
-CT-038 is the leaf that researches the full current mod landscape.
-Identifying which real, currently-published mod this leaf's specific
-acceptance criteria refer to required its own research pass:
+pulling behavior directly") without pinning an exact Thunderstore package.
+CT-037 researched that specific reference; CT-038 broadened the pass across
+Thunderstore's current Valheim listings for maintained mods touching carts,
+cart physics, item weights, or container behavior, selecting the
+significant combinations by download count and directness of effect on
+Teamster's compatibility surface (cart mass/weight, never player carry
+capacity — see "Ruled out" below for why that's a real distinction):
 
-| Candidate | Author | Downloads | What it actually does | GUID | Registered? |
+| Candidate | Author | Downloads (retrieved) | What it actually does | GUID | Registered? |
 |---|---|---|---|---|---|
 | BetterCarts | TastyChickenLegs | 46,000 | Quick attach/detach, up to 4-player push assist, damage removal, network sync. **Also reduces cart mass by a default 20%** — see below. | `TastyChickenLegs.BetterCarts` (verified: `Plugin.cs`'s `ModGUID` constant) | **Yes** — `Adapt`, `AffectedAspect.CartMassOrPhysics` |
-| Better Cart | We_Haul | 2,200 | "Allows for customization of minimum and maximum mass of Carts so that loading a cart doesn't make it impossible to move" — a direct, conceptually strong match for "changes cart physics, weight handling." | **Could not be verified.** No linked GitHub/source repository; Thunderstore's decompiled-source viewer for this package did not yield readable source through available tooling. | **No** |
+| ItemStacks | mtnewton | 306,955 (Thunderstore experimental API, retrieved 2026-09-06) | Increases item stack sizes and **reduces every item's weight by a default 90%**, on by default — see below. | `net.mtnewton.itemstacks` (verified: `ItemStacksPlugin.cs`'s `GUID` constant) | **Yes** — `Adapt`, `AffectedAspect.CartMassOrPhysics` |
+| ValheimPlus | (community, `valheimPlus` org) | 186,034 (Thunderstore experimental API, retrieved 2026-09-06) | A large, config-driven overhaul (dozens of independent optional sections). Its Wagon section can change cart mass, but ships **disabled by default**, and disabled reproduces vanilla mass exactly — see below. | `org.bepinex.plugins.valheim_plus` (verified: `ValheimPlus.cs`'s `[BepInPlugin(...)]` attribute) | **Yes** — `Warn`, `AffectedAspect.None` |
+| Better Cart | We_Haul | 1,793 (Thunderstore experimental API, retrieved 2026-09-06) | "Allows for customization of minimum and maximum mass of Carts so that loading a cart doesn't make it impossible to move" — a direct, conceptually strong match for "changes cart physics, weight handling." | **Could not be verified**, in either CT-037 or this leaf's renewed attempt. No linked GitHub/source repository found; Thunderstore's decompiled-source viewer for this package did not yield readable source through available tooling. | **No** |
 
 **BetterCarts does alter cart mass by default — a corrected finding.** The
 first research pass read only `Plugin.cs` and the README and concluded no
@@ -164,6 +169,98 @@ consumer in the table above substitutes its unavailable notice while this
 mod is detected. The GUID itself was correctly verified either time; only
 the behavioral classification was wrong the first pass.
 
+**ItemStacks reduces every item's weight by 90%, on by default.**
+`github.com/mtnewton/valheim-mods`, `ItemStacks/ItemStacksPlugin.cs`
+installs a Harmony postfix on the game's item-database initialization that
+walks every item type and calls a per-item weight setter:
+
+```csharp
+weightEnabledConfig = config.Bind(NAME + ".ItemWeight", "enabled", true, ...);
+weightMultiplierConfig = config.Bind(NAME + ".ItemMultipliers", "weight_multiplier", .1f, ...);
+// ...
+if (weightEnabled) tracker.SetWeight(weightMultiplier, item);
+```
+
+`ItemStacks/ItemTracker.cs`'s `SetWeight` confirms the effect is not
+cosmetic — it overwrites the item's own shared weight field directly:
+`item.m_itemData.m_shared.m_weight = value;`, the exact field
+`CART_INTERNALS.md` documents as what `Inventory.GetTotalWeight()` sums
+over. Both `enabled` (`true`) and the `0.1` multiplier are the shipped
+defaults, so a fresh install reduces all cargo weight, and therefore cart
+mass, to roughly a tenth of vanilla out of the box — an even larger and
+more central effect than BetterCarts', from a mod with over six times the
+downloads. Registered `Adapt`/`CartMassOrPhysics` for the same reason.
+
+**ValheimPlus can change cart mass, but only if a player explicitly turns
+its Wagon section on.** `github.com/valheimPlus/ValheimPlus`,
+`ValheimPlus/GameClasses/Vagon.cs` installs a Harmony prefix on the game's
+own cart-mass-recompute method that returns `false` (fully replacing it),
+but its disabled branch reproduces vanilla's formula exactly:
+
+```csharp
+[HarmonyPatch(typeof(Vagon), "UpdateMass")]
+private static bool Prefix(ref Vagon __instance)
+{
+    // ...
+    float totalWeight = Configuration.Current.Wagon.IsEnabled
+        ? Helper.applyModifierValue(rawWeight, Configuration.Current.Wagon.wagonExtraMassFromItems)
+        : rawWeight;                                              // vanilla when disabled
+    __instance.m_baseMass = Configuration.Current.Wagon.IsEnabled
+        ? Configuration.Current.Wagon.wagonBaseMass
+        : 20;                                                     // vanilla default when disabled
+    __instance.SetMass(__instance.m_baseMass + totalWeight * __instance.m_itemWeightMassFactor);
+    return false;
+}
+```
+
+Three independent source points confirm the Wagon section ships disabled:
+`ValheimPlus/Configurations/Sections/WagonConfiguration.cs` defaults
+`wagonBaseMass` to `20` and `wagonExtraMassFromItems` to `0` (vanilla-
+matching values even if the section *were* on), and the shipped
+`valheim_plus.cfg` template itself reads `[Wagon] ... enabled=false` with
+an explicit comment that the player must change it to `true` to activate
+the section. So a default install computes cart mass identically to
+vanilla — confirmed from the patch logic, the section's own defaults, and
+the shipped config file, not assumed from any one of them alone.
+
+This is a genuinely different shape of finding from BetterCarts/ItemStacks:
+the mod's *presence* doesn't determine whether cart mass is altered — the
+player's own, separately-configured choice does, and Teamster's detector
+only sees BepInEx plugin presence, never another mod's live config values.
+Tagging ValheimPlus `CartMassOrPhysics` would suppress accurate load advice
+for the (likely large, given the mod's dozens of unrelated features)
+fraction of installs that never touch the Wagon section — a real cost, not
+a hypothetical one, given ValheimPlus's popularity. Tagging it `None`
+outright would silently under-warn the minority who *did* enable it.
+`CompatibilityPolicy.Warn`/`AffectedAspect.None` resolves this: no gate
+trip on presence alone (protecting the majority's accurate readings), but
+its Compat-panel description explicitly tells the player to check their
+own `valheim_plus.cfg` `[Wagon]` section — the first real use of the `Warn`
+policy the framework has shipped with a live entry to demonstrate it.
+Recorded as a known limitation of presence-only detection in
+`HUMAN_ATTENTION.md` rather than silently accepted.
+
+**Ruled out — player carry-capacity mods (different mechanic entirely).**
+The research pass also found several current, meaningfully-downloaded mods
+that raise how much a *player* can carry before being encumbered
+(SkilledCarryWeight, FascinatingCarryWeight, "Skills Give More Carry
+Weight", PlecakDlaCweli, InfinityInventory). None of these change an
+item's own weight value or a cart's mass computation — they change the
+player's encumbrance *threshold* only, a mechanic Teamster's cart-mass
+calibration never reads. Considered and not registered, not because
+research was incomplete, but because they are outside this compatibility
+surface entirely.
+
+**Ruled out — container/chest sizing mods (grid size, not weight).**
+CustomContainerSizes (fenrir0054) and Bigger Chests (robclancy) let a
+player configure a cart or chest's inventory *grid dimensions* (more
+slots), not any item's weight or a cart's mass formula. More slots can let
+a player load more total weight than vanilla's cart grid would physically
+allow, which could push a real cart above what `LoadModel`'s calibration
+table covers — but that surfaces through the table's existing, honest
+`Unknown`/uncalibrated answer (the same path an unusually heavy vanilla
+load already takes), not a silently wrong one. Not registered.
+
 **Why "Better Cart" (We_Haul) is still not registered:** this repository's
 operating rule is to research real mod metadata rather than invent it. A
 BepInEx plugin GUID lives inside the compiled DLL, not in Thunderstore's
@@ -180,14 +277,28 @@ rather than guessed.
 
 ## Known scope limits
 
-- No in-game coexistence matrix has been run yet (dev machine, `TCT-Compat`
-  profile, per `TEST_PLAN.md`); the matrix acceptance criterion is
-  satisfied structurally today (the gate and every consumer above are
-  exhaustively unit-tested against both fake and the real registered
-  mass-altering probe) with the real-mod, real-game observation pending —
-  never claimed PASS. Tracked in `HUMAN_ATTENTION.md`.
-- The We_Haul "Better Cart" GUID remains unverified (see research above);
-  CT-038's broader pass may resolve this.
+- No in-game coexistence matrix has been run yet, for any of the three
+  registered mods (dev machine, `TCT-Compat` profile, per `TEST_PLAN.md`);
+  the matrix acceptance criterion is satisfied structurally today (the gate
+  and every consumer above are exhaustively unit-tested against both fake
+  and every real registered probe) with the real-mod, real-game observation
+  pending — never claimed PASS. Tracked in `HUMAN_ATTENTION.md`.
+- The We_Haul "Better Cart" GUID remains unverified after two research
+  passes (CT-037 and CT-038; see research above) — resolving it needs
+  either the owner supplying the real GUID or a future leaf explicitly
+  authorized to inspect the compiled binary.
+- **Presence-only detection cannot see another mod's live configuration.**
+  ValheimPlus's registration reflects its *shipped default* only (Wagon
+  section disabled). A player who has both Teamster and ValheimPlus
+  installed and has explicitly enabled and reconfigured the Wagon section
+  gets a `Warn`-level Compat-panel note, not a suppressed/unavailable
+  reading — the framework has no mechanism to read another BepInEx mod's
+  `ConfigEntry` values today, only its presence via `Chainloader.PluginInfos`
+  (`Adapters/CompatibilityAdapter.Lookup`). Extending detection to probe a
+  known mod's specific config values (mirroring the presence-probe pattern)
+  is a real, buildable enhancement but is out of scope for a leaf whose job
+  is research and registration, not framework extension — tracked in
+  `HUMAN_ATTENTION.md` as a future capability, not a defect in what shipped.
 
 ## In-game surface
 

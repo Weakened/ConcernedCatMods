@@ -30,5 +30,42 @@ public static class CompatibilityKnownMods
             policy: CompatibilityPolicy.Adapt,
             affectedAspect: CompatibilityAffectedAspect.CartMassOrPhysics,
             description: TeamsterStrings.Get("compat.betterCartsDescription")),
+
+        // CT-038: GUID verified directly against the mod's published source
+        // (github.com/mtnewton/valheim-mods, ItemStacksPlugin.cs — const
+        // GUID = "net.mtnewton.itemstacks"). Its Harmony postfix on the
+        // game's item-database init rewrites every item's shared weight
+        // field via a configurable multiplier, defaulting to 0.1 (a 90%
+        // reduction) with the feature itself on by default
+        // (weightEnabledConfig defaults true) — see COMPATIBILITY.md for
+        // the exact source citation. Cargo weight is exactly what this
+        // touches, globally, so it is tagged the same as BetterCarts.
+        new KnownModProbe(
+            guid: "net.mtnewton.itemstacks",
+            displayName: "ItemStacks",
+            policy: CompatibilityPolicy.Adapt,
+            affectedAspect: CompatibilityAffectedAspect.CartMassOrPhysics,
+            description: TeamsterStrings.Get("compat.itemStacksDescription")),
+
+        // CT-038: GUID verified directly against the mod's published source
+        // (github.com/valheimPlus/ValheimPlus, ValheimPlus.cs —
+        // [BepInPlugin("org.bepinex.plugins.valheim_plus", ...)]). Its cart
+        // mass patch is gated behind the mod's own optional Wagon config
+        // section, shipped disabled by default; disabled, the patch
+        // reproduces vanilla's mass formula exactly (verified from the
+        // patch's own disabled-branch logic, the section's default field
+        // values, and the shipped default config template — see
+        // COMPATIBILITY.md). Only an explicit, non-default config change by
+        // the player alters cart mass, which this registry's presence-only
+        // detection cannot observe — Warn/None rather than a gate trip, so
+        // the very large fraction of installs that never touch this one
+        // optional section do not lose accurate load advice for a change
+        // they never made.
+        new KnownModProbe(
+            guid: "org.bepinex.plugins.valheim_plus",
+            displayName: "ValheimPlus",
+            policy: CompatibilityPolicy.Warn,
+            affectedAspect: CompatibilityAffectedAspect.None,
+            description: TeamsterStrings.Get("compat.valheimPlusDescription")),
     };
 }

@@ -82,12 +82,15 @@ defects or calibration items — never silently accepted.
 
 ## Compatibility
 
-CT-038 researches the exact current cart/physics/inventory mods before any
-compatibility claims; the matrix template is:
+CT-038 researched the exact current cart/physics/inventory mod landscape
+before any compatibility claims (Thunderstore listings, selected by
+download count and directness of effect on cart mass/weight); the matrix:
 
 | Mod (exact name/version) | Load together | Teamster readouts sane | Their features intact | Notes |
 |---|---|---|---|---|
 | BetterCarts (TastyChickenLegs) 1.0.6+ | pending in-game | pending in-game | pending in-game | Registered `Adapt`/`AffectedAspect.CartMassOrPhysics` (CT-037) — its `Vagon.SetMass` Harmony prefix reduces cart mass by a default 20% (`Patches/CartConfigs.cs`: `cartMassReduction = 0.2f`), so every load-advice consumer substitutes its "unavailable" notice while it is detected; the in-game row confirms this holds for real rather than deciding it. |
+| ItemStacks (mtnewton) 1.2.0 | pending in-game | pending in-game | pending in-game | Registered `Adapt`/`AffectedAspect.CartMassOrPhysics` (CT-038) — reduces every item's weight by a default 90% (`ItemTracker.SetWeight` overwrites `m_shared.m_weight` directly), on by default, so cargo weight and cart mass both drop to roughly a tenth of vanilla out of the box; 306,955 downloads, over 6x BetterCarts'. |
+| ValheimPlus (`org.bepinex.plugins.valheim_plus`) 0.9.9.11 | pending in-game | pending in-game | pending in-game | Registered `Warn`/`AffectedAspect.None` (CT-038) — its Wagon cart-mass section ships disabled and, disabled, its patch reproduces vanilla's mass formula exactly (verified from the patch, the section's own defaults, and the shipped config template); only an explicit player opt-in changes cart mass, which presence-only detection cannot observe, so this is a Compat-panel note rather than a gate trip. |
 
 **Precedence policy (CT-037):** when a mod affecting cart mass or physics is
 present, Teamster must either measure the modified reality accurately or
@@ -113,16 +116,20 @@ Proven with both fake mass-altering probes and the real shipped registry in
 `CompatibilityAdvisoryGateTests` (reliable when nothing mass-altering is
 registered or detected, unreliable the instant one is, demonstrated generic
 by using an entirely different fake GUID/name for the same assertion, and
-asserted directly against the shipped `BetterCarts` entry), plus dedicated
-gate tests on every consumer above (`StuckDetectorTests`,
+asserted directly against each shipped entry — including that the
+`Warn`/`None` ValheimPlus entry, unlike the two `Adapt`/`CartMassOrPhysics`
+entries, never trips the gate even when detected), plus dedicated gate
+tests on every consumer above (`StuckDetectorTests`,
 `RecoveryGuidancePresenterTests`, `RouteProfilerTests`,
 `RouteReportPresenterTests`, `RouteBottleneckTests`). **Research finding:**
 the specific mod originally referenced as "Better Carts" in `PROJECT.md`
-could not be pinned to one exact, GUID-verified Thunderstore package — see
-`COMPATIBILITY.md`'s research table; the We_Haul "Better Cart" candidate
-remains unregistered for that reason. The registered `BetterCarts` entry is
-the currently-known real mass-altering mod, but no in-game observation with
-it actually installed has run yet — pending (`HUMAN_ATTENTION.md`).
+could not be pinned to one exact, GUID-verified Thunderstore package after
+two research passes (CT-037 and CT-038) — see `COMPATIBILITY.md`'s research
+table; the We_Haul "Better Cart" candidate remains unregistered for that
+reason. Three real mass-relevant mods are now registered
+(`BetterCarts`, `ItemStacks`, `ValheimPlus`), but no in-game observation
+with any of them actually installed has run yet — pending
+(`HUMAN_ATTENTION.md`).
 
 ## Multiplayer (v0.6)
 
