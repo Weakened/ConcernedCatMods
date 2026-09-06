@@ -33,6 +33,15 @@ Full detail in `RELEASE_DOSSIER.md`'s v0.9.0 entry. Summary:
 | DLL SHA-256 | `6d0133f363c0fd99a7a1b844ddd53d7d9070b248b719b91b0f77059b96638cbf` (247,808 B) |
 | Built against | Valheim 0.221.12 (buildid 21981559), BepInExPack 5.4.2333, Jötunn 2.29.2 |
 
+Both hashes are build fingerprints of the artifact this seal actually
+tested — not a promise that rebuilding from the source commit reproduces
+them byte-for-byte. This is a known, pre-existing, documented limitation
+(DEF-teamster-v0.8-001, #214, deferred P3, no correctness/safety impact)
+present since the v0.1 RC; do not treat a rebuild producing a different
+hash as evidence the artifact was tampered with — check the DLL's
+InformationalVersion string instead, which does correctly and reliably
+name its exact source commit.
+
 **Do not rebuild this ZIP if you intend to publish the exact tested
 artifact.** If you make any change, however small, before publishing,
 that is a new RC — reseal it (a new CT-04x-style leaf, or a manual

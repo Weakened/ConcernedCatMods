@@ -13,7 +13,7 @@ is owner-only, always.
 | Source commit | `161dc9d951f42ef345da88cb2e6f962e33d9d3b4` (branch `chore/ct-045-v09-beta-seal`). Sealed on merge to main via the CT-045 PR. |
 | ZIP | `artifacts/thunderstore/TheConcernedCat-ConcernedTeamster-0.9.0.zip` |
 | ZIP SHA-256 | `07ac86f6c9e0af216aaad239945cc5927c8c02ff1822d0634d3a705ab51807fd` (144,126 B) — a build fingerprint, not a reproducibility guarantee (DEF-teamster-v0.8-001, #214, still open/deferred) |
-| DLL SHA-256 | `6d0133f363c0fd99a7a1b844ddd53d7d9070b248b719b91b0f77059b96638cbf` (247,808 B) |
+| DLL SHA-256 | `6d0133f363c0fd99a7a1b844ddd53d7d9070b248b719b91b0f77059b96638cbf` (247,808 B) — also a build fingerprint, not a reproducibility guarantee; independent review's own rebuild from this exact commit reproduced the same known non-determinism (DEF-teamster-v0.8-001, #214) — matching size and InformationalVersion, different hash |
 | DLL identity | AssemblyVersion 0.9.0.0, InformationalVersion `0.9.0+161dc9d951f42ef345da88cb2e6f962e33d9d3b4` (read back directly from the built DLL) |
 | ZIP contents (6 entries) | manifest.json, icon.png (256×256), README.md, CHANGELOG.md, LICENSE, plugins/TheConcernedCat.ConcernedTeamster.dll — **own DLL only**, no PDB, no foreign DLL |
 | Fresh-profile install check | The sealed ZIP's `plugins/TheConcernedCat.ConcernedTeamster.dll` was extracted into a simulated fresh `BepInEx/plugins/` layout; its SHA-256 matched the built DLL exactly. This proves the file-level install mechanics; it is not a real mod-manager profile (none exists on this machine — see `PROFILE_REHEARSAL.md`) |
