@@ -24,19 +24,29 @@ function Get-EnvironmentValues {
     $deploy = [string]$group.MOD_DEPLOYPATH
 
     # Optional (added with Concerned Teamster): older Environment.props files
-    # legitimately omit it, so read it without tripping strict mode.
+    # legitimately omit these, so read each without tripping strict mode.
     $teamsterNode = $group.SelectSingleNode("TEAMSTER_DEPLOYPATH")
     $teamsterDeploy = if ($null -ne $teamsterNode) { [string]$teamsterNode.InnerText } else { "" }
+
+    # CT-043: the Compat and Dedicated profile paths, same optional pattern.
+    $teamsterCompatNode = $group.SelectSingleNode("TEAMSTER_COMPAT_DEPLOYPATH")
+    $teamsterCompatDeploy = if ($null -ne $teamsterCompatNode) { [string]$teamsterCompatNode.InnerText } else { "" }
+    $teamsterDedicatedNode = $group.SelectSingleNode("TEAMSTER_DEDICATED_DEPLOYPATH")
+    $teamsterDedicatedDeploy = if ($null -ne $teamsterDedicatedNode) { [string]$teamsterDedicatedNode.InnerText } else { "" }
 
     $bepInEx = $bepInEx.Replace('$(VALHEIM_INSTALL)', $valheim)
     $deploy = $deploy.Replace('$(VALHEIM_INSTALL)', $valheim).Replace('$(BEPINEX_PATH)', $bepInEx)
     $teamsterDeploy = $teamsterDeploy.Replace('$(VALHEIM_INSTALL)', $valheim)
+    $teamsterCompatDeploy = $teamsterCompatDeploy.Replace('$(VALHEIM_INSTALL)', $valheim)
+    $teamsterDedicatedDeploy = $teamsterDedicatedDeploy.Replace('$(VALHEIM_INSTALL)', $valheim)
 
     return [pscustomobject]@{
         ValheimInstall = $valheim
         BepInExPath = $bepInEx
         ModDeployPath = $deploy
         TeamsterDeployPath = $teamsterDeploy
+        TeamsterCompatDeployPath = $teamsterCompatDeploy
+        TeamsterDedicatedDeployPath = $teamsterDedicatedDeploy
     }
 }
 

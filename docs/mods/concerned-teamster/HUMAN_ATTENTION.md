@@ -1032,6 +1032,68 @@ only for non-blocking uncertainty.
   owner's call and does not block the internal RC seal either way.
 - Status: Open
 
+### 2026-09-06 — CT-043 profile family scripted at the file level; profile creation and third-party installs stay owner GUI actions
+
+- Version / issue: v0.9 / CT-043 (#160)
+- Question: CT-043 asks for "idempotent profile automation" for
+  TCT-Clean/Dev/Compat/Dedicated. Investigating the actual mod manager on
+  this machine (Thunderstore Mod Manager) found that only `TCC-Dev`
+  (Cartographer's) and a few other TCC-* profiles exist — **no TCT-*
+  profile has ever been created**, and creating one is registered through
+  the mod manager's own GUI/database (each profile's folder holds a
+  `mods.yml` package manifest the manager itself maintains), not a
+  documented, stable file format this repo's tooling should try to
+  reverse-engineer or drive headlessly.
+- Safe reversible default selected: script everything that is safely
+  repo/script-scoped — `deploy.ps1` gained a `-Profile Dev|Compat|
+  Dedicated` parameter (backward-compatible default `Dev`, Cartographer's
+  own path untouched) reading three `Environment.props` keys
+  (`TEAMSTER_DEPLOYPATH`/`_COMPAT_DEPLOYPATH`/`_DEDICATED_DEPLOYPATH`),
+  and a new `rehearse-teamster-lifecycle.ps1` proves fresh-install/
+  upgrade/uninstall/idempotence entirely inside a scratch directory using
+  real, actually-built packages (including a real historical v0.7.0
+  build via a temporary, always-cleaned-up `git worktree`) — see
+  `PROFILE_REHEARSAL.md` for the full design and what it does and does
+  not prove. Creating each profile once (New Profile → Install BepInEx)
+  and, for TCT-Compat, installing the three real compatibility mods from
+  Thunderstore's own browser, are documented as one-time owner steps in
+  the same doc — never attempted by this leaf.
+- Why work continued: nothing in this leaf touches a real mod-manager
+  profile, downloads third-party content, or installs anything outside
+  the repo's own `artifacts/` scratch space and system temp; the file-
+  level rehearsal genuinely proves what it claims (real builds, real
+  hashes, real worktree checkout of a real historical tag), and every
+  claim it cannot make (BepInEx actually invoking a migration on a live
+  launch, the mod manager actually recognizing a profile) is named
+  explicitly rather than implied.
+- Also discovered and fixed in passing: `concerned-teamster/v0.5.0`
+  through `v0.8.0` were never tagged (only v0.1.0–v0.4.0 were, despite
+  `docs/DEVELOPMENT.md`'s versioning policy requiring a namespaced tag
+  per release) — backfilled all four as annotated tags pointing at each
+  version's exact dossier-cited source commit (verified against each
+  commit's own `csproj` `<Version>` before tagging), since the chain-
+  integrity check this leaf's rehearsal performs needed the full tag set
+  to be meaningful. Tags are additive and were not force-pushed or moved.
+- Incidental note: verifying `deploy.ps1`'s Cartographer code path was
+  genuinely untouched by this change required actually running it once
+  with `-SkipBuild`, which redeployed the current main-branch
+  Cartographer build to the real TCC-Dev profile — a normal, expected,
+  fully-reversible action for that profile's own stated purpose (and the
+  DLL was fresh, rebuilt as a side effect of this session's own earlier
+  `build.ps1` runs), not a new risk, but noted here for transparency
+  since it touched real state outside the repo.
+- Risk / alternative: the owner may use a different mod manager than
+  Thunderstore Mod Manager on another machine, in which case the
+  `Environment.props` path convention still applies (any tool that
+  produces a `BepInEx/plugins/` folder works) but the "New Profile"
+  clicking steps in `PROFILE_REHEARSAL.md` would need adapting to that
+  tool's own UI.
+- Must resolve before public release: Yes — the four profiles need to
+  exist for real and the owner-smoke-checklist rows in
+  `PROFILE_REHEARSAL.md` need an actual in-game pass before the v0.9 beta
+  gate closes.
+- Status: Open
+
 ## Resolved items
 
 ### 2026-09-05 — CT-032 localization framework delivered; full-UI externalization is progressive
