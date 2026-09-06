@@ -20,6 +20,12 @@ default `false`) is set the moment the hint is tapped and is never reset by
 the mod; the config file is the single source of truth, so it survives
 restarts and world switches by construction.
 
+The hint is also suppressed (not dismissed — a display-only check, re-run
+every frame) whenever the Cart Status panel is already open: at that point
+the player has plainly already found the button, so a pointer to it
+floating above an open panel would be redundant. Closing the panel while
+still near a cart and not yet dismissed shows it again.
+
 **Never modal, never blocks input:** the hint is one small button
 (`GUIManager.CreateButton`, ~280×44) positioned above the Cart button with
 no background dim and no raycast-blocking overlay elsewhere on screen —

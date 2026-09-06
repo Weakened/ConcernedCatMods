@@ -475,7 +475,12 @@ internal sealed class CartStatusHudController : MonoBehaviour
     /// <summary>Drives the first-run hint purely from
     /// <see cref="OnboardingPresenter.Evaluate"/> every frame — no cached
     /// decision, so dismissing or approaching/leaving a cart takes effect
-    /// immediately with no extra state to keep in sync.</summary>
+    /// immediately with no extra state to keep in sync. Also hidden whenever
+    /// the status panel itself is already open: at that point the player has
+    /// plainly already found the button the hint points at, so a pointer to
+    /// it floating above an open panel would be redundant, not helpful. This
+    /// is a display-only suppression, not a dismissal — closing the panel
+    /// while still near a cart and not yet dismissed shows it again.</summary>
     private void UpdateOnboardingHint()
     {
         if (_onboardingHint == null || _settings is null)
@@ -483,10 +488,11 @@ internal sealed class CartStatusHudController : MonoBehaviour
             return;
         }
 
+        bool panelOpen = _panel is { activeSelf: true };
         bool isNearCart = _pump?.Telemetry is { Count: > 0 };
         OnboardingVisibility visibility = OnboardingPresenter.Evaluate(
             _settings.OnboardingDismissed.Value, isNearCart);
-        bool visible = visibility == OnboardingVisibility.Visible;
+        bool visible = !panelOpen && visibility == OnboardingVisibility.Visible;
         if (_onboardingHint.activeSelf != visible)
         {
             _onboardingHint.SetActive(visible);
