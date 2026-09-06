@@ -114,7 +114,7 @@ in-game visual/interaction rows deferred to `PRE_RELEASE_SMOKE_TEST.md`
 | Capability | Status | Where |
 |---|---|---|
 | Informal scale evidence against configured worst-case bounds | Done | v0.8 (CT-040); `RELEASE_DOSSIER.md`'s v0.8 scale table; loose sanity thresholds, not formal budgets |
-| Formal, gated performance/memory/network/long-run budgets | **Not yet done — CT-048's own scope** | This leaf (CT-046) only audits and cross-references; establishing and gating the formal budgets is CT-048's explicit job, not duplicated here |
+| Formal, gated performance/memory/network/long-run budgets | Done | v1.0 (CT-048); `PERFORMANCE_BUDGETS.md` — 14 budgets, all Met, each backed by a repeatable automated test; real in-game frame-time/log-size/terrain-probe-cost observation itemized pending in the same doc |
 
 ## Full regression across every standard profile
 
@@ -157,8 +157,10 @@ already-deferred P3s. Every capability through v0.9 has either full
 automated proof (`Done`) or full automated proof of its logic plus a
 specifically-itemized, cross-referenced pending in-game row (`Done\*`) —
 no capability has a blank, an unproven claim, or a claim resting on
-"it probably works." The remaining gaps are exactly the ones the v1.0
-sprint's own remaining leaves (CT-047 regression, CT-048 formal budgets,
-CT-049 final sign-off) already exist to close, plus a small, honestly
-bounded set of owner-only actions (media capture, profile creation,
-supplying a third-party GUID) no autonomous leaf can complete on its own.
+"it probably works." At CT-046 time the remaining gaps were exactly what
+the v1.0 sprint's own remaining leaves (CT-047 regression, CT-048 formal
+budgets, CT-049 final sign-off) existed to close; CT-047 and CT-048 have
+since closed theirs (see their own rows above), leaving CT-049's sign-off
+plus a small, honestly bounded set of owner-only actions (media capture,
+profile creation, supplying a third-party GUID) no autonomous leaf can
+complete on its own.
