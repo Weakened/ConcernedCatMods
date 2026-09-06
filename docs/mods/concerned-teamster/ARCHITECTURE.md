@@ -185,6 +185,21 @@ distinguishing text by design since CT-009/CT-018; CT-033 made that an
 audited, tested invariant. Full reasoning, the contrast numbers, and the
 non-color cue audit table live in `ACCESSIBILITY.md`.
 
+Onboarding and settings presets (CT-034) add two small pure-domain
+decisions. `Domain/Onboarding/OnboardingPresenter` decides whether the
+first-run pointer to the Cart button shows — a two-input function of
+"already dismissed" (persisted, permanent) and "a cart is nearby" (reused
+from existing telemetry). `Domain/Profiles/ConfigProfileCatalog` resolves
+one of three documented presets (Minimal, Standard, EverythingObservational)
+to concrete setting values; every profile keeps the parking brake opt-in,
+and `Domain/Profiles/ProfileTransition` decides whether a profile's values
+should be (re)applied — only when the active profile actually changed since
+the last plugin load, which is what makes applying a profile idempotent
+across restarts rather than fighting the player's own later edits.
+`Plugin.ApplyProfileIfChanged` is the adapter-level wiring that reads/writes
+the actual `ConfigEntry` values; full reasoning, the profile table, and the
+discoverability audit live in `ONBOARDING.md`.
+
 ### Persistence (from v0.4)
 
 Per-world sidecar files under the BepInEx config path, named by world UID with

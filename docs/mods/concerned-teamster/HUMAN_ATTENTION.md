@@ -683,6 +683,45 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-06 — CT-034 onboarding/profiles logic proven off-game; hint placement and profile switch pending
+
+- Version / issue: v0.7 / CT-034 (#149)
+- Question: the onboarding show/dismiss decision and the config-profile
+  resolution/idempotence/brake-opt-in logic are all pure and fully proven,
+  but three things need a live session: (a) whether the onboarding hint
+  button's text wraps and reads clearly at its chosen position/size (above
+  the Cart button, ~280×44) rather than clipping or overlapping the button
+  it points at; (b) whether switching `General.Profile` in the .cfg file and
+  relaunching visibly changes the expected settings (warnings/HUD
+  hint/trips/risk lookahead) while the brake stays whatever the player left
+  it at; (c) that a player's own manual edit to an individual setting
+  genuinely survives an unrelated restart (no `Profile` change) rather than
+  being silently overwritten.
+- Safe reversible default selected: the onboarding hint is a single
+  non-modal button with no background dim and no other input blocked
+  (construction guarantee — nothing else intercepts clicks while it shows);
+  worst case is a layout blemish. Profile application only ever writes
+  observational settings plus never touches `Brake.Enabled`
+  (`Resolve_BrakeStaysOptInInEveryProfile`, all three profiles), and only
+  fires when `ActiveProfile != LastAppliedProfile`
+  (`ShouldApply_OnlyWhenActiveDiffersFromLastApplied`,
+  `ShouldApply_SameActiveTwiceInARow_IsIdempotent`), so a manual edit is safe
+  until the player deliberately changes the profile again.
+- Why work continued: onboarding text/positioning is cosmetic (Truncate/Wrap
+  modes are already set); profile application only writes already-existing,
+  already-safe observational settings (nothing new mutates), so a wrong
+  value is a display/config surprise, never a safety issue — and the brake
+  exclusion is enforced by a test that runs over all three profiles, not by
+  hand-checking each one.
+- Risk / alternative: the hint's exact wording/position may need play-tested
+  tuning (a text/constant change, no logic change); the owner may prefer a
+  profile *picker panel* in the UI instead of a raw config-file enum — the
+  current design keeps this leaf's scope to what CT-034 actually asked for
+  (documented presets + explicit config switch), with a UI picker a
+  reasonable CT-042/CT-043 polish candidate if desired later.
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 ### 2026-09-05 — CT-032 localization framework delivered; full-UI externalization is progressive

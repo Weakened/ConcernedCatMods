@@ -3,6 +3,7 @@ using BepInEx.Logging;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedTeamster.Adapters;
 using TheConcernedCat.ConcernedTeamster.Domain.Localization;
+using TheConcernedCat.ConcernedTeamster.Domain.Onboarding;
 using TheConcernedCat.ConcernedTeamster.Domain.Ui;
 using TheConcernedCat.ConcernedTeamster.Domain.Warnings;
 using UnityEngine;
@@ -40,6 +41,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
     private GameObject? _button;
     private GameObject? _panel;
     private Text? _hudHint;
+    private GameObject? _onboardingHint;
     private GameObject? _brakeButton;
     private Text? _brakeButtonText;
     private Text[] _rows = Array.Empty<Text>();
@@ -100,6 +102,11 @@ internal sealed class CartStatusHudController : MonoBehaviour
                     _hudHint.gameObject.SetActive(false);
                 }
 
+                if (_onboardingHint != null && _onboardingHint.activeSelf)
+                {
+                    _onboardingHint.SetActive(false);
+                }
+
                 return;
             }
 
@@ -141,6 +148,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
             _tripPanel?.HandleFrame(now, _pump);
             _routePanel?.HandleFrame(now);
             UpdateHudHint();
+            UpdateOnboardingHint();
         }
         catch (Exception exception)
         {
@@ -195,6 +203,30 @@ internal sealed class CartStatusHudController : MonoBehaviour
             _hudHint.alignment = TextAnchor.MiddleRight;
             _hudHint.gameObject.SetActive(false);
             PanelStyle.ApplyScale(_hudHint.gameObject, CurrentUiScale());
+
+            // First-run onboarding (CT-034): a single clickable hint above
+            // the Cart button. Never modal (no background dim, no other
+            // input blocked) and never repeated once tapped — the whole
+            // "shows once, dismisses forever" decision is
+            // OnboardingPresenter.Evaluate, driven fresh every frame from
+            // the persisted dismissed flag and current cart proximity.
+            _onboardingHint = GUIManager.Instance.CreateButton(
+                TeamsterStrings.Get("onboarding.hint"),
+                GUIManager.CustomGUIFront.transform,
+                new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
+                new Vector2(-150f, 225f), 280f, 44f);
+            _onboardingHint.GetComponent<Button>().onClick.AddListener(DismissOnboarding);
+            Text? onboardingHintText = _onboardingHint.GetComponentInChildren<Text>();
+            if (onboardingHintText != null)
+            {
+                onboardingHintText.fontSize = 13;
+                onboardingHintText.alignment = TextAnchor.MiddleCenter;
+                onboardingHintText.horizontalOverflow = HorizontalWrapMode.Wrap;
+                onboardingHintText.verticalOverflow = VerticalWrapMode.Truncate;
+            }
+
+            _onboardingHint.SetActive(false);
+            PanelStyle.ApplyScale(_onboardingHint, CurrentUiScale());
         }
 
         if (_button.activeSelf != inWorld)
@@ -440,6 +472,48 @@ internal sealed class CartStatusHudController : MonoBehaviour
         }
     }
 
+    /// <summary>Drives the first-run hint purely from
+    /// <see cref="OnboardingPresenter.Evaluate"/> every frame — no cached
+    /// decision, so dismissing or approaching/leaving a cart takes effect
+    /// immediately with no extra state to keep in sync. Also hidden whenever
+    /// the status panel itself is already open: at that point the player has
+    /// plainly already found the button the hint points at, so a pointer to
+    /// it floating above an open panel would be redundant, not helpful. This
+    /// is a display-only suppression, not a dismissal — closing the panel
+    /// while still near a cart and not yet dismissed shows it again.</summary>
+    private void UpdateOnboardingHint()
+    {
+        if (_onboardingHint == null || _settings is null)
+        {
+            return;
+        }
+
+        bool panelOpen = _panel is { activeSelf: true };
+        bool isNearCart = _pump?.Telemetry is { Count: > 0 };
+        OnboardingVisibility visibility = OnboardingPresenter.Evaluate(
+            _settings.OnboardingDismissed.Value, isNearCart);
+        bool visible = !panelOpen && visibility == OnboardingVisibility.Visible;
+        if (_onboardingHint.activeSelf != visible)
+        {
+            _onboardingHint.SetActive(visible);
+        }
+    }
+
+    /// <summary>Permanent: persists immediately so the hint never returns,
+    /// even across a later session (CT-034 "dismisses forever").</summary>
+    private void DismissOnboarding()
+    {
+        if (_settings is not null)
+        {
+            _settings.OnboardingDismissed.Value = true;
+        }
+
+        if (_onboardingHint != null)
+        {
+            _onboardingHint.SetActive(false);
+        }
+    }
+
     private void Fail(Exception exception)
     {
         _failed = true;
@@ -458,6 +532,11 @@ internal sealed class CartStatusHudController : MonoBehaviour
             if (_hudHint != null)
             {
                 _hudHint.gameObject.SetActive(false);
+            }
+
+            if (_onboardingHint != null)
+            {
+                _onboardingHint.SetActive(false);
             }
 
             _manifestPanel?.Hide();

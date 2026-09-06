@@ -45,6 +45,12 @@ public static class TeamsterStrings
         // Shared panel chrome
         ["ui.close"] = "Close",
 
+        // First-run onboarding (CT-034): a single clickable hint that
+        // dismisses itself and never reappears once tapped.
+        ["onboarding.hint"] =
+            "New here? Click Cart below to see your mass, grade, and warnings. " +
+            "(Tap this to dismiss)",
+
         // Cart Status surface (CT-005): presenter lines + panel chrome.
         // Numbers arrive pre-formatted (invariant culture) so translations
         // reorder words, never digits.
