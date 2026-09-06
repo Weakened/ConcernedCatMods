@@ -1307,6 +1307,47 @@ only for non-blocking uncertainty.
   them, same as every other in-game-only item in this sprint.
 - Status: Open
 
+### 2026-09-06 — CT-049 final sign-off across six areas; six stale doc claims found and fixed, one compatibility version bump flagged unresolved
+
+- Version / issue: v1.0 / CT-049 (#167)
+- Question: after CT-046's audit and CT-047/CT-048's reruns, do docs,
+  localization, controller navigation, accessibility, migration, and the
+  compatibility statement still say exactly what the current source and
+  a fresh Thunderstore check show — or has anything drifted since each
+  area's own original leaf?
+- Safe reversible default selected: `V1_SIGNOFF.md` records six explicit
+  sign-off lines, each backed by a fresh test rerun (111 cases across
+  nine test classes, all green) plus a direct source/Thunderstore
+  recheck rather than trusting a prior leaf's citation. Six stale doc
+  claims were found and fixed in place: three wrong localization key
+  counts (274/274+/280+, actual 277 — recounted twice after a first
+  quick regex undercounted at 256), one misleading version-scoped
+  heading in the package README, and the compatibility matrix's version
+  pins (rechecked live against Thunderstore, not re-typed from memory).
+  No production code changed; every fix is a documentation correction
+  to match already-correct code and already-passing tests.
+- Why work continued: this leaf reruns and audits; it does not introduce
+  new runtime behavior, so the only risk is a wrong measurement or a
+  missed drift, which independent review re-checks rather than trusts.
+- Risk / alternative: BetterCarts was found to have released a real new
+  version (1.0.6→1.1.0) since CT-037 decompiled its mass-reduction
+  patch; this leaf did not re-decompile the new build to reconfirm the
+  patch still does the same thing, and says so plainly in
+  `COMPATIBILITY.md`'s new "Version recheck" section rather than
+  silently re-stamping the old finding onto the new version number. The
+  registry's GUID-based, presence-only detection is unaffected either
+  way. Separately, ValheimPlus is now marked Deprecated on Thunderstore
+  — flagged for owner awareness; its shipped behavior and Warn/None
+  classification are unchanged. The already-open `CompatibilityPanel`
+  NavigationCatalog gap (CT-031-era) was confirmed still open, not
+  silently resolved and not expanded into this leaf's scope.
+- Must resolve before public release: No for the sign-off itself (all
+  six areas pass); BetterCarts' un-re-decompiled version bump is a small,
+  non-blocking re-verification gap the owner may want closed before
+  relying on the exact "20%" figure, though the Adapt classification
+  itself does not depend on that exact number.
+- Status: Open
+
 ## Resolved items
 
 ### 2026-09-05 — CT-032 localization framework delivered; full-UI externalization is progressive
