@@ -97,6 +97,15 @@ public static class TeamsterStrings
         ["support.exportFailed"] = "Export failed: {0}",
         ["support.unknownError"] = "unknown error",
 
+        // Feedback path (CT-041): routes beta reports to the public GitHub
+        // tracker with clear never-include guidance. Opening the link is an
+        // explicit click; nothing here is sent anywhere automatically.
+        ["support.feedbackExplainer"] =
+            "To report a problem, open a GitHub issue and attach the bundle above. Never " +
+            "attach a world save file, a screenshot showing another player's name, or " +
+            "anything else you consider private.",
+        ["support.reportBugButton"] = "Report a Bug",
+
         // Cart Status surface (CT-005): presenter lines + panel chrome.
         // Numbers arrive pre-formatted (invariant culture) so translations
         // reorder words, never digits.
@@ -389,6 +398,7 @@ public static class TeamsterStrings
         ["nav.routeList"] = "Route list",
         ["nav.clear"] = "Clear",
         ["nav.report"] = "Report",
+        ["nav.reportBug"] = "Report a Bug",
     };
 
     private static Dictionary<string, string> _overrides = new(StringComparer.Ordinal);

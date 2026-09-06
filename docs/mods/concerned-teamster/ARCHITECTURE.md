@@ -274,6 +274,26 @@ Concerned Cartographer's crash-report sanitizer uses, reimplemented
 independently since the products share no compile-time reference. Full
 design in `RECOVERY.md`.
 
+### Feature and default freeze (CT-041)
+
+`Domain/Config/TeamsterDefaults` centralizes the seven boolean config
+defaults that previously lived only as inline literals inside
+`TeamsterSettings.Bind` (Enabled, DebugLogging, PanelWarningsEnabled,
+HudWarningHintsEnabled, BrakeEnabled, TripsEnabled,
+OnboardingDismissed) plus the shared profile default
+(`DefaultProfile`); `TeamsterSettings.Bind` now only reads these
+constants rather than deciding them, so `DefaultFreezeSnapshotTests` can
+lock every value directly even though `TeamsterSettings` itself stays
+outside the Domain-only test project. `Domain/Support/FeedbackLinks`
+holds the one GitHub issues URL the Support panel's new Report a Bug
+button and the package README both read, so they cannot drift apart.
+`tools/validate_repo.py`'s `check_teamster_no_internet_egress` is a new
+CI-gated source scan (mirroring CT-026's authority audit and CT-028's
+no-force audit) proving no internet-egress-capable API exists anywhere
+in Teamster source, with `Application.OpenURL` — the Report a Bug
+button's one outbound, explicit-click, data-free action — named as the
+sole intentional exception. Full audit in `FEATURE_FREEZE.md`.
+
 ### Integration adapters (v0.5+)
 
 `CartographerCapability` (CT-021) probes for Concerned Cartographer at runtime

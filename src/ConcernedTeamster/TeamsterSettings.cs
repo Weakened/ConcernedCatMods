@@ -4,6 +4,7 @@ using TheConcernedCat.ConcernedTeamster.Domain.Config;
 using TheConcernedCat.ConcernedTeamster.Domain.Profiles;
 using TheConcernedCat.ConcernedTeamster.Domain.Ui;
 using TheConcernedCat.ConcernedTeamster.Domain.Warnings;
+using Defaults = TheConcernedCat.ConcernedTeamster.Domain.Config.TeamsterDefaults;
 
 namespace TheConcernedCat.ConcernedTeamster;
 
@@ -114,9 +115,9 @@ internal sealed class TeamsterSettings
     public static TeamsterSettings Bind(ConfigFile config)
     {
         return new TeamsterSettings(
-            config.Bind("General", "Enabled", true,
+            config.Bind("General", "Enabled", Defaults.Enabled,
                 "Master switch for Concerned Teamster cart telemetry features. Disabling leaves carts fully vanilla; the mod never changes cart physics by default either way."),
-            config.Bind("Diagnostics", "DebugLogging", false,
+            config.Bind("Diagnostics", "DebugLogging", Defaults.DebugLogging,
                 "Write diagnostic messages for Teamster feature development. Never enables per-frame logging."),
             config.Bind("Telemetry", "SampleIntervalSeconds",
                 TelemetrySamplerOptions.DefaultSampleIntervalSeconds,
@@ -148,9 +149,9 @@ internal sealed class TeamsterSettings
                         TelemetrySamplerOptions.MaxMaxTrackedCarts))),
             config.Bind("Ui", "PanelShortcut", KeyboardShortcut.Empty,
                 "Optional keyboard accelerator that toggles the Cart Status panel. The visible Cart button is always the primary path; leave empty for no shortcut."),
-            config.Bind("Warnings", "PanelWarningsEnabled", true,
+            config.Bind("Warnings", "PanelWarningsEnabled", Defaults.PanelWarningsEnabled,
                 "Show load/grade warnings in the Cart Status panel."),
-            config.Bind("Warnings", "HudWarningHintsEnabled", false,
+            config.Bind("Warnings", "HudWarningHintsEnabled", Defaults.HudWarningHintsEnabled,
                 "Also show the current warning as a small HUD hint under the Cart button while pulling. Off by default: the panel is the primary surface and HUD space is precious; enable if you haul with the panel closed."),
             config.Bind("Warnings", "SteepGradeCautionPercent",
                 WarningOptions.DefaultSteepGradeCautionPercent,
@@ -166,9 +167,9 @@ internal sealed class TeamsterSettings
                     new AcceptableValueRange<int>(
                         Domain.Risk.LookaheadOptions.MinPoints,
                         Domain.Risk.LookaheadOptions.MaxPoints))),
-            config.Bind("Brake", "Enabled", true,
+            config.Bind("Brake", "Enabled", Defaults.BrakeEnabled,
                 "The parking brake feature: a visible button that freezes a parked cart you control until you release it. Explicit per-use, always reversible, never saved into the world, and it releases itself on detach distance, world exit, shutdown, or any capability loss. Disable to remove the button entirely."),
-            config.Bind("Trips", "Enabled", true,
+            config.Bind("Trips", "Enabled", Defaults.TripsEnabled,
                 "Record hauling trips (position, grade, speed, load while you pull) into Teamster's own per-world sidecar file under BepInEx/config. Never touches Valheim saves; delete the sidecar folder to erase all history."),
             config.Bind("Trips", "RecordSpacingSeconds",
                 Domain.Trips.TripRecorderOptions.DefaultRecordSpacingSeconds,
@@ -197,17 +198,17 @@ internal sealed class TeamsterSettings
                     "takes effect the next time a panel opens (or on world enter for the always-visible " +
                     "Cart button), not live on an already-open panel.",
                     new AcceptableValueRange<float>(UiScaleOptions.MinScale, UiScaleOptions.MaxScale))),
-            config.Bind("Onboarding", "Dismissed", false,
+            config.Bind("Onboarding", "Dismissed", Defaults.OnboardingDismissed,
                 "Set automatically once you dismiss the first-run hint pointing at the Cart button. " +
                 "Set back to false to see the hint again."),
-            config.Bind("General", "Profile", ConfigProfile.Standard,
+            config.Bind("General", "Profile", Defaults.DefaultProfile,
                 "A documented settings preset: Minimal (telemetry only, warnings/HUD hints/trips off), " +
                 "Standard (Teamster's normal defaults), or EverythingObservational (every read-only " +
                 "feature on). The parking brake stays off in every profile — enable Brake.Enabled " +
                 "yourself if you want it. Changing this re-applies the preset's values once, on the " +
                 "next load; your own edits to individual settings are never overwritten again until " +
                 "you change this value to something else."),
-            config.Bind("General", "LastAppliedProfile", ConfigProfile.Standard,
+            config.Bind("General", "LastAppliedProfile", Defaults.DefaultProfile,
                 "Internal bookkeeping — do not edit. Records which profile was last applied so a " +
                 "restart with no Profile change never re-applies it."),
             config.Bind("Internal", "ConfigSchemaVersion", ConfigSchemaVersion.PreVersioning,

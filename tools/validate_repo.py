@@ -442,6 +442,27 @@ TEAMSTER_NETWORK_OWNERSHIP_TOKENS = (
     "m_nview.InvokeRPC",
 )
 
+# CT-041: the beta privacy audit — Teamster has no telemetry and phones
+# nothing home, so no internet-egress-capable API may appear anywhere in
+# its source. This is a different concern from the game-network/ownership
+# tokens above (Valheim's own RPC/ZDO system): these are general .NET/Unity
+# APIs capable of reaching an external host. `Application.OpenURL` is
+# deliberately NOT on this list — the Report a Bug button uses it to open
+# the player's own browser on an explicit click, which sends no Teamster
+# data anywhere; it is the one intentional exception, exactly like the
+# brake's Rigidbody.constraints write is the no-force audit's.
+TEAMSTER_INTERNET_EGRESS_TOKENS = (
+    "HttpClient",
+    "HttpWebRequest",
+    "WebRequest",
+    "WebClient",
+    "UnityWebRequest",
+    "TcpClient",
+    "UdpClient",
+    "System.Net.Sockets",
+    "new Socket(",
+)
+
 
 def _strip_cs_line_comment(line: str) -> str:
     """Everything from the first // (covers // and ///) removed. Teamster's
@@ -577,6 +598,34 @@ def check_teamster_authority_policy(errors: list[str]) -> list[str]:
     ]
 
 
+def check_teamster_no_internet_egress(errors: list[str]) -> list[str]:
+    """CT-041 privacy audit: fails on any internet-egress-capable API in
+    Teamster source. Comments are stripped so prose stating their absence
+    is fine. `Application.OpenURL` is intentionally not checked for — see
+    TEAMSTER_INTERNET_EGRESS_TOKENS's own comment."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    hits = 0
+    scanned = 0
+    for path in sorted(teamster_dir.rglob("*.cs")):
+        if path.relative_to(teamster_dir).parts[0] in ("obj", "bin"):
+            continue
+        scanned += 1
+        for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            code = _strip_cs_line_comment(raw)
+            for token in TEAMSTER_INTERNET_EGRESS_TOKENS:
+                if token in code:
+                    hits += 1
+                    fail(
+                        f"[interop] CT-041 privacy audit: internet-egress token {token!r} in "
+                        f"{path.relative_to(ROOT)}:{number} — Teamster has no telemetry and must "
+                        "never phone home", errors)
+
+    return [
+        f"[interop] CT-041 privacy audit: {scanned} Teamster source files, "
+        f"no internet-egress calls ({hits} violations)",
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -617,6 +666,7 @@ def main() -> int:
     report.extend(check_teamster_integration_readonly(errors))
     report.extend(check_teamster_authority_policy(errors))
     report.extend(check_teamster_no_force_injection(errors))
+    report.extend(check_teamster_no_internet_egress(errors))
 
     prohibited = []
     for path in ROOT.rglob("*.dll"):

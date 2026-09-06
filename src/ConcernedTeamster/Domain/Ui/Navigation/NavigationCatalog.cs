@@ -79,6 +79,7 @@ public static class NavigationCatalog
             },
             [SupportBundlePanel] = new[]
             {
+                new FocusItem("support.reportbug", TeamsterStrings.Get("nav.reportBug"), isButton: true),
                 new FocusItem("support.export", TeamsterStrings.Get("nav.export"), isButton: true),
                 new FocusItem("support.close", TeamsterStrings.Get("nav.close"), isButton: true),
             },

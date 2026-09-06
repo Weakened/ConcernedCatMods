@@ -182,6 +182,22 @@ No in-game observation of an actual corrupted sidecar, a real v1→v2
 migration, or an opened/read exported bundle has been run yet — pending
 (`HUMAN_ATTENTION.md`), never claimed PASS.
 
+## Feature freeze, defaults, and privacy (CT-041)
+
+Full detail in `FEATURE_FREEZE.md`. Summary of the acceptance-criteria
+evidence:
+
+| Criterion | Evidence |
+|---|---|
+| Freeze document committed | `FEATURE_FREEZE.md` — every v0.1–v0.9 feature and every config default, with a safety classification |
+| Default snapshot test locks the frozen defaults | `DefaultFreezeSnapshotTests` — asserts every Domain-testable default directly against its source-of-truth constant, plus a Standard-profile-matches-fresh-install consistency check |
+| Feedback button and README both route to the documented path | `SupportBundlePanel`'s new Report a Bug button and the Package README's `## Support` section both point at `Domain.Support.FeedbackLinks.IssuesUrl`; `FeedbackLinksTests` locks the constant |
+| Privacy audit confirms no automatic data egress exists | `tools/validate_repo.py`'s new `check_teamster_no_internet_egress` — a CI-gated source scan for internet-egress-capable APIs across every shipped `.cs` file, not a one-time manual claim; `Application.OpenURL` (the Report a Bug button's one outbound action, always explicit-click, carries no data) is the sole documented exception |
+
+No in-game observation of the Report a Bug button actually opening a
+browser has been run yet — pending (`HUMAN_ATTENTION.md`), never claimed
+PASS.
+
 ## Multiplayer (v0.6)
 
 - Ownership: only the vanilla-authoritative controller's client mutates

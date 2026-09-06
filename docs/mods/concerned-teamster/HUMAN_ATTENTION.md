@@ -944,6 +944,42 @@ only for non-blocking uncertainty.
   these, same as every prior RC's live rows)
 - Status: Open
 
+### 2026-09-06 — CT-041 feature/default freeze and feedback path proven off-game; Report a Bug button's real browser-open is pending
+
+- Version / issue: v0.9 / CT-041 (#158)
+- Question: the freeze document, default snapshot test, and privacy audit
+  are all provable without a running game — but the Report a Bug button
+  calls `UnityEngine.Application.OpenURL`, a real-OS-interaction API whose
+  actual behavior (does the correct browser/URL actually open, does it
+  work under whatever sandboxing a BepInEx-injected process might have)
+  cannot be verified without a live session.
+- Safe reversible default selected: freeze the feature/default surface in
+  `FEATURE_FREEZE.md`, lock every Domain-testable default with
+  `DefaultFreezeSnapshotTests`, extract seven previously-inline config
+  literals into `TeamsterDefaults` (Domain-layer, so the lock is real
+  rather than trusting an Adapters-layer literal by inspection alone),
+  add a CI-gated privacy audit (`check_teamster_no_internet_egress`) that
+  scans every shipped `.cs` file for internet-egress APIs and explicitly
+  documents `Application.OpenURL` as the one intentional, data-free
+  exception, and route the new Report a Bug button and the README's
+  Support section at the same frozen `FeedbackLinks.IssuesUrl` constant
+  so they cannot drift apart.
+- Why work continued: `Application.OpenURL` is a long-established, widely
+  used Unity API for exactly this purpose (many BepInEx mods link a wiki
+  or Discord this way); worst case if it silently no-ops in some odd
+  environment is that the button does nothing, which is safe (no data
+  sent, no crash) — never worse than the button not existing.
+- Risk / alternative: none beyond confirming the click actually opens a
+  browser in a real session. An alternative (display the raw URL as
+  static, non-interactive text instead of a button) was considered and
+  rejected: it satisfies "visible" but not the issue's explicit ask for a
+  "button", and offers strictly less discoverability for the same privacy
+  profile (OpenURL sends no data either way).
+- Must resolve before public release: Yes (the v0.9 beta gate consumes
+  this, same as every prior RC's live rows) — add the confirmed row to
+  the owner smoke checklist once clicked in a real session.
+- Status: Open
+
 ## Resolved items
 
 ### 2026-09-05 — CT-032 localization framework delivered; full-UI externalization is progressive
