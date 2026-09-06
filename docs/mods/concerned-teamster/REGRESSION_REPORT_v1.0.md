@@ -36,7 +36,7 @@ match is the meaningful identity check here, and it holds.
 | Teamster unit tests | `dotnet test ConcernedTeamster.Tests` (Release) | **622/622 PASS** |
 | Cartographer regression | `dotnet test ConcernedCartographer.Tests` (Release) | **568/568 PASS**, unchanged |
 | Static validation + package + require-binary | `scripts/package.ps1 -Product ConcernedTeamster` | PASS — validator green, `tcli build` succeeded, 6-entry own-DLL-only ZIP |
-| Interop audits (independence, contract, read-only, authority/no-force/no-egress) | `validate_repo.py` interop lines | PASS — all five, 0 violations, identical to the working-tree run |
+| Interop audits — three zero-violation token-scan audits (authority/no-network, no-force, no-internet-egress), plus the independence/CT-021-contract/CT-024-read-only structural audits | `validate_repo.py` interop lines | PASS — all six, 0 violations, identical to the working-tree run |
 
 No failure occurred at any step. No defect was found or needed fixing —
 the clean-checkout rerun reproduced exactly the green state the working
