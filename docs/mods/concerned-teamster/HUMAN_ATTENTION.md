@@ -1134,6 +1134,65 @@ only for non-blocking uncertainty.
   checklist for real is exactly the v0.9 beta gate's remaining human work.
 - Status: Open
 
+### 2026-09-06 — CT-045 v0.9 public beta candidate sealed; this issue carries a human-preview gate the conveyor is honoring
+
+- Version / issue: v0.9 / CT-045 (#162)
+- Question: CT-045 is labeled `gate:human-preview` ("Must stop for
+  integrated human preview and approval") — the first Teamster issue in
+  this whole conveyor to carry that label. Every prior sprint-closing
+  seal (CT-030, CT-035, CT-040) sealed an explicitly internal-only RC and
+  the conveyor continued immediately into the next sprint with no pause;
+  v0.9 is different in kind, not just degree — it is the first RC ever
+  sealed as an actual publication candidate, and the label makes explicit
+  what the issue's own text already implied ("conveyor proceeds to v1.0
+  work without publishing" — a hand-off, not a mid-sprint checkpoint).
+- Safe reversible default selected: complete CT-045's own work in full —
+  version-sync, package, hash, the v0.9 dossier entry, and a new
+  `OWNER_PACKET_v0.9.md` (RC identity, proven-vs-pending summary, exact
+  owner-only publish steps adapted from Cartographer's own
+  `V1_RELEASE_PREP.md`, and rollback/reapproval guidance) — merge the PR
+  and close both this issue and sprint controller #157 with evidence,
+  exactly like every prior leaf. Then **stop** rather than beginning
+  CT-046 automatically, per the label. Nothing about sealing or
+  documenting is itself a publish action, so this work is safe to
+  complete without a human already having reviewed it; the label gates
+  what happens *after*, not the sealing work itself.
+- Why work continued (through the seal, not past it): every automatable
+  gate is provably green (622 Teamster + 568 Cartographer tests, three
+  zero-violation interop audits, a real fresh-install verification of
+  the sealed ZIP, a full lifecycle rehearsal against real artifacts);
+  none of that requires a human to have looked at it first, and stopping
+  mid-seal would leave the repository in a half-versioned state that
+  benefits no one. Continuing into v1.0 territory (CT-046) without the
+  owner having reviewed a candidate that could become the project's
+  first public release is a different, and real, kind of risk this
+  session has not faced at any earlier gate.
+- Also discovered and fixed in passing: `scripts/publish.ps1` was
+  hardcoded to Concerned Cartographer only (no `-Product` parameter,
+  Cartographer's path and package name baked into both the confirmation
+  prompt and the `tcli publish` config-path argument) — the owner packet
+  cannot honestly tell the owner to run this script for Teamster if it
+  literally cannot target Teamster. Fixed by adding the same
+  `-Product ConcernedCartographer|ConcernedTeamster` parameter
+  `package.ps1`/`deploy.ps1` already use, verified by invoking it with
+  each product and confirming it fails at the pre-existing
+  `TCLI_AUTH_TOKEN` check (the correct, safe failure point in this
+  environment) before ever reaching `package.ps1`, the interactive
+  confirmation, or `tcli publish` itself — this leaf never sets that
+  token and never types the confirmation string, so no publish action
+  was possible at any point.
+- Risk / alternative: none beyond the obvious — this packet's entire
+  point is that the owner's review is the risk-reducing step, not
+  something to route around. If the owner prefers the conveyor continue
+  into v1.0 work on internal RCs regardless of the beta's publication
+  status, that is their call to make explicitly (e.g. by removing the
+  label from a future equivalent issue, or by directly instructing the
+  next session), not something this session should infer from silence.
+- Must resolve before public release: N/A — this entry describes the
+  seal itself. The pending item is the owner packet's own sign-off
+  checklist, in `OWNER_PACKET_v0.9.md`.
+- Status: Open
+
 ## Resolved items
 
 ### 2026-09-05 — CT-032 localization framework delivered; full-UI externalization is progressive
