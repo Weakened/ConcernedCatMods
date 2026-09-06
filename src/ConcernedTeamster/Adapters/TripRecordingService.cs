@@ -26,6 +26,7 @@ internal sealed class TripRecordingService
     private readonly string _pluginVersion;
     private readonly List<RecoveryEvent> _recoveryEvents = new();
     private readonly List<Trip> _pendingRetryTrips = new();
+    private long _pendingRetryWorldUid;
     private bool _ioFailureLogged;
     private bool _refusalLogged;
 
@@ -112,14 +113,14 @@ internal sealed class TripRecordingService
         // real trip data. combined is genuinely retried on the next cycle
         // now (bounded by the sidecar's own retention cap — it can never
         // usefully hold more than the file would keep anyway).
-        List<Trip> combined = CombineWithPendingRetry(newTrips);
+        List<Trip> combined = CombineWithPendingRetry(newTrips, worldUid);
 
         string path = SidecarPathFor(worldUid);
         string? existingText = SidecarFileStore.TryRead(path, out string? readError);
         if (readError is not null)
         {
             WarnIoOnce("sidecar read failed: " + readError + "; will retry with the next trip");
-            RetainForRetry(combined);
+            RetainForRetry(combined, worldUid);
             return;
         }
 
@@ -153,7 +154,7 @@ internal sealed class TripRecordingService
             if (!SidecarFileStore.TryBackup(path, plan.BackupReason, out string? backupError))
             {
                 WarnIoOnce("sidecar backup failed: " + backupError + "; will retry with the next trip");
-                RetainForRetry(combined);
+                RetainForRetry(combined, worldUid);
                 return;
             }
 
@@ -166,7 +167,7 @@ internal sealed class TripRecordingService
         {
             WarnIoOnce(
                 "sidecar write failed: " + writeError + "; previous file left intact; will retry with the next trip");
-            RetainForRetry(combined);
+            RetainForRetry(combined, worldUid);
         }
     }
 
@@ -174,16 +175,40 @@ internal sealed class TripRecordingService
     /// this cycle's newly-finished ones and clears the pending queue — the
     /// combination itself is pure (<see cref="TripPersistPlan.CombineForRetry"/>);
     /// callers must call <see cref="RetainForRetry"/> again themselves if
-    /// this attempt also fails.</summary>
-    private List<Trip> CombineWithPendingRetry(IReadOnlyList<Trip> newTrips)
+    /// this attempt also fails.
+    /// <para>CT-039 review finding: a pending retry queue has no per-trip
+    /// world tag, but at any moment it only ever holds trips from the one
+    /// world that was live when <see cref="RetainForRetry"/> last ran — so
+    /// if the world changes before the retry succeeds (this instance is a
+    /// session-long singleton that survives a player exiting one world and
+    /// loading another), merging them into a DIFFERENT world's sidecar
+    /// would misattribute them, exactly the outcome the world-UID-
+    /// unavailable branch above already refuses to risk. Discarded with an
+    /// honest log line and a recorded recovery event instead.</para></summary>
+    private List<Trip> CombineWithPendingRetry(IReadOnlyList<Trip> newTrips, long worldUid)
     {
+        if (TripPersistPlan.ShouldDiscardPendingRetry(_pendingRetryTrips.Count, _pendingRetryWorldUid, worldUid))
+        {
+            int discarded = _pendingRetryTrips.Count;
+            _pendingRetryTrips.Clear();
+            WarnIoOnce(
+                discarded + " trip(s) pending retry from a previous world were discarded; " +
+                "the world changed before they could be saved");
+            RecordRecoveryEvent(
+                "world-changed",
+                SidecarPathFor(_pendingRetryWorldUid),
+                discarded + " trip(s) pending retry after an earlier save failure were discarded " +
+                "because the world changed before they could be saved.");
+        }
+
         List<Trip> combined = TripPersistPlan.CombineForRetry(_pendingRetryTrips, newTrips);
         _pendingRetryTrips.Clear();
         return combined;
     }
 
-    private void RetainForRetry(List<Trip> trips)
+    private void RetainForRetry(List<Trip> trips, long worldUid)
     {
+        _pendingRetryWorldUid = worldUid;
         _pendingRetryTrips.AddRange(TripPersistPlan.BoundForRetry(trips, _options.MaxTripsRetained));
     }
 

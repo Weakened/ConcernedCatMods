@@ -58,6 +58,24 @@ deliberately still dropped with an honest log line, not retried, since a
 world UID becoming available again could belong to a different world and
 retrying into it would misattribute the trip.
 
+**A second review round caught the same misattribution risk from a
+different trigger.** `TripRecordingService` is a session-long singleton —
+it survives a player exiting one world and loading another — but the
+retry queue this fix introduced had no per-world tag at all. If a persist
+attempt failed in World A and the player then loaded World B before the
+next successful attempt, the queued World-A trips would have been merged
+straight into World B's sidecar and cumulative road-quality history,
+exactly the outcome the world-UID-unavailable case above already refuses
+to risk, just reached by a different path (a UID that resolves
+successfully, but to a different world, rather than failing outright).
+`Domain/Trips/TripPersistPlan.ShouldDiscardPendingRetry` closes this: at
+any moment a pending queue holds trips from exactly one world (whichever
+was live when it was last retained), so one UID comparison is enough — no
+per-trip tagging needed. A world change discards the stale queue with an
+honest log line and a recorded `RecoveryEvent`, the same "tell the user
+what happened" treatment every other recovery path in this leaf gets,
+rather than silently contaminating the new world's data.
+
 ## Config schema migration
 
 `Domain/Config/ConfigSchemaVersion`/`ConfigSchemaMigration` introduce the

@@ -121,6 +121,37 @@ public class TripPersistPlanTests
     private static Trip MakeTrip(string cartId) =>
         new(0, cartId, new[] { new TripSample(0, 0f, 0f, 1f, 1f, 100f) });
 
+    // -- CT-039 review finding round 2: a pending retry queue must never
+    // survive a world change and get merged into a different world's
+    // sidecar -------------------------------------------------------------
+
+    [Fact]
+    public void ShouldDiscardPendingRetry_NoPendingTrips_NeverDiscards()
+    {
+        // Nothing to discard regardless of UID mismatch when the queue is
+        // already empty — this must not be misread as "always discard on
+        // any UID difference."
+        Assert.False(TripPersistPlan.ShouldDiscardPendingRetry(
+            pendingCount: 0, pendingWorldUid: 111L, currentWorldUid: 222L));
+    }
+
+    [Fact]
+    public void ShouldDiscardPendingRetry_SameWorld_NeverDiscards()
+    {
+        Assert.False(TripPersistPlan.ShouldDiscardPendingRetry(
+            pendingCount: 3, pendingWorldUid: 111L, currentWorldUid: 111L));
+    }
+
+    [Fact]
+    public void ShouldDiscardPendingRetry_DifferentWorldWithPendingTrips_Discards()
+    {
+        // The exact scenario the finding was about: a failed persist left
+        // trips pending under one world, and the player has since loaded
+        // a different one — merging now would misattribute them.
+        Assert.True(TripPersistPlan.ShouldDiscardPendingRetry(
+            pendingCount: 2, pendingWorldUid: 111L, currentWorldUid: 222L));
+    }
+
     [Fact]
     public void CombineForRetry_NoPending_ReturnsNewTripsUnchanged()
     {

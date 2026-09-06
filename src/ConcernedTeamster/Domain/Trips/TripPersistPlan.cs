@@ -84,6 +84,21 @@ public static class TripPersistPlan
         return new Plan(backupReason: null, logWarning: null, logInfo: null);
     }
 
+    /// <summary>Whether a pending retry queue must be discarded rather
+    /// than combined with this cycle's new trips, because the world
+    /// changed since it was retained (CT-039 review finding: a session
+    /// survives a player exiting one world and loading another, so a
+    /// naive combine could merge trips into a DIFFERENT world's sidecar
+    /// and road-quality history — the same misattribution the "world UID
+    /// unavailable" path already refuses to risk, via a different
+    /// trigger). At any moment a pending queue holds trips from exactly
+    /// one world (whichever was live when it was last retained), so a
+    /// single UID comparison is sufficient — no per-trip tagging needed.</summary>
+    public static bool ShouldDiscardPendingRetry(int pendingCount, long pendingWorldUid, long currentWorldUid)
+    {
+        return pendingCount > 0 && pendingWorldUid != currentWorldUid;
+    }
+
     /// <summary>Prepends a prior cycle's not-yet-persisted trips ahead of
     /// this cycle's newly-finished ones (CT-039 review finding: a failed
     /// persist attempt used to just drop <c>newTrips</c> — the recorder
