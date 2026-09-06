@@ -24,14 +24,14 @@ internal sealed class RecoveryGuidancePanel
     private const double RefreshPeriodSeconds = 1.0;
 
     private readonly ManualLogSource _log;
-    private readonly float _uiScale;
+    private readonly Func<float> _uiScale;
     private bool _failed;
     private GameObject? _panel;
     private Text? _title;
     private Text?[] _steps = Array.Empty<Text?>();
     private double _nextRefreshTime;
 
-    public RecoveryGuidancePanel(ManualLogSource log, float uiScale)
+    public RecoveryGuidancePanel(ManualLogSource log, Func<float> uiScale)
     {
         _log = log;
         _uiScale = uiScale;
@@ -149,11 +149,10 @@ internal sealed class RecoveryGuidancePanel
         Color headerColor = PanelStyle.Header;
         Color bodyColor = PanelStyle.Body;
 
-        _panel = gui.CreateWoodpanel(
-            GUIManager.CustomGUIFront.transform,
+        _panel = PanelStyle.CreateScaledWoodpanel(
+            gui, GUIManager.CustomGUIFront.transform,
             new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
-            new Vector2(-(PanelWidth / 2f) - 380f, -120f), PanelWidth, PanelHeight, draggable: true);
-        PanelStyle.ApplyScale(_panel, _uiScale);
+            new Vector2(-(PanelWidth / 2f) - 380f, -120f), PanelWidth, PanelHeight, _uiScale());
 
         gui.CreateText(
             TeamsterStrings.Get("recovery.title"), _panel.transform,

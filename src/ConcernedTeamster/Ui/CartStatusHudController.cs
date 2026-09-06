@@ -35,7 +35,6 @@ internal sealed class CartStatusHudController : MonoBehaviour
     private RecoveryGuidancePanel? _guidancePanel;
     private TripHistoryPanel? _tripPanel;
     private RoutePickerPanel? _routePanel;
-    private float _uiScale = UiScaleOptions.DefaultScale;
     private bool _failed;
 
     private GameObject? _button;
@@ -53,11 +52,23 @@ internal sealed class CartStatusHudController : MonoBehaviour
         _settings = settings;
         _log = log;
         _pump = pump;
-        _uiScale = UiScaleOptions.Clamp(settings.UiScale.Value);
-        _manifestPanel = new CargoManifestPanel(log, _uiScale);
-        _guidancePanel = new RecoveryGuidancePanel(log, _uiScale);
-        _tripPanel = new TripHistoryPanel(log, _uiScale);
+        _manifestPanel = new CargoManifestPanel(log, CurrentUiScale);
+        _guidancePanel = new RecoveryGuidancePanel(log, CurrentUiScale);
+        _tripPanel = new TripHistoryPanel(log, CurrentUiScale);
         _tripPanel.BindPump(pump);
+    }
+
+    /// <summary>Reads the config value fresh on every call (never cached) so
+    /// a config edit takes effect the next time any panel's GameObject is
+    /// actually (re)built — world enter/re-entry, or first open this
+    /// session — matching every other live-read setting this controller
+    /// already uses (<see cref="TeamsterSettings.PanelWarningsEnabled"/> and
+    /// siblings). An already-built, merely closed-then-reopened panel keeps
+    /// its existing GameObject (Toggle only flips SetActive) and so keeps
+    /// its size until the GameObject is next destroyed and rebuilt.</summary>
+    private float CurrentUiScale()
+    {
+        return UiScaleOptions.Clamp(_settings?.UiScale.Value ?? UiScaleOptions.DefaultScale);
     }
 
     private void Update()
@@ -171,7 +182,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
                 new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
                 new Vector2(-70f, 170f), 80f, 32f);
             _button.GetComponent<Button>().onClick.AddListener(TogglePanel);
-            PanelStyle.ApplyScale(_button, _uiScale);
+            PanelStyle.ApplyScale(_button, CurrentUiScale());
 
             // The optional HUD warning hint lives under the button (CT-009);
             // it stays empty and inactive unless enabled and warning.
@@ -183,7 +194,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
                 .GetComponent<Text>();
             _hudHint.alignment = TextAnchor.MiddleRight;
             _hudHint.gameObject.SetActive(false);
-            PanelStyle.ApplyScale(_hudHint.gameObject, _uiScale);
+            PanelStyle.ApplyScale(_hudHint.gameObject, CurrentUiScale());
         }
 
         if (_button.activeSelf != inWorld)
@@ -227,11 +238,10 @@ internal sealed class CartStatusHudController : MonoBehaviour
         Color headerColor = PanelStyle.Header;
         Color bodyColor = PanelStyle.Body;
 
-        _panel = gui.CreateWoodpanel(
-            GUIManager.CustomGUIFront.transform,
+        _panel = PanelStyle.CreateScaledWoodpanel(
+            gui, GUIManager.CustomGUIFront.transform,
             new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
-            new Vector2(-(PanelWidth / 2f) - 30f, 0f), PanelWidth, PanelHeight, draggable: true);
-        PanelStyle.ApplyScale(_panel, _uiScale);
+            new Vector2(-(PanelWidth / 2f) - 30f, 0f), PanelWidth, PanelHeight, CurrentUiScale());
 
         gui.CreateText(
             TeamsterStrings.Get("status.title"), _panel.transform,
@@ -269,7 +279,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
         {
             // ??= so a picker that fail-closed stays disabled for the whole
             // session instead of resetting with each world's panel rebuild.
-            _routePanel ??= new RoutePickerPanel(_log, _pump?.LoadModel, SelectedCartTotalMass, _uiScale);
+            _routePanel ??= new RoutePickerPanel(_log, _pump?.LoadModel, SelectedCartTotalMass, CurrentUiScale);
             GameObject routesButton = gui.CreateButton(
                 TeamsterStrings.Get("status.routesButton"), _panel.transform,
                 new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(90f, 96f), 110f, 30f);

@@ -169,7 +169,7 @@ mutating or invoking reflection token in those files fails validation.
 
 Accessibility (CT-033) adds three small pure-domain pieces every panel goes
 through: `Domain/Ui/UiScaleOptions` clamps the configurable UI scale factor
-(default 1.0, range 0.8–1.5) applied to each panel's root transform at build
+(default 1.0, range 0.8–1.3) applied to each panel's root transform at build
 time — uniform transform scaling carries every child's relative position
 along with it, so a panel that does not clip at one scale cannot newly clip
 at another. `Domain/Ui/ContrastRatio` implements the public WCAG 2.1

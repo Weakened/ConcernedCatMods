@@ -29,7 +29,7 @@ internal sealed class TripHistoryPanel
     private const double ConfirmWindowSeconds = 3.0;
 
     private readonly ManualLogSource _log;
-    private readonly float _uiScale;
+    private readonly Func<float> _uiScale;
     private bool _failed;
     private GameObject? _panel;
     private Text?[] _rowTexts = Array.Empty<Text?>();
@@ -56,7 +56,7 @@ internal sealed class TripHistoryPanel
     private int? _pendingDeleteId;
     private double _pendingDeleteUntil;
 
-    public TripHistoryPanel(ManualLogSource log, float uiScale)
+    public TripHistoryPanel(ManualLogSource log, Func<float> uiScale)
     {
         _log = log;
         _uiScale = uiScale;
@@ -376,11 +376,10 @@ internal sealed class TripHistoryPanel
         Color headerColor = PanelStyle.Header;
         Color bodyColor = PanelStyle.Body;
 
-        _panel = gui.CreateWoodpanel(
-            GUIManager.CustomGUIFront.transform,
+        _panel = PanelStyle.CreateScaledWoodpanel(
+            gui, GUIManager.CustomGUIFront.transform,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(0f, 0f), PanelWidth, PanelHeight, draggable: true);
-        PanelStyle.ApplyScale(_panel, _uiScale);
+            new Vector2(0f, 0f), PanelWidth, PanelHeight, _uiScale());
 
         gui.CreateText(
             TeamsterStrings.Get("trips.title"), _panel.transform,

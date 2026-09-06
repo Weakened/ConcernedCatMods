@@ -12,7 +12,15 @@ public static class UiScaleOptions
 {
     public const float DefaultScale = 1.0f;
     public const float MinScale = 0.8f;
-    public const float MaxScale = 1.5f;
+
+    /// <summary>Chosen so the tallest panel (Trip History, 760 units) stays
+    /// under a conservative 1080-unit reference canvas height even at
+    /// maximum scale (988 &lt; 1080) — see
+    /// <c>AccessibilityTests.MaxScale_TallestPanelStaysUnderConservativeReferenceCanvasHeight</c>
+    /// and ACCESSIBILITY.md. The 1080 figure is a commonly-cited Valheim UI
+    /// reference height, not independently verified against Jötunn's actual
+    /// canvas setup on this machine.</summary>
+    public const float MaxScale = 1.3f;
 
     /// <summary>NaN/Infinity fall back to the default (matches
     /// <c>WarningOptions.CreateClamped</c>'s pattern); everything else

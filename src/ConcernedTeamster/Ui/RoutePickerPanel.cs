@@ -41,7 +41,7 @@ internal sealed class RoutePickerPanel
     private readonly ManualLogSource _log;
     private readonly LoadModel? _loadModel;
     private readonly Func<float?> _cartMassProvider;
-    private readonly float _uiScale;
+    private readonly Func<float> _uiScale;
     private readonly RouteProfileCache _profileCache = new();
     private readonly RouteReportPanel _reportPanel;
     private string _selectedRouteName = "";
@@ -65,7 +65,7 @@ internal sealed class RoutePickerPanel
     private double _nextRefreshTime;
 
     internal RoutePickerPanel(
-        ManualLogSource log, LoadModel? loadModel, Func<float?> cartMassProvider, float uiScale)
+        ManualLogSource log, LoadModel? loadModel, Func<float?> cartMassProvider, Func<float> uiScale)
     {
         _log = log;
         _loadModel = loadModel;
@@ -375,11 +375,10 @@ internal sealed class RoutePickerPanel
         Color headerColor = PanelStyle.Header;
         Color bodyColor = PanelStyle.Body;
 
-        _panel = gui.CreateWoodpanel(
-            GUIManager.CustomGUIFront.transform,
+        _panel = PanelStyle.CreateScaledWoodpanel(
+            gui, GUIManager.CustomGUIFront.transform,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(0f, 0f), PanelWidth, PanelHeight, draggable: true);
-        PanelStyle.ApplyScale(_panel, _uiScale);
+            new Vector2(0f, 0f), PanelWidth, PanelHeight, _uiScale());
 
         gui.CreateText(
             TeamsterStrings.Get("routes.title"), _panel.transform,

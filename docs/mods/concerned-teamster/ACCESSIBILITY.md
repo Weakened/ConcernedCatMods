@@ -7,31 +7,47 @@ CT-033 acceptance criteria ask for.
 ## UI scale
 
 `TeamsterSettings.UiScale` (config section `Ui`, key `Scale`) is a single
-float, default `1.0`, clamped to `[0.8, 1.5]` by `Domain/Ui/UiScaleOptions`
+float, default `1.0`, clamped to `[0.8, 1.3]` by `Domain/Ui/UiScaleOptions`
 (both by `AcceptableValueRange` in the config UI and again in code, so no
-config edit can escape the range).
+config edit can escape the range). `MaxScale` is capped at 1.3 rather than a
+rounder 1.5 so the tallest panel (Trip History, 760 units) stays under a
+conservative 1080-unit reference canvas height even at maximum scale (988 <
+1080) — see the canvas-bounds discussion below.
 
-The factor is applied once, at panel-build time, to the panel's root
-`Transform.localScale` (`Ui/PanelStyle.ApplyScale`) — not to individual
-widths, heights, or offsets inside each panel. This is deliberate: uniform
-scaling of a parent transform carries every child's relative position and
-size along with it, so a panel that does not clip its own content at one
-scale cannot newly clip it at another scale. The property is structural
-(a Unity transform guarantee), not something each of the six panels has to
-re-prove independently. `AccessibilityTests` proves the piece that *is*
-pure-domain math: `UiScaleOptions.Clamp` is total (never NaN/throws), and
-`MinScale < DefaultScale < MaxScale`.
+The factor is read fresh (never cached) every time a panel's GameObject is
+actually built — `Ui/PanelStyle.CreateScaledWoodpanel` applies it to the
+panel's root `Transform.localScale` in the same call that creates the
+panel, and `CartStatusHudController.CurrentUiScale()` re-reads
+`TeamsterSettings.UiScale.Value` on every call rather than storing it once
+at plugin startup. This matters because a panel's GameObject, once built,
+persists across simple close/reopen (`Toggle` only flips `SetActive`) —
+Build() runs again only when Unity actually destroys and recreates the
+GameObject (a scene change: world enter/re-entry, or first open a given
+session). So a config edit takes effect the next time that specific panel
+is *rebuilt*, not necessarily the next time it is merely reopened within
+the same already-loaded world.
+
+Scaling the whole subtree via the root transform, rather than recomputing
+every width/height/offset inside each panel individually, is deliberate:
+uniform scaling of a parent transform carries every child's relative
+position and size along with it, so a panel that does not clip its own
+content at one scale cannot newly clip it at another scale. That property
+is structural (a Unity transform guarantee), not something each of the six
+panels has to re-prove independently. `AccessibilityTests` proves the piece
+that *is* pure-domain math: `UiScaleOptions.Clamp` is total (never
+NaN/throws), `MinScale < DefaultScale < MaxScale`, and the tallest panel's
+worst-case scaled height stays under the reference canvas assumption above.
 
 What this does **not** prove automatically: whether a *larger*-scaled panel
 stays clear of a neighboring panel's screen position (each panel's anchor
-offset from the screen edge is independent pixel math, not itself scaled),
-and whether legacy `Text` components stay crisp when scaled via transform
-rather than re-rendered at a larger font size. Both are visual, in-game
-checks — see the pending item in `HUMAN_ATTENTION.md`.
-
-Takes effect on the panel's next build (world enter, or first open that
-session) — not live on an already-open panel, the same trade-off
-`NavigationCatalog` already accepts for label baking (see `ARCHITECTURE.md`).
+offset from the screen edge is independent pixel math, not itself scaled);
+whether the tallest panel's scaled height genuinely fits Jötunn's actual
+`CustomGUIFront` canvas (the 1080 figure above is a commonly-cited Valheim
+UI reference height, not independently verified against Jötunn's real
+canvas setup — no live game session was available here); and whether legacy
+`Text` components stay crisp when scaled via transform rather than
+re-rendered at a larger font size. All three are visual, in-game checks —
+see the pending item in `HUMAN_ATTENTION.md`.
 
 ## Contrast pass
 
@@ -81,7 +97,12 @@ more resilient fix than tuning fill colors against an unverified estimate.
 
 `AccessibilityTests.PanelTextColor_MeetsAaContrastAgainstApproximateBackground`
 pins the three colors against the AA target so a future palette change is
-caught if it regresses below 4.5:1 against the documented estimate.
+caught if it regresses below 4.5:1 against the documented estimate. That
+test only checks raw RGB values, though, and cannot see whether the outline
+itself gets disabled again — `PanelTextCalls_NeverDisableTheContrastOutline`
+source-scans every shipped `Ui/*.cs` file and fails if any `CreateText` call
+passes `outline: false`, so the actual fix (not just the color inputs to
+the ratio formula) has a regression guard.
 
 **Pending:** an in-game screenshot with an actual color-pick of the wood
 panel texture would let `ApproximateWoodBackground` be replaced with a
@@ -113,8 +134,8 @@ invariant instead of a habit. The audit table:
 | Coop: hindering | `CoopEffort.Hindering` | "{n} hindering" tally + named list | `CooperativeEffortCounts_AreDistinctNonEmptyText` |
 | Coop: unclear | `CoopEffort.Unclear` | "{n} unclear" tally + named list | `CooperativeEffortCounts_AreDistinctNonEmptyText` |
 | Coop: idle | `CoopEffort.Idle` | Not tallied in crew summaries (a bystander is simply not mentioned) | — |
-| Trip series A | (picker/comparison "A" slot) | `"A #{id}: ..."` header, `[A]` row marker | `TripComparisonSeriesHeaders_AreDistinctText` |
-| Trip series B | (picker/comparison "B" slot) | `"B #{id}: ..."` header, `[B]` row marker | `TripComparisonSeriesHeaders_AreDistinctText` |
+| Trip series A | (picker/comparison "A" slot) | `"A #{id}: ..."` header, `[A]` row marker | `TripHistoryUiTests.Comparison_AlignsDifferentLengthsByNormalizedDistance` |
+| Trip series B | (picker/comparison "B" slot) | `"B #{id}: ..."` header, `[B]` row marker | `TripHistoryUiTests.Comparison_AlignsDifferentLengthsByNormalizedDistance` |
 | Unknown/missing weight | (manifest row) | literal `"?"` marker, counted separately in the total line | existing `CargoManifestPresenterTests` |
 
 `RiskLevel` (Safe/Unknown/Caution/Danger, `Domain/Risk`) is not in this

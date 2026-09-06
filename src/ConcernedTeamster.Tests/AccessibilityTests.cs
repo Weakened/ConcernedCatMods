@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using TheConcernedCat.ConcernedTeamster.Domain.Ui;
 
@@ -39,6 +41,28 @@ public class AccessibilityTests
     {
         Assert.True(UiScaleOptions.MinScale < UiScaleOptions.DefaultScale);
         Assert.True(UiScaleOptions.DefaultScale < UiScaleOptions.MaxScale);
+    }
+
+    [Fact]
+    public void MaxScale_TallestPanelStaysUnderConservativeReferenceCanvasHeight()
+    {
+        // TripHistoryPanel.PanelHeight is private to that class; pinned here
+        // as a known fact (same rationale as TeamsterStringsTests's
+        // ManifestPanelCompositionKeys_ArePinnedByteExact) since it cannot be
+        // referenced directly. 1080 is a commonly-cited Valheim UI reference
+        // height — NOT independently verified against Jotunn's actual
+        // CustomGUIFront canvas setup (no live game session here); this is a
+        // conservative planning assumption, tracked pending in-game
+        // confirmation in HUMAN_ATTENTION.md. The point of this test is to
+        // fail loudly if a future change to MaxScale or to the tallest
+        // panel's height stops leaving margin against that assumption.
+        const float tallestPanelHeight = 760f; // TripHistoryPanel.PanelHeight
+        const float approximateReferenceCanvasHeight = 1080f;
+        float worstCaseHeight = tallestPanelHeight * UiScaleOptions.MaxScale;
+
+        Assert.True(worstCaseHeight < approximateReferenceCanvasHeight,
+            $"Tallest panel at MaxScale ({worstCaseHeight}) should stay under the approximate " +
+            $"{approximateReferenceCanvasHeight} reference canvas height, leaving margin for other HUD chrome.");
     }
 
     // ---- ContrastRatio --------------------------------------------------------
@@ -133,12 +157,44 @@ public class AccessibilityTests
         Assert.Equal(templates.Length, new HashSet<string>(templates).Count);
     }
 
-    [Fact]
-    public void TripComparisonSeriesHeaders_AreDistinctText()
-    {
-        string headerA = TeamsterStrings.Format("compare.headerA", "1", "10 m, mass 20, worst 5%");
-        string headerB = TeamsterStrings.Format("compare.headerB", "1", "10 m, mass 20, worst 5%");
+    // Trip series A/B attribution (the real presenter, not just the catalog
+    // templates) is proven by TripHistoryUiTests
+    // .Comparison_AlignsDifferentLengthsByNormalizedDistance, which asserts
+    // ViewModel.HeaderA/HeaderB against two genuinely distinct trips.
 
-        Assert.NotEqual(headerA, headerB);
+    // ---- Outline regression guard ------------------------------------------
+
+    [Fact]
+    public void PanelTextCalls_NeverDisableTheContrastOutline()
+    {
+        // outline:true is the actual contrast fix (ACCESSIBILITY.md): a
+        // sensitivity check found unoutlined Header drops to 4.15:1 — below
+        // the 4.5:1 AA target — under a plausible lighter background
+        // estimate. PanelTextColor_MeetsAaContrastAgainstApproximateBackground
+        // only checks raw RGB values and cannot see this, so it is enforced
+        // here by scanning the shipped Ui source directly.
+        foreach (string file in Directory.EnumerateFiles(UiDirectory, "*.cs"))
+        {
+            string text = File.ReadAllText(file);
+            Assert.False(text.Contains("outline: false"),
+                $"{Path.GetFileName(file)} passes outline: false to CreateText, " +
+                "reopening the contrast risk documented in ACCESSIBILITY.md.");
+        }
     }
+
+    private static readonly Lazy<string> _repoRoot = new(() =>
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null &&
+            !File.Exists(Path.Combine(directory.FullName, "ConcernedCatMods.sln")))
+        {
+            directory = directory.Parent;
+        }
+
+        return directory?.FullName
+            ?? throw new InvalidOperationException("ConcernedCatMods.sln not found above test output.");
+    });
+
+    private static string UiDirectory =>
+        Path.Combine(_repoRoot.Value, "src", "ConcernedTeamster", "Ui");
 }
