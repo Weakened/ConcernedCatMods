@@ -637,6 +637,41 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-06 — CT-033 scale/contrast proven off-game; wood-panel background is an approximation
+
+- Version / issue: v0.7 / CT-033 (#148)
+- Question: the UI scale factor (0.8–1.5) is proven proportional and clamped
+  in pure domain code, and every panel text color is contrast-audited, but
+  two things are genuinely unverifiable without a live game session: (a)
+  whether a scaled panel visually clips against a *neighboring* panel's
+  fixed screen anchor (each panel's own offset from the screen edge is
+  independent pixel math, not itself scaled) or renders text noticeably
+  blurrier when scaled via transform instead of re-rendered at a larger
+  font size; (b) the contrast audit's background color
+  (`PanelPalette.ApproximateWoodBackground`) is a documented visual estimate
+  of Jötunn's wood-panel texture, not a measured pixel value.
+- Safe reversible default selected: uniform transform scaling is a Unity
+  geometric guarantee (a panel's own children cannot newly clip relative to
+  each other at any scale in the clamped range), proven in code via
+  `AccessibilityTests`; every panel text call that lacked an outline now has
+  one (`outline: true`), which is contrast-robust independent of the exact
+  background tone — a sensitivity check against a lighter plausible estimate
+  in `ACCESSIBILITY.md` shows this matters (unoutlined Header would drop to
+  4.15:1, below the 4.5:1 AA target, under that estimate).
+- Why work continued: worst case is a cosmetic one — a larger scale setting
+  looking slightly crowded next to another open panel, or text reading
+  marginally less crisp — never a crash, never hidden content (Truncate/
+  Overflow wrap modes are already in place), never a world-safety issue.
+- Risk / alternative: the owner may prefer scaling font size and per-element
+  offsets individually instead of the whole transform, for crisper text at
+  the cost of touching every dimension in all six panels; the chosen
+  approach trades a small crispness risk for structurally provable
+  no-self-clipping and a much smaller, lower-risk diff. Replacing the
+  approximate background with a screenshot color-pick is a one-constant
+  change with no code impact.
+- Must resolve before public release: Yes
+- Status: Open
+
 ## Resolved items
 
 ### 2026-09-05 — CT-032 localization framework delivered; full-UI externalization is progressive

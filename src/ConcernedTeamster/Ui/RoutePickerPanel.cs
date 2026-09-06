@@ -41,6 +41,7 @@ internal sealed class RoutePickerPanel
     private readonly ManualLogSource _log;
     private readonly LoadModel? _loadModel;
     private readonly Func<float?> _cartMassProvider;
+    private readonly float _uiScale;
     private readonly RouteProfileCache _profileCache = new();
     private readonly RouteReportPanel _reportPanel;
     private string _selectedRouteName = "";
@@ -63,12 +64,14 @@ internal sealed class RoutePickerPanel
     private long _lastChangeStamp = long.MinValue;
     private double _nextRefreshTime;
 
-    internal RoutePickerPanel(ManualLogSource log, LoadModel? loadModel, Func<float?> cartMassProvider)
+    internal RoutePickerPanel(
+        ManualLogSource log, LoadModel? loadModel, Func<float?> cartMassProvider, float uiScale)
     {
         _log = log;
         _loadModel = loadModel;
         _cartMassProvider = cartMassProvider;
-        _reportPanel = new RouteReportPanel(log);
+        _uiScale = uiScale;
+        _reportPanel = new RouteReportPanel(log, uiScale);
     }
 
     /// <summary>The validated selection for later leaves (CT-023); null when
@@ -369,13 +372,14 @@ internal sealed class RoutePickerPanel
 
         GUIManager gui = GUIManager.Instance;
         Font font = gui.AveriaSerifBold;
-        var headerColor = new Color(0.9f, 0.8f, 0.6f, 1f);
-        var bodyColor = new Color(0.85f, 0.85f, 0.82f, 1f);
+        Color headerColor = PanelStyle.Header;
+        Color bodyColor = PanelStyle.Body;
 
         _panel = gui.CreateWoodpanel(
             GUIManager.CustomGUIFront.transform,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
             new Vector2(0f, 0f), PanelWidth, PanelHeight, draggable: true);
+        PanelStyle.ApplyScale(_panel, _uiScale);
 
         gui.CreateText(
             TeamsterStrings.Get("routes.title"), _panel.transform,
@@ -386,7 +390,7 @@ internal sealed class RoutePickerPanel
         _statusLine = gui.CreateText(
             string.Empty, _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -56f),
-            font, 15, bodyColor, outline: false, Color.black, PanelWidth - 40f, 24f,
+            font, 15, bodyColor, outline: true, Color.black, PanelWidth - 40f, 24f,
             addContentSizeFitter: false).GetComponent<Text>();
         _statusLine.alignment = TextAnchor.UpperLeft;
 
@@ -412,7 +416,7 @@ internal sealed class RoutePickerPanel
         _overflowLine = gui.CreateText(
             string.Empty, _panel.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 48f),
-            font, 13, bodyColor, outline: false, Color.black, PanelWidth - 40f, 22f,
+            font, 13, bodyColor, outline: true, Color.black, PanelWidth - 40f, 22f,
             addContentSizeFitter: false).GetComponent<Text>();
 
         // CT-023: the profile block for the selected route, below the list.
@@ -423,7 +427,7 @@ internal sealed class RoutePickerPanel
             _profileLines[index] = gui.CreateText(
                 string.Empty, _panel.transform,
                 new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, profileY - 10f),
-                font, 13, bodyColor, outline: false, Color.black, PanelWidth - 40f, 20f,
+                font, 13, bodyColor, outline: true, Color.black, PanelWidth - 40f, 20f,
                 addContentSizeFitter: false).GetComponent<Text>();
             _profileLines[index].alignment = TextAnchor.UpperLeft;
             _profileLines[index].verticalOverflow = VerticalWrapMode.Truncate;

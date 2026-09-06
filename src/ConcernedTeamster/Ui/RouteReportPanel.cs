@@ -23,14 +23,16 @@ internal sealed class RouteReportPanel
     internal const int MaxLines = 18;
 
     private readonly ManualLogSource _log;
+    private readonly float _uiScale;
     private bool _failed;
     private GameObject? _panel;
     private Text? _title;
     private Text[] _lines = Array.Empty<Text>();
 
-    internal RouteReportPanel(ManualLogSource log)
+    internal RouteReportPanel(ManualLogSource log, float uiScale)
     {
         _log = log;
+        _uiScale = uiScale;
     }
 
     internal bool IsVisible => _panel != null && _panel.activeSelf;
@@ -103,13 +105,14 @@ internal sealed class RouteReportPanel
 
         GUIManager gui = GUIManager.Instance;
         Font font = gui.AveriaSerifBold;
-        var headerColor = new Color(0.9f, 0.8f, 0.6f, 1f);
-        var bodyColor = new Color(0.85f, 0.85f, 0.82f, 1f);
+        Color headerColor = PanelStyle.Header;
+        Color bodyColor = PanelStyle.Body;
 
         _panel = gui.CreateWoodpanel(
             GUIManager.CustomGUIFront.transform,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
             new Vector2(120f, 0f), PanelWidth, PanelHeight, draggable: true);
+        PanelStyle.ApplyScale(_panel, _uiScale);
 
         _title = gui.CreateText(
             string.Empty, _panel.transform,
@@ -124,7 +127,7 @@ internal sealed class RouteReportPanel
             _lines[index] = gui.CreateText(
                 string.Empty, _panel.transform,
                 new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, y - (LineHeight / 2f)),
-                font, 14, bodyColor, outline: false, Color.black, PanelWidth - 40f, LineHeight,
+                font, 14, bodyColor, outline: true, Color.black, PanelWidth - 40f, LineHeight,
                 addContentSizeFitter: false).GetComponent<Text>();
             _lines[index].alignment = TextAnchor.UpperLeft;
             _lines[index].verticalOverflow = VerticalWrapMode.Truncate;

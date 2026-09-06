@@ -29,6 +29,7 @@ internal sealed class CargoManifestPanel
     private const double ViewTickSeconds = 1.0;
 
     private readonly ManualLogSource _log;
+    private readonly float _uiScale;
     private readonly CargoManifestTracker _tracker = new();
 
     private bool _failed;
@@ -51,9 +52,10 @@ internal sealed class CargoManifestPanel
     private bool _viewDirty = true;
     private double _nextViewTick;
 
-    public CargoManifestPanel(ManualLogSource log)
+    public CargoManifestPanel(ManualLogSource log, float uiScale)
     {
         _log = log;
+        _uiScale = uiScale;
     }
 
     public bool IsVisible => _panel != null && _panel.activeSelf;
@@ -266,13 +268,14 @@ internal sealed class CargoManifestPanel
 
         GUIManager gui = GUIManager.Instance;
         Font font = gui.AveriaSerifBold;
-        var headerColor = new Color(0.9f, 0.8f, 0.6f, 1f);
-        var bodyColor = new Color(0.85f, 0.85f, 0.82f, 1f);
+        Color headerColor = PanelStyle.Header;
+        Color bodyColor = PanelStyle.Body;
 
         _panel = gui.CreateWoodpanel(
             GUIManager.CustomGUIFront.transform,
             new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
             new Vector2(-(PanelWidth / 2f) - 380f, 0f), PanelWidth, PanelHeight, draggable: true);
+        PanelStyle.ApplyScale(_panel, _uiScale);
 
         gui.CreateText(
             TeamsterStrings.Get("manifest.title"), _panel.transform,
@@ -342,7 +345,7 @@ internal sealed class CargoManifestPanel
         Text? text = gui.CreateText(
             string.Empty, _panel!.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, y - (height / 2f)),
-            font, 15, color, outline: false, Color.black, PanelWidth - 40f, height,
+            font, 15, color, outline: true, Color.black, PanelWidth - 40f, height,
             addContentSizeFitter: false).GetComponent<Text>();
         if (text != null)
         {

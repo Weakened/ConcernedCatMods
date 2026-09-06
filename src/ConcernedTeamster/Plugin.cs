@@ -87,7 +87,9 @@ public sealed class Plugin : BaseUnityPlugin
 
         Ui.CartStatusHudController hud = gameObject.AddComponent<Ui.CartStatusHudController>();
         hud.Initialize(settings, Logger, pump);
-        Logger.LogInfo("Cart Status panel armed: visible Cart button at the right screen edge while in a world.");
+        Logger.LogInfo(
+            "Cart Status panel armed: visible Cart button at the right screen edge while in a world, " +
+            $"UI scale {Domain.Ui.UiScaleOptions.Clamp(settings.UiScale.Value):0.##}.");
     }
 
     /// <summary>Loads the embedded calibration data once, reports its

@@ -24,15 +24,17 @@ internal sealed class RecoveryGuidancePanel
     private const double RefreshPeriodSeconds = 1.0;
 
     private readonly ManualLogSource _log;
+    private readonly float _uiScale;
     private bool _failed;
     private GameObject? _panel;
     private Text? _title;
     private Text?[] _steps = Array.Empty<Text?>();
     private double _nextRefreshTime;
 
-    public RecoveryGuidancePanel(ManualLogSource log)
+    public RecoveryGuidancePanel(ManualLogSource log, float uiScale)
     {
         _log = log;
+        _uiScale = uiScale;
     }
 
     public bool IsVisible => _panel != null && _panel.activeSelf;
@@ -144,13 +146,14 @@ internal sealed class RecoveryGuidancePanel
 
         GUIManager gui = GUIManager.Instance;
         Font font = gui.AveriaSerifBold;
-        var headerColor = new Color(0.9f, 0.8f, 0.6f, 1f);
-        var bodyColor = new Color(0.85f, 0.85f, 0.82f, 1f);
+        Color headerColor = PanelStyle.Header;
+        Color bodyColor = PanelStyle.Body;
 
         _panel = gui.CreateWoodpanel(
             GUIManager.CustomGUIFront.transform,
             new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
             new Vector2(-(PanelWidth / 2f) - 380f, -120f), PanelWidth, PanelHeight, draggable: true);
+        PanelStyle.ApplyScale(_panel, _uiScale);
 
         gui.CreateText(
             TeamsterStrings.Get("recovery.title"), _panel.transform,
@@ -161,7 +164,7 @@ internal sealed class RecoveryGuidancePanel
         _title = gui.CreateText(
             string.Empty, _panel.transform,
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -66f),
-            font, 15, headerColor, outline: false, Color.black, PanelWidth - 40f, 40f,
+            font, 15, headerColor, outline: true, Color.black, PanelWidth - 40f, 40f,
             addContentSizeFitter: false).GetComponent<Text>();
         if (_title != null)
         {
@@ -176,7 +179,7 @@ internal sealed class RecoveryGuidancePanel
             Text? row = gui.CreateText(
                 string.Empty, _panel.transform,
                 new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, y - (RowHeight / 2f)),
-                font, 14, bodyColor, outline: false, Color.black, PanelWidth - 40f, RowHeight,
+                font, 14, bodyColor, outline: true, Color.black, PanelWidth - 40f, RowHeight,
                 addContentSizeFitter: false).GetComponent<Text>();
             if (row != null)
             {
