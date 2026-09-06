@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.7.0 (Internal — unreleased)
+
+**UX, Controller, Accessibility, Localization (CT-031..CT-035).** The
+seventh internal release candidate: every panel is scalable, contrast-
+checked, and controller-navigable; every user-facing string is externalized
+with a documented translator path; and a new player is gently pointed at
+the Cart button instead of left to discover it cold.
+
+- **Controller navigation and accelerators (CT-031).** A deterministic focus
+  order for every panel and a conflict checker for keyboard accelerators
+  (internal duplicates and external collisions with a caller-supplied
+  reserved set) — buttons-first is enforced by an audit: every feature has a
+  visible button, none is accelerator-only. Live gamepad input wiring is
+  staged pending verification against the real read surface.
+- **Localization framework and full-catalog externalization (CT-032).**
+  Every user-facing string — status, manifest, warnings, diagnostics,
+  guidance, trips, routes, navigation — resolves through a 244-key English
+  catalog with override loading from a translator `.tsv`, English fallback,
+  a once-only missing-key report, and placeholder validation. A CI-gating
+  audit test fails the build if a hardcoded English literal, a dead catalog
+  key, or a re-hardcoded catalog sentence is ever introduced.
+- **UI scale, contrast, and non-color cues (CT-033).** A configurable scale
+  factor (0.8–1.3) applied to each panel's whole transform, so nothing can
+  clip relative to its own container at any scale. Every panel text color
+  is audited against the WCAG AA contrast target; a sensitivity check found
+  a real, narrow risk under the wood-panel background's uncertainty, fixed
+  by adding an outline everywhere one was missing. Every warning, diagnosis,
+  and comparison state was already text-distinguishable by design since
+  CT-009/CT-018 — now an audited, tested invariant.
+- **Onboarding, config profiles, and discoverability (CT-034).** A single
+  non-modal, self-dismissing hint introduces new players to the Cart button
+  the first time they are near a cart. Three documented settings presets
+  (Minimal / Standard / EverythingObservational) apply idempotently on an
+  explicit config change — Standard matches the mod's original defaults
+  exactly, and the parking brake stays opt-in in every preset. Every panel's
+  Close button now sits at the same position and size.
+- **Safety posture unchanged.** No cart physics, inventory, stamina, or
+  network behavior touched; nothing written to worlds or saves. All four
+  leaves are UI/config-layer only.
+
 ## 0.6.0 (Internal — unreleased)
 
 **Multiplayer Trust and Authority (CT-026..CT-030).** The sixth internal release candidate: a written, enforced policy for who may read, act, and observe each feature in multiplayer — with the parking brake the only mutating feature, gated to live local authority, and every network-derived input treated as hostile. Client-side throughout; Teamster sends nothing and takes no ownership.

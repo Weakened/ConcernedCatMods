@@ -5,6 +5,79 @@ split between automated evidence and pending manual claims, following the
 dossier discipline proven on Concerned Cartographer. Publication of anything
 is owner-only, always.
 
+## v0.7 RC1 — "UX, Controller, Accessibility, Localization" (sealed 2026-09-06)
+
+| Item | Value |
+|---|---|
+| Version | 0.7.0 (internal; no publication) |
+| Source commit | `e3a177c357d41e67fe86ceccc655559a32d68deb` (branch `chore/ct-035-v07-rc`; supersedes the pre-review seal at `2601ec5` — the independent review found a stale packaged README.md, a catalog-count error, a dropped Release-config citation, and an unenforced version-sync check, all fixed before this rebuild). Sealed on merge to main via the CT-035 PR. |
+| ZIP | `artifacts/thunderstore/TheConcernedCat-ConcernedTeamster-0.7.0.zip` |
+| ZIP SHA-256 | `33c7257e74b71e6d4ea920185ebd4eb73a4b057bfe4f7d6eed4a771e07ff619e` (130,648 B) |
+| DLL SHA-256 | `31a7a7e42094824f1d4d82db07bf289c282ad0a5c7068b8e0f0558db849c1e16` (218,624 B) |
+| DLL identity | AssemblyVersion 0.7.0.0, InformationalVersion `0.7.0+e3a177c357d41e67fe86ceccc655559a32d68deb` |
+| ZIP contents (6 entries) | manifest.json, icon.png (256×256), README.md, CHANGELOG.md, LICENSE, plugins/TheConcernedCat.ConcernedTeamster.dll — **own DLL only**, no PDB, no foreign DLL |
+| Built against | Valheim 0.221.12 (buildid 21981559 — re-verified in the Steam manifest at seal time, unchanged since the v0.6 seal one day earlier), Unity 6000.0.61f1, BepInExPack 5.4.2333, Jötunn 2.29.2 |
+| Version sync | 0.7.0 across csproj/Plugin.cs/thunderstore.toml + the CHANGELOG `## 0.7.0` section. `scripts/package.ps1` now derives `--expected-version` from the csproj automatically (this RC's own hardening, CT-035) rather than relying on someone typing it by hand each seal, so csproj/Plugin.cs/thunderstore.toml drift is caught on every future package build, not just this one |
+
+### Sprint scope sealed in this RC
+
+CT-031 controller navigation (deterministic focus catalog + ring) and
+accelerator conflict checking (internal + external, buttons-first audited)
+· CT-032 the localization framework and full 244-key catalog externalization
+across every panel, with a CI-gating hardcoded-string audit · CT-033 UI
+scale (0.8–1.3, applied per-panel via root-transform scaling), a WCAG AA
+contrast audit and fix (outline added where missing after a sensitivity
+check found a real risk), and a tested non-color-cue invariant · CT-034
+first-run onboarding, three documented config profiles (brake opt-in in
+every one, idempotent apply), a discoverability audit, and config
+migration safety for the new profile surface · CT-035 integration and this
+seal.
+
+### v0.7 campaign results (automated)
+
+| Campaign item | Method | Result |
+|---|---|---|
+| Static validation + version sync | `validate_repo.py --product teamster --expected-version 0.7.0 --require-binary` | PASS |
+| Solution build | `package.ps1 -Product ConcernedTeamster -Configuration Release` (invokes `build.ps1 -Configuration Release`) | PASS — 0 errors (3 pre-existing benign warnings) |
+| Teamster unit tests | `dotnet test ConcernedTeamster.Tests` (Release) | **542/542 PASS** — +84 executed cases over the v0.6 baseline of 458 (CT-031 navigation/conflict, CT-032 audit + catalog, CT-033 scale/contrast/cue, CT-034 onboarding/profiles) |
+| Cartographer regression | `dotnet test ConcernedCartographer.Tests` (Release) | **568/568 PASS** — unchanged with the v0.7 work present |
+| Cross-product independence + Cartographer contract + integration read-only | `validate_repo.py` interop lines | PASS — 4 trees independent, contract 12/12, 9 integration files read-only |
+| Authority policy / no-force audits | `validate_repo.py` interop lines | PASS — unchanged from v0.6 (no v0.7 leaf touches multiplayer/force paths) |
+| Package build + audit | `package.ps1 -Product ConcernedTeamster` + ZIP listing | PASS — hashes above, own-DLL-only (0 foreign/PDB entries) |
+| Controller-only full walkthrough (gamepad focus + accelerators) | in-game, real gamepad | **MANUAL — pending** (CT-031 logic unit-proven off-game; the live gamepad read surface needs verification before wiring, per HUMAN_ATTENTION) |
+| Localization fallback checks (missing key → English + once-only log) | in-game | **MANUAL — pending** (proven off-game by `TeamsterStringsTests`; the in-game log excerpt itself is unrecorded) |
+| Scale/contrast spot checks | in-game, TCT-Dev at 0.8/1.0/1.3 scale | **MANUAL — pending** (CT-033 HUMAN_ATTENTION entry: neighboring-panel crowding, actual canvas-bounds fit, wood-panel background color-pick) |
+| Onboarding fresh-profile run | in-game, TCT-Clean | **MANUAL — pending** (CT-034 HUMAN_ATTENTION entry: hint text wrap/placement, profile-switch visibility, manual-edit survival across a restart) |
+| Standard suite (clean load, cart/world lifecycle, uninstall safety) | in-game | **MANUAL — pending** (carried from every prior RC; unchanged by v0.7's UI/config-only scope) |
+
+### Campaign — automated coverage vs pending live rows
+
+Every v0.7 acceptance criterion decidable without a running game is green:
+the navigation/conflict logic, the full localization catalog and its
+fallback/placeholder rules, the scale-clamp and contrast-ratio math (plus
+the tallest-panel-vs-reference-canvas margin), and the onboarding/profile
+state machines are all unit-proven. The rows that need an actual Valheim
+session — real gamepad focus movement, an on-screen fallback log excerpt,
+visual scale/contrast at each setting, and a fresh-profile onboarding
+walkthrough — are itemized pending in `HUMAN_ATTENTION.md` (the CT-031,
+CT-033, and CT-034 entries; CT-032's entry is Resolved) and carried to the
+owner smoke checklist. No manual row is marked PASS.
+
+### Defects
+
+No defect filed against `sprint:teamster-v0.7`; none open with the sprint
+label at seal time (`gh issue list --label sprint:teamster-v0.7 --label bug`
+returns empty). The one open Teamster defect, #189 DEF-teamster-v0.4-001
+(P3), remains sidecar-backup hardening scoped to v0.4 — not in any v0.7
+leaf's scope — and stays deferred to the v0.8 migration/recovery line
+(CT-039) by its own rationale.
+
+### Gate decision
+
+All automatable v0.7 gates are green; the live campaign rows (controller,
+localization, scale/contrast, onboarding, standard suite) are pending by
+design for an internal RC. Sprint controller #145 closes with this seal.
+
 ## v0.6 RC1 — "Multiplayer Trust and Authority" (sealed 2026-09-05)
 
 | Item | Value |
