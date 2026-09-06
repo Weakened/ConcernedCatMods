@@ -9,6 +9,7 @@ namespace ConcernedTeamster.Tests;
 /// by stable id across renames, and invalidate it with an explicit state —
 /// never a crash or a stale ghost — when the source deletes, archives,
 /// shrinks, or stops being readable mid-session.</summary>
+[Collection("TeamsterStrings shared statics")]
 public class RoutePickerPresenterTests
 {
     private static CartographerRouteSnapshot Route(

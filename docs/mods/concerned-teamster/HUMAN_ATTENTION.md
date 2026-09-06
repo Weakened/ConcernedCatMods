@@ -637,6 +637,8 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+## Resolved items
+
 ### 2026-09-05 — CT-032 localization framework delivered; full-UI externalization is progressive
 
 - Version / issue: v0.7 / CT-032 (#147)
@@ -665,8 +667,12 @@ only for non-blocking uncertainty.
   it did not complete it.
 - Must resolve before public release: Yes (the v0.9 beta expects full
   localization coverage + the audit gate)
-- Status: Open
-
-## Resolved items
-
-None yet.
+- Status: Resolved 2026-09-05 — the progressive migration completed across
+  PRs #202/#203/#204 (status+manifest, warnings+diagnostics+guidance+load,
+  trips+routes+navigation; every PR output-preserving with an independent
+  MERGE-verdict review), and the repo-wide hardcoded-string audit gate landed
+  with the closing PR (negative-tested: planted literals, dead keys, and
+  re-hardcoded sentences all fail it; log diagnostics are structurally
+  exempt). Catalog: 241 keys, English complete. The in-game visual checks
+  remain tracked by the per-surface entries above and the owner smoke
+  checklist, unchanged.

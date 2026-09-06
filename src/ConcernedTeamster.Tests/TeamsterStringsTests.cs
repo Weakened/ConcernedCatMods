@@ -11,11 +11,14 @@ namespace ConcernedTeamster.Tests;
 /// top of it.
 ///
 /// Isolation rule: TeamsterStrings is process-global static state and xUnit
-/// runs test classes in parallel, so tests here may only override
-/// `routes.*` keys (no other suite asserts those exact outputs) and every
-/// mutation restores the default in a finally/cleanup line. Overriding a
-/// `status.*`/`manifest.*` key would race the exact-output presenter
-/// suites.</summary>
+/// runs test classes in parallel, so every mutation here restores the
+/// default in a finally/cleanup line, and this class shares a serialized
+/// collection with the suites that pin exact outputs of the keys it
+/// overrides (`routes.*` → RoutePickerPresenterTests). This class may
+/// override ONLY `routes.*` keys — overriding a `status.*`/`manifest.*` key
+/// would race CartStatusPresenterTests/CargoManifestPresenterTests, which pin
+/// exact output and are NOT in this serialized collection.</summary>
+[Collection("TeamsterStrings shared statics")]
 public class TeamsterStringsTests
 {
     [Fact]
@@ -231,25 +234,53 @@ public class TeamsterStringsTests
     [Fact]
     public void LoadOverrides_TranslationWins_ThenFallsBackWhenCleared()
     {
-        TeamsterStrings.LoadOverrides(new Dictionary<string, string> { ["routes.pick"] = "Choisissez." });
-        Assert.Equal("Choisissez.", TeamsterStrings.Get("routes.pick"));
+        try
+        {
+            TeamsterStrings.LoadOverrides(new Dictionary<string, string> { ["routes.pick"] = "Choisissez." });
+            Assert.Equal("Choisissez.", TeamsterStrings.Get("routes.pick"));
 
-        // A partial catalog still falls back to English for untranslated keys.
-        Assert.Equal("(unnamed route)", TeamsterStrings.Get("routes.unnamed"));
+            // A partial catalog still falls back to English for untranslated keys.
+            Assert.Equal("(unnamed route)", TeamsterStrings.Get("routes.unnamed"));
+        }
+        finally
+        {
+            // Clearing overrides restores English everywhere (isolation for other tests).
+            TeamsterStrings.LoadOverrides(new Dictionary<string, string>());
+        }
 
-        // Clearing overrides restores English everywhere (isolation for other tests).
-        TeamsterStrings.LoadOverrides(new Dictionary<string, string>());
         Assert.Equal("Pick a route to profile.", TeamsterStrings.Get("routes.pick"));
     }
 
     [Fact]
     public void Format_BrokenTranslation_FallsBackToEnglishFormat()
     {
-        // An override that somehow slipped a bad placeholder past parsing
-        // (defense in depth) must not crash Format.
-        TeamsterStrings.LoadOverrides(new Dictionary<string, string> { ["routes.selected"] = "Bad {" });
-        string result = TeamsterStrings.Format("routes.selected", "X");
-        Assert.Equal("Selected: X", result); // English format used
-        TeamsterStrings.LoadOverrides(new Dictionary<string, string>());
+        try
+        {
+            // An override that somehow slipped a bad placeholder past parsing
+            // (defense in depth) must not crash Format.
+            TeamsterStrings.LoadOverrides(new Dictionary<string, string> { ["routes.selected"] = "Bad {" });
+            string result = TeamsterStrings.Format("routes.selected", "X");
+            Assert.Equal("Selected: X", result); // English format used
+        }
+        finally
+        {
+            TeamsterStrings.LoadOverrides(new Dictionary<string, string>());
+        }
+    }
+
+    [Fact]
+    public void ParseOverrides_LiteralPercentFollowedByDigits_IsNotMisreadAsAnEscape()
+    {
+        // A translator who does not know about the internal %HH encoding may
+        // type a plain percent-then-number sequence directly (common in
+        // locales that write "50%" as "%50"). Only the four codes Escape()
+        // itself produces (%25 %09 %0A %0D) are treated as escapes; any other
+        // %XX, including one followed by ordinary digits, must stay literal
+        // so it can never be silently corrupted (e.g. misread as hex 0x50).
+        Dictionary<string, string> parsed = TeamsterStrings.ParseOverrides(
+            new[] { "routes.pick\t%50 complete" }, out int skipped);
+
+        Assert.Equal(0, skipped);
+        Assert.Equal("%50 complete", parsed["routes.pick"]);
     }
 }
