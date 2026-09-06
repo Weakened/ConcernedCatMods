@@ -14,5 +14,25 @@
          ConcernedTeamster). This must be the TCT-Dev profile's plugins folder.
          Optional until you develop Concerned Teamster on this machine. -->
     <TEAMSTER_DEPLOYPATH>C:\REPLACE_ME\TCT-Dev\BepInEx\plugins</TEAMSTER_DEPLOYPATH>
+
+    <!-- CT-043: the compatibility-matrix profile — deploy.ps1 -Product
+         ConcernedTeamster -Profile Compat. You create TCT-Compat once in your
+         mod manager (New Profile, Install BepInEx) and separately install
+         BetterCarts/ItemStacks/ValheimPlus into it from Thunderstore's own
+         browser — this script only ever deploys Teamster's own DLL here, it
+         never installs third-party mods. Optional; only needed to rehearse
+         the live compatibility matrix. -->
+    <TEAMSTER_COMPAT_DEPLOYPATH>C:\REPLACE_ME\TCT-Compat\BepInEx\plugins</TEAMSTER_COMPAT_DEPLOYPATH>
+
+    <!-- CT-043: the dedicated-server profile — deploy.ps1 -Product
+         ConcernedTeamster -Profile Dedicated. A dedicated-server BepInEx
+         install has the same plugins/ layout as a normal profile; you set
+         this up once via your mod manager's dedicated-server support (or a
+         manual BepInEx install matching start_server_bepinex's expectations).
+         Optional; only needed to rehearse dedicated-server authority
+         scenarios (CT-027). Note TCT-Clean has no entry here on purpose: it
+         exists specifically WITHOUT Teamster installed, as the vanilla-truth
+         baseline every other profile is compared against. -->
+    <TEAMSTER_DEDICATED_DEPLOYPATH>C:\REPLACE_ME\TCT-Dedicated\BepInEx\plugins</TEAMSTER_DEDICATED_DEPLOYPATH>
   </PropertyGroup>
 </Project>

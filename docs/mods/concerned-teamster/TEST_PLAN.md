@@ -210,6 +210,24 @@ evidence:
 | Audit checklist committed with all findings resolved or filed as defects | `SECURITY_AUDIT.md` — 2 findings, 1 fixed inline (a doc-comment accuracy correction), 1 filed (DEF-teamster-v0.9-002 / #217, P2, deferred to CT-044) |
 | Validator passes with the final metadata | `validate_repo.py --product teamster` — unchanged pass, no metadata changed this leaf (categories were already correct; version stays 0.8.0 until CT-045's seal) |
 
+## Profile family and lifecycle rehearsal (CT-043)
+
+Full detail in `PROFILE_REHEARSAL.md`. Summary of the acceptance-criteria
+evidence:
+
+| Criterion | Evidence |
+|---|---|
+| Profile scripts are idempotent and scoped to TCT profiles | `deploy.ps1 -Product ConcernedTeamster -Profile Dev\|Compat\|Dedicated`; idempotence of its `Copy-Item -Force` primitive proven by `rehearse-teamster-lifecycle.ps1`'s §5 (two runs, identical SHA-256); Cartographer's own deploy path independently confirmed unchanged |
+| Fresh/upgrade/uninstall rehearsals each have recorded evidence; migrations ran where expected | `rehearse-teamster-lifecycle.ps1` §§1–4 — real chain-integrity check across all 8 sealed tags, a real fresh-install of the current package, a real upgrade from an actually-rebuilt v0.7.0 (via a temporary `git worktree`) to current, and a real uninstall check; migration *logic* coverage is `ConfigSchemaMigrationTests`/`TripPersistPlanTests`/`TripPersistenceTests` (unchanged by this leaf, already exhaustive) |
+| No rehearsal step requires undocumented manual fiddling | Every manual step (creating each profile once, installing the three compat mods) is documented in `PROFILE_REHEARSAL.md`, not left implicit |
+| Owner-facing rehearsal doc committed | `PROFILE_REHEARSAL.md` |
+
+No TCT-* mod-manager profile exists on this machine yet (only Cartographer's
+TCC-* family does) — creating one is a one-time GUI action per
+`PROFILE_REHEARSAL.md`, deliberately not attempted by this leaf's
+tooling. The owner smoke-checklist rows this rehearsal adds are itemized
+in `HUMAN_ATTENTION.md`'s CT-043 entry, never claimed PASS.
+
 ## Multiplayer (v0.6)
 
 - Ownership: only the vanilla-authoritative controller's client mutates
