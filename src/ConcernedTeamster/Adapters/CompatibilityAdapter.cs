@@ -21,6 +21,14 @@ public static class CompatibilityAdapter
     /// ran.</summary>
     public static IReadOnlyList<ModDetectionResult>? Results => _results;
 
+    /// <summary>CT-037: whether cart-mass-calibrated advice (warnings, stuck
+    /// diagnosis, recovery guidance, route bottlenecks) can be trusted right
+    /// now. Before the first probe (<see cref="Results"/> is null) this is
+    /// true — fail-open until proven otherwise, so nothing gates on a probe
+    /// that simply has not run yet.</summary>
+    public static bool CartMassAdviceReliable =>
+        CompatibilityAdvisoryGate.CartMassAdviceReliable(_results ?? System.Array.Empty<ModDetectionResult>());
+
     /// <summary>Runs the probe once per session and logs one line per
     /// actually-detected known mod (or one "none detected" line otherwise).
     /// Called from the plugin's first Update tick — BepInEx fills

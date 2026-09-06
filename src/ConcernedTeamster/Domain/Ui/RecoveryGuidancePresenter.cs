@@ -82,6 +82,21 @@ public static class RecoveryGuidancePresenter
                 steps.Add(TeamsterStrings.Get("recovery.stepWheelHole"));
                 break;
 
+            case CartDiagnosis.LoadAdviceUnavailable:
+                // CT-037: no unload quantity is offered here — the load
+                // model's verdict is exactly what a detected mass/physics
+                // mod has invalidated, so no AddUnloadStep call, ever.
+                title = TeamsterStrings.Get("recovery.titleLoadAdviceUnavailable");
+                steps.Add(TeamsterStrings.Get("compat.alteredPhysicsSituation"));
+                steps.Add(TeamsterStrings.Get("compat.alteredPhysicsAction"));
+                if (brakeStep)
+                {
+                    steps.Add(TeamsterStrings.Get("recovery.stepBrakeHold"));
+                }
+
+                steps.Add(TeamsterStrings.Get("recovery.stepRouteAround"));
+                break;
+
             default:
                 title = TeamsterStrings.Get("recovery.titleUnclear");
                 steps.Add(TeamsterStrings.Get("recovery.stepReattach"));

@@ -53,8 +53,7 @@ public static class TeamsterStrings
 
         // Compatibility framework (CT-036): the status surface for detected
         // known mods. Silence is the default — only actually-detected known
-        // mods produce a line; the registry ships empty until CT-037/038
-        // research and add real entries.
+        // mods produce a line.
         ["compat.title"] = "Compatibility",
         ["compat.noneDetected"] = "No known compatibility concerns detected.",
         ["compat.notYetChecked"] = "Compatibility check has not run yet.",
@@ -64,6 +63,17 @@ public static class TeamsterStrings
         ["compat.policyAdapt"] = "adapted",
         ["compat.policyWarn"] = "caution",
         ["compat.overflow"] = "… {0} more detected — open the log for the full list",
+
+        // Precedence policy (CT-037): shown instead of a normal warning
+        // whenever a registered mod affecting cart mass/physics is
+        // detected — never a silently-wrong vanilla-calibrated verdict.
+        ["compat.alteredPhysicsSituation"] = "A detected mod changes cart mass or physics.",
+        ["compat.alteredPhysicsAction"] = "Load advice is unavailable — see the Compat panel for details.",
+        ["compat.loadAdviceUnavailableLine"] =
+            "Load advice unavailable — a detected mod changes cart mass or physics (see the Compat panel).",
+        ["compat.betterCartsDescription"] =
+            "Quick attach/detach and multiplayer push convenience — but reduces cart mass by " +
+            "default, so Teamster's load advice is shown as unavailable while it's detected.",
 
         // Cart Status surface (CT-005): presenter lines + panel chrome.
         // Numbers arrive pre-formatted (invariant culture) so translations
@@ -153,6 +163,7 @@ public static class TeamsterStrings
         ["diag.labelSteepClimb"] = "steep climb",
         ["diag.labelObstruction"] = "obstruction or grounded chassis",
         ["diag.labelUnclear"] = "cause unclear",
+        ["diag.labelLoadAdviceUnavailable"] = "load advice unavailable",
         ["diag.noTerrainEvidence"] = "pulling with no movement and no terrain data.",
         ["diag.noTerrainAction"] = "Look for obstacles around the wheels.",
         ["diag.descentEvidence"] = "not moving on a {0} descent — stalls there are unusual.",
@@ -168,6 +179,9 @@ public static class TeamsterStrings
         ["diag.steepClimbAction"] = "Try a shallower route, or lighten the load and retry.",
         ["diag.unclearClimbEvidence"] = "a {0} climb; calibration has no verdict and the grade alone is not conclusive.",
         ["diag.unclearClimbAction"] = "Check for obstacles first, then try with less cargo.",
+        ["diag.loadAdviceUnavailableEvidence"] =
+            "a {0} climb, but a detected mod changes cart mass or physics — the load model's verdict " +
+            "cannot be trusted right now.",
 
         // Cooperative effort (CT-028). Values never begin or end with
         // whitespace (the translator file trims line ends); joins live in
@@ -193,6 +207,7 @@ public static class TeamsterStrings
         ["recovery.titleSteep"] = "Steep, uncalibrated climb",
         ["recovery.titleObstruction"] = "Something is physically blocking the cart",
         ["recovery.titleUnclear"] = "Cause unclear — safe general steps",
+        ["recovery.titleLoadAdviceUnavailable"] = "Load advice unavailable under altered physics",
         ["recovery.stepBrakeHold"] = "Detach, then hold the cart with the parking brake while you work.",
         ["recovery.stepRetryClimb"] = "Retry the climb straight uphill at a steady pace.",
         ["recovery.stepRouteAround"] =

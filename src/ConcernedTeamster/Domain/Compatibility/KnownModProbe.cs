@@ -6,11 +6,17 @@ namespace TheConcernedCat.ConcernedTeamster.Domain.Compatibility;
 /// evaluated <see cref="ModDetectionResult"/>s, never a GUID literal.</summary>
 public sealed class KnownModProbe
 {
-    public KnownModProbe(string guid, string displayName, CompatibilityPolicy policy, string description)
+    public KnownModProbe(
+        string guid,
+        string displayName,
+        CompatibilityPolicy policy,
+        CompatibilityAffectedAspect affectedAspect,
+        string description)
     {
         Guid = guid;
         DisplayName = displayName;
         Policy = policy;
+        AffectedAspect = affectedAspect;
         Description = description;
     }
 
@@ -22,6 +28,12 @@ public sealed class KnownModProbe
     public string DisplayName { get; }
 
     public CompatibilityPolicy Policy { get; }
+
+    /// <summary>Which Teamster reading this mod's presence calls into
+    /// question (CT-037's precedence policy), queried through
+    /// <see cref="CompatibilityAdvisoryGate"/> — never branched on by
+    /// GUID/name in feature code.</summary>
+    public CompatibilityAffectedAspect AffectedAspect { get; }
 
     /// <summary>What this policy means in practice, shown to the player
     /// (for example "cart mass readings may not reflect this mod's changes").</summary>

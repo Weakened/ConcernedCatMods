@@ -36,6 +36,7 @@ public sealed class CartDiagnostic
             CartDiagnosis.MarginalLoad => "diag.labelMarginalLoad",
             CartDiagnosis.SteepClimb => "diag.labelSteepClimb",
             CartDiagnosis.Obstruction => "diag.labelObstruction",
+            CartDiagnosis.LoadAdviceUnavailable => "diag.labelLoadAdviceUnavailable",
             _ => "diag.labelUnclear",
         });
         return TeamsterStrings.Format("diag.line", label, Evidence, Action);

@@ -55,6 +55,7 @@ row: 15 | 200 | Climbs | Measured | proven at fifteen"));
         {
             CartDiagnosis.ImpossibleLoad, CartDiagnosis.MarginalLoad,
             CartDiagnosis.SteepClimb, CartDiagnosis.Obstruction, CartDiagnosis.Unclear,
+            CartDiagnosis.LoadAdviceUnavailable,
         })
         {
             RecoveryGuidanceViewModel viewModel = RecoveryGuidancePresenter.Present(
@@ -148,6 +149,47 @@ row: 15 | 200 | Climbs | Measured | proven at fifteen"));
         Assert.Contains("unclear", viewModel.Title, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(viewModel.Steps, step => step.Contains("Detach and re-attach"));
         Assert.Contains(viewModel.Steps, step => step.Contains("parking brake"));
+    }
+
+    // -- CT-037 precedence gate -------------------------------------------
+
+    [Fact]
+    public void Present_LoadAdviceUnavailable_NeverOffersAnUnloadQuantity()
+    {
+        // The whole point: a detected mass-altering mod means AddUnloadStep
+        // must never run, even though this diagnosis still has a telemetry
+        // and a live model to query.
+        RecoveryGuidanceViewModel viewModel = RecoveryGuidancePresenter.Present(
+            Diag(CartDiagnosis.LoadAdviceUnavailable), Telemetry(grade: 12f, cargo: 300f),
+            Model(), brakeFeatureEnabled: false);
+
+        Assert.True(viewModel.HasGuidance);
+        Assert.DoesNotContain(viewModel.Steps, step => step.Contains("Unload at least"));
+        Assert.DoesNotContain(viewModel.Steps, step => step.Contains("already at or under"));
+        Assert.Contains(viewModel.Steps, step => step.Contains("changes cart mass or physics"));
+        Assert.Contains(viewModel.Steps, step => step.Contains("Compat panel"));
+    }
+
+    [Fact]
+    public void Present_LoadAdviceUnavailable_BrakeStepStillRespectsSlope()
+    {
+        static bool HasBrakeStep(RecoveryGuidanceViewModel viewModel)
+        {
+            foreach (string step in viewModel.Steps)
+            {
+                if (step.Contains("parking brake"))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        Assert.True(HasBrakeStep(RecoveryGuidancePresenter.Present(
+            Diag(CartDiagnosis.LoadAdviceUnavailable), Telemetry(grade: 12f), Model(), true)));
+        Assert.False(HasBrakeStep(RecoveryGuidancePresenter.Present(
+            Diag(CartDiagnosis.LoadAdviceUnavailable), Telemetry(grade: 12f), Model(), false)));
     }
 
     [Fact]

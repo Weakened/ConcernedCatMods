@@ -3,6 +3,7 @@ using BepInEx.Logging;
 using TheConcernedCat.ConcernedTeamster.Domain.Carts;
 using TheConcernedCat.ConcernedTeamster.Domain.Diagnostics;
 using TheConcernedCat.ConcernedTeamster.Domain.Load;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using TheConcernedCat.ConcernedTeamster.Domain.Risk;
 using TheConcernedCat.ConcernedTeamster.Domain.Warnings;
 using UnityEngine;
@@ -64,10 +65,29 @@ internal sealed class CartTelemetryPump : MonoBehaviour
     public WarningOptions? WarningOptions => _warningOptions;
 
     /// <summary>Current warning for a cart, or null. Read-only: evaluation
-    /// happens exclusively on new snapshots inside Update (CT-009).</summary>
+    /// happens exclusively on new snapshots inside Update (CT-009).
+    /// CT-037: when a registered mod affecting cart mass/physics is
+    /// detected, every LoadModel-derived warning is replaced by one notice
+    /// saying so — a calibrated verdict assumes vanilla physics and must
+    /// never be shown as truth once that assumption breaks, even if the
+    /// cart's own situation would otherwise look fine.</summary>
     public CartWarning? TryGetWarning(string? cartId)
     {
-        return cartId is null ? null : _warnings?.TryGet(cartId);
+        if (cartId is null)
+        {
+            return null;
+        }
+
+        if (!CompatibilityAdapter.CartMassAdviceReliable)
+        {
+            return new CartWarning(
+                cartId,
+                WarningLevel.Caution,
+                TeamsterStrings.Get("compat.alteredPhysicsSituation"),
+                TeamsterStrings.Get("compat.alteredPhysicsAction"));
+        }
+
+        return _warnings?.TryGet(cartId);
     }
 
     /// <summary>Wires the sampler, warning evaluation, and descent risk
@@ -185,8 +205,11 @@ internal sealed class CartTelemetryPump : MonoBehaviour
 
             // CT-013: stuck diagnostics share the pulled-cart, fresh-
             // snapshot gate — parked and unattended carts never reach the
-            // detector.
-            LatestDiagnostic = _stuckDetector?.Update(entry.Value);
+            // detector. CT-037: the same precedence gate as TryGetWarning,
+            // so a mass/physics-altering mod suppresses the load-derived
+            // diagnosis here too, not just the panel's warning row.
+            LatestDiagnostic = _stuckDetector?.Update(
+                entry.Value, CompatibilityAdapter.CartMassAdviceReliable);
 
             // CT-016: trip recording, same gate.
             _trips?.FeedPulled(entry.Value);
@@ -214,10 +237,21 @@ internal sealed class CartTelemetryPump : MonoBehaviour
         if (_settings is { } settings && settings.DebugLogging.Value && now >= _nextDebugSummaryTime)
         {
             _nextDebugSummaryTime = now + DebugSummaryPeriodSeconds;
+            // CT-037: RiskModel.Query dominance-checks totalMass just like
+            // LoadModel, so this debug-only descent-risk summary is exactly
+            // as vanilla-physics-dependent — flagged rather than printed as
+            // though nothing changed. No player-facing panel renders this
+            // verdict today (only DescentRiskInfo.CartId is read elsewhere,
+            // for correlation), so this line is the only spot to fix.
+            string descentRiskSummary = LatestDescentRisk is null
+                ? "."
+                : "; " + LatestDescentRisk.Describe() +
+                    (CompatibilityAdapter.CartMassAdviceReliable
+                        ? "."
+                        : " (mass/physics-altering mod detected — assumes vanilla physics).");
             _log?.LogDebug(
                 $"Cart telemetry: {sampler.TrackedCartCount} tracked, " +
-                $"{sampler.SampledOnLastDueTick} sampled this tick" +
-                (LatestDescentRisk is null ? "." : "; " + LatestDescentRisk.Describe() + "."));
+                $"{sampler.SampledOnLastDueTick} sampled this tick" + descentRiskSummary);
         }
     }
 

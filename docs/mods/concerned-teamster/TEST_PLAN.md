@@ -87,11 +87,42 @@ compatibility claims; the matrix template is:
 
 | Mod (exact name/version) | Load together | Teamster readouts sane | Their features intact | Notes |
 |---|---|---|---|---|
+| BetterCarts (TastyChickenLegs) 1.0.6+ | pending in-game | pending in-game | pending in-game | Registered `Adapt`/`AffectedAspect.CartMassOrPhysics` (CT-037) — its `Vagon.SetMass` Harmony prefix reduces cart mass by a default 20% (`Patches/CartConfigs.cs`: `cartMassReduction = 0.2f`), so every load-advice consumer substitutes its "unavailable" notice while it is detected; the in-game row confirms this holds for real rather than deciding it. |
 
-Better Carts precedence (CT-037): when a physics-altering cart mod is present,
-Teamster must either measure the modified reality accurately or clearly label
-readings as unavailable — never display vanilla numbers as truth under altered
-physics.
+**Precedence policy (CT-037):** when a mod affecting cart mass or physics is
+present, Teamster must either measure the modified reality accurately or
+clearly label readings as unavailable — never display vanilla-calibrated
+numbers as truth under altered physics. Implemented generically:
+`Domain/Compatibility/CompatibilityAdvisoryGate.CartMassAdviceReliable`
+answers this from the compatibility registry's `AffectedAspect` tag (never a
+specific mod's GUID), read through one shared wrapper,
+`Adapters/CompatibilityAdapter.CartMassAdviceReliable`. Every LoadModel- or
+RiskModel-derived consumer substitutes a fixed unavailable notice instead of
+its normal output whenever that is false: cart warnings
+(`CartTelemetryPump.TryGetWarning`), stuck diagnosis
+(`StuckDetector.Classify`, via a `CartDiagnosis.LoadAdviceUnavailable`
+verdict that recovery guidance inherits automatically), the route profile's
+bottleneck line, the route report's overall and per-section advice, the
+trip-history load-binding line, and the descent-risk debug log (the one
+consumer with no player-facing panel today). The parking brake needs no
+gate — `BrakeFacts`/`BrakeLifecycle` have no mass field and never call
+`LoadModel`/`RiskModel`, so "brake policy under altered physics is explicit
+and fail-closed" holds structurally, with nothing to substitute.
+
+Proven with both fake mass-altering probes and the real shipped registry in
+`CompatibilityAdvisoryGateTests` (reliable when nothing mass-altering is
+registered or detected, unreliable the instant one is, demonstrated generic
+by using an entirely different fake GUID/name for the same assertion, and
+asserted directly against the shipped `BetterCarts` entry), plus dedicated
+gate tests on every consumer above (`StuckDetectorTests`,
+`RecoveryGuidancePresenterTests`, `RouteProfilerTests`,
+`RouteReportPresenterTests`, `RouteBottleneckTests`). **Research finding:**
+the specific mod originally referenced as "Better Carts" in `PROJECT.md`
+could not be pinned to one exact, GUID-verified Thunderstore package — see
+`COMPATIBILITY.md`'s research table; the We_Haul "Better Cart" candidate
+remains unregistered for that reason. The registered `BetterCarts` entry is
+the currently-known real mass-altering mod, but no in-game observation with
+it actually installed has run yet — pending (`HUMAN_ATTENTION.md`).
 
 ## Multiplayer (v0.6)
 

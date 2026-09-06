@@ -140,4 +140,39 @@ row: 2 | 300 | Climbs | Prior | flat-ish only"));
 
         Assert.Contains("never climbs", viewModel.Lines[2]);
     }
+
+    // -- CT-037 precedence gate --
+
+    [Fact]
+    public void LoadBinding_MassAdviceUnreliable_ShowsUnavailable_NotAStaleVerdict()
+    {
+        // Same fixture as LoadBinding_MatchesTheLoadModelExactly, which
+        // would otherwise report a BINDS verdict at 250 mass — unreliable
+        // must replace it, not merely add a caveat alongside it.
+        RouteBottleneckPresenter.ViewModel viewModel = RouteBottleneckPresenter.Present(
+            PlantedTrip(), null, ModelWithFailureAt15(), "250", massAdviceReliable: false);
+
+        Assert.Contains("Load advice unavailable", viewModel.Lines[2]);
+        Assert.Contains("Compat panel", viewModel.Lines[2]);
+        Assert.DoesNotContain("BINDS", viewModel.Lines[2]);
+    }
+
+    [Fact]
+    public void LoadBinding_MassAdviceUnreliable_GradeAndQualityLinesAreUnaffected()
+    {
+        // Terrain-only lines must not be touched by the mass-advice gate.
+        RouteBottleneckPresenter.ViewModel viewModel = RouteBottleneckPresenter.Present(
+            PlantedTrip(), null, ModelWithFailureAt15(), "250", massAdviceReliable: false);
+
+        Assert.Contains("Grade constraint: steepest point is 18.0%", viewModel.Lines[0]);
+    }
+
+    [Fact]
+    public void LoadBinding_MassAdviceReliableByDefault_UnchangedFromBeforeCT037()
+    {
+        RouteBottleneckPresenter.ViewModel viewModel = RouteBottleneckPresenter.Present(
+            PlantedTrip(), null, ModelWithFailureAt15(), "250");
+
+        Assert.Contains("Load constraint BINDS", viewModel.Lines[2]);
+    }
 }

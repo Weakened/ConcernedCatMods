@@ -43,31 +43,159 @@ drift apart.
 
 `CompatibilityFrameworkTests.ShippedRegistry_GuidsNeverAppearOutsideTheCompatibilityDomain`
 scans every shipped `.cs` file outside `Domain/Compatibility/` for each
-registered GUID and fails if one appears. Currently vacuous (the registry
-ships empty — see below), it becomes a real, automatically-enforced
-regression guard the moment CT-037/038 add real entries: a future feature
-that wants to know "is a specific policy active" must query the evaluated
-`ModDetectionResult`s (or a small helper reading them), never hardcode a
-GUID or mod name of its own.
+registered GUID and fails if one appears. Live since CT-037 added the first
+real entry: a future feature that wants to know "is a specific policy
+active" must query the evaluated `ModDetectionResult`s (or a small helper
+reading them), never hardcode a GUID or mod name of its own.
 
-## The registry ships empty
+## The shipped registry
 
-`Domain/Compatibility/CompatibilityKnownMods.Registry` is
-`Array.Empty<KnownModProbe>()`. Naming a specific mod's GUID and policy
-requires first verifying its actual, current, shipped metadata — inventing
-one would violate this repository's "research uncertain … APIs instead of
-inventing them" rule. CT-037 (Better Carts coexistence and precedence) and
-CT-038 (the broader current-mod research pass) populate this list after
-that research. The framework itself is fully proven off-game against fake
-registries in `CompatibilityFrameworkTests` (detection, each policy
-outcome, silence for unregistered/not-found mods, and the shared-composition
-guarantee).
+`Domain/Compatibility/CompatibilityKnownMods.Registry` carries one entry as
+of CT-037 (`TastyChickenLegs.BetterCarts` — see the research trail below).
+Naming a specific mod's GUID and policy requires first verifying its
+actual, current, shipped metadata — inventing one would violate this
+repository's "research uncertain … APIs instead of inventing them" rule.
+CT-038 (the broader current-mod research pass) grows this list further. The
+framework itself is fully proven off-game against fake registries in
+`CompatibilityFrameworkTests` (detection, each policy outcome, silence for
+unregistered/not-found mods, and the shared-composition guarantee).
+
+## Precedence policy (CT-037)
+
+`Domain/Compatibility/CompatibilityAffectedAspect` names which Teamster
+reading a mod's presence calls into question — today just `None` and
+`CartMassOrPhysics` (every LoadModel- or RiskModel-derived verdict:
+warnings, stuck diagnostics, recovery guidance, route bottlenecks, and
+descent risk — all calibrated against vanilla physics).
+`Domain/Compatibility/CompatibilityAdvisoryGate.CartMassAdviceReliable`
+answers "is that calibration still trustworthy right now" from the
+evaluated registry results — generic over the aspect, never a specific
+mod's GUID or name, so a future registry entry tagged `CartMassOrPhysics`
+gates every consumer automatically with no feature code to touch.
+
+The gate is wired into every consumer that renders a LoadModel- or
+RiskModel-derived value to the player, or (for the one consumer with no
+player-facing surface today) to a diagnostic log:
+
+| Consumer | Where the gate is checked | What happens when unreliable |
+|---|---|---|
+| Cart warnings | `Adapters/CartTelemetryPump.TryGetWarning` | Returns a fixed "load advice unavailable" `CartWarning` instead of consulting the tracker. |
+| Stuck diagnosis | `Domain/Diagnostics/StuckDetector.Classify` (flag threaded in from `CartTelemetryPump.Update`) | Returns `CartDiagnosis.LoadAdviceUnavailable` instead of ever calling `LoadModel.Query`. |
+| Recovery guidance | `Domain/Ui/RecoveryGuidancePresenter.Present` | A dedicated `LoadAdviceUnavailable` switch arm — inherited automatically from the corrected diagnosis above — never calls `AddUnloadStep`'s `RecommendedMaxMass` query. |
+| Route profile bottleneck line | `Domain/Routes/RouteLoadBottleneck.Evaluate` (checked at both `Ui/RoutePickerPanel` call sites) | `ProvenMaxMass`/`Verdict` are forced null; `Domain/Ui/RouteProfilePresenter.BottleneckLine` shows the shared unavailable line instead. Terrain-only fields (`HasGradeData`, `BottleneckGradePercent`) are untouched — a route's grade is not a mass fact. |
+| Route report (overall + per-section advice) | `Domain/Ui/RouteReportPresenter.Present`/`SectionAdvice` | Overall block shows the shared unavailable line once; per-section advice is suppressed (matching this presenter's existing "sections without a model answer get facts, not advice" rule) rather than repeating the notice after every steep section. |
+| Trip-history load binding | `Domain/Ui/RouteBottleneckPresenter.Present`/`DescribeLoadBinding` (checked at `Ui/TripHistoryPanel`) | Shows the shared unavailable line instead of walking the trip's climb points. |
+| Descent-risk debug log | `Adapters/CartTelemetryPump.Update`'s debug summary | Appends a flag noting the mod detection instead of printing the risk level as unqualified fact. No player-facing panel renders `DescentRiskInfo.Current`/`.Lookahead` today (only `.CartId`, for correlation), so this opt-in developer log is the only place this model's output is currently materialized as text. |
+
+Every consumer reads the same source of truth,
+`Adapters/CompatibilityAdapter.CartMassAdviceReliable` (a small wrapper over
+the gate that fails open — `true` — before the first probe runs), so there
+is one decision, not several independently-drifting ones.
+
+**The parking brake needs no gate.** `Domain/Brake/BrakeLifecycle`'s
+`EvaluateToggle`/`EvaluateTick` and `Domain/Brake/BrakeFacts` (read by
+`Adapters/CartBrakeAdapter.ReadFactsCore`) branch only on capability,
+world/cart existence, ownership authority, attach state, and a fixed
+distance constant — `BrakeFacts` has no mass field, and nothing in the
+brake stack calls `LoadModel` or `RiskModel` (verified by reading every
+file in `Domain/Brake/` and `Adapters/CartBrakeAdapter.cs`). "Brake policy
+under altered physics is explicit and fail-closed" is satisfied
+structurally: there is no vanilla-mass assumption for altered physics to
+invalidate in the first place.
+
+**The Cargo Manifest panel (issue #153's "manifest" row) also needs no
+gate**, for a different reason: it is not a prediction. `CART_INTERNALS.md`
+documents that Teamster's mass figures are recomputed live from
+`m_baseMass`, `m_itemWeightMassFactor`, and `Inventory.GetTotalWeight()` —
+the same fields a manifest listing reads — and BetterCarts' `SetMass`
+prefix only rewrites its own local `mass` parameter for the physics engine;
+it never writes back to those source fields. So the displayed weight
+numbers stay correct even with BetterCarts installed. What breaks is not a
+number but a *prediction*: `LoadModel`/`RiskModel`'s calibration rows were
+proven against vanilla pulling physics, and once the physics engine sees a
+BetterCarts-reduced mass while Teamster keeps computing the vanilla-formula
+mass, that calibration no longer reliably predicts real climbing behavior
+for the number shown — which is exactly what the gate on those two models,
+and only those two, protects against. `Domain/Ui/CargoManifestPresenter.cs`
+has no reference to `LoadModel`, `RiskModel`, or `Climbability` (verified),
+confirming there is nothing there for the gate to touch.
+
+## Research: identifying "Better Carts" (CT-037)
+
+`PROJECT.md`'s market research names "Better Carts" generically ("Better
+Carts and similar cart mods change cart physics, weight handling, or
+pulling behavior directly") without pinning an exact Thunderstore package —
+CT-038 is the leaf that researches the full current mod landscape.
+Identifying which real, currently-published mod this leaf's specific
+acceptance criteria refer to required its own research pass:
+
+| Candidate | Author | Downloads | What it actually does | GUID | Registered? |
+|---|---|---|---|---|---|
+| BetterCarts | TastyChickenLegs | 46,000 | Quick attach/detach, up to 4-player push assist, damage removal, network sync. **Also reduces cart mass by a default 20%** — see below. | `TastyChickenLegs.BetterCarts` (verified: `Plugin.cs`'s `ModGUID` constant) | **Yes** — `Adapt`, `AffectedAspect.CartMassOrPhysics` |
+| Better Cart | We_Haul | 2,200 | "Allows for customization of minimum and maximum mass of Carts so that loading a cart doesn't make it impossible to move" — a direct, conceptually strong match for "changes cart physics, weight handling." | **Could not be verified.** No linked GitHub/source repository; Thunderstore's decompiled-source viewer for this package did not yield readable source through available tooling. | **No** |
+
+**BetterCarts does alter cart mass by default — a corrected finding.** The
+first research pass read only `Plugin.cs` and the README and concluded no
+physics impact; an independent review (re-verified directly against the
+live source) found that conclusion was wrong, because the mod's `Patches/`
+folder was not inspected. `Patches/CartPatches.cs` installs a Harmony
+`Prefix` on `Vagon.SetMass`:
+
+```csharp
+[HarmonyPatch(typeof(Vagon), "SetMass")]
+private static class SetMass_Patch
+{
+    private static void Prefix(Vagon __instance, ZNetView ___m_nview, ref float mass)
+    {
+        if (!BetterCartsMain.modEnabled.Value || !___m_nview.IsOwner()) return;
+        if (CartConfigsMain.allowPlayerHelp.Value) { /* per-helper reduction */ }
+        else { mass = Mathf.Max(0, mass - mass * CartConfigsMain.cartMassReduction.Value); }
+    }
+}
+```
+
+`Patches/CartConfigs.cs` defaults `cartMassReduction` to `0.2f` ("For
+Single Player - fractional weight reduction for the cart") and
+`allowPlayerHelp` to `false` — so the solo-mode **20% mass reduction is the
+out-of-the-box default**, not an opt-in the player must discover. This is
+exactly the scenario the precedence policy exists for: BetterCarts is
+registered `Adapt`/`CartMassOrPhysics`, not `Coexist`/`None`, and every
+consumer in the table above substitutes its unavailable notice while this
+mod is detected. The GUID itself was correctly verified either time; only
+the behavioral classification was wrong the first pass.
+
+**Why "Better Cart" (We_Haul) is still not registered:** this repository's
+operating rule is to research real mod metadata rather than invent it. A
+BepInEx plugin GUID lives inside the compiled DLL, not in Thunderstore's
+page metadata or manifest.json, and is not required to follow any naming
+convention — guessing one (for example by pattern-matching the
+author/package name) risks registering a GUID that either never matches
+the real mod (a silently-dead registry entry) or, worse, coincidentally
+matches something else. Verifying it would require downloading and
+inspecting the mod's compiled binary, which this leaf treats as out of
+scope for an autonomous research pass — installing or inspecting
+third-party executable content warrants the owner's awareness first. This
+is recorded as a pending, non-blocking item (see `HUMAN_ATTENTION.md`)
+rather than guessed.
+
+## Known scope limits
+
+- No in-game coexistence matrix has been run yet (dev machine, `TCT-Compat`
+  profile, per `TEST_PLAN.md`); the matrix acceptance criterion is
+  satisfied structurally today (the gate and every consumer above are
+  exhaustively unit-tested against both fake and the real registered
+  mass-altering probe) with the real-mod, real-game observation pending —
+  never claimed PASS. Tracked in `HUMAN_ATTENTION.md`.
+- The We_Haul "Better Cart" GUID remains unverified (see research above);
+  CT-038's broader pass may resolve this.
 
 ## In-game surface
 
 The Cart Status panel's **Compat** button (always visible, unlike the
 Cartographer-conditional Routes button) opens a read-only panel listing
-every actually-detected known mod and its policy. With today's empty
-registry it always shows "No known compatibility concerns detected." —
-the honest, correct answer until real entries exist. The startup log
-prints the same line (or one line per detected mod) once per session.
+every actually-detected known mod and its policy. Until BetterCarts (or
+another registered mod) is actually installed alongside Teamster, it shows
+"No known compatibility concerns detected." — the honest, correct answer
+when detection finds nothing, regardless of what the registry contains.
+The startup log prints the same line (or one line per detected mod) once
+per session.

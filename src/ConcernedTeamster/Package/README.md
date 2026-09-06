@@ -19,8 +19,22 @@ Valheim shows no cart mass, no cargo weight total, no hint whether a loaded cart
 * Read-only, bounded telemetry with hard performance caps; everything game-facing is verified at startup and fails closed with one actionable log line if a game update changes cart internals.
 * **UX, controller, accessibility, and localization (v0.7).** Every panel scales (0.8–1.3×), meets a WCAG AA contrast target, and never relies on color alone — every warning, diagnosis, and comparison already carries distinguishing text or a symbol. A gamepad focus order and accelerator-conflict checker keep every feature reachable by button first. All 244 user-facing strings resolve through a translator-friendly catalog with English fallback — see the [translator guide](https://github.com/Weakened/ConcernedCatMods/blob/main/docs/mods/concerned-teamster/LOCALIZATION.md) to contribute a language. New players get a short, dismissable pointer to the Cart button, and three documented settings presets (Minimal / Standard / EverythingObservational) cover common preferences without ever auto-enabling the parking brake.
 
+## Compatibility with other mods (v0.8, in progress)
+
+Teamster now detects a small, researched registry of known mods (by GUID,
+never guessed) and applies a documented policy: coexist quietly, adapt a
+reading, or warn. The one mod registered so far, **BetterCarts** by
+TastyChickenLegs, reduces cart mass by a default 20% — verified directly
+from its published source — so every load-advice surface (warnings, stuck
+diagnosis, recovery guidance, route bottlenecks) shows a plain "load advice
+unavailable" notice instead of a vanilla-calibrated number presented as
+truth while it's detected. A **Compat** button on the Cart Status panel
+always shows what was detected. This registry grows as more mods are
+researched (v0.8's remaining leaves); an unrecognized mod is always silent
+— nothing to configure, no false alarms.
+
 ## What comes next (roadmap)
-* Compatibility and recovery hardening (v0.8), then the public beta (v0.9).
+* Further compatibility research and recovery hardening (v0.8), then the public beta (v0.9).
 
 ## Principles
 

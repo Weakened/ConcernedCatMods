@@ -45,12 +45,12 @@ row: 20 | 200 | Stalls | Measured | too much"));
     /// <summary>Feeds a stuck trace (low speed past the window) at the
     /// given grade/cargo and returns the diagnosis.</summary>
     private static CartDiagnostic Diagnose(
-        StuckDetector detector, float grade, float cargo = 300f)
+        StuckDetector detector, float grade, float cargo = 300f, bool massAdviceReliable = true)
     {
         CartDiagnostic last = CartDiagnostic.None;
         for (int index = 0; index <= 6; index++)
         {
-            last = detector.Update(Sample(index * 0.5, grade: grade, cargo: cargo));
+            last = detector.Update(Sample(index * 0.5, grade: grade, cargo: cargo), massAdviceReliable);
         }
 
         return last;
@@ -186,6 +186,56 @@ row: 20 | 200 | Stalls | Measured | too much"));
             other, true, 0.1f, 0f, true, 2f, 2f, GradeDirection.Level,
             TerrainSurfaceKind.Untouched, 2.5);
         Assert.Equal(CartDiagnosis.None, detector.Update(otherCart).Diagnosis);
+    }
+
+    // -- CT-037 precedence gate -------------------------------------------
+
+    [Fact]
+    public void Update_MassAdviceUnreliable_ClimbingGradeReportsUnavailable_NotAModelVerdict()
+    {
+        // 22%/250 cargo is ImpossibleLoad per Matrix_EachClassTriggersOnItsTraceOnly
+        // when mass advice is reliable; unreliable must replace that verdict
+        // entirely rather than showing it anyway.
+        var detector = new StuckDetector(Model());
+        CartDiagnostic diagnostic = Diagnose(detector, 22f, 250f, massAdviceReliable: false);
+
+        Assert.Equal(CartDiagnosis.LoadAdviceUnavailable, diagnostic.Diagnosis);
+        Assert.Contains("22%", diagnostic.Evidence);
+        Assert.NotEqual(string.Empty, diagnostic.Action);
+    }
+
+    [Fact]
+    public void Update_MassAdviceUnreliable_MildGradeIsUnaffected()
+    {
+        // Below the load-model threshold, the diagnosis is terrain-only —
+        // an unreliable mass mod has nothing to invalidate here.
+        var detector = new StuckDetector(Model());
+        CartDiagnostic diagnostic = Diagnose(detector, 2f, 300f, massAdviceReliable: false);
+        Assert.Equal(CartDiagnosis.Obstruction, diagnostic.Diagnosis);
+    }
+
+    [Fact]
+    public void Update_MassAdviceUnreliable_NoModelStillReportsUnavailable_NotTheGradeOnlyFallback()
+    {
+        // Without a loaded model, reliable mass advice falls back to a
+        // grade-only heuristic (Matrix_NoModel_SteepClimbAndUnclearStillWork).
+        // That fallback assumes "calibration failed to load," a different
+        // situation from "a mod invalidated it" — unreliable must still say
+        // so plainly rather than silently reusing the grade-only guess.
+        var detector = new StuckDetector(null);
+        CartDiagnostic diagnostic = Diagnose(detector, 18f, 300f, massAdviceReliable: false);
+        Assert.Equal(CartDiagnosis.LoadAdviceUnavailable, diagnostic.Diagnosis);
+    }
+
+    [Fact]
+    public void ComposeLine_LoadAdviceUnavailable_CarriesLabelAndCompatPointer()
+    {
+        var detector = new StuckDetector(Model());
+        CartDiagnostic diagnostic = Diagnose(detector, 22f, 250f, massAdviceReliable: false);
+
+        string line = diagnostic.ComposeLine();
+        Assert.Contains("load advice unavailable", line);
+        Assert.Contains("Compat panel", line);
     }
 
     [Fact]

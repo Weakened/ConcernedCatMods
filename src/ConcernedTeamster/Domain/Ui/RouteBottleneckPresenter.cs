@@ -37,7 +37,8 @@ public static class RouteBottleneckPresenter
         Trip? trip,
         RoadQualityIndex? segments,
         LoadModel? loadModel,
-        string? hypotheticalMassText)
+        string? hypotheticalMassText,
+        bool massAdviceReliable = true)
     {
         if (trip is null)
         {
@@ -68,7 +69,7 @@ public static class RouteBottleneckPresenter
         {
             DescribeWorstGrade(trip, cumulative, total),
             DescribeWorstQuality(trip, segments, cumulative, total),
-            DescribeLoadBinding(trip, loadModel, mass, cumulative, total),
+            DescribeLoadBinding(trip, loadModel, mass, cumulative, total, massAdviceReliable),
         };
 
         return new ViewModel(true,
@@ -170,11 +171,17 @@ public static class RouteBottleneckPresenter
     }
 
     private static string DescribeLoadBinding(
-        Trip trip, LoadModel? loadModel, float mass, float[] cumulative, float total)
+        Trip trip, LoadModel? loadModel, float mass, float[] cumulative, float total,
+        bool massAdviceReliable)
     {
         if (loadModel is null)
         {
             return TeamsterStrings.Get("bottleneck.noCalibration");
+        }
+
+        if (!massAdviceReliable)
+        {
+            return TeamsterStrings.Get("compat.loadAdviceUnavailableLine");
         }
 
         int climbPoints = 0;

@@ -18,12 +18,19 @@ namespace TheConcernedCat.ConcernedTeamster.Domain.Diagnostics;
 /// |---------------------------------------|----------|-----------------|
 /// | unavailable                           | —        | Unclear         |
 /// | mild (|g| &lt; 8%)                    | —        | Obstruction     |
+/// | climbing ≥ 8%, mass advice unreliable | (not queried) | LoadAdviceUnavailable |
 /// | climbing ≥ 8%                         | No       | ImpossibleLoad  |
 /// | climbing ≥ 8%                         | Marginal | MarginalLoad    |
 /// | climbing ≥ 8%                         | Yes      | Obstruction     |
 /// | climbing ≥ 15% (steep)                | Unknown  | SteepClimb      |
 /// | climbing 8–15%                        | Unknown  | Unclear         |
-/// | descending ≤ −8% (stuck going down?)  | —        | Unclear         |</summary>
+/// | descending ≤ −8% (stuck going down?)  | —        | Unclear         |
+///
+/// The "mass advice unreliable" row (CT-037) takes precedence over every
+/// other climbing-grade row, including when no load model is loaded at
+/// all — a detected mass/physics-altering mod invalidates the load-model
+/// path outright, so the query never happens and the result never falls
+/// back to the cruder grade-only SteepClimb/Unclear heuristic either.</summary>
 public sealed class StuckDetector
 {
     /// <summary>Speed below which a pulled cart counts as not moving.</summary>
@@ -51,8 +58,13 @@ public sealed class StuckDetector
 
     /// <summary>Evaluates one fresh snapshot of the pulled cart. Returns
     /// <see cref="CartDiagnostic.None"/> (and clears the window) whenever
-    /// the cart is not pulled, moving, or unreadable.</summary>
-    public CartDiagnostic Update(CartTelemetry telemetry)
+    /// the cart is not pulled, moving, or unreadable.
+    /// <paramref name="massAdviceReliable"/> is CT-037's precedence gate
+    /// (<c>CompatibilityAdvisoryGate.CartMassAdviceReliable</c>, passed in
+    /// rather than referenced directly so this class stays pure domain
+    /// code): when false, any grade that would otherwise consult the load
+    /// model instead reports <see cref="CartDiagnosis.LoadAdviceUnavailable"/>.</summary>
+    public CartDiagnostic Update(CartTelemetry telemetry, bool massAdviceReliable = true)
     {
         if (!telemetry.IsPulledByLocalPlayer || !telemetry.VelocityAvailable)
         {
@@ -83,7 +95,7 @@ public sealed class StuckDetector
             return CartDiagnostic.None;
         }
 
-        return Classify(telemetry);
+        return Classify(telemetry, massAdviceReliable);
     }
 
     public void Reset()
@@ -92,7 +104,7 @@ public sealed class StuckDetector
         _lowSpeedSinceSeconds = double.NaN;
     }
 
-    private CartDiagnostic Classify(CartTelemetry telemetry)
+    private CartDiagnostic Classify(CartTelemetry telemetry, bool massAdviceReliable)
     {
         if (!telemetry.GradeAvailable)
         {
@@ -116,6 +128,19 @@ public sealed class StuckDetector
             return new CartDiagnostic(CartDiagnosis.Obstruction,
                 TeamsterStrings.Format("diag.mildGradeEvidence", gradeText),
                 TeamsterStrings.Get("diag.mildGradeAction"));
+        }
+
+        // CT-037: this grade band would otherwise be classified from the
+        // load model's verdict — a vanilla-mass calibration. A detected
+        // mass/physics-altering mod invalidates that verdict outright, so
+        // report the limitation instead of a diagnosis that assumes
+        // vanilla physics or silently falling back to the cruder
+        // grade-only heuristic below.
+        if (!massAdviceReliable)
+        {
+            return new CartDiagnostic(CartDiagnosis.LoadAdviceUnavailable,
+                TeamsterStrings.Format("diag.loadAdviceUnavailableEvidence", gradeText),
+                TeamsterStrings.Get("compat.alteredPhysicsAction"));
         }
 
         if (_loadModel is not null)

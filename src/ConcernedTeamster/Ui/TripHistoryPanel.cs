@@ -321,7 +321,8 @@ internal sealed class TripHistoryPanel
         Trip? tripA = _selectedAId is { } aid ? FindTrip(aid) : null;
         RouteBottleneckPresenter.ViewModel viewModel = RouteBottleneckPresenter.Present(
             tripA, _segments, _pumpForButtons?.LoadModel,
-            _massInput != null ? _massInput.text : null);
+            _massInput != null ? _massInput.text : null,
+            CompatibilityAdapter.CartMassAdviceReliable);
 
         if (_bottleneckHeader != null)
         {

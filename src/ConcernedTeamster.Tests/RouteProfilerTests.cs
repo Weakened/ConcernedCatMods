@@ -441,6 +441,67 @@ public class RouteProfilerTests
         Assert.Null(result.ProvenMaxMass);
     }
 
+    // -- CT-037 precedence gate --
+
+    [Fact]
+    public void Bottleneck_MassAdviceUnreliable_GradeStaysButMassAnswersDoNot()
+    {
+        LoadCalibrationData? data = LoadCalibrationSource.TryLoadEmbedded();
+        var model = new LoadModel(data!);
+        var profiler = new RouteProfiler(
+            StraightX(100f),
+            (float x, float z, out float height, out TerrainSurfaceKind surface) =>
+            {
+                height = 0.07f * x;
+                surface = TerrainSurfaceKind.Untouched;
+                return true;
+            });
+        while (!profiler.IsComplete)
+        {
+            profiler.Advance(64);
+        }
+
+        RouteProfile profile = profiler.TryBuildProfile()!;
+        RouteLoadBottleneck.Result result =
+            RouteLoadBottleneck.Evaluate(profile, model, 400f, massAdviceReliable: false);
+
+        // Terrain fact: still reported, since altered cart mass does not
+        // change what grade the route itself has.
+        Assert.True(result.HasGradeData);
+        Assert.Equal(profile.MaxAbsGradePercent, result.BottleneckGradePercent);
+
+        // Mass-derived answers: withheld, and distinguishably so from "no
+        // grade data" / "nothing proven here" via MassAdviceReliable.
+        Assert.False(result.MassAdviceReliable);
+        Assert.Null(result.Verdict);
+        Assert.Null(result.ProvenMaxMass);
+    }
+
+    [Fact]
+    public void Bottleneck_MassAdviceReliableByDefault_UnchangedFromBeforeCT037()
+    {
+        LoadCalibrationData? data = LoadCalibrationSource.TryLoadEmbedded();
+        var model = new LoadModel(data!);
+        var profiler = new RouteProfiler(
+            StraightX(100f),
+            (float x, float z, out float height, out TerrainSurfaceKind surface) =>
+            {
+                height = 0.07f * x;
+                surface = TerrainSurfaceKind.Untouched;
+                return true;
+            });
+        while (!profiler.IsComplete)
+        {
+            profiler.Advance(64);
+        }
+
+        RouteLoadBottleneck.Result result =
+            RouteLoadBottleneck.Evaluate(profiler.TryBuildProfile()!, model, 400f);
+
+        Assert.True(result.MassAdviceReliable);
+        Assert.NotNull(result.Verdict);
+    }
+
     // -- display presenter --
 
     [Fact]
@@ -499,6 +560,35 @@ public class RouteProfilerTests
         Assert.Contains("8-15% 100%", lines[3]);
         Assert.StartsWith("Load check:", lines[4]);
         Assert.Contains("your cart (150):", lines[4]);
+    }
+
+    [Fact]
+    public void Presenter_MassAdviceUnreliable_ShowsUnavailable_NotAStaleVerdict()
+    {
+        var profiler = new RouteProfiler(
+            StraightX(100f),
+            (float x, float z, out float height, out TerrainSurfaceKind surface) =>
+            {
+                height = 0.10f * x;
+                surface = TerrainSurfaceKind.Paved;
+                return true;
+            });
+        while (!profiler.IsComplete)
+        {
+            profiler.Advance(64);
+        }
+
+        RouteProfile profile = profiler.TryBuildProfile()!;
+        LoadCalibrationData? data = LoadCalibrationSource.TryLoadEmbedded();
+        var model = new LoadModel(data!);
+        RouteLoadBottleneck.Result bottleneck =
+            RouteLoadBottleneck.Evaluate(profile, model, 150f, massAdviceReliable: false);
+
+        IReadOnlyList<string> lines = RouteProfilePresenter.Present(
+            true, false, profile.PositionCount, profile.PositionCount, profile, bottleneck);
+
+        Assert.Equal("Load advice unavailable — a detected mod changes cart mass or physics " +
+            "(see the Compat panel).", lines[4]);
     }
 
     [Fact]

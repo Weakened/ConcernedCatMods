@@ -39,7 +39,8 @@ public static class RouteReportPresenter
     }
 
     public static ViewModel Present(
-        string routeName, RouteProfile? profile, LoadModel? model, float? cartTotalMass)
+        string routeName, RouteProfile? profile, LoadModel? model, float? cartTotalMass,
+        bool massAdviceReliable = true)
     {
         string title = TeamsterStrings.Format(
             "report.title", routeName.Length > 0 ? routeName : TeamsterStrings.Get("routes.unnamed"));
@@ -78,7 +79,7 @@ public static class RouteReportPresenter
                 segment.GradePercent.ToString("+0.0;-0.0", CultureInfo.InvariantCulture),
                 Meters(segment.StartMeters), Meters(segment.LengthMeters)));
 
-            string? advice = SectionAdvice(segment, climb, model, cartTotalMass);
+            string? advice = SectionAdvice(segment, climb, model, cartTotalMass, massAdviceReliable);
             if (advice is not null)
             {
                 lines.Add("   " + advice);
@@ -109,10 +110,14 @@ public static class RouteReportPresenter
         else
         {
             RouteLoadBottleneck.Result bottleneck =
-                RouteLoadBottleneck.Evaluate(profile, model, cartTotalMass);
+                RouteLoadBottleneck.Evaluate(profile, model, cartTotalMass, massAdviceReliable);
             if (!bottleneck.HasGradeData)
             {
                 lines.Add(TeamsterStrings.Get("report.loadUnavailableNoGrade"));
+            }
+            else if (!bottleneck.MassAdviceReliable)
+            {
+                lines.Add(TeamsterStrings.Get("compat.loadAdviceUnavailableLine"));
             }
             else
             {
@@ -142,9 +147,14 @@ public static class RouteReportPresenter
     /// climb — the same slope hauled the other way — so the quantity still
     /// comes straight from LoadModel.</summary>
     private static string? SectionAdvice(
-        RouteProfileSegment segment, bool climb, LoadModel? model, float? cartTotalMass)
+        RouteProfileSegment segment, bool climb, LoadModel? model, float? cartTotalMass,
+        bool massAdviceReliable)
     {
-        if (model is null)
+        // CT-037: unreliable mass advice is reported once, in the overall
+        // load-recommendation block below — sections without a trustworthy
+        // model answer get facts (still ranked and listed), not a repeated
+        // "unavailable" advice line per section.
+        if (model is null || !massAdviceReliable)
         {
             return null;
         }
