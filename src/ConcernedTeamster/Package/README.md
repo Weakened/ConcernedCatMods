@@ -19,7 +19,7 @@ Valheim shows no cart mass, no cargo weight total, no hint whether a loaded cart
 * Read-only, bounded telemetry with hard performance caps; everything game-facing is verified at startup and fails closed with one actionable log line if a game update changes cart internals.
 * **UX, controller, accessibility, and localization (v0.7).** Every panel scales (0.8–1.3×), meets a WCAG AA contrast target, and never relies on color alone — every warning, diagnosis, and comparison already carries distinguishing text or a symbol. A gamepad focus order and accelerator-conflict checker keep every feature reachable by button first. All 274 user-facing strings resolve through a translator-friendly catalog with English fallback — see the [translator guide](https://github.com/Weakened/ConcernedCatMods/blob/main/docs/mods/concerned-teamster/LOCALIZATION.md) to contribute a language. New players get a short, dismissable pointer to the Cart button, and three documented settings presets (Minimal / Standard / EverythingObservational) cover common preferences without ever auto-enabling the parking brake.
 
-## Compatibility with other mods (v0.8, in progress)
+## Compatibility with other mods (v0.8)
 
 Teamster now detects a small, researched registry of known mods (by GUID,
 never guessed) and applies a documented policy: coexist quietly, adapt a
@@ -52,7 +52,7 @@ names, or full file paths are included; nothing is sent anywhere by the
 mod itself.
 
 ## What comes next (roadmap)
-* Further compatibility research and recovery hardening (v0.8), then the public beta (v0.9).
+* The public beta (v0.9), after a full hardening pass: feature/defaults freeze, a privacy-safe feedback path, complete public docs and a security audit, automated standard profiles, and a beta-defect burn-down.
 
 ## Principles
 
@@ -64,7 +64,7 @@ mod itself.
 
 ## Status
 
-Version 0.7.x is the internal **UX, Controller, Accessibility, Localization** line: cart truth, cargo and load planning, descent safety, trip-based road scoring, capability-detected route profiling, an enforced multiplayer read/act/observe policy, and now scalable/contrast-checked/controller-navigable panels with full localization and onboarding, with vanilla physics untouched by default. Features land issue by issue on the [GitHub tracker](https://github.com/Weakened/ConcernedCatMods/issues). The first public release will be the v0.9 beta after the full hardening pass.
+Version 0.8.x is the internal **Compatibility, Recovery, Scale** line: cart truth, cargo and load planning, descent safety, trip-based road scoring, capability-detected route profiling, an enforced multiplayer read/act/observe policy, scalable/contrast-checked/controller-navigable panels with full localization and onboarding, mod-compatibility awareness with a documented precedence policy, and now corruption-safe recovery with a sanitized support bundle — all proven at their worst-case configured scale, with vanilla physics untouched by default. Features land issue by issue on the [GitHub tracker](https://github.com/Weakened/ConcernedCatMods/issues). The first public release will be the v0.9 beta after the full hardening pass.
 
 ## Support
 

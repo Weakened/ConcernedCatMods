@@ -421,6 +421,65 @@ public class TripPersistenceTests
         });
     }
 
+    // -- CT-040: scale at the worst-case configured retention -------------
+
+    [Fact]
+    public void Scale_MaxTripsRetainedRoundTrip_StaysCorrectAndReasonablyFast()
+    {
+        // The worst case a player could actually configure:
+        // TripRecorderOptions.MaxMaxTripsRetained (500) trips in one
+        // sidecar, each a genuine multi-sample haul (20 samples — the
+        // per-trip sample cap, MaxMaxSamplesPerTrip at 5,000, is already
+        // exercised separately by Recorder_CapSplitsIntoSegmentsWithoutLosingTheHaul
+        // and is a recording-time concern, not a sidecar-scale one). This
+        // proves parse/compose stays correct and fast at maximum
+        // retention, not just at the default 50-trip cap the CT-020 gate
+        // above already covers.
+        RunInTempDir("ct040", directory =>
+        {
+            string path = Path.Combine(directory, "teamster_trips_42.txt");
+            const int maxTrips = TripRecorderOptions.MaxMaxTripsRetained;
+
+            var trips = new List<Trip>(maxTrips);
+            for (int index = 0; index < maxTrips; index++)
+            {
+                trips.Add(MakeTrip(20, cartId: "1:1", startTime: index * 100.0));
+            }
+
+            var composeStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            string composed = TripSidecar.Compose(trips, worldUid: 42L, "0.8.0");
+            Assert.True(SidecarFileStore.TryWriteAtomic(path, composed, out string? writeError));
+            composeStopwatch.Stop();
+            Assert.Null(writeError);
+
+            long fileSizeBytes = new FileInfo(path).Length;
+
+            var parseStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            string? text = SidecarFileStore.TryRead(path, out string? readError);
+            TripSidecar.ParseResult parsed = TripSidecar.Parse(text, 42L);
+            parseStopwatch.Stop();
+
+            Assert.Null(readError);
+            Assert.False(parsed.Refused);
+            Assert.Empty(parsed.Errors);
+            Assert.Equal(maxTrips, parsed.Trips.Count);
+            Assert.Equal(20, parsed.Trips[0].Samples.Count);
+
+            // Loose sanity bounds (not tight performance budgets — CT-048
+            // formalizes those in v1.0 per TEST_PLAN.md): catching an
+            // actual quadratic-blowup regression, not chasing machine-
+            // specific timing. CT-040 scale evidence records the real
+            // measured numbers in RELEASE_DOSSIER.md, not just this bound.
+            Assert.True(composeStopwatch.ElapsedMilliseconds < 2000,
+                $"Composing+writing {maxTrips} trips took {composeStopwatch.ElapsedMilliseconds} ms.");
+            Assert.True(parseStopwatch.ElapsedMilliseconds < 2000,
+                $"Reading+parsing {maxTrips} trips took {parseStopwatch.ElapsedMilliseconds} ms.");
+            Assert.True(fileSizeBytes < 10 * 1024 * 1024,
+                $"Sidecar at max retention was {fileSizeBytes} bytes — investigate before treating " +
+                "this as a loose sanity bound rather than a real regression.");
+        });
+    }
+
     [Fact]
     public void Isolation_TwoWorlds_ByFilenameAndHeader()
     {
