@@ -1,6 +1,6 @@
 # Concerned Teamster
 
-**In development by The Concerned Cat. Not yet released — this package exists for internal validation only.**
+**Public beta by The Concerned Cat. Actively maintained on the road to v1.0.**
 
 Your cart stops being a mystery: Concerned Teamster measures load, grade, traction, and risk so hauling decisions are informed — while vanilla cart physics stay untouched by default.
 
@@ -63,7 +63,7 @@ or stores: other players' in-game character names, shown only in
 cooperative haul diagnostics while you're actually playing with them.
 
 ## What comes next (roadmap)
-* The public beta (v0.9), after a full hardening pass: feature/defaults freeze, a privacy-safe feedback path, complete public docs and a security audit, automated standard profiles, and a beta-defect burn-down.
+* The road to v1.0: real in-game verification of every feature against this beta's own pre-release checklist, calibration data from real hauls and descents, and a stable-release hardening pass.
 
 ## Principles
 
@@ -75,7 +75,7 @@ cooperative haul diagnostics while you're actually playing with them.
 
 ## Status
 
-Version 0.8.x is the internal **Compatibility, Recovery, Scale** line: cart truth, cargo and load planning, descent safety, trip-based road scoring, capability-detected route profiling, an enforced multiplayer read/act/observe policy, scalable/contrast-checked/controller-navigable panels with full localization and onboarding, mod-compatibility awareness with a documented precedence policy, and now corruption-safe recovery with a sanitized support bundle — all proven at their worst-case configured scale, with vanilla physics untouched by default. Features land issue by issue on the [GitHub tracker](https://github.com/Weakened/ConcernedCatMods/issues). The first public release will be the v0.9 beta after the full hardening pass.
+Version 0.9.x is the **public beta**: cart truth, cargo and load planning, descent safety, trip-based road scoring, capability-detected route profiling, an enforced multiplayer read/act/observe policy, scalable/contrast-checked/controller-navigable panels with full localization and onboarding, mod-compatibility awareness with a documented precedence policy, corruption-safe recovery with a sanitized support bundle, and now a frozen feature/default surface with a privacy-safe feedback path — all proven at their worst-case configured scale, with vanilla physics untouched by default. Every feature is unit-proven off-game; the specific in-game observations still pending are tracked in [`PRE_RELEASE_SMOKE_TEST.md`](https://github.com/Weakened/ConcernedCatMods/blob/main/docs/mods/concerned-teamster/PRE_RELEASE_SMOKE_TEST.md) and never claimed passed until actually run. Features land issue by issue on the [GitHub tracker](https://github.com/Weakened/ConcernedCatMods/issues).
 
 ## Support
 

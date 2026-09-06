@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.9.0 (Public Beta — sealed, pending owner publish approval)
+
+**Public Beta Hardening (CT-041..CT-045).** The ninth internal release
+candidate, and the first ever sealed as a genuine public-beta
+*candidate* — not published by this change, but prepared exactly as it
+would ship if approved. Every feature through v0.8 is frozen; this
+release is entirely release-engineering: a documented feature/default
+freeze, a privacy-safe feedback path, complete public docs and a
+security self-audit, scripted profile-family deploy paths with a
+file-level lifecycle rehearsal, a defect burn-down, and the first
+compiled owner pre-release smoke checklist.
+
+- **Feature and default freeze (CT-041).** Every shipped feature and
+  every config default is now documented with a safety classification
+  in `FEATURE_FREEZE.md`, locked by a snapshot test so an accidental
+  future edit to a default fails a test instead of silently shipping.
+  A new **Report a Bug** button on the Support panel routes to the
+  public GitHub issue tracker.
+- **Public docs and security audit (CT-042).** The package README gained
+  an accurate privacy statement and an AI-assistance disclosure; a
+  committed security self-audit checked dependency pins, secrets, the
+  package copy-list, and every adapter's fail-closed behavior.
+- **Profile family and lifecycle rehearsal (CT-043).** `deploy.ps1`
+  gained a `-Profile Dev|Compat|Dedicated` parameter, and a new
+  rehearsal script proves fresh-install/upgrade/uninstall mechanics
+  against real, actually-built packages (including a real historical
+  v0.7.0 build) entirely inside a scratch directory.
+- **Defect burn-down and the smoke checklist (CT-044).** The one open P2
+  defect is fixed (the cart telemetry driver now fails closed like
+  every panel); the first complete `PRE_RELEASE_SMOKE_TEST.md` compiles
+  every pending manual verification from v0.1 onward into one ordered,
+  owner-runnable checklist.
+- **This seal (CT-045).** Version synced, packaged, hashed, and the
+  owner packet committed. Publication remains entirely owner-only and
+  did not happen as part of this change.
+
 ## 0.8.0 (Internal — unreleased)
 
 **Compatibility, Recovery, Scale (CT-036..CT-040).** The eighth internal
