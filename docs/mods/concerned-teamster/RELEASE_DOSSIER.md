@@ -5,6 +5,76 @@ split between automated evidence and pending manual claims, following the
 dossier discipline proven on Concerned Cartographer. Publication of anything
 is owner-only, always.
 
+## v0.9.0 — "Public Beta Hardening" (sealed 2026-09-06) — FIRST PUBLICATION-CANDIDATE SEAL
+
+| Item | Value |
+|---|---|
+| Version | 0.9.0 (public beta **candidate** — sealed for owner review; NOT published by this seal) |
+| Source commit | `161dc9d951f42ef345da88cb2e6f962e33d9d3b4` (branch `chore/ct-045-v09-beta-seal`). Sealed on merge to main via the CT-045 PR. |
+| ZIP | `artifacts/thunderstore/TheConcernedCat-ConcernedTeamster-0.9.0.zip` |
+| ZIP SHA-256 | `07ac86f6c9e0af216aaad239945cc5927c8c02ff1822d0634d3a705ab51807fd` (144,126 B) — a build fingerprint, not a reproducibility guarantee (DEF-teamster-v0.8-001, #214, still open/deferred) |
+| DLL SHA-256 | `6d0133f363c0fd99a7a1b844ddd53d7d9070b248b719b91b0f77059b96638cbf` (247,808 B) |
+| DLL identity | AssemblyVersion 0.9.0.0, InformationalVersion `0.9.0+161dc9d951f42ef345da88cb2e6f962e33d9d3b4` (read back directly from the built DLL) |
+| ZIP contents (6 entries) | manifest.json, icon.png (256×256), README.md, CHANGELOG.md, LICENSE, plugins/TheConcernedCat.ConcernedTeamster.dll — **own DLL only**, no PDB, no foreign DLL |
+| Fresh-profile install check | The sealed ZIP's `plugins/TheConcernedCat.ConcernedTeamster.dll` was extracted into a simulated fresh `BepInEx/plugins/` layout; its SHA-256 matched the built DLL exactly. This proves the file-level install mechanics; it is not a real mod-manager profile (none exists on this machine — see `PROFILE_REHEARSAL.md`) |
+| Built against | Valheim 0.221.12 (buildid 21981559, unchanged since the v0.7 seal), Unity 6000.0.61f1, BepInExPack 5.4.2333, Jötunn 2.29.2 |
+| Version sync | 0.9.0 across csproj/Plugin.cs/thunderstore.toml + the CHANGELOG `## 0.9.0` section, validator-asserted (`--expected-version 0.9.0 --require-binary`) |
+
+**This is the first Teamster RC ever sealed as an actual publication
+candidate** — every prior seal (v0.1 through v0.8) was explicitly
+internal-only by design, with no path to publication regardless of how
+green its gates were. v0.9 is different: if the owner reviews this seal
+and approves, it is the exact artifact intended to become the first
+public Concerned Teamster release. Nothing about this seal itself
+publishes anything — see the Owner Packet (below) for the exact,
+owner-only next steps.
+
+### Sprint scope sealed in this RC
+
+CT-041 the feature/default freeze (every shipped feature and config
+default documented and snapshot-locked) plus the privacy-safe Report a
+Bug feedback path · CT-042 complete public docs (privacy statement,
+AI-assistance disclosure, repo-wide attribution fixes) and a committed
+security self-audit · CT-043 scripted profile-family deploy paths
+(`deploy.ps1 -Profile Dev|Compat|Dedicated`) and a real-artifact
+file-level lifecycle rehearsal, plus four backfilled release tags ·
+CT-044 the one open P2 defect fixed and the first complete
+`PRE_RELEASE_SMOKE_TEST.md`, cross-referencing all 37 pending manual
+claims accumulated since v0.1 · CT-045 this seal.
+
+### v0.9 campaign results (automated)
+
+| Campaign item | Method | Result |
+|---|---|---|
+| Static validation + version sync | `validate_repo.py --product teamster --expected-version 0.9.0 --require-binary` | PASS |
+| Solution build | `package.ps1 -Product ConcernedTeamster -Configuration Release` | PASS — 0 errors |
+| Teamster unit tests | `dotnet test ConcernedTeamster.Tests` (Release) | **622/622 PASS** — +13 over the v0.8 baseline of 609 (CT-041's `DefaultFreezeSnapshotTests` + `FeedbackLinksTests`) |
+| Cartographer regression | `dotnet test ConcernedCartographer.Tests` (Release) | **568/568 PASS** — unchanged |
+| Cross-product independence + Cartographer contract + integration read-only | `validate_repo.py` interop lines | PASS — 4 trees independent, contract 12/12, 9 integration files read-only |
+| Authority policy / no-force / privacy audits | `validate_repo.py` interop lines | PASS — 9 features documented, 151 Teamster source files, 0 violations across all three audits |
+| Package build + audit | `package.ps1 -Product ConcernedTeamster` + ZIP listing | PASS — hashes above, own-DLL-only, 6 entries |
+| Fresh-profile install (file-level) | Sealed ZIP extracted into a scratch `BepInEx/plugins/` layout | PASS — DLL hash matches exactly |
+| Lifecycle rehearsal (fresh/upgrade/uninstall/idempotence) | `rehearse-teamster-lifecycle.ps1` | PASS — all 5 sections green against real, actually-built packages including a real historical v0.7.0 worktree build |
+| Defect burn-down | Sprint defect sweep | Zero open P0/P1/P2; two P3s deferred with documented rationale (DEF-teamster-v0.8-001, DEF-teamster-v0.9-001) |
+| The full `PRE_RELEASE_SMOKE_TEST.md` (37 cross-referenced sections) | in-game, owner-run | **MANUAL — pending, never run.** This is the entire remaining gate before publication; see the Owner Packet |
+
+### Defects
+
+No open P0/P1/P2 Teamster defect at seal time. Two deferred P3s, both
+pre-existing and documented: DEF-teamster-v0.8-001 (#214, build/ZIP hash
+non-reproducibility — a release-engineering traceability gap, no
+correctness impact) and DEF-teamster-v0.9-001 (#216, a flaky allocation
+test under full-suite Debug timing — a test-harness sensitivity, not a
+product defect).
+
+### Gate decision
+
+All automatable v0.9 gates are green. The entire live campaign —
+`PRE_RELEASE_SMOKE_TEST.md`'s 37 sections, compiled but never run — is
+pending by design; this is the actual human work publication requires,
+not a formality. Sprint controller #157 closes with this seal. **No
+publish action has occurred or is scheduled by any automation.**
+
 ## v0.8 RC1 — "Compatibility, Recovery, Scale" (sealed 2026-09-06)
 
 | Item | Value |

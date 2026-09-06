@@ -240,6 +240,23 @@ Full detail in `HUMAN_ATTENTION.md`'s CT-044 entry and
 | Checklist preambles verified runnable | `rehearse-teamster-lifecycle.ps1` (fresh install/upgrade/uninstall/idempotence) and `validate_repo.py --require-binary` (package audit) both re-run green for this leaf; the profile-creation clicks themselves remain owner-interactive and unverified, as stated |
 | Regression suite green after final fixes | 622/622 Teamster + 568/568 Cartographer PASS after the `CartTelemetryPump` fix |
 
+## v0.9 public beta seal (CT-045)
+
+Full detail in `RELEASE_DOSSIER.md`'s v0.9.0 entry and
+`OWNER_PACKET_v0.9.md`. Summary of the acceptance-criteria evidence:
+
+| Criterion | Evidence |
+|---|---|
+| RC sealed with recorded hashes; fresh-profile install verified | `RELEASE_DOSSIER.md` v0.9.0 entry — ZIP/DLL SHA-256 recorded, DLL InformationalVersion read back and confirmed to match the sealing commit; the sealed ZIP's DLL extracted into a simulated fresh `BepInEx/plugins/` layout with a matching hash |
+| Owner packet complete per the dossier pattern | `OWNER_PACKET_v0.9.md` — RC identity, proven-vs-pending summary, defect status, owner-only publish steps adapted from Cartographer's `V1_RELEASE_PREP.md`, rollback/reapproval guidance, sign-off checklist |
+| No publish action occurred or is scheduled by automation | No `tcli publish` invocation anywhere in this leaf; `scripts/publish.ps1`'s hardcoded Cartographer-only scope was fixed (added `-Product`) but verified only up to its pre-existing `TCLI_AUTH_TOKEN` safety check, never past it |
+| Sprint controller gate green and closed | 622 Teamster + 568 Cartographer tests, three zero-violation interop audits, zero open P0/P1/P2 defects — see the sprint controller #157 closure comment |
+
+This issue carries the `gate:human-preview` label — the conveyor
+completes and merges this seal, then stops for the owner's review rather
+than beginning the v1.0 sprint automatically. See `HUMAN_ATTENTION.md`'s
+CT-045 entry.
+
 ## Multiplayer (v0.6)
 
 - Ownership: only the vanilla-authoritative controller's client mutates

@@ -2,7 +2,9 @@
 param(
     [Parameter(Mandatory)]
     [ValidatePattern('^\d+\.\d+\.\d+$')]
-    [string]$Version
+    [string]$Version,
+    [ValidateSet("ConcernedCartographer", "ConcernedTeamster")]
+    [string]$Product = "ConcernedCartographer"
 )
 
 Set-StrictMode -Version Latest
@@ -17,22 +19,31 @@ if ([string]::IsNullOrWhiteSpace($env:TCLI_AUTH_TOKEN)) {
     throw "TCLI_AUTH_TOKEN is not set in this PowerShell process."
 }
 
+$productSlug = @{
+    ConcernedCartographer = "cartographer"
+    ConcernedTeamster     = "teamster"
+}[$Product]
+
 Push-Location $root
 try {
-    python ./tools/validate_repo.py --expected-version $Version
+    python ./tools/validate_repo.py --product $productSlug --expected-version $Version
     if ($LASTEXITCODE -ne 0) { throw "Version validation failed." }
 
-    & (Join-Path $PSScriptRoot "package.ps1") -Configuration Release
+    & (Join-Path $PSScriptRoot "package.ps1") -Configuration Release -Product $Product
 
-    $confirmation = Read-Host "Type PUBLISH $Version to upload TheConcernedCat-ConcernedCartographer"
+    $confirmation = Read-Host "Type PUBLISH $Version to upload TheConcernedCat-$Product"
     if ($confirmation -ne "PUBLISH $Version") {
         throw "Publish cancelled."
     }
 
-    tcli publish --config-path ./src/ConcernedCartographer/Package/thunderstore.toml
+    tcli publish --config-path ./src/$Product/Package/thunderstore.toml
     if ($LASTEXITCODE -ne 0) { throw "TCLI publish failed." }
 
-    Write-Host "Published Concerned Cartographer $Version. Create the tag concerned-cartographer/v$Version after verifying the listing."
+    $tagPrefix = @{
+        ConcernedCartographer = "concerned-cartographer"
+        ConcernedTeamster     = "concerned-teamster"
+    }[$Product]
+    Write-Host "Published $Product $Version. Create the tag $tagPrefix/v$Version after verifying the listing."
 }
 finally {
     Pop-Location
