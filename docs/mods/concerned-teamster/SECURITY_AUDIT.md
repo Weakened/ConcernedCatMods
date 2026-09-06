@@ -57,18 +57,22 @@ Every file under `Adapters/` was reviewed for how it handles an
 unexpected failure. Two structurally different, both legitimate,
 fail-closed patterns are in use:
 
-- **Checked-return-value fail-closed** (no exceptions needed): file I/O
-  (`SidecarFileStore`, and everything built on it — `TripRecordingService`,
-  `SupportBundleExporter`) and brake physics
-  (`CartBrakeAdapter.TryEngage`/`TryRelease`) report failure as a
-  `bool`/`out string? error` result, never relying on `catch`. This is
-  arguably the more disciplined pattern for expected failure modes
-  (disk full, permission denied, a destroyed cart) since it does not
-  depend on exception-based control flow.
-- **try/catch-and-disable-for-the-session** (every `Ui/*Panel.cs` file):
-  wraps the panel's methods in try/catch, logs one `LogError` line, and
-  sets a `_failed` flag so the panel becomes inert rather than risking a
-  repeat failure every frame or every click.
+- **Checked-return-value fail-closed** (caller never needs `catch`): file
+  I/O (`SidecarFileStore`, and everything built on it —
+  `TripRecordingService`, `SupportBundleExporter`) and brake physics
+  (`CartBrakeAdapter.TryEngage`/`TryRelease`/`ReadFacts`) report failure
+  as a `bool`/`out string? error` result to their callers — internally,
+  `CartBrakeAdapter` itself does wrap each physics call in its own
+  try/catch specifically so that contract holds even against a surprise
+  Unity exception, not just an expected failure. This is arguably the
+  more disciplined pattern for expected failure modes (disk full,
+  permission denied, a destroyed cart) since every caller gets a plain
+  checked result instead of needing its own exception handling.
+- **try/catch-and-disable-for-the-session** (every `Ui/*Panel.cs` file,
+  plus `Ui/CartStatusHudController.cs`): wraps the panel's methods in
+  try/catch, logs one `LogError` line, and sets a `_failed` flag so the
+  panel becomes inert rather than risking a repeat failure every frame or
+  every click.
 
 Two findings from cross-checking every adapter against these two
 patterns:

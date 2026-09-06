@@ -4,7 +4,7 @@
 
 **Eren Cansunar** — creator, product owner, maintainer and release authority, publishing as **The Concerned Cat**.
 
-Original concept/product direction includes the Concerned Cat mod portfolio and Concerned Cartographer's living-atlas direction: physical road cartography, richer pin management, decluttering, route planning and collaborative cartography.
+Original concept/product direction includes the Concerned Cat mod portfolio, Concerned Cartographer's living-atlas direction (physical road cartography, richer pin management, decluttering, route planning and collaborative cartography), and Concerned Teamster's cart-truth direction (load/grade/risk readouts, road-quality scoring from recorded trips, and researched mod-compatibility awareness).
 
 ## AI-assisted implementation
 

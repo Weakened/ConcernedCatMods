@@ -21,7 +21,7 @@ The same address handles privacy/crash-reporting questions and any logs or infor
 
 ## Security boundaries
 
-Concerned Cartographer should:
+Concerned Cartographer and Concerned Teamster should:
 
 - never require elevated/admin privileges for normal use;
 - never execute downloaded code;
