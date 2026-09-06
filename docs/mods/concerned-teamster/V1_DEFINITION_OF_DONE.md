@@ -121,7 +121,8 @@ in-game visual/interaction rows deferred to `PRE_RELEASE_SMOKE_TEST.md`
 | Capability | Status | Where |
 |---|---|---|
 | Domain unit tests + interop audits, every PR | Done | 622 Teamster + 568 Cartographer tests, three zero-violation interop audits (authority/no-network, no-force, no-internet-egress), every merge this whole conveyor |
-| Regression run against each of TCT-Clean/Dev/Compat/Dedicated specifically | **Not yet done — CT-047's own scope** | No TCT-* profile exists yet (see above); running the regression campaign across all four, once they exist, is CT-047's explicit job |
+| Full automated suite reruns clean from a fresh checkout | Done | v1.0 (CT-047); `REGRESSION_REPORT_v1.0.md` — a separate `git clone` (not this conveyor's working tree), full build+test+package cycle, 622+568 tests, zero new defects |
+| Regression run against each of TCT-Clean/Dev/Compat/Dedicated specifically | **Done\* — automated layer only** | v1.0 (CT-047); `REGRESSION_REPORT_v1.0.md`'s campaign-rerun table — every profile's underlying test suite reruns clean; no TCT-* profile exists yet for the in-game layer, itemized pending per profile in the same report |
 
 ## Final docs, localization, controller, accessibility, migration, compat sign-off
 
