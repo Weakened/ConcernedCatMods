@@ -1274,11 +1274,17 @@ only for non-blocking uncertainty.
   tightened from a loose sanity bound to a formal budget). All 14 are
   Met; no code changed to satisfy a budget — every real hot path was
   already fast/allocation-free, the tests simply prove it with a number
-  instead of an impression. `CooperativeEffortClassifier` and
-  `CartAuthorityPolicy` are explicitly excluded from a budget: neither
-  has a live Adapters call site yet (already recorded in their own
-  CT-026 and CT-028 entries above), so there is no real cadence to
-  measure against — a budget for uncalled code would be a guess.
+  instead of an impression. `CooperativeEffortClassifier`,
+  `RemoteStalenessPolicy`, and `OncePerKeyGate` are explicitly excluded
+  from a budget: none has a live Adapters call site yet (CT-028's entry
+  above already records `CooperativeEffortClassifier`'s idle production
+  caller), so there is no real cadence to measure against — a budget for
+  uncalled code would be a guess. (An earlier draft of this entry also
+  excluded `CartAuthorityPolicy` on the same grounds; that was wrong —
+  it runs live inside `BrakeLifecycle.EvaluateTick`/`EvaluateToggle` on
+  the brake's real due-tick/toggle path, exactly as CT-026's entry above
+  already states, and its cost is already covered by the brake-lifecycle
+  budget row.)
 - Why work continued: this leaf adds tests and a doc; it changes no
   production code path, so the only risk is a wrong measurement, which
   independent review re-runs rather than trusts.

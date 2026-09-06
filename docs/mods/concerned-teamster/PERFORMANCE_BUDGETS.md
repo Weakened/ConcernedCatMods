@@ -41,7 +41,7 @@ not an adjective.
 | 4 | Route profiler `Advance`, worst-case profile (4,096 positions, CT-023's hard cap) | frame, while a build is in flight | < 200 ms total to fully consume; 0 B | **0 ms; 0 B** | Met | `PerformanceBudgetTests.RouteProfiler_Advance_ConsumingWorstCaseProfile_AllocatesNothingAndCompletesWithinBudget` (new) |
 | 5 | Route profiler `Advance`, post-completion (panel keeps polling after the build finished) | every frame → 1M calls ≈ 4.6 h at 60 fps | 0 B/call | 0 B / 1,000,000 calls | Met | `PerformanceBudgetTests.RouteProfiler_Advance_AfterCompletion_AllocatesNothing` (new) |
 | 6 | Brake lifecycle `EvaluateTick`, engaged steady state | due tick (0.5 s) → 200k ticks ≈ 27.8 h | 0 B/call | 0 B / 200,000 calls | Met | `PerformanceBudgetTests.BrakeLifecycle_EvaluateTick_LongRun_AllocatesNothing` (new) |
-| 7 | Trip recorder feed→detach→drain, many finished trips | per haul (49 samples × 1.1 s spacing ≈ 54 s/trip) → 100 trips/window ≈ 1.5 h/window | allocation flat across two equal windows | window 1: 832,800 B; window 2: 832,800 B (identical) | Met | `PerformanceBudgetTests.TripRecorder_FeedDetachDrainOverManyTripCycles_AllocationStaysFlat` (new) |
+| 7 | Trip recorder feed→detach→drain, many finished trips | per haul (49 samples × 1.1 s spacing + debounce ≈ 58 s/cycle) → 100 cycles/window ≈ 1.6 h/window | allocation flat across two equal windows | window 1: 832,800 B; window 2: 832,800 B (identical) | Met | `PerformanceBudgetTests.TripRecorder_FeedDetachDrainOverManyTripCycles_AllocationStaysFlat` (new) |
 | 8 | Route bottleneck presenter, worst-case trip (5,000 samples, `MaxMaxSamplesPerTrip`) | per keystroke in the hypothetical-mass field | < 50 ms | **1 ms** | Met | `PerformanceBudgetTests.RouteBottleneckPresenter_Present_WorstCaseTripSize_CompletesWithinBudget` (new) |
 | 9 | Trip comparison presenter, two worst-case trips | on row select | < 100 ms | **10 ms** | Met | `PerformanceBudgetTests.TripComparisonPresenter_Present_WorstCaseTripSizes_CompletesWithinBudget` (new) |
 | 10 | Cargo manifest, many distinct items (200 synthetic, stress input) | on cargo change | < 500 ms | < 1 ms | Met | `CargoManifestTests.Create_ManyDistinctEntries_StaysCorrectAndFast` (pre-existing) |
@@ -64,17 +64,32 @@ copies into a length-capped buffer) but is bounded to at most 32
 characters per call at the same cadence — a fixed, small cost, not
 included as its own row.
 
-`CooperativeEffortClassifier`, `CartAuthorityPolicy`, `RemoteStalenessPolicy`,
-and `OncePerKeyGate` are fully built and correctness-tested (CT-026,
-CT-028) but have no live Adapters call site yet — `CooperativeEffortClassifier`'s
-one production caller always passes a null participant feed, and the
-brake's real authority gate is the narrower `BrakeFacts.IsLocalAuthority`
-rather than `CartAuthorityPolicy.MayMutate`. This is not a new finding:
-`HUMAN_ATTENTION.md`'s existing CT-026 and CT-028 entries already record
-live wiring as pending for their own reasons. Because nothing currently
-calls these at runtime, there is no real-world cadence to budget against
-— inventing one would be a guess, not a measurement. If a future issue
-wires either in, that issue is where its budget belongs.
+**Correction after review:** an earlier draft of this section wrongly
+claimed `CartAuthorityPolicy` had no live call site. It does:
+`CartAuthorityPolicy.MayMutate(TeamsterFeature.ParkingBrake, facts.Authority)`
+is called directly from both `BrakeLifecycle.EvaluateToggle` and
+`BrakeLifecycle.EvaluateTick` (`Domain/Brake/BrakeLifecycle.cs`), which
+`Adapters/BrakeService.cs` drives from `Adapters/CartTelemetryPump.cs`'s
+real due-tick loop — the brake's *entire* mutation-authority check runs
+through this policy, every due tick while engaged and on every toggle
+press. (`BrakeFacts.IsLocalAuthority` is a different thing: it only
+gates the HUD button's *visibility*, `Ui/CartStatusHudController.cs`.)
+CT-026's own `HUMAN_ATTENTION.md` entry already says as much — "the
+policy is the single source of truth the brake enforces through
+(test-asserted)" — its pending item is live *multiplayer* validation of
+this already-wired behavior (CT-027's scope), not absent wiring. No new
+row is needed here: row 6 above already measures `EvaluateTick`'s full
+cost, `MayMutate` included, at 0 B over 200k calls.
+
+`CooperativeEffortClassifier`, `RemoteStalenessPolicy`, and
+`OncePerKeyGate` genuinely have no live Adapters call site —
+`CooperativeEffortClassifier`'s one production caller
+(`RecoveryGuidancePanel`) always passes a null participant feed,
+matching CT-028's own already-recorded "production supplies none."
+Because nothing currently calls these three at runtime, there is no
+real-world cadence to budget against for them — inventing one would be
+a guess, not a measurement. If a future issue wires any of them in, that
+issue is where its budget belongs.
 
 ## Panel / HUD per-frame cost
 
