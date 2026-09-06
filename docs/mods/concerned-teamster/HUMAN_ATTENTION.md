@@ -825,13 +825,17 @@ only for non-blocking uncertainty.
   mass-relevance depends on another mod's own live configuration rather
   than its mere installation — `Adapters/CompatibilityAdapter.Lookup` reads
   only `Chainloader.PluginInfos` (is the mod present, what version), never
-  another mod's `ConfigEntry` values. A player who has both Teamster and a
+  another mod's live configuration. A player who has both Teamster and a
   Wagon-section-enabled ValheimPlus will see a `Warn`-level note, not a
   suppressed reading — correctly cautious, but not as strong a guarantee as
   the `Adapt` entries provide. Extending `CompatibilityAdapter` to probe a
-  specific known mod's specific config value (the same reflective-lookup
-  shape already used for presence) is a real, buildable follow-up, out of
-  scope for a research/registration leaf.
+  specific known mod's specific config value is a real, buildable
+  follow-up in principle, but harder than mirroring the presence probe: the
+  Wagon setting lives in ValheimPlus's own `ServerSyncConfig<T>` POCO
+  scheme (verified from source), not a standard BepInEx `ConfigEntry<T>`
+  binding, so it would need per-mod, format-specific reading logic rather
+  than one generic mechanism. Out of scope for a research/registration
+  leaf either way.
 - Must resolve before public release: Yes — the full in-game coexistence
   matrix (per this issue's acceptance criteria) with ItemStacks and
   ValheimPlus actually installed alongside Teamster (`TCT-Compat` profile,

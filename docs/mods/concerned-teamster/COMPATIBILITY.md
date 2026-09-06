@@ -50,13 +50,15 @@ reading them), never hardcode a GUID or mod name of its own.
 
 ## The shipped registry
 
-`Domain/Compatibility/CompatibilityKnownMods.Registry` carries one entry as
-of CT-037 (`TastyChickenLegs.BetterCarts` — see the research trail below).
-Naming a specific mod's GUID and policy requires first verifying its
-actual, current, shipped metadata — inventing one would violate this
-repository's "research uncertain … APIs instead of inventing them" rule.
-CT-038 (the broader current-mod research pass) grows this list further. The
-framework itself is fully proven off-game against fake registries in
+`Domain/Compatibility/CompatibilityKnownMods.Registry` carries three
+entries as of CT-038 (`TastyChickenLegs.BetterCarts`,
+`net.mtnewton.itemstacks`, `org.bepinex.plugins.valheim_plus` — see the
+research trail below). Naming a specific mod's GUID and policy requires
+first verifying its actual, current, shipped metadata — inventing one
+would violate this repository's "research uncertain … APIs instead of
+inventing them" rule. Future leaves (a broader Thunderstore sweep, or a
+specific mod the owner names) grow this list the same way. The framework
+itself is fully proven off-game against fake registries in
 `CompatibilityFrameworkTests` (detection, each policy outcome, silence for
 unregistered/not-found mods, and the shared-composition guarantee).
 
@@ -137,7 +139,7 @@ capacity — see "Ruled out" below for why that's a real distinction):
 | BetterCarts | TastyChickenLegs | 46,000 | Quick attach/detach, up to 4-player push assist, damage removal, network sync. **Also reduces cart mass by a default 20%** — see below. | `TastyChickenLegs.BetterCarts` (verified: `Plugin.cs`'s `ModGUID` constant) | **Yes** — `Adapt`, `AffectedAspect.CartMassOrPhysics` |
 | ItemStacks | mtnewton | 306,955 (Thunderstore experimental API, retrieved 2026-09-06) | Increases item stack sizes and **reduces every item's weight by a default 90%**, on by default — see below. | `net.mtnewton.itemstacks` (verified: `ItemStacksPlugin.cs`'s `GUID` constant) | **Yes** — `Adapt`, `AffectedAspect.CartMassOrPhysics` |
 | ValheimPlus | (community, `valheimPlus` org) | 186,034 (Thunderstore experimental API, retrieved 2026-09-06) | A large, config-driven overhaul (dozens of independent optional sections). Its Wagon section can change cart mass, but ships **disabled by default**, and disabled reproduces vanilla mass exactly — see below. | `org.bepinex.plugins.valheim_plus` (verified: `ValheimPlus.cs`'s `[BepInPlugin(...)]` attribute) | **Yes** — `Warn`, `AffectedAspect.None` |
-| Better Cart | We_Haul | 1,793 (Thunderstore experimental API, retrieved 2026-09-06) | "Allows for customization of minimum and maximum mass of Carts so that loading a cart doesn't make it impossible to move" — a direct, conceptually strong match for "changes cart physics, weight handling." | **Could not be verified**, in either CT-037 or this leaf's renewed attempt. No linked GitHub/source repository found; Thunderstore's decompiled-source viewer for this package did not yield readable source through available tooling. | **No** |
+| Better Cart | We_Haul | 1,793 (Thunderstore experimental API, retrieved 2026-09-06; CT-037 reported 2,200 from a web search snippet — this leaf's number comes from a direct, timestamped API query, most likely reflecting a version re-upload resetting Thunderstore's counter rather than an error in either research pass) | "Allows for customization of minimum and maximum mass of Carts so that loading a cart doesn't make it impossible to move" — a direct, conceptually strong match for "changes cart physics, weight handling." | **Could not be verified**, in either CT-037 or this leaf's renewed attempt. No linked GitHub/source repository found; Thunderstore's decompiled-source viewer for this package did not yield readable source through available tooling. | **No** |
 
 **BetterCarts does alter cart mass by default — a corrected finding.** The
 first research pass read only `Plugin.cs` and the README and concluded no
@@ -197,19 +199,36 @@ its Wagon section on.** `github.com/valheimPlus/ValheimPlus`,
 own cart-mass-recompute method that returns `false` (fully replacing it),
 but its disabled branch reproduces vanilla's formula exactly:
 
+Quoted verbatim from `ValheimPlus/GameClasses/Vagon.cs` (this markdown file
+is outside the `check_teamster_adapter_isolation` validator's `*.cs` scan,
+so the third-party type name below is not a Domain-purity violation — see
+`tools/validate_repo.py`):
+
 ```csharp
 [HarmonyPatch(typeof(Vagon), "UpdateMass")]
-private static bool Prefix(ref Vagon __instance)
+public static class ModifyWagonMass
 {
-    // ...
-    float totalWeight = Configuration.Current.Wagon.IsEnabled
-        ? Helper.applyModifierValue(rawWeight, Configuration.Current.Wagon.wagonExtraMassFromItems)
-        : rawWeight;                                              // vanilla when disabled
-    __instance.m_baseMass = Configuration.Current.Wagon.IsEnabled
-        ? Configuration.Current.Wagon.wagonBaseMass
-        : 20;                                                     // vanilla default when disabled
-    __instance.SetMass(__instance.m_baseMass + totalWeight * __instance.m_itemWeightMassFactor);
-    return false;
+    // "Vagon" is from base game
+    private static bool Prefix(ref Vagon __instance)
+    {
+        if (!__instance.m_nview.IsOwner()) return false;
+        if (__instance.m_container == null) return false;
+
+        float totalWeight = 0;
+        if (Configuration.Current.Wagon.IsEnabled)
+            totalWeight = Helper.applyModifierValue(__instance.m_container.GetInventory().GetTotalWeight(), Configuration.Current.Wagon.wagonExtraMassFromItems);
+        else
+            totalWeight = __instance.m_container.GetInventory().GetTotalWeight();
+
+        if (Configuration.Current.Wagon.IsEnabled)
+            __instance.m_baseMass = Configuration.Current.Wagon.wagonBaseMass;
+        else
+            __instance.m_baseMass = 20;
+
+        float mass = __instance.m_baseMass + totalWeight * __instance.m_itemWeightMassFactor;
+        __instance.SetMass(mass);
+        return false;
+    }
 }
 ```
 
@@ -292,12 +311,16 @@ rather than guessed.
   section disabled). A player who has both Teamster and ValheimPlus
   installed and has explicitly enabled and reconfigured the Wagon section
   gets a `Warn`-level Compat-panel note, not a suppressed/unavailable
-  reading — the framework has no mechanism to read another BepInEx mod's
-  `ConfigEntry` values today, only its presence via `Chainloader.PluginInfos`
-  (`Adapters/CompatibilityAdapter.Lookup`). Extending detection to probe a
-  known mod's specific config values (mirroring the presence-probe pattern)
-  is a real, buildable enhancement but is out of scope for a leaf whose job
-  is research and registration, not framework extension — tracked in
+  reading — the framework has no mechanism to read another mod's live
+  configuration today, only its presence via `Chainloader.PluginInfos`
+  (`Adapters/CompatibilityAdapter.Lookup`). This would be a harder lift than
+  it might sound: ValheimPlus's `WagonConfiguration` (verified from source)
+  is a plain POCO under the mod's own `ServerSyncConfig<T>` scheme, not a
+  standard BepInEx `ConfigEntry<T>` binding — so reading it back would need
+  per-mod, format-specific knowledge, not one generic "read any mod's
+  config" mechanism mirroring the generic presence probe. A real, buildable
+  enhancement in principle, but out of scope for a leaf whose job is
+  research and registration, not framework extension — tracked in
   `HUMAN_ATTENTION.md` as a future capability, not a defect in what shipped.
 
 ## In-game surface
