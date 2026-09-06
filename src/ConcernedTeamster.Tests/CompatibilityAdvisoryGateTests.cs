@@ -78,30 +78,37 @@ public class CompatibilityAdvisoryGateTests
     // ---- The shipped registry's one real entry (CT-037 research) ----------
 
     [Fact]
-    public void ShippedRegistry_BetterCarts_IsRegisteredWithVerifiedGuidAndCoexistPolicy()
+    public void ShippedRegistry_BetterCarts_IsRegisteredWithVerifiedGuidAndAdaptPolicy()
     {
         // GUID verified directly against the mod's published source
         // (github.com/TastyChickenLegs/BetterCarts, Plugin.cs: ModGUID =
         // "TastyChickenLegs.BetterCarts") -- see COMPATIBILITY.md for the
         // full research trail, including the candidate NOT registered
         // (We_Haul's Better_Cart) because its GUID could not be verified.
+        // Policy is Adapt/CartMassOrPhysics because
+        // Patches/CartPatches.cs's Vagon.SetMass prefix reduces cart mass
+        // by a default 20% (Patches/CartConfigs.cs: cartMassReduction =
+        // 0.2f, applied whenever allowPlayerHelp is false, itself the
+        // default) -- a default-on physics change, not a cosmetic one.
         KnownModProbe betterCarts = Assert.Single(
             CompatibilityKnownMods.Registry, p => p.DisplayName == "BetterCarts");
 
         Assert.Equal("TastyChickenLegs.BetterCarts", betterCarts.Guid);
-        Assert.Equal(CompatibilityPolicy.Coexist, betterCarts.Policy);
-        Assert.Equal(CompatibilityAffectedAspect.None, betterCarts.AffectedAspect);
+        Assert.Equal(CompatibilityPolicy.Adapt, betterCarts.Policy);
+        Assert.Equal(CompatibilityAffectedAspect.CartMassOrPhysics, betterCarts.AffectedAspect);
         Assert.NotEmpty(betterCarts.Description);
     }
 
     [Fact]
-    public void ShippedRegistry_BetterCarts_NeverGatesCartMassAdvice()
+    public void ShippedRegistry_BetterCarts_AlwaysGatesCartMassAdviceWhenDetected()
     {
-        // Direct consequence of Coexist + AffectedAspect.None: even
-        // detected, BetterCarts must never trip the precedence gate.
+        // Direct consequence of Adapt + AffectedAspect.CartMassOrPhysics:
+        // once detected, BetterCarts must trip the precedence gate so
+        // Teamster never shows vanilla-calibrated load advice as truth
+        // under its default mass reduction.
         IReadOnlyList<ModDetectionResult> results = CompatibilityRegistry.Evaluate(
             CompatibilityKnownMods.Registry, _ => (true, "1.0.6"));
 
-        Assert.True(CompatibilityAdvisoryGate.CartMassAdviceReliable(results));
+        Assert.False(CompatibilityAdvisoryGate.CartMassAdviceReliable(results));
     }
 }

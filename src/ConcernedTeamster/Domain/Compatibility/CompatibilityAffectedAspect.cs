@@ -10,9 +10,9 @@ public enum CompatibilityAffectedAspect
     None,
 
     /// <summary>The mod changes cart mass, weight limits, or pulling
-    /// physics — every LoadModel-derived verdict (warnings, stuck
-    /// diagnostics, recovery guidance, route bottlenecks) was calibrated
-    /// against vanilla physics and can no longer be trusted as vanilla
-    /// truth while such a mod is present.</summary>
+    /// physics — every LoadModel- or RiskModel-derived verdict (warnings,
+    /// stuck diagnostics, recovery guidance, route bottlenecks, descent
+    /// risk) was calibrated against vanilla physics and can no longer be
+    /// trusted as vanilla truth while such a mod is present.</summary>
     CartMassOrPhysics,
 }

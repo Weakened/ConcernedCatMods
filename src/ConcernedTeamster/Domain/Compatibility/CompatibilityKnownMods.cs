@@ -15,15 +15,20 @@ public static class CompatibilityKnownMods
     {
         // CT-037: GUID verified directly against the mod's published source
         // (github.com/TastyChickenLegs/BetterCarts, Plugin.cs — ModGUID =
-        // "TastyChickenLegs.BetterCarts"). Its shipped feature set (quick
-        // attach/detach, multiplayer push assist, damage removal, network
-        // sync) does not touch cart mass, weight, or pull physics, so it
-        // coexists cleanly — Teamster's readings stay accurate.
+        // "TastyChickenLegs.BetterCarts"). Its cart-mass-assignment Harmony
+        // patch (see COMPATIBILITY.md's research trail for the exact
+        // file/method) reduces the cart's mass by a default 20% — a
+        // default-on, physics-altering change, so Teamster's
+        // vanilla-calibrated load advice cannot be trusted while this mod
+        // is present. This entry is tagged CartMassOrPhysics precisely so
+        // CompatibilityAdvisoryGate.CartMassAdviceReliable turns false and
+        // every load-advice consumer substitutes its "unavailable" notice
+        // instead of a silently-wrong vanilla number.
         new KnownModProbe(
             guid: "TastyChickenLegs.BetterCarts",
             displayName: "BetterCarts",
-            policy: CompatibilityPolicy.Coexist,
-            affectedAspect: CompatibilityAffectedAspect.None,
+            policy: CompatibilityPolicy.Adapt,
+            affectedAspect: CompatibilityAffectedAspect.CartMassOrPhysics,
             description: TeamsterStrings.Get("compat.betterCartsDescription")),
     };
 }

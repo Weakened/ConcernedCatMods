@@ -323,6 +323,57 @@ public class RouteReportPresenterTests
             viewModel.Lines, line => line.StartsWith("1. Steep climb", StringComparison.Ordinal));
     }
 
+    // -- CT-037 precedence gate --
+
+    [Fact]
+    public void Report_MassAdviceUnreliable_OverallSaysUnavailable_NoPerSectionSpam()
+    {
+        RouteProfile profile = Profile(
+            (float x, float z, out float height, out TerrainSurfaceKind surface) =>
+            {
+                height = 0.20f * x;
+                surface = TerrainSurfaceKind.Untouched;
+                return true;
+            });
+        LoadModel model = Model();
+
+        RouteReportPresenter.ViewModel viewModel = RouteReportPresenter.Present(
+            "Altered physics", profile, model, 150f, massAdviceReliable: false);
+
+        // Overall recommendation block: unavailable, not a stale vanilla verdict.
+        Assert.Contains(
+            viewModel.Lines,
+            line => line == "Load advice unavailable — a detected mod changes cart mass or " +
+                "physics (see the Compat panel).");
+        Assert.DoesNotContain(viewModel.Lines, line => line.Contains("keep total mass"));
+        Assert.DoesNotContain(viewModel.Lines, line => line.Contains("Your cart"));
+
+        // Per-section advice is suppressed too (matching the existing
+        // "sections without a model answer get facts, not advice" rule),
+        // even though a live model and mass are both available — but the
+        // steep section itself is still ranked, since that is terrain fact.
+        Assert.DoesNotContain(viewModel.Lines, line => line.Contains("Here:"));
+        Assert.Contains(
+            viewModel.Lines, line => line.StartsWith("1. Steep climb", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Report_MassAdviceReliableByDefault_UnchangedFromBeforeCT037()
+    {
+        RouteProfile profile = Profile(
+            (float x, float z, out float height, out TerrainSurfaceKind surface) =>
+            {
+                height = 0.07f * x;
+                surface = TerrainSurfaceKind.Untouched;
+                return true;
+            });
+
+        RouteReportPresenter.ViewModel viewModel =
+            RouteReportPresenter.Present("Default", profile, Model(), 90f);
+
+        Assert.Contains(viewModel.Lines, line => line.StartsWith("Your cart", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Report_CartVerdictQuotesModelExplanationVerbatim()
     {

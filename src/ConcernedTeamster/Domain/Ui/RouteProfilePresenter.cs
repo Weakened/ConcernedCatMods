@@ -156,6 +156,11 @@ public static class RouteProfilePresenter
             return TeamsterStrings.Get("profile.loadNoGrade");
         }
 
+        if (!bottleneck.MassAdviceReliable)
+        {
+            return TeamsterStrings.Get("compat.loadAdviceUnavailableLine");
+        }
+
         string grade = bottleneck.BottleneckGradePercent.ToString("F0", CultureInfo.InvariantCulture) + "%";
         string proven = bottleneck.ProvenMaxMass is null
             ? TeamsterStrings.Format("profile.loadNoProven", grade)

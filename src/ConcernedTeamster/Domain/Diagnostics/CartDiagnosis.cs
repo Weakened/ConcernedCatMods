@@ -25,4 +25,9 @@ public enum CartDiagnosis
     /// <summary>Signatures conflict or explain nothing; saying so beats
     /// guessing.</summary>
     Unclear,
+
+    /// <summary>CT-037: the grade would normally call for a load-model
+    /// verdict, but a registered mod affecting cart mass or physics is
+    /// detected, so that verdict cannot be trusted — never guessed.</summary>
+    LoadAdviceUnavailable,
 }

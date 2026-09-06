@@ -16,42 +16,61 @@ public static class RouteLoadBottleneck
             float bottleneckGradePercent,
             LoadRecommendation? provenMaxMass,
             LoadVerdict? verdict,
-            float queriedMass)
+            float queriedMass,
+            bool massAdviceReliable = true)
         {
             HasGradeData = hasGradeData;
             BottleneckGradePercent = bottleneckGradePercent;
             ProvenMaxMass = provenMaxMass;
             Verdict = verdict;
             QueriedMass = queriedMass;
+            MassAdviceReliable = massAdviceReliable;
         }
 
         /// <summary>False when the profile produced no sampled grade at all
         /// (fully unsampled route) — then nothing else is meaningful.</summary>
         public bool HasGradeData { get; }
 
-        /// <summary>The steepest sampled |grade| (NaN without grade data).</summary>
+        /// <summary>The steepest sampled |grade| (NaN without grade data).
+        /// Terrain fact, not mass-calibrated — still valid even when
+        /// <see cref="MassAdviceReliable"/> is false.</summary>
         public float BottleneckGradePercent { get; }
 
         /// <summary>Heaviest total mass with a proven Climbs row at the
-        /// bottleneck grade or steeper; null when nothing is proven there.</summary>
+        /// bottleneck grade or steeper; null when nothing is proven there or
+        /// when <see cref="MassAdviceReliable"/> is false.</summary>
         public LoadRecommendation? ProvenMaxMass { get; }
 
         /// <summary>LoadModel's verdict for the chosen mass at the
-        /// bottleneck grade; null when no mass was chosen.</summary>
+        /// bottleneck grade; null when no mass was chosen or when
+        /// <see cref="MassAdviceReliable"/> is false.</summary>
         public LoadVerdict? Verdict { get; }
 
         /// <summary>The mass the verdict answered, NaN when none was chosen.</summary>
         public float QueriedMass { get; }
+
+        /// <summary>CT-037: false when a registered mod affecting cart mass
+        /// or physics is detected, in which case <see cref="ProvenMaxMass"/>
+        /// and <see cref="Verdict"/> are always null even with grade data —
+        /// callers must show "unavailable", never fall back to
+        /// "nothing proven here" (a different, terrain-caused meaning).</summary>
+        public bool MassAdviceReliable { get; }
     }
 
-    public static Result Evaluate(RouteProfile profile, LoadModel model, float? chosenTotalMass)
+    public static Result Evaluate(
+        RouteProfile profile, LoadModel model, float? chosenTotalMass, bool massAdviceReliable = true)
     {
         if (float.IsNaN(profile.MaxAbsGradePercent))
         {
-            return new Result(false, float.NaN, null, null, float.NaN);
+            return new Result(false, float.NaN, null, null, float.NaN, massAdviceReliable);
         }
 
         float grade = profile.MaxAbsGradePercent;
+        if (!massAdviceReliable)
+        {
+            return new Result(true, grade, null, null, chosenTotalMass ?? float.NaN, massAdviceReliable: false);
+        }
+
         LoadRecommendation? proven = model.RecommendedMaxMass(grade);
         LoadVerdict? verdict = chosenTotalMass.HasValue ? model.Query(grade, chosenTotalMass.Value) : null;
         return new Result(true, grade, proven, verdict, chosenTotalMass ?? float.NaN);

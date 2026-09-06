@@ -308,7 +308,8 @@ internal sealed class RoutePickerPanel
     private void RecomputeBottleneck()
     {
         _shownBottleneck = _loadModel is not null && _shownProfile is not null
-            ? RouteLoadBottleneck.Evaluate(_shownProfile, _loadModel, _cartMassProvider())
+            ? RouteLoadBottleneck.Evaluate(
+                _shownProfile, _loadModel, _cartMassProvider(), CompatibilityAdapter.CartMassAdviceReliable)
             : null;
     }
 
@@ -341,7 +342,8 @@ internal sealed class RoutePickerPanel
     private RouteReportPresenter.ViewModel BuildReportViewModel()
     {
         return RouteReportPresenter.Present(
-            _selectedRouteName, _shownProfile, _loadModel, _cartMassProvider());
+            _selectedRouteName, _shownProfile, _loadModel, _cartMassProvider(),
+            CompatibilityAdapter.CartMassAdviceReliable);
     }
 
     private void SelectRow(int index)

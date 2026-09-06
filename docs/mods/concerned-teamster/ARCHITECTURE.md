@@ -217,16 +217,21 @@ that no registered GUID ever appears outside `Domain/Compatibility/`, so a
 future policy addition cannot leak into a feature-code branch.
 
 CT-037 adds the registry's first real, GUID-verified entry (BetterCarts by
-TastyChickenLegs — `Coexist`, confirmed from source not to touch cart
-physics) and the precedence policy: `CompatibilityAffectedAspect` tags what
-a mod's presence calls into question (today: `CartMassOrPhysics`), and
+TastyChickenLegs — `Adapt`/`CartMassOrPhysics`; its `Vagon.SetMass` Harmony
+prefix reduces cart mass by a default 20%, confirmed from source) and the
+precedence policy: `CompatibilityAffectedAspect` tags what a mod's presence
+calls into question (today: `CartMassOrPhysics`), and
 `CompatibilityAdvisoryGate.CartMassAdviceReliable` — generic over the
-aspect, never a mod's identity — answers whether LoadModel-derived advice
-is still trustworthy. `CartTelemetryPump.TryGetWarning`, the one choke
-point every warning consumer calls through, substitutes a fixed "load
-advice unavailable" notice whenever it is not. Full design, and the
-research trail behind which real mod got registered (and which candidate
-did not, and why), in `COMPATIBILITY.md`.
+aspect, never a mod's identity — answers whether LoadModel- or
+RiskModel-derived advice is still trustworthy, read through one shared
+wrapper (`CompatibilityAdapter.CartMassAdviceReliable`). Every consumer that
+renders such advice substitutes a fixed "load advice unavailable" notice
+whenever it is not: cart warnings, stuck diagnosis (and the recovery
+guidance that inherits it), the route profile/report/trip-history bottleneck
+lines, and the descent-risk debug log. The parking brake needs no gate — its
+facts carry no mass field. Full design, and the research trail behind which
+real mod got registered (and which candidate did not, and why), in
+`COMPATIBILITY.md`.
 
 ### Persistence (from v0.4)
 

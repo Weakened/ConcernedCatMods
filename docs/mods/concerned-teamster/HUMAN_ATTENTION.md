@@ -722,48 +722,60 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
-### 2026-09-06 — CT-037 precedence policy proven with fake mass-altering probes; no real one registered yet
+### 2026-09-06 — CT-037 precedence policy wired end-to-end and exercised against a real mass-altering mod; in-game matrix still pending
 
 - Version / issue: v0.8 / CT-037 (#153)
 - Question: `PROJECT.md`'s "Better Carts" reference could not be pinned to
   one exact, GUID-verified Thunderstore package. Two real candidates were
   researched: BetterCarts (TastyChickenLegs, 46K downloads) — GUID verified
-  directly from its published source, but its actual feature set (quick
-  attach/detach, multiplayer push, damage removal) does not touch cart mass
-  or physics — and Better Cart (We_Haul, 2.2K downloads) — a much closer
-  conceptual match (it explicitly customizes min/max cart mass), but its
-  GUID could not be verified: no linked source repository, and Thunderstore's
-  decompiled-source viewer for it did not yield readable content through
-  available tooling. Verifying it further would mean downloading and
-  inspecting the mod's compiled binary, which this leaf treats as beyond an
-  autonomous research pass without the owner's awareness first.
-- Safe reversible default selected: register only the GUID-verified
-  candidate (BetterCarts, `Coexist`/`AffectedAspect.None` — accurately
-  reflecting that it does not affect Teamster's readings) rather than guess
-  at We_Haul's GUID. The precedence mechanism itself
-  (`CompatibilityAdvisoryGate.CartMassAdviceReliable`, wired into
-  `CartTelemetryPump.TryGetWarning`) is generic over
-  `CompatibilityAffectedAspect.CartMassOrPhysics` and fully proven with fake
-  mass-altering probes in `CompatibilityAdvisoryGateTests` — registering the
-  real mass-altering mod later (a corrected GUID from the owner, or CT-038's
-  broader research) requires only a new registry entry, no logic change.
-- Why work continued: the mechanism is the load-bearing deliverable and is
-  exhaustively tested; shipping zero mass-altering entries cannot mislead
-  (silence is the default), and the one entry that *is* shipped is honestly
-  researched, not guessed.
+  directly from its published source — and Better Cart (We_Haul, 2.2K
+  downloads) — a much closer conceptual match (it explicitly customizes
+  min/max cart mass), but its GUID could not be verified: no linked source
+  repository, and Thunderstore's decompiled-source viewer for it did not
+  yield readable content through available tooling. Verifying it further
+  would mean downloading and inspecting the mod's compiled binary, which
+  this leaf treats as beyond an autonomous research pass without the
+  owner's awareness first. **Correction during review:** the first research
+  pass on BetterCarts read only `Plugin.cs` and the README and concluded no
+  physics impact; that was wrong — its `Patches/CartPatches.cs` installs a
+  Harmony prefix on `Vagon.SetMass` that reduces cart mass by a default 20%
+  (`Patches/CartConfigs.cs`: `cartMassReduction = 0.2f`, applied whenever
+  `allowPlayerHelp` is false, itself the default), found only once an
+  independent review re-inspected the mod's `Patches/` folder directly.
+- Safe reversible default selected: register the GUID-verified candidate
+  with its corrected classification (BetterCarts,
+  `Adapt`/`AffectedAspect.CartMassOrPhysics`) rather than guess at We_Haul's
+  GUID. The precedence mechanism
+  (`CompatibilityAdvisoryGate.CartMassAdviceReliable`, read through
+  `CompatibilityAdapter.CartMassAdviceReliable`) is generic over
+  `CompatibilityAffectedAspect.CartMassOrPhysics` and is now wired into
+  every LoadModel-/RiskModel-derived consumer: cart warnings, stuck
+  diagnosis (`StuckDetector` → `CartDiagnosis.LoadAdviceUnavailable`,
+  inherited automatically by recovery guidance), the route profile/report/
+  trip-history bottleneck lines, and the descent-risk debug log. The
+  parking brake was audited and needs no gate — `BrakeFacts` carries no
+  mass field and the brake stack never calls `LoadModel`/`RiskModel`.
+  Registering a future mass-altering mod (a corrected We_Haul GUID, or
+  CT-038's broader research) requires only a new registry entry, no logic
+  change.
+- Why work continued: the mechanism and every consumer are exhaustively
+  unit-tested against both fake probes and the real shipped `BetterCarts`
+  entry (`CompatibilityAdvisoryGateTests`, `StuckDetectorTests`,
+  `RecoveryGuidancePresenterTests`, `RouteProfilerTests`,
+  `RouteReportPresenterTests`, `RouteBottleneckTests`); correcting the
+  classification in place (rather than shipping the wrong one and filing a
+  separate defect) matches this repo's "don't silently weaken acceptance
+  criteria" rule.
 - Risk / alternative: the owner may already know We_Haul's Better_Cart's
   exact GUID (or may prefer a different mod entirely as "the" physics-
   altering target) — supplying it turns this into a one-line registry
-  addition. Separately, only cart *warnings* are wired to the precedence
-  gate; stuck diagnostics, recovery guidance, and route-bottleneck analysis
-  also derive from LoadModel and should eventually consult the same gate —
-  deferred rather than touching four more presenters in a leaf with no
-  mass-altering entry yet to actually exercise them against.
-- Must resolve before public release: Yes — once a real mass-altering mod
-  is registered, the full in-game coexistence matrix (telemetry, manifest,
-  load model, risk model, brake, diagnostics — this issue's own acceptance
-  criteria) must be run and captured before any public release claims
-  compatibility awareness.
+  addition.
+- Must resolve before public release: Yes — the full in-game coexistence
+  matrix (telemetry, manifest, load model, risk model, brake, diagnostics —
+  this issue's own acceptance criteria) with BetterCarts actually installed
+  alongside Teamster (`TCT-Compat` profile) must be run and captured before
+  any public release claims compatibility awareness. Everything short of
+  that live observation is now in place and unit-proven.
 - Status: Open
 
 ## Resolved items

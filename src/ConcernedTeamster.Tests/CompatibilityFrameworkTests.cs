@@ -139,10 +139,10 @@ public class CompatibilityFrameworkTests
     [Fact]
     public void ShippedRegistry_GuidsNeverAppearOutsideTheCompatibilityDomain()
     {
-        // Currently vacuous (the shipped registry is empty until CT-037/038
-        // research real mods), but becomes a real regression guard the
-        // moment an entry is added — this is the enforcement mechanism for
-        // "adding a mod policy must not require touching feature code."
+        // The shipped registry is non-empty since CT-037; this is the real
+        // enforcement mechanism for "adding a mod policy must not require
+        // touching feature code." The early-return only guards a future
+        // state where the registry is temporarily empty again.
         if (CompatibilityKnownMods.Registry.Count == 0)
         {
             return;
