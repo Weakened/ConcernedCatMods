@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.8.0 (Internal — unreleased)
+
+**Compatibility, Recovery, Scale (CT-036..CT-040).** The eighth internal
+release candidate: Teamster now knows about a small, researched set of
+other mods that could contradict its own readings, never silently loses
+trip data to a corrupted file or a transient disk failure, and has been
+proven at the worst-case configured limits it ships with.
+
+- **Compatibility framework and precedence policy (CT-036/CT-037).** A
+  registry of known mods (by GUID, never guessed) with a documented
+  policy — coexist, adapt a reading, or warn — always visible from the
+  Cart Status panel's **Compat** button. When a registered mod is found to
+  alter cart mass or physics, every load-advice surface (warnings, stuck
+  diagnosis, recovery guidance, route bottlenecks) shows a plain
+  "unavailable" notice instead of a vanilla-calibrated number presented as
+  truth.
+- **Current mod research (CT-038).** A Thunderstore-wide research pass
+  registered two more real, GUID-verified mods that alter cart mass or
+  item weight by default (one of them more popular than every other
+  registered entry combined), and found — rather than assumed — that a
+  third, hugely popular overhaul mod's cart-mass feature ships disabled,
+  so it is flagged with a caution note instead of unnecessarily
+  suppressing advice for the many players who never enable it.
+- **Migration, backup, and the support bundle (CT-039).** Sidecar backups
+  now rotate a bounded set of copies per event instead of overwriting the
+  same file every time, and a failed save attempt genuinely retries
+  instead of silently losing the trip. Config gains its first version
+  marker for future-safe migrations. A new **Support** button exports a
+  single sanitized diagnostic file — versions, config, compatibility
+  status, sidecar summaries, recent recovery events, and recent log lines
+  — for sharing when reporting a problem; nothing is sent anywhere by the
+  mod itself.
+- **Scale validation (CT-040).** Trip retention, cargo manifest size, and
+  telemetry tracking are all proven correct at their worst-case configured
+  limits, not just their defaults — see `RELEASE_DOSSIER.md` for the exact
+  measured numbers.
+- **Safety posture unchanged.** No cart physics, inventory, stamina, or
+  network behavior touched; nothing written to worlds or Valheim saves;
+  Teamster's own sidecar/config/bundle files only.
+
 ## 0.7.0 (Internal — unreleased)
 
 **UX, Controller, Accessibility, Localization (CT-031..CT-035).** The

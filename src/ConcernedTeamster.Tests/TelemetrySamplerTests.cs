@@ -245,4 +245,129 @@ public class TelemetrySamplerTests
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         Assert.Equal(0L, allocated);
     }
+
+    // -- CT-040: scale at the worst-case configured bounds -----------------
+
+    [Fact]
+    public void Tick_MaxTrackedCartsOverALongSession_NeverExceedsTheCap_ReachesBeyondOnePerTickBatch()
+    {
+        // The worst case a player could actually configure: MaxMaxTrackedCarts
+        // (32) and MaxMaxCartsPerTick (8), more nearby carts than the store
+        // can ever hold at once (50), sustained over a long session (2,000
+        // due ticks at the minimum interval — several real minutes of
+        // continuous hauling in one dense area, well past what CT-040's
+        // "long-session sampling" scope asks to prove).
+        //
+        // CT-040 scale finding, empirically measured (not assumed): with
+        // this many candidates, round-robin coverage never reaches the
+        // full MaxTrackedCarts cap. EvictAfterSeconds is floored at 2 s
+        // (three sample intervals, floor(2.0/interval) ticks' worth of
+        // history) regardless of how small the interval gets, and the
+        // round-robin window only advances by one candidate per tick — so
+        // a sample's ~2 s freshness window, not MaxTrackedCarts, ends up
+        // governing how many distinct carts can be tracked at once in a
+        // cluster this dense. Measured steady-state count at the most
+        // favorable configuration (MinSampleIntervalSeconds, MaxMaxCartsPerTick)
+        // against 50 candidates: 27, comfortably under the 32 cap — never
+        // a violation of the hard cap (asserted every tick below), just a
+        // real gap between "configured maximum" and "practically
+        // reachable in a dense cluster" worth knowing rather than
+        // assuming they're the same. This trades maximum coverage for
+        // guaranteed freshness (a stale tracked cart is never shown) —
+        // documented in RELEASE_DOSSIER.md's v0.8 scale evidence, not
+        // treated as a defect.
+        var world = new FakeCartWorld();
+        for (int index = 0; index < 50; index++)
+        {
+            world.NearbyCartIds.Add("1:" + index);
+        }
+
+        TelemetrySampler sampler = CreateSampler(
+            world, interval: TelemetrySamplerOptions.MinSampleIntervalSeconds,
+            perTick: TelemetrySamplerOptions.MaxMaxCartsPerTick,
+            tracked: TelemetrySamplerOptions.MaxMaxTrackedCarts);
+
+        double now = 0.0;
+        for (int tick = 0; tick < 2000; tick++)
+        {
+            now += TelemetrySamplerOptions.MinSampleIntervalSeconds;
+            sampler.Tick(now);
+
+            // The hard cap is the actual safety promise: it must hold on
+            // every single tick, not just at the end of the run.
+            Assert.True(sampler.TrackedCartCount <= TelemetrySamplerOptions.MaxMaxTrackedCarts);
+        }
+
+        // Round-robin must still have reached well beyond the first
+        // per-tick batch — starvation would mean the same handful of ids
+        // dominate world.AttemptLog for the whole run. A loose, robust
+        // bound (not the exact measured 27) so this stays meaningful
+        // without being brittle to a future tuning change.
+        var distinctAttempted = new HashSet<string>(world.AttemptLog);
+        Assert.True(distinctAttempted.Count > TelemetrySamplerOptions.MaxMaxCartsPerTick * 2);
+    }
+
+    [Fact]
+    public void Tick_MaxScaleLongSession_AllocationPerTickDoesNotGrowOverTime()
+    {
+        // Unlike Tick_NotDueFastPath_AllocatesNothing and
+        // Tick_DueTicksWithEmptyWorld_AllocateNothing above (which prove
+        // TRUE zero allocation by constructing scenarios where no sample
+        // work happens at all), this scenario does real work every due
+        // tick — MaxMaxCartsPerTick (8) real CartTelemetry.Create calls,
+        // 2,000 times — so non-zero allocation here is expected and
+        // correct, not a regression. What actually matters at scale is
+        // that a long session's allocation rate does not creep upward
+        // (a leak growing with tracked-cart churn, say) — proven by
+        // comparing two equal-length windows, both already past warm-up,
+        // rather than asserting an invented absolute byte budget this
+        // leaf has no prior baseline to justify.
+        var world = new FakeCartWorld();
+        for (int index = 0; index < 50; index++)
+        {
+            world.NearbyCartIds.Add("1:" + index);
+        }
+
+        TelemetrySampler sampler = CreateSampler(
+            world, interval: 0.5f,
+            perTick: TelemetrySamplerOptions.MaxMaxCartsPerTick,
+            tracked: TelemetrySamplerOptions.MaxMaxTrackedCarts);
+
+        double now = 0.0;
+        for (int tick = 0; tick < 20; tick++)
+        {
+            now += 0.5;
+            sampler.Tick(now);
+        }
+
+        Assert.True(sampler.TrackedCartCount > 0);
+
+        const int windowTicks = 2000;
+        void RunWindow()
+        {
+            for (int tick = 0; tick < windowTicks; tick++)
+            {
+                now += 0.5;
+                sampler.Tick(now);
+            }
+        }
+
+        long firstWindowBytes = MeasureAllocatedBytes(RunWindow);
+        long secondWindowBytes = MeasureAllocatedBytes(RunWindow);
+
+        // A generous margin (not a tight ratio): the goal is catching an
+        // actual unbounded-growth leak, not chasing GC/JIT measurement
+        // noise between two otherwise-identical windows.
+        Assert.True(secondWindowBytes <= firstWindowBytes * 2,
+            $"Second {windowTicks}-tick window allocated {secondWindowBytes} B vs the first window's " +
+            $"{firstWindowBytes} B — allocation should stay roughly flat across equal-length windows " +
+            "once the store has warmed up, not grow with session length.");
+    }
+
+    private static long MeasureAllocatedBytes(Action action)
+    {
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        action();
+        return GC.GetAllocatedBytesForCurrentThread() - before;
+    }
 }

@@ -132,4 +132,47 @@ public class CargoManifestTests
         Assert.Equal(0, marker.Count);
         Assert.False(marker.WeightKnown);
     }
+
+    // -- CT-040: scale at a generously large synthetic entry count --------
+    //
+    // Not a claim about vanilla's actual cart grid capacity (this repo's
+    // "research, don't invent" rule applies to game constants too, and
+    // Teamster's own code never hardcodes one — CargoManifest just sorts
+    // whatever Inventory.GetAllItems() returns) — 200 distinct entries is
+    // a deliberately generous synthetic stress input, well past any
+    // realistic single-cart inventory, chosen to prove the sort/total
+    // logic stays correct and fast regardless of how large a real
+    // inventory could ever plausibly be.
+
+    [Fact]
+    public void Create_ManyDistinctEntries_StaysCorrectAndFast()
+    {
+        const int entryCount = 200;
+        var entries = new List<CargoEntry>(entryCount);
+        float expectedTotal = 0f;
+        for (int index = 0; index < entryCount; index++)
+        {
+            int count = index + 1;
+            float unitWeight = 1.5f;
+            float lineWeight = unitWeight * count;
+            entries.Add(CargoEntry.Create(
+                "Item" + index.ToString("D3"), "$item_" + index, count, unitWeight, lineWeight,
+                weightKnown: true));
+            expectedTotal += lineWeight;
+        }
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        CargoManifest manifest = CargoManifest.Create(entries, captureTimeSeconds: 0d);
+        stopwatch.Stop();
+
+        Assert.Equal(entryCount, manifest.Entries.Count);
+        Assert.Equal(expectedTotal, manifest.TotalKnownWeight);
+
+        // Heaviest-first ordering must still hold at scale: the highest
+        // synthetic count (and therefore line weight) sorts first.
+        Assert.Equal("Item" + (entryCount - 1).ToString("D3"), manifest.Entries[0].ItemId);
+
+        Assert.True(stopwatch.ElapsedMilliseconds < 500,
+            $"Composing a {entryCount}-entry manifest took {stopwatch.ElapsedMilliseconds} ms.");
+    }
 }

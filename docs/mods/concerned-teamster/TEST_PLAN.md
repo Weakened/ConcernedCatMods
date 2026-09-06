@@ -87,6 +87,34 @@ defects or calibration items — never silently accepted.
 - Sampler stays within its configured budget; measured evidence at each RC and
   formally in CT-048.
 
+### Scale evidence (CT-040)
+
+Informal measurement against the worst-case *configured* bounds — loose
+sanity thresholds, not the formal, gated performance budgets CT-048
+establishes in v1.0. Exact numbers (one real run, this dev machine) are in
+`RELEASE_DOSSIER.md`'s v0.8 RC entry; the automated tests assert generous
+margins, not these exact figures, since wall-clock varies by machine.
+
+| Scenario | Bound exercised | Automated test |
+|---|---|---|
+| Trip sidecar at max retention | `TripRecorderOptions.MaxMaxTripsRetained` (500 trips, 20 samples each) | `Scale_MaxTripsRetainedRoundTrip_StaysCorrectAndReasonablyFast` |
+| Cargo manifest, many distinct items | 200 synthetic entries (a generous stress input — see the test's own comment for why this is not a claim about vanilla's real cart capacity) | `Create_ManyDistinctEntries_StaysCorrectAndFast` |
+| Telemetry sampler, dense cart cluster, long session | `TelemetrySamplerOptions.MaxMaxTrackedCarts`/`MaxMaxCartsPerTick`, 50 candidates, 2,000+ due ticks | `Tick_MaxTrackedCartsOverALongSession_NeverExceedsTheCap_ReachesBeyondOnePerTickBatch`, `Tick_MaxScaleLongSession_AllocationPerTickDoesNotGrowOverTime` |
+
+**Scale finding, not a defect:** at `MaxMaxTrackedCarts` (32) with more
+nearby candidates than that, the sampler's practically-reachable tracked
+count stabilizes measurably below 32 (27 measured at the most favorable
+interval/per-tick combination), because `EvictAfterSeconds` is floored at
+2 seconds regardless of how small the sample interval gets, and the
+round-robin window advances by only one candidate per tick — so a
+sample's freshness window, not the configured cap, ends up governing
+coverage in a cart cluster this dense. The hard cap itself is never
+violated (asserted every tick). This trades maximum coverage for
+guaranteed freshness (a stale tracked cart is never shown), which matches
+this mod's own fail-closed philosophy — see the cited test's comment for
+the full derivation. Recorded here so "configured maximum" and
+"practically reachable" are never assumed to be the same number.
+
 ## Compatibility
 
 CT-038 researched the exact current cart/physics/inventory mod landscape
