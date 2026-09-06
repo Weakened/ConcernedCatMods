@@ -1,3 +1,5 @@
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
+
 namespace TheConcernedCat.ConcernedTeamster.Domain.Cargo;
 
 /// <summary>One immutable cargo line (CT-006): an item stack in the cart's
@@ -55,7 +57,7 @@ public sealed class CargoEntry
                 return DisplayNameToken;
             }
 
-            return ItemId.Length > 0 ? ItemId : "unknown item";
+            return ItemId.Length > 0 ? ItemId : TeamsterStrings.Get("manifest.unknownItem");
         }
     }
 
@@ -82,7 +84,8 @@ public sealed class CargoEntry
     public static CargoEntry CreateUnreadable(int slotIndex)
     {
         return new CargoEntry(
-            "unreadable-slot-" + slotIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            TeamsterStrings.Format(
+                "manifest.unreadableSlot", slotIndex.ToString(System.Globalization.CultureInfo.InvariantCulture)),
             string.Empty,
             0,
             0f,

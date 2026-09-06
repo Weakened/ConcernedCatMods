@@ -97,6 +97,8 @@ public static class TeamsterStrings
         ["manifest.capturedStale"] = "STALE — captured {0} s ago",
         ["manifest.row"] = "{0}   ×{1}   unit {2}   line {3}",
         ["manifest.overflow"] = "… {0} more — sort or filter to narrow",
+        ["manifest.unknownItem"] = "unknown item",
+        ["manifest.unreadableSlot"] = "unreadable-slot-{0}",
 
         // Load model verdict text (CT-008) — quoted verbatim by warnings,
         // diagnostics, guidance, and route reports.
@@ -498,44 +500,39 @@ public static class TeamsterStrings
         return builder.ToString();
     }
 
+    /// <summary>Decodes only the four codes <see cref="Escape"/> itself
+    /// produces (%25 %09 %0A %0D); any other percent sign — including one a
+    /// translator typed directly followed by ordinary digits, like a literal
+    /// "%50" — is left exactly as written. A generic %HH-is-hex decoder would
+    /// silently mis-decode "%50" as the character 'P' (0x50), corrupting any
+    /// translation that writes a percentage before its number.</summary>
     private static string Unescape(string value)
     {
         var builder = new StringBuilder(value.Length);
         for (int index = 0; index < value.Length; index++)
         {
-            char character = value[index];
-            if (character == '%' && index + 2 < value.Length &&
-                TryParseHex(value[index + 1], value[index + 2], out char decoded))
+            if (value[index] == '%' && index + 2 < value.Length)
             {
-                builder.Append(decoded);
-                index += 2;
-                continue;
+                char? decoded = value.Substring(index, 3) switch
+                {
+                    "%25" => '%',
+                    "%09" => '\t',
+                    "%0A" => '\n',
+                    "%0D" => '\r',
+                    _ => null,
+                };
+
+                if (decoded is char c)
+                {
+                    builder.Append(c);
+                    index += 2;
+                    continue;
+                }
             }
 
-            builder.Append(character);
+            builder.Append(value[index]);
         }
 
         return builder.ToString();
-    }
-
-    private static bool TryParseHex(char high, char low, out char value)
-    {
-        value = '\0';
-        if (!TryHexDigit(high, out int hi) || !TryHexDigit(low, out int lo))
-        {
-            return false;
-        }
-
-        value = (char)((hi << 4) | lo);
-        return true;
-    }
-
-    private static bool TryHexDigit(char c, out int value)
-    {
-        if (c >= '0' && c <= '9') { value = c - '0'; return true; }
-        if (c >= 'A' && c <= 'F') { value = c - 'A' + 10; return true; }
-        if (c >= 'a' && c <= 'f') { value = c - 'a' + 10; return true; }
-        value = 0;
-        return false;
     }
 }

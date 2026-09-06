@@ -20,15 +20,16 @@ public class HardcodedStringAuditTests
 {
     // ---- audited presentation sources (directories recurse) ----------------
 
-    private static readonly string[] AuditedDirectories =
+    private static readonly string[] _auditedDirectories =
     {
         Path.Combine("src", "ConcernedTeamster", "Domain", "Ui"),
         Path.Combine("src", "ConcernedTeamster", "Domain", "Warnings"),
         Path.Combine("src", "ConcernedTeamster", "Domain", "Diagnostics"),
+        Path.Combine("src", "ConcernedTeamster", "Domain", "Cargo"),
         Path.Combine("src", "ConcernedTeamster", "Ui"),
     };
 
-    private static readonly string[] AuditedFiles =
+    private static readonly string[] _auditedFiles =
     {
         Path.Combine("src", "ConcernedTeamster", "Domain", "Load", "LoadModel.cs"),
         Path.Combine("src", "ConcernedTeamster", "Domain", "Load", "LoadText.cs"),
@@ -78,7 +79,7 @@ public class HardcodedStringAuditTests
     [Fact]
     public void EveryCatalogKey_IsReferencedByShippedCode()
     {
-        HashSet<string> referenced = ShippedLiterals(excludeCatalogFile: true);
+        HashSet<string> referenced = _shippedLiteralsExcludingCatalog.Value;
         List<string> dead = TeamsterStrings.Defaults.Keys
             .Where(key => !referenced.Contains(key))
             .OrderBy(key => key, StringComparer.Ordinal)
@@ -103,6 +104,21 @@ public class HardcodedStringAuditTests
             "Catalog value(s) with leading/trailing whitespace:\n" + string.Join("\n", offenders));
     }
 
+    // Known, accepted limitations of the re-hardcode tripwire below (both
+    // narrow: the audited presentation directories are still fully covered
+    // by PresentationSources_ContainNoHardcodedUiStrings, which flags any
+    // re-hardcoded copy — split or not, escaped or not — as a bare literal
+    // the moment it lands inside an audited file; these gaps only matter for
+    // a copy placed outside the audited directories):
+    // - Compares raw source text against already-escape-decoded catalog
+    //   values, so a copy containing an escaped quote (manifest.noMatch,
+    //   bottleneck.badMass) would not be matched by this check alone.
+    // - A catalog value declared as a compile-time `+`-concatenation
+    //   (recovery.unloadNothingProven, recovery.unloadAtLeast,
+    //   recovery.unloadAlreadyUnder, bottleneck.binds,
+    //   bottleneck.uncalibratedPoints) is tokenized here as separate source
+    //   fragments, so a copy preserving that same split would not match the
+    //   compiler-folded whole string this check compares against.
     [Fact]
     public void ExternalizedSentences_AreNotReHardcodedAnywhereInShippedSource()
     {
@@ -110,7 +126,7 @@ public class HardcodedStringAuditTests
         // like "unknown") must appear in shipped source only inside the
         // catalog itself. Catching a copy here means someone bypassed the
         // catalog with text players see.
-        HashSet<string> shipped = ShippedLiterals(excludeCatalogFile: true);
+        HashSet<string> shipped = _shippedLiteralsExcludingCatalog.Value;
         List<string> copies = TeamsterStrings.Defaults
             .Where(entry => entry.Value.Length >= 15 && shipped.Contains(entry.Value))
             .Select(entry => entry.Key + " => \"" + entry.Value + "\"")
@@ -221,7 +237,15 @@ public class HardcodedStringAuditTests
                 index++;
                 if (index < text.Length && text[index] == '\\')
                 {
+                    // Skip the backslash AND the escaped character itself
+                    // unconditionally — e.g. '\'' escapes a quote, and the
+                    // while loop below must not mistake that escaped quote
+                    // for the literal's real closing quote.
                     index++;
+                    if (index < text.Length)
+                    {
+                        index++;
+                    }
                 }
 
                 while (index < text.Length && text[index] != '\'')
@@ -298,7 +322,7 @@ public class HardcodedStringAuditTests
         var spans = new List<(int, int)>();
         IReadOnlyList<SourceLiteral> literals = ExtractLiterals(text);
 
-        foreach (Match match in Regex.Matches(text, "\\bLog(Error|Warning|Info|Debug)\\s*\\("))
+        foreach (Match match in Regex.Matches(text, "\\bLog(Error|Warning|Info|Debug|Fatal|Message)\\s*\\("))
         {
             int depth = 0;
             for (int index = match.Index; index < text.Length; index++)
@@ -351,9 +375,15 @@ public class HardcodedStringAuditTests
 
     private static string RepoRoot => _repoRoot.Value;
 
+    // Two tests independently need every shipped literal outside the catalog
+    // file; computed once and shared instead of re-walking and re-tokenizing
+    // ~120 source files from disk twice per run.
+    private static readonly Lazy<HashSet<string>> _shippedLiteralsExcludingCatalog =
+        new(() => ShippedLiterals(excludeCatalogFile: true));
+
     private static IEnumerable<string> AuditedSourceFiles()
     {
-        foreach (string directory in AuditedDirectories)
+        foreach (string directory in _auditedDirectories)
         {
             foreach (string file in Directory.EnumerateFiles(
                 Path.Combine(RepoRoot, directory), "*.cs", SearchOption.AllDirectories))
@@ -362,7 +392,7 @@ public class HardcodedStringAuditTests
             }
         }
 
-        foreach (string file in AuditedFiles)
+        foreach (string file in _auditedFiles)
         {
             yield return Path.Combine(RepoRoot, file);
         }

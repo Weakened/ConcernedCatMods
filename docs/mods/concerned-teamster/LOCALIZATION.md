@@ -33,12 +33,16 @@ report.title	Rapport d'itinéraire : {0}
 - Encoding: a tab, newline, carriage return, or percent sign **inside a
   translation** is written percent-encoded — `%09` tab, `%0A` newline, `%0D`
   carriage return, `%25` percent. (Backslash sequences like `\n` are NOT
-  interpreted — they would show up literally in game.) A plain `%` that is
-  not followed by two hex digits is kept as-is, so ordinary text like
-  `100%` works either way.
-- Line ends are trimmed when the file loads, so a translation cannot begin
-  or end with a space — the English never does either; spacing around
-  inserted values lives inside the string, next to its placeholders.
+  interpreted — they would show up literally in game.) Only those four exact
+  codes are ever decoded; any other percent sign — including one immediately
+  followed by ordinary digits, such as a literal `%50` — is kept exactly as
+  typed, so a locale that writes a percentage before its number is always
+  safe.
+- Trailing whitespace on the line is trimmed when the file loads, so a
+  translation cannot end with a space — the English never does either. A
+  translation *can* begin with a space if you need one; it is preserved as
+  typed. Spacing around inserted values otherwise lives inside the string,
+  next to its placeholders.
 
 ## Placeholders
 
@@ -78,10 +82,12 @@ re-hardcoded.
 
 Deliberately **not** translatable, by design:
 
-- Console/log output, including the fail-closed session-disable lines and
-  the descent-risk debug summary (`Domain/Risk` verdict text surfaces only
-  in a debug log line today) — logs are a developer/support surface, and
-  support needs to read them regardless of the player's language.
+- Console/log output, including the fail-closed session-disable lines, the
+  descent-risk debug summary (`Domain/Risk` verdict text surfaces only in a
+  debug log line today), the parking-brake engage/release reason
+  (`Domain/Brake`), and the Cartographer capability probe outcome
+  (`Domain/Cartographer`) — logs are a developer/support surface, and support
+  needs to read them regardless of the player's language.
 - BepInEx configuration entry names and descriptions — they live in the
   user's `.cfg` file, which is a file format, not UI; translating them would
   fork users' config files by language.

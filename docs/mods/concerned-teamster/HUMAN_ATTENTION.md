@@ -637,6 +637,8 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+## Resolved items
+
 ### 2026-09-05 — CT-032 localization framework delivered; full-UI externalization is progressive
 
 - Version / issue: v0.7 / CT-032 (#147)
@@ -674,7 +676,3 @@ only for non-blocking uncertainty.
   exempt). Catalog: 241 keys, English complete. The in-game visual checks
   remain tracked by the per-surface entries above and the owner smoke
   checklist, unchanged.
-
-## Resolved items
-
-None yet.
