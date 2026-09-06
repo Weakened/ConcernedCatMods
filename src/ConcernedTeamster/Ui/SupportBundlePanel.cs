@@ -3,6 +3,7 @@ using BepInEx.Logging;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedTeamster.Adapters;
 using TheConcernedCat.ConcernedTeamster.Domain.Localization;
+using TheConcernedCat.ConcernedTeamster.Domain.Support;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -14,13 +15,15 @@ namespace TheConcernedCat.ConcernedTeamster.Ui;
 /// sidecar summaries, this session's recovery events, and recent log
 /// lines — see <see cref="Domain.Support.SupportBundleComposer"/> and
 /// <see cref="Domain.Support.SupportBundleSanitizer"/> for what that
-/// means and how it is enforced) and shows where it landed. Nothing is
-/// sent anywhere by this panel — the player decides what to do with the
-/// file afterward. Fail-closed session-disable like every Teamster panel.</summary>
+/// means and how it is enforced) and shows where it landed. A Report a
+/// Bug button (CT-041) opens the public GitHub issue tracker on an
+/// explicit click — the one and only outbound action this panel ever
+/// takes, and it carries no Teamster data with it. Fail-closed
+/// session-disable like every Teamster panel.</summary>
 internal sealed class SupportBundlePanel
 {
     private const float PanelWidth = 420f;
-    private const float PanelHeight = 220f;
+    private const float PanelHeight = 320f;
 
     private readonly ManualLogSource _log;
     private readonly Func<float> _uiScale;
@@ -126,6 +129,23 @@ internal sealed class SupportBundlePanel
         }
     }
 
+    private void HandleReportBugClicked()
+    {
+        if (_failed)
+        {
+            return;
+        }
+
+        try
+        {
+            Application.OpenURL(FeedbackLinks.IssuesUrl);
+        }
+        catch (Exception exception)
+        {
+            Fail(exception);
+        }
+    }
+
     private bool EnsurePanel()
     {
         if (GUIManager.Instance == null || GUIManager.CustomGUIFront == null)
@@ -162,6 +182,17 @@ internal sealed class SupportBundlePanel
             addContentSizeFitter: false).GetComponent<Text>();
         _statusText.alignment = TextAnchor.UpperLeft;
         _statusText.horizontalOverflow = HorizontalWrapMode.Wrap;
+
+        gui.CreateText(
+            TeamsterStrings.Get("support.feedbackExplainer"), _panel.transform,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -172f),
+            font, 13, bodyColor, outline: true, Color.black, PanelWidth - 40f, 70f,
+            addContentSizeFitter: false);
+
+        GameObject reportBug = gui.CreateButton(
+            TeamsterStrings.Get("support.reportBugButton"), _panel.transform,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 64f), 150f, 28f);
+        reportBug.GetComponent<Button>().onClick.AddListener(HandleReportBugClicked);
 
         GameObject export = gui.CreateButton(
             TeamsterStrings.Get("support.exportButton"), _panel.transform,

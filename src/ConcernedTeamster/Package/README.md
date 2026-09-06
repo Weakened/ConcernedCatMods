@@ -68,5 +68,6 @@ Version 0.8.x is the internal **Compatibility, Recovery, Scale** line: cart trut
 
 ## Support
 
-* Bugs and feature requests: the [GitHub issue tracker](https://github.com/Weakened/ConcernedCatMods/issues).
+* Bugs and feature requests: the [GitHub issue tracker](https://github.com/Weakened/ConcernedCatMods/issues) — also one click away in-game via the **Report a Bug** button on the Cart Status panel's Support screen.
+* When reporting a problem, attach the sanitized bundle from the Support panel's **Export** button (versions, config, compatibility, sidecar summaries, recent log lines — no world names, player names, or full file paths). Never attach a world save file, a screenshot showing another player's name, or anything else you consider private.
 * Anything that should not be public: **support@theconcernedcat.com**.
