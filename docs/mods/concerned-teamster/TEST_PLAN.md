@@ -257,6 +257,20 @@ completes and merges this seal, then stops for the owner's review rather
 than beginning the v1.0 sprint automatically. See `HUMAN_ATTENTION.md`'s
 CT-045 entry.
 
+## Golden path and v1.0 Definition of Done (CT-046)
+
+Full detail in `GOLDEN_PATH.md` and `V1_DEFINITION_OF_DONE.md`. Summary
+of the acceptance-criteria evidence:
+
+| Criterion | Evidence |
+|---|---|
+| Golden path and DoD matrix committed | `GOLDEN_PATH.md` (8-step install-to-uninstall narrative) and `V1_DEFINITION_OF_DONE.md` (every capability area, Cartographer's own precedent pattern) |
+| Every matrix row has evidence, a filed defect, or a documented limitation | No blank rows; every `Done`/`Done*` cites its proving tests and/or smoke section, every `Deferred` cites its recorded rationale |
+| Gap defects are labeled into this sprint | Audit found no new defect beyond the two already-filed, already-deferred P3s (#214, #216) — see `V1_DEFINITION_OF_DONE.md`'s "Audit conclusion" |
+
+This leaf implements no new feature and fixes no defect — it is
+audit-and-document only, per its own explicit scope.
+
 ## Multiplayer (v0.6)
 
 - Ownership: only the vanilla-authoritative controller's client mutates
