@@ -12,7 +12,7 @@ in-game visual/interaction rows deferred to `PRE_RELEASE_SMOKE_TEST.md`
 
 | Capability | Status | Where |
 |---|---|---|
-| Verified cart capability probe, fail-closed on a game change | Done\* | v0.1 (CT-002); 14 `GameMemberProbeTests` incl. every simulated-missing-member path; live startup banner is smoke §1 |
+| Verified cart capability probe, fail-closed on a game change | Done\* | v0.1 (CT-002); 22 `GameMemberProbeTests` incl. every simulated-missing-member path; live startup banner is smoke §1 |
 | Bounded, budgeted telemetry sampler | Done | v0.1 (CT-003); scheduling/budget/rotation/eviction/reset/zero-allocation fast paths tested; CT-040 scale tests prove the dense-cluster ceiling is a documented tradeoff, not a defect |
 | Deterministic grade math + surface classification | Done\* | v0.1 (CT-004); flat/slope/crest/dip/noisy fixtures; live grade-vs-terrain spot check is smoke §2 |
 | Cart Status panel | Done\* | v0.1 (CT-005); 22 presenter tests (every string/state); visual placement/readability is smoke §2 |
@@ -50,8 +50,8 @@ in-game visual/interaction rows deferred to `PRE_RELEASE_SMOKE_TEST.md`
 |---|---|---|
 | Runtime capability probe, no compile-time coupling | Done\* | v0.5 (CT-021); 12-member contract, drift tripwire in `validate_repo.py`; live present/absent/version-floor rows are smoke §6 |
 | Route picker | Done\* | v0.5 (CT-022); 13 presenter tests over fake catalogs incl. mid-session mutation; screenshot is smoke §6 row 6.1 |
-| Budgeted terrain profiler | Done\* | v0.5 (CT-023); 21 tests (budget/cancel, sampled/unsampled partition, fingerprint cache); real-route profile is smoke §6 row 6.3 |
-| Route problem report | Done\* | v0.5 (CT-024); 10 presenter tests, read-only-integration validator audit; real report is smoke §6 row 6.4 |
+| Budgeted terrain profiler | Done\* | v0.5 (CT-023); 28 tests (budget/cancel, sampled/unsampled partition, fingerprint cache); real-route profile is smoke §6 row 6.3 |
+| Route problem report | Done\* | v0.5 (CT-024); 14 presenter tests, read-only-integration validator audit; real report is smoke §6 row 6.4 |
 | Coexistence (both/either/neither installed, version floor) | Done\* | v0.5 (CT-025); Cartographer regression stays 568/568 green with Teamster present; live dual-mod session is smoke §6 rows 6.2, 6.5, 6.6 |
 
 ## Multiplayer trust and authority
@@ -59,16 +59,16 @@ in-game visual/interaction rows deferred to `PRE_RELEASE_SMOKE_TEST.md`
 | Capability | Status | Where |
 |---|---|---|
 | Enforced read/act/observe policy | Done | v0.6 (CT-026); policy is the tested single source of truth the brake enforces through; fail-closed `Unknown` |
-| Topology-independent authority logic | Done\* | v0.6 (CT-027); 7 `MultiplayerScenarioTests` driving handoff/flap/observer sequences; live two-topology campaign is smoke §7 |
-| Cooperative effort diagnostics | Done\* | v0.6 (CT-028); 20 tests (full single-actor matrix, combined-effort explanation); the real read-surface feed (contact/motion alignment) and staged scenario are smoke §7 row 7.4 |
-| Hardened, bounded network input | Done\* | v0.6 (CT-029); 44 tests incl. a 10k-iteration seeded fuzz sweep; live join/leave/disconnect lifecycle is smoke §7 row 7.5 |
+| Topology-independent authority logic | Done\* | v0.6 (CT-027); 8 `MultiplayerScenarioTests` driving handoff/flap/observer sequences; live two-topology campaign is smoke §7 |
+| Cooperative effort diagnostics | Done\* | v0.6 (CT-028); 21 tests (full single-actor matrix, combined-effort explanation); the real read-surface feed (contact/motion alignment) and staged scenario are smoke §7 row 7.4 |
+| Hardened, bounded network input | Done\* | v0.6 (CT-029); 43 tests incl. a 10k-iteration seeded fuzz sweep; live join/leave/disconnect lifecycle is smoke §7 row 7.5 |
 | Unmodded-peer coexistence | Done\* | v0.6 (CT-026/030); validator-audited (sends nothing, takes no ownership); live confirmation is smoke §7 row 7.3 |
 
 ## UX, controller, accessibility, localization
 
 | Capability | Status | Where |
 |---|---|---|
-| Deterministic focus order + accelerator-conflict checking | Done\* | v0.7 (CT-031); 18 tests (traversal wrap, reachability, chord conflicts); live gamepad walkthrough is smoke §8 row 8.1 |
+| Deterministic focus order + accelerator-conflict checking | Done\* | v0.7 (CT-031); 22 tests (traversal wrap, reachability, chord conflicts); live gamepad walkthrough is smoke §8 row 8.1 |
 | Full localization framework, English-complete catalog | Done | v0.7 (CT-032); 274+ keys, CI-gated hardcoded-string audit (planted literals/dead keys/re-hardcoded sentences all fail it) |
 | UI scale (0.8–1.3×) + WCAG AA contrast + non-color cues | Done\* | v0.7 (CT-033); geometric no-self-clip guarantee, contrast-ratio math, sensitivity check documented; live scale/contrast confirmation is smoke §8 rows 8.2–8.3 |
 | Onboarding + three config profiles, brake always opt-in | Done\* | v0.7 (CT-034); idempotence + brake-exclusion tested across all three profiles; live hint/profile-switch check is smoke §8 rows 8.4–8.6 |
@@ -106,7 +106,7 @@ in-game visual/interaction rows deferred to `PRE_RELEASE_SMOKE_TEST.md`
 | File-level lifecycle rehearsal | Done | v0.9 (CT-043); `rehearse-teamster-lifecycle.ps1` against real, actually-built artifacts incl. a real historical v0.7.0 worktree build |
 | TCT-* mod-manager profiles created for real | **Deferred to owner** | Profile creation is a mod-manager GUI action this repo's tooling deliberately does not drive (`PROFILE_REHEARSAL.md`); none exists on this machine yet |
 | Zero open P0/P1/P2 defects | Done | v0.9 (CT-044); DEF-teamster-v0.9-002 fixed |
-| Compiled pre-release smoke checklist | Done | v0.9 (CT-044); `PRE_RELEASE_SMOKE_TEST.md`, 37 cross-referenced sections, never run |
+| Compiled pre-release smoke checklist | Done | v0.9 (CT-044); `PRE_RELEASE_SMOKE_TEST.md`, a 36-row cross-reference table over 16 numbered sections (§0–§15), never run |
 | Sealed v0.9.0 RC + owner packet | Done\* | v0.9 (CT-045); `RELEASE_DOSSIER.md` + `OWNER_PACKET_v0.9.md`; the smoke checklist itself is the pending row |
 
 ## Performance, memory, network, long-run stability (formal budgets)

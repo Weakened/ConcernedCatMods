@@ -39,8 +39,8 @@ security self-audit · CT-043 scripted profile-family deploy paths
 (`deploy.ps1 -Profile Dev|Compat|Dedicated`) and a real-artifact
 file-level lifecycle rehearsal, plus four backfilled release tags ·
 CT-044 the one open P2 defect fixed and the first complete
-`PRE_RELEASE_SMOKE_TEST.md`, cross-referencing all 37 pending manual
-claims accumulated since v0.1 · CT-045 this seal.
+`PRE_RELEASE_SMOKE_TEST.md`, a 36-row cross-reference table over pending
+manual claims accumulated since v0.1 · CT-045 this seal.
 
 ### v0.9 campaign results (automated)
 
@@ -56,7 +56,7 @@ claims accumulated since v0.1 · CT-045 this seal.
 | Fresh-profile install (file-level) | Sealed ZIP extracted into a scratch `BepInEx/plugins/` layout | PASS — DLL hash matches exactly |
 | Lifecycle rehearsal (fresh/upgrade/uninstall/idempotence) | `rehearse-teamster-lifecycle.ps1` | PASS — all 5 sections green against real, actually-built packages including a real historical v0.7.0 worktree build |
 | Defect burn-down | Sprint defect sweep | Zero open P0/P1/P2; two P3s deferred with documented rationale (DEF-teamster-v0.8-001, DEF-teamster-v0.9-001) |
-| The full `PRE_RELEASE_SMOKE_TEST.md` (37 cross-referenced sections) | in-game, owner-run | **MANUAL — pending, never run.** This is the entire remaining gate before publication; see the Owner Packet |
+| The full `PRE_RELEASE_SMOKE_TEST.md` (36-row cross-reference table, 16 sections) | in-game, owner-run | **MANUAL — pending, never run.** This is the entire remaining gate before publication; see the Owner Packet |
 
 ### Defects
 
@@ -70,7 +70,7 @@ product defect).
 ### Gate decision
 
 All automatable v0.9 gates are green. The entire live campaign —
-`PRE_RELEASE_SMOKE_TEST.md`'s 37 sections, compiled but never run — is
+`PRE_RELEASE_SMOKE_TEST.md`'s 36-row cross-reference table, compiled but never run — is
 pending by design; this is the actual human work publication requires,
 not a formality. Sprint controller #157 closes with this seal. **No
 publish action has occurred or is scheduled by any automation.**
