@@ -31,13 +31,23 @@ Fixed in this leaf:
 - `docs/mods/concerned-teamster/TEST_PLAN.md` + `COMPATIBILITY.md`:
   compatibility mod versions rechecked live (see §6).
 
-Deliberately **not** changed: `RELEASE_DOSSIER.md`'s v0.9-seal entry
+Deliberately **not** changed: `RELEASE_DOSSIER.md`'s **v0.8 RC1** entry
 still says "609/609 PASS" — accurate for that exact sealed commit at the
-time it was sealed (before CT-048 added 7 more tests reaching 622). A
+time it was sealed (that entry's own successor, the v0.9.0 entry, already
+correctly records the jump to 622/622, attributed to CT-041's
+`DefaultFreezeSnapshotTests` + `FeedbackLinksTests`, not to CT-048). A
 dated dossier entry is a historical record, not a live claim; rewriting
 it to match today's count would make it wrong for the commit it actually
-describes. `REGRESSION_REPORT_v1.0.md` and `V1_DEFINITION_OF_DONE.md`
-already carry the current 622 figure.
+describes. Independent review of this leaf caught this section's own
+first draft making exactly that mistake in the other direction — it had
+misidentified which dossier entry carries "609/609" and mislabeled the
+*current* count as 622, when CT-048's `PerformanceBudgetTests.cs` (7
+tests, merged before this leaf branched) had already moved it to
+**629** — confirmed by this leaf's own test run. `REGRESSION_REPORT_v1.0.md`
+correctly cites 622 because that report ran before CT-048 merged; it is
+not stale, just older. `V1_DEFINITION_OF_DONE.md`'s "every merge this
+whole conveyor" row is a present-tense claim, so it's updated to 629 in
+this same leaf.
 
 ## 2. Localization completeness
 
@@ -47,11 +57,12 @@ The English catalog (`Domain/Localization/TeamsterStrings.cs`) has
 **277** keys (independently recounted for this leaf, twice, after a
 first quick regex undercounted at 256 by missing multi-line-wrapped
 values — the exact count matters here specifically because getting it
-wrong is the failure mode this leaf exists to catch). All four
-`HardcodedStringAuditTests` and all 17 `TeamsterStringsTests` methods
-(20 executed cases) pass on rerun: no hardcoded English string leaked
-outside the catalog, no dead unreferenced key, no re-hardcoded sentence,
-no leading/trailing whitespace in a catalog value.
+wrong is the failure mode this leaf exists to catch). `HardcodedStringAuditTests`
+(4 cases) and `TeamsterStringsTests` (17 methods, 20 executed cases with
+`[Theory]` expansion) — 24 executed cases total — pass on rerun: no
+hardcoded English string leaked outside the catalog, no dead
+unreferenced key, no re-hardcoded sentence, no leading/trailing
+whitespace in a catalog value.
 
 **Scope note, stated explicitly so it isn't misread:** Teamster's
 localization architecture (`LOCALIZATION.md`, CT-032) is a single
@@ -118,10 +129,12 @@ exist:
 - **Trip sidecar** (`TripSidecar.FormatVersion`: 1 → 2, CT-017 added
   road-quality segment rows): a **real, shape-changing** format bump,
   not just a forward-compatibility promise. `RoadQualityTests.cs`'s
-  `V1File_ParsesTripsAndFlagsMigration_RecomputeMatches` composes a real
-  v2 sidecar, textually rewrites its header back to `format-version: 1`
-  (a genuine fixture, not a synthetic stub), reparses it, and proves the
-  migration recompute matches scoring the same trips fresh.
+  `V1File_ParsesTripsAndFlagsMigration_RecomputeMatches` composes a
+  v2-format sidecar with no segment rows (a faithful stand-in for a real
+  pre-CT-017 v1 file, which likewise never has any), textually rewrites
+  its header back to `format-version: 1` (a genuine fixture technique,
+  not a synthetic stub), reparses it, and proves the migration recompute
+  matches scoring the same trips fresh.
   `TripPersistenceTests.cs` additionally proves an unrecognized *future*
   version is refused rather than guessed at, and that a backup is taken
   before migration; `TripPersistPlanTests.cs` proves the backup mandate
@@ -163,6 +176,9 @@ leaf, on this machine: `ControllerNavigationTests`, `AccessibilityTests`,
 `CompatibilityFrameworkTests`, `CompatibilityAdvisoryGateTests`,
 `HardcodedStringAuditTests`, `TeamsterStringsTests`,
 `TripPersistPlanTests` — **111/111 PASS**, zero failures, zero new
-defects filed. No production code changed by this leaf; every fix here
-is a documentation correction to match already-correct code and
+defects filed. The full suite (`dotnet test ConcernedTeamster.Tests -c
+Release`) is currently **629/629 PASS** — 622 at the v0.9 seal (CT-041)
+plus CT-048's 7 `PerformanceBudgetTests.cs` cases; Cartographer's 568/568
+is untouched. No production code changed by this leaf; every fix here is
+a documentation correction to match already-correct code and
 already-passing tests.
