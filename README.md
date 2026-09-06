@@ -7,7 +7,7 @@ Valheim mods by **The Concerned Cat**. This repository is a monorepo: shared eng
 | Mod | Status | Purpose |
 |---|---|---|
 | [Concerned Cartographer](docs/mods/concerned-cartographer/PROJECT.md) | 1.0 release candidate | A living atlas: self-mapping roads, durable managed pins, search and decluttering, road-aware routes, and explicit collaborative sharing on Valheim's map. |
-| [Concerned Teamster](docs/mods/concerned-teamster/PROJECT.md) | In development (v0.4 internal RCs) | Cart truth: measures cart load, grade, traction, and hauling risk, and scores road quality from recorded trips — while vanilla cart physics stay untouched by default. |
+| [Concerned Teamster](docs/mods/concerned-teamster/PROJECT.md) | In development (v0.8 internal RC line; v0.9 public beta hardening in progress) | Cart truth: measures cart load, grade, traction, and hauling risk, and scores road quality from recorded trips — while vanilla cart physics stay untouched by default. |
 
 ## Repository model
 
@@ -64,6 +64,16 @@ Concerned Cartographer is intentionally documented for outside contributors and 
 - [Contributing](CONTRIBUTING.md)
 - [Attribution / project notice](NOTICE.md)
 
+Concerned Teamster's own documentation:
+
+- [Project overview](docs/mods/concerned-teamster/PROJECT.md)
+- [Architecture](docs/mods/concerned-teamster/ARCHITECTURE.md)
+- [Feature and default freeze](docs/mods/concerned-teamster/FEATURE_FREEZE.md)
+- [Compatibility with other mods](docs/mods/concerned-teamster/COMPATIBILITY.md)
+- [Recovery, migration, and support bundle](docs/mods/concerned-teamster/RECOVERY.md)
+- [Privacy inventory](docs/mods/concerned-teamster/PRIVACY_INVENTORY.md)
+- [Security self-audit](docs/mods/concerned-teamster/SECURITY_AUDIT.md)
+
 ## Original project and attribution
 
-ConcernedCatMods and Concerned Cartographer are created and maintained by **Eren Cansunar / The Concerned Cat**. AI coding agents materially assisted implementation, tests, research and documentation. See [AUTHORS.md](AUTHORS.md), [NOTICE.md](NOTICE.md), and the repository [LICENSE](LICENSE).
+ConcernedCatMods, Concerned Cartographer, and Concerned Teamster are created and maintained by **Eren Cansunar / The Concerned Cat**. AI coding agents materially assisted implementation, tests, research and documentation. See [AUTHORS.md](AUTHORS.md), [NOTICE.md](NOTICE.md), and the repository [LICENSE](LICENSE).

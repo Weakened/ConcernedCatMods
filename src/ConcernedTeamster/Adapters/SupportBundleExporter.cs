@@ -25,9 +25,16 @@ internal static class SupportBundleExporter
         Path.Combine(Paths.ConfigPath, "ConcernedCatMods", "ConcernedTeamster", "SupportBundles");
 
     /// <summary>Composes and atomically writes a new bundle file, returning
-    /// its path on success. Never throws; a failure comes back as a false
-    /// result with a message, exactly like every other Teamster file
-    /// operation.</summary>
+    /// its path on success. Every <c>SidecarFileStore</c> operation reports
+    /// failure as a false result with a message rather than throwing; the
+    /// one exception is <see cref="GatherSidecarSummaries"/>'s directory
+    /// enumeration, which could in principle throw on a filesystem race
+    /// (a sidecar deleted or its permissions changed between listing and
+    /// reading) — CT-042 security review found this doc comment previously
+    /// overstated "never throws" here. That narrow case is still fail-safe
+    /// in practice: <c>SupportBundlePanel.HandleExportClicked</c> wraps this
+    /// call in its own try/catch, so an unexpected exception here disables
+    /// only the Support panel for the session, never the whole plugin.</summary>
     public static (bool Success, string? Path, string? Error) Export(
         string pluginVersion,
         TeamsterSettings settings,
