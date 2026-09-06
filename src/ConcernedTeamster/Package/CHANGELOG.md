@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.0.0 (Stable — sealed, pending owner publish approval)
+
+**Stable Teamster (CT-046..CT-050).** The tenth internal release
+candidate, and the first sealed as v1.0 stable — not published by this
+change, but prepared exactly as it would ship if approved. No new
+gameplay feature; this release is a final audit, formal budgets, a
+final cross-area sign-off, and the seal itself.
+
+- **Golden path and v1.0 definition of done (CT-046).** Every shipped
+  promise from v0.1 through v0.9 mapped to its evidence source in one
+  capability-by-capability matrix; zero new defects found beyond the two
+  already-deferred P3s.
+- **Full regression from a clean checkout (CT-047).** The entire
+  automated suite reruns clean from a genuinely fresh `git clone`, not
+  just this conveyor's own long-lived working tree — proof the committed
+  tree, not a possibly-stale local environment, is what's actually green.
+- **Formal performance, memory, network, and stability budgets (CT-048).**
+  14 numbered budgets covering the sampler, route profiler, brake
+  lifecycle, trip recorder, both O(n)-over-samples trip presenters, the
+  network input guard, and sidecar IO — all Met, each backed by a
+  repeatable automated test.
+- **Final sign-off across six non-code areas (CT-049).** Docs truth,
+  localization, controller navigation, accessibility, migration chain,
+  and the compatibility statement each re-verified fresh; several stale
+  doc numbers found and corrected, compatibility versions rechecked live
+  against Thunderstore.
+- **This seal (CT-050).** Version synced, packaged, hashed, a
+  fresh-profile install rehearsed against the real sealed artifact, and
+  the owner packet committed. Publication remains entirely owner-only
+  and did not happen as part of this change.
+
 ## 0.9.0 (Public Beta — sealed, pending owner publish approval)
 
 **Public Beta Hardening (CT-041..CT-045).** The ninth internal release

@@ -106,8 +106,9 @@ in-game visual/interaction rows deferred to `PRE_RELEASE_SMOKE_TEST.md`
 | File-level lifecycle rehearsal | Done | v0.9 (CT-043); `rehearse-teamster-lifecycle.ps1` against real, actually-built artifacts incl. a real historical v0.7.0 worktree build |
 | TCT-* mod-manager profiles created for real | **Deferred to owner** | Profile creation is a mod-manager GUI action this repo's tooling deliberately does not drive (`PROFILE_REHEARSAL.md`); none exists on this machine yet |
 | Zero open P0/P1/P2 defects | Done | v0.9 (CT-044); DEF-teamster-v0.9-002 fixed |
-| Compiled pre-release smoke checklist | Done | v0.9 (CT-044); `PRE_RELEASE_SMOKE_TEST.md`, a 36-row cross-reference table over 16 numbered sections (§0–§15), never run |
+| Compiled pre-release smoke checklist | Done | v0.9 (CT-044), extended v1.0 (CT-050); `PRE_RELEASE_SMOKE_TEST.md`, now a 39-row cross-reference table over 17 numbered sections (§0–§16), never run |
 | Sealed v0.9.0 RC + owner packet | Done\* | v0.9 (CT-045); `RELEASE_DOSSIER.md` + `OWNER_PACKET_v0.9.md`; the smoke checklist itself is the pending row |
+| Sealed v1.0.0 RC + owner packet | Done\* | v1.0 (CT-050); `RELEASE_DOSSIER.md`'s v1.0.0 entry + `OWNER_PACKET_v1.0.md`; the smoke checklist itself is the pending row |
 
 ## Performance, memory, network, long-run stability (formal budgets)
 

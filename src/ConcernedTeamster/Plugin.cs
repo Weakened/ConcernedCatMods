@@ -11,7 +11,7 @@ public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernedteamster";
     public const string PluginName = "Concerned Teamster";
-    public const string PluginVersion = "0.9.0";
+    public const string PluginVersion = "1.0.0";
 
     private bool _cartographerProbePending;
     private bool _compatibilityProbePending;

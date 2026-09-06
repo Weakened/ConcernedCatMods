@@ -1,6 +1,6 @@
 # Concerned Teamster
 
-**Public beta by The Concerned Cat. Actively maintained on the road to v1.0.**
+**Stable release candidate by The Concerned Cat.**
 
 Your cart stops being a mystery: Concerned Teamster measures load, grade, traction, and risk so hauling decisions are informed — while vanilla cart physics stay untouched by default.
 
@@ -75,7 +75,7 @@ cooperative haul diagnostics while you're actually playing with them.
 
 ## Status
 
-Version 0.9.x is the **public beta**: cart truth, cargo and load planning, descent safety, trip-based road scoring, capability-detected route profiling, an enforced multiplayer read/act/observe policy, scalable/contrast-checked/controller-navigable panels with full localization and onboarding, mod-compatibility awareness with a documented precedence policy, corruption-safe recovery with a sanitized support bundle, and now a frozen feature/default surface with a privacy-safe feedback path — all proven at their worst-case configured scale, with vanilla physics untouched by default. Every feature is unit-proven off-game; the specific in-game observations still pending are tracked in [`PRE_RELEASE_SMOKE_TEST.md`](https://github.com/Weakened/ConcernedCatMods/blob/main/docs/mods/concerned-teamster/PRE_RELEASE_SMOKE_TEST.md) and never claimed passed until actually run. Features land issue by issue on the [GitHub tracker](https://github.com/Weakened/ConcernedCatMods/issues).
+Version 1.0.0 is the **stable release candidate**: cart truth, cargo and load planning, descent safety, trip-based road scoring, capability-detected route profiling, an enforced multiplayer read/act/observe policy, scalable/contrast-checked/controller-navigable panels with full localization and onboarding, mod-compatibility awareness with a documented precedence policy, corruption-safe recovery with a sanitized support bundle, a frozen feature/default surface with a privacy-safe feedback path, and formal performance/memory/network budgets — all proven at their worst-case configured scale, with vanilla physics untouched by default. Every feature is unit-proven off-game; the specific in-game observations still pending are tracked in [`PRE_RELEASE_SMOKE_TEST.md`](https://github.com/Weakened/ConcernedCatMods/blob/main/docs/mods/concerned-teamster/PRE_RELEASE_SMOKE_TEST.md) and never claimed passed until actually run. Features land issue by issue on the [GitHub tracker](https://github.com/Weakened/ConcernedCatMods/issues).
 
 ## Support
 
