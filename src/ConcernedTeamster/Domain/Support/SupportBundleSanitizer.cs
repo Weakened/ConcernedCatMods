@@ -19,7 +19,17 @@ public static class SupportBundleSanitizer
     // Order matters, same reasoning as the sibling product's sanitizer:
     // URLs before paths (URLs contain slashes), coordinates before the
     // long-digit mask (so the marker stays readable), paths before the
-    // generic digit mask (the kept file name is still masked afterwards).
+    // generic digit mask. Unlike the sibling product's sanitizer, the
+    // matched path's terminal segment is NOT retained in the replacement
+    // (no "/$1"): Cartographer's composer only ever builds strings from
+    // known-safe fixed components (never a raw log line), so keeping a
+    // path's file name there is provably safe; this sanitizer's whole
+    // purpose is scrubbing arbitrary free-text log lines it cannot make
+    // that assumption about, and a future log line whose leaf filename
+    // itself carried identifying text would otherwise leak it verbatim.
+    // Sidecar/bundle file names are already surfaced separately and more
+    // safely (bare file name, not a path, so this regex never matches it
+    // at all, with only its digits masked by the pass below).
     private static readonly Regex Urls = new(
         @"\b(?:https?|wss?|ftp)://\S+", RegexOptions.Compiled);
 
@@ -28,11 +38,11 @@ public static class SupportBundleSanitizer
         RegexOptions.Compiled);
 
     private static readonly Regex WindowsPath = new(
-        @"[A-Za-z]:[\\/](?:[^\\/\r\n:*?""<>|\s]+[\\/])*([^\\/\r\n:*?""<>|\s]*)",
+        @"[A-Za-z]:[\\/](?:[^\\/\r\n:*?""<>|\s]+[\\/])*[^\\/\r\n:*?""<>|\s]*",
         RegexOptions.Compiled);
 
     private static readonly Regex UnixPath = new(
-        @"(?<![\w.<])/(?:[^/\s]+/)+([^/\s]*)", RegexOptions.Compiled);
+        @"(?<![\w.<])/(?:[^/\s]+/)+[^/\s]*", RegexOptions.Compiled);
 
     private static readonly Regex UsersFragment = new(
         @"\bUsers[\\/][^\\/\s]+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -68,8 +78,8 @@ public static class SupportBundleSanitizer
         string result = line!;
         result = Urls.Replace(result, "<url>");
         result = CoordinatePairs.Replace(result, "(<pos>)");
-        result = WindowsPath.Replace(result, "<path>/$1");
-        result = UnixPath.Replace(result, "<path>/$1");
+        result = WindowsPath.Replace(result, "<path>");
+        result = UnixPath.Replace(result, "<path>");
         result = UsersFragment.Replace(result, "Users/<user>");
         result = SaveFileNames.Replace(result, "<save>.$1");
         result = Ipv4.Replace(result, "<ip>");

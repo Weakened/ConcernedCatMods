@@ -38,6 +38,26 @@ backup at all — meaning the very next write permanently discarded whatever
 those malformed lines had contained, with no way back. It is now backed up
 identically to the refused and migrating cases.
 
+## A failed persist attempt retries instead of silently dropping trips
+
+Independent review of this leaf found one more instance of the exact
+class of bug DEF-teamster-v0.4-001 named: every failure branch inside
+`TripRecordingService.Persist` (backup failure, read failure, write
+failure) logged a message like "trips held in memory" while actually just
+returning — `TripRecorder.DrainFinishedTrips`/`DrainOnReset` had already
+cleared their own queue before handing the drained trips to `Persist`, so
+nothing was actually held anywhere, and a transient I/O failure (a
+momentary antivirus lock, a full disk) silently lost real trip data
+forever. `Domain/Trips/TripPersistPlan.CombineForRetry`/`BoundForRetry`
+(pure, directly tested) now let `Persist` genuinely retain a failed
+attempt's trips and prepend them ahead of the next cycle's newly-finished
+ones, bounded by the sidecar's own retention cap so a persistently broken
+disk cannot grow the retry queue unboundedly. The one exception is a lost
+world context (`WorldContextAdapter.TryGetWorldUid` failing) — that is
+deliberately still dropped with an honest log line, not retried, since a
+world UID becoming available again could belong to a different world and
+retrying into it would misattribute the trip.
+
 ## Config schema migration
 
 `Domain/Config/ConfigSchemaVersion`/`ConfigSchemaMigration` introduce the
@@ -103,6 +123,17 @@ raw world UID — the only world identifier Teamster ever reads at all, via
 of a cart id). `SupportBundleTests` plants a realistic mix of exactly these
 shapes, including this mod's own real warning-line format, and asserts
 none of it survives.
+
+**A path's own terminal segment is fully masked too, not retained.**
+Concerned Cartographer's sibling sanitizer keeps a matched path's final
+segment in its replacement (`"<path>/$1"`) — safe there only because that
+product's composer never passes it truly arbitrary text (see its own
+class doc comment). This sanitizer's whole purpose is scrubbing arbitrary
+free-text log lines, so a leaf filename that is itself the sensitive
+content (not a generic name) must not survive either; independent review
+caught this exact gap before it shipped. Sidecar/bundle file names are
+unaffected — they are surfaced separately as bare file names, which never
+match the path regexes at all, with only their embedded digits masked.
 
 **Recent log lines are the one place Teamster's approach differs from
 Concerned Cartographer's crash reporter on purpose.** Cartographer's

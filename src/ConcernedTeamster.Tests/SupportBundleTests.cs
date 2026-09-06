@@ -113,6 +113,12 @@ public class SupportBundleTests
         Assert.DoesNotContain("example.com", bundle);
         Assert.DoesNotContain("someone", bundle);
         Assert.DoesNotContain("C:\\Users", bundle);
+        // The path's own terminal segment must not survive either — a
+        // review finding: the first cut of this sanitizer kept it,
+        // relying on today's one real caller never putting anything
+        // sensitive in a filename, which this "defense in depth" test is
+        // specifically meant not to assume.
+        Assert.DoesNotContain("secret", bundle);
     }
 
     // ------------------------------------------------------------------
@@ -179,6 +185,23 @@ public class SupportBundleTests
         Assert.DoesNotContain("12.5", sanitized);
         Assert.DoesNotContain("123456789", sanitized);
         Assert.DoesNotContain("x.example", sanitized);
+    }
+
+    [Fact]
+    public void Sanitizer_PathsTerminalSegment_DoesNotSurviveEvenWhenItIsTheSensitivePart()
+    {
+        // CT-039 review finding: the first cut of this sanitizer kept a
+        // path's final segment unmasked ("<path>/$1"), mirroring the
+        // sibling product's sanitizer. That is safe for Cartographer only
+        // because its composer never passes it truly arbitrary text; this
+        // sanitizer's whole purpose is scrubbing arbitrary free-text log
+        // lines, so a filename that is itself the identifying content
+        // (not just a generic name like "file.txt") must not survive.
+        string sanitized = SupportBundleSanitizer.Sanitize(
+            "C:\\Users\\someone\\ErensSecretWorldBackup.txt mentioned in a log line");
+
+        Assert.DoesNotContain("ErensSecretWorldBackup", sanitized);
+        Assert.DoesNotContain("someone", sanitized);
     }
 
     [Fact]

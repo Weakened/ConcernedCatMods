@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace TheConcernedCat.ConcernedTeamster.Domain.Trips;
 
 /// <summary>What a sidecar persist cycle must do, decided as a pure
@@ -53,6 +55,16 @@ public static class TripPersistPlan
             // real, silent, unrecoverable-after-the-fact loss of whatever
             // the malformed lines contained. Now backed up like the other
             // two cases, so the original is always recoverable.
+            //
+            // Checked before NeedsMigration below: a corrupted v1 file can
+            // have both Errors.Count > 0 and NeedsMigration true at once,
+            // in which case this branch's "malformed" label wins over
+            // "migrate-v1" for the log line and recorded RecoveryEvent —
+            // cosmetic only. Either label still triggers exactly the same
+            // backup, and TripSidecar.MergeAndCompose checks
+            // existing.NeedsMigration directly (not this plan's label), so
+            // the segment-recompute migration itself still runs correctly
+            // regardless of which reason string won here.
             return new Plan(
                 backupReason: "malformed",
                 logWarning: "Trip sidecar had " + existing.Errors.Count +
@@ -70,5 +82,45 @@ public static class TripPersistPlan
         }
 
         return new Plan(backupReason: null, logWarning: null, logInfo: null);
+    }
+
+    /// <summary>Prepends a prior cycle's not-yet-persisted trips ahead of
+    /// this cycle's newly-finished ones (CT-039 review finding: a failed
+    /// persist attempt used to just drop <c>newTrips</c> — the recorder
+    /// had already cleared its own queue before handing them over — so a
+    /// transient I/O failure silently lost real trip data despite the
+    /// caller's log line claiming otherwise). Pure list combination,
+    /// extracted here — like <see cref="Decide"/> above — so it is
+    /// directly testable; the caller (Adapters-layer, untestable) only
+    /// decides when to call it and what to do with a failed attempt's
+    /// result.</summary>
+    public static List<Trip> CombineForRetry(IReadOnlyList<Trip> pending, IReadOnlyList<Trip> newTrips)
+    {
+        if (pending.Count == 0)
+        {
+            return new List<Trip>(newTrips);
+        }
+
+        var combined = new List<Trip>(pending.Count + newTrips.Count);
+        combined.AddRange(pending);
+        combined.AddRange(newTrips);
+        return combined;
+    }
+
+    /// <summary>Bounds a retry queue to at most <paramref name="maxRetained"/>
+    /// entries, dropping the OLDEST first — a pending queue can never
+    /// usefully hold more trips than the sidecar itself would keep once
+    /// written, and the oldest-first eviction matches
+    /// <see cref="TripSidecar.Prune"/>'s own newest-wins convention, so a
+    /// persistently broken disk cannot grow this queue unboundedly.</summary>
+    public static List<Trip> BoundForRetry(List<Trip> trips, int maxRetained)
+    {
+        int excess = trips.Count - maxRetained;
+        if (excess > 0)
+        {
+            trips.RemoveRange(0, excess);
+        }
+
+        return trips;
     }
 }

@@ -25,6 +25,7 @@ internal sealed class TripRecordingService
     private readonly ManualLogSource _log;
     private readonly string _pluginVersion;
     private readonly List<RecoveryEvent> _recoveryEvents = new();
+    private readonly List<Trip> _pendingRetryTrips = new();
     private bool _ioFailureLogged;
     private bool _refusalLogged;
 
@@ -67,7 +68,7 @@ internal sealed class TripRecordingService
     public void FlushAndReset(long lastKnownWorldUid)
     {
         IReadOnlyList<Trip> drained = _recorder.DrainOnReset();
-        if (drained.Count > 0)
+        if (drained.Count > 0 || _pendingRetryTrips.Count > 0)
         {
             Persist(drained, lastKnownWorldUid);
         }
@@ -76,13 +77,18 @@ internal sealed class TripRecordingService
     private void PersistFinishedTrips()
     {
         IReadOnlyList<Trip> finished = _recorder.DrainFinishedTrips();
-        if (finished.Count == 0)
+        if (finished.Count == 0 && _pendingRetryTrips.Count == 0)
         {
             return;
         }
 
         if (!WorldContextAdapter.TryGetWorldUid(out long worldUid))
         {
+            // Deliberately not retried: a lost world context (unlike a
+            // transient disk failure below) has no sensible retry target —
+            // if a world UID becomes available again it could be a
+            // different world, and misattributing a pending trip to it
+            // would be worse than the honest drop already logged here.
             WarnIoOnce("world UID unavailable; finished trip dropped rather than misfiled");
             return;
         }
@@ -98,11 +104,22 @@ internal sealed class TripRecordingService
             return;
         }
 
+        // CT-039 review finding: every failure branch below used to say a
+        // variant of "trips held in memory" while actually just returning
+        // — TripRecorder.DrainFinishedTrips/DrainOnReset already cleared
+        // its own queue before newTrips reached here, so nothing was
+        // actually held anywhere and a transient I/O failure silently lost
+        // real trip data. combined is genuinely retried on the next cycle
+        // now (bounded by the sidecar's own retention cap — it can never
+        // usefully hold more than the file would keep anyway).
+        List<Trip> combined = CombineWithPendingRetry(newTrips);
+
         string path = SidecarPathFor(worldUid);
         string? existingText = SidecarFileStore.TryRead(path, out string? readError);
         if (readError is not null)
         {
-            WarnIoOnce("sidecar read failed: " + readError);
+            WarnIoOnce("sidecar read failed: " + readError + "; will retry with the next trip");
+            RetainForRetry(combined);
             return;
         }
 
@@ -135,7 +152,8 @@ internal sealed class TripRecordingService
         {
             if (!SidecarFileStore.TryBackup(path, plan.BackupReason, out string? backupError))
             {
-                WarnIoOnce("sidecar backup failed: " + backupError + "; trips held in memory");
+                WarnIoOnce("sidecar backup failed: " + backupError + "; will retry with the next trip");
+                RetainForRetry(combined);
                 return;
             }
 
@@ -143,11 +161,30 @@ internal sealed class TripRecordingService
         }
 
         string composed = TripSidecar.MergeAndCompose(
-            existing, newTrips, _options.MaxTripsRetained, worldUid, _pluginVersion);
+            existing, combined, _options.MaxTripsRetained, worldUid, _pluginVersion);
         if (!SidecarFileStore.TryWriteAtomic(path, composed, out string? writeError))
         {
-            WarnIoOnce("sidecar write failed: " + writeError + "; previous file left intact");
+            WarnIoOnce(
+                "sidecar write failed: " + writeError + "; previous file left intact; will retry with the next trip");
+            RetainForRetry(combined);
         }
+    }
+
+    /// <summary>Prepends any trips a prior cycle failed to persist ahead of
+    /// this cycle's newly-finished ones and clears the pending queue — the
+    /// combination itself is pure (<see cref="TripPersistPlan.CombineForRetry"/>);
+    /// callers must call <see cref="RetainForRetry"/> again themselves if
+    /// this attempt also fails.</summary>
+    private List<Trip> CombineWithPendingRetry(IReadOnlyList<Trip> newTrips)
+    {
+        List<Trip> combined = TripPersistPlan.CombineForRetry(_pendingRetryTrips, newTrips);
+        _pendingRetryTrips.Clear();
+        return combined;
+    }
+
+    private void RetainForRetry(List<Trip> trips)
+    {
+        _pendingRetryTrips.AddRange(TripPersistPlan.BoundForRetry(trips, _options.MaxTripsRetained));
     }
 
     /// <summary>Loads this world's persisted trips and segment scores for
