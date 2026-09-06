@@ -1027,6 +1027,7 @@ only for non-blocking uncertainty.
   file — filed as DEF-teamster-v0.9-002 (#217, P2), deferred to CT-044
   since fixing it is a core-adapter code change deserving its own
   focused review, not something to bundle into a documentation leaf.
+  **Fixed in CT-044** — see that entry below.
 - Must resolve before public release: Yes for the media capture (the
   v0.9 beta gate expects real screenshots); the icon-art question is the
   owner's call and does not block the internal RC seal either way.
@@ -1092,6 +1093,45 @@ only for non-blocking uncertainty.
   exist for real and the owner-smoke-checklist rows in
   `PROFILE_REHEARSAL.md` need an actual in-game pass before the v0.9 beta
   gate closes.
+- Status: Open
+
+### 2026-09-06 — CT-044 defect burndown complete; the compiled smoke checklist has never been run
+
+- Version / issue: v0.9 / CT-044 (#161)
+- Question: CT-044's two jobs are (a) burn down every open in-scope
+  defect to zero P0/P1/P2, and (b) compile every pending manual claim
+  scattered across this ledger (CT-001 through CT-043, ~30 open entries)
+  into one ordered, owner-runnable checklist. Neither job can itself
+  produce new in-game evidence — compiling a checklist is not running it.
+- Safe reversible default selected: fixed the one open P2
+  (DEF-teamster-v0.9-002, #217 — `CartTelemetryPump.Update()` now wraps
+  its body in the same try/catch-and-disable pattern every `Ui/*Panel.cs`
+  file already uses, renamed to `UpdateCore()`), leaving both P3s
+  (DEF-teamster-v0.8-001 build non-determinism, DEF-teamster-v0.9-001 the
+  flaky allocation test) deferred exactly as their own filed rationale
+  already states — CT-044's own scope explicitly asks for P0–P2 fixed and
+  P3s *documented*, not fixed. Compiled `PRE_RELEASE_SMOKE_TEST.md`: every
+  section traces to a specific still-open ledger entry (cross-reference
+  table at the top of that file), organized by feature area rather than
+  issue-number order so related checks share one session/setup instead of
+  the owner repeating world/cart setup ~30 times. Dry-ran every
+  automatable piece of the checklist's preamble (package audit via
+  `validate_repo.py --require-binary`, all three `deploy.ps1 -Profile`
+  paths, the full `rehearse-teamster-lifecycle.ps1` fresh-install/upgrade/
+  uninstall proof) — all green, cited with fresh evidence in this leaf's
+  PR — but the actual profile-creation clicks and every in-game row stay
+  exactly as pending as they were before this leaf, now just organized
+  into one document instead of scattered across thirty.
+- Why work continued: the fix touches only the one adapter file the
+  filed defect named, mechanically mirroring an already-proven pattern
+  (no new decision logic, nothing to extract to Domain); the checklist
+  compilation adds no new claim beyond what was already recorded open
+  elsewhere in this ledger — it reorganizes, it does not invent.
+- Risk / alternative: the owner may prefer a different session grouping
+  than the one chosen here (by feature area); reordering rows is a
+  doc-only change with no dependency on anything else in this leaf.
+- Must resolve before public release: Yes — running the compiled
+  checklist for real is exactly the v0.9 beta gate's remaining human work.
 - Status: Open
 
 ## Resolved items

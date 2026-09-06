@@ -30,6 +30,7 @@ internal sealed class CartTelemetryPump : MonoBehaviour
     private LookaheadOptions? _lookaheadOptions;
     private bool _resetWhileNoLocalPlayer;
     private double _nextDebugSummaryTime;
+    private bool _failed;
 
     /// <summary>Descent risk for the cart the local player is pulling, from
     /// the most recent snapshot of it; null when nothing is pulled (CT-011).
@@ -126,7 +127,31 @@ internal sealed class CartTelemetryPump : MonoBehaviour
         return options;
     }
 
+    /// <summary>CT-044 (DEF-teamster-v0.9-002): fails closed like every
+    /// Ui/*Panel.cs file, instead of letting an unexpected exception repeat
+    /// every frame for the rest of the session. One LogError line names the
+    /// exception, then this component goes permanently inert.</summary>
     private void Update()
+    {
+        if (_failed)
+        {
+            return;
+        }
+
+        try
+        {
+            UpdateCore();
+        }
+        catch (System.Exception exception)
+        {
+            _failed = true;
+            _log?.LogError(
+                "Cart telemetry pump failed and was disabled for this session: " +
+                $"{exception.GetType().Name}: {exception.Message}");
+        }
+    }
+
+    private void UpdateCore()
     {
         TelemetrySampler? sampler = _sampler;
         if (sampler is null)

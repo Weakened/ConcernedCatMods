@@ -228,6 +228,18 @@ TCC-* family does) — creating one is a one-time GUI action per
 tooling. The owner smoke-checklist rows this rehearsal adds are itemized
 in `HUMAN_ATTENTION.md`'s CT-043 entry, never claimed PASS.
 
+## Defect burndown and the smoke checklist (CT-044)
+
+Full detail in `HUMAN_ATTENTION.md`'s CT-044 entry and
+`PRE_RELEASE_SMOKE_TEST.md`. Summary of the acceptance-criteria evidence:
+
+| Criterion | Evidence |
+|---|---|
+| Zero open P0/P1/P2 Teamster defects; deferred P3 list documented | DEF-teamster-v0.9-002 (P2, #217) fixed — `CartTelemetryPump.Update()` now fails closed like every `Ui/*Panel.cs` file. Two P3s remain deferred exactly per their own filed rationale: DEF-teamster-v0.8-001 (build non-determinism) and DEF-teamster-v0.9-001 (a flaky allocation test) |
+| Smoke checklist covers every pending manual claim with expected results | `PRE_RELEASE_SMOKE_TEST.md` — cross-reference table maps all ~30 open `HUMAN_ATTENTION.md` entries (CT-001 through CT-043) to a checklist section; every row has a Setup/Action/Expected/Evidence/Blocks structure |
+| Checklist preambles verified runnable | `rehearse-teamster-lifecycle.ps1` (fresh install/upgrade/uninstall/idempotence) and `validate_repo.py --require-binary` (package audit) both re-run green for this leaf; the profile-creation clicks themselves remain owner-interactive and unverified, as stated |
+| Regression suite green after final fixes | 622/622 Teamster + 568/568 Cartographer PASS after the `CartTelemetryPump` fix |
+
 ## Multiplayer (v0.6)
 
 - Ownership: only the vanilla-authoritative controller's client mutates
