@@ -10,11 +10,11 @@ is owner-only, always.
 | Item | Value |
 |---|---|
 | Version | 0.7.0 (internal; no publication) |
-| Source commit | `2601ec5543811af021cc3a270d55fbfdd78ca960` (branch `chore/ct-035-v07-rc`; version-sync + changelog committed before the RC build so the shipped DLL names this exact commit). Sealed on merge to main via the CT-035 PR. |
+| Source commit | `e3a177c357d41e67fe86ceccc655559a32d68deb` (branch `chore/ct-035-v07-rc`; supersedes the pre-review seal at `2601ec5` — the independent review found a stale packaged README.md, a catalog-count error, a dropped Release-config citation, and an unenforced version-sync check, all fixed before this rebuild). Sealed on merge to main via the CT-035 PR. |
 | ZIP | `artifacts/thunderstore/TheConcernedCat-ConcernedTeamster-0.7.0.zip` |
-| ZIP SHA-256 | `8ad324d519a599591d2398828a740b57e0895a2b9bde12869e7431106eff7259` (130,216 B) |
-| DLL SHA-256 | `e9f4f0fb28352f06cdadcc0beec06dcbb5cf84a8e921a8f831426c3c85cc97e1` (218,624 B) |
-| DLL identity | AssemblyVersion 0.7.0.0, InformationalVersion `0.7.0+2601ec5543811af021cc3a270d55fbfdd78ca960` |
+| ZIP SHA-256 | `33c7257e74b71e6d4ea920185ebd4eb73a4b057bfe4f7d6eed4a771e07ff619e` (130,648 B) |
+| DLL SHA-256 | `31a7a7e42094824f1d4d82db07bf289c282ad0a5c7068b8e0f0558db849c1e16` (218,624 B) |
+| DLL identity | AssemblyVersion 0.7.0.0, InformationalVersion `0.7.0+e3a177c357d41e67fe86ceccc655559a32d68deb` |
 | ZIP contents (6 entries) | manifest.json, icon.png (256×256), README.md, CHANGELOG.md, LICENSE, plugins/TheConcernedCat.ConcernedTeamster.dll — **own DLL only**, no PDB, no foreign DLL |
 | Built against | Valheim 0.221.12 (buildid 21981559 — re-verified in the Steam manifest at seal time, unchanged since the v0.6 seal one day earlier), Unity 6000.0.61f1, BepInExPack 5.4.2333, Jötunn 2.29.2 |
 | Version sync | 0.7.0 across csproj/Plugin.cs/thunderstore.toml + the CHANGELOG `## 0.7.0` section. `scripts/package.ps1` now derives `--expected-version` from the csproj automatically (this RC's own hardening, CT-035) rather than relying on someone typing it by hand each seal, so csproj/Plugin.cs/thunderstore.toml drift is caught on every future package build, not just this one |
