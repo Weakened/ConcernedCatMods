@@ -132,6 +132,9 @@ Write-Host "`n=== 3. Upgrade rehearsal (v0.7.0, the last pre-schema-versioning r
 $preMigrationTag = "concerned-teamster/v0.7.0"
 $worktreePath = Join-Path $env:TEMP ("teamster-rehearsal-worktree-" + [guid]::NewGuid().ToString("N"))
 git worktree add --detach $worktreePath $preMigrationTag | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    throw "Upgrade rehearsal FAILED: 'git worktree add' for $preMigrationTag did not succeed (exit $LASTEXITCODE) -- nothing was built or copied."
+}
 try {
     Copy-Item (Join-Path $root "Environment.props") (Join-Path $worktreePath "Environment.props") -Force
     Push-Location $worktreePath
@@ -167,7 +170,16 @@ try {
 }
 finally {
     Pop-Location -ErrorAction SilentlyContinue
-    git worktree remove $worktreePath --force 2>$null
+    # CT-043 review finding: a worktree killed while still in git's own
+    # transient "locked: initializing" state (e.g. the whole process tree
+    # hard-killed mid-run) needs a DOUBLE --force to actually remove --
+    # a single --force silently no-ops on a locked worktree, and even
+    # `git worktree prune` alone skips locked entries too. Empirically
+    # reproduced and confirmed by hard-killing this exact step; recovery
+    # needed exactly this double-force. The plain Remove-Item and trailing
+    # prune below are a backstop, not the primary fix.
+    git worktree remove $worktreePath --force --force 2>$null
+    git worktree prune -f 2>$null
     Remove-Item $worktreePath -Recurse -Force -ErrorAction SilentlyContinue
 }
 
