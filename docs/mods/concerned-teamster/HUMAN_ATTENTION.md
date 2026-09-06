@@ -1259,6 +1259,54 @@ only for non-blocking uncertainty.
   etc.) already states its own release-blocking status.
 - Status: Open
 
+### 2026-09-06 — CT-048 formal performance/memory/network/stability budgets proven at the domain layer; real in-game observation stays pending
+
+- Version / issue: v1.0 / CT-048 (#166)
+- Question: does Teamster's real per-tick/per-call hot path — the
+  sampler, route profiler, brake lifecycle, trip recorder, the two
+  O(n)-over-samples trip presenters, the network input guard, and
+  sidecar IO — meet a concrete, numbered budget rather than just "feels
+  fine," and does a simulated long session show any allocation growing
+  without bound?
+- Safe reversible default selected: `PERFORMANCE_BUDGETS.md` defines 14
+  numbered budgets and backs every one with a repeatable automated test
+  (six new in `PerformanceBudgetTests.cs`, one existing sidecar-IO test
+  tightened from a loose sanity bound to a formal budget). All 14 are
+  Met; no code changed to satisfy a budget — every real hot path was
+  already fast/allocation-free, the tests simply prove it with a number
+  instead of an impression. `CooperativeEffortClassifier`,
+  `RemoteStalenessPolicy`, and `OncePerKeyGate` are explicitly excluded
+  from a budget: none has a live Adapters call site yet (CT-028's entry
+  above already records `CooperativeEffortClassifier`'s idle production
+  caller), so there is no real cadence to measure against — a budget for
+  uncalled code would be a guess. (An earlier draft of this entry also
+  excluded `CartAuthorityPolicy` on the same grounds; that was wrong —
+  it runs live inside `BrakeLifecycle.EvaluateTick`/`EvaluateToggle` on
+  the brake's real due-tick/toggle path, exactly as CT-026's entry above
+  already states, and its cost is already covered by the brake-lifecycle
+  budget row.)
+- Why work continued: this leaf adds tests and a doc; it changes no
+  production code path, so the only risk is a wrong measurement, which
+  independent review re-runs rather than trusts.
+- Risk / alternative: per this issue's own scope ("structured manual
+  capture for in-game"), four observations stay genuinely pending —
+  real frame-time delta, real BepInEx log file size over a real
+  multi-hour session, the real Unity terrain-probe cost inside the route
+  profiler (the domain test's fake probe is free), and total process
+  working set beyond Teamster's own managed-heap allocations. All four
+  require a real running game; none is claimed here. The log-volume
+  claim itself (no unconditional per-frame logging call exists) is a
+  structural, source-cited manual audit, not a new CI-gated validator
+  rule — encoding "is this log call inside a rate limit" as a static
+  check would need control-flow analysis the existing token-scan audits
+  don't attempt, and risks false positives/negatives for a property this
+  leaf already verified by hand.
+- Must resolve before public release: No for the budgets themselves (all
+  Met); the four pending in-game observations remain bound by whatever
+  release-blocking status the owner smoke checklist ultimately assigns
+  them, same as every other in-game-only item in this sprint.
+- Status: Open
+
 ## Resolved items
 
 ### 2026-09-05 — CT-032 localization framework delivered; full-UI externalization is progressive

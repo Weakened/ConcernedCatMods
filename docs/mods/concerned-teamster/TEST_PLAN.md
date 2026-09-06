@@ -81,19 +81,30 @@ defects or calibration items — never silently accepted.
 
 ## Performance
 
+Formal, numbered budgets (14, all Met) covering the sampler, route
+profiler, brake lifecycle, trip recorder, both O(n)-over-samples
+presenters, the network input guard, and sidecar IO are in
+`PERFORMANCE_BUDGETS.md` (CT-048) — that doc is the single source of
+truth for these numbers, not repeated here. Two items in the issue's own
+scope stay manual/in-game, itemized pending in the same doc rather than
+claimed:
+
 - No visible frame-time spikes attributable to Teamster while hauling for 30
   minutes with the panel open.
-- Log volume bounded (no per-frame or per-sample logging).
-- Sampler stays within its configured budget; measured evidence at each RC and
-  formally in CT-048.
+- Real BepInEx log file size after a real multi-hour session (the
+  structural claim — no per-frame or per-sample logging call exists
+  anywhere in the source — is audited and source-cited in
+  `PERFORMANCE_BUDGETS.md`).
 
 ### Scale evidence (CT-040)
 
 Informal measurement against the worst-case *configured* bounds — loose
-sanity thresholds, not the formal, gated performance budgets CT-048
-establishes in v1.0. Exact numbers (one real run, this dev machine) are in
-`RELEASE_DOSSIER.md`'s v0.8 RC entry; the automated tests assert generous
-margins, not these exact figures, since wall-clock varies by machine.
+sanity thresholds, superseded by the formal, gated budgets in
+`PERFORMANCE_BUDGETS.md` (CT-048) for the same scenarios. Exact numbers
+(one real run, this dev machine) are in `RELEASE_DOSSIER.md`'s v0.8 RC
+entry; the automated tests assert generous margins, not these exact
+figures, since wall-clock varies by machine. Kept here as the original
+CT-040 record, not updated in place.
 
 | Scenario | Bound exercised | Automated test |
 |---|---|---|

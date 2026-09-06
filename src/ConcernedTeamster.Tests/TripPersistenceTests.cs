@@ -465,18 +465,20 @@ public class TripPersistenceTests
             Assert.Equal(maxTrips, parsed.Trips.Count);
             Assert.Equal(20, parsed.Trips[0].Samples.Count);
 
-            // Loose sanity bounds (not tight performance budgets — CT-048
-            // formalizes those in v1.0 per TEST_PLAN.md): catching an
-            // actual quadratic-blowup regression, not chasing machine-
-            // specific timing. CT-040 scale evidence records the real
-            // measured numbers in RELEASE_DOSSIER.md, not just this bound.
-            Assert.True(composeStopwatch.ElapsedMilliseconds < 2000,
-                $"Composing+writing {maxTrips} trips took {composeStopwatch.ElapsedMilliseconds} ms.");
-            Assert.True(parseStopwatch.ElapsedMilliseconds < 2000,
-                $"Reading+parsing {maxTrips} trips took {parseStopwatch.ElapsedMilliseconds} ms.");
-            Assert.True(fileSizeBytes < 10 * 1024 * 1024,
-                $"Sidecar at max retention was {fileSizeBytes} bytes — investigate before treating " +
-                "this as a loose sanity bound rather than a real regression.");
+            // CT-048's formal sidecar-IO-latency budget (docs/mods/concerned-
+            // teamster/PERFORMANCE_BUDGETS.md): generous multiples of the
+            // one-machine measured value (CT-040 scale evidence in
+            // RELEASE_DOSSIER.md: ~23 ms / ~27 ms / ~465 KiB) so machine-to-
+            // machine or JIT/GC noise doesn't cause a false failure, while
+            // still catching an actual quadratic-blowup or unbounded-growth
+            // regression.
+            Assert.True(composeStopwatch.ElapsedMilliseconds < 500,
+                $"Composing+writing {maxTrips} trips took {composeStopwatch.ElapsedMilliseconds} ms — budget is 500 ms.");
+            Assert.True(parseStopwatch.ElapsedMilliseconds < 500,
+                $"Reading+parsing {maxTrips} trips took {parseStopwatch.ElapsedMilliseconds} ms — budget is 500 ms.");
+            Assert.True(fileSizeBytes < 1024 * 1024,
+                $"Sidecar at max retention was {fileSizeBytes} bytes — budget is 1 MiB; investigate " +
+                "before treating this as a loose sanity bound rather than a real regression.");
         });
     }
 
