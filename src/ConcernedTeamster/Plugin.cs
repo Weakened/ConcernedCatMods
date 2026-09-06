@@ -18,6 +18,7 @@ public sealed class Plugin : BaseUnityPlugin
     private void Awake()
     {
         TeamsterSettings settings = TeamsterSettings.Bind(Config);
+        ApplyProfileIfChanged(settings);
 
         // CT-032: write the translator template and load any teamster-strings.tsv
         // overrides before UI strings are resolved; English is the fallback.
@@ -50,6 +51,35 @@ public sealed class Plugin : BaseUnityPlugin
             _cartographerProbePending = false;
             CartographerCapability.EnsureProbed(Logger);
         }
+    }
+
+    /// <summary>Applies the player's chosen settings preset once, only when
+    /// it genuinely changed since the last load (CT-034) — a restart with no
+    /// Profile edit is a no-op, so individually-tweaked settings are never
+    /// silently overwritten. The parking brake is deliberately excluded from
+    /// every profile's writes; it stays whatever the player already set,
+    /// opt-in by construction regardless of preset.</summary>
+    private void ApplyProfileIfChanged(TeamsterSettings settings)
+    {
+        Domain.Profiles.ConfigProfile active = settings.ActiveProfile.Value;
+        Domain.Profiles.ConfigProfile lastApplied = settings.LastAppliedProfile.Value;
+        if (!Domain.Profiles.ProfileTransition.ShouldApply(active, lastApplied))
+        {
+            return;
+        }
+
+        Domain.Profiles.ProfileValues values = Domain.Profiles.ConfigProfileCatalog.Resolve(active);
+        settings.PanelWarningsEnabled.Value = values.PanelWarningsEnabled;
+        settings.HudWarningHintsEnabled.Value = values.HudWarningHintsEnabled;
+        settings.TripsEnabled.Value = values.TripsEnabled;
+        settings.RiskLookaheadPoints.Value = values.RiskLookaheadPoints;
+        settings.LastAppliedProfile.Value = active;
+
+        Logger.LogInfo(
+            $"Config profile '{active}' applied (was '{lastApplied}'): " +
+            $"warnings={values.PanelWarningsEnabled}, HUD hint={values.HudWarningHintsEnabled}, " +
+            $"trips={values.TripsEnabled}, risk lookahead={values.RiskLookaheadPoints}. " +
+            "Brake.Enabled is never changed by a profile switch — it stays opt-in.");
     }
 
     /// <summary>Starts the telemetry pump only when the master switch is on

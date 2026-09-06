@@ -1,5 +1,6 @@
 using BepInEx.Configuration;
 using TheConcernedCat.ConcernedTeamster.Domain.Carts;
+using TheConcernedCat.ConcernedTeamster.Domain.Profiles;
 using TheConcernedCat.ConcernedTeamster.Domain.Ui;
 using TheConcernedCat.ConcernedTeamster.Domain.Warnings;
 
@@ -30,7 +31,10 @@ internal sealed class TeamsterSettings
         ConfigEntry<float> tripRecordSpacingSeconds,
         ConfigEntry<int> tripMaxSamplesPerTrip,
         ConfigEntry<int> tripMaxTripsRetained,
-        ConfigEntry<float> uiScale)
+        ConfigEntry<float> uiScale,
+        ConfigEntry<bool> onboardingDismissed,
+        ConfigEntry<ConfigProfile> activeProfile,
+        ConfigEntry<ConfigProfile> lastAppliedProfile)
     {
         Enabled = enabled;
         DebugLogging = debugLogging;
@@ -49,6 +53,9 @@ internal sealed class TeamsterSettings
         TripMaxSamplesPerTrip = tripMaxSamplesPerTrip;
         TripMaxTripsRetained = tripMaxTripsRetained;
         UiScale = uiScale;
+        OnboardingDismissed = onboardingDismissed;
+        ActiveProfile = activeProfile;
+        LastAppliedProfile = lastAppliedProfile;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -74,6 +81,22 @@ internal sealed class TeamsterSettings
     /// on the panel's next build (world enter or first open), not live to
     /// an already-open panel.</summary>
     public ConfigEntry<float> UiScale { get; }
+
+    /// <summary>Set once, permanently, when the player taps the first-run
+    /// onboarding hint (CT-034). Never reset by the mod itself.</summary>
+    public ConfigEntry<bool> OnboardingDismissed { get; }
+
+    /// <summary>The player's chosen settings preset (CT-034). Changing this
+    /// value re-applies the preset's settings once, on the next plugin
+    /// load; individual settings stay independently editable afterward.</summary>
+    public ConfigEntry<ConfigProfile> ActiveProfile { get; }
+
+    /// <summary>Internal bookkeeping — do not edit directly. Records which
+    /// profile was last actually applied, so <see cref="ActiveProfile"/>
+    /// re-applies only when it genuinely changes (CT-034's idempotence
+    /// guarantee) instead of overwriting manually-tweaked settings on every
+    /// restart.</summary>
+    public ConfigEntry<ConfigProfile> LastAppliedProfile { get; }
 
     public static TeamsterSettings Bind(ConfigFile config)
     {
@@ -160,6 +183,19 @@ internal sealed class TeamsterSettings
                     "Uniform size of every Teamster panel, button, and font. 1.0 is the default size; " +
                     "takes effect the next time a panel opens (or on world enter for the always-visible " +
                     "Cart button), not live on an already-open panel.",
-                    new AcceptableValueRange<float>(UiScaleOptions.MinScale, UiScaleOptions.MaxScale))));
+                    new AcceptableValueRange<float>(UiScaleOptions.MinScale, UiScaleOptions.MaxScale))),
+            config.Bind("Onboarding", "Dismissed", false,
+                "Set automatically once you dismiss the first-run hint pointing at the Cart button. " +
+                "Set back to false to see the hint again."),
+            config.Bind("General", "Profile", ConfigProfile.Standard,
+                "A documented settings preset: Minimal (telemetry only, warnings/HUD hints/trips off), " +
+                "Standard (Teamster's normal defaults), or EverythingObservational (every read-only " +
+                "feature on). The parking brake stays off in every profile — enable Brake.Enabled " +
+                "yourself if you want it. Changing this re-applies the preset's values once, on the " +
+                "next load; your own edits to individual settings are never overwritten again until " +
+                "you change this value to something else."),
+            config.Bind("General", "LastAppliedProfile", ConfigProfile.Standard,
+                "Internal bookkeeping — do not edit. Records which profile was last applied so a " +
+                "restart with no Profile change never re-applies it."));
     }
 }
