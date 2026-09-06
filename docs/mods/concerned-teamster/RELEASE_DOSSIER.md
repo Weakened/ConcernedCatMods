@@ -5,6 +5,112 @@ split between automated evidence and pending manual claims, following the
 dossier discipline proven on Concerned Cartographer. Publication of anything
 is owner-only, always.
 
+## v0.8 RC1 — "Compatibility, Recovery, Scale" (sealed 2026-09-06)
+
+| Item | Value |
+|---|---|
+| Version | 0.8.0 (internal; no publication) |
+| Source commit | `9b718c2d518fa4e0a92a81a9c716455b8cba1e3d` (branch `feat/ct-040-v08-rc-seal`; version-sync + scale-test content committed before the RC rebuild so the shipped DLL names this exact commit, not a dirty-tree build). Sealed on merge to main via the CT-040 PR. |
+| ZIP | `artifacts/thunderstore/TheConcernedCat-ConcernedTeamster-0.8.0.zip` |
+| ZIP SHA-256 | `4c3d674e88c0f66afc03ada6293ad3e1dbdb09ade73d8732f7a6dc5526a128c2` (142,157 B) |
+| DLL SHA-256 | `d5dfbbb22e186ba248b6537b71cfba9f85e8996275da1e3e4c8580cd594f1873` (245,760 B) |
+| DLL identity | AssemblyVersion 0.8.0.0, InformationalVersion `0.8.0+9b718c2d518fa4e0a92a81a9c716455b8cba1e3d` (read back directly from the built DLL, confirming a clean, non-dirty build) |
+| ZIP contents (6 entries) | manifest.json, icon.png (256×256), README.md, CHANGELOG.md, LICENSE, plugins/TheConcernedCat.ConcernedTeamster.dll — **own DLL only**, no PDB, no foreign DLL |
+| Built against | Valheim 0.221.12 (buildid 21981559 — re-verified in the Steam manifest at seal time, unchanged since the v0.7 seal), Unity 6000.0.61f1, BepInExPack 5.4.2333, Jötunn 2.29.2 |
+| Version sync | 0.8.0 across csproj/Plugin.cs/thunderstore.toml + the CHANGELOG `## 0.8.0` section, validator-asserted (`--expected-version 0.8.0 --require-binary`) |
+
+### Sprint scope sealed in this RC
+
+CT-036 the runtime compatibility and capability framework (GUID-only mod
+detection across four probe paths, a documented Coexist/Adapt/Warn policy)
+· CT-037 Better Carts coexistence validated directly from its published
+source and reclassified Adapt/CartMassOrPhysics after research found its
+`Vagon.SetMass` Harmony prefix, extending the gate to every load-advice
+consumer · CT-038 ItemStacks and ValheimPlus researched and registered
+from verified source (Adapt/CartMassOrPhysics and Warn/None respectively)
+· CT-039 bounded per-reason backup rotation, a pure tested persist-retry
+plan that survives transient I/O failure and world switches without
+losing or cross-contaminating trips, player-visible recovery events,
+config schema migration, and a sanitized support-bundle export + panel ·
+CT-040 worst-case scale evidence (max-retention trips, many-entry
+manifests, dense-cluster long-session sampling) and this seal.
+
+### v0.8 campaign results (automated)
+
+| Campaign item | Method | Result |
+|---|---|---|
+| Static validation + version sync | `validate_repo.py --product teamster --expected-version 0.8.0 --require-binary` | PASS |
+| Solution build | `package.ps1 -Product ConcernedTeamster -Configuration Release` (invokes `build.ps1 -Configuration Release`) | PASS — 0 errors (3 pre-existing benign warnings) |
+| Teamster unit tests | `dotnet test ConcernedTeamster.Tests` (Release) | **609/609 PASS** — +67 executed cases over the v0.7 baseline of 542 (CT-036 compatibility framework, CT-037 Better Carts correction, CT-038 two more registry entries, CT-039 migration/backup/support-bundle, CT-040 scale) |
+| Cartographer regression | `dotnet test ConcernedCartographer.Tests` (Release) | **568/568 PASS** — unchanged with the v0.8 work present |
+| Scale campaign (CT-040) | `dotnet test --filter` over the four new scale tests (Release) | PASS — see scale measurement table below |
+| Recovery/migration/support-bundle campaign rerun | `dotnet test --filter FullyQualifiedName~TripPersistenceTests\|TripPersistPlanTests\|ConfigSchemaMigrationTests\|SupportBundleTests` (Release) | **47/47 PASS**, fresh per-test temp-directory fixtures (no shared/stale state between runs) |
+| Compatibility matrix campaign rerun | `dotnet test --filter FullyQualifiedName~CompatibilityFrameworkTests\|CompatibilityAdvisoryGateTests` (Release) | **18/18 PASS** |
+| Cross-product independence + Cartographer contract + integration read-only | `validate_repo.py` interop lines | PASS — 4 trees independent, contract 12/12, 9 integration files read-only |
+| Authority policy / no-force audits | `validate_repo.py` interop lines | PASS — 9 features documented, 149 Teamster source files, 0 violations (grown from 112 files at the v0.6 seal as CT-031..040 landed; no v0.8 leaf touches multiplayer/force paths) |
+| Package build + audit | `package.ps1 -Product ConcernedTeamster` + ZIP listing | PASS — hashes above, own-DLL-only (0 foreign/PDB entries), 6 entries |
+| Corruption/recovery live campaign (kill mid-write, migrate a real v1 sidecar, export and read a real support bundle) | in-game | **MANUAL — pending** (the retry/discard/migration/sanitization LOGIC is unit-proven off-game per CT-039; live confirmation is pending by design for an internal RC) |
+| Compatibility live campaign (BetterCarts / ItemStacks / ValheimPlus installed, one at a time and combined) | in-game, TCT-Compat | **MANUAL — pending** (the three compatibility-matrix rows in TEST_PLAN.md; GUID detection and the policy gate are unit-proven off-game) |
+| Long real hauling session at configured-max scale | in-game | **MANUAL — pending** (the sampler ceiling/allocation-flatness finding below is proven synthetically against a fake cart world; a real dense-cart-cluster session is pending) |
+| Standard suite (clean load, cart/world lifecycle, uninstall safety) | in-game | **MANUAL — pending** (carried from every prior RC; unchanged by v0.8's compatibility/recovery/scale-only scope) |
+
+### Scale measurement table (CT-040)
+
+One real run on this dev machine (Release build); loose, generous bounds
+are what the automated tests actually assert (see `TEST_PLAN.md`'s scale
+evidence section) so these exact figures are not brittle to normal
+machine-to-machine or JIT/GC noise:
+
+| Scenario | Configured bound exercised | Measured result |
+|---|---|---|
+| Trip sidecar at max retention | 500 trips (`MaxMaxTripsRetained`) × 20 samples each | Compose+write 23 ms; read+parse 27 ms; file size 474,750 B (~464 KiB) |
+| Cargo manifest, many distinct items | 200 synthetic entries (stress input, not a vanilla-capacity claim) | Compose <1 ms (rounds to 0 ms) |
+| Telemetry sampler, dense cluster, long session | 50 candidate carts, `MaxMaxTrackedCarts` 32, `MaxMaxCartsPerTick` 8, 2,000 ticks at `MinSampleIntervalSeconds` | Steady-state tracked-cart count stabilizes at **27**, never exceeds 32 (asserted every tick); all 50 candidates got at least one attempt (no starvation) |
+| Telemetry sampler allocation, long session | Two consecutive 2,000-tick windows, 0.5 s interval, 50 candidates, both past warm-up | First window 2,434,192 B; second window 2,438,168 B (+0.16%) — flat, no growth with session length |
+
+The tracked-cart ceiling (27 of a configured 32) is a **documented
+tradeoff, not a defect**: `EvictAfterSeconds` floors at 2 s regardless of
+how small the sample interval gets, and the round-robin window advances
+by one candidate per tick, so in a cluster this dense a sample's
+freshness window governs coverage before the hard cap does. This trades
+maximum coverage for guaranteed freshness (a stale tracked cart is never
+shown) — see `TelemetrySamplerTests.cs`'s
+`Tick_MaxTrackedCartsOverALongSession_...` test comment for the full
+derivation.
+
+### Pending manual claims added by v0.8
+
+1. Corruption/recovery walkthrough: kill the process mid-write and confirm
+   the prior sidecar survives via rotated backup; load a real pre-v1
+   sidecar and confirm migration + recovery-event surfacing; export a
+   support bundle from a live session and confirm it reads clean with no
+   world/player/path leakage (CT-039 entries).
+2. Compatibility walkthrough: install BetterCarts, ItemStacks, and
+   ValheimPlus (one at a time and combined) and confirm the Compat panel
+   and load-advice gate match the researched, tested policy for each
+   (CT-037/CT-038 entries; the three "pending in-game" rows in
+   `TEST_PLAN.md`'s compatibility matrix).
+3. Scale spot check: a long real hauling session in a dense cart cluster,
+   watching for the documented tracked-cart-ceiling behavior and for any
+   frame-time or log-volume regression the synthetic tests can't observe
+   (CT-040 entry).
+4. Standard suite (carried from every prior RC): clean load, cart/world
+   lifecycle, uninstall safety.
+
+### Defects
+
+No defect filed against `sprint:teamster-v0.8`; none open with the sprint
+label at seal time (`gh issue list --label sprint:teamster-v0.8 --label
+bug` returns empty). The one previously-open Teamster defect, #189
+DEF-teamster-v0.4-001 (P3, sidecar backup hardening), was fixed and
+closed as part of CT-039 — no open Teamster defect remains at seal time.
+
+### Gate decision
+
+All automatable v0.8 gates are green; the live campaign rows (corruption/
+recovery, compatibility, scale spot check, standard suite) are pending by
+design for an internal RC. Sprint controller #151 closes with this seal.
+
 ## v0.7 RC1 — "UX, Controller, Accessibility, Localization" (sealed 2026-09-06)
 
 | Item | Value |

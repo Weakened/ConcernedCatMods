@@ -902,6 +902,41 @@ only for non-blocking uncertainty.
   test-plan evidence table.
 - Status: Open
 
+### 2026-09-06 — CT-040 v0.8 RC sealed; live corruption/compatibility/scale campaign pending
+
+- Version / issue: v0.8 / CT-040 (#156)
+- Question: the v0.8 RC integrates the compatibility, recovery, and scale
+  sprint, but the full live campaign — killing the process mid-write and
+  confirming rotated-backup recovery, migrating a real pre-v1 sidecar,
+  exporting and reading a real support bundle, installing BetterCarts /
+  ItemStacks / ValheimPlus and confirming the Compat panel and load-advice
+  gate for each, and a long real hauling session in a dense cart cluster —
+  needs interactive sessions the owner runs.
+- Safe reversible default selected: seal the internal RC with every
+  automatable gate green — 609 Teamster + 568 Cartographer tests, a
+  filtered rerun of the CT-039 recovery/migration/support-bundle suite
+  (47/47) and the CT-036..038 compatibility suite (18/18) as their own
+  campaigns, the same five interop audits, three new scale tests proving
+  max-retention/many-entry/dense-cluster-long-session behavior with real
+  measured numbers recorded in `RELEASE_DOSSIER.md`, and a version-synced
+  package with recorded hashes built from a clean (non-dirty) commit —
+  confirmed by reading the shipped DLL's own InformationalVersion back
+  after the build rather than assuming it. Nothing publishes; publication
+  is owner-only.
+- Why work continued: every new/rerun mechanism is unit-tested (real
+  filesystem fixtures for recovery, a fake cart world for the sampler
+  scale tests); the live rows confirm behavior only a running game can
+  produce.
+- Risk / alternative: none beyond confirming the pending rows in game; the
+  RC is internal. The one genuinely new scale finding — the telemetry
+  sampler's practically-reachable tracked-cart ceiling (27) falling below
+  its configured cap (32) in a dense cluster — is a documented design
+  tradeoff (freshness over coverage), not a defect; see
+  `RELEASE_DOSSIER.md`'s v0.8 scale measurement table for the derivation.
+- Must resolve before public release: Yes (the v0.9 beta gate consumes
+  these, same as every prior RC's live rows)
+- Status: Open
+
 ## Resolved items
 
 ### 2026-09-05 — CT-032 localization framework delivered; full-UI externalization is progressive
