@@ -51,6 +51,17 @@ public static class TeamsterStrings
             "New here? Click Cart below to see your mass, grade, and warnings. " +
             "(Tap this to dismiss)",
 
+        // Compatibility framework (CT-036): the status surface for detected
+        // known mods. Silence is the default — only actually-detected known
+        // mods produce a line; the registry ships empty until CT-037/038
+        // research and add real entries.
+        ["compat.title"] = "Compatibility",
+        ["compat.noneDetected"] = "No known compatibility concerns detected.",
+        ["compat.line"] = "{0} ({1}): {2}",
+        ["compat.policyCoexist"] = "coexisting",
+        ["compat.policyAdapt"] = "adapted",
+        ["compat.policyWarn"] = "caution",
+
         // Cart Status surface (CT-005): presenter lines + panel chrome.
         // Numbers arrive pre-formatted (invariant culture) so translations
         // reorder words, never digits.
@@ -60,6 +71,7 @@ public static class TeamsterStrings
         ["status.routesButton"] = "Routes",
         ["status.manifestButton"] = "Manifest",
         ["status.guidanceButton"] = "Guidance",
+        ["status.compatButton"] = "Compat",
         ["status.engageBrake"] = "Engage brake",
         ["status.releaseBrake"] = "Release brake",
         ["status.telemetryOff"] = "Cart telemetry is unavailable — see the log for details.",

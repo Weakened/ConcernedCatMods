@@ -36,6 +36,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
     private RecoveryGuidancePanel? _guidancePanel;
     private TripHistoryPanel? _tripPanel;
     private RoutePickerPanel? _routePanel;
+    private CompatibilityPanel? _compatPanel;
     private bool _failed;
 
     private GameObject? _button;
@@ -58,6 +59,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
         _guidancePanel = new RecoveryGuidancePanel(log, CurrentUiScale);
         _tripPanel = new TripHistoryPanel(log, CurrentUiScale);
         _tripPanel.BindPump(pump);
+        _compatPanel = new CompatibilityPanel(log, CurrentUiScale);
     }
 
     /// <summary>Reads the config value fresh on every call (never cached) so
@@ -96,6 +98,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
                 _guidancePanel?.Hide();
                 _tripPanel?.Hide();
                 _routePanel?.Hide();
+                _compatPanel?.Hide();
                 _selectedCartId = null;
                 if (_hudHint != null && _hudHint.gameObject.activeSelf)
                 {
@@ -147,6 +150,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
             _guidancePanel?.HandleFrame(now, _pump);
             _tripPanel?.HandleFrame(now, _pump);
             _routePanel?.HandleFrame(now);
+            _compatPanel?.HandleFrame();
             UpdateHudHint();
             UpdateOnboardingHint();
         }
@@ -302,6 +306,14 @@ internal sealed class CartStatusHudController : MonoBehaviour
             TeamsterStrings.Get("status.tripsButton"), _panel.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(90f, 62f), 110f, 30f);
         trips.GetComponent<Button>().onClick.AddListener(() => _tripPanel?.Toggle(_pump));
+
+        // CT-036: compatibility status, always available (unlike Routes,
+        // never conditional on another mod's presence) — mirrors Routes'
+        // row on the opposite side.
+        GameObject compat = gui.CreateButton(
+            TeamsterStrings.Get("status.compatButton"), _panel.transform,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-90f, 96f), 110f, 30f);
+        compat.GetComponent<Button>().onClick.AddListener(() => _compatPanel?.Toggle());
 
         // CT-022: the route picker exists only when the Cartographer probe
         // reported Available (this panel is built lazily in-world, long
@@ -546,6 +558,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
             // dead the !inWorld sweep never runs again, and a selected id
             // must not outlive the world it belongs to.
             _routePanel?.Hide();
+            _compatPanel?.Hide();
         }
         catch
         {

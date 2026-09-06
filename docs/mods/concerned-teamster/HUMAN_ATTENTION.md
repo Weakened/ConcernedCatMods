@@ -722,6 +722,32 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
+### 2026-09-06 — CT-036 compatibility framework proven off-game with fake mods; empty registry pending real entries
+
+- Version / issue: v0.8 / CT-036 (#152)
+- Question: the registry/policy mechanism (detection, each policy outcome,
+  silence for unregistered/not-found mods, the shared log/panel
+  composition) is fully proven with fake test mods, but the shipped
+  registry is intentionally empty — no real mod has been researched yet —
+  so there is nothing for an in-game session to actually observe beyond the
+  empty-state message and the new Compat button's presence/placement.
+- Safe reversible default selected: ship the framework with zero registered
+  mods rather than guess at a real one's GUID (this repository's "research,
+  don't invent" rule for third-party mods); the Compat panel and log line
+  both honestly say "No known compatibility concerns detected." until
+  CT-037/038 add researched entries.
+- Why work continued: an empty registry cannot mislead — there is no policy
+  to misapply yet — and the mechanism itself is exhaustively unit-tested;
+  the only pending item is cosmetic (button placement/panel visibility),
+  not correctness.
+- Risk / alternative: none beyond the pending visual check below; once
+  CT-037 adds a real entry, that leaf's own HUMAN_ATTENTION entry will carry
+  the actual in-game policy-observation pending items (e.g. "Better Carts
+  installed → Compat panel shows its policy line").
+- Must resolve before public release: No (the registry itself has nothing
+  to verify yet; CT-037/038's entries will carry the real pending items)
+- Status: Open
+
 ## Resolved items
 
 ### 2026-09-05 — CT-032 localization framework delivered; full-UI externalization is progressive

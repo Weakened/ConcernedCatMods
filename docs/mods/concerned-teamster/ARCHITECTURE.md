@@ -200,6 +200,25 @@ across restarts rather than fighting the player's own later edits.
 the actual `ConfigEntry` values; full reasoning, the profile table, and the
 discoverability audit live in `ONBOARDING.md`.
 
+### Compatibility framework (v0.8+)
+
+`CompatibilityRegistry.Evaluate` (CT-036) generalizes the CT-021
+Cartographer-probe pattern into a reusable mechanism: given a list of
+`KnownModProbe` entries (GUID, display name, a `Coexist`/`Adapt`/`Warn`
+policy, and a description) and a lookup function, it queries only the
+registered GUIDs — a mod outside the registry is never asked about, so
+"unknown mods produce no warnings" holds by construction. `Adapters/
+CompatibilityAdapter` supplies the real `Chainloader.PluginInfos` lookup on
+the first Update tick (same load-order reasoning as CT-021).
+`CompatibilityStatusPresenter` composes the status text once; the startup
+log banner and the Cart Status panel's **Compat** button both call the same
+composition, so they can never disagree. The shipped registry ships empty
+— naming a real mod requires researching its actual GUID first, which is
+CT-037 (Better Carts) and CT-038's job, not this leaf's. A source-scanning
+test enforces that no registered GUID ever appears outside `Domain/
+Compatibility/`, so a future policy addition cannot leak into a feature-code
+branch. Full design in `COMPATIBILITY.md`.
+
 ### Persistence (from v0.4)
 
 Per-world sidecar files under the BepInEx config path, named by world UID with
