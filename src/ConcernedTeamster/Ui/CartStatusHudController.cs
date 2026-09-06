@@ -52,10 +52,23 @@ internal sealed class CartStatusHudController : MonoBehaviour
         _settings = settings;
         _log = log;
         _pump = pump;
-        _manifestPanel = new CargoManifestPanel(log);
-        _guidancePanel = new RecoveryGuidancePanel(log);
-        _tripPanel = new TripHistoryPanel(log);
+        _manifestPanel = new CargoManifestPanel(log, CurrentUiScale);
+        _guidancePanel = new RecoveryGuidancePanel(log, CurrentUiScale);
+        _tripPanel = new TripHistoryPanel(log, CurrentUiScale);
         _tripPanel.BindPump(pump);
+    }
+
+    /// <summary>Reads the config value fresh on every call (never cached) so
+    /// a config edit takes effect the next time any panel's GameObject is
+    /// actually (re)built — world enter/re-entry, or first open this
+    /// session — matching every other live-read setting this controller
+    /// already uses (<see cref="TeamsterSettings.PanelWarningsEnabled"/> and
+    /// siblings). An already-built, merely closed-then-reopened panel keeps
+    /// its existing GameObject (Toggle only flips SetActive) and so keeps
+    /// its size until the GameObject is next destroyed and rebuilt.</summary>
+    private float CurrentUiScale()
+    {
+        return UiScaleOptions.Clamp(_settings?.UiScale.Value ?? UiScaleOptions.DefaultScale);
     }
 
     private void Update()
@@ -169,17 +182,19 @@ internal sealed class CartStatusHudController : MonoBehaviour
                 new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
                 new Vector2(-70f, 170f), 80f, 32f);
             _button.GetComponent<Button>().onClick.AddListener(TogglePanel);
+            PanelStyle.ApplyScale(_button, CurrentUiScale());
 
             // The optional HUD warning hint lives under the button (CT-009);
             // it stays empty and inactive unless enabled and warning.
             _hudHint = GUIManager.Instance.CreateText(
                 string.Empty, GUIManager.CustomGUIFront.transform,
                 new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-160f, 140f),
-                GUIManager.Instance.AveriaSerifBold, 14, new Color(1f, 0.85f, 0.5f, 1f),
+                GUIManager.Instance.AveriaSerifBold, 14, PanelStyle.HudHint,
                 outline: true, Color.black, 300f, 40f, addContentSizeFitter: false)
                 .GetComponent<Text>();
             _hudHint.alignment = TextAnchor.MiddleRight;
             _hudHint.gameObject.SetActive(false);
+            PanelStyle.ApplyScale(_hudHint.gameObject, CurrentUiScale());
         }
 
         if (_button.activeSelf != inWorld)
@@ -220,13 +235,13 @@ internal sealed class CartStatusHudController : MonoBehaviour
 
         GUIManager gui = GUIManager.Instance;
         Font font = gui.AveriaSerifBold;
-        var headerColor = new Color(0.9f, 0.8f, 0.6f, 1f);
-        var bodyColor = new Color(0.85f, 0.85f, 0.82f, 1f);
+        Color headerColor = PanelStyle.Header;
+        Color bodyColor = PanelStyle.Body;
 
-        _panel = gui.CreateWoodpanel(
-            GUIManager.CustomGUIFront.transform,
+        _panel = PanelStyle.CreateScaledWoodpanel(
+            gui, GUIManager.CustomGUIFront.transform,
             new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
-            new Vector2(-(PanelWidth / 2f) - 30f, 0f), PanelWidth, PanelHeight, draggable: true);
+            new Vector2(-(PanelWidth / 2f) - 30f, 0f), PanelWidth, PanelHeight, CurrentUiScale());
 
         gui.CreateText(
             TeamsterStrings.Get("status.title"), _panel.transform,
@@ -242,7 +257,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
                 string.Empty, _panel.transform,
                 new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
                 new Vector2(0f, y - (RowHeight / 2f)),
-                font, 16, bodyColor, outline: false, Color.black, PanelWidth - 40f, RowHeight,
+                font, 16, bodyColor, outline: true, Color.black, PanelWidth - 40f, RowHeight,
                 addContentSizeFitter: false).GetComponent<Text>();
             _rows[index].alignment = TextAnchor.UpperLeft;
             _rows[index].verticalOverflow = VerticalWrapMode.Truncate;
@@ -264,7 +279,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
         {
             // ??= so a picker that fail-closed stays disabled for the whole
             // session instead of resetting with each world's panel rebuild.
-            _routePanel ??= new RoutePickerPanel(_log, _pump?.LoadModel, SelectedCartTotalMass);
+            _routePanel ??= new RoutePickerPanel(_log, _pump?.LoadModel, SelectedCartTotalMass, CurrentUiScale);
             GameObject routesButton = gui.CreateButton(
                 TeamsterStrings.Get("status.routesButton"), _panel.transform,
                 new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(90f, 96f), 110f, 30f);

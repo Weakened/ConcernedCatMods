@@ -167,6 +167,24 @@ without a model answer get facts, not advice. The whole CT-021..CT-024
 integration path is audited read-only by tools/validate_repo.py: any
 mutating or invoking reflection token in those files fails validation.
 
+Accessibility (CT-033) adds three small pure-domain pieces every panel goes
+through: `Domain/Ui/UiScaleOptions` clamps the configurable UI scale factor
+(default 1.0, range 0.8–1.3) applied to each panel's root transform at build
+time — uniform transform scaling carries every child's relative position
+along with it, so a panel that does not clip at one scale cannot newly clip
+at another. `Domain/Ui/ContrastRatio` implements the public WCAG 2.1
+contrast formula, and `Domain/Ui/PanelPalette` is the single definition of
+every panel's text colors (previously six copies of the same two `Color`
+literals) plus a documented approximate wood-panel background for auditing
+against it. `Ui/PanelStyle` is the one place that converts the palette to
+Unity's `Color` type and applies the scale factor, so both concerns are
+adapter-boundary code, not repeated per panel. Every state that would
+otherwise read as "just a color" (warning severity, stuck-cart diagnosis,
+cooperative-effort tallies, trip comparison series) already carried
+distinguishing text by design since CT-009/CT-018; CT-033 made that an
+audited, tested invariant. Full reasoning, the contrast numbers, and the
+non-color cue audit table live in `ACCESSIBILITY.md`.
+
 ### Persistence (from v0.4)
 
 Per-world sidecar files under the BepInEx config path, named by world UID with

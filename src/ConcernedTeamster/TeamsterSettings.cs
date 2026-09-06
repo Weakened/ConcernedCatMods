@@ -1,5 +1,6 @@
 using BepInEx.Configuration;
 using TheConcernedCat.ConcernedTeamster.Domain.Carts;
+using TheConcernedCat.ConcernedTeamster.Domain.Ui;
 using TheConcernedCat.ConcernedTeamster.Domain.Warnings;
 
 namespace TheConcernedCat.ConcernedTeamster;
@@ -28,7 +29,8 @@ internal sealed class TeamsterSettings
         ConfigEntry<bool> tripsEnabled,
         ConfigEntry<float> tripRecordSpacingSeconds,
         ConfigEntry<int> tripMaxSamplesPerTrip,
-        ConfigEntry<int> tripMaxTripsRetained)
+        ConfigEntry<int> tripMaxTripsRetained,
+        ConfigEntry<float> uiScale)
     {
         Enabled = enabled;
         DebugLogging = debugLogging;
@@ -46,6 +48,7 @@ internal sealed class TeamsterSettings
         TripRecordSpacingSeconds = tripRecordSpacingSeconds;
         TripMaxSamplesPerTrip = tripMaxSamplesPerTrip;
         TripMaxTripsRetained = tripMaxTripsRetained;
+        UiScale = uiScale;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -64,6 +67,13 @@ internal sealed class TeamsterSettings
     public ConfigEntry<float> TripRecordSpacingSeconds { get; }
     public ConfigEntry<int> TripMaxSamplesPerTrip { get; }
     public ConfigEntry<int> TripMaxTripsRetained { get; }
+
+    /// <summary>Uniform scale applied to every panel's root transform
+    /// (CT-033) — text, buttons, and the panel itself all grow or shrink
+    /// together, so nothing can clip relative to its own container. Applies
+    /// on the panel's next build (world enter or first open), not live to
+    /// an already-open panel.</summary>
+    public ConfigEntry<float> UiScale { get; }
 
     public static TeamsterSettings Bind(ConfigFile config)
     {
@@ -144,6 +154,12 @@ internal sealed class TeamsterSettings
                     "Retention: how many trips each world's sidecar keeps; the oldest are pruned first.",
                     new AcceptableValueRange<int>(
                         Domain.Trips.TripRecorderOptions.MinMaxTripsRetained,
-                        Domain.Trips.TripRecorderOptions.MaxMaxTripsRetained))));
+                        Domain.Trips.TripRecorderOptions.MaxMaxTripsRetained))),
+            config.Bind("Ui", "Scale", UiScaleOptions.DefaultScale,
+                new ConfigDescription(
+                    "Uniform size of every Teamster panel, button, and font. 1.0 is the default size; " +
+                    "takes effect the next time a panel opens (or on world enter for the always-visible " +
+                    "Cart button), not live on an already-open panel.",
+                    new AcceptableValueRange<float>(UiScaleOptions.MinScale, UiScaleOptions.MaxScale))));
     }
 }
