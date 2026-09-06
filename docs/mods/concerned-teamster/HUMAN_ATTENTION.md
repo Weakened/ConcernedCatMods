@@ -722,30 +722,48 @@ only for non-blocking uncertainty.
 - Must resolve before public release: Yes
 - Status: Open
 
-### 2026-09-06 — CT-036 compatibility framework proven off-game with fake mods; empty registry pending real entries
+### 2026-09-06 — CT-037 precedence policy proven with fake mass-altering probes; no real one registered yet
 
-- Version / issue: v0.8 / CT-036 (#152)
-- Question: the registry/policy mechanism (detection, each policy outcome,
-  silence for unregistered/not-found mods, the shared log/panel
-  composition) is fully proven with fake test mods, but the shipped
-  registry is intentionally empty — no real mod has been researched yet —
-  so there is nothing for an in-game session to actually observe beyond the
-  empty-state message and the new Compat button's presence/placement.
-- Safe reversible default selected: ship the framework with zero registered
-  mods rather than guess at a real one's GUID (this repository's "research,
-  don't invent" rule for third-party mods); the Compat panel and log line
-  both honestly say "No known compatibility concerns detected." until
-  CT-037/038 add researched entries.
-- Why work continued: an empty registry cannot mislead — there is no policy
-  to misapply yet — and the mechanism itself is exhaustively unit-tested;
-  the only pending item is cosmetic (button placement/panel visibility),
-  not correctness.
-- Risk / alternative: none beyond the pending visual check below; once
-  CT-037 adds a real entry, that leaf's own HUMAN_ATTENTION entry will carry
-  the actual in-game policy-observation pending items (e.g. "Better Carts
-  installed → Compat panel shows its policy line").
-- Must resolve before public release: No (the registry itself has nothing
-  to verify yet; CT-037/038's entries will carry the real pending items)
+- Version / issue: v0.8 / CT-037 (#153)
+- Question: `PROJECT.md`'s "Better Carts" reference could not be pinned to
+  one exact, GUID-verified Thunderstore package. Two real candidates were
+  researched: BetterCarts (TastyChickenLegs, 46K downloads) — GUID verified
+  directly from its published source, but its actual feature set (quick
+  attach/detach, multiplayer push, damage removal) does not touch cart mass
+  or physics — and Better Cart (We_Haul, 2.2K downloads) — a much closer
+  conceptual match (it explicitly customizes min/max cart mass), but its
+  GUID could not be verified: no linked source repository, and Thunderstore's
+  decompiled-source viewer for it did not yield readable content through
+  available tooling. Verifying it further would mean downloading and
+  inspecting the mod's compiled binary, which this leaf treats as beyond an
+  autonomous research pass without the owner's awareness first.
+- Safe reversible default selected: register only the GUID-verified
+  candidate (BetterCarts, `Coexist`/`AffectedAspect.None` — accurately
+  reflecting that it does not affect Teamster's readings) rather than guess
+  at We_Haul's GUID. The precedence mechanism itself
+  (`CompatibilityAdvisoryGate.CartMassAdviceReliable`, wired into
+  `CartTelemetryPump.TryGetWarning`) is generic over
+  `CompatibilityAffectedAspect.CartMassOrPhysics` and fully proven with fake
+  mass-altering probes in `CompatibilityAdvisoryGateTests` — registering the
+  real mass-altering mod later (a corrected GUID from the owner, or CT-038's
+  broader research) requires only a new registry entry, no logic change.
+- Why work continued: the mechanism is the load-bearing deliverable and is
+  exhaustively tested; shipping zero mass-altering entries cannot mislead
+  (silence is the default), and the one entry that *is* shipped is honestly
+  researched, not guessed.
+- Risk / alternative: the owner may already know We_Haul's Better_Cart's
+  exact GUID (or may prefer a different mod entirely as "the" physics-
+  altering target) — supplying it turns this into a one-line registry
+  addition. Separately, only cart *warnings* are wired to the precedence
+  gate; stuck diagnostics, recovery guidance, and route-bottleneck analysis
+  also derive from LoadModel and should eventually consult the same gate —
+  deferred rather than touching four more presenters in a leaf with no
+  mass-altering entry yet to actually exercise them against.
+- Must resolve before public release: Yes — once a real mass-altering mod
+  is registered, the full in-game coexistence matrix (telemetry, manifest,
+  load model, risk model, brake, diagnostics — this issue's own acceptance
+  criteria) must be run and captured before any public release claims
+  compatibility awareness.
 - Status: Open
 
 ## Resolved items
@@ -787,3 +805,32 @@ only for non-blocking uncertainty.
   exempt). Catalog: 241 keys, English complete. The in-game visual checks
   remain tracked by the per-surface entries above and the owner smoke
   checklist, unchanged.
+
+### 2026-09-06 — CT-036 compatibility framework proven off-game with fake mods; empty registry pending real entries
+
+- Version / issue: v0.8 / CT-036 (#152)
+- Question: the registry/policy mechanism (detection, each policy outcome,
+  silence for unregistered/not-found mods, the shared log/panel
+  composition) is fully proven with fake test mods, but the shipped
+  registry is intentionally empty — no real mod has been researched yet —
+  so there is nothing for an in-game session to actually observe beyond the
+  empty-state message and the new Compat button's presence/placement.
+- Safe reversible default selected: ship the framework with zero registered
+  mods rather than guess at a real one's GUID (this repository's "research,
+  don't invent" rule for third-party mods); the Compat panel and log line
+  both honestly say "No known compatibility concerns detected." until
+  CT-037/038 add researched entries.
+- Why work continued: an empty registry cannot mislead — there is no policy
+  to misapply yet — and the mechanism itself is exhaustively unit-tested;
+  the only pending item is cosmetic (button placement/panel visibility),
+  not correctness.
+- Risk / alternative: none beyond the pending visual check below; once
+  CT-037 adds a real entry, that leaf's own HUMAN_ATTENTION entry will carry
+  the actual in-game policy-observation pending items (e.g. "Better Carts
+  installed → Compat panel shows its policy line").
+- Must resolve before public release: No (the registry itself has nothing
+  to verify yet; CT-037/038's entries will carry the real pending items)
+- Status: Resolved 2026-09-06 — CT-037 populated the registry with one
+  real, GUID-verified entry (BetterCarts by TastyChickenLegs); this entry's
+  own concern (an empty registry with nothing to observe) no longer applies.
+  CT-037's own entry (Open items, above) carries the current pending items.

@@ -212,12 +212,21 @@ CompatibilityAdapter` supplies the real `Chainloader.PluginInfos` lookup on
 the first Update tick (same load-order reasoning as CT-021).
 `CompatibilityStatusPresenter` composes the status text once; the startup
 log banner and the Cart Status panel's **Compat** button both call the same
-composition, so they can never disagree. The shipped registry ships empty
-— naming a real mod requires researching its actual GUID first, which is
-CT-037 (Better Carts) and CT-038's job, not this leaf's. A source-scanning
-test enforces that no registered GUID ever appears outside `Domain/
-Compatibility/`, so a future policy addition cannot leak into a feature-code
-branch. Full design in `COMPATIBILITY.md`.
+composition, so they can never disagree. A source-scanning test enforces
+that no registered GUID ever appears outside `Domain/Compatibility/`, so a
+future policy addition cannot leak into a feature-code branch.
+
+CT-037 adds the registry's first real, GUID-verified entry (BetterCarts by
+TastyChickenLegs — `Coexist`, confirmed from source not to touch cart
+physics) and the precedence policy: `CompatibilityAffectedAspect` tags what
+a mod's presence calls into question (today: `CartMassOrPhysics`), and
+`CompatibilityAdvisoryGate.CartMassAdviceReliable` — generic over the
+aspect, never a mod's identity — answers whether LoadModel-derived advice
+is still trustworthy. `CartTelemetryPump.TryGetWarning`, the one choke
+point every warning consumer calls through, substitutes a fixed "load
+advice unavailable" notice whenever it is not. Full design, and the
+research trail behind which real mod got registered (and which candidate
+did not, and why), in `COMPATIBILITY.md`.
 
 ### Persistence (from v0.4)
 

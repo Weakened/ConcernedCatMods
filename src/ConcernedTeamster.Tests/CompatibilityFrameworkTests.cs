@@ -14,13 +14,16 @@ namespace ConcernedTeamster.Tests;
 public class CompatibilityFrameworkTests
 {
     private static readonly KnownModProbe CoexistProbe =
-        new("com.example.coexist", "Coexist Mod", CompatibilityPolicy.Coexist, "no changes needed");
+        new("com.example.coexist", "Coexist Mod", CompatibilityPolicy.Coexist,
+            CompatibilityAffectedAspect.None, "no changes needed");
 
     private static readonly KnownModProbe AdaptProbe =
-        new("com.example.adapt", "Adapt Mod", CompatibilityPolicy.Adapt, "readings adjust automatically");
+        new("com.example.adapt", "Adapt Mod", CompatibilityPolicy.Adapt,
+            CompatibilityAffectedAspect.None, "readings adjust automatically");
 
     private static readonly KnownModProbe WarnProbe =
-        new("com.example.warn", "Warn Mod", CompatibilityPolicy.Warn, "some readings may be inaccurate");
+        new("com.example.warn", "Warn Mod", CompatibilityPolicy.Warn,
+            CompatibilityAffectedAspect.None, "some readings may be inaccurate");
 
     private static readonly KnownModProbe[] FakeRegistry = { CoexistProbe, AdaptProbe, WarnProbe };
 
@@ -119,7 +122,8 @@ public class CompatibilityFrameworkTests
             .Cast<CompatibilityPolicy>()
             .Select(policy =>
             {
-                var probe = new KnownModProbe("com.example.policy", "Policy Mod", policy, "description");
+                var probe = new KnownModProbe(
+                    "com.example.policy", "Policy Mod", policy, CompatibilityAffectedAspect.None, "description");
                 IReadOnlyList<ModDetectionResult> results = CompatibilityRegistry.Evaluate(
                     new[] { probe }, _ => (true, "1.0.0"));
                 return Assert.Single(CompatibilityStatusPresenter.ComposeDetectedLines(results));

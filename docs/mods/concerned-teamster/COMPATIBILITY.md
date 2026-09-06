@@ -63,6 +63,76 @@ registries in `CompatibilityFrameworkTests` (detection, each policy
 outcome, silence for unregistered/not-found mods, and the shared-composition
 guarantee).
 
+## Precedence policy (CT-037)
+
+`Domain/Compatibility/CompatibilityAffectedAspect` names which Teamster
+reading a mod's presence calls into question — today just `None` and
+`CartMassOrPhysics` (every LoadModel-derived verdict: warnings, stuck
+diagnostics, recovery guidance, route bottlenecks — all calibrated against
+vanilla physics). `Domain/Compatibility/CompatibilityAdvisoryGate
+.CartMassAdviceReliable` answers "is that calibration still trustworthy
+right now" from the evaluated registry results — generic over the aspect,
+never a specific mod's GUID or name, so a future registry entry tagged
+`CartMassOrPhysics` gates every consumer automatically with no feature code
+to touch.
+
+The gate is wired into exactly one choke point: `CartTelemetryPump
+.TryGetWarning`, which every consumer (the Cart Status panel row and the
+optional HUD hint) already calls through. When cart-mass advice is
+unreliable, it returns a fixed notice ("A detected mod changes cart mass or
+physics. Load advice is unavailable — see the Compat panel for details.")
+instead of consulting the normal warning tracker — never a silently-wrong
+vanilla-calibrated verdict, per this leaf's acceptance criteria. Diagnostics,
+guidance, and route-bottleneck consumers are not yet wired to the same gate;
+see "Known scope limits" below.
+
+## Research: identifying "Better Carts" (CT-037)
+
+`PROJECT.md`'s market research names "Better Carts" generically ("Better
+Carts and similar cart mods change cart physics, weight handling, or
+pulling behavior directly") without pinning an exact Thunderstore package —
+CT-038 is the leaf that researches the full current mod landscape.
+Identifying which real, currently-published mod this leaf's specific
+acceptance criteria refer to required its own research pass:
+
+| Candidate | Author | Downloads | What it actually does | GUID | Registered? |
+|---|---|---|---|---|---|
+| BetterCarts | TastyChickenLegs | 46,000 | Quick attach/detach, up to 4-player push assist, damage removal, network sync. **Does not touch cart mass, weight, or physics** (confirmed by reading `Plugin.cs` and the README directly from [github.com/TastyChickenLegs/BetterCarts](https://github.com/TastyChickenLegs/BetterCarts)). | `TastyChickenLegs.BetterCarts` (verified: `Plugin.cs`'s `ModGUID` constant) | **Yes** — `Coexist`, `AffectedAspect.None` |
+| Better Cart | We_Haul | 2,200 | "Allows for customization of minimum and maximum mass of Carts so that loading a cart doesn't make it impossible to move" — a direct, conceptually strong match for "changes cart physics, weight handling." | **Could not be verified.** No linked GitHub/source repository; Thunderstore's decompiled-source viewer for this package did not yield readable source through available tooling. | **No** |
+
+**Why "Better Cart" (We_Haul) is not registered despite being the better
+conceptual fit:** this repository's operating rule is to research real mod
+metadata rather than invent it. A BepInEx plugin GUID lives inside the
+compiled DLL, not in Thunderstore's page metadata or manifest.json, and is
+not required to follow any naming convention — guessing one (for example by
+pattern-matching the author/package name) risks registering a GUID that
+either never matches the real mod (a silently-dead registry entry) or,
+worse, coincidentally matches something else. Verifying it would require
+downloading and inspecting the mod's compiled binary, which this leaf
+treats as out of scope for an autonomous research pass — installing or
+inspecting third-party executable content warrants the owner's awareness
+first. This is recorded as a pending, non-blocking item (see
+`HUMAN_ATTENTION.md`) rather than guessed.
+
+**BetterCarts (TastyChickenLegs) is registered anyway** because it is a
+real, verified, currently-published cart mod a player could plausibly run
+alongside Teamster, and the research confirms — rather than assumes — that
+it coexists cleanly. Shipping one true, well-researched `Coexist` entry is
+more honest than shipping zero entries or a guessed one.
+
+## Known scope limits
+
+- The precedence gate (`CompatibilityAdvisoryGate`) is wired into cart
+  warnings only. Stuck diagnostics, recovery guidance, and route-bottleneck
+  analysis also derive from `LoadModel` and should eventually consult the
+  same gate; deferred rather than touching four more well-tested presenters
+  in a leaf whose registry has no mass-altering entry to actually exercise
+  the gate against yet. Tracked in `HUMAN_ATTENTION.md`.
+- No in-game coexistence matrix has been run (no mass-altering mod is
+  registered to test against); the matrix acceptance criterion is satisfied
+  structurally (the gate is exhaustively unit-tested against fake
+  mass-altering probes) with the real-mod observation pending.
+
 ## In-game surface
 
 The Cart Status panel's **Compat** button (always visible, unlike the

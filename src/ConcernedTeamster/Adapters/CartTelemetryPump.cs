@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using BepInEx.Logging;
 using TheConcernedCat.ConcernedTeamster.Domain.Carts;
+using TheConcernedCat.ConcernedTeamster.Domain.Compatibility;
 using TheConcernedCat.ConcernedTeamster.Domain.Diagnostics;
 using TheConcernedCat.ConcernedTeamster.Domain.Load;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using TheConcernedCat.ConcernedTeamster.Domain.Risk;
 using TheConcernedCat.ConcernedTeamster.Domain.Warnings;
 using UnityEngine;
@@ -64,10 +66,30 @@ internal sealed class CartTelemetryPump : MonoBehaviour
     public WarningOptions? WarningOptions => _warningOptions;
 
     /// <summary>Current warning for a cart, or null. Read-only: evaluation
-    /// happens exclusively on new snapshots inside Update (CT-009).</summary>
+    /// happens exclusively on new snapshots inside Update (CT-009).
+    /// CT-037: when a registered mod affecting cart mass/physics is
+    /// detected, every LoadModel-derived warning is replaced by one notice
+    /// saying so — a calibrated verdict assumes vanilla physics and must
+    /// never be shown as truth once that assumption breaks, even if the
+    /// cart's own situation would otherwise look fine.</summary>
     public CartWarning? TryGetWarning(string? cartId)
     {
-        return cartId is null ? null : _warnings?.TryGet(cartId);
+        if (cartId is null)
+        {
+            return null;
+        }
+
+        if (!CompatibilityAdvisoryGate.CartMassAdviceReliable(
+            CompatibilityAdapter.Results ?? System.Array.Empty<ModDetectionResult>()))
+        {
+            return new CartWarning(
+                cartId,
+                WarningLevel.Caution,
+                TeamsterStrings.Get("compat.alteredPhysicsSituation"),
+                TeamsterStrings.Get("compat.alteredPhysicsAction"));
+        }
+
+        return _warnings?.TryGet(cartId);
     }
 
     /// <summary>Wires the sampler, warning evaluation, and descent risk

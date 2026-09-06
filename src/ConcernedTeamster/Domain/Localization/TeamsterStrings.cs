@@ -65,6 +65,15 @@ public static class TeamsterStrings
         ["compat.policyWarn"] = "caution",
         ["compat.overflow"] = "… {0} more detected — open the log for the full list",
 
+        // Precedence policy (CT-037): shown instead of a normal warning
+        // whenever a registered mod affecting cart mass/physics is
+        // detected — never a silently-wrong vanilla-calibrated verdict.
+        ["compat.alteredPhysicsSituation"] = "A detected mod changes cart mass or physics.",
+        ["compat.alteredPhysicsAction"] = "Load advice is unavailable — see the Compat panel for details.",
+        ["compat.betterCartsDescription"] =
+            "Quick attach/detach and multiplayer push convenience — does not change cart mass or " +
+            "physics; Teamster's readings stay accurate.",
+
         // Cart Status surface (CT-005): presenter lines + panel chrome.
         // Numbers arrive pre-formatted (invariant culture) so translations
         // reorder words, never digits.
