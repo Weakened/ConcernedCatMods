@@ -61,10 +61,11 @@ real historical v0.7.0 build, uninstall, deploy idempotence). Full
 detail: `TEST_PLAN.md`, `RELEASE_DOSSIER.md`.
 
 **Pending (the actual gate):** every row of
-`PRE_RELEASE_SMOKE_TEST.md` — 37 cross-referenced sections covering
-every feature from the Cart Status panel through the compatibility
-matrix, multiplayer authority, and the upgrade chain. **None of it has
-ever been run.** This is not a formality; it is real, substantive
+`PRE_RELEASE_SMOKE_TEST.md` — a 36-row cross-reference table over 16
+numbered sections (§0–§15), covering every feature from the Cart Status
+panel through the compatibility matrix, multiplayer authority, and the
+upgrade chain. **None of it has ever been run.** This is not a
+formality; it is real, substantive
 verification this conveyor cannot perform (no licensed, interactive
 Valheim session exists in this environment). Do not skip to publication
 without running it.

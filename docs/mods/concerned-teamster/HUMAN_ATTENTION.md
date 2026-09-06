@@ -1193,6 +1193,36 @@ only for non-blocking uncertainty.
   checklist, in `OWNER_PACKET_v0.9.md`.
 - Status: Open
 
+### 2026-09-06 — CT-046 golden path and v1.0 DoD matrix audited; no new defect found
+
+- Version / issue: v1.0 / CT-046 (#164)
+- Question: CT-046's scope is audit-only ("this issue only proves or
+  files") — every product promise through v0.9 needed to be mapped to
+  its evidence source, with any gap becoming a defect or a documented
+  limitation.
+- Safe reversible default selected: `GOLDEN_PATH.md` (an 8-step
+  install-to-uninstall narrative) and `V1_DEFINITION_OF_DONE.md` (a
+  capability-by-capability matrix, mirroring Cartographer's own
+  precedent doc) were compiled by cross-referencing every already-shipped
+  feature against its actual test files and `HUMAN_ATTENTION.md`'s
+  already-open pending items — not by re-deciding anything.
+- Why work continued: this leaf changes no code and fixes nothing; it is
+  read-and-document work with no risk of its own beyond the audit being
+  inaccurate, which independent review checks for like any other claim.
+- Risk / alternative: the audit's own honest conclusion is that no new
+  defect exists beyond the two already-filed, already-deferred P3s
+  (#214, #216) — every other gap (We_Haul's GUID, the presence-only
+  detection limit, the NavigationCatalog cosmetic gap, media capture,
+  profile creation) was already known and already documented before this
+  leaf, just not previously collected into one matrix. The owner may
+  read this differently and find a gap this pass missed; the matrix is
+  structured so a missed row would be conspicuous (every capability area
+  from `FEATURE_FREEZE.md` is represented) rather than silently absent.
+- Must resolve before public release: No — this is a documentation leaf;
+  the underlying pending items it cross-references keep whatever
+  resolution requirement their own original entry already states.
+- Status: Open
+
 ## Resolved items
 
 ### 2026-09-05 — CT-032 localization framework delivered; full-UI externalization is progressive
