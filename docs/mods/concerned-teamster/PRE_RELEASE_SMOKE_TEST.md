@@ -1,16 +1,18 @@
-# Pre-release smoke test — Concerned Teamster v0.9 public beta
+# Pre-release smoke test — Concerned Teamster v1.0 stable
 
-CT-044. The single-session-family human release checklist. This document
-compiles every manual-only verification the autonomous conveyor deferred
-from CT-001 through CT-043 into one ordered, step-by-step checklist with
-expected results per step, following the proven `PRE_RELEASE_SMOKE_TEST.md`
-pattern from Concerned Cartographer's own release line. Rows marked
-**BLOCKS** must pass before the v0.9 beta publishes; others are
-record-and-ship. No row here has ever been run — every one is compiled
-from a still-open `HUMAN_ATTENTION.md` entry, cross-referenced below, and
-none is claimed PASS by this document itself.
+CT-044, extended through CT-050. The single-session-family human release
+checklist. This document compiles every manual-only verification the
+autonomous conveyor deferred from CT-001 through CT-049 into one ordered,
+step-by-step checklist with expected results per step, following the
+proven `PRE_RELEASE_SMOKE_TEST.md` pattern from Concerned Cartographer's
+own release line. Rows marked **BLOCKS** must pass before v1.0 publishes;
+others are record-and-ship. No row here has ever been run — every one is
+compiled from a still-open `HUMAN_ATTENTION.md` entry, cross-referenced
+below, and none is claimed PASS by this document itself.
 
-> Status: DRAFT — first compilation, v0.9 line. Not yet run.
+> Status: DRAFT — compiled at CT-044 for the v0.9 line, extended at
+> CT-050 with §16 (CT-048's performance/memory budgets) and updated
+> compatibility/version references for v1.0. Not yet run.
 
 ## Cross-reference: every pending claim this checklist covers
 
@@ -51,6 +53,9 @@ none is claimed PASS by this document itself.
 | CT-040 corruption/compat/scale live campaign | CT-040 (#156) | §10, §9, §11 |
 | CT-041 Report a Bug real browser-open | CT-041 (#158) | §12 |
 | CT-042 real-gameplay media capture | CT-042 (#159) | §2, §3, §5, §9 (each has its own "Capture for CT-042 media" callout) |
+| CT-047 per-profile in-game campaigns (Standard/Compat/Multiplayer/Dedicated) | CT-047 (#165) | No new rows — `REGRESSION_REPORT_v1.0.md`'s campaign table cross-references the exact same §1–§13 rows this checklist already carries; CT-047 proved the automated layer beneath them, not a new manual claim |
+| CT-048 real frame-time delta, real BepInEx log size, real terrain-probe cost, real process working set over a real multi-hour session | CT-048 (#166) | §14 (new) |
+| CT-049 BetterCarts 1.1.0 mass-reduction patch not re-decompiled against the new build | CT-049 (#167) | §9.1 (updated) |
 | CT-043 profile creation + in-game rows | CT-043 (#160) | §0, throughout |
 
 ## 0. Preamble: profile setup and package install — DRY-RUN VERIFIED RUNNABLE
@@ -68,8 +73,8 @@ Per `PROFILE_REHEARSAL.md`. **BLOCKS.**
 4. New Profile → `TCT-Dedicated` (or your manager's dedicated-server
    support) → Install BepInEx. Configure `TEAMSTER_DEDICATED_DEPLOYPATH`,
    deploy with `-Profile Dedicated`.
-5. Package audit: import the exact v0.9 RC ZIP named in
-   `RELEASE_DOSSIER.md` (once CT-045 seals it) — ZIP root is
+5. Package audit: import the exact v1.0.0 RC ZIP named in
+   `RELEASE_DOSSIER.md`'s v1.0.0 entry (CT-050) — ZIP root is
    `manifest.json`, `README.md`, `CHANGELOG.md`, `LICENSE`, `icon.png`
    (256×256), `plugins/TheConcernedCat.ConcernedTeamster.dll`, nothing
    else; dependencies pinned to BepInExPack 5.4.2333 and Jötunn 2.29.2.
@@ -191,7 +196,7 @@ Prep: TCT-Compat with BetterCarts, ItemStacks, and ValheimPlus installed.
 
 | # | Setup | Action | Expected | Evidence on failure | Blocks |
 |---|---|---|---|---|---|
-| 9.1 | BetterCarts installed alongside Teamster | Open the Compat panel; check warnings, stuck diagnosis, recovery guidance, route bottleneck | Compat panel lists BetterCarts detected, Adapt policy; every load-advice surface shows "load advice unavailable" instead of a vanilla-calibrated number | Screenshot | Yes |
+| 9.1 | BetterCarts **1.1.0** installed alongside Teamster (CT-049: version bumped from the 1.0.6 that CT-037 originally decompiled; the mod's mass-reduction patch was not re-decompiled against this build) | Open the Compat panel; check warnings, stuck diagnosis, recovery guidance, route bottleneck; separately confirm the cart's actual mass still drops by roughly the documented ~20% with BetterCarts' default config | Compat panel lists BetterCarts detected, Adapt policy; every load-advice surface shows "load advice unavailable" instead of a vanilla-calibrated number; the mod still measurably alters cart mass (confirms the Adapt classification is still warranted for this exact build) | Screenshot | Yes |
 | 9.2 | ItemStacks installed alongside Teamster | Same checks as 9.1 | Same suppression behavior, ItemStacks correctly detected | Screenshot | Yes |
 | 9.3 | ValheimPlus installed, Wagon section left at its default (disabled) | Check the Compat panel | Warn-level note shown, but load advice is NOT suppressed (matches vanilla physics while disabled) | Screenshot | Yes |
 | 9.4 | ValheimPlus, Wagon section explicitly enabled by you in `valheim_plus.cfg` | Recheck the Compat panel and load advice | Warn note still shown (presence-only detection can't see the live config — documented limit); advice quality is the player's own responsibility once they've opted into an incompatible config | Screenshot | Yes |
@@ -232,17 +237,32 @@ addition and `rehearse-teamster-lifecycle.ps1`'s file-level proof.
 | 13.1 | Scratch profile, sealed v0.7.0 ZIP (chain-integrity-verified by `rehearse-teamster-lifecycle.ps1`) | Install v0.7.0 for real, play a short session to generate a config + sidecar | Config and sidecar files created normally | Inspect the files | Yes |
 | 13.2 | 13.1 | Upgrade in place to the sealed v0.9.0 RC ZIP; relaunch | Startup log shows the expected one-line schema-migration message; existing trip history intact | LogOutput.log | Yes |
 | 13.3 | Any TCT profile with history | Remove the plugin DLL only; relaunch | Vanilla behavior, no missing-object errors; the player's own sidecar/support-bundle files remain untouched under `BepInEx/config/` until the player separately deletes them | LogOutput.log | Yes |
+| 13.4 | 13.2's profile, now on the sealed v1.0.0 RC ZIP | Upgrade in place from v0.9.0 to v1.0.0; relaunch | No migration message logged (config schema and sidecar format are both unchanged since v0.9.0 — v1.0's own changes are release-engineering only); existing config, trip history, and support-bundle history all remain valid and readable | LogOutput.log | Yes |
 
-## 14. Thunderstore preflight (owner-only)
+## 14. Performance and stability budgets, real session (CT-048)
 
-- [ ] `python ./tools/validate_repo.py --product teamster --expected-version 0.9.0 --require-binary` passes. **BLOCKS**
+`PERFORMANCE_BUDGETS.md` proves every real per-tick/per-call Domain hot
+path against a formal, numbered budget — all Met, but only at the
+domain-logic layer with a fake terrain probe and no real Unity frame
+loop. Four observations genuinely need a live session:
+
+| # | Setup | Action | Expected | Evidence on failure | Blocks |
+|---|---|---|---|---|---|
+| 14.1 | A long haul (2+ hours) with the Cart Status panel open throughout | Play normally; occasionally open Trip History, Route Picker (build a profile), and Cargo Manifest | No visible frame-time spike or stutter attributable to Teamster at any point, including during an active route-profile build | Observation; a frame-time overlay/profiler if available | No (record-and-ship — the domain layer's own budgets already gate correctness; this confirms the real render-thread cost matches the logic-layer's zero-allocation proof) |
+| 14.2 | Same session | Note `BepInEx/LogOutput.log`'s size before starting and after finishing | Growth is small and roughly linear with session length — no repeated per-frame or per-sample spam (matches `PERFORMANCE_BUDGETS.md`'s structural log-volume audit) | The log file itself | Yes |
+| 14.3 | Same session, at least one full route profile build (Cartographer installed) | Note any perceptible hitch specifically while the profiler is actively consuming samples (CT-023's per-frame budget) | No hitch — the real Unity `Heightmap` terrain query per sample is the one cost `PERFORMANCE_BUDGETS.md`'s fake-probe test cannot measure | Observation | No (record-and-ship) |
+| 14.4 | Same session | Note Valheim's process memory (Task Manager) at start and end | No unbounded growth — some growth from the game itself/other mods is expected and not attributable to Teamster; compare against Teamster's own managed-heap budgets in `PERFORMANCE_BUDGETS.md` as a sanity check, not a strict bound (this figure includes Unity/BepInEx/other-mod memory outside Teamster's control) | Observation | No (record-and-ship) |
+
+## 15. Thunderstore preflight (owner-only)
+
+- [ ] `python ./tools/validate_repo.py --product teamster --expected-version 1.0.0 --require-binary` passes. **BLOCKS**
 - [ ] ZIP inspected by a human for secrets/saves/game DLLs/unrelated files. **BLOCKS**
 - [ ] README/CHANGELOG on the package page match actual behavior (cross-check against this checklist's captured evidence). **BLOCKS**
 - [ ] Categories: mods, client-side, utility, **ai-generated**. **BLOCKS**
 - [ ] Icon: keep the generated placeholder, or replace with commissioned/final art (CT-001/CT-042 open item — owner taste decision, does not block). Record the decision here.
 - [ ] Upload is Eren-only, via the Thunderstore web UI or a publish script with a token passed via environment variable, never stored. **BLOCKS**
 
-## 15. Post-publication smoke
+## 16. Post-publication smoke
 
 - [ ] Install the published package from Thunderstore into a clean profile; §1 passes.
 - [ ] Package page renders README/icon/changelog correctly.

@@ -1348,6 +1348,51 @@ only for non-blocking uncertainty.
   itself does not depend on that exact number.
 - Status: Open
 
+### 2026-09-06 — CT-050 v1.0.0 stable candidate sealed; this is the v1.0 sprint's own final leaf, and the conveyor stops here for owner review
+
+- Version / issue: v1.0 / CT-050 (#168)
+- Question: with every v1.0 leaf (CT-046–049) closed, is Teamster ready
+  to seal as a stable (not beta) release candidate, and what exactly
+  remains for the owner to do before publication?
+- Safe reversible default selected: version-synced 1.0.0 everywhere via
+  the established two-commit pattern (version-sync commit, then real
+  ZIP/DLL hashes from a genuinely separate `git clone` of that exact
+  commit — never a dirty-tree build); ran `rehearse-teamster-lifecycle.ps1`
+  against that same clean clone for fresh-profile install verification
+  (all 5 sections green, DLL hash cross-confirmed by two independent
+  tools); wrote `OWNER_PACKET_v1.0.md` following Concerned Cartographer's
+  full `V1_RELEASE_PREP.md` sequence (this is a real stable release, not
+  a scoped-down beta like v0.9.0's packet was); extended
+  `PRE_RELEASE_SMOKE_TEST.md` through v1.0 (new §14, updated §9.1, new
+  13.4 row); wrote `CONVEYOR_COMPLETION_REPORT.md` summarizing the whole
+  v0.1→v1.0 journey. Backfilled the missing `concerned-teamster/v0.9.0`
+  tag (the same gap CT-043 fixed for v0.1–v0.8, simply missed since it
+  postdated that backfill pass) — a past beta version, not the final
+  stable tag. Did **not** create `concerned-teamster/v1.0.0`, did not
+  invoke `tcli publish`, and does not claim the smoke checklist passed —
+  all explicitly reserved for the owner, per this issue's own scope and
+  its `gate:human-preview` label.
+- Why work continued: every prior v1.0 leaf closed clean with zero new
+  defects; this leaf changes no runtime behavior beyond version strings,
+  so the only risk is a wrong hash or a miscited fact in the owner
+  packet, which independent review re-verifies against source rather
+  than trusting the draft.
+- Risk / alternative: the entire live campaign — the now-39-row
+  `PRE_RELEASE_SMOKE_TEST.md` — has never been run, exactly as it was at
+  every prior seal; this is the real, substantive gate, not a formality,
+  and nothing in this leaf claims otherwise. One small, non-blocking
+  re-verification gap carries over from CT-049 (BetterCarts 1.1.0's
+  mass-reduction patch not re-decompiled).
+- Must resolve before public release: N/A for this seal itself (it is
+  the packaging of the request for the owner's own resolution); every
+  item in "What is proven vs. what is pending" in `OWNER_PACKET_v1.0.md`
+  carries its own already-stated resolution requirement.
+- Status: Open — **this is the last Teamster entry the autonomous
+  conveyor is expected to add before the owner reviews this seal.** Per
+  the `gate:human-preview` label and this project's own precedent (the
+  identical stop after CT-045's v0.9.0 seal), no further Teamster work
+  resumes automatically after this leaf closes.
+
 ## Resolved items
 
 ### 2026-09-05 — CT-032 localization framework delivered; full-UI externalization is progressive

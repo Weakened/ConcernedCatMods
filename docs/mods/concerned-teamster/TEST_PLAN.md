@@ -314,6 +314,20 @@ fresh rerun/recheck rather than a re-assertion of an earlier leaf's proof:
 | Migration chain | Two real, shape-changing single-step transitions (config schema 0→1, trip sidecar format 1→2), both fixture-proven, not a v0.1–v0.9 ladder; rerun green |
 | Compatibility statement | Versions rechecked live against Thunderstore; BetterCarts bumped 1.0.6→1.1.0 (not re-decompiled, flagged), ItemStacks unchanged, ValheimPlus now Deprecated upstream (flagged); no registry classification changed; 18 test cases rerun green |
 
+## v1.0 seal (CT-050)
+
+Full detail in `RELEASE_DOSSIER.md`'s v1.0.0 entry and `OWNER_PACKET_v1.0.md`.
+
+| Criterion | Evidence |
+|---|---|
+| Version synced everywhere, validator/package green | `validate_repo.py --product teamster --expected-version 1.0.0 --require-binary` PASS; package identity `TheConcernedCat-ConcernedTeamster-1.0.0` |
+| Real hashes recorded from a clean checkout | Two-commit seal pattern: version-sync commit, then a genuinely separate `git clone` of that exact commit rebuilt for real ZIP/DLL hashes — never a dirty-tree build |
+| Fresh-profile install verification | `rehearse-teamster-lifecycle.ps1` run against the sealed commit from that same clean clone — all 5 sections green, DLL hash cross-confirmed by two independent tools |
+| Owner packet complete | `OWNER_PACKET_v1.0.md` — RC identity, proven-vs-pending, defect status, the full v1.0-caliber publication sequence (signed-tag consideration, SBOM, final technical blockers checklist), rollback guidance, sign-off checklist |
+| Smoke checklist current through v1.0 | `PRE_RELEASE_SMOKE_TEST.md` extended: new §14 (CT-048's real-session performance observations), updated §9.1 (BetterCarts version recheck), new 13.4 (0.9.0→1.0.0 upgrade), now 39 rows over 17 sections |
+| End-of-conveyor report | `CONVEYOR_COMPLETION_REPORT.md` |
+| No publish/tag-of-stable action performed by automation | `concerned-teamster/v0.9.0` backfilled (a past beta version, the same gap CT-043 fixed for v0.1–v0.8); `concerned-teamster/v1.0.0` deliberately not created — owner-only |
+
 ## Multiplayer (v0.6)
 
 - Ownership: only the vanilla-authoritative controller's client mutates

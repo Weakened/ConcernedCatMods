@@ -106,8 +106,9 @@ in-game visual/interaction rows deferred to `PRE_RELEASE_SMOKE_TEST.md`
 | File-level lifecycle rehearsal | Done | v0.9 (CT-043); `rehearse-teamster-lifecycle.ps1` against real, actually-built artifacts incl. a real historical v0.7.0 worktree build |
 | TCT-* mod-manager profiles created for real | **Deferred to owner** | Profile creation is a mod-manager GUI action this repo's tooling deliberately does not drive (`PROFILE_REHEARSAL.md`); none exists on this machine yet |
 | Zero open P0/P1/P2 defects | Done | v0.9 (CT-044); DEF-teamster-v0.9-002 fixed |
-| Compiled pre-release smoke checklist | Done | v0.9 (CT-044); `PRE_RELEASE_SMOKE_TEST.md`, a 36-row cross-reference table over 16 numbered sections (§0–§15), never run |
+| Compiled pre-release smoke checklist | Done | v0.9 (CT-044), extended v1.0 (CT-050); `PRE_RELEASE_SMOKE_TEST.md`, now a 39-row cross-reference table over 17 numbered sections (§0–§16), never run |
 | Sealed v0.9.0 RC + owner packet | Done\* | v0.9 (CT-045); `RELEASE_DOSSIER.md` + `OWNER_PACKET_v0.9.md`; the smoke checklist itself is the pending row |
+| Sealed v1.0.0 RC + owner packet | Done\* | v1.0 (CT-050); `RELEASE_DOSSIER.md`'s v1.0.0 entry + `OWNER_PACKET_v1.0.md`; the smoke checklist itself is the pending row |
 
 ## Performance, memory, network, long-run stability (formal budgets)
 
@@ -159,9 +160,11 @@ specifically-itemized, cross-referenced pending in-game row (`Done\*`) —
 no capability has a blank, an unproven claim, or a claim resting on
 "it probably works." At CT-046 time the remaining gaps were exactly what
 the v1.0 sprint's own remaining leaves (CT-047 regression, CT-048 formal
-budgets, CT-049 final sign-off) existed to close; all three have since
-closed theirs (see their own rows above). What remains is CT-050's own
-seal-and-owner-packet scope plus a small, honestly bounded set of
+budgets, CT-049 final sign-off) existed to close; all four leaves,
+including this seal (CT-050), have since closed theirs (see their own
+rows above). What remains is a small, honestly bounded set of
 owner-only actions (media capture, profile creation, supplying a
-third-party GUID, the actual in-game smoke checklist) no autonomous leaf
-can complete on its own.
+third-party GUID, and — the entire remaining gate — the actual in-game
+smoke checklist and publication itself) that no autonomous leaf can
+complete on its own. See `CONVEYOR_COMPLETION_REPORT.md` for the full
+summary and `OWNER_PACKET_v1.0.md` for the exact next steps.
