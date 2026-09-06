@@ -18,10 +18,15 @@ namespace TheConcernedCat.ConcernedTeamster.Adapters;
 /// is ever touched.</summary>
 internal sealed class TripRecordingService
 {
+    private const int MaxRecoveryEventsRetained = 50;
+
     private readonly TripRecorder _recorder;
     private readonly TripRecorderOptions _options;
     private readonly ManualLogSource _log;
     private readonly string _pluginVersion;
+    private readonly List<RecoveryEvent> _recoveryEvents = new();
+    private readonly List<Trip> _pendingRetryTrips = new();
+    private long _pendingRetryWorldUid;
     private bool _ioFailureLogged;
     private bool _refusalLogged;
 
@@ -32,6 +37,12 @@ internal sealed class TripRecordingService
         _log = log;
         _pluginVersion = pluginVersion;
     }
+
+    /// <summary>Sidecar recovery events (backup/quarantine/migration) this
+    /// session, oldest first, for the Support Bundle panel (CT-039).
+    /// Bounded — a session that somehow saw more than this has bigger
+    /// problems than a long list would help with.</summary>
+    public IReadOnlyList<RecoveryEvent> RecoveryEvents => _recoveryEvents;
 
     public static string SidecarDirectory =>
         Path.Combine(Paths.ConfigPath, "ConcernedCatMods", "ConcernedTeamster");
@@ -58,7 +69,7 @@ internal sealed class TripRecordingService
     public void FlushAndReset(long lastKnownWorldUid)
     {
         IReadOnlyList<Trip> drained = _recorder.DrainOnReset();
-        if (drained.Count > 0)
+        if (drained.Count > 0 || _pendingRetryTrips.Count > 0)
         {
             Persist(drained, lastKnownWorldUid);
         }
@@ -67,13 +78,18 @@ internal sealed class TripRecordingService
     private void PersistFinishedTrips()
     {
         IReadOnlyList<Trip> finished = _recorder.DrainFinishedTrips();
-        if (finished.Count == 0)
+        if (finished.Count == 0 && _pendingRetryTrips.Count == 0)
         {
             return;
         }
 
         if (!WorldContextAdapter.TryGetWorldUid(out long worldUid))
         {
+            // Deliberately not retried: a lost world context (unlike a
+            // transient disk failure below) has no sensible retry target —
+            // if a world UID becomes available again it could be a
+            // different world, and misattributing a pending trip to it
+            // would be worse than the honest drop already logged here.
             WarnIoOnce("world UID unavailable; finished trip dropped rather than misfiled");
             return;
         }
@@ -89,62 +105,111 @@ internal sealed class TripRecordingService
             return;
         }
 
+        // CT-039 review finding: every failure branch below used to say a
+        // variant of "trips held in memory" while actually just returning
+        // — TripRecorder.DrainFinishedTrips/DrainOnReset already cleared
+        // its own queue before newTrips reached here, so nothing was
+        // actually held anywhere and a transient I/O failure silently lost
+        // real trip data. combined is genuinely retried on the next cycle
+        // now (bounded by the sidecar's own retention cap — it can never
+        // usefully hold more than the file would keep anyway).
+        List<Trip> combined = CombineWithPendingRetry(newTrips, worldUid);
+
         string path = SidecarPathFor(worldUid);
         string? existingText = SidecarFileStore.TryRead(path, out string? readError);
         if (readError is not null)
         {
-            WarnIoOnce("sidecar read failed: " + readError);
+            WarnIoOnce("sidecar read failed: " + readError + "; will retry with the next trip");
+            RetainForRetry(combined, worldUid);
             return;
         }
 
         TripSidecar.ParseResult existing = TripSidecar.Parse(existingText, worldUid);
-        if (existing.Refused)
-        {
-            // Foreign or future file: back it up once and start fresh —
-            // never silently destroy data.
-            if (!_refusalLogged)
-            {
-                _refusalLogged = true;
-                _log.LogWarning(
-                    "Trip sidecar at " + path + " was refused (" +
-                    string.Join("; ", existing.Errors) + "); backing it up and starting fresh.");
-            }
 
-            if (!SidecarFileStore.TryBackup(path, "refused", out string? backupError))
-            {
-                WarnIoOnce("sidecar backup failed: " + backupError + "; trips held in memory");
-                return;
-            }
+        // CT-039 / DEF-teamster-v0.4-001: what to do this cycle is decided
+        // by a pure function (TripPersistPlan.Decide), not this method's
+        // own control flow — see that type for why. This method's only
+        // job is to execute the plan exactly: back up first when the plan
+        // says to, abort without writing if that backup fails, otherwise
+        // proceed. Nothing here decides whether a backup is warranted.
+        TripPersistPlan.Plan plan = TripPersistPlan.Decide(existing);
+        if (plan.BackupReason == "refused" && !_refusalLogged)
+        {
+            _refusalLogged = true;
+            _log.LogWarning("Trip sidecar at " + path + ": " + plan.LogWarning);
         }
-        else if (existing.Errors.Count > 0 && !_ioFailureLogged)
+        else if (plan.BackupReason == "malformed" && !_ioFailureLogged)
         {
             _ioFailureLogged = true;
-            _log.LogWarning(
-                "Trip sidecar had " + existing.Errors.Count +
-                " malformed line(s); valid trips were kept.");
+            _log.LogWarning(plan.LogWarning);
         }
 
-        // CT-017: a v1 file is backed up before the rewrite would replace
-        // it; the recompute itself happens inside the shared merge step.
-        if (existing.NeedsMigration)
+        if (plan.LogInfo is not null)
         {
-            if (!SidecarFileStore.TryBackup(path, "migrate-v1", out string? migrateBackupError))
+            _log.LogInfo(plan.LogInfo);
+        }
+
+        if (plan.BackupReason is not null)
+        {
+            if (!SidecarFileStore.TryBackup(path, plan.BackupReason, out string? backupError))
             {
-                WarnIoOnce("pre-migration backup failed: " + migrateBackupError + "; trips held in memory");
+                WarnIoOnce("sidecar backup failed: " + backupError + "; will retry with the next trip");
+                RetainForRetry(combined, worldUid);
                 return;
             }
 
-            _log.LogInfo(
-                "Trip sidecar migrated from format v1: segment scores recomputed from " +
-                existing.Trips.Count + " stored trip(s); original backed up.");
+            RecordRecoveryEvent(plan.BackupReason, path, plan.LogWarning ?? plan.LogInfo!);
         }
 
         string composed = TripSidecar.MergeAndCompose(
-            existing, newTrips, _options.MaxTripsRetained, worldUid, _pluginVersion);
+            existing, combined, _options.MaxTripsRetained, worldUid, _pluginVersion);
         if (!SidecarFileStore.TryWriteAtomic(path, composed, out string? writeError))
         {
-            WarnIoOnce("sidecar write failed: " + writeError + "; previous file left intact");
+            WarnIoOnce(
+                "sidecar write failed: " + writeError + "; previous file left intact; will retry with the next trip");
+            RetainForRetry(combined, worldUid);
         }
+    }
+
+    /// <summary>Prepends any trips a prior cycle failed to persist ahead of
+    /// this cycle's newly-finished ones and clears the pending queue — the
+    /// combination itself is pure (<see cref="TripPersistPlan.CombineForRetry"/>);
+    /// callers must call <see cref="RetainForRetry"/> again themselves if
+    /// this attempt also fails.
+    /// <para>CT-039 review finding: a pending retry queue has no per-trip
+    /// world tag, but at any moment it only ever holds trips from the one
+    /// world that was live when <see cref="RetainForRetry"/> last ran — so
+    /// if the world changes before the retry succeeds (this instance is a
+    /// session-long singleton that survives a player exiting one world and
+    /// loading another), merging them into a DIFFERENT world's sidecar
+    /// would misattribute them, exactly the outcome the world-UID-
+    /// unavailable branch above already refuses to risk. Discarded with an
+    /// honest log line and a recorded recovery event instead.</para></summary>
+    private List<Trip> CombineWithPendingRetry(IReadOnlyList<Trip> newTrips, long worldUid)
+    {
+        if (TripPersistPlan.ShouldDiscardPendingRetry(_pendingRetryTrips.Count, _pendingRetryWorldUid, worldUid))
+        {
+            int discarded = _pendingRetryTrips.Count;
+            _pendingRetryTrips.Clear();
+            WarnIoOnce(
+                discarded + " trip(s) pending retry from a previous world were discarded; " +
+                "the world changed before they could be saved");
+            RecordRecoveryEvent(
+                "world-changed",
+                SidecarPathFor(_pendingRetryWorldUid),
+                discarded + " trip(s) pending retry after an earlier save failure were discarded " +
+                "because the world changed before they could be saved.");
+        }
+
+        List<Trip> combined = TripPersistPlan.CombineForRetry(_pendingRetryTrips, newTrips);
+        _pendingRetryTrips.Clear();
+        return combined;
+    }
+
+    private void RetainForRetry(List<Trip> trips, long worldUid)
+    {
+        _pendingRetryWorldUid = worldUid;
+        _pendingRetryTrips.AddRange(TripPersistPlan.BoundForRetry(trips, _options.MaxTripsRetained));
     }
 
     /// <summary>Loads this world's persisted trips and segment scores for
@@ -234,5 +299,15 @@ internal sealed class TripRecordingService
 
         _ioFailureLogged = true;
         _log.LogWarning("Trip recording: " + message + ".");
+    }
+
+    private void RecordRecoveryEvent(string reason, string path, string message)
+    {
+        if (_recoveryEvents.Count >= MaxRecoveryEventsRetained)
+        {
+            return;
+        }
+
+        _recoveryEvents.Add(new RecoveryEvent(reason, Path.GetFileName(path), message));
     }
 }

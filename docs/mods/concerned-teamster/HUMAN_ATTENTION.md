@@ -847,6 +847,61 @@ only for non-blocking uncertainty.
   authorized to inspect the compiled binary.
 - Status: Open
 
+### 2026-09-06 — CT-039 recovery/migration/support-bundle mechanism proven off-game; two small pre-existing gaps noticed in passing
+
+- Version / issue: v0.8 / CT-039 (#155), folding in DEF-teamster-v0.4-001
+  (#189)
+- Question: DEF-teamster-v0.4-001 flagged two weaknesses in the trip
+  sidecar backup path — fixed-name backups clobber on a repeat event, and
+  the backup-before-rewrite ordering lived only in untestable Adapters-
+  layer control flow. CT-039's own scope (config/data migration, backup/
+  recovery, sanitized support bundle) directly overlaps this subsystem, so
+  the defect was folded into this leaf rather than filed and fixed
+  separately.
+- Safe reversible default selected: bounded backup rotation (3 generations
+  per reason, `SidecarFileStore.MaxBackupGenerationsPerReason`) replacing
+  the fixed-name overwrite; the ordering guarantee extracted into a pure,
+  tested `TripPersistPlan.Decide` function that `TripRecordingService
+  .Persist` now merely executes; the previously-unbacked-up
+  malformed-rows case now backed up too (a real, related gap found while
+  rebuilding this path, not originally listed in the defect). Config
+  schema versioning introduced via the one migration every existing
+  install actually goes through (see `RECOVERY.md` for why no file backup
+  was added for that specific step). Support bundle sanitization mirrors
+  Concerned Cartographer's proven regex technique, reimplemented
+  independently (no compile-time coupling permitted between products).
+- Why work continued: every new mechanism is exhaustively unit-tested
+  against a real filesystem or realistic planted content
+  (`TripPersistenceTests`, `TripPersistPlanTests`,
+  `ConfigSchemaMigrationTests`, `SupportBundleTests`); nothing here
+  changes vanilla behavior or touches a Valheim save.
+- Risk / alternative: two small, pre-existing gaps were noticed while
+  touching adjacent code and are recorded here rather than silently fixed
+  or silently ignored:
+  1. `NavigationCatalog` (CT-031) never gained an entry for the
+     Compatibility panel's own Close button when CT-036 shipped it
+     (only the main panel's Compat *button* is cataloged now, added
+     alongside this leaf's own Support button). Fixing the main-panel
+     button entries was in scope for this leaf since it touches the same
+     list; fully building out `CompatibilityPanel`'s own sub-navigation
+     entry was not (a separate panel, a CT-036 leftover) and is left for
+     a future accessibility pass.
+  2. The Cart Status panel grew from `PanelHeight = 410f` to `450f` to fit
+     a third button row (Support, beside Compat) without crowding the row
+     -text block above it. The panel-height/MaxScale margin assumption
+     `AccessibilityTests.MaxScale_TallestPanelStaysUnderConservativeReferenceCanvasHeight`
+     checks is pinned to `TripHistoryPanel` (760f), not this panel, so
+     this change does not affect that guard — but the new row's actual
+     in-game clearance at `UiScaleOptions.MaxScale` has not been visually
+     confirmed, only computed.
+- Must resolve before public release: No for both — neither blocks a
+  release claim on its own; both are visual/accessibility polish items
+  suitable for CT-041's public-beta hardening pass or a dedicated small
+  leaf. The recovery/migration/support-bundle mechanism itself has no
+  "must resolve" gap beyond the in-game observation already noted in the
+  test-plan evidence table.
+- Status: Open
+
 ## Resolved items
 
 ### 2026-09-05 — CT-032 localization framework delivered; full-UI externalization is progressive

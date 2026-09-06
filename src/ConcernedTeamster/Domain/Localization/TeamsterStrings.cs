@@ -84,6 +84,19 @@ public static class TeamsterStrings
             "mass and cargo-to-mass scaling — if you've turned that section on, Teamster's " +
             "readings may no longer match; check your valheim_plus.cfg [Wagon] settings.",
 
+        // Support bundle (CT-039): a player-triggered, sanitized diagnostic
+        // export. Nothing here is sent anywhere automatically.
+        ["support.title"] = "Support Bundle",
+        ["support.explainer"] =
+            "Exports a sanitized diagnostic file (versions, config, compatibility, sidecar " +
+            "summaries, recent log lines) to share when reporting a problem. No world names, " +
+            "player names, or full file paths are included.",
+        ["support.readyToExport"] = "Ready to export.",
+        ["support.exportButton"] = "Export",
+        ["support.exported"] = "Exported to: {0}",
+        ["support.exportFailed"] = "Export failed: {0}",
+        ["support.unknownError"] = "unknown error",
+
         // Cart Status surface (CT-005): presenter lines + panel chrome.
         // Numbers arrive pre-formatted (invariant culture) so translations
         // reorder words, never digits.
@@ -94,6 +107,7 @@ public static class TeamsterStrings
         ["status.manifestButton"] = "Manifest",
         ["status.guidanceButton"] = "Guidance",
         ["status.compatButton"] = "Compat",
+        ["status.supportButton"] = "Support",
         ["status.engageBrake"] = "Engage brake",
         ["status.releaseBrake"] = "Release brake",
         ["status.telemetryOff"] = "Cart telemetry is unavailable — see the log for details.",
@@ -362,6 +376,8 @@ public static class TeamsterStrings
         ["nav.brake"] = "Engage/Release brake",
         ["nav.manifest"] = "Manifest",
         ["nav.guidance"] = "Guidance",
+        ["nav.compat"] = "Compatibility",
+        ["nav.support"] = "Support Bundle",
         ["nav.close"] = "Close",
         ["nav.sortColumn"] = "Sort column",
         ["nav.filter"] = "Filter",
@@ -369,6 +385,7 @@ public static class TeamsterStrings
         ["nav.selectA"] = "Select A",
         ["nav.selectB"] = "Select B",
         ["nav.delete"] = "Delete",
+        ["nav.export"] = "Export bundle",
         ["nav.routeList"] = "Route list",
         ["nav.clear"] = "Clear",
         ["nav.report"] = "Report",

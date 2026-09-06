@@ -24,7 +24,7 @@ namespace TheConcernedCat.ConcernedTeamster.Ui;
 internal sealed class CartStatusHudController : MonoBehaviour
 {
     private const float PanelWidth = 320f;
-    private const float PanelHeight = 410f;
+    private const float PanelHeight = 450f;
     private const float RowHeight = 26f;
     private const float RefreshPeriodSeconds = 0.25f;
     private const int RowCount = 9;
@@ -37,6 +37,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
     private TripHistoryPanel? _tripPanel;
     private RoutePickerPanel? _routePanel;
     private CompatibilityPanel? _compatPanel;
+    private SupportBundlePanel? _supportPanel;
     private bool _failed;
 
     private GameObject? _button;
@@ -50,7 +51,9 @@ internal sealed class CartStatusHudController : MonoBehaviour
     private double _nextRefreshTime;
     private double _nextSelectionRefreshTime;
 
-    internal void Initialize(TeamsterSettings settings, ManualLogSource log, CartTelemetryPump? pump)
+    internal void Initialize(
+        TeamsterSettings settings, ManualLogSource log, CartTelemetryPump? pump,
+        string pluginVersion, LogTailRecorder logTail)
     {
         _settings = settings;
         _log = log;
@@ -60,6 +63,8 @@ internal sealed class CartStatusHudController : MonoBehaviour
         _tripPanel = new TripHistoryPanel(log, CurrentUiScale);
         _tripPanel.BindPump(pump);
         _compatPanel = new CompatibilityPanel(log, CurrentUiScale);
+        _supportPanel = new SupportBundlePanel(
+            log, CurrentUiScale, pluginVersion, settings, logTail, () => _pump?.Trips);
     }
 
     /// <summary>Reads the config value fresh on every call (never cached) so
@@ -99,6 +104,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
                 _tripPanel?.Hide();
                 _routePanel?.Hide();
                 _compatPanel?.Hide();
+                _supportPanel?.Hide();
                 _selectedCartId = null;
                 if (_hudHint != null && _hudHint.gameObject.activeSelf)
                 {
@@ -155,6 +161,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
             _tripPanel?.HandleFrame(now, _pump);
             _routePanel?.HandleFrame(now);
             _compatPanel?.HandleFrame();
+            _supportPanel?.HandleFrame();
             UpdateHudHint();
             UpdateOnboardingHint();
         }
@@ -318,6 +325,15 @@ internal sealed class CartStatusHudController : MonoBehaviour
             TeamsterStrings.Get("status.compatButton"), _panel.transform,
             new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-90f, 96f), 110f, 30f);
         compat.GetComponent<Button>().onClick.AddListener(() => _compatPanel?.Toggle());
+
+        // CT-039: support bundle export, always available (unlike Routes,
+        // never conditional on another mod's presence) — a third row above
+        // Compat/Routes, on the same side as Compat since both are always
+        // present regardless of Cartographer.
+        GameObject support = gui.CreateButton(
+            TeamsterStrings.Get("status.supportButton"), _panel.transform,
+            new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-90f, 130f), 110f, 30f);
+        support.GetComponent<Button>().onClick.AddListener(() => _supportPanel?.Toggle());
 
         // CT-022: the route picker exists only when the Cartographer probe
         // reported Available (this panel is built lazily in-world, long
@@ -563,6 +579,7 @@ internal sealed class CartStatusHudController : MonoBehaviour
             // must not outlive the world it belongs to.
             _routePanel?.Hide();
             _compatPanel?.Hide();
+            _supportPanel?.Hide();
         }
         catch
         {

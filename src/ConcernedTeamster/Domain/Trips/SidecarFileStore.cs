@@ -74,8 +74,19 @@ public static class SidecarFileStore
         }
     }
 
-    /// <summary>Copies the file to "<c>path.bak-&lt;reason&gt;</c>" before a
-    /// migration or refusal-overwrite would touch it. Never throws.</summary>
+    /// <summary>How many generations of a backup a single reason keeps
+    /// (CT-039 / DEF-teamster-v0.4-001): bounded so repeated refusals or
+    /// migrations cannot accumulate disk usage forever, but more than one
+    /// so a second event does not silently destroy the only prior
+    /// evidence of the first.</summary>
+    public const int MaxBackupGenerationsPerReason = 3;
+
+    /// <summary>Copies the file to "<c>path.bak-&lt;reason&gt;-1</c>" before a
+    /// migration or a refusal/malformed-overwrite would touch it, rotating
+    /// any existing generations for that same reason up
+    /// (<c>-1</c>→<c>-2</c>→<c>-3</c>, oldest evicted) so a bounded set of
+    /// distinct backups survives repeated events instead of one fixed name
+    /// silently overwriting itself every time. Never throws.</summary>
     public static bool TryBackup(string path, string reason, out string? error)
     {
         error = null;
@@ -86,7 +97,22 @@ public static class SidecarFileStore
                 return true;
             }
 
-            File.Copy(path, path + ".bak-" + reason, overwrite: true);
+            string oldest = BackupPath(path, reason, MaxBackupGenerationsPerReason);
+            if (File.Exists(oldest))
+            {
+                File.Delete(oldest);
+            }
+
+            for (int generation = MaxBackupGenerationsPerReason - 1; generation >= 1; generation--)
+            {
+                string from = BackupPath(path, reason, generation);
+                if (File.Exists(from))
+                {
+                    File.Move(from, BackupPath(path, reason, generation + 1));
+                }
+            }
+
+            File.Copy(path, BackupPath(path, reason, 1), overwrite: true);
             return true;
         }
         catch (Exception exception)
@@ -95,4 +121,7 @@ public static class SidecarFileStore
             return false;
         }
     }
+
+    private static string BackupPath(string path, string reason, int generation) =>
+        path + ".bak-" + reason + "-" + generation.ToString(System.Globalization.CultureInfo.InvariantCulture);
 }

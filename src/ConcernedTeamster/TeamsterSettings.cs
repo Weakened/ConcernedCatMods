@@ -1,5 +1,6 @@
 using BepInEx.Configuration;
 using TheConcernedCat.ConcernedTeamster.Domain.Carts;
+using TheConcernedCat.ConcernedTeamster.Domain.Config;
 using TheConcernedCat.ConcernedTeamster.Domain.Profiles;
 using TheConcernedCat.ConcernedTeamster.Domain.Ui;
 using TheConcernedCat.ConcernedTeamster.Domain.Warnings;
@@ -34,7 +35,8 @@ internal sealed class TeamsterSettings
         ConfigEntry<float> uiScale,
         ConfigEntry<bool> onboardingDismissed,
         ConfigEntry<ConfigProfile> activeProfile,
-        ConfigEntry<ConfigProfile> lastAppliedProfile)
+        ConfigEntry<ConfigProfile> lastAppliedProfile,
+        ConfigEntry<int> schemaVersion)
     {
         Enabled = enabled;
         DebugLogging = debugLogging;
@@ -56,6 +58,7 @@ internal sealed class TeamsterSettings
         OnboardingDismissed = onboardingDismissed;
         ActiveProfile = activeProfile;
         LastAppliedProfile = lastAppliedProfile;
+        SchemaVersion = schemaVersion;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -97,6 +100,16 @@ internal sealed class TeamsterSettings
     /// guarantee) instead of overwriting manually-tweaked settings on every
     /// restart.</summary>
     public ConfigEntry<ConfigProfile> LastAppliedProfile { get; }
+
+    /// <summary>Internal bookkeeping — do not edit (CT-039). Tracks which
+    /// version of Teamster's config schema this file was last written by,
+    /// so a future update can migrate safely instead of guessing whether
+    /// this file predates a renamed or restructured key. Defaults to
+    /// <see cref="ConfigSchemaVersion.PreVersioning"/> so every install
+    /// from before this concept existed genuinely migrates once, for
+    /// real, on its first post-upgrade load — see
+    /// <c>Plugin.ApplyConfigSchemaMigrationIfNeeded</c>.</summary>
+    public ConfigEntry<int> SchemaVersion { get; }
 
     public static TeamsterSettings Bind(ConfigFile config)
     {
@@ -196,6 +209,9 @@ internal sealed class TeamsterSettings
                 "you change this value to something else."),
             config.Bind("General", "LastAppliedProfile", ConfigProfile.Standard,
                 "Internal bookkeeping — do not edit. Records which profile was last applied so a " +
-                "restart with no Profile change never re-applies it."));
+                "restart with no Profile change never re-applies it."),
+            config.Bind("Internal", "ConfigSchemaVersion", ConfigSchemaVersion.PreVersioning,
+                "Internal bookkeeping — do not edit. Tracks which version of Teamster's config " +
+                "schema this file was last written by, so a future update can migrate safely."));
     }
 }

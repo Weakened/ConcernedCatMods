@@ -15,10 +15,17 @@ public sealed class Plugin : BaseUnityPlugin
 
     private bool _cartographerProbePending;
     private bool _compatibilityProbePending;
+    private readonly Adapters.LogTailRecorder _logTail = new();
 
     private void Awake()
     {
+        // CT-039: attached first, before any other log line this session,
+        // so the support bundle's "recent log lines" section can include
+        // even the startup banner below.
+        _logTail.Attach(Logger);
+
         TeamsterSettings settings = TeamsterSettings.Bind(Config);
+        ApplyConfigSchemaMigrationIfNeeded(settings);
         ApplyProfileIfChanged(settings);
 
         // CT-032: write the translator template and load any teamster-strings.tsv
@@ -65,6 +72,33 @@ public sealed class Plugin : BaseUnityPlugin
         {
             _compatibilityProbePending = false;
             CompatibilityAdapter.EnsureProbed(Logger);
+        }
+    }
+
+    /// <summary>Runs the config schema migration ladder (CT-039), deciding
+    /// what to do as a pure function (<c>ConfigSchemaMigration.Decide</c>)
+    /// so the decision itself is directly testable — this method's only
+    /// job is to log the outcome and, when the plan calls for it, advance
+    /// the stored version.</summary>
+    private void ApplyConfigSchemaMigrationIfNeeded(TeamsterSettings settings)
+    {
+        Domain.Config.ConfigSchemaMigration.Plan plan =
+            Domain.Config.ConfigSchemaMigration.Decide(settings.SchemaVersion.Value);
+        if (plan.LogMessage is not null)
+        {
+            if (plan.IsFromANewerVersion)
+            {
+                Logger.LogWarning(plan.LogMessage);
+            }
+            else
+            {
+                Logger.LogInfo(plan.LogMessage);
+            }
+        }
+
+        if (plan.NeedsMigration)
+        {
+            settings.SchemaVersion.Value = Domain.Config.ConfigSchemaVersion.Current;
         }
     }
 
@@ -131,7 +165,7 @@ public sealed class Plugin : BaseUnityPlugin
             $"fall hold {Domain.Warnings.WarningOptions.FallHoldSeconds:0.#} s).");
 
         Ui.CartStatusHudController hud = gameObject.AddComponent<Ui.CartStatusHudController>();
-        hud.Initialize(settings, Logger, pump);
+        hud.Initialize(settings, Logger, pump, ResolveInformationalVersion(), _logTail);
         Logger.LogInfo(
             "Cart Status panel armed: visible Cart button at the right screen edge while in a world, " +
             $"UI scale {Domain.Ui.UiScaleOptions.Clamp(settings.UiScale.Value):0.##}.");
