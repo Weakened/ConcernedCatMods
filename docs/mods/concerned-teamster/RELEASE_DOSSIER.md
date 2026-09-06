@@ -17,13 +17,13 @@ is owner-only, always.
 | DLL identity | AssemblyVersion 0.7.0.0, InformationalVersion `0.7.0+2601ec5543811af021cc3a270d55fbfdd78ca960` |
 | ZIP contents (6 entries) | manifest.json, icon.png (256×256), README.md, CHANGELOG.md, LICENSE, plugins/TheConcernedCat.ConcernedTeamster.dll — **own DLL only**, no PDB, no foreign DLL |
 | Built against | Valheim 0.221.12 (buildid 21981559 — re-verified in the Steam manifest at seal time, unchanged since the v0.6 seal one day earlier), Unity 6000.0.61f1, BepInExPack 5.4.2333, Jötunn 2.29.2 |
-| Version sync | 0.7.0 across csproj/Plugin.cs/thunderstore.toml + the CHANGELOG `## 0.7.0` section, all validator-asserted (`--expected-version 0.7.0 --require-binary`) |
+| Version sync | 0.7.0 across csproj/Plugin.cs/thunderstore.toml + the CHANGELOG `## 0.7.0` section. `scripts/package.ps1` now derives `--expected-version` from the csproj automatically (this RC's own hardening, CT-035) rather than relying on someone typing it by hand each seal, so csproj/Plugin.cs/thunderstore.toml drift is caught on every future package build, not just this one |
 
 ### Sprint scope sealed in this RC
 
 CT-031 controller navigation (deterministic focus catalog + ring) and
 accelerator conflict checking (internal + external, buttons-first audited)
-· CT-032 the localization framework and full 242-key catalog externalization
+· CT-032 the localization framework and full 244-key catalog externalization
 across every panel, with a CI-gating hardcoded-string audit · CT-033 UI
 scale (0.8–1.3, applied per-panel via root-transform scaling), a WCAG AA
 contrast audit and fix (outline added where missing after a sensitivity
@@ -39,8 +39,8 @@ seal.
 |---|---|---|
 | Static validation + version sync | `validate_repo.py --product teamster --expected-version 0.7.0 --require-binary` | PASS |
 | Solution build | `package.ps1 -Product ConcernedTeamster -Configuration Release` (invokes `build.ps1 -Configuration Release`) | PASS — 0 errors (3 pre-existing benign warnings) |
-| Teamster unit tests | `dotnet test ConcernedTeamster.Tests` | **542/542 PASS** — +84 executed cases over the v0.6 baseline of 458 (CT-031 navigation/conflict, CT-032 audit + catalog, CT-033 scale/contrast/cue, CT-034 onboarding/profiles) |
-| Cartographer regression | `dotnet test ConcernedCartographer.Tests` | **568/568 PASS** — unchanged with the v0.7 work present |
+| Teamster unit tests | `dotnet test ConcernedTeamster.Tests` (Release) | **542/542 PASS** — +84 executed cases over the v0.6 baseline of 458 (CT-031 navigation/conflict, CT-032 audit + catalog, CT-033 scale/contrast/cue, CT-034 onboarding/profiles) |
+| Cartographer regression | `dotnet test ConcernedCartographer.Tests` (Release) | **568/568 PASS** — unchanged with the v0.7 work present |
 | Cross-product independence + Cartographer contract + integration read-only | `validate_repo.py` interop lines | PASS — 4 trees independent, contract 12/12, 9 integration files read-only |
 | Authority policy / no-force audits | `validate_repo.py` interop lines | PASS — unchanged from v0.6 (no v0.7 leaf touches multiplayer/force paths) |
 | Package build + audit | `package.ps1 -Product ConcernedTeamster` + ZIP listing | PASS — hashes above, own-DLL-only (0 foreign/PDB entries) |

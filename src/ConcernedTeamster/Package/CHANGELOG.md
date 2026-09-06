@@ -16,7 +16,7 @@ the Cart button instead of left to discover it cold.
   staged pending verification against the real read surface.
 - **Localization framework and full-catalog externalization (CT-032).**
   Every user-facing string — status, manifest, warnings, diagnostics,
-  guidance, trips, routes, navigation — resolves through a 242-key English
+  guidance, trips, routes, navigation — resolves through a 244-key English
   catalog with override loading from a translator `.tsv`, English fallback,
   a once-only missing-key report, and placeholder validation. A CI-gating
   audit test fails the build if a hardcoded English literal, a dead catalog

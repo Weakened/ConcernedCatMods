@@ -21,9 +21,18 @@ $productSlug = @{
     ConcernedTeamster     = "teamster"
 }[$Product]
 
+# Read the version to expect directly from the csproj that was just built,
+# so an RC seal's --expected-version check is enforced on every package
+# build automatically instead of relying on someone typing it by hand.
+$csprojPath = Join-Path $root "src" $Product "$Product.csproj"
+[xml]$csprojXml = Get-Content $csprojPath
+$expectedVersion = $csprojXml.Project.PropertyGroup |
+    ForEach-Object { $_.Version } | Where-Object { $_ } | Select-Object -First 1
+if (-not $expectedVersion) { throw "Could not read <Version> from $csprojPath." }
+
 Push-Location $root
 try {
-    python ./tools/validate_repo.py --product $productSlug --require-binary
+    python ./tools/validate_repo.py --product $productSlug --require-binary --expected-version $expectedVersion
     if ($LASTEXITCODE -ne 0) { throw "Repository/package validation failed." }
 
     tcli build --config-path ./src/$Product/Package/thunderstore.toml
