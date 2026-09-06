@@ -1429,7 +1429,8 @@ only for non-blocking uncertainty.
   rebuilt artifact.
 - Must resolve before public release: N/A — this is a documentation/
   artifact-preservation correction, not a defect in shipped behavior.
-- Status: Resolved (pending review/merge of this fix).
+- Status: Open — fix is in PR #228, pending review/merge; move to
+  Resolved with the merge date once it lands.
 
 ## Resolved items
 

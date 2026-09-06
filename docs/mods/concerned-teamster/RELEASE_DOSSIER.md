@@ -47,8 +47,8 @@ this time copying the exact resulting ZIP into the repo's own
 `artifacts/thunderstore/` folder (replacing the stale leftover) before
 doing anything else with it — the values in this entry are now that
 artifact's, re-verified stable by hashing it twice in a row before
-finalizing. See `DEF-teamster-v1.0-001` for the filed process-gap
-record.
+finalizing. See `DEF-teamster-v1.0-001` (#227) for the filed
+process-gap record.
 
 **Backfilled tag note:** `concerned-teamster/v0.9.0` had never been
 tagged (the same gap CT-043 found and fixed for v0.1–v0.8, simply missed

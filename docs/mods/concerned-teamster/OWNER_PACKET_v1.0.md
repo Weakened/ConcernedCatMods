@@ -39,7 +39,7 @@ Full detail in `RELEASE_DOSSIER.md`'s v1.0.0 entry. Summary:
 original CT-050 seal) — the artifact whose hash the seal first recorded
 was only ever measured inside a scratch clone that was then deleted,
 never copied anywhere durable. No source changed; see
-`RELEASE_DOSSIER.md`'s "Reseal note" and `DEF-teamster-v1.0-001` for the
+`RELEASE_DOSSIER.md`'s "Reseal note" and `DEF-teamster-v1.0-001` (#227) for the
 full account. If you already downloaded a ZIP from this repo's
 `artifacts/thunderstore/` folder before this correction, re-fetch it —
 the one there now is the one these hashes describe.
