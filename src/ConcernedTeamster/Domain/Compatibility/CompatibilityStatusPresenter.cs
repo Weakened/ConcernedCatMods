@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using TheConcernedCat.ConcernedTeamster.Domain.Localization;
@@ -18,7 +19,11 @@ public static class CompatibilityStatusPresenter
         return results
             .Where(result => result.Found)
             .Select(result => TeamsterStrings.Format(
-                "compat.line", result.Probe.DisplayName, PolicyWord(result.Probe.Policy), result.Probe.Description))
+                "compat.line",
+                result.Probe.DisplayName,
+                VersionText(result.DetectedVersion),
+                PolicyWord(result.Probe.Policy),
+                result.Probe.Description))
             .ToList();
     }
 
@@ -26,13 +31,22 @@ public static class CompatibilityStatusPresenter
     /// detected (including when the registry itself is empty).</summary>
     public static string ComposeNoneDetectedLine() => TeamsterStrings.Get("compat.noneDetected");
 
+    private static string VersionText(string? detectedVersion)
+    {
+        return string.IsNullOrEmpty(detectedVersion)
+            ? TeamsterStrings.Get("compat.versionUnknown")
+            : "v" + detectedVersion;
+    }
+
     private static string PolicyWord(CompatibilityPolicy policy)
     {
         return policy switch
         {
+            CompatibilityPolicy.Coexist => TeamsterStrings.Get("compat.policyCoexist"),
             CompatibilityPolicy.Adapt => TeamsterStrings.Get("compat.policyAdapt"),
             CompatibilityPolicy.Warn => TeamsterStrings.Get("compat.policyWarn"),
-            _ => TeamsterStrings.Get("compat.policyCoexist"),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(policy), policy, "Unhandled CompatibilityPolicy value — add a wording case above."),
         };
     }
 }

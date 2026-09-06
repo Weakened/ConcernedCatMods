@@ -19,7 +19,7 @@ namespace TheConcernedCat.ConcernedTeamster.Ui;
 internal sealed class CompatibilityPanel
 {
     private const float PanelWidth = 380f;
-    private const float PanelHeight = 320f;
+    private const float PanelHeight = 360f;
     private const float RowHeight = 26f;
     private const int MaxLines = 8;
 
@@ -28,6 +28,7 @@ internal sealed class CompatibilityPanel
     private bool _failed;
     private GameObject? _panel;
     private Text[] _lines = Array.Empty<Text>();
+    private Text? _overflow;
 
     public CompatibilityPanel(ManualLogSource log, Func<float> uiScale)
     {
@@ -95,20 +96,59 @@ internal sealed class CompatibilityPanel
     private void Render()
     {
         IReadOnlyList<ModDetectionResult>? results = CompatibilityAdapter.Results;
-        IReadOnlyList<string> detected = results is null
-            ? Array.Empty<string>()
-            : CompatibilityStatusPresenter.ComposeDetectedLines(results);
 
+        if (results is null)
+        {
+            // Distinguishes "probe has not run this session yet" from
+            // "probe ran and found nothing" — the two must never look
+            // identical, or a crashed probe would read as a clean bill of
+            // health. Not reachable in normal play (the probe runs on the
+            // plugin's first Update tick, long before any panel can open),
+            // but CompatibilityRegistry.Evaluate's per-probe fail-closed
+            // catch keeps this state honest if it ever is.
+            _lines[0].text = TeamsterStrings.Get("compat.notYetChecked");
+            for (int index = 1; index < _lines.Length; index++)
+            {
+                _lines[index].text = string.Empty;
+            }
+
+            if (_overflow != null)
+            {
+                _overflow.text = string.Empty;
+            }
+
+            return;
+        }
+
+        IReadOnlyList<string> detected = CompatibilityStatusPresenter.ComposeDetectedLines(results);
+        if (detected.Count == 0)
+        {
+            _lines[0].text = CompatibilityStatusPresenter.ComposeNoneDetectedLine();
+            for (int index = 1; index < _lines.Length; index++)
+            {
+                _lines[index].text = string.Empty;
+            }
+
+            if (_overflow != null)
+            {
+                _overflow.text = string.Empty;
+            }
+
+            return;
+        }
+
+        int shown = Math.Min(detected.Count, _lines.Length);
         for (int index = 0; index < _lines.Length; index++)
         {
-            if (index == 0 && detected.Count == 0)
-            {
-                _lines[index].text = CompatibilityStatusPresenter.ComposeNoneDetectedLine();
-            }
-            else
-            {
-                _lines[index].text = index < detected.Count ? detected[index] : string.Empty;
-            }
+            _lines[index].text = index < shown ? detected[index] : string.Empty;
+        }
+
+        if (_overflow != null)
+        {
+            int hidden = detected.Count - shown;
+            _overflow.text = hidden > 0
+                ? TeamsterStrings.Format("compat.overflow", hidden.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                : string.Empty;
         }
     }
 
@@ -146,9 +186,22 @@ internal sealed class CompatibilityPanel
                 addContentSizeFitter: false).GetComponent<Text>();
             _lines[index].alignment = TextAnchor.UpperLeft;
             _lines[index].verticalOverflow = VerticalWrapMode.Truncate;
-            _lines[index].horizontalOverflow = HorizontalWrapMode.Wrap;
+            // Overflow (not Wrap), matching every sibling panel's row-text
+            // convention (TripHistoryPanel, CargoManifestPanel): a long
+            // single line stays on one visual line and may extend past the
+            // column, rather than wrapping to a second line that this
+            // fixed row height would then clip.
+            _lines[index].horizontalOverflow = HorizontalWrapMode.Overflow;
             y -= RowHeight;
         }
+
+        _overflow = gui.CreateText(
+            string.Empty, _panel.transform,
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, y - (RowHeight / 2f)),
+            font, 13, bodyColor, outline: true, Color.black, PanelWidth - 40f, RowHeight,
+            addContentSizeFitter: false).GetComponent<Text>();
+        _overflow.alignment = TextAnchor.UpperLeft;
+        _overflow.horizontalOverflow = HorizontalWrapMode.Overflow;
 
         GameObject close = gui.CreateButton(
             TeamsterStrings.Get("ui.close"), _panel.transform,

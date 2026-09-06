@@ -57,10 +57,13 @@ public static class TeamsterStrings
         // research and add real entries.
         ["compat.title"] = "Compatibility",
         ["compat.noneDetected"] = "No known compatibility concerns detected.",
-        ["compat.line"] = "{0} ({1}): {2}",
+        ["compat.notYetChecked"] = "Compatibility check has not run yet.",
+        ["compat.line"] = "{0} {1} ({2}): {3}",
+        ["compat.versionUnknown"] = "unknown version",
         ["compat.policyCoexist"] = "coexisting",
         ["compat.policyAdapt"] = "adapted",
         ["compat.policyWarn"] = "caution",
+        ["compat.overflow"] = "… {0} more detected — open the log for the full list",
 
         // Cart Status surface (CT-005): presenter lines + panel chrome.
         // Numbers arrive pre-formatted (invariant culture) so translations

@@ -20,7 +20,11 @@ mechanism: given a list of probes and a `Func<string, (bool, string?)>`
 lookup, it queries the lookup **once per registered probe and nothing
 else** — a mod that isn't in the registry is never asked about, which is
 what makes "unknown mods produce no warnings" true by construction rather
-than a filter that could be implemented wrong. `Adapters/CompatibilityAdapter`
+than a filter that could be implemented wrong. A lookup that throws (a
+malformed third-party plugin's metadata, say) fails closed to "not found"
+for that one probe only — the rest of the registry still gets evaluated,
+unlike an all-or-nothing try/catch that would go dark for every mod over
+one bad entry. `Adapters/CompatibilityAdapter`
 supplies the real lookup (`Chainloader.PluginInfos`, mirroring
 `CartographerCapability`'s CT-021 probe shape) and runs once on the first
 Update tick, for the same reason CT-021 waits: BepInEx fills `PluginInfos`

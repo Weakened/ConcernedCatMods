@@ -43,7 +43,11 @@ public sealed class Plugin : BaseUnityPlugin
 
         // CT-036: the compatibility registry probe waits for the same
         // reason — any known mod could load after Teamster in this session.
-        _compatibilityProbePending = settings.Enabled.Value;
+        // Unlike the Cartographer probe, this one always runs: mod-presence
+        // awareness is independent of Enabled (Teamster's cart-telemetry
+        // master switch) — a player who disables telemetry for unrelated
+        // reasons should not also lose every compatibility notice.
+        _compatibilityProbePending = true;
 
         // Read-only telemetry, panels, manifest, and advisory warnings only;
         // nothing mutates carts.

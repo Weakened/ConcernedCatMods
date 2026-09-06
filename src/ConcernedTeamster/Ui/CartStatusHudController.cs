@@ -122,13 +122,17 @@ internal sealed class CartStatusHudController : MonoBehaviour
             bool statusVisible = _panel != null && _panel.activeSelf;
             if (statusVisible)
             {
+                // No early return on Escape (a pre-existing gap CT-036's
+                // new Compat panel exposed): the sub-panel HandleFrame
+                // calls below own their own Escape handling, and skipping
+                // them here left a sibling panel (Manifest/Guidance/Trips/
+                // Routes/Compat) visibly open after the main panel closed,
+                // needing a second Escape press to notice it.
                 if (Input.GetKeyDown(KeyCode.Escape))
                 {
                     _panel!.SetActive(false);
-                    return;
                 }
-
-                if (now >= _nextRefreshTime)
+                else if (now >= _nextRefreshTime)
                 {
                     _nextRefreshTime = now + RefreshPeriodSeconds;
                     RefreshPanel(now);

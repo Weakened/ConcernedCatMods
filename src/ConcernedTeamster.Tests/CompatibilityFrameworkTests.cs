@@ -109,18 +109,25 @@ public class CompatibilityFrameworkTests
         Assert.NotEmpty(CompatibilityStatusPresenter.ComposeNoneDetectedLine());
     }
 
-    [Theory]
-    [InlineData(CompatibilityPolicy.Coexist)]
-    [InlineData(CompatibilityPolicy.Adapt)]
-    [InlineData(CompatibilityPolicy.Warn)]
-    public void StatusSurface_EveryPolicyProducesDistinctNonEmptyWording(CompatibilityPolicy policy)
+    [Fact]
+    public void StatusSurface_EveryPolicyProducesDistinctNonEmptyWording()
     {
-        var probe = new KnownModProbe("com.example.policy", "Policy Mod", policy, "description");
-        IReadOnlyList<ModDetectionResult> results = CompatibilityRegistry.Evaluate(
-            new[] { probe }, _ => (true, "1.0.0"));
+        // A copy-paste bug making two policies resolve to the same wording
+        // (e.g. Adapt and Warn both rendering as "coexisting") would pass a
+        // per-policy non-empty check but must fail this pairwise comparison.
+        string[] lines = System.Enum.GetValues(typeof(CompatibilityPolicy))
+            .Cast<CompatibilityPolicy>()
+            .Select(policy =>
+            {
+                var probe = new KnownModProbe("com.example.policy", "Policy Mod", policy, "description");
+                IReadOnlyList<ModDetectionResult> results = CompatibilityRegistry.Evaluate(
+                    new[] { probe }, _ => (true, "1.0.0"));
+                return Assert.Single(CompatibilityStatusPresenter.ComposeDetectedLines(results));
+            })
+            .ToArray();
 
-        string line = Assert.Single(CompatibilityStatusPresenter.ComposeDetectedLines(results));
-        Assert.NotEmpty(line);
+        Assert.All(lines, Assert.NotEmpty);
+        Assert.Equal(lines.Length, lines.Distinct().Count());
     }
 
     // ---- Audit: feature code never branches on a specific mod's GUID -------
@@ -132,20 +139,30 @@ public class CompatibilityFrameworkTests
         // research real mods), but becomes a real regression guard the
         // moment an entry is added — this is the enforcement mechanism for
         // "adding a mod policy must not require touching feature code."
-        string shippedRoot = Path.Combine(RepoRoot, "src", "ConcernedTeamster");
-        string compatibilityDir = Path.Combine(shippedRoot, "Domain", "Compatibility");
-
-        foreach (KnownModProbe probe in CompatibilityKnownMods.Registry)
+        if (CompatibilityKnownMods.Registry.Count == 0)
         {
-            foreach (string file in Directory.EnumerateFiles(shippedRoot, "*.cs", SearchOption.AllDirectories))
-            {
-                if (file.StartsWith(compatibilityDir, System.StringComparison.OrdinalIgnoreCase) ||
-                    file.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar))
-                {
-                    continue;
-                }
+            return;
+        }
 
-                Assert.False(File.ReadAllText(file).Contains(probe.Guid),
+        string shippedRoot = Path.Combine(RepoRoot, "src", "ConcernedTeamster");
+        // Trailing separator so this is a folder-membership check, not a
+        // string-prefix match — otherwise a future sibling directory like
+        // Domain/CompatibilityV2 would wrongly be treated as exempt too.
+        string compatibilityDirPrefix =
+            Path.Combine(shippedRoot, "Domain", "Compatibility") + Path.DirectorySeparatorChar;
+
+        foreach (string file in Directory.EnumerateFiles(shippedRoot, "*.cs", SearchOption.AllDirectories))
+        {
+            if (file.StartsWith(compatibilityDirPrefix, System.StringComparison.OrdinalIgnoreCase) ||
+                file.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar))
+            {
+                continue;
+            }
+
+            string text = File.ReadAllText(file);
+            foreach (KnownModProbe probe in CompatibilityKnownMods.Registry)
+            {
+                Assert.False(text.Contains(probe.Guid),
                     $"{file} references known-mod GUID '{probe.Guid}' outside Domain/Compatibility.");
             }
         }
