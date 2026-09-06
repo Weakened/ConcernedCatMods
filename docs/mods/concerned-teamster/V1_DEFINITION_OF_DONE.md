@@ -160,9 +160,11 @@ specifically-itemized, cross-referenced pending in-game row (`Done\*`) —
 no capability has a blank, an unproven claim, or a claim resting on
 "it probably works." At CT-046 time the remaining gaps were exactly what
 the v1.0 sprint's own remaining leaves (CT-047 regression, CT-048 formal
-budgets, CT-049 final sign-off) existed to close; all three have since
-closed theirs (see their own rows above). What remains is CT-050's own
-seal-and-owner-packet scope plus a small, honestly bounded set of
+budgets, CT-049 final sign-off) existed to close; all four leaves,
+including this seal (CT-050), have since closed theirs (see their own
+rows above). What remains is a small, honestly bounded set of
 owner-only actions (media capture, profile creation, supplying a
-third-party GUID, the actual in-game smoke checklist) no autonomous leaf
-can complete on its own.
+third-party GUID, and — the entire remaining gate — the actual in-game
+smoke checklist and publication itself) that no autonomous leaf can
+complete on its own. See `CONVEYOR_COMPLETION_REPORT.md` for the full
+summary and `OWNER_PACKET_v1.0.md` for the exact next steps.

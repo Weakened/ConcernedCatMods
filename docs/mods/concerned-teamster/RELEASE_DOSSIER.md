@@ -5,6 +5,87 @@ split between automated evidence and pending manual claims, following the
 dossier discipline proven on Concerned Cartographer. Publication of anything
 is owner-only, always.
 
+## v1.0.0 — "Stable Teamster" (sealed 2026-09-06) — FIRST STABLE-CANDIDATE SEAL
+
+| Item | Value |
+|---|---|
+| Version | 1.0.0 (stable release **candidate** — sealed for owner review; NOT published by this seal) |
+| Source commit | `03c4233764cd7ba3771a78b49ce6e1535be41bfa` (branch `feat/ct-050-v1.0-seal`). Sealed on merge to main via the CT-050 PR. |
+| ZIP | `artifacts/thunderstore/TheConcernedCat-ConcernedTeamster-1.0.0.zip` |
+| ZIP SHA-256 | `7e57ad3dca1a64b8492b03559acbbfc0179780360286dc3cd6e9086ec965f791` (144,744 B) — a build fingerprint, not a reproducibility guarantee (DEF-teamster-v0.8-001, #214, still open/deferred) |
+| DLL SHA-256 | `620cdb9d2045b9770b0c03a993178cb7f242b383cd62d998477fea2681473673` (247,808 B, identical size to v0.9.0's — no Domain/Adapters code changed since v0.9.0, only version strings and test-only additions) — also a build fingerprint, not a reproducibility guarantee per the same deferred defect |
+| DLL identity | AssemblyVersion 1.0.0.0, InformationalVersion `1.0.0+03c4233764cd7ba3771a78b49ce6e1535be41bfa` (read back directly from the built DLL) |
+| ZIP contents (6 entries) | manifest.json, icon.png (256×256), README.md, CHANGELOG.md, LICENSE, plugins/TheConcernedCat.ConcernedTeamster.dll — **own DLL only**, no PDB, no foreign DLL |
+| Fresh-profile install check | `rehearse-teamster-lifecycle.ps1` run against this exact commit from a genuinely separate `git clone` (not this conveyor's own working tree): the sealed ZIP's DLL extracted into a simulated fresh `BepInEx/plugins/` layout, SHA-256 matched the built DLL exactly (`620CDB9D...`, cross-confirmed by two independent tools). Not a real mod-manager profile (none exists on this machine — see `PROFILE_REHEARSAL.md`) |
+| Built against | Valheim 0.221.12 (buildid 21981559, unchanged since the v0.7 seal), Unity 6000.0.61f1, BepInExPack 5.4.2333, Jötunn 2.29.2 |
+| Version sync | 1.0.0 across csproj/Plugin.cs/thunderstore.toml + the CHANGELOG `## 1.0.0` section, validator-asserted (`--expected-version 1.0.0 --require-binary`) |
+| Dependency record (SBOM) | `dotnet list ConcernedTeamster.csproj package --include-transitive`: one top-level package, `JotunnLib 2.29.2`, zero transitive dependencies listed |
+
+**This is Teamster's first stable-candidate seal.** v0.9.0 was the first
+seal ever intended for *publication* (as a public beta); v1.0.0 is the
+first intended as the *stable* release. Nothing about this seal itself
+publishes anything, tags `concerned-teamster/v1.0.0`, or claims the
+in-game smoke checklist passed — see the Owner Packet (`OWNER_PACKET_v1.0.md`)
+for the exact, owner-only next steps.
+
+**Backfilled tag note:** `concerned-teamster/v0.9.0` had never been
+tagged (the same gap CT-043 found and fixed for v0.1–v0.8, simply missed
+since CT-045 sealed after CT-043's backfill pass). Backfilled at this
+leaf, verified against that commit's own `csproj` `<Version>` before
+tagging, pushed separately from this PR branch — the same technique
+CT-043 established. `concerned-teamster/v1.0.0` is deliberately **not**
+created here; that is the actual final stable tag, and creating it is an
+owner-only publication step per this project's own standing constraints.
+
+### Sprint scope sealed in this RC
+
+CT-046 the golden-path narrative and v1.0 capability-by-capability
+definition-of-done matrix (audit-only, zero new defects beyond the two
+already-deferred P3s) · CT-047 the full automated suite reruns clean
+from a genuinely fresh `git clone`, not just this conveyor's own working
+tree · CT-048 fourteen formal, numbered performance/memory/network
+budgets, all Met, each backed by a repeatable automated test · CT-049 a
+final sign-off across six non-code areas (docs truth, localization,
+controller, accessibility, migration chain, compatibility statement),
+finding and fixing several stale doc numbers and rechecking third-party
+mod versions live against Thunderstore · CT-050 this seal.
+
+### v1.0 campaign results (automated)
+
+| Campaign item | Method | Result |
+|---|---|---|
+| Static validation + version sync | `validate_repo.py --product teamster --expected-version 1.0.0 --require-binary` | PASS |
+| Solution build | `package.ps1 -Product ConcernedTeamster -Configuration Release` | PASS — 0 errors |
+| Teamster unit tests | `dotnet test ConcernedTeamster.Tests` (Release) | **629/629 PASS** — +7 over the v0.9 baseline of 622 (CT-048's `PerformanceBudgetTests`) |
+| Cartographer regression | `dotnet test ConcernedCartographer.Tests` (Release) | **568/568 PASS** — unchanged |
+| Cross-product independence + Cartographer contract + integration read-only | `validate_repo.py` interop lines | PASS — 4 trees independent, contract 12/12, 9 integration files read-only |
+| Authority policy / no-force / privacy audits | `validate_repo.py` interop lines | PASS — 9 features documented, 151 Teamster source files, 0 violations across all three audits |
+| Package build + audit | `package.ps1 -Product ConcernedTeamster` + ZIP listing | PASS — hashes above, own-DLL-only, 6 entries |
+| Fresh-profile install (file-level), from a clean clone | `rehearse-teamster-lifecycle.ps1` run against a genuinely separate `git clone` of this exact sealed commit | PASS — all 5 sections green (chain integrity, fresh install, upgrade from a real historical v0.7.0 worktree build, uninstall, deploy-copy idempotence) |
+| Formal performance/memory/network budgets | `PERFORMANCE_BUDGETS.md` (CT-048) | PASS — 14/14 budgets Met |
+| Final six-area sign-off | `V1_SIGNOFF.md` (CT-049) | PASS — all six areas signed off |
+| Defect burn-down | Sprint defect sweep | Zero open P0/P1/P2; two P3s deferred with documented rationale (DEF-teamster-v0.8-001, DEF-teamster-v0.9-001), unchanged since v0.9 |
+| The full `PRE_RELEASE_SMOKE_TEST.md` (39-row cross-reference table, 17 sections, extended through v1.0 at this leaf) | in-game, owner-run | **MANUAL — pending, never run.** This is the entire remaining gate before publication; see the Owner Packet |
+
+### Defects
+
+No open P0/P1/P2 Teamster defect at seal time. Two deferred P3s, both
+pre-existing, documented, and unchanged since the v0.9 seal:
+DEF-teamster-v0.8-001 (#214, build/ZIP hash non-reproducibility — a
+release-engineering traceability gap, no correctness impact) and
+DEF-teamster-v0.9-001 (#216, a flaky allocation test under full-suite
+Debug timing — a test-harness sensitivity, not a product defect).
+
+### Gate decision
+
+All automatable v1.0 gates are green. The entire live campaign —
+`PRE_RELEASE_SMOKE_TEST.md`'s 39-row cross-reference table, extended
+through v1.0 but still never run — is pending by design; this is the
+actual human work publication requires, not a formality. Sprint
+controller #163 closes with this seal. **No publish action, and no
+`concerned-teamster/v1.0.0` tag creation, has occurred or is scheduled
+by any automation.**
+
 ## v0.9.0 — "Public Beta Hardening" (sealed 2026-09-06) — FIRST PUBLICATION-CANDIDATE SEAL
 
 | Item | Value |
