@@ -28,12 +28,21 @@ Full detail in `RELEASE_DOSSIER.md`'s v1.0.0 entry. Summary:
 | | |
 |---|---|
 | Version | 1.0.0 |
-| Source commit | `03c4233764cd7ba3771a78b49ce6e1535be41bfa` |
-| ZIP | `TheConcernedCat-ConcernedTeamster-1.0.0.zip` |
-| ZIP SHA-256 | `7e57ad3dca1a64b8492b03559acbbfc0179780360286dc3cd6e9086ec965f791` (144,744 B) |
-| DLL SHA-256 | `620cdb9d2045b9770b0c03a993178cb7f242b383cd62d998477fea2681473673` (247,808 B) |
+| Source commit | `0d204eb9737707044b6b6cb834ed19fad2f710a9` (`main`'s tip after the CT-050 merge) |
+| ZIP | `TheConcernedCat-ConcernedTeamster-1.0.0.zip` — a persistent copy lives at `artifacts/thunderstore/` in the working repo on this machine |
+| ZIP SHA-256 | `3a482abf8b0d7eea8336447c00cd949d1ce557067f0e0014f513b0660636f024` (144,734 B) |
+| DLL SHA-256 | `4449fe3b69ee85917584e1e57c4f4778f695dc1c099ec64a47af0679cb218fd7` (247,808 B) |
 | Built against | Valheim 0.221.12 (buildid 21981559), BepInExPack 5.4.2333, Jötunn 2.29.2 |
 | Dependencies | `JotunnLib 2.29.2` only — zero transitive dependencies |
+
+**These are corrected values** (reseal same day, hours after the
+original CT-050 seal) — the artifact whose hash the seal first recorded
+was only ever measured inside a scratch clone that was then deleted,
+never copied anywhere durable. No source changed; see
+`RELEASE_DOSSIER.md`'s "Reseal note" and `DEF-teamster-v1.0-001` (#227) for the
+full account. If you already downloaded a ZIP from this repo's
+`artifacts/thunderstore/` folder before this correction, re-fetch it —
+the one there now is the one these hashes describe.
 
 Both hashes are build fingerprints of the artifact this seal actually
 tested — not a promise that rebuilding from the source commit reproduces
@@ -41,7 +50,7 @@ them byte-for-byte. This is a known, pre-existing, documented limitation
 (DEF-teamster-v0.8-001, #214, deferred P3, no correctness/safety impact)
 present since the v0.1 RC; do not treat a rebuild producing a different
 hash as evidence the artifact was tampered with — check the DLL's
-InformationalVersion string instead (`1.0.0+03c4233764cd7ba3771a78b49ce6e1535be41bfa`),
+InformationalVersion string instead (`1.0.0+0d204eb9737707044b6b6cb834ed19fad2f710a9`),
 which does correctly and reliably name its exact source commit.
 
 **Do not rebuild this ZIP if you intend to publish the exact tested
@@ -119,8 +128,14 @@ heavier items skipped for v0.9.0 apply now.
    git pull --ff-only
    git status --short
    ```
-   Status should be clean, at commit `03c4233764cd7ba3771a78b49ce6e1535be41bfa`
-   once this PR merges. Confirm `dotnet test` and `python tools/validate_repo.py`
+   Status should be clean. The already-built, already-verified ZIP at
+   `artifacts/thunderstore/TheConcernedCat-ConcernedTeamster-1.0.0.zip`
+   is the one this packet's hashes describe — don't assume any commit
+   hash cited in this doc still equals `main`'s exact current tip by the
+   time you read this (further doc-only fixes can move `main` without
+   changing the sealed artifact at all); the DLL's own InformationalVersion
+   string is the reliable source of truth for which commit actually
+   produced it. Confirm `dotnet test` and `python tools/validate_repo.py`
    both still pass on your machine — they did on this conveyor's, but
    your machine is the one whose word counts for the actual release.
 2. **Run `PRE_RELEASE_SMOKE_TEST.md` in full.** Every **BLOCKS** row must

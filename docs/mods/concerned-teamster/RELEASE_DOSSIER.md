@@ -10,13 +10,13 @@ is owner-only, always.
 | Item | Value |
 |---|---|
 | Version | 1.0.0 (stable release **candidate** — sealed for owner review; NOT published by this seal) |
-| Source commit | `03c4233764cd7ba3771a78b49ce6e1535be41bfa` (branch `feat/ct-050-v1.0-seal`). Sealed on merge to main via the CT-050 PR. |
-| ZIP | `artifacts/thunderstore/TheConcernedCat-ConcernedTeamster-1.0.0.zip` |
-| ZIP SHA-256 | `7e57ad3dca1a64b8492b03559acbbfc0179780360286dc3cd6e9086ec965f791` (144,744 B) — a build fingerprint, not a reproducibility guarantee (DEF-teamster-v0.8-001, #214, still open/deferred) |
-| DLL SHA-256 | `620cdb9d2045b9770b0c03a993178cb7f242b383cd62d998477fea2681473673` (247,808 B, identical size to v0.9.0's — no Domain/Adapters code changed since v0.9.0, only version strings and test-only additions) — also a build fingerprint, not a reproducibility guarantee per the same deferred defect |
-| DLL identity | AssemblyVersion 1.0.0.0, InformationalVersion `1.0.0+03c4233764cd7ba3771a78b49ce6e1535be41bfa` (read back directly from the built DLL) |
+| Source commit | `0d204eb9737707044b6b6cb834ed19fad2f710a9` (`main`'s tip after the CT-050 merge — see the reseal note below for why this superseded the original `03c4233` citation) |
+| ZIP | `artifacts/thunderstore/TheConcernedCat-ConcernedTeamster-1.0.0.zip` — a persistent copy now lives at this exact path in the working repo on this machine, not only in a since-deleted scratch clone |
+| ZIP SHA-256 | `3a482abf8b0d7eea8336447c00cd949d1ce557067f0e0014f513b0660636f024` (144,734 B) — a build fingerprint, not a reproducibility guarantee (DEF-teamster-v0.8-001, #214, still open/deferred) |
+| DLL SHA-256 | `4449fe3b69ee85917584e1e57c4f4778f695dc1c099ec64a47af0679cb218fd7` (247,808 B, identical size to v0.9.0's and to the original seal's — no Domain/Adapters code changed) — also a build fingerprint, not a reproducibility guarantee per the same deferred defect |
+| DLL identity | AssemblyVersion 1.0.0.0, InformationalVersion `1.0.0+0d204eb9737707044b6b6cb834ed19fad2f710a9` (read back directly from the built DLL) |
 | ZIP contents (6 entries) | manifest.json, icon.png (256×256), README.md, CHANGELOG.md, LICENSE, plugins/TheConcernedCat.ConcernedTeamster.dll — **own DLL only**, no PDB, no foreign DLL |
-| Fresh-profile install check | `rehearse-teamster-lifecycle.ps1` run against this exact commit from a genuinely separate `git clone` (not this conveyor's own working tree): the sealed ZIP's DLL extracted into a simulated fresh `BepInEx/plugins/` layout, SHA-256 matched the built DLL exactly (`620CDB9D...`, cross-confirmed by two independent tools). Not a real mod-manager profile (none exists on this machine — see `PROFILE_REHEARSAL.md`) |
+| Fresh-profile install check | `rehearse-teamster-lifecycle.ps1` run against this exact commit from a genuinely separate `git clone` (not this conveyor's own working tree): the sealed ZIP's DLL extracted into a simulated fresh `BepInEx/plugins/` layout, SHA-256 matched the built DLL exactly (`4449FE3B...`, cross-confirmed by two independent tools, hashed twice in a row to confirm the file was no longer being rewritten by anything). Not a real mod-manager profile (none exists on this machine — see `PROFILE_REHEARSAL.md`) |
 | Built against | Valheim 0.221.12 (buildid 21981559, unchanged since the v0.7 seal), Unity 6000.0.61f1, BepInExPack 5.4.2333, Jötunn 2.29.2 |
 | Version sync | 1.0.0 across csproj/Plugin.cs/thunderstore.toml + the CHANGELOG `## 1.0.0` section, validator-asserted (`--expected-version 1.0.0 --require-binary`) |
 | Dependency record (SBOM) | `dotnet list ConcernedTeamster.csproj package --include-transitive`: one top-level package, `JotunnLib 2.29.2`, zero transitive dependencies listed |
@@ -27,6 +27,28 @@ first intended as the *stable* release. Nothing about this seal itself
 publishes anything, tags `concerned-teamster/v1.0.0`, or claims the
 in-game smoke checklist passed — see the Owner Packet (`OWNER_PACKET_v1.0.md`)
 for the exact, owner-only next steps.
+
+**Reseal note (same day, hours after the original seal):** the hashes
+this entry first recorded (`03c4233` / ZIP `7e57ad3d...` / DLL
+`620cdb9d...`) were computed inside a scratch `git clone` that was then
+deleted — the exact bytes those hashes describe were never copied into
+any durable, discoverable location on this machine, only their hash
+values were. The owner found a ZIP already sitting in this repo's own
+`artifacts/thunderstore/` folder (a leftover from an earlier
+verification build, not the sealed one) whose hash didn't match, and
+reasonably flagged it as a possible release-handoff problem before
+reporting it. It was not a code or content problem — no source file
+differs between `03c4233` and `0d204eb`, and DEF-teamster-v0.8-001 means
+ZIP hashes are *expected* to differ across any two separate builds
+regardless. The real gap was process: the artifact whose hash gets
+documented should always be preserved somewhere durable, not just
+measured and discarded. Fixed by rebuilding from `main`'s current tip,
+this time copying the exact resulting ZIP into the repo's own
+`artifacts/thunderstore/` folder (replacing the stale leftover) before
+doing anything else with it — the values in this entry are now that
+artifact's, re-verified stable by hashing it twice in a row before
+finalizing. See `DEF-teamster-v1.0-001` (#227) for the filed
+process-gap record.
 
 **Backfilled tag note:** `concerned-teamster/v0.9.0` had never been
 tagged (the same gap CT-043 found and fixed for v0.1–v0.8, simply missed

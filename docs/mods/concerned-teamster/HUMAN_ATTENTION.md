@@ -1393,6 +1393,45 @@ only for non-blocking uncertainty.
   identical stop after CT-045's v0.9.0 seal), no further Teamster work
   resumes automatically after this leaf closes.
 
+### 2026-09-06 — DEF-teamster-v1.0-001: sealed artifact never preserved durably, caught by the owner before any smoke test ran
+
+- Version / issue: v1.0 / DEF-teamster-v1.0-001 (#227) — an owner-directed
+  fix, not an autonomously-selected leaf; the conveyor itself had already
+  stopped per CT-050's `gate:human-preview` entry directly above.
+- Question: the owner found that the ZIP sitting in this repo's own
+  `artifacts/thunderstore/` folder — the natural place to look for "the
+  sealed v1.0.0 ZIP" — did not match `RELEASE_DOSSIER.md`'s recorded
+  hashes, and correctly held off running any smoke test against it
+  until this was resolved.
+- Safe reversible default selected: root-caused directly rather than
+  guessed — the hashed artifact had only ever existed inside a scratch
+  `git clone` that was deleted after CT-050's seal, and a leftover from
+  an earlier, different verification build was sitting in the
+  persistent folder instead. Rebuilt from `main`'s tip
+  (`0d204eb9737707044b6b6cb834ed19fad2f710a9`) in a fresh clone; this
+  time copied the exact resulting ZIP into `artifacts/thunderstore/`
+  and re-hashed it in place, twice, before treating any value as final
+  — catching, mid-process, that the lifecycle rehearsal script's own
+  internal `package.ps1` call had silently overwritten the first build
+  with a second one at the same path (expected per DEF-teamster-v0.8-001's
+  ZIP non-determinism, but only safe to rely on once nothing further
+  would rebuild it). `RELEASE_DOSSIER.md` and `OWNER_PACKET_v1.0.md`
+  updated with the new values and an explicit reseal note; full account
+  and a general process fix for future seals filed as #227.
+- Why work continued: this is a direct, explicit request from the owner
+  in response to a real problem they found — not autonomous continuation
+  past the seal's own stop point. No source file changed; only the
+  documented hash/commit citations and the persisted artifact.
+- Risk / alternative: none beyond what CT-050's own entry already
+  states — the in-game smoke checklist remains the real, unrun gate.
+  Confirmed 629/629 Teamster + 568/568 Cartographer tests and the
+  full 5-section lifecycle rehearsal all still green against this
+  rebuilt artifact.
+- Must resolve before public release: N/A — this is a documentation/
+  artifact-preservation correction, not a defect in shipped behavior.
+- Status: Open — fix is in PR #228, pending review/merge; move to
+  Resolved with the merge date once it lands.
+
 ## Resolved items
 
 ### 2026-09-05 — CT-032 localization framework delivered; full-UI externalization is progressive
