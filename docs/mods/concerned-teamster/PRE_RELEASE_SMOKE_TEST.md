@@ -37,6 +37,7 @@ none is claimed PASS by this document itself.
 | CT-023 route profile check | CT-023 (#136) | §6 |
 | CT-024 route report demonstration | CT-024 (#137) | §6 |
 | CT-025 coexistence matrix | CT-025 (#138) | §6 |
+| CT-026 authority policy; live validation deferred to CT-027 | CT-026 (#140) | §7 (no row of its own — its "Yes (via CT-027's live validation)" resolution means CT-027's rows below fully carry it) |
 | CT-027 live multiplayer scenario runs | CT-027 (#141) | §7 |
 | CT-028 coop live participant feed + staged scenario | CT-028 (#142) | §7 |
 | CT-029 live lifecycle runs | CT-029 (#143) | §7 |
@@ -46,10 +47,10 @@ none is claimed PASS by this document itself.
 | CT-034 onboarding hint + profile switch | CT-034 (#149) | §8 |
 | CT-037 in-game coexistence matrix (BetterCarts) | CT-037 (#153) | §9 |
 | CT-038 in-game coexistence matrix (ItemStacks/ValheimPlus) | CT-038 (#154) | §9 |
-| CT-039 two visual polish items (non-blocking) | CT-039 (#155) | §8 (record-and-ship) |
+| CT-039 two visual polish items (non-blocking) | CT-039 (#155) | §8.7 (panel clearance); the NavigationCatalog gap for CompatibilityPanel's own Close button has no dedicated row — record-and-ship, tracked here since it needs no in-game observation to fix, only a future accessibility-pass code change |
 | CT-040 corruption/compat/scale live campaign | CT-040 (#156) | §10, §9, §11 |
 | CT-041 Report a Bug real browser-open | CT-041 (#158) | §12 |
-| CT-042 real-gameplay media capture | CT-042 (#159) | Throughout — capture during §2–§9 |
+| CT-042 real-gameplay media capture | CT-042 (#159) | §2, §3, §5, §9 (each has its own "Capture for CT-042 media" callout) |
 | CT-043 profile creation + in-game rows | CT-043 (#160) | §0, throughout |
 
 ## 0. Preamble: profile setup and package install — DRY-RUN VERIFIED RUNNABLE
@@ -113,7 +114,7 @@ Cart Status panel with a loaded cart, for the package README.
 |---|---|---|---|---|---|
 | 3.1 | Cart loaded with mixed/quality-scaled gear | Open the manifest, compare every line/count/weight against the vanilla container UI | Exact match, including quality-scaled items; unreadable slots show an explicit marker, never a wrong number | Screenshot both | Yes |
 | 3.2 | Full-ish cart | Sort every column both directions; type a filter (incl. a localized item name); watch responsiveness | Sort/filter behave per the documented matrix; ▲▼ glyphs render (or record as boxes if the font lacks them — cosmetic) | Screenshot | Yes |
-| 3.3 | Calibration protocol (`CALIBRATION_PROTOCOL.md`) | Run 5 cargo sets × 3 graded ramps × 2 reps in TCT-Clean/TCT-Dev, recording pull results | Produces real Measured calibration rows; note the exact gravity used (bounds hold ≥4.4 m/s²) | Recorded protocol data sheet | No (record-and-ship; sharpens advice, does not block) |
+| 3.3 | Calibration protocol (`CALIBRATION_PROTOCOL.md`) | Run 5 cargo sets × 3 graded ramps × 2 reps in TCT-Clean/TCT-Dev, recording pull results | Produces real Measured calibration rows; note the exact gravity used (bounds hold ≥4.4 m/s²) | Recorded protocol data sheet | Yes |
 | 3.4 | Built test slope | Load progressively heavier cargo and climb; watch the panel warning row and (if enabled) the HUD hint | Steep-climb caution rises smoothly, holds through brief grade dips (no flicker), releases correctly; Unknown calibration never warns | Screenshot / clip of the transcript | Yes |
 
 **Capture for CT-042 media**: a manifest-panel screenshot showing sorting
@@ -123,7 +124,7 @@ and a warning row, for the package README.
 
 | # | Setup | Action | Expected | Evidence on failure | Blocks |
 |---|---|---|---|---|---|
-| 4.1 | Descent calibration protocol | Run 5 sets × 3 ramps × 3 entry speeds × 2 reps | Produces real Measured descent rows | Recorded protocol data sheet | No (record-and-ship) |
+| 4.1 | Descent calibration protocol | Run 5 sets × 3 ramps × 3 entry speeds × 2 reps | Produces real Measured descent rows | Recorded protocol data sheet | Yes |
 | 4.2 | Cart on a graded slope, attached | Engage the brake button | Cart holds on the grade; wheels/joints behave (no visible dangling); button reflects engaged state | Clip | Yes |
 | 4.3 | 4.2 | Release the brake | Vanilla rolling resumes immediately; releases correctly also on: grabbing the cart, walking away past the distance threshold, world exit, plugin shutdown, cart destruction | Clip per release path | Yes |
 | 4.4 | Multiplayer, two clients | Authority hand-off mid-haul with the brake engaged | Brake state and button visibility follow authority correctly on both clients | Clip | Yes |
@@ -178,7 +179,7 @@ clients, at least one unmodded peer if available.
 |---|---|---|---|---|---|
 | 8.1 | Gamepad connected | Navigate every panel using only the controller | Focus visibly moves in the documented order; every feature is reachable by button; accelerators fire and conflicts warn correctly | Clip | Yes |
 | 8.2 | `Ui.Scale` at 0.8, 1.0, 1.3 | Open every panel at each scale, including alongside a neighboring panel | No clipping against a neighbor; the tallest panel (Trip History) fits the actual canvas; text stays readable with the outline applied | Screenshots ×3 scales | Yes |
-| 8.3 | Default wood-panel background | Spot-check contrast visually against `ACCESSIBILITY.md`'s documented estimate | Text reads clearly; if the real background is notably lighter than estimated, flag for a contrast re-audit | Screenshot | No (record-and-ship unless a real readability problem is found, then BLOCKS) |
+| 8.3 | Default wood-panel background | Spot-check contrast visually against `ACCESSIBILITY.md`'s documented estimate | Text reads clearly against the real background; if it is notably lighter than the estimate used for the contrast audit, that is itself the finding — the audit's conclusion depends on this being roughly accurate | Screenshot | Yes |
 | 8.4 | Fresh profile, first world entry | Observe the onboarding hint | Appears once, points at the Cart button, wraps/reads cleanly without clipping; dismissing it hides it permanently | Screenshot | Yes |
 | 8.5 | Config file | Switch `General.Profile` between Minimal/Standard/EverythingObservational and relaunch | Warnings/HUD-hint/trips/risk-lookahead change per the documented preset; the brake stays whatever you left it at, every time | Screenshot + config diff | Yes |
 | 8.6 | A manually-edited individual setting | Restart without changing `Profile` | The manual edit survives untouched | Config diff | Yes |
