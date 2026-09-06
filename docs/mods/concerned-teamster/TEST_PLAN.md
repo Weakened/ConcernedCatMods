@@ -271,6 +271,18 @@ of the acceptance-criteria evidence:
 This leaf implements no new feature and fixes no defect — it is
 audit-and-document only, per its own explicit scope.
 
+## Full regression from a clean checkout (CT-047)
+
+Full detail in `REGRESSION_REPORT_v1.0.md`. Summary of the
+acceptance-criteria evidence:
+
+| Criterion | Evidence |
+|---|---|
+| Automated suite green from clean checkout | `REGRESSION_REPORT_v1.0.md` — a separate `git clone` of `main`, not this conveyor's own working tree; 622 Teamster + 568 Cartographer tests, real-game build, full package cycle, all PASS |
+| Campaign/compat/multiplayer reruns green or pending-listed with reasons | Automated layer reruns clean (compatibility 18/18, multiplayer/authority/network-hardening 86/86); in-game layer pending-listed per profile with the same already-established reason (no TCT-* profile exists) — never claimed passed |
+| Regression report committed and referenced by the DoD matrix | `REGRESSION_REPORT_v1.0.md`; `V1_DEFINITION_OF_DONE.md`'s regression rows updated to cite it |
+| Zero open P0/P1 | Confirmed — no new defect found or filed by this rerun |
+
 ## Multiplayer (v0.6)
 
 - Ownership: only the vanilla-authoritative controller's client mutates

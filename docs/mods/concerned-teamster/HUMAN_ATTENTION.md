@@ -1223,6 +1223,42 @@ only for non-blocking uncertainty.
   resolution requirement their own original entry already states.
 - Status: Open
 
+### 2026-09-06 — CT-047 full regression reruns clean from a fresh clone; in-game layer still needs the profiles CT-043 already flagged
+
+- Version / issue: v1.0 / CT-047 (#165)
+- Question: does the committed tree at the current `main` tip still
+  build, pass its full test suite, and package cleanly when checked out
+  from nothing but a bare clone — not just in this conveyor's own
+  long-lived working tree, which could have accumulated stale generated
+  files or cache state a fresh checkout would expose?
+- Safe reversible default selected: a genuinely separate `git clone` of
+  `main` into a scratch directory, with only the gitignored
+  `Environment.props` copied in, then the full build+test+package cycle
+  run there from scratch. `REGRESSION_REPORT_v1.0.md` records the
+  result: 622 Teamster tests, 568 Cartographer tests, the compatibility
+  and multiplayer campaign filters, and `package.ps1`'s validator/tcli
+  step all PASS, with zero new defects. The scratch clone was deleted
+  once evidence was captured; nothing about the real working tree was
+  touched.
+- Why work continued: this leaf changes no product code, only adds a
+  report and updates the DoD matrix's two regression rows to cite it;
+  the only risk is the report being inaccurate, which independent review
+  checks like any other claim.
+- Risk / alternative: per CT-047's own acceptance criteria, "reruns
+  green or pending-listed with reasons" — the automated logic layer for
+  every campaign (standard, compatibility, multiplayer, dedicated)
+  reruns clean, but the in-game layer stays pending for the exact reason
+  CT-043 already documented: no TCT-* mod-manager profile exists on this
+  development machine, and creating one is a one-time owner GUI action
+  this repo's tooling deliberately does not perform. This report invents
+  no new claim about that gap; it only re-confirms the automated layer
+  underneath it is sound.
+- Must resolve before public release: No for this report itself
+  (documentation-only); the in-game layer it itemizes as pending remains
+  bound by whichever original entry (CT-008, CT-011, CT-027, CT-030,
+  etc.) already states its own release-blocking status.
+- Status: Open
+
 ## Resolved items
 
 ### 2026-09-05 — CT-032 localization framework delivered; full-UI externalization is progressive
