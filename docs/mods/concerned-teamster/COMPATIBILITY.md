@@ -103,6 +103,23 @@ under altered physics is explicit and fail-closed" is satisfied
 structurally: there is no vanilla-mass assumption for altered physics to
 invalidate in the first place.
 
+**The Cargo Manifest panel (issue #153's "manifest" row) also needs no
+gate**, for a different reason: it is not a prediction. `CART_INTERNALS.md`
+documents that Teamster's mass figures are recomputed live from
+`m_baseMass`, `m_itemWeightMassFactor`, and `Inventory.GetTotalWeight()` —
+the same fields a manifest listing reads — and BetterCarts' `SetMass`
+prefix only rewrites its own local `mass` parameter for the physics engine;
+it never writes back to those source fields. So the displayed weight
+numbers stay correct even with BetterCarts installed. What breaks is not a
+number but a *prediction*: `LoadModel`/`RiskModel`'s calibration rows were
+proven against vanilla pulling physics, and once the physics engine sees a
+BetterCarts-reduced mass while Teamster keeps computing the vanilla-formula
+mass, that calibration no longer reliably predicts real climbing behavior
+for the number shown — which is exactly what the gate on those two models,
+and only those two, protects against. `Domain/Ui/CargoManifestPresenter.cs`
+has no reference to `LoadModel`, `RiskModel`, or `Climbability` (verified),
+confirming there is nothing there for the gate to touch.
+
 ## Research: identifying "Better Carts" (CT-037)
 
 `PROJECT.md`'s market research names "Better Carts" generically ("Better

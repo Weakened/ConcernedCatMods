@@ -18,12 +18,19 @@ namespace TheConcernedCat.ConcernedTeamster.Domain.Diagnostics;
 /// |---------------------------------------|----------|-----------------|
 /// | unavailable                           | —        | Unclear         |
 /// | mild (|g| &lt; 8%)                    | —        | Obstruction     |
+/// | climbing ≥ 8%, mass advice unreliable | (not queried) | LoadAdviceUnavailable |
 /// | climbing ≥ 8%                         | No       | ImpossibleLoad  |
 /// | climbing ≥ 8%                         | Marginal | MarginalLoad    |
 /// | climbing ≥ 8%                         | Yes      | Obstruction     |
 /// | climbing ≥ 15% (steep)                | Unknown  | SteepClimb      |
 /// | climbing 8–15%                        | Unknown  | Unclear         |
-/// | descending ≤ −8% (stuck going down?)  | —        | Unclear         |</summary>
+/// | descending ≤ −8% (stuck going down?)  | —        | Unclear         |
+///
+/// The "mass advice unreliable" row (CT-037) takes precedence over every
+/// other climbing-grade row, including when no load model is loaded at
+/// all — a detected mass/physics-altering mod invalidates the load-model
+/// path outright, so the query never happens and the result never falls
+/// back to the cruder grade-only SteepClimb/Unclear heuristic either.</summary>
 public sealed class StuckDetector
 {
     /// <summary>Speed below which a pulled cart counts as not moving.</summary>
