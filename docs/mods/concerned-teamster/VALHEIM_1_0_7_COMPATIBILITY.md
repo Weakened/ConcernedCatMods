@@ -72,14 +72,15 @@ below after the clean package run.
 | Item | Evidence |
 |---|---|
 | Version | 1.0.0 |
-| Source commit | _recorded after compatibility-proof commit_ |
-| ZIP | artifacts/thunderstore/TheConcernedCat-ConcernedTeamster-1.0.0.zip |
-| ZIP SHA-256 | _recorded after package run_ |
-| DLL SHA-256 | _recorded after package run_ |
-| Package contents | _recorded after package audit_ |
-| Teamster tests | _recorded after regression run_ |
-| Cartographer regressions | _recorded after regression run_ |
-| Repository validator | _recorded after validator run_ |
+| Source commit | fc077b0f21bfe5615e42efb00c5958f4f64a2167 |
+| Immutable local ZIP | artifacts/thunderstore/TheConcernedCat-ConcernedTeamster-1.0.0-valheim-1.0.7-fc077b0.zip (144,713 B) |
+| ZIP SHA-256 | C34EE142F5A32D56FF9F28F5457251D25FAB174DE91217DA36245ADC395F566B |
+| DLL identity | 1.0.0+fc077b0f21bfe5615e42efb00c5958f4f64a2167; 247,808 B |
+| DLL SHA-256 | A4B40064BB27C9D5D4DC0F069E2AD97A18E152611C2F63C1BAADD6A7B6C7ECB8 |
+| Package contents | 6 entries: manifest, icon, README, changelog, license, and Teamster DLL only |
+| Teamster tests | 629/629 PASS |
+| Cartographer regressions | 568/568 PASS |
+| Repository validator | PASS, including all cross-product and safety audits |
 
 ## Owner-only Valheim 1.0.7 smoke
 
