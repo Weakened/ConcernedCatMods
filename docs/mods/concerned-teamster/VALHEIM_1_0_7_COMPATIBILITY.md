@@ -1,7 +1,7 @@
 # Valheim 1.0.7 compatibility audit
 
-Issue: DEF-teamster-v1.0-002 (#230)  
-Audit date: 2026-09-09  
+Issue: DEF-teamster-v1.0-002 (#230)
+Audit date: 2026-09-09
 Status: **automated compatibility PASS; owner in-game smoke pending**
 
 Concerned Cartographer exposed a Valheim API break after the game update:
