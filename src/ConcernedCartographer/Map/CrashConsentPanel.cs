@@ -4,6 +4,7 @@ using Jotunn.Managers;
 using TheConcernedCat.ConcernedCartographer.Atlas;
 using TheConcernedCat.ConcernedCartographer.Reporting;
 using TheConcernedCat.ConcernedCartographer.Runtime;
+using TheConcernedCat.ConcernedCartographer.Ui;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -225,6 +226,18 @@ internal sealed class CrashConsentPanel
             GUIManager.CustomGUIFront!.transform,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 0f),
             PanelWidth, PanelHeight, draggable: false);
+
+        // This dialog never applied Accessibility.UiScale at all (unlike
+        // every other CustomGUIFront-parented CC panel) — same fixed-pixel-
+        // canvas defect as the rest, worse here because it never even had
+        // the manual preference to fall back on. It is built once and shown
+        // repeatedly, so the scale is fixed at first build like every other
+        // Teamster/Cartographer panel (world enter or first show).
+        RectTransform? canvas = GUIManager.CustomGUIFront.transform as RectTransform;
+        float canvasWidth = canvas != null ? canvas.rect.width : Screen.width;
+        float canvasHeight = canvas != null ? canvas.rect.height : Screen.height;
+        _panel.transform.localScale = Vector3.one *
+            UiDisplayScale.ResolveEffectiveScale(canvasWidth, canvasHeight, _settings.UiScale.Value);
 
         gui.CreateText(
             AtlasStrings.Get("privacy.consentTitle"), _panel.transform,

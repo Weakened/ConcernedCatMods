@@ -5,6 +5,7 @@ using TheConcernedCat.ConcernedCartographer.Atlas;
 using TheConcernedCat.ConcernedCartographer.Map;
 using TheConcernedCat.ConcernedCartographer.Persistence;
 using TheConcernedCat.ConcernedCartographer.Roads;
+using TheConcernedCat.ConcernedCartographer.Ui;
 using UnityEngine;
 
 namespace TheConcernedCat.ConcernedCartographer.Runtime;
@@ -889,8 +890,28 @@ internal sealed class CartographerRuntime : IDisposable
             return;
         }
 
-        panel.UiScale = _settings.UiScale.Value;
+        panel.UiScale = EffectiveUiScale();
         _mapUi.OpenExclusive(token, panel.Toggle);
+    }
+
+    /// <summary>The UiScale to feed a panel parented on Jötunn's
+    /// CustomGUIFront (every CC side panel, the Atlas Drawer, and the Pin
+    /// Workbench — NOT the Pin Palette, which lives on Minimap's own
+    /// correctly-scaling canvas and must keep using the raw preference).
+    /// CustomGUIFront never sets CanvasScaler.uiScaleMode, so it stays at
+    /// Unity's default ConstantPixelSize: those panels are sized in literal
+    /// screen pixels with no relationship to the player's actual render
+    /// resolution, and the player's own preference alone cannot compensate
+    /// for that on a high-resolution or high-DPI display. This layers the
+    /// preference on top of a baseline derived from the live canvas size.</summary>
+    private float EffectiveUiScale()
+    {
+        RectTransform? canvas = Jotunn.Managers.GUIManager.CustomGUIFront != null
+            ? Jotunn.Managers.GUIManager.CustomGUIFront.transform as RectTransform
+            : null;
+        float canvasWidth = canvas != null ? canvas.rect.width : Screen.width;
+        float canvasHeight = canvas != null ? canvas.rect.height : Screen.height;
+        return UiDisplayScale.ResolveEffectiveScale(canvasWidth, canvasHeight, _settings.UiScale.Value);
     }
 
     /// <summary>Toolbar [Quick Pin] (#102): closes the map and arms a
@@ -930,7 +951,7 @@ internal sealed class CartographerRuntime : IDisposable
     {
         if (AtlasAccessAllowed(out string drawerDenial))
         {
-            _drawerPanel.UiScale = _settings.UiScale.Value;
+            _drawerPanel.UiScale = EffectiveUiScale();
             _drawerPanel.Toggle(
                 _settings.DrawerShowDirt.Value,
                 _settings.DrawerShowPaved.Value,
@@ -1021,7 +1042,7 @@ internal sealed class CartographerRuntime : IDisposable
             return;
         }
 
-        _workbenchPanel.UiScale = _settings.UiScale.Value;
+        _workbenchPanel.UiScale = EffectiveUiScale();
         _mapUi.OpenExclusive(_workbenchToken,
             () => _workbenchPanel.OpenForManaged(pin, _pinCommands.Operations, ResyncPins));
     }
@@ -1054,7 +1075,7 @@ internal sealed class CartographerRuntime : IDisposable
             return;
         }
 
-        _workbenchPanel.UiScale = _settings.UiScale.Value;
+        _workbenchPanel.UiScale = EffectiveUiScale();
         _mapUi.OpenExclusive(_workbenchToken,
             () => _workbenchPanel.OpenForManaged(managed, _pinCommands.Operations, ResyncPins));
     }
@@ -1450,7 +1471,7 @@ internal sealed class CartographerRuntime : IDisposable
             return;
         }
 
-        _workbenchPanel.UiScale = _settings.UiScale.Value;
+        _workbenchPanel.UiScale = EffectiveUiScale();
 
         var point = new RoadPoint(world.x, world.y, world.z);
         PinOperations operations = _pinCommands.Operations;
