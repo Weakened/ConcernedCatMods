@@ -1,4 +1,4 @@
-# Current handoff: Concerned Cartographer 1.0.0 (CC-232)
+# Current handoff: Concerned Cartographer V1.0, package 1.0.1 (CC-232)
 
 The current release preparation supersedes the historical 0.10.x handoffs below.
 See [V1_RELEASE_232.md](V1_RELEASE_232.md) for the exact source commit, sealed ZIP,

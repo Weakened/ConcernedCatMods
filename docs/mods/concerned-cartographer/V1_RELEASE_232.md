@@ -1,4 +1,20 @@
-﻿# Concerned Cartographer 1.0.0 - release handoff (CC-232)
+# Updated handoff: V1.0 (package 1.0.1)
+
+The owner encountered an already-existing 1.0.0 upload. Thunderstore's package API also reported latest version 1.0.0. This new package remains the V1.0 release, without beta branding, and uses the next patch number 1.0.1.
+
+- Build source: `6ac75c19998945f36b0661bb2cbb60c1f3fffac6`.
+- ZIP: `TheConcernedCat-ConcernedCartographer-1.0.1.zip` (384,321 bytes).
+- ZIP SHA-256: `9fd64885540e0546a0cb8f57216d63ebc58d92024d40f0b9b5d02413e58d47de`.
+- DLL SHA-256: `b0f9d59793087a01cd23de1a05652569298dea94443c55e77ec183d2b118a101`.
+- Sealed location: `C:\code\ConcernedCatMods-cc-232\artifacts\cc232\sealed\TheConcernedCat-ConcernedCartographer-1.0.1.zip`.
+- Release build, required-binary/version validation, tcli packaging, exact six-entry ZIP audit, README/changelog byte checks, 256x256 icon, and zero direct Character/Player.Message DLL references: PASS.
+- Same reviewed runtime implementation and 578-test result as the previous handoff; only release metadata and documentation changed.
+- Compared Claude's local commit `fffee51edaaf4b2410543f2db66cd275a54ea3c3`: the underlying HUD compatibility fix is retained, with the reviewed guarded initialization and unsupported-signature checks added here. Claude's checkout remains untouched.
+- This is the current upload artifact. The 1.0.0 ZIP below is historical. No automatic publication performed; exact-package manual verification remains as documented below.
+
+---
+
+# Concerned Cartographer 1.0.0 - release handoff (CC-232)
 
 ## Artifact identity
 
