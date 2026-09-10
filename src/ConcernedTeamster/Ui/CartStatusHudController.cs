@@ -74,10 +74,21 @@ internal sealed class CartStatusHudController : MonoBehaviour
     /// already uses (<see cref="TeamsterSettings.PanelWarningsEnabled"/> and
     /// siblings). An already-built, merely closed-then-reopened panel keeps
     /// its existing GameObject (Toggle only flips SetActive) and so keeps
-    /// its size until the GameObject is next destroyed and rebuilt.</summary>
+    /// its size until the GameObject is next destroyed and rebuilt.
+    ///
+    /// Jötunn's CustomGUIFront canvas never sets CanvasScaler.uiScaleMode, so
+    /// it stays at Unity's default ConstantPixelSize — every panel here is
+    /// sized in literal screen pixels with no relationship to the player's
+    /// actual render resolution, and shrinks proportionally on any display
+    /// larger than the 1920x1080 reference the panel sizes were designed
+    /// against. UiScaleOptions.ResolveEffectiveScale layers the player's own
+    /// preference on top of a display-derived baseline instead of using the
+    /// preference as the whole scale, so panels default to a legible size on
+    /// a high-resolution or high-DPI display with no configuration needed.</summary>
     private float CurrentUiScale()
     {
-        return UiScaleOptions.Clamp(_settings?.UiScale.Value ?? UiScaleOptions.DefaultScale);
+        return UiScaleOptions.ResolveEffectiveScale(
+            Screen.width, Screen.height, _settings?.UiScale.Value ?? UiScaleOptions.DefaultScale);
     }
 
     private void Update()

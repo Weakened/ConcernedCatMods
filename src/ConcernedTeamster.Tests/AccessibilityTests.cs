@@ -50,12 +50,15 @@ public class AccessibilityTests
         // as a known fact (same rationale as TeamsterStringsTests's
         // ManifestPanelCompositionKeys_ArePinnedByteExact) since it cannot be
         // referenced directly. 1080 is a commonly-cited Valheim UI reference
-        // height — NOT independently verified against Jotunn's actual
-        // CustomGUIFront canvas setup (no live game session here); this is a
-        // conservative planning assumption, tracked pending in-game
-        // confirmation in HUMAN_ATTENTION.md. The point of this test is to
-        // fail loudly if a future change to MaxScale or to the tallest
-        // panel's height stops leaving margin against that assumption.
+        // height, and is now CONFIRMED (not just assumed) to match Jötunn's
+        // actual CustomGUIFront canvas behavior: CustomGUIFront never sets
+        // CanvasScaler.uiScaleMode, so it stays at Unity's default
+        // ConstantPixelSize — a panel really is sized in literal screen
+        // pixels, with 1920x1080 the reference this mod's panels were
+        // designed against (confirmed by decompiling the shipped Jotunn.dll).
+        // The point of this test is to fail loudly if a future change to
+        // MaxScale or to the tallest panel's height stops leaving margin
+        // against that reference.
         const float tallestPanelHeight = 760f; // TripHistoryPanel.PanelHeight
         const float approximateReferenceCanvasHeight = 1080f;
         float worstCaseHeight = tallestPanelHeight * UiScaleOptions.MaxScale;
@@ -63,6 +66,90 @@ public class AccessibilityTests
         Assert.True(worstCaseHeight < approximateReferenceCanvasHeight,
             $"Tallest panel at MaxScale ({worstCaseHeight}) should stay under the approximate " +
             $"{approximateReferenceCanvasHeight} reference canvas height, leaving margin for other HUD chrome.");
+    }
+
+    // ---- UiScaleOptions.ResolveDisplayBaseline / ResolveEffectiveScale ------
+
+    [Theory]
+    [InlineData(1920f, 1080f)] // exactly the reference canvas
+    [InlineData(1280f, 720f)] // smaller than the reference on both axes
+    [InlineData(0f, 1080f)] // unusable width
+    [InlineData(1920f, 0f)] // unusable height
+    [InlineData(float.NaN, 1080f)]
+    [InlineData(1920f, float.PositiveInfinity)]
+    public void ResolveDisplayBaseline_AtOrBelowReferenceOrUnusable_NeverShrinksBelowOne(
+        float canvasWidth, float canvasHeight)
+    {
+        // The fix must never make an already-correctly-sized (or
+        // unmeasurable) canvas smaller than the design already assumes —
+        // only high-resolution displays should get bigger panels.
+        Assert.Equal(UiScaleOptions.DefaultScale, UiScaleOptions.ResolveDisplayBaseline(canvasWidth, canvasHeight));
+    }
+
+    [Fact]
+    public void ResolveDisplayBaseline_DoubleTheReferenceResolution_DoublesTheBaseline()
+    {
+        Assert.Equal(2f, UiScaleOptions.ResolveDisplayBaseline(3840f, 2160f));
+    }
+
+    [Fact]
+    public void ResolveDisplayBaseline_UsesTheNarrowerAxisSoAPanelNeverOverflowsEitherDimension()
+    {
+        // 3840x1080: width says 2x, height says 1x. Taking the wider ratio
+        // would grow a panel until it no longer fits the shorter axis.
+        Assert.Equal(UiScaleOptions.DefaultScale, UiScaleOptions.ResolveDisplayBaseline(3840f, 1080f));
+    }
+
+    [Fact]
+    public void ResolveDisplayBaseline_ExtremeResolution_CapsAtMaxDisplayScale()
+    {
+        Assert.Equal(UiScaleOptions.MaxDisplayScale, UiScaleOptions.ResolveDisplayBaseline(19_200f, 10_800f));
+    }
+
+    [Theory]
+    [InlineData(0.5f)]
+    [InlineData(1.0f)]
+    [InlineData(UiScaleOptions.MaxScale)]
+    public void ResolveEffectiveScale_AtReferenceResolution_MatchesThePreAutoScaleBehavior(float userPreference)
+    {
+        // At the reference resolution the baseline is exactly 1, so the
+        // combined result must equal the old Clamp-only behavior byte for
+        // byte — this fix must not change anything for anyone already at a
+        // normal resolution.
+        Assert.Equal(
+            UiScaleOptions.Clamp(userPreference),
+            UiScaleOptions.ResolveEffectiveScale(
+                UiScaleOptions.ReferenceWidth, UiScaleOptions.ReferenceHeight, userPreference));
+    }
+
+    [Fact]
+    public void ResolveEffectiveScale_CombinesDisplayBaselineAndUserPreference()
+    {
+        float expected = 2f * UiScaleOptions.MaxScale;
+        Assert.Equal(expected, UiScaleOptions.ResolveEffectiveScale(3840f, 2160f, UiScaleOptions.MaxScale));
+    }
+
+    [Theory]
+    [InlineData(1920f, 1080f)]
+    [InlineData(3840f, 2160f)]
+    [InlineData(19_200f, 10_800f)]
+    public void ResolveEffectiveScale_WorstCase_TallestPanelStaysProportionallyUnderItsOwnCanvas(
+        float canvasWidth, float canvasHeight)
+    {
+        // Generalizes MaxScale_TallestPanelStaysUnderConservativeReferenceCanvasHeight:
+        // whatever the display baseline turns out to be, the tallest panel at
+        // MaxScale must stay within the same margin of the canvas it was
+        // actually measured against, not just the 1920x1080 reference case.
+        const float tallestPanelHeight = 760f; // TripHistoryPanel.PanelHeight
+        float baseline = UiScaleOptions.ResolveDisplayBaseline(canvasWidth, canvasHeight);
+        float effectiveScale = UiScaleOptions.ResolveEffectiveScale(canvasWidth, canvasHeight, UiScaleOptions.MaxScale);
+        float worstCaseHeight = tallestPanelHeight * effectiveScale;
+        float scaledReferenceCanvasHeight = 1080f * baseline;
+
+        Assert.True(worstCaseHeight < scaledReferenceCanvasHeight,
+            $"Tallest panel at the worst-case combined scale ({worstCaseHeight}) should stay under " +
+            $"{scaledReferenceCanvasHeight} (the reference canvas height scaled by the same baseline), " +
+            "leaving margin for other HUD chrome.");
     }
 
     // ---- ContrastRatio --------------------------------------------------------
