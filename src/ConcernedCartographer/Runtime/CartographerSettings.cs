@@ -219,7 +219,13 @@ internal sealed class CartographerSettings
             config.Bind("Routes", "RouteOnRoadSpeed", 5f, new ConfigDescription(
                 "On-road travel speed (m/s) for time estimates.", new AcceptableValueRange<float>(0.5f, 15f))),
             config.Bind("Accessibility", "UiScale", 1f, new ConfigDescription(
-                "Scale multiplier for Concerned Cartographer panels.", new AcceptableValueRange<float>(0.8f, 1.6f))),
+                "Personal size preference for Concerned Cartographer panels. Most panels also apply an " +
+                "automatic baseline on top of this for your display (Jötunn's panel canvas is a fixed " +
+                "pixel size, so those panels would otherwise render far smaller than intended on a " +
+                "high-resolution or high-DPI screen) — the Pin Palette (\"New Marker\") is the exception, " +
+                "since it is built on Valheim's own map canvas, which already scales correctly with " +
+                "resolution, so only this raw preference applies to it.",
+                new AcceptableValueRange<float>(0.8f, 1.6f))),
             config.Bind("Accessibility", "HighContrast", false,
                 "High-contrast map ink: near-black dirt, near-white paved, brighter route colors. Kinds stay distinguishable without color (dashed/dotted styles, icons, labels)."),
             config.Bind("Accessibility", "WorkbenchGamepadButton", "",
