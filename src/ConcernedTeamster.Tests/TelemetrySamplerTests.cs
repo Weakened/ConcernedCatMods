@@ -213,16 +213,13 @@ public class TelemetrySamplerTests
         TelemetrySampler sampler = CreateSampler(world);
         sampler.Tick(0.0);
 
-        // Warm up the code path, then measure: 200k not-due ticks must not
-        // allocate a single byte on this thread.
-        sampler.Tick(0.1);
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int index = 0; index < 200_000; index++)
-        {
-            sampler.Tick(0.2);
-        }
+        // Exercise a full warmup and measurement on a dedicated thread:
+        // xUnit runner work cannot be charged to this exact-zero assertion.
+        long allocated = AllocationProbe.MeasureAfterWarmup(
+            () => sampler.Tick(0.2),
+            warmupIterations: 200_000,
+            measuredIterations: 200_000);
 
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         Assert.Equal(0L, allocated);
     }
 
@@ -234,15 +231,16 @@ public class TelemetrySamplerTests
         sampler.Tick(0.0);
         sampler.Tick(1.0);
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
         double now = 2.0;
-        for (int index = 0; index < 10_000; index++)
-        {
-            now += 0.11;
-            sampler.Tick(now);
-        }
+        long allocated = AllocationProbe.MeasureAfterWarmup(
+            () =>
+            {
+                now += 0.11;
+                sampler.Tick(now);
+            },
+            warmupIterations: 10_000,
+            measuredIterations: 10_000);
 
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         Assert.Equal(0L, allocated);
     }
 
