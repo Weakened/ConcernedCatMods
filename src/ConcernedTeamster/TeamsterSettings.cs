@@ -194,7 +194,10 @@ internal sealed class TeamsterSettings
                         Domain.Trips.TripRecorderOptions.MaxMaxTripsRetained))),
             config.Bind("Ui", "Scale", UiScaleOptions.DefaultScale,
                 new ConfigDescription(
-                    "Uniform size of every Teamster panel, button, and font. 1.0 is the default size; " +
+                    "Personal size preference for every Teamster panel, button, and font, layered on top " +
+                    "of an automatic baseline the mod already applies for your display (Jötunn's panel " +
+                    "canvas is a fixed pixel size, so panels would otherwise render far smaller than " +
+                    "intended on a high-resolution or high-DPI screen). 1.0 is the default preference; " +
                     "takes effect the next time a panel opens (or on world enter for the always-visible " +
                     "Cart button), not live on an already-open panel.",
                     new AcceptableValueRange<float>(UiScaleOptions.MinScale, UiScaleOptions.MaxScale))),
