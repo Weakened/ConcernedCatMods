@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -12,6 +12,7 @@
          they have no Unity/BepInEx dependencies, and shipping stays a single
          plugin DLL because no extra domain assembly exists. -->
     <Compile Include="..\ConcernedCartographer\Domain\**\*.cs" LinkBase="Domain" />
+    <Compile Include="..\ConcernedCartographer\Runtime\VanillaMessage.cs" Link="Runtime/VanillaMessage.cs" />
   </ItemGroup>
 
   <ItemGroup>

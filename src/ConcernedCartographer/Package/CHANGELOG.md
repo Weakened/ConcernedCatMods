@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.0.1 - V1.0 patch release
+
+V1.0 is released; this is not a beta. The package uses 1.0.1 because 1.0.0 has already been uploaded to Thunderstore.
+
+- Preserves the Valheim 1.0 Character.Message compatibility fix.
+- Hardens the adapter so binding initialization failures and unsupported method signatures disable cosmetic notifications safely.
+- Updates the package details to V1.0 and corrects the road-capture description.
+- Retains the technical explanation below so other mod authors can diagnose the optional-argument binary compatibility break.
+- Adds ten focused adapter compatibility tests. No dependency or atlas data-format changes.
+
+## 1.0.0
+
+**Concerned Cartographer v1.0 - the living atlas, with the Valheim 1.0 compatibility fix.**
+
+- Fixed the `MissingMethodException` reported on Valheim 1.0.7 / Unity 6000.0.75f1 when Cartographer tried to show a vanilla HUD message. The old binding could prevent the containing runtime update method from running, affecting much more than the notification itself.
+- Routed all Cartographer HUD-message calls through the version-tolerant `VanillaMessage` adapter. It resolves the running game's method and supplies its trailing defaults instead of compiling a call to the removed four-argument overload. Binding initialization is guarded and unsupported signatures fail closed. Unavailable messaging logs one startup warning; invocation failure drops the cosmetic notification.
+- Promoted package, plugin, and assembly metadata to 1.0.0 and updated the package details from public beta to v1.
+- Corrected the README's road-capture description: only successful local-player Pathen/Paved construction creates road data. Walking existing paint does not create roads.
+- No dependency or atlas data-format changes in this release. Keep your existing configuration and Cartographer sidecar files when upgrading.
+
+### For other mod authors: why an optional argument broke existing DLLs
+
+The former method was `Character.Message(MessageHud.MessageType, string, int, UnityEngine.Sprite)`. The affected game build adds a fifth argument, `bool log = false`. A source call such as `player.Message(type, text)` still compiles against the new assemblies, but C# embeds omitted optional arguments at compile time. An already-built DLL still references the old four-parameter signature, which no longer exists.
+
+On Mono the failure can occur while the containing method is JIT-compiled, before an in-method try/catch can run. Catching exceptions around the old direct call is therefore insufficient protection for the update path.
+
+Rebuild against the current game assemblies and inspect the final DLL's member references. For compatibility across known signatures, put the game call behind a narrow runtime adapter: check the leading parameter types, reject unsupported signatures, supply trailing defaults, and keep optional HUD failures from disabling gameplay. Cartographer's implementation is in `src/ConcernedCartographer/Runtime/VanillaMessage.cs`. This fix addresses this particular method change; it is not proof that every game API or older/newer game build is compatible.
+
 ## 0.10.1 (Public Beta)
 
 Storefront and documentation refresh only: the corrected Thunderstore thumbnail and a new in-game screenshot gallery in the package README (images are GitHub-hosted, not packaged). No gameplay, dependency, privacy, synchronization, or data-format changes — the plugin differs from 0.10.0 only in its version metadata.

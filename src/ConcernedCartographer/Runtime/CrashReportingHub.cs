@@ -171,7 +171,7 @@ internal sealed class CrashReportingHub : IDisposable
             }
 
             string key = ReportingActive ? "privacy.noticeSent" : "privacy.noticeOff";
-            Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, AtlasStrings.Format(key, subsystem));
+            VanillaMessage.Show(Player.m_localPlayer, MessageHud.MessageType.TopLeft, AtlasStrings.Format(key, subsystem));
         }
         catch
         {

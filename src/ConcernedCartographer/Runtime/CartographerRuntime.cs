@@ -173,7 +173,7 @@ internal sealed class CartographerRuntime : IDisposable
             }
             else
             {
-                Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft,
+                VanillaMessage.Show(Player.m_localPlayer, MessageHud.MessageType.TopLeft,
                     "The enhanced marker palette is disabled (setting or a conflicting pin manager); the vanilla selector is shown instead.");
             }
         };
@@ -185,6 +185,14 @@ internal sealed class CartographerRuntime : IDisposable
         _drawerPanel.PrivacyClicked = () => _consentPanel.ShowSettings();
         _drawerPanel.SystemMarkersClicked = () => OpenSidePanel(_systemMarkersToken, _systemMarkersPanel);
         MapInputGate.Install(log);
+
+        // DEF-v0.10-001: HUD toasts go through a reflection shim, so an
+        // unrecognised Character.Message costs the toasts and nothing else.
+        // Say so once instead of dropping every message in silence.
+        if (!VanillaMessage.Available)
+        {
+            log.LogWarning("Vanilla HUD messages unavailable (Character.Message not recognised on this game build); CC status toasts will be skipped.");
+        }
 
         // RC14 fix 3: narrow input ownership for armed Quick Pin, active
         // exactly while the gate holds (plus the owned press's frame).
@@ -448,7 +456,7 @@ internal sealed class CartographerRuntime : IDisposable
                         GamepadDown(_settings.WorkbenchGamepadButton.Value));
                 if (action == QuickPinInputGate.FrameAction.Cancel)
                 {
-                    Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, AtlasStrings.Get("quickpin.cancelled"));
+                    VanillaMessage.Show(Player.m_localPlayer, MessageHud.MessageType.TopLeft, AtlasStrings.Get("quickpin.cancelled"));
                 }
                 else if (action == QuickPinInputGate.FrameAction.Capture)
                 {
@@ -871,7 +879,7 @@ internal sealed class CartographerRuntime : IDisposable
 
         if (quickPinMessage.Length > 0)
         {
-            Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, quickPinMessage);
+            VanillaMessage.Show(Player.m_localPlayer, MessageHud.MessageType.TopLeft, quickPinMessage);
         }
     }
 
@@ -886,7 +894,7 @@ internal sealed class CartographerRuntime : IDisposable
     {
         if (!AtlasAccessAllowed(out string denial))
         {
-            Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, denial);
+            VanillaMessage.Show(Player.m_localPlayer, MessageHud.MessageType.TopLeft, denial);
             return;
         }
 
@@ -925,7 +933,7 @@ internal sealed class CartographerRuntime : IDisposable
         // uses: arming is an atlas write path (it creates a pin).
         if (!AtlasAccessAllowed(out string denial))
         {
-            Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, denial);
+            VanillaMessage.Show(Player.m_localPlayer, MessageHud.MessageType.TopLeft, denial);
             return;
         }
 
@@ -942,7 +950,7 @@ internal sealed class CartographerRuntime : IDisposable
         // RC14 fix 3: the arming frame is owned too — the toolbar click
         // that armed must not become an attack as the map closes.
         _quickPinGate.Arm(Time.frameCount);
-        Player.m_localPlayer?.Message(MessageHud.MessageType.Center, AtlasStrings.Get("quickpin.armed"));
+        VanillaMessage.Show(Player.m_localPlayer, MessageHud.MessageType.Center, AtlasStrings.Get("quickpin.armed"));
     }
 
     /// <summary>Drawer toggle shared by the hotkey and the large-map
@@ -960,7 +968,7 @@ internal sealed class CartographerRuntime : IDisposable
         }
         else
         {
-            Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, drawerDenial);
+            VanillaMessage.Show(Player.m_localPlayer, MessageHud.MessageType.TopLeft, drawerDenial);
         }
     }
 
@@ -1038,7 +1046,7 @@ internal sealed class CartographerRuntime : IDisposable
 
         if (!AtlasAccessAllowed(out string denial))
         {
-            Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, denial);
+            VanillaMessage.Show(Player.m_localPlayer, MessageHud.MessageType.TopLeft, denial);
             return;
         }
 
@@ -1060,7 +1068,7 @@ internal sealed class CartographerRuntime : IDisposable
 
         if (!AtlasAccessAllowed(out string denial))
         {
-            Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, denial);
+            VanillaMessage.Show(Player.m_localPlayer, MessageHud.MessageType.TopLeft, denial);
             return;
         }
 
@@ -1431,7 +1439,8 @@ internal sealed class CartographerRuntime : IDisposable
 
             System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
             System.IO.File.WriteAllText(path, DateTime.UtcNow.ToString("o"));
-            Player.m_localPlayer?.Message(
+            VanillaMessage.Show(
+                Player.m_localPlayer,
                 MessageHud.MessageType.Center,
                 AtlasStrings.Get("hud.onboarding"));
         }
@@ -1467,7 +1476,7 @@ internal sealed class CartographerRuntime : IDisposable
 
         if (!AtlasAccessAllowed(out string denial))
         {
-            Player.m_localPlayer?.Message(MessageHud.MessageType.TopLeft, denial);
+            VanillaMessage.Show(Player.m_localPlayer, MessageHud.MessageType.TopLeft, denial);
             return;
         }
 

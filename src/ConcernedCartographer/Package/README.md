@@ -1,6 +1,6 @@
-# Concerned Cartographer
+# Concerned Cartographer V1.0
 
-**Public beta by The Concerned Cat. Actively maintained on the road to v1.0 and beyond.**
+**V1.0 release (package 1.0.1) by The Concerned Cat. Includes the Valheim 1.0 HUD-message compatibility fix.**
 
 Concerned Cartographer turns Valheim’s map into a living atlas.
 
@@ -9,7 +9,7 @@ The roads your Vikings build can map themselves. Existing pins can become durabl
 ## Highlights
 
 * Dirt paths and paved roads appear as separate map layers.
-* Roads are captured as you build, walk, or rediscover them.
+* Your successful Pathen and Paved construction actions record roads; walking existing terrain does not create road ink.
 * Existing vanilla pins can be upgraded and edited without being recreated.
 * The Atlas Drawer provides search, filtering, clustering, and saved views.
 * Freehand and waypoint routes can follow recorded roads.
@@ -53,11 +53,11 @@ The roads your Vikings build can map themselves. Existing pins can become durabl
 
 *Settings with backups, a sanitized support bundle, road-repair tools — and opt-in crash reporting that spells out what is never sent.*
 
-## Beta status and support
+## Version 1.0 and support
 
-This is a real public release, but it is also the first large-scale community test of the complete atlas.
+Version 1.0 brings the complete atlas out of public beta, with a compatibility fix for the changed HUD-message API in Valheim 1.0.
 
-Development and compatibility support will continue through the stable v1.0 milestone and beyond. Confirmed crashes, data-loss risks, installation failures, stuck input, duplicated pins, and multiplayer consistency problems receive the highest priority.
+Development and compatibility support continue beyond v1.0. Confirmed crashes, data-loss risks, installation failures, stuck input, duplicated pins, and multiplayer consistency problems receive the highest priority.
 
 Report ordinary bugs and compatibility problems through the GitHub issue tracker:
 
