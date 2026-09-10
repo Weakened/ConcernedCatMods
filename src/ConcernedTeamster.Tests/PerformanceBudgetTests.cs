@@ -47,7 +47,6 @@ public class PerformanceBudgetTests
         var profiler = new RouteProfiler(StraightX(50_000f), FlatProbe);
 
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        long before = GC.GetAllocatedBytesForCurrentThread();
         while (!profiler.IsComplete)
         {
             // 24 = RoutePickerPanel.ProfileSamplesPerFrame, CT-023's chosen
@@ -57,7 +56,20 @@ public class PerformanceBudgetTests
         }
 
         stopwatch.Stop();
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long allocated = AllocationProbe.MeasureAfterWarmup(
+            () =>
+            {
+                var allocationProfiler = new RouteProfiler(StraightX(50_000f), FlatProbe);
+                return () =>
+                {
+                    while (!allocationProfiler.IsComplete)
+                    {
+                        allocationProfiler.Advance(24);
+                    }
+                };
+            },
+            warmupIterations: 1,
+            measuredIterations: 1);
 
         Assert.Equal(RouteProfiler.MaxSamplePositions, profiler.TotalSamplesConsumed);
         Assert.Equal(0L, allocated);
@@ -75,17 +87,13 @@ public class PerformanceBudgetTests
             profiler.Advance(24);
         }
 
-        // Warm up, then measure: 1M post-completion Advance calls (the panel
-        // polls every rendered frame even once the profile is done — 1M
-        // frames is several hours at 60 fps) must not allocate a single byte.
-        profiler.Advance(24);
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int index = 0; index < 1_000_000; index++)
-        {
-            profiler.Advance(24);
-        }
+        // Warm and measure on a dedicated thread. One million measured
+        // calls represent several hours at 60 fps and must allocate exactly zero.
+        long allocated = AllocationProbe.MeasureAfterWarmup(
+            () => profiler.Advance(24),
+            warmupIterations: 1_000_000,
+            measuredIterations: 1_000_000);
 
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         Assert.Equal(0L, allocated);
     }
 
@@ -102,15 +110,12 @@ public class PerformanceBudgetTests
         lifecycle.MarkEngaged("cart-1"); // confirms physics engaged, as the adapter would after EvaluateToggle
         Assert.True(lifecycle.IsEngaged);
 
-        // Warm up, then measure: 200k steady-state ticks must not allocate.
-        lifecycle.EvaluateTick(facts, out _);
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int index = 0; index < 200_000; index++)
-        {
-            lifecycle.EvaluateTick(facts, out _);
-        }
+        // A full warmup keeps tiered-JIT work outside the exact-zero window.
+        long allocated = AllocationProbe.MeasureAfterWarmup(
+            () => lifecycle.EvaluateTick(facts, out _),
+            warmupIterations: 200_000,
+            measuredIterations: 200_000);
 
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         Assert.Equal(0L, allocated);
     }
 
@@ -246,26 +251,19 @@ public class PerformanceBudgetTests
             100f, -5f, float.NaN, float.PositiveInfinity, float.NegativeInfinity, 1e12f, 0f,
         };
 
-        // Warm up every branch (finite-in-range, negative, NaN, +/-Inf, over-cap) once.
-        foreach (float raw in rawValues)
-        {
-            NetworkInputGuard.Mass(raw);
-            NetworkInputGuard.MassFactor(raw);
-            NetworkInputGuard.Speed(raw);
-            NetworkInputGuard.Grade(raw);
-        }
+        int rawIndex = 0;
+        long allocated = AllocationProbe.MeasureAfterWarmup(
+            () =>
+            {
+                float raw = rawValues[rawIndex++ % rawValues.Length];
+                NetworkInputGuard.Mass(raw);
+                NetworkInputGuard.MassFactor(raw);
+                NetworkInputGuard.Speed(raw);
+                NetworkInputGuard.Grade(raw);
+            },
+            warmupIterations: 50_000,
+            measuredIterations: 50_000);
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int index = 0; index < 50_000; index++)
-        {
-            float raw = rawValues[index % rawValues.Length];
-            NetworkInputGuard.Mass(raw);
-            NetworkInputGuard.MassFactor(raw);
-            NetworkInputGuard.Speed(raw);
-            NetworkInputGuard.Grade(raw);
-        }
-
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         Assert.Equal(0L, allocated);
     }
 
