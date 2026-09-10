@@ -333,6 +333,22 @@ are absorbed into the store, and foreign/system pins are untouchable
 through every code path. Private Minimap members are reached only through
 Harmony skip-visibility helpers (`MinimapReflection`).
 
+## Route Follow extension boundary (post-1.0)
+
+`RouteFollowMath` is the game-free geometry boundary shared by the future
+walking and sailing Route Follow adapters. Given an ordered route, explicit
+travel direction, current monotonic segment cursor, and bounded search and
+safety tolerances, it returns the nearest projection, an along-route
+look-ahead target, cross-track error, remaining distance, and route-end state.
+It allocates nothing and fails closed on malformed geometry.
+
+The core deliberately does not choose direction, read input, start autorun,
+steer a character or ship, inspect obstacles, or touch multiplayer authority.
+Those responsibilities remain isolated in #241 (walking adapter/UI), #242
+(Valheim 1.0 ship-control compatibility spike), and #243 (sailing adapter).
+Every runtime adapter must preserve vanilla physics, wind, speed, stamina,
+collision, and network authority, with manual input taking immediate priority.
+
 ## Lifecycle
 
 ### Plugin load
