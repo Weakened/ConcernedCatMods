@@ -7,22 +7,28 @@ is owner-only, always.
 
 ## Reproducible package hardening (#214, 2026-09-10)
 
-The historical DLL instability reported by #214 no longer reproduces: four
-clean builds from source revision `5ae1b6e` produced one DLL SHA-256
-(`01c868f9...`) on every run. The remaining ZIP defect reproduced exactly:
-all six payload files were byte-identical, but `tcli build` assigned the
-current build time to every entry, yielding four different archive hashes.
+Four clean same-checkout builds produced an identical DLL, but exact-commit
+builds in two differently named clones exposed an absolute SourceLink/PDB path
+inside the DLL. `ContinuousIntegrationBuild` had only been enabled when the
+`CI` environment variable was set, so local release builds did not normalize
+that path. It is now enabled for every build; two independent clones then
+produced byte-identical DLLs from the same commit.
 
+The ZIP defect also reproduced exactly: all six payload files were
+byte-identical, but `tcli build` assigned the current build time to every
+entry, yielding a different archive hash on each rebuild.
 `scripts/package.ps1` now canonicalizes the completed TCLI archive before it
 can become a release candidate. `tools/reproducible_zip.py` sorts entries,
 uses the ZIP epoch timestamp, removes host-dependent metadata, and stores the
-payload bytes without implementation-dependent compression. Three clean
-Teamster 1.0.1 package cycles then produced one DLL hash and one ZIP hash on
-every run. The cross-platform regression in
-`tools/tests/test_reproducible_zip.py` also proves that archives with different
-source order, timestamps, and compression canonicalize to identical bytes.
-Historical dossier hashes remain honest build fingerprints; packages produced
-by the hardened pipeline are now bit-reproducible for identical payloads.
+payload bytes without implementation-dependent compression.
+
+The cross-platform regression in `tools/tests/test_reproducible_zip.py` proves
+that archives with different source order, timestamps, and compression
+canonicalize to identical bytes. The final acceptance check packages the same
+commit in two separate clones and requires both the DLL and ZIP SHA-256 to
+match. Historical dossier hashes remain honest build fingerprints; packages
+produced by the hardened pipeline are now bit-reproducible from identical
+source and toolchain inputs.
 
 ## v1.0.0 — "Stable Teamster" (sealed 2026-09-06) — FIRST STABLE-CANDIDATE SEAL
 
