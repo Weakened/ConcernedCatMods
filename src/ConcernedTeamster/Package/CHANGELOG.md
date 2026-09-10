@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1
+
+- Replaced the storefront icon with an illustrated wooden hauling cart on aged parchment, matching Concerned Cartographer artwork and Concerned Cat branding.
+- Presentation-only update. Gameplay, settings, dependencies, and data formats are unchanged.
+
 ## 1.0.0 (Stable — sealed, pending owner publish approval)
 
 **Stable Teamster (CT-046..CT-050).** The tenth internal release
