@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.1 - V1.0 patch release
+
+V1.0 is released; this is not a beta. The package uses 1.0.1 because 1.0.0 has already been uploaded to Thunderstore.
+
+- Preserves the Valheim 1.0 Character.Message compatibility fix.
+- Hardens the adapter so binding initialization failures and unsupported method signatures disable cosmetic notifications safely.
+- Updates the package details to V1.0 and corrects the road-capture description.
+- Retains the technical explanation below so other mod authors can diagnose the optional-argument binary compatibility break.
+- Adds ten focused adapter compatibility tests. No dependency or atlas data-format changes.
+
 ## 1.0.0
 
 **Concerned Cartographer v1.0 - the living atlas, with the Valheim 1.0 compatibility fix.**
