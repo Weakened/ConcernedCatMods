@@ -196,7 +196,8 @@ internal sealed class SyncTransport
                 pins.Pins,
                 routes.Routes,
                 DateTime.UtcNow));
-            Player.m_localPlayer?.Message(
+            VanillaMessage.Show(
+                Player.m_localPlayer,
                 MessageHud.MessageType.TopLeft,
                 AtlasStrings.Format("hud.syncReceived", authorName));
             // Privacy audit (CC-098): the author name is a player name — the

@@ -151,7 +151,8 @@ internal sealed class SurveyScanner
 
             if (_unnotifiedAdded > 0 && _notifyElapsed >= NotifyCoalesceSeconds)
             {
-                player.Message(
+                VanillaMessage.Show(
+                    player,
                     MessageHud.MessageType.TopLeft,
                     AtlasStrings.Format("hud.surveyObservations", _unnotifiedAdded));
                 _unnotifiedAdded = 0;

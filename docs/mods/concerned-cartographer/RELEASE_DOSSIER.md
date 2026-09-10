@@ -1,3 +1,16 @@
+# Current handoff: Concerned Cartographer 1.0.0 (CC-232)
+
+The current release preparation supersedes the historical 0.10.x handoffs below.
+See [V1_RELEASE_232.md](V1_RELEASE_232.md) for the exact source commit, sealed ZIP,
+checksums, validation results, and remaining manual verification.
+
+Version 1.0.0 includes the Valheim 1.0 Character.Message compatibility adapter,
+its failure-handling hardening, and refreshed package details/changelog. The
+canonical checkout's existing edits were preserved in an isolated release branch.
+No Thunderstore upload is performed by this preparation.
+
+---
+
 # Concerned Cartographer v1.0 line — Release Dossier (0.10.x Public Beta)
 
 Prepared by the autonomous conveyor (Tankard Olafsson) per OPS-001 rev 2.
