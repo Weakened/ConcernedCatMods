@@ -38,6 +38,12 @@ try {
     tcli build --config-path ./src/$Product/Package/thunderstore.toml
     if ($LASTEXITCODE -ne 0) { throw "TCLI package build failed." }
 
+    # TCLI stamps every entry with the build time. Canonicalize the completed
+    # archive so identical source payloads produce identical release bytes.
+    $packagePath = Join-Path $root "artifacts" "thunderstore" "TheConcernedCat-$Product-$expectedVersion.zip"
+    python ./tools/reproducible_zip.py $packagePath
+    if ($LASTEXITCODE -ne 0) { throw "Reproducible ZIP canonicalization failed." }
+
     Write-Host "Package created under artifacts\thunderstore. Import it into a fresh mod-manager profile before publishing."
 }
 finally {
