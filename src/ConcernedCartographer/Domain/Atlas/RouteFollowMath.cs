@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using TheConcernedCat.ConcernedCartographer.Roads;
 
 namespace TheConcernedCat.ConcernedCartographer.Atlas;
@@ -49,7 +48,7 @@ internal static class RouteFollowMath
     private const float TieEpsilon = 0.000001f;
 
     public static bool TrySample(
-        IReadOnlyList<RoadPoint>? points,
+        RouteFollowPath? route,
         in RoadPoint position,
         RouteFollowDirection direction,
         int cursorSegment,
@@ -59,7 +58,7 @@ internal static class RouteFollowMath
         float routeEndToleranceMeters, out RouteFollowSample sample)
     {
         sample = default;
-        if (points is null || points.Count < 2 ||
+        if (route is null ||
             !IsFinite(position) ||
             !IsDirectionValid(direction) ||
             maxSegmentsToSearch <= 0 ||
@@ -70,7 +69,7 @@ internal static class RouteFollowMath
             return false;
         }
 
-        int lastSegment = points.Count - 2;
+        int lastSegment = route.LastSegmentIndex;
         int start = Clamp(cursorSegment, 0, lastSegment);
         int finish = direction == RouteFollowDirection.Forward
             ? (int)Math.Min(lastSegment, (long)start + maxSegmentsToSearch - 1L)
@@ -86,8 +85,8 @@ internal static class RouteFollowMath
              direction == RouteFollowDirection.Forward ? index <= finish : index >= finish;
              index += (int)direction)
         {
-            RoadPoint from = points[index];
-            RoadPoint to = points[index + 1];
+            RoadPoint from = route[index];
+            RoadPoint to = route[index + 1];
             if (!IsFinite(from) || !IsFinite(to))
             {
                 return false;
@@ -134,7 +133,7 @@ internal static class RouteFollowMath
         }
 
         if (!TryMeasureRemaining(
-                points,
+                route,
                 bestSegment,
                 bestFraction,
                 direction,
@@ -144,7 +143,7 @@ internal static class RouteFollowMath
         }
 
         if (!TryFindLookAhead(
-                points,
+                route,
                 bestSegment,
                 bestFraction,
                 direction,
@@ -166,101 +165,54 @@ internal static class RouteFollowMath
     }
 
     private static bool TryMeasureRemaining(
-        IReadOnlyList<RoadPoint> points,
+        RouteFollowPath route,
         int segmentIndex,
         float segmentFraction,
         RouteFollowDirection direction,
         out float remaining)
     {
         remaining = 0f;
-        int step = (int)direction;
-        int index = segmentIndex;
-        float fraction = segmentFraction;
+        double segmentStart = route.DistanceAtPoint(segmentIndex);
+        double segmentEnd = route.DistanceAtPoint(segmentIndex + 1);
+        double projectedMeters =
+            segmentStart + ((segmentEnd - segmentStart) * segmentFraction);
+        double remainingMeters = direction == RouteFollowDirection.Forward
+            ? route.TotalMeters - projectedMeters
+            : projectedMeters;
 
-        while (index >= 0 && index < points.Count - 1)
+        if (double.IsNaN(remainingMeters) ||
+            double.IsInfinity(remainingMeters) ||
+            remainingMeters < 0d ||
+            remainingMeters > float.MaxValue)
         {
-            if (!TrySegment(points[index], points[index + 1], out float length))
-            {
-                return false;
-            }
-
-            if (length > SegmentEpsilon)
-            {
-                remaining += direction == RouteFollowDirection.Forward
-                    ? length * (1f - fraction)
-                    : length * fraction;
-            }
-
-            index += step;
-            fraction = direction == RouteFollowDirection.Forward ? 0f : 1f;
+            return false;
         }
 
-        return IsFiniteNonNegative(remaining);
+        remaining = (float)remainingMeters;
+        return true;
     }
 
     private static bool TryFindLookAhead(
-        IReadOnlyList<RoadPoint> points,
+        RouteFollowPath route,
         int segmentIndex,
         float segmentFraction,
         RouteFollowDirection direction,
         float lookAheadMeters,
         out RoadPoint target)
     {
-        target = default;
-        float distanceLeft = lookAheadMeters;
-        int step = (int)direction;
-        int index = segmentIndex;
-        float fraction = segmentFraction;
+        double segmentStart = route.DistanceAtPoint(segmentIndex);
+        double segmentEnd = route.DistanceAtPoint(segmentIndex + 1);
+        double projectedMeters =
+            segmentStart + ((segmentEnd - segmentStart) * segmentFraction);
+        double targetMeters = direction == RouteFollowDirection.Forward
+            ? Math.Min(route.TotalMeters, projectedMeters + lookAheadMeters)
+            : Math.Max(0d, projectedMeters - lookAheadMeters);
 
-        while (index >= 0 && index < points.Count - 1)
-        {
-            RoadPoint from = points[index];
-            RoadPoint to = points[index + 1];
-            if (!TrySegment(from, to, out float length))
-            {
-                return false;
-            }
-
-            if (length > SegmentEpsilon)
-            {
-                float available = direction == RouteFollowDirection.Forward
-                    ? length * (1f - fraction)
-                    : length * fraction;
-                if (distanceLeft <= available)
-                {
-                    float delta = distanceLeft / length;
-                    float targetFraction = direction == RouteFollowDirection.Forward
-                        ? fraction + delta
-                        : fraction - delta;
-                    target = Interpolate(from, to, Clamp01(targetFraction));
-                    return true;
-                }
-
-                distanceLeft -= available;
-            }
-
-            index += step;
-            fraction = direction == RouteFollowDirection.Forward ? 0f : 1f;
-        }
-
-        target = direction == RouteFollowDirection.Forward
-            ? points[points.Count - 1]
-            : points[0];
-        return IsFinite(target);
-    }
-
-    private static bool TrySegment(in RoadPoint from, in RoadPoint to, out float length)
-    {
-        length = 0f;
-        if (!IsFinite(from) || !IsFinite(to))
-        {
-            return false;
-        }
-
-        float dx = to.X - from.X;
-        float dz = to.Z - from.Z;
-        length = (float)Math.Sqrt((dx * dx) + (dz * dz));
-        return IsFiniteNonNegative(length);
+        return route.TryLocateDistance(
+            targetMeters,
+            out _,
+            out _,
+            out target);
     }
 
     private static bool IsFurtherAlong(

@@ -335,12 +335,15 @@ Harmony skip-visibility helpers (`MinimapReflection`).
 
 ## Route Follow extension boundary (post-1.0)
 
-`RouteFollowMath` is the game-free geometry boundary shared by the future
-walking and sailing Route Follow adapters. Given an ordered route, explicit
-travel direction, current monotonic segment cursor, and bounded search and
-safety tolerances, it returns the nearest projection, an along-route
-look-ahead target, cross-track error, remaining distance, and route-end state.
-It allocates nothing and fails closed on malformed geometry.
+`RouteFollowPath` is the immutable, game-free geometry snapshot shared by
+the future walking and sailing Route Follow adapters. It validates and copies
+an ordered route once, then precomputes cumulative horizontal distance.
+`RouteFollowMath` uses that snapshot with an explicit travel direction,
+monotonic segment cursor, and bounded projection window. Projection inspects
+at most `maxSegmentsToSearch` segments, remaining distance is O(1), and
+look-ahead lookup is O(log n), so no hot-path query traverses the route tail.
+It allocates nothing in steady state and fails closed when construction finds
+malformed geometry or the projection window contains no traversable segment.
 
 The core deliberately does not choose direction, read input, start autorun,
 steer a character or ship, inspect obstacles, or touch multiplayer authority.
