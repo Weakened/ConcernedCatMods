@@ -96,6 +96,12 @@ internal sealed class CartographerRuntime : IDisposable
     private float _relabelElapsed;
     private RouteStore _routeStore = new();
     private RouteCommandHandler? _routeCommands;
+    private readonly WalkingRouteFollowController _walkingRouteFollow = new();
+    private AtlasId _followRouteId;
+    private long _followRouteRevision;
+    private long _followStoreStamp;
+    private bool _autoRunWasPressed;
+    private readonly Collider[] _routeFollowNearby = new Collider[16];
     private bool _routeRedrawPending;
     private float _routeRedrawElapsed;
     private readonly SyncInbox _syncInbox = new();
@@ -133,7 +139,7 @@ internal sealed class CartographerRuntime : IDisposable
         _mapUi = new MapUiCoordinator(log);
         _consentPanel = new CrashConsentPanel(log, settings);
         _palettePanel = new PinPalettePanel(log);
-        _routesPanel = new RoutesPanel(log, () => _routeCommands);
+        _routesPanel = new RoutesPanel(log, () => _routeCommands, settings);
         _surveyPanel = new SurveyPanel(
             log, settings, ExecuteSurveyCommand,
             () => _surveyEngine.Observations,
@@ -199,6 +205,9 @@ internal sealed class CartographerRuntime : IDisposable
         PlayerInputGate.Install(log);
         PlayerInputGate.SuppressAttack = () => _quickPinGate.SuppressAttack(Time.frameCount);
         PlayerInputGate.SuppressMenu = () => _quickPinGate.SuppressMenu(Time.frameCount);
+        WalkingRouteFollowAdapter.Install(log);
+        WalkingRouteFollowAdapter.ControlsApplying = HandleWalkingRouteControls;
+        WalkingRouteFollowAdapter.ManualLookApplying = HandleWalkingManualLook;
 
         // RC15: explicit vanilla pin deletions are captured at the
         // RemovePin choke point — the ONLY evidence that may tombstone a
@@ -363,6 +372,202 @@ internal sealed class CartographerRuntime : IDisposable
         _pinAdapter.HandleExplicitVanillaDelete(_pinStore, pin);
     }
 
+    private void HandleWalkingManualLook(Player player)
+    {
+        if (!_walkingRouteFollow.IsFollowing || player != Player.m_localPlayer)
+        {
+            return;
+        }
+
+        _walkingRouteFollow.Cancel();
+        player.m_autoRun = false;
+        VanillaMessage.Show(player, MessageHud.MessageType.TopLeft,
+            "Route Follow stopped (manual look)." );
+    }
+
+    private void HandleWalkingRouteControls(
+        Player player,
+        Vector3 movedir,
+        ref bool autoRunPressed)
+    {
+        bool togglePressed = autoRunPressed && !_autoRunWasPressed;
+        _autoRunWasPressed = autoRunPressed;
+
+        if (_disposed || player != Player.m_localPlayer)
+        {
+            return;
+        }
+
+        if (!_walkingRouteFollow.IsFollowing)
+        {
+            if (_settings.RouteFollowEnabled.Value && togglePressed)
+            {
+                // If eligible, the vanilla SetControls call that follows this
+                // prefix starts ordinary autorun; steering begins next tick.
+                TryStartWalkingRouteFollow(player);
+            }
+
+            return;
+        }
+
+        WalkingRouteFollowStep step = _walkingRouteFollow.Tick(
+            BuildWalkingFrame(player, movedir, togglePressed));
+        if (step.StopVanillaAutorun)
+        {
+            autoRunPressed = false;
+            player.m_autoRun = false;
+            ShowFollowStopped(step.CancelReason);
+            return;
+        }
+
+        ApplyFollowLook(player, step);
+    }
+
+    private WalkingRouteFollowFrame BuildWalkingFrame(
+        Player player,
+        Vector3 movedir,
+        bool togglePressed)
+    {
+        Vector3 position = player.transform.position;
+        bool sameWorld = WorldContext.TryGetWorldUid(out long uid) &&
+            _worldUid == uid;
+        bool routeUnchanged =
+            _routeStore.ChangeStamp == _followStoreStamp &&
+            _routeStore.TryGet(_followRouteId, out AtlasRoute route) &&
+            !route.Deleted && !route.Archived &&
+            route.Revision == _followRouteRevision;
+        bool lifecycleReady = _mapReady && sameWorld &&
+            !Minimap.IsOpen() && !player.IsDead() && !player.IsTeleporting();
+        bool eligible = player.CanMove() && !player.IsAttached() &&
+            !player.IsAttachedToShip() && !player.IsRiding() &&
+            player.GetDoodadController() is null &&
+            player.GetStandingOnShip() is null;
+
+        return new WalkingRouteFollowFrame(
+            new RoadPoint(position.x, position.y, position.z),
+            player.transform.eulerAngles.y,
+            Time.fixedDeltaTime,
+            enabled: _settings.Enabled.Value &&
+                _settings.RouteFollowEnabled.Value,
+            vanillaAutorunActive: player.m_autoRun,
+            togglePressed: togglePressed,
+            manualInput: movedir.sqrMagnitude > 0.0001f,
+            routeUnchanged: routeUnchanged,
+            lifecycleReady: lifecycleReady,
+            eligibleMovement: eligible,
+            blocked: true);
+    }
+
+    private bool TryStartWalkingRouteFollow(Player player)
+    {
+        if (!_mapReady || Minimap.IsOpen() ||
+            !_routesPanel.TryGetSelectedRoute(out AtlasId id) ||
+            !_routeStore.TryGet(id, out AtlasRoute route) ||
+            route.Deleted || route.Archived ||
+            !RouteFollowPath.TryCreate(route.Points, out RouteFollowPath? path) ||
+            !WalkingMovementEligible(player))
+        {
+            return false;
+        }
+
+        Vector3 current = player.transform.position;
+        RoadPoint first = route.Points[0];
+        RoadPoint last = route.Points[route.Points.Count - 1];
+        double firstDistance = HorizontalDistanceSquared(current, first);
+        double lastDistance = HorizontalDistanceSquared(current, last);
+        RouteFollowDirection direction = firstDistance <= lastDistance
+            ? RouteFollowDirection.Forward
+            : RouteFollowDirection.Reverse;
+        var position = new RoadPoint(current.x, current.y, current.z);
+        if (!_walkingRouteFollow.TryStart(path, direction, position))
+        {
+            return false;
+        }
+
+        _followRouteId = id;
+        _followRouteRevision = route.Revision;
+        _followStoreStamp = _routeStore.ChangeStamp;
+        VanillaMessage.Show(player, MessageHud.MessageType.TopLeft,
+            $"Route Follow started: {route.Name}. Manual input or Q cancels.");
+        return true;
+    }
+
+    private bool WalkingMovementEligible(Player player)
+    {
+        return !player.IsDead() && !player.IsTeleporting() &&
+            player.CanMove() && !player.IsAttached() &&
+            !player.IsAttachedToShip() && !player.IsRiding() &&
+            player.GetDoodadController() is null &&
+            player.GetStandingOnShip() is null &&
+            !IsPullingCart(player);
+    }
+
+    private bool IsPullingCart(Player player)
+    {
+        int count = Physics.OverlapSphereNonAlloc(
+            player.transform.position, 5f, _routeFollowNearby);
+        for (int index = 0; index < count; index++)
+        {
+            Collider collider = _routeFollowNearby[index];
+            Vagon? cart = collider != null
+                ? collider.GetComponentInParent<Vagon>()
+                : null;
+            if (cart != null && cart.IsAttached(player))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static double HorizontalDistanceSquared(
+        Vector3 position,
+        in RoadPoint point)
+    {
+        double x = (double)position.x - point.X;
+        double z = (double)position.z - point.Z;
+        return (x * x) + (z * z);
+    }
+
+    private static void ApplyFollowLook(
+        Player player,
+        in WalkingRouteFollowStep step)
+    {
+        if (!step.Steering)
+        {
+            return;
+        }
+
+        float radians = step.DesiredYawDegrees * Mathf.Deg2Rad;
+        player.SetLookDir(new Vector3(
+            Mathf.Sin(radians), 0f, Mathf.Cos(radians)));
+    }
+
+    private void ShowFollowStopped(WalkingRouteFollowCancelReason reason)
+    {
+        if (reason != WalkingRouteFollowCancelReason.InvalidState)
+        {
+            VanillaMessage.Show(Player.m_localPlayer,
+                MessageHud.MessageType.TopLeft,
+                $"Route Follow stopped ({reason}).");
+        }
+    }
+
+    private void StopWalkingRouteFollow()
+    {
+        if (_walkingRouteFollow.IsFollowing)
+        {
+            _walkingRouteFollow.Cancel();
+            if (Player.m_localPlayer is { } player)
+            {
+                player.m_autoRun = false;
+            }
+        }
+
+        _autoRunWasPressed = false;
+    }
+
     public void Tick(float unscaledDeltaTime)
     {
         if (_disposed)
@@ -401,6 +606,7 @@ internal sealed class CartographerRuntime : IDisposable
             // menu input (the armed flag previously leaked through this
             // branch; with the gate that would leak suppression too).
             _quickPinGate.Disarm();
+            StopWalkingRouteFollow();
             if (!_settings.Enabled.Value)
             {
                 _renderer.EnsureTextureFallback();
@@ -605,6 +811,7 @@ internal sealed class CartographerRuntime : IDisposable
             MapInputGate.ConsumeClicks = false;
             _textFocusBlock.Release();
             _quickPinGate.Disarm();
+            StopWalkingRouteFollow();
             _pipeline?.EndAllStrokes();
             _displayController.Reset();
             _mapUi.Reset();
@@ -2444,8 +2651,10 @@ internal sealed class CartographerRuntime : IDisposable
         _overlayRelabel.Restore();
         _textFocusBlock.Release();
         _quickPinGate.Disarm();
+        StopWalkingRouteFollow();
         MapInputGate.Uninstall();
         PlayerInputGate.Uninstall();
+        WalkingRouteFollowAdapter.Uninstall();
         PinDeletionWatch.Uninstall();
         MapPointerGuard.Clear();
         SaveIfDirty();
@@ -2484,6 +2693,7 @@ internal sealed class CartographerRuntime : IDisposable
             _log,
             ResyncPins);
         _displayController.Reset();
+        StopWalkingRouteFollow();
         _routeStore = _routePersistence.Load(uid);
         _routeStore.LocalAuthor = _authorId;
         _routeStore.Changed += _routePersistence.QueueJournal;

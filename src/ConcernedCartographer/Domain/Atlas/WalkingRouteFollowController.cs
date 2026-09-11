@@ -102,8 +102,11 @@ internal sealed class WalkingRouteFollowController
         in RoadPoint position)
     {
         Cancel();
+        int initialCursor = direction == RouteFollowDirection.Reverse && path is not null
+            ? path.LastSegmentIndex
+            : 0;
         if (path is null ||
-            !RouteFollowMath.TrySample(path, position, direction, 0,
+            !RouteFollowMath.TrySample(path, position, direction, initialCursor,
                 path.LastSegmentIndex + 1, LookAheadMeters,
                 MaximumCrossTrackMeters, RouteEndToleranceMeters,
                 out RouteFollowSample sample) ||

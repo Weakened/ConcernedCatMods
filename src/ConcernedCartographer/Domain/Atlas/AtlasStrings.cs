@@ -66,7 +66,7 @@ internal static class AtlasStrings
         ["system.boss"] = "Boss markers",
         ["share.instructions"] = "Broadcast your shared scope; preview an inbox entry, then apply with an explicit conflict choice.",
         ["routes.title"] = "Routes",
-        ["routes.explainer"] = "Routes are map planning overlays: draw or waypoint a plan, style and share it. They never move your character.",
+        ["routes.explainer"] = "Routes are plans. Optional Route Follow can steer vanilla Q autorun along the selected route; it is OFF by default and manual input cancels immediately.",
         ["routes.nameHint"] = "new route name",
         ["routes.freeDraw"] = "Free Draw",
         ["routes.waypoints"] = "Waypoints",

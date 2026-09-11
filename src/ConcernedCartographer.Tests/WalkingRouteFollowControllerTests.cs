@@ -88,6 +88,20 @@ public class WalkingRouteFollowControllerTests
     }
 
     [Fact]
+    public void ReverseDirectionCanStartNearFarEndpoint()
+    {
+        var controller = new WalkingRouteFollowController();
+        Assert.True(controller.TryStart(
+            Path(P(0f, 0f), P(20f, 0f)),
+            RouteFollowDirection.Reverse, P(19f, 0f)));
+
+        WalkingRouteFollowStep step = controller.Tick(
+            new WalkingRouteFollowFrame(P(19f, 0f), 270f, 0.1f));
+        Assert.True(step.Steering);
+        Assert.True(controller.IsFollowing);
+    }
+
+    [Fact]
     public void CannotStartWithoutEligibleGeometry()
     {
         var controller = new WalkingRouteFollowController();
