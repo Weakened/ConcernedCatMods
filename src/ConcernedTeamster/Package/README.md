@@ -1,6 +1,6 @@
 # Concerned Teamster
 
-**Stable release candidate by The Concerned Cat.**
+**Stable 1.0.2 patch release by The Concerned Cat.**
 
 Your cart stops being a mystery: Concerned Teamster measures load, grade, traction, and risk so hauling decisions are informed — while vanilla cart physics stay untouched by default.
 
