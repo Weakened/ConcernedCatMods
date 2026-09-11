@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.2 - Valheim 1.0.7 and high-DPI corrective upload
+
+Thunderstore versions are immutable. Package 1.0.1 already exists, so this 1.0.2 upload carries the reviewed Valheim 1.0.7 HUD-message compatibility fix and high-resolution UI scaling correction forward without any Route Follow changes.
+
+- Prevents the Valheim 1.0.7 `Character.Message` signature change from breaking Cartographer's update loop; cosmetic notifications resolve the live method safely and fail closed.
+- Corrects Cartographer panel sizing on high-resolution displays through the shared UI scale behavior included in the reviewed safe source line.
+- Contains no dependency, persistence-format, or atlas-data migration changes.
+
 ## 1.0.1 - V1.0 patch release
 
 V1.0 is released; this is not a beta. The package uses 1.0.1 because 1.0.0 has already been uploaded to Thunderstore.

@@ -11,7 +11,7 @@ public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernedcartographer";
     public const string PluginName = "Concerned Cartographer";
-    public const string PluginVersion = "1.0.1";
+    public const string PluginVersion = "1.0.2";
 
     private CartographerRuntime? _runtime;
     private CrashReportingHub? _crashHub;
@@ -55,7 +55,7 @@ public sealed class Plugin : BaseUnityPlugin
     }
 
     /// <summary>The release identity including the build commit (SDK stamps
-    /// InformationalVersion as "1.0.1+&lt;sha&gt;"). Shared by the crash
+    /// InformationalVersion as "1.0.2+&lt;sha&gt;"). Shared by the crash
     /// context and the RC15 lifecycle log line, and safe to log: it names
     /// this build of the mod and nothing about the player.</summary>
     private static string ResolveInformationalVersion()
