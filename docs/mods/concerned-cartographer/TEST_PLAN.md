@@ -64,7 +64,7 @@ Test at least five samples of each:
 - [ ] Press Q again and confirm Route Follow and vanilla autorun stop immediately.
 - [ ] Manual movement or mouse/right-stick look cancels immediately and restores full control.
 - [ ] Editing, deleting, archiving, or replacing the active route cancels immediately.
-- [ ] Death, teleport, map opening, world switch, logout, route end, off-route travel, and no-progress timeout each cancel safely.
+- [ ] Death, teleport, map opening, world switch, logout, route end, off-route travel, and the 2.5-second no-route-progress timeout each cancel safely.
 - [ ] Ships, carts, mounts, and doodad controllers cannot start walking Route Follow.
 - [ ] Speed, stamina, collision, fog, attack, interaction, networking, and route data remain unchanged.
 - [ ] Record Valheim 1.0.7 log and video evidence; automated tests are not a substitute for this owner check.
