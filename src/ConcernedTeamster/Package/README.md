@@ -1,6 +1,6 @@
 # Concerned Teamster
 
-**Stable release candidate by The Concerned Cat.**
+**Stable 1.0.2 patch release by The Concerned Cat.**
 
 Your cart stops being a mystery: Concerned Teamster measures load, grade, traction, and risk so hauling decisions are informed — while vanilla cart physics stay untouched by default.
 
@@ -63,7 +63,7 @@ or stores: other players' in-game character names, shown only in
 cooperative haul diagnostics while you're actually playing with them.
 
 ## What comes next (roadmap)
-* The road to v1.0: real in-game verification of every feature against this beta's own pre-release checklist, calibration data from real hauls and descents, and a stable-release hardening pass.
+* Version 1.0.2 is a stable maintenance patch. Future work focuses on Valheim compatibility, reported bugs, reliability, and calibration informed by real hauling feedback; new gameplay features are tracked separately.
 
 ## Principles
 
@@ -75,7 +75,7 @@ cooperative haul diagnostics while you're actually playing with them.
 
 ## Status
 
-Version 1.0.0 is the **stable release candidate**: cart truth, cargo and load planning, descent safety, trip-based road scoring, capability-detected route profiling, an enforced multiplayer read/act/observe policy, scalable/contrast-checked/controller-navigable panels with full localization and onboarding, mod-compatibility awareness with a documented precedence policy, corruption-safe recovery with a sanitized support bundle, a frozen feature/default surface with a privacy-safe feedback path, and formal performance/memory/network budgets — all proven at their worst-case configured scale, with vanilla physics untouched by default. Every feature is unit-proven off-game; the specific in-game observations still pending are tracked in [`PRE_RELEASE_SMOKE_TEST.md`](https://github.com/Weakened/ConcernedCatMods/blob/main/docs/mods/concerned-teamster/PRE_RELEASE_SMOKE_TEST.md) and never claimed passed until actually run. Features land issue by issue on the [GitHub tracker](https://github.com/Weakened/ConcernedCatMods/issues).
+Version 1.0.2 is the current stable patch release: cart truth, cargo and load planning, descent safety, trip-based road scoring, capability-detected route profiling, an enforced multiplayer read/act/observe policy, scalable/contrast-checked/controller-navigable panels with full localization and onboarding, mod-compatibility awareness with a documented precedence policy, corruption-safe recovery with a sanitized support bundle, a frozen feature/default surface with a privacy-safe feedback path, and formal performance/memory/network budgets — all proven at their worst-case configured scale, with vanilla physics untouched by default. Every feature is unit-proven off-game; the specific in-game observations still pending are tracked in [`PRE_RELEASE_SMOKE_TEST.md`](https://github.com/Weakened/ConcernedCatMods/blob/main/docs/mods/concerned-teamster/PRE_RELEASE_SMOKE_TEST.md) and never claimed passed until actually run. Features land issue by issue on the [GitHub tracker](https://github.com/Weakened/ConcernedCatMods/issues).
 
 ## Support
 
