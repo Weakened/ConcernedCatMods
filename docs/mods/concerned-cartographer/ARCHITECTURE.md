@@ -347,10 +347,17 @@ malformed geometry or the projection window contains no traversable segment.
 
 The core deliberately does not choose direction, read input, start autorun,
 steer a character or ship, inspect obstacles, or touch multiplayer authority.
-Those responsibilities remain isolated in #241 (walking adapter/UI), #242
-(Valheim 1.0 ship-control compatibility spike), and #243 (sailing adapter).
-Every runtime adapter must preserve vanilla physics, wind, speed, stamina,
-collision, and network authority, with manual input taking immediate priority.
+The #241 walking adapter is isolated behind exact Valheim 1.0.7 Harmony prefixes
+for `Player.SetControls` and `Player.SetMouseLook`. It is opt-in and default OFF,
+starts only from a selected live route when the player presses vanilla Q, and
+steers only `Character.SetLookDir`; vanilla `SetControls` still owns autorun and
+movement. The adapter snapshots the route id, revision, and store change stamp
+and cancels on manual input, Q, route mutation/lifecycle changes, ineligible
+movement, off-route, endpoint, or stuck detection. Boats, carts, mounts, and
+doodad controllers fail closed. #242 owns the ship-control compatibility spike
+and #243 owns any future sailing adapter. Every runtime adapter must preserve
+vanilla physics, wind, speed, stamina, collision, and network authority, with
+manual input taking immediate priority.
 
 ## Lifecycle
 

@@ -56,6 +56,19 @@ Test at least five samples of each:
 - [ ] One intentionally malformed row is skipped without losing valid rows.
 - [ ] Removing the mod leaves the world playable and unchanged.
 
+## Walking Route Follow (owner live smoke required)
+
+- [ ] With `AutoFollowEnabled` absent or false, Q behaves exactly like vanilla autorun.
+- [ ] With Route Follow enabled but no eligible selected route, Q remains vanilla.
+- [ ] Select a live route, close the map, stand near an endpoint, and press Q; autorun follows the route in the expected direction.
+- [ ] Press Q again and confirm Route Follow and vanilla autorun stop immediately.
+- [ ] Manual movement or mouse/right-stick look cancels immediately and restores full control.
+- [ ] Editing, deleting, archiving, or replacing the active route cancels immediately.
+- [ ] Death, teleport, map opening, world switch, logout, route end, off-route travel, and no-progress timeout each cancel safely.
+- [ ] Ships, carts, mounts, and doodad controllers cannot start walking Route Follow.
+- [ ] Speed, stamina, collision, fog, attack, interaction, networking, and route data remain unchanged.
+- [ ] Record Valheim 1.0.7 log and video evidence; automated tests are not a substitute for this owner check.
+
 ## Performance
 
 - [ ] Run for 30 minutes while traversing/creating roads.

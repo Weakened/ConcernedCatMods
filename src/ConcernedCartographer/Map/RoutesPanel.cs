@@ -32,8 +32,10 @@ internal sealed class RoutesPanel : CcSidePanel
     };
 
     private readonly Func<Runtime.RouteCommandHandler?> _handler;
+    private readonly Runtime.CartographerSettings _settings;
     private InputField? _name;
     private Toggle? _snap;
+    private Toggle? _follow;
     private Text? _modeStatus;
     private Text? _selectionStatus;
     private Text? _output;
@@ -44,10 +46,20 @@ internal sealed class RoutesPanel : CcSidePanel
     private bool _hasSelection;
     private bool _mergeArmed;
 
-    public RoutesPanel(ManualLogSource log, Func<Runtime.RouteCommandHandler?> handler)
-        : base(log, "routes.title", 384f, 672f)
+    public RoutesPanel(
+        ManualLogSource log,
+        Func<Runtime.RouteCommandHandler?> handler,
+        Runtime.CartographerSettings settings)
+        : base(log, "routes.title", 384f, 704f)
     {
         _handler = handler;
+        _settings = settings;
+    }
+
+    public bool TryGetSelectedRoute(out AtlasId id)
+    {
+        id = _selected;
+        return _hasSelection;
     }
 
     /// <summary>True while a UI-entered map mode is active (runtime input gate).</summary>
@@ -113,8 +125,6 @@ internal sealed class RoutesPanel : CcSidePanel
 
     protected override void BuildContent(GUIManager gui, Font font, Color headerColor, ref float y)
     {
-        // v1 product framing (RC10 feedback 16): routes are manual map
-        // planning/navigation overlays, never character automation.
         Text explainer = AddBody(gui, font, AtlasStrings.Get("routes.explainer"), 11,
             new Color(0.85f, 0.82f, 0.7f, 1f), ref y, 28f);
         explainer.alignment = TextAnchor.UpperCenter;
@@ -234,8 +244,14 @@ internal sealed class RoutesPanel : CcSidePanel
         _output = AddBody(gui, font, "", 12, Color.white, ref y, 36f);
         y -= 10f;
 
-        // RC11 blocker 4: bottom control area — Snap lives here now, and
-        // the confirmed Clear all sits beside it for fragment cleanup.
+        _follow = AddToggle(gui, font, new Color(0.85f, 1f, 0.85f, 1f),
+            "Route Follow (Q)", left + 12f, y, value =>
+            {
+                _settings.RouteFollowEnabled.Value = value;
+                RefreshList();
+            }, labelWidth: 170f);
+        y -= 30f;
+
         _snap = AddToggle(gui, font, Color.white, AtlasStrings.Get("routes.snap"), left + 12f, y, value =>
             _handler()?.UiSetSnap(value), labelWidth: 110f);
         AddButton(gui, "Clear all routes", left + 262f, y, 150f, 26f, () =>
@@ -267,6 +283,11 @@ internal sealed class RoutesPanel : CcSidePanel
         if (_snap != null && _handler() is { } handler)
         {
             SetToggleSilently(_snap, handler.SnapEnabled);
+        }
+
+        if (_follow != null)
+        {
+            SetToggleSilently(_follow, _settings.RouteFollowEnabled.Value);
         }
 
         _mergeArmed = false;
@@ -417,8 +438,11 @@ internal sealed class RoutesPanel : CcSidePanel
         {
             int living = _handler()?.LivingRouteCount() ?? rows.Count;
             string overflow = living > rows.Count ? $" ({living - rows.Count} more not shown)" : "";
+            string follow = _settings.RouteFollowEnabled.Value
+                ? " — Follow ON: close map, stand near it, press Q"
+                : " — Follow OFF (opt in below)";
             _selectionStatus.text = (_hasSelection
-                ? $"Selected: {RouteName(_selected)}"
+                ? $"Selected: {RouteName(_selected)}{follow}"
                 : "Click a route below to select it") + overflow;
         }
     }

@@ -39,6 +39,7 @@ internal sealed class CartographerSettings
         ConfigEntry<float> routeOnRoadTolerance,
         ConfigEntry<float> routeOffRoadSpeed,
         ConfigEntry<float> routeOnRoadSpeed,
+        ConfigEntry<bool> routeFollowEnabled,
         ConfigEntry<float> uiScale,
         ConfigEntry<bool> highContrast,
         ConfigEntry<string> workbenchGamepadButton,
@@ -84,6 +85,7 @@ internal sealed class CartographerSettings
         RouteOnRoadTolerance = routeOnRoadTolerance;
         RouteOffRoadSpeed = routeOffRoadSpeed;
         RouteOnRoadSpeed = routeOnRoadSpeed;
+        RouteFollowEnabled = routeFollowEnabled;
         UiScale = uiScale;
         HighContrast = highContrast;
         WorkbenchGamepadButton = workbenchGamepadButton;
@@ -130,6 +132,7 @@ internal sealed class CartographerSettings
     public ConfigEntry<float> RouteOnRoadTolerance { get; }
     public ConfigEntry<float> RouteOffRoadSpeed { get; }
     public ConfigEntry<float> RouteOnRoadSpeed { get; }
+    public ConfigEntry<bool> RouteFollowEnabled { get; }
     public ConfigEntry<float> UiScale { get; }
     public ConfigEntry<bool> HighContrast { get; }
     public ConfigEntry<string> WorkbenchGamepadButton { get; }
@@ -218,6 +221,8 @@ internal sealed class CartographerSettings
                 "Off-road travel speed (m/s) for time estimates.", new AcceptableValueRange<float>(0.5f, 15f))),
             config.Bind("Routes", "RouteOnRoadSpeed", 5f, new ConfigDescription(
                 "On-road travel speed (m/s) for time estimates.", new AcceptableValueRange<float>(0.5f, 15f))),
+            config.Bind("Routes", "AutoFollowEnabled", false,
+                "Opt in to walking Route Follow: with a route selected, vanilla Q autorun may steer along it. Manual input always cancels."),
             config.Bind("Accessibility", "UiScale", 1f, new ConfigDescription(
                 "Personal size preference for Concerned Cartographer panels. Most panels also apply an " +
                 "automatic baseline on top of this for your display (Jötunn's panel canvas is a fixed " +
