@@ -25,6 +25,7 @@ internal static class WalkingRouteFollowAdapter
             return;
         }
 
+        Harmony? installingHarmony = null;
         try
         {
             Type[] signature =
@@ -44,22 +45,35 @@ internal static class WalkingRouteFollowAdapter
                 return;
             }
 
-            var harmony = new Harmony(Plugin.PluginGuid + ".walkingroutefollow");
-            harmony.Patch(target,
+            installingHarmony = new Harmony(Plugin.PluginGuid + ".walkingroutefollow");
+            installingHarmony.Patch(target,
                 prefix: new HarmonyMethod(
                     typeof(WalkingRouteFollowAdapter),
                     nameof(BeforeSetControls)));
-            harmony.Patch(lookTarget,
+            installingHarmony.Patch(lookTarget,
                 prefix: new HarmonyMethod(
                     typeof(WalkingRouteFollowAdapter),
                     nameof(BeforeSetMouseLook)));
-            s_harmony = harmony;
+            s_harmony = installingHarmony;
         }
         catch (Exception exception)
         {
+            // Installation is transactional: if the second patch fails,
+            // remove the first before advertising this adapter as absent.
+            try
+            {
+                installingHarmony?.UnpatchSelf();
+            }
+            catch
+            {
+                // Null callbacks below remain an exact vanilla pass-through.
+            }
+
+            ControlsApplying = null;
+            ManualLookApplying = null;
+            s_harmony = null;
             log.LogWarning(
                 $"Walking Route Follow unavailable: {SafeLogText.Brief(exception)}");
-            s_harmony = null;
         }
     }
 
