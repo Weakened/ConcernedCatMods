@@ -63,7 +63,7 @@ or stores: other players' in-game character names, shown only in
 cooperative haul diagnostics while you're actually playing with them.
 
 ## What comes next (roadmap)
-* The road to v1.0: real in-game verification of every feature against this beta's own pre-release checklist, calibration data from real hauls and descents, and a stable-release hardening pass.
+* Version 1.0.2 is a stable maintenance patch. Future work focuses on Valheim compatibility, reported bugs, reliability, and calibration informed by real hauling feedback; new gameplay features are tracked separately.
 
 ## Principles
 
