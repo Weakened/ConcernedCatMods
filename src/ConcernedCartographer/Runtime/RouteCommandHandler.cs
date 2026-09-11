@@ -58,6 +58,11 @@ internal sealed class RouteCommandHandler
     /// its own buttons.</summary>
     public long ChangeStamp => _store.ChangeStamp;
 
+    public bool TryGetRoute(AtlasId id, out AtlasRoute route)
+    {
+        return _store.TryGet(id, out route);
+    }
+
     /// <summary>True when the current map mode was entered through the
     /// Routes panel (#101): the runtime then feeds map input WITHOUT the
     /// draw modifier and consumes vanilla click/drag while it lasts. The
@@ -161,7 +166,9 @@ internal sealed class RouteCommandHandler
                 _settings.RouteOnRoadTolerance.Value,
                 _settings.RouteOffRoadSpeed.Value,
                 _settings.RouteOnRoadSpeed.Value);
-            string flags = (route.Locked ? " L" : "") + (route.Archived ? " A" : "");
+            string flags = (route.Locked ? " L" : "") +
+                (route.Archived ? " A" : "") +
+                (route.TravelMode == RouteTravelMode.Sailing ? " Sailing" : "");
             rows.Add((route.Id,
                 $"{route.Name} [{route.Kind} · {route.Style} · {route.Status}]{flags} {estimate.DistanceMeters:0} m"));
         }
@@ -232,6 +239,24 @@ internal sealed class RouteCommandHandler
 
         RouteStatus next = route.Status == RouteStatus.Done ? RouteStatus.Planned : route.Status + 1;
         return UiEdit(id, r => r.Status = next, $"status {next}");
+    }
+
+    public string UiSetTravelMode(AtlasId id, RouteTravelMode mode)
+    {
+        if (!_store.TryGet(id, out AtlasRoute route) || route.Deleted)
+        {
+            return "Route no longer exists.";
+        }
+
+        if (!Enum.IsDefined(typeof(RouteTravelMode), mode))
+        {
+            return "Unknown route travel mode.";
+        }
+
+        return UiEdit(id, route => route.TravelMode = mode,
+            mode == RouteTravelMode.Sailing
+                ? "marked for sailing"
+                : "marked for land travel");
     }
 
     public string UiSetColor(AtlasId id, int? argb)
@@ -337,6 +362,11 @@ internal sealed class RouteCommandHandler
         if (!_store.TryGet(keep, out AtlasRoute keepRoute) || !_store.TryGet(absorbed, out AtlasRoute absorbedRoute))
         {
             return "Route no longer exists.";
+        }
+
+        if (keepRoute.TravelMode != absorbedRoute.TravelMode)
+        {
+            return "Merge failed: land and sailing routes cannot be combined.";
         }
 
         if (!_operations.Merge(keep, absorbed))

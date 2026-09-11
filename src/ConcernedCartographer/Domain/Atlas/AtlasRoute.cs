@@ -27,6 +27,14 @@ internal enum RouteStatus
     Done = 3,
 }
 
+/// <summary>Explicit movement eligibility. Existing routes remain land
+/// routes until the owner deliberately marks one for sailing.</summary>
+internal enum RouteTravelMode
+{
+    Land = 1,
+    Sailing = 2,
+}
+
 /// <summary>A managed route: durable identity, monotonic revision, polyline
 /// points, style/status metadata, lock/archive flags, and a durable
 /// deletion tombstone — the same lifecycle contract as pins.</summary>
@@ -46,6 +54,7 @@ internal sealed class AtlasRoute
     public RouteKind Kind { get; set; } = RouteKind.Freehand;
     public RouteStyle Style { get; set; } = RouteStyle.Solid;
     public RouteStatus Status { get; set; } = RouteStatus.Planned;
+    public RouteTravelMode TravelMode { get; set; } = RouteTravelMode.Land;
     public int? ColorArgb { get; set; }
     public string Notes { get; set; } = "";
     public AtlasScope Scope { get; set; } = AtlasScope.Private;
@@ -76,6 +85,7 @@ internal sealed class AtlasRoute
             Kind = Kind,
             Style = Style,
             Status = Status,
+            TravelMode = TravelMode,
             ColorArgb = ColorArgb,
             Notes = Notes,
             Scope = Scope,
@@ -99,6 +109,7 @@ internal sealed class AtlasRoute
         Kind = other.Kind;
         Style = other.Style;
         Status = other.Status;
+        TravelMode = other.TravelMode;
         ColorArgb = other.ColorArgb;
         Notes = other.Notes;
         Scope = other.Scope;

@@ -36,6 +36,7 @@ internal sealed class RoutesPanel : CcSidePanel
     private InputField? _name;
     private Toggle? _snap;
     private Toggle? _follow;
+    private Toggle? _sailing;
     private Text? _modeStatus;
     private Text? _selectionStatus;
     private Text? _output;
@@ -50,7 +51,7 @@ internal sealed class RoutesPanel : CcSidePanel
         ManualLogSource log,
         Func<Runtime.RouteCommandHandler?> handler,
         Runtime.CartographerSettings settings)
-        : base(log, "routes.title", 384f, 704f)
+        : base(log, "routes.title", 384f, 734f)
     {
         _handler = handler;
         _settings = settings;
@@ -252,6 +253,19 @@ internal sealed class RoutesPanel : CcSidePanel
             }, labelWidth: 170f);
         y -= 30f;
 
+        _sailing = AddToggle(gui, font, new Color(0.72f, 0.9f, 1f, 1f),
+            "Selected route: Sailing", left + 12f, y, value =>
+            {
+                if (_hasSelection && _handler() is { } handler)
+                {
+                    Report(handler.UiSetTravelMode(
+                        _selected,
+                        value ? RouteTravelMode.Sailing : RouteTravelMode.Land));
+                    RefreshList();
+                }
+            }, labelWidth: 220f);
+        y -= 30f;
+
         _snap = AddToggle(gui, font, Color.white, AtlasStrings.Get("routes.snap"), left + 12f, y, value =>
             _handler()?.UiSetSnap(value), labelWidth: 110f);
         AddButton(gui, "Clear all routes", left + 262f, y, 150f, 26f, () =>
@@ -290,6 +304,7 @@ internal sealed class RoutesPanel : CcSidePanel
             SetToggleSilently(_follow, _settings.RouteFollowEnabled.Value);
         }
 
+        RefreshSailingToggle();
         _mergeArmed = false;
         _clearAllArmed = false;
         _renderedStamp = _handler()?.ChangeStamp ?? -1;
@@ -434,6 +449,7 @@ internal sealed class RoutesPanel : CcSidePanel
             _hasSelection = false;
         }
 
+        RefreshSailingToggle();
         if (_selectionStatus != null)
         {
             int living = _handler()?.LivingRouteCount() ?? rows.Count;
@@ -445,6 +461,22 @@ internal sealed class RoutesPanel : CcSidePanel
                 ? $"Selected: {RouteName(_selected)}{follow}"
                 : "Click a route below to select it") + overflow;
         }
+    }
+
+    private void RefreshSailingToggle()
+    {
+        if (_sailing == null)
+        {
+            return;
+        }
+
+        bool sailing = _hasSelection &&
+            _handler() is { } handler &&
+            handler.TryGetRoute(_selected, out AtlasRoute route) &&
+            !route.Deleted &&
+            route.TravelMode == RouteTravelMode.Sailing;
+        SetToggleSilently(_sailing, sailing);
+        _sailing.interactable = _hasSelection;
     }
 
     private void RefreshMode()

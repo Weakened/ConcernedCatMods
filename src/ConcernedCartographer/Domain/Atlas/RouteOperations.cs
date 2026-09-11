@@ -190,6 +190,7 @@ internal sealed class RouteOperations
         if (firstId.Equals(secondId) ||
             !TryGetEditable(firstId, out AtlasRoute first) ||
             !TryGetEditable(secondId, out AtlasRoute second) ||
+            first.TravelMode != second.TravelMode ||
             first.Points.Count == 0 || second.Points.Count == 0)
         {
             return false;
@@ -332,6 +333,7 @@ internal sealed class RouteOperations
         target.Kind = source.Kind;
         target.Style = source.Style;
         target.Status = source.Status;
+        target.TravelMode = source.TravelMode;
         target.ColorArgb = source.ColorArgb;
         target.Scope = source.Scope;
     }
