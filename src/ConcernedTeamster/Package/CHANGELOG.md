@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.2
+
+- Updated the mod for Valheim 1.0.7 / Unity 6000 compatibility and verified its game-facing cart API contracts against the installed assemblies.
+- Fixed panels rendering too small on high-resolution displays by using the corrected runtime UI scale baseline while preserving the configurable scale range.
+- Stabilized the allocation regression test and made release packaging bit-reproducible across clean rebuilds.
+- No world-save, sidecar, configuration-schema, cart-physics, or gameplay-balance changes.
+
 ## 1.0.1
 
 - Replaced the storefront icon with an illustrated wooden hauling cart on aged parchment, matching Concerned Cartographer artwork and Concerned Cat branding.
