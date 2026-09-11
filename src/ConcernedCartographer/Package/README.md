@@ -1,6 +1,6 @@
 # Concerned Cartographer V1.0
 
-**V1.0 release (package 1.0.1) by The Concerned Cat. Includes the Valheim 1.0 HUD-message compatibility fix.**
+**V1.0 release (package 1.0.2) by The Concerned Cat. Includes the Valheim 1.0 HUD-message compatibility fix and high-resolution UI scaling correction.**
 
 Concerned Cartographer turns Valheim’s map into a living atlas.
 

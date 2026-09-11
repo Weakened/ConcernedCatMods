@@ -4,7 +4,7 @@ schemaVersion = "0.0.1"
 [package]
 namespace = "TheConcernedCat"
 name = "ConcernedCartographer"
-versionNumber = "1.0.1"
+versionNumber = "1.0.2"
 description = "v1.0: The living atlas: your Pathen/Paved roads become durable map ink, with editable markers, routes, search, and sharing."
 websiteUrl = "https://github.com/Weakened/ConcernedCatMods"
 containsNsfwContent = false
