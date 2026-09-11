@@ -6,7 +6,7 @@
 - Preserves vanilla `Player.SetControls` ownership: while following, the adapter feeds the held autorun signal so vanilla refreshes movement from the bounded look direction. A second Q press or any cancellation feeds false and clears autorun.
 - Cancels on manual movement/look, route edit/delete/archive/replacement, map or world lifecycle changes, death, teleport, ineligible movement, off-route travel, route end, or a 2.5-second no-route-progress timeout.
 - Fails closed for ships, carts, mounts, doodad controllers, saturated cart scans, unsupported game signatures, and partial Harmony installation. It never changes speed, stamina, collision, fog, attacks, interactions, or multiplayer authority.
-- Audited against the installed Valheim 1.0.7 control path (`PlayerController.FixedUpdate` → `Player.SetControls`, `Player.SetMouseLook`, and `Character.SetLookDir`) and covered by deterministic game-free controller/control-policy tests.
+- Audited against installed Valheim 1.0.12 (Steam build 25253764, Unity 6000.0.75f1): `PlayerController.FixedUpdate` still passes the held AutoRun input to `Player.SetControls`, with `Player.SetMouseLook` and `Character.SetLookDir` unchanged from the recorded 1.0.7 baseline. Deterministic game-free controller/control-policy tests cover the boundary.
 - Carries forward the Valheim 1.0.7 HUD-message compatibility and high-resolution UI corrections from 1.0.2. No persistence or atlas-data migration is required.
 - Owner in-game smoke testing remains required and is intentionally not claimed by automated validation.
 

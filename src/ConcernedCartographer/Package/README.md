@@ -1,6 +1,6 @@
 # Concerned Cartographer V1.1
 
-**V1.1.0 by The Concerned Cat adds opt-in walking Route Follow while preserving vanilla movement, safety boundaries, and the Valheim 1.0.7 compatibility fixes.**
+**V1.1.0 by The Concerned Cat adds opt-in walking Route Follow while preserving vanilla movement and safety boundaries, audited against Valheim 1.0.12.**
 
 Concerned Cartographer turns Valheim’s map into a living atlas.
 
@@ -56,7 +56,7 @@ The roads your Vikings build can map themselves. Existing pins can become durabl
 
 ## Version 1.1 and support
 
-Version 1.1 adds optional walking Route Follow. Enable it in the Routes panel, select a live route, close the map, stand near the route, and press Q. A second Q press, manual movement/look, route changes, unsafe lifecycle states, leaving the route, reaching its end, or making no route progress for 2.5 seconds cancels it. Ships, carts, mounts, speed, stamina, collision, fog, and multiplayer authority are never controlled. Version 1.1 also carries forward the Valheim 1.0.7 HUD-message and high-resolution UI fixes from 1.0.2.
+Version 1.1 adds optional walking Route Follow. Enable it in the Routes panel, select a live route, close the map, stand near the route, and press Q. A second Q press, manual movement/look, route changes, unsafe lifecycle states, leaving the route, reaching its end, or making no route progress for 2.5 seconds cancels it. Ships, carts, mounts, speed, stamina, collision, fog, and multiplayer authority are never controlled. Version 1.1 also carries forward the Valheim 1.0.7 HUD-message and high-resolution UI fixes from 1.0.2, verified against the current Valheim 1.0.12 build.
 
 Development and compatibility support continue beyond v1.0. Confirmed crashes, data-loss risks, installation failures, stuck input, duplicated pins, and multiplayer consistency problems receive the highest priority.
 
