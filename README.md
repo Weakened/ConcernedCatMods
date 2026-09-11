@@ -6,7 +6,7 @@ Valheim mods by **The Concerned Cat**. This repository is a monorepo: shared eng
 
 | Mod | Status | Purpose |
 |---|---|---|
-| [Concerned Cartographer](docs/mods/concerned-cartographer/PROJECT.md) | 1.0 release candidate | A living atlas: self-mapping roads, durable managed pins, search and decluttering, road-aware routes, and explicit collaborative sharing on Valheim's map. |
+| [Concerned Cartographer](docs/mods/concerned-cartographer/PROJECT.md) | v1.1.0 walking Route Follow | A living atlas: self-mapping roads, durable managed pins, search and decluttering, road-aware routes, optional walking Route Follow, and explicit collaborative sharing on Valheim's map. |
 | [Concerned Teamster](docs/mods/concerned-teamster/PROJECT.md) | v1.0.2 stable patch release | Cart truth: measures cart load, grade, traction, and hauling risk, and scores road quality from recorded trips — while vanilla cart physics stay untouched by default. |
 
 ## Repository model

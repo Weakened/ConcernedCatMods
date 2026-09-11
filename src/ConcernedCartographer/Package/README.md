@@ -1,6 +1,6 @@
-# Concerned Cartographer V1.0
+# Concerned Cartographer V1.1
 
-**V1.0 release (package 1.0.2) by The Concerned Cat. Includes the Valheim 1.0 HUD-message compatibility fix and high-resolution UI scaling correction.**
+**V1.1.0 by The Concerned Cat adds opt-in walking Route Follow while preserving vanilla movement and safety boundaries, audited against Valheim 1.0.12.**
 
 Concerned Cartographer turns Valheim’s map into a living atlas.
 
@@ -13,6 +13,7 @@ The roads your Vikings build can map themselves. Existing pins can become durabl
 * Existing vanilla pins can be upgraded and edited without being recreated.
 * The Atlas Drawer provides search, filtering, clustering, and saved views.
 * Freehand and waypoint routes can follow recorded roads.
+* Optional walking Route Follow can steer vanilla Q autorun along the selected route; it is OFF by default and manual input cancels immediately.
 * Backups, restoration, migration, and sanitized support reports are built in.
 * Multiplayer sharing is deliberate: nothing is applied without review.
 * Fog of war is respected.
@@ -35,7 +36,7 @@ The roads your Vikings build can map themselves. Existing pins can become durabl
 
 ![The Routes panel with a named freehand route drawn as a dashed line across the map to a port, with style, snap-to-roads and editing controls](https://raw.githubusercontent.com/Weakened/ConcernedCatMods/main/docs/media/concerned-cartographer/routes.jpg)
 
-*Routes are planning overlays — freehand or waypoints, styled and named, with snap-to-roads. They never move your character.*
+*Routes are planning overlays — freehand or waypoints, styled and named, with snap-to-roads. When you explicitly opt in, walking Route Follow can steer vanilla Q autorun along the selected route.*
 
 ![The Survey panel showing pending observations awaiting review, with accept and reject controls for each](https://raw.githubusercontent.com/Weakened/ConcernedCatMods/main/docs/media/concerned-cartographer/survey-before.jpg)
 
@@ -53,9 +54,9 @@ The roads your Vikings build can map themselves. Existing pins can become durabl
 
 *Settings with backups, a sanitized support bundle, road-repair tools — and opt-in crash reporting that spells out what is never sent.*
 
-## Version 1.0 and support
+## Version 1.1 and support
 
-Version 1.0 brings the complete atlas out of public beta, with a compatibility fix for the changed HUD-message API in Valheim 1.0.
+Version 1.1 adds optional walking Route Follow. Enable it in the Routes panel, select a live route, close the map, stand near the route, and press Q. A second Q press, manual movement/look, route changes, unsafe lifecycle states, leaving the route, reaching its end, or making no route progress for 2.5 seconds cancels it. Ships, carts, mounts, speed, stamina, collision, fog, and multiplayer authority are never controlled. Version 1.1 also carries forward the Valheim 1.0.7 HUD-message and high-resolution UI fixes from 1.0.2, verified against the current Valheim 1.0.12 build.
 
 Development and compatibility support continue beyond v1.0. Confirmed crashes, data-loss risks, installation failures, stuck input, duplicated pins, and multiplayer consistency problems receive the highest priority.
 

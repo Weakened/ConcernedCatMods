@@ -382,7 +382,7 @@ internal sealed class CartographerRuntime : IDisposable
         _walkingRouteFollow.Cancel();
         player.m_autoRun = false;
         VanillaMessage.Show(player, MessageHud.MessageType.TopLeft,
-            "Route Follow stopped (manual look)." );
+            "Route Follow stopped (manual look).");
     }
 
     private void HandleWalkingRouteControls(
@@ -412,9 +412,9 @@ internal sealed class CartographerRuntime : IDisposable
 
         WalkingRouteFollowStep step = _walkingRouteFollow.Tick(
             BuildWalkingFrame(player, movedir, togglePressed));
+        WalkingRouteFollowControlPolicy.Apply(step, ref autoRunPressed);
         if (step.StopVanillaAutorun)
         {
-            autoRunPressed = false;
             player.m_autoRun = false;
             ShowFollowStopped(step.CancelReason);
             return;
@@ -438,10 +438,9 @@ internal sealed class CartographerRuntime : IDisposable
             route.Revision == _followRouteRevision;
         bool lifecycleReady = _mapReady && sameWorld &&
             !Minimap.IsOpen() && !player.IsDead() && !player.IsTeleporting();
-        bool eligible = player.CanMove() && !player.IsAttached() &&
-            !player.IsAttachedToShip() && !player.IsRiding() &&
-            player.GetDoodadController() is null &&
-            player.GetStandingOnShip() is null;
+        // Re-evaluate every SetControls tick: attachment can change after
+        // Route Follow starts, and walking-only eligibility must fail closed.
+        bool eligible = WalkingMovementEligible(player);
 
         return new WalkingRouteFollowFrame(
             new RoadPoint(position.x, position.y, position.z),
@@ -454,8 +453,7 @@ internal sealed class CartographerRuntime : IDisposable
             manualInput: movedir.sqrMagnitude > 0.0001f,
             routeUnchanged: routeUnchanged,
             lifecycleReady: lifecycleReady,
-            eligibleMovement: eligible,
-            blocked: true);
+            eligibleMovement: eligible);
     }
 
     private bool TryStartWalkingRouteFollow(Player player)
@@ -506,6 +504,13 @@ internal sealed class CartographerRuntime : IDisposable
     {
         int count = Physics.OverlapSphereNonAlloc(
             player.transform.position, 5f, _routeFollowNearby);
+        if (count >= _routeFollowNearby.Length)
+        {
+            // A saturated non-alloc query is incomplete. Treat it as
+            // ineligible rather than risk steering while a cart is attached.
+            return true;
+        }
+
         for (int index = 0; index < count; index++)
         {
             Collider collider = _routeFollowNearby[index];

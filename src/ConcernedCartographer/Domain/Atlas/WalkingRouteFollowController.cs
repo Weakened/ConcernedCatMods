@@ -14,7 +14,7 @@ internal enum WalkingRouteFollowCancelReason
     IneligibleMovement,
     OffRoute,
     RouteEnd,
-    Stuck,
+    NoProgressTimeout,
     InvalidState,
 }
 
@@ -30,8 +30,7 @@ internal readonly struct WalkingRouteFollowFrame
         bool manualInput = false,
         bool routeUnchanged = true,
         bool lifecycleReady = true,
-        bool eligibleMovement = true,
-        bool blocked = false)
+        bool eligibleMovement = true)
     {
         Position = position;
         CurrentYawDegrees = currentYawDegrees;
@@ -43,7 +42,6 @@ internal readonly struct WalkingRouteFollowFrame
         RouteUnchanged = routeUnchanged;
         LifecycleReady = lifecycleReady;
         EligibleMovement = eligibleMovement;
-        Blocked = blocked;
     }
     public RoadPoint Position { get; }
     public float CurrentYawDegrees { get; }
@@ -55,7 +53,6 @@ internal readonly struct WalkingRouteFollowFrame
     public bool RouteUnchanged { get; }
     public bool LifecycleReady { get; }
     public bool EligibleMovement { get; }
-    public bool Blocked { get; }
 }
 
 internal readonly struct WalkingRouteFollowStep
@@ -78,6 +75,25 @@ internal readonly struct WalkingRouteFollowStep
     public WalkingRouteFollowCancelReason CancelReason { get; }
 }
 
+internal static class WalkingRouteFollowControlPolicy
+{
+    /// <summary>Feed held autorun while steering so vanilla SetControls
+    /// refreshes m_moveDir from m_lookDir; cancellation always wins.</summary>
+    public static void Apply(
+        in WalkingRouteFollowStep step,
+        ref bool autoRunPressed)
+    {
+        if (step.StopVanillaAutorun)
+        {
+            autoRunPressed = false;
+        }
+        else if (step.Steering)
+        {
+            autoRunPressed = true;
+        }
+    }
+}
+
 internal sealed class WalkingRouteFollowController
 {
     private const int ProjectionWindow = 12;
@@ -85,14 +101,14 @@ internal sealed class WalkingRouteFollowController
     private const float MaximumCrossTrackMeters = 10f;
     private const float RouteEndToleranceMeters = 1.25f;
     private const float ProgressEpsilonMeters = 0.15f;
-    private const float StuckTimeoutSeconds = 2.5f;
+    private const float NoProgressTimeoutSeconds = 2.5f;
     private const float MaximumTurnDegreesPerSecond = 120f;
 
     private RouteFollowPath? _path;
     private RouteFollowDirection _direction;
     private int _cursor;
     private float _lastRemainingMeters;
-    private float _stuckSeconds;
+    private float _noProgressSeconds;
 
     public bool IsFollowing => _path is not null;
 
@@ -151,19 +167,15 @@ internal sealed class WalkingRouteFollowController
         if (_lastRemainingMeters - sample.RemainingMeters >= ProgressEpsilonMeters)
         {
             _lastRemainingMeters = sample.RemainingMeters;
-            _stuckSeconds = 0f;
-        }
-        else if (frame.Blocked)
-        {
-            _stuckSeconds += frame.DeltaSeconds;
-            if (_stuckSeconds >= StuckTimeoutSeconds)
-            {
-                return Stop(WalkingRouteFollowCancelReason.Stuck);
-            }
+            _noProgressSeconds = 0f;
         }
         else
         {
-            _stuckSeconds = 0f;
+            _noProgressSeconds += frame.DeltaSeconds;
+            if (_noProgressSeconds >= NoProgressTimeoutSeconds)
+            {
+                return Stop(WalkingRouteFollowCancelReason.NoProgressTimeout);
+            }
         }
 
         float targetYaw = YawTo(frame.Position, sample.LookAheadPoint);
@@ -180,7 +192,7 @@ internal sealed class WalkingRouteFollowController
         _path = null;
         _cursor = 0;
         _lastRemainingMeters = 0f;
-        _stuckSeconds = 0f;
+        _noProgressSeconds = 0f;
     }
     private WalkingRouteFollowStep Stop(WalkingRouteFollowCancelReason reason)
     {

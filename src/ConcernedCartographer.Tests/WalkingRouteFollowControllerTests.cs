@@ -73,18 +73,34 @@ public class WalkingRouteFollowControllerTests
     }
 
     [Fact]
-    public void BlockedWithoutProgressCancelsAfterTimeout()
+    public void NoRouteProgressCancelsAfterTimeout()
     {
         var controller = Started();
         WalkingRouteFollowStep step = default;
         for (int index = 0; index < 6; index++)
         {
             step = controller.Tick(new WalkingRouteFollowFrame(
-                P(1f, 0f), 0f, 0.5f, blocked: true));
+                P(1f, 0f), 0f, 0.5f));
         }
 
-        Assert.Equal(WalkingRouteFollowCancelReason.Stuck, step.CancelReason);
+        Assert.Equal(WalkingRouteFollowCancelReason.NoProgressTimeout, step.CancelReason);
         Assert.True(step.StopVanillaAutorun);
+    }
+
+    [Fact]
+    public void ControlPolicyMaintainsVanillaAutorunWhileSteeringAndStopsOnCancel()
+    {
+        bool autoRunPressed = false;
+        var steering = new WalkingRouteFollowStep(
+            true, 45f, false, WalkingRouteFollowCancelReason.None);
+
+        WalkingRouteFollowControlPolicy.Apply(steering, ref autoRunPressed);
+        Assert.True(autoRunPressed);
+
+        var stopping = new WalkingRouteFollowStep(
+            false, 0f, true, WalkingRouteFollowCancelReason.ManualInput);
+        WalkingRouteFollowControlPolicy.Apply(stopping, ref autoRunPressed);
+        Assert.False(autoRunPressed);
     }
 
     [Fact]
