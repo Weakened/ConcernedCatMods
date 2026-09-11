@@ -632,7 +632,8 @@ internal sealed class CartographerRuntime : IDisposable
             lifecycleReady: lifecycleReady,
             helmValid: controls == _sailingFollowControls &&
                 ship == _sailingFollowShip &&
-                SailingHelmValid(player, controls, ship));
+                SailingHelmValid(player, controls, ship),
+            currentRudderValue: ship.GetRudderValue());
     }
 
     private bool TryStartSailingRouteFollow(

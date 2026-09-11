@@ -31,7 +31,8 @@ internal readonly struct SailingRouteFollowFrame
         bool togglePressed = false,
         bool routeUnchanged = true,
         bool lifecycleReady = true,
-        bool helmValid = true)
+        bool helmValid = true,
+        float currentRudderValue = 0f)
     {
         Position = position;
         CurrentYawDegrees = currentYawDegrees;
@@ -43,6 +44,7 @@ internal readonly struct SailingRouteFollowFrame
         RouteUnchanged = routeUnchanged;
         LifecycleReady = lifecycleReady;
         HelmValid = helmValid;
+        CurrentRudderValue = currentRudderValue;
     }
 
     public RoadPoint Position { get; }
@@ -55,6 +57,7 @@ internal readonly struct SailingRouteFollowFrame
     public bool RouteUnchanged { get; }
     public bool LifecycleReady { get; }
     public bool HelmValid { get; }
+    public float CurrentRudderValue { get; }
 }
 
 internal readonly struct SailingRouteFollowStep
@@ -133,6 +136,8 @@ internal sealed class SailingRouteFollowController
     private const float ProgressEpsilonMeters = 0.5f;
     private const float NoProgressTimeoutSeconds = 15f;
     private const float FullRudderErrorDegrees = 45f;
+    private const float RudderRateSpan = 0.25f;
+    private const float RudderCenterDeadband = 0.04f;
 
     private RouteFollowPath? _path;
     private RouteFollowDirection _direction;
@@ -210,16 +215,23 @@ internal sealed class SailingRouteFollowController
         }
 
         float targetYaw = YawTo(frame.Position, sample.LookAheadPoint);
-        float error = NormalizeDelta(targetYaw - frame.CurrentYawDegrees);
-        float rudder = Math.Max(-1f, Math.Min(1f,
-            error / FullRudderErrorDegrees));
-        if (float.IsNaN(rudder) || float.IsInfinity(rudder))
+        float headingError = NormalizeDelta(
+            targetYaw - frame.CurrentYawDegrees);
+        float desiredRudder = Math.Max(-1f, Math.Min(
+            1f, headingError / FullRudderErrorDegrees));
+        float currentRudder = Math.Max(
+            -1f, Math.Min(1f, frame.CurrentRudderValue));
+        float rudderError = desiredRudder - currentRudder;
+        float rudderRate = Math.Abs(rudderError) <= RudderCenterDeadband
+            ? 0f
+            : Math.Max(-1f, Math.Min(1f, rudderError / RudderRateSpan));
+        if (float.IsNaN(rudderRate) || float.IsInfinity(rudderRate))
         {
             return Stop(SailingRouteFollowCancelReason.InvalidState);
         }
 
         return new SailingRouteFollowStep(
-            true, rudder, SailingRouteFollowCancelReason.None);
+            true, rudderRate, SailingRouteFollowCancelReason.None);
     }
 
     public void Cancel()
@@ -250,7 +262,11 @@ internal sealed class SailingRouteFollowController
             float.IsNaN(frame.DeltaSeconds) ||
             float.IsInfinity(frame.DeltaSeconds) ||
             float.IsNaN(frame.CurrentYawDegrees) ||
-            float.IsInfinity(frame.CurrentYawDegrees))
+            float.IsInfinity(frame.CurrentYawDegrees) ||
+            float.IsNaN(frame.CurrentRudderValue) ||
+            float.IsInfinity(frame.CurrentRudderValue) ||
+            frame.CurrentRudderValue < -1.25f ||
+            frame.CurrentRudderValue > 1.25f)
         {
             return SailingRouteFollowCancelReason.InvalidState;
         }

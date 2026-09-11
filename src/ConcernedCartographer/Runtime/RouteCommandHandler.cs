@@ -609,6 +609,17 @@ internal sealed class RouteCommandHandler
                 }
 
                 return EditNearest(player, route => route.Status = status, $"status {status}");
+            case "travel":
+                if (!Enum.TryParse(remainder.Trim(), ignoreCase: true, out RouteTravelMode travel) ||
+                    !Enum.IsDefined(typeof(RouteTravelMode), travel))
+                {
+                    return "Usage: cc_routes travel land|sailing";
+                }
+
+                return EditNearest(
+                    player,
+                    route => route.TravelMode = travel,
+                    $"travel mode {travel}");
             case "color":
                 string trimmed = remainder.Trim().TrimStart('#');
                 if (string.Equals(trimmed, "clear", StringComparison.OrdinalIgnoreCase))
@@ -680,7 +691,7 @@ internal sealed class RouteCommandHandler
 
                 return redoSummary;
             default:
-                return "Usage: cc_routes [list|draw <name>|waypoint <name>|erase|stop|snap on/off|measure|name|style|status|color|lock|unlock|archive|unarchive|delete|restore|split|merge|undo|redo]";
+                return "Usage: cc_routes [list|draw <name>|waypoint <name>|erase|stop|snap on/off|measure|name|style|status|travel land|sailing|color|lock|unlock|archive|unarchive|delete|restore|split|merge|undo|redo]";
         }
     }
 
@@ -698,7 +709,7 @@ internal sealed class RouteCommandHandler
                     _settings.RouteOnRoadTolerance.Value,
                     _settings.RouteOffRoadSpeed.Value,
                     _settings.RouteOnRoadSpeed.Value);
-                builder.Append($"\n  \"{route.Name}\" [{route.Kind}, {route.Style}, {route.Status}" +
+                builder.Append($"\n  \"{route.Name}\" [{route.Kind}, {route.Style}, {route.Status}, {route.TravelMode}" +
                     $"{(route.Locked ? ", locked" : "")}{(route.Archived ? ", archived" : "")}] " +
                     $"{route.Points.Count} pts, {estimate.DistanceMeters:0} m");
             }

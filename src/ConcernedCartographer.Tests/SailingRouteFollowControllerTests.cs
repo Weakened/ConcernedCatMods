@@ -18,7 +18,7 @@ public class SailingRouteFollowControllerTests
 
     [Theory]
     [InlineData(0f, 1f)]
-    [InlineData(120f, -0.666667f)]
+    [InlineData(120f, -1f)]
     public void ProducesOnlyBoundedVanillaRudderInput(
         float currentYaw,
         float expected)
@@ -122,6 +122,55 @@ public class SailingRouteFollowControllerTests
                 new SailingRouteFollowFrame(P(2f, 0f), 90f, 1f))
                 .InjectRudder);
         }
+    }
+
+    [Fact]
+    public void ClosedLoopCommandsRateTowardDesiredRudderAndRecenters()
+    {
+        var controller = Started();
+
+        SailingRouteFollowStep turn = controller.Tick(
+            new SailingRouteFollowFrame(
+                P(1f, 0f), 0f, 0.02f,
+                currentRudderValue: 0f));
+        Assert.Equal(1f, turn.RudderInput);
+
+        SailingRouteFollowStep unwind = controller.Tick(
+            new SailingRouteFollowFrame(
+                P(2f, 0f), 80f, 0.02f,
+                currentRudderValue: 0.8f));
+        Assert.True(unwind.RudderInput < 0f);
+
+        SailingRouteFollowStep recenter = controller.Tick(
+            new SailingRouteFollowFrame(
+                P(3f, 0f), 90f, 0.02f,
+                currentRudderValue: 0.2f));
+        Assert.True(recenter.RudderInput < 0f);
+
+        SailingRouteFollowStep centered = controller.Tick(
+            new SailingRouteFollowFrame(
+                P(4f, 0f), 90f, 0.02f,
+                currentRudderValue: 0f));
+        Assert.Equal(0f, centered.RudderInput);
+    }
+
+    [Theory]
+    [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
+    [InlineData(-2f)]
+    [InlineData(2f)]
+    public void InvalidRudderFeedbackFailsClosed(float rudder)
+    {
+        var controller = Started();
+        SailingRouteFollowStep step = controller.Tick(
+            new SailingRouteFollowFrame(
+                P(1f, 0f), 90f, 0.02f,
+                currentRudderValue: rudder));
+
+        Assert.False(step.InjectRudder);
+        Assert.Equal(
+            SailingRouteFollowCancelReason.InvalidState,
+            step.CancelReason);
     }
 
     [Fact]

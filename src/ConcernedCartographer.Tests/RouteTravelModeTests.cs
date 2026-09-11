@@ -150,6 +150,143 @@ public class RouteTravelModeTests
         Assert.False(RouteFollowEligibility.CanSail(route));
     }
 
+    [Fact]
+    public void CloneAndCopyFromPreserveTravelMode()
+    {
+        AtlasRoute source = Route(RouteTravelMode.Sailing);
+        AtlasRoute clone = source.Clone();
+        Assert.Equal(RouteTravelMode.Sailing, clone.TravelMode);
+
+        AtlasRoute target = Route(RouteTravelMode.Land);
+        target.CopyFrom(source);
+        Assert.Equal(RouteTravelMode.Sailing, target.TravelMode);
+    }
+
+    [Fact]
+    public void SplitAndEraseTailPreserveTravelMode()
+    {
+        var splitStore = new RouteStore();
+        var splitOps = new RouteOperations(splitStore);
+        AtlasRoute split = FivePointRoute(
+            splitStore, RouteTravelMode.Sailing);
+        AtlasRoute? splitTail = splitOps.Split(split.Id, 2);
+        Assert.NotNull(splitTail);
+        Assert.Equal(RouteTravelMode.Sailing, split.TravelMode);
+        Assert.Equal(
+            RouteTravelMode.Sailing,
+            splitTail!.TravelMode);
+
+        var eraseStore = new RouteStore();
+        var eraseOps = new RouteOperations(eraseStore);
+        AtlasRoute erased = FivePointRoute(
+            eraseStore, RouteTravelMode.Sailing);
+        int removed = eraseOps.EraseNear(
+            erased.Id, P(20f, 0f), 4f,
+            out List<AtlasRoute> tails);
+
+        Assert.Equal(1, removed);
+        Assert.Equal(RouteTravelMode.Sailing, erased.TravelMode);
+        Assert.Single(tails);
+        Assert.Equal(
+            RouteTravelMode.Sailing,
+            tails[0].TravelMode);
+    }
+
+    [Fact]
+    public void UndoRedoRestoresTravelMode()
+    {
+        var store = new RouteStore();
+        var operations = new RouteOperations(store);
+        AtlasRoute route = operations.StartRoute(
+            RouteKind.Waypoint, "Passage");
+
+        Assert.True(operations.EditMetadata(
+            route.Id,
+            edited => edited.TravelMode = RouteTravelMode.Sailing,
+            "mark sailing"));
+        Assert.Equal(RouteTravelMode.Sailing, route.TravelMode);
+
+        Assert.True(operations.Undo(out _));
+        Assert.Equal(RouteTravelMode.Land, route.TravelMode);
+        Assert.True(operations.Redo(out _));
+        Assert.Equal(RouteTravelMode.Sailing, route.TravelMode);
+    }
+
+    [Fact]
+    public void HigherRevisionCanResetSailingToLand()
+    {
+        AtlasRoute sailing = Route(RouteTravelMode.Sailing);
+        AtlasRoute land = sailing.Clone();
+        land.Revision++;
+        land.TravelMode = RouteTravelMode.Land;
+
+        List<string> journal =
+            RouteCodec.SerializeRoute(sailing).ToList();
+        journal.AddRange(RouteCodec.SerializeRoute(land));
+
+        AtlasRoute resolved =
+            Assert.Single(RouteCodec.Parse(journal).Routes);
+        Assert.Equal(RouteTravelMode.Land, resolved.TravelMode);
+        Assert.Equal(land.Revision, resolved.Revision);
+    }
+
+    [Fact]
+    public void SyncEncodeAndApplyPreserveSailingMode()
+    {
+        var sourcePins = new PinStore();
+        var sourceRoutes = new RouteStore();
+        AtlasRoute sailing = Route(RouteTravelMode.Sailing);
+        sailing.Scope = AtlasScope.Table;
+        Assert.True(sourceRoutes.Upsert(sailing));
+
+        (_, List<AtlasRoute> shared) =
+            SyncPlanner.CollectShared(sourcePins, sourceRoutes);
+        List<string> encoded = RouteCodec.Serialize(shared).ToList();
+        List<AtlasRoute> decoded = RouteCodec.Parse(encoded).Routes;
+
+        var destinationPins = new PinStore();
+        var destinationRoutes = new RouteStore();
+        SyncPlan plan = SyncPlanner.Plan(
+            destinationPins,
+            destinationRoutes,
+            new List<AtlasPin>(),
+            decoded);
+        Assert.Equal(
+            1,
+            SyncPlanner.Apply(
+                plan,
+                destinationPins,
+                destinationRoutes,
+                takeRemoteOnConflict: false));
+
+        Assert.True(destinationRoutes.TryGet(
+            sailing.Id, out AtlasRoute received));
+        Assert.Equal(
+            RouteTravelMode.Sailing,
+            received.TravelMode);
+    }
+
+    private static AtlasRoute FivePointRoute(
+        RouteStore store,
+        RouteTravelMode mode)
+    {
+        AtlasRoute route = store.Create(created =>
+        {
+            created.Name = "Five";
+            created.Kind = RouteKind.Waypoint;
+            created.TravelMode = mode;
+        });
+        store.Mutate(route.Id, edited =>
+        {
+            edited.Points.Add(P(0f, 0f));
+            edited.Points.Add(P(10f, 0f));
+            edited.Points.Add(P(20f, 0f));
+            edited.Points.Add(P(30f, 0f));
+            edited.Points.Add(P(40f, 0f));
+        });
+        return route;
+    }
+
     private static AtlasRoute Route(RouteTravelMode mode)
     {
         var route = new AtlasRoute(
