@@ -347,7 +347,7 @@ malformed geometry or the projection window contains no traversable segment.
 
 The core deliberately does not choose direction, read input, start autorun,
 steer a character or ship, inspect obstacles, or touch multiplayer authority.
-The #241 walking adapter is isolated behind exact Valheim 1.0.7 Harmony prefixes
+The #241 walking adapter is isolated behind exact Valheim 1.0.12 Harmony prefixes
 for `Player.SetControls` and `Player.SetMouseLook`. It is opt-in and default OFF,
 starts only from a selected live route when the player presses vanilla Q, and
 steers only `Character.SetLookDir`. While active it feeds the held autorun flag

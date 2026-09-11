@@ -6,7 +6,7 @@ using TheConcernedCat.ConcernedCartographer.Reporting;
 
 namespace TheConcernedCat.ConcernedCartographer.Runtime;
 
-/// <summary>Narrow Valheim 1.0.7 control choke for local walking Route Follow.
+/// <summary>Narrow Valheim 1.0.12 control choke for local walking Route Follow.
 /// When no runtime callback is present, the prefix is exact vanilla pass-through.</summary>
 internal static class WalkingRouteFollowAdapter
 {
