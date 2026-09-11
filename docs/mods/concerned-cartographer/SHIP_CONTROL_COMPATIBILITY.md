@@ -3,7 +3,7 @@
 - Issue: CC-RF-003 (#242)
 - Parent: Optional Route Follow (#104)
 - Audit date: 2026-09-10
-- Status: **installed-assembly compatibility PASS; disposable-profile live matrix pending**
+- Status: **installed-assembly compatibility PASS after #249 cancellation-seam correction; disposable-profile live matrix pending**
 
 This spike verifies the control boundary that a later sailing Route Follow
 slice may use. It does not implement steering, change package behavior, or
@@ -49,10 +49,14 @@ excluding a new vessel.
    aboard the ship, writes `ZDOVars.s_user`, and returns the result.
 3. On success, the local player starts doodad control with that exact
    `ShipControlls` instance.
-4. `Player.SetControls` forwards raw input through
-   `IDoodadController.ApplyControlls`.
-5. `ShipControlls.ApplyControlls(Vector3, Vector3, bool, bool, bool)`
-   delegates the movement vector to `Ship.ApplyControlls(Vector3)`.
+4. `Player.SetControls` receives the complete raw action set, but calls
+   `SetDoodadControlls` / `IDoodadController.ApplyControlls` **before** it
+   checks `jump | attack | secondaryAttack | dodge` and calls
+   `StopDoodadControl`. A ship-input hook alone therefore cannot guarantee
+   same-call cancellation for those helm-exit actions.
+5. `ShipControlls.ApplyControlls(Vector3, Vector3, bool, bool, bool)` sees
+   movement/run/block inputs only and delegates the movement vector to
+   `Ship.ApplyControlls(Vector3)`.
 6. `Ship.ApplyControlls` maintains vanilla forward/back edge state,
    integrates the rudder input, and sends Forward, Backward, or Rudder RPCs
    to the ship object's current owner.
@@ -69,7 +73,9 @@ A client helmsman is valid. Route Follow must never require
 
 | Purpose | Valheim 1.0.7 member |
 |---|---|
-| Safe interception point | `ShipControlls.ApplyControlls(Vector3 moveDir, Vector3 lookDir, bool run, bool autoRun, bool block)` |
+| Raw input observation | read-only prefix on `Player.SetControls(Vector3 movedir, bool attack, bool attackHold, bool secondaryAttack, bool secondaryAttackHold, bool block, bool blockHold, bool jump, bool crouch, bool run, bool autoRun, bool dodge)` |
+| Steering injection | prefix on `ShipControlls.ApplyControlls(Vector3 moveDir, Vector3 lookDir, bool run, bool autoRun, bool block)` |
+| Lifecycle cancellation | prefix on `Player.StopDoodadControl()` while the exact doodad controller is still available |
 | Local controlled ship | `Player.GetControlledShip()` |
 | Exact doodad identity | `Player.GetDoodadController()` |
 | Granted helm user | `ShipControlls.GetUser()`, `HaveValidUser()` |
@@ -82,12 +88,32 @@ A client helmsman is valid. Route Follow must never require
 
 ## Required adapter boundary for #243
 
-The later runtime adapter should be a narrow Harmony prefix on
-`ShipControlls.ApplyControlls`. It must run synchronously where vanilla
-already receives helm input; a separate `Update` call into
+The later runtime adapter requires three narrow Harmony seams. They form one
+ordered contract; `ShipControlls.ApplyControlls` alone is insufficient.
+
+1. A read-only prefix on `Player.SetControls` observes the complete raw
+   action set before vanilla calls `SetDoodadControlls`. It must gate on
+   `__instance == Player.m_localPlayer`, an active sailing route, and the
+   exact live `ShipControlls` doodad identity. Manual rudder/sail input or
+   `jump | attack | secondaryAttack | dodge` cancels the route state here.
+   The prefix must not change any `Player.SetControls` argument or skip the
+   original.
+2. A prefix on `ShipControlls.ApplyControlls` is the only steering
+   injection seam. Because the earlier prefix already cleared the route
+   state, an exit action in this `Player.SetControls` call cannot reach a
+   synthetic steering write. A defensive raw-`moveDir` check here still
+   cancels manual rudder/sail input and passes it through unchanged.
+3. A prefix on `Player.StopDoodadControl` observes the exact controller
+   before vanilla calls `OnUseStop` and clears `m_doodadController`.
+   It cancels route state for Use-to-leave, invalid/range loss, and other
+   lifecycle callers. It must not suppress or modify the original method.
+
+This ordering is mandatory: raw observation/cancellation, then vanilla's
+doodad dispatch and the guarded steering prefix, then vanilla's own
+helm-exit check/lifecycle stop. A separate `Update` call into
 `Ship.ApplyControlls` would race vanilla input and duplicate RPC cadence.
 
-Before modifying an argument, the adapter must prove all of these:
+Before modifying `moveDir.x`, the steering prefix must prove all of these:
 
 - the feature is explicitly enabled and a sailing route is active;
 - `Player.m_localPlayer` is alive and present;
@@ -95,17 +121,14 @@ Before modifying an argument, the adapter must prove all of these:
 - `GetDoodadController()` is this exact `ShipControlls` instance;
 - `HaveValidUser()` is true and `GetUser()` equals the local player ID;
 - the ship/controls Unity objects are live and the world/session key matches;
-- route projection and the control state are valid and finite.
+- route projection and the control state are valid and finite;
+- the earlier raw-input observer installed successfully for this session.
 
-It must snapshot raw `moveDir` first. Any player rudder or sail input
-(`x` or `z` outside a small tested dead zone) cancels Route Follow in
-that same call and passes the vector through unchanged. Vanilla jump,
-attack, secondary attack, dodge, Use-to-leave, and invalid-controller paths
-already stop doodad control; the route state must also observe that loss and
-cancel without attempting one final steering write.
 Only after every gate passes may the prefix replace `moveDir.x` with a
 finite value clamped to [-1, 1]. It must preserve `y`, `z`, look
-direction, run, autorun, and block exactly.
+direction, run, autorun, and block exactly. Any observer or lifecycle-hook
+bind failure disables sailing Route Follow for the session; an
+`ApplyControlls`-only fallback is forbidden.
 
 The synthetic value is a **rudder direction/rate input**, not an absolute
 rudder angle. Vanilla integrates it into `m_rudderValue` using its own
@@ -144,8 +167,13 @@ The state owner in #243 must cancel and clear references on:
   failure.
 
 Cancellation restores full vanilla behavior by doing nothing to the current
-input call. It must not send a compensating Stop/Rudder RPC because that
-would overwrite the player's vanilla state.
+input call. For jump, attack, secondary attack, and dodge, the
+`Player.SetControls` prefix must clear route state before the same original
+call can dispatch to `ShipControlls.ApplyControlls`; that dispatch must see
+inactive state and perform no synthetic steering write. The lifecycle prefix
+then observes vanilla `StopDoodadControl` without replacing it. Cancellation
+must not send a compensating Stop/Rudder RPC because that would overwrite the
+player's vanilla state.
 
 If any inspected type/member/signature moves after a Valheim update, patch
 installation must fail closed: log one actionable warning, keep Route Follow
@@ -163,8 +191,11 @@ python ./tools/validate_repo.py
 ```
 `audit-cartographer-ship-api.ps1` builds Cartographer unless
 `-SkipBuild` is supplied, decompiles only the required installed types,
-asserts the control/authority/replication members and vessel catalog, and
-prints sanitized JSON identities. It never copies an inspected binary.
+asserts the raw-input-before-dispatch hook, the installed dispatch-before-exit
+ordering, the lifecycle stop hook, authority/replication members and vessel
+catalog, and prints sanitized JSON identities. It also verifies that this
+contract names all three required seams; an `ApplyControlls`-only contract
+fails. It never copies an inspected binary.
 
 ## Disposable-profile live matrix
 
@@ -181,7 +212,7 @@ topology, disposable world, steps, result, log excerpt, and video reference.
 | A2 | Dedicated server without Cartographer; one modded helmsman, one unmodded observer | No server dependency; observer sees ordinary ship motion | Pending owner |
 | M1 | While following, apply manual left/right then sail forward/back | Follow cancels on the first raw input; that exact input reaches vanilla | Pending #243 |
 | W1 | Tailwind, crosswind, headwind/no-progress cases | Vanilla wind/physics remain authoritative; no tack/boost; unsafe case cancels | Pending #243 |
-| L1 | Leave helm with Use, jump/attack/dodge, and move out of range | Follow state clears; no later RPC or stale reference | Pending #243 |
+| L1 | Leave helm with Use, jump/attack/secondary/dodge, and move out of range | Follow state clears; jump/attack/secondary/dodge produce no synthetic steering write in that same `SetControls` call; no later RPC or stale reference | Pending #243 |
 | L2 | Route edit/delete/archive/deselect and route end | Immediate clean cancellation | Pending #243 |
 | L3 | Death, portal/teleport, logout/relog, world switch, plugin disable | State clears across every boundary; vanilla control remains usable | Pending #243 |
 | L4 | Destroy a disposable test ship while follow is active | Unity-null path cancels without exception or world/save damage | Pending #243 |
@@ -199,7 +230,9 @@ blocked until the #243 live rows pass.
   treated as an unstable internal member.
 - `Ship.GetLocalShip()` means the latest ship the local player is aboard,
   not necessarily the ship they control; it is insufficient as a helm gate.
-- Static IL proves current authority and RPC paths, not latency feel under a
-  real host/dedicated-server session.
+- Static IL proves current authority and RPC paths, not Harmony ordering
+  against unknown third-party patches or latency feel under a real
+  host/dedicated-server session. The disposable-profile matrix remains the
+  release gate.
 - No steering algorithm, route state, config, UI, package version, tag,
   release, or publication is part of #242.

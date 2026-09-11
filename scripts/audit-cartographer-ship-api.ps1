@@ -25,7 +25,8 @@ $resources = Join-Path $environment.ValheimInstall "valheim_Data\resources.asset
 $globalManagers = Join-Path $environment.ValheimInstall "valheim_Data\globalgamemanagers"
 $bepInExDll = Join-Path $environment.BepInExPath "core\BepInEx.dll"
 $jotunnDll = Join-Path $environment.BepInExPath "plugins\ValheimModding-Jotunn\Jotunn.dll"
-foreach ($required in @($gameAssembly, $resources, $globalManagers, $bepInExDll, $jotunnDll)) {
+$contractPath = Join-Path $root "docs\mods\concerned-cartographer\SHIP_CONTROL_COMPATIBILITY.md"
+foreach ($required in @($gameAssembly, $resources, $globalManagers, $bepInExDll, $jotunnDll, $contractPath)) {
     if (-not (Test-Path $required -PathType Leaf)) {
         throw "Required audit input is missing: $required"
     }
@@ -53,6 +54,24 @@ function Assert-SourceContains {
         throw "Valheim 1.0.7 ship contract moved: $Contract"
     }
 }
+function Assert-SourceOrder {
+    param(
+        [Parameter(Mandatory)][string]$Source,
+        [Parameter(Mandatory)][string[]]$Needles,
+        [Parameter(Mandatory)][string]$Contract
+    )
+
+    $cursor = 0
+    foreach ($needle in $Needles) {
+        $index = $Source.IndexOf($needle, $cursor, [StringComparison]::Ordinal)
+        if ($index -lt 0) {
+            throw "Valheim 1.0.7 ship contract moved: $Contract (missing or out of order: $needle)"
+        }
+
+        $cursor = $index + $needle.Length
+    }
+}
+
 function Get-FileIdentity {
     param([Parameter(Mandatory)][string]$Path)
 
@@ -69,6 +88,16 @@ function Get-FileIdentity {
         sha256 = (Get-FileHash $Path -Algorithm SHA256).Hash
         assemblyVersion = $assemblyVersion
     }
+}
+
+$contractSource = Get-Content -LiteralPath $contractPath -Raw
+foreach ($contractNeedle in @(
+    'A read-only prefix on `Player.SetControls`',
+    'A prefix on `ShipControlls.ApplyControlls`',
+    'A prefix on `Player.StopDoodadControl`',
+    '`ApplyControlls`-only fallback is forbidden'
+)) {
+    Assert-SourceContains $contractSource $contractNeedle "documented raw-input, steering, and lifecycle seams"
 }
 
 $versionSource = Get-TypeSource -TypeName "Version"
@@ -134,7 +163,18 @@ foreach ($member in @(
 Assert-SourceContains $player 'm_doodadController.ApplyControlls(moveDir, lookDir, run, autoRun, block);' "Player must pass raw controls through the doodad controller"
 Assert-SourceContains $player 'public Ship GetControlledShip()' "local-player controlled-ship identity"
 Assert-SourceContains $player 'public IDoodadController GetDoodadController()' "local-player doodad-controller identity"
-Assert-SourceContains $player 'StopDoodadControl();' "vanilla helm-release lifecycle"
+Assert-SourceContains $player 'public void SetControls(Vector3 movedir, bool attack, bool attackHold, bool secondaryAttack, bool secondaryAttackHold, bool block, bool blockHold, bool jump, bool crouch, bool run, bool autoRun, bool dodge = false)' "raw Player.SetControls observation boundary"
+Assert-SourceOrder $player @(
+    'public void SetControls(Vector3 movedir, bool attack, bool attackHold, bool secondaryAttack, bool secondaryAttackHold, bool block, bool blockHold, bool jump, bool crouch, bool run, bool autoRun, bool dodge = false)',
+    'SetDoodadControlls(ref movedir, ref m_lookDir, ref run, ref autoRun, blockHold);',
+    'if (jump | attack | secondaryAttack | dodge)',
+    'StopDoodadControl();'
+) "Player.SetControls currently dispatches doodad input before its helm-exit check, so raw exit input must be observed in a Player.SetControls prefix"
+Assert-SourceOrder $player @(
+    'public void StopDoodadControl()',
+    'm_doodadController.OnUseStop(this);',
+    'm_doodadController = null;'
+) "Player.StopDoodadControl prefix must observe the exact controller before vanilla clears it"
 Assert-SourceContains $zNetView 'ZRoutedRpc.instance.InvokeRoutedRPC(m_zdo.GetOwner(), m_zdo.m_uid, method, parameters);' "default ZNetView RPC target must remain the object's owner"
 Assert-SourceContains $zSyncTransform 'zDO.SetPosition(position2);' "owner transform position replication"
 Assert-SourceContains $zSyncTransform 'zDO.SetRotation(rotation);' "owner transform rotation replication"
@@ -180,8 +220,11 @@ $result = [ordered]@{
     steamBuildId = $steamBuildId
     unityVersion = $unityMatch.Value
     vessels = $vessels
-    hookBoundary = "ShipControlls.ApplyControlls(Vector3, Vector3, bool, bool, bool)"
-    controllerIdentity = "Player.GetControlledShip + ShipControlls.GetUser/HaveValidUser"
+    rawInputObservation = "read-only Player.SetControls prefix before doodad dispatch"
+    steeringInjection = "ShipControlls.ApplyControlls prefix after raw-input cancellation"
+    helmExitOrdering = "installed Player.SetControls dispatches doodad controls before jump/attack/secondary/dodge stop"
+    lifecycleCancellation = "Player.StopDoodadControl prefix before OnUseStop and controller clear"
+    controllerIdentity = "Player.GetControlledShip + Player.GetDoodadController + ShipControlls.GetUser/HaveValidUser"
     simulationAuthority = "Ship.ZNetView owner only"
     rudderTransport = "vanilla owner-targeted Rudder RPC; owner publishes ZDO rudder"
     sailPolicy = "read-only; vanilla speed state and EnvMan wind remain authoritative"
