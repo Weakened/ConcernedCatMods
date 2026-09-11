@@ -68,10 +68,38 @@ internal static class SailingRouteFollowAdapter
             var stopTarget = AccessTools.Method(
                 typeof(Player), nameof(Player.StopDoodadControl),
                 Type.EmptyTypes);
-            if (playerTarget is null || helmTarget is null || stopTarget is null)
+            var controlledShipTarget = AccessTools.Method(
+                typeof(Player), nameof(Player.GetControlledShip),
+                Type.EmptyTypes);
+            var doodadTarget = AccessTools.Method(
+                typeof(Player), nameof(Player.GetDoodadController),
+                Type.EmptyTypes);
+            var playerIdTarget = AccessTools.Method(
+                typeof(Player), nameof(Player.GetPlayerID),
+                Type.EmptyTypes);
+            var validUserTarget = AccessTools.Method(
+                typeof(ShipControlls), nameof(ShipControlls.HaveValidUser),
+                Type.EmptyTypes);
+            var userTarget = AccessTools.Method(
+                typeof(ShipControlls), nameof(ShipControlls.GetUser),
+                Type.EmptyTypes);
+            var rudderTarget = AccessTools.Method(
+                typeof(Ship), nameof(Ship.GetRudderValue),
+                Type.EmptyTypes);
+            bool contractValid =
+                playerTarget is not null &&
+                helmTarget is not null &&
+                stopTarget is not null &&
+                controlledShipTarget?.ReturnType == typeof(Ship) &&
+                doodadTarget?.ReturnType == typeof(IDoodadController) &&
+                playerIdTarget?.ReturnType == typeof(long) &&
+                validUserTarget?.ReturnType == typeof(bool) &&
+                userTarget?.ReturnType == typeof(long) &&
+                rudderTarget?.ReturnType == typeof(float);
+            if (!contractValid)
             {
                 log.LogWarning(
-                    "Sailing Route Follow unavailable: Valheim helm-control signatures not recognised.");
+                    "Sailing Route Follow unavailable: Valheim helm-control contract not recognised.");
                 return;
             }
 
