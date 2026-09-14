@@ -18,6 +18,7 @@ Concerned Cartographer is a Valheim living-atlas mod created and maintained by *
 - [`DATA_FORMATS.md`](DATA_FORMATS.md) — sidecars, schemas, migrations and recovery rules
 - [`PIN_WORKBENCH_DESIGN.md`](PIN_WORKBENCH_DESIGN.md) — pin ownership/editing UX contract
 - [`SHIP_CONTROL_COMPATIBILITY.md`](SHIP_CONTROL_COMPATIBILITY.md) — Valheim 1.0 sailing-control and authority contract
+- [`SURVEY_LOCATION_COMPATIBILITY.md`](SURVEY_LOCATION_COMPATIBILITY.md) — the loaded-world surfaces the survey reads, and why dungeon entrances need the location one (#258)
 - [`TEST_PLAN.md`](TEST_PLAN.md) — integration and release test plan
 
 ### Maintainers / release

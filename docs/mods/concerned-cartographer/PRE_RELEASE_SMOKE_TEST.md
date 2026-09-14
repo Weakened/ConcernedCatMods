@@ -878,6 +878,8 @@ evidence and STOP the human test.
 | 5.7 | In world | `F7` on a rock/portal/crypt; on a creature; on nothing | Sensible pin at target; creature refused; no-target message; duplicate radius blocks repeat | Clips | Yes |
 | 5.8 | Enable SurveyRulesEnabled | Walk near copper rocks ~1 min | HUD reports observations; `cc_survey list` shows them; nothing pinned until accept; base exclusion respected near a Base pin | Console output | Yes |
 | 5.9 | 5.8 | `cc_survey accept all`, disable survey | Pins appear tagged "surveyed"; scanner stays silent when disabled | Console output | No |
+| 5.10 | Enable SurveyRulesEnabled, Black Forest | Walk up to a Burial Chamber, then a Troll Cave, then a Bear Cave | Each appears as a pending observation in the Survey panel (category Dungeons); accepting creates exactly one marker at the entrance; the sweep line reports a non-zero "locations" figure | Console output + screenshot | Yes (#258) |
+| 5.11 | 5.10 | Reject one dungeon observation, relog, revisit the same entrance | The rejected entrance is not offered again; the other two remain accepted markers | Console output | Yes (#258) |
 
 ## 6. Routes (v0.5)
 

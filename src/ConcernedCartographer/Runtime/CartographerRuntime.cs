@@ -2687,6 +2687,7 @@ internal sealed class CartographerRuntime : IDisposable
         _terrainIntent = _terrainIntentPersistence.Load(uid);
         _pinStore = _pinPersistence.Load(uid);
         _surveyEngine.ResetSession();
+        _surveyScanner.ResetForWorld();
         _surveyEngine.LoadRejected(_surveyRejectedPersistence.Load(uid));
         _pinStore.LocalAuthor = _authorId;
         _pinStore.Changed += _pinPersistence.QueueJournal;
