@@ -421,6 +421,12 @@ internal sealed class SurveyPanel : CcSidePanel
                 {
                     scanState = "Scanning OFF — enable above to start";
                 }
+                else if (!SurveyScanner.LocationSurfaceAvailable)
+                {
+                    // Issue #258: say so out loud rather than silently
+                    // going back to never offering dungeons.
+                    scanState = $"Scanning ({_settings.SurveyScanRadius.Value:0} m) — no location surface";
+                }
                 else
                 {
                     scanState = $"Scanning continuously ({_settings.SurveyScanRadius.Value:0} m around you)";
@@ -430,7 +436,7 @@ internal sealed class SurveyPanel : CcSidePanel
                 // wrap at the panel width, so the block never exceeds its
                 // reserved four-line band.
                 string lastScan = scanner?.LastScanUtc is DateTime last
-                    ? $"Sweep {Math.Max(0, (int)(DateTime.UtcNow - last).TotalSeconds)}s ago: {scanner.LastScanExamined} checked, {scanner.LastScanAdded} new"
+                    ? $"Sweep {Math.Max(0, (int)(DateTime.UtcNow - last).TotalSeconds)}s ago: {scanner.LastScanExamined} objects + {scanner.LastScanLocations} locations, {scanner.LastScanAdded} new"
                     : "No sweep finished yet this session";
 
                 _status.text = scanState +

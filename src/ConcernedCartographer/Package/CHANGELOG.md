@@ -1,6 +1,14 @@
 # Changelog
 
-## 1.1.0 - Optional walking Route Follow
+## 1.1.0 - Dungeon surveying fixed, plus optional walking Route Follow
+
+Fixed
+
+- **Survey now finds dungeons.** Burial Chambers, Troll Caves, Bear Caves, Sunken Crypts, Frost Caves and Hildir's crypt/cave are offered as pending observations when you walk up to them, exactly like berries and ore. Previously the survey only examined networked objects, and a Valheim dungeon entrance is not one: the game spawns it as a world *location*, so nothing carrying the dungeon's name ever existed for the survey to match. The scanner now also examines the world locations loaded around you. It still never reads the world location database, so nothing you have not visited is revealed, and dungeons still arrive as reviewable observations you accept or reject — never as automatic pins.
+- **Bear Cave, Hildir's crypt, Hildir's cave and half-buried Burial Chambers now have starter rules.** These identities matched no shipped rule, so they could not have been offered even once the scan was fixed. An untouched starter `survey-rules.tsv` is upgraded in place on load; a file you edited is never modified, and you can add the patterns yourself from the Survey panel.
+- The Survey panel's sweep line now reports the loaded locations it covered, and says so plainly if a future game build stops exposing them instead of silently missing dungeons again.
+
+Added
 
 - Adds walking Route Follow as an explicit opt-in toggle in the Routes panel, OFF by default. Select a live route, close the map, stand near it, and press Q to begin vanilla autorun with bounded yaw steering.
 - Preserves vanilla `Player.SetControls` ownership: while following, the adapter feeds the held autorun signal so vanilla refreshes movement from the bounded look direction. A second Q press or any cancellation feeds false and clears autorun.

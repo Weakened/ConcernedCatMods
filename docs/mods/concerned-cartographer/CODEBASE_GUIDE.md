@@ -724,11 +724,45 @@ Rules support exact or prefix prefab patterns, blacklist patterns, icon/category
 
 Pure review-before-commit state for survey observations. A scan match is not automatically a permanent pin, preventing map flooding.
 
-The Unity-side `SurveyScanner` walks a fresh loaded-instance snapshot
+The Unity-side `SurveyScanner` walks a fresh loaded snapshot
 CONTINUOUSLY on a bounded per-tick budget since RC10 (feedback 9) —
 matches surface within about a second — and coalesces the top-left
 notice to one per ~10 s, only when something was collected.
 `SurveyScanIntervalSeconds` is a documented no-op.
+
+### Survey loaded-world surfaces (issue #258)
+
+The scanner walks TWO loaded-world surfaces through one shared budget:
+
+| Surface | Adapter | What it holds |
+|---|---|---|
+| Networked objects | `Runtime/ZNetSceneSightingSource.cs` | `ZNetScene.m_instances`, i.e. everything instantiated from a ZDO. Skips characters. |
+| Loaded locations | `Runtime/LoadedLocationSightingSource.cs` | `Location.s_allLocations`, i.e. the world locations whose zones are currently loaded. |
+
+The second surface is why dungeon entrances were never offered before
+1.1.0. A Burial Chamber, Troll Cave or Bear Cave is a Valheim *location*:
+the networked stand-in is a `LocationProxy` (GameObject name
+"LocationProxy(Clone)"), and `ZoneSystem.SpawnLocation` in client mode
+instantiates the real location prefab with every enabled `ZNetView` child
+deactivated. Nothing called "Crypt3(Clone)" or "TrollCave02(Clone)" is
+ever registered in `ZNetScene.m_instances`, so the `crypt*` and
+`trollcave*` rules could not fire however close the player stood.
+
+`Location.s_allLocations` is appended in `Location.Awake` and removed in
+`OnDestroy`, so it is an already-instantiated, currently-loaded set —
+bounded exactly like the ZNetScene surface, and never the world-wide
+location database `ZoneSystem.m_locationInstances`, which would leak
+unexplored map data. Resolution is by name through `AccessTools`, so a
+future rename degrades to "no location surface" in the Survey panel
+instead of throwing.
+
+`Domain/Atlas/SurveySweep.cs` owns the bounded walk: it holds one
+per-tick budget across all sources, applies the range test (a location
+may add its OWN declared exterior radius, clamped to
+`SurveySweep.MaxFootprintBonusMeters`), and offers each sighting to the
+unchanged `SurveyEngine`. Rules, duplicate radius, stable identity,
+rejection memory, base exclusion, expiry, the observation cap and the
+Accept review are untouched by the added surface.
 
 ### `RoutePatternMath.cs` / `OverlayVisibilityRule.cs` (RC10)
 

@@ -10,16 +10,24 @@ using UnityEngine;
 namespace TheConcernedCat.ConcernedCartographer.Runtime;
 
 /// <summary>Feeds nearby loaded objects to the survey engine CONTINUOUSLY
-/// on a small per-tick budget (RC10 feedback 9): a fresh instance snapshot
-/// is walked a slice at a time every frame, so a matching object near the
-/// player becomes an observation within about a second instead of waiting
-/// out a 10-second timer, while the per-frame cost stays flat and bounded.
-/// Disabled by default; never scans the world database — only
-/// already-instantiated ZNetViews within the configured radius, skipping
-/// characters entirely. The engine enforces every anti-flood bound on top.
-/// The top-left "new survey observations" toast is COALESCED to at most
-/// one per <see cref="NotifyCoalesceSeconds"/>, and only when new
-/// observations were actually collected.</summary>
+/// on a small per-tick budget (RC10 feedback 9): a fresh snapshot of the
+/// loaded surfaces is walked a slice at a time every frame, so a matching
+/// object near the player becomes an observation within about a second
+/// instead of waiting out a 10-second timer, while the per-frame cost
+/// stays flat and bounded. Disabled by default; never scans the world
+/// database — only already-instantiated objects within the configured
+/// radius, skipping characters entirely. The engine enforces every
+/// anti-flood bound on top. The top-left "new survey observations" toast
+/// is COALESCED to at most one per <see cref="NotifyCoalesceSeconds"/>,
+/// and only when new observations were actually collected.
+///
+/// Issue #258: the scanner walks TWO loaded-world surfaces, not one.
+/// <see cref="ZNetSceneSightingSource"/> is the networked-object surface it
+/// always had; <see cref="LoadedLocationSightingSource"/> is the loaded
+/// <c>Location</c> surface where dungeon entrances actually live. Both
+/// share one per-tick budget, so the added surface cannot raise the
+/// per-frame cost, and both feed the same rules, duplicate suppression,
+/// rejection memory, and Accept review.</summary>
 internal sealed class SurveyScanner
 {
     private const int PerTickExamineBudget = 48;
@@ -30,10 +38,11 @@ internal sealed class SurveyScanner
 
     private readonly CartographerSettings _settings;
     private readonly ManualLogSource _log;
-    private readonly List<ZNetView> _buffer = new();
-    private int _cursor;
-    private int _sweepExamined;
-    private int _sweepAdded;
+    private readonly ZNetSceneSightingSource _networkedObjects = new();
+    private readonly LoadedLocationSightingSource _loadedLocations = new();
+    private readonly List<ISurveySightingSource> _sources = new();
+    private readonly SurveySweep _sweep = new(PerTickExamineBudget);
+    private bool _sweepActive;
     private float _notifyElapsed = NotifyCoalesceSeconds;
     private int _unnotifiedAdded;
     private bool _disabledForSession;
@@ -42,9 +51,11 @@ internal sealed class SurveyScanner
     {
         _settings = settings;
         _log = log;
+        _sources.Add(_networkedObjects);
+        _sources.Add(_loadedLocations);
     }
 
-    /// <summary>When the last full sweep over the loaded instances
+    /// <summary>When the last full sweep over the loaded surfaces
     /// completed (UTC), or null before the first. Feeds the panel status.</summary>
     public DateTime? LastScanUtc { get; private set; }
 
@@ -54,16 +65,40 @@ internal sealed class SurveyScanner
     /// <summary>Observations the last completed sweep added.</summary>
     public int LastScanAdded { get; private set; }
 
+    /// <summary>Loaded world locations covered by the newest snapshot
+    /// (issue #258 — the surface dungeon entrances live on).</summary>
+    public int LastScanLocations { get; private set; }
+
     /// <summary>True after a scanner failure disabled it for this session
     /// (the panel shows this honestly instead of a silent "no results").</summary>
     public bool DisabledForSession => _disabledForSession;
+
+    /// <summary>False when this game build no longer exposes the loaded
+    /// <c>Location</c> surface. The survey still runs on the networked
+    /// objects and the panel says so, instead of silently missing
+    /// dungeons again.</summary>
+    public static bool LocationSurfaceAvailable => LoadedLocationSightingSource.Available;
 
     /// <summary>Restarts the sweep against a fresh snapshot — the Survey
     /// panel's "Scan now". With continuous scanning this mostly resets the
     /// cursor; results were already arriving every frame.</summary>
     public void RequestImmediateScan()
     {
-        _buffer.Clear();
+        _sweepActive = false;
+    }
+
+    /// <summary>World switch: drop every snapshot and sweep statistic so
+    /// the next world starts from a clean, honest scan state.</summary>
+    public void ResetForWorld()
+    {
+        _sweepActive = false;
+        _networkedObjects.Clear();
+        _loadedLocations.Clear();
+        LastScanUtc = null;
+        LastScanExamined = 0;
+        LastScanAdded = 0;
+        LastScanLocations = 0;
+        _unnotifiedAdded = 0;
     }
 
     public void Tick(float deltaTime, SurveyEngine engine, PinStore pins)
@@ -77,77 +112,56 @@ internal sealed class SurveyScanner
         try
         {
             Player player = Player.m_localPlayer;
-            if (player is null || InstancesField is null || ZNetScene.instance == null)
+            if (player is null || ZNetScene.instance == null)
             {
                 return;
             }
 
             DateTime now = DateTime.UtcNow;
-            if (_buffer.Count == 0 || _cursor >= _buffer.Count)
+            if (!_sweepActive || _sweep.Completed)
             {
                 // Sweep boundary: publish the finished sweep's stats, apply
-                // live bounds, prune expiries, snapshot fresh instances.
-                if (_buffer.Count > 0)
+                // live bounds, prune expiries, snapshot fresh surfaces.
+                if (_sweepActive)
                 {
                     LastScanUtc = now;
-                    LastScanExamined = _sweepExamined;
-                    LastScanAdded = _sweepAdded;
+                    LastScanExamined = _sweep.Examined;
+                    LastScanAdded = _sweep.Added;
                 }
 
-                _sweepExamined = 0;
-                _sweepAdded = 0;
-                _cursor = 0;
                 engine.MaxObservations = (int)_settings.SurveyMaxObservations.Value;
                 engine.BaseExclusionRadiusMeters = _settings.SurveyBaseExclusionRadius.Value;
                 engine.Prune(now);
 
-                _buffer.Clear();
-                foreach (KeyValuePair<ZDO, ZNetView> entry in InstancesField(ZNetScene.instance))
+                _networkedObjects.Clear();
+                if (InstancesField is not null)
                 {
-                    _buffer.Add(entry.Value);
+                    foreach (KeyValuePair<ZDO, ZNetView> entry in InstancesField(ZNetScene.instance))
+                    {
+                        _networkedObjects.Add(entry.Value);
+                    }
                 }
 
-                if (_buffer.Count == 0)
+                _loadedLocations.Refresh();
+                LastScanLocations = _loadedLocations.Count;
+                if (_networkedObjects.Count == 0 && _loadedLocations.Count == 0)
                 {
+                    _sweepActive = false;
                     return;
                 }
+
+                _sweep.Restart();
+                _sweepActive = true;
             }
 
             Vector3 playerPosition = player.transform.position;
-            float radius = _settings.SurveyScanRadius.Value;
-            int sliceEnd = Math.Min(_cursor + PerTickExamineBudget, _buffer.Count);
-            for (; _cursor < sliceEnd; _cursor++)
-            {
-                _sweepExamined++;
-                ZNetView view = _buffer[_cursor];
-                if (view == null || view.gameObject == null)
-                {
-                    continue;
-                }
-
-                Vector3 position = view.transform.position;
-                if (Vector3.Distance(position, playerPosition) > radius ||
-                    view.GetComponent<Character>() != null)
-                {
-                    continue;
-                }
-
-                SurveyEngine.OfferResult result = engine.Offer(
-                    view.gameObject.name,
-                    new RoadPoint(position.x, position.y, position.z),
-                    pins,
-                    now);
-                if (result == SurveyEngine.OfferResult.Added)
-                {
-                    _sweepAdded++;
-                    _unnotifiedAdded++;
-                }
-                else if (result == SurveyEngine.OfferResult.CapReached)
-                {
-                    _cursor = _buffer.Count;
-                    break;
-                }
-            }
+            _unnotifiedAdded += _sweep.Tick(
+                _sources,
+                new RoadPoint(playerPosition.x, playerPosition.y, playerPosition.z),
+                _settings.SurveyScanRadius.Value,
+                engine,
+                pins,
+                now);
 
             if (_unnotifiedAdded > 0 && _notifyElapsed >= NotifyCoalesceSeconds)
             {

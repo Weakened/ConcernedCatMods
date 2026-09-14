@@ -10,9 +10,10 @@ namespace TheConcernedCat.ConcernedCartographer.Persistence;
 /// <summary>Loads the shareable survey-rules file, writing the starter set
 /// on first use. The file is the import/export format: plain patterns and
 /// suggestions, no machine paths or secrets. An UNTOUCHED starter file
-/// from an earlier RC (the sparse pre-RC8 set or the RC8/RC9 set) is
-/// upgraded in place to the current broadened starter set; any file the
-/// player edited never matches and is never modified.</summary>
+/// from an earlier release (the sparse pre-RC8 set, the RC8/RC9 set, or
+/// the v1.0/v1.1.0 set that predates the issue #258 dungeon identities) is
+/// upgraded in place to the current starter set; any file the player
+/// edited never matches and is never modified.</summary>
 internal sealed class SurveyRulePersistence
 {
     private readonly ManualLogSource _log;
@@ -39,11 +40,12 @@ internal sealed class SurveyRulePersistence
             {
                 string current = Normalize(File.ReadAllLines(RulePath));
                 if (current == Normalize(SurveyRuleSet.LegacyStarterSet().Serialize()) ||
-                    current == Normalize(SurveyRuleSet.Rc8StarterSet().Serialize()))
+                    current == Normalize(SurveyRuleSet.Rc8StarterSet().Serialize()) ||
+                    current == Normalize(SurveyRuleSet.V1StarterSet().Serialize()))
                 {
                     File.WriteAllLines(RulePath, SurveyRuleSet.Default().Serialize());
                     _log.LogInfo(
-                        "Upgraded the untouched starter survey rules (survey-rules.tsv) to the v1 starter set " +
+                        "Upgraded the untouched starter survey rules (survey-rules.tsv) to the current starter set " +
                         "(edited files are never touched).");
                 }
             }
