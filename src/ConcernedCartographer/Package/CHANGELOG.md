@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1.0 - Dungeon surveying fixed, plus optional walking Route Follow
+## 1.0.3 - Dungeon surveying fixed, plus optional walking Route Follow
 
 Fixed
 

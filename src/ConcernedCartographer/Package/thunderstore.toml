@@ -4,8 +4,8 @@ schemaVersion = "0.0.1"
 [package]
 namespace = "TheConcernedCat"
 name = "ConcernedCartographer"
-versionNumber = "1.1.0"
-description = "v1.1: The living atlas adds opt-in walking Route Follow to durable roads, editable markers, routes, search, and sharing."
+versionNumber = "1.0.3"
+description = "v1.0.3: Survey now finds dungeon entrances. The living atlas: durable roads, markers, routes, search, sharing, walking Route Follow."
 websiteUrl = "https://github.com/Weakened/ConcernedCatMods"
 containsNsfwContent = false
 
