@@ -1,6 +1,8 @@
 using TheConcernedCat.ConcernedCartographer.Atlas;
 using TheConcernedCat.ConcernedCartographer.Roads;
 
+namespace ConcernedCartographer.Tests;
+
 /// <summary>Issue #258 regressions: "survey never tries to pin dungeons"
 /// (Cartographer 1.0.2 / Valheim 1.0.12, Burial Crypt, Troll Cave, Bear
 /// Cave). Two independent defects had to hold for the report to be true,
@@ -25,12 +27,20 @@ public class DungeonSurveyDiscoveryTests
 {
     private const float ScanRadius = 40f;
 
-    /// <summary>A snapshot source, exactly what the runtime adapters wrap.</summary>
+    /// <summary>A snapshot source, exactly what the runtime adapters wrap,
+    /// including the split read: the cheap placement first, the expensive
+    /// name only for an entry the sweep accepted as in range.</summary>
     private sealed class FakeSource : ISurveySightingSource
     {
         private readonly List<SurveySighting?> _entries = new();
 
         public int Count => _entries.Count;
+
+        /// <summary>How many times the sweep paid for a name read. The
+        /// networked surface pays a native interop call and a fresh string
+        /// per name, so this must stay proportional to in-range entries,
+        /// not to snapshot size.</summary>
+        public int NameReads { get; private set; }
 
         public FakeSource Add(string name, float x, float z, float y = 0f, float footprint = 0f)
         {
@@ -45,11 +55,33 @@ public class DungeonSurveyDiscoveryTests
             return this;
         }
 
-        public bool TryRead(int index, out SurveySighting sighting)
+        public bool TryReadPlacement(int index, out RoadPoint position, out float footprintRadiusMeters)
         {
+            position = default;
+            footprintRadiusMeters = 0f;
             SurveySighting? entry = _entries[index];
-            sighting = entry ?? default;
-            return entry.HasValue;
+            if (!entry.HasValue)
+            {
+                return false;
+            }
+
+            position = entry.Value.Position;
+            footprintRadiusMeters = entry.Value.FootprintRadiusMeters;
+            return true;
+        }
+
+        public bool TryReadName(int index, out string name)
+        {
+            name = "";
+            SurveySighting? entry = _entries[index];
+            if (!entry.HasValue)
+            {
+                return false;
+            }
+
+            NameReads++;
+            name = entry.Value.Name;
+            return true;
         }
     }
 
@@ -106,7 +138,7 @@ public class DungeonSurveyDiscoveryTests
     };
 
     [Fact]
-    public void ReportedBug_NetworkedObjectsAloneNeverOfferADungeon()
+    public void NetworkedSurfaceAlone_OffersNothingForTheReportedDungeons()
     {
         SurveyEngine engine = NewEngine();
         var pins = new PinStore();
@@ -326,6 +358,89 @@ public class DungeonSurveyDiscoveryTests
     }
 
     [Fact]
+    public void NameIsReadOnlyForEntriesTheSweepAcceptedAsInRange()
+    {
+        // The networked surface pays a native interop call and a fresh
+        // string per name, so the range test must run first. Before #258
+        // the inline loop did exactly this; the extracted sweep must too.
+        var far = new FakeSource();
+        for (int index = 0; index < 200; index++)
+        {
+            far.Add("RaspberryBush(Clone)", 10000f + index, 0f);
+        }
+
+        far.Add("Crypt3(Clone)", 0f, 0f);
+
+        SurveyEngine engine = NewEngine();
+        var pins = new PinStore();
+        SweepFrom(
+            new SurveySweep(48, 1),
+            new List<ISurveySightingSource> { far },
+            engine, pins, new RoadPoint(0f, 0f, 0f));
+
+        Assert.Single(engine.Observations);
+        Assert.Equal(1, far.NameReads);
+    }
+
+    [Fact]
+    public void AFullPendingListCannotStarveTheLocationSurface()
+    {
+        // The engine cap ends a sweep. With the networked surface walked
+        // first, a pending list full of berry bushes would mean a dungeon
+        // under the player's feet is never reached — the very symptom of
+        // #258. The scanner therefore walks locations first.
+        var networked = new FakeSource();
+        for (int index = 0; index < 50; index++)
+        {
+            networked.Add($"RaspberryBush{index}(Clone)", index * 0.5f, 0f);
+        }
+
+        var locations = new FakeSource().Add("Crypt3(Clone)", 1f, 1f, footprint: 24f);
+
+        var engine = new SurveyEngine
+        {
+            Rules = SurveyRuleSet.Default(),
+            MaxObservations = 3,
+            BaseExclusionRadiusMeters = 0f,
+        };
+        var pins = new PinStore();
+
+        // Locations first, exactly as SurveyScanner orders its sources.
+        SweepFrom(
+            new SurveySweep(48, 2),
+            new List<ISurveySightingSource> { locations, networked },
+            engine, pins, new RoadPoint(0f, 0f, 0f));
+
+        Assert.Contains(engine.Observations, o => o.PrefabName == "crypt3");
+    }
+
+    [Fact]
+    public void PerSourceExaminedCountsAddUpInsteadOfDoubleCounting()
+    {
+        var networked = new FakeSource();
+        for (int index = 0; index < 20; index++)
+        {
+            networked.Add("Rock_4(Clone)", index, 0f);
+        }
+
+        var locations = LoadedDungeonLocations();
+        var sources = new List<ISurveySightingSource> { locations, networked };
+        var sweep = new SurveySweep(48, 2);
+        sweep.Restart();
+        SurveyEngine engine = NewEngine();
+        var pins = new PinStore();
+        int guard = 0;
+        while (!sweep.Completed && guard++ < 100)
+        {
+            sweep.Tick(sources, new RoadPoint(0f, 0f, 0f), ScanRadius, engine, pins, DateTime.UtcNow);
+        }
+
+        Assert.Equal(3, sweep.ExaminedFrom(0));
+        Assert.Equal(20, sweep.ExaminedFrom(1));
+        Assert.Equal(sweep.Examined, sweep.ExaminedFrom(0) + sweep.ExaminedFrom(1));
+    }
+
+    [Fact]
     public void SweepBudget_IsSharedAcrossSurfacesAndCoversThemAll()
     {
         var networked = new FakeSource();
@@ -403,17 +518,62 @@ public class DungeonSurveyDiscoveryTests
         Assert.False(sweep.Completed);
     }
 
+    /// <summary>The EXACT survey-rules.tsv that Cartographer 1.0.x and the
+    /// pre-fix 1.1.0 wrote. This is a golden constant on purpose: the
+    /// in-place upgrade only fires on a byte-identical match, so if
+    /// V1StarterSet ever drifts from what shipped, every existing player
+    /// silently keeps the broken rules and #258 re-opens for them. A
+    /// self-comparison would not catch that; this does.</summary>
+    private static readonly string[] ShippedV1RuleFile =
+    {
+        "# ConcernedCartographer survey rules v1",
+        "# pattern<TAB>icon<TAB>category<TAB>duplicate-radius-m<TAB>expiry-minutes ('pattern*' = prefix, '!pattern' = never pin; an optional 6th field 'off' disables a rule)",
+        "!piece_*",
+        "!vfx_*",
+        "!sfx_*",
+        "!fx_*",
+        "raspberrybush*\tcc:resource\tResources\t30\t120",
+        "blueberrybush*\tcc:resource\tResources\t30\t120",
+        "cloudberrybush*\tcc:resource\tResources\t30\t120",
+        "pickable_mushroom*\tcc:resource\tResources\t30\t120",
+        "pickable_thistle*\tcc:resource\tResources\t30\t120",
+        "pickable_dandelion*\tcc:resource\tResources\t30\t120",
+        "pickable_flint*\tcc:resource\tResources\t30\t120",
+        "pickable_seedcarrot*\tcc:resource\tResources\t40\t120",
+        "pickable_seedturnip*\tcc:resource\tResources\t40\t120",
+        "pickable_seedonion*\tcc:resource\tResources\t40\t120",
+        "gucksack*\tcc:resource\tResources\t40\t120",
+        "beehive*\tcc:resource\tResources\t60\t240",
+        "rock4_copper*\tcc:mine\tResources\t40\t240",
+        "minerock_tin*\tcc:mine\tResources\t30\t240",
+        "silvervein*\tcc:mine\tResources\t40\t240",
+        "minerock_obsidian*\tcc:mine\tResources\t40\t240",
+        "mudpile*\tcc:mine\tResources\t40\t240",
+        "crypt*\tcc:dungeon\tDungeons\t80\t480",
+        "sunkencrypt*\tcc:dungeon\tDungeons\t80\t480",
+        "trollcave*\tcc:dungeon\tDungeons\t80\t480",
+        "mountaincave*\tcc:dungeon\tDungeons\t80\t480",
+        "runestone*\tcc:objective\tPoints of interest\t80\t480",
+        "vegvisir*\tcc:objective\tPoints of interest\t80\t480",
+    };
+
+    [Fact]
+    public void V1StarterSet_StillMatchesTheFileThatActuallyShipped()
+    {
+        Assert.Equal(ShippedV1RuleFile, SurveyRuleSet.V1StarterSet().Serialize().ToArray());
+    }
+
     [Fact]
     public void UntouchedV1StarterFile_UpgradesToTheCorrectedDungeonRules()
     {
-        // The in-place upgrade path the persistence layer uses: an
-        // untouched v1 starter file is byte-identical to V1StarterSet,
-        // and the current Default is what replaces it.
-        string[] shipped = SurveyRuleSet.V1StarterSet().Serialize().ToArray();
-        SurveyRuleSet reparsed = SurveyRuleSet.Parse(shipped, out int malformed);
+        // The in-place upgrade path the persistence layer uses: parse the
+        // shipped file, confirm it normalizes back to itself (so the
+        // equality check in SurveyRulePersistence fires), and confirm the
+        // current Default is genuinely different where it matters.
+        SurveyRuleSet reparsed = SurveyRuleSet.Parse(ShippedV1RuleFile, out int malformed);
 
         Assert.Equal(0, malformed);
-        Assert.Equal(shipped, reparsed.Serialize().ToArray());
+        Assert.Equal(ShippedV1RuleFile, reparsed.Serialize().ToArray());
         Assert.False(reparsed.TryMatch("BearCave(Clone)", out _));
         Assert.True(SurveyRuleSet.Default().TryMatch("BearCave(Clone)", out _));
     }

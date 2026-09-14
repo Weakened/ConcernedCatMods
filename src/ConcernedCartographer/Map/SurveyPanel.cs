@@ -436,7 +436,7 @@ internal sealed class SurveyPanel : CcSidePanel
                 // wrap at the panel width, so the block never exceeds its
                 // reserved four-line band.
                 string lastScan = scanner?.LastScanUtc is DateTime last
-                    ? $"Sweep {Math.Max(0, (int)(DateTime.UtcNow - last).TotalSeconds)}s ago: {scanner.LastScanExamined} objects + {scanner.LastScanLocations} locations, {scanner.LastScanAdded} new"
+                    ? $"Sweep {Math.Max(0, (int)(DateTime.UtcNow - last).TotalSeconds)}s ago: {scanner.LastScanExamined} objects, {scanner.LastScanLocations} locations, {scanner.LastScanAdded} new"
                     : "No sweep finished yet this session";
 
                 _status.text = scanState +

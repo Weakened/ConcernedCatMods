@@ -764,6 +764,19 @@ unchanged `SurveyEngine`. Rules, duplicate radius, stable identity,
 rejection memory, base exclusion, expiry, the observation cap and the
 Accept review are untouched by the added surface.
 
+Two details are load-bearing and easy to undo by accident:
+
+- Source reads are SPLIT. `TryReadPlacement` is cheap and runs for every
+  examined entry; `TryReadName` pays for `GetComponent` and for
+  `UnityEngine.Object.name` (an interop call that allocates a string every
+  time) and runs only for an entry already proven in range.
+- The scanner lists the loaded-location surface FIRST. The engine's
+  observation cap ends a sweep, so walking the thousands-strong networked
+  surface first would let a full pending list starve dungeon discovery.
+
+See `docs/mods/concerned-cartographer/SURVEY_LOCATION_COMPATIBILITY.md`
+and `scripts/audit-cartographer-survey-api.ps1`.
+
 ### `RoutePatternMath.cs` / `OverlayVisibilityRule.cs` (RC10)
 
 Pure and tested: the single geometric dash/dot cadence walker both

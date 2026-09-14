@@ -30,10 +30,6 @@ namespace TheConcernedCat.ConcernedCartographer.Runtime;
 /// survey keeps working on its other surfaces.</remarks>
 internal sealed class LoadedLocationSightingSource : ISurveySightingSource
 {
-    /// <summary>Bound on locations examined per sweep. The loaded set is
-    /// naturally small (a handful of zones); this only guarantees it.</summary>
-    public const int MaxLocationsPerSweep = 96;
-
     private static readonly AccessTools.FieldRef<List<Location>>? AllLocationsField =
         BuildAllLocationsRef();
 
@@ -50,7 +46,11 @@ internal sealed class LoadedLocationSightingSource : ISurveySightingSource
         _snapshot.Clear();
     }
 
-    /// <summary>Snapshots the currently loaded locations, bounded.</summary>
+    /// <summary>Snapshots the currently loaded locations. No truncation:
+    /// the set is already bounded by the loaded zones, and the sweep walks
+    /// it under the same shared per-tick budget as every other surface —
+    /// a cap here would silently drop whichever locations loaded last,
+    /// which are exactly the ones the player is walking toward.</summary>
     public void Refresh()
     {
         _snapshot.Clear();
@@ -65,7 +65,7 @@ internal sealed class LoadedLocationSightingSource : ISurveySightingSource
             return;
         }
 
-        for (int index = 0; index < all.Count && _snapshot.Count < MaxLocationsPerSweep; index++)
+        for (int index = 0; index < all.Count; index++)
         {
             Location location = all[index];
             if (location != null)
@@ -75,20 +75,32 @@ internal sealed class LoadedLocationSightingSource : ISurveySightingSource
         }
     }
 
-    public bool TryRead(int index, out SurveySighting sighting)
+    public bool TryReadPlacement(int index, out RoadPoint position, out float footprintRadiusMeters)
     {
-        sighting = default;
+        position = default;
+        footprintRadiusMeters = 0f;
         Location location = _snapshot[index];
         if (location == null || location.gameObject == null)
         {
             return false;
         }
 
-        UnityEngine.Vector3 position = location.transform.position;
-        sighting = new SurveySighting(
-            location.gameObject.name,
-            new RoadPoint(position.x, position.y, position.z),
-            location.m_exteriorRadius);
+        UnityEngine.Vector3 world = location.transform.position;
+        position = new RoadPoint(world.x, world.y, world.z);
+        footprintRadiusMeters = location.m_exteriorRadius;
+        return true;
+    }
+
+    public bool TryReadName(int index, out string name)
+    {
+        name = "";
+        Location location = _snapshot[index];
+        if (location == null || location.gameObject == null)
+        {
+            return false;
+        }
+
+        name = location.gameObject.name;
         return true;
     }
 

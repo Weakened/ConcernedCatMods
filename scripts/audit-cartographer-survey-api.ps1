@@ -113,14 +113,12 @@ if (-not $unityMatch.Success) {
 $location = Get-TypeSource -TypeName "Location"
 Assert-SourceContains $location 'private static List<Location> s_allLocations = new List<Location>();' `
     "Location.s_allLocations is the loaded-location surface"
-Assert-SourceOrder $location @(
-    'private void Awake()',
-    's_allLocations.Add(this);'
-) "loaded locations must be registered on Awake"
-Assert-SourceOrder $location @(
-    'private void OnDestroy()',
-    's_allLocations.Remove(this);'
-) "loaded locations must be unregistered on destroy"
+# Contiguous, not merely ordered: an ordered assertion would still pass if
+# the registration moved into any later method.
+Assert-SourceContains $location 'private void Awake() { s_allLocations.Add(this);' `
+    "loaded locations must be registered in Location.Awake"
+Assert-SourceContains $location 'private void OnDestroy() { s_allLocations.Remove(this); }' `
+    "loaded locations must be unregistered in Location.OnDestroy"
 Assert-SourceContains $location 'public float m_exteriorRadius = 20f;' `
     "a location publishes its own exterior radius"
 
@@ -134,11 +132,13 @@ Assert-SourceContains $locationProxy 'm_instance = ZoneSystem.instance.SpawnProx
 $zoneSystem = Get-TypeSource -TypeName "ZoneSystem"
 Assert-SourceContains $zoneSystem 'return SpawnLocation(location, seed, pos, rot, SpawnMode.Client, spawnedGhostObjects);' `
     "client-side location spawning uses SpawnMode.Client"
-Assert-SourceOrder $zoneSystem @(
-    'ZNetView[] array3 = enabledComponentsInChildren;',
-    'array3[j].gameObject.SetActive(value: false);',
-    'gameObject = SoftReferenceableAssets.Utils.Instantiate(location.m_prefab, pos, rot);'
-) "SpawnMode.Client must deactivate every location ZNetView before instantiating, which is why no location-named object is ever registered in ZNetScene.m_instances"
+# ONE contiguous substring. The loop header alone appears in both the
+# Full/Ghost and the Client branch, so an ordered assertion would prove
+# nothing about the branch this fix depends on.
+Assert-SourceContains $zoneSystem ('for (int j = 0; j < array3.Length; j++) ' +
+    '{ array3[j].gameObject.SetActive(value: false); } ' +
+    'gameObject = SoftReferenceableAssets.Utils.Instantiate(location.m_prefab, pos, rot);') `
+    "SpawnMode.Client must deactivate every location ZNetView immediately before instantiating the prefab, which is why no location-named object is ever registered in ZNetScene.m_instances"
 
 $zNetScene = Get-TypeSource -TypeName "ZNetScene"
 Assert-SourceContains $zNetScene 'private readonly Dictionary<ZDO, ZNetView> m_instances' `
@@ -217,6 +217,46 @@ if ($unmatched.Count -gt 0) {
     throw "Shipped starter rules do not cover installed dungeon locations: $($unmatched -join ', ')"
 }
 
+# Report, do not assert, the installed locations no shipped rule covers.
+# The audited list above is a reviewed scope; this makes the REST of the
+# catalog visible instead of letting a self-selected list imply coverage.
+$ruleCoveredLocations = @()
+$uncoveredLocations = @()
+foreach ($candidate in ($catalog | Sort-Object)) {
+    $clean = $candidate.ToLowerInvariant()
+    $isCovered = $false
+    foreach ($pattern in $dungeonPatterns) {
+        $cleanPattern = $pattern.ToLowerInvariant()
+        if ($cleanPattern.EndsWith("*")) {
+            if ($clean.StartsWith($cleanPattern.Substring(0, $cleanPattern.Length - 1), [StringComparison]::Ordinal)) {
+                $isCovered = $true
+                break
+            }
+        } elseif ($clean -eq $cleanPattern) {
+            $isCovered = $true
+            break
+        }
+    }
+
+    if ($isCovered) { $ruleCoveredLocations += $candidate } else { $uncoveredLocations += $candidate }
+}
+
+# The runestone pair the loaded-location surface newly exposes: the same
+# site exists both as a networked prop prefab and as a world location.
+# Both spellings are asserted so the duplicate-collapse behaviour rests on
+# evidence rather than on an assumed name.
+$extendedManifest = Join-Path $environment.ValheimInstall "valheim_Data\StreamingAssets\SoftRef\manifest_extended"
+if (-not (Test-Path $extendedManifest -PathType Leaf)) {
+    throw "Required audit input is missing: $extendedManifest"
+}
+$extendedText = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($extendedManifest))
+if (-not $extendedText.Contains('Assets/world/Props/RuneStones/RuneStone_BlackForest.prefab', [StringComparison]::Ordinal)) {
+    throw "Installed catalog no longer has the networked RuneStone_BlackForest prop."
+}
+if (-not $catalog.Contains('Runestone_BlackForest')) {
+    throw "Installed catalog no longer has the Runestone_BlackForest location."
+}
+
 $result = [ordered]@{
     result = "PASS"
     scope = "static audit of installed assemblies and asset catalog; NOT live in-game evidence"
@@ -228,6 +268,9 @@ $result = [ordered]@{
     locationCatalogEntries = $catalog.Count
     auditedDungeonLocations = $dungeonLocations
     shippedDungeonRulePatterns = $dungeonPatterns
+    locationsCoveredByDungeonRules = $ruleCoveredLocations
+    locationsNotCoveredByDungeonRules = $uncoveredLocations.Count
+    runestoneDualSurface = "RuneStone_BlackForest (networked prop) and Runestone_BlackForest (world location) both present; identities collapse through the rule duplicate radius"
     gameAssembly = Get-FileIdentity $gameAssembly
     softRefManifest = Get-FileIdentity $softRefManifest
     globalManagers = Get-FileIdentity $globalManagers

@@ -76,12 +76,30 @@ degrades to `SurveyScanner.LocationSurfaceAvailable == false`, which the
 Survey panel reports as "no location surface" — the survey keeps running on
 the networked surface instead of silently missing dungeons again.
 
-`Location.m_exteriorRadius` is read so that standing inside a dungeon's own
-footprint counts as nearby. `SurveySweep` clamps that bonus to
-`MaxFootprintBonusMeters` (32 m), so discovery stays bounded even if a
-location (or a mod-added one) reports an absurd radius.
+`Location.m_exteriorRadius` (a public field) is read so the scan range is
+measured from the location's **boundary** rather than its centre: the test
+is `distance <= scanRadius + min(exteriorRadius, 32 m)`. `SurveySweep`
+applies that `MaxFootprintBonusMeters` clamp, so discovery stays bounded
+even if a location (or a mod-added one) reports an absurd radius. At the
+maximum configurable scan radius this reaches 132 m for a location versus
+100 m for a networked object — still a bounded nearby-loaded read, never a
+world-database query.
 
-## Installed dungeon-entrance location identities
+Reads are split so the added surface does not change the per-frame cost
+profile. `TryReadPlacement` is the cheap positional read taken for every
+examined entry; `TryReadName` — where a surface pays for `GetComponent`
+and for `UnityEngine.Object.name`, an interop call that allocates a fresh
+string on every access — runs only for an entry the sweep has already
+accepted as in range. That is exactly the ordering the inline scanner loop
+had before this change.
+
+Surface **order** matters too. The engine's observation cap ends a sweep,
+so the scanner walks the small loaded-location surface FIRST; otherwise a
+pending list already full of berry bushes could end every sweep on the
+networked surface and starve dungeon discovery — the original symptom,
+reintroduced by the fix.
+
+## Covered scope
 
 Read from `valheim_Data/StreamingAssets/SoftRef/manifest` (212 location
 prefabs in the installed catalog). The audit asserts each of these exists
@@ -102,11 +120,41 @@ prefabs in the installed catalog). The audit asserts each of these exists
 matched **no** rule in the shipped v1.0/v1.1.0 starter set, so they were a
 second, independent reason the reporter saw nothing. An untouched starter
 `survey-rules.tsv` is upgraded in place; an edited file is never modified.
+`DungeonSurveyDiscoveryTests` pins `V1StarterSet()` to a golden copy of the
+file that actually shipped, because the upgrade only fires on a
+byte-identical match — drift there would silently re-open this issue for
+every existing player.
+
+### Deliberately NOT covered
+
+The reviewed list above is a scope, not a claim of completeness. The audit
+reports `locationsNotCoveredByDungeonRules` (202 of the 212 entries) so the
+gap stays visible. Mistlands and Ashlands entrances — infested mines,
+Dvergr town and boss entrances, charred fortresses — are tracked in
+issue #260 and were not added here because their in-game classification was
+not verified during this fix.
+
+### A second surface for the same site: runestones
+
+The pre-existing `runestone*` starter rule now also matches world
+locations, because lore runestone sites exist on both surfaces in the
+installed catalog:
+
+| Surface | Installed asset |
+|---|---|
+| Networked prop | `Assets/world/Props/RuneStones/RuneStone_BlackForest.prefab` |
+| World location | `Assets/world/Locations/BlackForest/Runestone_BlackForest.prefab` |
+
+Both spellings clean to the same identity, so the rule's 80 m duplicate
+radius collapses the pair into one observation. The audit asserts both
+assets still exist, so this behaviour rests on evidence rather than on an
+assumed name. It is disclosed in the changelog because it can produce
+"Points of interest" observations a 1.0.2 player never saw.
 
 ## Fail-closed behaviour
 
 - Field missing or reshaped → surface unavailable, survey continues, panel says so.
 - Destroyed location in the snapshot → entry skipped, still counted against the sweep budget.
-- Snapshot bounded by `LoadedLocationSightingSource.MaxLocationsPerSweep` (96).
+- Snapshot is **not** truncated: the loaded-location set is already bounded by the loaded zones, and a fixed cap would have silently dropped whichever locations loaded last — exactly the ones the player is walking toward.
 - One shared per-tick budget across both surfaces, so the added surface cannot raise the per-frame cost.
 - Rules, duplicate radius, stable identity, rejection memory, base exclusion, expiry, the observation cap and the Accept review are unchanged — a dungeon is a reviewable observation, never an automatic pin.

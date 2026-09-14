@@ -31,6 +31,13 @@ namespace TheConcernedCat.ConcernedCartographer.Runtime;
 internal sealed class SurveyScanner
 {
     private const int PerTickExamineBudget = 48;
+
+    // Surface order matters. The engine's observation cap ends a sweep, so
+    // the small, high-value loaded-location surface is walked FIRST: a
+    // pending list full of berry bushes can never starve dungeon discovery.
+    private const int LocationSourceIndex = 0;
+    private const int NetworkedSourceIndex = 1;
+    private const int SourceCount = 2;
     private const float NotifyCoalesceSeconds = 10f;
 
     private static readonly AccessTools.FieldRef<ZNetScene, Dictionary<ZDO, ZNetView>>? InstancesField =
@@ -41,7 +48,7 @@ internal sealed class SurveyScanner
     private readonly ZNetSceneSightingSource _networkedObjects = new();
     private readonly LoadedLocationSightingSource _loadedLocations = new();
     private readonly List<ISurveySightingSource> _sources = new();
-    private readonly SurveySweep _sweep = new(PerTickExamineBudget);
+    private readonly SurveySweep _sweep = new(PerTickExamineBudget, SourceCount);
     private bool _sweepActive;
     private float _notifyElapsed = NotifyCoalesceSeconds;
     private int _unnotifiedAdded;
@@ -51,22 +58,24 @@ internal sealed class SurveyScanner
     {
         _settings = settings;
         _log = log;
-        _sources.Add(_networkedObjects);
         _sources.Add(_loadedLocations);
+        _sources.Add(_networkedObjects);
     }
 
     /// <summary>When the last full sweep over the loaded surfaces
     /// completed (UTC), or null before the first. Feeds the panel status.</summary>
     public DateTime? LastScanUtc { get; private set; }
 
-    /// <summary>Loaded objects examined by the last completed sweep.</summary>
+    /// <summary>Networked objects examined by the last completed sweep.</summary>
     public int LastScanExamined { get; private set; }
 
     /// <summary>Observations the last completed sweep added.</summary>
     public int LastScanAdded { get; private set; }
 
-    /// <summary>Loaded world locations covered by the newest snapshot
-    /// (issue #258 — the surface dungeon entrances live on).</summary>
+    /// <summary>Loaded world locations examined by that SAME completed
+    /// sweep (issue #258 — the surface dungeon entrances live on). It is
+    /// reported separately from <see cref="LastScanExamined"/>, never
+    /// folded into it, so the two figures add up.</summary>
     public int LastScanLocations { get; private set; }
 
     /// <summary>True after a scanner failure disabled it for this session
@@ -125,7 +134,8 @@ internal sealed class SurveyScanner
                 if (_sweepActive)
                 {
                     LastScanUtc = now;
-                    LastScanExamined = _sweep.Examined;
+                    LastScanExamined = _sweep.ExaminedFrom(NetworkedSourceIndex);
+                    LastScanLocations = _sweep.ExaminedFrom(LocationSourceIndex);
                     LastScanAdded = _sweep.Added;
                 }
 
@@ -143,7 +153,6 @@ internal sealed class SurveyScanner
                 }
 
                 _loadedLocations.Refresh();
-                LastScanLocations = _loadedLocations.Count;
                 if (_networkedObjects.Count == 0 && _loadedLocations.Count == 0)
                 {
                     _sweepActive = false;
