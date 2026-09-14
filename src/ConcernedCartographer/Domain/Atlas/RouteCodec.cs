@@ -9,16 +9,23 @@ namespace TheConcernedCat.ConcernedCartographer.Atlas;
 /// plus its point rows, all stamped with the route's revision. Snapshot and
 /// journal share the format; parsing keeps, per identity, only the rows of
 /// the highest revision seen, so replay is idempotent and a truncated
-/// trailing line costs at most itself.</summary>
+/// trailing line costs at most itself.
+///
+/// The v3 meta row (#243) appends the route's travel mode. It is emitted
+/// ONLY for a route explicitly marked as a sailing route, so every existing
+/// route keeps its byte-identical v2 row and an older Cartographer reading
+/// the same sidecar or sync payload never meets a field it has not seen.</summary>
 internal static class RouteCodec
 {
     public const string Header = "# ConcernedCartographer routes v2";
     private const string RowMarker = "1";
     private const string MetaMarkerV2 = "2";
+    private const string MetaMarkerV3 = "3";
     private const string MetaTag = "M";
     private const string PointTag = "P";
     private const int MetaFieldCountV1 = 17;
     private const int MetaFieldCountV2 = 19;
+    private const int MetaFieldCountV3 = 20;
 
     public sealed class ParseResult
     {
@@ -51,8 +58,8 @@ internal static class RouteCodec
     public static IEnumerable<string> SerializeRoute(AtlasRoute route)
     {
         string revision = route.Revision.ToString(CultureInfo.InvariantCulture);
-        yield return string.Join(
-            "\t",
+        string[] meta =
+        {
             route.Id.ToString(),
             revision,
             route.CreatedUtc.Ticks.ToString(CultureInfo.InvariantCulture),
@@ -71,7 +78,16 @@ internal static class RouteCodec
             route.DeletedUtc?.Ticks.ToString(CultureInfo.InvariantCulture) ?? "",
             AtlasText.Escape(route.OwnerAuthor),
             AtlasText.Escape(route.LastAuthor),
-            MetaMarkerV2);
+        };
+
+        // A default (land) route keeps the exact v2 row it has always had;
+        // only an explicitly marked sailing route carries the v3 field.
+        string metaRow = string.Join("\t", meta);
+        yield return route.Travel == RouteTravel.Land
+            ? metaRow + "\t" + MetaMarkerV2
+            : metaRow + "\t" +
+                ((int)route.Travel).ToString(CultureInfo.InvariantCulture) +
+                "\t" + MetaMarkerV3;
 
         for (int index = 0; index < route.Points.Count; index++)
         {
@@ -106,7 +122,9 @@ internal static class RouteCodec
 
             string[] parts = line.Split('\t');
             if (parts.Length < 8 ||
-                (parts[parts.Length - 1] != RowMarker && parts[parts.Length - 1] != MetaMarkerV2) ||
+                (parts[parts.Length - 1] != RowMarker &&
+                    parts[parts.Length - 1] != MetaMarkerV2 &&
+                    parts[parts.Length - 1] != MetaMarkerV3) ||
                 !AtlasId.TryParse(parts[0], out AtlasId id) ||
                 !string.Equals(id.Kind, AtlasId.RouteKind, StringComparison.Ordinal) ||
                 !long.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out long revision) ||
@@ -139,7 +157,9 @@ internal static class RouteCodec
                 bucket.Reset(revision);
             }
 
-            if ((parts.Length == MetaFieldCountV1 || parts.Length == MetaFieldCountV2) && parts[4] == MetaTag)
+            if ((parts.Length == MetaFieldCountV1 ||
+                    parts.Length == MetaFieldCountV2 ||
+                    parts.Length == MetaFieldCountV3) && parts[4] == MetaTag)
             {
                 if (!TryParseMeta(parts, id, revision, out AtlasRoute meta))
                 {
@@ -214,10 +234,23 @@ internal static class RouteCodec
             return false;
         }
 
-        bool hasAuthors = parts.Length == MetaFieldCountV2;
+        bool hasAuthors = parts.Length >= MetaFieldCountV2;
+        RouteTravel travel = RouteTravel.Land;
+        if (parts.Length == MetaFieldCountV3)
+        {
+            if (!int.TryParse(parts[18], NumberStyles.Integer, CultureInfo.InvariantCulture, out int travelValue) ||
+                !Enum.IsDefined(typeof(RouteTravel), travelValue))
+            {
+                return false;
+            }
+
+            travel = (RouteTravel)travelValue;
+        }
+
         route = new AtlasRoute(id)
         {
             Revision = revision,
+            Travel = travel,
             OwnerAuthor = hasAuthors ? AtlasText.Unescape(parts[16]) : "",
             LastAuthor = hasAuthors ? AtlasText.Unescape(parts[17]) : "",
             CreatedUtc = new DateTime(created, DateTimeKind.Utc),

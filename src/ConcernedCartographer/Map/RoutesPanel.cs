@@ -200,15 +200,20 @@ internal sealed class RoutesPanel : CcSidePanel
         }
 
         y -= 6f;
-        float fifth = (Width - 44f) / 5f;
-        string[] opRow1 = { "Rename", "Style", "Status", "Lock", "Archive" };
-        string[] opRow2 = { "Delete", "Restore", "Split", "Merge", "Measure" };
-        for (int index = 0; index < 5; index++)
+        // Six columns since #243 added the per-route Sailing mark; the
+        // empty tail slot keeps both rows on the same grid.
+        float sixth = (Width - 44f) / 6f;
+        string[] opRow1 = { "Rename", "Style", "Status", "Sailing", "Lock", "Archive" };
+        string[] opRow2 = { "Delete", "Restore", "Split", "Merge", "Measure", "" };
+        for (int index = 0; index < opRow1.Length; index++)
         {
             string op1 = opRow1[index];
             string op2 = opRow2[index];
-            AddButton(gui, op1, left + (fifth * (index + 0.5f)), y, fifth - 4f, 26f, () => Operate(op1));
-            AddButton(gui, op2, left + (fifth * (index + 0.5f)), y - 30f, fifth - 4f, 26f, () => Operate(op2));
+            AddButton(gui, op1, left + (sixth * (index + 0.5f)), y, sixth - 4f, 26f, () => Operate(op1));
+            if (op2.Length > 0)
+            {
+                AddButton(gui, op2, left + (sixth * (index + 0.5f)), y - 30f, sixth - 4f, 26f, () => Operate(op2));
+            }
         }
 
         y -= 64f;
@@ -363,6 +368,9 @@ internal sealed class RoutesPanel : CcSidePanel
             case "Status":
                 Report(handler.UiCycleStatus(_selected));
                 break;
+            case "Sailing":
+                Report(handler.UiToggleSailing(_selected));
+                break;
             case "Lock":
                 Report(handler.UiToggleLock(_selected));
                 break;
@@ -438,9 +446,15 @@ internal sealed class RoutesPanel : CcSidePanel
         {
             int living = _handler()?.LivingRouteCount() ?? rows.Count;
             string overflow = living > rows.Count ? $" ({living - rows.Count} more not shown)" : "";
-            string follow = _settings.RouteFollowEnabled.Value
-                ? " — Follow ON: close map, stand near it, press Q"
-                : " — Follow OFF (opt in below)";
+            bool sailingRoute = _hasSelection &&
+                (_handler()?.UiIsSailingRoute(_selected) ?? false);
+            string follow = sailingRoute
+                ? (_settings.SailingRouteFollowEnabled.Value
+                    ? " — Sailing Follow ON: take the helm, press Q"
+                    : " — sailing route; Sailing Follow OFF in config")
+                : (_settings.RouteFollowEnabled.Value
+                    ? " — Follow ON: close map, stand near it, press Q"
+                    : " — Follow OFF (opt in below)");
             _selectionStatus.text = (_hasSelection
                 ? $"Selected: {RouteName(_selected)}{follow}"
                 : "Click a route below to select it") + overflow;

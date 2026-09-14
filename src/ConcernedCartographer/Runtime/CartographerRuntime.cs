@@ -101,7 +101,23 @@ internal sealed class CartographerRuntime : IDisposable
     private long _followRouteRevision;
     private long _followStoreStamp;
     private bool _autoRunWasPressed;
+
+    // #243 sailing Route Follow. The raw-input observer decides each frame
+    // and leaves a ONE-SHOT authorisation that only the ShipControlls
+    // steering prefix may consume, so a synthetic rudder write can never
+    // outlive the control call that authorised it.
+    private readonly SailingRouteFollowController _sailingRouteFollow = new();
+    private AtlasId _sailingRouteId;
+    private long _sailingRouteRevision;
+    private long _sailingStoreStamp;
+    private SailingRouteFollowStep _sailingStep;
+    private bool _sailingStepPending;
     private readonly Collider[] _routeFollowNearby = new Collider[16];
+
+    // Vanilla treats |z| > 0.5 as a sail step; any non-zero helm axis is
+    // deliberate rudder input. Both cancel sailing Route Follow.
+    private const float ManualHelmInputEpsilon = 0.01f;
+    private const float SailStepInputEpsilon = 0.5f;
     private bool _routeRedrawPending;
     private float _routeRedrawElapsed;
     private readonly SyncInbox _syncInbox = new();
@@ -208,6 +224,14 @@ internal sealed class CartographerRuntime : IDisposable
         WalkingRouteFollowAdapter.Install(log);
         WalkingRouteFollowAdapter.ControlsApplying = HandleWalkingRouteControls;
         WalkingRouteFollowAdapter.ManualLookApplying = HandleWalkingManualLook;
+
+        // #243: all three ship seams or none. SailingRouteFollowAdapter
+        // rolls back a partial install itself; Installed stays false and
+        // TryStartSailingRouteFollow refuses to engage.
+        SailingRouteFollowAdapter.Install(log);
+        SailingRouteFollowAdapter.RawControlsObserved = HandleSailingRawControls;
+        SailingRouteFollowAdapter.SteeringRequested = HandleSailingSteering;
+        SailingRouteFollowAdapter.DoodadControlStopping = HandleSailingDoodadStop;
 
         // RC15: explicit vanilla pin deletions are captured at the
         // RemovePin choke point — the ONLY evidence that may tombstone a
@@ -559,6 +583,243 @@ internal sealed class CartographerRuntime : IDisposable
         }
     }
 
+    /// <summary>#243 seam 1: the read-only raw-input observation that runs
+    /// BEFORE vanilla dispatches doodad controls. Every cancellation the
+    /// helm can produce happens here, so the steering seam later in the very
+    /// same Player.SetControls call can only ever see inactive state.</summary>
+    private void HandleSailingRawControls(
+        Player player,
+        Vector3 movedir,
+        bool exitInput,
+        bool togglePressed)
+    {
+        // A pending authorisation is one-shot and call-scoped: drop any that
+        // the steering seam did not consume.
+        _sailingStepPending = false;
+        if (_disposed || player != Player.m_localPlayer)
+        {
+            return;
+        }
+
+        if (!_sailingRouteFollow.IsFollowing)
+        {
+            if (togglePressed &&
+                _settings.Enabled.Value &&
+                _settings.SailingRouteFollowEnabled.Value)
+            {
+                TryStartSailingRouteFollow(player);
+            }
+
+            return;
+        }
+
+        if (!TryGetHelm(player, out ShipControlls controls, out Ship ship))
+        {
+            ReportSailingStopped(_sailingRouteFollow.CancelWith(
+                SailingRouteFollowCancelReason.HelmLost));
+            return;
+        }
+
+        SailingRouteFollowStep step = _sailingRouteFollow.Tick(
+            BuildSailingFrame(player, controls, ship, movedir, exitInput, togglePressed));
+        if (step.Cancelled)
+        {
+            ReportSailingStopped(step);
+            return;
+        }
+
+        _sailingStep = step;
+        _sailingStepPending = step.Steering;
+    }
+
+    /// <summary>#243 seam 2: the ONLY steering injection. It consumes the
+    /// one-shot authorisation, re-proves the helm identity, and returns a
+    /// bounded vanilla rudder-RATE value. Returning false leaves the
+    /// original movement vector exactly as vanilla built it.</summary>
+    private bool HandleSailingSteering(
+        ShipControlls controls,
+        Vector3 rawMoveDirection,
+        out float rudderInput)
+    {
+        rudderInput = 0f;
+        bool authorized = _sailingStepPending;
+        _sailingStepPending = false;
+        if (!authorized || _disposed || !_sailingRouteFollow.IsFollowing)
+        {
+            return false;
+        }
+
+        Player player = Player.m_localPlayer;
+        if (player is null ||
+            !TryGetHelm(player, out ShipControlls liveControls, out _) ||
+            !ReferenceEquals(liveControls, controls))
+        {
+            ReportSailingStopped(_sailingRouteFollow.CancelWith(
+                SailingRouteFollowCancelReason.HelmLost));
+            return false;
+        }
+
+        // Defensive: manual helm input reaching this seam cancels and passes
+        // through unchanged, even though seam 1 should already have caught it.
+        if (Math.Abs(rawMoveDirection.x) > ManualHelmInputEpsilon ||
+            Math.Abs(rawMoveDirection.z) > SailStepInputEpsilon)
+        {
+            ReportSailingStopped(_sailingRouteFollow.CancelWith(
+                SailingRouteFollowCancelReason.ManualRudderInput));
+            return false;
+        }
+
+        return SailingRouteFollowControlPolicy.TryApply(_sailingStep, ref rudderInput);
+    }
+
+    /// <summary>#243 seam 3: vanilla is about to clear the doodad
+    /// controller. Observe only; never suppress or modify the original.</summary>
+    private void HandleSailingDoodadStop(Player player, IDoodadController controller)
+    {
+        if (_disposed || player != Player.m_localPlayer ||
+            !_sailingRouteFollow.IsFollowing)
+        {
+            return;
+        }
+
+        ReportSailingStopped(_sailingRouteFollow.CancelWith(
+            SailingRouteFollowCancelReason.Lifecycle));
+    }
+
+    private SailingRouteFollowFrame BuildSailingFrame(
+        Player player,
+        ShipControlls controls,
+        Ship ship,
+        Vector3 movedir,
+        bool exitInput,
+        bool togglePressed)
+    {
+        Vector3 position = ship.transform.position;
+        bool sameWorld = WorldContext.TryGetWorldUid(out long uid) && _worldUid == uid;
+        bool routeUnchanged =
+            _routeStore.ChangeStamp == _sailingStoreStamp &&
+            _routeStore.TryGet(_sailingRouteId, out AtlasRoute route) &&
+            !route.Deleted && !route.Archived &&
+            route.Travel == RouteTravel.Sea &&
+            route.Revision == _sailingRouteRevision;
+        bool lifecycleReady = _mapReady && sameWorld &&
+            !Minimap.IsOpen() && !player.IsDead() && !player.IsTeleporting() &&
+            SailingRouteFollowAdapter.Installed &&
+            !_walkingRouteFollow.IsFollowing;
+
+        return new SailingRouteFollowFrame(
+            new RoadPoint(position.x, position.y, position.z),
+            ship.transform.rotation.eulerAngles.y,
+            ship.GetRudderValue(),
+            Time.fixedDeltaTime,
+            enabled: _settings.Enabled.Value &&
+                _settings.SailingRouteFollowEnabled.Value,
+            helmGranted: HelmGranted(player, controls),
+            togglePressed: togglePressed,
+            manualRudderInput: Math.Abs(movedir.x) > ManualHelmInputEpsilon,
+            manualSailInput: Math.Abs(movedir.z) > SailStepInputEpsilon,
+            exitInput: exitInput,
+            routeUnchanged: routeUnchanged,
+            lifecycleReady: lifecycleReady);
+    }
+
+    private bool TryStartSailingRouteFollow(Player player)
+    {
+        if (!SailingRouteFollowAdapter.Installed ||
+            !_mapReady || Minimap.IsOpen() ||
+            _walkingRouteFollow.IsFollowing ||
+            !TryGetHelm(player, out ShipControlls controls, out Ship ship) ||
+            !_routesPanel.TryGetSelectedRoute(out AtlasId id) ||
+            !_routeStore.TryGet(id, out AtlasRoute route) ||
+            route.Deleted || route.Archived ||
+            route.Travel != RouteTravel.Sea ||
+            !RouteFollowPath.TryCreate(route.Points, out RouteFollowPath? path))
+        {
+            return false;
+        }
+
+        Vector3 current = ship.transform.position;
+        RoadPoint first = route.Points[0];
+        RoadPoint last = route.Points[route.Points.Count - 1];
+        RouteFollowDirection direction =
+            HorizontalDistanceSquared(current, first) <=
+            HorizontalDistanceSquared(current, last)
+                ? RouteFollowDirection.Forward
+                : RouteFollowDirection.Reverse;
+        var position = new RoadPoint(current.x, current.y, current.z);
+        if (!_sailingRouteFollow.TryStart(path, direction, position))
+        {
+            return false;
+        }
+
+        _sailingRouteId = id;
+        _sailingRouteRevision = route.Revision;
+        _sailingStoreStamp = _routeStore.ChangeStamp;
+        _sailingStepPending = false;
+        VanillaMessage.Show(player, MessageHud.MessageType.TopLeft,
+            $"Sailing Route Follow started: {route.Name}. Sails stay manual; any helm input cancels.");
+        return true;
+    }
+
+    /// <summary>The exact-identity helm gate from the #242 contract: this
+    /// player controls this ship through this very controls instance, and
+    /// the ship network owner granted them the helm.</summary>
+    private static bool TryGetHelm(
+        Player player,
+        out ShipControlls controls,
+        out Ship ship)
+    {
+        controls = null!;
+        ship = null!;
+        if (player.IsDead() || player.IsTeleporting())
+        {
+            return false;
+        }
+
+        if (player.GetDoodadController() is not ShipControlls liveControls ||
+            liveControls == null || liveControls.m_ship == null)
+        {
+            return false;
+        }
+
+        Ship controlled = player.GetControlledShip();
+        if (controlled == null || !ReferenceEquals(controlled, liveControls.m_ship) ||
+            !HelmGranted(player, liveControls))
+        {
+            return false;
+        }
+
+        controls = liveControls;
+        ship = controlled;
+        return true;
+    }
+
+    private static bool HelmGranted(Player player, ShipControlls controls)
+    {
+        return controls != null && controls.HaveValidUser() &&
+            controls.GetUser() == player.GetPlayerID();
+    }
+
+    private void ReportSailingStopped(in SailingRouteFollowStep step)
+    {
+        _sailingStepPending = false;
+        if (!step.Cancelled ||
+            step.CancelReason == SailingRouteFollowCancelReason.None)
+        {
+            return;
+        }
+
+        VanillaMessage.Show(Player.m_localPlayer,
+            MessageHud.MessageType.TopLeft,
+            $"Sailing Route Follow stopped ({step.CancelReason}).");
+    }
+
+    private void StopSailingRouteFollow()
+    {
+        _sailingRouteFollow.Cancel();
+        _sailingStepPending = false;
+    }
+
     private void StopWalkingRouteFollow()
     {
         if (_walkingRouteFollow.IsFollowing)
@@ -612,6 +873,7 @@ internal sealed class CartographerRuntime : IDisposable
             // branch; with the gate that would leak suppression too).
             _quickPinGate.Disarm();
             StopWalkingRouteFollow();
+            StopSailingRouteFollow();
             if (!_settings.Enabled.Value)
             {
                 _renderer.EnsureTextureFallback();
@@ -817,6 +1079,7 @@ internal sealed class CartographerRuntime : IDisposable
             _textFocusBlock.Release();
             _quickPinGate.Disarm();
             StopWalkingRouteFollow();
+            StopSailingRouteFollow();
             _pipeline?.EndAllStrokes();
             _displayController.Reset();
             _mapUi.Reset();
@@ -2657,9 +2920,11 @@ internal sealed class CartographerRuntime : IDisposable
         _textFocusBlock.Release();
         _quickPinGate.Disarm();
         StopWalkingRouteFollow();
+        StopSailingRouteFollow();
         MapInputGate.Uninstall();
         PlayerInputGate.Uninstall();
         WalkingRouteFollowAdapter.Uninstall();
+        SailingRouteFollowAdapter.Uninstall();
         PinDeletionWatch.Uninstall();
         MapPointerGuard.Clear();
         SaveIfDirty();
@@ -2699,6 +2964,7 @@ internal sealed class CartographerRuntime : IDisposable
             ResyncPins);
         _displayController.Reset();
         StopWalkingRouteFollow();
+        StopSailingRouteFollow();
         _routeStore = _routePersistence.Load(uid);
         _routeStore.LocalAuthor = _authorId;
         _routeStore.Changed += _routePersistence.QueueJournal;
