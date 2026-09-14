@@ -104,7 +104,9 @@ internal readonly struct SailingRouteFollowStep
         CancelReason = cancelReason;
     }
 
-    /// <summary>True only when a synthetic rudder-rate write is authorised.</summary>
+    /// <summary>True only when a synthetic rudder-rate write is authorised.
+    /// False while following but inside the rudder deadband, so vanilla is
+    /// left holding exactly the rudder it already had.</summary>
     public bool Steering { get; }
 
     /// <summary>The bounded rudder-RATE input, always within [-1, 1]. It is
@@ -144,11 +146,25 @@ internal static class SailingRouteFollowControlPolicy
 /// <c>Ship.ApplyControlls</c> computes
 /// <c>m_rudderValue += dir.x * lerp(0.5,1,|m_rudderValue|) * m_rudderSpeed * dt</c>,
 /// so <c>dir.x</c> is a rate, not an angle: the controller asks for a target
-/// deflection from the heading error and then feeds the bounded rate that
-/// walks the vanilla rudder toward it, exactly as a player holding the helm
-/// key would. It never writes <c>m_rudderValue</c>, never touches
-/// <c>dir.z</c> (which is what vanilla turns into Forward/Backward sail
-/// steps), and never reads or writes physics, wind, or ownership.
+/// deflection and then feeds the bounded rate that walks the vanilla rudder
+/// toward it, exactly as a player holding the helm key would. It never writes
+/// <c>m_rudderValue</c>, never touches <c>dir.z</c> (which is what vanilla
+/// turns into Forward/Backward sail steps), and never reads or writes
+/// physics, wind, or ownership.
+///
+/// A ship is a SECOND-ORDER plant: vanilla applies a torque impulse to a
+/// rigidbody with angular damping, and the turn authority scales with forward
+/// speed, so heading lags the rudder by seconds. Proportional-only steering
+/// on a lagging plant hunts and can saturate the cross-track bound. The
+/// controller therefore adds two leads, both derived from frames it already
+/// receives and neither requiring a new game API:
+///
+///  * a yaw-RATE damping term (<see cref="YawLeadSeconds"/>), which is the
+///    derivative half of a PD controller and supplies the phase margin the
+///    plant lag eats;
+///  * a look-ahead measured in TIME rather than metres
+///    (<see cref="LookAheadSeconds"/>, clamped to a metre band), so a fast
+///    longship aims further ahead than a raft.
 ///
 /// Adverse wind, an obstacle and a becalmed ship are all bounded by the same
 /// deterministic rule: if the ship fails to gain
@@ -162,12 +178,22 @@ internal sealed class SailingRouteFollowController
     /// bounded corner tolerance, not a licence to cut one.</summary>
     public const float MaximumCrossTrackMeters = 40f;
 
-    /// <summary>Bounded look-ahead. Long enough for a longship to turn,
-    /// short enough that a waypoint corner is actually rounded.</summary>
-    public const float LookAheadMeters = 25f;
+    /// <summary>Look-ahead horizon in seconds of travel.</summary>
+    public const float LookAheadSeconds = 3.5f;
+
+    /// <summary>Metre band the time-based look-ahead is clamped into, so a
+    /// stopped ship still has a target and a fast one cannot aim past a
+    /// corner.</summary>
+    public const float MinimumLookAheadMeters = 18f;
+    public const float MaximumLookAheadMeters = 45f;
 
     /// <summary>Heading error that asks for full rudder.</summary>
     public const float FullRudderHeadingErrorDegrees = 25f;
+
+    /// <summary>How far ahead the yaw-rate damping term looks. This is the
+    /// derivative gain expressed as a lead time, so it is comparable with the
+    /// hull's own turn lag.</summary>
+    public const float YawLeadSeconds = 1.6f;
 
     /// <summary>Ships stop slowly; the route ends before they do.</summary>
     public const float RouteEndToleranceMeters = 12f;
@@ -183,20 +209,46 @@ internal sealed class SailingRouteFollowController
     private const float RudderSlewGain = 4f;
 
     /// <summary>Below this deflection error the rudder is left exactly where
-    /// vanilla put it — no synthetic write, no jitter.</summary>
+    /// vanilla put it — no synthetic write at all.</summary>
     private const float RudderDeadband = 0.02f;
+
+    /// <summary>Low-pass factor for the derived speed and yaw rate. Frame
+    /// deltas are small and noisy; the plant is not.</summary>
+    private const float DerivedSmoothing = 0.15f;
+
+    /// <summary>Sanity bound on derived speed, well above any vanilla hull.</summary>
+    private const float MaximumPlausibleSpeed = 60f;
+
+    /// <summary>Sanity bound on derived yaw rate.</summary>
+    private const float MaximumPlausibleYawRate = 360f;
 
     private RouteFollowPath? _path;
     private RouteFollowDirection _direction;
     private int _cursor;
     private float _lastRemainingMeters;
     private float _noProgressSeconds;
+    private bool _hasPreviousFrame;
+    private RoadPoint _previousPosition;
+    private float _previousHeadingDegrees;
+    private float _speedMetersPerSecond;
+    private float _yawRateDegreesPerSecond;
 
     public bool IsFollowing => _path is not null;
 
     /// <summary>Seconds since the ship last made real progress along the
     /// route. Surfaced for diagnostics and tests.</summary>
     public float NoProgressSeconds => _noProgressSeconds;
+
+    /// <summary>Smoothed speed derived from successive frames, in m/s.</summary>
+    public float DerivedSpeedMetersPerSecond => _speedMetersPerSecond;
+
+    /// <summary>Smoothed yaw rate derived from successive frames, in deg/s.</summary>
+    public float DerivedYawRateDegreesPerSecond => _yawRateDegreesPerSecond;
+
+    /// <summary>The look-ahead distance the current speed estimate asks for.</summary>
+    public float LookAheadMeters =>
+        Clamp(_speedMetersPerSecond * LookAheadSeconds,
+            MinimumLookAheadMeters, MaximumLookAheadMeters);
 
     public bool TryStart(
         RouteFollowPath? path,
@@ -209,7 +261,7 @@ internal sealed class SailingRouteFollowController
             : 0;
         if (path is null ||
             !RouteFollowMath.TrySample(path, position, direction, initialCursor,
-                path.LastSegmentIndex + 1, LookAheadMeters,
+                path.LastSegmentIndex + 1, MinimumLookAheadMeters,
                 MaximumCrossTrackMeters, RouteEndToleranceMeters,
                 out RouteFollowSample sample) ||
             sample.AtRouteEnd)
@@ -222,6 +274,9 @@ internal sealed class SailingRouteFollowController
         _cursor = sample.SegmentIndex;
         _lastRemainingMeters = sample.RemainingMeters;
         _noProgressSeconds = 0f;
+        _hasPreviousFrame = false;
+        _speedMetersPerSecond = 0f;
+        _yawRateDegreesPerSecond = 0f;
         return true;
     }
 
@@ -237,6 +292,8 @@ internal sealed class SailingRouteFollowController
         {
             return Stop(immediate);
         }
+
+        UpdateDerivedMotion(frame);
 
         if (!RouteFollowMath.TrySample(
                 _path, frame.Position, _direction, _cursor, ProjectionWindow,
@@ -268,14 +325,20 @@ internal sealed class SailingRouteFollowController
 
         float bearing = BearingTo(frame.Position, sample.LookAheadPoint);
         float headingError = NormalizeDelta(bearing - frame.HeadingDegrees);
+
+        // PD: the yaw-rate term is subtracted as a lead, so the controller
+        // starts easing off while the hull is still swinging toward the
+        // course instead of waiting for the error to close.
+        float dampedError = headingError - (YawLeadSeconds * _yawRateDegreesPerSecond);
         float targetRudder = Clamp(
-            headingError / FullRudderHeadingErrorDegrees, -1f, 1f);
+            dampedError / FullRudderHeadingErrorDegrees, -1f, 1f);
         float rudderError = targetRudder - frame.RudderValue;
         if (Math.Abs(rudderError) <= RudderDeadband)
         {
-            // Hold exactly what vanilla holds.
+            // Authorise no write at all: vanilla keeps exactly the rudder it
+            // already has.
             return new SailingRouteFollowStep(
-                true, 0f, false, SailingRouteFollowCancelReason.None);
+                false, 0f, false, SailingRouteFollowCancelReason.None);
         }
 
         float rudderInput = Clamp(rudderError * RudderSlewGain, -1f, 1f);
@@ -289,6 +352,11 @@ internal sealed class SailingRouteFollowController
         _cursor = 0;
         _lastRemainingMeters = 0f;
         _noProgressSeconds = 0f;
+        _hasPreviousFrame = false;
+        _previousPosition = default;
+        _previousHeadingDegrees = 0f;
+        _speedMetersPerSecond = 0f;
+        _yawRateDegreesPerSecond = 0f;
     }
 
     /// <summary>Cancels and reports the reason, for the raw-input observer
@@ -302,6 +370,40 @@ internal sealed class SailingRouteFollowController
         }
 
         return Stop(reason);
+    }
+
+    /// <summary>Derives speed and yaw rate from successive frames. Both are
+    /// smoothed and sanity-bounded, so a teleport or a frame hitch cannot
+    /// inject a wild steering command.</summary>
+    private void UpdateDerivedMotion(in SailingRouteFollowFrame frame)
+    {
+        if (!_hasPreviousFrame || frame.DeltaSeconds <= 0f)
+        {
+            _hasPreviousFrame = true;
+            _previousPosition = frame.Position;
+            _previousHeadingDegrees = frame.HeadingDegrees;
+            return;
+        }
+
+        float travelled = frame.Position.HorizontalDistanceTo(_previousPosition);
+        float speed = travelled / frame.DeltaSeconds;
+        if (speed >= 0f && speed <= MaximumPlausibleSpeed)
+        {
+            _speedMetersPerSecond +=
+                (speed - _speedMetersPerSecond) * DerivedSmoothing;
+        }
+
+        float yawRate =
+            NormalizeDelta(frame.HeadingDegrees - _previousHeadingDegrees) /
+            frame.DeltaSeconds;
+        if (Math.Abs(yawRate) <= MaximumPlausibleYawRate)
+        {
+            _yawRateDegreesPerSecond +=
+                (yawRate - _yawRateDegreesPerSecond) * DerivedSmoothing;
+        }
+
+        _previousPosition = frame.Position;
+        _previousHeadingDegrees = frame.HeadingDegrees;
     }
 
     private SailingRouteFollowStep Stop(SailingRouteFollowCancelReason reason)

@@ -110,8 +110,7 @@ internal sealed class CartographerRuntime : IDisposable
     private AtlasId _sailingRouteId;
     private long _sailingRouteRevision;
     private long _sailingStoreStamp;
-    private SailingRouteFollowStep _sailingStep;
-    private bool _sailingStepPending;
+    private readonly SailingSteeringAuthorisation _sailingAuthorisation = new();
     private readonly Collider[] _routeFollowNearby = new Collider[16];
 
     // Vanilla treats |z| > 0.5 as a sail step; any non-zero helm axis is
@@ -486,6 +485,10 @@ internal sealed class CartographerRuntime : IDisposable
             !_routesPanel.TryGetSelectedRoute(out AtlasId id) ||
             !_routeStore.TryGet(id, out AtlasRoute route) ||
             route.Deleted || route.Archived ||
+            // #243: a route marked for sailing is not a walking route. The
+            // Routes panel advertises only Sailing Follow for it, so walking
+            // must not quietly steer the player into the water instead.
+            route.Travel == RouteTravel.Sea ||
             !RouteFollowPath.TryCreate(route.Points, out RouteFollowPath? path) ||
             !WalkingMovementEligible(player))
         {
@@ -595,7 +598,7 @@ internal sealed class CartographerRuntime : IDisposable
     {
         // A pending authorisation is one-shot and call-scoped: drop any that
         // the steering seam did not consume.
-        _sailingStepPending = false;
+        _sailingAuthorisation.Clear();
         if (_disposed || player != Player.m_localPlayer)
         {
             return;
@@ -628,8 +631,10 @@ internal sealed class CartographerRuntime : IDisposable
             return;
         }
 
-        _sailingStep = step;
-        _sailingStepPending = step.Steering;
+        if (step.Steering)
+        {
+            _sailingAuthorisation.Arm(controls, step.RudderInput);
+        }
     }
 
     /// <summary>#243 seam 2: the ONLY steering injection. It consumes the
@@ -642,8 +647,10 @@ internal sealed class CartographerRuntime : IDisposable
         out float rudderInput)
     {
         rudderInput = 0f;
-        bool authorized = _sailingStepPending;
-        _sailingStepPending = false;
+
+        // Consuming ALWAYS clears, and only succeeds for the exact controls
+        // instance the observer armed.
+        bool authorized = _sailingAuthorisation.TryConsume(controls, out float authorizedRudder);
         if (!authorized || _disposed || !_sailingRouteFollow.IsFollowing)
         {
             return false;
@@ -669,7 +676,10 @@ internal sealed class CartographerRuntime : IDisposable
             return false;
         }
 
-        return SailingRouteFollowControlPolicy.TryApply(_sailingStep, ref rudderInput);
+        return SailingRouteFollowControlPolicy.TryApply(
+            new SailingRouteFollowStep(
+                true, authorizedRudder, false, SailingRouteFollowCancelReason.None),
+            ref rudderInput);
     }
 
     /// <summary>#243 seam 3: vanilla is about to clear the doodad
@@ -755,7 +765,7 @@ internal sealed class CartographerRuntime : IDisposable
         _sailingRouteId = id;
         _sailingRouteRevision = route.Revision;
         _sailingStoreStamp = _routeStore.ChangeStamp;
-        _sailingStepPending = false;
+        _sailingAuthorisation.Clear();
         VanillaMessage.Show(player, MessageHud.MessageType.TopLeft,
             $"Sailing Route Follow started: {route.Name}. Sails stay manual; any helm input cancels.");
         return true;
@@ -802,7 +812,7 @@ internal sealed class CartographerRuntime : IDisposable
 
     private void ReportSailingStopped(in SailingRouteFollowStep step)
     {
-        _sailingStepPending = false;
+        _sailingAuthorisation.Clear();
         if (!step.Cancelled ||
             step.CancelReason == SailingRouteFollowCancelReason.None)
         {
@@ -817,7 +827,7 @@ internal sealed class CartographerRuntime : IDisposable
     private void StopSailingRouteFollow()
     {
         _sailingRouteFollow.Cancel();
-        _sailingStepPending = false;
+        _sailingAuthorisation.Clear();
     }
 
     private void StopWalkingRouteFollow()

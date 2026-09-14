@@ -11,21 +11,29 @@ namespace TheConcernedCat.ConcernedCartographer.Atlas;
 /// the highest revision seen, so replay is idempotent and a truncated
 /// trailing line costs at most itself.
 ///
-/// The v3 meta row (#243) appends the route's travel mode. It is emitted
-/// ONLY for a route explicitly marked as a sailing route, so every existing
-/// route keeps its byte-identical v2 row and an older Cartographer reading
-/// the same sidecar or sync payload never meets a field it has not seen.</summary>
+/// The travel row (#243) carries a route's sailing mark. It is a SEPARATE
+/// row rather than a wider meta row, and it is emitted ONLY for a route
+/// explicitly marked as a sailing route. That shape is deliberate: the meta
+/// row keeps its exact v2 bytes, so a pre-#243 Cartographer reading the same
+/// sidecar or sync payload still parses the route and its points in full and
+/// loses only the mark, instead of rejecting the meta row and discarding the
+/// whole route. An unmarked route is byte-identical to what shipped before.</summary>
 internal static class RouteCodec
 {
     public const string Header = "# ConcernedCartographer routes v2";
     private const string RowMarker = "1";
     private const string MetaMarkerV2 = "2";
-    private const string MetaMarkerV3 = "3";
     private const string MetaTag = "M";
     private const string PointTag = "P";
+
+    /// <summary>#243 travel row. It reuses the 8-field point-row arity so an
+    /// older parser's length/marker guards still accept the LINE and then
+    /// simply fail to recognise the tag, counting one malformed row and
+    /// leaving the route itself intact.</summary>
+    private const string TravelTag = "V";
+    private const int PointFieldCount = 8;
     private const int MetaFieldCountV1 = 17;
     private const int MetaFieldCountV2 = 19;
-    private const int MetaFieldCountV3 = 20;
 
     public sealed class ParseResult
     {
@@ -80,14 +88,23 @@ internal static class RouteCodec
             AtlasText.Escape(route.LastAuthor),
         };
 
-        // A default (land) route keeps the exact v2 row it has always had;
-        // only an explicitly marked sailing route carries the v3 field.
-        string metaRow = string.Join("\t", meta);
-        yield return route.Travel == RouteTravel.Land
-            ? metaRow + "\t" + MetaMarkerV2
-            : metaRow + "\t" +
-                ((int)route.Travel).ToString(CultureInfo.InvariantCulture) +
-                "\t" + MetaMarkerV3;
+        // The meta row is unconditionally the v2 row it has always been.
+        yield return string.Join("\t", meta) + "\t" + MetaMarkerV2;
+
+        // Only an explicitly marked sailing route emits a travel row.
+        if (route.Travel != RouteTravel.Land)
+        {
+            yield return string.Join(
+                "\t",
+                route.Id.ToString(),
+                revision,
+                ((int)route.Travel).ToString(CultureInfo.InvariantCulture),
+                "0",
+                "0",
+                "0",
+                TravelTag,
+                RowMarker);
+        }
 
         for (int index = 0; index < route.Points.Count; index++)
         {
@@ -123,8 +140,7 @@ internal static class RouteCodec
             string[] parts = line.Split('\t');
             if (parts.Length < 8 ||
                 (parts[parts.Length - 1] != RowMarker &&
-                    parts[parts.Length - 1] != MetaMarkerV2 &&
-                    parts[parts.Length - 1] != MetaMarkerV3) ||
+                    parts[parts.Length - 1] != MetaMarkerV2) ||
                 !AtlasId.TryParse(parts[0], out AtlasId id) ||
                 !string.Equals(id.Kind, AtlasId.RouteKind, StringComparison.Ordinal) ||
                 !long.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out long revision) ||
@@ -157,9 +173,11 @@ internal static class RouteCodec
                 bucket.Reset(revision);
             }
 
-            if ((parts.Length == MetaFieldCountV1 ||
-                    parts.Length == MetaFieldCountV2 ||
-                    parts.Length == MetaFieldCountV3) && parts[4] == MetaTag)
+            // Each meta shape is pinned to its own trailing marker, so a
+            // hand-edited row cannot be mistaken for a different version.
+            if (parts[4] == MetaTag &&
+                ((parts.Length == MetaFieldCountV1 && parts[parts.Length - 1] == RowMarker) ||
+                    (parts.Length == MetaFieldCountV2 && parts[parts.Length - 1] == MetaMarkerV2)))
             {
                 if (!TryParseMeta(parts, id, revision, out AtlasRoute meta))
                 {
@@ -169,7 +187,19 @@ internal static class RouteCodec
 
                 bucket.Meta = meta;
             }
-            else if (parts.Length == 8 && parts[6] == PointTag && parts[7] == RowMarker)
+            else if (parts.Length == PointFieldCount && parts[6] == TravelTag &&
+                parts[7] == RowMarker)
+            {
+                if (!int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int travelValue) ||
+                    !Enum.IsDefined(typeof(RouteTravel), travelValue))
+                {
+                    malformed++;
+                    continue;
+                }
+
+                bucket.Travel = (RouteTravel)travelValue;
+            }
+            else if (parts.Length == PointFieldCount && parts[6] == PointTag && parts[7] == RowMarker)
             {
                 if (!int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int index) ||
                     index < 0 ||
@@ -200,6 +230,7 @@ internal static class RouteCodec
                 continue;
             }
 
+            bucket.Meta.Travel = bucket.Travel;
             bucket.Points.Sort((a, b) => a.Index.CompareTo(b.Index));
             foreach ((int _, RoadPoint point) in bucket.Points)
             {
@@ -234,23 +265,10 @@ internal static class RouteCodec
             return false;
         }
 
-        bool hasAuthors = parts.Length >= MetaFieldCountV2;
-        RouteTravel travel = RouteTravel.Land;
-        if (parts.Length == MetaFieldCountV3)
-        {
-            if (!int.TryParse(parts[18], NumberStyles.Integer, CultureInfo.InvariantCulture, out int travelValue) ||
-                !Enum.IsDefined(typeof(RouteTravel), travelValue))
-            {
-                return false;
-            }
-
-            travel = (RouteTravel)travelValue;
-        }
-
+        bool hasAuthors = parts.Length == MetaFieldCountV2;
         route = new AtlasRoute(id)
         {
             Revision = revision,
-            Travel = travel,
             OwnerAuthor = hasAuthors ? AtlasText.Unescape(parts[16]) : "",
             LastAuthor = hasAuthors ? AtlasText.Unescape(parts[17]) : "",
             CreatedUtc = new DateTime(created, DateTimeKind.Utc),
@@ -321,12 +339,19 @@ internal static class RouteCodec
     {
         public long Revision { get; private set; }
         public AtlasRoute? Meta { get; set; }
+
+        /// <summary>#243: the sailing mark arrives in its own row, so it is
+        /// collected beside the meta row and applied once the bucket is
+        /// resolved. A route with no travel row is Land, exactly as before.</summary>
+        public RouteTravel Travel { get; set; } = RouteTravel.Land;
+
         public List<(int Index, RoadPoint Point)> Points { get; } = new();
 
         public void Reset(long revision)
         {
             Revision = revision;
             Meta = null;
+            Travel = RouteTravel.Land;
             Points.Clear();
         }
     }

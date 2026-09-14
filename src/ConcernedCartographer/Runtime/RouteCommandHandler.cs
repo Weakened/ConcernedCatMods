@@ -686,7 +686,7 @@ internal sealed class RouteCommandHandler
 
                 return redoSummary;
             default:
-                return "Usage: cc_routes [list|draw <name>|waypoint <name>|erase|stop|snap on/off|measure|name|style|status|color|lock|unlock|archive|unarchive|delete|restore|split|merge|undo|redo]";
+                return "Usage: cc_routes [list|draw <name>|waypoint <name>|erase|stop|snap on/off|measure|name|style|status|sailing|color|lock|unlock|archive|unarchive|delete|restore|split|merge|undo|redo]";
         }
     }
 

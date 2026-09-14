@@ -86,9 +86,18 @@ internal static class SailingRouteFollowAdapter
             }
 
             installing = new Harmony(Plugin.PluginGuid + ".sailingroutefollow");
+            // Priority.First so this observer sees the RAW autoRun value.
+            // WalkingRouteFollowAdapter also prefixes Player.SetControls and
+            // writes autoRun through a ref while it steers; at equal priority
+            // Harmony orders by insertion and walking installs first, so
+            // without this the sailing edge detector would latch onto the
+            // other feature's synthetic input.
             installing.Patch(setControls,
                 prefix: new HarmonyMethod(
-                    typeof(SailingRouteFollowAdapter), nameof(BeforeSetControls)));
+                    typeof(SailingRouteFollowAdapter), nameof(BeforeSetControls))
+                {
+                    priority = Priority.First,
+                });
             installing.Patch(applyControlls,
                 prefix: new HarmonyMethod(
                     typeof(SailingRouteFollowAdapter), nameof(BeforeApplyControlls)));
@@ -148,16 +157,20 @@ internal static class SailingRouteFollowAdapter
     {
         try
         {
+            if (__instance != Player.m_localPlayer)
+            {
+                // Another character's controls must never move the local
+                // player's edge state.
+                return;
+            }
+
             bool togglePressed = autoRun && !s_autoRunWasPressed;
             s_autoRunWasPressed = autoRun;
-            if (__instance == Player.m_localPlayer)
-            {
-                RawControlsObserved?.Invoke(
-                    __instance,
-                    movedir,
-                    jump || attack || secondaryAttack || dodge,
-                    togglePressed);
-            }
+            RawControlsObserved?.Invoke(
+                __instance,
+                movedir,
+                jump || attack || secondaryAttack || dodge,
+                togglePressed);
         }
         catch
         {
@@ -179,8 +192,9 @@ internal static class SailingRouteFollowAdapter
             Vector3 raw = moveDir;
             if (SteeringRequested(__instance, raw, out float rudderInput))
             {
-                // Rudder axis only: sail steps (z), look direction, run and
-                // block reach vanilla exactly as the player supplied them.
+                // Rudder axis only. In particular z is preserved, so
+                // vanilla's own dir.z > 0.5 / < -0.5 edges still decide
+                // Forward()/Backward() and sail state stays entirely manual.
                 moveDir = new Vector3(rudderInput, raw.y, raw.z);
             }
         }

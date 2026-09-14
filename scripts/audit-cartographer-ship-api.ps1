@@ -221,12 +221,29 @@ $vessels = [ordered]@{
 # set; it proves NOTHING about live Harmony ordering or multiplayer.
 function Get-CodeOnlySource {
     # Comments explain the vanilla equations by name, so the forbidden-call
-    # scan must read CODE, not documentation.
+    # scan must read CODE, not documentation. A naive cut at the first '//'
+    # would also amputate any line containing a URL inside a string literal,
+    # so quotes are tracked.
     param([Parameter(Mandatory)][string]$Path)
 
     $stripped = foreach ($line in (Get-Content -LiteralPath $Path)) {
-        $commentAt = $line.IndexOf('//', [StringComparison]::Ordinal)
-        if ($commentAt -ge 0) { $line.Substring(0, $commentAt) } else { $line }
+        $inString = $false
+        $cut = -1
+        for ($i = 0; $i -lt $line.Length; $i++) {
+            $ch = $line[$i]
+            if ($ch -eq '"' -and ($i -eq 0 -or $line[$i - 1] -ne '\')) {
+                $inString = -not $inString
+                continue
+            }
+
+            if (-not $inString -and $ch -eq '/' -and
+                $i + 1 -lt $line.Length -and $line[$i + 1] -eq '/') {
+                $cut = $i
+                break
+            }
+        }
+
+        if ($cut -ge 0) { $line.Substring(0, $cut) } else { $line }
     }
 
     return [regex]::Replace(($stripped -join " "), "\s+", " ").Trim()
@@ -254,28 +271,65 @@ if ((Test-Path $adapterPath -PathType Leaf) -and (Test-Path $sailingControllerPa
         "partial sailing hook installation must roll back"
     Assert-SourceContains $adapterSource 'moveDir = new Vector3(rudderInput, raw.y, raw.z);' `
         "steering may replace only the rudder axis"
-    Assert-SourceContains $adapterSource 'prefix: new HarmonyMethod(' `
-        "all three sailing seams must be prefixes"
-    if ($adapterSource.Contains('postfix:', [StringComparison]::Ordinal) -or
-        $adapterSource.Contains('__result', [StringComparison]::Ordinal) -or
-        $adapterSource.Contains('return false;', [StringComparison]::Ordinal)) {
-        throw "Sailing adapter must never skip or replace an original method."
+
+    # Count, do not merely find: a substring match would be satisfied by ONE
+    # prefix among three patches.
+    $prefixCount = ([regex]::Matches($adapterSource, 'prefix: new HarmonyMethod\(')).Count
+    if ($prefixCount -ne 3) {
+        throw "Sailing adapter declares $prefixCount prefixes; all 3 seams must be prefixes."
+    }
+
+    # A transpiler or finalizer is strictly worse than a postfix here, and a
+    # bool-returning prefix can skip the original whatever it returns.
+    foreach ($modifier in @('postfix:', 'transpiler:', 'finalizer:', '__result', '__state')) {
+        if ($adapterSource.Contains($modifier, [StringComparison]::Ordinal)) {
+            throw "Sailing adapter must never skip or replace an original method (found: $modifier)."
+        }
+    }
+    if ($adapterSource -match 'private static bool Before') {
+        throw "Sailing adapter prefixes must return void; a bool prefix can skip the original."
     }
 
     # No absolute rudder write, no force/transform/ownership/sail control.
+    # CartographerRuntime is included because that is where the sailing gates
+    # actually touch Ship/ShipControlls; auditing only the two dedicated files
+    # would leave the real integration point unscanned. Its sailing region is
+    # isolated first so unrelated runtime code cannot trip the scan.
+    $runtimePath = Join-Path $root "src\ConcernedCartographer\Runtime\CartographerRuntime.cs"
+    $runtimeSailing = ""
+    if (Test-Path $runtimePath -PathType Leaf) {
+        $runtimeLines = Get-Content -LiteralPath $runtimePath
+        $collecting = $false
+        $collected = foreach ($line in $runtimeLines) {
+            if ($line -match 'private (void|bool|SailingRouteFollowFrame) (HandleSailing|BuildSailingFrame|TryStartSailingRouteFollow|StopSailingRouteFollow|ReportSailingStopped)') {
+                $collecting = $true
+            } elseif ($line -match '^    private .*Walking' -or $line -match '^    public void Tick\(') {
+                $collecting = $false
+            }
+
+            if ($collecting) { $line }
+        }
+
+        $runtimeSailing = [regex]::Replace(($collected -join " "), "\s+", " ").Trim()
+        if ($runtimeSailing.Length -lt 500) {
+            throw "Could not isolate the sailing region of CartographerRuntime.cs for the forbidden-call scan."
+        }
+    }
+
     foreach ($forbidden in @(
         'm_rudderValue', 'Rudder(', 'SetOwner', 'ClaimOwnership', 'AddForce',
         'velocity =', 'transform.position =', 'transform.rotation =',
-        '.Forward()', '.Backward()', 'InvokeRPC', 'GetWindDir', 'SetWind'
+        '.Forward()', '.Backward()', 'InvokeRPC', 'GetWindDir', 'SetWind',
+        'm_body', 'AddTorque', 'MovePosition', 'MoveRotation'
     )) {
-        foreach ($sailingSource in @($adapterSource, $controllerSource)) {
+        foreach ($sailingSource in @($adapterSource, $controllerSource, $runtimeSailing)) {
             if ($sailingSource.Contains($forbidden, [StringComparison]::Ordinal)) {
                 throw "Sailing Route Follow source contains a forbidden call: $forbidden"
             }
         }
     }
 
-    $sailingHookEvidence = "3 prefixes (Player.SetControls, ShipControlls.ApplyControlls, Player.StopDoodadControl), transactional rollback, rudder-axis-only write, no forbidden calls"
+    $sailingHookEvidence = "3 prefixes (Player.SetControls, ShipControlls.ApplyControlls, Player.StopDoodadControl), transactional rollback, rudder-axis-only write, no forbidden call in the adapter, the controller, or the runtime sailing region"
 }
 
 $result = [ordered]@{

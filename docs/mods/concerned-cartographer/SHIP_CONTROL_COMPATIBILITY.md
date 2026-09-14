@@ -263,21 +263,31 @@ stops being true:
   three audited seams (`Player.SetControls` with the full 12-argument
   signature, `ShipControlls.ApplyControlls(Vector3, Vector3, bool, bool, bool)`,
   and `Player.StopDoodadControl()`);
-- all three are **prefixes**, none uses `__result` or returns `false`, so no
-  original method is ever skipped or replaced;
+- **exactly three** prefix declarations are counted, not merely found, and
+  no `postfix:`, `transpiler:`, `finalizer:`, `__result`, `__state` or
+  bool-returning prefix appears, so no original method is ever skipped or
+  replaced;
 - a partial install rolls back (`UnpatchSelf`) and leaves the feature off;
 - the steering seam writes `new Vector3(rudderInput, raw.y, raw.z)` — the
   rudder axis only, so sail steps (`z`), look direction, run and block reach
   vanilla exactly as the player supplied them;
-- neither file contains `m_rudderValue`, `Rudder(`, `SetOwner`,
-  `ClaimOwnership`, `AddForce`, `velocity =`, `transform.position =`,
+- the forbidden-call scan finds none of `m_rudderValue`, `Rudder(`,
+  `SetOwner`, `ClaimOwnership`, `AddForce`, `AddTorque`, `MovePosition`,
+  `MoveRotation`, `m_body`, `velocity =`, `transform.position =`,
   `transform.rotation =`, `.Forward()`, `.Backward()`, `InvokeRPC`,
-  `GetWindDir` or `SetWind` in code (comments are stripped before the scan,
-  since they name the vanilla equations).
+  `GetWindDir` or `SetWind` — across the adapter, the controller **and the
+  sailing region of `CartographerRuntime.cs`**, which is where the gates
+  actually touch `Ship`/`ShipControlls`. Comments are stripped before the
+  scan (they name the vanilla equations), with quote tracking so a URL in a
+  string literal cannot truncate a line.
 
-The runtime keeps a **one-shot, call-scoped** authorisation: the raw-input
-observer decides, and only the steering prefix in that same
-`Player.SetControls` call may consume it. Any cancellation — manual rudder,
+The runtime keeps a **one-shot, call-scoped** authorisation
+(`Domain/Atlas/SailingSteeringAuthorisation.cs`, so the invariant is
+game-free and directly tested): the raw-input observer arms it with the exact
+controls instance, and only the steering prefix in that same
+`Player.SetControls` call may consume it. Consumption always clears, and only
+succeeds for that same instance, so a write cannot survive into a later call,
+reach another ship, or fire on a path where vanilla never ran the observer. Any cancellation — manual rudder,
 a sail step, jump/attack/secondary/dodge, Q, losing the granted helm,
 route mutation, lifecycle, off-route, route end, or the no-progress
 timeout — clears it before vanilla's doodad dispatch, so an exit action can

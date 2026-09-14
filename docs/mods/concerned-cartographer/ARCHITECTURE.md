@@ -360,7 +360,24 @@ doodad controllers fail closed.
 The #243 sailing adapter is the second runtime consumer of the same kernel.
 It is opt-in, default OFF, and additionally requires a route explicitly
 marked as a sailing route (`AtlasRoute.Travel == RouteTravel.Sea`), so a
-land route can never engage it. It binds THREE Valheim 1.0.12 seams as one
+land route can never engage it — and walking Route Follow symmetrically
+refuses a sea-marked route rather than steering the player into the water.
+
+The mark is persisted in its own `RouteCodec` row rather than by widening
+the meta row. That is a deliberate cross-version trade: the meta row keeps
+its exact v2 bytes, so a pre-1.1 Cartographer reading the same sidecar or
+sync payload still parses the route and all of its points and loses only the
+mark. Widening the meta row instead would have made the old parser reject
+that row, orphan the points, and discard the whole route.
+
+The controller is a PD, not a P. A ship is a second-order plant — vanilla
+applies a torque impulse to a rigidbody with angular damping and scales turn
+authority with forward speed — so heading lags the rudder by seconds and
+proportional-only steering hunts and saturates the cross-track bound. The
+controller therefore subtracts a yaw-rate lead term and sizes its look-ahead
+in seconds of travel rather than metres, both derived from frames it already
+receives. The deterministic tests sweep hull lag and speed instead of fixing
+both at their most forgiving values. It binds THREE Valheim 1.0.12 seams as one
 transaction — a read-only `Player.SetControls` prefix, the
 `ShipControlls.ApplyControlls` steering prefix, and a
 `Player.StopDoodadControl` lifecycle prefix — because installed
