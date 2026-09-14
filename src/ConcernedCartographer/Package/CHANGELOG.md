@@ -1,7 +1,13 @@
 # Changelog
 
-## 1.1.0 - Optional walking Route Follow
+## 1.1.0 - Optional walking and sailing Route Follow
 
+- **Sailing Route Follow (opt-in, OFF by default).** Mark a route as a sailing route with the new **Sailing** button in the Routes panel (or `cc_routes sailing on`), turn on `Routes/SailingAutoFollowEnabled`, take the helm of a raft, karve, longship or Drakkar with that route selected, and press Q. Cartographer then feeds the same bounded rudder input a player supplies by holding the helm key, steering along the route and around its corners.
+- **Your sails stay yours.** Sailing Route Follow never raises, lowers or reverses the sail, never touches wind, physics, speed, collision, damage or multiplayer authority, and never takes ownership of the ship. It writes exactly one thing: the rudder axis.
+- **Everything cancels it, immediately.** Any helm input, any sail step, jump/attack/secondary/dodge, pressing Q again, leaving the helm, editing or deleting the route, going too far off it, reaching the end, a map or world change, death or teleport. If wind or an obstacle stops the ship making progress along the route for 12 seconds, it releases the helm rather than fighting. There is no tacking, no obstacle avoidance, no docking and no pathfinding.
+- If the game ever changes the ship-control methods this relies on, all three hooks are removed together and the feature simply stays off for that session, leaving vanilla sailing untouched.
+- **Live multiplayer testing of sailing Route Follow is still outstanding.** The automated coverage is deterministic and game-free; raft/karve/longship/Drakkar, player-hosted and dedicated-server runs remain owner-verified and are not claimed here.
+- Marking a route as a sailing route is stored per route. A route nobody marked keeps exactly the file format it already had, so existing routes and shared route files are unchanged.
 - Adds walking Route Follow as an explicit opt-in toggle in the Routes panel, OFF by default. Select a live route, close the map, stand near it, and press Q to begin vanilla autorun with bounded yaw steering.
 - Preserves vanilla `Player.SetControls` ownership: while following, the adapter feeds the held autorun signal so vanilla refreshes movement from the bounded look direction. A second Q press or any cancellation feeds false and clears autorun.
 - Cancels on manual movement/look, route edit/delete/archive/replacement, map or world lifecycle changes, death, teleport, ineligible movement, off-route travel, route end, or a 2.5-second no-route-progress timeout.

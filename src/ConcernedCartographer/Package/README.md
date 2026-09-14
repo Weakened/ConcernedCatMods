@@ -1,6 +1,6 @@
 # Concerned Cartographer V1.1
 
-**V1.1.0 by The Concerned Cat adds opt-in walking Route Follow while preserving vanilla movement and safety boundaries, audited against Valheim 1.0.12.**
+**V1.1.0 by The Concerned Cat adds opt-in walking and sailing Route Follow while preserving vanilla movement, physics and safety boundaries, audited against Valheim 1.0.12.**
 
 Concerned Cartographer turns Valheim’s map into a living atlas.
 
@@ -14,6 +14,7 @@ The roads your Vikings build can map themselves. Existing pins can become durabl
 * The Atlas Drawer provides search, filtering, clustering, and saved views.
 * Freehand and waypoint routes can follow recorded roads.
 * Optional walking Route Follow can steer vanilla Q autorun along the selected route; it is OFF by default and manual input cancels immediately.
+* Optional sailing Route Follow can steer the vanilla rudder along a route you marked as a sailing route while you hold the helm; it is OFF by default, your sails stay manual, and any helm input cancels immediately.
 * Backups, restoration, migration, and sanitized support reports are built in.
 * Multiplayer sharing is deliberate: nothing is applied without review.
 * Fog of war is respected.
@@ -56,7 +57,11 @@ The roads your Vikings build can map themselves. Existing pins can become durabl
 
 ## Version 1.1 and support
 
-Version 1.1 adds optional walking Route Follow. Enable it in the Routes panel, select a live route, close the map, stand near the route, and press Q. A second Q press, manual movement/look, route changes, unsafe lifecycle states, leaving the route, reaching its end, or making no route progress for 2.5 seconds cancels it. Ships, carts, mounts, speed, stamina, collision, fog, and multiplayer authority are never controlled. Version 1.1 also carries forward the Valheim 1.0.7 HUD-message and high-resolution UI fixes from 1.0.2, verified against the current Valheim 1.0.12 build.
+Version 1.1 adds optional walking Route Follow. Enable it in the Routes panel, select a live route, close the map, stand near the route, and press Q. A second Q press, manual movement/look, route changes, unsafe lifecycle states, leaving the route, reaching its end, or making no route progress for 2.5 seconds cancels it. Carts, mounts, speed, stamina, collision, fog, and multiplayer authority are never controlled.
+
+Version 1.1 also adds optional sailing Route Follow, separately opt-in and also OFF by default. Mark a route as a sailing route (Routes panel **Sailing** button, or `cc_routes sailing on`), enable `Routes/SailingAutoFollowEnabled`, take the helm with that route selected, and press Q. Cartographer feeds only the bounded rudder input a player supplies by holding the helm key. Your sails stay manual, and wind, physics, speed, collision, damage, ownership and network authority are untouched. Any helm input, any sail step, jump/attack/secondary/dodge, a second Q, leaving the helm, route changes, going too far off route, reaching the end, or 12 seconds without progress cancels it. There is no tacking, obstacle avoidance, docking or pathfinding. Live multiplayer verification of sailing Route Follow is still outstanding.
+
+Version 1.1 also carries forward the Valheim 1.0.7 HUD-message and high-resolution UI fixes from 1.0.2, verified against the current Valheim 1.0.12 build.
 
 Development and compatibility support continue beyond v1.0. Confirmed crashes, data-loss risks, installation failures, stuck input, duplicated pins, and multiplayer consistency problems receive the highest priority.
 

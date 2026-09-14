@@ -355,10 +355,39 @@ so vanilla `SetControls` refreshes movement from the bounded look direction;
 vanilla still owns autorun and movement. The adapter snapshots the route id, revision, and store change stamp
 and cancels on manual input, Q, route mutation/lifecycle changes, ineligible
 movement, off-route, endpoint, or a no-route-progress timeout. Boats, carts, mounts, and
-doodad controllers fail closed. #242 owns the ship-control compatibility spike
-and #243 owns any future sailing adapter. Every runtime adapter must preserve
-vanilla physics, wind, speed, stamina, collision, and network authority, with
-manual input taking immediate priority.
+doodad controllers fail closed.
+
+The #243 sailing adapter is the second runtime consumer of the same kernel.
+It is opt-in, default OFF, and additionally requires a route explicitly
+marked as a sailing route (`AtlasRoute.Travel == RouteTravel.Sea`), so a
+land route can never engage it. It binds THREE Valheim 1.0.12 seams as one
+transaction — a read-only `Player.SetControls` prefix, the
+`ShipControlls.ApplyControlls` steering prefix, and a
+`Player.StopDoodadControl` lifecycle prefix — because installed
+`Player.SetControls` dispatches doodad controls BEFORE its own helm-exit
+check; an `ApplyControlls`-only fallback is forbidden and a partial install
+rolls back and leaves the feature off for the session.
+
+The raw observer decides each frame and leaves a ONE-SHOT, call-scoped
+authorisation that only the steering prefix in that same call may consume,
+so a synthetic write can never outlive the control call that authorised it.
+The steering prefix writes `moveDir.x` and nothing else. That axis is
+vanilla's rudder-RATE input, not an absolute angle: vanilla integrates it
+into `m_rudderValue` on its own fixed timestep and keeps its own 0.2 s
+Rudder RPC cadence. Sail power stays entirely manual — `moveDir.z`, which
+vanilla turns into Forward/Backward sail steps, is passed through
+untouched, and the adapter never calls `Forward`, `Backward`, `Rudder`,
+`SetOwner`, or any force/transform/wind API.
+
+Walking and sailing are structurally mutually exclusive: walking requires
+`GetDoodadController() is null`, sailing requires the exact live
+`ShipControlls` instance plus `HaveValidUser()`/`GetUser()` matching the
+local player. Sailing additionally refuses to start while walking follow is
+active, and treats walking activity as a lifecycle cancel.
+
+Every runtime adapter must preserve vanilla physics, wind, speed, stamina,
+collision, and network authority, with manual input taking immediate
+priority.
 
 ## Lifecycle
 

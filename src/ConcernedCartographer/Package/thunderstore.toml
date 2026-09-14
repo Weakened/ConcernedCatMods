@@ -5,7 +5,7 @@ schemaVersion = "0.0.1"
 namespace = "TheConcernedCat"
 name = "ConcernedCartographer"
 versionNumber = "1.1.0"
-description = "v1.1: The living atlas adds opt-in walking Route Follow to durable roads, editable markers, routes, search, and sharing."
+description = "v1.1: The living atlas adds opt-in walking and sailing Route Follow to durable roads, markers, routes, search, and sharing."
 websiteUrl = "https://github.com/Weakened/ConcernedCatMods"
 containsNsfwContent = false
 
