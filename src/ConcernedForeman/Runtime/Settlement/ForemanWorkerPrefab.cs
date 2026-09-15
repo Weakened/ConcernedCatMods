@@ -137,11 +137,24 @@ internal static class ForemanWorkerPrefab
     }
 
     /// <summary>Forgets the built prefab. Called on world unload so a second
-    /// world in the same session rebuilds against its own scene.</summary>
+    /// world in the same session rebuilds against its own scene.
+    ///
+    /// It must <b>unregister</b>, not merely drop the reference. Jotunn's
+    /// prefab manager keeps custom prefabs across world loads, and
+    /// <c>CreateClonedPrefab</c> refuses a name that already exists by logging
+    /// and returning null. Nulling the field alone would therefore make every
+    /// world after the first fail to build a worker, reporting the misleading
+    /// "could not clone" until the game was restarted.</summary>
     internal static void Reset()
     {
         _prefab = null;
         LastFailure = null;
+
+        PrefabManager prefabs = PrefabManager.Instance;
+        if (prefabs != null && prefabs.GetPrefab(PrefabName) != null)
+        {
+            prefabs.DestroyPrefab(PrefabName);
+        }
     }
 
     private static string? DescribeMissingComponents(GameObject clone)

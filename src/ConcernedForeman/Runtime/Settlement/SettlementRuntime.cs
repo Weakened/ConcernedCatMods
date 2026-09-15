@@ -90,7 +90,8 @@ internal sealed class SettlementRuntime
             : "active";
 
         return
-            $"Settlement runtime: on. Authority: {authority}. " +
+            $"Settlement runtime: {(_settings.SettlementRuntimeEnabled.Value ? "on" : "off")}. " +
+            $"Authority: {authority}. " +
             $"Worker at {Format(_worker.transform.position)}, goal {goalText}. " +
             $"Path requests so far: {_worker.TotalPathRequests}." +
             (_worker.IsFaulted ? " WORKER FAULTED and is inert; see the log." : string.Empty);
@@ -145,6 +146,12 @@ internal sealed class SettlementRuntime
         worker.AuthorityGate = HasAuthority;
         worker.UseSitePolicy(_sitePolicy);
         worker.OnDeferred = reason => _log($"Worker deferred: {Describe(reason)}");
+
+        // A latched fault is an error, not verbose diagnostics. It is reported
+        // unconditionally: with DebugLogging off (the default) a faulted worker
+        // would otherwise go permanently inert with no trace anywhere except a
+        // status command nobody has a reason to run.
+        worker.ErrorLog = _log;
         if (_settings.DebugLogging.Value)
         {
             worker.DebugLog = _log;
@@ -168,8 +175,15 @@ internal sealed class SettlementRuntime
             return "Usage: cf_worker goto <x> <z>.";
         }
 
+        // Probe from a fixed world ceiling, not from the worker's own height.
+        // Sampling at workerY + 50 puts the origin *below* the terrain whenever
+        // the target is more than fifty metres uphill, so the height resolves to
+        // the wrong surface — and that wrong altitude is then what the hazard
+        // check measures water depth against.
+        const float ProbeCeiling = 5000f;
         float y = _worker.transform.position.y;
-        if (ZoneSystem.instance != null && ZoneSystem.instance.GetSolidHeight(new Vector3(x, y + 50f, z), out float ground))
+        if (ZoneSystem.instance != null
+            && ZoneSystem.instance.GetSolidHeight(new Vector3(x, ProbeCeiling, z), out float ground))
         {
             y = ground;
         }
@@ -196,12 +210,23 @@ internal sealed class SettlementRuntime
             return "No worker.";
         }
 
+        // Stop it before anything else. If the destroy below cannot happen we
+        // are about to drop our only handle on this creature, and a worker left
+        // walking with no handle is strictly worse than one standing still.
+        _worker.ClearGoal();
+
         ZNetView view = _worker.GetComponent<ZNetView>();
-        if (view != null && view.IsValid() && view.IsOwner())
+        if (view == null || !view.IsValid() || !view.IsOwner())
         {
-            view.Destroy();
+            // Keep the reference. Reporting success here and nulling it would
+            // orphan a live creature AND let the next spawn create a second
+            // one, breaking the one-worker-at-a-time invariant this spike
+            // relies on.
+            return "Could not despawn: this peer does not own that worker. " +
+                "Its order has been cleared, so it will stand still.";
         }
 
+        view.Destroy();
         _worker = null;
         return "Worker despawned.";
     }

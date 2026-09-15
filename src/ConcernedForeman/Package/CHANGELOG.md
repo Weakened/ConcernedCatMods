@@ -3,7 +3,7 @@
 All notable changes to Concerned Foreman are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
-## [0.1.0] - unreleased
+## 0.1.0 - The worker actor spike (unreleased)
 
 The first code this product has ever had. **Not published, and not a
 playable release**: it is the worker actor spike from CF-SET-002 (#279),

@@ -75,6 +75,12 @@ internal sealed class ForemanWorkerAI : BaseAI
     /// <summary>Verbose per-decision logging. Off unless the player asked.</summary>
     internal Action<string>? DebugLog { get; set; }
 
+    /// <summary>Errors, reported whatever the diagnostic settings say. A latched
+    /// fault makes this worker permanently inert, which is exactly the thing a
+    /// player needs told — routing it through <see cref="DebugLog"/> would hide
+    /// it behind an option that is off by default.</summary>
+    internal Action<string>? ErrorLog { get; set; }
+
     /// <summary>Told once, when the worker gives up on a goal.</summary>
     internal Action<WorkerDeferralReason>? OnDeferred { get; set; }
 
@@ -151,7 +157,7 @@ internal sealed class ForemanWorkerAI : BaseAI
             if (!_loggedFault)
             {
                 _loggedFault = true;
-                DebugLog?.Invoke(
+                ErrorLog?.Invoke(
                     "Worker faulted and is now inert; it will not act again this session. " + ex);
             }
 
@@ -250,7 +256,10 @@ internal sealed class ForemanWorkerAI : BaseAI
             return;
         }
 
-        _ticksUntilSiteCheck = SiteCheckIntervalTicks;
+        // Re-armed one short: this tick is the checking tick, so counting a
+        // further full interval would make the real period 11 ticks, not the
+        // documented 10.
+        _ticksUntilSiteCheck = SiteCheckIntervalTicks - 1;
         _goalInLoadedGround = _policy.IsInLoadedGround(goal);
         _goalIsHazardous = _policy.IsHazardous(goal);
     }

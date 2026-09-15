@@ -348,6 +348,34 @@ public sealed class WorkerMovementPlannerTests
         Assert.Equal(3, actions.Count(a => a.Kind == WorkerActionKind.RequestPath));
     }
 
+    [Fact]
+    public void APathThatKeepsSucceedingAndGoingStale_StaysRateLimited()
+    {
+        // Review finding: a success restores the attempt allowance, which is
+        // deliberate — a long walk re-plans. But if it also cleared the retry
+        // backoff, this cycle (found, then gone again next tick) would cost one
+        // request every single tick forever, with no ceiling and no spacing.
+        // The allowance resets; the backoff must not.
+        WorkerMovementPlanner planner = new(new WorkerMovementBudget(
+            maxPathRequestsPerTick: 1,
+            maxPathAttemptsPerGoal: 5,
+            retryBackoffTicks: 10,
+            maxPlanningDistance: 64f));
+        planner.AssignGoal(WorkerGoal.At(new SitePoint(30f, 0f, 0f)));
+
+        // The pathfinder always succeeds; the observation always says there is
+        // no usable path. 1000 ticks at 20 Hz is fifty seconds of it.
+        List<WorkerAction> actions = Run(
+            planner, WorkerObservation.Ready(Origin), ticks: 1000, pathFound: true);
+
+        int requests = actions.Count(a => a.Kind == WorkerActionKind.RequestPath);
+
+        // One immediately, then one per 10-tick backoff: 100, not 1000.
+        Assert.Equal(100, requests);
+        Assert.Equal(100, planner.TotalPathRequests);
+        Assert.False(planner.IsDeferred);
+    }
+
     // ---- assignment clears the past ----------------------------------------
 
     [Fact]

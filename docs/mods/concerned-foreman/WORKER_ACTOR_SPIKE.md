@@ -231,9 +231,20 @@ only thing permitted to authorise a path request.
 | Bound | Default | Meaning |
 |---|---|---|
 | `MaxPathRequestsPerTick` | 1 | ≤ 20 requests/second/worker |
-| `MaxPathAttemptsPerGoal` | 5 | then the goal is **deferred**, permanently |
-| `RetryBackoffTicks` | 10 | 0.5 s between attempts, so the allowance is not burned in 5 consecutive ticks |
+| `MaxPathAttemptsPerGoal` | 5 | **consecutive unsuccessful** requests, then the goal is **deferred**, permanently |
+| `RetryBackoffTicks` | 10 | 0.5 s between requests, and it is **not** cleared by a success |
 | `MaxPlanningDistance` | 64 m | checked **before** an attempt is spent, because distance is free to measure |
+
+**The failure bound is not a lifetime cap, and saying so would be wrong.** A
+successful request restores the attempt allowance, because a long walk
+legitimately re-plans and a lifetime cap would defer a perfectly reachable goal
+partway there. So a goal's cost is bounded in **rate**, not in total: after the
+first request, at most one per `RetryBackoffTicks`, whatever happens. The
+backoff surviving a success is what makes that true — an earlier draft cleared
+it, which would have let a path that is found and immediately goes stale cost one
+request every tick indefinitely. Pinned by
+`APathThatKeepsSucceedingAndGoingStale_StaysRateLimited`: 1 000 ticks of exactly
+that cycle cost **100** requests, not 1 000.
 
 The site checks are budgeted too, and for the same reason. The hazard check
 casts a ray and walks the burning-area list, so running it at the full 20 Hz
@@ -303,12 +314,13 @@ missing prefab, or one lacking `ZNetView`/`Character`/`ZSyncAnimation`/
 
 | Claim | How |
 |---|---|
-| The budget is never exceeded, per tick or per goal | 35 tests in `WorkerMovementPlannerTests` |
+| The budget is never exceeded, per tick or per consecutive-failure streak | 36 tests in `WorkerMovementPlannerTests` |
 | An unreachable goal defers with a reason and then costs nothing for 5 000 further ticks | `UnreachableGoal_DefersWithAReason_AndNeverSpinsAgain` |
+| A path that repeatedly succeeds and goes stale stays rate-limited, not once-per-tick | `APathThatKeepsSucceedingAndGoingStale_StaysRateLimited` |
 | With no order, 2 000 ticks produce zero path requests and zero actions | `WithNoGoal_DoesNothing_ForeverAndFree` |
 | Missing authority / unloaded ground / hazard refuse before spending anything | `RefusalsHappenBeforeAnyPathRequestIsSpent` |
 | A lost adapter report cannot cause an infinite ask | `ALostAdapterReport_StillSpendsTheAttempt_…` |
-| Suites and validator green | 1023 CC + 647 CT + 64 settlement, `Repository validation passed.` |
+| Suites and validator green | 1023 CC + 647 CT + 65 settlement, `Repository validation passed.` |
 
 ### Proved by reading the shipped binary
 

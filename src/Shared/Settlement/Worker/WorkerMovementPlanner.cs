@@ -14,10 +14,19 @@ namespace TheConcernedCat.Settlement.Worker;
 /// <b>The two properties everything else rests on.</b>
 ///
 /// <list type="number">
-/// <item><b>Bounded.</b> A goal can cost at most
-/// <see cref="WorkerMovementBudget.MaxPathAttemptsPerGoal"/> path requests, ever,
-/// and at most <see cref="WorkerMovementBudget.MaxPathRequestsPerTick"/> of them
-/// in any one tick.</item>
+/// <item><b>Rate-bounded.</b> At most
+/// <see cref="WorkerMovementBudget.MaxPathRequestsPerTick"/> requests in any one
+/// tick, and after the first request for a goal, at most one per
+/// <see cref="WorkerMovementBudget.RetryBackoffTicks"/> ticks — including across
+/// a success, which is why <see cref="ReportPathOutcome"/> does not clear the
+/// backoff.</item>
+/// <item><b>Failure-bounded.</b> At most
+/// <see cref="WorkerMovementBudget.MaxPathAttemptsPerGoal"/> <i>consecutive
+/// unsuccessful</i> requests, after which the goal is deferred.
+/// <b>Deliberately not a lifetime cap.</b> A successful request restores the
+/// allowance, because a long walk legitimately re-plans and a lifetime cap would
+/// defer a perfectly reachable goal partway there. The cost of a goal is
+/// therefore bounded in <i>rate</i>, not in total.</item>
 /// <item><b>Terminal.</b> Once a goal is deferred, no later tick can spend
 /// another request on it. Only assigning a new goal clears the deferral, and
 /// only a person or a higher layer does that.</item>
@@ -214,13 +223,21 @@ internal sealed class WorkerMovementPlanner
     /// path that later goes stale — a tree falls, a piece is placed — deserves
     /// the full allowance again rather than the remainder of the last one. A
     /// failure records nothing, because <see cref="Decide"/> already charged the
-    /// attempt.</summary>
+    /// attempt.
+    ///
+    /// <b>It deliberately does not clear the retry backoff.</b> Resetting the
+    /// allowance is what makes a long walk possible; resetting the backoff too
+    /// would remove the only thing rate-limiting a goal that alternates between
+    /// finding a path and losing it, and that pattern would then cost one
+    /// request every tick for as long as it lasted. Keeping the backoff means
+    /// the worst case of that cycle is one request per
+    /// <see cref="WorkerMovementBudget.RetryBackoffTicks"/> ticks, forever
+    /// rather than never — which is a rate a settlement can afford.</summary>
     public void ReportPathOutcome(bool pathFound)
     {
         if (pathFound)
         {
             _attemptsForCurrentGoal = 0;
-            _hasRequestedForThisGoal = false;
         }
     }
 
