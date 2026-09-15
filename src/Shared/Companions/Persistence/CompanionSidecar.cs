@@ -207,14 +207,18 @@ internal sealed class CompanionSidecar
         HasCarriedUnlockRow = true;
     }
 
-    internal void Restore(CompanionQuestRecord record)
+    /// <summary>Adds a record read from disk. Returns false when a record for
+    /// that quest already exists, so the codec can carry the loser rather than
+    /// discard it.</summary>
+    internal bool Restore(CompanionQuestRecord record)
     {
         if (_quests.ContainsKey(record.QuestId.Value))
         {
-            return;
+            return false;
         }
 
         _quests.Add(record.QuestId.Value, record);
         _order.Add(record.QuestId.Value);
+        return true;
     }
 }

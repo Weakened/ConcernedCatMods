@@ -73,6 +73,16 @@ The case that made this necessary: a corrupt sidecar is quarantined, so the
 *next* session finds no file at all and would see a brand new player. The
 session that saw the corruption is the only one that can record what it knew.
 
+Access is granted **per scope, not per quest**. A product may ship more than one
+companion, and opening a session for a second, untouched quest must not conclude
+that a player who finished the first one is new. Presentation stays per quest, so
+the second companion is still introduced to someone who already has the tools.
+
+The tools-only preference **unlocks without finishing the quest**. Turning it on
+and back off in one session restores the story, which is the same outcome as
+having had it on when the session opened. Finishing the introduction by skipping
+it is a separate, explicit action from the story UI.
+
 ### 3. Progress reaches disk before its presentation is removed
 
 `CompanionProgress.TryRetirePresentation` refuses while anything is unsaved. A
@@ -88,8 +98,18 @@ Sidecars record their schema version and their own scope. A file from a newer
 build is read-only; a file belonging to another character or world is refused
 rather than merged or overwritten; unknown rows and unknown trailing fields are
 re-emitted verbatim. Running an older build once cannot erase what a newer one
-recorded. Malformed rows are carried too, but are *not* treated as evidence of
-anything - garbage must not earn an unlock.
+recorded.
+
+Carrying an unknown row is not sufficient on its own. A **quest stage** from a
+newer build makes the whole file read-only, because otherwise this build would
+write its own row for that quest *before* the carried one, and the newer build
+would read the older row first and adopt it — losing exactly the progress the
+carry was meant to protect. A duplicate quest row is carried rather than dropped;
+it is the one place the codec could destroy data instead of preserving it.
+
+An unreadable file that could not be moved aside also makes the sidecar
+read-only. The notice promises the old file was kept, so the next save must not
+be able to overwrite it.
 
 ## Storage
 

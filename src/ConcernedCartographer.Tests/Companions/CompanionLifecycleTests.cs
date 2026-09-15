@@ -216,7 +216,13 @@ public sealed class CompanionLifecycleTests : IDisposable
         Assert.True(progress.IsUnlocked);
         Assert.False(progress.ShouldPresentCollectible);
 
-        progress.SetToolsOnlyPreference(true);
+        // The preference alone unlocks and hides the collectible but leaves the
+        // quest open, so turning it off restores the story. Finishing the
+        // introduction is the separate, explicit skip below.
+        Assert.Equal(QuestState.Unstarted, progress.QuestState);
+        Assert.False(progress.HasCompanion);
+
+        progress.Advance(QuestTransition.Skip);
         Assert.Equal(QuestState.Skipped, progress.QuestState);
         Assert.True(progress.CanReplayStory);
         Assert.False(progress.HasCompanion);
@@ -227,7 +233,7 @@ public sealed class CompanionLifecycleTests : IDisposable
     {
         CompanionScope scope = Scope();
         CompanionProgress progress = Open(scope);
-        progress.SetToolsOnlyPreference(true);
+        progress.Advance(QuestTransition.Skip);
 
         Assert.True(progress.CanReplayStory);
         Assert.Equal(QuestTransitionOutcome.Advanced, progress.Advance(QuestTransition.Welcome));

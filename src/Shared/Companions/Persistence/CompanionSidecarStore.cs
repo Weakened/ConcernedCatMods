@@ -123,13 +123,31 @@ internal sealed class CompanionSidecarStore
                 // Move it aside so a fresh file can be written, and tell the
                 // player exactly where the old one went.
                 string? quarantine = TryQuarantine(path);
-                string notice = quarantine == null
-                    ? "Your companion data could not be read and could not be moved aside. " +
-                      "Your existing features stay available; nothing was deleted."
-                    : "Your companion data could not be read. The old file was kept as \"" +
-                      Path.GetFileName(quarantine) + "\" and a fresh one will be written. " +
-                      "Your existing features stay available.";
-                return new LoadReport(parsed.Sidecar, parsed.Outcome, parsed.SkippedRows, notice, quarantine);
+                if (quarantine == null)
+                {
+                    // The unreadable file is still sitting at the live path.
+                    // Leaving the sidecar writable here would let the very next
+                    // save overwrite the file this notice just promised was
+                    // kept - so it does not stay writable.
+                    parsed.Sidecar.MarkReadOnly();
+                    return new LoadReport(
+                        parsed.Sidecar,
+                        parsed.Outcome,
+                        parsed.SkippedRows,
+                        "Your companion data could not be read and could not be moved aside, so it " +
+                        "was left exactly as it is. Your existing features stay available and " +
+                        "nothing was deleted.",
+                        null);
+                }
+
+                return new LoadReport(
+                    parsed.Sidecar,
+                    parsed.Outcome,
+                    parsed.SkippedRows,
+                    "Your companion data could not be read. The old file was kept as \"" +
+                    Path.GetFileName(quarantine) + "\" and a fresh one will be written. " +
+                    "Your existing features stay available.",
+                    quarantine);
             }
 
             case SidecarLoadOutcome.ScopeMismatch:
@@ -208,19 +226,40 @@ internal sealed class CompanionSidecarStore
                     writer.WriteLine(line);
                 }
             }
+        }
+        catch (Exception exception)
+        {
+            // The write phase failed, so the temporary file is incomplete and
+            // the live file was never touched. Discarding the temporary file is
+            // safe here and only here.
+            TryDelete(temporaryPath);
+            return new SaveReport(false, DescribeSaveFailure(exception));
+        }
 
+        try
+        {
             Commit(temporaryPath, path);
             sidecar.MarkClean();
             return new SaveReport(true, null);
         }
         catch (Exception exception)
         {
-            TryDelete(temporaryPath);
+            // The commit phase failed. The temporary file holds a COMPLETE copy
+            // of the new data and the live file may be mid-replace, so it is
+            // deliberately left on disk: deleting it here would throw away the
+            // only intact copy. It is named in the notice so it can be
+            // recovered by hand, and the next successful save overwrites it.
             return new SaveReport(
                 false,
-                "Could not save companion progress (" + Describe(exception) + "). " +
-                "Your existing features stay available and will be saved again on the next change.");
+                DescribeSaveFailure(exception) + " A complete copy was left as \"" +
+                Path.GetFileName(temporaryPath) + "\".");
         }
+    }
+
+    private static string DescribeSaveFailure(Exception exception)
+    {
+        return "Could not save companion progress (" + Describe(exception) + "). " +
+            "Your existing features stay available and will be saved again on the next change.";
     }
 
     /// <summary>Swaps the finished temporary file into place. The live file is
@@ -249,6 +288,11 @@ internal sealed class CompanionSidecarStore
         }
     }
 
+    /// <summary>Last-resort commit for filesystems where <see cref="File.Replace"/>
+    /// does not work. This one is genuinely not atomic - a crash part way
+    /// through leaves a truncated live file - so it runs only when the atomic
+    /// path is unavailable, and the temporary file is kept until the copy has
+    /// completed so a failure still leaves one intact copy on disk.</summary>
     private static void CopyOver(string temporaryPath, string path)
     {
         File.Copy(temporaryPath, path, overwrite: true);

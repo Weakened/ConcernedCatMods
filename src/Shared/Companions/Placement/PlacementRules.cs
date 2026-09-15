@@ -23,10 +23,21 @@ internal sealed class PlacementRules
         float maximumHeightDelta = DefaultMaximumHeightDelta,
         float anchorMoveTolerance = DefaultAnchorMoveTolerance)
     {
-        if (minimumRadius < 0f)
-        {
-            throw new ArgumentOutOfRangeException(nameof(minimumRadius));
-        }
+        // Finiteness is checked first and explicitly. Every comparison below is
+        // false for NaN, so a NaN slipping through would not just survive
+        // validation - it would go on to make the planner's own range checks
+        // pass for every candidate, silently disabling the bounds this type
+        // exists to enforce.
+        RequireFinite(minimumRadius, nameof(minimumRadius));
+        RequireFinite(maximumRadius, nameof(maximumRadius));
+        RequireFinite(fireComfortRadius, nameof(fireComfortRadius));
+        RequireFinite(maximumHeightDelta, nameof(maximumHeightDelta));
+        RequireFinite(anchorMoveTolerance, nameof(anchorMoveTolerance));
+
+        RequireNotNegative(minimumRadius, nameof(minimumRadius));
+        RequireNotNegative(fireComfortRadius, nameof(fireComfortRadius));
+        RequireNotNegative(maximumHeightDelta, nameof(maximumHeightDelta));
+        RequireNotNegative(anchorMoveTolerance, nameof(anchorMoveTolerance));
 
         if (maximumRadius < minimumRadius)
         {
@@ -60,4 +71,22 @@ internal sealed class PlacementRules
     public float AnchorMoveTolerance { get; }
 
     public static PlacementRules Default { get; } = new PlacementRules();
+
+    private static void RequireFinite(float value, string parameterName)
+    {
+        if (float.IsNaN(value) || float.IsInfinity(value))
+        {
+            throw new ArgumentOutOfRangeException(
+                parameterName, "Placement bounds must be finite numbers.");
+        }
+    }
+
+    private static void RequireNotNegative(float value, string parameterName)
+    {
+        if (value < 0f)
+        {
+            throw new ArgumentOutOfRangeException(
+                parameterName, "Placement bounds cannot be negative.");
+        }
+    }
 }

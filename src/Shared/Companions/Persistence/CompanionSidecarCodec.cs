@@ -158,8 +158,13 @@ internal static class CompanionSidecarCodec
 
             if (fields.Length >= 4 && string.Equals(fields[0], ScopeRow, StringComparison.Ordinal))
             {
+                // EVERY scope row must match, not just the last one. Appending
+                // a matching row to a file that belongs to somebody else must
+                // not make this build adopt it.
+                scopeMatches = scopeSeen
+                    ? scopeMatches && ScopeMatches(fields, expected)
+                    : ScopeMatches(fields, expected);
                 scopeSeen = true;
-                scopeMatches = ScopeMatches(fields, expected);
                 continue;
             }
 
@@ -224,6 +229,15 @@ internal static class CompanionSidecarCodec
             QuestRowOutcome rowOutcome = TryParseQuest(fields, out CompanionQuestRecord? record);
             if (rowOutcome == QuestRowOutcome.ForwardStage)
             {
+                // A quest stage only a newer build defines. Carrying the row is
+                // not enough on its own: this build would happily create its
+                // own record for the same quest id, write it BEFORE the carried
+                // row, and the newer build would then read the older row first
+                // and adopt it - losing the progress the carried row was meant
+                // to protect. The whole file goes read-only instead, which is
+                // the same answer an unsupported schema gets and for the same
+                // reason.
+                sidecar.MarkReadOnly();
                 sidecar.AddCarriedLine(line, isForwardData: true);
                 continue;
             }
@@ -235,7 +249,14 @@ internal static class CompanionSidecarCodec
                 continue;
             }
 
-            sidecar.Restore(record!);
+            if (!sidecar.Restore(record!))
+            {
+                // A second row for a quest already restored. Never drop it:
+                // this is the one place the codec could destroy data rather
+                // than carry it.
+                skipped++;
+                sidecar.AddCarriedLine(line, isForwardData: false);
+            }
         }
 
         SidecarLoadOutcome outcome = skipped > 0
