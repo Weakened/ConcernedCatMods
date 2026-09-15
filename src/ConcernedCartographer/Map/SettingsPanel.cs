@@ -12,24 +12,40 @@ namespace TheConcernedCat.ConcernedCartographer.Map;
 /// confirmation), the sanitized support bundle, and the road repair
 /// tools as an Advanced section (each acts on the recorded road nearest
 /// your character, exactly like `cc_roads`). Human support routing is
-/// shown here; the console remains the scripting surface.</summary>
+/// shown here; the console remains the scripting surface.
+///
+/// CC-NPC-003 adds the Companions section at the top. It lives on this panel
+/// specifically because this panel is never gated: the way to say "just give
+/// me the tools" has to be reachable by somebody who has not met Hulgi and
+/// cannot find the compass, or the gate would have no exit.</summary>
 internal sealed class SettingsPanel : CcSidePanel
 {
     private readonly Func<string[], string> _executeAtlas;
     private readonly Func<string[], string> _executeRoads;
+    private readonly Func<string[], string> _executeCompanion;
     private readonly Action _openPrivacy;
     private Text? _output;
     private bool _restoreArmed;
+    private Toggle? _toolsOnlyToggle;
+    private Toggle? _showCompanionToggle;
+    private readonly Func<bool> _toolsOnly;
+    private readonly Func<bool> _showCompanion;
 
     public SettingsPanel(
         ManualLogSource log,
         Func<string[], string> executeAtlas,
         Func<string[], string> executeRoads,
+        Func<string[], string> executeCompanion,
+        Func<bool> toolsOnly,
+        Func<bool> showCompanion,
         Action openPrivacy)
-        : base(log, "settings.title", 384f, 620f)
+        : base(log, "settings.title", 384f, 720f)
     {
         _executeAtlas = executeAtlas;
         _executeRoads = executeRoads;
+        _executeCompanion = executeCompanion;
+        _toolsOnly = toolsOnly;
+        _showCompanion = showCompanion;
         _openPrivacy = openPrivacy;
     }
 
@@ -37,6 +53,29 @@ internal sealed class SettingsPanel : CcSidePanel
     {
         float left = -(Width - 44f) / 2f;
         float half = (Width - 44f) / 2f;
+
+        AddBody(gui, font, "Companions", 14, headerColor, ref y, 22f);
+        AddBody(
+            gui, font,
+            "Hulgi introduces the map tools. Tools-only skips the story and unlocks them straight " +
+            "away — and once unlocked, nothing here can lock them again.",
+            11, new Color(1f, 1f, 1f, 0.72f), ref y, 34f);
+
+        _toolsOnlyToggle = AddToggle(
+            gui, font, headerColor, "Tools-only (skip the story)", left + 12f, y,
+            value => Report(_executeCompanion(new[] { "toolsonly", value ? "on" : "off" })));
+        y -= 30f;
+
+        _showCompanionToggle = AddToggle(
+            gui, font, headerColor, "Show Hulgi once he joins", left + 12f, y,
+            value => Report(_executeCompanion(new[] { "show", value ? "on" : "off" })));
+        y -= 32f;
+
+        AddButton(gui, "Replay introduction", left + (half * 0.5f), y, half - 4f, 28f,
+            () => Report(_executeCompanion(new[] { "story" })));
+        AddButton(gui, "Companion status", left + (half * 1.5f), y, half - 4f, 28f,
+            () => Report(_executeCompanion(new[] { "status" })));
+        y -= 40f;
 
         AddButton(gui, "Privacy & crash reports…", 0f, y, Width - 44f, 30f, _openPrivacy);
         y -= 38f;
@@ -124,6 +163,19 @@ internal sealed class SettingsPanel : CcSidePanel
     protected override void OnShown()
     {
         _restoreArmed = false;
+
+        // Mirror the live config into the toggles WITHOUT firing their change
+        // handlers: opening a panel is not the player changing a preference.
+        if (_toolsOnlyToggle != null)
+        {
+            SetToggleSilently(_toolsOnlyToggle, _toolsOnly());
+        }
+
+        if (_showCompanionToggle != null)
+        {
+            SetToggleSilently(_showCompanionToggle, _showCompanion());
+        }
+
         Report("Action results appear here.");
     }
 

@@ -120,6 +120,31 @@ internal static class AtlasStrings
         ["palette.place"] = "Double-click the map to place: {0}",
         ["palette.pick"] = "Pick a marker, then double-click the map.",
         ["hud.noMapNeedTable"] = "The atlas needs a cartography table nearby in a nomap world.",
+
+        // CC-NPC-003 — Concerned Companions. Hulgi's introduction is authored
+        // content and lives here with every other player-facing string, so a
+        // translator replaces the story in the same file as the buttons.
+        ["companion.hulgi.name"] = "Hulgi",
+        ["companion.compass.name"] = "Broken compass",
+        ["companion.compass.hoverVerb"] = "Examine",
+        ["companion.compass.examine"] = "Salt has clouded the glass. The needle will not move.",
+        ["companion.compass.prompt"] = "A broken compass lies here. Press [E] to examine it.",
+        ["companion.locked"] = "Concerned Cartographer's map tools are waiting on an introduction. Look for a broken compass near where you wake up — or turn on Companions → ToolsOnly in the config to use them straight away.",
+        ["companion.welcomed"] = "Hulgi has joined your camp. Concerned Cartographer is ready.",
+        ["companion.toolsOnlyChosen"] = "Just the tools, then. Concerned Cartographer is ready.",
+        ["companion.saveFailed"] = "That choice could not be saved, so nothing was changed. The compass is still there — try again.",
+        ["companion.storyUnavailable"] = "The introduction cannot be shown right now. The compass stays where it is; try again in a moment.",
+        ["companion.replayUnavailable"] = "There is no introduction to replay yet.",
+        ["story.page"] = "Page {0} of {1}",
+        ["story.back"] = "Back",
+        ["story.next"] = "Next",
+        ["story.close"] = "Close",
+        ["story.welcome"] = "Welcome aboard, Hulgi.",
+        ["story.toolsOnly"] = "Just the tools, thanks.",
+        ["story.hulgi.page1"] = "Salt has clouded the glass. The needle will not move.\n\nScratched into the back, in a steadier hand than the rest:\n\n\"Be careful, Hulgi!\"",
+        ["story.hulgi.page2"] = "\"I was not.\n\nTrusted the weather, then my luck. The sea had other ideas. Never made it home.\"",
+        ["story.hulgi.page3"] = "\"Someone there was waiting for me. Small fellow. Four paws. Very poor at forgiving a late supper.\"",
+        ["story.hulgi.page4"] = "\"I cannot change my last voyage. Perhaps I can help with yours.\n\nHulgi the cartographer, at your service.\"",
     };
 
     private static Dictionary<string, string> _overrides = new(StringComparer.Ordinal);

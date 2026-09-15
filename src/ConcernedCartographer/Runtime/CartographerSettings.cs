@@ -51,7 +51,10 @@ internal sealed class CartographerSettings
         ConfigEntry<int> acceptedPrivacyPolicyVersion,
         ConfigEntry<string> sentryDsn,
         ConfigEntry<bool> showVanillaMapControls,
-        ConfigEntry<bool> highPrecisionLargeMapRoads)
+        ConfigEntry<bool> highPrecisionLargeMapRoads,
+        ConfigEntry<bool> companionsEnabled,
+        ConfigEntry<bool> companionToolsOnly,
+        ConfigEntry<bool> companionVisible)
     {
         Enabled = enabled;
         CaptureConstructionActions = captureConstructionActions;
@@ -99,6 +102,9 @@ internal sealed class CartographerSettings
         SentryDsn = sentryDsn;
         ShowVanillaMapControls = showVanillaMapControls;
         HighPrecisionLargeMapRoads = highPrecisionLargeMapRoads;
+        CompanionsEnabled = companionsEnabled;
+        CompanionToolsOnly = companionToolsOnly;
+        CompanionVisible = companionVisible;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -147,6 +153,20 @@ internal sealed class CartographerSettings
     public ConfigEntry<string> SentryDsn { get; }
     public ConfigEntry<bool> ShowVanillaMapControls { get; }
     public ConfigEntry<bool> HighPrecisionLargeMapRoads { get; }
+
+    /// <summary>CC-NPC-003 master switch. Off behaves exactly like a build
+    /// without companions: no collectible, no introduction, and every map tool
+    /// available. It can never lock anything.</summary>
+    public ConfigEntry<bool> CompanionsEnabled { get; }
+
+    /// <summary>The player's standing answer to "story or just the tools".
+    /// Turning it on grants access immediately and the grant is written down, so
+    /// turning it back off later never takes the tools away again.</summary>
+    public ConfigEntry<bool> CompanionToolsOnly { get; }
+
+    /// <summary>Whether the companion is shown once recruited. Presentation
+    /// only - hiding him never touches access or progress.</summary>
+    public ConfigEntry<bool> CompanionVisible { get; }
 
     public static CartographerSettings Bind(ConfigFile config)
     {
@@ -255,6 +275,12 @@ internal sealed class CartographerSettings
             config.Bind("Map", "ShowVanillaMapControls", false,
                 "Show Valheim's own right-side map control rail (pin icon selectors, death/boss filter buttons, visible-to-others toggle) alongside the Concerned Cartographer toolbar. Default: the CC toolbar and Atlas System Markers replace it. Automatically treated as true when a known conflicting pin manager is installed."),
             config.Bind("Map", "HighPrecisionLargeMapRoads", true,
-                "Render roads on the LARGE map as sub-texel vector geometry that pans/zooms with the map (DEF-v1.0-006), instead of only the 2048-texel texture overlay (which stays for the minimap and as fallback)."));
+                "Render roads on the LARGE map as sub-texel vector geometry that pans/zooms with the map (DEF-v1.0-006), instead of only the 2048-texel texture overlay (which stays for the minimap and as fallback)."),
+            config.Bind("Companions", "CompanionsEnabled", true,
+                "Enable Concerned Companions: the Broken Compass, Hulgi's introduction and his presence at your home point. Turning this OFF removes all of it and leaves every map tool available - it never locks anything."),
+            config.Bind("Companions", "ToolsOnly", false,
+                "Skip the story and use the map tools straight away. Turning this ON grants access immediately and permanently; turning it back off restores the introduction without ever taking access away."),
+            config.Bind("Companions", "ShowCompanion", true,
+                "Show Hulgi once he has joined you. This is presentation only - hiding him never affects your tools, your progress or your data."));
     }
 }
