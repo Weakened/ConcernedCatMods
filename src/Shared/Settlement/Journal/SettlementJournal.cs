@@ -301,11 +301,12 @@ internal sealed class SettlementJournal
             // closed; CommitFinished was open both times. A guard per case is a
             // guard somebody forgets.
             //
-            // CarriesRequest is a POSITIVE list rather than "anything except
-            // OrderTransition", so a kind added later is classified on purpose
-            // instead of inheriting whichever answer the exclusion happened to
-            // give it. What keeps that honest is a TEST, not the compiler --
-            // see CarriesRequest itself.
+            // CarriesRequest is a positive list because it makes each existing
+            // kind's classification readable and enumerable. It does NOT change
+            // what an unclassified new kind answers -- that falls through to
+            // true, exactly as "anything except OrderTransition" would have.
+            // The only thing that forces a new kind to be classified on purpose
+            // is a test that enumerates the enum; see CarriesRequest itself.
             if (CarriesRequest(entry.Kind) && entry.Request.IsEmpty)
             {
                 continue;
