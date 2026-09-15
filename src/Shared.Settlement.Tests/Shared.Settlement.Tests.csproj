@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>TheConcernedCat.Shared.Settlement.Tests</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- CF-SET-001: the settlement layer is source-shared exactly like the
+         companion layer, and belongs to no product. It has no Unity, BepInEx
+         or Jötunn reference, which is what lets this project compile it
+         directly and exercise the whole recovery surface against a temporary
+         directory rather than reason about it.
+
+         This project deliberately references NO product. A product adopting
+         settlements adds one <Compile Include> line of its own; nothing here
+         creates a dependency in either direction. -->
+    <Compile Include="..\Shared\Settlement\**\*.cs" LinkBase="Settlement" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>
