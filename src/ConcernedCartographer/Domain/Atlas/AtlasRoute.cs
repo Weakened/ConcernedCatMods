@@ -19,6 +19,15 @@ internal enum RouteStyle
     Dotted = 3,
 }
 
+/// <summary>What a route is meant to be travelled by. Land is the default
+/// and the only value every existing route has; a route must be explicitly
+/// marked Sea before sailing Route Follow (#243) will ever engage on it.</summary>
+internal enum RouteTravel
+{
+    Land = 1,
+    Sea = 2,
+}
+
 /// <summary>Planning status of a route.</summary>
 internal enum RouteStatus
 {
@@ -46,6 +55,7 @@ internal sealed class AtlasRoute
     public RouteKind Kind { get; set; } = RouteKind.Freehand;
     public RouteStyle Style { get; set; } = RouteStyle.Solid;
     public RouteStatus Status { get; set; } = RouteStatus.Planned;
+    public RouteTravel Travel { get; set; } = RouteTravel.Land;
     public int? ColorArgb { get; set; }
     public string Notes { get; set; } = "";
     public AtlasScope Scope { get; set; } = AtlasScope.Private;
@@ -76,6 +86,7 @@ internal sealed class AtlasRoute
             Kind = Kind,
             Style = Style,
             Status = Status,
+            Travel = Travel,
             ColorArgb = ColorArgb,
             Notes = Notes,
             Scope = Scope,
@@ -99,6 +110,7 @@ internal sealed class AtlasRoute
         Kind = other.Kind;
         Style = other.Style;
         Status = other.Status;
+        Travel = other.Travel;
         ColorArgb = other.ColorArgb;
         Notes = other.Notes;
         Scope = other.Scope;

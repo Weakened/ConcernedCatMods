@@ -26,6 +26,8 @@ $globalManagers = Join-Path $environment.ValheimInstall "valheim_Data\globalgame
 $bepInExDll = Join-Path $environment.BepInExPath "core\BepInEx.dll"
 $jotunnDll = Join-Path $environment.BepInExPath "plugins\ValheimModding-Jotunn\Jotunn.dll"
 $contractPath = Join-Path $root "docs\mods\concerned-cartographer\SHIP_CONTROL_COMPATIBILITY.md"
+$adapterPath = Join-Path $root "src\ConcernedCartographer\Runtime\SailingRouteFollowAdapter.cs"
+$sailingControllerPath = Join-Path $root "src\ConcernedCartographer\Domain\Atlas\SailingRouteFollowController.cs"
 foreach ($required in @($gameAssembly, $resources, $globalManagers, $bepInExDll, $jotunnDll, $contractPath)) {
     if (-not (Test-Path $required -PathType Leaf)) {
         throw "Required audit input is missing: $required"
@@ -51,7 +53,7 @@ function Assert-SourceContains {
     )
 
     if (-not $Source.Contains($Needle, [StringComparison]::Ordinal)) {
-        throw "Valheim 1.0.7 ship contract moved: $Contract"
+        throw "Installed Valheim ship contract moved: $Contract"
     }
 }
 function Assert-SourceOrder {
@@ -65,7 +67,7 @@ function Assert-SourceOrder {
     foreach ($needle in $Needles) {
         $index = $Source.IndexOf($needle, $cursor, [StringComparison]::Ordinal)
         if ($index -lt 0) {
-            throw "Valheim 1.0.7 ship contract moved: $Contract (missing or out of order: $needle)"
+            throw "Installed Valheim ship contract moved: $Contract (missing or out of order: $needle)"
         }
 
         $cursor = $index + $needle.Length
@@ -214,6 +216,122 @@ $vessels = [ordered]@{
     longship = $displayRows["longship"]
     longship_ashlands = $displayRows["longship_ashlands"]
 }
+# --- #243: the shipped adapter must bind exactly the three audited seams --
+# Static source evidence only. It proves the hook set and the forbidden-call
+# set; it proves NOTHING about live Harmony ordering or multiplayer.
+function Get-CodeOnlySource {
+    # Comments explain the vanilla equations by name, so the forbidden-call
+    # scan must read CODE, not documentation. A naive cut at the first '//'
+    # would also amputate any line containing a URL inside a string literal,
+    # so quotes are tracked.
+    param([Parameter(Mandatory)][string]$Path)
+
+    $stripped = foreach ($line in (Get-Content -LiteralPath $Path)) {
+        $inString = $false
+        $cut = -1
+        for ($i = 0; $i -lt $line.Length; $i++) {
+            $ch = $line[$i]
+            if ($ch -eq '"' -and ($i -eq 0 -or $line[$i - 1] -ne '\')) {
+                $inString = -not $inString
+                continue
+            }
+
+            if (-not $inString -and $ch -eq '/' -and
+                $i + 1 -lt $line.Length -and $line[$i + 1] -eq '/') {
+                $cut = $i
+                break
+            }
+        }
+
+        if ($cut -ge 0) { $line.Substring(0, $cut) } else { $line }
+    }
+
+    return [regex]::Replace(($stripped -join " "), "\s+", " ").Trim()
+}
+
+$sailingHookEvidence = "not present"
+if ((Test-Path $adapterPath -PathType Leaf) -and (Test-Path $sailingControllerPath -PathType Leaf)) {
+    $adapterSource = Get-CodeOnlySource -Path $adapterPath
+    $controllerSource = Get-CodeOnlySource -Path $sailingControllerPath
+
+    foreach ($seam in @(
+        'nameof(Player.SetControls), setControlsSignature',
+        'nameof(ShipControlls.ApplyControlls), new[] { typeof(Vector3), typeof(Vector3), typeof(bool), typeof(bool), typeof(bool) }',
+        'nameof(Player.StopDoodadControl), Type.EmptyTypes'
+    )) {
+        Assert-SourceContains $adapterSource $seam "sailing adapter must resolve the audited seam: $seam"
+    }
+
+    $patchCount = ([regex]::Matches($adapterSource, 'installing\.Patch\(')).Count
+    if ($patchCount -ne 3) {
+        throw "Sailing adapter installs $patchCount Harmony patches; the audited contract requires exactly 3."
+    }
+
+    Assert-SourceContains $adapterSource 'installing?.UnpatchSelf();' `
+        "partial sailing hook installation must roll back"
+    Assert-SourceContains $adapterSource 'moveDir = new Vector3(rudderInput, raw.y, raw.z);' `
+        "steering may replace only the rudder axis"
+
+    # Count, do not merely find: a substring match would be satisfied by ONE
+    # prefix among three patches.
+    $prefixCount = ([regex]::Matches($adapterSource, 'prefix: new HarmonyMethod\(')).Count
+    if ($prefixCount -ne 3) {
+        throw "Sailing adapter declares $prefixCount prefixes; all 3 seams must be prefixes."
+    }
+
+    # A transpiler or finalizer is strictly worse than a postfix here, and a
+    # bool-returning prefix can skip the original whatever it returns.
+    foreach ($modifier in @('postfix:', 'transpiler:', 'finalizer:', '__result', '__state')) {
+        if ($adapterSource.Contains($modifier, [StringComparison]::Ordinal)) {
+            throw "Sailing adapter must never skip or replace an original method (found: $modifier)."
+        }
+    }
+    if ($adapterSource -match 'private static bool Before') {
+        throw "Sailing adapter prefixes must return void; a bool prefix can skip the original."
+    }
+
+    # No absolute rudder write, no force/transform/ownership/sail control.
+    # CartographerRuntime is included because that is where the sailing gates
+    # actually touch Ship/ShipControlls; auditing only the two dedicated files
+    # would leave the real integration point unscanned. Its sailing region is
+    # isolated first so unrelated runtime code cannot trip the scan.
+    $runtimePath = Join-Path $root "src\ConcernedCartographer\Runtime\CartographerRuntime.cs"
+    $runtimeSailing = ""
+    if (Test-Path $runtimePath -PathType Leaf) {
+        $runtimeLines = Get-Content -LiteralPath $runtimePath
+        $collecting = $false
+        $collected = foreach ($line in $runtimeLines) {
+            if ($line -match 'private (void|bool|SailingRouteFollowFrame) (HandleSailing|BuildSailingFrame|TryStartSailingRouteFollow|StopSailingRouteFollow|ReportSailingStopped)') {
+                $collecting = $true
+            } elseif ($line -match '^    private .*Walking' -or $line -match '^    public void Tick\(') {
+                $collecting = $false
+            }
+
+            if ($collecting) { $line }
+        }
+
+        $runtimeSailing = [regex]::Replace(($collected -join " "), "\s+", " ").Trim()
+        if ($runtimeSailing.Length -lt 500) {
+            throw "Could not isolate the sailing region of CartographerRuntime.cs for the forbidden-call scan."
+        }
+    }
+
+    foreach ($forbidden in @(
+        'm_rudderValue', 'Rudder(', 'SetOwner', 'ClaimOwnership', 'AddForce',
+        'velocity =', 'transform.position =', 'transform.rotation =',
+        '.Forward()', '.Backward()', 'InvokeRPC', 'GetWindDir', 'SetWind',
+        'm_body', 'AddTorque', 'MovePosition', 'MoveRotation'
+    )) {
+        foreach ($sailingSource in @($adapterSource, $controllerSource, $runtimeSailing)) {
+            if ($sailingSource.Contains($forbidden, [StringComparison]::Ordinal)) {
+                throw "Sailing Route Follow source contains a forbidden call: $forbidden"
+            }
+        }
+    }
+
+    $sailingHookEvidence = "3 prefixes (Player.SetControls, ShipControlls.ApplyControlls, Player.StopDoodadControl), transactional rollback, rudder-axis-only write, no forbidden call in the adapter, the controller, or the runtime sailing region"
+}
+
 $result = [ordered]@{
     result = "PASS"
     valheimVersion = $gameVersion
@@ -228,6 +346,7 @@ $result = [ordered]@{
     simulationAuthority = "Ship.ZNetView owner only"
     rudderTransport = "vanilla owner-targeted Rudder RPC; owner publishes ZDO rudder"
     sailPolicy = "read-only; vanilla speed state and EnvMan wind remain authoritative"
+    sailingAdapterStaticAudit = $sailingHookEvidence
     movementReplication = "vanilla ZSyncTransform owner position/rotation"
     gameAssembly = Get-FileIdentity $gameAssembly
     resources = Get-FileIdentity $resources

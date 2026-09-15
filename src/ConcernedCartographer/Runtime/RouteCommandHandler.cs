@@ -234,6 +234,30 @@ internal sealed class RouteCommandHandler
         return UiEdit(id, r => r.Status = next, $"status {next}");
     }
 
+    /// <summary>Marks the route as a sailing route, or back to land
+    /// (#243). Sailing Route Follow only ever engages on a Sea route, so
+    /// this mark is the explicit per-route opt-in.</summary>
+    public string UiToggleSailing(AtlasId id)
+    {
+        if (!_store.TryGet(id, out AtlasRoute route) || route.Deleted)
+        {
+            return "Route no longer exists.";
+        }
+
+        RouteTravel next = route.Travel == RouteTravel.Sea
+            ? RouteTravel.Land
+            : RouteTravel.Sea;
+        return UiEdit(id, r => r.Travel = next,
+            next == RouteTravel.Sea ? "marked as a sailing route" : "marked as a land route");
+    }
+
+    /// <summary>True when the route is marked as a sailing route.</summary>
+    public bool UiIsSailingRoute(AtlasId id)
+    {
+        return _store.TryGet(id, out AtlasRoute route) &&
+            !route.Deleted && route.Travel == RouteTravel.Sea;
+    }
+
     public string UiSetColor(AtlasId id, int? argb)
     {
         return UiEdit(id, route => route.ColorArgb = argb, argb is null ? "color cleared" : "color set");
@@ -579,6 +603,18 @@ internal sealed class RouteCommandHandler
                 }
 
                 return EditNearest(player, route => route.Status = status, $"status {status}");
+            case "sailing":
+                string sailingArgument = remainder.Trim().ToLowerInvariant();
+                if (sailingArgument != "on" && sailingArgument != "off")
+                {
+                    return "Usage: cc_routes sailing on|off";
+                }
+
+                RouteTravel travel = sailingArgument == "on"
+                    ? RouteTravel.Sea
+                    : RouteTravel.Land;
+                return EditNearest(player, route => route.Travel = travel,
+                    travel == RouteTravel.Sea ? "sailing route" : "land route");
             case "color":
                 string trimmed = remainder.Trim().TrimStart('#');
                 if (string.Equals(trimmed, "clear", StringComparison.OrdinalIgnoreCase))
@@ -650,7 +686,7 @@ internal sealed class RouteCommandHandler
 
                 return redoSummary;
             default:
-                return "Usage: cc_routes [list|draw <name>|waypoint <name>|erase|stop|snap on/off|measure|name|style|status|color|lock|unlock|archive|unarchive|delete|restore|split|merge|undo|redo]";
+                return "Usage: cc_routes [list|draw <name>|waypoint <name>|erase|stop|snap on/off|measure|name|style|status|sailing|color|lock|unlock|archive|unarchive|delete|restore|split|merge|undo|redo]";
         }
     }
 

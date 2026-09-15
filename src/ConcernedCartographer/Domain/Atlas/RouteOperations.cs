@@ -334,6 +334,9 @@ internal sealed class RouteOperations
         target.Status = source.Status;
         target.ColorArgb = source.ColorArgb;
         target.Scope = source.Scope;
+        // #243: a split sailing route must stay a sailing route, or the tail
+        // silently becomes ineligible for Sailing Route Follow.
+        target.Travel = source.Travel;
     }
 
     private UndoRecord SnapshotRecord(string description, IReadOnlyList<AtlasId> ids)

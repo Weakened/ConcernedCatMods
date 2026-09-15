@@ -14,6 +14,7 @@ The roads your Vikings build can map themselves. Existing pins can become durabl
 * The Atlas Drawer provides search, filtering, clustering, and saved views.
 * Freehand and waypoint routes can follow recorded roads.
 * Optional walking Route Follow can steer vanilla Q autorun along the selected route; it is OFF by default and manual input cancels immediately.
+* Optional sailing Route Follow can steer the vanilla rudder along a route you marked as a sailing route while you hold the helm; it is OFF by default, your sails stay manual, and any helm input cancels immediately.
 * Backups, restoration, migration, and sanitized support reports are built in.
 * Multiplayer sharing is deliberate: nothing is applied without review.
 * Fog of war is respected.

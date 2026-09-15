@@ -40,6 +40,7 @@ internal sealed class CartographerSettings
         ConfigEntry<float> routeOffRoadSpeed,
         ConfigEntry<float> routeOnRoadSpeed,
         ConfigEntry<bool> routeFollowEnabled,
+        ConfigEntry<bool> sailingRouteFollowEnabled,
         ConfigEntry<float> uiScale,
         ConfigEntry<bool> highContrast,
         ConfigEntry<string> workbenchGamepadButton,
@@ -86,6 +87,7 @@ internal sealed class CartographerSettings
         RouteOffRoadSpeed = routeOffRoadSpeed;
         RouteOnRoadSpeed = routeOnRoadSpeed;
         RouteFollowEnabled = routeFollowEnabled;
+        SailingRouteFollowEnabled = sailingRouteFollowEnabled;
         UiScale = uiScale;
         HighContrast = highContrast;
         WorkbenchGamepadButton = workbenchGamepadButton;
@@ -133,6 +135,7 @@ internal sealed class CartographerSettings
     public ConfigEntry<float> RouteOffRoadSpeed { get; }
     public ConfigEntry<float> RouteOnRoadSpeed { get; }
     public ConfigEntry<bool> RouteFollowEnabled { get; }
+    public ConfigEntry<bool> SailingRouteFollowEnabled { get; }
     public ConfigEntry<float> UiScale { get; }
     public ConfigEntry<bool> HighContrast { get; }
     public ConfigEntry<string> WorkbenchGamepadButton { get; }
@@ -223,6 +226,8 @@ internal sealed class CartographerSettings
                 "On-road travel speed (m/s) for time estimates.", new AcceptableValueRange<float>(0.5f, 15f))),
             config.Bind("Routes", "AutoFollowEnabled", false,
                 "Opt in to walking Route Follow: with a route selected, vanilla Q autorun may steer along it. Manual input always cancels."),
+            config.Bind("Routes", "SailingAutoFollowEnabled", false,
+                "Opt in to sailing Route Follow: at the helm with a route marked as a sailing route selected, Q may steer the vanilla rudder along it. Sail power stays manual and any manual input cancels."),
             config.Bind("Accessibility", "UiScale", 1f, new ConfigDescription(
                 "Personal size preference for Concerned Cartographer panels. Most panels also apply an " +
                 "automatic baseline on top of this for your display (Jötunn's panel canvas is a fixed " +

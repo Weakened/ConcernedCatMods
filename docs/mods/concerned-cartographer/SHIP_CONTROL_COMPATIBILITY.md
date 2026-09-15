@@ -1,18 +1,40 @@
 # Valheim 1.0 ship-control compatibility spike
 
-- Issue: CC-RF-003 (#242)
+- Issue: CC-RF-003 (#242); consumed by CC-RF-004 (#243)
 - Parent: Optional Route Follow (#104)
-- Audit date: 2026-09-10
-- Status: **installed-assembly compatibility PASS after #249 cancellation-seam correction; disposable-profile live matrix pending**
+- Original audit date: 2026-09-10 (Valheim 1.0.7)
+- **Re-verified 2026-09-14 against the CURRENT install: Valheim 1.0.12** —
+  every recorded member, ordering and authority contract below still holds
+- Status: **installed-assembly compatibility PASS; disposable-profile live
+  matrix still PENDING — no row below is claimed as passed**
 
-This spike verifies the control boundary that a later sailing Route Follow
-slice may use. It does not implement steering, change package behavior, or
-claim a live Valheim test.
+This spike verified the control boundary that the #243 sailing Route Follow
+slice now uses. The spike itself implements no steering; the #243
+implementation is audited statically at the end of this document. Neither
+claims a live Valheim test.
 
 ## Audited environment
 
 No game, Unity, loader, or framework binary is committed or packaged.
 Hashes identify only the licensed local inputs inspected on BLD.
+
+### Current re-verification (2026-09-14)
+
+| Input | Identity | SHA-256 |
+|---|---|---|
+| Valheim | **1.0.12**, Steam build 25253764; `assembly_valheim.dll` 2,568,192 B | `27A766A8D23A7BD8B6A54FB9AD0452A96C305FB3629B39C40527C09A1C393A84` |
+| Unity | 6000.0.75f1; `globalgamemanagers` 205,668 B | `1388BD29F3956A1FBD483B4DA807BD64725FC9B84D8C871350193036C1468524` |
+| Ship asset catalog | `resources.assets` 79,463,828 B | `2D33C35D227A596E2408065A0D29AC270F3806B1D52F43A0C04B0E201106D11A` |
+| BepInEx | 5.4.23.3; 130,048 B | `E9AC3A950E91E71B13DF5480B36CE06AF27E981A688F0E62125B674D03A0713A` |
+| Jötunn | 2.29.2.0; 516,096 B | `F65751BC15E7AE7466B0F7D3B38C758397741C99A50890DEB19ACF738376BFB1` |
+
+The game assembly, Unity manager blob and ship asset catalog all changed
+between 1.0.7 and 1.0.12; `scripts/audit-cartographer-ship-api.ps1` was
+re-run in full and every assertion below still passes, including the
+`Player.SetControls` dispatch-before-exit ordering that makes the
+three-seam contract mandatory.
+
+### Original spike (2026-09-10)
 
 | Input | Identity | SHA-256 |
 |---|---|---|
@@ -24,9 +46,9 @@ Hashes identify only the licensed local inputs inspected on BLD.
 
 ## Installed vessel surface
 
-The installed 1.0.7 asset catalog exposes exactly four player-facing ship
-names. The Ashlands longship is the additional variant beyond the original
-three.
+The installed asset catalog exposes exactly four player-facing ship
+names, unchanged from 1.0.7 to 1.0.12. The Ashlands longship is the
+additional variant beyond the original three.
 
 | Asset key | Player-facing name | Static result |
 |---|---|---|
@@ -71,7 +93,7 @@ A client helmsman is valid. Route Follow must never require
 
 ## Audited members
 
-| Purpose | Valheim 1.0.7 member |
+| Purpose | Installed member (identical in 1.0.7 and 1.0.12) |
 |---|---|
 | Raw input observation | read-only prefix on `Player.SetControls(Vector3 movedir, bool attack, bool attackHold, bool secondaryAttack, bool secondaryAttackHold, bool block, bool blockHold, bool jump, bool crouch, bool run, bool autoRun, bool dodge)` |
 | Steering injection | prefix on `ShipControlls.ApplyControlls(Vector3 moveDir, Vector3 lookDir, bool run, bool autoRun, bool block)` |
@@ -216,12 +238,65 @@ topology, disposable world, steps, result, log excerpt, and video reference.
 | L2 | Route edit/delete/archive/deselect and route end | Immediate clean cancellation | Pending #243 |
 | L3 | Death, portal/teleport, logout/relog, world switch, plugin disable | State clears across every boundary; vanilla control remains usable | Pending #243 |
 | L4 | Destroy a disposable test ship while follow is active | Unity-null path cancels without exception or world/save damage | Pending #243 |
-| F1 | Simulate adapter bind failure in a test build | One warning; feature disabled; untouched vanilla controls | Pending #243 |
-| S1 | Review server and client logs after the matrix | No ownership transfer, custom movement RPC, force/transform write, or repeated error | Pending #243 |
+| F1 | Simulate adapter bind failure in a test build | One warning; feature disabled; untouched vanilla controls | **Pending owner** (static: adapter rolls back a partial install and `Installed` stays false) |
+| S1 | Review server and client logs after the matrix | No ownership transfer, custom movement RPC, force/transform write, or repeated error | **Pending owner** |
+
+Rows M1, W1, L1-L4 were written as "Pending #243" while #243 was unwritten.
+#243 is now implemented, so they are **Pending owner**: each has
+deterministic game-free coverage in
+`src/ConcernedCartographer.Tests/SailingRouteFollowControllerTests.cs`, and
+none of that coverage is live evidence. Nothing in this table is claimed
+as passed.
 
 Use a dedicated `TCC-Compat`-style profile and disposable world. Destructive
 ship testing must never use the owner's normal world. Publication remains
 blocked until the #243 live rows pass.
+
+## #243 implementation, statically audited
+
+`scripts/audit-cartographer-ship-api.ps1` now also reads the shipped
+`Runtime/SailingRouteFollowAdapter.cs` and
+`Domain/Atlas/SailingRouteFollowController.cs` and fails if any of these
+stops being true:
+
+- exactly **three** Harmony patches are installed, resolving exactly the
+  three audited seams (`Player.SetControls` with the full 12-argument
+  signature, `ShipControlls.ApplyControlls(Vector3, Vector3, bool, bool, bool)`,
+  and `Player.StopDoodadControl()`);
+- **exactly three** prefix declarations are counted, not merely found, and
+  no `postfix:`, `transpiler:`, `finalizer:`, `__result`, `__state` or
+  bool-returning prefix appears, so no original method is ever skipped or
+  replaced;
+- a partial install rolls back (`UnpatchSelf`) and leaves the feature off;
+- the steering seam writes `new Vector3(rudderInput, raw.y, raw.z)` — the
+  rudder axis only, so sail steps (`z`), look direction, run and block reach
+  vanilla exactly as the player supplied them;
+- the forbidden-call scan finds none of `m_rudderValue`, `Rudder(`,
+  `SetOwner`, `ClaimOwnership`, `AddForce`, `AddTorque`, `MovePosition`,
+  `MoveRotation`, `m_body`, `velocity =`, `transform.position =`,
+  `transform.rotation =`, `.Forward()`, `.Backward()`, `InvokeRPC`,
+  `GetWindDir` or `SetWind` — across the adapter, the controller **and the
+  sailing region of `CartographerRuntime.cs`**, which is where the gates
+  actually touch `Ship`/`ShipControlls`. Comments are stripped before the
+  scan (they name the vanilla equations), with quote tracking so a URL in a
+  string literal cannot truncate a line.
+
+The runtime keeps a **one-shot, call-scoped** authorisation
+(`Domain/Atlas/SailingSteeringAuthorisation.cs`, so the invariant is
+game-free and directly tested): the raw-input observer arms it with the exact
+controls instance, and only the steering prefix in that same
+`Player.SetControls` call may consume it. Consumption always clears, and only
+succeeds for that same instance, so a write cannot survive into a later call,
+reach another ship, or fire on a path where vanilla never ran the observer. Any cancellation — manual rudder,
+a sail step, jump/attack/secondary/dodge, Q, losing the granted helm,
+route mutation, lifecycle, off-route, route end, or the no-progress
+timeout — clears it before vanilla's doodad dispatch, so an exit action can
+never reach a synthetic write.
+
+This is **static source evidence**. It proves the hook set and the
+forbidden-call set. It proves nothing about live Harmony ordering against
+third-party patches, latency feel, or multiplayer behaviour; the
+disposable-profile matrix above remains the release gate.
 
 ## Residual risks and explicit non-claims
 
@@ -235,4 +310,10 @@ blocked until the #243 live rows pass.
   host/dedicated-server session. The disposable-profile matrix remains the
   release gate.
 - No steering algorithm, route state, config, UI, package version, tag,
-  release, or publication is part of #242.
+  release, or publication was part of #242.
+- The #243 closed-loop tests drive a small kinematic ship model that
+  reproduces the one vanilla equation the controller talks to
+  (`m_rudderValue += dir.x * lerp(0.5,1,|m_rudderValue|) * m_rudderSpeed * dt`,
+  clamped to [-1, 1]) plus a proportional hull response. They prove the
+  controller converges and rounds corners within its stated tolerance. They
+  are **not** physics, wind or multiplayer evidence.
