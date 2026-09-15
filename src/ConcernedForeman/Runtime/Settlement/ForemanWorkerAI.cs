@@ -40,6 +40,12 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 /// untouched by overriding it: a repeating idle sound armed in <c>Awake</c>,
 /// three registered RPCs, and three <c>MessageHud.MessageAll</c> broadcasts.
 /// <see cref="SilenceWhatUpdateAiDoesNotReach"/> deals with each.</item>
+/// <item><c>BaseAI.HavePath</c> reads like a cheap question and is not:
+/// <c>Pathfinding.HavePath</c> forwards straight to <c>GetPath</c> with
+/// <c>requireFullPath: true</c>, so asking it every tick would be a full path
+/// search twenty times a second — an unbudgeted cost inside a leaf whose whole
+/// claim is that its costs are bounded. The planner is told about paths through
+/// <c>FoundPath()</c>, which is a field read of the last result.</item>
 /// </list></summary>
 internal sealed class ForemanWorkerAI : BaseAI
 {
@@ -177,7 +183,7 @@ internal sealed class ForemanWorkerAI : BaseAI
         RefreshSiteChecksIfDue(goal);
         WorkerObservation observation = new(
             position: ToSitePoint(transform.position),
-            hasPath: HavePathSafely(goal),
+            hasPath: FoundPath(),
             hasAuthority: HasAuthority(),
             goalInLoadedGround: _goalInLoadedGround,
             goalIsHazardous: _goalIsHazardous);
@@ -193,13 +199,18 @@ internal sealed class ForemanWorkerAI : BaseAI
                 // how often we ask; vanilla's throttle bounds how often the ask
                 // reaches the pathfinder. Both are real, and the tighter one
                 // wins.
-                _planner.ReportPathOutcome(FindPath(goal));
+                _planner.ReportPathOutcome(
+                    Pathfinding.instance != null && FindPath(goal));
                 break;
 
             case WorkerActionKind.Move:
                 // Trap 2: the return value means "stopped", not "arrived", so
                 // it is deliberately discarded. Arrival is the planner's call.
-                MoveTo(dt, goal, _planner.Goal.ArrivalTolerance, run: false);
+                if (Pathfinding.instance != null)
+                {
+                    MoveTo(dt, goal, _planner.Goal.ArrivalTolerance, run: false);
+                }
+
                 break;
 
             case WorkerActionKind.Arrive:
@@ -257,13 +268,6 @@ internal sealed class ForemanWorkerAI : BaseAI
         {
             return false;
         }
-    }
-
-    private bool HavePathSafely(Vector3 goal)
-    {
-        // Pathfinding.instance is null before the world loads. A missing
-        // pathfinder means "no path", not a crash in the shared driver.
-        return Pathfinding.instance != null && HavePath(goal);
     }
 
     private void TryStopQuietly()

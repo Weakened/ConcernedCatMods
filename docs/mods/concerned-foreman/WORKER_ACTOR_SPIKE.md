@@ -87,7 +87,7 @@ the movement primitives a worker needs are reachable from a subclass:
 |---|---|---|
 | `MoveTo(float dt, Vector3 point, float dist, bool run)` | `protected` | walking |
 | `FindPath(Vector3 target)` | `protected` | asking the pathfinder |
-| `HavePath(Vector3 target)` | `protected` | do we have a route |
+| `FoundPath()` | `protected` | did the last request succeed (a field read) |
 | `StopMoving()` | `public` | stopping |
 | `MoveTowards(Vector3 dir, bool run)` | `public` | direct steering |
 | `m_pathAgentType` | `public` field | `Pathfinding.AgentType.Humanoid` |
@@ -197,6 +197,25 @@ the pathfinder*. Both are real and the tighter one wins. This is worth stating
 plainly because it means vanilla creatures are already cheap per-request — what
 vanilla has **no** equivalent of is a bound on *giving up*, which is the next
 section.
+
+---
+
+**A third trap, in a method that reads as free.** `BaseAI.HavePath` looks like a
+cheap "do we have a route?" accessor. It is not:
+
+```csharp
+public bool HavePath(Vector3 from, Vector3 to, AgentType agentType)
+    => GetPath(from, to, null, agentType, requireFullPath: true, cleanup: false, havePath: true);
+```
+
+It is a **full path search**. Asking it once per tick — the obvious way to fill
+the planner's `HasPath` observation — would be twenty complete searches a second
+per worker, an unbudgeted cost sitting inside the very leaf whose claim is that
+its costs are bounded. The adapter uses `FoundPath()` instead, which is a read of
+`m_lastFindPathResult` and costs nothing. `MoveTo` refreshes that field through
+its own throttled `FindPath`, so it stays current within a second, and a path
+that goes stale mid-walk turns into a fresh budgeted attempt rather than a
+silent stall.
 
 ---
 
