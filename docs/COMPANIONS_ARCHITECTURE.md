@@ -155,3 +155,79 @@ product scoping is what keeps two products apart.
 > was not recoverable. The extension contract is therefore proved with two
 > *synthetic* products in tests. No product identity has been invented, and none
 > should be until the owner supplies one.
+
+---
+
+## How Concerned Cartographer adopts it (CC-NPC-003)
+
+The shared layer is deliberately ignorant of Unity. Everything below is the
+product's own half of the wiring, and it is split along the same line the test
+project draws: `Domain/Companions/**` is game-free and unit-tested,
+`Runtime/Companions/**` is the adapter that touches Valheim.
+
+| Piece | Lives in | Job |
+|---|---|---|
+| `CartographerCompanions` | `Domain/Companions` | The `ICompanionProduct` registration: product `concerned-cartographer`, companion `hulgi`, quest `broken-compass`. |
+| `CompanionStory` / `StoryReader` | `Domain/Companions` | Four authored pages, and the clamped paging model the panel drives. |
+| `CompanionFeatureGate` | `Domain/Companions` | Which of *this product's added* affordances are available, and why. |
+| `LegacyEvidenceRule` | `Domain/Companions` | Turns file-existence facts into the shared layer's `LegacyEvidence` answer. |
+| `CompassProximity` / `IntroductionSequence` | `Domain/Companions` | Distance behaviour with hysteresis, and the exact order of quest transitions. |
+| `CompanionScopeSource` | `Runtime/Companions` | `ZNet.GetWorldUID()` + `PlayerProfile.GetPlayerID()` → `CompanionScope`. |
+| `CartographerLegacyProbe` | `Runtime/Companions` | Looks for prior Cartographer sidecars; gathers facts only. |
+| `SpawnAnchorSource` | `Runtime/Companions` | Claimed bed, else the world start location resolved at runtime. |
+| `WorldPlacementProbe` | `Runtime/Companions` | `IPlacementProbe` over `ZoneSystem` — loaded, solid, level, dry, clear. |
+| `LocalVisual` | `Runtime/Companions` | Render-only copies of vanilla prefabs. Nothing from the source ever wakes. |
+| `BrokenCompassObject` | `Runtime/Companions` | `Hoverable` + `Interactable`, no `ZNetView`, non-blocking collider. |
+| `CompanionDirector` | `Runtime/Companions` | Owns all of the above and answers one question to the rest of the runtime. |
+| `CompanionStoryPanel` | `Map` | The paged introduction. Keyboard, controller and mouse. |
+| `CompanionToolsCommand` | `Runtime` | `cc_companion` — status, tools-only, replay, visibility, where, path. |
+
+### The gate, and why it can barely close
+
+`CartographerRuntime.AllowFeature` sits in front of the Atlas drawer, the
+marker palette, Routes, Survey, Share, Quick Pin and the Pin Workbench — the
+things this mod *added*. It is not in front of Settings, Privacy, the backup
+and support tooling, the console commands, the vanilla map, or anything
+belonging to another mod. That is not an oversight: Settings is where
+Tools-only lives, so gating it would make the gate unescapable.
+
+The gate opens for all of these, and only the last line closes it:
+
+- companions switched off in config;
+- world or character not identifiable (a fact about our adapters, never about
+  the player);
+- nothing resolved yet, because a player should never watch their toolbar
+  appear a second late;
+- any `UnlockPolicy` grant — a finished introduction, a Tools-only preference,
+  prior Cartographer data in *any* world, profile-level data, unreadable
+  companion data, or an ambiguous answer;
+- otherwise: a genuinely new character, in an identified world, with
+  companions on, who has not yet finished or skipped the introduction.
+
+### Render-only construction
+
+`LocalVisual` instantiates the source prefab **underneath an inactive holder**,
+copies out `sharedMesh` and `sharedMaterials`, and destroys the clone before
+anything is ever enabled. No component from the source prefab runs — which is
+the only workable shape, because the audit found that `BaseAI` registers itself
+into a process-wide static list the moment it wakes and `ZNetView` creates a
+ZDO, so "instantiate and strip afterwards" is always too late. Materials are
+read through `sharedMaterials` and never written, so the vanilla asset every
+other object in the world is drawn with is untouched.
+
+### Two ways to examine, one entry point
+
+Vanilla's hover raycast is the intended path and `BrokenCompassObject`
+implements `Hoverable`/`Interactable` for it. Whether that raycast reaches a
+mod-made collider on this build is one of the compatibility note's open rows,
+so the director also watches the Use key directly while the player is close
+*and not already hovering something real*. Both paths call one idempotent
+`Examine()`, and the quest transitions underneath are idempotent too, so
+triggering both on the same frame still produces exactly one introduction.
+
+### What is still pending live observation
+
+Nothing in this slice claims in-game evidence. `cc_companion status` prints the
+facts that close those rows — which prefab the visual came from, whether the
+collider landed on a non-solid layer, whether vanilla hovering has ever
+reached the object, and which name the world's start location answered to.

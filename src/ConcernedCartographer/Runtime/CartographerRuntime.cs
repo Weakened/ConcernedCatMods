@@ -4,7 +4,9 @@ using BepInEx.Logging;
 using TheConcernedCat.ConcernedCartographer.Atlas;
 using TheConcernedCat.ConcernedCartographer.Map;
 using TheConcernedCat.ConcernedCartographer.Persistence;
+using TheConcernedCat.ConcernedCartographer.Companions;
 using TheConcernedCat.ConcernedCartographer.Roads;
+using TheConcernedCat.ConcernedCartographer.Runtime.Companions;
 using TheConcernedCat.ConcernedCartographer.Ui;
 using UnityEngine;
 
@@ -134,6 +136,14 @@ internal sealed class CartographerRuntime : IDisposable
     // generation number + reason only).
     private readonly MapSessionTracker _mapSession = new();
 
+    // CC-NPC-003 Concerned Companions. The director owns everything about
+    // the companion; the runtime asks it exactly one question -- whether
+    // this product's added affordances are available -- and otherwise only
+    // ticks it. A companion failure can therefore cost the companion and
+    // nothing else.
+    private readonly CompanionStoryPanel _storyPanel;
+    private readonly CompanionDirector _companions;
+
     public CartographerRuntime(CartographerSettings settings, ManualLogSource log)
     {
         _settings = settings;
@@ -170,7 +180,14 @@ internal sealed class CartographerRuntime : IDisposable
 
             return authors;
         });
-        _settingsPanel = new SettingsPanel(log, ExecuteAtlasCommand, ExecuteRoadCommand, () => _consentPanel.ShowSettings());
+        _settingsPanel = new SettingsPanel(
+            log,
+            ExecuteAtlasCommand,
+            ExecuteRoadCommand,
+            ExecuteCompanionCommand,
+            () => settings.CompanionToolsOnly.Value,
+            () => settings.CompanionVisible.Value,
+            () => _consentPanel.ShowSettings());
         _systemMarkersPanel = new SystemMarkersPanel(log);
 
         // One major side surface at a time (#100).
@@ -183,9 +200,20 @@ internal sealed class CartographerRuntime : IDisposable
         _systemMarkersToken = _mapUi.RegisterSurface(() => _systemMarkersPanel.IsVisible, _systemMarkersPanel.Hide);
         _workbenchToken = _mapUi.RegisterSurface(() => _workbenchPanel.IsVisible, _workbenchPanel.Close);
 
-        _mapUi.AtlasClicked = () => _mapUi.OpenExclusive(_drawerToken, ToggleDrawer);
+        _mapUi.AtlasClicked = () =>
+        {
+            if (AllowFeature(CartographerFeature.Atlas))
+            {
+                _mapUi.OpenExclusive(_drawerToken, ToggleDrawer);
+            }
+        };
         _mapUi.MarkersClicked = () =>
         {
+            if (!AllowFeature(CartographerFeature.Markers))
+            {
+                return;
+            }
+
             if (PaletteActive())
             {
                 _palettePanel.UiScale = _settings.UiScale.Value;
@@ -198,11 +226,40 @@ internal sealed class CartographerRuntime : IDisposable
                     "The enhanced marker palette is disabled (setting or a conflicting pin manager); the vanilla selector is shown instead.");
             }
         };
-        _mapUi.RoutesClicked = () => OpenSidePanel(_routesToken, _routesPanel);
-        _mapUi.SurveyClicked = () => OpenSidePanel(_surveyToken, _surveyPanel);
-        _mapUi.ShareClicked = () => OpenSidePanel(_shareToken, _sharePanel);
+        _mapUi.RoutesClicked = () =>
+        {
+            if (AllowFeature(CartographerFeature.Routes))
+            {
+                OpenSidePanel(_routesToken, _routesPanel);
+            }
+        };
+        _mapUi.SurveyClicked = () =>
+        {
+            if (AllowFeature(CartographerFeature.Survey))
+            {
+                OpenSidePanel(_surveyToken, _surveyPanel);
+            }
+        };
+        _mapUi.ShareClicked = () =>
+        {
+            if (AllowFeature(CartographerFeature.Share))
+            {
+                OpenSidePanel(_shareToken, _sharePanel);
+            }
+        };
+
+        // Settings and Privacy are deliberately NOT gated. They are how a
+        // player configures and repairs the mod -- including turning the
+        // introduction off entirely -- so locking them would be the one way to
+        // make the gate unescapable.
         _mapUi.SettingsClicked = () => OpenSidePanel(_settingsToken, _settingsPanel);
-        _mapUi.QuickPinClicked = ArmQuickPin;
+        _mapUi.QuickPinClicked = () =>
+        {
+            if (AllowFeature(CartographerFeature.QuickPin))
+            {
+                ArmQuickPin();
+            }
+        };
         _drawerPanel.PrivacyClicked = () => _consentPanel.ShowSettings();
         _drawerPanel.SystemMarkersClicked = () => OpenSidePanel(_systemMarkersToken, _systemMarkersPanel);
         MapInputGate.Install(log);
@@ -292,6 +349,9 @@ internal sealed class CartographerRuntime : IDisposable
         _constructionCapture = new ConstructionCapture(log);
         _constructionCapture.OperationCaptured += HandleTerrainOperation;
 
+        _storyPanel = new CompanionStoryPanel(log);
+        _companions = new CompanionDirector(settings, log, _storyPanel);
+
         // RC8 road source authority: the chunk-recovery scanner is not
         // constructed at all — passive road creation is disabled in v1.
         // Roads come exclusively from the player's own Pathen/Paved ops.
@@ -324,6 +384,11 @@ internal sealed class CartographerRuntime : IDisposable
         // the live map instead of the destroyed one.
         _renderer.ResetMapSession();
         _routeRenderer.ResetMapSession();
+        // The GUI objects the companion owns died with the previous scene;
+        // drop the references before anything tries to reuse them, then start
+        // this world's companion state from scratch.
+        _companions.OnSceneTeardown();
+        _companions.OnWorldChanged();
         // RC14 fix 1: sprite load failures were session-scoped by intent;
         // forget them so a transient teardown failure cannot degrade cc:*
         // icons in this fresh session.
@@ -856,6 +921,12 @@ internal sealed class CartographerRuntime : IDisposable
         // holding the global input block (DEF-v1.0-001), which must hold
         // even when the mod is disabled mid-session or the world tears down.
         _workbenchPanel.HandleFrame();
+
+        // CC-NPC-003: the story panel is handled here, above every gate, for
+        // the same reason the workbench is -- it holds the global input block
+        // while it is open, and a panel that stops being ticked while holding
+        // that block leaves the player unable to move.
+        _storyPanel.HandleFrame();
         _consentPanel.HandleFrame();
         _routesPanel.HandleFrame();
         _surveyPanel.HandleFrame();
@@ -902,8 +973,18 @@ internal sealed class CartographerRuntime : IDisposable
                 _mapUi.CloseAllSurfaces();
             }
 
+            if (!_settings.Enabled.Value)
+            {
+                // A mod switched off mid-session takes its companion with it.
+                // The gate it leaves behind is OPEN, because a disabled mod
+                // must never be the reason something is unavailable.
+                _companions.Suspend();
+            }
+
             return;
         }
+
+        _companions.Tick(unscaledDeltaTime);
 
         _drawerPanel.HandleFrame();
 
@@ -947,7 +1028,8 @@ internal sealed class CartographerRuntime : IDisposable
                 }
             }
             else if (_settings.QuickPinHotkey.Value != KeyCode.None &&
-                Input.GetKeyDown(_settings.QuickPinHotkey.Value))
+                Input.GetKeyDown(_settings.QuickPinHotkey.Value) &&
+                AllowFeature(CartographerFeature.QuickPin))
             {
                 CaptureQuickPin();
             }
@@ -1015,13 +1097,15 @@ internal sealed class CartographerRuntime : IDisposable
 
             if (_pinCommands is not null && !_workbenchPanel.IsVisible &&
                 (Input.GetKeyDown(_settings.WorkbenchHotkey.Value) ||
-                 GamepadDown(_settings.WorkbenchGamepadButton.Value)))
+                 GamepadDown(_settings.WorkbenchGamepadButton.Value)) &&
+                AllowFeature(CartographerFeature.Workbench))
             {
                 OpenWorkbenchAtCursor();
             }
 
-            if (Input.GetKeyDown(_settings.DrawerHotkey.Value) ||
-                GamepadDown(_settings.DrawerGamepadButton.Value))
+            if ((Input.GetKeyDown(_settings.DrawerHotkey.Value) ||
+                GamepadDown(_settings.DrawerGamepadButton.Value)) &&
+                AllowFeature(CartographerFeature.Atlas))
             {
                 _mapUi.OpenExclusive(_drawerToken, ToggleDrawer);
             }
@@ -1529,6 +1613,11 @@ internal sealed class CartographerRuntime : IDisposable
             return;
         }
 
+        if (!AllowFeature(CartographerFeature.Workbench))
+        {
+            return;
+        }
+
         if (!AtlasAccessAllowed(out string denial))
         {
             VanillaMessage.Show(Player.m_localPlayer, MessageHud.MessageType.TopLeft, denial);
@@ -1547,6 +1636,11 @@ internal sealed class CartographerRuntime : IDisposable
     private void UpgradeAndEdit(Minimap.PinData pin)
     {
         if (_pinCommands is null)
+        {
+            return;
+        }
+
+        if (!AllowFeature(CartographerFeature.Workbench))
         {
             return;
         }
@@ -1955,6 +2049,11 @@ internal sealed class CartographerRuntime : IDisposable
     private void OpenWorkbenchNear(Vector3 world)
     {
         if (_pinCommands is null)
+        {
+            return;
+        }
+
+        if (!AllowFeature(CartographerFeature.Workbench))
         {
             return;
         }
@@ -2943,7 +3042,142 @@ internal sealed class CartographerRuntime : IDisposable
         _pipeline?.EndAllStrokes();
         _constructionCapture.OperationCaptured -= HandleTerrainOperation;
         _constructionCapture.Dispose();
+        _companions.Dispose();
         _disposed = true;
+    }
+
+    /// <summary>The CC-NPC-003 gate in front of every affordance this product
+    /// ADDED to Valheim.
+    ///
+    /// The bias is the whole design: <see cref="CompanionFeatureGate"/> is open
+    /// unless a character was positively identified as new, so in practice this
+    /// returns true for everybody who has ever used the mod, everybody who
+    /// turned companions off, and everybody whose world could not be
+    /// identified. When it does return false it says so in one sentence that
+    /// names both ways out, because a player who cannot find the compass must
+    /// still be able to reach their tools.</summary>
+    private bool AllowFeature(CartographerFeature feature)
+    {
+        if (_companions.Gate.Allows(feature))
+        {
+            return true;
+        }
+
+        VanillaMessage.Show(
+            Player.m_localPlayer,
+            MessageHud.MessageType.Center,
+            AtlasStrings.Get(_companions.Gate.LockedNoticeKey));
+        return false;
+    }
+
+    /// <summary>`cc_companion`. A diagnostic and a preference surface: it can
+    /// report, it can set the two player preferences, and it can replay a
+    /// finished story. It cannot advance the quest or hand out access the
+    /// policy would not have granted anyway.</summary>
+    internal string ExecuteCompanionCommand(string[] args)
+    {
+        string verb = args is { Length: > 0 } ? args[0].ToLowerInvariant() : "status";
+
+        switch (verb)
+        {
+            case "status":
+                return DescribeCompanionStatus();
+
+            case "toolsonly":
+            {
+                if (args.Length < 2)
+                {
+                    return "Usage: cc_companion toolsonly <on|off>. Currently " +
+                        (_settings.CompanionToolsOnly.Value ? "on." : "off.");
+                }
+
+                bool on = ParseOnOff(args[1], _settings.CompanionToolsOnly.Value);
+                _settings.CompanionToolsOnly.Value = on;
+                return on
+                    ? "Tools-only is on. The map tools are available now, and this grant is permanent: " +
+                      "turning it off later restores the introduction without taking anything away."
+                    : "Tools-only is off. The introduction is offered again. Anything already granted stays granted.";
+            }
+
+            case "show":
+            {
+                if (args.Length < 2)
+                {
+                    return "Usage: cc_companion show <on|off>. Currently " +
+                        (_settings.CompanionVisible.Value ? "on." : "off.");
+                }
+
+                bool on = ParseOnOff(args[1], _settings.CompanionVisible.Value);
+                _settings.CompanionVisible.Value = on;
+                return on
+                    ? "The companion will be shown once he has joined you."
+                    : "The companion is hidden. Your tools, progress and data are unaffected.";
+            }
+
+            case "story":
+                return _companions.TryReplayStory()
+                    ? "Replaying the introduction."
+                    : AtlasStrings.Get("companion.replayUnavailable");
+
+            case "where":
+            {
+                CompanionStatus status = _companions.Status;
+                return $"Home point: {status.AnchorKind}" +
+                    (status.StartLocationName != null
+                        ? $" (world start location \"{status.StartLocationName}\")"
+                        : "") +
+                    $". Collectible present: {status.CompassPresent}.";
+            }
+
+            case "path":
+                return "Companion data: " + Runtime.Companions.CartographerLegacyProbe.DataDirectory;
+
+            default:
+                return "Unknown subcommand. Use: status, toolsonly <on|off>, story, show <on|off>, where, path.";
+        }
+    }
+
+    private static bool ParseOnOff(string value, bool current)
+    {
+        switch (value.ToLowerInvariant())
+        {
+            case "on":
+            case "true":
+            case "1":
+            case "yes":
+                return true;
+            case "off":
+            case "false":
+            case "0":
+            case "no":
+                return false;
+            default:
+                return !current;
+        }
+    }
+
+    private string DescribeCompanionStatus()
+    {
+        CompanionStatus status = _companions.Status;
+        var builder = new System.Text.StringBuilder();
+        builder.AppendLine("Concerned Companions");
+        builder.AppendLine($"  enabled          : {status.CompanionsEnabled}");
+        builder.AppendLine($"  scope            : {status.Scope}");
+        builder.AppendLine($"  data             : {status.LoadOutcome}");
+        builder.AppendLine($"  quest            : {status.QuestState}");
+        builder.AppendLine($"  tools available  : {status.Unlocked} ({status.GateReason} / {status.UnlockReason})");
+        builder.AppendLine($"  tools-only       : {status.ToolsOnly}");
+        builder.AppendLine($"  home point       : {status.AnchorKind}" +
+            (status.StartLocationName != null ? $" via \"{status.StartLocationName}\"" : ""));
+        builder.AppendLine($"  compass present  : {status.CompassPresent} (visual: {status.CompassVisualSource})");
+        builder.AppendLine($"  compass layer    : {(status.CompassOnNonSolidLayer ? "non-solid" : "pass-through trigger")}");
+        builder.AppendLine($"  vanilla hover    : {(status.HoverObserved ? "observed" : "not seen yet")}");
+        if (status.Notice != null)
+        {
+            builder.AppendLine("  notice           : " + status.Notice);
+        }
+
+        return builder.ToString().TrimEnd();
     }
 
     private void SwitchWorld(long uid)
