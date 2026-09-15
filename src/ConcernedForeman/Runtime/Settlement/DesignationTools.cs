@@ -61,6 +61,20 @@ internal sealed class DesignationTools
         _site = site;
     }
 
+    /// <summary>Drops a plan the player was shown but never confirmed.
+    ///
+    /// Called when a world goes away. A plan is a snapshot of one settlement's
+    /// book, and carrying one into a different world would hand world A's plan
+    /// to world B's register. <see cref="SettlementRegister.ApplyUndesignation"/>
+    /// would refuse it as stale, so the damage was already bounded — but relying
+    /// on a downstream guard for something this cheap to prevent is how the
+    /// guard ends up being the only thing standing between a typo and a
+    /// cancelled order.</summary>
+    internal void Forget()
+    {
+        _pending = null;
+    }
+
     internal string Execute(string[]? args)
     {
         string subcommand = (args != null && args.Length > 0)

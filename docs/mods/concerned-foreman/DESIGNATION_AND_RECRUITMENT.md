@@ -297,9 +297,26 @@ So these are only proved by §7:
 - the ward call's arguments and the loaded-ground sampling;
 - resolving the chest you are looking at, and its `ZDOID`;
 - argument parsing, the confirmation gate on a costly clear, and dropping a
-  pending plan when a new designation makes it stale.
+  pending plan when a new designation or a world change makes it stale.
 
 The last of those is the one worth naming: if the confirmation gate were wrong,
 a clear could happen a word early. The damage is bounded by the core — an
 out-of-date plan is refused as stale by `ApplyUndesignation` rather than applied
 — but the gate itself is adapter logic and has no automated test.
+
+An unconfirmed plan is dropped on a successful designation **and** when a world
+unloads. The second of those is belt-and-braces: a plan carried from world A
+into world B would not match world B's book, so `ApplyUndesignation` would refuse
+it as stale anyway. Relying on the downstream guard for something that cheap to
+prevent is how the guard ends up being the only thing between a typo and a
+cancelled order.
+
+`AtomicTextFile` — the piece both records depend on — does have its own tests
+now, covering both commit paths (`File.Move` for a new file, `File.Replace` for
+an existing one), a failed write leaving the live file untouched, and the escape
+ordering that stops a player-typed `%09` coming back as a real tab. What those
+tests **cannot** cover is the reason the fallbacks exist: they run on `net10.0`
+while the plugins ship `net48`, so the `PlatformNotSupportedException` and
+`IOException` paths to `CopyOver` are exercised on a runtime that is not the one
+they were written for. That is this repository's standing net10-vs-net48 debt,
+and this leaf inherits rather than closes it.

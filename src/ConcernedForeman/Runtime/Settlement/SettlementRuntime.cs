@@ -250,8 +250,10 @@ internal sealed class SettlementRuntime
 
         // The records are dropped too, so a second world in the same session
         // reads its own files instead of inheriting the first world's
-        // settlement.
+        // settlement -- and with them any unconfirmed clear the player was
+        // shown, which belonged to the world that just went away.
         _records.Forget();
+        _designations.Forget();
     }
 
     private static string Format(Vector3 point)
