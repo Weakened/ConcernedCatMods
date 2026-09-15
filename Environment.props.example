@@ -34,5 +34,10 @@
          exists specifically WITHOUT Teamster installed, as the vanilla-truth
          baseline every other profile is compared against. -->
     <TEAMSTER_DEDICATED_DEPLOYPATH>C:\REPLACE_ME\TCT-Dedicated\BepInEx\plugins</TEAMSTER_DEDICATED_DEPLOYPATH>
+
+    <!-- CF-SET-002: Concerned Foreman deploys to its own dedicated profile,
+         TCF-Dev, so a Foreman test never contaminates Cartographer's or
+         Teamster's evidence. Only needed if you deploy Foreman. -->
+    <FOREMAN_DEPLOYPATH>C:\REPLACE_ME\TCF-Dev\BepInEx\plugins</FOREMAN_DEPLOYPATH>
   </PropertyGroup>
 </Project>

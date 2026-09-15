@@ -2,9 +2,9 @@
 param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Debug",
-    # Default builds the whole solution (both products), matching historical
-    # behavior now that the solution contains Concerned Teamster too.
-    [ValidateSet("All", "ConcernedCartographer", "ConcernedTeamster")]
+    # Default builds the whole solution (every product), matching historical
+    # behavior now that the solution contains Teamster and Foreman too.
+    [ValidateSet("All", "ConcernedCartographer", "ConcernedTeamster", "ConcernedForeman")]
     [string]$Product = "All"
 )
 

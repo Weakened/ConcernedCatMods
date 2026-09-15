@@ -62,6 +62,15 @@ Each mod is an independently versioned product.
 | Sprint label | `sprint:` plus product slug where needed | `sprint:v0.3` (legacy, Cartographer) | `sprint:teamster-v0.3` |
 | Mod-manager profiles | product-prefixed | `TCC-Clean/Dev/Compat` | `TCT-Clean/Dev/Compat/Dedicated` |
 
+**Concerned Foreman** (added by CF-SET-002) follows every row of the table above:
+`Concerned Foreman` / `src/ConcernedForeman` / `ConcernedForeman.csproj` /
+`ConcernedForeman.Tests` / `TheConcernedCat.ConcernedForeman` /
+`TheConcernedCat.ConcernedForeman.dll` /
+`com.theconcernedcat.valheim.concernedforeman` / `TheConcernedCat` /
+`ConcernedForeman` / `docs/mods/concerned-foreman` / `concerned-foreman/v0.1.0` /
+issue keys `CF-###` (diagnostics) and `CF-SET-###` (settlement runtime) /
+profiles `TCF-Clean/Dev/Compat`.
+
 Each product is fully independent: its own DLL, plugin GUID, package, changelog, versions, tags, and release lifecycle. Products never reference each other at compile time.
 
 Do not use `ConcernedCat` and `TheConcernedCat` interchangeably in identifiers. Use:
@@ -109,6 +118,7 @@ Existing areas:
 | Area | Purpose | Consumers |
 |---|---|---|
 | `src/Shared/Companions` | Concerned Companions: identity, quest state, sidecar persistence, unlock decisions, placement planning, dialogue rotation | `ConcernedCartographer` |
+| `src/Shared/Settlement` | Settlement runtime: identity, work orders, custody ledger, replayable journal, worker movement planning | `ConcernedForeman` |
 
 ## Git
 

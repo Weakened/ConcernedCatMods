@@ -2,7 +2,7 @@
 param(
     [ValidateSet("Release")]
     [string]$Configuration = "Release",
-    [ValidateSet("ConcernedCartographer", "ConcernedTeamster")]
+    [ValidateSet("ConcernedCartographer", "ConcernedTeamster", "ConcernedForeman")]
     [string]$Product = "ConcernedCartographer"
 )
 

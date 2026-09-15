@@ -3,7 +3,7 @@ param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Debug",
     [switch]$SkipBuild,
-    [ValidateSet("ConcernedCartographer", "ConcernedTeamster")]
+    [ValidateSet("ConcernedCartographer", "ConcernedTeamster", "ConcernedForeman")]
     [string]$Product = "ConcernedCartographer",
     # CT-043: which Teamster profile family member to deploy to. Ignored for
     # ConcernedCartographer (ConcernedCartographer always deploys to TCC-Dev;
@@ -40,6 +40,17 @@ if ($Product -eq "ConcernedTeamster") {
     Assert-PathValue -Name $profileConfig.Key -Path $profileConfig.Path
     $deployRoot = $profileConfig.Path
     $profileName = $profileConfig.Name
+} elseif ($Product -eq "ConcernedForeman") {
+    # CF-SET-002: Foreman gets its own profile for the same reason Teamster
+    # does - testing one mod must never contaminate another's evidence. The
+    # key is optional in Environment.props until somebody actually deploys
+    # Foreman, which is what asks for it.
+    if ([string]::IsNullOrWhiteSpace($environment.ForemanDeployPath)) {
+        throw "FOREMAN_DEPLOYPATH is not configured in Environment.props. Copy the block from Environment.props.example and point it at the TCF-Dev profile's plugins folder."
+    }
+    Assert-PathValue -Name "FOREMAN_DEPLOYPATH" -Path $environment.ForemanDeployPath
+    $deployRoot = $environment.ForemanDeployPath
+    $profileName = "TCF-Dev"
 } else {
     Assert-PathValue -Name "MOD_DEPLOYPATH" -Path $environment.ModDeployPath
     $deployRoot = $environment.ModDeployPath

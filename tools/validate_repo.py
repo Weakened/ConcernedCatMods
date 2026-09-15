@@ -38,6 +38,13 @@ PRODUCTS: dict[str, dict[str, object]] = {
         "package_name": "ConcernedTeamster",
         "dll_name": "TheConcernedCat.ConcernedTeamster.dll",
     },
+    "foreman": {
+        "display": "Concerned Foreman",
+        "project_dir": ROOT / "src" / "ConcernedForeman",
+        "csproj": "ConcernedForeman.csproj",
+        "package_name": "ConcernedForeman",
+        "dll_name": "TheConcernedCat.ConcernedForeman.dll",
+    },
 }
 
 EXPECTED_NAMESPACE = "TheConcernedCat"
@@ -247,8 +254,17 @@ def check_teamster_adapter_isolation(errors: list[str]) -> None:
 CROSS_PRODUCT_RULES: tuple[tuple[str, str, str], ...] = (
     ("teamster", "src/ConcernedTeamster", "ConcernedCartographer"),
     ("teamster", "src/ConcernedTeamster.Tests", "ConcernedCartographer"),
+    ("teamster", "src/ConcernedTeamster", "ConcernedForeman"),
+    ("teamster", "src/ConcernedTeamster.Tests", "ConcernedForeman"),
     ("cartographer", "src/ConcernedCartographer", "ConcernedTeamster"),
     ("cartographer", "src/ConcernedCartographer.Tests", "ConcernedTeamster"),
+    ("cartographer", "src/ConcernedCartographer", "ConcernedForeman"),
+    ("cartographer", "src/ConcernedCartographer.Tests", "ConcernedForeman"),
+    # CF-SET-002: Foreman is a third independent product and inherits the same
+    # rule in both directions. Its only shared code is source-linked from
+    # src/Shared, which belongs to no product.
+    ("foreman", "src/ConcernedForeman", "ConcernedCartographer"),
+    ("foreman", "src/ConcernedForeman", "ConcernedTeamster"),
 )
 
 
@@ -266,7 +282,7 @@ def check_cross_product_independence(errors: list[str]) -> list[str]:
             r"^\s*(?:global\s+)?using\s+(?:static\s+)?(?:\w+\s*=\s*)?"
             r"TheConcernedCat\." + target + r"\b|"
             r"InternalsVisibleTo\(\s*\"TheConcernedCat\." + target + r"\b")
-        for target in {"ConcernedCartographer", "ConcernedTeamster"}
+        for target in {"ConcernedCartographer", "ConcernedTeamster", "ConcernedForeman"}
     }
     checked_projects = 0
     for owner, project_rel, target in CROSS_PRODUCT_RULES:
