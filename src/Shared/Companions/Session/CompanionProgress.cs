@@ -27,6 +27,7 @@ internal sealed class CompanionProgress
     private readonly QuestId _questId;
     private readonly LegacyEvidence _evidence;
     private bool _toolsOnlyPreference;
+    private bool _noticeCameFromSave;
 
     private CompanionProgress(
         CompanionSidecarStore store,
@@ -109,7 +110,16 @@ internal sealed class CompanionProgress
     ///
     /// Saving inline rather than on a later tick is deliberate: every transition
     /// here is a rare, player-visible moment, and the cost of one small file
-    /// write is nothing next to losing the moment to a crash.</summary>
+    /// write is nothing next to losing the moment to a crash.
+    ///
+    /// <b><see cref="QuestTransitionOutcome.Advanced"/> means the state moved in
+    /// memory, not that it reached disk.</b> If the write fails the sidecar
+    /// stays dirty — which is enough to stop
+    /// <see cref="TryRetirePresentation"/> removing anything — but the return
+    /// value cannot tell you. A caller about to fire a one-time side effect
+    /// (an unlock notice, removing a collectible, handing out a memento) must
+    /// check <see cref="HasUnsavedChanges"/> first, and show
+    /// <see cref="Notice"/> if it is set.</summary>
     public QuestTransitionOutcome Advance(QuestTransition transition)
     {
         QuestTransitionOutcome outcome = _sidecar.Apply(_questId, transition);
@@ -221,11 +231,29 @@ internal sealed class CompanionProgress
     private bool Save()
     {
         CompanionSidecarStore.SaveReport report = _store.Save(_sidecar);
-        if (!report.Saved && report.Notice != null)
+        if (!report.Saved)
         {
-            Notice = report.Notice;
+            if (report.Notice != null)
+            {
+                Notice = report.Notice;
+                _noticeCameFromSave = true;
+            }
+
+            return false;
         }
 
-        return report.Saved;
+        // A save that succeeds retracts a save failure it has just disproved.
+        // Antivirus and backup software hold a file for a moment and let go;
+        // without this, one such moment leaves the player reading "could not
+        // save" for the rest of the session while their progress is safely on
+        // disk. A notice from the LOAD is different — it describes the file
+        // they still have, and a successful write does not make it untrue.
+        if (_noticeCameFromSave)
+        {
+            _noticeCameFromSave = false;
+            Notice = null;
+        }
+
+        return true;
     }
 }

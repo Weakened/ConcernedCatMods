@@ -35,6 +35,7 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
 
     private readonly ManualLogSource _log;
     private readonly float _clearanceRadius;
+    private readonly float _warmthRadius;
 
     /// <summary>Reused across every candidate. The planner probes several
     /// dozen points per attempt, and a fresh array each time would be pure
@@ -43,9 +44,20 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
 
     private bool _waterLevelUnavailableLogged;
 
-    public WorldPlacementProbe(ManualLogSource log, float clearanceRadius = 0.5f)
+    /// <param name="warmthRadius">How far from a fire still counts as warm.
+    /// This has to be passed IN rather than compared afterwards: the vanilla
+    /// warmth call answers inside-or-outside for a radius you hand it, so a
+    /// probe that asked with a fixed radius and let the planner compare
+    /// afterwards would leave <c>PlacementRules.FireComfortRadius</c> looking
+    /// like a tuning knob while changing nothing. Give it the rules' own value
+    /// and the knob is real.</param>
+    public WorldPlacementProbe(
+        ManualLogSource log,
+        float warmthRadius = PlacementRules.DefaultFireComfortRadius,
+        float clearanceRadius = 0.5f)
     {
         _log = log;
+        _warmthRadius = warmthRadius > 0f ? warmthRadius : PlacementRules.DefaultFireComfortRadius;
         _clearanceRadius = clearanceRadius;
     }
 
@@ -107,15 +119,21 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
     }
 
     /// <summary>Warmth as a distance, per the shared sample's contract:
-    /// non-negative means a fire is near. <c>EffectArea.IsPointInsideArea</c>
-    /// answers the question without touching any fire's internals, but it
-    /// answers yes/no, so a hit reports zero and a miss reports -1.</summary>
-    private static float DistanceToWarmth(Vector3 grounded)
+    /// non-negative means a fire is near, and the planner then compares it
+    /// against <c>FireComfortRadius</c>.
+    ///
+    /// <c>EffectArea.IsPointInsideArea</c> answers inside-or-outside for a
+    /// radius passed in, not a distance, so the comfort radius is what this
+    /// asks WITH. A hit therefore reports 0 (inside the radius the planner
+    /// will compare against, which is exactly what "warm" means) and a miss
+    /// reports -1. Widening the rule widens the question, which is the
+    /// behaviour a tuning knob is supposed to have.</summary>
+    private float DistanceToWarmth(Vector3 grounded)
     {
         try
         {
             EffectArea? heat = EffectArea.IsPointInsideArea(
-                grounded, EffectArea.Type.Heat, 0f);
+                grounded, EffectArea.Type.Heat, _warmthRadius);
             return heat != null ? 0f : -1f;
         }
         catch

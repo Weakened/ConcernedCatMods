@@ -96,7 +96,7 @@ internal sealed class CompanionDirector : IDisposable
         _scopeSource = new CompanionScopeSource(log);
         _legacyProbe = new CartographerLegacyProbe(log);
         _anchorSource = new SpawnAnchorSource(log);
-        _placementProbe = new WorldPlacementProbe(log);
+        _placementProbe = new WorldPlacementProbe(log, CompassRules.FireComfortRadius);
         _store = new CompanionSidecarStore(CartographerLegacyProbe.DataDirectory);
         _rateLimited = new RateLimitedLog(log, 30f);
 

@@ -354,9 +354,60 @@ internal sealed class CompanionSidecarStore
         return exception.GetType().Name;
     }
 
-    /// <summary>Every sidecar file this store owns under its root. Used by
-    /// migration probes that need to know whether a character has any prior
-    /// data at all.</summary>
+    /// <summary>True when THIS scope — this product, this world, this
+    /// character — already has a sidecar.
+    ///
+    /// This is the question a migration probe actually wants, and it is a
+    /// separate method because the obvious alternative is a trap: a root can
+    /// hold files for several products, worlds and characters, so counting
+    /// files there answers "has anybody ever played anything" and would hand
+    /// one product an unlock earned by another. The grant it produces is
+    /// monotonic, so that mistake is permanent and silent.</summary>
+    public bool HasSidecarFor(CompanionScope scope)
+    {
+        try
+        {
+            return File.Exists(ResolvePath(scope));
+        }
+        catch
+        {
+            // Unreadable is not the same as absent; the caller's evidence rule
+            // decides what to do with "do not know", and every one of them
+            // resolves towards granting.
+            return false;
+        }
+    }
+
+    /// <summary>Sidecar files belonging to one product, across every world and
+    /// character. Still not an answer about one character — use
+    /// <see cref="HasSidecarFor"/> for that.</summary>
+    public IReadOnlyList<string> ListSidecarFiles(ProductId product)
+    {
+        if (product.IsEmpty)
+        {
+            return new string[0];
+        }
+
+        var owned = new List<string>();
+        string prefix = product.Value + ".";
+        foreach (string path in ListSidecarFiles())
+        {
+            if (Path.GetFileName(path).StartsWith(prefix, StringComparison.Ordinal))
+            {
+                owned.Add(path);
+            }
+        }
+
+        return owned;
+    }
+
+    /// <summary>Every sidecar file under this root — <b>every product, every
+    /// world, every character</b>.
+    ///
+    /// Deliberately blunt, and deliberately not what a legacy-evidence probe
+    /// should call: answering "is this player an existing user" from this list
+    /// grants one product's tools on another product's history. Use
+    /// <see cref="HasSidecarFor"/> or the product-scoped overload.</summary>
     public IReadOnlyList<string> ListSidecarFiles()
     {
         try

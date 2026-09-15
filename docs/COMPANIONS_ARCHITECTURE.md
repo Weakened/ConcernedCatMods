@@ -111,6 +111,27 @@ An unreadable file that could not be moved aside also makes the sidecar
 read-only. The notice promises the old file was kept, so the next save must not
 be able to overwrite it.
 
+One consequence is easy to misread, so it is stated plainly here: **a damaged
+row in an otherwise valid, scope-matching sidecar does count as prior use.** A
+load outcome of `LoadedWithSkippedRows` goes through
+`SidecarLoadOutcomes.IndicatesPriorData`, so it reaches `UnlockPolicy` as
+"companion data unreadable", grants access, and persists that grant. Only two
+outcomes do not count as prior use: `Missing`, and a clean `Loaded`. This is the
+player-favouring direction the whole layer is built around — a file that exists
+but cannot be fully read is still a file somebody's game wrote — but it is
+tighter-sounding than it is, and a successor touching `LegacyEvidence` should
+know that before assuming garbage cannot earn an unlock.
+
+### Asking the storage layer about one character
+
+`CompanionSidecarStore.HasSidecarFor(scope)` is the call a product's
+legacy-evidence probe should use. `ListSidecarFiles()` without an argument
+returns every file under the root — **every product, every world, every
+character** — and answering "is this an existing player" from it would grant one
+product's tools on another product's history. Because the resulting grant is
+monotonic, that mistake would be permanent and silent. There is a product-scoped
+overload for the cases that genuinely want a whole product.
+
 ## Storage
 
 ```text
