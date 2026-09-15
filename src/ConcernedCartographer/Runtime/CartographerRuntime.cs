@@ -3134,7 +3134,10 @@ internal sealed class CartographerRuntime : IDisposable
                 // audit's own prescribed way to establish the hair and beard
                 // preset names, which are asset-bundle data rather than API and
                 // were deliberately never guessed.
-                return Runtime.Companions.AppearanceCatalog.Read().Describe();
+                return Runtime.Companions.AppearanceCatalog.Read().Describe(
+                    hairOverride: _settings.CompanionHairPreset.Value,
+                    beardOverride: _settings.CompanionBeardPreset.Value) +
+                    DescribeCustomizationSliders();
 
             case "path":
                 return "Companion data: " + Runtime.Companions.CartographerLegacyProbe.DataDirectory;
@@ -3143,6 +3146,17 @@ internal sealed class CartographerRuntime : IDisposable
                 return "Unknown subcommand. Use: status, toolsonly <on|off>, story, show <on|off>, " +
                     "where, appearance, path.";
         }
+    }
+
+    /// <summary>Appends the character-creation slider labels when that screen
+    /// is actually present. It is only there in the main menu, so this is
+    /// silent in a loaded world rather than reporting an absence as a fault -
+    /// it exists to record, once, which on-screen label corresponds to which of
+    /// the game's two hair sliders.</summary>
+    private static string DescribeCustomizationSliders()
+    {
+        string? sliders = Runtime.Companions.CustomizationPaletteReader.DescribeSliders();
+        return sliders == null ? "" : Environment.NewLine + "  customization sliders: " + sliders;
     }
 
     private static bool ParseOnOff(string value, bool current)

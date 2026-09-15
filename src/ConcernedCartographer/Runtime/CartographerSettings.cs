@@ -56,7 +56,9 @@ internal sealed class CartographerSettings
         ConfigEntry<bool> companionToolsOnly,
         ConfigEntry<bool> companionVisible,
         ConfigEntry<bool> companionAmbientChatter,
-        ConfigEntry<float> companionAmbientIntervalSeconds)
+        ConfigEntry<float> companionAmbientIntervalSeconds,
+        ConfigEntry<string> companionHairPreset,
+        ConfigEntry<string> companionBeardPreset)
     {
         Enabled = enabled;
         CaptureConstructionActions = captureConstructionActions;
@@ -109,6 +111,8 @@ internal sealed class CartographerSettings
         CompanionVisible = companionVisible;
         CompanionAmbientChatter = companionAmbientChatter;
         CompanionAmbientIntervalSeconds = companionAmbientIntervalSeconds;
+        CompanionHairPreset = companionHairPreset;
+        CompanionBeardPreset = companionBeardPreset;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -179,6 +183,15 @@ internal sealed class CartographerSettings
     public ConfigEntry<bool> CompanionAmbientChatter { get; }
 
     public ConfigEntry<float> CompanionAmbientIntervalSeconds { get; }
+
+    /// <summary>An explicit hair preset for Hulgi, by customization-screen
+    /// label or prefab id. Empty means the owner's reference default. A value
+    /// set here is never overwritten by a later default change - CC-NPC-006
+    /// requires a customized appearance to survive.</summary>
+    public ConfigEntry<string> CompanionHairPreset { get; }
+
+    /// <summary>An explicit beard preset for Hulgi, on the same terms.</summary>
+    public ConfigEntry<string> CompanionBeardPreset { get; }
 
     public static CartographerSettings Bind(ConfigFile config)
     {
@@ -298,6 +311,10 @@ internal sealed class CartographerSettings
                 "Let Hulgi make the occasional unprompted remark while you are standing near him. OFF by default. Speaking to him directly always works whether this is on or off."),
             config.Bind("Companions", "AmbientIntervalSeconds", 45f, new ConfigDescription(
                 "Shortest gap between unprompted remarks, in seconds. Only used when AmbientChatter is on.",
-                new AcceptableValueRange<float>(15f, 600f))));
+                new AcceptableValueRange<float>(15f, 600f))),
+            config.Bind("Companions", "HairPreset", "",
+                "Give Hulgi a specific hair preset, by the character-creation label (\"Long Braid\") or the prefab id (\"Hair11\"). Leave empty for his own look. Run 'cc_companion appearance' in game to list what this build offers. A name this build does not have falls back to his default rather than leaving him bald."),
+            config.Bind("Companions", "BeardPreset", "",
+                "Give Hulgi a specific beard preset, by the character-creation label (\"Handlebar\") or the prefab id (\"Beard26\"). Leave empty for his own look."));
     }
 }

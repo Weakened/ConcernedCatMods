@@ -36,6 +36,17 @@ internal sealed class ActorReport
 
     public bool HairColourApplied { get; set; }
 
+    /// <summary>True when the colour came from the game's own customization
+    /// palette rather than the documented fallback tuning value.</summary>
+    public bool HairColourObserved { get; set; }
+
+    /// <summary>The colour actually applied, for the acceptance row.</summary>
+    public ColourTriple HairColour { get; set; } = AppearanceColour.HairFallback;
+
+    /// <summary>True when the extracted model's own skin was tinted. Only
+    /// possible with an observed palette; never guessed.</summary>
+    public bool SkinColourApplied { get; set; }
+
     /// <summary>The animator state actually used for the pose, or null when
     /// none of the candidates existed and the model kept its default.</summary>
     public string? PoseState { get; set; }
@@ -45,7 +56,9 @@ internal sealed class ActorReport
     public override string ToString()
     {
         return $"source={SourcePrefab} skeleton={UsedSkeleton} hair={Hair} ({(HairAttached ? "attached" : "not attached")}) " +
-            $"beard={Beard} ({(BeardAttached ? "attached" : "not attached")}) colour={HairColourApplied} " +
+            $"beard={Beard} ({(BeardAttached ? "attached" : "not attached")}) " +
+            $"colour={(HairColourApplied ? HairColour.ToString() : "not applied")}" +
+            $"{(HairColourObserved ? " (palette)" : " (fallback)")} skin={SkinColourApplied} " +
             $"pose={Pose} state={PoseState ?? "<default>"}";
     }
 }
@@ -104,16 +117,39 @@ internal sealed class CompanionActor
 
     private static readonly string[] HeadBoneFragments = { "head", "neck" };
 
+    /// <summary>The shader property Valheim tints skin, hair and beards with.
+    /// Cached as an id the way the game caches it.</summary>
+    private static readonly int SkinColourProperty = Shader.PropertyToID("_SkinColor");
+
     private readonly ManualLogSource _log;
     private readonly Action _onTalk;
+    private readonly Func<string?> _hairOverride;
+    private readonly Func<string?> _beardOverride;
 
     private GameObject? _root;
     private Animator? _animator;
 
-    public CompanionActor(ManualLogSource log, Action onTalk)
+    /// <summary>The attachment point the source model's own <c>VisEquipment</c>
+    /// names for hair and beards, captured during extraction. It is a bone
+    /// inside the visual subtree, so the reference survives the re-parent - and
+    /// using it means the presets sit exactly where the game puts them instead
+    /// of on whichever bone a name search happened to hit first.</summary>
+    private Transform? _helmetJoint;
+
+    /// <summary>The extracted model's body renderer, for the skin tint and for
+    /// re-binding a skinned customization mesh to the right bones.</summary>
+    private SkinnedMeshRenderer? _bodyModel;
+
+    public CompanionActor(
+        ManualLogSource log,
+        Action onTalk,
+        Func<string?>? hairOverride = null,
+        Func<string?>? beardOverride = null)
     {
         _log = log;
         _onTalk = onTalk;
+        _hairOverride = hairOverride ?? (() => null);
+        _beardOverride = beardOverride ?? (() => null);
     }
 
     public bool Exists => _root != null;
@@ -296,6 +332,29 @@ internal sealed class CompanionActor
                 return null;
             }
 
+            // Read the source's own attachment point and body renderer BEFORE
+            // anything is destroyed. Both live inside the visual subtree, so
+            // the references stay valid once it is re-parented out, and the
+            // component they were read from never wakes.
+            Transform? helmet = null;
+            SkinnedMeshRenderer? body = null;
+            var vis = clone.GetComponentInChildren<VisEquipment>(includeInactive: true);
+            if (vis != null)
+            {
+                helmet = vis.m_helmet;
+                body = vis.m_bodyModel;
+                if (helmet != null && !helmet.IsChildOf(visual.transform))
+                {
+                    // The joint is outside the subtree we keep; it would dangle.
+                    helmet = null;
+                }
+
+                if (body != null && !body.transform.IsChildOf(visual.transform))
+                {
+                    body = null;
+                }
+            }
+
             root = new GameObject("CC_Hulgi");
             visual.transform.SetParent(root.transform, worldPositionStays: false);
             visual.transform.localPosition = Vector3.zero;
@@ -303,6 +362,8 @@ internal sealed class CompanionActor
 
             RemovePhysics(root);
             _animator = animator;
+            _helmetJoint = helmet;
+            _bodyModel = body;
 
             GameObject? result = root;
             root = null;
@@ -381,6 +442,18 @@ internal sealed class CompanionActor
         }
     }
 
+    /// <summary>Gives the extracted model the owner's reference appearance.
+    ///
+    /// Everything here follows what the game itself does in
+    /// <c>VisEquipment</c>: the customization item's <c>attach</c> child is
+    /// what gets instantiated (not the whole item prefab), it goes on the
+    /// model's own helmet joint, and the tint is a
+    /// <c>MaterialPropertyBlock</c> on <c>_SkinColor</c>. Using the game's own
+    /// mechanism rather than a plausible-looking one is the difference between
+    /// a beard and an untinted lump floating near a neck bone.
+    ///
+    /// Every step is allowed to fail on its own. A missing preset changes how
+    /// Hulgi looks and nothing else.</summary>
     private void ApplyAppearance()
     {
         if (_root == null || Report == null)
@@ -392,22 +465,40 @@ internal sealed class CompanionActor
         {
             AppearanceCatalog catalog = AppearanceCatalog.Read();
             Report.Hair = AppearancePlan.Choose(
-                catalog.Hair, AppearancePlan.HairPreferences, AppearanceCatalog.HairPrefix);
+                catalog.Hair, AppearancePlan.HulgiHair, _hairOverride());
             Report.Beard = AppearancePlan.Choose(
-                catalog.Beards, AppearancePlan.BeardPreferences, AppearanceCatalog.BeardPrefix);
+                catalog.Beards, AppearancePlan.HulgiBeard, _beardOverride());
 
-            Transform? head = FindHeadBone(_root.transform);
-            if (head == null)
+            if (!Report.Hair.MatchesReference || !Report.Beard.MatchesReference)
             {
                 _log.LogInfo(
-                    "The companion's head bone could not be found, so hair and beard presets were not " +
-                    "attached. He keeps the source model's own appearance.");
-                return;
+                    "The companion's reference appearance could not be matched exactly on this build " +
+                    $"(hair {Report.Hair}, beard {Report.Beard}). He wears the closest available " +
+                    "presets. Nothing else is affected.");
             }
 
-            Report.HairAttached = TryAttach(Report.Hair.PrefabName, head, "hair");
-            Report.BeardAttached = TryAttach(Report.Beard.PrefabName, head, "beard");
-            Report.HairColourApplied = TryApplyHairColour(head);
+            CustomizationPalette palette = CustomizationPaletteReader.Read(_log);
+            ColourTriple hairColour = AppearanceColour.HulgiHair(palette);
+            Report.HairColour = hairColour;
+            Report.HairColourObserved = palette.Observed;
+
+            Transform? joint = _helmetJoint ?? FindHeadBone(_root.transform);
+            if (joint == null)
+            {
+                _log.LogInfo(
+                    "The companion's head attachment point could not be found, so hair and beard " +
+                    "presets were not attached. He keeps the source model's own appearance.");
+            }
+            else
+            {
+                Report.HairAttached = TryAttachCustomization(
+                    Report.Hair.PrefabName, joint, "hair", hairColour);
+                Report.BeardAttached = TryAttachCustomization(
+                    Report.Beard.PrefabName, joint, "beard", hairColour);
+                Report.HairColourApplied = Report.HairAttached || Report.BeardAttached;
+            }
+
+            Report.SkinColourApplied = TryApplyBodyColours(palette, hairColour);
         }
         catch (Exception exception)
         {
@@ -417,27 +508,91 @@ internal sealed class CompanionActor
         }
     }
 
-    private bool TryAttach(string? prefabName, Transform head, string slot)
+    /// <summary>Attaches one customization preset the way the game attaches
+    /// hair and beards.
+    ///
+    /// The clone is made under an inactive holder and inspected before it is
+    /// ever allowed to wake, exactly as the body extraction is: a customization
+    /// item is a mesh and a material, and if one on some build turns out to
+    /// carry a component from the forbidden list, the attachment is abandoned
+    /// rather than cleaned up.</summary>
+    private bool TryAttachCustomization(
+        string? prefabName, Transform joint, string slot, ColourTriple colour)
     {
         if (string.IsNullOrEmpty(prefabName))
         {
             return false;
         }
 
+        GameObject? prefab = LocalVisual.FindPrefab(prefabName!);
+        if (prefab == null)
+        {
+            _log.LogInfo(
+                $"The companion's {slot} preset \"{prefabName}\" is not in this build's item table, " +
+                "so it was not attached.");
+            return false;
+        }
+
+        GameObject holder = new GameObject("CC_CustomizationHarvest");
+        holder.SetActive(false);
+
+        GameObject? piece = null;
         try
         {
-            LocalVisual.Result piece = LocalVisual.Build(
-                "Hulgi" + slot, new[] { prefabName! }, 1f, _log);
-            if (piece.Source == "primitive")
+            // The game instantiates the item's "attach" child, never the item
+            // prefab itself: the prefab root is an ItemDrop with a ZNetView on
+            // it, and the visible mesh is one level down.
+            GameObject? attach = FindAttachChild(prefab, out bool skinned);
+            if (attach == null)
             {
-                // A primitive cylinder is not a beard. Better to have none.
-                UnityEngine.Object.DestroyImmediate(piece.Root);
+                _log.LogInfo(
+                    $"The companion's {slot} preset \"{prefabName}\" has no attachment mesh on this " +
+                    "build, so it was not attached.");
                 return false;
             }
 
-            piece.Root.transform.SetParent(head, worldPositionStays: false);
-            piece.Root.transform.localPosition = Vector3.zero;
-            piece.Root.transform.localRotation = Quaternion.identity;
+            piece = UnityEngine.Object.Instantiate(attach, holder.transform);
+            if (ContainsForbiddenComponent(piece, out string offender))
+            {
+                _log.LogInfo(
+                    $"The companion's {slot} preset \"{prefabName}\" carries {offender}, so it was " +
+                    "not used. Nothing was stripped; the preset was refused.");
+                return false;
+            }
+
+            RemovePhysics(piece);
+
+            if (skinned && _bodyModel != null)
+            {
+                // A skinned customization mesh deforms with the body, so it is
+                // bound to the body's bones and parented beside it - the game's
+                // own attach_skin path.
+                piece.transform.SetParent(_bodyModel.transform.parent, worldPositionStays: false);
+                piece.transform.localPosition = Vector3.zero;
+                piece.transform.localRotation = Quaternion.identity;
+                foreach (SkinnedMeshRenderer mesh in
+                    piece.GetComponentsInChildren<SkinnedMeshRenderer>(includeInactive: true))
+                {
+                    if (mesh != null)
+                    {
+                        mesh.rootBone = _bodyModel.rootBone;
+                        mesh.bones = _bodyModel.bones;
+                    }
+                }
+            }
+            else
+            {
+                piece.transform.SetParent(joint, worldPositionStays: false);
+                piece.transform.localPosition = Vector3.zero;
+                piece.transform.localRotation = Quaternion.identity;
+            }
+
+            ApplyEquipOffset(prefab, piece.transform);
+            Tint(piece, colour);
+
+            GameObject attached = piece;
+            piece = null;
+            attached.SetActive(true);
             return true;
         }
         catch (Exception exception)
@@ -446,42 +601,129 @@ internal sealed class CompanionActor
                 $"The companion's {slot} preset could not be attached: {SafeLogText.Brief(exception)}");
             return false;
         }
-    }
-
-    /// <summary>Tints the attached hair through a property block, so the
-    /// vanilla material every other character shares is never written to. Two
-    /// property names are tried because which one this build's hair shader uses
-    /// is not knowable from metadata.</summary>
-    private bool TryApplyHairColour(Transform head)
-    {
-        try
+        finally
         {
-            var colour = new Color(
-                AppearancePlan.StrawberryBlondR,
-                AppearancePlan.StrawberryBlondG,
-                AppearancePlan.StrawberryBlondB,
-                1f);
-
-            bool applied = false;
-            var block = new MaterialPropertyBlock();
-            foreach (Renderer renderer in head.GetComponentsInChildren<Renderer>(includeInactive: true))
+            if (piece != null)
             {
-                if (renderer == null)
-                {
-                    continue;
-                }
-
-                renderer.GetPropertyBlock(block);
-                block.SetColor("_Color", colour);
-                block.SetColor("_HairColor", colour);
-                renderer.SetPropertyBlock(block);
-                applied = true;
+                UnityEngine.Object.DestroyImmediate(piece);
             }
 
-            return applied;
+            UnityEngine.Object.DestroyImmediate(holder);
         }
-        catch
+    }
+
+    /// <summary>Finds the child the game would attach, matching its own search:
+    /// a child named <c>attach</c> or <c>attach_skin</c>, first one
+    /// wins.</summary>
+    private static GameObject? FindAttachChild(GameObject prefab, out bool skinned)
+    {
+        skinned = false;
+        int children = prefab.transform.childCount;
+        for (int index = 0; index < children; index++)
         {
+            Transform child = prefab.transform.GetChild(index);
+            if (child == null)
+            {
+                continue;
+            }
+
+            if (child.gameObject.name == "attach")
+            {
+                return child.gameObject;
+            }
+
+            if (child.gameObject.name == "attach_skin")
+            {
+                skinned = true;
+                return child.gameObject;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The optional <c>equipoffset</c> nudge the game applies after
+    /// parenting. Transcribed from <c>VisEquipment.AttachItem</c>, including its
+    /// use of the prefab child's world transform - a prefab asset sits at the
+    /// origin, so that is its local offset.</summary>
+    private static void ApplyEquipOffset(GameObject prefab, Transform attached)
+    {
+        Transform offset = prefab.transform.Find("equipoffset");
+        if (offset == null)
+        {
+            return;
+        }
+
+        attached.localPosition += offset.position;
+        attached.localRotation *= offset.rotation;
+    }
+
+    /// <summary>Tints hair and beard the way the game does: a property block on
+    /// <c>_SkinColor</c>.
+    ///
+    /// The property name matters and is not interchangeable. Valheim's hair
+    /// shader reads <c>_SkinColor</c>; writing <c>_Color</c> sets a property
+    /// the shader never samples, which looks exactly like a colour that was
+    /// applied and had no effect. A property block is used rather than the
+    /// material so the vanilla asset every other character shares is never
+    /// written to.</summary>
+    private static void Tint(GameObject piece, ColourTriple colour)
+    {
+        var tint = new Color(colour.R, colour.G, colour.B, 1f);
+        var block = new MaterialPropertyBlock();
+        foreach (Renderer renderer in piece.GetComponentsInChildren<Renderer>(includeInactive: true))
+        {
+            if (renderer == null)
+            {
+                continue;
+            }
+
+            renderer.GetPropertyBlock(block);
+            block.SetColor(SkinColourProperty, tint);
+            renderer.SetPropertyBlock(block);
+        }
+    }
+
+    /// <summary>Tints the extracted body: skin on material 0 and the model's
+    /// own hair on material 1, which is the split the game itself uses.
+    ///
+    /// The skin half only happens with a palette read off the live game. There
+    /// is no defensible fallback for a body colour - a guessed one is worse
+    /// than the model's own - so an unobserved palette leaves the skin alone
+    /// and says so.</summary>
+    private bool TryApplyBodyColours(CustomizationPalette palette, ColourTriple hairColour)
+    {
+        if (_bodyModel == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            var block = new MaterialPropertyBlock();
+            var hairTint = new Color(hairColour.R, hairColour.G, hairColour.B, 1f);
+            _bodyModel.GetPropertyBlock(block, 1);
+            block.SetColor(SkinColourProperty, hairTint);
+            _bodyModel.SetPropertyBlock(block, 1);
+
+            ColourTriple? skin = AppearanceColour.HulgiSkin(palette);
+            if (!skin.HasValue)
+            {
+                return false;
+            }
+
+            var skinTint = new Color(skin.Value.R, skin.Value.G, skin.Value.B, 1f);
+            block = new MaterialPropertyBlock();
+            _bodyModel.GetPropertyBlock(block, 0);
+            block.SetColor(SkinColourProperty, skinTint);
+            _bodyModel.SetPropertyBlock(block, 0);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            _log.LogInfo(
+                "The companion's skin tone could not be applied on this build; he keeps the source " +
+                $"model's own: {SafeLogText.Brief(exception)}");
             return false;
         }
     }
@@ -529,6 +771,8 @@ internal sealed class CompanionActor
     public void Release()
     {
         _animator = null;
+        _helmetJoint = null;
+        _bodyModel = null;
         Report = null;
         PlacedAnchor = CompanionAnchor.None;
 
@@ -556,6 +800,8 @@ internal sealed class CompanionActor
     {
         _root = null;
         _animator = null;
+        _helmetJoint = null;
+        _bodyModel = null;
         Report = null;
         PlacedAnchor = CompanionAnchor.None;
     }

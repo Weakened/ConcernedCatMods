@@ -151,7 +151,11 @@ internal sealed class CompanionDirector : IDisposable
         _placementProbe = new WorldPlacementProbe(log, CompassRules.FireComfortRadius);
         _hulgiProbe = new WorldPlacementProbe(log, HulgiRules.FireComfortRadius);
         _bedProbe = new BedValidityProbe(log);
-        _actor = new CompanionActor(log, TalkToCompanion);
+        _actor = new CompanionActor(
+            log,
+            TalkToCompanion,
+            () => _settings.CompanionHairPreset.Value,
+            () => _settings.CompanionBeardPreset.Value);
         _biomes = new KnownBiomeReader(log);
         _store = new CompanionSidecarStore(CartographerLegacyProbe.DataDirectory);
         _rateLimited = new RateLimitedLog(log, 30f);
