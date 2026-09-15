@@ -11,11 +11,11 @@ Epic #264. Leaves #265, #266, #267, #268, #269.
 |---|---|
 | Package | `TheConcernedCat-ConcernedCartographer-1.1.0` |
 | Path | `artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-1.1.0.zip` |
-| ZIP SHA256 | `45C08DFE911B446C93A686A4E850A2547F2B843333881B447349B34EA1DD6431` |
+| ZIP SHA256 | `686B0CC749E907338086BBB0FD01D77C7BE567742CFC4432537B2293FD0CC49B` |
 | ZIP bytes | 872,408 |
-| DLL SHA256 | `D7849F76C2C325BB4F5829594BB1C38677C67848283902534F62B284693C4175` |
+| DLL SHA256 | `AE69C3BA735FB1CBB7BA86BEE4B65A8A0C38CD07F3210FF678C4C8176E0A5131` |
 | DLL bytes | 655,872 |
-| InformationalVersion | `1.1.0+deabec28d70f82b76cbab49d17a262d4d9aed26f` |
+| InformationalVersion | `1.1.0+830193bc6edb45f7ef8a33d6bd4c5c6442f96c19` |
 | Checksums file | `artifacts/thunderstore/SHA256SUMS-ConcernedCartographer-1.1.0.txt` |
 
 `artifacts/` is git-ignored, so the ZIP lives on disk beside every previous
