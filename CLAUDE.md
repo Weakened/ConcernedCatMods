@@ -1,11 +1,12 @@
 # Claude Code instructions for ConcernedCatMods
 
-You are working in a Valheim mod monorepo with multiple independent products. The active implementation target is **Concerned Teamster** (issue key `CT`, label `mod:teamster`). **Concerned Cartographer** is in public beta; open Cartographer P0/P1 regressions preempt Teamster work, and other Cartographer work proceeds only through its own issues.
+You are working in a Valheim mod monorepo with multiple independent products. The active implementation target is the **Concerned Companions** epic (#264, issue key `CC-NPC`, label `mod:cartographer`): Hulgi, the Broken Compass, and the reusable companion foundation in `src/Shared/Companions`. **Concerned Teamster** completed its v1.0 conveyor and is not the active target; **Concerned Cartographer** is in public beta. Open P0/P1 regressions in either shipped product preempt companion work, and other work in either product proceeds only through its own issues.
 
 ## Operating mode
 
 - Begin by reading `docs/NAMING_CONVENTIONS.md`, then the project, architecture, test-plan, and execution documents for the product you are working on under `docs/mods/concerned-teamster/` or `docs/mods/concerned-cartographer/`.
-- Teamster conveyor work follows `docs/mods/concerned-teamster/AUTONOMOUS_EXECUTION.md`: lowest-numbered open unblocked CT leaf, one issue per branch/PR, evidence-commented closure, continue immediately.
+- Companion work follows epic #264: take the lowest-numbered open unblocked `CC-NPC` leaf, one issue per branch/PR, close with evidence, continue immediately.
+- Teamster conveyor work, if it resumes, follows `docs/mods/concerned-teamster/AUTONOMOUS_EXECUTION.md`: lowest-numbered open unblocked CT leaf, one issue per branch/PR, evidence-commented closure, continue immediately.
 - Work on exactly one GitHub issue at a time.
 - Prefer a vertical slice that can be manually proved in game over a broad speculative implementation.
 - Keep changes small enough for an independent Codex review.
@@ -17,6 +18,7 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
 - Never invoke `tcli publish` or create a public release without explicit human approval.
 - Never modify the user's real world files. Test in a disposable world and a dedicated mod-manager profile.
 - Do not silently weaken validation or remove acceptance criteria to make a task appear complete.
+- Companions additionally: local-only presentation. No networked NPC, ZDO creation, custom RPC, native save entity, collision blocking, enemy targeting, combat, loot, or storage. Never instantiate a live `Player`/`BaseAI` and strip components afterwards. Feature access is monotonic and independent of the companion existing: ambiguous evidence grants, and nothing (a lost bed, a death, a hidden companion, a corrupt sidecar) ever revokes it.
 - Teamster additionally: preserve vanilla cart mass/physics by default; no zero-weight defaults, cart teleports, recovery cheats, stamina bypass, pathfinding, world-save mutation, or server-authority takeover. Mutating conveniences must be explicit, reversible, fail-closed, and authorized by their own issue. No compile-time dependency between Teamster and Cartographer.
 
 ## Local commands
