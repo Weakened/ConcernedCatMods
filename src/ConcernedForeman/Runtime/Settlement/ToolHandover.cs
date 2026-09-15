@@ -1,4 +1,5 @@
 using TheConcernedCat.Settlement.Identity;
+using TheConcernedCat.Settlement.Journal;
 using TheConcernedCat.Settlement.Tools;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Settlement;
@@ -74,36 +75,28 @@ internal static class ToolHandover
         WorkerId worker,
         RequestId transaction,
         ToolLedger ledger,
+        SettlementJournal journal,
         out ToolSpecimen given,
         out string message)
     {
         given = default;
 
-        if (ledger == null || worker.IsEmpty || transaction.IsEmpty)
+        if (ledger == null || journal == null || worker.IsEmpty || transaction.IsEmpty)
         {
             message = "That handover was not set up properly. Nothing was taken.";
             return HandoverOutcome.Refused;
         }
 
-#pragma warning disable CS0162 // unreachable while the gate is closed, by design
-        if (ToolLedger.RequiresPersistence)
+        if (journal.IsReadOnly)
         {
-            // Closed on purpose, and this is the honest interim rather than a
-            // TODO. The ledger is in memory only: there are no tool journal
-            // entry kinds, no codec columns and no replay, so a relog would
-            // erase the record of a real axe somebody handed over -- and with
-            // it any possibility of giving it back. Taking a player's tool on
-            // that basis is a data-loss path for their property.
-            //
-            // Everything below is written and reviewed; it starts working the
-            // moment the journal can carry a handover, and not one commit
-            // earlier.
-            message = "He would take it, but this build cannot yet remember a tool handover " +
-                "across a reload — so it will not take your axe and lose the record of it. " +
-                "Nothing has been taken.";
+            // The record of the handover cannot be written, so the handover must
+            // not happen -- the same rule that stops a designation being cleared
+            // against a journal this build may not write. Taking somebody's axe
+            // on a promise we cannot keep is worse than refusing.
+            message = "He cannot take it: this settlement's record could not be fully read, so " +
+                "nothing new is being written to it. Nothing has been taken.";
             return HandoverOutcome.Refused;
         }
-#pragma warning restore CS0162
 
         // Idempotent before anything is touched. The caller may not know whether
         // its previous attempt reached disk, and must not have to.
@@ -161,12 +154,20 @@ internal static class ToolHandover
             return HandoverOutcome.Refused;
         }
 
+        // The intention, written BEFORE the item moves. A replay that finds
+        // this with no matching finish knows a handover was in flight, which is
+        // a completely different situation from never having tried.
+        journal.Append(
+            JournalEntryKind.ToolHandoverStarted, default, transaction,
+            worker: worker, tool: specimen);
+
         if (!source.RemoveItem(selected))
         {
             // The item reached him but did not leave us -- something else moved
             // it in between. Removing our side could destroy the last reference,
-            // so this stops and says so instead. The ledger records the same
-            // uncertainty for the same reason material custody does.
+            // so this stops and says so instead. The started entry above is left
+            // standing with no finish, which is exactly how a replay learns that
+            // this one is unresolved.
             ledger.Issue(new ToolHolding(transaction, worker, specimen));
             ledger.MarkUncertain(transaction);
 
@@ -177,9 +178,12 @@ internal static class ToolHandover
         }
 
         ledger.Issue(new ToolHolding(transaction, worker, specimen));
+        journal.Append(
+            JournalEntryKind.ToolHandoverFinished, default, transaction,
+            worker: worker, tool: specimen);
 
         // Equipping is presentation, and its failure is not the handover's
-        // failure: he owns the tool either way, and the ledger already says so.
+        // failure: he owns the tool either way, and the record already says so.
         to.EquipItem(selected);
 
         given = specimen;
@@ -199,11 +203,20 @@ internal static class ToolHandover
         ItemDrop.ItemData? held,
         RequestId transaction,
         ToolLedger ledger,
+        SettlementJournal journal,
         out string message)
     {
-        if (ledger == null || transaction.IsEmpty || !ledger.TryGet(transaction, out ToolHolding holding))
+        if (ledger == null || journal == null || transaction.IsEmpty
+            || !ledger.TryGet(transaction, out ToolHolding holding))
         {
             message = "There is no record of that tool.";
+            return HandoverOutcome.Refused;
+        }
+
+        if (journal.IsReadOnly)
+        {
+            message = "He cannot give it back yet: this settlement's record could not be fully " +
+                "read, so nothing new is being written to it.";
             return HandoverOutcome.Refused;
         }
 
@@ -249,6 +262,10 @@ internal static class ToolHandover
         }
 
         ledger.Return(transaction);
+        journal.Append(
+            JournalEntryKind.ToolReturned, default, transaction,
+            worker: holding.Worker, tool: holding.Tool);
+
         message = "He hands it back.";
         return HandoverOutcome.Given;
     }

@@ -108,22 +108,16 @@ internal sealed class ToolHolding
 /// copy, and this ledger exists so that the move can be undone exactly once and
 /// never twice.
 ///
-/// <b>IN MEMORY ONLY, and an earlier version of this comment claimed otherwise.</b>
-/// It said a retry "after a crash, a relog or a full inventory" repeats the
-/// request rather than the effect, and cited the material custody ledger as the
-/// design being mirrored. The shape is mirrored; the thing that earns that
-/// sentence is not. <c>CustodyLedger</c> is rebuilt by
-/// <c>SettlementJournal.Replay()</c> from a persisted journal — there are no
-/// tool entry kinds, no codec columns, no store and no replay, so this ledger
-/// does not survive a session at all. Within one session every operation is
-/// genuinely idempotent; across a restart the record of a real tool a player
-/// handed over is simply gone, and a return could never be offered.
-///
-/// That is a data-loss path for somebody's actual axe, so **issuing a tool is
-/// gated closed** until the persistence exists — see
-/// <see cref="RequiresPersistence"/>. The gate is the honest interim: the
-/// contract is right, and what is missing is missing visibly rather than
-/// discovered by a player who relogged.
+/// <b>Rebuilt from the journal, and for one commit it was not.</b> An earlier
+/// version claimed a retry "after a crash, a relog or a full inventory" repeats
+/// the request rather than the effect, and cited the material custody ledger as
+/// the design being mirrored — while mirroring only its shape. An independent
+/// review found the claim before a player found the missing axe, and issuing was
+/// gated closed until it became true. It is true now: #299 added
+/// <c>ToolHandoverStarted</c> / <c>ToolHandoverFinished</c> /
+/// <c>ToolReturned</c> entries, their codec columns, and the replay that
+/// rebuilds this ledger — so a handover survives a reload, a retry is recognised
+/// as the same one, and a tool can still be given back.
 ///
 /// The <see cref="ToolHoldingState.Uncertain"/> state is still the material
 /// ledger's, for a transfer whose two halves cannot be made atomic against a
@@ -132,14 +126,6 @@ internal sealed class ToolHolding
 /// every worker every job forever with no way out.</summary>
 internal sealed class ToolLedger
 {
-    /// <summary>True while this build cannot persist a handover.
-    ///
-    /// Read by the adapter, which refuses to issue a tool while it is set. It is
-    /// a constant rather than a setting because a player must not be able to
-    /// turn off a guard against losing their own axe; it goes away when the
-    /// journal learns to carry tool entries, and not before.</summary>
-    public const bool RequiresPersistence = true;
-
     private readonly Dictionary<string, ToolHolding> _holdings =
         new Dictionary<string, ToolHolding>(StringComparer.Ordinal);
     private readonly List<string> _order = new List<string>();

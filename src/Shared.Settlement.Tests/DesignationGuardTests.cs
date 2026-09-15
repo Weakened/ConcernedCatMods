@@ -350,6 +350,14 @@ public sealed class DesignationGuardTests : IDisposable
             [JournalEntryKind.Refunded] = true,
             [JournalEntryKind.CommitStarted] = true,
             [JournalEntryKind.CommitFinished] = true,
+
+            // Added when tool handovers joined the record. This test failed the
+            // moment the three kinds were declared and before they were
+            // classified, which is the whole reason it exists -- the compiler
+            // does not and will not do it.
+            [JournalEntryKind.ToolHandoverStarted] = true,
+            [JournalEntryKind.ToolHandoverFinished] = true,
+            [JournalEntryKind.ToolReturned] = true,
         };
 
         foreach (JournalEntryKind kind in Enum.GetValues(typeof(JournalEntryKind)))

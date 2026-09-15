@@ -4,6 +4,7 @@ using System.Globalization;
 using TheConcernedCat.Settlement.Custody;
 using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Orders;
+using TheConcernedCat.Settlement.Tools;
 
 namespace TheConcernedCat.Settlement.Journal;
 
@@ -27,6 +28,41 @@ internal enum JournalEntryKind
 
     /// <summary>Both happened. Written AFTER both.</summary>
     CommitFinished = 4,
+
+    /// <summary>A real tool is about to change hands. Written BEFORE the item
+    /// moves, for the same reason <see cref="CommitStarted"/> is: the two halves
+    /// of a handover cannot be made atomic against a game, so a replay that
+    /// finds a start with no finish <i>knows</i> something was in flight.</summary>
+    ToolHandoverStarted = 5,
+
+    /// <summary>The item moved and the worker has it. Written AFTER.</summary>
+    ToolHandoverFinished = 6,
+
+    /// <summary>The worker gave it back.</summary>
+    ToolReturned = 7,
+}
+
+/// <summary>Which half of the record an entry belongs to.
+///
+/// Tool entries are keyed by a <b>worker</b>, material entries by an
+/// <b>order</b>. Neither is a stand-in for the other, and an entry that carried
+/// a synthetic order id so it could reuse the material shape would be a record
+/// that reads wrongly forever after.</summary>
+internal static class JournalEntryKinds
+{
+    public static bool IsTool(JournalEntryKind kind)
+    {
+        switch (kind)
+        {
+            case JournalEntryKind.ToolHandoverStarted:
+            case JournalEntryKind.ToolHandoverFinished:
+            case JournalEntryKind.ToolReturned:
+                return true;
+
+            default:
+                return false;
+        }
+    }
 }
 
 /// <summary>One immutable line of the journal.</summary>
@@ -41,14 +77,33 @@ internal sealed class JournalEntry
         RequestId request = default,
         OrderTransition transition = OrderTransition.Approve,
         string? container = null,
-        IEnumerable<MaterialStack>? stacks = null)
+        IEnumerable<MaterialStack>? stacks = null,
+        WorkerId worker = default,
+        ToolSpecimen tool = default)
     {
         if (sequence < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(sequence));
         }
 
-        if (order.IsEmpty)
+        if (JournalEntryKinds.IsTool(kind))
+        {
+            // A handover belongs to a WORKER, not to an order. Inventing an
+            // order id so the entry could reuse the material shape would make
+            // every later read of this record wrong about who was involved.
+            if (worker.IsEmpty)
+            {
+                throw new ArgumentException(
+                    "A tool journal entry needs the worker it is about.", nameof(worker));
+            }
+
+            if (tool.IsEmpty)
+            {
+                throw new ArgumentException(
+                    "A tool journal entry needs the tool it is about.", nameof(tool));
+            }
+        }
+        else if (order.IsEmpty)
         {
             throw new ArgumentException("A journal entry needs an owning order.", nameof(order));
         }
@@ -59,6 +114,8 @@ internal sealed class JournalEntry
         Request = request;
         Transition = transition;
         Container = container;
+        Worker = worker;
+        Tool = tool;
 
         if (stacks != null)
         {
@@ -77,6 +134,12 @@ internal sealed class JournalEntry
     public string? Container { get; }
     public IReadOnlyList<MaterialStack> Stacks => _stacks;
 
+    /// <summary>Empty unless this is a tool entry.</summary>
+    public WorkerId Worker { get; }
+
+    /// <summary>Empty unless this is a tool entry.</summary>
+    public ToolSpecimen Tool { get; }
+
     public override string ToString()
     {
         return Sequence.ToString(CultureInfo.InvariantCulture) + " " + Kind + " " + Order.Value +
@@ -92,12 +155,14 @@ internal sealed class ReplayResult
     internal ReplayResult(
         IReadOnlyDictionary<string, OrderState> orders,
         CustodyLedger ledger,
+        ToolLedger tools,
         long nextSequence,
         Guid journalInstance,
         IEnumerable<string> repairs)
     {
         Orders = orders;
         Ledger = ledger;
+        Tools = tools;
         NextSequence = nextSequence;
         JournalInstance = journalInstance;
         foreach (string repair in repairs)
@@ -109,6 +174,11 @@ internal sealed class ReplayResult
     public IReadOnlyDictionary<string, OrderState> Orders { get; }
 
     public CustodyLedger Ledger { get; }
+
+    /// <summary>Which real tools each worker is holding, rebuilt from the
+    /// record. This is what makes the tool ledger's idempotence claim true
+    /// across a reload rather than only within one session.</summary>
+    public ToolLedger Tools { get; }
 
     public long NextSequence { get; }
 
@@ -221,9 +291,12 @@ internal sealed class SettlementJournal
         RequestId request = default,
         OrderTransition transition = OrderTransition.Approve,
         string? container = null,
-        IEnumerable<MaterialStack>? stacks = null)
+        IEnumerable<MaterialStack>? stacks = null,
+        WorkerId worker = default,
+        ToolSpecimen tool = default)
     {
-        var entry = new JournalEntry(NextSequence, kind, order, request, transition, container, stacks);
+        var entry = new JournalEntry(
+            NextSequence, kind, order, request, transition, container, stacks, worker, tool);
         _entries.Add(entry);
         _highestSequence = entry.Sequence;
         IsDirty = true;
@@ -271,6 +344,9 @@ internal sealed class SettlementJournal
             case JournalEntryKind.Refunded:
             case JournalEntryKind.CommitStarted:
             case JournalEntryKind.CommitFinished:
+            case JournalEntryKind.ToolHandoverStarted:
+            case JournalEntryKind.ToolHandoverFinished:
+            case JournalEntryKind.ToolReturned:
                 return true;
 
             case JournalEntryKind.OrderTransition:
@@ -285,8 +361,11 @@ internal sealed class SettlementJournal
     {
         var orders = new Dictionary<string, OrderState>(StringComparer.Ordinal);
         var ledger = new CustodyLedger();
+        var tools = new ToolLedger();
         var startedCommits = new Dictionary<string, JournalEntry>(StringComparer.Ordinal);
         var finishedCommits = new HashSet<string>(StringComparer.Ordinal);
+        var startedHandovers = new Dictionary<string, JournalEntry>(StringComparer.Ordinal);
+        var finishedHandovers = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (JournalEntry entry in _entries)
         {
@@ -348,6 +427,19 @@ internal sealed class SettlementJournal
                     finishedCommits.Add(entry.Request.Value);
                     ledger.Commit(entry.Request);
                     break;
+
+                case JournalEntryKind.ToolHandoverStarted:
+                    startedHandovers[entry.Request.Value] = entry;
+                    break;
+
+                case JournalEntryKind.ToolHandoverFinished:
+                    finishedHandovers.Add(entry.Request.Value);
+                    tools.Issue(new ToolHolding(entry.Request, entry.Worker, entry.Tool));
+                    break;
+
+                case JournalEntryKind.ToolReturned:
+                    tools.Return(entry.Request);
+                    break;
             }
         }
 
@@ -380,6 +472,28 @@ internal sealed class SettlementJournal
                 "request one way or the other.");
         }
 
-        return new ReplayResult(orders, ledger, NextSequence, Instance, repairs);
+        // A handover that started and did not finish is genuinely unknown, and
+        // stays unknown -- the same rule as an interrupted material commit, for
+        // the same reason. Assuming it completed hands a worker a tool the
+        // player may still be holding; assuming it did not loses the record of
+        // one they are not.
+        foreach (KeyValuePair<string, JournalEntry> pending in startedHandovers)
+        {
+            if (finishedHandovers.Contains(pending.Key))
+            {
+                continue;
+            }
+
+            JournalEntry entry = pending.Value;
+            tools.Issue(new ToolHolding(entry.Request, entry.Worker, entry.Tool));
+            tools.MarkUncertain(entry.Request);
+
+            repairs.Add(
+                "A tool was changing hands (" + entry.Tool + ", worker \"" + entry.Worker.Value +
+                "\") when the session ended, and whether it moved is not recorded. Nothing has " +
+                "been taken or given back. Check both inventories, then say which way it went.");
+        }
+
+        return new ReplayResult(orders, ledger, tools, NextSequence, Instance, repairs);
     }
 }
