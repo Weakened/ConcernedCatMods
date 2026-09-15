@@ -85,6 +85,26 @@ internal static class ToolHandover
             return HandoverOutcome.Refused;
         }
 
+#pragma warning disable CS0162 // unreachable while the gate is closed, by design
+        if (ToolLedger.RequiresPersistence)
+        {
+            // Closed on purpose, and this is the honest interim rather than a
+            // TODO. The ledger is in memory only: there are no tool journal
+            // entry kinds, no codec columns and no replay, so a relog would
+            // erase the record of a real axe somebody handed over -- and with
+            // it any possibility of giving it back. Taking a player's tool on
+            // that basis is a data-loss path for their property.
+            //
+            // Everything below is written and reviewed; it starts working the
+            // moment the journal can carry a handover, and not one commit
+            // earlier.
+            message = "He would take it, but this build cannot yet remember a tool handover " +
+                "across a reload — so it will not take your axe and lose the record of it. " +
+                "Nothing has been taken.";
+            return HandoverOutcome.Refused;
+        }
+#pragma warning restore CS0162
+
         // Idempotent before anything is touched. The caller may not know whether
         // its previous attempt reached disk, and must not have to.
         if (ledger.TryGet(transaction, out ToolHolding existing))

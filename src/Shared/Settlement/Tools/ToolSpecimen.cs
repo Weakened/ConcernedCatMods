@@ -19,9 +19,18 @@ internal enum ToolKind
     /// answer, not ours.</summary>
     Axe = 1,
 
-    /// <summary>Something that can build. Verified by capability too: a hammer
-    /// is an item carrying a <c>PieceTable</c> in
-    /// <c>ItemDrop.ItemData.SharedData.m_buildPieces</c>.
+    /// <summary>Something that can build.
+    ///
+    /// Carrying a <c>PieceTable</c> is <b>necessary but not sufficient</b>, and
+    /// an earlier version of this comment said it was sufficient. Vanilla's own
+    /// <c>Inventory.GetAllPieceTables(List&lt;PieceTable&gt;)</c> deliberately
+    /// collects <i>several</i> distinct tables from one inventory and dedupes
+    /// them — which is proof from the binary that more than one item type
+    /// carries one. The hoe and the cultivator are the known others.
+    ///
+    /// So the classifier additionally requires the table to contain at least one
+    /// piece that is a real structure rather than a terrain operation. See
+    /// <c>ToolClassifier</c>.
     ///
     /// Neither kind is recognised by prefab name. A name match would break on
     /// any modded or renamed tool and would silently accept something that
@@ -33,9 +42,19 @@ internal enum ToolKind
 ///
 /// <b>This is a description, not a copy.</b> The item itself stays a single
 /// instance that moved from one inventory to another; this records enough to
-/// recognise it, to show the player what they gave, and to notice if what comes
-/// back is not what went in. Nothing here can be used to reconstruct a tool —
-/// deliberately, because a type that could mint one would eventually be used to.
+/// show the player what they gave and to recognise the <i>kind</i> of thing it
+/// was. Nothing here can be used to reconstruct a tool — by convention rather
+/// than by construction, since a determined caller could still read the fields.
+///
+/// <b>What it cannot do, corrected:</b> it cannot tell one axe from another
+/// identical axe. <see cref="ItemKey"/> is a <i>type</i> token — the adapter
+/// supplies <c>m_shared.m_name</c>, which is the same field vanilla's own
+/// <c>Inventory.CountItems</c> uses to count fungible stacks. An earlier
+/// version of this comment claimed the record was enough "to notice if what
+/// comes back is not what went in"; it is not, and a player holding two
+/// identical axes may get either one back. Per-instance identity would need
+/// <c>ItemData.m_customData</c>, which this type has no field for and which is
+/// tracked separately.
 ///
 /// Durability is recorded <i>at issue</i> and is never treated as current. A
 /// tool wears while it is used, so "is this still usable" is a live question for
@@ -71,10 +90,16 @@ internal readonly struct ToolSpecimen : IEquatable<ToolSpecimen>
 
         if (!(durabilityAtIssue >= 0f) || float.IsInfinity(durabilityAtIssue))
         {
+            // The reason matters and an earlier version of it was wrong: NaN is
+            // rejected NOT because it "compares false against itself" here.
+            // Single.Equals(NaN, NaN) returns TRUE -- unlike operator == -- and
+            // this type compares with .Equals. NaN is rejected because a
+            // durability that is not a number cannot be shown to a player, cannot
+            // be ordered against anything, and can only have arrived from a bug
+            // worth stopping at.
             throw new ArgumentOutOfRangeException(
                 nameof(durabilityAtIssue),
-                "Durability at issue must be a real, non-negative number. NaN would compare " +
-                "false against itself and make a returned tool unrecognisable.");
+                "Durability at issue must be a real, non-negative number.");
         }
 
         Kind = kind;
@@ -86,8 +111,12 @@ internal readonly struct ToolSpecimen : IEquatable<ToolSpecimen>
 
     public ToolKind Kind { get; }
 
-    /// <summary>The item's own identity, supplied by the adapter. Opaque here:
-    /// this layer never interprets it, only remembers and compares it.</summary>
+    /// <summary>The item's <b>type</b> token, supplied by the adapter. Opaque
+    /// here: this layer never interprets it, only remembers and compares it.
+    ///
+    /// Not an instance identity, and not capable of becoming one — see the type
+    /// summary. Named <c>ItemKey</c> rather than <c>ItemId</c> for that
+    /// reason.</summary>
     public string ItemKey { get; }
 
     public int Quality { get; }

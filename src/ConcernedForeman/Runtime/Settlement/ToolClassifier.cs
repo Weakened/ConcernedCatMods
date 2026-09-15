@@ -1,4 +1,5 @@
 using TheConcernedCat.Settlement.Tools;
+using UnityEngine;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 
@@ -18,21 +19,32 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 /// damage is what fells a tree, and <c>TreeBase.RPC_Damage</c> consumes it
 /// through the ordinary damage path.</item>
 /// <item><c>ItemDrop.ItemData.SharedData.m_buildPieces</c> is a
-/// <c>PieceTable</c>. Carrying one is what makes an item a building tool.</item>
+/// <c>PieceTable</c>. Carrying one is <b>necessary but not sufficient</b> for a
+/// hammer — see <c>BuildsStructures</c>, which is where that distinction is
+/// actually enforced.</item>
 /// <item><c>ItemDrop.ItemData.SharedData.m_toolTier</c> is the integer
 /// <c>HitData.CheckToolTier</c> compares against a target's
 /// <c>m_minToolTier</c>. We record it so a refusal can name the reason; we do
 /// not reimplement the comparison.</item>
 /// </list>
 ///
-/// <b>What this classifier is careful about.</b> "Has chop damage" is necessary
-/// but not obviously sufficient — a weapon may also chop. So the axe test
-/// additionally requires that chop is the item's <i>largest</i> damage
-/// component, which is what distinguishes a felling tool from a sword that
-/// happens to bite wood. If that still admits something unintended, the honest
-/// consequence is visible: the worker holds it, vanilla's own tier check
-/// governs what it may fell, and nothing here grants damage the item does not
-/// have.</summary>
+/// <b>Neither marker is sufficient on its own, and the first version of this
+/// class treated both as if they were.</b> A weapon may also chop, so the axe
+/// test additionally requires chop to be the item's <i>largest</i> damage
+/// component — which keeps a sword out without hardcoding a list of swords. More
+/// than one item type carries a piece table, so the hammer test additionally
+/// requires the table to offer a real structure rather than only terrain
+/// operations.
+///
+/// Where a classifier still admits something unintended, the consequence is
+/// bounded and visible rather than silent: the worker holds it, vanilla's own
+/// tier check governs what it may actually fell, and nothing here grants an item
+/// damage or capability it does not have.
+///
+/// <b>Not verified from the binary:</b> whether any non-axe vanilla item has
+/// dominant chop damage. Item statistics live in asset bundles, not in the
+/// assembly, so decompilation cannot answer it — this is an assumption, and a
+/// disposable-world check is the only thing that can settle it.</summary>
 internal static class ToolClassifier
 {
     /// <summary>What this item is, as far as this build employs tools.
@@ -46,9 +58,8 @@ internal static class ToolClassifier
             return ToolKind.None;
         }
 
-        // Hammer first: a building tool may also carry incidental damage, and
-        // carrying a piece table is the less ambiguous signal of the two.
-        if (shared.m_buildPieces != null)
+        // Hammer first: a building tool may also carry incidental damage.
+        if (BuildsStructures(shared.m_buildPieces))
         {
             return ToolKind.Hammer;
         }
@@ -59,6 +70,49 @@ internal static class ToolClassifier
         }
 
         return ToolKind.None;
+    }
+
+    /// <summary>True when this piece table builds structures rather than shaping
+    /// ground.
+    ///
+    /// Carrying a <c>PieceTable</c> at all is <b>not</b> sufficient, and an
+    /// earlier version of this classifier treated it as if it were. Vanilla's own
+    /// <c>Inventory.GetAllPieceTables(List&lt;PieceTable&gt;)</c> walks an
+    /// inventory collecting <i>several distinct</i> tables and deduping them,
+    /// which is proof from the binary that more than one item type carries one —
+    /// the hoe and the cultivator being the obvious others. A worker handed a hoe
+    /// as its "hammer" would be ready to build and able to build nothing.
+    ///
+    /// The discriminator is structural rather than a name or a data value: a
+    /// building table offers at least one piece that is a real
+    /// <c>Piece</c> and is not a <c>TerrainOp</c>. Ground-shaping tables offer
+    /// only terrain operations.</summary>
+    private static bool BuildsStructures(PieceTable? table)
+    {
+        if (table == null || table.m_pieces == null)
+        {
+            return false;
+        }
+
+        foreach (GameObject piece in table.m_pieces)
+        {
+            if (piece == null)
+            {
+                continue;
+            }
+
+            if (piece.GetComponent<TerrainOp>() != null)
+            {
+                continue;
+            }
+
+            if (piece.GetComponent<Piece>() != null)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>True when chopping is what this item is mainly for.

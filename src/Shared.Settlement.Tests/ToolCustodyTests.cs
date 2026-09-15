@@ -95,6 +95,93 @@ public sealed class ToolCustodyTests
     }
 
     [Fact]
+    public void ReusingATransactionIdForADifferentToolIsRefusedNotWavedThrough()
+    {
+        // "Already satisfied" told a caller that the thing it asked for had
+        // happened. If it asked for something ELSE under a used id, that answer
+        // is a lie in the most dangerous direction -- the caller believes a
+        // second tool was recorded and moves on.
+        var ledger = new ToolLedger();
+        ledger.Issue(Handover(0, Axe()));
+
+        Assert.Equal(ToolOutcome.Rejected, ledger.Issue(Handover(0, Hammer())));
+        Assert.Equal(
+            ToolOutcome.Rejected,
+            ledger.Issue(new ToolHolding(RequestId.For(Job, 0), new WorkerId("somebody-else"), Axe())));
+
+        Assert.Single(ledger.Holdings);
+        Assert.Equal(ToolKind.Axe, ledger.HeldBy(Thorstein)[0].Tool.Kind);
+    }
+
+    [Fact]
+    public void AnInterruptedHandoverCanActuallyBeResolved()
+    {
+        // The previous version had no way out of Uncertain at all, while the
+        // player-facing text said "resolve it". Both answers a person can give
+        // are available, and only a person can give them.
+        var toWorker = new ToolLedger();
+        toWorker.Issue(Handover(0, Axe()));
+        toWorker.MarkUncertain(RequestId.For(Job, 0));
+
+        Assert.Equal(ToolOutcome.Applied, toWorker.Resolve(RequestId.For(Job, 0), workerHasIt: true));
+        Assert.Equal(1, toWorker.CountIn(ToolHoldingState.Held));
+        Assert.False(toWorker.HasUncertainHandover(Thorstein));
+
+        var toPlayer = new ToolLedger();
+        toPlayer.Issue(Handover(0, Axe()));
+        toPlayer.MarkUncertain(RequestId.For(Job, 0));
+
+        Assert.Equal(ToolOutcome.Applied, toPlayer.Resolve(RequestId.For(Job, 0), workerHasIt: false));
+        Assert.Equal(1, toPlayer.CountIn(ToolHoldingState.Returned));
+
+        // And resolving is only ever available FROM Uncertain.
+        Assert.Equal(ToolOutcome.Rejected, toPlayer.Resolve(RequestId.For(Job, 0), true));
+    }
+
+    [Fact]
+    public void OneWorkersInterruptedHandoverDoesNotStopEverybodyElse()
+    {
+        // It used to. HasUncertainHandover asked the question of the whole
+        // ledger, so a single interrupted transfer refused every worker every
+        // job -- including bare-handed gathering that touches no tool.
+        var ledger = new ToolLedger();
+        var other = new WorkerId("other-hand");
+        ledger.Issue(Handover(0, Axe()));
+        ledger.MarkUncertain(RequestId.For(Job, 0));
+
+        Assert.True(ledger.HasUncertainHandover(Thorstein));
+        Assert.False(ledger.HasUncertainHandover(other));
+        Assert.True(ledger.HasAnyUncertainHandover);
+
+        Assert.True(WorkerReadiness.Assess(
+            other, true, ledger, WorkerReadiness.ForGathering, new Serviceable()).IsReady);
+    }
+
+    [Fact]
+    public void ACallerThatDoesNotSayWhatTheJobNeedsIsRefused()
+    {
+        // The one fail-OPEN path: a null requirement list fell back to "needs
+        // nothing" and answered Ready.
+        ToolLedger ledger = Equipped();
+
+        ReadinessVerdict verdict = WorkerReadiness.Assess(
+            Thorstein, true, ledger, null!, new Serviceable());
+
+        Assert.False(verdict.IsReady);
+        Assert.Equal(ReadinessRefusal.ToolMissing, verdict.Refusal);
+        Assert.Equal(ToolKind.None, verdict.Tool);
+        Assert.DoesNotContain("hammer", verdict.Describe());
+    }
+
+    [Fact]
+    public void IssuingIsGatedClosedWhileAHandoverCannotSurviveAReload()
+    {
+        // Not a preference and not a setting. The ledger does not persist, so
+        // taking somebody's axe would lose the record of it on the next reload.
+        Assert.True(ToolLedger.RequiresPersistence);
+    }
+
+    [Fact]
     public void AToolIsGivenBackExactlyOnce()
     {
         var ledger = new ToolLedger();
@@ -143,12 +230,14 @@ public sealed class ToolCustodyTests
         ledger.Issue(Handover(0, Axe()));
         ledger.Issue(Handover(1, Hammer()));
 
-        int Accounted() =>
-            ledger.CountIn(ToolHoldingState.Held)
-            + ledger.CountIn(ToolHoldingState.Returned)
-            + ledger.CountIn(ToolHoldingState.Uncertain);
-
-        Assert.Equal(2, Accounted());
+        // Counting every state would be a tautology -- the three states
+        // partition a set nothing is ever removed from, so the total is
+        // identically the number of holdings whatever TrySettle does. An
+        // independent review caught exactly that shape in this project before.
+        // So the assertions below name WHICH state each tool is in, which is
+        // the thing a wrong settle would actually change.
+        Assert.Equal(2, ledger.Holdings.Count);
+        Assert.Equal(2, ledger.CountIn(ToolHoldingState.Held));
 
         ledger.Return(RequestId.For(Job, 0));
         ledger.Return(RequestId.For(Job, 0));
@@ -156,9 +245,15 @@ public sealed class ToolCustodyTests
         ledger.Issue(Handover(0, Axe()));
         ledger.Return(RequestId.For(Job, 1));
 
-        Assert.Equal(2, Accounted());
+        Assert.Equal(2, ledger.Holdings.Count);
+        Assert.Equal(0, ledger.CountIn(ToolHoldingState.Held));
         Assert.Equal(1, ledger.CountIn(ToolHoldingState.Returned));
         Assert.Equal(1, ledger.CountIn(ToolHoldingState.Uncertain));
+
+        // The uncertain one specifically was NOT quietly returned by that last
+        // call, which is the settle a broken implementation would have made.
+        Assert.True(ledger.TryGet(RequestId.For(Job, 1), out ToolHolding stillUnknown));
+        Assert.Equal(ToolHoldingState.Uncertain, stillUnknown.State);
     }
 
     // ------------------------------------------------------------------
@@ -171,7 +266,7 @@ public sealed class ToolCustodyTests
         ToolLedger ledger = Equipped();
         ledger.MarkUncertain(RequestId.For(Job, 0));
 
-        Assert.True(ledger.HasUncertainHandover);
+        Assert.True(ledger.HasUncertainHandover(Thorstein));
 
         ReadinessVerdict verdict = WorkerReadiness.Assess(
             Thorstein, isRecruited: true, ledger, WorkerReadiness.ForGathering, new Serviceable());

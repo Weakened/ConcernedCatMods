@@ -63,18 +63,26 @@ internal readonly struct ReadinessVerdict
     {
         switch (Refusal)
         {
-            case ReadinessRefusal.NotRecruited when IsReady == false:
+            case ReadinessRefusal.NotRecruited:
                 return "Nobody is employed here yet.";
 
+            case ReadinessRefusal.ToolMissing when Tool == ToolKind.Axe:
+                return "He has no axe. Give him one and he can cut.";
+
+            case ReadinessRefusal.ToolMissing when Tool == ToolKind.Hammer:
+                return "He has no hammer. Give him one and he can build.";
+
             case ReadinessRefusal.ToolMissing:
-                return Tool == ToolKind.Axe
-                    ? "He has no axe. Give him one and he can cut."
-                    : "He has no hammer. Give him one and he can build.";
+                // Reachable without a kind -- a missing ledger, or a caller that
+                // did not say what the job needs. Naming a hammer here would be
+                // a guess, and an earlier version made it.
+                return "He is not equipped for that job.";
+
+            case ReadinessRefusal.ToolUnusable when Tool == ToolKind.Axe:
+                return "His axe will not cut any more. It needs repairing, or a better one.";
 
             case ReadinessRefusal.ToolUnusable:
-                return Tool == ToolKind.Axe
-                    ? "His axe will not cut any more. It needs repairing, or a better one."
-                    : "His hammer will not build any more. It needs repairing, or a better one.";
+                return "His hammer will not build any more. It needs repairing, or a better one.";
 
             case ReadinessRefusal.HandoverUncertain:
                 return "A tool handover was interrupted and it is not recorded whether the item " +
@@ -166,14 +174,23 @@ internal static class WorkerReadiness
         // An unresolved handover stops everything, not just the job that needs
         // that tool. Until a person says where the item went, acting at all
         // risks compounding the problem.
-        if (ledger.HasUncertainHandover)
+        if (ledger.HasUncertainHandover(worker))
         {
             return ReadinessVerdict.Refused(ReadinessRefusal.HandoverUncertain);
         }
 
+        if (required == null)
+        {
+            // The one fail-OPEN path an earlier version had: a null requirement
+            // list fell back to "needs nothing" and answered Ready. A caller
+            // that did not say what the job needs has not established that the
+            // job can be done.
+            return ReadinessVerdict.Refused(ReadinessRefusal.ToolMissing);
+        }
+
         IToolCondition live = condition ?? UnknownToolCondition.Instance;
 
-        foreach (ToolKind kind in required ?? ForGathering)
+        foreach (ToolKind kind in required)
         {
             if (!ledger.TryGetHeld(worker, kind, out ToolHolding holding))
             {

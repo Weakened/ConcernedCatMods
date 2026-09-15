@@ -69,6 +69,19 @@ internal sealed class ToolHolding
 
     public bool IsSettled => State != ToolHoldingState.Held;
 
+    /// <summary>Takes a holding out of <see cref="ToolHoldingState.Uncertain"/>
+    /// on a person's say-so. The only way out, and only from there.</summary>
+    internal bool TryResolve(bool workerHasIt)
+    {
+        if (State != ToolHoldingState.Uncertain)
+        {
+            return false;
+        }
+
+        State = workerHasIt ? ToolHoldingState.Held : ToolHoldingState.Returned;
+        return true;
+    }
+
     internal bool TrySettle(ToolHoldingState settled)
     {
         if (settled == ToolHoldingState.Held || State == settled || State != ToolHoldingState.Held)
@@ -93,21 +106,40 @@ internal sealed class ToolHolding
 /// <b>The player's axe is still the player's axe.</b> A handover moves one item
 /// instance from one inventory to another; it does not create a worker-owned
 /// copy, and this ledger exists so that the move can be undone exactly once and
-/// never twice. Every operation is keyed by a transaction id and is idempotent,
-/// so a retry after a crash, a relog or a full inventory repeats the
-/// <i>request</i> rather than the <i>effect</i>.
+/// never twice.
 ///
-/// It is deliberately the same shape as the material custody ledger, including
-/// the <see cref="ToolHoldingState.Uncertain"/> state for a transfer whose two
-/// halves cannot be made atomic against a game. That design has already been
-/// reviewed and adversarially tested for material; a tool is the same problem
-/// with a smaller number, and inventing a second mechanism for it would mean
-/// two places to get conservation wrong.
+/// <b>IN MEMORY ONLY, and an earlier version of this comment claimed otherwise.</b>
+/// It said a retry "after a crash, a relog or a full inventory" repeats the
+/// request rather than the effect, and cited the material custody ledger as the
+/// design being mirrored. The shape is mirrored; the thing that earns that
+/// sentence is not. <c>CustodyLedger</c> is rebuilt by
+/// <c>SettlementJournal.Replay()</c> from a persisted journal — there are no
+/// tool entry kinds, no codec columns, no store and no replay, so this ledger
+/// does not survive a session at all. Within one session every operation is
+/// genuinely idempotent; across a restart the record of a real tool a player
+/// handed over is simply gone, and a return could never be offered.
 ///
-/// What this type deliberately cannot do: describe a tool well enough to build
-/// one. See <see cref="ToolSpecimen"/>.</summary>
+/// That is a data-loss path for somebody's actual axe, so **issuing a tool is
+/// gated closed** until the persistence exists — see
+/// <see cref="RequiresPersistence"/>. The gate is the honest interim: the
+/// contract is right, and what is missing is missing visibly rather than
+/// discovered by a player who relogged.
+///
+/// The <see cref="ToolHoldingState.Uncertain"/> state is still the material
+/// ledger's, for a transfer whose two halves cannot be made atomic against a
+/// game — but it is scoped to the worker it happened to, and it is resolvable.
+/// An earlier version was neither, which meant one interrupted handover refused
+/// every worker every job forever with no way out.</summary>
 internal sealed class ToolLedger
 {
+    /// <summary>True while this build cannot persist a handover.
+    ///
+    /// Read by the adapter, which refuses to issue a tool while it is set. It is
+    /// a constant rather than a setting because a player must not be able to
+    /// turn off a guard against losing their own axe; it goes away when the
+    /// journal learns to carry tool entries, and not before.</summary>
+    public const bool RequiresPersistence = true;
+
     private readonly Dictionary<string, ToolHolding> _holdings =
         new Dictionary<string, ToolHolding>(StringComparer.Ordinal);
     private readonly List<string> _order = new List<string>();
@@ -150,9 +182,15 @@ internal sealed class ToolLedger
             throw new ArgumentNullException(nameof(holding));
         }
 
-        if (_holdings.ContainsKey(holding.Transaction.Value))
+        if (_holdings.TryGetValue(holding.Transaction.Value, out ToolHolding? recorded))
         {
-            return ToolOutcome.AlreadySatisfied;
+            // Idempotent only for the SAME handover. A transaction id reused for
+            // a different tool or a different worker is a caller bug, and
+            // answering AlreadySatisfied would tell it the wrong thing happened
+            // successfully.
+            return recorded!.Worker.Equals(holding.Worker) && recorded.Tool.Equals(holding.Tool)
+                ? ToolOutcome.AlreadySatisfied
+                : ToolOutcome.Rejected;
         }
 
         _holdings.Add(holding.Transaction.Value, holding);
@@ -234,9 +272,35 @@ internal sealed class ToolLedger
         return false;
     }
 
-    /// <summary>True when any handover is in an unknown state, so the runtime
-    /// must stop and say so rather than continue.</summary>
-    public bool HasUncertainHandover
+    /// <summary>True when THIS worker has a handover in an unknown state.
+    ///
+    /// Scoped to the worker on purpose. An earlier version asked the question of
+    /// the whole ledger, so one interrupted handover refused every worker every
+    /// job — including bare-handed gathering that touches no tool at all. The
+    /// material ledger parks one <i>order</i> for repair rather than the
+    /// settlement; this parks one worker.</summary>
+    public bool HasUncertainHandover(WorkerId worker)
+    {
+        if (worker.IsEmpty)
+        {
+            return false;
+        }
+
+        foreach (string key in _order)
+        {
+            ToolHolding holding = _holdings[key];
+            if (holding.Worker.Equals(worker) && holding.State == ToolHoldingState.Uncertain)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>True when anybody has an unresolved handover. For reporting, not
+    /// for gating work.</summary>
+    public bool HasAnyUncertainHandover
     {
         get
         {
@@ -250,6 +314,26 @@ internal sealed class ToolLedger
 
             return false;
         }
+    }
+
+    /// <summary>Resolves an interrupted handover, the way a person decided it
+    /// actually went.
+    ///
+    /// <b>Only a person gets a holding out of Uncertain</b>, which is why this
+    /// takes an explicit answer rather than working one out. It exists because
+    /// the previous version had no way out at all: the player-facing text said
+    /// "resolve it" and nothing could. The two answers are the only two there
+    /// are — the worker really has it, or the player really still does.</summary>
+    public ToolOutcome Resolve(RequestId transaction, bool workerHasIt)
+    {
+        if (transaction.IsEmpty
+            || !_holdings.TryGetValue(transaction.Value, out ToolHolding? holding)
+            || holding!.State != ToolHoldingState.Uncertain)
+        {
+            return ToolOutcome.Rejected;
+        }
+
+        return holding.TryResolve(workerHasIt) ? ToolOutcome.Applied : ToolOutcome.Rejected;
     }
 
     /// <summary>How many tools are in each state. The conservation tests compare
