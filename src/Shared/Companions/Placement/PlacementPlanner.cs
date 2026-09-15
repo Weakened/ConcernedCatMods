@@ -51,6 +51,7 @@ internal sealed class PlacementPlanner
         bool haveBest = false;
         WorldPoint bestPosition = default;
         CompanionPose bestPose = CompanionPose.SitOnGround;
+        SeatOffer bestSeat = SeatOffer.None;
         int bestScore = int.MinValue;
         float bestRadiusError = float.MaxValue;
 
@@ -108,6 +109,7 @@ internal sealed class PlacementPlanner
                 bestRadiusError = radiusError;
                 bestPosition = sample.Position;
                 bestPose = PoseFor(sample);
+                bestSeat = bestPose == CompanionPose.SitOnSeat ? sample.SeatOffer : SeatOffer.None;
             }
         }
 
@@ -122,7 +124,7 @@ internal sealed class PlacementPlanner
         }
 
         return haveBest
-            ? PlacementResult.Placed(bestPosition, bestPose, probed)
+            ? PlacementResult.Placed(bestPosition, bestPose, probed, bestSeat)
             : PlacementResult.Deferred(probed, blockedBy);
     }
 
@@ -173,7 +175,7 @@ internal sealed class PlacementPlanner
     private int Score(PlacementProbeSample sample)
     {
         int score = 0;
-        if (sample.Seat == SeatAvailability.Free)
+        if (sample.SeatOffer.IsUsable)
         {
             score += 2;
         }
@@ -188,7 +190,7 @@ internal sealed class PlacementPlanner
 
     private CompanionPose PoseFor(PlacementProbeSample sample)
     {
-        if (sample.Seat == SeatAvailability.Free)
+        if (sample.SeatOffer.IsUsable)
         {
             return CompanionPose.SitOnSeat;
         }

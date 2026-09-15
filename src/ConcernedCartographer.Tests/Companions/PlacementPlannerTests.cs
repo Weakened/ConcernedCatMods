@@ -103,15 +103,86 @@ public class PlacementPlannerTests
     }
 
     [Fact]
-    public void PrefersAFreeSeatOverBareGround()
+    public void PrefersAFreeSeatOverBareGroundAndCarriesTheSeatsOwnPose()
     {
+        // The seat's attachment point is somewhere else entirely, and that is
+        // the point: sitting on a chair means going to the chair's own pose,
+        // not standing on the ground the probe happened to sample beside it.
+        SeatOffer offer = SeatOffer.Free(
+            new WorldPoint(11f, 31.5f, 12f), yawDegrees: 137f, attachAnimation: "attach_throne");
+
         var probe = new StubProbe(position =>
             position.Z > 3f
-                ? new PlacementProbeSample(position, PlacementRejection.None, -1f, SeatAvailability.Free)
+                ? new PlacementProbeSample(position, PlacementRejection.None, -1f, offer)
                 : Clear(position));
 
         PlacementResult result = new PlacementPlanner().Plan(Bed, probe);
 
+        Assert.Equal(CompanionPose.SitOnSeat, result.Pose);
+        Assert.True(result.Position.Z > 3f);
+        Assert.True(result.Seat.IsUsable);
+        Assert.Equal(11f, result.Seat.Position.X, 3);
+        Assert.Equal(137f, result.Seat.YawDegrees, 3);
+        Assert.Equal("attach_throne", result.Seat.AttachAnimation);
+    }
+
+    [Fact]
+    public void AGroundSpotCarriesNoSeatToUse()
+    {
+        // Nothing downstream may read a stale seat off a companion who is
+        // sitting on the grass.
+        PlacementResult result = new PlacementPlanner().Plan(Bed, StubProbe.AllClear());
+
+        Assert.Equal(CompanionPose.SitOnGround, result.Pose);
+        Assert.False(result.Seat.IsUsable);
+    }
+
+    [Fact]
+    public void AFreeSeatWithNoPoseIsNotSomethingToSitOn()
+    {
+        // The availability-only constructor says "there is a seat" without
+        // saying where or how. That is not enough to put anybody on it, and
+        // guessing is what puts a figure inside a bench.
+        var probe = new StubProbe(position =>
+            new PlacementProbeSample(position, PlacementRejection.None, -1f, SeatAvailability.Free));
+
+        PlacementResult result = new PlacementPlanner().Plan(Bed, probe);
+
+        Assert.True(result.Found);
+        Assert.Equal(CompanionPose.SitOnGround, result.Pose);
+        Assert.False(result.Seat.IsUsable);
+    }
+
+    [Fact]
+    public void AnOccupiedSeatIsNeverOfferedAsAPose()
+    {
+        var probe = new StubProbe(position =>
+            new PlacementProbeSample(position, PlacementRejection.None, -1f, SeatOffer.Occupied));
+
+        PlacementResult result = new PlacementPlanner().Plan(Bed, probe);
+
+        Assert.Equal(CompanionPose.SitOnGround, result.Pose);
+        Assert.False(result.Seat.IsUsable);
+        Assert.Equal(SeatAvailability.Occupied, SeatOffer.Occupied.Availability);
+    }
+
+    [Fact]
+    public void AFreeSeatOutranksWarmthButAWarmSeatOutranksBoth()
+    {
+        SeatOffer offer = SeatOffer.Free(new WorldPoint(4f, 30f, 4f), 0f, "attach_chair");
+
+        // A cold seat beats a warm patch of ground...
+        var seatVsFire = new StubProbe(position =>
+            position.Z > 3f
+                ? new PlacementProbeSample(position, PlacementRejection.None, -1f, offer)
+                : new PlacementProbeSample(position, PlacementRejection.None, 0f, SeatOffer.None));
+        Assert.Equal(CompanionPose.SitOnSeat, new PlacementPlanner().Plan(Bed, seatVsFire).Pose);
+
+        // ...and a seat by the fire beats a seat in the cold.
+        var warmSeat = new StubProbe(position =>
+            new PlacementProbeSample(
+                position, PlacementRejection.None, position.Z > 3f ? 0f : -1f, offer));
+        PlacementResult result = new PlacementPlanner().Plan(Bed, warmSeat);
         Assert.Equal(CompanionPose.SitOnSeat, result.Pose);
         Assert.True(result.Position.Z > 3f);
     }
@@ -144,10 +215,10 @@ public class PlacementPlannerTests
     [Fact]
     public void UnverifiedSeatingIsTreatedAsNoSeating()
     {
-        // Until seating is confirmed in game, a documented gap beats a figure
-        // floating over a bench.
+        // Seating a build cannot establish a pose for is still a documented
+        // gap, and a documented gap beats a figure floating over a bench.
         var probe = new StubProbe(position =>
-            new PlacementProbeSample(position, PlacementRejection.None, -1f, SeatAvailability.Unverified));
+            new PlacementProbeSample(position, PlacementRejection.None, -1f, SeatOffer.Unverified));
 
         PlacementResult result = new PlacementPlanner().Plan(Bed, probe);
 

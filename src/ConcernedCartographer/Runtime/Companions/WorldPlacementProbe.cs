@@ -38,6 +38,11 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
     /// doorway two metres away still makes a spot a bad place to sit.</summary>
     private const float NeighbourhoodRadius = 2f;
 
+    /// <summary>How close a seat has to still be to count as the same seat
+    /// when it is re-checked. Tight: this is asking "is that chair still
+    /// there", not "is there a chair around here".</summary>
+    private const float SeatRecheckRadius = 0.35f;
+
     /// <summary>Radius for the authored-location sweep. Locations are
     /// large, so this only has to find a piece of one; its own radius
     /// fields decide the rest.</summary>
@@ -89,7 +94,7 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
             if (!zones.GetSolidHeight(probeFrom, out float height, out Vector3 normal, out GameObject _))
             {
                 return new PlacementProbeSample(
-                    position, PlacementRejection.Unsupported, -1f, SeatAvailability.None);
+                    position, PlacementRejection.Unsupported, -1f, SeatOffer.None);
             }
 
             Vector3 grounded = new Vector3(point.x, height, point.z);
@@ -110,7 +115,7 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
                 rejections |= PlacementRejection.Unsupported;
             }
 
-            rejections |= SurveyNeighbourhood(grounded, out SeatAvailability seat);
+            rejections |= SurveyNeighbourhood(grounded, out SeatOffer seat);
 
             if (IsHazardousFire(grounded))
             {
@@ -131,7 +136,7 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
                 "A companion placement probe could not read the ground there; that candidate is " +
                 $"skipped: {SafeLogText.Brief(exception)}");
             return new PlacementProbeSample(
-                position, PlacementRejection.Unsupported, -1f, SeatAvailability.None);
+                position, PlacementRejection.Unsupported, -1f, SeatOffer.None);
         }
     }
 
@@ -170,9 +175,9 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
     /// the same answers. Nothing found here is moved, claimed, opened or
     /// written to — a companion yields to the world, never the other way
     /// round.</summary>
-    private PlacementRejection SurveyNeighbourhood(Vector3 grounded, out SeatAvailability seat)
+    private PlacementRejection SurveyNeighbourhood(Vector3 grounded, out SeatOffer seat)
     {
-        seat = SeatAvailability.None;
+        seat = SeatOffer.None;
 
         try
         {
@@ -184,7 +189,9 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
                 QueryTriggerInteraction.Collide);
 
             PlacementRejection rejections = PlacementRejection.None;
-            bool freeSeatNearby = false;
+            Chair? bestSeat = null;
+            float bestSeatDistance = float.MaxValue;
+            bool occupiedSeatNearby = false;
 
             for (int index = 0; index < count; index++)
             {
@@ -218,16 +225,31 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
                 var chair = hit.GetComponentInParent<Chair>();
                 if (chair != null)
                 {
-                    // IsInUse is the vanilla way to yield to a real occupant.
-                    // No seat is ever claimed and no attachment message is ever
-                    // sent.
+                    // IsInUse is the vanilla way to yield to a real occupant,
+                    // and it asks whether a PLAYER is on the attach point. A
+                    // companion posed there does not answer it, which is
+                    // exactly right: he is not using the seat in any sense the
+                    // game knows about, so he can never lock one.
                     if (chair.IsInUse())
                     {
-                        seat = SeatAvailability.Occupied;
+                        occupiedSeatNearby = true;
+                        continue;
                     }
-                    else
+
+                    Transform? attach = chair.m_attachPoint;
+                    if (attach == null)
                     {
-                        freeSeatNearby = true;
+                        // A seat with no attachment point gives us nowhere to
+                        // put him. Reported as seating we cannot use rather
+                        // than guessed at.
+                        continue;
+                    }
+
+                    float distance = Vector3.Distance(attach.position, grounded);
+                    if (distance < bestSeatDistance)
+                    {
+                        bestSeatDistance = distance;
+                        bestSeat = chair;
                     }
 
                     continue;
@@ -242,19 +264,26 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
                 }
             }
 
-            if (freeSeatNearby && seat != SeatAvailability.Occupied)
+            if (bestSeat != null)
             {
-                // Deliberately NOT reported as Free. A free chair was found,
-                // and whether posing a companion on one actually looks right is
-                // an open evidence row — the audit could only confirm that
-                // Chair.m_attachAnimation is a per-prefab string, not what it
-                // contains or how it lands. Unverified is what the shared
-                // planner treats as no seat, so the companion sits on the
-                // ground beside the chair rather than standing inside it, and
-                // the console tool reports the seat as detected-but-unused
-                // instead of pretending furniture support works.
-                seat = SeatAvailability.Unverified;
+                // The seat's own attachment point and its own sitting
+                // animation, which is what the game uses when a player sits
+                // down. Both are per-seat data read off the piece in front of
+                // us, so a stool, a throne and a bench each get their own pose
+                // instead of a shared guess.
+                Transform attach = bestSeat.m_attachPoint;
+                string? animation = string.IsNullOrEmpty(bestSeat.m_attachAnimation)
+                    ? null
+                    : bestSeat.m_attachAnimation;
+                seat = SeatOffer.Free(
+                    new WorldPoint(attach.position.x, attach.position.y, attach.position.z),
+                    attach.rotation.eulerAngles.y,
+                    animation);
                 SeatSeen = true;
+            }
+            else if (occupiedSeatNearby)
+            {
+                seat = SeatOffer.Occupied;
             }
 
             return rejections;
@@ -265,9 +294,64 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
         }
     }
 
-    /// <summary>True once a free seat has been detected near any candidate this
-    /// session. Reported by the console tool as pending evidence.</summary>
+    /// <summary>True once a free seat has been found near any candidate this
+    /// session. Reported by the console tool.</summary>
     public bool SeatSeen { get; private set; }
+
+    /// <summary>Whether the seat at <paramref name="seatPosition"/> is still
+    /// there and still free.
+    ///
+    /// Asked of the world rather than remembered, because remembering which
+    /// <c>Chair</c> was chosen would answer a different question: the planner
+    /// probes several dozen candidates and the last seat it saw is rarely the
+    /// one anybody is sitting on.
+    ///
+    /// Three answers, and the third is the important one. True: the seat is
+    /// there and free. False: it is gone, or a player is in it. <b>Null: we
+    /// could not look</b> — the chunk is unloaded because the player walked
+    /// away — and the caller must then keep believing what it believed, exactly
+    /// as an unloaded bed does not un-home anybody.</summary>
+    public bool? IsSeatStillFree(WorldPoint seatPosition)
+    {
+        var point = new Vector3(seatPosition.X, seatPosition.Y, seatPosition.Z);
+
+        try
+        {
+            ZoneSystem zones = ZoneSystem.instance;
+            if (zones == null || !zones.IsZoneLoaded(point))
+            {
+                return null;
+            }
+
+            int count = Physics.OverlapSphereNonAlloc(
+                point, SeatRecheckRadius, _overlapBuffer, ~0, QueryTriggerInteraction.Collide);
+
+            for (int index = 0; index < count; index++)
+            {
+                Collider hit = _overlapBuffer[index];
+                var chair = hit == null ? null : hit.GetComponentInParent<Chair>();
+                if (chair == null || chair.m_attachPoint == null)
+                {
+                    continue;
+                }
+
+                if (Vector3.Distance(chair.m_attachPoint.position, point) > SeatRecheckRadius)
+                {
+                    continue;
+                }
+
+                return !chair.IsInUse();
+            }
+
+            // The zone is loaded and nothing is there. The seat is gone.
+            return false;
+        }
+        catch
+        {
+            // A world that will not answer is not evidence that a seat vanished.
+            return null;
+        }
+    }
 
     private static bool IsWithin(Collider hit, Vector3 point, float radius)
     {

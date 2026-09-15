@@ -198,6 +198,7 @@ internal sealed class CompanionDirector : IDisposable
         _actor.Exists,
         _actor.Report?.ToString(),
         _hulgiProbe.SeatSeen,
+        DescribeSeating(),
         _biomes.LastObserved,
         _catalog.Count,
         _settings.CompanionAmbientChatter.Value);
@@ -480,7 +481,8 @@ internal sealed class CompanionDirector : IDisposable
             _presentationSupported,
             _anchor,
             _actor.PlacedAnchor,
-            _anchorValidity);
+            _anchorValidity,
+            ReadSeatStatus());
 
         switch (ResidencyPlanner.Decide(inputs))
         {
@@ -518,7 +520,8 @@ internal sealed class CompanionDirector : IDisposable
         }
 
         if (!_actor.TryBuild(
-                placement.Position, placement.Pose, _anchor, ActorPrefabCandidates, _log))
+                placement.Position, placement.Pose, _anchor, ActorPrefabCandidates, _log,
+                placement.Seat))
         {
             // Every fallback was exhausted. Presentation is disabled with an
             // actionable notice; the companion still exists, still counts, and
@@ -532,6 +535,55 @@ internal sealed class CompanionDirector : IDisposable
         _actor.SetVisible(_settings.CompanionVisible.Value);
         _visibilityApplied = _settings.CompanionVisible.Value;
         _log.LogInfo($"Hulgi settled near your {DescribeAnchor(_anchor.Kind)}: {_actor.Report}.");
+    }
+
+    /// <summary>Where he is sitting, in one line.</summary>
+    private string DescribeSeating()
+    {
+        if (!_actor.Exists)
+        {
+            return _hulgiProbe.SeatSeen
+                ? "a free seat was seen nearby; he is not placed yet"
+                : "no free seat seen yet; he is not placed yet";
+        }
+
+        CompanionPose pose = _actor.Report?.Pose ?? CompanionPose.SitOnGround;
+        switch (pose)
+        {
+            case CompanionPose.SitOnSeat:
+                return "on a seat at " + _actor.Seat + " (a local pose only; the seat is not claimed, " +
+                    "and he gives it up if anyone sits down or it is taken away)";
+            case CompanionPose.SitByFire:
+                return "on the ground by a fire" +
+                    (_hulgiProbe.SeatSeen ? "; a seat was seen but was not the best spot" : "");
+            default:
+                return "on the ground" +
+                    (_hulgiProbe.SeatSeen ? "; a seat was seen but was not free or not usable" : "");
+        }
+    }
+
+    /// <summary>Whether the seat he is on is still a seat he may have.
+    ///
+    /// Two things end it, and both are ordinary: the piece is destroyed, and a
+    /// player sits in it. The second is the one that matters — the furniture
+    /// belongs to whoever built it, and a companion who keeps a chair a player
+    /// wants is worse company than one sitting on the grass.
+    ///
+    /// <c>Chair.IsInUse</c> asks whether a PLAYER is on the attach point, so
+    /// our own posed figure never registers as an occupant. That is what makes
+    /// this check honest rather than self-satisfying.</summary>
+    private SeatStatus ReadSeatStatus()
+    {
+        if (!_actor.Exists || !_actor.Seat.IsUsable)
+        {
+            return SeatStatus.NotSeated;
+        }
+
+        // Null means the ground there is not loaded, so nothing can be
+        // checked. Keep believing he is seated: the alternative moves him every
+        // time the player walks out of range of his own camp.
+        bool? free = _hulgiProbe.IsSeatStillFree(_actor.Seat.Position);
+        return free == false ? SeatStatus.Lost : SeatStatus.Held;
     }
 
     /// <summary>Says one line.
@@ -1092,6 +1144,7 @@ internal readonly struct CompanionStatus
         bool actorPresent,
         string? actorReport,
         bool freeSeatSeen,
+        string seating,
         string knownBiomesObserved,
         int dialogueLineCount,
         bool ambientChatter)
@@ -1119,6 +1172,7 @@ internal readonly struct CompanionStatus
         ActorPresent = actorPresent;
         ActorReport = actorReport;
         FreeSeatSeen = freeSeatSeen;
+        Seating = seating;
         KnownBiomesObserved = knownBiomesObserved;
         DialogueLineCount = dialogueLineCount;
         AmbientChatter = ambientChatter;
@@ -1147,11 +1201,14 @@ internal readonly struct CompanionStatus
     public bool ActorPresent { get; }
     public string? ActorReport { get; }
 
-    /// <summary>A free seat was detected near a candidate. Reported as pending
-    /// evidence, NOT as working furniture support: whether posing on a chair
-    /// looks right is unobserved, so the planner is fed Unverified and the
-    /// companion sits on the ground beside it.</summary>
+    /// <summary>A free seat was found near a candidate at some point this
+    /// session.</summary>
     public bool FreeSeatSeen { get; }
+
+    /// <summary>One line about where he is actually sitting: on a seat, on the
+    /// ground by a fire, or on the ground. Says which, rather than reporting
+    /// what the probe merely noticed.</summary>
+    public string Seating { get; }
 
     /// <summary>The biome spellings this build actually put in
     /// <c>Player.m_knownBiome</c>. Printed by the console tool, which is how

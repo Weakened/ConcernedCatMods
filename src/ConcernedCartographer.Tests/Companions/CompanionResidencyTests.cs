@@ -29,10 +29,74 @@ public sealed class CompanionResidencyTests
         bool supported = true,
         CompanionAnchor current = default,
         CompanionAnchor placed = default,
-        AnchorValidity validity = AnchorValidity.Valid)
+        AnchorValidity validity = AnchorValidity.Valid,
+        SeatStatus seat = SeatStatus.NotSeated)
     {
         return new ResidencyInputs(
-            recruited, visible, actorPresent, supported, current, placed, validity);
+            recruited, visible, actorPresent, supported, current, placed, validity, seat);
+    }
+
+    // ------------------------------------------------------------------
+    // Giving up a seat
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Seat_ASeatThatWasTakenOrTakenAwayIsGivenUpAtOnce()
+    {
+        // The home point has NOT moved in either case, so without this rule
+        // nothing below would notice and he would stay folded into a chair
+        // that is gone, or sitting inside the player who just sat down.
+        Assert.Equal(
+            ResidencyAction.Rehome,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: true, current: Bed(), placed: Bed(), seat: SeatStatus.Lost)));
+    }
+
+    [Fact]
+    public void Seat_HoldingASeatChangesNothing()
+    {
+        Assert.Equal(
+            ResidencyAction.None,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: true, current: Bed(), placed: Bed(), seat: SeatStatus.Held)));
+
+        Assert.Equal(
+            ResidencyAction.None,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: true, current: Bed(), placed: Bed(), seat: SeatStatus.NotSeated)));
+    }
+
+    [Fact]
+    public void Seat_ALostSeatNeverResurrectsAHiddenOrUnrecruitedCompanion()
+    {
+        // Presentation is downstream of everything: losing a seat must not
+        // become a reason to build an actor the player asked not to see.
+        Assert.Equal(
+            ResidencyAction.Remove,
+            ResidencyPlanner.Decide(Inputs(
+                visible: false, actorPresent: true, current: Bed(), placed: Bed(),
+                seat: SeatStatus.Lost)));
+
+        Assert.Equal(
+            ResidencyAction.Remove,
+            ResidencyPlanner.Decide(Inputs(
+                recruited: false, actorPresent: true, current: Bed(), placed: Bed(),
+                seat: SeatStatus.Lost)));
+
+        Assert.Equal(
+            ResidencyAction.Remove,
+            ResidencyPlanner.Decide(Inputs(
+                supported: false, actorPresent: true, current: Bed(), placed: Bed(),
+                seat: SeatStatus.Lost)));
+    }
+
+    [Fact]
+    public void Seat_ALostSeatWithNoActorIsStillJustAPlacement()
+    {
+        Assert.Equal(
+            ResidencyAction.Place,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: false, current: Bed(), placed: default, seat: SeatStatus.Lost)));
     }
 
     // ------------------------------------------------------------------

@@ -12,11 +12,20 @@ internal readonly struct PlacementProbeSample
         PlacementRejection rejections,
         float distanceToFire,
         SeatAvailability seat)
+        : this(position, rejections, distanceToFire, Offer(seat))
+    {
+    }
+
+    public PlacementProbeSample(
+        WorldPoint position,
+        PlacementRejection rejections,
+        float distanceToFire,
+        SeatOffer seat)
     {
         Position = position;
         Rejections = rejections;
         DistanceToFire = distanceToFire;
-        Seat = seat;
+        SeatOffer = seat;
     }
 
     /// <summary>The probed position, with its height corrected to the ground
@@ -30,8 +39,11 @@ internal readonly struct PlacementProbeSample
     /// requirement.</summary>
     public float DistanceToFire { get; }
 
+    /// <summary>The seat here, if any, with the pose to use it.</summary>
+    public SeatOffer SeatOffer { get; }
+
     /// <summary>Whether a seat is usable here, purely as a visual pose.</summary>
-    public SeatAvailability Seat { get; }
+    public SeatAvailability Seat => SeatOffer.Availability;
 
     public bool IsUsable => Rejections == PlacementRejection.None;
 
@@ -40,6 +52,23 @@ internal readonly struct PlacementProbeSample
     public static PlacementProbeSample NotLoaded(WorldPoint position)
     {
         return new PlacementProbeSample(
-            position, PlacementRejection.NotLoaded, -1f, SeatAvailability.None);
+            position, PlacementRejection.NotLoaded, -1f, SeatOffer.None);
+    }
+
+    /// <summary>Bridges the availability-only constructor. A caller that says
+    /// "free" without a pose is describing a seat nobody established how to
+    /// use, which is exactly what Unverified means.</summary>
+    private static SeatOffer Offer(SeatAvailability seat)
+    {
+        switch (seat)
+        {
+            case SeatAvailability.Occupied:
+                return SeatOffer.Occupied;
+            case SeatAvailability.Free:
+            case SeatAvailability.Unverified:
+                return SeatOffer.Unverified;
+            default:
+                return SeatOffer.None;
+        }
     }
 }

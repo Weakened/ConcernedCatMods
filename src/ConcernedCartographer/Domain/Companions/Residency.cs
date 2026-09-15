@@ -25,6 +25,25 @@ internal enum AnchorValidity
     Gone = 2,
 }
 
+/// <summary>What has become of the seat the companion is sitting on.
+///
+/// Furniture is not permanent and it is not his. A bench gets taken down, a
+/// stool gets picked up, and the player sits in the chair he was using - all
+/// three are ordinary, and all three have to end with him somewhere sensible
+/// rather than perched in mid-air or overlapping the person who owns the
+/// place.</summary>
+internal enum SeatStatus
+{
+    /// <summary>He is not using a seat, so there is nothing to lose.</summary>
+    NotSeated = 0,
+
+    /// <summary>The seat is still there and still free.</summary>
+    Held = 1,
+
+    /// <summary>The seat is gone, or somebody is in it. He gives it up.</summary>
+    Lost = 2,
+}
+
 /// <summary>What the runtime should do about the companion actor this pass.</summary>
 internal enum ResidencyAction
 {
@@ -52,7 +71,8 @@ internal readonly struct ResidencyInputs
         bool presentationSupported,
         CompanionAnchor currentAnchor,
         CompanionAnchor placedAnchor,
-        AnchorValidity validity)
+        AnchorValidity validity,
+        SeatStatus seat = SeatStatus.NotSeated)
     {
         CompanionRecruited = companionRecruited;
         VisibilityEnabled = visibilityEnabled;
@@ -61,6 +81,7 @@ internal readonly struct ResidencyInputs
         CurrentAnchor = currentAnchor;
         PlacedAnchor = placedAnchor;
         Validity = validity;
+        Seat = seat;
     }
 
     /// <summary>Whether the player actually welcomed the companion. Someone who
@@ -83,6 +104,9 @@ internal readonly struct ResidencyInputs
     public CompanionAnchor PlacedAnchor { get; }
 
     public AnchorValidity Validity { get; }
+
+    /// <summary>What has become of the seat he is on, if any.</summary>
+    public SeatStatus Seat { get; }
 }
 
 /// <summary>Decides whether the companion should be standing somewhere, and
@@ -120,6 +144,16 @@ internal static class ResidencyPlanner
         if (!inputs.ActorPresent)
         {
             return ResidencyAction.Place;
+        }
+
+        // A seat that was taken or taken away is given up at once, and only
+        // then. Re-planning re-probes the furniture, so the next spot is
+        // whatever is actually free - another seat, or the ground beside it.
+        // The check is deliberately before the anchor comparison: the home
+        // point has not moved, so nothing below would notice.
+        if (inputs.Seat == SeatStatus.Lost)
+        {
+            return ResidencyAction.Rehome;
         }
 
         // The anchor was checked and is gone. This is the only answer that may

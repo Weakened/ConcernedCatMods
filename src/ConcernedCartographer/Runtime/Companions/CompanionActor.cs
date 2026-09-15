@@ -101,19 +101,18 @@ internal sealed class CompanionActor
         "Tameable",
     };
 
-    /// <summary>Animator states to try for a seated idle, best first. Every one
-    /// is checked against the live controller with <c>Animator.HasState</c>
-    /// before it is used, so none of them is an assumption — the audit was
-    /// explicit that no animation key is a constant on this build.</summary>
-    private static readonly string[] SitStateCandidates =
-    {
-        "attach_chair",
-        "Sitting",
-        "sit",
-        "attach_bed",
-        "idle",
-        "Idle",
-    };
+    /// <summary>The animator parameter the game sets to sit somebody on the
+    /// ground: <c>Player.StartEmote("sit", oneshot: false)</c> ends in
+    /// <c>SetBool("emote_" + emote, true)</c>. It is a parameter, not a state
+    /// name, which is the whole reason the previous state-name search never
+    /// found anything.</summary>
+    private const string GroundSitParameter = "emote_sit";
+
+    /// <summary>What a seat asks for when it does not name its own animation.
+    /// <c>Chair.m_attachAnimation</c> defaults to exactly this, and
+    /// <c>Player.AttachStart</c> passes it straight to
+    /// <c>SetBool(attachAnimation, true)</c>.</summary>
+    private const string DefaultSeatParameter = "attach_chair";
 
     private static readonly string[] HeadBoneFragments = { "head", "neck" };
 
@@ -140,6 +139,13 @@ internal sealed class CompanionActor
     /// re-binding a skinned customization mesh to the right bones.</summary>
     private SkinnedMeshRenderer? _bodyModel;
 
+    /// <summary>The seat he was placed on, if any.</summary>
+    private SeatOffer _seat;
+
+    /// <summary>The animator parameter currently held true for his pose, so it
+    /// can be released before another is set.</summary>
+    private string? _poseParameter;
+
     public CompanionActor(
         ManualLogSource log,
         Action onTalk,
@@ -153,6 +159,10 @@ internal sealed class CompanionActor
     }
 
     public bool Exists => _root != null;
+
+    /// <summary>The seat he is using, if any. The director re-checks it every
+    /// residency pass so a seat that is taken or taken away is given up.</summary>
+    public SeatOffer Seat => _seat;
 
     public ActorReport? Report { get; private set; }
 
@@ -170,9 +180,11 @@ internal sealed class CompanionActor
         CompanionPose pose,
         CompanionAnchor anchor,
         IReadOnlyList<string> sourceCandidates,
-        ManualLogSource log)
+        ManualLogSource log,
+        SeatOffer seat = default)
     {
         Release();
+        _seat = seat;
 
         foreach (string candidate in sourceCandidates)
         {
@@ -213,6 +225,12 @@ internal sealed class CompanionActor
         return true;
     }
 
+    /// <summary>Puts the body where it belongs.
+    ///
+    /// A seat is not "the ground near a chair": the game puts a sitter on the
+    /// chair's own <c>m_attachPoint</c>, at the chair's own heading, and so
+    /// does this. Using the probed ground point instead is what makes a seated
+    /// figure look like it is standing through the furniture.</summary>
     private void Place(WorldPoint position, CompanionPose pose)
     {
         PlacedAnchorSet(position);
@@ -221,8 +239,12 @@ internal sealed class CompanionActor
             return;
         }
 
-        _root.transform.position = new Vector3(position.X, position.Y, position.Z);
-        _root.transform.rotation = Quaternion.Euler(0f, 200f, 0f);
+        bool onSeat = pose == CompanionPose.SitOnSeat && _seat.IsUsable;
+        WorldPoint where = onSeat ? _seat.Position : position;
+        float yaw = onSeat ? _seat.YawDegrees : 200f;
+
+        _root.transform.position = new Vector3(where.X, where.Y, where.Z);
+        _root.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
         ApplyPose(pose);
     }
 
@@ -246,13 +268,19 @@ internal sealed class CompanionActor
         }
     }
 
-    /// <summary>Applies a seated idle if this build has a state for one.
+    /// <summary>Sits him down, the way the game sits anybody down.
     ///
-    /// Every candidate is checked with <c>Animator.HasState</c> first, so an
-    /// absent state is a fact this build told us rather than an exception we
+    /// Valheim does not play a sitting state by name. It sets an animator
+    /// <b>bool parameter</b> - <c>emote_sit</c> for the ground emote,
+    /// <c>attach_chair</c> (or whatever the piece names) for furniture - and
+    /// lets the controller do the rest. Setting the parameter is a local write
+    /// to our own animator: no attachment message is sent, no seat is claimed,
+    /// and nothing about the piece or the player changes.
+    ///
+    /// Every parameter is checked against the live controller first, so an
+    /// absent one is a fact this build told us rather than an exception we
     /// caught. When none exists the model keeps its default idle and the report
-    /// says <c>PoseState = null</c> — which is how seating stays honestly
-    /// "pending" instead of quietly claimed.</summary>
+    /// says <c>PoseState = null</c>.</summary>
     private void ApplyPose(CompanionPose pose)
     {
         if (Report != null)
@@ -269,15 +297,20 @@ internal sealed class CompanionActor
         {
             _animator.applyRootMotion = false;
 
-            foreach (string candidate in SitStateCandidates)
+            // A pose that is being replaced must be cleared first, or a
+            // companion who gives up a chair stays folded into a sitting shape
+            // on the grass.
+            ClearPoseParameter();
+
+            foreach (string candidate in PoseParameters(pose))
             {
-                int hash = Animator.StringToHash(candidate);
-                if (!_animator.HasState(0, hash))
+                if (!HasBoolParameter(candidate))
                 {
                     continue;
                 }
 
-                _animator.Play(hash, 0, 0f);
+                _animator.SetBool(candidate, true);
+                _poseParameter = candidate;
                 if (Report != null)
                 {
                     Report.PoseState = candidate;
@@ -285,6 +318,10 @@ internal sealed class CompanionActor
 
                 return;
             }
+
+            _log.LogInfo(
+                "This build has no sitting animation parameter for the companion, so he keeps the " +
+                "model's own idle. Nothing else is affected.");
         }
         catch (Exception exception)
         {
@@ -292,6 +329,66 @@ internal sealed class CompanionActor
                 "The companion's idle pose could not be applied on this build; he keeps the model's " +
                 $"default: {SafeLogText.Brief(exception)}");
         }
+    }
+
+    /// <summary>The parameters to try for a pose, best first. A seat's own
+    /// animation leads when there is one; the ground emote is the fallback for
+    /// everything, which is what makes "sit on the ground" the behaviour that
+    /// always works.</summary>
+    private IEnumerable<string> PoseParameters(CompanionPose pose)
+    {
+        if (pose == CompanionPose.SitOnSeat && _seat.IsUsable)
+        {
+            yield return _seat.AttachAnimation ?? DefaultSeatParameter;
+            yield return DefaultSeatParameter;
+        }
+
+        yield return GroundSitParameter;
+    }
+
+    private void ClearPoseParameter()
+    {
+        if (_animator == null || _poseParameter == null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (HasBoolParameter(_poseParameter))
+            {
+                _animator.SetBool(_poseParameter, false);
+            }
+        }
+        catch
+        {
+            // A controller that will not answer is not worth a notice here.
+        }
+
+        _poseParameter = null;
+    }
+
+    /// <summary>Whether the live controller actually has this bool parameter.
+    /// <c>Animator.SetBool</c> on an absent one logs a Unity error every call,
+    /// so asking first is both honest and quiet.</summary>
+    private bool HasBoolParameter(string name)
+    {
+        if (_animator == null || string.IsNullOrEmpty(name))
+        {
+            return false;
+        }
+
+        foreach (AnimatorControllerParameter parameter in _animator.parameters)
+        {
+            if (parameter != null &&
+                parameter.type == AnimatorControllerParameterType.Bool &&
+                string.Equals(parameter.name, name, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Extracts the animated visual subtree, or returns null.</summary>
@@ -770,6 +867,8 @@ internal sealed class CompanionActor
 
     public void Release()
     {
+        ClearPoseParameter();
+        _seat = SeatOffer.None;
         _animator = null;
         _helmetJoint = null;
         _bodyModel = null;
@@ -800,6 +899,8 @@ internal sealed class CompanionActor
     {
         _root = null;
         _animator = null;
+        _poseParameter = null;
+        _seat = SeatOffer.None;
         _helmetJoint = null;
         _bodyModel = null;
         Report = null;
