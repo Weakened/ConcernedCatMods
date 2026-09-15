@@ -350,18 +350,52 @@ public sealed class DesignationGuardTests : IDisposable
             [JournalEntryKind.Refunded] = true,
             [JournalEntryKind.CommitStarted] = true,
             [JournalEntryKind.CommitFinished] = true,
+
+            // Added when tool handovers joined the record. This test failed the
+            // moment the three kinds were declared and before they were
+            // classified, which is the whole reason it exists -- the compiler
+            // does not and will not do it.
+            [JournalEntryKind.ToolHandoverStarted] = true,
+            [JournalEntryKind.ToolHandoverFinished] = true,
+            [JournalEntryKind.ToolReturned] = true,
+
+            // Added when a resolution became part of the record. This test
+            // failed again the moment they were declared, which is twice now
+            // that it has caught exactly what it was built for.
+            [JournalEntryKind.ToolResolvedToWorker] = true,
+            [JournalEntryKind.ToolResolvedToPlayer] = true,
         };
+
+        // Collected, not asserted one at a time. Assert.True stops at the
+        // first failure, so the previous version named ONE unclassified member
+        // while the commit message claimed it named each -- somebody adding two
+        // kinds would have been sent round twice. Now the message lists them.
+        var unclassified = new List<string>();
+        var wrong = new List<string>();
 
         foreach (JournalEntryKind kind in Enum.GetValues(typeof(JournalEntryKind)))
         {
-            Assert.True(
-                expected.ContainsKey(kind),
-                "JournalEntryKind." + kind + " is not classified. Decide whether it carries a " +
-                "request id, add it to SettlementJournal.CarriesRequest and to this test. " +
-                "Nothing else will tell you.");
+            if (!expected.TryGetValue(kind, out bool carries))
+            {
+                unclassified.Add(kind.ToString());
+                continue;
+            }
 
-            Assert.Equal(expected[kind], SettlementJournal.CarriesRequest(kind));
+            if (SettlementJournal.CarriesRequest(kind) != carries)
+            {
+                wrong.Add(kind.ToString());
+            }
         }
+
+        Assert.True(
+            unclassified.Count == 0,
+            "Not classified: " + string.Join(", ", unclassified) + ". Decide for each whether it " +
+            "carries a request id, add it to SettlementJournal.CarriesRequest and to this test. " +
+            "Nothing else will tell you -- the compiler will not.");
+
+        Assert.True(
+            wrong.Count == 0,
+            "CarriesRequest disagrees with this test for: " + string.Join(", ", wrong) + ".");
 
         Assert.Equal(expected.Count, Enum.GetValues(typeof(JournalEntryKind)).Length);
     }

@@ -173,13 +173,10 @@ public sealed class ToolCustodyTests
         Assert.DoesNotContain("hammer", verdict.Describe());
     }
 
-    [Fact]
-    public void IssuingIsGatedClosedWhileAHandoverCannotSurviveAReload()
-    {
-        // Not a preference and not a setting. The ledger does not persist, so
-        // taking somebody's axe would lose the record of it on the next reload.
-        Assert.True(ToolLedger.RequiresPersistence);
-    }
+    // The gate that once stood here is gone, because what it guarded against is
+    // fixed: #299 gave the journal tool entries and a replay that rebuilds this
+    // ledger. What it was protecting is now pinned by ToolPersistenceTests,
+    // which asserts the behaviour rather than the existence of a guard.
 
     [Fact]
     public void AToolIsGivenBackExactlyOnce()

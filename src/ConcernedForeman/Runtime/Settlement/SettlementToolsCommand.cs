@@ -24,6 +24,7 @@ internal sealed class SettlementToolsCommand : ConsoleCommand
     public override string Help =>
         "Concerned Foreman settlement designation. Subcommands: status, area <radius>, " +
         "harvest <radius>, supply (look at a chest), recruit [name], dismiss [name], " +
+        "resolve <request> mine|his, " +
         "clear <area|harvest|supply> [yes]. Requires the settlement runtime to be enabled " +
         "in the config and this peer to be the host.";
 
@@ -47,6 +48,7 @@ internal sealed class SettlementToolsCommand : ConsoleCommand
         return new List<string>
         {
             "status", "area", "harvest", "supply", "recruit", "dismiss", "clear",
+            "resolve",
         };
     }
 }

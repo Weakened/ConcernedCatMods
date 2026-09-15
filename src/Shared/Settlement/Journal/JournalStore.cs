@@ -6,6 +6,7 @@ using TheConcernedCat.Settlement.Custody;
 using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Orders;
 using TheConcernedCat.Settlement.Storage;
+using TheConcernedCat.Settlement.Tools;
 
 namespace TheConcernedCat.Settlement.Journal;
 
@@ -51,8 +52,25 @@ internal sealed class JournalStore
     private const string TemporarySuffix = ".tmp";
 
     /// <summary>Bumped only when a change would confuse an older build. An
-    /// older build refuses a newer file rather than reading half of it.</summary>
-    public const int SchemaVersion = 1;
+    /// older build refuses a newer file rather than reading half of it.
+    ///
+    /// <b>2</b> since tool handovers joined the record. The bump is the point: a
+    /// build that does not know about tools cannot account for one a player
+    /// handed over, and half-reading such a file would let it rewrite the file
+    /// with the handovers deleted. Refusing outright is the safe direction, and
+    /// it is why the tool rows also carry their own tag rather than extending
+    /// the entry row — a version check is a clearer refusal than a pile of
+    /// unreadable lines.</summary>
+    public const int SchemaVersion = 2;
+
+    /// <summary>Row tag for a material or order entry.</summary>
+    private const string EntryTag = "e";
+
+    /// <summary>Row tag for a tool handover. Deliberately distinct: a handover
+    /// is keyed by a worker and carries a tool, and squeezing it into the entry
+    /// row would have meant either a synthetic order id or trailing columns
+    /// after the variable-length stack list.</summary>
+    private const string ToolTag = "t";
 
     private const char Separator = '\t';
     private const char CarriageReturn = '\r';
@@ -193,7 +211,9 @@ internal sealed class JournalStore
                 sawHeader = true;
             }
 
-            if (TryParseEntry(fields, out JournalEntry entry) && entry.Sequence > highestSequence)
+            if ((TryParseEntry(fields, out JournalEntry entry)
+                    || TryParseToolEntry(fields, out entry))
+                && entry.Sequence > highestSequence)
             {
                 highestSequence = entry.Sequence;
                 journal.Restore(entry);
@@ -283,9 +303,29 @@ internal sealed class JournalStore
 
         foreach (JournalEntry entry in journal.Entries)
         {
+            if (JournalEntryKinds.IsTool(entry.Kind))
+            {
+                yield return string.Join(
+                    Separator.ToString(),
+                    new[]
+                    {
+                        ToolTag,
+                        entry.Sequence.ToString(CultureInfo.InvariantCulture),
+                        ((int)entry.Kind).ToString(CultureInfo.InvariantCulture),
+                        entry.Request.IsEmpty ? "" : entry.Request.Value,
+                        entry.Worker.Value,
+                        ((int)entry.Tool.Kind).ToString(CultureInfo.InvariantCulture),
+                        AtomicTextFile.Escape(entry.Tool.ItemKey),
+                        entry.Tool.Quality.ToString(CultureInfo.InvariantCulture),
+                        entry.Tool.DurabilityAtIssue.ToString("R", CultureInfo.InvariantCulture),
+                        entry.Tool.ToolTier.ToString(CultureInfo.InvariantCulture),
+                    });
+                continue;
+            }
+
             var fields = new List<string>
             {
-                "e",
+                EntryTag,
                 entry.Sequence.ToString(CultureInfo.InvariantCulture),
                 ((int)entry.Kind).ToString(CultureInfo.InvariantCulture),
                 entry.Order.Value,
@@ -303,11 +343,89 @@ internal sealed class JournalStore
         }
     }
 
+    /// <summary>Reads a tool handover row.
+    ///
+    /// Every field is validated before the entry is built, and a row that fails
+    /// any of them is damage rather than something to repair by guessing which
+    /// column was wrong -- the same rule the entry rows follow.</summary>
+    private static bool TryParseToolEntry(string[] fields, out JournalEntry entry)
+    {
+        entry = null!;
+
+        if (fields.Length < 10 || !string.Equals(fields[0], ToolTag, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (!long.TryParse(fields[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out long sequence)
+            || sequence < 0)
+        {
+            return false;
+        }
+
+        if (!int.TryParse(fields[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int kindValue)
+            || !Enum.IsDefined(typeof(JournalEntryKind), kindValue)
+            || !JournalEntryKinds.IsTool((JournalEntryKind)kindValue))
+        {
+            return false;
+        }
+
+        if (!int.TryParse(fields[5], NumberStyles.Integer, CultureInfo.InvariantCulture, out int toolKind)
+            || !Enum.IsDefined(typeof(ToolKind), toolKind)
+            || (ToolKind)toolKind == ToolKind.None)
+        {
+            return false;
+        }
+
+        if (!int.TryParse(fields[7], NumberStyles.Integer, CultureInfo.InvariantCulture, out int quality)
+            || !float.TryParse(
+                fields[8], NumberStyles.Float, CultureInfo.InvariantCulture, out float durability)
+            || float.IsNaN(durability)
+            || float.IsInfinity(durability)
+            || !int.TryParse(fields[9], NumberStyles.Integer, CultureInfo.InvariantCulture, out int tier))
+        {
+            return false;
+        }
+
+        if (fields[3].Length == 0)
+        {
+            // Every tool kind keys off a request id -- the replay classifies
+            // them that way -- so a row without one is damage rather than a row
+            // that parses cleanly and is then silently ignored.
+            return false;
+        }
+
+        try
+        {
+            var specimen = new ToolSpecimen(
+                (ToolKind)toolKind, AtomicTextFile.Unescape(fields[6]), quality, durability, tier);
+
+            entry = new JournalEntry(
+                sequence,
+                (JournalEntryKind)kindValue,
+                default,
+                new RequestId(fields[3]),
+                OrderTransition.Approve,
+                null,
+                null,
+                new WorkerId(fields[4]),
+                specimen);
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            // A row that does not satisfy the types' own invariants is damaged.
+            // ArgumentOutOfRangeException derives from ArgumentException, so
+            // this one clause covers both the identity and the range guards.
+            return false;
+        }
+    }
+
     private static bool TryParseEntry(string[] fields, out JournalEntry entry)
     {
         entry = null!;
 
-        if (fields.Length < 7 || !string.Equals(fields[0], "e", StringComparison.Ordinal))
+        if (fields.Length < 7 || !string.Equals(fields[0], EntryTag, StringComparison.Ordinal))
         {
             return false;
         }
@@ -319,8 +437,14 @@ internal sealed class JournalStore
         }
 
         if (!int.TryParse(fields[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int kindValue) ||
-            !Enum.IsDefined(typeof(JournalEntryKind), kindValue))
+            !Enum.IsDefined(typeof(JournalEntryKind), kindValue) ||
+            JournalEntryKinds.IsTool((JournalEntryKind)kindValue))
         {
+            // A tool kind on an entry row is damage. Without this the
+            // JournalEntry constructor below -- deliberately outside the try --
+            // throws straight out of Load, and one corrupted tag byte makes
+            // every command for that world fail forever with no read-only mode
+            // and no notice, because no LoadReport is ever built.
             return false;
         }
 

@@ -5,6 +5,7 @@ using TheConcernedCat.Settlement.Designations;
 using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Journal;
 using TheConcernedCat.Settlement.Recruitment;
+using TheConcernedCat.Settlement.Tools;
 using TheConcernedCat.Settlement.Register;
 using TheConcernedCat.Settlement.Worker;
 using UnityEngine;
@@ -95,9 +96,11 @@ internal sealed class DesignationTools
             case "recruit": return Recruit(register, args);
             case "dismiss": return Dismiss(register, args);
             case "clear": return Clear(register, journal, args);
+            case "resolve": return Resolve(journal, args);
             default:
                 return "Unknown subcommand. Try: status, area <radius>, harvest <radius>, " +
-                    "supply, recruit [name], dismiss [name], clear <area|harvest|supply> [yes].";
+                    "supply, recruit [name], dismiss [name], clear <area|harvest|supply> [yes], " +
+                    "resolve <request> mine|his.";
         }
     }
 
@@ -345,6 +348,63 @@ internal sealed class DesignationTools
                         "is being written over them. " + (_records.Notice ?? string.Empty)
                     : "Refused: " + _describeMissingAuthority() + ".";
         }
+    }
+
+    /// <summary>Settles an interrupted tool handover, the way a person says it
+    /// actually went.
+    ///
+    /// This exists because the repair message told a player to "say which way it
+    /// went" and there was no way to say it — an instruction with no command
+    /// behind it, which an independent review caught. Only a person answers;
+    /// nothing here works it out.</summary>
+    private string Resolve(SettlementJournal journal, string[]? args)
+    {
+        if (!_hasAuthority())
+        {
+            // Every other mutating subcommand asks this, and this one writes a
+            // journal row and saves both settlement files -- so it asking was
+            // never optional. Without it the class summary above and the
+            // command's own help text were both false.
+            return "Refused: " + _describeMissingAuthority() + ".";
+        }
+
+        if (args == null || args.Length < 3)
+        {
+            return "Usage: cf_settle resolve <request> mine|his. \"mine\" means you still have " +
+                "the tool; \"his\" means he does. Run cf_settle status to see which handover " +
+                "is waiting.";
+        }
+
+        bool workerHasIt;
+        switch (args[2].ToLowerInvariant())
+        {
+            case "his": workerHasIt = true; break;
+            case "mine": workerHasIt = false; break;
+            default:
+                return "Say \"mine\" if you still have it, or \"his\" if he does. Nothing has " +
+                    "been changed.";
+        }
+
+        RequestId transaction;
+        try
+        {
+            transaction = new RequestId(args[1]);
+        }
+        catch (ArgumentException)
+        {
+            return "That is not a handover reference. Run cf_settle status to see the one that " +
+                "is waiting.";
+        }
+
+        // Replayed fresh, so the answer is given against what the record says
+        // right now rather than against a cached view of it.
+        ToolLedger tools = journal.Replay().Tools;
+
+        ToolResolution.TryRecord(
+            transaction, workerHasIt, tools, journal, _records.TryPersistJournal,
+            out string message);
+
+        return message;
     }
 
     private string Report(DesignationResult result, SettlementRegister register)

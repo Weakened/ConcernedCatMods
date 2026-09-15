@@ -4,6 +4,7 @@ using System.Globalization;
 using TheConcernedCat.Settlement.Custody;
 using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Orders;
+using TheConcernedCat.Settlement.Tools;
 
 namespace TheConcernedCat.Settlement.Journal;
 
@@ -27,6 +28,55 @@ internal enum JournalEntryKind
 
     /// <summary>Both happened. Written AFTER both.</summary>
     CommitFinished = 4,
+
+    /// <summary>A real tool is about to change hands. Written BEFORE the item
+    /// moves, for the same reason <see cref="CommitStarted"/> is: the two halves
+    /// of a handover cannot be made atomic against a game, so a replay that
+    /// finds a start with no finish <i>knows</i> something was in flight.</summary>
+    ToolHandoverStarted = 5,
+
+    /// <summary>The item moved and the worker has it. Written AFTER.</summary>
+    ToolHandoverFinished = 6,
+
+    /// <summary>The worker gave it back.</summary>
+    ToolReturned = 7,
+
+    /// <summary>A person looked at an interrupted handover and said the worker
+    /// really does have the tool.</summary>
+    ToolResolvedToWorker = 8,
+
+    /// <summary>A person looked at an interrupted handover and said the player
+    /// really still has it.
+    ///
+    /// Two kinds rather than one carrying a flag, because the answer IS the
+    /// content of the entry and a boolean column would be one more thing a
+    /// damaged row could get subtly wrong.</summary>
+    ToolResolvedToPlayer = 9,
+}
+
+/// <summary>Which half of the record an entry belongs to.
+///
+/// Tool entries are keyed by a <b>worker</b>, material entries by an
+/// <b>order</b>. Neither is a stand-in for the other, and an entry that carried
+/// a synthetic order id so it could reuse the material shape would be a record
+/// that reads wrongly forever after.</summary>
+internal static class JournalEntryKinds
+{
+    public static bool IsTool(JournalEntryKind kind)
+    {
+        switch (kind)
+        {
+            case JournalEntryKind.ToolHandoverStarted:
+            case JournalEntryKind.ToolHandoverFinished:
+            case JournalEntryKind.ToolReturned:
+            case JournalEntryKind.ToolResolvedToWorker:
+            case JournalEntryKind.ToolResolvedToPlayer:
+                return true;
+
+            default:
+                return false;
+        }
+    }
 }
 
 /// <summary>One immutable line of the journal.</summary>
@@ -41,14 +91,52 @@ internal sealed class JournalEntry
         RequestId request = default,
         OrderTransition transition = OrderTransition.Approve,
         string? container = null,
-        IEnumerable<MaterialStack>? stacks = null)
+        IEnumerable<MaterialStack>? stacks = null,
+        WorkerId worker = default,
+        ToolSpecimen tool = default)
     {
         if (sequence < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(sequence));
         }
 
-        if (order.IsEmpty)
+        if (JournalEntryKinds.IsTool(kind))
+        {
+            // A handover belongs to a WORKER, not to an order. Inventing an
+            // order id so the entry could reuse the material shape would make
+            // every later read of this record wrong about who was involved.
+            if (worker.IsEmpty)
+            {
+                throw new ArgumentException(
+                    "A tool journal entry needs the worker it is about.", nameof(worker));
+            }
+
+            if (tool.IsEmpty)
+            {
+                throw new ArgumentException(
+                    "A tool journal entry needs the tool it is about.", nameof(tool));
+            }
+
+            if (!order.IsEmpty)
+            {
+                // "Refuses to pretend otherwise" has to mean this too. Accepting
+                // an order and then dropping it on the way to disk would leave a
+                // caller believing the record said something it never did.
+                throw new ArgumentException(
+                    "A tool journal entry belongs to a worker, not an order.", nameof(order));
+            }
+
+            if (request.IsEmpty)
+            {
+                // The reader treats a tool row without a request as damage, so
+                // the writer must not be able to produce one. Guarding only the
+                // reader left this build able to write a file it would later
+                // call damaged and go permanently read-only over.
+                throw new ArgumentException(
+                    "A tool journal entry needs the transaction it is about.", nameof(request));
+            }
+        }
+        else if (order.IsEmpty)
         {
             throw new ArgumentException("A journal entry needs an owning order.", nameof(order));
         }
@@ -59,6 +147,8 @@ internal sealed class JournalEntry
         Request = request;
         Transition = transition;
         Container = container;
+        Worker = worker;
+        Tool = tool;
 
         if (stacks != null)
         {
@@ -77,6 +167,12 @@ internal sealed class JournalEntry
     public string? Container { get; }
     public IReadOnlyList<MaterialStack> Stacks => _stacks;
 
+    /// <summary>Empty unless this is a tool entry.</summary>
+    public WorkerId Worker { get; }
+
+    /// <summary>Empty unless this is a tool entry.</summary>
+    public ToolSpecimen Tool { get; }
+
     public override string ToString()
     {
         return Sequence.ToString(CultureInfo.InvariantCulture) + " " + Kind + " " + Order.Value +
@@ -92,12 +188,14 @@ internal sealed class ReplayResult
     internal ReplayResult(
         IReadOnlyDictionary<string, OrderState> orders,
         CustodyLedger ledger,
+        ToolLedger tools,
         long nextSequence,
         Guid journalInstance,
         IEnumerable<string> repairs)
     {
         Orders = orders;
         Ledger = ledger;
+        Tools = tools;
         NextSequence = nextSequence;
         JournalInstance = journalInstance;
         foreach (string repair in repairs)
@@ -109,6 +207,11 @@ internal sealed class ReplayResult
     public IReadOnlyDictionary<string, OrderState> Orders { get; }
 
     public CustodyLedger Ledger { get; }
+
+    /// <summary>Which real tools each worker is holding, rebuilt from the
+    /// record. This is what makes the tool ledger's idempotence claim true
+    /// across a reload rather than only within one session.</summary>
+    public ToolLedger Tools { get; }
 
     public long NextSequence { get; }
 
@@ -210,6 +313,53 @@ internal sealed class SettlementJournal
     public void MarkClean()
     {
         IsDirty = false;
+        _savedCount = _entries.Count;
+    }
+
+    /// <summary>How many entries are known to have reached disk. Zero until a
+    /// save succeeds, and never decreases — what is written is written.</summary>
+    private int _savedCount;
+
+    /// <summary>Drops trailing entries that never reached disk.
+    ///
+    /// For one case only, and it is a real one: an act appends its intention,
+    /// tries to persist it, and the save fails. The act is refused and nothing
+    /// in the world changed — but the entry is still sitting in this list, and
+    /// some later unrelated save would carry it to disk as a record of
+    /// something that never happened. For a handover that means a phantom
+    /// unresolved transfer and a player hunting for an axe that never moved.
+    ///
+    /// <b>It can only ever remove what is not on disk.</b> A request to truncate
+    /// below <see cref="_savedCount"/> is refused outright rather than
+    /// clamped — un-writing a persisted entry is not something this type will
+    /// do by arithmetic, and a caller asking for it has a bug worth
+    /// seeing.</summary>
+    public bool TryDiscardUnsaved(int keep)
+    {
+        if (keep < _savedCount || keep > _entries.Count)
+        {
+            return false;
+        }
+
+        if (keep == _entries.Count)
+        {
+            return true;
+        }
+
+        _entries.RemoveRange(keep, _entries.Count - keep);
+
+        long highest = -1L;
+        foreach (JournalEntry entry in _entries)
+        {
+            if (entry.Sequence > highest)
+            {
+                highest = entry.Sequence;
+            }
+        }
+
+        _highestSequence = highest;
+        IsDirty = _entries.Count != _savedCount;
+        return true;
     }
 
     /// <summary>Appends one line. The sequence is assigned here so a caller
@@ -221,9 +371,12 @@ internal sealed class SettlementJournal
         RequestId request = default,
         OrderTransition transition = OrderTransition.Approve,
         string? container = null,
-        IEnumerable<MaterialStack>? stacks = null)
+        IEnumerable<MaterialStack>? stacks = null,
+        WorkerId worker = default,
+        ToolSpecimen tool = default)
     {
-        var entry = new JournalEntry(NextSequence, kind, order, request, transition, container, stacks);
+        var entry = new JournalEntry(
+            NextSequence, kind, order, request, transition, container, stacks, worker, tool);
         _entries.Add(entry);
         _highestSequence = entry.Sequence;
         IsDirty = true;
@@ -271,6 +424,11 @@ internal sealed class SettlementJournal
             case JournalEntryKind.Refunded:
             case JournalEntryKind.CommitStarted:
             case JournalEntryKind.CommitFinished:
+            case JournalEntryKind.ToolHandoverStarted:
+            case JournalEntryKind.ToolHandoverFinished:
+            case JournalEntryKind.ToolReturned:
+            case JournalEntryKind.ToolResolvedToWorker:
+            case JournalEntryKind.ToolResolvedToPlayer:
                 return true;
 
             case JournalEntryKind.OrderTransition:
@@ -285,8 +443,13 @@ internal sealed class SettlementJournal
     {
         var orders = new Dictionary<string, OrderState>(StringComparer.Ordinal);
         var ledger = new CustodyLedger();
+        var tools = new ToolLedger();
         var startedCommits = new Dictionary<string, JournalEntry>(StringComparer.Ordinal);
         var finishedCommits = new HashSet<string>(StringComparer.Ordinal);
+        var startedHandovers = new Dictionary<string, JournalEntry>(StringComparer.Ordinal);
+        var finishedHandovers = new HashSet<string>(StringComparer.Ordinal);
+        var returnedHandovers = new HashSet<string>(StringComparer.Ordinal);
+        var resolutions = new Dictionary<string, bool>(StringComparer.Ordinal);
 
         foreach (JournalEntry entry in _entries)
         {
@@ -348,6 +511,52 @@ internal sealed class SettlementJournal
                     finishedCommits.Add(entry.Request.Value);
                     ledger.Commit(entry.Request);
                     break;
+
+                // Tool rows are COLLECTED here and applied afterwards, never
+                // applied as they are met. Applying in file order meant a
+                // return could arrive before the holding it refers to existed
+                // -- so it was silently dropped and the tool replayed as still
+                // held. Order of application is a property of the replay, not
+                // of where a row happens to sit in the file.
+                case JournalEntryKind.ToolHandoverStarted:
+                    // First one wins. Last-write-wins would let a second start
+                    // under the same id quietly replace the tool or the worker,
+                    // bypassing the mismatch rejection ToolLedger.Issue makes a
+                    // point of.
+                    if (!startedHandovers.ContainsKey(entry.Request.Value))
+                    {
+                        startedHandovers[entry.Request.Value] = entry;
+                    }
+
+                    break;
+
+                // NOTE: the specimen a holding is built from now comes from
+                // the FIRST row seen for a request -- normally the start, where
+                // it used to come from the finish. The adapter writes the same
+                // specimen to both, so this changes nothing today; it matters if
+                // anything ever writes them differently, and the first row is
+                // the right authority because it is the one that definitely
+                // describes what was picked up.
+                case JournalEntryKind.ToolHandoverFinished:
+                    finishedHandovers.Add(entry.Request.Value);
+                    if (!startedHandovers.ContainsKey(entry.Request.Value))
+                    {
+                        // A finish whose start did not survive is still evidence
+                        // that the tool moved.
+                        startedHandovers[entry.Request.Value] = entry;
+                    }
+
+                    break;
+
+                case JournalEntryKind.ToolReturned:
+                    returnedHandovers.Add(entry.Request.Value);
+                    break;
+
+                case JournalEntryKind.ToolResolvedToWorker:
+                case JournalEntryKind.ToolResolvedToPlayer:
+                    resolutions[entry.Request.Value] =
+                        entry.Kind == JournalEntryKind.ToolResolvedToWorker;
+                    break;
             }
         }
 
@@ -380,6 +589,63 @@ internal sealed class SettlementJournal
                 "request one way or the other.");
         }
 
-        return new ReplayResult(orders, ledger, NextSequence, Instance, repairs);
+        // A handover that started and did not finish is genuinely unknown, and
+        // stays unknown -- the same rule as an interrupted material commit, for
+        // the same reason. Assuming it completed hands a worker a tool the
+        // player may still be holding; assuming it did not loses the record of
+        // one they are not.
+        // Every holding is created first, so nothing that refers to one can
+        // arrive before it exists. Then, in the one order that composes: an
+        // unfinished handover becomes unknown, a person's answer settles it, and
+        // only then does a return apply -- because a return is owed from Held,
+        // and a resolution is the thing that can produce Held.
+        foreach (KeyValuePair<string, JournalEntry> handover in startedHandovers)
+        {
+            JournalEntry entry = handover.Value;
+            tools.Issue(new ToolHolding(entry.Request, entry.Worker, entry.Tool));
+        }
+
+        foreach (KeyValuePair<string, JournalEntry> handover in startedHandovers)
+        {
+            if (!finishedHandovers.Contains(handover.Key))
+            {
+                tools.MarkUncertain(handover.Value.Request);
+            }
+        }
+
+        foreach (KeyValuePair<string, bool> answer in resolutions)
+        {
+            if (startedHandovers.TryGetValue(answer.Key, out JournalEntry? resolved))
+            {
+                tools.Resolve(resolved!.Request, answer.Value);
+            }
+        }
+
+        foreach (string returned in returnedHandovers)
+        {
+            if (startedHandovers.TryGetValue(returned, out JournalEntry? entry))
+            {
+                tools.Return(entry!.Request);
+            }
+        }
+
+        foreach (KeyValuePair<string, JournalEntry> handover in startedHandovers)
+        {
+            if (!tools.HasUncertainHandover(handover.Value.Worker)
+                || !tools.TryGet(handover.Value.Request, out ToolHolding holding)
+                || holding.State != ToolHoldingState.Uncertain)
+            {
+                continue;
+            }
+
+            JournalEntry entry = handover.Value;
+            repairs.Add(
+                "A tool was changing hands (" + entry.Tool + ", worker \"" + entry.Worker.Value +
+                "\", request \"" + entry.Request.Value + "\") when the session ended, and whether " +
+                "it moved is not recorded. Nothing has been taken or given back. Check both " +
+                "inventories, then run: cf_settle resolve " + entry.Request.Value + " mine|his");
+        }
+
+        return new ReplayResult(orders, ledger, tools, NextSequence, Instance, repairs);
     }
 }
