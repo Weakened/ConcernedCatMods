@@ -530,6 +530,13 @@ internal sealed class SettlementJournal
 
                     break;
 
+                // NOTE: the specimen a holding is built from now comes from
+                // the FIRST row seen for a request -- normally the start, where
+                // it used to come from the finish. The adapter writes the same
+                // specimen to both, so this changes nothing today; it matters if
+                // anything ever writes them differently, and the first row is
+                // the right authority because it is the one that definitely
+                // describes what was picked up.
                 case JournalEntryKind.ToolHandoverFinished:
                     finishedHandovers.Add(entry.Request.Value);
                     if (!startedHandovers.ContainsKey(entry.Request.Value))

@@ -36,11 +36,13 @@ internal enum HandoverOutcome
 /// makes the design work: <c>Inventory.RemoveItem(ItemDrop.ItemData)</c> is
 /// <c>m_inventory.Contains(item)</c> then <c>m_inventory.Remove(item)</c> — it
 /// operates on the <b>same object reference</b>, as does
-/// <c>Inventory.AddItem(ItemDrop.ItemData)</c>. So moving a tool is moving one
-/// instance between two lists, and its type, quality, durability and every other
-/// field travel with it because they <i>are</i> it. Nothing needs copying, and
-/// <c>ItemData.Clone()</c> is deliberately never called here — a clone is a
-/// second axe.
+/// <c>Inventory.AddItem(ItemDrop.ItemData)</c> — <b>off its stacking branch</b>,
+/// which mutates <c>m_stack</c> on the source and can return false after moving
+/// part of a stack. A single, non-stacking item is refused before it reaches
+/// that branch, so moving a tool is moving one instance between two lists, and
+/// its type, quality, durability and every other field travel with it because
+/// they <i>are</i> it. Nothing needs copying, and <c>ItemData.Clone()</c> is
+/// deliberately never called here — a clone is a second axe.
 ///
 /// <b>The order is add-then-remove, and that is not arbitrary.</b> Neither order
 /// is atomic against a game that can be killed between two statements, so the
@@ -172,6 +174,19 @@ internal static class ToolHandover
         if (!ToolClassifier.IsStillUsable(selected))
         {
             message = "That one is worn out. Repair it first and he will take it.";
+            return HandoverOutcome.Refused;
+        }
+
+        if (selected.m_shared.m_maxStackSize > 1 || selected.m_stack != 1)
+        {
+            // Read from the 1.0.12 binary: Inventory.AddItem takes a stacking
+            // branch that mutates m_stack on the SOURCE and can still return
+            // false after moving some units. Every real axe and hammer has a
+            // maximum stack of one, so this refuses something that does not
+            // exist rather than restricting anything -- but the alternative is
+            // an unqualified claim that AddItem never touches the source, which
+            // is only true off that branch.
+            message = "He takes one tool at a time, not a stack.";
             return HandoverOutcome.Refused;
         }
 
@@ -337,73 +352,6 @@ internal static class ToolHandover
 
         message = "He hands it back.";
         return HandoverOutcome.Given;
-    }
-}
-
-/// <summary>Records a person's decision about an interrupted handover.
-///
-/// The ledger could already be resolved in memory, and for one commit that was
-/// all it could do — the answer was discarded on the next load and the holding
-/// went straight back to unknown, while the documentation called it
-/// "resolvable". The decision is part of the record now, so it survives.
-///
-/// Only a person calls this. Nothing works the answer out.</summary>
-internal static class ToolResolution
-{
-    internal static bool TryRecord(
-        RequestId transaction,
-        bool workerHasIt,
-        ToolLedger ledger,
-        SettlementJournal journal,
-        Func<bool> saveNow,
-        out string message)
-    {
-        if (ledger == null || journal == null || saveNow == null || transaction.IsEmpty
-            || !ledger.TryGet(transaction, out ToolHolding holding))
-        {
-            message = "There is no record of that handover.";
-            return false;
-        }
-
-        if (journal.IsReadOnly)
-        {
-            message = "That cannot be settled yet: this settlement's record could not be fully " +
-                "read, so nothing new is being written to it.";
-            return false;
-        }
-
-        if (ledger.Resolve(transaction, workerHasIt) != ToolOutcome.Applied)
-        {
-            message = "That handover is not waiting on an answer.";
-            return false;
-        }
-
-        int beforeAnswer = journal.Entries.Count;
-        journal.Append(
-            workerHasIt
-                ? JournalEntryKind.ToolResolvedToWorker
-                : JournalEntryKind.ToolResolvedToPlayer,
-            default,
-            transaction,
-            worker: holding.Worker,
-            tool: holding.Tool);
-
-        if (!ToolHandover.TryPersist(saveNow))
-        {
-            // "Recorded" has to mean recorded. Saying it after a failed write
-            // would send somebody away believing a question was settled that
-            // will be asked again on the next load.
-            journal.TryDiscardUnsaved(beforeAnswer);
-            ledger.MarkUncertain(transaction);
-
-            message = "That could not be written down, so nothing has been settled. Try again.";
-            return false;
-        }
-
-        message = workerHasIt
-            ? "Recorded: he has it."
-            : "Recorded: you have it.";
-        return true;
     }
 }
 

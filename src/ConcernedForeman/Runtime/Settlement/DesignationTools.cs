@@ -359,6 +359,15 @@ internal sealed class DesignationTools
     /// nothing here works it out.</summary>
     private string Resolve(SettlementJournal journal, string[]? args)
     {
+        if (!_hasAuthority())
+        {
+            // Every other mutating subcommand asks this, and this one writes a
+            // journal row and saves both settlement files -- so it asking was
+            // never optional. Without it the class summary above and the
+            // command's own help text were both false.
+            return "Refused: " + _describeMissingAuthority() + ".";
+        }
+
         if (args == null || args.Length < 3)
         {
             return "Usage: cf_settle resolve <request> mine|his. \"mine\" means you still have " +
@@ -392,7 +401,7 @@ internal sealed class DesignationTools
         ToolLedger tools = journal.Replay().Tools;
 
         ToolResolution.TryRecord(
-            transaction, workerHasIt, tools, journal, () => _records.Save() == null,
+            transaction, workerHasIt, tools, journal, _records.TryPersistJournal,
             out string message);
 
         return message;

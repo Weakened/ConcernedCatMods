@@ -197,6 +197,30 @@ internal sealed class SettlementRecords
         }
     }
 
+    /// <summary>Writes whatever changed and answers whether the JOURNAL is fully
+    /// on disk.
+    ///
+    /// This is the predicate a tool handover needs, and the joined notice from
+    /// <see cref="Save"/> is not it. <c>JournalStore.Save</c> marks the journal
+    /// clean before the register is even attempted, so a register-only failure
+    /// returns a notice while the handover row is safely written — and a caller
+    /// reading "notice means failure" then tells a player nothing was recorded
+    /// about something that was.
+    ///
+    /// Asking the journal itself removes the ambiguity: not dirty means
+    /// everything it held reached disk, including the case where it held nothing
+    /// to write.</summary>
+    internal bool TryPersistJournal()
+    {
+        if (_journal == null || _register == null)
+        {
+            return false;
+        }
+
+        _writer.Save(_journal, _register);
+        return !_journal.IsDirty;
+    }
+
     /// <summary>Writes whatever changed, through the game-free writer that owns
     /// the ordering rule.</summary>
     internal string? Save()
