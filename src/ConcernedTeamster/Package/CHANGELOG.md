@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.3 - Version-alignment rebuild
+
+**No functional changes.** This release is byte-for-byte the same mod as 1.0.2 apart
+from its version metadata: it was rebuilt so both Concerned Cat mods sit on the same
+version number. Nothing in Concerned Teamster's behaviour, configuration, sidecar
+format, cart physics, panels, or multiplayer policy is different.
+
+- Rebuilt from the same source as 1.0.2 and re-verified against installed Valheim 1.0.12 (Unity 6000.0.75f1, BepInEx 5.4.23.3, Jotunn 2.29.2).
+- Upgrading from 1.0.2 is optional and changes nothing you can observe in game. Keep your existing configuration and sidecar files.
+- No world-save, sidecar, configuration-schema, cart-physics, or gameplay-balance changes.
+
 ## 1.0.2
 
 - Updated the mod for Valheim 1.0.7 / Unity 6000 compatibility and verified its game-facing cart API contracts against the installed assemblies.
