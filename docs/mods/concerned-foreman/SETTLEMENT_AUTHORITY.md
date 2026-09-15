@@ -149,11 +149,25 @@ What the subclass must do, and what CF-SET-002 must prove:
   reason** rather than retrying forever.
 - No combat, no aggravation, no faction behaviour.
 
-**This is the one decision with real residual risk**, because `BaseAI` carries
-behaviour we are switching off rather than behaviour we never had. CF-SET-002's
-go/no-go is exactly that: does an overridden `UpdateAI` actually stop all of it?
-If it does not, the fallback is the non-AI driver, and the cost is reimplemented
-movement — not a broken worker.
+**This was the one decision with real residual risk**, because `BaseAI` looked
+like it carried behaviour we would be switching off rather than behaviour we
+never had.
+
+**Resolved by CF-SET-002 (#279): GO, and the premise was wrong in our favour.**
+`BaseAI.UpdateAI` in the installed 1.0.12 build contains *no* wandering, alerting
+or threat behaviour to switch off — it is an ownership gate plus housekeeping,
+and every piece of vanilla's own thinking lives one level down in `MonsterAI`
+and `AnimalAI`. A worker deriving from `BaseAI` directly does not suppress
+vanilla behaviour; it never inherits any. **The non-AI fallback is not needed**
+and reimplemented movement is a cost this project does not have to pay.
+
+The risk that was real, and that the spike found, is elsewhere: several vanilla
+behaviours run *outside* `UpdateAI` and are untouched by overriding it — a
+repeating idle sound armed in `Awake`, three registered RPCs, three server-wide
+`MessageAll` broadcasts, and two static cross-AI paths. The full evidence, each
+call site, and what was done about each is in
+[`WORKER_ACTOR_SPIKE.md`](WORKER_ACTOR_SPIKE.md). Read it before touching the
+worker.
 
 ---
 

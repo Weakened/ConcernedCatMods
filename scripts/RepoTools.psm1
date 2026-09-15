@@ -34,11 +34,18 @@ function Get-EnvironmentValues {
     $teamsterDedicatedNode = $group.SelectSingleNode("TEAMSTER_DEDICATED_DEPLOYPATH")
     $teamsterDedicatedDeploy = if ($null -ne $teamsterDedicatedNode) { [string]$teamsterDedicatedNode.InnerText } else { "" }
 
+    # CF-SET-002: Concerned Foreman's own profile, same optional pattern. An
+    # Environment.props written before this product existed is still valid;
+    # deploying Foreman is what asks for the key, and says so if it is absent.
+    $foremanNode = $group.SelectSingleNode("FOREMAN_DEPLOYPATH")
+    $foremanDeploy = if ($null -ne $foremanNode) { [string]$foremanNode.InnerText } else { "" }
+
     $bepInEx = $bepInEx.Replace('$(VALHEIM_INSTALL)', $valheim)
     $deploy = $deploy.Replace('$(VALHEIM_INSTALL)', $valheim).Replace('$(BEPINEX_PATH)', $bepInEx)
     $teamsterDeploy = $teamsterDeploy.Replace('$(VALHEIM_INSTALL)', $valheim)
     $teamsterCompatDeploy = $teamsterCompatDeploy.Replace('$(VALHEIM_INSTALL)', $valheim)
     $teamsterDedicatedDeploy = $teamsterDedicatedDeploy.Replace('$(VALHEIM_INSTALL)', $valheim)
+    $foremanDeploy = $foremanDeploy.Replace('$(VALHEIM_INSTALL)', $valheim)
 
     return [pscustomobject]@{
         ValheimInstall = $valheim
@@ -47,6 +54,7 @@ function Get-EnvironmentValues {
         TeamsterDeployPath = $teamsterDeploy
         TeamsterCompatDeployPath = $teamsterCompatDeploy
         TeamsterDedicatedDeployPath = $teamsterDedicatedDeploy
+        ForemanDeployPath = $foremanDeploy
     }
 }
 

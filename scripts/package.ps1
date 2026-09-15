@@ -2,7 +2,7 @@
 param(
     [ValidateSet("Release")]
     [string]$Configuration = "Release",
-    [ValidateSet("ConcernedCartographer", "ConcernedTeamster")]
+    [ValidateSet("ConcernedCartographer", "ConcernedTeamster", "ConcernedForeman")]
     [string]$Product = "ConcernedCartographer"
 )
 
@@ -19,7 +19,12 @@ Assert-Command tcli
 $productSlug = @{
     ConcernedCartographer = "cartographer"
     ConcernedTeamster     = "teamster"
+    ConcernedForeman      = "foreman"
 }[$Product]
+# Under Set-StrictMode a missing key yields $null, PowerShell drops the null
+# argument entirely, and validate_repo.py then fails on a confusing argparse
+# error instead of on the real cause. Fail here, naming the product.
+if (-not $productSlug) { throw "No validator slug is mapped for product '$Product'. Add it to the table above." }
 
 # Read the version to expect directly from the csproj that was just built,
 # so an RC seal's --expected-version check is enforced on every package

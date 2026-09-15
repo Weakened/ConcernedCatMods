@@ -1,7 +1,11 @@
 # Concerned Foreman
 
-**Status:** active target. No code, no package, no GUID reserved yet — CF-001
-locks the contract and CF-002 is the first spike that may produce any.
+**Status:** active target. As of CF-SET-002 (#279) the product exists in the
+repository: `src/ConcernedForeman`, version **0.1.0**, carrying the settlement
+worker spike and nothing else. **Nothing is published, there is no tag, and no
+part of it has been observed running in a game.** The diagnostics half — the
+actual product promise below — has no code yet; CF-001's research obligations
+remain open.
 
 **Promise:** *Point at a building or a station and Foreman explains why it is
 stable, exposed, comfortable, or about to fail.* Under #273 it also gains an

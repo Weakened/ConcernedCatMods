@@ -1,0 +1,38 @@
+[config]
+schemaVersion = "0.0.1"
+
+[package]
+namespace = "TheConcernedCat"
+name = "ConcernedForeman"
+versionNumber = "0.1.0"
+description = "Building diagnostics that explain themselves, plus an opt-in settlement runtime that is off until you turn it on. This build is an early spike: one worker that walks where it is told and stops."
+websiteUrl = "https://github.com/Weakened/ConcernedCatMods"
+containsNsfwContent = false
+
+[package.dependencies]
+denikson-BepInExPack_Valheim = "5.4.2333"
+ValheimModding-Jotunn = "2.29.2"
+
+[build]
+icon = "./icon.png"
+readme = "./README.md"
+outdir = "../../../artifacts/thunderstore"
+
+[[build.copy]]
+source = "../bin/Release/net48/TheConcernedCat.ConcernedForeman.dll"
+target = "plugins/TheConcernedCat.ConcernedForeman.dll"
+
+[[build.copy]]
+source = "./CHANGELOG.md"
+target = "CHANGELOG.md"
+
+[[build.copy]]
+source = "../../../LICENSE"
+target = "LICENSE"
+
+[publish]
+repository = "https://thunderstore.io"
+communities = ["valheim"]
+
+[publish.categories]
+valheim = ["mods", "client-side", "utility", "ai-generated"]
