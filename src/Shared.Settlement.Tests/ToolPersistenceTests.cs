@@ -169,6 +169,7 @@ public sealed class ToolPersistenceTests : IDisposable
         string repair = Assert.Single(replayed.Repairs);
         Assert.Contains("thorstein", repair);
         Assert.Contains("not recorded", repair);
+        Assert.Contains(Transaction().Value, repair);
     }
 
     [Fact]
@@ -245,13 +246,28 @@ public sealed class ToolPersistenceTests : IDisposable
     }
 
     [Fact]
-    public void AnOlderBuildIsRefusedTheWholeFileRatherThanHalfOfIt()
+    public void AFileWeWriteCarriesTheVersionAnOlderBuildWillRefuse()
     {
-        // The schema bump is the point. A build that does not know about tools
-        // cannot account for one somebody handed over, and half-reading the file
-        // would let it rewrite it with the handovers deleted.
+        // The previous version of this test wrote a v3 header and checked that
+        // THIS build refused it -- the opposite direction from its own name, and
+        // it would have passed with every line of tool code deleted.
+        //
+        // The direction that matters is that a file containing handovers
+        // announces a version an older build rejects outright, because such a
+        // build cannot account for a tool somebody handed over and half-reading
+        // would let it rewrite the file with the handovers deleted.
         Assert.Equal(2, JournalStore.SchemaVersion);
 
+        Assert.True(_store.Save(Handed()).Saved);
+        string[] written = File.ReadAllLines(_store.ResolvePath(Scope));
+
+        Assert.Contains(written, line => line.StartsWith("v\t2\t", StringComparison.Ordinal));
+        Assert.Contains(written, line => line.StartsWith("t\t", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AFileFromANewerBuildIsRefusedWholeRatherThanHalfRead()
+    {
         File.WriteAllLines(_store.ResolvePath(Scope), new[]
         {
             "#\tsettlement journal v3",
@@ -263,6 +279,107 @@ public sealed class ToolPersistenceTests : IDisposable
         Assert.Equal(JournalLoadOutcome.UnsupportedSchema, report.Outcome);
         Assert.True(report.ReadOnly);
         Assert.False(_store.Save(report.Journal).Saved);
+    }
+
+    [Fact]
+    public void AToolKindOnAnEntryRowIsDamageRatherThanACrash()
+    {
+        // Enum.IsDefined accepted a tool kind on an 'e' row, and the
+        // JournalEntry constructor that then threw sits outside the try -- so
+        // one corrupted tag byte threw straight out of Load and every command
+        // for that world failed forever, with no read-only mode and no notice.
+        File.WriteAllLines(_store.ResolvePath(Scope), new[]
+        {
+            "#\tsettlement journal v2",
+            "v\t2\t" + Scope.ToStorageKey(),
+            "e\t0\t6\tcottage-1\thandover-0\t0\t",
+        });
+
+        JournalStore.LoadReport report = _store.Load(Scope);
+
+        Assert.Equal(JournalLoadOutcome.LoadedWithSkippedLines, report.Outcome);
+        Assert.True(report.ReadOnly);
+        Assert.Empty(report.Journal.Entries);
+    }
+
+    [Fact]
+    public void AToolRowWithNoRequestIsDamageRatherThanSilentlyIgnored()
+    {
+        File.WriteAllLines(_store.ResolvePath(Scope), new[]
+        {
+            "#\tsettlement journal v2",
+            "v\t2\t" + Scope.ToStorageKey(),
+            "t\t0\t6\t\tthorstein\t1\t$item_axe_bronze\t1\t50\t2",
+        });
+
+        JournalStore.LoadReport report = _store.Load(Scope);
+
+        Assert.Equal(JournalLoadOutcome.LoadedWithSkippedLines, report.Outcome);
+        Assert.True(report.ReadOnly);
+    }
+
+    [Fact]
+    public void ASecondStartUnderTheSameIdDoesNotReplaceTheFirst()
+    {
+        var journal = new SettlementJournal(Scope);
+        var other = new ToolSpecimen(ToolKind.Hammer, "$item_hammer", 1, 10f, 0);
+        journal.Append(
+            JournalEntryKind.ToolHandoverStarted, default, Transaction(),
+            worker: Thorstein, tool: BronzeAxe);
+        journal.Append(
+            JournalEntryKind.ToolHandoverStarted, default, Transaction(),
+            worker: Thorstein, tool: other);
+
+        ToolLedger tools = Reload(journal).Replay().Tools;
+
+        // Last-write-wins would have quietly swapped the axe for a hammer,
+        // bypassing the mismatch rejection ToolLedger.Issue makes a point of.
+        Assert.True(tools.TryGet(Transaction(), out ToolHolding held));
+        Assert.Equal(ToolKind.Axe, held.Tool.Kind);
+    }
+
+    [Fact]
+    public void AToolEntryRefusesAnOrderRatherThanSwallowingIt()
+    {
+        Assert.Throws<ArgumentException>(() => new SettlementJournal(Scope).Append(
+            JournalEntryKind.ToolHandoverStarted, new OrderId("cottage-1"), Transaction(),
+            worker: Thorstein, tool: BronzeAxe));
+    }
+
+    [Fact]
+    public void AResolutionSurvivesTheNextReload()
+    {
+        // It did not. Resolve changed an in-memory ledger that Replay rebuilds
+        // from scratch, so the answer was discarded and the holding went back to
+        // unknown -- while the documentation called it "resolvable".
+        SettlementJournal journal = Handed(finish: false);
+        Assert.True(_store.Save(journal).Saved);
+
+        journal.Append(
+            JournalEntryKind.ToolResolvedToWorker, default, Transaction(),
+            worker: Thorstein, tool: BronzeAxe);
+        Assert.True(_store.Save(journal).Saved);
+
+        ReplayResult replayed = _store.Load(Scope).Journal.Replay();
+
+        Assert.False(replayed.Tools.HasUncertainHandover(Thorstein));
+        Assert.True(replayed.Tools.TryGetHeld(Thorstein, ToolKind.Axe, out _));
+        Assert.Empty(replayed.Repairs);
+    }
+
+    [Fact]
+    public void AResolutionTheOtherWayAlsoSurvives()
+    {
+        SettlementJournal journal = Handed(finish: false);
+        journal.Append(
+            JournalEntryKind.ToolResolvedToPlayer, default, Transaction(),
+            worker: Thorstein, tool: BronzeAxe);
+
+        ReplayResult replayed = Reload(journal).Replay();
+
+        Assert.False(replayed.Tools.HasUncertainHandover(Thorstein));
+        Assert.Equal(1, replayed.Tools.CountIn(ToolHoldingState.Returned));
+        Assert.Empty(replayed.Repairs);
     }
 
     [Fact]

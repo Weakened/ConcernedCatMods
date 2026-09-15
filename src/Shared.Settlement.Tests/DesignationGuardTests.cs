@@ -358,6 +358,12 @@ public sealed class DesignationGuardTests : IDisposable
             [JournalEntryKind.ToolHandoverStarted] = true,
             [JournalEntryKind.ToolHandoverFinished] = true,
             [JournalEntryKind.ToolReturned] = true,
+
+            // Added when a resolution became part of the record. This test
+            // failed again the moment they were declared, which is twice now
+            // that it has caught exactly what it was built for.
+            [JournalEntryKind.ToolResolvedToWorker] = true,
+            [JournalEntryKind.ToolResolvedToPlayer] = true,
         };
 
         foreach (JournalEntryKind kind in Enum.GetValues(typeof(JournalEntryKind)))

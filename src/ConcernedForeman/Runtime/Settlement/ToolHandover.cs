@@ -1,3 +1,4 @@
+using System;
 using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Journal;
 using TheConcernedCat.Settlement.Tools;
@@ -58,7 +59,16 @@ internal enum HandoverOutcome
 /// failure is then reported as <see cref="HandoverOutcome.Uncertain"/> rather
 /// than repaired by guessing, because "the player's inventory no longer holds
 /// the item we took from it" means something else moved it, and removing our
-/// copy could destroy the last reference to it.</summary>
+/// copy could destroy the last reference to it.
+///
+/// <b>The record reaches disk before the item moves, and an earlier version only
+/// reached a list.</b> <c>SettlementJournal.Append</c> mutates memory and sets a
+/// dirty flag; nothing here saved, so a kill between the append and some later
+/// unrelated save lost <i>both</i> rows while the axe had really moved — and the
+/// replay would then conclude "never tried", which is precisely the state the
+/// two-entry design exists to distinguish itself from. So the intention is
+/// written <b>and persisted</b> before anything is touched, and a failure to
+/// persist it is an ordinary refusal with nothing moved.</summary>
 internal static class ToolHandover
 {
     /// <summary>Hands one specific item from a player to a worker.
@@ -76,15 +86,28 @@ internal static class ToolHandover
         RequestId transaction,
         ToolLedger ledger,
         SettlementJournal journal,
+        Func<bool> saveNow,
         out ToolSpecimen given,
         out string message)
     {
         given = default;
 
-        if (ledger == null || journal == null || worker.IsEmpty || transaction.IsEmpty)
+        if (ledger == null || journal == null || saveNow == null
+            || worker.IsEmpty || transaction.IsEmpty)
         {
             message = "That handover was not set up properly. Nothing was taken.";
             return HandoverOutcome.Refused;
+        }
+
+        // Idempotence first, and before the read-only check. A handover that has
+        // already happened has already happened -- reporting "nothing has been
+        // taken" about a tool that was is a false statement about the player's
+        // own inventory, and an earlier ordering made it.
+        if (ledger.TryGet(transaction, out ToolHolding existing))
+        {
+            given = existing.Tool;
+            message = existing.Tool.Kind + " already handed over. Nothing changed.";
+            return HandoverOutcome.AlreadyGiven;
         }
 
         if (journal.IsReadOnly)
@@ -96,15 +119,6 @@ internal static class ToolHandover
             message = "He cannot take it: this settlement's record could not be fully read, so " +
                 "nothing new is being written to it. Nothing has been taken.";
             return HandoverOutcome.Refused;
-        }
-
-        // Idempotent before anything is touched. The caller may not know whether
-        // its previous attempt reached disk, and must not have to.
-        if (ledger.TryGet(transaction, out ToolHolding existing))
-        {
-            given = existing.Tool;
-            message = existing.Tool.Kind + " already handed over. Nothing changed.";
-            return HandoverOutcome.AlreadyGiven;
         }
 
         if (from == null || to == null || selected == null)
@@ -154,12 +168,23 @@ internal static class ToolHandover
             return HandoverOutcome.Refused;
         }
 
-        // The intention, written BEFORE the item moves. A replay that finds
-        // this with no matching finish knows a handover was in flight, which is
-        // a completely different situation from never having tried.
+        // The intention, written and PERSISTED before the item moves. A replay
+        // that finds this with no matching finish knows a handover was in
+        // flight, which is a completely different situation from never having
+        // tried -- but only if it actually reached disk.
         journal.Append(
             JournalEntryKind.ToolHandoverStarted, default, transaction,
             worker: worker, tool: specimen);
+
+        if (!saveNow())
+        {
+            // Nothing has been touched yet, so this is an ordinary refusal. The
+            // unsaved entry is discarded with the session; on the next load
+            // there is no record and no missing axe, which is the correct pair.
+            message = "He cannot take it: this settlement's record could not be written, so " +
+                "nothing has been taken.";
+            return HandoverOutcome.Refused;
+        }
 
         if (!source.RemoveItem(selected))
         {
@@ -181,6 +206,12 @@ internal static class ToolHandover
         journal.Append(
             JournalEntryKind.ToolHandoverFinished, default, transaction,
             worker: worker, tool: specimen);
+
+        // Best effort, and a failure here is already safe: the started entry is
+        // on disk, so a replay reports an unresolved handover and a person says
+        // which way it went. That is the outcome this design is built around
+        // rather than one it is caught out by.
+        saveNow();
 
         // Equipping is presentation, and its failure is not the handover's
         // failure: he owns the tool either way, and the record already says so.
@@ -204,9 +235,10 @@ internal static class ToolHandover
         RequestId transaction,
         ToolLedger ledger,
         SettlementJournal journal,
+        Func<bool> saveNow,
         out string message)
     {
-        if (ledger == null || journal == null || transaction.IsEmpty
+        if (ledger == null || journal == null || saveNow == null || transaction.IsEmpty
             || !ledger.TryGet(transaction, out ToolHolding holding))
         {
             message = "There is no record of that tool.";
@@ -265,9 +297,65 @@ internal static class ToolHandover
         journal.Append(
             JournalEntryKind.ToolReturned, default, transaction,
             worker: holding.Worker, tool: holding.Tool);
+        saveNow();
 
         message = "He hands it back.";
         return HandoverOutcome.Given;
+    }
+}
+
+/// <summary>Records a person's decision about an interrupted handover.
+///
+/// The ledger could already be resolved in memory, and for one commit that was
+/// all it could do — the answer was discarded on the next load and the holding
+/// went straight back to unknown, while the documentation called it
+/// "resolvable". The decision is part of the record now, so it survives.
+///
+/// Only a person calls this. Nothing works the answer out.</summary>
+internal static class ToolResolution
+{
+    internal static bool TryRecord(
+        RequestId transaction,
+        bool workerHasIt,
+        ToolLedger ledger,
+        SettlementJournal journal,
+        Func<bool> saveNow,
+        out string message)
+    {
+        if (ledger == null || journal == null || saveNow == null || transaction.IsEmpty
+            || !ledger.TryGet(transaction, out ToolHolding holding))
+        {
+            message = "There is no record of that handover.";
+            return false;
+        }
+
+        if (journal.IsReadOnly)
+        {
+            message = "That cannot be settled yet: this settlement's record could not be fully " +
+                "read, so nothing new is being written to it.";
+            return false;
+        }
+
+        if (ledger.Resolve(transaction, workerHasIt) != ToolOutcome.Applied)
+        {
+            message = "That handover is not waiting on an answer.";
+            return false;
+        }
+
+        journal.Append(
+            workerHasIt
+                ? JournalEntryKind.ToolResolvedToWorker
+                : JournalEntryKind.ToolResolvedToPlayer,
+            default,
+            transaction,
+            worker: holding.Worker,
+            tool: holding.Tool);
+        saveNow();
+
+        message = workerHasIt
+            ? "Recorded: he has it."
+            : "Recorded: you have it.";
+        return true;
     }
 }
 

@@ -387,6 +387,14 @@ internal sealed class JournalStore
             return false;
         }
 
+        if (fields[3].Length == 0)
+        {
+            // Every tool kind keys off a request id -- the replay classifies
+            // them that way -- so a row without one is damage rather than a row
+            // that parses cleanly and is then silently ignored.
+            return false;
+        }
+
         try
         {
             var specimen = new ToolSpecimen(
@@ -396,7 +404,7 @@ internal sealed class JournalStore
                 sequence,
                 (JournalEntryKind)kindValue,
                 default,
-                fields[3].Length == 0 ? default : new RequestId(fields[3]),
+                new RequestId(fields[3]),
                 OrderTransition.Approve,
                 null,
                 null,
@@ -429,8 +437,14 @@ internal sealed class JournalStore
         }
 
         if (!int.TryParse(fields[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int kindValue) ||
-            !Enum.IsDefined(typeof(JournalEntryKind), kindValue))
+            !Enum.IsDefined(typeof(JournalEntryKind), kindValue) ||
+            JournalEntryKinds.IsTool((JournalEntryKind)kindValue))
         {
+            // A tool kind on an entry row is damage. Without this the
+            // JournalEntry constructor below -- deliberately outside the try --
+            // throws straight out of Load, and one corrupted tag byte makes
+            // every command for that world fail forever with no read-only mode
+            // and no notice, because no LoadReport is ever built.
             return false;
         }
 

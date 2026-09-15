@@ -40,6 +40,18 @@ internal enum JournalEntryKind
 
     /// <summary>The worker gave it back.</summary>
     ToolReturned = 7,
+
+    /// <summary>A person looked at an interrupted handover and said the worker
+    /// really does have the tool.</summary>
+    ToolResolvedToWorker = 8,
+
+    /// <summary>A person looked at an interrupted handover and said the player
+    /// really still has it.
+    ///
+    /// Two kinds rather than one carrying a flag, because the answer IS the
+    /// content of the entry and a boolean column would be one more thing a
+    /// damaged row could get subtly wrong.</summary>
+    ToolResolvedToPlayer = 9,
 }
 
 /// <summary>Which half of the record an entry belongs to.
@@ -57,6 +69,8 @@ internal static class JournalEntryKinds
             case JournalEntryKind.ToolHandoverStarted:
             case JournalEntryKind.ToolHandoverFinished:
             case JournalEntryKind.ToolReturned:
+            case JournalEntryKind.ToolResolvedToWorker:
+            case JournalEntryKind.ToolResolvedToPlayer:
                 return true;
 
             default:
@@ -101,6 +115,15 @@ internal sealed class JournalEntry
             {
                 throw new ArgumentException(
                     "A tool journal entry needs the tool it is about.", nameof(tool));
+            }
+
+            if (!order.IsEmpty)
+            {
+                // "Refuses to pretend otherwise" has to mean this too. Accepting
+                // an order and then dropping it on the way to disk would leave a
+                // caller believing the record said something it never did.
+                throw new ArgumentException(
+                    "A tool journal entry belongs to a worker, not an order.", nameof(order));
             }
         }
         else if (order.IsEmpty)
@@ -347,6 +370,8 @@ internal sealed class SettlementJournal
             case JournalEntryKind.ToolHandoverStarted:
             case JournalEntryKind.ToolHandoverFinished:
             case JournalEntryKind.ToolReturned:
+            case JournalEntryKind.ToolResolvedToWorker:
+            case JournalEntryKind.ToolResolvedToPlayer:
                 return true;
 
             case JournalEntryKind.OrderTransition:
@@ -366,6 +391,7 @@ internal sealed class SettlementJournal
         var finishedCommits = new HashSet<string>(StringComparer.Ordinal);
         var startedHandovers = new Dictionary<string, JournalEntry>(StringComparer.Ordinal);
         var finishedHandovers = new HashSet<string>(StringComparer.Ordinal);
+        var resolutions = new Dictionary<string, bool>(StringComparer.Ordinal);
 
         foreach (JournalEntry entry in _entries)
         {
@@ -429,7 +455,15 @@ internal sealed class SettlementJournal
                     break;
 
                 case JournalEntryKind.ToolHandoverStarted:
-                    startedHandovers[entry.Request.Value] = entry;
+                    // First one wins. Last-write-wins would let a second start
+                    // under the same id quietly replace the tool or the worker,
+                    // bypassing the mismatch rejection ToolLedger.Issue makes a
+                    // point of.
+                    if (!startedHandovers.ContainsKey(entry.Request.Value))
+                    {
+                        startedHandovers[entry.Request.Value] = entry;
+                    }
+
                     break;
 
                 case JournalEntryKind.ToolHandoverFinished:
@@ -439,6 +473,12 @@ internal sealed class SettlementJournal
 
                 case JournalEntryKind.ToolReturned:
                     tools.Return(entry.Request);
+                    break;
+
+                case JournalEntryKind.ToolResolvedToWorker:
+                case JournalEntryKind.ToolResolvedToPlayer:
+                    resolutions[entry.Request.Value] =
+                        entry.Kind == JournalEntryKind.ToolResolvedToWorker;
                     break;
             }
         }
@@ -488,10 +528,20 @@ internal sealed class SettlementJournal
             tools.Issue(new ToolHolding(entry.Request, entry.Worker, entry.Tool));
             tools.MarkUncertain(entry.Request);
 
+            // A person may already have said which way it went. That answer is
+            // part of the record, so replaying it here is what makes
+            // "resolvable" durably true rather than true until the next load.
+            if (resolutions.TryGetValue(entry.Request.Value, out bool workerHasIt))
+            {
+                tools.Resolve(entry.Request, workerHasIt);
+                continue;
+            }
+
             repairs.Add(
                 "A tool was changing hands (" + entry.Tool + ", worker \"" + entry.Worker.Value +
-                "\") when the session ended, and whether it moved is not recorded. Nothing has " +
-                "been taken or given back. Check both inventories, then say which way it went.");
+                "\", request \"" + entry.Request.Value + "\") when the session ended, and whether " +
+                "it moved is not recorded. Nothing has been taken or given back. Check both " +
+                "inventories, then say which way it went.");
         }
 
         return new ReplayResult(orders, ledger, tools, NextSequence, Instance, repairs);
