@@ -55,6 +55,7 @@ internal sealed class PlacementPlanner
         float bestRadiusError = float.MaxValue;
 
         PlacementRejection blockedBy = PlacementRejection.None;
+        bool sawUnloaded = false;
         int probed = 0;
 
         for (int ring = 0; ring < RingCount; ring++)
@@ -74,6 +75,11 @@ internal sealed class PlacementPlanner
 
                 PlacementProbeSample sample = probe.Probe(candidate);
                 probed++;
+
+                if ((sample.Rejections & PlacementRejection.NotLoaded) != 0)
+                {
+                    sawUnloaded = true;
+                }
 
                 PlacementRejection rejections = sample.Rejections | RangeRejections(anchor, sample);
                 if (rejections != PlacementRejection.None)
@@ -105,6 +111,16 @@ internal sealed class PlacementPlanner
             }
         }
 
+        // An unloaded candidate is not a hazard, it is an unanswered question.
+        // Committing to the best of a partial view makes the chosen spot depend
+        // on how far streaming happened to have got, and the companion then
+        // appears to move once the rest of the world arrives - the exact
+        // wandering this planner is deterministic to avoid. Defer and re-plan.
+        if (sawUnloaded)
+        {
+            return PlacementResult.Deferred(probed, blockedBy | PlacementRejection.NotLoaded);
+        }
+
         return haveBest
             ? PlacementResult.Placed(bestPosition, bestPose, probed)
             : PlacementResult.Deferred(probed, blockedBy);
@@ -133,13 +149,23 @@ internal sealed class PlacementPlanner
     /// is close enough to home.</summary>
     private PlacementRejection RangeRejections(CompanionAnchor anchor, PlacementProbeSample sample)
     {
+        // The tolerance is not slack in the rule, it is float arithmetic. Ring
+        // candidates are generated exactly ON the band edges, and recovering
+        // the distance through cos/sin and a subtraction at world coordinates
+        // in the thousands loses enough precision to put a candidate a
+        // fraction of a millimetre outside the band it was built inside. Without
+        // this, a third of every sweep rejects candidates the planner itself
+        // placed.
+        const float Tolerance = 0.01f;
+
         float horizontal = sample.Position.HorizontalDistanceTo(anchor.Position);
-        if (horizontal < _rules.MinimumRadius || horizontal > _rules.MaximumRadius)
+        if (horizontal < _rules.MinimumRadius - Tolerance ||
+            horizontal > _rules.MaximumRadius + Tolerance)
         {
             return PlacementRejection.OutOfRange;
         }
 
-        return sample.Position.VerticalDistanceTo(anchor.Position) > _rules.MaximumHeightDelta
+        return sample.Position.VerticalDistanceTo(anchor.Position) > _rules.MaximumHeightDelta + Tolerance
             ? PlacementRejection.OutOfRange
             : PlacementRejection.None;
     }

@@ -146,8 +146,11 @@ internal sealed class CompanionProgress
         }
 
         _sidecar.MarkPresentationRetired(_questId);
-        Save();
-        return true;
+
+        // The caller removes the collectible on a true return, so true has to
+        // mean the flag reached disk. A failed save reports false and the
+        // retire simply runs again next session.
+        return Save();
     }
 
     /// <summary>Applies a change to the tools-only preference. Turning it on
@@ -155,12 +158,14 @@ internal sealed class CompanionProgress
     /// because the grant was recorded when it went on.</summary>
     public void SetToolsOnlyPreference(bool enabled)
     {
+        // Deliberately does NOT finish the quest. Turning the preference on
+        // once must not permanently remove the story: a player who tries
+        // tools-only, dislikes it, and turns it back off in the same session
+        // gets the collectible back, exactly as they would if the preference
+        // had been on when the session opened. Finishing the introduction by
+        // skipping it is a separate, explicit action -
+        // Advance(QuestTransition.Skip) - taken from the story UI.
         _toolsOnlyPreference = enabled;
-        if (enabled)
-        {
-            Advance(QuestTransition.Skip);
-        }
-
         Resolve();
     }
 
@@ -180,12 +185,30 @@ internal sealed class CompanionProgress
             || _sidecar.HasForwardData
             || SidecarLoadOutcomes.IndicatesPriorData(LoadOutcome);
 
+        // Access is granted per SCOPE, not per quest. A product may ship more
+        // than one companion, and opening a session for a second, untouched
+        // quest must not conclude that a player who finished the first one is
+        // brand new - that would withdraw tools they already had. Presentation
+        // stays per quest: the second companion is still introduced.
+        QuestState unlockState = _sidecar.HasAnyCompletedQuest()
+            ? Quest.QuestState.Recruited
+            : QuestState;
+
         UnlockDecision decision = UnlockPolicy.Decide(
-            QuestState,
+            unlockState,
             _sidecar.GrantedReason,
             _evidence,
             unreadable,
             _toolsOnlyPreference);
+
+        // ...so the presentation half of the decision is recomputed from THIS
+        // quest, which is what the caller asked about.
+        decision = new UnlockDecision(
+            decision.IsUnlocked,
+            decision.Reason,
+            decision.ShouldPersistGrant,
+            !QuestStateMachine.IsComplete(QuestState) && !_toolsOnlyPreference,
+            !QuestStateMachine.IsComplete(QuestState));
 
         if (decision.ShouldPersistGrant && _sidecar.RecordUnlockGrant(decision.Reason))
         {
@@ -195,12 +218,14 @@ internal sealed class CompanionProgress
         Decision = decision;
     }
 
-    private void Save()
+    private bool Save()
     {
         CompanionSidecarStore.SaveReport report = _store.Save(_sidecar);
         if (!report.Saved && report.Notice != null)
         {
             Notice = report.Notice;
         }
+
+        return report.Saved;
     }
 }
