@@ -37,9 +37,13 @@ internal readonly struct LegacyEvidenceFacts
     /// each one takes a deliberate action.</summary>
     public bool ProfileWideDataExists { get; }
 
-    /// <summary>The mod's config file records a version older than the one
-    /// that introduced companions. Weaker than a data file — a config is
-    /// written on first launch — so it only ever produces Ambiguous.</summary>
+    /// <summary>The data directory holds something this build did not write
+    /// for itself. Weaker than a recognised data file — it says somebody was
+    /// here, not what they did — so it only ever produces Ambiguous.
+    ///
+    /// A directory containing nothing but our own first-run bookkeeping does
+    /// NOT set this. It used to, and the result was that a brand new player
+    /// was classified as a returning one on their very first session.</summary>
     public bool ConfiguredBeforeThisRelease { get; }
 
     /// <summary>The probe itself could not complete. Not evidence about the
@@ -50,6 +54,89 @@ internal readonly struct LegacyEvidenceFacts
 
     public static LegacyEvidenceFacts Failed =>
         new LegacyEvidenceFacts(false, false, false, false, probeFailed: true);
+}
+
+/// <summary>The files this mod writes for itself, without anybody asking.
+///
+/// This list exists because the first in-game run of the companion build
+/// granted a brand new character on a brand new world access as an EXISTING
+/// user. The cause was circular: the plugin writes its starter survey rules
+/// during startup, the legacy probe then finds <c>survey-rules.tsv</c> and
+/// reads it as a deliberate past action, and so every fresh installation looks
+/// like a returning player. The gate #264 asks for could never engage for
+/// anyone.
+///
+/// Nothing here counts as evidence of anything. A file only says a player used
+/// this mod before if a player had to do something to create it.</summary>
+internal static class CartographerFirstRunFiles
+{
+    /// <summary>Exact names this build creates on its own.</summary>
+    private static readonly string[] Names =
+    {
+        "author-id.txt",
+        "survey-rules.tsv",
+        "cartographer-strings-template.tsv",
+        "onboarding-shown.txt",
+    };
+
+    /// <summary>Suffixes this build creates on its own. Companion sidecars are
+    /// here because they are written the moment the companion system opens,
+    /// and because they are scoped to one character: another character's
+    /// sidecar is not evidence about this one.</summary>
+    private static readonly string[] Suffixes =
+    {
+        ".companions.tsv",
+        ".companions.tsv.tmp",
+    };
+
+    /// <summary>True when <paramref name="fileName"/> is something this build
+    /// wrote for itself rather than something a player did.</summary>
+    public static bool IsSelfWritten(string? fileName)
+    {
+        if (string.IsNullOrEmpty(fileName))
+        {
+            return true;
+        }
+
+        foreach (string name in Names)
+        {
+            if (string.Equals(fileName, name, System.StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        foreach (string suffix in Suffixes)
+        {
+            if (fileName!.EndsWith(suffix, System.StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>True when a data directory holds nothing but this build's own
+    /// bookkeeping — which is what a first run looks like, and must not be
+    /// mistaken for a history.</summary>
+    public static bool IsOnlySelfWritten(System.Collections.Generic.IReadOnlyList<string>? fileNames)
+    {
+        if (fileNames == null)
+        {
+            return true;
+        }
+
+        foreach (string name in fileNames)
+        {
+            if (!IsSelfWritten(name))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }
 
 /// <summary>Turns "what is on disk" into the shared layer's

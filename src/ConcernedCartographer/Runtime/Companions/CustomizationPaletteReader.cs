@@ -7,7 +7,7 @@ using UnityEngine;
 namespace TheConcernedCat.ConcernedCartographer.Runtime.Companions;
 
 /// <summary>Reads the character-creation screen's colour palette off the live
-/// game.
+/// game, and keeps it.
 ///
 /// CC-NPC-006 requires the owner's slider readings to go through the game's own
 /// conversion, and that conversion lerps between four colours declared in the
@@ -30,6 +30,71 @@ internal static class CustomizationPaletteReader
 {
     private static CustomizationPalette _cached = CustomizationPalette.Unobserved;
     private static bool _loggedFailure;
+    private static GameObject? _watcher;
+
+    /// <summary>Starts watching for the character screen.
+    ///
+    /// The palette lives on a component in the start scene, and that scene is
+    /// gone by the time a world is loaded — so a read attempted from the actor,
+    /// in world, can never succeed. Observed exactly that way in game: the
+    /// companion's hair fell back to its documented tuning colour every single
+    /// session, which is honest but is not the reference colour.
+    ///
+    /// The watcher is a tiny behaviour that polls a few times a second until it
+    /// gets one read, then destroys itself. Polling rather than patching
+    /// because the screen is opened by a UI button this mod has no business
+    /// hooking, and one successful read lasts the whole process.</summary>
+    public static void BeginWatching(ManualLogSource log)
+    {
+        if (_cached.Observed || _watcher != null)
+        {
+            return;
+        }
+
+        try
+        {
+            _watcher = new GameObject("CC_CustomizationPaletteWatcher");
+            UnityEngine.Object.DontDestroyOnLoad(_watcher);
+            _watcher.AddComponent<PaletteWatcher>().Log = log;
+        }
+        catch (Exception exception)
+        {
+            _watcher = null;
+            log.LogInfo(
+                "The companion's reference hair colour could not be looked up on this build, so his " +
+                "documented fallback colour is used: " + exception.Message);
+        }
+    }
+
+    /// <summary>Polls for the character screen and stops as soon as it has the
+    /// palette. Deliberately cheap: four checks a second, each one a type
+    /// lookup that returns an empty array while the screen is absent.</summary>
+    private sealed class PaletteWatcher : MonoBehaviour
+    {
+        private const float IntervalSeconds = 0.25f;
+
+        public ManualLogSource? Log;
+
+        private float _elapsed;
+
+        private void Update()
+        {
+            _elapsed += Time.unscaledDeltaTime;
+            if (_elapsed < IntervalSeconds)
+            {
+                return;
+            }
+
+            _elapsed = 0f;
+            if (!Read(Log).Observed)
+            {
+                return;
+            }
+
+            _watcher = null;
+            UnityEngine.Object.Destroy(gameObject);
+        }
+    }
 
     /// <summary>The live palette if it has ever been readable in this process,
     /// otherwise the unobserved one. Cheap after the first success.</summary>
@@ -51,15 +116,23 @@ internal static class CustomizationPaletteReader
             return _cached;
         }
 
-        if (log != null && !_loggedFailure)
+        return CustomizationPalette.Unobserved;
+    }
+
+    /// <summary>Says once, at the point of use, that the fallback is in play.
+    /// Separate from <see cref="Read"/> because the watcher calls that four
+    /// times a second and a log line per poll would be its own defect.</summary>
+    public static void NoteFallbackOnce(ManualLogSource log)
+    {
+        if (_cached.Observed || _loggedFailure)
         {
-            _loggedFailure = true;
-            log.LogInfo(
-                "The game's customization palette was not readable, so the companion's hair uses its " +
-                "documented fallback colour instead of the reference sliders. Nothing else is affected.");
+            return;
         }
 
-        return CustomizationPalette.Unobserved;
+        _loggedFailure = true;
+        log.LogInfo(
+            "The game's customization palette was not read this session, so the companion's hair uses " +
+            "its documented fallback colour instead of the reference sliders. Nothing else is affected.");
     }
 
     /// <summary>Drops the cache. Test and diagnostic surface only.</summary>

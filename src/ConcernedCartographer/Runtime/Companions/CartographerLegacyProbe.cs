@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using BepInEx;
@@ -35,12 +36,18 @@ internal sealed class CartographerLegacyProbe
     };
 
     /// <summary>Profile-scoped files that only appear after a deliberate
-    /// action: saving a view, writing a survey rule, installing a
-    /// translation.</summary>
+    /// action: saving a view, installing a translation.
+    ///
+    /// <c>survey-rules.tsv</c> used to be here and is deliberately gone. The
+    /// plugin writes a starter copy of it during startup, so finding it proved
+    /// only that this mod had been launched — including by the very session
+    /// doing the asking. A brand new character on a brand new world was granted
+    /// access as an existing user because of it, observed in game before this
+    /// was fixed. The translator's override file stays: it has a different name
+    /// from the template this build writes, and somebody has to create it.</summary>
     private static readonly string[] ProfileFiles =
     {
         "views.tsv",
-        "survey-rules.tsv",
         "cartographer-strings.tsv",
     };
 
@@ -61,6 +68,20 @@ internal sealed class CartographerLegacyProbe
     {
         LegacyEvidenceFacts facts = Gather(worldUid);
         return LegacyEvidenceRule.Evaluate(facts);
+    }
+
+    /// <summary>Every file name directly in the data directory. Names only —
+    /// this probe has never read a file's contents and still does not.</summary>
+    private static IReadOnlyList<string> NamesIn(string directory)
+    {
+        string[] paths = Directory.GetFiles(directory);
+        var names = new string[paths.Length];
+        for (int index = 0; index < paths.Length; index++)
+        {
+            names[index] = Path.GetFileName(paths[index]);
+        }
+
+        return names;
     }
 
     internal LegacyEvidenceFacts Gather(long worldUid)
@@ -108,10 +129,16 @@ internal sealed class CartographerLegacyProbe
             }
 
             // A directory that exists but holds nothing we recognise still
-            // means somebody ran this mod before. Weak, so it reads as the
-            // config-age signal rather than as real data — and Ambiguous
-            // grants.
-            bool configured = !thisWorld && !anyWorld && !profileWide;
+            // means somebody was here. Weak, so it reads as the config-age
+            // signal rather than as real data — and Ambiguous grants.
+            //
+            // Our own first-run bookkeeping does not count. The directory is
+            // created by this build during startup and immediately filled with
+            // an author id, a starter rules file and a strings template, so
+            // "the directory is not empty" was true on every first run and
+            // this signal fired for everybody.
+            bool configured = !thisWorld && !anyWorld && !profileWide &&
+                !CartographerFirstRunFiles.IsOnlySelfWritten(NamesIn(directory));
 
             return new LegacyEvidenceFacts(
                 thisWorld, anyWorld, profileWide, configured, probeFailed: false);

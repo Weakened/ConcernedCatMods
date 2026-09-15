@@ -575,6 +575,7 @@ internal sealed class CompanionActor
             }
 
             CustomizationPalette palette = CustomizationPaletteReader.Read(_log);
+            CustomizationPaletteReader.NoteFallbackOnce(_log);
             ColourTriple hairColour = AppearanceColour.HulgiHair(palette);
             Report.HairColour = hairColour;
             Report.HairColourObserved = palette.Observed;
