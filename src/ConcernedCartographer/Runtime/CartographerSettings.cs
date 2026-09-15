@@ -54,7 +54,9 @@ internal sealed class CartographerSettings
         ConfigEntry<bool> highPrecisionLargeMapRoads,
         ConfigEntry<bool> companionsEnabled,
         ConfigEntry<bool> companionToolsOnly,
-        ConfigEntry<bool> companionVisible)
+        ConfigEntry<bool> companionVisible,
+        ConfigEntry<bool> companionAmbientChatter,
+        ConfigEntry<float> companionAmbientIntervalSeconds)
     {
         Enabled = enabled;
         CaptureConstructionActions = captureConstructionActions;
@@ -105,6 +107,8 @@ internal sealed class CartographerSettings
         CompanionsEnabled = companionsEnabled;
         CompanionToolsOnly = companionToolsOnly;
         CompanionVisible = companionVisible;
+        CompanionAmbientChatter = companionAmbientChatter;
+        CompanionAmbientIntervalSeconds = companionAmbientIntervalSeconds;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -167,6 +171,14 @@ internal sealed class CartographerSettings
     /// <summary>Whether the companion is shown once recruited. Presentation
     /// only - hiding him never touches access or progress.</summary>
     public ConfigEntry<bool> CompanionVisible { get; }
+
+    /// <summary>Unprompted remarks while you are standing near him. OFF by
+    /// default and deliberately so: a companion who talks at you is charming
+    /// for an evening and tiresome by the second. Speaking to him always
+    /// works regardless of this.</summary>
+    public ConfigEntry<bool> CompanionAmbientChatter { get; }
+
+    public ConfigEntry<float> CompanionAmbientIntervalSeconds { get; }
 
     public static CartographerSettings Bind(ConfigFile config)
     {
@@ -281,6 +293,11 @@ internal sealed class CartographerSettings
             config.Bind("Companions", "ToolsOnly", false,
                 "Skip the story and use the map tools straight away. Turning this ON grants access immediately and permanently; turning it back off restores the introduction without ever taking access away."),
             config.Bind("Companions", "ShowCompanion", true,
-                "Show Hulgi once he has joined you. This is presentation only - hiding him never affects your tools, your progress or your data."));
+                "Show Hulgi once he has joined you. This is presentation only - hiding him never affects your tools, your progress or your data."),
+            config.Bind("Companions", "AmbientChatter", false,
+                "Let Hulgi make the occasional unprompted remark while you are standing near him. OFF by default. Speaking to him directly always works whether this is on or off."),
+            config.Bind("Companions", "AmbientIntervalSeconds", 45f, new ConfigDescription(
+                "Shortest gap between unprompted remarks, in seconds. Only used when AmbientChatter is on.",
+                new AcceptableValueRange<float>(15f, 600f))));
     }
 }

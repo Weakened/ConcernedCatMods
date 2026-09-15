@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.1.0 - Hulgi, and the Broken Compass
+
+Added
+
+- **Hulgi.** A broken compass lies near where you wake up. Examine it and a drowned cartographer introduces himself over four short pages; welcome him, or take **Just the tools, thanks** and skip the story. Either finishes the introduction and unlocks the atlas tools permanently.
+- **He lives at your home point.** Near your claimed bed, or the world's starting point if you have not claimed one. Replace the bed and he moves with it; destroy it and he returns to the start. Travelling away from home does **not** move him: a bed the game cannot currently see is still your bed.
+- **He talks when spoken to.** Over thirty short lines about his cat, the weather and travelling carefully. Unprompted chatter is off by default and can be turned on in `Companions/AmbientChatter`.
+- **He knows only where you have been.** Place-specific remarks are gated behind biomes *this character* has visited, read from the local character only. He can never mention somewhere you have not been, and he never names a boss, a weakness or an item.
+- **A Companions section on the Settings panel**, plus `cc_companion` (status, toolsonly, story, show, where, appearance, path).
+
+Nothing about him can cost you anything
+
+- **He is local only.** No `ZNetView`, no networked identity, no part in your world save, no collision, no combat, no loot, no storage. No other player can see him, modded or not.
+- **Existing players keep everything on upgrade.** Any roads, pins, routes, survey rules or saved views from *any* world count as prior use and unlock the tools immediately. Unreadable or ambiguous data grants access too, and the grant is written down so it cannot be re-derived away later. The only locked state is a genuinely new character in a world the mod could identify.
+- **You never have to find him.** Settings is never gated, and `cc_companion toolsonly on` works from the console before you have met anybody.
+- **Recruitment is saved before the compass is removed.** If the save fails, the compass stays exactly where it is and says so, rather than leaving you with no compass and no companion.
+- Hiding him, losing a bed, dying, or running a game build that cannot draw him changes what you see and nothing else. `Companions/CompanionsEnabled = false` removes the whole feature and leaves every map tool available.
+
+Unchanged
+
+- Every atlas, marker, route, survey, sharing and Route Follow behaviour from 1.0.4. Concerned Teamster is untouched and stays at its own version.
+
+Still outstanding
+
+- **In-game observation of Hulgi has not been performed and is not claimed.** `cc_companion status` and `cc_companion appearance` report what was actually resolved on your machine: which prefab his appearance came from, whether hovering reaches him, which idle pose was used, and which biome names this build records. Sitting on furniture is detected but deliberately not used until it has been seen to work.
+- **Live multiplayer testing of sailing Route Follow** remains outstanding from 1.0.4.
+
+
 ## 1.0.4 - Optional sailing Route Follow
 
 - **Sailing Route Follow (opt-in, OFF by default).** Mark a route as a sailing route with the new **Sailing** button in the Routes panel (or `cc_routes sailing on`), turn on `Routes/SailingAutoFollowEnabled`, take the helm of a raft, karve, longship or Drakkar with that route selected, and press Q. Cartographer then feeds the same bounded rudder input a player supplies by holding the helm key, steering along the route and around its corners.

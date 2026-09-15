@@ -105,13 +105,15 @@ internal sealed class CompanionActor
     private static readonly string[] HeadBoneFragments = { "head", "neck" };
 
     private readonly ManualLogSource _log;
+    private readonly Action _onTalk;
 
     private GameObject? _root;
     private Animator? _animator;
 
-    public CompanionActor(ManualLogSource log)
+    public CompanionActor(ManualLogSource log, Action onTalk)
     {
         _log = log;
+        _onTalk = onTalk;
     }
 
     public bool Exists => _root != null;
@@ -505,9 +507,7 @@ internal sealed class CompanionActor
         return null;
     }
 
-    /// <summary>Hover text only. The companion is not
-    /// <c>Interactable</c> in this slice: talking to him is CC-NPC-005, and an
-    /// interactable that does nothing would be worse than none.</summary>
+    /// <summary>Name on hover, and a line when spoken to.</summary>
     private void AttachHover()
     {
         if (_root == null)
@@ -517,7 +517,7 @@ internal sealed class CompanionActor
 
         try
         {
-            CompanionHover.Attach(_root);
+            CompanionHover.Attach(_root, _onTalk, _log);
         }
         catch (Exception exception)
         {
@@ -561,15 +561,25 @@ internal sealed class CompanionActor
     }
 }
 
-/// <summary>A name on hover, and nothing else. No <c>Interactable</c>, no
-/// collider of its own — it rides whatever the visual subtree offers, so it
-/// appears when vanilla's raycast happens to reach the model and is silent
-/// otherwise.</summary>
-internal sealed class CompanionHover : MonoBehaviour, Hoverable
+/// <summary>A name on hover and a line when spoken to.
+///
+/// It has no collider of its own — it rides whatever the extracted visual
+/// subtree offers, so it answers when vanilla's raycast happens to reach the
+/// model and is silent otherwise. The director watches the Use key nearby for
+/// the same reason it does for the compass: whether that raycast reaches a
+/// mod-made object on this build is still unobserved, and a companion nobody
+/// can talk to would be a poor companion.</summary>
+internal sealed class CompanionHover : MonoBehaviour, Hoverable, Interactable
 {
-    public static CompanionHover Attach(GameObject root)
+    private Action? _onTalk;
+    private ManualLogSource? _log;
+
+    public static CompanionHover Attach(GameObject root, Action onTalk, ManualLogSource log)
     {
-        return root.AddComponent<CompanionHover>();
+        var component = root.AddComponent<CompanionHover>();
+        component._onTalk = onTalk;
+        component._log = log;
+        return component;
     }
 
     public string GetHoverName()
@@ -579,11 +589,44 @@ internal sealed class CompanionHover : MonoBehaviour, Hoverable
 
     public string GetHoverText()
     {
-        return AtlasStrings.Get("companion.hulgi.name");
+        return AtlasStrings.Get("companion.hulgi.name") +
+            "\n[<color=yellow><b>$KEY_Use</b></color>] " + AtlasStrings.Get("companion.talkVerb");
     }
 
     public float GetHoverOffset()
     {
         return 1.6f;
+    }
+
+    public bool Interact(Humanoid user, bool hold, bool alt)
+    {
+        // A held key repeats every frame. He is talkative, not that talkative.
+        if (hold)
+        {
+            return false;
+        }
+
+        Talk();
+        return true;
+    }
+
+    /// <summary>Nothing may be used on him. He is not a container, a station or
+    /// a trader, and an item interaction that did something would be a surface
+    /// this design never asked for.</summary>
+    public bool UseItem(Humanoid user, ItemDrop.ItemData item)
+    {
+        return false;
+    }
+
+    public void Talk()
+    {
+        try
+        {
+            _onTalk?.Invoke();
+        }
+        catch (Exception exception)
+        {
+            _log?.LogWarning($"The companion could not speak: {SafeLogText.Brief(exception)}");
+        }
     }
 }

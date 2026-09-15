@@ -3193,6 +3193,9 @@ internal sealed class CartographerRuntime : IDisposable
         builder.AppendLine(
             $"  seating          : {(status.FreeSeatSeen ? "free seat detected nearby" : "no free seat seen")} " +
             "- furniture use is PENDING in-game evidence, so he sits on the ground beside it");
+        builder.AppendLine($"  dialogue lines   : {status.DialogueLineCount}");
+        builder.AppendLine($"  ambient chatter  : {status.AmbientChatter} (off by default)");
+        builder.AppendLine($"  known biomes     : {status.KnownBiomesObserved}");
         if (status.Notice != null)
         {
             builder.AppendLine("  notice           : " + status.Notice);
