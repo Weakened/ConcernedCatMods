@@ -125,6 +125,16 @@ internal sealed class JournalEntry
                 throw new ArgumentException(
                     "A tool journal entry belongs to a worker, not an order.", nameof(order));
             }
+
+            if (request.IsEmpty)
+            {
+                // The reader treats a tool row without a request as damage, so
+                // the writer must not be able to produce one. Guarding only the
+                // reader left this build able to write a file it would later
+                // call damaged and go permanently read-only over.
+                throw new ArgumentException(
+                    "A tool journal entry needs the transaction it is about.", nameof(request));
+            }
         }
         else if (order.IsEmpty)
         {
@@ -438,6 +448,7 @@ internal sealed class SettlementJournal
         var finishedCommits = new HashSet<string>(StringComparer.Ordinal);
         var startedHandovers = new Dictionary<string, JournalEntry>(StringComparer.Ordinal);
         var finishedHandovers = new HashSet<string>(StringComparer.Ordinal);
+        var returnedHandovers = new HashSet<string>(StringComparer.Ordinal);
         var resolutions = new Dictionary<string, bool>(StringComparer.Ordinal);
 
         foreach (JournalEntry entry in _entries)
@@ -501,6 +512,12 @@ internal sealed class SettlementJournal
                     ledger.Commit(entry.Request);
                     break;
 
+                // Tool rows are COLLECTED here and applied afterwards, never
+                // applied as they are met. Applying in file order meant a
+                // return could arrive before the holding it refers to existed
+                // -- so it was silently dropped and the tool replayed as still
+                // held. Order of application is a property of the replay, not
+                // of where a row happens to sit in the file.
                 case JournalEntryKind.ToolHandoverStarted:
                     // First one wins. Last-write-wins would let a second start
                     // under the same id quietly replace the tool or the worker,
@@ -515,11 +532,17 @@ internal sealed class SettlementJournal
 
                 case JournalEntryKind.ToolHandoverFinished:
                     finishedHandovers.Add(entry.Request.Value);
-                    tools.Issue(new ToolHolding(entry.Request, entry.Worker, entry.Tool));
+                    if (!startedHandovers.ContainsKey(entry.Request.Value))
+                    {
+                        // A finish whose start did not survive is still evidence
+                        // that the tool moved.
+                        startedHandovers[entry.Request.Value] = entry;
+                    }
+
                     break;
 
                 case JournalEntryKind.ToolReturned:
-                    tools.Return(entry.Request);
+                    returnedHandovers.Add(entry.Request.Value);
                     break;
 
                 case JournalEntryKind.ToolResolvedToWorker:
@@ -564,31 +587,56 @@ internal sealed class SettlementJournal
         // the same reason. Assuming it completed hands a worker a tool the
         // player may still be holding; assuming it did not loses the record of
         // one they are not.
-        foreach (KeyValuePair<string, JournalEntry> pending in startedHandovers)
+        // Every holding is created first, so nothing that refers to one can
+        // arrive before it exists. Then, in the one order that composes: an
+        // unfinished handover becomes unknown, a person's answer settles it, and
+        // only then does a return apply -- because a return is owed from Held,
+        // and a resolution is the thing that can produce Held.
+        foreach (KeyValuePair<string, JournalEntry> handover in startedHandovers)
         {
-            if (finishedHandovers.Contains(pending.Key))
-            {
-                continue;
-            }
-
-            JournalEntry entry = pending.Value;
+            JournalEntry entry = handover.Value;
             tools.Issue(new ToolHolding(entry.Request, entry.Worker, entry.Tool));
-            tools.MarkUncertain(entry.Request);
+        }
 
-            // A person may already have said which way it went. That answer is
-            // part of the record, so replaying it here is what makes
-            // "resolvable" durably true rather than true until the next load.
-            if (resolutions.TryGetValue(entry.Request.Value, out bool workerHasIt))
+        foreach (KeyValuePair<string, JournalEntry> handover in startedHandovers)
+        {
+            if (!finishedHandovers.Contains(handover.Key))
             {
-                tools.Resolve(entry.Request, workerHasIt);
+                tools.MarkUncertain(handover.Value.Request);
+            }
+        }
+
+        foreach (KeyValuePair<string, bool> answer in resolutions)
+        {
+            if (startedHandovers.TryGetValue(answer.Key, out JournalEntry? resolved))
+            {
+                tools.Resolve(resolved!.Request, answer.Value);
+            }
+        }
+
+        foreach (string returned in returnedHandovers)
+        {
+            if (startedHandovers.TryGetValue(returned, out JournalEntry? entry))
+            {
+                tools.Return(entry!.Request);
+            }
+        }
+
+        foreach (KeyValuePair<string, JournalEntry> handover in startedHandovers)
+        {
+            if (!tools.HasUncertainHandover(handover.Value.Worker)
+                || !tools.TryGet(handover.Value.Request, out ToolHolding holding)
+                || holding.State != ToolHoldingState.Uncertain)
+            {
                 continue;
             }
 
+            JournalEntry entry = handover.Value;
             repairs.Add(
                 "A tool was changing hands (" + entry.Tool + ", worker \"" + entry.Worker.Value +
                 "\", request \"" + entry.Request.Value + "\") when the session ended, and whether " +
                 "it moved is not recorded. Nothing has been taken or given back. Check both " +
-                "inventories, then say which way it went.");
+                "inventories, then run: cf_settle resolve " + entry.Request.Value + " mine|his");
         }
 
         return new ReplayResult(orders, ledger, tools, NextSequence, Instance, repairs);

@@ -71,6 +71,23 @@ internal enum HandoverOutcome
 /// persist it is an ordinary refusal with nothing moved.</summary>
 internal static class ToolHandover
 {
+    /// <summary>Calls a save and turns any answer we did not get into "no".
+    ///
+    /// A save that throws established exactly as much as one that returned
+    /// false, and letting it escape mid-handover would leave an item moved and a
+    /// record un-rolled-back — the worst of the outcomes available.</summary>
+    internal static bool TryPersist(Func<bool> saveNow)
+    {
+        try
+        {
+            return saveNow();
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Hands one specific item from a player to a worker.
     ///
     /// <paramref name="selected"/> must be an item the player actually chose.
@@ -166,48 +183,42 @@ internal static class ToolHandover
             return HandoverOutcome.Refused;
         }
 
-        if (!destination.AddItem(selected))
-        {
-            // Nothing moved: the item is still the player's, exactly as before.
-            message = "He could not take it. Nothing was taken from you.";
-            return HandoverOutcome.Refused;
-        }
-
-        // The intention, written and PERSISTED before the item moves. A replay
-        // that finds this with no matching finish knows a handover was in
-        // flight, which is a completely different situation from never having
-        // tried -- but only if it actually reached disk.
+        // The intention, written and PERSISTED before ANYTHING is touched.
+        //
+        // An earlier version put this between AddItem and RemoveItem, which was
+        // a silent duplication: AddItem ends in m_inventory.Add(item) and does
+        // not remove from the source, so refusing there left the same instance
+        // referenced by both inventories -- while the message said "nothing has
+        // been taken". The window has to be closed on the near side.
         int beforeIntent = journal.Entries.Count;
         journal.Append(
             JournalEntryKind.ToolHandoverStarted, default, transaction,
             worker: worker, tool: specimen);
 
-        bool persisted;
-        try
+        if (!TryPersist(saveNow))
         {
-            persisted = saveNow();
-        }
-        catch (Exception)
-        {
-            // A save that throws established nothing, exactly as one that
-            // returns false did. Letting it escape here would leave the item
-            // unmoved and the intention un-rolled-back, which is the worst of
-            // both.
-            persisted = false;
-        }
-
-        if (!persisted)
-        {
-            // Nothing has been touched yet, so this is an ordinary refusal --
-            // and the intention is rolled OUT of the journal rather than left
-            // for some later unrelated save to carry to disk. A started row with
-            // no finish, for a handover that never happened, would replay as a
-            // phantom unresolved transfer and send a player looking for an axe
-            // that never moved.
+            // Genuinely nothing touched. The intention is rolled OUT rather than
+            // left for some later unrelated save to carry to disk as a record of
+            // something that never happened.
             journal.TryDiscardUnsaved(beforeIntent);
 
             message = "He cannot take it: this settlement's record could not be written, so " +
                 "nothing has been taken.";
+            return HandoverOutcome.Refused;
+        }
+
+        if (!destination.AddItem(selected))
+        {
+            // Nothing moved, but the intention is on disk. Say so in the record
+            // rather than leaving a start with no finish, which would replay as
+            // an unresolved handover and stop this worker until a person
+            // answered a question about an axe that never left the player.
+            journal.Append(
+                JournalEntryKind.ToolResolvedToPlayer, default, transaction,
+                worker: worker, tool: specimen);
+            TryPersist(saveNow);
+
+            message = "He could not take it. Nothing was taken from you.";
             return HandoverOutcome.Refused;
         }
 
@@ -236,7 +247,7 @@ internal static class ToolHandover
         // on disk, so a replay reports an unresolved handover and a person says
         // which way it went. That is the outcome this design is built around
         // rather than one it is caught out by.
-        saveNow();
+        TryPersist(saveNow);
 
         // Equipping is presentation, and its failure is not the handover's
         // failure: he owns the tool either way, and the record already says so.
@@ -322,7 +333,7 @@ internal static class ToolHandover
         journal.Append(
             JournalEntryKind.ToolReturned, default, transaction,
             worker: holding.Worker, tool: holding.Tool);
-        saveNow();
+        TryPersist(saveNow);
 
         message = "He hands it back.";
         return HandoverOutcome.Given;
@@ -367,6 +378,7 @@ internal static class ToolResolution
             return false;
         }
 
+        int beforeAnswer = journal.Entries.Count;
         journal.Append(
             workerHasIt
                 ? JournalEntryKind.ToolResolvedToWorker
@@ -375,7 +387,18 @@ internal static class ToolResolution
             transaction,
             worker: holding.Worker,
             tool: holding.Tool);
-        saveNow();
+
+        if (!ToolHandover.TryPersist(saveNow))
+        {
+            // "Recorded" has to mean recorded. Saying it after a failed write
+            // would send somebody away believing a question was settled that
+            // will be asked again on the next load.
+            journal.TryDiscardUnsaved(beforeAnswer);
+            ledger.MarkUncertain(transaction);
+
+            message = "That could not be written down, so nothing has been settled. Try again.";
+            return false;
+        }
 
         message = workerHasIt
             ? "Recorded: he has it."
