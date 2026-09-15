@@ -1,6 +1,6 @@
-# Concerned Cartographer V1.0.4
+# Concerned Cartographer V1.1.0
 
-**V1.0.4 by The Concerned Cat adds opt-in sailing Route Follow, on top of the 1.0.3 dungeon-surveying fix and walking Route Follow, preserving vanilla movement, physics and safety boundaries, audited against Valheim 1.0.12.**
+**V1.1.0 by The Concerned Cat introduces Hulgi: a local-only companion who lives at your home point and introduces the atlas, on top of 1.0.4’s sailing Route Follow. He is not a networked creature — no other player can see him, he takes no part in your save, and he never blocks, fights or carries anything. Audited against Valheim 1.0.12.**
 
 Concerned Cartographer turns Valheim’s map into a living atlas.
 
@@ -55,9 +55,38 @@ The roads your Vikings build can map themselves. Existing pins can become durabl
 
 *Settings with backups, a sanitized support bundle, road-repair tools — and opt-in crash reporting that spells out what is never sent.*
 
-## Version 1.0.4 and support
+## Hulgi and the Broken Compass (new in V1.1.0)
 
-Version 1.0.4 adds optional sailing Route Follow. Mark a route as a sailing route (Routes panel **Sailing** button, or `cc_routes sailing on`), enable `Routes/SailingAutoFollowEnabled`, take the helm with that route selected, and press Q. Cartographer feeds only the bounded rudder input a player supplies by holding the helm key. Your sails stay manual, and wind, physics, speed, collision, damage, ownership and network authority are untouched. Any helm input, any sail step, jump/attack/secondary/dodge, a second Q, leaving the helm, route changes, going too far off route, reaching the end, or 12 seconds without progress cancels it. There is no tacking, obstacle avoidance, docking or pathfinding. **Live multiplayer verification of sailing Route Follow is still outstanding** and is not claimed.
+A broken compass lies on the ground near where you wake up. Examine it and Hulgi introduces
+himself — a drowned cartographer who never made it home, and who would rather you did. Welcome
+him and the atlas tools are yours; or choose **Just the tools, thanks** and skip the story
+entirely. Either choice is permanent in the only direction that matters: once the tools are
+unlocked, nothing can lock them again.
+
+* **Existing players are never locked out.** If this installation has ever recorded roads, pins,
+  routes, a survey rule or a saved view — in *any* world — you keep everything on upgrade, and
+  Hulgi is simply someone you can still go and meet. Unreadable or ambiguous data grants access
+  too: the only locked state is a genuinely new character in a world the mod could identify.
+* **You never have to find him.** The Companions section of the Settings panel, and
+  `cc_companion toolsonly on`, both reach the tools without meeting him. Settings is never gated.
+* **He is local only.** No other player sees him, he has no networked identity, he takes no part
+  in your world save, he has no collision, and he never fights, carries, stores or picks anything
+  up. Turning `Companions/CompanionsEnabled` off removes all of it and leaves every map tool
+  available.
+* **He lives where you do.** Near your claimed bed, or the world’s starting point if you have not
+  claimed one. Replace the bed and he moves; destroy it and he goes back to the start. Walking
+  away from home does not move him — a bed the game cannot currently see is still your bed.
+* **He talks when spoken to.** Over thirty short lines about his cat, the weather, and travelling
+  carefully. Place-specific remarks only mention biomes *this character* has already visited, so
+  he can never spoil somewhere you have not been. Unprompted chatter is **off by default**.
+* **Nothing about him can cost you anything.** Hiding him, a lost bed, a death, a failed save or a
+  game build that cannot draw him changes what you see and nothing else.
+
+`cc_companion status` reports exactly what was resolved on your machine.
+
+## Version 1.1.0 and support
+
+Version 1.1.0 introduces Hulgi, the local-only companion described above; every atlas feature from 1.0.4 is unchanged. Version 1.0.4 added optional sailing Route Follow. Mark a route as a sailing route (Routes panel **Sailing** button, or `cc_routes sailing on`), enable `Routes/SailingAutoFollowEnabled`, take the helm with that route selected, and press Q. Cartographer feeds only the bounded rudder input a player supplies by holding the helm key. Your sails stay manual, and wind, physics, speed, collision, damage, ownership and network authority are untouched. Any helm input, any sail step, jump/attack/secondary/dodge, a second Q, leaving the helm, route changes, going too far off route, reaching the end, or 12 seconds without progress cancels it. There is no tacking, obstacle avoidance, docking or pathfinding. **Live multiplayer verification of sailing Route Follow is still outstanding** and is not claimed.
 
 Version 1.0.3 fixed dungeon surveying: Burial Chambers, Troll Caves, Bear Caves, Sunken Crypts, Frost Caves and Hildir's crypt and cave are offered as pending observations when you walk up to them. They never were before, because the survey only examined networked objects and a Valheim dungeon entrance is not one.
 

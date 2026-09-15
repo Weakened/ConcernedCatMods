@@ -1,5 +1,6 @@
 using System;
 using BepInEx.Logging;
+using TheConcernedCat.Companions.Dialogue;
 using TheConcernedCat.Companions.Identity;
 using TheConcernedCat.Companions.Persistence;
 using TheConcernedCat.Companions.Placement;
@@ -80,6 +81,15 @@ internal sealed class CompanionDirector : IDisposable
     /// the scope the sidecar is addressed to.</summary>
     private const float ScopeRecheckSeconds = 10f;
 
+    /// <summary>How close the player must be to speak to the companion, and to
+    /// hear an ambient remark. Roughly conversational; beyond it he is scenery.</summary>
+    private const float TalkRadius = 4.5f;
+
+    /// <summary>Shortest gap between two spoken lines, whatever asked for them.
+    /// A companion who answers a mashed key sixty times a second is not
+    /// characterful, he is a bug.</summary>
+    private const float TalkCooldownSeconds = 1.5f;
+
     /// <summary>How long to wait after a placement attempt found nowhere to
     /// put the collectible. Each attempt probes several dozen candidates, and
     /// the reason they failed -- water, a wall, unloaded ground -- does not
@@ -100,6 +110,9 @@ internal sealed class CompanionDirector : IDisposable
     private readonly WorldPlacementProbe _hulgiProbe;
     private readonly BedValidityProbe _bedProbe;
     private readonly CompanionActor _actor;
+    private readonly KnownBiomeReader _biomes;
+    private readonly DialogueCatalog _catalog = HulgiDialogue.BuildCatalog();
+    private DialogueRotation? _dialogue;
     private readonly RateLimitedLog _rateLimited;
 
     private CompanionProgress? _progress;
@@ -113,6 +126,9 @@ internal sealed class CompanionDirector : IDisposable
     private float _anchorElapsed;
     private float _placementRetryElapsed;
     private float _residencyElapsed;
+    private float _talkCooldown;
+    private float _ambientElapsed;
+    private int _conversationTurn;
     private float _actorRetryElapsed;
     private AnchorValidity _anchorValidity = AnchorValidity.Unknown;
     private bool _presentationSupported = true;
@@ -135,7 +151,8 @@ internal sealed class CompanionDirector : IDisposable
         _placementProbe = new WorldPlacementProbe(log, CompassRules.FireComfortRadius);
         _hulgiProbe = new WorldPlacementProbe(log, HulgiRules.FireComfortRadius);
         _bedProbe = new BedValidityProbe(log);
-        _actor = new CompanionActor(log);
+        _actor = new CompanionActor(log, TalkToCompanion);
+        _biomes = new KnownBiomeReader(log);
         _store = new CompanionSidecarStore(CartographerLegacyProbe.DataDirectory);
         _rateLimited = new RateLimitedLog(log, 30f);
 
@@ -176,7 +193,10 @@ internal sealed class CompanionDirector : IDisposable
         _presentationSupported,
         _actor.Exists,
         _actor.Report?.ToString(),
-        _hulgiProbe.SeatSeen);
+        _hulgiProbe.SeatSeen,
+        _biomes.LastObserved,
+        _catalog.Count,
+        _settings.CompanionAmbientChatter.Value);
 
     /// <summary>Called when a world becomes available. Drops any previous
     /// world's state; the next tick resolves the new one.</summary>
@@ -326,6 +346,8 @@ internal sealed class CompanionDirector : IDisposable
             }
 
             UpdateProximityAndInput();
+            UpdateCompanionInput();
+            UpdateAmbientChatter(deltaTime);
         }
         catch (Exception exception)
         {
@@ -354,6 +376,14 @@ internal sealed class CompanionDirector : IDisposable
             evidence,
             _settings.CompanionToolsOnly.Value);
         _toolsOnlyApplied = _settings.CompanionToolsOnly.Value;
+
+        // A per-character starting offset, so two characters in the same world
+        // do not hear the catalogue in the same order. Deterministic, so one
+        // character's order is reproducible across sessions.
+        int offset = unchecked(
+            (scope.Character.Value.GetHashCode() * 397) ^ scope.World.Value.GetHashCode());
+        _dialogue = new DialogueRotation(_catalog, startOffset: offset);
+        _conversationTurn = 0;
 
         _log.LogInfo(
             $"Companion progress opened: quest {_progress.QuestState}, " +
@@ -498,6 +528,109 @@ internal sealed class CompanionDirector : IDisposable
         _actor.SetVisible(_settings.CompanionVisible.Value);
         _visibilityApplied = _settings.CompanionVisible.Value;
         _log.LogInfo($"Hulgi settled near your {DescribeAnchor(_anchor.Kind)}: {_actor.Report}.");
+    }
+
+    /// <summary>Says one line.
+    ///
+    /// Idempotent under mashing: a cooldown swallows repeats, so the vanilla
+    /// interaction and the proximity fallback firing on the same frame produce
+    /// one line rather than two. Delivered as an ordinary HUD toast, never a
+    /// panel — "no modal interruption during combat, loading or death" is
+    /// satisfied by never being modal in the first place.</summary>
+    public void TalkToCompanion()
+    {
+        if (_dialogue == null || _talkCooldown > 0f)
+        {
+            return;
+        }
+
+        // Greet first, then range over everything he has to say. The
+        // whole-catalogue pass is where biome lines come from, so a well
+        // travelled player does not get nothing but travel advisories and an
+        // untravelled one never notices a category quietly failing.
+        DialogueCategory? category = _conversationTurn == 0
+            ? HulgiDialogue.ConversationOrder[0]
+            : (DialogueCategory?)null;
+        _conversationTurn++;
+
+        DialogueContext context = _biomes.Read();
+        if (!_dialogue.TryNext(category, context, out DialogueLine line) &&
+            !_dialogue.TryNext(null, context, out line))
+        {
+            // Nothing eligible at all. Silence beats saying something
+            // inappropriate.
+            return;
+        }
+
+        _talkCooldown = TalkCooldownSeconds;
+        ShowNotice(AtlasStrings.Get(line.Key), MessageHud.MessageType.Center);
+    }
+
+    /// <summary>Ambient remarks, OFF by default.
+    ///
+    /// A companion who talks at you unprompted is charming for an evening and
+    /// tiresome by the second. So this is opt-in, it only fires while the
+    /// player is standing near him, and it uses the same rotation and the same
+    /// cooldown as speaking to him — there is one voice, not two.</summary>
+    private void UpdateAmbientChatter(float deltaTime)
+    {
+        if (_talkCooldown > 0f)
+        {
+            _talkCooldown -= deltaTime;
+        }
+
+        if (!_settings.CompanionAmbientChatter.Value || !_actor.Exists)
+        {
+            return;
+        }
+
+        _ambientElapsed += deltaTime;
+        if (_ambientElapsed < _settings.CompanionAmbientIntervalSeconds.Value)
+        {
+            return;
+        }
+
+        _ambientElapsed = 0f;
+
+        Player player = Player.m_localPlayer;
+        if (player == null || !_settings.CompanionVisible.Value)
+        {
+            return;
+        }
+
+        if (Vector3.Distance(player.transform.position, _actor.Position) > TalkRadius)
+        {
+            return;
+        }
+
+        TalkToCompanion();
+    }
+
+    /// <summary>The proximity fallback for talking, mirroring the compass's.
+    /// Only while close, only while not aiming at something else, and never
+    /// while a menu or a text field owns the key.</summary>
+    private void UpdateCompanionInput()
+    {
+        if (!_actor.Exists || !_settings.CompanionVisible.Value)
+        {
+            return;
+        }
+
+        Player player = Player.m_localPlayer;
+        if (player == null || _storyPanel.IsVisible)
+        {
+            return;
+        }
+
+        if (Vector3.Distance(player.transform.position, _actor.Position) > TalkRadius)
+        {
+            return;
+        }
+
+        if (InteractPressed(player, allowCompass: false))
+        {
+            TalkToCompanion();
+        }
     }
 
     private void ApplyVisibilityPreference()
@@ -696,7 +829,7 @@ internal sealed class CompanionDirector : IDisposable
     /// examine, the same key is watched directly while the player is close and
     /// is <b>not</b> already hovering something real — so this never competes
     /// with a workbench, a door, or a chest for the same press.</summary>
-    private bool InteractPressed(Player player)
+    private bool InteractPressed(Player player, bool allowCompass = true)
     {
         try
         {
@@ -711,11 +844,17 @@ internal sealed class CompanionDirector : IDisposable
             }
 
             GameObject? hovered = player.GetHoverObject();
-            if (hovered != null && hovered.GetComponentInParent<BrokenCompassObject>() == null)
+            if (hovered != null)
             {
-                // The player is aiming at something else entirely; their key
-                // press belongs to that thing.
-                return false;
+                bool hoveringOurs = allowCompass
+                    ? hovered.GetComponentInParent<BrokenCompassObject>() != null
+                    : hovered.GetComponentInParent<CompanionHover>() != null;
+                if (!hoveringOurs)
+                {
+                    // The player is aiming at something else entirely; their
+                    // key press belongs to that thing.
+                    return false;
+                }
             }
 
             try
@@ -948,7 +1087,10 @@ internal readonly struct CompanionStatus
         bool presentationSupported,
         bool actorPresent,
         string? actorReport,
-        bool freeSeatSeen)
+        bool freeSeatSeen,
+        string knownBiomesObserved,
+        int dialogueLineCount,
+        bool ambientChatter)
     {
         CompanionsEnabled = companionsEnabled;
         ProgressOpen = progressOpen;
@@ -973,6 +1115,9 @@ internal readonly struct CompanionStatus
         ActorPresent = actorPresent;
         ActorReport = actorReport;
         FreeSeatSeen = freeSeatSeen;
+        KnownBiomesObserved = knownBiomesObserved;
+        DialogueLineCount = dialogueLineCount;
+        AmbientChatter = ambientChatter;
     }
 
     public bool CompanionsEnabled { get; }
@@ -1003,4 +1148,14 @@ internal readonly struct CompanionStatus
     /// looks right is unobserved, so the planner is fed Unverified and the
     /// companion sits on the ground beside it.</summary>
     public bool FreeSeatSeen { get; }
+
+    /// <summary>The biome spellings this build actually put in
+    /// <c>Player.m_knownBiome</c>. Printed by the console tool, which is how
+    /// the audit's open row about those spellings gets closed by
+    /// observation.</summary>
+    public string KnownBiomesObserved { get; }
+
+    public int DialogueLineCount { get; }
+
+    public bool AmbientChatter { get; }
 }

@@ -60,6 +60,31 @@ internal sealed class DialogueCatalog
 
     /// <summary>Lines eligible right now: the right category, and permitted by
     /// what this character knows.</summary>
+    /// <summary>This line's position in the catalogue, or -1.
+    ///
+    /// Exists so a rotation cursor can be expressed in CATALOGUE space rather
+    /// than in the space of whichever filtered list it happened to walk last.
+    /// A cursor folded into a three-line category and then reused for the whole
+    /// catalogue restarts near the front every time, which starves the tail —
+    /// and the tail is where most of a 24-line catalogue lives.</summary>
+    public int IndexOf(DialogueLine? line)
+    {
+        if (line == null)
+        {
+            return -1;
+        }
+
+        for (int index = 0; index < _lines.Count; index++)
+        {
+            if (string.Equals(_lines[index].Key, line.Key, StringComparison.Ordinal))
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
     public List<DialogueLine> Eligible(DialogueCategory? category, DialogueContext context)
     {
         DialogueContext effective = context ?? DialogueContext.Empty;
