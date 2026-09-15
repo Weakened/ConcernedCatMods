@@ -53,7 +53,26 @@ internal sealed class SpawnAnchorSource : IAnchorSource
     /// row can be closed with an observation instead of a guess.</summary>
     public string? ResolvedStartLocationName => _resolvedStartLocationName;
 
+    /// <summary>The whole resolution in one call: bed if claimed, else the
+    /// world's start. Kept for callers that do not care which they got.</summary>
     public bool TryGetAnchor(out CompanionAnchor anchor)
+    {
+        if (TryGetClaimedBed(out anchor))
+        {
+            return true;
+        }
+
+        return TryGetDefaultSpawn(out anchor);
+    }
+
+    /// <summary>What the PROFILE records as a claimed bed.
+    ///
+    /// Deliberately separate from the fallback, because the two answers need
+    /// different treatment: this one records a position, not a bed, and
+    /// survives the bed being destroyed. Whether the bed is still standing is
+    /// <see cref="BedValidityProbe"/>'s question, and it can only be asked once
+    /// this call has said where to look.</summary>
+    public bool TryGetClaimedBed(out CompanionAnchor anchor)
     {
         anchor = CompanionAnchor.None;
 
@@ -65,36 +84,53 @@ internal sealed class SpawnAnchorSource : IAnchorSource
             }
 
             PlayerProfile profile = Game.instance.GetPlayerProfile();
-            if (profile == null)
+            if (profile == null || !profile.HaveCustomSpawnPoint())
             {
                 return false;
             }
 
-            if (profile.HaveCustomSpawnPoint())
+            Vector3 bed = profile.GetCustomSpawnPoint();
+            if (!IsUsable(bed))
             {
-                Vector3 bed = profile.GetCustomSpawnPoint();
-                if (IsUsable(bed))
-                {
-                    anchor = new CompanionAnchor(
-                        AnchorKind.ClaimedBed, new WorldPoint(bed.x, bed.y, bed.z));
-                    return true;
-                }
+                return false;
             }
 
-            if (TryGetStartLocation(out Vector3 start))
-            {
-                anchor = new CompanionAnchor(
-                    AnchorKind.DefaultSpawn, new WorldPoint(start.x, start.y, start.z));
-                return true;
-            }
-
-            return false;
+            anchor = new CompanionAnchor(
+                AnchorKind.ClaimedBed, new WorldPoint(bed.x, bed.y, bed.z));
+            return true;
         }
         catch (Exception exception)
         {
             _rateLimited.Warning(
-                "companion-anchor",
-                $"Could not work out this character's home point this session: {SafeLogText.Describe(exception)}");
+                "companion-anchor-bed",
+                $"Could not read this character's claimed bed this session: {SafeLogText.Describe(exception)}");
+            return false;
+        }
+    }
+
+    /// <summary>The world's own starting point — the fallback for a character
+    /// with no bed, and the only place a companion moves to when a bed is
+    /// confirmed gone.</summary>
+    public bool TryGetDefaultSpawn(out CompanionAnchor anchor)
+    {
+        anchor = CompanionAnchor.None;
+
+        try
+        {
+            if (!TryGetStartLocation(out Vector3 start))
+            {
+                return false;
+            }
+
+            anchor = new CompanionAnchor(
+                AnchorKind.DefaultSpawn, new WorldPoint(start.x, start.y, start.z));
+            return true;
+        }
+        catch (Exception exception)
+        {
+            _rateLimited.Warning(
+                "companion-anchor-start",
+                $"Could not work out this world's starting point: {SafeLogText.Describe(exception)}");
             return false;
         }
     }

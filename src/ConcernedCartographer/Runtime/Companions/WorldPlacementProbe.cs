@@ -33,6 +33,16 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
     /// not.</summary>
     private const float MinimumUpDot = 0.76f;
 
+    /// <summary>How far around a candidate to look for beds, doors,
+    /// seats and bodies. Wider than the clearance radius, because a
+    /// doorway two metres away still makes a spot a bad place to sit.</summary>
+    private const float NeighbourhoodRadius = 2f;
+
+    /// <summary>Radius for the authored-location sweep. Locations are
+    /// large, so this only has to find a piece of one; its own radius
+    /// fields decide the rest.</summary>
+    private const float LocationProbeRadius = 3f;
+
     private readonly ManualLogSource _log;
     private readonly float _clearanceRadius;
     private readonly float _warmthRadius;
@@ -40,7 +50,7 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
     /// <summary>Reused across every candidate. The planner probes several
     /// dozen points per attempt, and a fresh array each time would be pure
     /// garbage for the collector to sweep.</summary>
-    private readonly Collider[] _overlapBuffer = new Collider[16];
+    private readonly Collider[] _overlapBuffer = new Collider[32];
 
     private bool _waterLevelUnavailableLogged;
 
@@ -100,13 +110,20 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
                 rejections |= PlacementRejection.Unsupported;
             }
 
-            if (IsOccupied(grounded))
+            rejections |= SurveyNeighbourhood(grounded, out SeatAvailability seat);
+
+            if (IsHazardousFire(grounded))
             {
-                rejections |= PlacementRejection.Occupied;
+                rejections |= PlacementRejection.Fire;
+            }
+
+            if (IsInsideClearedLocation(grounded))
+            {
+                rejections |= PlacementRejection.Shrine;
             }
 
             return new PlacementProbeSample(
-                groundedPoint, rejections, DistanceToWarmth(grounded), SeatAvailability.Unverified);
+                groundedPoint, rejections, DistanceToWarmth(grounded), seat);
         }
         catch (Exception exception)
         {
@@ -144,24 +161,35 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
         }
     }
 
-    /// <summary>Anything solid already standing in the spot. A small sphere,
-    /// on the layers that actually block a body — nothing here moves, claims
-    /// or inspects what it finds.</summary>
-    private bool IsOccupied(Vector3 grounded)
+    /// <summary>One sweep of what is standing in and around the spot: whether
+    /// it is occupied, whether it is somebody's bed or a doorway, and whether
+    /// there is a seat.
+    ///
+    /// Done as a single overlap because the planner asks this for several dozen
+    /// candidates and four separate sweeps would cost four times as much for
+    /// the same answers. Nothing found here is moved, claimed, opened or
+    /// written to — a companion yields to the world, never the other way
+    /// round.</summary>
+    private PlacementRejection SurveyNeighbourhood(Vector3 grounded, out SeatAvailability seat)
     {
+        seat = SeatAvailability.None;
+
         try
         {
             int count = Physics.OverlapSphereNonAlloc(
                 grounded + (Vector3.up * 0.9f),
-                _clearanceRadius,
+                NeighbourhoodRadius,
                 _overlapBuffer,
                 ~0,
-                QueryTriggerInteraction.Ignore);
+                QueryTriggerInteraction.Collide);
+
+            PlacementRejection rejections = PlacementRejection.None;
+            bool freeSeatNearby = false;
 
             for (int index = 0; index < count; index++)
             {
                 Collider hit = _overlapBuffer[index];
-                if (hit == null || hit.isTrigger)
+                if (hit == null)
                 {
                     continue;
                 }
@@ -172,8 +200,124 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
                     continue;
                 }
 
-                if (hit.GetComponentInParent<Character>() != null ||
-                    hit.GetComponentInParent<Piece>() != null)
+                // A bed is somebody's. Standing on one is rude and, for a
+                // respawn point, actively unhelpful.
+                if (hit.GetComponentInParent<Bed>() != null)
+                {
+                    rejections |= PlacementRejection.Bed;
+                    continue;
+                }
+
+                // A doorway is a route, not a room.
+                if (hit.GetComponentInParent<Door>() != null)
+                {
+                    rejections |= PlacementRejection.Doorway;
+                    continue;
+                }
+
+                var chair = hit.GetComponentInParent<Chair>();
+                if (chair != null)
+                {
+                    // IsInUse is the vanilla way to yield to a real occupant.
+                    // No seat is ever claimed and no attachment message is ever
+                    // sent.
+                    if (chair.IsInUse())
+                    {
+                        seat = SeatAvailability.Occupied;
+                    }
+                    else
+                    {
+                        freeSeatNearby = true;
+                    }
+
+                    continue;
+                }
+
+                bool solid = !hit.isTrigger &&
+                    (hit.GetComponentInParent<Character>() != null ||
+                     hit.GetComponentInParent<Piece>() != null);
+                if (solid && IsWithin(hit, grounded, _clearanceRadius))
+                {
+                    rejections |= PlacementRejection.Occupied;
+                }
+            }
+
+            if (freeSeatNearby && seat != SeatAvailability.Occupied)
+            {
+                // Deliberately NOT reported as Free. A free chair was found,
+                // and whether posing a companion on one actually looks right is
+                // an open evidence row — the audit could only confirm that
+                // Chair.m_attachAnimation is a per-prefab string, not what it
+                // contains or how it lands. Unverified is what the shared
+                // planner treats as no seat, so the companion sits on the
+                // ground beside the chair rather than standing inside it, and
+                // the console tool reports the seat as detected-but-unused
+                // instead of pretending furniture support works.
+                seat = SeatAvailability.Unverified;
+                SeatSeen = true;
+            }
+
+            return rejections;
+        }
+        catch
+        {
+            return PlacementRejection.None;
+        }
+    }
+
+    /// <summary>True once a free seat has been detected near any candidate this
+    /// session. Reported by the console tool as pending evidence.</summary>
+    public bool SeatSeen { get; private set; }
+
+    private static bool IsWithin(Collider hit, Vector3 point, float radius)
+    {
+        try
+        {
+            return (hit.ClosestPoint(point) - point).sqrMagnitude <= radius * radius;
+        }
+        catch
+        {
+            // A collider shape that cannot answer counts as in the way.
+            return true;
+        }
+    }
+
+    /// <summary>Open flame, as opposed to warmth: the same effect-area
+    /// mechanism, asked a different question.</summary>
+    private static bool IsHazardousFire(Vector3 grounded)
+    {
+        try
+        {
+            return EffectArea.IsPointInsideArea(grounded, EffectArea.Type.Burning, 0.5f) != null
+                || EffectArea.IsPointInsideArea(grounded, EffectArea.Type.Fire, 0.5f) != null;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Inside a location that clears its own ground — a shrine, a
+    /// boss altar, the starting temple. Their geometry is authored, and a
+    /// companion standing in the middle of it looks like a bug.</summary>
+    private bool IsInsideClearedLocation(Vector3 grounded)
+    {
+        try
+        {
+            int count = Physics.OverlapSphereNonAlloc(
+                grounded, LocationProbeRadius, _overlapBuffer, ~0, QueryTriggerInteraction.Collide);
+
+            for (int index = 0; index < count; index++)
+            {
+                Collider hit = _overlapBuffer[index];
+                var location = hit == null ? null : hit.GetComponentInParent<Location>();
+                if (location == null || !location.m_clearArea)
+                {
+                    continue;
+                }
+
+                float distance = Vector3.Distance(grounded, location.transform.position);
+                if (distance <= Mathf.Max(location.m_exteriorRadius, location.m_interiorRadius))
                 {
                     return true;
                 }
