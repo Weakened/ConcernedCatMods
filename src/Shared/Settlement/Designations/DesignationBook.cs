@@ -325,8 +325,16 @@ internal sealed class DesignationBook
     {
         get
         {
-            return _designations.TryGetValue(DesignationKind.SupplyContainer, out Designation? supply)
-                && supply!.IsStaleIdentity(_epoch);
+            if (!_designations.TryGetValue(DesignationKind.SupplyContainer, out Designation? supply))
+            {
+                return false;
+            }
+
+            // With no current identity space nothing resolves, so a chest row is
+            // stale whatever its own epoch says. Without this, a row that also
+            // has no epoch -- one written by a build that had none -- would
+            // resolve to nothing while reporting itself perfectly fine.
+            return string.IsNullOrEmpty(_epoch) || supply!.IsStaleIdentity(_epoch);
         }
     }
 }

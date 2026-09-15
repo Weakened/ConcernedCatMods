@@ -135,7 +135,11 @@ internal sealed class SettlementRecords
         // Anything outstanding for the world we are leaving is written before
         // its records are dropped. The path comes from each object's own
         // immutable scope, so this writes the DEPARTING world's files.
-        Save();
+        //
+        // Reported on the same terms the teardown uses: only when there was
+        // something to write, so a read-only record does not log its notice
+        // every time a world changes.
+        FlushDeparting();
 
         SettlementRegisterStore.LoadReport registerReport = _registers.Load(scope);
         JournalStore.LoadReport journalReport = _journals.Load(scope);
@@ -176,6 +180,23 @@ internal sealed class SettlementRecords
         }
     }
 
+    /// <summary>Writes anything outstanding and says so only if it mattered.
+    ///
+    /// Shared by the two places a world's records stop being current — a change
+    /// of world and a teardown — so the two cannot drift into reporting the
+    /// same situation differently.</summary>
+    private void FlushDeparting()
+    {
+        bool hadWork = (_journal != null && _journal.IsDirty)
+            || (_register != null && _register.IsDirty);
+
+        string? notice = Save();
+        if (notice != null && hadWork)
+        {
+            _log(notice);
+        }
+    }
+
     /// <summary>Writes whatever changed, through the game-free writer that owns
     /// the ordering rule.</summary>
     internal string? Save()
@@ -200,14 +221,7 @@ internal sealed class SettlementRecords
         // read-only record returns its "nothing was written over it" notice on
         // every attempt, and logging that on every world unload trains a player
         // to ignore the one notice that is supposed to be actionable.
-        bool hadWork = (_journal != null && _journal.IsDirty)
-            || (_register != null && _register.IsDirty);
-
-        string? notice = Save();
-        if (notice != null && hadWork)
-        {
-            _log(notice);
-        }
+        FlushDeparting();
 
         _register = null;
         _journal = null;

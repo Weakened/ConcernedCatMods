@@ -310,14 +310,18 @@ public sealed class DesignationGuardTests : IDisposable
         //
         // The codec treats the request field as optional for all of them, and
         // each one reaches a dictionary keyed by RequestId.Value, which is null
-        // when the id is default. Replay now runs on nearly every cf_settle
-        // command, so an unguarded kind is a permanently dead command for that
-        // world rather than an unreachable edge.
+        // when the id is default. Replay runs on two of the seven cf_settle
+        // subcommands -- status and clear -- so an unguarded kind is not an
+        // unreachable edge: it is those two permanently dead for that world.
         File.WriteAllLines(_journals.ResolvePath(Scope), new[]
         {
             "#\tsettlement journal v1",
             "v\t1\t" + Scope.ToStorageKey(),
-            "e\t0\t" + kind.ToString() + "\tcottage-1\t\t0\t",
+            // Container and stacks are present so the Reserved row is a REAL
+            // regression row: without the guard it reaches the Reservation
+            // constructor, which rejects an empty request. A bare row would be
+            // skipped for having no container and would prove nothing.
+            "e\t0\t" + kind.ToString() + "\tcottage-1\t\t0\tchest-a\tWood*20",
         });
 
         ReplayResult replayed = _journals.Load(Scope).Journal.Replay();
@@ -325,6 +329,63 @@ public sealed class DesignationGuardTests : IDisposable
         Assert.NotNull(replayed);
         Assert.False(replayed.NeedsRepair);
         Assert.Empty(replayed.Ledger.Reservations);
+    }
+
+    [Fact]
+    public void EveryJournalKindIsExplicitlyClassifiedAsCarryingARequestOrNot()
+    {
+        // This test is the guarantee. An earlier comment claimed the compiler
+        // provided one -- that a switch statement with no default arm would
+        // fail to build when a member was added to the enum. C# does no such
+        // thing: it compiles and silently takes the fallback.
+        //
+        // So the mapping is pinned here instead. Add a member to
+        // JournalEntryKind without deciding which side it is on and this fails,
+        // naming the member. That is a real guarantee, in the place that can
+        // actually make one.
+        var expected = new Dictionary<JournalEntryKind, bool>
+        {
+            [JournalEntryKind.OrderTransition] = false,
+            [JournalEntryKind.Reserved] = true,
+            [JournalEntryKind.Refunded] = true,
+            [JournalEntryKind.CommitStarted] = true,
+            [JournalEntryKind.CommitFinished] = true,
+        };
+
+        foreach (JournalEntryKind kind in Enum.GetValues(typeof(JournalEntryKind)))
+        {
+            Assert.True(
+                expected.ContainsKey(kind),
+                "JournalEntryKind." + kind + " is not classified. Decide whether it carries a " +
+                "request id, add it to SettlementJournal.CarriesRequest and to this test. " +
+                "Nothing else will tell you.");
+
+            Assert.Equal(expected[kind], SettlementJournal.CarriesRequest(kind));
+        }
+
+        Assert.Equal(expected.Count, Enum.GetValues(typeof(JournalEntryKind)).Length);
+    }
+
+    [Fact]
+    public void AKindThisBuildDoesNotDefineNeverReachesTheReplay()
+    {
+        // The other half of the contract. An undefined kind cannot arrive from
+        // a file at all, because the codec refuses it -- so the fallback inside
+        // CarriesRequest is for a kind added in CODE and left unclassified, not
+        // for anything a player's disk can produce.
+        File.WriteAllLines(_journals.ResolvePath(Scope), new[]
+        {
+            "#\tsettlement journal v1",
+            "v\t1\t" + Scope.ToStorageKey(),
+            "e\t0\t99\tcottage-1\treq-1\t0\t",
+        });
+
+        JournalStore.LoadReport report = _journals.Load(Scope);
+
+        Assert.Equal(JournalLoadOutcome.LoadedWithSkippedLines, report.Outcome);
+        Assert.Equal(1, report.SkippedLines);
+        Assert.True(report.ReadOnly);
+        Assert.Empty(report.Journal.Entries);
     }
 
     [Fact]

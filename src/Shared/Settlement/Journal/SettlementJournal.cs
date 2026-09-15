@@ -239,6 +239,47 @@ internal sealed class SettlementJournal
         }
     }
 
+    /// <summary>True when this kind keys off a request id.
+    ///
+    /// <b>There is no compiler guarantee here, and an earlier version of this
+    /// comment claimed there was.</b> This is a C# switch <i>statement</i> with
+    /// a trailing <c>return</c>: adding a member to
+    /// <see cref="JournalEntryKind"/> compiles cleanly and silently takes the
+    /// fallback. Even a switch <i>expression</i> would only warn. The claim came
+    /// from a review suggestion that was written down without being checked
+    /// against the language — which is the same defect class this method exists
+    /// to guard against, committed while fixing an instance of it.
+    ///
+    /// The actual contract, in two parts:
+    ///
+    /// <list type="bullet">
+    /// <item>An <b>undefined</b> kind never reaches here from a file.
+    /// <c>JournalStore.TryParseEntry</c> rejects any kind value
+    /// <c>Enum.IsDefined</c> does not know, so the line is counted as damage and
+    /// the journal goes read-only.</item>
+    /// <item>A kind added <b>in code</b> and not classified below falls through
+    /// to <c>true</c> — treated as carrying a request, so an entry with an empty
+    /// one is skipped rather than crashing the replay. Fail-safe, but silent,
+    /// which is why the mapping is pinned by a test that enumerates every member
+    /// of the enum. Add a member without classifying it and that test fails.</item>
+    /// </list></summary>
+    internal static bool CarriesRequest(JournalEntryKind kind)
+    {
+        switch (kind)
+        {
+            case JournalEntryKind.Reserved:
+            case JournalEntryKind.Refunded:
+            case JournalEntryKind.CommitStarted:
+            case JournalEntryKind.CommitFinished:
+                return true;
+
+            case JournalEntryKind.OrderTransition:
+                return false;
+        }
+
+        return true;
+    }
+
     /// <summary>Rebuilds order states and the custody ledger from the record.</summary>
     public ReplayResult Replay()
     {
@@ -255,11 +296,17 @@ internal sealed class SettlementJournal
             // a dictionary keyed by RequestId.Value, which is null when the id
             // is default, and a null key takes the whole replay down.
             //
-            // Guarding this ONCE, here, is the fix. An earlier version guarded
+            // Guarding this once, here, is the fix. An earlier version guarded
             // Refunded, then CommitStarted, each time claiming the class was
-            // closed; CommitFinished was still open both times. Kinds get added
-            // to this enum, and a guard per case is a guard somebody forgets.
-            if (entry.Kind != JournalEntryKind.OrderTransition && entry.Request.IsEmpty)
+            // closed; CommitFinished was open both times. A guard per case is a
+            // guard somebody forgets.
+            //
+            // CarriesRequest is a POSITIVE list rather than "anything except
+            // OrderTransition", so a kind added later is classified on purpose
+            // instead of inheriting whichever answer the exclusion happened to
+            // give it. What keeps that honest is a TEST, not the compiler --
+            // see CarriesRequest itself.
+            if (CarriesRequest(entry.Kind) && entry.Request.IsEmpty)
             {
                 continue;
             }
@@ -277,7 +324,10 @@ internal sealed class SettlementJournal
                 }
 
                 case JournalEntryKind.Reserved:
-                    if (!entry.Request.IsEmpty && entry.Container != null && entry.Stacks.Count > 0)
+                    // No request check here: the guard above owns that for
+                    // every kind, and leaving a second one would make this the
+                    // case whose regression test proves nothing.
+                    if (entry.Container != null && entry.Stacks.Count > 0)
                     {
                         ledger.Reserve(new Reservation(
                             entry.Request, entry.Order, entry.Container, entry.Stacks));

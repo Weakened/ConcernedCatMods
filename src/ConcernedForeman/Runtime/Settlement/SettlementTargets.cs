@@ -51,7 +51,7 @@ internal static class SettlementTargets
         if (key == null)
         {
             container = null;
-            failure = "that container has no stable identity yet — it may still be being placed. " +
+            failure = "that container could not be identified — it may still be being placed. " +
                 "Nothing was marked, because a designation that resolved by position would " +
                 "follow whatever ends up standing there.";
             return false;

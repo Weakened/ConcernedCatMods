@@ -38,9 +38,10 @@ internal enum RegisterLoadOutcome
 /// step. A register answers "what is marked right now", and a marking replaced
 /// by an explicit later act is simply gone. So the file holds today's rows and
 /// is rewritten whole, through the same temp-file-and-swap, for the same reason:
-/// an interrupted write must leave either the whole old file or the whole new
-/// one. <see cref="TheConcernedCat.Settlement.Storage.AtomicTextFile"/> is
-/// careful about where that holds and where it does not.
+/// an interrupted write should leave either the whole old file or the whole new
+/// one. That holds on <c>File.Replace</c>, which is the path that normally runs;
+/// the fallbacks are <b>not</b> atomic and #293 tracks detecting the truncation
+/// they can leave.
 ///
 /// The failure discipline is the journal's, deliberately, and <b>not</b> the
 /// companion sidecar's. A damaged file is never quarantined and replaced with an
