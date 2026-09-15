@@ -252,3 +252,91 @@ Nothing in this slice claims in-game evidence. `cc_companion status` prints the
 facts that close those rows — which prefab the visual came from, whether the
 collider landed on a non-solid layer, whether vanilla hovering has ever
 reached the object, and which name the world's start location answered to.
+
+---
+
+## Hulgi's presence (CC-NPC-004)
+
+### Residency: three answers, not two
+
+`PlayerProfile.HaveCustomSpawnPoint()` reports what the *profile* remembers, not
+what the *world* contains — destroy the bed and the recorded position stays
+behind. So `BedValidityProbe` asks the world, and its answer has three values:
+
+| Answer | Meaning | Effect |
+|---|---|---|
+| `Valid` | loaded ground, a `Bed` is there | keep the bed |
+| `Unknown` | the ground is not loaded, nothing can be checked | **keep the bed** |
+| `Gone` | loaded ground, no bed in it | fall back to the world start |
+
+`Unknown` keeping the bed is the load-bearing line. Collapsing it into `Gone`
+would relocate the companion to the world's starting point every time the player
+walked two biomes from home — the exact wandering the whole rule exists to
+prevent. Only loaded-and-empty may move him off a bed a player claimed.
+
+`ResidencyPlanner` then decides between doing nothing, placing, rehoming and
+removing. Almost every case is "do nothing": a hidden companion keeps his home,
+a momentary resolution failure leaves an existing actor standing, and a home
+point that jitters below `AnchorMoveTolerance` is the same home point.
+
+### The actor is extracted, never stripped
+
+`CompanionActor.TryExtractVisual` instantiates the source prefab under an
+**inactive** holder, re-parents the animated visual subtree out of the clone,
+and destroys the remainder — which is where `Player`, `ZNetView`, `Character`
+and `BaseAI` live — without any of it ever being enabled.
+
+Then it does something the ordinary version of this does not: if a networking or
+AI component turns out to be *inside* the extracted subtree, the whole candidate
+is **refused** and the next one is tried. It is never removed and carried on
+with. That keeps a property true and auditable rather than merely intended: a
+finished actor has never contained one of those components.
+
+Colliders and rigidbodies are treated differently and deliberately so. A
+collider carries no registration — nothing knows about it until something
+touches it — so removing one leaves no trace, while leaving one in place would
+mean a player walking into an invisible wall where their companion stands.
+
+### Appearance is enumerated, never assumed
+
+The audit established that stock hair and beard preset names are serialized
+values inside compressed asset bundles, not API, and refused to guess them.
+`AppearanceCatalog` reads the live prefab tables at runtime, `AppearancePlan`
+picks from what is really there, and the chain ends in "no item at all":
+
+1. a preferred name (matched case-insensitively as a substring — the game's own
+   spelling is precisely what could not be established);
+2. any member of the same family, which still looks deliberate;
+3. nothing, and the model keeps its own look.
+
+A missing preset changes how Hulgi looks and nothing else. It cannot fail his
+construction, and it certainly cannot touch the introduction or a player's
+tools. `cc_companion appearance` prints what this build actually has, which is
+how the audit's two open appearance rows get closed by observation.
+
+The seated idle works the same way: every candidate animator state is checked
+with `Animator.HasState` before use, and when none exists the model keeps its
+default idle and the report says so.
+
+### Furniture: detected, reported, deliberately unused
+
+The placement probe finds chairs and asks `Chair.IsInUse()`. A free chair is
+reported to the shared planner as `SeatAvailability.Unverified`, **not** `Free`
+— and the planner treats `Unverified` as no seat, so the companion sits on the
+ground beside the chair rather than standing inside it. `cc_companion status`
+says "free seat detected nearby — furniture use is PENDING in-game evidence".
+
+That is the honest position. The audit could only confirm that
+`Chair.m_attachAnimation` is a per-prefab string field; what it contains, and
+whether a companion posed on a real chair lands correctly, is unobserved. No
+seat is ever claimed and no attachment message is ever sent.
+
+### Scope staleness
+
+Following the review: the scope is resolved once and then written to on every
+transition, and the store's scope-mismatch guard only catches a *file* that
+disagrees, not an in-memory scope gone stale because a world change slipped past
+its hook. So every ten seconds the director compares the live world UID and
+player ID against the scope the open sidecar is addressed to, and reopens if
+they differ. Two accessor reads; no progress is ever written to a previous
+world.

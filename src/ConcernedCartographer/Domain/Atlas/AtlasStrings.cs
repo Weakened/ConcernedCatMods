@@ -144,6 +144,8 @@ internal static class AtlasStrings
         ["story.hulgi.page1"] = "Salt has clouded the glass. The needle will not move.\n\nScratched into the back, in a steadier hand than the rest:\n\n\"Be careful, Hulgi!\"",
         ["story.hulgi.page2"] = "\"I was not.\n\nTrusted the weather, then my luck. The sea had other ideas. Never made it home.\"",
         ["story.hulgi.page3"] = "\"Someone there was waiting for me. Small fellow. Four paws. Very poor at forgiving a late supper.\"",
+        ["companion.presentationUnavailable"] = "Hulgi cannot be shown on this game build, so he stays out of sight. Your tools, your progress and his company are unaffected.",
+        ["companion.hiddenNotice"] = "Hulgi is hidden. Your tools, progress and data are unaffected.",
         ["story.hulgi.page4"] = "\"I cannot change my last voyage. Perhaps I can help with yours.\n\nHulgi the cartographer, at your service.\"",
     };
 

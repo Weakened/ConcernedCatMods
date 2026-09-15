@@ -37,7 +37,8 @@ internal sealed class CompanionToolsCommand : ConsoleCommand
 
     public override string Help =>
         "Concerned Companions. Subcommands: status, toolsonly <on|off>, story (replay), " +
-        "show <on|off> (companion visibility), where (home point), path (data folder).";
+        "show <on|off> (companion visibility), where (home point), appearance (list this " +
+        "build's hair/beard presets), path (data folder).";
 
     public override void Run(string[] args, Terminal context)
     {
@@ -56,6 +57,6 @@ internal sealed class CompanionToolsCommand : ConsoleCommand
 
     public override List<string> CommandOptionList()
     {
-        return new List<string> { "status", "toolsonly", "story", "show", "where", "path" };
+        return new List<string> { "status", "toolsonly", "story", "show", "where", "appearance", "path" };
     }
 }

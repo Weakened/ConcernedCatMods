@@ -3129,11 +3129,19 @@ internal sealed class CartographerRuntime : IDisposable
                     $". Collectible present: {status.CompassPresent}.";
             }
 
+            case "appearance":
+                // Read-only enumeration of the live prefab tables. This is the
+                // audit's own prescribed way to establish the hair and beard
+                // preset names, which are asset-bundle data rather than API and
+                // were deliberately never guessed.
+                return Runtime.Companions.AppearanceCatalog.Read().Describe();
+
             case "path":
                 return "Companion data: " + Runtime.Companions.CartographerLegacyProbe.DataDirectory;
 
             default:
-                return "Unknown subcommand. Use: status, toolsonly <on|off>, story, show <on|off>, where, path.";
+                return "Unknown subcommand. Use: status, toolsonly <on|off>, story, show <on|off>, " +
+                    "where, appearance, path.";
         }
     }
 
@@ -3169,9 +3177,22 @@ internal sealed class CartographerRuntime : IDisposable
         builder.AppendLine($"  tools-only       : {status.ToolsOnly}");
         builder.AppendLine($"  home point       : {status.AnchorKind}" +
             (status.StartLocationName != null ? $" via \"{status.StartLocationName}\"" : ""));
+        builder.AppendLine($"  bed check        : {status.AnchorValidity}" +
+            (status.BedLookupUnavailable ? " (lookup unavailable on this build)" : ""));
         builder.AppendLine($"  compass present  : {status.CompassPresent} (visual: {status.CompassVisualSource})");
         builder.AppendLine($"  compass layer    : {(status.CompassOnNonSolidLayer ? "non-solid" : "pass-through trigger")}");
         builder.AppendLine($"  vanilla hover    : {(status.HoverObserved ? "observed" : "not seen yet")}");
+        builder.AppendLine($"  show companion   : {status.CompanionVisible}");
+        builder.AppendLine($"  presentation     : {(status.PresentationSupported ? "supported" : "unavailable on this build")}");
+        builder.AppendLine($"  companion actor  : {(status.ActorPresent ? "present" : "absent")}");
+        if (status.ActorReport != null)
+        {
+            builder.AppendLine("  actor detail     : " + status.ActorReport);
+        }
+
+        builder.AppendLine(
+            $"  seating          : {(status.FreeSeatSeen ? "free seat detected nearby" : "no free seat seen")} " +
+            "- furniture use is PENDING in-game evidence, so he sits on the ground beside it");
         if (status.Notice != null)
         {
             builder.AppendLine("  notice           : " + status.Notice);

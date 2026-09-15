@@ -49,9 +49,36 @@ internal sealed class CompanionDirector : IDisposable
         "Ruby",
     };
 
+    /// <summary>Hulgi lives further out than the collectible does: close
+    /// enough to be part of the camp, far enough not to stand in a doorway.
+    /// The 3-10 m band is CC-NPC-004's own requirement.</summary>
+    private static readonly PlacementRules HulgiRules =
+        new PlacementRules(minimumRadius: 3f, maximumRadius: 10f);
+
+    /// <summary>Sources to extract an animated body from, best first. Every one
+    /// is looked up at runtime and refused if its visual subtree turns out to
+    /// carry a networking or AI component; none of them is assumed to
+    /// exist.</summary>
+    private static readonly string[] ActorPrefabCandidates =
+    {
+        "Player",
+    };
+
     private const float ScopeRetrySeconds = 2f;
     private const float PresenceIntervalSeconds = 0.25f;
     private const float AnchorRecheckSeconds = 5f;
+
+    /// <summary>How often the actor's residency is reconsidered. Slower than
+    /// the collectible's presence pass: a companion who has settled somewhere
+    /// should look settled, not twitch towards every re-resolved anchor.</summary>
+    private const float ResidencyIntervalSeconds = 2f;
+
+    /// <summary>Backoff after a residency pass found nowhere to put him.</summary>
+    private const float ActorRetrySeconds = 8f;
+
+    /// <summary>How often the live world and character are re-checked against
+    /// the scope the sidecar is addressed to.</summary>
+    private const float ScopeRecheckSeconds = 10f;
 
     /// <summary>How long to wait after a placement attempt found nowhere to
     /// put the collectible. Each attempt probes several dozen candidates, and
@@ -69,6 +96,10 @@ internal sealed class CompanionDirector : IDisposable
     private readonly CompanionSidecarStore _store;
     private readonly CompanionStoryPanel _storyPanel;
     private readonly CompassProximity _proximity = new CompassProximity();
+    private readonly PlacementPlanner _hulgiPlanner = new PlacementPlanner(HulgiRules);
+    private readonly WorldPlacementProbe _hulgiProbe;
+    private readonly BedValidityProbe _bedProbe;
+    private readonly CompanionActor _actor;
     private readonly RateLimitedLog _rateLimited;
 
     private CompanionProgress? _progress;
@@ -81,6 +112,11 @@ internal sealed class CompanionDirector : IDisposable
     private float _presenceElapsed;
     private float _anchorElapsed;
     private float _placementRetryElapsed;
+    private float _residencyElapsed;
+    private float _actorRetryElapsed;
+    private AnchorValidity _anchorValidity = AnchorValidity.Unknown;
+    private bool _presentationSupported = true;
+    private bool _visibilityApplied = true;
     private bool _toolsOnlyApplied;
     private bool _noticedRecorded;
     private bool _promptVisible;
@@ -97,6 +133,9 @@ internal sealed class CompanionDirector : IDisposable
         _legacyProbe = new CartographerLegacyProbe(log);
         _anchorSource = new SpawnAnchorSource(log);
         _placementProbe = new WorldPlacementProbe(log, CompassRules.FireComfortRadius);
+        _hulgiProbe = new WorldPlacementProbe(log, HulgiRules.FireComfortRadius);
+        _bedProbe = new BedValidityProbe(log);
+        _actor = new CompanionActor(log);
         _store = new CompanionSidecarStore(CartographerLegacyProbe.DataDirectory);
         _rateLimited = new RateLimitedLog(log, 30f);
 
@@ -130,13 +169,24 @@ internal sealed class CompanionDirector : IDisposable
         _compassSource,
         _compassBehaviour?.OnNonSolidLayer ?? false,
         _compassBehaviour?.HoverObserved ?? false,
-        _settings.CompanionToolsOnly.Value);
+        _settings.CompanionToolsOnly.Value,
+        _settings.CompanionVisible.Value,
+        _anchorValidity,
+        _bedProbe.LookupUnavailable,
+        _presentationSupported,
+        _actor.Exists,
+        _actor.Report?.ToString(),
+        _hulgiProbe.SeatSeen);
 
     /// <summary>Called when a world becomes available. Drops any previous
     /// world's state; the next tick resolves the new one.</summary>
     public void OnWorldChanged()
     {
         ReleaseCompass();
+        _actor.Release();
+        _anchorValidity = AnchorValidity.Unknown;
+        _presentationSupported = true;
+        _actorRetryElapsed = 0f;
         _progress = null;
         _anchor = CompanionAnchor.None;
         _scopeElapsed = ScopeRetrySeconds;
@@ -152,6 +202,10 @@ internal sealed class CompanionDirector : IDisposable
     /// the references are dropped rather than destroyed again.</summary>
     public void OnSceneTeardown()
     {
+        // Unity already destroyed every GameObject in the old scene. Calling
+        // Destroy on them again would be talking to a corpse, so the references
+        // are dropped instead.
+        _actor.Forget();
         _compass = null;
         _compassBehaviour = null;
         _compassSource = "none";
@@ -169,6 +223,8 @@ internal sealed class CompanionDirector : IDisposable
         {
             ReleaseCompass();
         }
+
+        _actor.Release();
 
         if (_storyPanel.IsVisible)
         {
@@ -194,6 +250,8 @@ internal sealed class CompanionDirector : IDisposable
                 {
                     ReleaseCompass();
                 }
+
+                _actor.Release();
 
                 if (_storyPanel.IsVisible)
                 {
@@ -226,6 +284,19 @@ internal sealed class CompanionDirector : IDisposable
             }
 
             ApplyToolsOnlyPreference();
+
+            _scopeElapsed += deltaTime;
+            if (_scopeElapsed >= ScopeRecheckSeconds)
+            {
+                _scopeElapsed = 0f;
+                ReopenIfScopeWentStale();
+                if (_progress == null)
+                {
+                    Gate = CompanionFeatureGate.Unresolved;
+                    return;
+                }
+            }
+
             Gate = CompanionFeatureGate.FromUnlock(_progress!.IsUnlocked);
 
             _anchorElapsed += deltaTime;
@@ -245,6 +316,13 @@ internal sealed class CompanionDirector : IDisposable
             {
                 _presenceElapsed = 0f;
                 UpdateCollectiblePresence();
+            }
+
+            _residencyElapsed += deltaTime;
+            if (_residencyElapsed >= ResidencyIntervalSeconds)
+            {
+                _residencyElapsed = 0f;
+                UpdateResidency();
             }
 
             UpdateProximityAndInput();
@@ -306,9 +384,26 @@ internal sealed class CompanionDirector : IDisposable
                 : "Tools-only is off: the introduction is offered again. Access already granted stays granted.");
     }
 
+    /// <summary>Re-resolves home, asking the world whether a claimed bed is
+    /// still standing.
+    ///
+    /// The three-way validity answer is what keeps this quiet. A bed whose
+    /// chunk is not loaded returns Unknown, which keeps the bed; only loaded
+    /// ground with no bed in it moves the companion to the world's starting
+    /// point. Without that distinction, walking two biomes from home would
+    /// relocate him every time.</summary>
     private void RefreshAnchor()
     {
-        if (!_anchorSource.TryGetAnchor(out CompanionAnchor current))
+        bool haveBed = _anchorSource.TryGetClaimedBed(out CompanionAnchor bed);
+        _anchorValidity = haveBed
+            ? _bedProbe.Check(new Vector3(bed.Position.X, bed.Position.Y, bed.Position.Z))
+            : AnchorValidity.Gone;
+
+        _anchorSource.TryGetDefaultSpawn(out CompanionAnchor fallback);
+
+        CompanionAnchor current = ResidencyPlanner.Resolve(
+            haveBed ? bed : CompanionAnchor.None, _anchorValidity, fallback);
+        if (!current.IsValid)
         {
             return;
         }
@@ -326,6 +421,140 @@ internal sealed class CompanionDirector : IDisposable
                 ReleaseCompass();
             }
         }
+    }
+
+    /// <summary>Decides whether Hulgi should be standing somewhere, and puts
+    /// him there.
+    ///
+    /// Everything this can do is presentation. Hiding him, failing to build
+    /// him, or finding nowhere to put him changes nothing about the player's
+    /// access, their progress, or the fact that he joined — which is the
+    /// property the whole epic is built on.</summary>
+    private void UpdateResidency()
+    {
+        if (_progress == null)
+        {
+            return;
+        }
+
+        ApplyVisibilityPreference();
+
+        var inputs = new ResidencyInputs(
+            _progress.HasCompanion,
+            _settings.CompanionVisible.Value,
+            _actor.Exists,
+            _presentationSupported,
+            _anchor,
+            _actor.PlacedAnchor,
+            _anchorValidity);
+
+        switch (ResidencyPlanner.Decide(inputs))
+        {
+            case ResidencyAction.Remove:
+                _actor.Release();
+                return;
+
+            case ResidencyAction.Rehome:
+                _actor.Release();
+                _actorRetryElapsed = 0f;
+                break;
+
+            case ResidencyAction.Place:
+                break;
+
+            default:
+                return;
+        }
+
+        if (_actorRetryElapsed > 0f)
+        {
+            _actorRetryElapsed -= ResidencyIntervalSeconds;
+            return;
+        }
+
+        PlacementResult placement = _hulgiPlanner.Plan(_anchor, _hulgiProbe);
+        if (!placement.Found)
+        {
+            _actorRetryElapsed = ActorRetrySeconds;
+            _rateLimited.Warning(
+                "companion-actor-placement",
+                $"No clear spot near your home point for Hulgi yet ({placement.BlockedBy}); he will " +
+                "settle when there is one. Nothing about your tools or progress is affected.");
+            return;
+        }
+
+        if (!_actor.TryBuild(
+                placement.Position, placement.Pose, _anchor, ActorPrefabCandidates, _log))
+        {
+            // Every fallback was exhausted. Presentation is disabled with an
+            // actionable notice; the companion still exists, still counts, and
+            // still unlocked the tools.
+            _presentationSupported = false;
+            ShowNotice(AtlasStrings.Get("companion.presentationUnavailable"));
+            return;
+        }
+
+        _actor.RememberAnchor(_anchor);
+        _actor.SetVisible(_settings.CompanionVisible.Value);
+        _visibilityApplied = _settings.CompanionVisible.Value;
+        _log.LogInfo($"Hulgi settled near your {DescribeAnchor(_anchor.Kind)}: {_actor.Report}.");
+    }
+
+    private void ApplyVisibilityPreference()
+    {
+        bool desired = _settings.CompanionVisible.Value;
+        if (desired == _visibilityApplied)
+        {
+            return;
+        }
+
+        _visibilityApplied = desired;
+        if (_actor.Exists)
+        {
+            _actor.SetVisible(desired);
+        }
+    }
+
+    /// <summary>Re-checks that the live world and character still match the
+    /// scope this session's sidecar is addressed to, and reopens if not.
+    ///
+    /// The independent review's point: a scope is resolved once and then
+    /// written to on every transition, and the store's own scope-mismatch guard
+    /// only catches a FILE that disagrees — not an in-memory scope that has
+    /// gone stale because a world change slipped past the hook that should have
+    /// reset it. This is the belt to that hook's braces, and it is cheap:
+    /// two accessor reads every ten seconds.</summary>
+    private void ReopenIfScopeWentStale()
+    {
+        if (_progress == null)
+        {
+            return;
+        }
+
+        if (!_scopeSource.TryResolve(out CompanionScope live))
+        {
+            // Cannot tell. Changing nothing is right: the existing progress is
+            // still addressed to a world we successfully resolved once.
+            return;
+        }
+
+        if (live.Equals(_progress.Scope))
+        {
+            return;
+        }
+
+        _log.LogInfo(
+            "The live world or character no longer matches the companion data open in this session, " +
+            "so it is being reopened for the current one. No progress is written to the previous scope.");
+        ReleaseCompass();
+        _actor.Release();
+        _anchor = CompanionAnchor.None;
+        _anchorValidity = AnchorValidity.Unknown;
+        _noticedRecorded = false;
+        _resumePage = 0;
+        _progress = null;
+        _proximity.Reset();
+        TryOpenProgress();
     }
 
     private void UpdateCollectiblePresence()
@@ -687,6 +916,7 @@ internal sealed class CompanionDirector : IDisposable
         // Progress is saved inline at every transition, so there is nothing
         // pending here; the objects are what need releasing.
         ReleaseCompass();
+        _actor.Release();
         _storyPanel.Hide();
     }
 }
@@ -711,7 +941,14 @@ internal readonly struct CompanionStatus
         string compassVisualSource,
         bool compassOnNonSolidLayer,
         bool hoverObserved,
-        bool toolsOnly)
+        bool toolsOnly,
+        bool companionVisible,
+        AnchorValidity anchorValidity,
+        bool bedLookupUnavailable,
+        bool presentationSupported,
+        bool actorPresent,
+        string? actorReport,
+        bool freeSeatSeen)
     {
         CompanionsEnabled = companionsEnabled;
         ProgressOpen = progressOpen;
@@ -729,6 +966,13 @@ internal readonly struct CompanionStatus
         CompassOnNonSolidLayer = compassOnNonSolidLayer;
         HoverObserved = hoverObserved;
         ToolsOnly = toolsOnly;
+        CompanionVisible = companionVisible;
+        AnchorValidity = anchorValidity;
+        BedLookupUnavailable = bedLookupUnavailable;
+        PresentationSupported = presentationSupported;
+        ActorPresent = actorPresent;
+        ActorReport = actorReport;
+        FreeSeatSeen = freeSeatSeen;
     }
 
     public bool CompanionsEnabled { get; }
@@ -747,4 +991,16 @@ internal readonly struct CompanionStatus
     public bool CompassOnNonSolidLayer { get; }
     public bool HoverObserved { get; }
     public bool ToolsOnly { get; }
+    public bool CompanionVisible { get; }
+    public AnchorValidity AnchorValidity { get; }
+    public bool BedLookupUnavailable { get; }
+    public bool PresentationSupported { get; }
+    public bool ActorPresent { get; }
+    public string? ActorReport { get; }
+
+    /// <summary>A free seat was detected near a candidate. Reported as pending
+    /// evidence, NOT as working furniture support: whether posing on a chair
+    /// looks right is unobserved, so the planner is fed Unverified and the
+    /// companion sits on the ground beside it.</summary>
+    public bool FreeSeatSeen { get; }
 }
