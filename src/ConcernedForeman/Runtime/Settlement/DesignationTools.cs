@@ -315,11 +315,18 @@ internal sealed class DesignationTools
                 return plan.Describe();
 
             case UndesignationOutcome.Stale:
-                return "Nothing was cleared: what is marked changed since that was worked out. " +
+                return "Nothing was cleared: this settlement changed since that was worked out. " +
                     "Run the same command again to see the current answer.";
 
             default:
-                return "Refused: " + _describeMissingAuthority() + ".";
+                // Apply refuses for two reasons, and they need different
+                // sentences: no authority, or a record this build must not
+                // write over. Reporting the authority one for both would send a
+                // player looking at the wrong thing.
+                return _records.IsReadOnly
+                    ? "Refused: this settlement's records could not be fully read, so nothing " +
+                        "is being written over them. " + (_records.Notice ?? string.Empty)
+                    : "Refused: " + _describeMissingAuthority() + ".";
         }
     }
 

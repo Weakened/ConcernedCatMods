@@ -200,35 +200,56 @@ internal sealed class SettlementRegister
         var ordersToCancel = new List<OrderId>();
         var toRefund = new List<Reservation>();
 
-        bool clearsSettlement = kind == DesignationKind.SettlementArea;
+        // Every flag below comes from what is ACTUALLY being removed, never
+        // from the kind that was asked for. Clearing a settlement area that is
+        // not marked -- possible when a file carries orphaned children -- must
+        // not cancel every order in the settlement on the strength of a request
+        // that removes nothing of that kind.
+        bool clearsSettlement = false;
+        bool clearsHarvest = false;
         string? clearedContainer = null;
         foreach (Designation gone in removed)
         {
-            if (gone.Kind == DesignationKind.SupplyContainer)
+            switch (gone.Kind)
             {
-                clearedContainer = gone.ContainerKey;
-            }
-        }
-
-        bool clearsHarvest = false;
-        foreach (Designation gone in removed)
-        {
-            if (gone.Kind == DesignationKind.HarvestArea)
-            {
-                clearsHarvest = true;
+                case DesignationKind.SettlementArea: clearsSettlement = true; break;
+                case DesignationKind.HarvestArea: clearsHarvest = true; break;
+                case DesignationKind.SupplyContainer: clearedContainer = gone.ContainerKey; break;
             }
         }
 
         IReadOnlyList<Reservation> allReservations = state.Ledger.Reservations;
 
-        foreach (KeyValuePair<string, OrderState> entry in state.Orders)
+        // An order can be known ONLY by its reservation: replay records a state
+        // for a transition entry, but a Reserved entry adds nothing to the
+        // order table. Iterating that table alone would leave such an order
+        // invisible to the cascade -- its material never returned, and the
+        // player told that clearing costs nothing.
+        var orderKeys = new List<string>();
+        var seenOrders = new HashSet<string>(StringComparer.Ordinal);
+        foreach (KeyValuePair<string, OrderState> known in state.Orders)
         {
-            if (OrderStateMachine.IsTerminal(entry.Value))
+            if (seenOrders.Add(known.Key))
+            {
+                orderKeys.Add(known.Key);
+            }
+        }
+
+        foreach (Reservation reservation in allReservations)
+        {
+            if (seenOrders.Add(reservation.Order.Value))
+            {
+                orderKeys.Add(reservation.Order.Value);
+            }
+        }
+
+        foreach (string orderKey in orderKeys)
+        {
+            var order = new OrderId(orderKey);
+            if (OrderStateMachine.IsTerminal(state.StateOf(order)))
             {
                 continue;
             }
-
-            var order = new OrderId(entry.Key);
 
             // Dependency on a container is provenance, not current holdings.
             // An order that already spent everything it drew from that chest is
@@ -258,7 +279,7 @@ internal sealed class SettlementRegister
             }
 
             bool affected = clearsSettlement
-                || (clearsHarvest && entry.Value == OrderState.Gathering)
+                || (clearsHarvest && state.StateOf(order) == OrderState.Gathering)
                 || drewFromClearedContainer;
 
             if (!affected)
@@ -270,7 +291,8 @@ internal sealed class SettlementRegister
             toRefund.AddRange(held);
         }
 
-        return UndesignationPlan.For(kind, removed, ordersToCancel, toRefund);
+        return UndesignationPlan.For(
+            kind, removed, ordersToCancel, toRefund, state.NextSequence);
     }
 
     /// <summary>Carries out a plan.
@@ -315,15 +337,49 @@ internal sealed class SettlementRegister
                 "That journal belongs to a different settlement.", nameof(journal));
         }
 
+        if (journal.IsReadOnly)
+        {
+            // The record of what this would do cannot be written, so the thing
+            // itself must not happen. Otherwise the designation disappears
+            // while the refund that justified it does not survive the session.
+            return UndesignationOutcome.Refused;
+        }
+
         if (plan.Removed.Count == 0)
         {
             return UndesignationOutcome.NotDesignated;
         }
 
-        foreach (Designation expected in plan.Removed)
+        // A plan is a snapshot of BOTH the book and the journal, and staleness
+        // in each is unsafe in a different way.
+        //
+        // The journal moving on is the dangerous one. A reservation appended
+        // after the plan was made is not in ToRefund, so applying would cancel
+        // its order without returning it -- and a cancelled order is terminal,
+        // so no later cascade would ever reach that material again. A commit
+        // started after the plan was made is worse: refunding it would put
+        // material back that may already be standing as a wall, which is
+        // exactly the guess this type refuses to make everywhere else.
+        if (journal.NextSequence != plan.JournalSequence)
         {
-            if (!_book.TryGet(expected.Kind, out Designation current)
-                || !current.SameAs(expected))
+            return UndesignationOutcome.Stale;
+        }
+
+        // The book is re-checked by re-deriving the whole cascade rather than
+        // by confirming the listed rows, because the cascade is what apply
+        // actually performs. Confirming only plan.Removed would let a
+        // designation marked since the plan was made be swept away unlisted,
+        // undescribed, and with anything drawn from it stranded.
+        var currentRemovals = new List<Designation>();
+        CollectRemovals(plan.Kind, currentRemovals);
+        if (currentRemovals.Count != plan.Removed.Count)
+        {
+            return UndesignationOutcome.Stale;
+        }
+
+        for (int index = 0; index < currentRemovals.Count; index++)
+        {
+            if (!currentRemovals[index].SameAs(plan.Removed[index]))
             {
                 return UndesignationOutcome.Stale;
             }
@@ -333,7 +389,7 @@ internal sealed class SettlementRegister
         {
             journal.Append(
                 JournalEntryKind.Refunded, reservation.Order, reservation.Request,
-                container: reservation.Container);
+                container: reservation.Container, stacks: reservation.Stacks);
         }
 
         foreach (OrderId order in plan.OrdersToCancel)
@@ -369,9 +425,14 @@ internal sealed class SettlementRegister
         }
     }
 
-    internal void Restore(Designation designation) => _book.Restore(designation);
+    /// <summary>Restores a row read from disk. False when the row cannot be
+    /// taken -- a second designation of a kind that already has one, or a
+    /// worker past this build's roster size. The caller counts a refusal as a
+    /// damaged line rather than dropping it quietly, because a row this build
+    /// cannot represent is a row it must not write back either.</summary>
+    internal bool Restore(Designation designation) => _book.Restore(designation);
 
-    internal void Restore(WorkerRecord record) => _roster.Restore(record);
+    internal bool Restore(WorkerRecord record) => _roster.Restore(record);
 }
 
 internal enum UndesignationOutcome
@@ -407,7 +468,8 @@ internal sealed class UndesignationPlan
         DesignationRefusal refusal,
         IReadOnlyList<Designation> removed,
         IReadOnlyList<OrderId> ordersToCancel,
-        IReadOnlyList<Reservation> toRefund)
+        IReadOnlyList<Reservation> toRefund,
+        long journalSequence)
     {
         Kind = kind;
         IsRefused = isRefused;
@@ -415,7 +477,16 @@ internal sealed class UndesignationPlan
         Removed = removed;
         OrdersToCancel = ordersToCancel;
         ToRefund = toRefund;
+        JournalSequence = journalSequence;
     }
+
+    /// <summary>The journal length this plan was worked out against.
+    ///
+    /// What to return and what to cancel both depend on the journal as it was
+    /// at that instant. If it has grown since, the plan describes a settlement
+    /// that no longer exists, and applying it would act on the difference
+    /// without accounting for it.</summary>
+    public long JournalSequence { get; }
 
     public DesignationKind Kind { get; }
 
@@ -439,23 +510,26 @@ internal sealed class UndesignationPlan
     internal static UndesignationPlan Refused(DesignationRefusal refusal)
     {
         return new UndesignationPlan(
-            DesignationKind.None, true, refusal, NoDesignations, NoOrders, NoReservations);
+            DesignationKind.None, true, refusal, NoDesignations, NoOrders, NoReservations, -1L);
     }
 
     internal static UndesignationPlan Nothing(DesignationKind kind)
     {
         return new UndesignationPlan(
-            kind, false, DesignationRefusal.Unspecified, NoDesignations, NoOrders, NoReservations);
+            kind, false, DesignationRefusal.Unspecified,
+            NoDesignations, NoOrders, NoReservations, -1L);
     }
 
     internal static UndesignationPlan For(
         DesignationKind kind,
         IReadOnlyList<Designation> removed,
         IReadOnlyList<OrderId> ordersToCancel,
-        IReadOnlyList<Reservation> toRefund)
+        IReadOnlyList<Reservation> toRefund,
+        long journalSequence)
     {
         return new UndesignationPlan(
-            kind, false, DesignationRefusal.Unspecified, removed, ordersToCancel, toRefund);
+            kind, false, DesignationRefusal.Unspecified,
+            removed, ordersToCancel, toRefund, journalSequence);
     }
 
     /// <summary>One sentence a player can read before deciding.</summary>

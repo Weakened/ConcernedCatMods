@@ -21,7 +21,13 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 /// what is marked and who is employed. The journal is history: what moved. A
 /// damaged register costs the player their markings; a damaged journal costs
 /// the answer to "whose wood is where". Both go read-only rather than being
-/// replaced, and neither can make the other unreadable.</summary>
+/// replaced.
+///
+/// They are not independent when it comes to <i>writing</i>, though, and that
+/// asymmetry is deliberate: either one being read-only stops both, and a failed
+/// journal write stops the register write. The rule itself lives in the
+/// game-free <see cref="SettlementRecordWriter"/> so that it can be tested;
+/// this class only resolves which world's files are meant.</summary>
 internal sealed class SettlementRecords
 {
     /// <summary>One settlement per world, for the first proof.
@@ -36,6 +42,7 @@ internal sealed class SettlementRecords
     private readonly Action<string> _log;
     private readonly SettlementRegisterStore _registers;
     private readonly JournalStore _journals;
+    private readonly SettlementRecordWriter _writer;
 
     private SettlementScope _scope;
     private SettlementRegister? _register;
@@ -51,6 +58,7 @@ internal sealed class SettlementRecords
         _log = log;
         _registers = new SettlementRegisterStore(root);
         _journals = new JournalStore(root);
+        _writer = new SettlementRecordWriter(_journals, _registers);
     }
 
     private static string DefaultRoot()
@@ -64,9 +72,15 @@ internal sealed class SettlementRecords
     /// rather than only in the log line nobody scrolled back to.</summary>
     internal string? Notice { get; private set; }
 
-    /// <summary>True when the record could not be fully read and this build
-    /// must not write over it.</summary>
-    internal bool IsReadOnly => _register != null && _register.IsReadOnly;
+    /// <summary>True when <b>either</b> record could not be fully read and this
+    /// build must not write over it.
+    ///
+    /// Both files, not just the register. An act here changes both, so a
+    /// journal this build may not write is as disqualifying as a register it
+    /// may not write — and a damaged journal line is enough to produce that on
+    /// its own, with no transient failure anywhere.</summary>
+    internal bool IsReadOnly =>
+        (_register != null && _register.IsReadOnly) || (_journal != null && _journal.IsReadOnly);
 
     /// <summary>Resolves the current world's records, loading them if this is
     /// the first use or the world has changed.
@@ -106,29 +120,28 @@ internal sealed class SettlementRecords
 
     private void Load(SettlementScope scope)
     {
+        SettlementRegisterStore.LoadReport registerReport = _registers.Load(scope);
+        JournalStore.LoadReport journalReport = _journals.Load(scope);
+
+        _register = registerReport.Register;
+        _journal = journalReport.Journal;
+
+        // Assigned last, so a throw anywhere above cannot leave the scope
+        // pointing at a world whose records were never loaded.
         _scope = scope;
 
-        SettlementRegisterStore.LoadReport registerReport = _registers.Load(scope);
-        _register = registerReport.Register;
-
-        JournalStore.LoadReport journalReport = _journals.Load(scope);
-        _journal = journalReport.Journal;
-        _journalReadOnly = journalReport.ReadOnly;
-
-        Notice = registerReport.Notice ?? journalReport.Notice;
+        // BOTH notices, joined. Coalescing would tell a player the journal is
+        // unreadable and never mention that the register is too, or the
+        // reverse -- and those are different repairs.
+        Notice = SettlementRecordWriter.Join(registerReport.Notice, journalReport.Notice);
         if (Notice != null)
         {
             _log(Notice);
         }
     }
 
-    private bool _journalReadOnly;
-
-    /// <summary>Writes whatever changed. Both files are written, in the order
-    /// that leaves the safer inconsistency if the second write fails: the
-    /// journal first, because a journal entry with no matching register change
-    /// reads as "this happened and the marking is still there", while the
-    /// reverse would read as "the marking is gone and nothing was returned".</summary>
+    /// <summary>Writes whatever changed, through the game-free writer that owns
+    /// the ordering rule.</summary>
     internal string? Save()
     {
         if (_register == null || _journal == null)
@@ -136,20 +149,22 @@ internal sealed class SettlementRecords
             return null;
         }
 
-        JournalStore.SaveReport journal = _journals.Save(_journal, _journalReadOnly);
-        SettlementRegisterStore.SaveReport register = _registers.Save(_register);
-
-        return journal.Notice ?? register.Notice;
+        return _writer.Save(_journal, _register).Notice;
     }
 
     /// <summary>Drops everything when a world goes away, so the next world in
     /// the same session starts from its own files.</summary>
     internal void Forget()
     {
+        // A last attempt to write anything outstanding before the world goes.
+        // The path comes from each object's own immutable scope, so this writes
+        // the DEPARTING world's files, never the next one's. Normally there is
+        // nothing to do, because every act saves as it happens.
+        Save();
+
         _register = null;
         _journal = null;
         _scope = default;
-        _journalReadOnly = false;
         Notice = null;
     }
 }

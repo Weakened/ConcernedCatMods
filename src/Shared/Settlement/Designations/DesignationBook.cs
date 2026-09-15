@@ -205,16 +205,28 @@ internal sealed class DesignationBook
     }
 
     /// <summary>Restores a designation read from disk, without re-running the
-    /// checks.
+    /// world checks. Returns false when the row cannot be taken.
     ///
     /// Loading is not designating. The checks that ran when the player marked
     /// it ran against the world as it was then, and re-running them at load
     /// would mean a ward built next door, or a world not finished loading,
     /// quietly deleted a settlement the player still has. A record is read back
-    /// as it was written.</summary>
-    internal void Restore(Designation designation)
+    /// as it was written.
+    ///
+    /// A <b>second</b> row of a kind that already has one is a different
+    /// matter, and is refused rather than taken as last-wins. The file is
+    /// supposed to hold at most one of each; two means it is damaged, and
+    /// silently keeping whichever happened to be second would discard a
+    /// designation and then rewrite the file without it.</summary>
+    internal bool Restore(Designation designation)
     {
+        if (_designations.ContainsKey(designation.Kind))
+        {
+            return false;
+        }
+
         _designations[designation.Kind] = designation;
+        return true;
     }
 
     /// <summary>True when a point is inside the marked harvest area. False when

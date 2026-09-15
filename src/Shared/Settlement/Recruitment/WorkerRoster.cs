@@ -273,17 +273,24 @@ internal sealed class WorkerRoster
     }
 
     /// <summary>Restores a worker read from disk, without re-checking the
-    /// settlement. Loading is not recruiting: a record written when the
-    /// settlement existed is read back as it was written.</summary>
-    internal void Restore(WorkerRecord record)
+    /// settlement. Returns false when the row cannot be taken.
+    ///
+    /// Loading is not recruiting: a record written when the settlement existed
+    /// is read back as it was written. But <see cref="MaxWorkers"/> is enforced
+    /// here as well as in <see cref="Recruit"/>, because a file written by a
+    /// build that employs more of them is a file this build cannot represent —
+    /// and quietly keeping the first few would then rewrite the file with the
+    /// rest deleted.</summary>
+    internal bool Restore(WorkerRecord record)
     {
-        if (_workers.ContainsKey(record.Id.Value))
+        if (_workers.ContainsKey(record.Id.Value) || _order.Count >= MaxWorkers)
         {
-            return;
+            return false;
         }
 
         _workers.Add(record.Id.Value, record);
         _order.Add(record.Id.Value);
+        return true;
     }
 }
 

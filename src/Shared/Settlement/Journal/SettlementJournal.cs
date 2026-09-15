@@ -162,6 +162,23 @@ internal sealed class SettlementJournal
 
     public bool IsDirty { get; private set; }
 
+    /// <summary>True when this build must not write over the file this journal
+    /// came from: a newer schema, another settlement, or lines it could not
+    /// read.
+    ///
+    /// The flag lives on the journal rather than beside it because a caller
+    /// holding a journal must be able to ask whether writing it is allowed
+    /// <i>without</i> also having kept the load report. CF-SET-004's review
+    /// found exactly that gap: a read-only journal did not stop an act that
+    /// wrote both the journal and a second file, so the second file recorded a
+    /// change the record of which was refused.</summary>
+    public bool IsReadOnly { get; private set; }
+
+    internal void MarkReadOnly()
+    {
+        IsReadOnly = true;
+    }
+
     public void MarkClean()
     {
         IsDirty = false;
@@ -221,7 +238,16 @@ internal sealed class SettlementJournal
                     break;
 
                 case JournalEntryKind.Refunded:
-                    ledger.Refund(entry.Request);
+                    // Guarded exactly as Reserved above is. A refund line whose
+                    // request field is empty -- which a damaged or hand-edited
+                    // file can produce, because the codec treats that field as
+                    // optional -- would otherwise reach a dictionary lookup on a
+                    // null key and take the whole replay down with it.
+                    if (!entry.Request.IsEmpty)
+                    {
+                        ledger.Refund(entry.Request);
+                    }
+
                     break;
 
                 case JournalEntryKind.CommitStarted:

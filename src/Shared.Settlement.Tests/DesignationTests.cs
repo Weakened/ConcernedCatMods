@@ -907,35 +907,58 @@ public sealed class DesignationTests : IDisposable
     [Fact]
     public void ConservationHoldsAcrossAnUndesignation()
     {
+        // An earlier version of this test summed every reservation state and
+        // asserted the total was unchanged. That is a tautology: the only
+        // operation that changes the total is Reserve, and clearing never
+        // reserves, so it passed whether the refund was right, wrong, doubled
+        // or absent. An independent review caught it. This version models the
+        // CONTAINER, which is the half the invariant is actually about:
+        //
+        //     container + held + committed = constant
+        //
+        // The container is simulated here because no container type exists in
+        // this layer yet -- CF-SET-006 owns that -- but the plan is what a
+        // container would be driven by, so driving one from the plan is a real
+        // test of the plan.
+        const int Stocked = 50;
+        const int Reserved = 20;
+
         SettlementRegister register = SetUpSettlement(out _);
         SettlementJournal journal = JournalWithReservedOrder();
 
-        int Accounted(ReplayResult state)
-        {
-            int total = 0;
-            foreach (ReservationState which in new[]
-            {
-                ReservationState.Held, ReservationState.Committed,
-                ReservationState.Refunded, ReservationState.Uncertain,
-            })
-            {
-                if (state.Ledger.Totals(which).TryGetValue("Wood", out int count))
-                {
-                    total += count;
-                }
-            }
+        // The reserve already happened: the chest is down by that much.
+        int container = Stocked - Reserved;
 
-            return total;
+        int Total(ReplayResult state, ReservationState which)
+        {
+            return state.Ledger.Totals(which).TryGetValue("Wood", out int count) ? count : 0;
         }
 
-        int before = Accounted(journal.Replay());
+        int Accounted(ReplayResult state)
+        {
+            return container
+                + Total(state, ReservationState.Held)
+                + Total(state, ReservationState.Committed);
+        }
+
+        Assert.Equal(Stocked, Accounted(journal.Replay()));
 
         UndesignationPlan plan = register.PlanUndesignation(
             DesignationKind.SupplyContainer, journal.Replay(), authorised: true);
-        register.ApplyUndesignation(plan, journal);
+        Assert.Equal(UndesignationOutcome.Removed, register.ApplyUndesignation(plan, journal));
 
-        Assert.Equal(before, Accounted(journal.Replay()));
-        Assert.Equal(20, before);
+        // A container driven by this plan puts back exactly what it names.
+        container += plan.Totals().TryGetValue("Wood", out int returned) ? returned : 0;
+
+        ReplayResult after = journal.Replay();
+        Assert.Equal(Stocked, Accounted(after));
+        Assert.Equal(Stocked, container);
+
+        // And it really moved: nothing is still held, nothing became committed,
+        // and the refund is recorded exactly once.
+        Assert.Equal(0, Total(after, ReservationState.Held));
+        Assert.Equal(0, Total(after, ReservationState.Committed));
+        Assert.Equal(Reserved, Total(after, ReservationState.Refunded));
     }
 
     [Fact]
@@ -955,6 +978,33 @@ public sealed class DesignationTests : IDisposable
 
         ReplayResult after = journal.Replay();
         Assert.Equal(20, after.Ledger.Totals(ReservationState.Refunded)["Wood"]);
+    }
+
+    [Fact]
+    public void AnOldPlanIsRefusedEvenWhenTheSameThingIsMarkedAgainIdentically()
+    {
+        // The case the book check alone cannot catch: clear, then re-mark the
+        // SAME container the same way, then confirm the old plan. The book now
+        // matches the plan again, so only the journal moving on tells them
+        // apart. Without that check this replays a refund against a settlement
+        // that has already been settled once.
+        FakeSite site = Granting();
+        SettlementRegister register = SetUpSettlement(out _);
+        SettlementJournal journal = JournalWithReservedOrder();
+
+        UndesignationPlan plan = register.PlanUndesignation(
+            DesignationKind.SupplyContainer, journal.Replay(), authorised: true);
+
+        Assert.Equal(UndesignationOutcome.Removed, register.ApplyUndesignation(plan, journal));
+        Assert.Equal(
+            DesignationOutcome.Designated,
+            register.Designate(Supply(), site, authorised: true).Outcome);
+
+        Assert.Equal(UndesignationOutcome.Stale, register.ApplyUndesignation(plan, journal));
+
+        // Still exactly one refund.
+        Assert.Equal(20, journal.Replay().Ledger.Totals(ReservationState.Refunded)["Wood"]);
+        Assert.True(register.IsSupplyContainer("chest-a"));
     }
 
     [Fact]
@@ -1028,17 +1078,34 @@ public sealed class DesignationTests : IDisposable
     [Fact]
     public void ClearingIsRecordedSoItSurvivesARelog()
     {
+        // This used an empty journal and saved only the register, so it proved
+        // nothing about the thing that matters: that the refund survives
+        // alongside the designation going away. Both files now round-trip.
+        var journals = new JournalStore(_root);
         SettlementRegister register = SetUpSettlement(out _);
-        _store.Save(register);
-        var journal = new SettlementJournal(Scope);
+        SettlementJournal journal = JournalWithReservedOrder();
 
-        register.ApplyUndesignation(
-            register.PlanUndesignation(DesignationKind.SupplyContainer, journal.Replay(), true),
-            journal);
-
-        Assert.True(register.IsDirty);
         Assert.True(_store.Save(register).Saved);
+        Assert.True(journals.Save(journal).Saved);
 
+        UndesignationPlan plan = register.PlanUndesignation(
+            DesignationKind.SupplyContainer, journal.Replay(), authorised: true);
+        Assert.Equal(UndesignationOutcome.Removed, register.ApplyUndesignation(plan, journal));
+
+        var writer = new SettlementRecordWriter(journals, _store);
+        RecordSaveOutcome saved = writer.Save(journal, register);
+
+        Assert.True(saved.JournalSaved);
+        Assert.True(saved.RegisterSaved);
+        Assert.False(saved.RegisterHeldBack);
+
+        // Reloaded from disk, both halves agree: the container is no longer
+        // designated AND the wood was returned.
         Assert.False(_store.Load(Scope).Register.IsSupplyContainer("chest-a"));
+
+        ReplayResult reloaded = journals.Load(Scope).Journal.Replay();
+        Assert.Equal(OrderState.Cancelled, reloaded.StateOf(Cottage));
+        Assert.Equal(20, reloaded.Ledger.Totals(ReservationState.Refunded)["Wood"]);
+        Assert.Empty(reloaded.Ledger.Totals(ReservationState.Held));
     }
 }

@@ -155,8 +155,28 @@ Refunds are written to the journal **before** the designation goes away, so a
 crash mid-clear replays to a coherent state: material back in the container it
 came from, then the order marked cancelled. The refund goes through the existing
 `CustodyLedger`, which is keyed by request id and idempotent, so a refund cannot
-be taken twice. Applying a plan a second time is refused as **stale** rather than
-replayed.
+be taken twice.
+
+### What makes a plan stale, and why each one matters
+
+A plan is a snapshot of **both** the book and the journal, and an independent
+review found the first version checking only the book. All four are now refused:
+
+| Change since the plan was made | Why applying anyway is unsafe |
+|---|---|
+| The journal gained a **reservation** | It is not in `ToRefund`, so the order would be cancelled without returning it — and a cancelled order is terminal, so no later cascade could ever reach that material again |
+| The journal gained a **`CommitStarted`** | Refunding it would put material back that may already be standing as a wall. Replay settles a refund during its entry pass and only marks unfinished commits uncertain afterwards, so the refund would *win* |
+| A designation was **replaced** | The plan describes something that is no longer marked |
+| A designation was **marked** | Apply performs a cascade, so a newly marked child would be swept away unlisted, undescribed, and with anything drawn from it stranded |
+
+The last one is why apply **re-derives the whole cascade** and compares it,
+rather than confirming the rows the plan listed: the cascade is what apply
+actually performs.
+
+**A journal this build may not write stops a clear altogether.** If the record of
+what the clear would do cannot be saved, the clear must not happen — otherwise
+the designation disappears and the refund that justified it does not survive the
+session.
 
 **Nobody is dismissed by clearing ground.** Letting somebody go is its own
 explicit act (`cf_settle dismiss`), for the same reason nothing is designated
@@ -217,6 +237,32 @@ answer to "whose wood is where". Neither can make the other unreadable.
 Both use the same temp-file-and-swap (`AtomicTextFile`, extracted from
 `JournalStore` when this leaf needed a second copy of it), so an interrupted
 write leaves either the whole old file or the whole new one.
+
+**The journal is written first, and a failed journal write stops the register
+write.** The ordering on its own buys nothing — that was the shape of the first
+version, and an independent review found it. The register records that a
+designation is *gone*; the journal records that its material was *returned* and
+the order *cancelled*. Writing the register anyway after the journal refused puts
+"the marking is gone and nothing was returned" on disk, which is the one
+inconsistency no later run can repair, because the designation that would have
+driven a cascade is the thing that disappeared. The reverse is survivable, which
+is why the journal goes first: a journal entry with no matching register change
+reads as "this happened and the marking is still there", and the player can
+simply clear it again.
+
+That rule lives in the game-free `SettlementRecordWriter` rather than in the
+Foreman adapter, specifically so it can be tested. It was originally in the
+adapter, where nothing could reach it.
+
+**A row this build cannot represent is damage, not data.** A radius outside the
+allowed range, a second row of a kind that already has one, or more workers than
+this build employs all count as skipped lines and put the record read-only. The
+radius re-check is worth distinguishing from the ward re-check that §3 refuses to
+do: a ward answer depends on the world as it is *now*, so re-asking it could
+delete a settlement somebody still has, but a radius is a property of the row and
+is wrong today in exactly the way it was wrong when it was written. Accepting a
+harvest row with a radius of 1e30 would make felling legal everywhere in the
+world.
 
 **A damaged record is never quarantined and replaced with an empty one.** That
 rule is the journal's, deliberately, and not the companion sidecar's: a companion
@@ -297,7 +343,15 @@ So these are only proved by §7:
 - the ward call's arguments and the loaded-ground sampling;
 - resolving the chest you are looking at, and its `ZDOID`;
 - argument parsing, the confirmation gate on a costly clear, and dropping a
-  pending plan when a new designation or a world change makes it stale.
+  pending plan when a new designation or a world change makes it stale;
+- resolving *which* world's records are meant, from `ZNet.GetWorldUID()`.
+
+That list is shorter than it was. The two-file write rule used to be in this
+list, and an independent review found it broken — in adapter code nothing could
+exercise. It now lives in the game-free `SettlementRecordWriter` and has three
+tests, including one against a real locked file rather than a flag. The lesson
+generalises: logic that can only be reached through the adapter should be moved
+down until it can be tested, not annotated as untested.
 
 The last of those is the one worth naming: if the confirmation gate were wrong,
 a clear could happen a word early. The damage is bounded by the core — an

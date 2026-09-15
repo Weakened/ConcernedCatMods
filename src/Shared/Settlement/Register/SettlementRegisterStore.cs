@@ -195,11 +195,17 @@ internal sealed class SettlementRegisterStore
 
             if (TryParseDesignation(fields, out Designation designation))
             {
-                register.Restore(designation);
+                if (!register.Restore(designation))
+                {
+                    skipped++;
+                }
             }
             else if (TryParseWorker(fields, out WorkerRecord worker))
             {
-                register.Restore(worker);
+                if (!register.Restore(worker))
+                {
+                    skipped++;
+                }
             }
             else
             {
@@ -348,6 +354,20 @@ internal sealed class SettlementRegisterStore
             || !TryParseNumber(fields[3], out float y)
             || !TryParseNumber(fields[4], out float z)
             || !TryParseNumber(fields[5], out float radius))
+        {
+            return false;
+        }
+
+        // The size bound is re-applied on load, unlike the ward check, and the
+        // difference is the point: a ward answer depends on the world as it is
+        // now, so re-asking it could delete a settlement a player still has,
+        // but a radius is a property of the row itself and is wrong in exactly
+        // the same way today as it was when it was written. A damaged harvest
+        // row carrying a radius of 1e30 would otherwise load clean and make
+        // felling legal everywhere in the world, which is the precise opposite
+        // of "nothing marked is never anywhere".
+        if ((DesignationKind)kindValue != DesignationKind.SupplyContainer
+            && (!(radius >= DesignationBook.MinRadius) || !(radius <= DesignationBook.MaxRadius)))
         {
             return false;
         }

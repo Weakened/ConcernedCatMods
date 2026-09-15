@@ -79,8 +79,12 @@ internal sealed class JournalStore
             Journal = journal;
             Outcome = outcome;
             SkippedLines = skippedLines;
-            ReadOnly = readOnly;
             Notice = notice;
+
+            if (readOnly)
+            {
+                journal.MarkReadOnly();
+            }
         }
 
         public SettlementJournal Journal { get; }
@@ -89,7 +93,9 @@ internal sealed class JournalStore
 
         /// <summary>True when this build must not write over the file. The
         /// settlement then refuses new work rather than losing the record.</summary>
-        public bool ReadOnly { get; }
+        /// <summary>Read straight off the journal, so the two can never
+        /// disagree about whether writing is allowed.</summary>
+        public bool ReadOnly => Journal.IsReadOnly;
 
         public string? Notice { get; }
     }
@@ -218,7 +224,7 @@ internal sealed class JournalStore
             throw new ArgumentNullException(nameof(journal));
         }
 
-        if (readOnly)
+        if (readOnly || journal.IsReadOnly)
         {
             return new SaveReport(
                 false,
