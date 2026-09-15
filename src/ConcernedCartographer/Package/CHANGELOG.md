@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased - Optional sailing Route Follow
+## 1.0.4 - Optional sailing Route Follow
 
 - **Sailing Route Follow (opt-in, OFF by default).** Mark a route as a sailing route with the new **Sailing** button in the Routes panel (or `cc_routes sailing on`), turn on `Routes/SailingAutoFollowEnabled`, take the helm of a raft, karve, longship or Drakkar with that route selected, and press Q. Cartographer then feeds the same bounded rudder input a player supplies by holding the helm key, steering along the route and around its corners.
 - **Your sails stay yours.** Sailing Route Follow never raises, lowers or reverses the sail, never touches wind, physics, speed, collision, damage or multiplayer authority, and never takes ownership of the ship. It writes exactly one thing: the rudder axis.
