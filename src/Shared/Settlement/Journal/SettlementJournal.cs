@@ -181,22 +181,12 @@ internal sealed class SettlementJournal
     /// would then depend on list insertion rather than on the record. That
     /// value is also the fingerprint a pending undesignation plan is checked
     /// against, so a repeat would let a stale plan through.</summary>
-    public long NextSequence
-    {
-        get
-        {
-            long highest = -1L;
-            foreach (JournalEntry entry in _entries)
-            {
-                if (entry.Sequence > highest)
-                {
-                    highest = entry.Sequence;
-                }
-            }
+    public long NextSequence => _highestSequence + 1L;
 
-            return highest + 1L;
-        }
-    }
+    /// <summary>Tracked as entries arrive rather than scanned for. Append reads
+    /// NextSequence on every call, so scanning would make building a journal
+    /// quadratic in its own length.</summary>
+    private long _highestSequence = -1L;
 
     public bool IsDirty { get; private set; }
 
@@ -235,6 +225,7 @@ internal sealed class SettlementJournal
     {
         var entry = new JournalEntry(NextSequence, kind, order, request, transition, container, stacks);
         _entries.Add(entry);
+        _highestSequence = entry.Sequence;
         IsDirty = true;
         return entry;
     }
@@ -242,6 +233,10 @@ internal sealed class SettlementJournal
     internal void Restore(JournalEntry entry)
     {
         _entries.Add(entry);
+        if (entry.Sequence > _highestSequence)
+        {
+            _highestSequence = entry.Sequence;
+        }
     }
 
     /// <summary>Rebuilds order states and the custody ledger from the record.</summary>
@@ -254,6 +249,21 @@ internal sealed class SettlementJournal
 
         foreach (JournalEntry entry in _entries)
         {
+            // Four of the five kinds key off a request id, and the codec treats
+            // that field as optional for all of them -- so a damaged or
+            // hand-edited line can carry an empty one. Every such line reaches
+            // a dictionary keyed by RequestId.Value, which is null when the id
+            // is default, and a null key takes the whole replay down.
+            //
+            // Guarding this ONCE, here, is the fix. An earlier version guarded
+            // Refunded, then CommitStarted, each time claiming the class was
+            // closed; CommitFinished was still open both times. Kinds get added
+            // to this enum, and a guard per case is a guard somebody forgets.
+            if (entry.Kind != JournalEntryKind.OrderTransition && entry.Request.IsEmpty)
+            {
+                continue;
+            }
+
             switch (entry.Kind)
             {
                 case JournalEntryKind.OrderTransition:
@@ -276,28 +286,11 @@ internal sealed class SettlementJournal
                     break;
 
                 case JournalEntryKind.Refunded:
-                    // Guarded exactly as Reserved above is. A refund line whose
-                    // request field is empty -- which a damaged or hand-edited
-                    // file can produce, because the codec treats that field as
-                    // optional -- would otherwise reach a dictionary lookup on a
-                    // null key and take the whole replay down with it.
-                    if (!entry.Request.IsEmpty)
-                    {
-                        ledger.Refund(entry.Request);
-                    }
-
+                    ledger.Refund(entry.Request);
                     break;
 
                 case JournalEntryKind.CommitStarted:
-                    // Guarded exactly as Reserved and Refunded are. The codec
-                    // treats the request field as optional, so a damaged line
-                    // can carry an empty one -- and this is a dictionary write
-                    // with a null key, which would take the whole replay down.
-                    if (!entry.Request.IsEmpty)
-                    {
-                        startedCommits[entry.Request.Value] = entry;
-                    }
-
+                    startedCommits[entry.Request.Value] = entry;
                     break;
 
                 case JournalEntryKind.CommitFinished:

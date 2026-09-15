@@ -382,7 +382,7 @@ Enable the runtime: `BepInEx/config/…ConcernedForeman.cfg` →
 | 12 | `cf_settle recruit` | one labourer recruited |
 | 13 | `cf_settle recruit` again | "already on the roster. Nothing changed" |
 | 14 | `cf_settle recruit second-hand` | refused: one worker at a time |
-| 15 | **Quit to the main menu and reload the world.** `cf_settle status` | all three designations and the worker are exactly as they were |
+| 15 | **Quit to the main menu and reload the world.** `cf_settle status` | both areas and the worker are exactly as they were; the chest row is still listed **with a notice that it needs marking again** — see step 15b |
 | 15b | **Immediately after step 15**, look at the designated chest and run `cf_settle supply` | "Marked" — *not* "Already marked". The chest's identity did not survive the reload, and this is what re-marking it looks like. `cf_settle status` before this step says the chest needs marking again |
 | 16 | Destroy the designated chest, place a new one in the same spot, `cf_settle status` | the designation does not silently follow the new one |
 | 17 | `cf_settle clear supply` | it is cleared (no orders exist yet, so it costs nothing) |
@@ -410,8 +410,10 @@ being quietly skipped.
 
 ## 8. What is not covered by a test
 
-The game-free core is exercised thoroughly, though not exhaustively — #293
-records two holes in it that are still open. The Foreman adapter is not, and
+The game-free core is exercised thoroughly, though not exhaustively. #293
+originally recorded two holes in it; the journal-sequence one is closed here
+(`NextSequence` returns the highest, and rows out of order are damage), leaving
+truncation detection open. The Foreman adapter is not, and
 cannot be from the game-free project: `WorldDesignationSite`, `SettlementTargets`
 and `DesignationTools` all reference Unity and game types, and
 `Shared.Settlement.Tests` deliberately references no product and no engine.
@@ -427,12 +429,13 @@ So these are only proved by §7:
 - `SettlementRecords.Forget()`'s attempt to flush anything outstanding as a
   world goes away.
 
-**This list grew, and one thing left it.** The two-file write rule was never in
-it — it was simply undocumented, and an independent review found it broken in
-adapter code nothing could exercise. It now lives in the game-free
-`SettlementRecordWriter` with three tests, one against a genuinely locked file.
-The lesson generalises: logic reachable only through the adapter should be moved
-down until it can be tested, rather than annotated as untested.
+**This list grew.** An earlier draft claimed it had shrunk because the two-file
+write rule had left it; that rule was never in it — it was simply undocumented,
+and an independent review found it broken in adapter code nothing could exercise.
+It now lives in the game-free `SettlementRecordWriter` with three tests, one
+against a genuinely locked file. The lesson generalises: logic reachable only
+through the adapter should be moved down until it can be tested, rather than
+annotated as untested.
 
 The last of those is the one worth naming: if the confirmation gate were wrong,
 a clear could happen a word early. The damage is bounded by the core — an

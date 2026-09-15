@@ -295,22 +295,88 @@ public sealed class DesignationGuardTests : IDisposable
             register.ApplyUndesignation(plan, other, authorised: true));
     }
 
-    [Fact]
-    public void ACommitStartedLineWithNoRequestDoesNotBringDownTheReplay()
+    [Theory]
+    [InlineData(1)]  // Reserved
+    [InlineData(2)]  // Refunded
+    [InlineData(3)]  // CommitStarted
+    [InlineData(4)]  // CommitFinished
+    public void NoLineWithAnEmptyRequestBringsDownTheReplay(int kind)
     {
-        // The sibling of the refund-line guard, in the same dictionary-write
-        // shape. The codec treats the request field as optional for every kind.
+        // Every kind, not the ones somebody happened to notice. This was
+        // guarded twice -- once for Refunded, once for CommitStarted -- each
+        // time with a comment claiming the class was closed, and CommitFinished
+        // was still open both times. A Theory over the whole enum is the shape
+        // that cannot be half-right.
+        //
+        // The codec treats the request field as optional for all of them, and
+        // each one reaches a dictionary keyed by RequestId.Value, which is null
+        // when the id is default. Replay now runs on nearly every cf_settle
+        // command, so an unguarded kind is a permanently dead command for that
+        // world rather than an unreachable edge.
         File.WriteAllLines(_journals.ResolvePath(Scope), new[]
         {
             "#\tsettlement journal v1",
             "v\t1\t" + Scope.ToStorageKey(),
-            "e\t0\t3\tcottage-1\t\t0\t",
+            "e\t0\t" + kind.ToString() + "\tcottage-1\t\t0\t",
         });
 
         ReplayResult replayed = _journals.Load(Scope).Journal.Replay();
 
         Assert.NotNull(replayed);
         Assert.False(replayed.NeedsRepair);
+        Assert.Empty(replayed.Ledger.Reservations);
+    }
+
+    [Fact]
+    public void ClearingAKindThatIsNotMarkedCancelsNothing()
+    {
+        // Re-expressed after the orphan-restore rule removed the route the
+        // earlier version of this test used. The property still worth pinning
+        // is that a request naming a kind which is not marked removes nothing
+        // and therefore cancels nothing -- it must not fall through to "this
+        // clears the settlement" on the strength of the kind that was asked
+        // for.
+        SettlementRegister register = SetUp();
+        SettlementJournal journal = Reserved();
+
+        UndesignationPlan plan = register.PlanUndesignation(
+            DesignationKind.SettlementArea, journal.Replay(), authorised: true);
+        Assert.Equal(3, plan.Removed.Count);
+
+        SettlementRegister bare = new SettlementRegister(Scope);
+        bare.UseIdentityEpoch(ThisRun);
+
+        UndesignationPlan nothing = bare.PlanUndesignation(
+            DesignationKind.SettlementArea, journal.Replay(), authorised: true);
+
+        Assert.True(nothing.ChangesNothing);
+        Assert.Empty(nothing.OrdersToCancel);
+        Assert.Empty(nothing.ToRefund);
+        Assert.Equal(
+            UndesignationOutcome.NotDesignated,
+            bare.ApplyUndesignation(nothing, journal, authorised: true));
+        Assert.Equal(OrderState.Reserved, journal.Replay().StateOf(Cottage));
+    }
+
+    [Fact]
+    public void WithNoIdentitySpaceNoChestResolvesEither()
+    {
+        // The documented rule is that a null epoch stops designating AND
+        // resolving. Only the designating half was enforced, so a row with no
+        // epoch, read into a book with no epoch, compared equal and resolved --
+        // the wrong direction for the half that grants access to a chest.
+        var register = new SettlementRegister(Scope);
+        register.UseIdentityEpoch(ThisRun);
+        register.Designate(
+            DesignationRequest.Area(DesignationKind.SettlementArea, Origin, 24f), Site, true);
+        register.Designate(
+            DesignationRequest.Container(new SitePoint(3f, 10f, 3f), "chest-a"), Site, true);
+        Assert.True(register.IsSupplyContainer("chest-a"));
+
+        register.UseIdentityEpoch(null);
+
+        Assert.False(register.IsSupplyContainer("chest-a"));
+        Assert.True(register.HasStaleSupplyIdentity);
     }
 
     [Fact]
@@ -330,10 +396,10 @@ public sealed class DesignationGuardTests : IDisposable
 
         JournalStore.LoadReport report = _journals.Load(Scope);
 
-        Assert.Equal(JournalLoadOutcome.LoadedWithSkippedLines, report.SkippedLines > 0
-            ? JournalLoadOutcome.LoadedWithSkippedLines
-            : report.Outcome);
+        Assert.Equal(JournalLoadOutcome.LoadedWithSkippedLines, report.Outcome);
+        Assert.Equal(1, report.SkippedLines);
         Assert.True(report.ReadOnly);
+        Assert.Single(report.Journal.Entries);
         Assert.Equal(6L, report.Journal.NextSequence);
     }
 

@@ -196,8 +196,15 @@ internal sealed class SettlementRecords
         // The path comes from each object's own immutable scope, so this writes
         // the DEPARTING world's files, never the next one's. Normally there is
         // nothing to do, because every act saves as it happens.
+        // Only worth saying something when there was something to write. A
+        // read-only record returns its "nothing was written over it" notice on
+        // every attempt, and logging that on every world unload trains a player
+        // to ignore the one notice that is supposed to be actionable.
+        bool hadWork = (_journal != null && _journal.IsDirty)
+            || (_register != null && _register.IsDirty);
+
         string? notice = Save();
-        if (notice != null)
+        if (notice != null && hadWork)
         {
             _log(notice);
         }

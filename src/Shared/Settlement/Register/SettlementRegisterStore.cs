@@ -39,7 +39,8 @@ internal enum RegisterLoadOutcome
 /// by an explicit later act is simply gone. So the file holds today's rows and
 /// is rewritten whole, through the same temp-file-and-swap, for the same reason:
 /// an interrupted write must leave either the whole old file or the whole new
-/// one.
+/// one. <see cref="TheConcernedCat.Settlement.Storage.AtomicTextFile"/> is
+/// careful about where that holds and where it does not.
 ///
 /// The failure discipline is the journal's, deliberately, and <b>not</b> the
 /// companion sidecar's. A damaged file is never quarantined and replaced with an

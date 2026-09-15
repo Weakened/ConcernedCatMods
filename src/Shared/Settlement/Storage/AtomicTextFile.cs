@@ -5,7 +5,9 @@ using System.IO;
 namespace TheConcernedCat.Settlement.Storage;
 
 /// <summary>Writing a settlement file so that an interrupted write leaves
-/// either the whole old file or the whole new one.
+/// either the whole old file or the whole new one — on the path that normally
+/// runs. The fallbacks below are <b>not</b> atomic, and #293 tracks detecting
+/// the truncation they can leave.
 ///
 /// Extracted from <c>JournalStore</c> when CF-SET-004 added a second file with
 /// the same requirement. The alternative was a second copy of the

@@ -28,15 +28,22 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 /// that only contains wards whose objects are <i>loaded</i>. A ward on unloaded
 /// ground is not absent, it is invisible — and answering "granted" from a list
 /// that cannot see it is the silent skip the authority ADR forbids. So this
-/// class refuses unless the ground around the designation is loaded, and the
-/// margin is one full zone, because a vanilla ward reaches 32 m from an object
-/// that may sit in the neighbouring zone.</summary>
+/// class refuses unless the ground around the designation is loaded; see
+/// <see cref="LoadedMargin"/> for how far, and for what that number does and
+/// does not rest on.</summary>
 internal sealed class WorldDesignationSite : IDesignationSite
 {
     /// <summary>How far past the designation's own extent the world has to be
-    /// loaded before the ward answer means anything. One zone is 64 m in this
-    /// build (<c>ZoneSystem.m_zoneSize</c>), comfortably more than a ward's own
-    /// reach, so a ward object just outside the area is still registered.</summary>
+    /// loaded before the ward answer means anything.
+    ///
+    /// Two caveats this constant used to state as fact. It is <b>our</b> number,
+    /// not one read from the game: <c>ZoneSystem.m_zoneSize</c> is 64 in this
+    /// build, but <c>ZoneSystem.GetZone</c> does not read that field — it
+    /// divides by a hardcoded 64. And one zone exceeding a ward's 32 m reach
+    /// holds for the ward radii this build ships; a prefab with a larger
+    /// <c>m_radius</c> would reach past the margin. Prefab radii are asset data
+    /// and cannot be read by decompiling the assembly, so that is an assumption
+    /// rather than a verified fact.</summary>
     private const float LoadedMargin = 64f;
 
     /// <summary>Distance between the points the loaded check samples. A zone is
@@ -46,32 +53,32 @@ internal sealed class WorldDesignationSite : IDesignationSite
 
     public AreaAccess CheckAccess(SitePoint centre, float radius)
     {
-        ZoneSystem zones = ZoneSystem.instance;
-        if (zones == null)
-        {
-            // No zone system means no world. That is not "probably fine".
-            return AreaAccess.Unavailable;
-        }
-
-        var point = new Vector3(centre.X, centre.Y, centre.Z);
-        if (!IsSurroundingsLoaded(zones, point, radius))
-        {
-            return AreaAccess.Unavailable;
-        }
-
+        // The guard wraps the WHOLE answer, not only the ward call. This
+        // interface's contract is that anything it cannot establish answers
+        // Unavailable, and an escaping exception establishes nothing — wherever
+        // it came from. IsZoneLoaded walks live zone state and is no more
+        // exception-free than PrivateArea.CheckAccess is.
         try
         {
+            ZoneSystem zones = ZoneSystem.instance;
+            if (zones == null)
+            {
+                // No zone system means no world. That is not "probably fine".
+                return AreaAccess.Unavailable;
+            }
+
+            var point = new Vector3(centre.X, centre.Y, centre.Z);
+            if (!IsSurroundingsLoaded(zones, point, radius))
+            {
+                return AreaAccess.Unavailable;
+            }
+
             return PrivateArea.CheckAccess(point, radius, flash: false, wardCheck: true)
                 ? AreaAccess.Granted
                 : AreaAccess.Denied;
         }
         catch (Exception)
         {
-            // IDesignationSite's contract is that anything it cannot establish
-            // answers Unavailable, and an escaping exception establishes
-            // nothing. Vanilla's own check walks live ward objects and
-            // dereferences the local player, so it is not exception-free in
-            // every state a console command can be typed in.
             return AreaAccess.Unavailable;
         }
     }

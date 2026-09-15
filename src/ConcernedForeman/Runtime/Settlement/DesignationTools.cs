@@ -129,7 +129,14 @@ internal sealed class DesignationTools
             foreach (Designation designation in register.Designations)
             {
                 text.Append("  ").Append(designation);
-                if (designation.IsStaleIdentity(null) && register.HasStaleSupplyIdentity)
+
+                // Ask about the KIND, not about the row's own epoch. Using
+                // IsStaleIdentity(null) as a stand-in for "is this the chest"
+                // silently skipped the warning for a row that has no epoch at
+                // all -- written by an older build, or hand-repaired -- which is
+                // exactly the row most in need of it.
+                if (designation.Kind == DesignationKind.SupplyContainer
+                    && register.HasStaleSupplyIdentity)
                 {
                     text.Append(
                         "  -- MARKED BEFORE THIS WORLD WAS LOADED. The game gives a chest no " +

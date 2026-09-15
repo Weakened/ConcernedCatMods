@@ -61,14 +61,25 @@ internal static class SettlementTargets
         return true;
     }
 
-    /// <summary>The container's own identity, as a stable string.
+    /// <summary>The container's own identity, as a string — for as long as this
+    /// run of the world lasts, and no longer.
     ///
-    /// A <c>ZDOID</c> is assigned when the object is created and travels with it
-    /// in the world save, so it survives a relog — which is what "designations
-    /// are re-readable after a relog" needs. Verified against the installed
-    /// 1.0.12 build: <c>ZDO.m_uid</c> is a public <c>ZDOID</c> field, and
-    /// <c>ZDOID</c> exposes <c>public long UserID</c> and
-    /// <c>public uint ID</c>.
+    /// Verified against the installed 1.0.12 build: <c>ZDO.m_uid</c> is a public
+    /// <c>ZDOID</c> field, and <c>ZDOID</c> exposes <c>public long UserID</c>
+    /// and <c>public uint ID</c>.
+    ///
+    /// <b>What is NOT true, and what this comment used to claim:</b> that a
+    /// <c>ZDOID</c> is assigned at creation and travels with the object in the
+    /// world save. <c>ZDO.Load</c> opens with
+    /// <c>m_uid.SetID(++ZDOID.m_loadID)</c> — every persisted object is handed a
+    /// fresh id in load order — and <c>SetID</c> also forces the user half to a
+    /// constant. So a key produced here means nothing after the next reload,
+    /// and because the new ids are dense from one it is likely to match some
+    /// <i>other</i> chest.
+    ///
+    /// That is why a designation records the identity epoch it was made in, and
+    /// why a key from an earlier epoch resolves to nothing rather than to a
+    /// guess. Nothing may treat this string as durable.
     ///
     /// The view is resolved exactly the way <c>Container.Awake</c> resolves its
     /// own, honouring <c>m_rootObjectOverride</c>, so a chest on a wagon is

@@ -147,6 +147,13 @@ internal sealed class DesignationBook
             // would leave a player with a row they can see, cannot use, and
             // cannot replace without first clearing something that is already
             // inert.
+            //
+            // KNOWN HOLE, tracked in #294: this replacement does not run the
+            // undesignation cascade, so a reservation held against the OLD key
+            // would be orphaned rather than refunded. Nothing writes a
+            // reservation before CF-SET-006, so it is unreachable today -- and
+            // it goes live with that leaf, which is why it is named here rather
+            // than only in an issue.
             if (!existing.IsStaleIdentity(_epoch))
             {
                 return DesignationResult.Refused(
@@ -281,6 +288,16 @@ internal sealed class DesignationBook
     {
         if (string.IsNullOrEmpty(containerKey))
         {
+            return false;
+        }
+
+        if (string.IsNullOrEmpty(_epoch))
+        {
+            // The documented rule is that without a current identity space no
+            // chest can be designated OR resolved. Only the designate half was
+            // enforced, which left a null-epoch row in a null-epoch book
+            // reading as fresh -- the wrong way round for the half that grants
+            // access to a player's chest.
             return false;
         }
 
