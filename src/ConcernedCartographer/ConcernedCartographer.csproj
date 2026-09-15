@@ -20,6 +20,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- CC-NPC-001: the Concerned Companions layer is shared as SOURCE, not as
+         an assembly. Every product that wants companions adds this one line and
+         compiles the same internal types into its own DLL, so packaging never
+         gains a dependency and no product ever references another. The sources
+         are pure C# with no Unity/BepInEx/Jotunn types, which is what lets the
+         test project link them and exercise the whole layer game-free. -->
+    <Compile Include="..\Shared\Companions\**\*.cs" LinkBase="Companions" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="JotunnLib" Version="2.29.2" />
   </ItemGroup>
 

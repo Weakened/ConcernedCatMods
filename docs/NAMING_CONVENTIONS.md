@@ -81,6 +81,35 @@ Do not use `ConcernedCat` and `TheConcernedCat` interchangeably in identifiers. 
 - One primary public type per file.
 - Folder names under a C# project: PascalCase, such as `Map`, `Roads`, `Runtime`, and `Persistence`.
 
+## Shared source libraries
+
+Some code is useful to more than one product. It is shared as **source**, never
+as an assembly: each product compiles its own copy into its own DLL, so
+packaging never gains a dependency and the "one mod DLL per package" contract
+holds. Products still never reference each other.
+
+| Item | Convention | Example |
+|---|---|---|
+| Shared source root | `src/Shared/<Area>` in PascalCase | `src/Shared/Companions` |
+| Namespace | `TheConcernedCat.<Area>` plus a folder segment | `TheConcernedCat.Companions.Quest` |
+| Visibility | every type `internal` | `internal sealed class CompanionRegistry` |
+| Adoption | one `Compile` item in the consuming `.csproj` | `<Compile Include="..\Shared\Companions\**\*.cs" LinkBase="Companions" />` |
+
+Rules for anything under `src/Shared`:
+
+- No Unity, BepInEx, or Jötunn types. Shared code must compile into a test
+  assembly and run without the game installed.
+- No product namespace may appear in it. A shared type that needs to know
+  something product specific takes it as a parameter or an interface.
+- A shared area is not a framework and is not mandatory. A product that does not
+  want it simply does not add the `Compile` item.
+
+Existing areas:
+
+| Area | Purpose | Consumers |
+|---|---|---|
+| `src/Shared/Companions` | Concerned Companions: identity, quest state, sidecar persistence, unlock decisions, placement planning, dialogue rotation | `ConcernedCartographer` |
+
 ## Git
 
 Branches (issue key `cc-###` for Cartographer, `ct-###` for Teamster):

@@ -2,7 +2,7 @@
 
 ## Mission
 
-Ship small, stable, testable Valheim mods. The active implementation target is **Concerned Teamster** (issue key `CT`). **Concerned Cartographer** is in public beta: open Cartographer P0/P1 regressions preempt Teamster work; other Cartographer changes happen only through Cartographer issues. Work from an issue and satisfy only that issue's acceptance criteria.
+Ship small, stable, testable Valheim mods. The active implementation target is the **Concerned Companions** epic (#264, issue key `CC-NPC`): Hulgi, the Broken Compass, and the reusable companion foundation in `src/Shared/Companions`. **Concerned Teamster** finished its v1.0 conveyor; **Concerned Cartographer** is in public beta. Open P0/P1 regressions in either shipped product preempt companion work; other changes to either product happen only through that product's issues. Work from an issue and satisfy only that issue's acceptance criteria.
 
 ## Read first
 
@@ -22,7 +22,8 @@ Before changing a product, read `docs/NAMING_CONVENTIONS.md`, then that product'
 - Do not let two agents edit the same working tree at the same time.
 - Preserve client-side behavior until a multiplayer-sync design is approved.
 - Treat Valheim internal APIs as unstable. Keep them behind narrow adapters and log actionable failures.
-- Products never reference each other at compile time; cross-product integration is runtime capability detection only.
+- Products never reference each other at compile time; cross-product integration is runtime capability detection only. Code shared between products lives under `src/Shared/<Area>` and is compiled into each consumer as source; it must contain no Unity/BepInEx/Jötunn types and no product namespace.
+- Companions: local-only presentation. No networked NPC, ZDO, custom RPC, native save entity, combat, or loot. Feature access is monotonic and never depends on the companion existing.
 - Teamster: preserve vanilla cart mass and physics by default. No zero-weight defaults, cart teleports, recovery cheats, stamina bypass, pathfinding, world-save mutation, or server-authority takeover. Behavior-mutating features must be explicit, reversible, fail-closed, and authorized by their own issue.
 
 ## Required workflow
