@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.4 - Version-alignment rebuild
+
+**No functional changes, again.** Concerned Teamster is unchanged since 1.0.2; this
+release exists only so both Concerned Cat mods stay on the same version number while
+Concerned Cartographer ships its sailing Route Follow update. Behaviour,
+configuration, sidecar format, cart physics, panels and multiplayer policy are all
+identical.
+
+- Rebuilt from the same source as 1.0.2 and 1.0.3, re-verified against installed Valheim 1.0.12 (Unity 6000.0.75f1, BepInEx 5.4.23.3, Jotunn 2.29.2).
+- Upgrading from 1.0.2 or 1.0.3 is optional and changes nothing you can observe in game. Keep your existing configuration and sidecar files.
+- No world-save, sidecar, configuration-schema, cart-physics, or gameplay-balance changes.
+
 ## 1.0.3 - Version-alignment rebuild
 
 **No functional changes.** This release is byte-for-byte the same mod as 1.0.2 apart
