@@ -78,6 +78,11 @@ internal static class ToolHandover
     /// container: the owner's rule is that the player's specifically selected
     /// instance moves, and a method that could find its own candidate would
     /// eventually be asked to.</summary>
+    /// <param name="saveNow">Writes the journal and returns whether it reached
+    /// disk. It may be called more than once, must be safe to call when nothing
+    /// is dirty, and <b>is allowed to throw</b> — a throw is treated exactly as
+    /// <c>false</c>, because an answer we did not get is not an answer that the
+    /// record is safe.</param>
     internal static HandoverOutcome TryGive(
         Humanoid? from,
         Humanoid? to,
@@ -172,15 +177,35 @@ internal static class ToolHandover
         // that finds this with no matching finish knows a handover was in
         // flight, which is a completely different situation from never having
         // tried -- but only if it actually reached disk.
+        int beforeIntent = journal.Entries.Count;
         journal.Append(
             JournalEntryKind.ToolHandoverStarted, default, transaction,
             worker: worker, tool: specimen);
 
-        if (!saveNow())
+        bool persisted;
+        try
         {
-            // Nothing has been touched yet, so this is an ordinary refusal. The
-            // unsaved entry is discarded with the session; on the next load
-            // there is no record and no missing axe, which is the correct pair.
+            persisted = saveNow();
+        }
+        catch (Exception)
+        {
+            // A save that throws established nothing, exactly as one that
+            // returns false did. Letting it escape here would leave the item
+            // unmoved and the intention un-rolled-back, which is the worst of
+            // both.
+            persisted = false;
+        }
+
+        if (!persisted)
+        {
+            // Nothing has been touched yet, so this is an ordinary refusal --
+            // and the intention is rolled OUT of the journal rather than left
+            // for some later unrelated save to carry to disk. A started row with
+            // no finish, for a handover that never happened, would replay as a
+            // phantom unresolved transfer and send a player looking for an axe
+            // that never moved.
+            journal.TryDiscardUnsaved(beforeIntent);
+
             message = "He cannot take it: this settlement's record could not be written, so " +
                 "nothing has been taken.";
             return HandoverOutcome.Refused;

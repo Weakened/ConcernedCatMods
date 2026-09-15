@@ -303,6 +303,53 @@ internal sealed class SettlementJournal
     public void MarkClean()
     {
         IsDirty = false;
+        _savedCount = _entries.Count;
+    }
+
+    /// <summary>How many entries are known to have reached disk. Zero until a
+    /// save succeeds, and never decreases — what is written is written.</summary>
+    private int _savedCount;
+
+    /// <summary>Drops trailing entries that never reached disk.
+    ///
+    /// For one case only, and it is a real one: an act appends its intention,
+    /// tries to persist it, and the save fails. The act is refused and nothing
+    /// in the world changed — but the entry is still sitting in this list, and
+    /// some later unrelated save would carry it to disk as a record of
+    /// something that never happened. For a handover that means a phantom
+    /// unresolved transfer and a player hunting for an axe that never moved.
+    ///
+    /// <b>It can only ever remove what is not on disk.</b> A request to truncate
+    /// below <see cref="_savedCount"/> is refused outright rather than
+    /// clamped — un-writing a persisted entry is not something this type will
+    /// do by arithmetic, and a caller asking for it has a bug worth
+    /// seeing.</summary>
+    public bool TryDiscardUnsaved(int keep)
+    {
+        if (keep < _savedCount || keep > _entries.Count)
+        {
+            return false;
+        }
+
+        if (keep == _entries.Count)
+        {
+            return true;
+        }
+
+        _entries.RemoveRange(keep, _entries.Count - keep);
+
+        long highest = -1L;
+        foreach (JournalEntry entry in _entries)
+        {
+            if (entry.Sequence > highest)
+            {
+                highest = entry.Sequence;
+            }
+        }
+
+        _highestSequence = highest;
+        IsDirty = _entries.Count != _savedCount;
+        return true;
     }
 
     /// <summary>Appends one line. The sequence is assigned here so a caller

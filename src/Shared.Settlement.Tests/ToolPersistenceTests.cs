@@ -347,6 +347,80 @@ public sealed class ToolPersistenceTests : IDisposable
     }
 
     [Fact]
+    public void AnIntentionThatCouldNotBePersistedIsRolledOutOfTheJournal()
+    {
+        // The defect this closes: the act appends its intention, the save fails,
+        // the act is refused -- and the entry is still sitting in the in-memory
+        // journal, where some later unrelated save would carry it to disk as a
+        // record of something that never happened. For a handover that is a
+        // phantom unresolved transfer and a player hunting an axe that never
+        // moved.
+        var journal = new SettlementJournal(Scope);
+        journal.Append(
+            JournalEntryKind.OrderTransition, new OrderId("cottage-1"),
+            transition: TheConcernedCat.Settlement.Orders.OrderTransition.Approve);
+        Assert.True(_store.Save(journal).Saved);
+
+        int saved = journal.Entries.Count;
+        journal.Append(
+            JournalEntryKind.ToolHandoverStarted, default, Transaction(),
+            worker: Thorstein, tool: BronzeAxe);
+
+        Assert.True(journal.TryDiscardUnsaved(saved));
+        Assert.Equal(saved, journal.Entries.Count);
+        Assert.False(journal.IsDirty);
+
+        // And a later successful save writes no trace of it.
+        Assert.False(_store.Save(journal).Saved);
+        ReplayResult replayed = _store.Load(Scope).Journal.Replay();
+
+        Assert.Empty(replayed.Tools.Holdings);
+        Assert.Empty(replayed.Repairs);
+    }
+
+    [Fact]
+    public void WhatHasReachedDiskIsNeverDiscarded()
+    {
+        // Truncating below the saved point would be un-writing a persisted
+        // entry. Refused outright rather than clamped, because a caller asking
+        // for it has a bug worth seeing.
+        SettlementJournal journal = Handed();
+        Assert.True(_store.Save(journal).Saved);
+
+        Assert.False(journal.TryDiscardUnsaved(0));
+        Assert.False(journal.TryDiscardUnsaved(1));
+        Assert.Equal(2, journal.Entries.Count);
+
+        // Out of range in the other direction is refused too.
+        Assert.False(journal.TryDiscardUnsaved(99));
+
+        // And the no-op case is allowed.
+        Assert.True(journal.TryDiscardUnsaved(2));
+    }
+
+    [Fact]
+    public void DiscardingAnUnsavedEntryPutsTheSequenceBack()
+    {
+        // NextSequence is the fingerprint a pending undesignation plan is
+        // checked against, so leaving it advanced past a discarded entry would
+        // invalidate a plan for no reason.
+        var journal = new SettlementJournal(Scope);
+        journal.Append(
+            JournalEntryKind.OrderTransition, new OrderId("cottage-1"),
+            transition: TheConcernedCat.Settlement.Orders.OrderTransition.Approve);
+        Assert.True(_store.Save(journal).Saved);
+
+        long before = journal.NextSequence;
+        journal.Append(
+            JournalEntryKind.ToolHandoverStarted, default, Transaction(),
+            worker: Thorstein, tool: BronzeAxe);
+        Assert.NotEqual(before, journal.NextSequence);
+
+        Assert.True(journal.TryDiscardUnsaved(1));
+        Assert.Equal(before, journal.NextSequence);
+    }
+
+    [Fact]
     public void AResolutionSurvivesTheNextReload()
     {
         // It did not. Resolve changed an in-memory ledger that Replay rebuilds
