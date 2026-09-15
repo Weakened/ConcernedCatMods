@@ -65,9 +65,12 @@ public sealed class DesignationGuardTests : IDisposable
 
     private static readonly GrantingSite Site = new();
 
+    private const string ThisRun = "run-a";
+
     private SettlementRegister SetUp()
     {
         var register = new SettlementRegister(Scope);
+        register.UseIdentityEpoch(ThisRun);
         register.Designate(
             DesignationRequest.Area(DesignationKind.SettlementArea, Origin, 24f), Site, true);
         register.Designate(
@@ -116,7 +119,7 @@ public sealed class DesignationGuardTests : IDisposable
         UndesignationPlan plan = register.PlanUndesignation(
             DesignationKind.SupplyContainer, journal.Replay(), authorised: true);
 
-        Assert.Equal(UndesignationOutcome.Refused, register.ApplyUndesignation(plan, journal));
+        Assert.Equal(UndesignationOutcome.Refused, register.ApplyUndesignation(plan, journal, authorised: true));
         Assert.True(register.IsSupplyContainer("chest-a"));
         Assert.Equal(OrderState.Reserved, journal.Replay().StateOf(Cottage));
     }
@@ -138,7 +141,7 @@ public sealed class DesignationGuardTests : IDisposable
             JournalEntryKind.Reserved, Cottage, RequestId.For(Cottage, 1),
             container: "chest-a", stacks: new[] { new MaterialStack("Wood", 5) });
 
-        Assert.Equal(UndesignationOutcome.Stale, register.ApplyUndesignation(plan, journal));
+        Assert.Equal(UndesignationOutcome.Stale, register.ApplyUndesignation(plan, journal, authorised: true));
 
         ReplayResult after = journal.Replay();
         Assert.Equal(25, after.Ledger.Totals(ReservationState.Held)["Wood"]);
@@ -162,7 +165,7 @@ public sealed class DesignationGuardTests : IDisposable
 
         journal.Append(JournalEntryKind.CommitStarted, Cottage, RequestId.For(Cottage, 0));
 
-        Assert.Equal(UndesignationOutcome.Stale, register.ApplyUndesignation(plan, journal));
+        Assert.Equal(UndesignationOutcome.Stale, register.ApplyUndesignation(plan, journal, authorised: true));
 
         ReplayResult after = journal.Replay();
         Assert.True(after.NeedsRepair);
@@ -182,6 +185,7 @@ public sealed class DesignationGuardTests : IDisposable
         // removed unlisted, undescribed, and with anything drawn from it
         // stranded.
         var register = new SettlementRegister(Scope);
+        register.UseIdentityEpoch(ThisRun);
         register.Designate(
             DesignationRequest.Area(DesignationKind.SettlementArea, Origin, 24f), Site, true);
         var journal = new SettlementJournal(Scope);
@@ -193,7 +197,7 @@ public sealed class DesignationGuardTests : IDisposable
         register.Designate(
             DesignationRequest.Container(new SitePoint(3f, 10f, 3f), "chest-a"), Site, true);
 
-        Assert.Equal(UndesignationOutcome.Stale, register.ApplyUndesignation(plan, journal));
+        Assert.Equal(UndesignationOutcome.Stale, register.ApplyUndesignation(plan, journal, authorised: true));
         Assert.True(register.IsSupplyContainer("chest-a"));
         Assert.True(register.HasSettlementArea);
     }
@@ -216,16 +220,22 @@ public sealed class DesignationGuardTests : IDisposable
         Assert.Single(plan.OrdersToCancel);
         Assert.Equal(20, plan.Totals()["Wood"]);
 
-        Assert.Equal(UndesignationOutcome.Removed, register.ApplyUndesignation(plan, journal));
+        Assert.Equal(UndesignationOutcome.Removed, register.ApplyUndesignation(plan, journal, authorised: true));
         Assert.Equal(20, journal.Replay().Ledger.Totals(ReservationState.Refunded)["Wood"]);
     }
 
     [Fact]
-    public void ClearingAKindThatIsNotMarkedDoesNotCancelEverythingAnyway()
+    public void AChildDesignationWithNoSettlementIsTreatedAsDamaged()
     {
-        // "Clears the settlement" was read off the REQUESTED kind, so asking to
-        // clear a settlement area that is not marked -- while orphaned children
-        // are -- cancelled every unfinished order in the settlement.
+        // A harvest area or a chest belongs to a settlement area. A file
+        // carrying one without the other is damaged, and taking the orphan
+        // would produce a settlement whose parts answer questions their parent
+        // never authorised -- and then write it back in that shape.
+        //
+        // This also removes the only route by which the "clears the settlement"
+        // flag could have been derived from a request that removes nothing of
+        // that kind; deriving it from what is actually removed stays as
+        // belt-and-braces.
         string path = _registers.ResolvePath(Scope);
         File.WriteAllLines(path, new[]
         {
@@ -234,22 +244,97 @@ public sealed class DesignationGuardTests : IDisposable
             "d\t2\t60\t10\t0\t20\t",
         });
 
-        SettlementRegister register = _registers.Load(Scope).Register;
-        Assert.False(register.HasSettlementArea);
-        Assert.Single(register.Designations);
+        SettlementRegisterStore.LoadReport report = _registers.Load(Scope);
 
+        Assert.Equal(RegisterLoadOutcome.LoadedWithSkippedLines, report.Outcome);
+        Assert.Equal(1, report.SkippedLines);
+        Assert.True(report.ReadOnly);
+        Assert.Empty(report.Register.Designations);
+        Assert.False(report.Register.IsInHarvestArea(new SitePoint(60f, 10f, 0f)));
+        Assert.False(_registers.Save(report.Register).Saved);
+    }
+
+    [Fact]
+    public void ClearingIsRefusedOutrightOnceAuthorityIsLost()
+    {
+        // A plan can sit unconfirmed for as long as a player takes to type --
+        // long enough to switch the runtime off in between. Authority is
+        // re-read on every other act in this runtime; this was the one
+        // mutating entry point that did not honour that.
+        SettlementRegister register = SetUp();
         SettlementJournal journal = Reserved();
 
         UndesignationPlan plan = register.PlanUndesignation(
-            DesignationKind.SettlementArea, journal.Replay(), authorised: true);
+            DesignationKind.SupplyContainer, journal.Replay(), authorised: true);
+        Assert.Single(plan.OrdersToCancel);
 
-        // The harvest area goes, because it is a child of a settlement that is
-        // not there. But the order is Reserved, not Gathering, so losing a
-        // harvest area it is not using must not cancel it.
-        Assert.Single(plan.Removed);
-        Assert.Equal(DesignationKind.HarvestArea, plan.Removed[0].Kind);
-        Assert.Empty(plan.OrdersToCancel);
-        Assert.Empty(plan.ToRefund);
+        Assert.Equal(
+            UndesignationOutcome.Refused,
+            register.ApplyUndesignation(plan, journal, authorised: false));
+
+        Assert.True(register.IsSupplyContainer("chest-a"));
+        Assert.Equal(OrderState.Reserved, journal.Replay().StateOf(Cottage));
+    }
+
+    [Fact]
+    public void APlanFromADifferentJournalOfTheSameLengthIsRefused()
+    {
+        // Scope and length together are not enough: two journal objects for the
+        // same settlement can hold different entries and still agree on both.
+        SettlementRegister register = SetUp();
+        SettlementJournal planned = Reserved();
+        SettlementJournal other = Reserved(container: "chest-elsewhere");
+
+        Assert.Equal(planned.NextSequence, other.NextSequence);
+
+        UndesignationPlan plan = register.PlanUndesignation(
+            DesignationKind.SupplyContainer, planned.Replay(), authorised: true);
+
+        Assert.Equal(
+            UndesignationOutcome.Stale,
+            register.ApplyUndesignation(plan, other, authorised: true));
+    }
+
+    [Fact]
+    public void ACommitStartedLineWithNoRequestDoesNotBringDownTheReplay()
+    {
+        // The sibling of the refund-line guard, in the same dictionary-write
+        // shape. The codec treats the request field as optional for every kind.
+        File.WriteAllLines(_journals.ResolvePath(Scope), new[]
+        {
+            "#\tsettlement journal v1",
+            "v\t1\t" + Scope.ToStorageKey(),
+            "e\t0\t3\tcottage-1\t\t0\t",
+        });
+
+        ReplayResult replayed = _journals.Load(Scope).Journal.Replay();
+
+        Assert.NotNull(replayed);
+        Assert.False(replayed.NeedsRepair);
+    }
+
+    [Fact]
+    public void AJournalWhoseRowsAreOutOfOrderIsTreatedAsDamaged()
+    {
+        // NextSequence is the fingerprint a pending plan is checked against, and
+        // it used to read the LAST entry rather than the highest. A reordered
+        // file would then hand out a sequence already in use -- defeating the
+        // guarantee Append documents, and letting a stale plan through.
+        File.WriteAllLines(_journals.ResolvePath(Scope), new[]
+        {
+            "#\tsettlement journal v1",
+            "v\t1\t" + Scope.ToStorageKey(),
+            "e\t5\t0\tcottage-1\t\t0\t",
+            "e\t1\t0\tcottage-1\t\t0\t",
+        });
+
+        JournalStore.LoadReport report = _journals.Load(Scope);
+
+        Assert.Equal(JournalLoadOutcome.LoadedWithSkippedLines, report.SkippedLines > 0
+            ? JournalLoadOutcome.LoadedWithSkippedLines
+            : report.Outcome);
+        Assert.True(report.ReadOnly);
+        Assert.Equal(6L, report.Journal.NextSequence);
     }
 
     // ------------------------------------------------------------------
@@ -289,7 +374,7 @@ public sealed class DesignationGuardTests : IDisposable
 
         register.ApplyUndesignation(
             register.PlanUndesignation(DesignationKind.SupplyContainer, journal.Replay(), true),
-            journal);
+            journal, authorised: true);
 
         JournalEntry refund = journal.Entries.Single(e => e.Kind == JournalEntryKind.Refunded);
 

@@ -128,7 +128,16 @@ internal sealed class DesignationTools
         {
             foreach (Designation designation in register.Designations)
             {
-                text.Append("  ").Append(designation).Append(Environment.NewLine);
+                text.Append("  ").Append(designation);
+                if (designation.IsStaleIdentity(null) && register.HasStaleSupplyIdentity)
+                {
+                    text.Append(
+                        "  -- MARKED BEFORE THIS WORLD WAS LOADED. The game gives a chest no " +
+                        "identity that survives a save, so this one currently points at nothing. " +
+                        "Look at the chest and run: cf_settle supply");
+                }
+
+                text.Append(Environment.NewLine);
             }
         }
 
@@ -302,7 +311,8 @@ internal sealed class DesignationTools
                 "cf_settle clear " + args[1].ToLowerInvariant() + " yes";
         }
 
-        UndesignationOutcome outcome = register.ApplyUndesignation(plan, journal);
+        UndesignationOutcome outcome =
+            register.ApplyUndesignation(plan, journal, _hasAuthority());
         _pending = null;
 
         switch (outcome)

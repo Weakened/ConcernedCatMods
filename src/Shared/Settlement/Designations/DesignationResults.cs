@@ -77,6 +77,11 @@ internal enum DesignationRefusal
     /// <summary>The request was not a valid kind — a default-constructed
     /// request reaching the book.</summary>
     InvalidRequest = 10,
+
+    /// <summary>There is no current identity epoch, so a chest cannot be
+    /// designated at all. Fail-closed: without one, a key could not later be
+    /// told apart from a key left over from a previous run of the world.</summary>
+    ContainerIdentityUnavailable = 11,
 }
 
 /// <summary>The answer to one marking request, and why.</summary>
@@ -175,6 +180,10 @@ internal readonly struct DesignationResult
 
             case DesignationRefusal.InvalidRequest:
                 return "that was not a designation this build understands";
+
+            case DesignationRefusal.ContainerIdentityUnavailable:
+                return "this settlement has no current way to tell one chest from another, " +
+                    "so no chest is being marked";
 
             default:
                 return "no reason was recorded, which is a bug — please report it";

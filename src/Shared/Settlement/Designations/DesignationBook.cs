@@ -45,6 +45,17 @@ internal sealed class DesignationBook
     private readonly Dictionary<DesignationKind, Designation> _designations =
         new Dictionary<DesignationKind, Designation>();
 
+    /// <summary>Which run of the world we are in, as far as object identities
+    /// are concerned. Null until an adapter supplies one, and null means no
+    /// chest can be designated or resolved — fail-closed, because without it a
+    /// key from a previous run could not be told from a current one.</summary>
+    private string? _epoch;
+
+    internal void UseIdentityEpoch(string? epoch)
+    {
+        _epoch = epoch;
+    }
+
     /// <summary>Everything marked, in a stable order so that saving the book
     /// twice produces the same file.</summary>
     public IReadOnlyList<Designation> Designations
@@ -98,8 +109,13 @@ internal sealed class DesignationBook
                 return DesignationResult.Refused(DesignationRefusal.ContainerNotIdentified);
             }
 
+            if (string.IsNullOrEmpty(_epoch))
+            {
+                return DesignationResult.Refused(DesignationRefusal.ContainerIdentityUnavailable);
+            }
+
             candidate = new Designation(
-                DesignationKind.SupplyContainer, request.Centre, 0f, request.ContainerKey);
+                DesignationKind.SupplyContainer, request.Centre, 0f, request.ContainerKey, _epoch);
         }
         else
         {
@@ -124,8 +140,18 @@ internal sealed class DesignationBook
                 return DesignationResult.Already(existing);
             }
 
-            return DesignationResult.Refused(
-                DesignationRefusal.AlreadyDesignatedDifferently, existing);
+            // A chest whose key was written in a previous run of the world is
+            // not a designation you have to clear first -- it is the memory of
+            // one, and it already resolves to nothing. Re-marking is the
+            // recovery path, so it replaces rather than being refused. Refusing
+            // would leave a player with a row they can see, cannot use, and
+            // cannot replace without first clearing something that is already
+            // inert.
+            if (!existing.IsStaleIdentity(_epoch))
+            {
+                return DesignationResult.Refused(
+                    DesignationRefusal.AlreadyDesignatedDifferently, existing);
+            }
         }
 
         if (request.Kind != DesignationKind.SettlementArea
@@ -225,6 +251,16 @@ internal sealed class DesignationBook
             return false;
         }
 
+        // A harvest area or a chest belongs to a settlement area. A file that
+        // carries one without the other is damaged, and taking the orphan would
+        // produce a settlement whose parts answer questions their parent never
+        // authorised -- then write it back in that shape.
+        if (designation.Kind != DesignationKind.SettlementArea
+            && !_designations.ContainsKey(DesignationKind.SettlementArea))
+        {
+            return false;
+        }
+
         _designations[designation.Kind] = designation;
         return true;
     }
@@ -248,7 +284,32 @@ internal sealed class DesignationBook
             return false;
         }
 
-        return _designations.TryGetValue(DesignationKind.SupplyContainer, out Designation? supply)
-            && string.Equals(supply!.ContainerKey, containerKey, System.StringComparison.Ordinal);
+        if (!_designations.TryGetValue(DesignationKind.SupplyContainer, out Designation? supply))
+        {
+            return false;
+        }
+
+        // A key from a previous run of the world names nothing now, and the ids
+        // it was drawn from are handed out densely from one on every load -- so
+        // a stale key is not merely useless, it is LIKELY to match some other
+        // chest. Answering false is the only safe answer available.
+        if (supply!.IsStaleIdentity(_epoch))
+        {
+            return false;
+        }
+
+        return string.Equals(supply.ContainerKey, containerKey, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>True when a chest is marked but its identity was written in a
+    /// previous run of the world, so it currently resolves to nothing and the
+    /// player needs to mark it again.</summary>
+    public bool HasStaleSupplyIdentity
+    {
+        get
+        {
+            return _designations.TryGetValue(DesignationKind.SupplyContainer, out Designation? supply)
+                && supply!.IsStaleIdentity(_epoch);
+        }
     }
 }

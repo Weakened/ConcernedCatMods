@@ -143,6 +143,7 @@ internal sealed class JournalStore
 
         var journal = new SettlementJournal(scope);
         int skipped = 0;
+        long highestSequence = -1L;
         bool sawHeader = false;
 
         foreach (string raw in lines)
@@ -192,12 +193,16 @@ internal sealed class JournalStore
                 sawHeader = true;
             }
 
-            if (TryParseEntry(fields, out JournalEntry entry))
+            if (TryParseEntry(fields, out JournalEntry entry) && entry.Sequence > highestSequence)
             {
+                highestSequence = entry.Sequence;
                 journal.Restore(entry);
             }
             else
             {
+                // A row out of sequence is damage, not data. Accepting it would
+                // let the file's order differ from the record's order, which is
+                // the one thing the sequence exists to prevent.
                 skipped++;
             }
         }

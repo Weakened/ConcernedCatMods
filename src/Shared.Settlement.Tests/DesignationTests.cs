@@ -86,7 +86,19 @@ public sealed class DesignationTests : IDisposable
 
     private static FakeSite Granting() => new(AreaAccess.Granted);
 
-    private SettlementRegister Fresh() => new(Scope);
+    /// <summary>The identity space a chest key belongs to. Real runs get a
+    /// fresh one from the adapter on every world load, because the game hands
+    /// every persisted object a new id then; tests name it so they can be
+    /// explicit about which side of a reload they are on.</summary>
+    private const string ThisRun = "run-a";
+    private const string AfterAReload = "run-b";
+
+    private SettlementRegister Fresh()
+    {
+        var register = new SettlementRegister(Scope);
+        register.UseIdentityEpoch(ThisRun);
+        return register;
+    }
 
     private static DesignationRequest Settlement(float radius = 24f, SitePoint? at = null)
     {
@@ -532,14 +544,97 @@ public sealed class DesignationTests : IDisposable
         Assert.True(_store.Save(register).Saved);
 
         SettlementRegisterStore.LoadReport report = _store.Load(Scope);
+        report.Register.UseIdentityEpoch(ThisRun);
 
         Assert.Equal(RegisterLoadOutcome.Loaded, report.Outcome);
         Assert.False(report.ReadOnly);
         Assert.Equal(3, report.Register.Designations.Count);
         Assert.Single(report.Register.Workers);
         Assert.Equal("hand-1", report.Register.Workers[0].Id.Value);
-        Assert.True(report.Register.IsSupplyContainer("chest-a"));
         Assert.True(report.Register.IsInHarvestArea(new SitePoint(140f, 31f, 200f)));
+
+        // The chest row round-trips INCLUDING which run of the world its
+        // identity belongs to, so it still resolves while that run lasts.
+        Assert.True(report.Register.IsSupplyContainer("chest-a"));
+        Assert.False(report.Register.HasStaleSupplyIdentity);
+    }
+
+    [Fact]
+    public void AChestMarkedBeforeAReloadResolvesToNothingAfterIt()
+    {
+        // The game gives a placed object no identity that survives a save:
+        // ZDO.Load reassigns every uid in load order. A key written before a
+        // reload therefore names nothing after it -- and because the new ids
+        // are dense from one, it is LIKELY to name some other chest. Answering
+        // "no chest" is the only safe answer; answering "yes" would let a
+        // worker draw from a container the player never designated.
+        SettlementRegister register = SetUpSettlement(out _);
+        _store.Save(register);
+
+        SettlementRegister reloaded = _store.Load(Scope).Register;
+        reloaded.UseIdentityEpoch(AfterAReload);
+
+        Assert.True(reloaded.HasStaleSupplyIdentity);
+        Assert.False(reloaded.IsSupplyContainer("chest-a"));
+
+        // The row is still THERE, so the player can see what they marked and
+        // where. It just does not resolve.
+        Assert.Equal(3, reloaded.Designations.Count);
+
+        // The areas are unaffected: a circle is described by its own
+        // coordinates, not by a reference to an object.
+        Assert.True(reloaded.IsInHarvestArea(new SitePoint(140f, 31f, 200f)));
+    }
+
+    [Fact]
+    public void ReMarkingTheChestAfterAReloadJustWorks()
+    {
+        // Recovery must not require clearing something that is already inert.
+        SettlementRegister register = SetUpSettlement(out _);
+        _store.Save(register);
+
+        SettlementRegister reloaded = _store.Load(Scope).Register;
+        reloaded.UseIdentityEpoch(AfterAReload);
+
+        DesignationResult again = reloaded.Designate(
+            Supply(key: "chest-a-new-id"), Granting(), authorised: true);
+
+        Assert.Equal(DesignationOutcome.Designated, again.Outcome);
+        Assert.False(reloaded.HasStaleSupplyIdentity);
+        Assert.True(reloaded.IsSupplyContainer("chest-a-new-id"));
+        Assert.False(reloaded.IsSupplyContainer("chest-a"));
+        Assert.Equal(3, reloaded.Designations.Count);
+    }
+
+    [Fact]
+    public void WithNoIdentitySpaceNoChestCanBeMarkedAtAll()
+    {
+        FakeSite site = Granting();
+        var register = new SettlementRegister(Scope);
+        register.UseIdentityEpoch(null);
+        register.Designate(Settlement(), site, authorised: true);
+
+        // Fail-closed: without a current identity space a key could not later
+        // be told apart from one left over from a previous run.
+        Assert.Equal(
+            DesignationRefusal.ContainerIdentityUnavailable,
+            register.Designate(Supply(), site, authorised: true).Refusal);
+    }
+
+    [Fact]
+    public void AChestThatMovedIsStillTheSameChest()
+    {
+        // A container IS its key. Its centre is recorded only to show the
+        // player where it stood, so re-marking a chest that has moved -- one
+        // riding a wagon, which SettlementTargets explicitly supports -- must
+        // not be refused as "already marked differently".
+        FakeSite site = Granting();
+        SettlementRegister register = SetUpSettlement(out _);
+
+        DesignationResult moved = register.Designate(
+            Supply(at: new SitePoint(104f, 30f, 202f)), site, authorised: true);
+
+        Assert.Equal(DesignationOutcome.AlreadyDesignated, moved.Outcome);
     }
 
     [Fact]
@@ -621,6 +716,7 @@ public sealed class DesignationTests : IDisposable
         File.WriteAllLines(path, lines);
 
         SettlementRegisterStore.LoadReport report = _store.Load(Scope);
+        report.Register.UseIdentityEpoch(ThisRun);
 
         Assert.Equal(RegisterLoadOutcome.LoadedWithSkippedLines, report.Outcome);
         Assert.Equal(1, report.SkippedLines);
@@ -707,6 +803,7 @@ public sealed class DesignationTests : IDisposable
 
         _store.Save(register);
         SettlementRegister reloaded = _store.Load(Scope).Register;
+        reloaded.UseIdentityEpoch(ThisRun);
 
         Assert.True(reloaded.IsSupplyContainer("chest\tone%09two"));
     }
@@ -749,7 +846,7 @@ public sealed class DesignationTests : IDisposable
         Assert.Equal(20, plan.Totals()["Wood"]);
         Assert.Contains("20 Wood", plan.Describe());
 
-        Assert.Equal(UndesignationOutcome.Removed, register.ApplyUndesignation(plan, journal));
+        Assert.Equal(UndesignationOutcome.Removed, register.ApplyUndesignation(plan, journal, authorised: true));
 
         ReplayResult after = journal.Replay();
         Assert.Equal(OrderState.Cancelled, after.StateOf(Cottage));
@@ -774,7 +871,7 @@ public sealed class DesignationTests : IDisposable
         Assert.Empty(plan.OrdersToCancel);
         Assert.Empty(plan.ToRefund);
 
-        register.ApplyUndesignation(plan, journal);
+        register.ApplyUndesignation(plan, journal, authorised: true);
 
         Assert.Equal(OrderState.Reserved, journal.Replay().StateOf(Cottage));
     }
@@ -800,7 +897,7 @@ public sealed class DesignationTests : IDisposable
             DesignationKind.HarvestArea, gathering.Replay(), authorised: true);
 
         Assert.Single(loud.OrdersToCancel);
-        gatheringRegister.ApplyUndesignation(loud, gathering);
+        gatheringRegister.ApplyUndesignation(loud, gathering, authorised: true);
         Assert.Equal(OrderState.Cancelled, gathering.Replay().StateOf(Cottage));
     }
 
@@ -822,7 +919,7 @@ public sealed class DesignationTests : IDisposable
         Assert.Equal(DesignationKind.HarvestArea, plan.Removed[1].Kind);
         Assert.Equal(DesignationKind.SettlementArea, plan.Removed[2].Kind);
 
-        Assert.Equal(UndesignationOutcome.Removed, register.ApplyUndesignation(plan, journal));
+        Assert.Equal(UndesignationOutcome.Removed, register.ApplyUndesignation(plan, journal, authorised: true));
 
         Assert.Empty(register.Designations);
         Assert.Equal(OrderState.Cancelled, journal.Replay().StateOf(Cottage));
@@ -843,7 +940,7 @@ public sealed class DesignationTests : IDisposable
 
         Assert.True(plan.ChangesNothing);
         Assert.Equal(
-            UndesignationOutcome.NotDesignated, register.ApplyUndesignation(plan, journal));
+            UndesignationOutcome.NotDesignated, register.ApplyUndesignation(plan, journal, authorised: true));
         Assert.Contains("Nothing to clear", plan.Describe());
     }
 
@@ -871,7 +968,7 @@ public sealed class DesignationTests : IDisposable
         Assert.Empty(plan.OrdersToCancel);
         Assert.Empty(plan.ToRefund);
 
-        register.ApplyUndesignation(plan, journal);
+        register.ApplyUndesignation(plan, journal, authorised: true);
 
         ReplayResult after = journal.Replay();
         Assert.Equal(OrderState.NeedsRepair, after.StateOf(Cottage));
@@ -897,7 +994,7 @@ public sealed class DesignationTests : IDisposable
         Assert.Single(plan.OrdersToCancel);
         Assert.Empty(plan.ToRefund);
 
-        register.ApplyUndesignation(plan, journal);
+        register.ApplyUndesignation(plan, journal, authorised: true);
 
         ReplayResult after = journal.Replay();
         Assert.Equal(20, after.Ledger.Totals(ReservationState.Committed)["Wood"]);
@@ -945,7 +1042,7 @@ public sealed class DesignationTests : IDisposable
 
         UndesignationPlan plan = register.PlanUndesignation(
             DesignationKind.SupplyContainer, journal.Replay(), authorised: true);
-        Assert.Equal(UndesignationOutcome.Removed, register.ApplyUndesignation(plan, journal));
+        Assert.Equal(UndesignationOutcome.Removed, register.ApplyUndesignation(plan, journal, authorised: true));
 
         // A container driven by this plan puts back exactly what it names.
         container += plan.Totals().TryGetValue("Wood", out int returned) ? returned : 0;
@@ -970,11 +1067,11 @@ public sealed class DesignationTests : IDisposable
         UndesignationPlan plan = register.PlanUndesignation(
             DesignationKind.SupplyContainer, journal.Replay(), authorised: true);
 
-        Assert.Equal(UndesignationOutcome.Removed, register.ApplyUndesignation(plan, journal));
+        Assert.Equal(UndesignationOutcome.Removed, register.ApplyUndesignation(plan, journal, authorised: true));
 
         // The designation is gone, so the plan no longer matches the book and
         // is refused as stale rather than replayed.
-        Assert.Equal(UndesignationOutcome.Stale, register.ApplyUndesignation(plan, journal));
+        Assert.Equal(UndesignationOutcome.Stale, register.ApplyUndesignation(plan, journal, authorised: true));
 
         ReplayResult after = journal.Replay();
         Assert.Equal(20, after.Ledger.Totals(ReservationState.Refunded)["Wood"]);
@@ -995,12 +1092,12 @@ public sealed class DesignationTests : IDisposable
         UndesignationPlan plan = register.PlanUndesignation(
             DesignationKind.SupplyContainer, journal.Replay(), authorised: true);
 
-        Assert.Equal(UndesignationOutcome.Removed, register.ApplyUndesignation(plan, journal));
+        Assert.Equal(UndesignationOutcome.Removed, register.ApplyUndesignation(plan, journal, authorised: true));
         Assert.Equal(
             DesignationOutcome.Designated,
             register.Designate(Supply(), site, authorised: true).Outcome);
 
-        Assert.Equal(UndesignationOutcome.Stale, register.ApplyUndesignation(plan, journal));
+        Assert.Equal(UndesignationOutcome.Stale, register.ApplyUndesignation(plan, journal, authorised: true));
 
         // Still exactly one refund.
         Assert.Equal(20, journal.Replay().Ledger.Totals(ReservationState.Refunded)["Wood"]);
@@ -1022,10 +1119,10 @@ public sealed class DesignationTests : IDisposable
         // has since replaced.
         register.ApplyUndesignation(
             register.PlanUndesignation(DesignationKind.SupplyContainer, journal.Replay(), true),
-            journal);
+            journal, authorised: true);
         register.Designate(Supply(key: "chest-b"), site, authorised: true);
 
-        Assert.Equal(UndesignationOutcome.Stale, register.ApplyUndesignation(plan, journal));
+        Assert.Equal(UndesignationOutcome.Stale, register.ApplyUndesignation(plan, journal, authorised: true));
         Assert.True(register.IsSupplyContainer("chest-b"));
     }
 
@@ -1040,7 +1137,7 @@ public sealed class DesignationTests : IDisposable
 
         Assert.True(plan.IsRefused);
         Assert.Equal(DesignationRefusal.NotAuthorised, plan.Refusal);
-        Assert.Equal(UndesignationOutcome.Refused, register.ApplyUndesignation(plan, journal));
+        Assert.Equal(UndesignationOutcome.Refused, register.ApplyUndesignation(plan, journal, authorised: true));
         Assert.True(register.IsSupplyContainer("chest-a"));
         Assert.Equal(OrderState.Reserved, journal.Replay().StateOf(Cottage));
     }
@@ -1055,7 +1152,7 @@ public sealed class DesignationTests : IDisposable
         UndesignationPlan plan = register.PlanUndesignation(
             DesignationKind.SupplyContainer, new SettlementJournal(Scope).Replay(), authorised: true);
 
-        Assert.Throws<ArgumentException>(() => register.ApplyUndesignation(plan, foreign));
+        Assert.Throws<ArgumentException>(() => register.ApplyUndesignation(plan, foreign, authorised: true));
     }
 
     [Fact]
@@ -1067,7 +1164,7 @@ public sealed class DesignationTests : IDisposable
 
         register.ApplyUndesignation(
             register.PlanUndesignation(DesignationKind.SettlementArea, journal.Replay(), true),
-            journal);
+            journal, authorised: true);
 
         Assert.Empty(register.Designations);
         Assert.Equal(
@@ -1090,7 +1187,7 @@ public sealed class DesignationTests : IDisposable
 
         UndesignationPlan plan = register.PlanUndesignation(
             DesignationKind.SupplyContainer, journal.Replay(), authorised: true);
-        Assert.Equal(UndesignationOutcome.Removed, register.ApplyUndesignation(plan, journal));
+        Assert.Equal(UndesignationOutcome.Removed, register.ApplyUndesignation(plan, journal, authorised: true));
 
         var writer = new SettlementRecordWriter(journals, _store);
         RecordSaveOutcome saved = writer.Save(journal, register);

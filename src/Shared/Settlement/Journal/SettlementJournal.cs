@@ -93,11 +93,13 @@ internal sealed class ReplayResult
         IReadOnlyDictionary<string, OrderState> orders,
         CustodyLedger ledger,
         long nextSequence,
+        Guid journalInstance,
         IEnumerable<string> repairs)
     {
         Orders = orders;
         Ledger = ledger;
         NextSequence = nextSequence;
+        JournalInstance = journalInstance;
         foreach (string repair in repairs)
         {
             _repairs.Add(repair);
@@ -109,6 +111,10 @@ internal sealed class ReplayResult
     public CustodyLedger Ledger { get; }
 
     public long NextSequence { get; }
+
+    /// <summary>The journal object this replay came from, so a plan built on it
+    /// can refuse to be applied to a different one.</summary>
+    public Guid JournalInstance { get; }
 
     /// <summary>One actionable sentence per unresolved situation, naming the
     /// order and the request. Empty when everything reconciled.</summary>
@@ -156,9 +162,41 @@ internal sealed class SettlementJournal
 
     public SettlementScope Scope { get; }
 
+    /// <summary>Distinguishes one loaded journal from another with the same
+    /// scope and the same length.
+    ///
+    /// A plan fingerprints the journal it was worked out against. Scope plus
+    /// length is not enough — two journal objects for the same settlement can
+    /// hold different entries and still agree on both — so each instance also
+    /// carries an identity nothing else shares.</summary>
+    public Guid Instance { get; } = Guid.NewGuid();
+
     public IReadOnlyList<JournalEntry> Entries => _entries;
 
-    public long NextSequence => _entries.Count == 0 ? 0 : _entries[_entries.Count - 1].Sequence + 1;
+    /// <summary>One past the highest sequence in the record.
+    ///
+    /// The MAXIMUM, not the last entry's. Reading the last entry made the
+    /// documented guarantee below false for any file whose rows were reordered:
+    /// the next append would reuse a number already in use, and replay order
+    /// would then depend on list insertion rather than on the record. That
+    /// value is also the fingerprint a pending undesignation plan is checked
+    /// against, so a repeat would let a stale plan through.</summary>
+    public long NextSequence
+    {
+        get
+        {
+            long highest = -1L;
+            foreach (JournalEntry entry in _entries)
+            {
+                if (entry.Sequence > highest)
+                {
+                    highest = entry.Sequence;
+                }
+            }
+
+            return highest + 1L;
+        }
+    }
 
     public bool IsDirty { get; private set; }
 
@@ -251,7 +289,15 @@ internal sealed class SettlementJournal
                     break;
 
                 case JournalEntryKind.CommitStarted:
-                    startedCommits[entry.Request.Value] = entry;
+                    // Guarded exactly as Reserved and Refunded are. The codec
+                    // treats the request field as optional, so a damaged line
+                    // can carry an empty one -- and this is a dictionary write
+                    // with a null key, which would take the whole replay down.
+                    if (!entry.Request.IsEmpty)
+                    {
+                        startedCommits[entry.Request.Value] = entry;
+                    }
+
                     break;
 
                 case JournalEntryKind.CommitFinished:
@@ -290,6 +336,6 @@ internal sealed class SettlementJournal
                 "request one way or the other.");
         }
 
-        return new ReplayResult(orders, ledger, NextSequence, repairs);
+        return new ReplayResult(orders, ledger, NextSequence, Instance, repairs);
     }
 }

@@ -1,3 +1,4 @@
+using System;
 using TheConcernedCat.Settlement.Designations;
 using TheConcernedCat.Settlement.Worker;
 using UnityEngine;
@@ -58,9 +59,21 @@ internal sealed class WorldDesignationSite : IDesignationSite
             return AreaAccess.Unavailable;
         }
 
-        return PrivateArea.CheckAccess(point, radius, flash: false, wardCheck: true)
-            ? AreaAccess.Granted
-            : AreaAccess.Denied;
+        try
+        {
+            return PrivateArea.CheckAccess(point, radius, flash: false, wardCheck: true)
+                ? AreaAccess.Granted
+                : AreaAccess.Denied;
+        }
+        catch (Exception)
+        {
+            // IDesignationSite's contract is that anything it cannot establish
+            // answers Unavailable, and an escaping exception establishes
+            // nothing. Vanilla's own check walks live ward objects and
+            // dereferences the local player, so it is not exception-free in
+            // every state a console command can be typed in.
+            return AreaAccess.Unavailable;
+        }
     }
 
     /// <summary>True when every zone the area could hide a ward in is loaded.

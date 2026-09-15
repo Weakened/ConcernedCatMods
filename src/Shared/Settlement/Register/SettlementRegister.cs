@@ -62,6 +62,15 @@ internal sealed class SettlementRegister
 
     public bool HasSettlementArea => _book.Has(DesignationKind.SettlementArea);
 
+    /// <summary>Tells this register which run of the world it is in, so a chest
+    /// key written before a reload can be recognised as meaning nothing now.
+    /// Until it is set, no chest can be designated or resolved.</summary>
+    public void UseIdentityEpoch(string? epoch) => _book.UseIdentityEpoch(epoch);
+
+    /// <summary>True when a chest is marked but its identity is from a previous
+    /// run of the world, so it resolves to nothing until it is marked again.</summary>
+    public bool HasStaleSupplyIdentity => _book.HasStaleSupplyIdentity;
+
     public bool TryGet(DesignationKind kind, out Designation designation)
     {
         return _book.TryGet(kind, out designation);
@@ -292,7 +301,7 @@ internal sealed class SettlementRegister
         }
 
         return UndesignationPlan.For(
-            kind, removed, ordersToCancel, toRefund, state.NextSequence);
+            kind, removed, ordersToCancel, toRefund, state.NextSequence, state.JournalInstance);
     }
 
     /// <summary>Carries out a plan.
@@ -308,9 +317,19 @@ internal sealed class SettlementRegister
     /// record which replays to a coherent state: material back in the container
     /// it came from, then the order that will not be finishing marked as
     /// cancelled.</summary>
+    /// <summary><paramref name="authorised"/> is re-asked here and not taken
+    /// from the plan. Authority is deliberately re-read on every act elsewhere
+    /// in this runtime, and a plan can sit unconfirmed for as long as a player
+    /// takes to type -- long enough to switch the runtime off in between. This
+    /// was the one mutating entry point that did not honour that.</summary>
     public UndesignationOutcome ApplyUndesignation(
-        UndesignationPlan plan, SettlementJournal journal)
+        UndesignationPlan plan, SettlementJournal journal, bool authorised)
     {
+        if (!authorised)
+        {
+            return UndesignationOutcome.Refused;
+        }
+
         if (plan == null)
         {
             throw new ArgumentNullException(nameof(plan));
@@ -360,7 +379,8 @@ internal sealed class SettlementRegister
         // started after the plan was made is worse: refunding it would put
         // material back that may already be standing as a wall, which is
         // exactly the guess this type refuses to make everywhere else.
-        if (journal.NextSequence != plan.JournalSequence)
+        if (journal.NextSequence != plan.JournalSequence
+            || journal.Instance != plan.JournalInstance)
         {
             return UndesignationOutcome.Stale;
         }
@@ -469,7 +489,8 @@ internal sealed class UndesignationPlan
         IReadOnlyList<Designation> removed,
         IReadOnlyList<OrderId> ordersToCancel,
         IReadOnlyList<Reservation> toRefund,
-        long journalSequence)
+        long journalSequence,
+        Guid journalInstance)
     {
         Kind = kind;
         IsRefused = isRefused;
@@ -478,9 +499,16 @@ internal sealed class UndesignationPlan
         OrdersToCancel = ordersToCancel;
         ToRefund = toRefund;
         JournalSequence = journalSequence;
+        JournalInstance = journalInstance;
     }
 
-    /// <summary>The journal length this plan was worked out against.
+    /// <summary>Which journal object this plan was worked out against. Scope
+    /// and sequence together are not enough: two journals for the same
+    /// settlement can hold different entries and still agree on both.</summary>
+    public Guid JournalInstance { get; }
+
+    /// <summary>One past the highest sequence the journal held when this plan
+    /// was worked out.
     ///
     /// What to return and what to cancel both depend on the journal as it was
     /// at that instant. If it has grown since, the plan describes a settlement
@@ -510,14 +538,15 @@ internal sealed class UndesignationPlan
     internal static UndesignationPlan Refused(DesignationRefusal refusal)
     {
         return new UndesignationPlan(
-            DesignationKind.None, true, refusal, NoDesignations, NoOrders, NoReservations, -1L);
+            DesignationKind.None, true, refusal,
+            NoDesignations, NoOrders, NoReservations, -1L, Guid.Empty);
     }
 
     internal static UndesignationPlan Nothing(DesignationKind kind)
     {
         return new UndesignationPlan(
             kind, false, DesignationRefusal.Unspecified,
-            NoDesignations, NoOrders, NoReservations, -1L);
+            NoDesignations, NoOrders, NoReservations, -1L, Guid.Empty);
     }
 
     internal static UndesignationPlan For(
@@ -525,11 +554,12 @@ internal sealed class UndesignationPlan
         IReadOnlyList<Designation> removed,
         IReadOnlyList<OrderId> ordersToCancel,
         IReadOnlyList<Reservation> toRefund,
-        long journalSequence)
+        long journalSequence,
+        Guid journalInstance)
     {
         return new UndesignationPlan(
             kind, false, DesignationRefusal.Unspecified,
-            removed, ordersToCancel, toRefund, journalSequence);
+            removed, ordersToCancel, toRefund, journalSequence, journalInstance);
     }
 
     /// <summary>One sentence a player can read before deciding.</summary>

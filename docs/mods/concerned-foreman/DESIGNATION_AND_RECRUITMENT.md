@@ -62,18 +62,55 @@ Three consequences follow, and each has a test:
   marked" never reads as "anywhere".
 - **Re-marking the same thing is idempotent**; re-marking the same *kind* a
   *different* way is **refused** and names the one that exists. Silently moving a
-  player's settlement is a designation the player did not make.
+  player's settlement is a designation the player did not make. For a chest,
+  "the same thing" means the same key in the same epoch — **not** the same
+  position, so re-marking a chest that has moved (one riding a wagon, which the
+  adapter explicitly supports) is idempotent rather than refused.
 - **The supply chest is chosen by looking at it.** Not by being nearest — that
   is the inference from proximity this leaf forbids, and it is also the
   behaviour that would re-point a settlement's supply at a chest somebody built
   later.
 
-A chest is remembered by its **`ZDOID`**, not its position. `ZDO.m_uid` is a
-public `ZDOID` field in this build and `ZDOID` exposes `public long UserID` and
-`public uint ID`; a ZDO's id is assigned at creation and travels with the object
-in the world save, which is what makes a designation re-readable after a relog.
-Resolving by position would follow whatever ends up standing there after a chest
-is destroyed and rebuilt.
+A chest is remembered by its **`ZDOID`**, not its position — resolving by
+position would follow whatever ends up standing there after a chest is destroyed
+and rebuilt. `ZDO.m_uid` is a public `ZDOID` field in this build and `ZDOID`
+exposes `public long UserID` and `public uint ID`.
+
+### That identity does not survive a save, and the first version assumed it did
+
+This document previously claimed a ZDO's id "is assigned at creation and travels
+with the object in the world save". **That is false in 1.0.12**, and an
+independent review caught it. `ZDO.Load` opens:
+
+```csharp
+public void Load(ZPackage pkg, Version.World version)
+{
+    bool flag = version >= Version.World.ChunkedSave;
+    m_uid.SetID(++ZDOID.m_loadID);          // re-assigned, not read back
+```
+
+and `SetID` also forces the user half to a constant
+(`UserKey = UnknownFormerUserKey`, i.e. `1`). So after any load **every**
+persisted object has a fresh id, handed out densely from one in load order.
+
+A key written before a reload therefore names nothing afterwards — and because
+the new ids are dense, it is *likely* to name some **other** chest that happened
+to load into that ordinal. Silently resolving to the wrong chest is the worst
+outcome available here: a worker would draw from a container the player never
+designated, which is the precise failure this design exists to prevent, arriving
+by a different route.
+
+**So a chest designation records which run of the world its key belongs to.** The
+adapter mints a fresh *identity epoch* every time a world's records are opened,
+and a key from any earlier epoch resolves to **nothing at all** rather than to a
+guess. The row stays visible, so the player can still see what they marked and
+where; `cf_settle status` says it needs marking again, and re-marking replaces it
+without having to clear anything first. Areas are unaffected — a circle is
+described by its own coordinates, not by a reference to an object.
+
+A stable mod-owned identity written into the chest's own ZDO would remove the
+re-marking step entirely. That is a deliberate world-state write which this leaf
+was not authorised to make, so it is named here rather than done quietly.
 
 ---
 
@@ -106,9 +143,24 @@ not absent from the world — it is invisible to this check, and answering
 authority ADR forbids.
 
 So `WorldDesignationSite` refuses unless the ground around the designation is
-loaded, with a margin of one full zone (64 m in this build,
-`ZoneSystem.m_zoneSize`) because a vanilla ward reaches 32 m from an object that
-may sit in the neighbouring zone. Anything it cannot establish answers
+loaded, with a margin of one full zone — 64 m. Two caveats on that number, both
+worth stating rather than implying:
+
+- The margin is a **constant in our code**, not a value read from the game.
+  `ZoneSystem.m_zoneSize` is 64 in this build, but `ZoneSystem.GetZone` does not
+  read that field — it divides by a hardcoded 64 with a hardcoded 32 offset. So
+  the two agree today and our constant matches both; it is not derived from
+  either.
+- One zone exceeds a vanilla ward's 32 m reach, so a ward object in the
+  neighbouring zone is still registered. That holds **for the ward radii this
+  build ships**; a prefab with `m_radius` over 64 would reach past the margin.
+  Prefab radii are asset data and cannot be read by decompiling the assembly, so
+  this is an assumption, not a verified fact.
+
+`WorldDesignationSite` also answers `Unavailable` rather than propagating if
+`PrivateArea.CheckAccess` throws — it walks live ward objects and dereferences
+the local player, so it is not exception-free in every state a console command
+can be typed in, and an escaping exception establishes nothing. Anything it cannot establish answers
 `AreaAccess.Unavailable`, and **`Unavailable` is zero** — an adapter that threw,
 forgot, or was never wired refuses by default rather than granting by default.
 
@@ -235,8 +287,16 @@ A damaged register costs the player their markings; a damaged journal costs the
 answer to "whose wood is where". Neither can make the other unreadable.
 
 Both use the same temp-file-and-swap (`AtomicTextFile`, extracted from
-`JournalStore` when this leaf needed a second copy of it), so an interrupted
-write leaves either the whole old file or the whole new one.
+`JournalStore` when this leaf needed a second copy of it). On the path that
+normally runs — `File.Replace` — an interrupted write leaves either the whole old
+file or the whole new one.
+
+**The fallbacks are not atomic**, and saying otherwise would be the same class of
+overclaim this document exists to avoid. When `File.Replace` throws
+`PlatformNotSupportedException` or `IOException` — the antivirus-or-sync case it
+is written for — the code falls back to `File.Copy(overwrite: true)`, which can
+leave a partial destination. Detecting that is #293's job; it is not detected
+today, and a truncated file currently loads clean.
 
 **The journal is written first, and a failed journal write stops the register
 write.** The ordering on its own buys nothing — that was the shape of the first
@@ -255,14 +315,21 @@ Foreman adapter, specifically so it can be tested. It was originally in the
 adapter, where nothing could reach it.
 
 **A row this build cannot represent is damage, not data.** A radius outside the
-allowed range, a second row of a kind that already has one, or more workers than
-this build employs all count as skipped lines and put the record read-only. The
+allowed range, a second row of a kind that already has one, a harvest area or
+chest with no settlement area to belong to, or more workers than this build
+employs all count as skipped lines and put the record read-only. The
 radius re-check is worth distinguishing from the ward re-check that §3 refuses to
 do: a ward answer depends on the world as it is *now*, so re-asking it could
 delete a settlement somebody still has, but a radius is a property of the row and
 is wrong today in exactly the way it was wrong when it was written. Accepting a
 harvest row with a radius of 1e30 would make felling legal everywhere in the
 world.
+
+**Either record being unwritable stops every act, not just the one that touches
+it.** An act changes both files, so a journal this build may not write over
+disqualifies marking and recruiting too — the register is marked read-only
+alongside it, rather than leaving the rule to whichever call site happened to
+consult the journal's own flag.
 
 **A damaged record is never quarantined and replaced with an empty one.** That
 rule is the journal's, deliberately, and not the companion sidecar's: a companion
@@ -305,8 +372,9 @@ Enable the runtime: `BepInEx/config/…ConcernedForeman.cfg` →
 | 3 | `cf_settle area 24` standing in the open | marked, echoing the centre and radius |
 | 4 | `cf_settle area 24` again, same spot | "Already marked, exactly like that… Nothing changed" |
 | 5 | `cf_settle area 30` | **refused**, naming the 24 m one and telling you to clear it first |
-| 6 | Build a workbench ward, or find one you do not own, and `cf_settle area 24` inside it | **refused**, naming the ward — at designation time, not at build time |
-| 7 | Walk to the edge of loaded ground and `cf_settle area 48` reaching into unloaded terrain | **refused** because the check could not be made — *not* granted |
+| 6 | `cf_settle clear area`, then stand inside a ward you do not own and `cf_settle area 24` | **refused**, naming the ward — at designation time, not at build time |
+| 7 | Still with nothing marked, walk to the edge of loaded ground and `cf_settle area 48` reaching into unloaded terrain | **refused** because the check could not be made — *not* granted |
+| 7b | `cf_settle area 24` back in the open, to restore the settlement for the steps below | marked |
 | 8 | `cf_settle harvest 20` in a forest away from the settlement | marked |
 | 9 | `cf_settle supply` while looking at nothing | refused, telling you to look at a chest |
 | 10 | `cf_settle supply` while looking at a chest **outside** the settlement area | refused, naming the reason |
@@ -315,11 +383,20 @@ Enable the runtime: `BepInEx/config/…ConcernedForeman.cfg` →
 | 13 | `cf_settle recruit` again | "already on the roster. Nothing changed" |
 | 14 | `cf_settle recruit second-hand` | refused: one worker at a time |
 | 15 | **Quit to the main menu and reload the world.** `cf_settle status` | all three designations and the worker are exactly as they were |
-| 16 | Destroy the designated chest, place a new one in the same spot, `cf_settle status` | the designation still names the **old** chest — it did not silently follow the new one |
+| 15b | **Immediately after step 15**, look at the designated chest and run `cf_settle supply` | "Marked" — *not* "Already marked". The chest's identity did not survive the reload, and this is what re-marking it looks like. `cf_settle status` before this step says the chest needs marking again |
+| 16 | Destroy the designated chest, place a new one in the same spot, `cf_settle status` | the designation does not silently follow the new one |
 | 17 | `cf_settle clear supply` | it is cleared (no orders exist yet, so it costs nothing) |
 | 18 | `cf_settle clear area` | the harvest area and any supply designation go with it; the worker stays employed |
 | 19 | `cf_settle dismiss` | the worker leaves the roster — a separate, deliberate act |
 | 20 | Load a **different** world and `cf_settle status` | nothing marked; the first world's settlement is not inherited |
+
+**Step 6 depends on step 6's `clear` actually running first.** An earlier draft
+put both ward steps after a settlement area was already marked, where the
+already-marked check settles the request *before* the ward is ever consulted —
+so both would have returned "already marked differently" and neither would have
+exercised the ward gate at all. They are the only two steps that do, so getting
+that sequencing wrong would have left #281's ward-refusal scope with no live
+evidence while appearing to have some.
 
 Steps 17 and 18 cannot yet show the interesting half. **No leaf creates an order
 or reserves material**, so clearing currently cancels nothing. The cascade is
@@ -333,7 +410,8 @@ being quietly skipped.
 
 ## 8. What is not covered by a test
 
-The game-free core is exercised exhaustively. The Foreman adapter is not, and
+The game-free core is exercised thoroughly, though not exhaustively — #293
+records two holes in it that are still open. The Foreman adapter is not, and
 cannot be from the game-free project: `WorldDesignationSite`, `SettlementTargets`
 and `DesignationTools` all reference Unity and game types, and
 `Shared.Settlement.Tests` deliberately references no product and no engine.
@@ -344,14 +422,17 @@ So these are only proved by §7:
 - resolving the chest you are looking at, and its `ZDOID`;
 - argument parsing, the confirmation gate on a costly clear, and dropping a
   pending plan when a new designation or a world change makes it stale;
-- resolving *which* world's records are meant, from `ZNet.GetWorldUID()`.
+- resolving *which* world's records are meant, from `ZNet.GetWorldUID()`, and
+  minting the identity epoch for that run;
+- `SettlementRecords.Forget()`'s attempt to flush anything outstanding as a
+  world goes away.
 
-That list is shorter than it was. The two-file write rule used to be in this
-list, and an independent review found it broken — in adapter code nothing could
-exercise. It now lives in the game-free `SettlementRecordWriter` and has three
-tests, including one against a real locked file rather than a flag. The lesson
-generalises: logic that can only be reached through the adapter should be moved
-down until it can be tested, not annotated as untested.
+**This list grew, and one thing left it.** The two-file write rule was never in
+it — it was simply undocumented, and an independent review found it broken in
+adapter code nothing could exercise. It now lives in the game-free
+`SettlementRecordWriter` with three tests, one against a genuinely locked file.
+The lesson generalises: logic reachable only through the adapter should be moved
+down until it can be tested, rather than annotated as untested.
 
 The last of those is the one worth naming: if the confirmation gate were wrong,
 a clear could happen a word early. The damage is bounded by the core — an

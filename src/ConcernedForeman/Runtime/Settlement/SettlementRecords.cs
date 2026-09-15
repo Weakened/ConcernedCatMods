@@ -99,7 +99,19 @@ internal sealed class SettlementRecords
             return false;
         }
 
-        long worldId = net.GetWorldUID();
+        long worldId;
+        try
+        {
+            worldId = net.GetWorldUID();
+        }
+        catch (Exception)
+        {
+            // GetWorldUID dereferences state that is not guaranteed to exist
+            // the instant ZNet does. No world id means no scope, and no scope
+            // means we do not write anything.
+            return false;
+        }
+
         if (worldId == 0L)
         {
             // Not yet known. Refusing beats writing into a scope that is about
@@ -120,11 +132,35 @@ internal sealed class SettlementRecords
 
     private void Load(SettlementScope scope)
     {
+        // Anything outstanding for the world we are leaving is written before
+        // its records are dropped. The path comes from each object's own
+        // immutable scope, so this writes the DEPARTING world's files.
+        Save();
+
         SettlementRegisterStore.LoadReport registerReport = _registers.Load(scope);
         JournalStore.LoadReport journalReport = _journals.Load(scope);
 
         _register = registerReport.Register;
         _journal = journalReport.Journal;
+
+        // A journal this build may not write over stops the REGISTER being
+        // written too. Marking the register read-only is how that reaches every
+        // act -- designating, recruiting, dismissing -- rather than only the
+        // two places that happened to consult the journal's own flag. An act
+        // changes both files, so either one being unwritable disqualifies it.
+        if (_journal.IsReadOnly)
+        {
+            _register.MarkReadOnly();
+        }
+
+        // A fresh identity space for this run of the world.
+        //
+        // Every persisted object is handed a new id on load, so a chest key
+        // written before this moment names nothing now. Generating the epoch
+        // HERE -- once per world open, not once per process -- is what makes
+        // "before this load" and "during this load" distinguishable, including
+        // when the same world is reopened twice in one session.
+        _register.UseIdentityEpoch(Guid.NewGuid().ToString("N"));
 
         // Assigned last, so a throw anywhere above cannot leave the scope
         // pointing at a world whose records were never loaded.
@@ -160,7 +196,11 @@ internal sealed class SettlementRecords
         // The path comes from each object's own immutable scope, so this writes
         // the DEPARTING world's files, never the next one's. Normally there is
         // nothing to do, because every act saves as it happens.
-        Save();
+        string? notice = Save();
+        if (notice != null)
+        {
+            _log(notice);
+        }
 
         _register = null;
         _journal = null;

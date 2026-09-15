@@ -26,8 +26,8 @@ internal readonly struct RecordSaveOutcome
     public string? Notice { get; }
 }
 
-/// <summary>Writes a settlement's journal and register together, in the one
-/// order that cannot leave them disagreeing about material.
+/// <summary>Writes a settlement's journal and register together, in the order
+/// whose only possible disagreement is the recoverable one.
 ///
 /// <b>This exists as its own game-free type because the rule it enforces is the
 /// most dangerous line in the leaf and it was previously unreachable by any

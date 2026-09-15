@@ -45,7 +45,12 @@ internal enum DesignationKind
 /// sidestepped by mutating a field.</summary>
 internal sealed class Designation
 {
-    internal Designation(DesignationKind kind, SitePoint centre, float radius, string? containerKey)
+    internal Designation(
+        DesignationKind kind,
+        SitePoint centre,
+        float radius,
+        string? containerKey,
+        string? identityEpoch = null)
     {
         if (kind == DesignationKind.None)
         {
@@ -84,10 +89,17 @@ internal sealed class Designation
             }
         }
 
+        if (kind != DesignationKind.SupplyContainer && identityEpoch != null)
+        {
+            throw new ArgumentException(
+                "Only a supply container has an identity that can go stale.", nameof(identityEpoch));
+        }
+
         Kind = kind;
         Centre = centre;
         Radius = radius;
         ContainerKey = containerKey;
+        IdentityEpoch = identityEpoch;
     }
 
     public DesignationKind Kind { get; }
@@ -104,6 +116,31 @@ internal sealed class Designation
     /// here: this layer never interprets it, it only remembers it and compares
     /// it for equality.</summary>
     public string? ContainerKey { get; }
+
+    /// <summary>Which run of the world the <see cref="ContainerKey"/> means
+    /// anything in.
+    ///
+    /// <b>This exists because the game gives a placed object no identity that
+    /// survives a save.</b> The design originally assumed it did. Decompiling
+    /// the installed 1.0.12 build showed otherwise: <c>ZDO.Load</c> opens with
+    /// <c>m_uid.SetID(++ZDOID.m_loadID)</c>, so every persisted object is
+    /// handed a <i>fresh</i> id in load order, and <c>SetID</c> also forces the
+    /// user half to a constant. A key written before a reload therefore names
+    /// nothing after it — and because the new ids are dense from one, it is
+    /// likely to name some <i>other</i> chest that happens to have loaded in
+    /// that position.
+    ///
+    /// Silently resolving to the wrong chest is the worst outcome available
+    /// here: a worker would draw from a container the player never designated.
+    /// So the epoch is recorded alongside the key, and a key from a previous
+    /// epoch resolves to <b>nothing at all</b> rather than to a guess. The
+    /// player is told to mark the chest again, which is one keystroke and is
+    /// honest.
+    ///
+    /// Null for every area designation: ground does not have this problem,
+    /// because a circle is described by its own coordinates rather than by a
+    /// reference to an object.</summary>
+    public string? IdentityEpoch { get; }
 
     public bool IsArea => Kind != DesignationKind.SupplyContainer;
 
@@ -127,17 +164,37 @@ internal sealed class Designation
     /// nudged the centre by a metre got silently told nothing had changed.</summary>
     public bool SameAs(Designation other)
     {
-        return other != null
-            && other.Kind == Kind
-            && other.Centre.Equals(Centre)
-            && other.Radius.Equals(Radius)
-            && string.Equals(other.ContainerKey, ContainerKey, StringComparison.Ordinal);
+        if (other == null || other.Kind != Kind)
+        {
+            return false;
+        }
+
+        if (Kind == DesignationKind.SupplyContainer)
+        {
+            // A container IS its key, within an epoch. Its centre is recorded
+            // only to show the player where it stood -- the type's own comment
+            // says so -- and comparing it here would mean re-marking a chest
+            // that had moved a millimetre, or a chest riding a wagon, was
+            // refused as "already marked differently".
+            return string.Equals(other.ContainerKey, ContainerKey, StringComparison.Ordinal)
+                && string.Equals(other.IdentityEpoch, IdentityEpoch, StringComparison.Ordinal);
+        }
+
+        return other.Centre.Equals(Centre) && other.Radius.Equals(Radius);
+    }
+
+    /// <summary>True when this is a container designation whose key was written
+    /// in a different run of the world and therefore means nothing now.</summary>
+    public bool IsStaleIdentity(string? currentEpoch)
+    {
+        return Kind == DesignationKind.SupplyContainer
+            && !string.Equals(IdentityEpoch, currentEpoch, StringComparison.Ordinal);
     }
 
     public override string ToString()
     {
         return Kind == DesignationKind.SupplyContainer
-            ? "supply container " + ContainerKey + " at " + Centre
+            ? "supply container at " + Centre
             : string.Format(
                 CultureInfo.InvariantCulture, "{0} at {1}, radius {2:0.#} m", Kind, Centre, Radius);
     }
@@ -170,6 +227,9 @@ internal readonly struct DesignationRequest
         return new DesignationRequest(kind, centre, radius, null);
     }
 
+    /// <summary>A request to designate a chest. The epoch is stamped by the
+    /// book from whichever run of the world is current, not passed in here,
+    /// so a caller cannot claim an identity is fresher than it is.</summary>
     public static DesignationRequest Container(SitePoint at, string? containerKey)
     {
         return new DesignationRequest(DesignationKind.SupplyContainer, at, 0f, containerKey);

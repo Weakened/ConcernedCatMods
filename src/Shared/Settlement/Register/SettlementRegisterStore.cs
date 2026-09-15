@@ -306,6 +306,7 @@ internal sealed class SettlementRegisterStore
                     Number(designation.Centre.Z),
                     Number(designation.Radius),
                     AtomicTextFile.Escape(designation.ContainerKey),
+                    AtomicTextFile.Escape(designation.IdentityEpoch),
                 });
         }
 
@@ -374,10 +375,18 @@ internal sealed class SettlementRegisterStore
 
         string? containerKey = fields[6].Length == 0 ? null : AtomicTextFile.Unescape(fields[6]);
 
+        // Written by a build that had no epoch, or a row that predates one: the
+        // designation loads, and the missing epoch makes it permanently stale,
+        // so it resolves to nothing until the player marks the chest again.
+        // That is the safe direction.
+        string? epoch = fields.Length < 8 || fields[7].Length == 0
+            ? null
+            : AtomicTextFile.Unescape(fields[7]);
+
         try
         {
             designation = new Designation(
-                (DesignationKind)kindValue, new SitePoint(x, y, z), radius, containerKey);
+                (DesignationKind)kindValue, new SitePoint(x, y, z), radius, containerKey, epoch);
             return true;
         }
         catch (ArgumentException)
