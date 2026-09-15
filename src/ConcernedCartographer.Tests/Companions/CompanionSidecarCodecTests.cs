@@ -140,7 +140,11 @@ public class CompanionSidecarCodecTests
 
         Assert.Equal(1, parsed.SkippedRows);
         Assert.False(parsed.Sidecar.HasForwardData);
-        Assert.Contains("q\tbroken\tx\ty\tz", parsed.Sidecar.ForwardLines);
+
+        // Carried, but as damage rather than as somebody else's data: the two
+        // are re-emitted differently and only one of them is ever counted.
+        Assert.Contains("q\tbroken\tx\ty\tz", parsed.Sidecar.QuarantinedLines);
+        Assert.DoesNotContain("q\tbroken\tx\ty\tz", parsed.Sidecar.ForwardLines);
     }
 
     [Fact]

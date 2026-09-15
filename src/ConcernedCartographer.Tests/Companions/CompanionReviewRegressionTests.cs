@@ -209,9 +209,126 @@ public sealed class CompanionReviewRegressionTests : IDisposable
             scope);
 
         Assert.Equal(1, parsed.SkippedRows);
-        Assert.Contains("q\tintroduction\t1\t1\t0", parsed.Sidecar.ForwardLines);
+        Assert.Contains("q\tintroduction\t1\t1\t0", parsed.Sidecar.QuarantinedLines);
         Assert.True(parsed.Sidecar.TryGetQuest(FirstQuest, out CompanionQuestRecord record));
         Assert.Equal(QuestState.Recruited, record.State);
+    }
+
+    [Fact]
+    public void ACarriedDuplicateIsNotRecountedAsFreshDamageOnEveryLoad()
+    {
+        // #292. The row survives a load, gets re-emitted on save, and is read
+        // back next session. Counting it again there makes a permanent false
+        // alarm out of the one notice that is supposed to be actionable.
+        CompanionScope scope = Scope();
+        string[] original =
+        {
+            "s\t1",
+            "k\tsynthetic-alpha\t" + scope.World.ToStorageToken() + "\t" + scope.Character.ToStorageToken(),
+            "q\tintroduction\t4\t2\t0",
+            "q\tintroduction\t1\t1\t0",
+        };
+
+        CompanionSidecarCodec.ParseResult first = CompanionSidecarCodec.Parse(original, scope);
+        Assert.Equal(1, first.SkippedRows);
+        Assert.Equal(SidecarLoadOutcome.LoadedWithSkippedRows, first.Outcome);
+
+        // A load that only carries rows advances nothing, so without an
+        // explicit request for a rewrite the marker would never reach the file.
+        Assert.True(first.Sidecar.IsDirty);
+
+        var written = new List<string>(CompanionSidecarCodec.Serialize(first.Sidecar));
+        CompanionSidecarCodec.ParseResult second = CompanionSidecarCodec.Parse(written, scope);
+
+        Assert.Equal(0, second.SkippedRows);
+        Assert.Equal(SidecarLoadOutcome.Loaded, second.Outcome);
+        Assert.True(second.Sidecar.HasPreviouslyCarriedDamage);
+
+        // Nothing was dropped: the loser is still there, byte for byte.
+        Assert.Contains("q\tintroduction\t1\t1\t0", second.Sidecar.QuarantinedLines);
+
+        // And the winner is still the winner.
+        Assert.True(second.Sidecar.TryGetQuest(FirstQuest, out CompanionQuestRecord kept));
+        Assert.Equal(QuestState.Recruited, kept.State);
+
+        // Stable across further sessions: no growth, no re-marking, no notice.
+        var again = new List<string>(CompanionSidecarCodec.Serialize(second.Sidecar));
+        CompanionSidecarCodec.ParseResult third = CompanionSidecarCodec.Parse(again, scope);
+        Assert.Equal(0, third.SkippedRows);
+        Assert.Equal(written.Count, again.Count);
+        Assert.Equal(written, again);
+        Assert.Single(third.Sidecar.QuarantinedLines);
+    }
+
+    [Fact]
+    public void CarriedDamageIsNeverMistakenForANewerBuildsData()
+    {
+        // A quarantined row must not become evidence. Garbage that unlocked
+        // features would be a worse bug than the one #292 describes.
+        CompanionScope scope = Scope();
+        CompanionSidecarCodec.ParseResult first = CompanionSidecarCodec.Parse(
+            new[]
+            {
+                "s\t1",
+                "k\tsynthetic-alpha\t" + scope.World.ToStorageToken() + "\t" + scope.Character.ToStorageToken(),
+                "q\tbroken\tnot-a-state\tnope\t?",
+            },
+            scope);
+
+        var written = new List<string>(CompanionSidecarCodec.Serialize(first.Sidecar));
+        CompanionSidecarCodec.ParseResult second = CompanionSidecarCodec.Parse(written, scope);
+
+        Assert.False(second.Sidecar.HasForwardData);
+        Assert.Equal(UnlockReason.NotUnlocked, second.Sidecar.GrantedReason);
+        Assert.Equal(0, second.SkippedRows);
+        Assert.Contains("q\tbroken\tnot-a-state\tnope\t?", second.Sidecar.QuarantinedLines);
+    }
+
+    [Fact]
+    public void RealDamageFoundAfterACarriedRowIsStillReported()
+    {
+        // The fix must silence only the rows this build already carried. A
+        // file that acquires NEW damage later has to say so.
+        CompanionScope scope = Scope();
+        CompanionSidecarCodec.ParseResult first = CompanionSidecarCodec.Parse(
+            new[]
+            {
+                "s\t1",
+                "k\tsynthetic-alpha\t" + scope.World.ToStorageToken() + "\t" + scope.Character.ToStorageToken(),
+                "q\tintroduction\t4\t2\t0",
+                "q\tintroduction\t1\t1\t0",
+            },
+            scope);
+
+        var written = new List<string>(CompanionSidecarCodec.Serialize(first.Sidecar));
+        written.Add("q\tsecond\tmangled\tby\tsomething");
+
+        CompanionSidecarCodec.ParseResult second = CompanionSidecarCodec.Parse(written, scope);
+
+        Assert.Equal(1, second.SkippedRows);
+        Assert.Equal(SidecarLoadOutcome.LoadedWithSkippedRows, second.Outcome);
+        Assert.Equal(2, second.Sidecar.QuarantinedLines.Count);
+    }
+
+    [Fact]
+    public void AReadOnlyFileIsNotRewrittenJustToTidyCarriedDamage()
+    {
+        // Not overwriting a newer build's file outranks our own bookkeeping,
+        // even at the cost of the notice recurring there.
+        CompanionScope scope = Scope();
+        CompanionSidecarCodec.ParseResult parsed = CompanionSidecarCodec.Parse(
+            new[]
+            {
+                "s\t1",
+                "k\tsynthetic-alpha\t" + scope.World.ToStorageToken() + "\t" + scope.Character.ToStorageToken(),
+                "q\tintroduction\t99\t3\t0",
+                "q\tbroken\tnot-a-state\tnope\t?",
+            },
+            scope);
+
+        Assert.True(parsed.Sidecar.IsReadOnly);
+        Assert.False(parsed.Sidecar.IsDirty);
+        Assert.False(_store.Save(parsed.Sidecar, force: true).Saved);
     }
 
     [Fact]

@@ -30,6 +30,16 @@ internal static class CompanionSidecarCodec
     private const string ScopeRow = "k";
     private const string QuestRow = "q";
     private const string UnlockRow = "u";
+
+    /// <summary>The row kind a carried-but-unusable line is re-emitted under.
+    ///
+    /// The original line follows the marker verbatim, separator and all, so
+    /// nothing is lost and splitting the marker back off reconstructs it
+    /// exactly. Its whole purpose is to make "damage found this session"
+    /// distinguishable from "damage this build itself carried last session" —
+    /// without it, the outcome is pinned at LoadedWithSkippedRows forever and
+    /// the one notice that should be actionable becomes noise (#292).</summary>
+    private const string CarriedRow = "x";
     private const int QuestFieldCount = 5;
 
     public sealed class ParseResult
@@ -84,6 +94,13 @@ internal static class CompanionSidecarCodec
         foreach (string line in sidecar.ForwardLines)
         {
             yield return line;
+        }
+
+        // Damage goes back out too — it is never deleted — but marked, so the
+        // next load carries it again without reporting it again.
+        foreach (string line in sidecar.QuarantinedLines)
+        {
+            yield return CarriedRow + FieldSeparator + line;
         }
     }
 
@@ -198,6 +215,21 @@ internal static class CompanionSidecarCodec
         foreach (string line in body)
         {
             string[] fields = line.Split(FieldSeparator);
+            if (string.Equals(fields[0], CarriedRow, StringComparison.Ordinal))
+            {
+                // A row a previous run already carried and already reported.
+                // Carried again, counted never: the player was told once and
+                // there is nothing they can do about it, so telling them every
+                // session only trains them to ignore the notice.
+                if (fields.Length >= 2)
+                {
+                    sidecar.ReadmitQuarantinedLine(
+                        line.Substring(CarriedRow.Length + 1));
+                }
+
+                continue;
+            }
+
             if (string.Equals(fields[0], UnlockRow, StringComparison.Ordinal))
             {
                 if (fields.Length >= 2 &&
@@ -257,6 +289,12 @@ internal static class CompanionSidecarCodec
                 skipped++;
                 sidecar.AddCarriedLine(line, isForwardData: false);
             }
+        }
+
+        if (skipped > 0)
+        {
+            // Ask for a rewrite so these rows come back marked next time.
+            sidecar.RequestQuarantineRewrite();
         }
 
         SidecarLoadOutcome outcome = skipped > 0

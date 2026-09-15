@@ -17,6 +17,7 @@ internal sealed class CompanionSidecar
         new Dictionary<string, CompanionQuestRecord>(StringComparer.Ordinal);
     private readonly List<string> _order = new List<string>();
     private readonly List<string> _forwardLines = new List<string>();
+    private readonly List<string> _quarantinedLines = new List<string>();
 
     public CompanionSidecar(CompanionScope scope)
     {
@@ -49,9 +50,25 @@ internal sealed class CompanionSidecar
     /// destroyed, but it is not treated as proof of anything.</summary>
     public bool HasForwardData { get; private set; }
 
-    /// <summary>Verbatim lines this build did not consume, re-emitted on save
-    /// so a single run of an older build does not erase them.</summary>
+    /// <summary>Verbatim lines a NEWER build wrote, re-emitted on save so a
+    /// single run of an older build does not erase them.</summary>
     public IReadOnlyList<string> ForwardLines => _forwardLines;
+
+    /// <summary>Lines this build could not use — damaged rows, and duplicate
+    /// quest rows that lost to one already restored.
+    ///
+    /// Kept apart from <see cref="ForwardLines"/> because they answer a
+    /// different question. A forward line is data somebody else owns. A
+    /// quarantined line is damage: it has been reported to the player once,
+    /// and it is carried rather than deleted only because this codec never
+    /// destroys a row it does not understand. Re-emitting it under its own row
+    /// kind is what stops the next session reading it back as damage found
+    /// that session.</summary>
+    public IReadOnlyList<string> QuarantinedLines => _quarantinedLines;
+
+    /// <summary>True when a quarantined row came back from the file already
+    /// marked, i.e. a previous run carried it. Not new damage.</summary>
+    public bool HasPreviouslyCarriedDamage { get; private set; }
 
     public IReadOnlyList<CompanionQuestRecord> Quests
     {
@@ -187,10 +204,38 @@ internal sealed class CompanionSidecar
     /// distinguishes "a newer build wrote this" from "this row is malformed".</summary>
     internal void AddCarriedLine(string line, bool isForwardData)
     {
-        _forwardLines.Add(line);
         if (isForwardData)
         {
+            _forwardLines.Add(line);
             HasForwardData = true;
+            return;
+        }
+
+        _quarantinedLines.Add(line);
+    }
+
+    /// <summary>Takes back a row a previous run already quarantined. Carried
+    /// exactly as before; simply not counted again.</summary>
+    internal void ReadmitQuarantinedLine(string line)
+    {
+        _quarantinedLines.Add(line);
+        HasPreviouslyCarriedDamage = true;
+    }
+
+    /// <summary>Asks for a save so newly quarantined rows are written back
+    /// under their marker.
+    ///
+    /// Without this the fix would never take effect on a quiet session: a load
+    /// that only carries rows changes no progress, so nothing else would ever
+    /// mark the file dirty, the marker would never be written, and the notice
+    /// would recur exactly as #292 describes. A read-only file is left alone —
+    /// not overwriting a newer build's data outranks tidying our own
+    /// bookkeeping.</summary>
+    internal void RequestQuarantineRewrite()
+    {
+        if (!IsReadOnly)
+        {
+            IsDirty = true;
         }
     }
 
