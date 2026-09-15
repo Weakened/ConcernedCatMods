@@ -420,6 +420,164 @@ public sealed class ToolPersistenceTests : IDisposable
         Assert.Equal(before, journal.NextSequence);
     }
 
+    // ------------------------------------------------------------------
+    // The ordering matrix
+    //
+    // Tool rows are collected during the entry loop and applied afterwards in
+    // one fixed order: create every holding, mark the unfinished ones unknown,
+    // apply a person's answers, then apply returns. An earlier version applied
+    // each row as it was met, so a return could arrive before the holding it
+    // referred to existed and was silently dropped -- the tool then replayed as
+    // still held. These pin the order rather than the implementation.
+    // ------------------------------------------------------------------
+
+    private SettlementJournal Rows(params (JournalEntryKind Kind, int Step)[] rows)
+    {
+        var journal = new SettlementJournal(Scope);
+        foreach ((JournalEntryKind kind, int step) in rows)
+        {
+            journal.Append(kind, default, Transaction(step), worker: Thorstein, tool: BronzeAxe);
+        }
+
+        return journal;
+    }
+
+    private ToolLedger Replayed(SettlementJournal journal) => Reload(journal).Replay().Tools;
+
+    [Fact]
+    public void ResolvedToWorkerThenReturnedEndsReturned()
+    {
+        // The ordering that used to end Held: the forward pass applied the
+        // return before the post-pass had created the holding, so the return was
+        // dropped and the resolution re-issued it. A tool the player had back
+        // was recorded as still in his hands.
+        ToolLedger tools = Replayed(Rows(
+            (JournalEntryKind.ToolHandoverStarted, 0),
+            (JournalEntryKind.ToolResolvedToWorker, 0),
+            (JournalEntryKind.ToolReturned, 0)));
+
+        Assert.True(tools.TryGet(Transaction(), out ToolHolding holding));
+        Assert.Equal(ToolHoldingState.Returned, holding.State);
+        Assert.Empty(tools.HeldBy(Thorstein));
+    }
+
+    [Fact]
+    public void ResolvedToPlayerEndsReturnedAndNeedsNoRepair()
+    {
+        ReplayResult replayed = Reload(Rows(
+            (JournalEntryKind.ToolHandoverStarted, 0),
+            (JournalEntryKind.ToolResolvedToPlayer, 0))).Replay();
+
+        Assert.True(replayed.Tools.TryGet(Transaction(), out ToolHolding holding));
+        Assert.Equal(ToolHoldingState.Returned, holding.State);
+        Assert.Empty(replayed.Repairs);
+        Assert.False(replayed.Tools.HasUncertainHandover(Thorstein));
+    }
+
+    [Fact]
+    public void AFinishWhoseStartDidNotSurviveIsStillEvidenceTheToolMoved()
+    {
+        // A finish is only ever written after the item really moved, so treating
+        // it as nothing because its start is missing would lose a real tool.
+        ToolLedger tools = Replayed(Rows((JournalEntryKind.ToolHandoverFinished, 0)));
+
+        Assert.True(tools.TryGetHeld(Thorstein, ToolKind.Axe, out _));
+        Assert.False(tools.HasUncertainHandover(Thorstein));
+    }
+
+    [Fact]
+    public void ARowReferringToAHandoverThatIsNotThereChangesNothing()
+    {
+        // A return or an answer for a handover with no start is not evidence of
+        // anything, and must not conjure a holding to act on.
+        Assert.Empty(Replayed(Rows((JournalEntryKind.ToolReturned, 0))).Holdings);
+        Assert.Empty(Replayed(Rows((JournalEntryKind.ToolResolvedToWorker, 0))).Holdings);
+        Assert.Empty(Replayed(Rows((JournalEntryKind.ToolResolvedToPlayer, 0))).Holdings);
+    }
+
+    [Fact]
+    public void AReturnRepeatedInTheRecordStillOnlyAppliesOnce()
+    {
+        ToolLedger tools = Replayed(Rows(
+            (JournalEntryKind.ToolHandoverStarted, 0),
+            (JournalEntryKind.ToolHandoverFinished, 0),
+            (JournalEntryKind.ToolReturned, 0),
+            (JournalEntryKind.ToolReturned, 0)));
+
+        Assert.Single(tools.Holdings);
+        Assert.Equal(1, tools.CountIn(ToolHoldingState.Returned));
+    }
+
+    [Fact]
+    public void AnAnswerForAHandoverThatFinishedNormallyChangesNothing()
+    {
+        // Nothing was in doubt, so there is nothing to settle. The holding must
+        // stay Held rather than being pushed somewhere by an answer to a
+        // question nobody asked.
+        ToolLedger tools = Replayed(Rows(
+            (JournalEntryKind.ToolHandoverStarted, 0),
+            (JournalEntryKind.ToolHandoverFinished, 0),
+            (JournalEntryKind.ToolResolvedToPlayer, 0)));
+
+        Assert.True(tools.TryGet(Transaction(), out ToolHolding holding));
+        Assert.Equal(ToolHoldingState.Held, holding.State);
+    }
+
+    [Fact]
+    public void TwoAnswersThatDisagreeDoNotLeaveTheToolInTwoPlaces()
+    {
+        // Whatever the last word is, exactly one outcome is recorded and the
+        // tool exists exactly once.
+        ToolLedger tools = Replayed(Rows(
+            (JournalEntryKind.ToolHandoverStarted, 0),
+            (JournalEntryKind.ToolResolvedToWorker, 0),
+            (JournalEntryKind.ToolResolvedToPlayer, 0)));
+
+        Assert.Single(tools.Holdings);
+        Assert.True(tools.TryGet(Transaction(), out ToolHolding holding));
+        Assert.NotEqual(ToolHoldingState.Uncertain, holding.State);
+        Assert.Equal(
+            1,
+            tools.CountIn(ToolHoldingState.Held) + tools.CountIn(ToolHoldingState.Returned));
+    }
+
+    [Fact]
+    public void ARepairIsOnlyRaisedForSomethingStillUnsettled()
+    {
+        // The repair loop runs after the answers are applied, so an interrupted
+        // handover somebody has already settled must not still be reported as
+        // waiting on them.
+        Assert.Empty(Reload(Rows(
+            (JournalEntryKind.ToolHandoverStarted, 0),
+            (JournalEntryKind.ToolResolvedToWorker, 0))).Replay().Repairs);
+
+        ReplayResult unsettled = Reload(Rows(
+            (JournalEntryKind.ToolHandoverStarted, 0))).Replay();
+
+        string repair = Assert.Single(unsettled.Repairs);
+
+        // And it names the command that can actually answer it, which for one
+        // commit it did not -- the message said "say which way it went" and
+        // there was nothing to say it with.
+        Assert.Contains("cf_settle resolve", repair);
+        Assert.Contains(Transaction().Value, repair);
+    }
+
+    [Fact]
+    public void TwoHandoversSettleIndependently()
+    {
+        ToolLedger tools = Replayed(Rows(
+            (JournalEntryKind.ToolHandoverStarted, 0),
+            (JournalEntryKind.ToolHandoverFinished, 0),
+            (JournalEntryKind.ToolHandoverStarted, 1)));
+
+        Assert.True(tools.TryGet(Transaction(0), out ToolHolding settled));
+        Assert.Equal(ToolHoldingState.Held, settled.State);
+
+        Assert.True(tools.TryGet(Transaction(1), out ToolHolding pending));
+        Assert.Equal(ToolHoldingState.Uncertain, pending.State);
+    }
+
     [Fact]
     public void AResolutionSurvivesTheNextReload()
     {
