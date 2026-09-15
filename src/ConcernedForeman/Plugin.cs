@@ -14,7 +14,7 @@ namespace TheConcernedCat.ConcernedForeman;
 ///
 /// Nothing here installs a patch, hooks a game event or touches world state at
 /// load. Until the settlement runtime is enabled and a worker is deliberately
-/// spawned, this plugin registers one console command and does nothing else.</summary>
+/// spawned, this plugin registers two console commands and does nothing else.</summary>
 [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
 [BepInDependency(Jotunn.Main.ModGuid)]
 public sealed class Plugin : BaseUnityPlugin
@@ -38,6 +38,7 @@ public sealed class Plugin : BaseUnityPlugin
             ". Building diagnostics do not require it.");
 
         CommandManager.Instance.AddConsoleCommand(new WorkerToolsCommand(_settlement));
+        CommandManager.Instance.AddConsoleCommand(new SettlementToolsCommand(_settlement));
     }
 
     /// <summary>Notices a world going away.

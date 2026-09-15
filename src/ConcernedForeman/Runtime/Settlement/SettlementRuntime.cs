@@ -24,6 +24,8 @@ internal sealed class SettlementRuntime
     private readonly ForemanSettlementSettings _settings;
     private readonly Action<string> _log;
     private readonly WorkerSitePolicy _sitePolicy = new WorldSitePolicy();
+    private readonly SettlementRecords _records;
+    private readonly DesignationTools _designations;
 
     private ForemanWorkerAI? _worker;
 
@@ -31,7 +33,14 @@ internal sealed class SettlementRuntime
     {
         _settings = settings;
         _log = log;
+        _records = new SettlementRecords(log);
+        _designations = new DesignationTools(HasAuthority, DescribeMissingAuthority, _records);
     }
+
+    /// <summary>CF-SET-004's command surface. It shares this object's single
+    /// authority answer rather than carrying one of its own, so marking ground
+    /// is refused in exactly the situations a worker refuses to act.</summary>
+    internal string ExecuteSettlement(string[]? args) => _designations.Execute(args);
 
     /// <summary>The single authority answer. Every clause is a refusal, never an
     /// assumption: a missing <c>ZNet</c> is "no authority", not "probably solo".</summary>
@@ -97,7 +106,7 @@ internal sealed class SettlementRuntime
             (_worker.IsFaulted ? " WORKER FAULTED and is inert; see the log." : string.Empty);
     }
 
-    private string DescribeMissingAuthority()
+    internal string DescribeMissingAuthority()
     {
         if (!_settings.SettlementRuntimeEnabled.Value)
         {
@@ -238,6 +247,13 @@ internal sealed class SettlementRuntime
     {
         _worker = null;
         ForemanWorkerPrefab.Reset();
+
+        // The records are dropped too, so a second world in the same session
+        // reads its own files instead of inheriting the first world's
+        // settlement -- and with them any unconfirmed clear the player was
+        // shown, which belonged to the world that just went away.
+        _records.Forget();
+        _designations.Forget();
     }
 
     private static string Format(Vector3 point)

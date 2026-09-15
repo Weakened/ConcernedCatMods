@@ -5,6 +5,7 @@ using System.IO;
 using TheConcernedCat.Settlement.Custody;
 using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Orders;
+using TheConcernedCat.Settlement.Storage;
 
 namespace TheConcernedCat.Settlement.Journal;
 
@@ -78,8 +79,12 @@ internal sealed class JournalStore
             Journal = journal;
             Outcome = outcome;
             SkippedLines = skippedLines;
-            ReadOnly = readOnly;
             Notice = notice;
+
+            if (readOnly)
+            {
+                journal.MarkReadOnly();
+            }
         }
 
         public SettlementJournal Journal { get; }
@@ -88,7 +93,9 @@ internal sealed class JournalStore
 
         /// <summary>True when this build must not write over the file. The
         /// settlement then refuses new work rather than losing the record.</summary>
-        public bool ReadOnly { get; }
+        /// <summary>Read straight off the journal, so the two can never
+        /// disagree about whether writing is allowed.</summary>
+        public bool ReadOnly => Journal.IsReadOnly;
 
         public string? Notice { get; }
     }
@@ -136,6 +143,7 @@ internal sealed class JournalStore
 
         var journal = new SettlementJournal(scope);
         int skipped = 0;
+        long highestSequence = -1L;
         bool sawHeader = false;
 
         foreach (string raw in lines)
@@ -185,12 +193,16 @@ internal sealed class JournalStore
                 sawHeader = true;
             }
 
-            if (TryParseEntry(fields, out JournalEntry entry))
+            if (TryParseEntry(fields, out JournalEntry entry) && entry.Sequence > highestSequence)
             {
+                highestSequence = entry.Sequence;
                 journal.Restore(entry);
             }
             else
             {
+                // A row out of sequence is damage, not data. Accepting it would
+                // let the file's order differ from the record's order, which is
+                // the one thing the sequence exists to prevent.
                 skipped++;
             }
         }
@@ -217,7 +229,7 @@ internal sealed class JournalStore
             throw new ArgumentNullException(nameof(journal));
         }
 
-        if (readOnly)
+        if (readOnly || journal.IsReadOnly)
         {
             return new SaveReport(
                 false,
@@ -233,29 +245,19 @@ internal sealed class JournalStore
         string path = ResolvePath(journal.Scope);
         string temporaryPath = path + TemporarySuffix;
 
-        try
+        Exception? writeFailure =
+            AtomicTextFile.TryWriteTemporary(_rootDirectory, temporaryPath, Serialize(journal));
+        if (writeFailure != null)
         {
-            Directory.CreateDirectory(_rootDirectory);
-            using (var writer = new StreamWriter(temporaryPath, append: false))
-            {
-                foreach (string line in Serialize(journal))
-                {
-                    writer.WriteLine(line);
-                }
-            }
-        }
-        catch (Exception exception)
-        {
-            TryDelete(temporaryPath);
             return new SaveReport(
                 false,
-                "Could not record the settlement's progress (" + exception.GetType().Name + "). " +
+                "Could not record the settlement's progress (" + writeFailure.GetType().Name + "). " +
                 "Nothing was changed on disk and the work will be recorded again on the next change.");
         }
 
         try
         {
-            Commit(temporaryPath, path);
+            AtomicTextFile.Commit(temporaryPath, path);
             journal.MarkClean();
             return new SaveReport(true, null);
         }
@@ -289,12 +291,12 @@ internal sealed class JournalStore
                 entry.Order.Value,
                 entry.Request.IsEmpty ? "" : entry.Request.Value,
                 ((int)entry.Transition).ToString(CultureInfo.InvariantCulture),
-                Escape(entry.Container),
+                AtomicTextFile.Escape(entry.Container),
             };
 
             foreach (MaterialStack stack in entry.Stacks)
             {
-                fields.Add(Escape(stack.Item) + "*" + stack.Count.ToString(CultureInfo.InvariantCulture));
+                fields.Add(AtomicTextFile.Escape(stack.Item) + "*" + stack.Count.ToString(CultureInfo.InvariantCulture));
             }
 
             yield return string.Join(Separator.ToString(), fields.ToArray());
@@ -343,7 +345,7 @@ internal sealed class JournalStore
             return false;
         }
 
-        string? container = fields[6].Length == 0 ? null : Unescape(fields[6]);
+        string? container = fields[6].Length == 0 ? null : AtomicTextFile.Unescape(fields[6]);
 
         var stacks = new List<MaterialStack>();
         for (int index = 7; index < fields.Length; index++)
@@ -358,80 +360,12 @@ internal sealed class JournalStore
                 return false;
             }
 
-            stacks.Add(new MaterialStack(Unescape(fields[index].Substring(0, star)), count));
+            stacks.Add(new MaterialStack(AtomicTextFile.Unescape(fields[index].Substring(0, star)), count));
         }
 
         entry = new JournalEntry(
             sequence, (JournalEntryKind)kindValue, order, request,
             (OrderTransition)transitionValue, container, stacks);
         return true;
-    }
-
-    private static string Escape(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-        {
-            return "";
-        }
-
-        return value!
-            .Replace("%", "%25")
-            .Replace("\t", "%09")
-            .Replace("*", "%2A")
-            .Replace("\r", "%0D")
-            .Replace("\n", "%0A");
-    }
-
-    private static string Unescape(string value)
-    {
-        return value
-            .Replace("%0A", "\n")
-            .Replace("%0D", "\r")
-            .Replace("%2A", "*")
-            .Replace("%09", "\t")
-            .Replace("%25", "%");
-    }
-
-    private static void Commit(string temporaryPath, string path)
-    {
-        if (!File.Exists(path))
-        {
-            File.Move(temporaryPath, path);
-            return;
-        }
-
-        try
-        {
-            File.Replace(temporaryPath, path, destinationBackupFileName: null);
-        }
-        catch (PlatformNotSupportedException)
-        {
-            CopyOver(temporaryPath, path);
-        }
-        catch (IOException)
-        {
-            CopyOver(temporaryPath, path);
-        }
-    }
-
-    private static void CopyOver(string temporaryPath, string path)
-    {
-        File.Copy(temporaryPath, path, overwrite: true);
-        TryDelete(temporaryPath);
-    }
-
-    private static void TryDelete(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
-        catch
-        {
-            // Best effort; the caller already has a real error to report.
-        }
     }
 }
