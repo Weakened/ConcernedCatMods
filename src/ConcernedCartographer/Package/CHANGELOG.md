@@ -1,6 +1,26 @@
 # Changelog
 
-## 1.1.0 - Optional walking and sailing Route Follow
+## Unreleased - Optional sailing Route Follow
+
+- **Sailing Route Follow (opt-in, OFF by default).** Mark a route as a sailing route with the new **Sailing** button in the Routes panel (or `cc_routes sailing on`), turn on `Routes/SailingAutoFollowEnabled`, take the helm of a raft, karve, longship or Drakkar with that route selected, and press Q. Cartographer then feeds the same bounded rudder input a player supplies by holding the helm key, steering along the route and around its corners.
+- **Your sails stay yours.** Sailing Route Follow never raises, lowers or reverses the sail, never touches wind, physics, speed, collision, damage or multiplayer authority, and never takes ownership of the ship. It writes exactly one thing: the rudder axis.
+- **Everything cancels it, immediately.** Any helm input, any sail step, jump/attack/secondary/dodge, pressing Q again, leaving the helm, editing or deleting the route, going too far off it, reaching the end, a map or world change, death or teleport. If wind or an obstacle stops the ship making progress along the route for 12 seconds, it releases the helm rather than fighting. There is no tacking, no obstacle avoidance, no docking and no pathfinding.
+- If the game ever changes the ship-control methods this relies on, all three hooks are removed together and the feature simply stays off for that session, leaving vanilla sailing untouched.
+- **Live multiplayer testing of sailing Route Follow is still outstanding.** The automated coverage is deterministic and game-free; raft/karve/longship/Drakkar, player-hosted and dedicated-server runs remain owner-verified and are not claimed here.
+- Marking a route as a sailing route is stored per route, in its own line of the route file. A route nobody marked keeps exactly the file format it already had, so existing routes and shared route files are unchanged. If you share a marked route with someone still on an older build, they get the whole route normally and simply do not see the sailing mark.
+- A sailing route is not offered to walking Route Follow, and splitting a sailing route leaves both halves marked.
+
+## 1.0.3 - Dungeon surveying fixed, plus optional walking Route Follow
+
+Fixed
+
+- **Survey now finds the Black Forest, Swamp and Mountain dungeon entrances.** Burial Chambers (including the half-buried ones), Troll Caves, Bear Caves, Sunken Crypts, Frost Caves and Hildir's crypt and cave are offered as pending observations when you walk up to them, exactly like berries and ore. Previously the survey only examined networked objects, and a Valheim dungeon entrance is not one: the game spawns it as a world *location*, so nothing carrying the dungeon's name ever existed for the survey to match. The scanner now also examines the world locations loaded around you. It still never reads the world location database, so nothing you have not visited is revealed, and dungeons still arrive as reviewable observations you accept or reject — never as automatic pins.
+- **Bear Cave, Hildir's crypt, Hildir's cave and half-buried Burial Chambers now have starter rules.** These identities matched no shipped rule, so they could not have been offered even once the scan was fixed. An untouched starter `survey-rules.tsv` is upgraded in place on load; a file you edited is never modified.
+- Mistlands and Ashlands entrances (infested mines, Dvergr town and boss entrances, charred fortresses) are **not** in the starter rules yet — add a pattern for them in the Survey panel if you want them, and see issue #260 for the tracked follow-up.
+- Because the same change makes lore runestones visible as world locations, the existing `runestone*` starter rule can now also offer a **Points of interest** observation at a runestone site. It is still a review-before-pin observation, and the rule can be turned off in the Survey panel.
+- The Survey panel's sweep line now reports networked objects and loaded locations separately, and says so plainly if a future game build stops exposing locations instead of silently missing dungeons again.
+
+Added
 
 - **Sailing Route Follow (opt-in, OFF by default).** Mark a route as a sailing route with the new **Sailing** button in the Routes panel (or `cc_routes sailing on`), turn on `Routes/SailingAutoFollowEnabled`, take the helm of a raft, karve, longship or Drakkar with that route selected, and press Q. Cartographer then feeds the same bounded rudder input a player supplies by holding the helm key, steering along the route and around its corners.
 - **Your sails stay yours.** Sailing Route Follow never raises, lowers or reverses the sail, never touches wind, physics, speed, collision, damage or multiplayer authority, and never takes ownership of the ship. It writes exactly one thing: the rudder axis.

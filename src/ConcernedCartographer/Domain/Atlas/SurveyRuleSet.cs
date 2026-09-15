@@ -211,12 +211,13 @@ internal sealed class SurveyRuleSet
     }
 
     /// <summary>The starter rule file written when none exists (broadened
-    /// in RC10, feedback 10): a bounded, immediately useful set — common
-    /// gatherables and wild seeds, ore deposits, dungeon entrances, lore
-    /// runestones and boss vegvisirs — every one duplicate-radius and
-    /// expiry bounded so a walk through a forest yields a handful of
-    /// reviewable observations, never a flood. Players edit the file
-    /// freely; it is the shareable import/export format.</summary>
+    /// in RC10, feedback 10; dungeon identities corrected for issue #258):
+    /// a bounded, immediately useful set — common gatherables and wild
+    /// seeds, ore deposits, dungeon entrances, lore runestones and boss
+    /// vegvisirs — every one duplicate-radius and expiry bounded so a walk
+    /// through a forest yields a handful of reviewable observations, never
+    /// a flood. Players edit the file freely; it is the shareable
+    /// import/export format.</summary>
     public static SurveyRuleSet Default()
     {
         var set = new SurveyRuleSet();
@@ -243,13 +244,61 @@ internal sealed class SurveyRuleSet
         set.AddRule(new SurveyRule("mudpile*", "cc:mine", "Resources", 40f, 240f));
 
         // Dungeon entrances and points of interest (8 h expiry).
+        // Issue #258: these are Valheim LOCATION identities, verified
+        // against the installed 1.0.12 location catalog — Crypt2/3/4
+        // (Burial Chambers), HalfBurried_ForestCrypt, Hildir_crypt,
+        // SunkenCrypt4, TrollCave02, BearCave, MountainCave02,
+        // Hildir_cave. "bearcave" and the "hildir_"/"halfburried_"
+        // prefixes had no rule at all, so even a correct scan could not
+        // have offered them.
+        set.AddRule(new SurveyRule("crypt*", "cc:dungeon", "Dungeons", 80f, 480f));
+        set.AddRule(new SurveyRule("halfburried_forestcrypt*", "cc:dungeon", "Dungeons", 80f, 480f));
+        set.AddRule(new SurveyRule("hildir_crypt*", "cc:dungeon", "Dungeons", 80f, 480f));
+        set.AddRule(new SurveyRule("sunkencrypt*", "cc:dungeon", "Dungeons", 80f, 480f));
+        set.AddRule(new SurveyRule("trollcave*", "cc:dungeon", "Dungeons", 80f, 480f));
+        set.AddRule(new SurveyRule("bearcave*", "cc:dungeon", "Dungeons", 80f, 480f));
+        set.AddRule(new SurveyRule("mountaincave*", "cc:dungeon", "Dungeons", 80f, 480f));
+        set.AddRule(new SurveyRule("hildir_cave*", "cc:dungeon", "Dungeons", 80f, 480f));
+        set.AddRule(new SurveyRule("runestone*", "cc:objective", "Points of interest", 80f, 480f));
+        set.AddRule(new SurveyRule("vegvisir*", "cc:objective", "Points of interest", 80f, 480f));
+
+        set.AddBlacklist("piece_*");
+        set.AddBlacklist("vfx_*");
+        set.AddBlacklist("sfx_*");
+        set.AddBlacklist("fx_*");
+        return set;
+    }
+
+    /// <summary>The exact starter set shipped by v1.0/v1.1.0 before the
+    /// issue #258 fix, used to recognize an untouched v1 starter file and
+    /// upgrade it in place to the corrected dungeon identities. A file the
+    /// player edited never matches and is never touched.</summary>
+    public static SurveyRuleSet V1StarterSet()
+    {
+        var set = new SurveyRuleSet();
+        set.AddRule(new SurveyRule("raspberrybush*", "cc:resource", "Resources", 30f, 120f));
+        set.AddRule(new SurveyRule("blueberrybush*", "cc:resource", "Resources", 30f, 120f));
+        set.AddRule(new SurveyRule("cloudberrybush*", "cc:resource", "Resources", 30f, 120f));
+        set.AddRule(new SurveyRule("pickable_mushroom*", "cc:resource", "Resources", 30f, 120f));
+        set.AddRule(new SurveyRule("pickable_thistle*", "cc:resource", "Resources", 30f, 120f));
+        set.AddRule(new SurveyRule("pickable_dandelion*", "cc:resource", "Resources", 30f, 120f));
+        set.AddRule(new SurveyRule("pickable_flint*", "cc:resource", "Resources", 30f, 120f));
+        set.AddRule(new SurveyRule("pickable_seedcarrot*", "cc:resource", "Resources", 40f, 120f));
+        set.AddRule(new SurveyRule("pickable_seedturnip*", "cc:resource", "Resources", 40f, 120f));
+        set.AddRule(new SurveyRule("pickable_seedonion*", "cc:resource", "Resources", 40f, 120f));
+        set.AddRule(new SurveyRule("gucksack*", "cc:resource", "Resources", 40f, 120f));
+        set.AddRule(new SurveyRule("beehive*", "cc:resource", "Resources", 60f, 240f));
+        set.AddRule(new SurveyRule("rock4_copper*", "cc:mine", "Resources", 40f, 240f));
+        set.AddRule(new SurveyRule("minerock_tin*", "cc:mine", "Resources", 30f, 240f));
+        set.AddRule(new SurveyRule("silvervein*", "cc:mine", "Resources", 40f, 240f));
+        set.AddRule(new SurveyRule("minerock_obsidian*", "cc:mine", "Resources", 40f, 240f));
+        set.AddRule(new SurveyRule("mudpile*", "cc:mine", "Resources", 40f, 240f));
         set.AddRule(new SurveyRule("crypt*", "cc:dungeon", "Dungeons", 80f, 480f));
         set.AddRule(new SurveyRule("sunkencrypt*", "cc:dungeon", "Dungeons", 80f, 480f));
         set.AddRule(new SurveyRule("trollcave*", "cc:dungeon", "Dungeons", 80f, 480f));
         set.AddRule(new SurveyRule("mountaincave*", "cc:dungeon", "Dungeons", 80f, 480f));
         set.AddRule(new SurveyRule("runestone*", "cc:objective", "Points of interest", 80f, 480f));
         set.AddRule(new SurveyRule("vegvisir*", "cc:objective", "Points of interest", 80f, 480f));
-
         set.AddBlacklist("piece_*");
         set.AddBlacklist("vfx_*");
         set.AddBlacklist("sfx_*");

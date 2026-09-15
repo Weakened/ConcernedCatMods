@@ -16,6 +16,17 @@ internal readonly struct RoadPoint
     public float Y { get; }
     public float Z { get; }
 
+    /// <summary>Full 3D distance. The survey uses this so a dungeon
+    /// interior (Valheim parks interiors 5000 m above their entrance)
+    /// never reads as nearby from the surface.</summary>
+    public float DistanceTo(in RoadPoint other)
+    {
+        float dx = X - other.X;
+        float dy = Y - other.Y;
+        float dz = Z - other.Z;
+        return (float)Math.Sqrt((dx * dx) + (dy * dy) + (dz * dz));
+    }
+
     public float HorizontalDistanceTo(in RoadPoint other)
     {
         float dx = X - other.X;
