@@ -2405,8 +2405,15 @@ internal sealed class CompanionHover : MonoBehaviour, Hoverable, Interactable
 
     public string GetHoverText()
     {
-        return AtlasStrings.Get("companion.hulgi.name") +
-            "\n[<color=yellow><b>$KEY_Use</b></color>] " + AtlasStrings.Get("companion.talkVerb");
+        // `$KEY_Use` means nothing until the game's Localization turns it into
+        // the player's live binding - a remapped key, or the controller button
+        // while a gamepad is active. Handing it over raw is what put the literal
+        // token on screen. Trader and Raven give their whole hover text to
+        // Localize; only the key goes through it here, because the name and the
+        // verb are this mod's own strings, already translated.
+        return AtlasStrings.Get("companion.hulgi.name") + "\n" +
+            Localization.instance.Localize("[<color=yellow><b>$KEY_Use</b></color>]") + " " +
+            AtlasStrings.Get("companion.talkVerb");
     }
 
     public float GetHoverOffset()
@@ -2423,7 +2430,15 @@ internal sealed class CompanionHover : MonoBehaviour, Hoverable, Interactable
         }
 
         Talk();
-        return true;
+
+        // False, the way the game's own talking NPCs answer. In Player.Interact
+        // the return value decides one thing only: whether the player plays
+        // DoInteractAnimation - turn to face the object and fire "interact",
+        // the reach used for chests and doors. Trader and Raven both talk and
+        // return false, so speaking to somebody is not a reach. Nothing else
+        // rides on it: hold suppression stamps m_lastHoverInteractTime before
+        // this is called, whatever it returns.
+        return false;
     }
 
     /// <summary>Nothing may be used on him. He is not a container, a station or

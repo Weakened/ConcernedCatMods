@@ -51,6 +51,19 @@ Fixed
   the rest of the session. His body is now assembled switched off, and the
   game's own scripts are taken out of it before the light goes on. Nothing you
   can see changes: he looks, sits, walks, dresses and speaks exactly as before.
+- **Talking to him is not a reach.** Pressing Use on Hulgi made your character
+  raise an arm, the same reach you use to open a chest. The game's own trader
+  and raven don't do that when you talk to them, and neither does he now. The
+  conversation itself is unchanged.
+- **His prompt shows your key.** Hovering over him showed the literal text
+  `$KEY_Use` instead of the key you press. It now shows your actual binding - a
+  remapped key, or your controller's button while you are playing on one.
+- **He no longer gets up every few seconds at night.** In a camp with no roof in
+  reach he would get up to look for shelter, sit down in the open, and get up
+  again about every fifteen seconds all night. After one look finds nowhere dry
+  he now spends the evening like any other: he stays on a seat you built him,
+  potters about at his usual pace, and still finds a roof if you build one near
+  him.
 
 Added
 

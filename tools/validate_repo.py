@@ -836,6 +836,98 @@ def check_companion_body_fails_closed(errors: list[str]) -> list[str]:
     ]
 
 
+def _cs_block(code: list[str], start: int) -> list[str]:
+    """The lines of the braced block that opens at or after `start`. Brace
+    counting on comment-stripped lines, which is all a method body needs."""
+    depth = 0
+    opened = False
+    block = []
+    for line in code[start:]:
+        depth += line.count("{") - line.count("}")
+        opened = opened or depth > 0
+        block.append(line)
+        if opened and depth <= 0:
+            break
+    return block
+
+
+def check_companion_talk_is_not_a_reach(errors: list[str]) -> list[str]:
+    """CC-NPC-011 talk audit: speaking to a companion is not a reach, and its
+    prompt shows the player's real key.
+
+    Both were seen by the owner in game. In Player.Interact the return value of
+    Interactable.Interact decides one thing: whether the player plays
+    DoInteractAnimation, the arm-raising reach used for chests and doors. The
+    game's own talking NPCs, Trader and Raven, return false - so every return
+    in CompanionHover.Interact must be the literal `return false;`; a computed
+    one could quietly become true again. And `$KEY_Use` is only a token until
+    Localization.Localize turns it into the live binding, remaps and gamepad
+    included, so every hover-text line carrying a `$KEY_` token must pass it
+    through Localize on that same line. Comments are stripped first, so neither
+    rule can be met by a comment."""
+    path = (ROOT / "src" / "ConcernedCartographer" / "Runtime" / "Companions" /
+            "CompanionActor.cs")
+    if not path.is_file():
+        fail("[companions] CC-NPC-011 talk audit: CompanionActor.cs is missing", errors)
+        return []
+
+    code = [_strip_cs_line_comment(line) for line in
+            path.read_text(encoding="utf-8").splitlines()]
+    hover = next((n for n, line in enumerate(code) if "class CompanionHover" in line), None)
+    if hover is None:
+        fail(
+            "[companions] CC-NPC-011 talk audit: CompanionHover is gone from "
+            f"{path.relative_to(ROOT)} — the audit no longer covers talking to him", errors)
+        return []
+
+    def method(signature: str) -> list[str] | None:
+        at = next((n for n in range(hover, len(code)) if signature in code[n]), None)
+        return None if at is None else _cs_block(code, at)
+
+    interact = method("public bool Interact(")
+    if interact is None:
+        fail(
+            "[companions] CC-NPC-011 talk audit: CompanionHover.Interact is missing — the audit "
+            "no longer covers talking to him", errors)
+        return []
+
+    returns = [line.strip() for line in interact if "return" in line.split("//")[0]]
+    if not returns or any(line != "return false;" for line in returns):
+        fail(
+            "[companions] CC-NPC-011 talk audit: CompanionHover.Interact must answer "
+            f"`return false;` on every path, found {returns} in {path.relative_to(ROOT)} — "
+            "returning true makes the player raise an arm every time somebody talks to him",
+            errors)
+        return []
+
+    hover_text = method("public string GetHoverText(")
+    if hover_text is None:
+        fail(
+            "[companions] CC-NPC-011 talk audit: CompanionHover.GetHoverText is missing — the "
+            "audit no longer covers his prompt", errors)
+        return []
+
+    keys = [line.strip() for line in hover_text if "$KEY_" in line]
+    if not keys:
+        fail(
+            "[companions] CC-NPC-011 talk audit: his hover prompt no longer names a key in "
+            f"{path.relative_to(ROOT)} — the player has to be told what to press", errors)
+        return []
+
+    raw = [line for line in keys if "Localization.instance.Localize(" not in line]
+    if raw:
+        fail(
+            "[companions] CC-NPC-011 talk audit: a `$KEY_` token in his hover prompt is not "
+            f"passed through Localization.instance.Localize in {path.relative_to(ROOT)} — it "
+            "reaches the screen as the literal token instead of the player's key", errors)
+        return []
+
+    return [
+        "[companions] CC-NPC-011 talk audit: talking to him is not a reach, and his prompt "
+        "shows the player's own key",
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -878,6 +970,7 @@ def main() -> int:
     report.extend(check_teamster_no_force_injection(errors))
     report.extend(check_teamster_no_internet_egress(errors))
     report.extend(check_companion_body_fails_closed(errors))
+    report.extend(check_companion_talk_is_not_a_reach(errors))
 
     prohibited = []
     for path in ROOT.rglob("*.dll"):
