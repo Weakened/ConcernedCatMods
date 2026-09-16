@@ -44,6 +44,50 @@ internal enum SeatStatus
     Lost = 2,
 }
 
+/// <summary>What a furniture sweep found, compared with what he is doing now.
+///
+/// The placement planner is deliberately still. It re-plans when the home point
+/// moves and when a seat is lost, and never merely because a fresh sweep liked
+/// a different spot of the same rank — that twitchiness is what makes a
+/// companion look like he is pacing between sessions. An upgrade is the single
+/// exception and it only ever ratchets one way: ground, then fire, then seat.
+///
+/// Carrying the comparison as a value rather than a bool is what lets the rule
+/// be stated once, here, instead of in the adapter that happens to do the
+/// sweeping.</summary>
+internal readonly struct SeatUpgrade
+{
+    /// <summary>No sweep happened this pass. The overwhelmingly common case:
+    /// the sweep runs on a slow interval, and not at all once he is seated.
+    /// </summary>
+    public static readonly SeatUpgrade NotSurveyed = default;
+
+    public SeatUpgrade(CompanionPose placed, CompanionPose offered)
+    {
+        Surveyed = true;
+        Placed = placed;
+        Offered = offered;
+    }
+
+    /// <summary>Whether a sweep actually ran. A sweep that ran and found
+    /// nothing better is not the same as no sweep, and neither moves him.
+    /// </summary>
+    public bool Surveyed { get; }
+
+    /// <summary>The pose he is in.</summary>
+    public CompanionPose Placed { get; }
+
+    /// <summary>The best pose available where he is.</summary>
+    public CompanionPose Offered { get; }
+
+    /// <summary>Strictly better, or nothing. Equal rank never moves him, so a
+    /// sweep that breaks a tie differently from last time costs nothing; worse
+    /// rank never moves him either, so a chair being carried away does not
+    /// shuffle him sideways onto the grass — losing the seat does that, and
+    /// that is a different signal with its own backoff.</summary>
+    public bool IsWorthMoving => Surveyed && Offered > Placed;
+}
+
 /// <summary>What the runtime should do about the companion actor this pass.</summary>
 internal enum ResidencyAction
 {
@@ -72,7 +116,8 @@ internal readonly struct ResidencyInputs
         CompanionAnchor currentAnchor,
         CompanionAnchor placedAnchor,
         AnchorValidity validity,
-        SeatStatus seat = SeatStatus.NotSeated)
+        SeatStatus seat = SeatStatus.NotSeated,
+        SeatUpgrade upgrade = default)
     {
         CompanionRecruited = companionRecruited;
         VisibilityEnabled = visibilityEnabled;
@@ -82,6 +127,7 @@ internal readonly struct ResidencyInputs
         PlacedAnchor = placedAnchor;
         Validity = validity;
         Seat = seat;
+        Upgrade = upgrade;
     }
 
     /// <summary>Whether the player actually welcomed the companion. Someone who
@@ -107,6 +153,9 @@ internal readonly struct ResidencyInputs
 
     /// <summary>What has become of the seat he is on, if any.</summary>
     public SeatStatus Seat { get; }
+
+    /// <summary>What a furniture sweep offered this pass, if one ran.</summary>
+    public SeatUpgrade Upgrade { get; }
 }
 
 /// <summary>Decides whether the companion should be standing somewhere, and
@@ -152,6 +201,18 @@ internal static class ResidencyPlanner
         // The check is deliberately before the anchor comparison: the home
         // point has not moved, so nothing below would notice.
         if (inputs.Seat == SeatStatus.Lost)
+        {
+            return ResidencyAction.Rehome;
+        }
+
+        // Somebody built him a chair. Nothing above notices, because nothing
+        // above changed: the actor exists, the home point has not moved, and
+        // the seat he is on - the ground - cannot be lost. Without this he
+        // sits beside a new bench until a relog, which is the whole of #306.
+        //
+        // Strictly better only, so this can fire at most twice in a
+        // companion's life: ground to fire, fire to seat.
+        if (inputs.Upgrade.IsWorthMoving)
         {
             return ResidencyAction.Rehome;
         }

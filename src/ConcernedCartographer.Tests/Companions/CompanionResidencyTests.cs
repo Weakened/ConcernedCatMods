@@ -30,15 +30,155 @@ public sealed class CompanionResidencyTests
         CompanionAnchor current = default,
         CompanionAnchor placed = default,
         AnchorValidity validity = AnchorValidity.Valid,
-        SeatStatus seat = SeatStatus.NotSeated)
+        SeatStatus seat = SeatStatus.NotSeated,
+        SeatUpgrade upgrade = default)
     {
         return new ResidencyInputs(
-            recruited, visible, actorPresent, supported, current, placed, validity, seat);
+            recruited, visible, actorPresent, supported, current, placed, validity, seat, upgrade);
     }
 
     // ------------------------------------------------------------------
     // Giving up a seat
     // ------------------------------------------------------------------
+
+    // ------------------------------------------------------------------
+    // Taking a seat that appeared later (#306)
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Upgrade_AChairBuiltAfterHeSettlesIsTaken()
+    {
+        // The case the whole issue is about. Nothing else in the inputs has
+        // changed: the actor exists, the home point is the same, and the
+        // ground he is sitting on cannot be lost. Before this rule the answer
+        // was None and the bench stood empty beside him until a relog.
+        Assert.Equal(
+            ResidencyAction.Rehome,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: true, current: Bed(), placed: Bed(),
+                upgrade: new SeatUpgrade(CompanionPose.SitOnGround, CompanionPose.SitOnSeat))));
+
+        // And the intermediate rung: a fire is better than bare ground.
+        Assert.Equal(
+            ResidencyAction.Rehome,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: true, current: Bed(), placed: Bed(),
+                upgrade: new SeatUpgrade(CompanionPose.SitOnGround, CompanionPose.SitByFire))));
+    }
+
+    [Fact]
+    public void Upgrade_AnEqualOfferNeverMovesHim()
+    {
+        // The anti-twitch rule. A sweep that finds another patch of ground, or
+        // another chair just as good, must not shuffle him across the camp -
+        // that is the restlessness the deterministic planner exists to avoid,
+        // and it would show up as a companion who never sits still.
+        foreach (CompanionPose pose in new[]
+                 {
+                     CompanionPose.SitOnGround, CompanionPose.SitByFire, CompanionPose.SitOnSeat,
+                 })
+        {
+            Assert.Equal(
+                ResidencyAction.None,
+                ResidencyPlanner.Decide(Inputs(
+                    actorPresent: true, current: Bed(), placed: Bed(),
+                    upgrade: new SeatUpgrade(pose, pose))));
+        }
+    }
+
+    [Fact]
+    public void Upgrade_AWorseOfferNeverMovesHim()
+    {
+        // A chair carried away while he is on it is a LOST seat, with its own
+        // rule and its own backoff. It must not also arrive here as "the best
+        // thing around is now the ground" and cause a second move.
+        Assert.Equal(
+            ResidencyAction.None,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: true, current: Bed(), placed: Bed(),
+                upgrade: new SeatUpgrade(CompanionPose.SitOnSeat, CompanionPose.SitOnGround))));
+
+        Assert.Equal(
+            ResidencyAction.None,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: true, current: Bed(), placed: Bed(),
+                upgrade: new SeatUpgrade(CompanionPose.SitByFire, CompanionPose.SitOnGround))));
+    }
+
+    [Fact]
+    public void Upgrade_NoSweepIsNotTheSameAsASweepThatFoundNothing()
+    {
+        // The default value has to be inert, because it is what every pass
+        // that did not sweep passes in - which is almost all of them.
+        Assert.False(default(SeatUpgrade).Surveyed);
+        Assert.False(default(SeatUpgrade).IsWorthMoving);
+        Assert.False(SeatUpgrade.NotSurveyed.IsWorthMoving);
+
+        Assert.Equal(
+            ResidencyAction.None,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: true, current: Bed(), placed: Bed(),
+                upgrade: SeatUpgrade.NotSurveyed)));
+
+        // A sweep DID run and offered a seat: that is the one that moves him.
+        Assert.True(
+            new SeatUpgrade(CompanionPose.SitOnGround, CompanionPose.SitOnSeat).Surveyed);
+    }
+
+    [Fact]
+    public void Upgrade_NeverResurrectsAHiddenOrUnrecruitedCompanion()
+    {
+        // Presentation stays downstream of everything. An offered seat is not
+        // a reason to build an actor the player asked not to see, and it is
+        // certainly not a reason to give a companion to someone who chose
+        // Tools-only.
+        var offer = new SeatUpgrade(CompanionPose.SitOnGround, CompanionPose.SitOnSeat);
+
+        Assert.Equal(
+            ResidencyAction.Remove,
+            ResidencyPlanner.Decide(Inputs(
+                recruited: false, actorPresent: true, current: Bed(), placed: Bed(),
+                upgrade: offer)));
+
+        Assert.Equal(
+            ResidencyAction.Remove,
+            ResidencyPlanner.Decide(Inputs(
+                visible: false, actorPresent: true, current: Bed(), placed: Bed(),
+                upgrade: offer)));
+
+        Assert.Equal(
+            ResidencyAction.Remove,
+            ResidencyPlanner.Decide(Inputs(
+                supported: false, actorPresent: true, current: Bed(), placed: Bed(),
+                upgrade: offer)));
+    }
+
+    [Fact]
+    public void Upgrade_ALostSeatOutranksAnOffer()
+    {
+        // Both say Rehome, so the returned action cannot tell them apart - but
+        // the adapter reads Seat to decide whether the eight-second backoff
+        // applies, and losing a seat must keep it. Pinned because collapsing
+        // the two would turn a seat that keeps being claimed into a rebuild
+        // every two seconds.
+        var inputs = Inputs(
+            actorPresent: true, current: Bed(), placed: Bed(), seat: SeatStatus.Lost,
+            upgrade: new SeatUpgrade(CompanionPose.SitOnGround, CompanionPose.SitOnSeat));
+
+        Assert.Equal(ResidencyAction.Rehome, ResidencyPlanner.Decide(inputs));
+        Assert.Equal(SeatStatus.Lost, inputs.Seat);
+    }
+
+    [Fact]
+    public void Upgrade_AnOfferDoesNotOverrideAMissingActor()
+    {
+        // Place, not Rehome: there is nothing to tear down.
+        Assert.Equal(
+            ResidencyAction.Place,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: false, current: Bed(), placed: default,
+                upgrade: new SeatUpgrade(CompanionPose.SitOnGround, CompanionPose.SitOnSeat))));
+    }
 
     [Fact]
     public void Seat_ASeatThatWasTakenOrTakenAwayIsGivenUpAtOnce()

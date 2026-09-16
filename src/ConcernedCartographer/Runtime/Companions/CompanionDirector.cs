@@ -96,6 +96,24 @@ internal sealed class CompanionDirector : IDisposable
     /// change between two consecutive frames.</summary>
     private const float PlacementRetrySeconds = 5f;
 
+    /// <summary>How often a settled companion looks up to see whether anyone
+    /// has built him somewhere better to sit.
+    ///
+    /// Half a minute, not the two-second residency tick. The sweep costs a
+    /// world probe, and a companion who re-evaluates his seating every two
+    /// seconds is the exact restlessness the deterministic planner exists to
+    /// avoid. Half a minute is fast enough that building a bench and turning
+    /// round is enough to see it work.</summary>
+    private const float SeatUpgradeSeconds = 30f;
+
+    /// <summary>The longest the sweep will ever wait.
+    ///
+    /// Reached only by doubling, and only when an upgrade was attempted and did
+    /// not take - the sweep offered a seat and the rebuilt actor came back on
+    /// the ground anyway. That disagreement would otherwise rebuild a humanoid
+    /// model every thirty seconds for as long as the world is loaded.</summary>
+    private const float SeatUpgradeCeilingSeconds = 480f;
+
     private readonly CartographerSettings _settings;
     private readonly ManualLogSource _log;
     private readonly CompanionScopeSource _scopeSource;
@@ -126,6 +144,9 @@ internal sealed class CompanionDirector : IDisposable
     private float _anchorElapsed;
     private float _placementRetryElapsed;
     private float _residencyElapsed;
+    private float _seatUpgradeElapsed;
+    private float _seatUpgradeWait = SeatUpgradeSeconds;
+    private CompanionPose? _upgradeFrom;
     private float _talkCooldown;
     private float _ambientElapsed;
     private int _conversationTurn;
@@ -345,6 +366,7 @@ internal sealed class CompanionDirector : IDisposable
                 UpdateCollectiblePresence();
             }
 
+            _seatUpgradeElapsed += deltaTime;
             _residencyElapsed += deltaTime;
             if (_residencyElapsed >= ResidencyIntervalSeconds)
             {
@@ -488,7 +510,8 @@ internal sealed class CompanionDirector : IDisposable
             _anchor,
             _actor.PlacedAnchor,
             _anchorValidity,
-            ReadSeatStatus());
+            ReadSeatStatus(),
+            ReadSeatUpgrade());
 
         switch (ResidencyPlanner.Decide(inputs))
         {
@@ -509,6 +532,14 @@ internal sealed class CompanionDirector : IDisposable
                 // humanoid model every two seconds. Bounded, the same
                 // disagreement costs one rebuild every eight.
                 bool lostSeat = inputs.Seat == SeatStatus.Lost;
+
+                // Remember what he was doing, so that if the sweep promised a
+                // seat and the rebuild lands him on the grass anyway, the next
+                // sweep waits longer instead of trying again immediately.
+                _upgradeFrom = inputs.Upgrade.IsWorthMoving
+                    ? inputs.Upgrade.Placed
+                    : (CompanionPose?)null;
+
                 _actor.Release();
                 _actorRetryElapsed = lostSeat ? ActorRetrySeconds : 0f;
                 break;
@@ -553,6 +584,7 @@ internal sealed class CompanionDirector : IDisposable
         _actor.RememberAnchor(_anchor);
         _actor.SetVisible(_settings.CompanionVisible.Value);
         _visibilityApplied = _settings.CompanionVisible.Value;
+        JudgeUpgrade();
         _log.LogInfo($"Hulgi settled near your {DescribeAnchor(_anchor.Kind)}: {_actor.Report}.");
     }
 
@@ -597,6 +629,78 @@ internal sealed class CompanionDirector : IDisposable
                 return "on the ground" +
                     (_hulgiProbe.SeatSeen ? "; a seat was seen but was not free or not usable" : "");
         }
+    }
+
+    /// <summary>Looks for somewhere better to sit, occasionally.
+    ///
+    /// Three things keep this cheap. It does not run at all once he is on a
+    /// seat, because nothing outranks one and a sweep that cannot change the
+    /// answer is a sweep not worth paying for. It does not run without a home
+    /// point, because the planner has nothing to plan around. And it runs on
+    /// its own slow clock rather than the residency tick.
+    ///
+    /// It reports a comparison, never a decision: whether moving is worth it is
+    /// <see cref="ResidencyPlanner"/>'s to say, and it says yes only to a
+    /// strictly better pose.</summary>
+    private SeatUpgrade ReadSeatUpgrade()
+    {
+        if (!_actor.Exists || !_anchor.IsValid || _actor.Pose >= CompanionPose.SitOnSeat)
+        {
+            return SeatUpgrade.NotSurveyed;
+        }
+
+        if (_seatUpgradeElapsed < _seatUpgradeWait)
+        {
+            return SeatUpgrade.NotSurveyed;
+        }
+
+        _seatUpgradeElapsed = 0f;
+
+        PlacementResult offer = _hulgiPlanner.Plan(_anchor, _hulgiProbe);
+        return offer.Found ? new SeatUpgrade(_actor.Pose, offer.Pose) : SeatUpgrade.NotSurveyed;
+    }
+
+    /// <summary>Whether the last upgrade actually happened, and how long to
+    /// wait before believing the sweep again.
+    ///
+    /// The sweep and the rebuild ask the world the same question a second
+    /// apart, and they can disagree - a chair claimed in between, a probe that
+    /// finds a spot the builder then rejects. Undetected, that disagreement is
+    /// a humanoid model torn down and rebuilt every thirty seconds forever.
+    /// Detected, it costs one rebuild, then one at a minute, then two, up to
+    /// eight, and stops being visible at all.</summary>
+    private void JudgeUpgrade()
+    {
+        if (_upgradeFrom == null)
+        {
+            return;
+        }
+
+        CompanionPose from = _upgradeFrom.Value;
+        _upgradeFrom = null;
+
+        if (_actor.Pose > from)
+        {
+            _seatUpgradeWait = SeatUpgradeSeconds;
+            _log.LogInfo(
+                $"Hulgi moved from {DescribePose(from)} to {DescribePose(_actor.Pose)}.");
+            return;
+        }
+
+        _seatUpgradeWait = Math.Min(_seatUpgradeWait * 2f, SeatUpgradeCeilingSeconds);
+        _log.LogInfo(
+            $"A better seat for Hulgi was offered and did not take; he is still {DescribePose(_actor.Pose)}. " +
+            $"The next look is in {_seatUpgradeWait:0} s.");
+    }
+
+    private static string DescribePose(CompanionPose pose)
+    {
+        return pose switch
+        {
+            CompanionPose.SitOnSeat => "on a seat",
+            CompanionPose.SitByFire => "by a fire",
+            _ => "on the ground",
+        };
     }
 
     /// <summary>Whether the seat he is on is still a seat he may have.

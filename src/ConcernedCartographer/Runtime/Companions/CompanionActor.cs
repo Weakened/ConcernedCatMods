@@ -222,6 +222,12 @@ internal sealed class CompanionActor
 
     public ActorReport? Report { get; private set; }
 
+    /// <summary>The pose he is actually in, not the one that was asked for.
+    /// The furniture sweep compares against this, so a companion who reported
+    /// a seat he had failed to take would silence the sweep permanently.
+    /// </summary>
+    public CompanionPose Pose => Report?.Pose ?? CompanionPose.SitOnGround;
+
     /// <summary>The home point this actor was built against, so the residency
     /// rule can tell whether it has moved.</summary>
     public CompanionAnchor PlacedAnchor { get; private set; }
@@ -302,9 +308,16 @@ internal sealed class CompanionActor
         WorldPoint where = onSeat ? _seat.Position : position;
         float yaw = onSeat ? _seat.YawDegrees : 200f;
 
+        // A seat offered but not usable is not a pose we may claim to be in.
+        // He is on the probed ground either way; reporting otherwise would tell
+        // the furniture sweep it had succeeded and stop it looking again.
+        CompanionPose achieved = pose == CompanionPose.SitOnSeat && !onSeat
+            ? CompanionPose.SitOnGround
+            : pose;
+
         _root.transform.position = new Vector3(where.X, where.Y, where.Z);
         _root.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
-        ApplyPose(pose);
+        ApplyPose(achieved);
     }
 
     private void PlacedAnchorSet(WorldPoint position)
