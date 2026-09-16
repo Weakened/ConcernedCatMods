@@ -57,18 +57,34 @@ public sealed class CampRoutineTests
                 RoutineState.Settled, CampRoutine.SettledSeconds, nightOrStorm: true,
                 secondsSinceShelterSearchFailed: 1f)));
 
-        // ...and looks again once it has been long enough for something to have
-        // changed, promptly, from a seat or from the ground.
+        // ...and from the ground he looks again once it has been long enough for
+        // something to have changed.
         Assert.Equal(
             RoutineAction.Stroll,
             CampRoutine.Decide(At(
                 RoutineState.Settled, 0f, nightOrStorm: true,
                 secondsSinceShelterSearchFailed: CampRoutine.ShelterRetrySeconds)));
+    }
+
+    [Fact]
+    public void AFailedLookHoldsHimOnASeatForTheRestOfTheWeather()
+    {
+        // Review of the first fix found the slower version of the same loop: on
+        // a seat, the retry fired every five minutes, walked him off the chair
+        // to sit on the grass, and the seat sweep put him back. A seat somebody
+        // built him keeps him until the weather changes...
+        Assert.Equal(
+            RoutineAction.Continue,
+            CampRoutine.Decide(At(
+                RoutineState.Settled, 0f, nightOrStorm: true, pose: CompanionPose.SitOnSeat,
+                secondsSinceShelterSearchFailed: CampRoutine.ShelterRetrySeconds * 10f)));
+
+        // ...and a new spell of weather, with no failure on record, still gets
+        // him up for one honest look.
         Assert.Equal(
             RoutineAction.Stroll,
             CampRoutine.Decide(At(
-                RoutineState.Settled, 0f, nightOrStorm: true, pose: CompanionPose.SitOnSeat,
-                secondsSinceShelterSearchFailed: CampRoutine.ShelterRetrySeconds)));
+                RoutineState.Settled, 0f, nightOrStorm: true, pose: CompanionPose.SitOnSeat)));
     }
 
     [Fact]

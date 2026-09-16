@@ -260,6 +260,7 @@ internal sealed class CompanionDirector : IDisposable
     {
         ReleaseCompass();
         _actor.Release();
+        _sinceShelterSearchFailed = float.PositiveInfinity;
         _anchorValidity = AnchorValidity.Unknown;
         _presentationSupported = true;
         _actorRetryElapsed = 0f;
@@ -796,9 +797,17 @@ internal sealed class CompanionDirector : IDisposable
                 _actor.StopWalking();
                 _actor.SettleWhereHeStands();
                 EnterRoutine(RoutineState.Settled);
-                _log.LogInfo(
-                    "Hulgi sat down" +
-                    (IsSheltered(_actor.Position) ? " under cover." : " in the open."));
+                bool covered = IsSheltered(_actor.Position);
+                if (nightOrStorm && !covered)
+                {
+                    // However he got here - nowhere dry in reach, a dry spot he
+                    // could not get to, or his patience running out on the way -
+                    // he has looked and he is sitting in the open. Recording only
+                    // the first of those left the other two free to loop.
+                    NoteShelterSearchFailed();
+                }
+
+                _log.LogInfo("Hulgi sat down" + (covered ? " under cover." : " in the open."));
                 break;
         }
     }
@@ -867,15 +876,8 @@ internal sealed class CompanionDirector : IDisposable
             // what stops the up-walk-sit-up loop seen in game at 7287919. His
             // ordinary pottering still passes through here, so a roof built
             // nearby is still found at his next stroll; only the extra
-            // get-up-just-to-look is held back. Said once per spell of weather.
-            if (float.IsPositiveInfinity(_sinceShelterSearchFailed))
-            {
-                _log.LogInfo(
-                    "Hulgi looked for somewhere dry and found nowhere in reach of his camp, so he is " +
-                    "not getting up just to look again.");
-            }
-
-            _sinceShelterSearchFailed = 0f;
+            // get-up-just-to-look is held back.
+            NoteShelterSearchFailed();
         }
 
         if (fallback.HasValue)
@@ -883,7 +885,27 @@ internal sealed class CompanionDirector : IDisposable
             // Nowhere dry within reach. Moving anyway is better than sitting in
             // the open pretending the weather is fine.
             StrollTo(fallback.Value);
+            return;
         }
+
+        // Nothing he could stand on anywhere in the ring. He stays sitting, and
+        // the settled floor starts again - without this the routine asked again
+        // on the very next frame, and every frame after, twelve probes a time.
+        _routineElapsed = 0f;
+    }
+
+    /// <summary>Records that a look for somewhere dry came back empty. Said in
+    /// the log once per spell of weather, not once per look.</summary>
+    private void NoteShelterSearchFailed()
+    {
+        if (float.IsPositiveInfinity(_sinceShelterSearchFailed))
+        {
+            _log.LogInfo(
+                "Hulgi looked for somewhere dry and ended up in the open, so he is not getting up " +
+                "just to look again for a while.");
+        }
+
+        _sinceShelterSearchFailed = 0f;
     }
 
     private void StrollTo(Vector3 point)
@@ -1119,6 +1141,7 @@ internal sealed class CompanionDirector : IDisposable
             "so it is being reopened for the current one. No progress is written to the previous scope.");
         ReleaseCompass();
         _actor.Release();
+        _sinceShelterSearchFailed = float.PositiveInfinity;
         _anchor = CompanionAnchor.None;
         _anchorValidity = AnchorValidity.Unknown;
         _noticedRecorded = false;

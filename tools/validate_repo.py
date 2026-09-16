@@ -852,79 +852,96 @@ def _cs_block(code: list[str], start: int) -> list[str]:
 
 
 def check_companion_talk_is_not_a_reach(errors: list[str]) -> list[str]:
-    """CC-NPC-011 talk audit: speaking to a companion is not a reach, and its
-    prompt shows the player's real key.
+    """CC-NPC-011 talk audit: speaking to a companion is not a reach, and every
+    companion prompt shows the player's real key.
 
     Both were seen by the owner in game. In Player.Interact the return value of
     Interactable.Interact decides one thing: whether the player plays
     DoInteractAnimation, the arm-raising reach used for chests and doors. The
-    game's own talking NPCs, Trader and Raven, return false - so every return
-    in CompanionHover.Interact must be the literal `return false;`; a computed
-    one could quietly become true again. And `$KEY_Use` is only a token until
-    Localization.Localize turns it into the live binding, remaps and gamepad
-    included, so every hover-text line carrying a `$KEY_` token must pass it
-    through Localize on that same line. Comments are stripped first, so neither
-    rule can be met by a comment."""
-    path = (ROOT / "src" / "ConcernedCartographer" / "Runtime" / "Companions" /
-            "CompanionActor.cs")
-    if not path.is_file():
-        fail("[companions] CC-NPC-011 talk audit: CompanionActor.cs is missing", errors)
+    game's own talking NPCs, Trader and Raven, return false - so every value
+    CompanionHover.Interact can produce, as a `return` or as an expression body,
+    must be the literal `false`; a computed one could quietly become true again.
+    And `$KEY_Use` is only a token until Localization.Localize turns it into the
+    live binding, remaps and gamepad included, so every `$KEY_` token in Hulgi's
+    and the compass's hover text must sit INSIDE a Localize call's string
+    argument - not merely on the same line as one.
+
+    Line and single-line block comments are stripped first, so a comment can
+    satisfy neither rule. A Localize call whose argument is not one string
+    literal on one line does not count; that is deliberate, and it fails
+    loudly rather than passing on trust."""
+    companions = ROOT / "src" / "ConcernedCartographer" / "Runtime" / "Companions"
+
+    def read(name: str) -> list[str] | None:
+        path = companions / name
+        if not path.is_file():
+            fail(f"[companions] CC-NPC-011 talk audit: {name} is missing — the audit no longer "
+                 "covers it", errors)
+            return None
+        return [re.sub(r"/\*.*?\*/", "", _strip_cs_line_comment(line))
+                for line in path.read_text(encoding="utf-8").splitlines()]
+
+    def member(code: list[str], owner: str, signature: str, file: str) -> list[str] | None:
+        at_class = next((n for n, line in enumerate(code) if f"class {owner}" in line), None)
+        at = None if at_class is None else next(
+            (n for n in range(at_class, len(code)) if signature in code[n]), None)
+        if at is None:
+            fail(f"[companions] CC-NPC-011 talk audit: {owner}.{signature.split('(')[0].split()[-1]} "
+                 f"is missing from {file} — the audit no longer covers it", errors)
+            return None
+        # An expression body ends at its semicolon; a block body at its brace.
+        if "=>" in " ".join(code[at:at + 2]).split("{")[0]:
+            body = []
+            for line in code[at:]:
+                body.append(line)
+                if ";" in line:
+                    break
+            return body
+        return _cs_block(code, at)
+
+    actor = read("CompanionActor.cs")
+    compass = read("BrokenCompassObject.cs")
+    if actor is None or compass is None:
         return []
 
-    code = [_strip_cs_line_comment(line) for line in
-            path.read_text(encoding="utf-8").splitlines()]
-    hover = next((n for n, line in enumerate(code) if "class CompanionHover" in line), None)
-    if hover is None:
-        fail(
-            "[companions] CC-NPC-011 talk audit: CompanionHover is gone from "
-            f"{path.relative_to(ROOT)} — the audit no longer covers talking to him", errors)
-        return []
-
-    def method(signature: str) -> list[str] | None:
-        at = next((n for n in range(hover, len(code)) if signature in code[n]), None)
-        return None if at is None else _cs_block(code, at)
-
-    interact = method("public bool Interact(")
+    interact = member(actor, "CompanionHover", "public bool Interact(", "CompanionActor.cs")
     if interact is None:
+        return []
+    text = " ".join(interact)
+    head = text.split("{")[0]
+    values = ([head.split("=>", 1)[1].split(";", 1)[0].strip()] if "=>" in head
+              else [value.strip() for value in re.findall(r"\breturn\b([^;]*);", text)])
+    if not values or any(value != "false" for value in values):
         fail(
-            "[companions] CC-NPC-011 talk audit: CompanionHover.Interact is missing — the audit "
-            "no longer covers talking to him", errors)
+            "[companions] CC-NPC-011 talk audit: CompanionHover.Interact must produce the literal "
+            f"`false` on every path, found {values} — anything else lets Player.Interact make "
+            "the player raise an arm every time somebody talks to him", errors)
         return []
 
-    returns = [line.strip() for line in interact if "return" in line.split("//")[0]]
-    if not returns or any(line != "return false;" for line in returns):
-        fail(
-            "[companions] CC-NPC-011 talk audit: CompanionHover.Interact must answer "
-            f"`return false;` on every path, found {returns} in {path.relative_to(ROOT)} — "
-            "returning true makes the player raise an arm every time somebody talks to him",
-            errors)
-        return []
-
-    hover_text = method("public string GetHoverText(")
-    if hover_text is None:
-        fail(
-            "[companions] CC-NPC-011 talk audit: CompanionHover.GetHoverText is missing — the "
-            "audit no longer covers his prompt", errors)
-        return []
-
-    keys = [line.strip() for line in hover_text if "$KEY_" in line]
-    if not keys:
-        fail(
-            "[companions] CC-NPC-011 talk audit: his hover prompt no longer names a key in "
-            f"{path.relative_to(ROOT)} — the player has to be told what to press", errors)
-        return []
-
-    raw = [line for line in keys if "Localization.instance.Localize(" not in line]
-    if raw:
-        fail(
-            "[companions] CC-NPC-011 talk audit: a `$KEY_` token in his hover prompt is not "
-            f"passed through Localization.instance.Localize in {path.relative_to(ROOT)} — it "
-            "reaches the screen as the literal token instead of the player's key", errors)
-        return []
+    localize = re.compile(r'Localization\.instance\.Localize\(\s*"[^"]*"\s*\)')
+    for owner, code, file in (("CompanionHover", actor, "CompanionActor.cs"),
+                              ("BrokenCompassObject", compass, "BrokenCompassObject.cs")):
+        hover = member(code, owner, "public string GetHoverText(", file)
+        if hover is None:
+            return []
+        resolved = sum(call.count("$KEY_") for line in hover for call in localize.findall(line))
+        raw = [line.strip() for line in hover if "$KEY_" in localize.sub("", line)]
+        if resolved == 0:
+            fail(
+                f"[companions] CC-NPC-011 talk audit: {owner}.GetHoverText no longer names a key "
+                f"through Localization.instance.Localize in {file} — the player has to be told "
+                "what to press", errors)
+            return []
+        if raw:
+            fail(
+                f"[companions] CC-NPC-011 talk audit: {owner}.GetHoverText has a `$KEY_` token "
+                f"outside a Localize call in {file}: {raw} — it reaches the screen as the literal "
+                "token instead of the player's key", errors)
+            return []
 
     return [
-        "[companions] CC-NPC-011 talk audit: talking to him is not a reach, and his prompt "
-        "shows the player's own key",
+        "[companions] CC-NPC-011 talk audit: talking to Hulgi is not a reach, and his prompt and "
+        "the compass's show the player's own key",
     ]
 
 

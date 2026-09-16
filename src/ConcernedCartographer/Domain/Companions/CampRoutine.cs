@@ -169,15 +169,22 @@ internal static class CampRoutine
                 return RoutineAction.Continue;
             }
 
-            // Out in it: worth getting up for, whatever he is sitting on - but
-            // only if the last look did not just come back empty. This was the
-            // one rule here with no floor, and in a camp with no roof in reach
-            // it turned into a loop in game: up, walk, sit "in the open", up
-            // again, every fifteen seconds all night. After a failed look he
-            // falls through to the ordinary rules below, which keep him on a
-            // seat somebody built and pace his pottering like any other
-            // evening, until it is worth looking again.
-            if (inputs.SecondsSinceShelterSearchFailed >= ShelterRetrySeconds)
+            // Out in it: worth getting up for, whatever he is sitting on - once.
+            // This was the one rule here with no floor, and in a camp with no
+            // roof in reach it turned into a loop in game: up, walk, sit "in the
+            // open", up again, every fifteen seconds all night.
+            //
+            // So a look that came back empty holds. On the ground it holds for
+            // ShelterRetrySeconds and then he may look again. On a seat
+            // somebody built him it holds for the rest of this spell of
+            // weather: getting up from a chair every few minutes to sit on the
+            // grass beside it, and being put back on the chair by the seat
+            // sweep, is the same loop at a slower speed. A new spell of weather
+            // starts with no failure on record, so he still looks once.
+            bool neverLooked = float.IsPositiveInfinity(inputs.SecondsSinceShelterSearchFailed);
+            bool lookAgain = inputs.Pose != CompanionPose.SitOnSeat &&
+                inputs.SecondsSinceShelterSearchFailed >= ShelterRetrySeconds;
+            if (neverLooked || lookAgain)
             {
                 return RoutineAction.Stroll;
             }

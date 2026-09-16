@@ -60,7 +60,13 @@ internal sealed class BrokenCompassObject : MonoBehaviour, Hoverable, Interactab
         HoverObserved = true;
         try
         {
-            return AtlasStrings.Get("companion.compass.name") + "\n[<color=yellow><b>$KEY_Use</b></color>] " +
+            // The key goes through the game's Localization, which turns
+            // `$KEY_Use` into the player's live binding (a remapped key, or the
+            // controller button while a gamepad is active). Handed over raw it
+            // reached the screen as the literal token - the same defect the
+            // owner saw on Hulgi's prompt.
+            return AtlasStrings.Get("companion.compass.name") + "\n" +
+                Localization.instance.Localize("[<color=yellow><b>$KEY_Use</b></color>]") + " " +
                 AtlasStrings.Get("companion.compass.hoverVerb");
         }
         catch
