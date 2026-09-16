@@ -173,6 +173,13 @@ internal static class AppearancePlan
         shapeFallbacks: new[] { "handlebar", "moustache", "mustache", "braid", "thick", "short" },
         familyPrefix: "Beard");
 
+    /// <summary>What Hulgi drinks from, best first: the vanilla wooden
+    /// "Tankard", then the Dvergr one. Mugs only - the two drinking horns the
+    /// game also has are not what the owner asked for. It is drawn in his hand
+    /// for the length of a drink and gone again after; it is not an item he
+    /// has, and nothing is taken from anyone's inventory to show it.</summary>
+    public static readonly IReadOnlyList<string> HulgiMugs = new[] { "Tankard", "Tankard_dvergr" };
+
     /// <summary>Picks one slot.</summary>
     /// <param name="available">Every option this build offers for the slot, as
     /// enumerated at runtime.</param>

@@ -28,6 +28,34 @@ Added
   leaves the area around your home point, never blocks anything and never
   touches the world - turn it off with `Companions/Wander` if you prefer him
   still.
+- **He walks to a better spot instead of appearing there.** When somewhere
+  better to sit turns up nearby - a fire lit, a bench built, your bed claimed a
+  short way off - he gets up and walks over, around buildings and through
+  doorways. Only a move of more than 30 m still puts him there directly.
+- **He notices a change to his camp within about a second.** Break the campfire
+  and build one somewhere else, and he heads for the new one straight away. It
+  stays cheap: one small check a second of the fires, seats and doors around
+  him, and the full look for a better spot runs only when one of them changed,
+  with a half-minute look as a safety net.
+- **He opens a door to leave a building, and closes it behind him.** When the
+  better spot is outside and the door is shut, he walks to it, opens it, steps
+  through and closes it after himself. Only an ordinary door you could open
+  yourself - never a locked door, and never inside a guard stone's area you
+  have no access to - and nothing else in the world is ever changed.
+- **He has a drink now and then.** Every few minutes a vanilla tankard appears
+  in his hand and he drinks from it, sitting where he is. Now and then he
+  raises a toast first - turning to you if you are near - getting up for it and
+  sitting back down afterwards; from a seat he steps off it to toast, unless
+  something is in the way, in which case he just drinks. The mug is only drawn
+  in his hand while he drinks: it is not an item, and nobody's inventory is
+  touched.
+- **The Broken Compass sparkles** the way the game's own pickables do, and it
+  lies just outside the stone circle rather than in the middle of it.
+- **`cc_companion summon`** sits him on the ground in front of you, to watch him
+  find his way back to the best spot he can reach; **`cc_companion drink
+  [toast|plain]`** has him take a drink now instead of waiting for one; and
+  **`cc_companion placement`** explains where he sits and why - every spot he
+  considered and what ruled it out.
 
 Fixed
 
@@ -41,9 +69,10 @@ Fixed
 - **He takes a chair built after he has settled.** The placement plan was made
   once and revisited only when the home point moved or his seat was lost, so a
   bench built beside him stood empty until something else forced a rehome. He
-  now looks up every half minute while he is not already on a seat, and moves
-  only for a strictly better place to sit - never for an equally good one, so he
-  does not drift around the camp. Once he is on a seat he stops looking.
+  now looks again whenever a fire, seat or door near him changes, and every half
+  minute besides, and moves only for a strictly better place - a warm spot by a
+  fire over a cold seat, any seat over bare ground - never for an equally good
+  one, so he does not drift around the camp.
 - **Skinned pieces are bound the way the game binds them** - handed the body's
   bone array whole, rather than matched joint by joint on name. For Hulgi's
   hair the two happen to produce the same answer, so this fixed nothing on its

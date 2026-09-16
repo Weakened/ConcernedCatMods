@@ -219,6 +219,11 @@ internal sealed class CompanionActor
     /// of on whichever bone a name search happened to hit first.</summary>
     private Transform? _helmetJoint;
 
+    /// <summary>The joint the source model's own <c>VisEquipment</c> holds a
+    /// right-hand item on, captured the same way as the helmet joint. His mug
+    /// goes here, exactly where the game would put a tankard.</summary>
+    private Transform? _rightHandJoint;
+
     /// <summary>The extracted model's body renderer, for the skin tint and for
     /// re-binding a skinned customization mesh to the right bones.</summary>
     private SkinnedMeshRenderer? _bodyModel;
@@ -352,6 +357,8 @@ internal sealed class CompanionActor
     /// figure look like it is standing through the furniture.</summary>
     private void Place(WorldPoint position, CompanionPose pose)
     {
+        // Wherever he is being put, he is not finishing a drink there.
+        EndDrink(restore: false);
         PlacedAnchorSet(position);
         if (_root == null)
         {
@@ -388,6 +395,13 @@ internal sealed class CompanionActor
 
     public void SetVisible(bool visible)
     {
+        if (!visible)
+        {
+            // Back on his seat before he goes, so he comes back sitting on it
+            // rather than standing in front of it with his mug put away.
+            EndDrink(restore: true);
+        }
+
         if (_root != null && _root.activeSelf != visible)
         {
             _root.SetActive(visible);
@@ -645,6 +659,14 @@ internal sealed class CompanionActor
 
     private bool HasFloatParameter(string name)
     {
+        return HasParameter(name, AnimatorControllerParameterType.Float);
+    }
+
+    /// <summary>Whether the live controller has a parameter of this name AND
+    /// type. Setting one that is absent, or of another type, makes Unity log an
+    /// error every call.</summary>
+    private bool HasParameter(string name, AnimatorControllerParameterType type)
+    {
         if (_animator == null || string.IsNullOrEmpty(name))
         {
             return false;
@@ -653,7 +675,7 @@ internal sealed class CompanionActor
         foreach (AnimatorControllerParameter parameter in _animator.parameters)
         {
             if (parameter != null &&
-                parameter.type == AnimatorControllerParameterType.Float &&
+                parameter.type == type &&
                 string.Equals(parameter.name, name, StringComparison.Ordinal))
             {
                 return true;
@@ -753,6 +775,7 @@ internal sealed class CompanionActor
     /// belongs to where he SETTLES, and a stroll is a round trip.</summary>
     public void StandUp()
     {
+        EndDrink(restore: false);
         ClearPoseParameter();
     }
 
@@ -764,6 +787,7 @@ internal sealed class CompanionActor
     /// seat near where he has wandered to, he should be offered it.</summary>
     public void SettleWhereHeStands()
     {
+        EndDrink(restore: false);
         ApplyPose(CompanionPose.SitOnGround);
     }
 
@@ -786,6 +810,771 @@ internal sealed class CompanionActor
         Place(position, CompanionPose.SitOnGround);
     }
 
+    /// <summary>The one-shot emote the game plays for <c>/toast</c>.
+    /// <c>Player.UpdateEmote</c> fires one-shot emotes as animator triggers,
+    /// <c>SetTrigger("emote_" + name)</c>, after clearing
+    /// <c>emote_stop</c>.</summary>
+    private const string ToastTrigger = "emote_toast";
+
+    private const string EmoteStopTrigger = "emote_stop";
+
+    /// <summary>What the game plays whenever anybody eats or drinks anything:
+    /// <c>Humanoid.UseItem</c> fires <c>SetTrigger("eat")</c> and shows the item
+    /// in the right hand while it plays. It is the upper-body minor action
+    /// <c>Player.InMinorAction</c> reads off layer 1, which is why a player can
+    /// eat sitting at a table - and why it is the drink he has sitting
+    /// down.</summary>
+    private const string ConsumeTrigger = "eat";
+
+    /// <summary>The drinking animation the game's own data names. Used on his
+    /// feet when the mug's item data does not name one itself.</summary>
+    private const string DrinkEmoteTrigger = "emote_drink";
+
+    /// <summary>The held-item state <c>Humanoid.SetAnimationState</c> writes,
+    /// as an int and as a float. Set to the mug's own state while he holds it
+    /// standing, which is how a player holding a tankard stands.</summary>
+    private const string ItemStateInt = "statei";
+
+    private const string ItemStateFloat = "statef";
+
+    /// <summary>How long after a trigger the animator is looked at to see
+    /// whether it did anything.</summary>
+    private const float TriggerCheckSeconds = 0.4f;
+
+    private DrinkPhase _drinkPhase;
+    private float _drinkElapsed;
+    private bool _drinkToast;
+    private bool _drinkStandsUp;
+    private bool _drinkWasSitting;
+    private string? _drinkPoseParameter;
+    private Vector3 _drinkHome;
+    private Quaternion _drinkHomeRotation = Quaternion.identity;
+    private Vector3 _drinkStand;
+    private Quaternion _drinkStandRotation = Quaternion.identity;
+    private IReadOnlyList<string> _drinkMugs = Array.Empty<string>();
+
+    /// <summary>The mug, once one has been put in his hand. Kept and switched
+    /// off between drinks rather than rebuilt for each; it goes with the figure
+    /// when he is rebuilt.</summary>
+    private GameObject? _mug;
+    private string _mugName = "";
+
+    /// <summary>What the mug's own item data says drinking from it looks like,
+    /// and the held-item state it asks for. Read off the item prefab, never
+    /// guessed.</summary>
+    private string? _mugDrinkTrigger;
+    private int _mugItemState = -1;
+
+    private bool _itemStateHeld;
+    private int _savedItemState;
+    private float _savedItemStateFloat;
+
+    private string? _firedTrigger;
+    private float _firedAt;
+    private bool _firedStanding;
+    private int[]? _firedLayers;
+
+    /// <summary>What has already been said about the drink animations this
+    /// session. The controller is the same every rebuild, so once is
+    /// enough.</summary>
+    private readonly HashSet<string> _drinkReported = new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>Set when the standing drink animation was seen to do nothing
+    /// on this build; from then on he drinks standing the way he drinks
+    /// seated.</summary>
+    private bool _standingDrinkDoesNothing;
+
+    /// <summary>Whether he is in the middle of a drink.</summary>
+    public bool IsDrinking => _drinkPhase != DrinkPhase.None;
+
+    /// <summary>Where he is sitting - which, while he is up for a toast, is the
+    /// seat he is coming straight back to rather than the step in front of it.
+    /// </summary>
+    public Vector3 RestingPosition => IsDrinking && _drinkStandsUp ? _drinkHome : Position;
+
+    /// <summary>Whether there is an animated figure to have a drink with, on
+    /// screen. The stand-in marker has no hands.</summary>
+    public bool CanDrink => _root != null && _animator != null && _root.activeInHierarchy;
+
+    /// <summary>Whether a sitting animation is being held right now - on the
+    /// ground or on a seat.</summary>
+    public bool IsSitting => _poseParameter != null;
+
+    /// <summary>Whether he is sitting on furniture rather than on the
+    /// ground.</summary>
+    public bool IsOnSeat => _poseParameter != null && _seat.IsUsable && Pose == CompanionPose.SitOnSeat;
+
+    /// <summary>Which way he is facing, flattened; zero when there is no
+    /// figure.</summary>
+    public Vector3 Facing
+    {
+        get
+        {
+            if (_root == null)
+            {
+                return Vector3.zero;
+            }
+
+            Vector3 forward = _root.transform.forward;
+            forward.y = 0f;
+            return forward.sqrMagnitude < 0.0001f ? Vector3.zero : forward.normalized;
+        }
+    }
+
+    /// <summary>Starts a drink. False, with the reason, when he cannot have one
+    /// right now.
+    ///
+    /// Presentation only, local only. The mug is a copy of the vanilla item's
+    /// hand mesh drawn on his hand for the length of the drink; nothing is
+    /// given, taken, consumed or sent, and the animations are triggers on his
+    /// own extracted animator.</summary>
+    /// <param name="standAt">For a toast from a seat: the ground just in front
+    /// of it, already checked by the caller. Null there means there is nowhere
+    /// to stand, and the toast is left out rather than done standing inside
+    /// the furniture. Ignored anywhere else - on the ground he gets up where he
+    /// is.</param>
+    /// <param name="faceTowards">Whoever he is toasting, when somebody is
+    /// near.</param>
+    public bool BeginDrink(
+        DrinkPlan plan, Vector3? standAt, Vector3? faceTowards, IReadOnlyList<string> mugs,
+        out string outcome)
+    {
+        if (_root == null || _animator == null)
+        {
+            outcome = "There is no animated companion to have a drink.";
+            return false;
+        }
+
+        if (IsDrinking)
+        {
+            outcome = "Hulgi is already having a drink.";
+            return false;
+        }
+
+        bool toast = plan.Toast;
+        bool sitting = IsSitting;
+        bool onSeat = IsOnSeat;
+        string note = string.Empty;
+        if (toast && onSeat && !standAt.HasValue)
+        {
+            toast = false;
+            note = " There is no room to stand in front of his seat, so he skips the toast.";
+        }
+
+        _drinkToast = toast;
+        _drinkStandsUp = toast && sitting;
+        _drinkWasSitting = sitting;
+        _drinkPoseParameter = _poseParameter;
+        _drinkHome = _root.transform.position;
+        _drinkHomeRotation = _root.transform.rotation;
+        _drinkStand = onSeat && standAt.HasValue ? standAt.Value : _drinkHome;
+        _drinkStandRotation = toast ? RotationToward(_drinkStand, faceTowards, _drinkHomeRotation) : _drinkHomeRotation;
+        _drinkMugs = mugs ?? Array.Empty<string>();
+        _drinkElapsed = 0f;
+        _drinkPhase = DrinkPhase.None;
+
+        // Onto the first step this frame, not the next.
+        AdvanceDrink(0f);
+
+        outcome = (toast
+            ? "Hulgi raises his mug in a toast" + (faceTowards.HasValue ? " to you" : "") + ", then drinks."
+            : "Hulgi has a drink" + (sitting ? " where he sits." : ".")) + note;
+        return true;
+    }
+
+    /// <summary>Puts a drink down wherever it has got to, and him back where he
+    /// was.</summary>
+    public void CancelDrink()
+    {
+        EndDrink(restore: true);
+    }
+
+    /// <summary>Moves a drink along. Called every frame while
+    /// <see cref="IsDrinking"/>.</summary>
+    public void TickDrink(float deltaTime)
+    {
+        if (!IsDrinking)
+        {
+            return;
+        }
+
+        if (_root == null || _animator == null)
+        {
+            ForgetDrink();
+            return;
+        }
+
+        AdvanceDrink(deltaTime);
+    }
+
+    private void AdvanceDrink(float deltaTime)
+    {
+        _drinkElapsed += deltaTime;
+        DrinkPhase phase = DrinkTimeline.PhaseAt(
+            _drinkElapsed, _drinkToast, _drinkStandsUp, out float progress);
+
+        if (phase != _drinkPhase)
+        {
+            LeaveDrinkPhase(_drinkPhase);
+            _drinkPhase = phase;
+            EnterDrinkPhase(phase);
+        }
+
+        GlideDrink(phase, progress);
+        CheckTriggerEffect();
+
+        if (phase == DrinkPhase.Done)
+        {
+            EndDrink(restore: true);
+        }
+    }
+
+    private void EnterDrinkPhase(DrinkPhase phase)
+    {
+        switch (phase)
+        {
+            case DrinkPhase.StandUp:
+                // Up off the seat or the ground. The report is not told he has
+                // left it - he is coming straight back.
+                ClearPoseParameter();
+                break;
+
+            case DrinkPhase.Raise:
+                ShowMug();
+                break;
+
+            case DrinkPhase.Toast:
+                ShowMug();
+                FireDrinkTrigger(ToastTrigger, emote: true, standing: true);
+                break;
+
+            case DrinkPhase.Drink:
+                ShowMug();
+                bool standing = !_drinkWasSitting || _drinkStandsUp;
+                FireDrinkTrigger(DrinkTriggerFor(standing), emote: false, standing);
+                break;
+
+            case DrinkPhase.SitDown:
+                HideMug();
+                RestoreItemState();
+                HoldPoseAgain();
+                break;
+        }
+    }
+
+    private void LeaveDrinkPhase(DrinkPhase phase)
+    {
+        switch (phase)
+        {
+            case DrinkPhase.Toast:
+            case DrinkPhase.Drink:
+                // A trigger the controller never took is not left armed, to go
+                // off later out of nowhere.
+                ResetFiredTrigger();
+                break;
+
+            case DrinkPhase.Lower:
+                HideMug();
+                RestoreItemState();
+                break;
+        }
+    }
+
+    /// <summary>Getting up for a toast and sitting back down afterwards, as a
+    /// short glide timed to the animation. From a seat that is the step off it
+    /// to the ground in front and back; from the ground it is only a turn
+    /// towards whoever he is toasting.</summary>
+    private void GlideDrink(DrinkPhase phase, float progress)
+    {
+        if (_root == null)
+        {
+            return;
+        }
+
+        float eased = progress * progress * (3f - (2f * progress));
+        switch (phase)
+        {
+            case DrinkPhase.StandUp:
+                _root.transform.SetPositionAndRotation(
+                    Vector3.Lerp(_drinkHome, _drinkStand, eased),
+                    Quaternion.Slerp(_drinkHomeRotation, _drinkStandRotation, eased));
+                break;
+
+            case DrinkPhase.Raise when _drinkToast && !_drinkWasSitting:
+                // Already on his feet: he only turns to face the toast.
+                _root.transform.rotation = Quaternion.Slerp(_drinkHomeRotation, _drinkStandRotation, eased);
+                break;
+
+            case DrinkPhase.SitDown:
+                _root.transform.SetPositionAndRotation(
+                    Vector3.Lerp(_drinkStand, _drinkHome, eased),
+                    Quaternion.Slerp(_drinkStandRotation, _drinkHomeRotation, eased));
+                break;
+        }
+    }
+
+    /// <summary>Ends a drink, finished or interrupted.</summary>
+    /// <param name="restore">True puts him back exactly where and how he was
+    /// if he got up for it - the end of every drink, and a drink cut off by
+    /// hiding him. False when the caller is about to put him somewhere itself:
+    /// a walk, a rebuild, a pose set by hand.</param>
+    private void EndDrink(bool restore)
+    {
+        if (_drinkPhase == DrinkPhase.None)
+        {
+            return;
+        }
+
+        HideMug();
+        RestoreItemState();
+        ResetFiredTrigger();
+
+        if (restore && _drinkStandsUp && _root != null)
+        {
+            _root.transform.SetPositionAndRotation(_drinkHome, _drinkHomeRotation);
+            HoldPoseAgain();
+        }
+
+        _drinkPhase = DrinkPhase.None;
+        _drinkElapsed = 0f;
+    }
+
+    /// <summary>Drops every reference a drink holds, without touching Unity:
+    /// the figure it belonged to is already gone.</summary>
+    private void ForgetDrink()
+    {
+        _drinkPhase = DrinkPhase.None;
+        _drinkElapsed = 0f;
+        _mug = null;
+        _mugName = string.Empty;
+        _itemStateHeld = false;
+        _firedTrigger = null;
+        _firedLayers = null;
+    }
+
+    private void HoldPoseAgain()
+    {
+        if (_animator == null || _drinkPoseParameter == null || _poseParameter != null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (HasBoolParameter(_drinkPoseParameter))
+            {
+                _animator.SetBool(_drinkPoseParameter, true);
+                _poseParameter = _drinkPoseParameter;
+            }
+        }
+        catch
+        {
+            // He stays standing. The next placement sits him down.
+        }
+    }
+
+    private static Quaternion RotationToward(Vector3 from, Vector3? target, Quaternion otherwise)
+    {
+        if (!target.HasValue)
+        {
+            return otherwise;
+        }
+
+        Vector3 flat = target.Value - from;
+        flat.y = 0f;
+        return flat.sqrMagnitude < 0.04f
+            ? otherwise
+            : Quaternion.LookRotation(flat.normalized, Vector3.up);
+    }
+
+    /// <summary>The drink animation to use. On his feet, the one the mug's own
+    /// item data names, then the game's drinking animation; sitting - or when
+    /// the standing one was seen to do nothing - the eating animation the game
+    /// plays for every drink anybody has.</summary>
+    private string? DrinkTriggerFor(bool standing)
+    {
+        if (standing && !_standingDrinkDoesNothing)
+        {
+            if (_mug != null && _mug.activeSelf && !string.IsNullOrEmpty(_mugDrinkTrigger) &&
+                HasParameter(_mugDrinkTrigger!, AnimatorControllerParameterType.Trigger))
+            {
+                return _mugDrinkTrigger;
+            }
+
+            if (HasParameter(DrinkEmoteTrigger, AnimatorControllerParameterType.Trigger))
+            {
+                return DrinkEmoteTrigger;
+            }
+        }
+
+        return ConsumeTrigger;
+    }
+
+    private void FireDrinkTrigger(string? name, bool emote, bool standing)
+    {
+        if (_animator == null || string.IsNullOrEmpty(name))
+        {
+            return;
+        }
+
+        if (!HasParameter(name!, AnimatorControllerParameterType.Trigger))
+        {
+            if (_drinkReported.Add("missing " + name))
+            {
+                _log.LogInfo(
+                    $"[drink] This build's companion animator has no \"{name}\" trigger, so that part " +
+                    "of his drink is left out. Nothing else is affected.");
+            }
+
+            return;
+        }
+
+        try
+        {
+            if (emote && HasParameter(EmoteStopTrigger, AnimatorControllerParameterType.Trigger))
+            {
+                // What Player.UpdateEmote does before starting an emote.
+                _animator.ResetTrigger(EmoteStopTrigger);
+            }
+
+            _firedLayers = SnapshotLayers();
+            _animator.SetTrigger(name);
+            _firedTrigger = name;
+            _firedAt = _drinkElapsed;
+            _firedStanding = standing;
+        }
+        catch (Exception exception)
+        {
+            _firedLayers = null;
+            _log.LogInfo(
+                $"[drink] The \"{name}\" animation could not be started: {SafeLogText.Brief(exception)}");
+        }
+    }
+
+    private void ResetFiredTrigger()
+    {
+        if (_animator != null && _firedTrigger != null)
+        {
+            try
+            {
+                _animator.ResetTrigger(_firedTrigger);
+            }
+            catch
+            {
+                // Nothing left armed that can be reached anyway.
+            }
+        }
+
+        _firedTrigger = null;
+        _firedLayers = null;
+    }
+
+    /// <summary>Which state every animator layer is in or heading into, by
+    /// hash, so a trigger's effect can be read back a moment later.</summary>
+    private int[]? SnapshotLayers()
+    {
+        if (_animator == null)
+        {
+            return null;
+        }
+
+        var layers = new int[_animator.layerCount];
+        for (int index = 0; index < layers.Length; index++)
+        {
+            layers[index] = _animator.IsInTransition(index)
+                ? _animator.GetNextAnimatorStateInfo(index).fullPathHash
+                : _animator.GetCurrentAnimatorStateInfo(index).fullPathHash;
+        }
+
+        return layers;
+    }
+
+    /// <summary>Says, once per animation per session, whether a drink or toast
+    /// trigger actually moved his animator - which layer, or nothing. The
+    /// animations are the game's own and could not be watched while this was
+    /// written, so this is the evidence that says whether they play from where
+    /// he is. A standing drink that does nothing is given up on for the
+    /// session in favour of the one that works sitting.</summary>
+    private void CheckTriggerEffect()
+    {
+        if (_animator == null || _firedTrigger == null || _firedLayers == null ||
+            _drinkElapsed - _firedAt < TriggerCheckSeconds)
+        {
+            return;
+        }
+
+        int[]? now = SnapshotLayers();
+        int[] before = _firedLayers;
+        _firedLayers = null;
+        if (now == null)
+        {
+            return;
+        }
+
+        var moved = new List<string>();
+        for (int index = 0; index < now.Length && index < before.Length; index++)
+        {
+            if (now[index] != before[index])
+            {
+                moved.Add(index.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
+        }
+
+        string where = _firedStanding ? "standing" : "sitting";
+        if (moved.Count == 0 && _firedStanding && _firedTrigger != ToastTrigger &&
+            _firedTrigger != ConsumeTrigger && !_standingDrinkDoesNothing)
+        {
+            _standingDrinkDoesNothing = true;
+            _log.LogInfo(
+                $"[drink] \"{_firedTrigger}\" did not move his animator while standing, so he drinks " +
+                $"standing with \"{ConsumeTrigger}\" for the rest of this session.");
+        }
+
+        if (_drinkReported.Add(_firedTrigger + " " + where))
+        {
+            _log.LogInfo(
+                $"[drink] \"{_firedTrigger}\" ({where}) " +
+                (moved.Count == 0
+                    ? $"moved no animator layer within {TriggerCheckSeconds:0.0}s."
+                    : $"moved animator layer(s) {string.Join(", ", moved)}."));
+        }
+    }
+
+    private void ShowMug()
+    {
+        if (_root == null)
+        {
+            return;
+        }
+
+        if (_mug != null)
+        {
+            if (!_mug.activeSelf)
+            {
+                _mug.SetActive(true);
+            }
+
+            HoldItemState();
+            return;
+        }
+
+        if (_rightHandJoint == null)
+        {
+            if (_drinkReported.Add("no hand"))
+            {
+                _log.LogInfo(
+                    "[drink] His model has no right-hand joint on this build, so he drinks without a " +
+                    "mug in his hand. Nothing else is affected.");
+            }
+
+            return;
+        }
+
+        foreach (string name in _drinkMugs)
+        {
+            if (TryAttachMug(name, _rightHandJoint))
+            {
+                HoldItemState();
+                return;
+            }
+        }
+
+        if (_drinkReported.Add("no mug"))
+        {
+            _log.LogInfo(
+                "[drink] None of this build's mugs could be put in his hand, so he drinks without " +
+                "one. Nothing else is affected.");
+        }
+    }
+
+    private void HideMug()
+    {
+        if (_mug != null && _mug.activeSelf)
+        {
+            _mug.SetActive(false);
+        }
+    }
+
+    /// <summary>Puts a mug in his right hand the way
+    /// <c>VisEquipment.AttachItem</c> puts a tankard in a player's: the item's
+    /// own <c>attach</c> child, on the right-hand joint, nudged by its
+    /// <c>equipoffset</c>. Built dark and refused on a surviving script, exactly
+    /// as hair, beards and garments are - a mug that kept a game script would
+    /// wake it inside him.</summary>
+    private bool TryAttachMug(string prefabName, Transform joint)
+    {
+        GameObject? prefab = LocalVisual.FindPrefab(prefabName);
+        if (prefab == null)
+        {
+            return false;
+        }
+
+        GameObject? attach = FindAttachChild(prefab, out bool skinned);
+        if (attach == null || skinned)
+        {
+            // A held item hangs off a joint. One that wants binding to the
+            // skeleton is not a mug.
+            return false;
+        }
+
+        GameObject holder = new GameObject("CC_MugHarvest");
+        holder.SetActive(false);
+
+        GameObject? piece = null;
+        try
+        {
+            piece = UnityEngine.Object.Instantiate(attach, holder.transform);
+            if (ContainsForbiddenComponent(piece, out string offender))
+            {
+                _log.LogInfo(
+                    $"[drink] The mug \"{prefabName}\" carries {offender}, so it was not used. Nothing " +
+                    "was stripped; the mug was refused.");
+                return false;
+            }
+
+            RemovePhysics(piece);
+            RemoveCloth(piece);
+            int mugScripts = RemoveBehaviours(
+                piece, clothHandledByCaller: true, out string mugScriptNames,
+                out string mugSurvivors);
+
+            if (mugSurvivors.Length > 0)
+            {
+                // Refused, not held. Still isolated under the inactive holder;
+                // the finally below destroys it there.
+                _log.LogInfo(
+                    $"[drink] The mug \"{prefabName}\" keeps {mugSurvivors} that this build will not " +
+                    "let us remove, so it was refused rather than put in his hand. Nothing was " +
+                    "attached and nothing was enabled.");
+                return false;
+            }
+
+            // worldPositionStays left at its default, for the reason the hair
+            // path gives: it keeps the mug's own scale on a joint that is not
+            // at unit scale.
+            piece.transform.SetParent(joint);
+            piece.transform.localPosition = Vector3.zero;
+            piece.transform.localRotation = Quaternion.identity;
+            ApplyEquipOffset(prefab, piece.transform);
+            ReadMugAnimation(prefab);
+
+            if (_drinkReported.Add("mug " + prefabName))
+            {
+                _log.LogInfo(
+                    $"[drink] mug {prefabName} on {PathOf(joint)}{DescribeScale(joint)}; drink animation " +
+                    $"from its item data: {_mugDrinkTrigger ?? "<none>"}, held-item state " +
+                    $"{(_mugItemState < 0 ? "<none>" : _mugItemState.ToString(System.Globalization.CultureInfo.InvariantCulture))}" +
+                    (mugScripts > 0 ? $"; scripts-quieted=[{mugScriptNames}]" : string.Empty));
+            }
+
+            GameObject held = piece;
+            piece = null;
+            held.SetActive(true);
+            _mug = held;
+            _mugName = prefabName;
+            return true;
+        }
+        catch (Exception exception)
+        {
+            _log.LogInfo(
+                $"[drink] The mug \"{prefabName}\" could not be put in his hand: {SafeLogText.Brief(exception)}");
+            return false;
+        }
+        finally
+        {
+            if (piece != null)
+            {
+                UnityEngine.Object.DestroyImmediate(piece);
+            }
+
+            UnityEngine.Object.DestroyImmediate(holder);
+        }
+    }
+
+    /// <summary>What the mug's item data says: the animation its attack plays,
+    /// which for a tankard is the drink, and the held-item state. Read off the
+    /// prefab's component; nothing is instantiated to read it.</summary>
+    private void ReadMugAnimation(GameObject prefab)
+    {
+        _mugDrinkTrigger = null;
+        _mugItemState = -1;
+
+        try
+        {
+            ItemDrop? drop = prefab.GetComponent<ItemDrop>();
+            ItemDrop.ItemData.SharedData? shared = drop != null ? drop.m_itemData?.m_shared : null;
+            if (shared == null)
+            {
+                return;
+            }
+
+            string? animation = shared.m_attack?.m_attackAnimation;
+            _mugDrinkTrigger = string.IsNullOrEmpty(animation) ? null : animation;
+            _mugItemState = (int)shared.m_animationState;
+        }
+        catch
+        {
+            // Without it he drinks the way everybody drinks.
+        }
+    }
+
+    private void HoldItemState()
+    {
+        bool standing = !_drinkWasSitting || _drinkStandsUp;
+        if (_animator == null || _itemStateHeld || _mugItemState < 0 || !standing)
+        {
+            return;
+        }
+
+        try
+        {
+            if (HasParameter(ItemStateInt, AnimatorControllerParameterType.Int))
+            {
+                _savedItemState = _animator.GetInteger(ItemStateInt);
+                _animator.SetInteger(ItemStateInt, _mugItemState);
+            }
+
+            if (HasParameter(ItemStateFloat, AnimatorControllerParameterType.Float))
+            {
+                _savedItemStateFloat = _animator.GetFloat(ItemStateFloat);
+                _animator.SetFloat(ItemStateFloat, _mugItemState);
+            }
+
+            _itemStateHeld = true;
+        }
+        catch
+        {
+            // He holds it the way he holds nothing.
+        }
+    }
+
+    private void RestoreItemState()
+    {
+        if (_animator == null || !_itemStateHeld)
+        {
+            _itemStateHeld = false;
+            return;
+        }
+
+        _itemStateHeld = false;
+        try
+        {
+            if (HasParameter(ItemStateInt, AnimatorControllerParameterType.Int))
+            {
+                _animator.SetInteger(ItemStateInt, _savedItemState);
+            }
+
+            if (HasParameter(ItemStateFloat, AnimatorControllerParameterType.Float))
+            {
+                _animator.SetFloat(ItemStateFloat, _savedItemStateFloat);
+            }
+        }
+        catch
+        {
+            // Left as it is; the next rebuild starts clean.
+        }
+    }
+
     /// <summary>Puts him in a pose by hand, so he can be looked at in one.
     ///
     /// Presentation only, local only, and not persisted: it writes animator
@@ -804,6 +1593,8 @@ internal sealed class CompanionActor
         {
             return "There is no companion model to pose.";
         }
+
+        EndDrink(restore: false);
 
         switch (what)
         {
@@ -868,22 +1659,7 @@ internal sealed class CompanionActor
     /// so asking first is both honest and quiet.</summary>
     private bool HasBoolParameter(string name)
     {
-        if (_animator == null || string.IsNullOrEmpty(name))
-        {
-            return false;
-        }
-
-        foreach (AnimatorControllerParameter parameter in _animator.parameters)
-        {
-            if (parameter != null &&
-                parameter.type == AnimatorControllerParameterType.Bool &&
-                string.Equals(parameter.name, name, StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return HasParameter(name, AnimatorControllerParameterType.Bool);
     }
 
     /// <summary>Extracts the animated visual subtree, or returns null.</summary>
@@ -929,16 +1705,23 @@ internal sealed class CompanionActor
             // the references stay valid once it is re-parented out, and the
             // component they were read from never wakes.
             Transform? helmet = null;
+            Transform? rightHand = null;
             SkinnedMeshRenderer? body = null;
             var vis = clone.GetComponentInChildren<VisEquipment>(includeInactive: true);
             if (vis != null)
             {
                 helmet = vis.m_helmet;
+                rightHand = vis.m_rightHand;
                 body = vis.m_bodyModel;
                 if (helmet != null && !helmet.IsChildOf(visual.transform))
                 {
                     // The joint is outside the subtree we keep; it would dangle.
                     helmet = null;
+                }
+
+                if (rightHand != null && !rightHand.IsChildOf(visual.transform))
+                {
+                    rightHand = null;
                 }
 
                 if (body != null && !body.transform.IsChildOf(visual.transform))
@@ -998,6 +1781,7 @@ internal sealed class CompanionActor
 
             _animator = animator;
             _helmetJoint = helmet;
+            _rightHandJoint = rightHand;
             _bodyModel = body;
 
             GameObject? result = root;
@@ -2390,9 +3174,13 @@ internal sealed class CompanionActor
     public void Release()
     {
         ClearPoseParameter();
+
+        // The mug goes with the figure it hangs off.
+        ForgetDrink();
         _seat = SeatOffer.None;
         _animator = null;
         _helmetJoint = null;
+        _rightHandJoint = null;
         _bodyModel = null;
         Report = null;
         PlacedAnchor = CompanionAnchor.None;
@@ -2420,10 +3208,12 @@ internal sealed class CompanionActor
     public void Forget()
     {
         _root = null;
+        ForgetDrink();
         _animator = null;
         _poseParameter = null;
         _seat = SeatOffer.None;
         _helmetJoint = null;
+        _rightHandJoint = null;
         _bodyModel = null;
         Report = null;
         PlacedAnchor = CompanionAnchor.None;

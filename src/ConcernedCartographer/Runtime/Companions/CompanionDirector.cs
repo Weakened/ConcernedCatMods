@@ -155,6 +155,28 @@ internal sealed class CompanionDirector : IDisposable
     /// retracing a circle.</summary>
     private const float StrollTurnDegrees = 137f;
 
+    /// <summary>How far in front of a seat he stands to raise a toast. Enough
+    /// to clear the seat's front edge with his whole body.</summary>
+    private const float ToastStepMetres = 0.75f;
+
+    /// <summary>How near somebody must be for him to turn and raise the toast
+    /// to them rather than to the camp in general.</summary>
+    private const float ToastFaceMetres = 8f;
+
+    /// <summary>What must not be where he stands for a toast. Not Occupied: the
+    /// seat he just got up from is right behind him, and the body check in
+    /// <see cref="FindToastSpot"/> asks the real question about what stands
+    /// there.</summary>
+    private const PlacementRejection UnsafeToStand =
+        PlacementRejection.NotLoaded | PlacementRejection.Water | PlacementRejection.Unsupported |
+        PlacementRejection.TooSteep | PlacementRejection.Fire | PlacementRejection.Doorway |
+        PlacementRejection.Bed;
+
+    /// <summary>The one source of chance in his day. Only when he drinks and
+    /// whether he toasts ride on it; where he goes and sits stays
+    /// deterministic.</summary>
+    private static readonly System.Random Dice = new System.Random();
+
 
     private readonly CartographerSettings _settings;
     private readonly ManualLogSource _log;
@@ -252,6 +274,9 @@ internal sealed class CompanionDirector : IDisposable
 
     private int _strollTurn;
     private bool _walkReported;
+
+    private readonly DrinkHabit _drinks = new DrinkHabit(() => Dice.NextDouble());
+    private bool _drinkingFailed;
 
     /// <summary>The plan the furniture sweep just made, kept for the rebuild it
     /// is about to cause. Valid for this residency pass only.</summary>
@@ -503,6 +528,7 @@ internal sealed class CompanionDirector : IDisposable
             }
 
             UpdateRoutine(deltaTime);
+            UpdateDrinking(deltaTime);
             UpdateProximityAndInput();
             UpdateCompanionInput();
             UpdateAmbientChatter(deltaTime);
@@ -898,6 +924,13 @@ internal sealed class CompanionDirector : IDisposable
             return SeatUpgrade.NotSurveyed;
         }
 
+        // Not in the middle of a drink either, unless the camp changed: the
+        // timer keeps, so the look comes the moment he has put the mug away.
+        if (_actor.IsDrinking && !_campChanged)
+        {
+            return SeatUpgrade.NotSurveyed;
+        }
+
         _seatUpgradeElapsed = 0f;
         _campChanged = false;
 
@@ -923,7 +956,10 @@ internal sealed class CompanionDirector : IDisposable
     /// seat if he is on one.</summary>
     private int CurrentSpotValue()
     {
-        Vector3 at = _actor.Position;
+        // Where he sits, not where he may be standing for a toast: measured from
+        // the step in front of his seat, his own seat can look like somewhere
+        // better to go.
+        Vector3 at = _actor.RestingPosition;
         PlacementProbeSample here = _hulgiProbe.Probe(new WorldPoint(at.x, at.y, at.z));
         SeatOffer seat = _actor.Pose == CompanionPose.SitOnSeat ? _actor.Seat : SeatOffer.None;
         return _hulgiPlanner.ValueOf(new PlacementProbeSample(
@@ -1299,6 +1335,157 @@ internal sealed class CompanionDirector : IDisposable
             "closed ones. If nothing reachable is better than where he is, he stays.";
     }
 
+    /// <summary>Every so often, a drink - with a toast in front of it now and
+    /// then. Only while he is sitting or standing about: never mid-walk, never
+    /// on his way through a door.</summary>
+    private void UpdateDrinking(float deltaTime)
+    {
+        if (_drinkingFailed)
+        {
+            return;
+        }
+
+        try
+        {
+            if (_actor.IsDrinking)
+            {
+                _actor.TickDrink(deltaTime);
+                return;
+            }
+
+            bool canDrink = _actor.Exists && _actor.CanDrink && _settings.CompanionVisible.Value &&
+                !_relocating && (_routine == RoutineState.Settled || _routine == RoutineState.Standing);
+
+            if (_drinks.Tick(deltaTime, canDrink, out DrinkPlan plan))
+            {
+                StartDrink(plan);
+            }
+        }
+        catch (Exception exception)
+        {
+            // A drink is a nicety. One that throws is put down, and he goes
+            // without for the session - rather than letting it reach the
+            // tick's handler, which would step the whole companion aside.
+            _drinkingFailed = true;
+            try
+            {
+                _actor.CancelDrink();
+            }
+            catch
+            {
+                // Nothing more to put right; the next rebuild starts clean.
+            }
+
+            _log.LogInfo(
+                "Hulgi's drink hit an error, so he goes without for this session. Nothing else is " +
+                $"affected: {SafeLogText.Brief(exception)}");
+        }
+    }
+
+    private string StartDrink(DrinkPlan plan)
+    {
+        Vector3? standAt = plan.Toast && _actor.IsOnSeat ? FindToastSpot() : null;
+
+        Player player = Player.m_localPlayer;
+        Vector3? toWhom = player != null &&
+            Vector3.Distance(player.transform.position, _actor.Position) <= ToastFaceMetres
+                ? player.transform.position
+                : (Vector3?)null;
+
+        bool started = _actor.BeginDrink(plan, standAt, toWhom, AppearancePlan.HulgiMugs, out string outcome);
+        if (started)
+        {
+            _log.LogInfo(outcome);
+        }
+
+        return outcome;
+    }
+
+    /// <summary>The ground just in front of his seat, if a person could stand
+    /// there: a floor he can step down onto, nothing solid where his body
+    /// would be - a table, a wall, a post - and nothing the placement probe
+    /// would never put him on, a fire above all. Null when there is no such
+    /// spot, and then he drinks without the toast rather than standing inside
+    /// the furniture.</summary>
+    private Vector3? FindToastSpot()
+    {
+        Vector3 seat = _actor.Position;
+        Vector3 facing = _actor.Facing;
+        if (facing == Vector3.zero)
+        {
+            return null;
+        }
+
+        Vector3 candidate = seat + (facing * ToastStepMetres);
+        if (!CompanionFooting.TryFind(candidate, 0.3f, 1.5f, out Vector3 ground, out Vector3 normal) ||
+            Vector3.Dot(normal, Vector3.up) < 0.75f)
+        {
+            return null;
+        }
+
+        // Down off a seat, or level with a low one. Not up onto something, and
+        // not a drop.
+        float drop = seat.y - ground.y;
+        if (drop < -0.3f || drop > 1.2f || CompanionFooting.IsBodyObstructed(ground))
+        {
+            return null;
+        }
+
+        PlacementProbeSample sample = _hulgiProbe.Probe(new WorldPoint(ground.x, ground.y, ground.z));
+        return (sample.Rejections & UnsafeToStand) == 0 ? ground : (Vector3?)null;
+    }
+
+    /// <summary><c>cc_companion drink [toast|plain]</c>: a drink now, so it can
+    /// be watched without waiting for one. The next drink he has on his own is
+    /// the usual while after it.</summary>
+    public string Drink(string? how)
+    {
+        if (!_actor.Exists)
+        {
+            return "Drink: Hulgi is not placed right now.";
+        }
+
+        if (_actor.IsDrinking)
+        {
+            return "Drink: Hulgi is already having one.";
+        }
+
+        if (_drinkingFailed)
+        {
+            return "Drink: his drinks hit an error earlier this session (see the log), so he is going without.";
+        }
+
+        if (_relocating || _routine == RoutineState.Strolling)
+        {
+            return "Drink: Hulgi is walking. Ask again once he has stopped.";
+        }
+
+        if (!_actor.CanDrink)
+        {
+            return "Drink: there is no animated, visible Hulgi to have one.";
+        }
+
+        bool? toast;
+        switch (how?.ToLowerInvariant())
+        {
+            case null:
+            case "":
+                toast = null;
+                break;
+            case "toast":
+                toast = true;
+                break;
+            case "plain":
+                toast = false;
+                break;
+            default:
+                return "Usage: cc_companion drink [toast|plain]. Without either, chance decides the " +
+                    "toast the way it does for the drinks he has on his own.";
+        }
+
+        return StartDrink(_drinks.Now(toast));
+    }
+
 
     /// <summary>The bit of him that is not a statue.
     ///
@@ -1320,6 +1507,14 @@ internal sealed class CompanionDirector : IDisposable
         if (_relocating)
         {
             TickRelocation(deltaTime);
+            return;
+        }
+
+        // A mug in his hand holds everything else: he does not get up and
+        // wander off mid-swallow, and the wait he is in does not run out under
+        // it. A move the camp asks for still happens - it ends the drink.
+        if (_actor.IsDrinking)
+        {
             return;
         }
 

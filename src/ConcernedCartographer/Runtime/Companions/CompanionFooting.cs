@@ -62,10 +62,7 @@ internal static class CompanionFooting
     /// all.</summary>
     public static bool IsWayBlocked(Vector3 from, Vector3 to)
     {
-        if (_obstructionMask == -1)
-        {
-            _obstructionMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece");
-        }
+        EnsureObstructionMask();
 
         Vector3 flat = new Vector3(to.x - from.x, 0f, to.z - from.z);
         float distance = flat.magnitude;
@@ -82,6 +79,29 @@ internal static class CompanionFooting
             distance,
             _obstructionMask,
             QueryTriggerInteraction.Ignore);
+    }
+
+    /// <summary>Whether something solid already stands where his body would be
+    /// if he stood at <paramref name="grounded"/>: the same body and the same
+    /// layers as <see cref="IsWayBlocked"/>, asked of one spot instead of a
+    /// line.</summary>
+    public static bool IsBodyObstructed(Vector3 grounded)
+    {
+        EnsureObstructionMask();
+        return Physics.CheckCapsule(
+            grounded + (Vector3.up * SweepBottom),
+            grounded + (Vector3.up * SweepTop),
+            SweepRadius,
+            _obstructionMask,
+            QueryTriggerInteraction.Ignore);
+    }
+
+    private static void EnsureObstructionMask()
+    {
+        if (_obstructionMask == -1)
+        {
+            _obstructionMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece");
+        }
     }
 
     public static bool TryFind(

@@ -3162,9 +3162,13 @@ internal sealed class CartographerRuntime : IDisposable
             case "summon":
                 return _companions.Summon();
 
+            case "drink":
+                return _companions.Drink(args.Length > 1 ? args[1] : null);
+
             default:
                 return "Unknown subcommand. Use: status, toolsonly <on|off>, story, show <on|off>, " +
-                    "where, placement, summon, appearance, pose <stand|ground|seat>, path, reset [quest|bed|day|all].";
+                    "where, placement, summon, drink [toast|plain], appearance, pose <stand|ground|seat>, path, " +
+                    "reset [quest|bed|day|all].";
         }
     }
 

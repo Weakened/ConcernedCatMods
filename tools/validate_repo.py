@@ -663,12 +663,13 @@ def check_companion_body_fails_closed(errors: list[str]) -> list[str]:
     remove - which is narrower than "while the defect is present", and is what
     it actually verifies.
 
-    The second half covers the two accessory paths, which parent a piece onto
-    the LIVE figure and so wake it the same way. Each must refuse its piece on
-    a survivor before that re-parent, and the check is ordered - condition,
-    then the return, then the re-parent - so no comment and no unrelated
-    `return false;` elsewhere in the method can stand in for it. Comments are
-    stripped before any of this is read."""
+    The second half covers the three accessory paths - hair and beards,
+    garments, and the mug put in his hand for a drink - which parent a piece
+    onto the LIVE figure and so wake it the same way. Each must refuse its
+    piece on a survivor before that re-parent, and the check is ordered -
+    condition, then the return, then the re-parent - so no comment and no
+    unrelated `return false;` elsewhere in the method can stand in for it.
+    Comments are stripped before any of this is read."""
     path = (ROOT / "src" / "ConcernedCartographer" / "Runtime" / "Companions" /
             "CompanionActor.cs")
     if not path.is_file():
@@ -790,22 +791,22 @@ def check_companion_body_fails_closed(errors: list[str]) -> list[str]:
     # ones spelled `piece` would let it in unseen.
     call_sites = [n for n, line in enumerate(code)
                   if "RemoveBehaviours(" in line and "private static int" not in line]
-    if len(call_sites) != 3:
+    if len(call_sites) != 4:
         fail(
-            "[companions] CC-NPC-010 no-wake audit: expected exactly three RemoveBehaviours call "
-            f"sites in {path.relative_to(ROOT)} (the body and the two accessory paths), found "
+            "[companions] CC-NPC-010 no-wake audit: expected exactly four RemoveBehaviours call "
+            f"sites in {path.relative_to(ROOT)} (the body and the three accessory paths), found "
             f"{len(call_sites)} — a new caller hands a game prefab's subtree to the live figure "
             "too, and has to make its own refusal rather than inherit theirs", errors)
         return []
 
-    # Both accessory paths hand their piece to the live figure, so a script
+    # Every accessory path hands its piece to the live figure, so a script
     # that survived removal wakes there exactly as it would in the body.
     accessories = [n for n in call_sites if "piece," in " ".join(code[n:n + 3])]
-    if len(accessories) != 2:
+    if len(accessories) != 3:
         fail(
-            "[companions] CC-NPC-010 no-wake audit: expected exactly two accessory script passes "
-            f"in {path.relative_to(ROOT)}, found {len(accessories)} — hair/beard and garments are "
-            "the two that parent a piece onto the live figure", errors)
+            "[companions] CC-NPC-010 no-wake audit: expected exactly three accessory script passes "
+            f"in {path.relative_to(ROOT)}, found {len(accessories)} — hair/beard, garments and the "
+            "drinking mug are the three that parent a piece onto the live figure", errors)
         return []
 
     for call in accessories:
@@ -831,8 +832,9 @@ def check_companion_body_fails_closed(errors: list[str]) -> list[str]:
     return [
         "[companions] CC-NPC-010 no-wake audit: the extracted body is assembled dark, and a "
         "surviving game script refuses the candidate instead of being switched on",
-        "[companions] CC-NPC-010 no-wake audit: both accessory paths refuse their piece on a "
-        "surviving source script before it is parented onto the live figure",
+        "[companions] CC-NPC-010 no-wake audit: all three accessory paths (hair/beard, garments, "
+        "the drinking mug) refuse their piece on a surviving source script before it is parented "
+        "onto the live figure",
     ]
 
 
