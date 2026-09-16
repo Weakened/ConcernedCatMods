@@ -29,10 +29,235 @@ public sealed class CompanionResidencyTests
         bool supported = true,
         CompanionAnchor current = default,
         CompanionAnchor placed = default,
-        AnchorValidity validity = AnchorValidity.Valid)
+        AnchorValidity validity = AnchorValidity.Valid,
+        SeatStatus seat = SeatStatus.NotSeated,
+        SeatUpgrade upgrade = default)
     {
         return new ResidencyInputs(
-            recruited, visible, actorPresent, supported, current, placed, validity);
+            recruited, visible, actorPresent, supported, current, placed, validity, seat, upgrade);
+    }
+
+    // ------------------------------------------------------------------
+    // Giving up a seat
+    // ------------------------------------------------------------------
+
+    // ------------------------------------------------------------------
+    // Taking a seat that appeared later (#306)
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Upgrade_AChairBuiltAfterHeSettlesIsTaken()
+    {
+        // The case the whole issue is about. Nothing else in the inputs has
+        // changed: the actor exists, the home point is the same, and the
+        // ground he is sitting on cannot be lost. Before this rule the answer
+        // was None and the bench stood empty beside him until a relog.
+        Assert.Equal(
+            ResidencyAction.Rehome,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: true, current: Bed(), placed: Bed(),
+                upgrade: new SeatUpgrade(CompanionPose.SitOnGround, CompanionPose.SitOnSeat))));
+
+        // And the intermediate rung: a fire is better than bare ground.
+        Assert.Equal(
+            ResidencyAction.Rehome,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: true, current: Bed(), placed: Bed(),
+                upgrade: new SeatUpgrade(CompanionPose.SitOnGround, CompanionPose.SitByFire))));
+    }
+
+    [Fact]
+    public void Upgrade_AWarmSpotIsWorthLeavingAColdSeatForButNotAWarmSeat()
+    {
+        // The owner's test: he is on a chair inside, the campfire is broken
+        // and rebuilt outside. The chair is now worth 1, the new fireside 2.
+        Assert.Equal(
+            ResidencyAction.Rehome,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: true, current: Bed(), placed: Bed(),
+                upgrade: new SeatUpgrade(currentValue: 1, offeredValue: 2))));
+
+        // A seat already by the fire (3) is never left for warm ground (2).
+        Assert.Equal(
+            ResidencyAction.None,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: true, current: Bed(), placed: Bed(),
+                upgrade: new SeatUpgrade(currentValue: 3, offeredValue: 2))));
+    }
+
+    [Fact]
+    public void Upgrade_AnEqualOfferNeverMovesHim()
+    {
+        // The anti-twitch rule. A sweep that finds another patch of ground, or
+        // another chair just as good, must not shuffle him across the camp -
+        // that is the restlessness the deterministic planner exists to avoid,
+        // and it would show up as a companion who never sits still.
+        foreach (CompanionPose pose in new[]
+                 {
+                     CompanionPose.SitOnGround, CompanionPose.SitByFire, CompanionPose.SitOnSeat,
+                 })
+        {
+            Assert.Equal(
+                ResidencyAction.None,
+                ResidencyPlanner.Decide(Inputs(
+                    actorPresent: true, current: Bed(), placed: Bed(),
+                    upgrade: new SeatUpgrade(pose, pose))));
+        }
+    }
+
+    [Fact]
+    public void Upgrade_AWorseOfferNeverMovesHim()
+    {
+        // A chair carried away while he is on it is a LOST seat, with its own
+        // rule and its own backoff. It must not also arrive here as "the best
+        // thing around is now the ground" and cause a second move.
+        Assert.Equal(
+            ResidencyAction.None,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: true, current: Bed(), placed: Bed(),
+                upgrade: new SeatUpgrade(CompanionPose.SitOnSeat, CompanionPose.SitOnGround))));
+
+        Assert.Equal(
+            ResidencyAction.None,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: true, current: Bed(), placed: Bed(),
+                upgrade: new SeatUpgrade(CompanionPose.SitByFire, CompanionPose.SitOnGround))));
+    }
+
+    [Fact]
+    public void Upgrade_TheDefaultValueIsInert()
+    {
+        // This is the value every pass that did not sweep passes in, which is
+        // almost all of them, so it has to mean "do nothing" on its own.
+        // Two things make it inert and only one of them is load bearing today:
+        // Surveyed is false, and Placed and Offered are both the lowest pose so
+        // the strictly-greater test fails anyway. The redundancy is deliberate
+        // - it is what keeps the default inert if the pose ranks are ever
+        // reordered - but it does mean this pins less than it appears to.
+        Assert.False(default(SeatUpgrade).Surveyed);
+        Assert.False(default(SeatUpgrade).IsWorthMoving);
+        Assert.False(SeatUpgrade.NotSurveyed.IsWorthMoving);
+
+        Assert.Equal(
+            ResidencyAction.None,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: true, current: Bed(), placed: Bed(),
+                upgrade: SeatUpgrade.NotSurveyed)));
+    }
+
+    [Fact]
+    public void Upgrade_NeverResurrectsAHiddenOrUnrecruitedCompanion()
+    {
+        // Presentation stays downstream of everything. An offered seat is not
+        // a reason to build an actor the player asked not to see, and it is
+        // certainly not a reason to give a companion to someone who chose
+        // Tools-only.
+        var offer = new SeatUpgrade(CompanionPose.SitOnGround, CompanionPose.SitOnSeat);
+
+        Assert.Equal(
+            ResidencyAction.Remove,
+            ResidencyPlanner.Decide(Inputs(
+                recruited: false, actorPresent: true, current: Bed(), placed: Bed(),
+                upgrade: offer)));
+
+        Assert.Equal(
+            ResidencyAction.Remove,
+            ResidencyPlanner.Decide(Inputs(
+                visible: false, actorPresent: true, current: Bed(), placed: Bed(),
+                upgrade: offer)));
+
+        Assert.Equal(
+            ResidencyAction.Remove,
+            ResidencyPlanner.Decide(Inputs(
+                supported: false, actorPresent: true, current: Bed(), placed: Bed(),
+                upgrade: offer)));
+    }
+
+    [Fact]
+    public void Upgrade_ALostSeatAndAnOfferTogetherStillRehomeOnce()
+    {
+        // Both signals can arrive on the same pass. The planner returns one
+        // action either way; what it must not do is disagree with itself or
+        // report anything other than Rehome when both are shouting.
+        //
+        // Which of the two set it, and therefore whether the adapter applies
+        // its rebuild backoff, is the adapter's business and is NOT pinned
+        // here - that lives in untested Runtime code.
+        Assert.Equal(
+            ResidencyAction.Rehome,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: true, current: Bed(), placed: Bed(), seat: SeatStatus.Lost,
+                upgrade: new SeatUpgrade(CompanionPose.SitOnGround, CompanionPose.SitOnSeat))));
+    }
+
+    [Fact]
+    public void Upgrade_AnOfferDoesNotOverrideAMissingActor()
+    {
+        // Place, not Rehome: there is nothing to tear down.
+        Assert.Equal(
+            ResidencyAction.Place,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: false, current: Bed(), placed: default,
+                upgrade: new SeatUpgrade(CompanionPose.SitOnGround, CompanionPose.SitOnSeat))));
+    }
+
+    [Fact]
+    public void Seat_ASeatThatWasTakenOrTakenAwayIsGivenUpAtOnce()
+    {
+        // The home point has NOT moved in either case, so without this rule
+        // nothing below would notice and he would stay folded into a chair
+        // that is gone, or sitting inside the player who just sat down.
+        Assert.Equal(
+            ResidencyAction.Rehome,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: true, current: Bed(), placed: Bed(), seat: SeatStatus.Lost)));
+    }
+
+    [Fact]
+    public void Seat_HoldingASeatChangesNothing()
+    {
+        Assert.Equal(
+            ResidencyAction.None,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: true, current: Bed(), placed: Bed(), seat: SeatStatus.Held)));
+
+        Assert.Equal(
+            ResidencyAction.None,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: true, current: Bed(), placed: Bed(), seat: SeatStatus.NotSeated)));
+    }
+
+    [Fact]
+    public void Seat_ALostSeatNeverResurrectsAHiddenOrUnrecruitedCompanion()
+    {
+        // Presentation is downstream of everything: losing a seat must not
+        // become a reason to build an actor the player asked not to see.
+        Assert.Equal(
+            ResidencyAction.Remove,
+            ResidencyPlanner.Decide(Inputs(
+                visible: false, actorPresent: true, current: Bed(), placed: Bed(),
+                seat: SeatStatus.Lost)));
+
+        Assert.Equal(
+            ResidencyAction.Remove,
+            ResidencyPlanner.Decide(Inputs(
+                recruited: false, actorPresent: true, current: Bed(), placed: Bed(),
+                seat: SeatStatus.Lost)));
+
+        Assert.Equal(
+            ResidencyAction.Remove,
+            ResidencyPlanner.Decide(Inputs(
+                supported: false, actorPresent: true, current: Bed(), placed: Bed(),
+                seat: SeatStatus.Lost)));
+    }
+
+    [Fact]
+    public void Seat_ALostSeatWithNoActorIsStillJustAPlacement()
+    {
+        Assert.Equal(
+            ResidencyAction.Place,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: false, current: Bed(), placed: default, seat: SeatStatus.Lost)));
     }
 
     // ------------------------------------------------------------------
@@ -190,63 +415,310 @@ public sealed class CompanionResidencyTests
     // ------------------------------------------------------------------
 
     [Fact]
-    public void Appearance_PrefersTheFirstPreferenceThatExists()
+    public void Appearance_MatchesTheOwnersCustomizationLabelFirst()
     {
-        var available = new[] { "BeardShort1", "BeardMuttonchops1", "BeardThick1" };
+        // The label is what the owner actually chose on the character screen,
+        // so it outranks the prefab id even when both are present and point
+        // somewhere else.
+        var available = new[]
+        {
+            new AppearanceOption("Hair11", "Braided Ponytail"),
+            new AppearanceOption("Hair31", "Long Braid"),
+        };
 
-        AppearanceChoice choice = AppearancePlan.Choose(
-            available, AppearancePlan.BeardPreferences, AppearanceCatalogPrefix);
+        AppearanceChoice choice = AppearancePlan.Choose(available, AppearancePlan.HulgiHair);
 
-        Assert.Equal("BeardMuttonchops1", choice.PrefabName);
-        Assert.Equal(AppearanceMatch.Preferred, choice.Match);
+        Assert.Equal("Hair31", choice.PrefabName);
+        Assert.Equal(AppearanceMatch.DisplayName, choice.Match);
+        Assert.True(choice.MatchesReference);
     }
 
     [Fact]
-    public void Appearance_FallsBackToTheSameFamilyWhenNoPreferenceExists()
+    public void Appearance_FallsBackToTheDocumentedPrefabIdWhenLabelsAreUnavailable()
     {
-        var available = new[] { "BeardSomethingUnheardOf" };
+        // A build with no localization still has the prefab ids, and the
+        // Jotunn-derived mapping is exactly what they are for.
+        var available = new[]
+        {
+            new AppearanceOption("Hair10"),
+            new AppearanceOption("Hair11"),
+        };
 
-        AppearanceChoice choice = AppearancePlan.Choose(
-            available, AppearancePlan.BeardPreferences, AppearanceCatalogPrefix);
+        AppearanceChoice choice = AppearancePlan.Choose(available, AppearancePlan.HulgiHair);
 
-        Assert.Equal("BeardSomethingUnheardOf", choice.PrefabName);
-        Assert.Equal(AppearanceMatch.Alternate, choice.Match);
+        Assert.Equal("Hair11", choice.PrefabName);
+        Assert.Equal(AppearanceMatch.PrefabName, choice.Match);
+
+        // And it must NOT claim the reference was matched: nothing confirmed
+        // that this build calls Hair11 "Long Braid".
+        Assert.False(choice.MatchesReference);
     }
 
     [Fact]
-    public void Appearance_AnEmptyBuildYieldsNoItemRatherThanAGuess()
+    public void Appearance_HandlebarBeardIsWhatIsAskedForNowAndMuttonChopsAreNot()
     {
+        // CC-NPC-006 replaced the pre-screenshot mutton-chops prose. A build
+        // carrying both must pick the one the owner chose.
+        var available = new[]
+        {
+            new AppearanceOption("Beard4", "Mutton Chops"),
+            new AppearanceOption("Beard26", "Handlebar"),
+        };
+
+        AppearanceChoice choice = AppearancePlan.Choose(available, AppearancePlan.HulgiBeard);
+
+        Assert.Equal("Beard26", choice.PrefabName);
+        Assert.True(choice.MatchesReference);
+    }
+
+    [Fact]
+    public void Appearance_FallsBackThroughShapeThenFamilyThenNothing()
+    {
+        var shaped = new[]
+        {
+            new AppearanceOption("BeardX", "Thick Beard"),
+            new AppearanceOption("BeardY", "A Fine Moustache"),
+        };
+        AppearanceChoice byShape = AppearancePlan.Choose(shaped, AppearancePlan.HulgiBeard);
+        Assert.Equal("BeardY", byShape.PrefabName);
+        Assert.Equal(AppearanceMatch.Shape, byShape.Match);
+        Assert.False(byShape.MatchesReference);
+
+        var family = new[] { new AppearanceOption("BeardSomethingUnheardOf") };
+        AppearanceChoice byFamily = AppearancePlan.Choose(family, AppearancePlan.HulgiBeard);
+        Assert.Equal("BeardSomethingUnheardOf", byFamily.PrefabName);
+        Assert.Equal(AppearanceMatch.Family, byFamily.Match);
+
         Assert.Equal(
             AppearanceMatch.None,
-            AppearancePlan.Choose(
-                new string[0], AppearancePlan.BeardPreferences, AppearanceCatalogPrefix).Match);
-        Assert.Null(AppearancePlan.Choose(
-            null, AppearancePlan.HairPreferences, "Hair").PrefabName);
+            AppearancePlan.Choose(new AppearanceOption[0], AppearancePlan.HulgiBeard).Match);
+        Assert.Null(AppearancePlan.Choose(null, AppearancePlan.HulgiHair).PrefabName);
+    }
+
+    [Fact]
+    public void Appearance_AnExplicitPlayerChoiceWinsAndAnUnknownOneDoesNotStrand()
+    {
+        var available = new[]
+        {
+            new AppearanceOption("Hair11", "Long Braid"),
+            new AppearanceOption("Hair23", "Short Curls"),
+        };
+
+        AppearanceChoice chosen = AppearancePlan.Choose(
+            available, AppearancePlan.HulgiHair, playerOverride: "Short Curls");
+        Assert.Equal("Hair23", chosen.PrefabName);
+        Assert.Equal(AppearanceMatch.Override, chosen.Match);
+
+        // The override may also be a prefab id.
+        Assert.Equal(
+            "Hair23",
+            AppearancePlan.Choose(available, AppearancePlan.HulgiHair, "hair23").PrefabName);
+
+        // An override naming something this build does not have must fall
+        // through to the stock default rather than leaving him bald.
+        AppearanceChoice missing = AppearancePlan.Choose(
+            available, AppearancePlan.HulgiHair, "NotInThisBuild");
+        Assert.Equal("Hair11", missing.PrefabName);
+        Assert.Equal(AppearanceMatch.DisplayName, missing.Match);
+    }
+
+    [Fact]
+    public void Appearance_MatchingIsCaseAndWhitespaceInsensitive()
+    {
+        var available = new[] { new AppearanceOption("Hair11", "  LONG braid ") };
+
+        AppearanceChoice choice = AppearancePlan.Choose(available, AppearancePlan.HulgiHair);
+
+        Assert.Equal(AppearanceMatch.DisplayName, choice.Match);
     }
 
     [Fact]
     public void Appearance_FamilyFilterIsCaseInsensitiveAndOrdered()
     {
-        var all = new[] { "HairShort1", "beardlong1", "SwordIron", "HairBraided1", "BeardShort1" };
+        IReadOnlyList<AppearanceOption> all = AppearancePlan.FromPrefabNames(
+            new[] { "HairShort1", "beardlong1", "SwordIron", "HairBraided1", "BeardShort1" });
 
-        Assert.Equal(new[] { "HairBraided1", "HairShort1" }, AppearancePlan.FilterFamily(all, "Hair"));
-        Assert.Equal(new[] { "beardlong1", "BeardShort1" }, AppearancePlan.FilterFamily(all, "Beard"));
+        Assert.Equal(
+            new[] { "HairBraided1", "HairShort1" },
+            Names(AppearancePlan.FilterFamily(all, "Hair")));
+        Assert.Equal(
+            new[] { "beardlong1", "BeardShort1" },
+            Names(AppearancePlan.FilterFamily(all, "Beard")));
         Assert.Empty(AppearancePlan.FilterFamily(all, ""));
         Assert.Empty(AppearancePlan.FilterFamily(null, "Hair"));
     }
 
-    [Fact]
-    public void Appearance_PreferenceMatchingIsCaseInsensitive()
-    {
-        // The audit could not establish the game's own spelling of these names,
-        // which is exactly why the match must not depend on it.
-        AppearanceChoice choice = AppearancePlan.Choose(
-            new[] { "BeardMUTTONCHOPS2" }, AppearancePlan.BeardPreferences, AppearanceCatalogPrefix);
+    // ------------------------------------------------------------------
+    // Appearance colour
+    // ------------------------------------------------------------------
 
-        Assert.Equal(AppearanceMatch.Preferred, choice.Match);
+    [Fact]
+    public void Colour_UsesTheGamesOwnConversionRatherThanTheSliderTuple()
+    {
+        // Lerp(hairLow, hairHigh, tone) * Lerp(minLevel, maxLevel, level),
+        // transcribed from PlayerCustomizaton.Update. Chosen so every factor
+        // is distinguishable: a implementation that stored the slider tuple as
+        // RGB, or dropped the level multiplier, gets a different answer.
+        var palette = new CustomizationPalette(
+            skinLow: new ColourTriple(0.2f, 0.2f, 0.2f),
+            skinHigh: new ColourTriple(1f, 0.8f, 0.6f),
+            hairLow: new ColourTriple(0.1f, 0.05f, 0f),
+            hairHigh: new ColourTriple(0.9f, 0.8f, 0.5f),
+            minimumLevel: 0.1f,
+            maximumLevel: 1f,
+            observed: true);
+
+        ColourTriple hair = AppearanceColour.Hair(palette, hairTone: 0.5f, hairLevel: 0.5f);
+
+        // ramp = (0.5, 0.425, 0.25); level = 0.55
+        Assert.Equal(0.275f, hair.R, 4);
+        Assert.Equal(0.23375f, hair.G, 4);
+        Assert.Equal(0.1375f, hair.B, 4);
+
+        ColourTriple skin = AppearanceColour.Skin(palette, 0.25f);
+        Assert.Equal(0.4f, skin.R, 4);
+        Assert.Equal(0.35f, skin.G, 4);
+        Assert.Equal(0.3f, skin.B, 4);
     }
 
-    /// <summary>The beard family prefix, spelled here rather than referenced so
-    /// these tests stay game-free.</summary>
-    private const string AppearanceCatalogPrefix = "Beard";
+    [Fact]
+    public void Colour_AnUnreadPaletteUsesTheDocumentedFallbackAndNoSkinTint()
+    {
+        CustomizationPalette unobserved = CustomizationPalette.Unobserved;
+
+        ColourTriple hair = AppearanceColour.HulgiHair(unobserved);
+        Assert.Equal(AppearanceColour.HairFallback.R, hair.R, 4);
+        Assert.Equal(AppearanceColour.HairFallback.G, hair.G, 4);
+        Assert.Equal(AppearanceColour.HairFallback.B, hair.B, 4);
+
+        // A guessed body colour is worse than the model's own, so there is
+        // deliberately no skin fallback.
+        Assert.Null(AppearanceColour.HulgiSkin(unobserved));
+    }
+
+    [Fact]
+    public void Colour_SliderReadingsOutsideTheRangeBehaveLikeTheGamesClamp()
+    {
+        var palette = new CustomizationPalette(
+            skinLow: new ColourTriple(0f, 0f, 0f),
+            skinHigh: new ColourTriple(1f, 1f, 1f),
+            hairLow: new ColourTriple(0f, 0f, 0f),
+            hairHigh: new ColourTriple(1f, 1f, 1f),
+            minimumLevel: 0.1f,
+            maximumLevel: 1f,
+            observed: true);
+
+        Assert.Equal(1f, AppearanceColour.Skin(palette, 4f).R, 4);
+        Assert.Equal(0f, AppearanceColour.Skin(palette, -4f).R, 4);
+        Assert.Equal(0f, AppearanceColour.Hair(palette, float.NaN, 1f).R, 4);
+    }
+
+    [Fact]
+    public void Colour_HulgisSlidersAreTheOwnerReadingsAndReachTheResult()
+    {
+        Assert.Equal(0.50f, AppearanceColour.HulgiSkinHue, 4);
+        Assert.Equal(0.94f, AppearanceColour.HulgiHairTone, 4);
+        Assert.Equal(0.74f, AppearanceColour.HulgiHairLevel, 4);
+
+        var palette = new CustomizationPalette(
+            skinLow: new ColourTriple(0f, 0f, 0f),
+            skinHigh: new ColourTriple(1f, 1f, 1f),
+            hairLow: new ColourTriple(0f, 0f, 0f),
+            hairHigh: new ColourTriple(1f, 1f, 1f),
+            minimumLevel: 0f,
+            maximumLevel: 1f,
+            observed: true);
+
+        // tone 0.94 along a black-to-white ramp, scaled by level 0.74.
+        Assert.Equal(0.94f * 0.74f, AppearanceColour.HulgiHair(palette).R, 4);
+        Assert.Equal(0.50f, AppearanceColour.HulgiSkin(palette)!.Value.R, 4);
+    }
+
+    // ------------------------------------------------------------------
+    // Appearance fit
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Fit_APresetDrawnAwayFromTheHeadIsNotWorn()
+    {
+        // Observed on 1.0.12: hair reported "attached" and rendered 0.99 m
+        // from the head, hanging at standing height over a seated companion.
+        // Attaching is not the same as wearing, and only one of them is what
+        // the owner asked for.
+        Assert.False(AppearanceFit.Fits(0.99f));
+        Assert.False(AppearanceFit.Fits(AppearanceFit.ToleranceMetres + 0.01f));
+    }
+
+    [Fact]
+    public void Wardrobe_TheOwnersGarmentsAreLookedUpByNameFirst()
+    {
+        var chest = new[]
+        {
+            new AppearanceOption("ArmorLeatherChest", "Leather tunic"),
+            new AppearanceOption("ArmorRagsChest", "Rag tunic"),
+        };
+        AppearanceChoice tunic = AppearancePlan.Choose(chest, AppearancePlan.HulgiChest);
+        Assert.Equal("ArmorRagsChest", tunic.PrefabName);
+        Assert.True(tunic.MatchesReference);
+
+        var legs = new[]
+        {
+            new AppearanceOption("ArmorRagsLegs", "Rag trousers"),
+            new AppearanceOption("ArmorLeatherLegs", "Leather pants"),
+        };
+        AppearanceChoice pants = AppearancePlan.Choose(legs, AppearancePlan.HulgiLegs);
+        Assert.Equal("ArmorLeatherLegs", pants.PrefabName);
+        Assert.True(pants.MatchesReference);
+    }
+
+    [Fact]
+    public void Wardrobe_AnEmptyOrUnknownBuildLeavesHimInWhateverTheModelWears()
+    {
+        // Clothing is presentation. A build without these items changes how he
+        // looks and nothing else - it can never fail his construction.
+        Assert.Equal(
+            AppearanceMatch.None,
+            AppearancePlan.Choose(new AppearanceOption[0], AppearancePlan.HulgiChest).Match);
+        Assert.Null(AppearancePlan.Choose(null, AppearancePlan.HulgiLegs).PrefabName);
+    }
+
+    [Fact]
+    public void Wardrobe_AGarmentIsMeasuredAgainstTheBodyNotTheHead()
+    {
+        // A tunic's centre is legitimately most of a torso from any single
+        // bone, so the head tolerance would reject a perfectly worn one.
+        Assert.False(AppearanceFit.Fits(0.7f));
+        Assert.True(AppearanceFit.Fits(0.7f, AppearanceFit.GarmentToleranceMetres));
+
+        // And it is still a bound, not an excuse.
+        Assert.False(AppearanceFit.Fits(
+            AppearanceFit.GarmentToleranceMetres + 0.01f, AppearanceFit.GarmentToleranceMetres));
+        Assert.False(AppearanceFit.Fits(float.NaN, AppearanceFit.GarmentToleranceMetres));
+    }
+
+    [Fact]
+    public void Fit_ATallHairstyleOrLongBeardStillCounts()
+    {
+        Assert.True(AppearanceFit.Fits(0f));
+        Assert.True(AppearanceFit.Fits(0.3f));
+        Assert.True(AppearanceFit.Fits(AppearanceFit.ToleranceMetres));
+    }
+
+    [Fact]
+    public void Fit_APieceThatCannotBeMeasuredIsNotAssumedToBeRight()
+    {
+        // No renderer to measure means no evidence it landed anywhere.
+        Assert.False(AppearanceFit.Fits(float.NaN));
+    }
+
+    private static string[] Names(IReadOnlyList<AppearanceOption> options)
+    {
+        var names = new string[options.Count];
+        for (int index = 0; index < options.Count; index++)
+        {
+            names[index] = options[index].PrefabName;
+        }
+
+        return names;
+    }
 }

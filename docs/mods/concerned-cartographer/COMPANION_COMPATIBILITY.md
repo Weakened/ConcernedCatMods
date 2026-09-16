@@ -88,6 +88,30 @@ changes the plan for the better.
 | Visual equipment | `VisEquipment` — a `MonoBehaviour` carrying `SkinnedMeshRenderer m_bodyModel`, `PlayerModel[] m_models`, `ZNetView m_nview` (non-public), `ZNetView m_nViewOverride` (public) | Verified |
 | Non-player appearance | `void VisEquipment.SetupFacialHairNonPlayer()`, `bool VisEquipment.m_isArmorStand` | Unverified |
 | NPC appearance via ZDO | `void VisEquipment.SetupNpcHair(ZDO)`, `void VisEquipment.SetupNpcBeard(ZDO)` | Verified — **must never be used**; takes a ZDO |
+| Skinned attachment | `GameObject VisEquipment.AttachItem(int, int, Transform, bool, bool, int)` (non-public) — for a child named `attach_skin`: parent to `m_bodyModel.transform.parent`, zero the local position and rotation, then for every `SkinnedMeshRenderer` under it assign `rootBone = m_bodyModel.rootBone` and `bones = m_bodyModel.bones` | Verified by decompilation of `assembly_valheim.dll` 1.0.12 — the contract #305 rests on |
+| Armour attachment | `List<GameObject> VisEquipment.AttachArmor(int, int, int)` (non-public) — same bone assignment for `attach_skin`; every other `attach_<joint>` child is parented to the joint found by name under `m_visual` | Verified by decompilation of `assembly_valheim.dll` 1.0.12 |
+
+**A skinned customization mesh is bound by ARRAY, not by joint.** The game never
+re-maps bone to bone: it hands the piece `m_bodyModel.bones` whole, in the body's
+own order, because Unity skins by index and a vanilla hair or armour mesh's
+bindposes are authored against the player skeleton's array layout. Matching the
+same names in the piece's own order gives the identical array whenever the two
+orderings agree — measured in game on 2026-09-16, Hair11's did agree
+(`adopted 1; bone order already matched the body's`) — so this is a correctness
+alignment with the game's contract, **not** the fix for #305. Where an ordering
+did differ, the result would be a complete, plausible binding that draws the
+mesh somewhere else entirely, and no count or name check could tell the two
+apart.
+
+**What actually displaced Hulgi's hair was cloth.** `Hair11`'s `attach_skin`
+carries two cloth components; `Beard26` carries none, which is exactly why the
+beard landed correctly and the braid did not. Valheim initialises cloth through
+`VisEquipment.SetupCloth`, feeding it the live `m_clothColliders` and
+`m_boneMap`; an extracted presentation figure has neither, and the component
+rebuilds itself against its serialised transforms on enable — the armature we
+have just replaced. Strip cloth from every attached piece, hair and beards
+included. Measured after stripping: 0.26 m from the head, against a 0.45 m
+tolerance, down from 0.99 m.
 
 **`BaseAI` self-registers into a static list.** `BaseAI.GetAllInstances()` and the
 backing `m_instances` mean an instantiated AI is reachable process-wide the

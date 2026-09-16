@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using BepInEx.Logging;
 using TheConcernedCat.Companions.Placement;
@@ -21,12 +22,35 @@ namespace TheConcernedCat.ConcernedCartographer.Runtime.Companions;
 /// it compares solid ground against the live water level, and when the water
 /// level cannot be read it says so once and stops rejecting for water rather
 /// than inventing a shoreline.</summary>
-internal sealed class WorldPlacementProbe : IPlacementProbe
+internal sealed class WorldPlacementProbe : IPlacementProbe, ISeatFinder
 {
     /// <summary>How far above and below the anchor's height to look for
     /// ground. Generous enough for a sloped camp, small enough that a
-    /// candidate never resolves onto a roof or the floor of a cave below.</summary>
+    /// candidate never resolves onto a roof or the floor of a cave below.
+    ///
+    /// That was the intent from the start, and the code never did it:
+    /// <c>ZoneSystem.GetSolidHeight</c> adds a thousand metres to whatever
+    /// height it is given and returns the FIRST solid thing below that, so a
+    /// spot under a roof resolved onto the roof. The footing is now found by
+    /// <see cref="CompanionFooting"/> over exactly this window, the same rule
+    /// his walk uses.</summary>
     private const float GroundSearchUp = 6f;
+
+    /// <summary>How far below the anchor's height the footing search
+    /// reaches.</summary>
+    private const float GroundSearchDown = 12f;
+
+    /// <summary>Where the middle of his body is, above his feet. Obstructions
+    /// are measured from here, so the floor he stands on is not one.</summary>
+    private const float BodyCentre = 0.9f;
+
+    /// <summary>How close a bed may be to his body before the spot is refused.
+    /// Near a bed is where a camp is; on or against one is not.</summary>
+    private const float BedMargin = 1f;
+
+    /// <summary>How close the fire piece itself may be. Beside a fire is the
+    /// coziest place in a camp; in it is not.</summary>
+    private const float FireMargin = 1f;
 
     /// <summary>Slope limit, as the dot product of the ground normal with up.
     /// About 40 degrees — a hillside camp still works, a cliff face does
@@ -37,6 +61,15 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
     /// seats and bodies. Wider than the clearance radius, because a
     /// doorway two metres away still makes a spot a bad place to sit.</summary>
     private const float NeighbourhoodRadius = 2f;
+
+    /// <summary>How close a seat has to still be to count as the same seat
+    /// when it is re-checked. Tight: this is asking "is that chair still
+    /// there", not "is there a chair around here".</summary>
+    private const float SeatRecheckRadius = 0.35f;
+
+    /// <summary>How far around a seat's attach point to look for the piece
+    /// that owns it: the whole of a bench, not just the point.</summary>
+    private const float SeatSearchRadius = 1.5f;
 
     /// <summary>Radius for the authored-location sweep. Locations are
     /// large, so this only has to find a piece of one; its own radius
@@ -49,8 +82,11 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
 
     /// <summary>Reused across every candidate. The planner probes several
     /// dozen points per attempt, and a fresh array each time would be pure
-    /// garbage for the collector to sweep.</summary>
-    private readonly Collider[] _overlapBuffer = new Collider[32];
+    /// garbage for the collector to sweep. It was 32, and a small shelter -
+    /// posts, rafters, roof tiles, floor, bed, fire - fills that on its own,
+    /// silently dropping whatever came after it, bed and chair
+    /// included.</summary>
+    private readonly Collider[] _overlapBuffer = new Collider[128];
 
     private bool _waterLevelUnavailableLogged;
 
@@ -85,14 +121,14 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
 
             PlacementRejection rejections = PlacementRejection.None;
 
-            Vector3 probeFrom = point + (Vector3.up * GroundSearchUp);
-            if (!zones.GetSolidHeight(probeFrom, out float height, out Vector3 normal, out GameObject _))
+            if (!CompanionFooting.TryFind(
+                    point, GroundSearchUp, GroundSearchDown, out Vector3 grounded, out Vector3 normal))
             {
                 return new PlacementProbeSample(
-                    position, PlacementRejection.Unsupported, -1f, SeatAvailability.None);
+                    position, PlacementRejection.Unsupported, -1f, SeatOffer.None);
             }
 
-            Vector3 grounded = new Vector3(point.x, height, point.z);
+            float height = grounded.y;
             var groundedPoint = new WorldPoint(grounded.x, grounded.y, grounded.z);
 
             if (Vector3.Dot(normal, Vector3.up) < MinimumUpDot)
@@ -105,12 +141,15 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
                 rejections |= PlacementRejection.Water;
             }
 
-            if (zones.IsBlocked(grounded + (Vector3.up * 0.1f)))
-            {
-                rejections |= PlacementRejection.Unsupported;
-            }
+            // There used to be a ZoneSystem.IsBlocked test here. It does not
+            // ask whether a point is blocked: it casts from two kilometres up
+            // and answers whether ANY piece or rock exists anywhere in that
+            // column. Every spot under a roof or on a floor failed it, which is
+            // why he could not be placed on a platform, and why a shelter
+            // search could never find shelter. Footing with headroom, and a
+            // body-height clearance test below, ask the real questions.
 
-            rejections |= SurveyNeighbourhood(grounded, out SeatAvailability seat);
+            rejections |= SurveyNeighbourhood(grounded, out SeatOffer seat);
 
             if (IsHazardousFire(grounded))
             {
@@ -131,7 +170,7 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
                 "A companion placement probe could not read the ground there; that candidate is " +
                 $"skipped: {SafeLogText.Brief(exception)}");
             return new PlacementProbeSample(
-                position, PlacementRejection.Unsupported, -1f, SeatAvailability.None);
+                position, PlacementRejection.Unsupported, -1f, SeatOffer.None);
         }
     }
 
@@ -149,8 +188,10 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
     {
         try
         {
+            // Heat, and the area around a fire. Near a fire is exactly the cozy
+            // spot the owner asked him to prefer.
             EffectArea? heat = EffectArea.IsPointInsideArea(
-                grounded, EffectArea.Type.Heat, _warmthRadius);
+                grounded, EffectArea.Type.Heat | EffectArea.Type.Fire, _warmthRadius);
             return heat != null ? 0f : -1f;
         }
         catch
@@ -170,9 +211,9 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
     /// the same answers. Nothing found here is moved, claimed, opened or
     /// written to — a companion yields to the world, never the other way
     /// round.</summary>
-    private PlacementRejection SurveyNeighbourhood(Vector3 grounded, out SeatAvailability seat)
+    private PlacementRejection SurveyNeighbourhood(Vector3 grounded, out SeatOffer seat)
     {
-        seat = SeatAvailability.None;
+        seat = SeatOffer.None;
 
         try
         {
@@ -184,7 +225,9 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
                 QueryTriggerInteraction.Collide);
 
             PlacementRejection rejections = PlacementRejection.None;
-            bool freeSeatNearby = false;
+            Chair? bestSeat = null;
+            float bestSeatDistance = float.MaxValue;
+            bool occupiedSeatNearby = false;
 
             for (int index = 0; index < count; index++)
             {
@@ -201,15 +244,38 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
                 }
 
                 // A bed is somebody's. Standing on one is rude and, for a
-                // respawn point, actively unhelpful.
+                // respawn point, actively unhelpful. On or against it, that
+                // is - not anywhere within two metres, which in a small
+                // shelter is everywhere and left a bed-anchored companion
+                // nowhere to go.
+                //
+                // Only the bed's SOLID colliders. A bed carries large trigger
+                // volumes - the base area that keeps monsters from spawning in a
+                // camp - and a point inside a trigger sphere is its own closest
+                // point, so every spot within ten metres of the owner's bed read
+                // as "on the bed". Seen in the placement table: Bed on 48 of 48.
                 if (hit.GetComponentInParent<Bed>() != null)
                 {
-                    rejections |= PlacementRejection.Bed;
+                    if (!hit.isTrigger && IsWithin(hit, grounded + (Vector3.up * BodyCentre), BedMargin))
+                    {
+                        rejections |= PlacementRejection.Bed;
+                    }
+
                     continue;
                 }
 
-                // A doorway is a route, not a room.
-                if (hit.GetComponentInParent<Door>() != null)
+                // The fire itself, as a solid thing he must not sit in. Its
+                // warmth area is a trigger and is warmth, not a hazard - see
+                // IsHazardousFire.
+                if (!hit.isTrigger && hit.GetComponentInParent<Fireplace>() != null &&
+                    IsWithin(hit, grounded + (Vector3.up * 0.3f), FireMargin))
+                {
+                    rejections |= PlacementRejection.Fire;
+                }
+
+                // A doorway is a route, not a room. The door's own collider, not
+                // any area volume hanging off it.
+                if (!hit.isTrigger && hit.GetComponentInParent<Door>() != null)
                 {
                     rejections |= PlacementRejection.Doorway;
                     continue;
@@ -218,43 +284,69 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
                 var chair = hit.GetComponentInParent<Chair>();
                 if (chair != null)
                 {
-                    // IsInUse is the vanilla way to yield to a real occupant.
-                    // No seat is ever claimed and no attachment message is ever
-                    // sent.
+                    // IsInUse is the vanilla way to yield to a real occupant,
+                    // and it asks whether a PLAYER is on the attach point. A
+                    // companion posed there does not answer it, which is
+                    // exactly right: he is not using the seat in any sense the
+                    // game knows about, so he can never lock one.
                     if (chair.IsInUse())
                     {
-                        seat = SeatAvailability.Occupied;
+                        occupiedSeatNearby = true;
+                        continue;
                     }
-                    else
+
+                    Transform? attach = chair.m_attachPoint;
+                    if (attach == null)
                     {
-                        freeSeatNearby = true;
+                        // A seat with no attachment point gives us nowhere to
+                        // put him. Reported as seating we cannot use rather
+                        // than guessed at.
+                        continue;
+                    }
+
+                    float distance = Vector3.Distance(attach.position, grounded);
+                    if (distance < bestSeatDistance)
+                    {
+                        bestSeatDistance = distance;
+                        bestSeat = chair;
                     }
 
                     continue;
                 }
 
+                // Measured from the middle of his body, not from his feet. From
+                // the feet, the floor piece he is standing on is always within
+                // clearance of itself, so every spot on a built floor came back
+                // Occupied.
                 bool solid = !hit.isTrigger &&
                     (hit.GetComponentInParent<Character>() != null ||
                      hit.GetComponentInParent<Piece>() != null);
-                if (solid && IsWithin(hit, grounded, _clearanceRadius))
+                if (solid && IsWithin(hit, grounded + (Vector3.up * BodyCentre), _clearanceRadius))
                 {
                     rejections |= PlacementRejection.Occupied;
                 }
             }
 
-            if (freeSeatNearby && seat != SeatAvailability.Occupied)
+            if (bestSeat != null)
             {
-                // Deliberately NOT reported as Free. A free chair was found,
-                // and whether posing a companion on one actually looks right is
-                // an open evidence row — the audit could only confirm that
-                // Chair.m_attachAnimation is a per-prefab string, not what it
-                // contains or how it lands. Unverified is what the shared
-                // planner treats as no seat, so the companion sits on the
-                // ground beside the chair rather than standing inside it, and
-                // the console tool reports the seat as detected-but-unused
-                // instead of pretending furniture support works.
-                seat = SeatAvailability.Unverified;
+                // The seat's own attachment point and its own sitting
+                // animation, which is what the game uses when a player sits
+                // down. Both are per-seat data read off the piece in front of
+                // us, so a stool, a throne and a bench each get their own pose
+                // instead of a shared guess.
+                Transform attach = bestSeat.m_attachPoint;
+                string? animation = string.IsNullOrEmpty(bestSeat.m_attachAnimation)
+                    ? null
+                    : bestSeat.m_attachAnimation;
+                seat = SeatOffer.Free(
+                    new WorldPoint(attach.position.x, attach.position.y, attach.position.z),
+                    attach.rotation.eulerAngles.y,
+                    animation);
                 SeatSeen = true;
+            }
+            else if (occupiedSeatNearby)
+            {
+                seat = SeatOffer.Occupied;
             }
 
             return rejections;
@@ -265,9 +357,206 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
         }
     }
 
-    /// <summary>True once a free seat has been detected near any candidate this
-    /// session. Reported by the console tool as pending evidence.</summary>
+    /// <summary>True once a free seat has been found near any candidate this
+    /// session. Reported by the console tool.</summary>
     public bool SeatSeen { get; private set; }
+
+    /// <summary>A larger buffer than the ground survey's: a ten-metre sphere
+    /// in a base holds a lot of pieces, and a chair that falls off the end of
+    /// the buffer is a chair he silently never finds.</summary>
+    private readonly Collider[] _seatBuffer = new Collider[256];
+    private int _seatMask = -1;
+
+    /// <inheritdoc/>
+    public IReadOnlyList<PlacementProbeSample> FindSeats(WorldPoint center, float radius)
+    {
+        var seats = new List<PlacementProbeSample>();
+        var point = new Vector3(center.X, center.Y, center.Z);
+
+        try
+        {
+            ZoneSystem zones = ZoneSystem.instance;
+            if (zones == null || !zones.IsZoneLoaded(point))
+            {
+                return seats;
+            }
+
+            // Furniture lives on the piece layers; terrain, trees and rocks do
+            // not need sweeping for chairs, and leaving them out keeps the
+            // buffer for what matters.
+            if (_seatMask == -1)
+            {
+                _seatMask = LayerMask.GetMask("piece", "piece_nonsolid", "Default_small");
+            }
+
+            int count = Physics.OverlapSphereNonAlloc(
+                point, radius, _seatBuffer, _seatMask, QueryTriggerInteraction.Collide);
+
+            var seen = new HashSet<Chair>();
+            for (int index = 0; index < count; index++)
+            {
+                Collider hit = _seatBuffer[index];
+                Chair? chair = hit == null ? null : hit.GetComponentInParent<Chair>();
+                if (chair == null || !seen.Add(chair) || chair.m_attachPoint == null)
+                {
+                    continue;
+                }
+
+                // IsInUse asks whether a PLAYER sits there. He yields to one,
+                // and a seat he is posed on never answers it - see the survey.
+                if (chair.IsInUse())
+                {
+                    continue;
+                }
+
+                Transform attach = chair.m_attachPoint;
+                Vector3 at = attach.position;
+                var seatPoint = new WorldPoint(at.x, at.y, at.z);
+                PlacementRejection rejections = IsHazardousFire(at)
+                    ? PlacementRejection.Fire
+                    : PlacementRejection.None;
+                string? animation = string.IsNullOrEmpty(chair.m_attachAnimation)
+                    ? null
+                    : chair.m_attachAnimation;
+
+                seats.Add(new PlacementProbeSample(
+                    seatPoint,
+                    rejections,
+                    DistanceToWarmth(at),
+                    SeatOffer.Free(seatPoint, attach.rotation.eulerAngles.y, animation)));
+            }
+
+            // Nearest first, then by position, so the same world gives the
+            // same order every session.
+            seats.Sort((a, b) =>
+            {
+                int byDistance = a.Position.HorizontalDistanceTo(center)
+                    .CompareTo(b.Position.HorizontalDistanceTo(center));
+                if (byDistance != 0)
+                {
+                    return byDistance;
+                }
+
+                int byX = a.Position.X.CompareTo(b.Position.X);
+                return byX != 0 ? byX : a.Position.Z.CompareTo(b.Position.Z);
+            });
+
+            if (seats.Count > 0)
+            {
+                SeatSeen = true;
+            }
+        }
+        catch (Exception)
+        {
+            // A world that will not answer offers no seats this pass; the ring
+            // sweep still runs.
+            seats.Clear();
+        }
+
+        return seats;
+    }
+
+    /// <summary>Whether the seat at <paramref name="seatPosition"/> is still
+    /// there and still free.
+    ///
+    /// Asked of the world rather than remembered, because remembering which
+    /// <c>Chair</c> was chosen would answer a different question: the planner
+    /// probes several dozen candidates and the last seat it saw is rarely the
+    /// one anybody is sitting on.
+    ///
+    /// Three answers, and the third is the important one. True: the seat is
+    /// there and free. False: it is gone, or a player is in it. <b>Null: we
+    /// could not look</b> — the chunk is unloaded because the player walked
+    /// away — and the caller must then keep believing what it believed, exactly
+    /// as an unloaded bed does not un-home anybody.</summary>
+    public bool? IsSeatStillFree(WorldPoint seatPosition)
+    {
+        var point = new Vector3(seatPosition.X, seatPosition.Y, seatPosition.Z);
+
+        try
+        {
+            ZoneSystem zones = ZoneSystem.instance;
+            if (zones == null || !zones.IsZoneLoaded(point))
+            {
+                return null;
+            }
+
+            // Looked for by the seat's ATTACH POINT, from a sphere wide enough to
+            // hold the whole piece, and through the piece as well as up from the
+            // collider. A log bench keeps its Chair components on two "SitPoint"
+            // children and its attach points on the log's own centre line, below
+            // the sit points' colliders (read from the game's piece_logbench01):
+            // a small sphere at the attach point touches only the log, whose
+            // collider has no Chair above it. So the bench always answered "gone",
+            // and in game at 2374768 he got up and sat back down on the same bench
+            // 144 times.
+            int count = Physics.OverlapSphereNonAlloc(
+                point, SeatSearchRadius, _overlapBuffer, ~0, QueryTriggerInteraction.Collide);
+
+            // The NEAREST matching seat, not the first collider that happens to
+            // answer. Two attach points can sit inside the same small sphere -
+            // a pair of stools, a bench with two places - and answering for the
+            // wrong one makes this disagree with the planner every pass, which
+            // is a rehome loop rather than a wrong answer.
+            Chair? nearest = null;
+            float nearestDistance = float.MaxValue;
+            var seen = new HashSet<Chair>();
+
+            for (int index = 0; index < count; index++)
+            {
+                Collider hit = _overlapBuffer[index];
+                if (hit == null)
+                {
+                    continue;
+                }
+
+                Chair? above = hit.GetComponentInParent<Chair>();
+                if (above != null)
+                {
+                    Consider(above);
+                }
+
+                Piece? piece = hit.GetComponentInParent<Piece>();
+                if (piece != null)
+                {
+                    foreach (Chair inside in piece.GetComponentsInChildren<Chair>())
+                    {
+                        Consider(inside);
+                    }
+                }
+            }
+
+            void Consider(Chair chair)
+            {
+                if (chair == null || chair.m_attachPoint == null || !seen.Add(chair))
+                {
+                    return;
+                }
+
+                float distance = Vector3.Distance(chair.m_attachPoint.position, point);
+                if (distance > SeatRecheckRadius || distance >= nearestDistance)
+                {
+                    return;
+                }
+
+                nearestDistance = distance;
+                nearest = chair;
+            }
+
+            if (nearest != null)
+            {
+                return !nearest.IsInUse();
+            }
+
+            // The zone is loaded and nothing is there. The seat is gone.
+            return false;
+        }
+        catch
+        {
+            // A world that will not answer is not evidence that a seat vanished.
+            return null;
+        }
+    }
 
     private static bool IsWithin(Collider hit, Vector3 point, float radius)
     {
@@ -288,8 +577,12 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
     {
         try
         {
-            return EffectArea.IsPointInsideArea(grounded, EffectArea.Type.Burning, 0.5f) != null
-                || EffectArea.IsPointInsideArea(grounded, EffectArea.Type.Fire, 0.5f) != null;
+            // Burning only. EffectArea.Type.Fire is the area AROUND a fire - the
+            // one that puts "Fire" in the player's status bar - and it reaches
+            // metres out. Treated as a hazard it refused every fireside spot:
+            // Fire on 29 of 48 candidates around the owner's shelter. The fire
+            // piece itself is refused up close in the neighbourhood survey.
+            return EffectArea.IsPointInsideArea(grounded, EffectArea.Type.Burning, 0.5f) != null;
         }
         catch
         {

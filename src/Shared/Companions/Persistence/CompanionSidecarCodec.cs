@@ -30,6 +30,16 @@ internal static class CompanionSidecarCodec
     private const string ScopeRow = "k";
     private const string QuestRow = "q";
     private const string UnlockRow = "u";
+
+    /// <summary>The row kind a carried-but-unusable line is re-emitted under.
+    ///
+    /// The original line follows the marker verbatim, separator and all, so
+    /// nothing is lost and splitting the marker back off reconstructs it
+    /// exactly. Its whole purpose is to make "damage found this session"
+    /// distinguishable from "damage this build itself carried last session" —
+    /// without it, the outcome is pinned at LoadedWithSkippedRows forever and
+    /// the one notice that should be actionable becomes noise (#292).</summary>
+    private const string CarriedRow = "x";
     private const int QuestFieldCount = 5;
 
     public sealed class ParseResult
@@ -85,6 +95,13 @@ internal static class CompanionSidecarCodec
         {
             yield return line;
         }
+
+        // Damage goes back out too — it is never deleted — but marked, so the
+        // next load carries it again without reporting it again.
+        foreach (string line in sidecar.QuarantinedLines)
+        {
+            yield return CarriedRow + FieldSeparator + line;
+        }
     }
 
     public static string SerializeQuest(CompanionQuestRecord record)
@@ -96,6 +113,12 @@ internal static class CompanionSidecarCodec
             ((int)record.State).ToString(CultureInfo.InvariantCulture),
             record.Revision.ToString(CultureInfo.InvariantCulture),
             record.PresentationRetired ? "1" : "0",
+
+            // Added after the first five fields, where an older build keeps
+            // unknown trailing fields and writes them back verbatim - so an
+            // older build carries it, and a file from before it reads as
+            // "not announced".
+            record.JoinAnnounced ? "1" : "0",
         };
 
         foreach (string extra in record.UnknownFields)
@@ -198,6 +221,22 @@ internal static class CompanionSidecarCodec
         foreach (string line in body)
         {
             string[] fields = line.Split(FieldSeparator);
+            if (string.Equals(fields[0], CarriedRow, StringComparison.Ordinal))
+            {
+                // A row a previous run already carried and already reported.
+                // Carried again, counted never: the player was told once and
+                // there is nothing they can do about it, so telling them every
+                // session only trains them to ignore the notice.
+                //
+                // A bare marker with nothing after it is corruption from
+                // outside - this build never writes one - and it is carried
+                // verbatim rather than dropped, because "never destroys a row
+                // it does not understand" has no exceptions.
+                sidecar.ReadmitQuarantinedLine(
+                    fields.Length >= 2 ? line.Substring(CarriedRow.Length + 1) : line);
+                continue;
+            }
+
             if (string.Equals(fields[0], UnlockRow, StringComparison.Ordinal))
             {
                 if (fields.Length >= 2 &&
@@ -257,6 +296,15 @@ internal static class CompanionSidecarCodec
                 skipped++;
                 sidecar.AddCarriedLine(line, isForwardData: false);
             }
+        }
+
+        if (skipped > 0)
+        {
+            // Ask for a rewrite so these rows come back marked next time. This
+            // does not make the sidecar dirty: dirty means unsaved player
+            // progress, and saying so from a load has consequences all over the
+            // presentation layer that have nothing to do with a damaged row.
+            sidecar.RequestQuarantineRewrite();
         }
 
         SidecarLoadOutcome outcome = skipped > 0
@@ -345,13 +393,25 @@ internal static class CompanionSidecarCodec
 
         bool retired = string.Equals(fields[4], "1", StringComparison.Ordinal);
 
+        // The join flag is read only when the field is exactly 0 or 1. Anything
+        // else in that position is not ours to interpret, and stays an unknown
+        // field carried verbatim, as it always was.
+        int firstUnknown = QuestFieldCount;
+        bool joinAnnounced = false;
+        if (fields.Length > QuestFieldCount &&
+            (fields[QuestFieldCount] == "0" || fields[QuestFieldCount] == "1"))
+        {
+            joinAnnounced = fields[QuestFieldCount] == "1";
+            firstUnknown = QuestFieldCount + 1;
+        }
+
         var extras = new List<string>();
-        for (int index = QuestFieldCount; index < fields.Length; index++)
+        for (int index = firstUnknown; index < fields.Length; index++)
         {
             extras.Add(fields[index]);
         }
 
-        record = CompanionQuestRecord.Restore(questId, state, revision, retired, extras);
+        record = CompanionQuestRecord.Restore(questId, state, revision, retired, extras, joinAnnounced);
         return QuestRowOutcome.Parsed;
     }
 }

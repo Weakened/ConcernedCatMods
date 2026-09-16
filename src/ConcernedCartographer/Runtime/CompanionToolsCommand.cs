@@ -22,8 +22,10 @@ namespace TheConcernedCat.ConcernedCartographer.Runtime;
 /// over.</item>
 /// </list>
 ///
-/// It is a diagnostic and a preference surface. It cannot advance the quest,
-/// grant anything the policy would not grant on its own, or remove access.</summary>
+/// It is a diagnostic, a preference surface and - since <c>pose</c> - a way to
+/// look at him in a shape his own lifecycle does not produce. It cannot advance
+/// the quest, grant anything the policy would not grant on its own, or remove
+/// access.</summary>
 internal sealed class CompanionToolsCommand : ConsoleCommand
 {
     private readonly CartographerRuntime _runtime;
@@ -37,8 +39,13 @@ internal sealed class CompanionToolsCommand : ConsoleCommand
 
     public override string Help =>
         "Concerned Companions. Subcommands: status, toolsonly <on|off>, story (replay), " +
-        "show <on|off> (companion visibility), where (home point), appearance (list this " +
-        "build's hair/beard presets), path (data folder).";
+        "show <on|off> (companion visibility), where (home point), placement (why he sits " +
+        "where he does, or why he is not placed), summon (sit him in front of you to watch " +
+        "him find his way back), drink [toast|plain] (watch him have one now), doors [list|clear|all " +
+        "<on|off>] (which doors companions may use), appearance (list this " +
+        "build's hair/beard presets), pose <stand|ground|seat> (look at him in one), " +
+        "path (data folder), reset [quest|bed|day|all] (replay: restart the introduction, " +
+        "forget your bed spawn point, return the world to day 1; tools stay unlocked).";
 
     public override void Run(string[] args, Terminal context)
     {
@@ -57,6 +64,7 @@ internal sealed class CompanionToolsCommand : ConsoleCommand
 
     public override List<string> CommandOptionList()
     {
-        return new List<string> { "status", "toolsonly", "story", "show", "where", "appearance", "path" };
+        return new List<string>
+            { "status", "toolsonly", "story", "show", "where", "appearance", "pose", "path" };
     }
 }

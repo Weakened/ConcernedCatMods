@@ -642,6 +642,311 @@ def check_teamster_no_internet_egress(errors: list[str]) -> list[str]:
     ]
 
 
+def check_companion_body_fails_closed(errors: list[str]) -> list[str]:
+    """CC-NPC-010 no-wake audit: the extracted companion body must be built
+    dark and refused rather than switched on over a surviving game script.
+
+    This is a source audit rather than a unit test because the thing being
+    guarded is Unity object lifetime, which no test host here can run: the
+    defect (#308) was that re-parenting a prefab subtree into an ACTIVE root
+    runs Awake on the game's own scripts, and CharacterAnimEvent.Awake
+    dereferences a Character the extraction has guaranteed is absent.
+
+    Everything is anchored on the ONE line that re-parents the visual, because
+    that line is the extraction: a second one is a second extraction path, and
+    it must make its own no-wake decision rather than inherit this one by
+    accident. Around that anchor the audit asks three questions and no more —
+    is the root dark before the visual lands in it, is the script pass run
+    before it is switched on, and does something refuse the candidate in
+    between. Deliberately not a C# parser: it is the smallest check that
+    cannot pass while the body is switched on over a script the pass could not
+    remove - which is narrower than "while the defect is present", and is what
+    it actually verifies.
+
+    The second half covers the three accessory paths - hair and beards,
+    garments, and the mug put in his hand for a drink - which parent a piece
+    onto the LIVE figure and so wake it the same way. Each must refuse its
+    piece on a survivor before that re-parent, and the check is ordered -
+    condition, then the return, then the re-parent - so no comment and no
+    unrelated `return false;` elsewhere in the method can stand in for it.
+    Comments are stripped before any of this is read."""
+    path = (ROOT / "src" / "ConcernedCartographer" / "Runtime" / "Companions" /
+            "CompanionActor.cs")
+    if not path.is_file():
+        fail(
+            "[companions] CC-NPC-010 no-wake audit: CompanionActor.cs is missing — the audit no "
+            "longer covers the extraction (was it moved or renamed?)", errors)
+        return []
+
+    code = [_strip_cs_line_comment(line) for line in
+            path.read_text(encoding="utf-8").splitlines()]
+
+    # `root`, not `_root`: the local being built, never the field that
+    # SetVisible toggles on a finished actor.
+    dark = re.compile(r"(?<![\w.])root\.SetActive\(false\)")
+    lit = re.compile(r"(?<![\w.])root\.SetActive\(true\)")
+
+    anchors = [n for n, line in enumerate(code)
+               if "visual.transform.SetParent(root.transform" in line]
+    if len(anchors) != 1:
+        fail(
+            "[companions] CC-NPC-010 no-wake audit: expected exactly one re-parent of the "
+            f"extracted visual in {path.relative_to(ROOT)}, found {len(anchors)} — a second "
+            "extraction path must make its own no-wake decision rather than inherit this one",
+            errors)
+        return []
+
+    reparent = anchors[0]
+
+    # Bounded to THIS root's lifetime - from the line that creates it to the
+    # line the visual lands on. Searching the whole file above would let an
+    # unrelated `root.SetActive(false)` in some earlier method stand in for the
+    # one that matters.
+    born = next((n for n in range(reparent - 1, -1, -1)
+                 if re.search(r"(?<![\w.])root\s*=\s*new GameObject\(", code[n])), None)
+    if born is None or not any(dark.search(line) for line in code[born:reparent]):
+        fail(
+            "[companions] CC-NPC-010 no-wake audit: the visual is re-parented into a root that "
+            f"was never made inactive in {path.relative_to(ROOT)}:{reparent + 1} — re-parenting "
+            "into a live object is what runs Awake, and that is exactly how #308 threw on every "
+            "placement", errors)
+        return []
+
+    after = code[reparent:]
+
+    # A call may wrap across lines, so each position is read together with the
+    # two lines below it. Cheap, and it keeps a formatting change from being
+    # reported as a missing guard.
+    def statement(index: int) -> str:
+        return " ".join(after[index:index + 3])
+
+    def refuses(lines: list[str], condition: int, token: str) -> bool:
+        """True when the guard opened at `lines[condition]` returns with
+        `token` unconditionally, at the top level of its own block.
+
+        Brace counting, not parsing, and only as much as the job needs. Three
+        things it must not accept, each of which an earlier version did:
+
+        - a `return` further down the method, outside the guard - which is what
+          a later `if (_bodyModel == null) { return false; }` was doing;
+        - a `return` nested one level deeper, inside a condition of its own,
+          because then the fall-through still wears the piece;
+        - a `return` in an `else` branch, for the same reason.
+
+        Hence `before == 1`: the line must sit directly inside the guard's own
+        braces. A brace that does not balance - an escaped `{{` in a log
+        message, say - therefore ends the scan without a match and fails the
+        audit, rather than running past the block and finding something later.
+        A braceless `if (x) return false;` is accepted, on that line or the one
+        below it, because that is the same guard written shorter."""
+        depth = 0
+        opened = False
+        for offset, line in enumerate(lines[condition:]):
+            before = depth
+            depth += line.count("{") - line.count("}")
+            if not opened:
+                if depth > 0:
+                    opened = True
+                    if token in line:
+                        return True
+                    continue
+                if offset <= 1 and token in line:
+                    return True
+                if offset > 1:
+                    return False
+                continue
+            if before == 1 and token in line:
+                return True
+            if before == 1 and re.search(r"(?<!\w)else(?!\w)", line):
+                return False
+            if depth <= 0:
+                return False
+        return False
+
+    enable = next((n for n, line in enumerate(after) if lit.search(line)), None)
+    pass_call = next((n for n, line in enumerate(after)
+                      if "RemoveBehaviours(" in line and "root," in statement(n)), None)
+    if enable is None or pass_call is None or pass_call > enable:
+        fail(
+            "[companions] CC-NPC-010 no-wake audit: the extracted body must have the source's own "
+            f"scripts removed BEFORE it is switched on in {path.relative_to(ROOT)} — the pass and "
+            "the enable are missing or in the wrong order", errors)
+        return []
+
+    # From AFTER the pass line, or the `out string survivors` declaration on it
+    # would satisfy the test on its own; and the return has to follow the
+    # condition, or any unrelated `return null;` in the window would do.
+    between = after[pass_call + 1:enable]
+    guard = next((n for n, line in enumerate(between) if "survivors.Length > 0" in line), None)
+    if guard is None or not refuses(between, guard, "return null;"):
+        fail(
+            "[companions] CC-NPC-010 no-wake audit: nothing refuses the candidate between the "
+            f"script-removal pass and root.SetActive(true) in {path.relative_to(ROOT)} — a script "
+            "this build will not let us destroy must fail the extraction closed, because a "
+            "disabled component still receives Awake when its object is activated", errors)
+        return []
+
+    # Every call site, not just the ones that look like accessories: a new
+    # caller under any local name has to be looked at, and counting only the
+    # ones spelled `piece` would let it in unseen.
+    call_sites = [n for n, line in enumerate(code)
+                  if "RemoveBehaviours(" in line and "private static int" not in line]
+    if len(call_sites) != 4:
+        fail(
+            "[companions] CC-NPC-010 no-wake audit: expected exactly four RemoveBehaviours call "
+            f"sites in {path.relative_to(ROOT)} (the body and the three accessory paths), found "
+            f"{len(call_sites)} — a new caller hands a game prefab's subtree to the live figure "
+            "too, and has to make its own refusal rather than inherit theirs", errors)
+        return []
+
+    # Every accessory path hands its piece to the live figure, so a script
+    # that survived removal wakes there exactly as it would in the body.
+    accessories = [n for n in call_sites if "piece," in " ".join(code[n:n + 3])]
+    if len(accessories) != 3:
+        fail(
+            "[companions] CC-NPC-010 no-wake audit: expected exactly three accessory script passes "
+            f"in {path.relative_to(ROOT)}, found {len(accessories)} — hair/beard, garments and the "
+            "drinking mug are the three that parent a piece onto the live figure", errors)
+        return []
+
+    for call in accessories:
+        attach = next((n for n in range(call + 1, len(code))
+                       if "piece.transform.SetParent(" in code[n]), None)
+        if attach is None:
+            fail(
+                "[companions] CC-NPC-010 no-wake audit: the accessory pass at "
+                f"{path.relative_to(ROOT)}:{call + 1} is not followed by the re-parent it is "
+                "supposed to guard — the audit no longer covers that path", errors)
+            return []
+
+        window = code[call + 1:attach]
+        guard = next((n for n, line in enumerate(window) if "Survivors.Length > 0" in line), None)
+        if guard is None or not refuses(window, guard, "return false;"):
+            fail(
+                "[companions] CC-NPC-010 no-wake audit: the accessory pass at "
+                f"{path.relative_to(ROOT)}:{call + 1} does not refuse the piece before parenting it "
+                f"on at line {attach + 1} — a source script that survived removal would wake the "
+                "moment the piece joins the live figure", errors)
+            return []
+
+    return [
+        "[companions] CC-NPC-010 no-wake audit: the extracted body is assembled dark, and a "
+        "surviving game script refuses the candidate instead of being switched on",
+        "[companions] CC-NPC-010 no-wake audit: all three accessory paths (hair/beard, garments, "
+        "the drinking mug) refuse their piece on a surviving source script before it is parented "
+        "onto the live figure",
+    ]
+
+
+def _cs_block(code: list[str], start: int) -> list[str]:
+    """The lines of the braced block that opens at or after `start`. Brace
+    counting on comment-stripped lines, which is all a method body needs."""
+    depth = 0
+    opened = False
+    block = []
+    for line in code[start:]:
+        depth += line.count("{") - line.count("}")
+        opened = opened or depth > 0
+        block.append(line)
+        if opened and depth <= 0:
+            break
+    return block
+
+
+def check_companion_talk_is_not_a_reach(errors: list[str]) -> list[str]:
+    """CC-NPC-011 talk audit: speaking to a companion is not a reach, and every
+    companion prompt shows the player's real key.
+
+    Both were seen by the owner in game. In Player.Interact the return value of
+    Interactable.Interact decides one thing: whether the player plays
+    DoInteractAnimation, the arm-raising reach used for chests and doors. The
+    game's own talking NPCs, Trader and Raven, return false - so every value
+    CompanionHover.Interact can produce, as a `return` or as an expression body,
+    must be the literal `false`; a computed one could quietly become true again.
+    And `$KEY_Use` is only a token until Localization.Localize turns it into the
+    live binding, remaps and gamepad included, so every `$KEY_` token in Hulgi's
+    and the compass's hover text must sit INSIDE a Localize call's string
+    argument - not merely on the same line as one.
+
+    Line and single-line block comments are stripped first, so a comment can
+    satisfy neither rule. A Localize call whose argument is not one string
+    literal on one line does not count; that is deliberate, and it fails
+    loudly rather than passing on trust."""
+    companions = ROOT / "src" / "ConcernedCartographer" / "Runtime" / "Companions"
+
+    def read(name: str) -> list[str] | None:
+        path = companions / name
+        if not path.is_file():
+            fail(f"[companions] CC-NPC-011 talk audit: {name} is missing — the audit no longer "
+                 "covers it", errors)
+            return None
+        return [re.sub(r"/\*.*?\*/", "", _strip_cs_line_comment(line))
+                for line in path.read_text(encoding="utf-8").splitlines()]
+
+    def member(code: list[str], owner: str, signature: str, file: str) -> list[str] | None:
+        at_class = next((n for n, line in enumerate(code) if f"class {owner}" in line), None)
+        at = None if at_class is None else next(
+            (n for n in range(at_class, len(code)) if signature in code[n]), None)
+        if at is None:
+            fail(f"[companions] CC-NPC-011 talk audit: {owner}.{signature.split('(')[0].split()[-1]} "
+                 f"is missing from {file} — the audit no longer covers it", errors)
+            return None
+        # An expression body ends at its semicolon; a block body at its brace.
+        if "=>" in " ".join(code[at:at + 2]).split("{")[0]:
+            body = []
+            for line in code[at:]:
+                body.append(line)
+                if ";" in line:
+                    break
+            return body
+        return _cs_block(code, at)
+
+    actor = read("CompanionActor.cs")
+    compass = read("BrokenCompassObject.cs")
+    if actor is None or compass is None:
+        return []
+
+    interact = member(actor, "CompanionHover", "public bool Interact(", "CompanionActor.cs")
+    if interact is None:
+        return []
+    text = " ".join(interact)
+    head = text.split("{")[0]
+    values = ([head.split("=>", 1)[1].split(";", 1)[0].strip()] if "=>" in head
+              else [value.strip() for value in re.findall(r"\breturn\b([^;]*);", text)])
+    if not values or any(value != "false" for value in values):
+        fail(
+            "[companions] CC-NPC-011 talk audit: CompanionHover.Interact must produce the literal "
+            f"`false` on every path, found {values} — anything else lets Player.Interact make "
+            "the player raise an arm every time somebody talks to him", errors)
+        return []
+
+    localize = re.compile(r'Localization\.instance\.Localize\(\s*"[^"]*"\s*\)')
+    for owner, code, file in (("CompanionHover", actor, "CompanionActor.cs"),
+                              ("BrokenCompassObject", compass, "BrokenCompassObject.cs")):
+        hover = member(code, owner, "public string GetHoverText(", file)
+        if hover is None:
+            return []
+        resolved = sum(call.count("$KEY_") for line in hover for call in localize.findall(line))
+        raw = [line.strip() for line in hover if "$KEY_" in localize.sub("", line)]
+        if resolved == 0:
+            fail(
+                f"[companions] CC-NPC-011 talk audit: {owner}.GetHoverText no longer names a key "
+                f"through Localization.instance.Localize in {file} — the player has to be told "
+                "what to press", errors)
+            return []
+        if raw:
+            fail(
+                f"[companions] CC-NPC-011 talk audit: {owner}.GetHoverText has a `$KEY_` token "
+                f"outside a Localize call in {file}: {raw} — it reaches the screen as the literal "
+                "token instead of the player's key", errors)
+            return []
+
+    return [
+        "[companions] CC-NPC-011 talk audit: talking to Hulgi is not a reach, and his prompt and "
+        "the compass's show the player's own key",
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -683,6 +988,8 @@ def main() -> int:
     report.extend(check_teamster_authority_policy(errors))
     report.extend(check_teamster_no_force_injection(errors))
     report.extend(check_teamster_no_internet_egress(errors))
+    report.extend(check_companion_body_fails_closed(errors))
+    report.extend(check_companion_talk_is_not_a_reach(errors))
 
     prohibited = []
     for path in ROOT.rglob("*.dll"):

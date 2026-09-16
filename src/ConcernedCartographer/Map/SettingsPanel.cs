@@ -28,8 +28,11 @@ internal sealed class SettingsPanel : CcSidePanel
     private bool _restoreArmed;
     private Toggle? _toolsOnlyToggle;
     private Toggle? _showCompanionToggle;
+    private Toggle? _allDoorsToggle;
     private readonly Func<bool> _toolsOnly;
     private readonly Func<bool> _showCompanion;
+    private readonly Func<bool> _allDoors;
+    private readonly Func<string> _doorKey;
 
     public SettingsPanel(
         ManualLogSource log,
@@ -38,6 +41,8 @@ internal sealed class SettingsPanel : CcSidePanel
         Func<string[], string> executeCompanion,
         Func<bool> toolsOnly,
         Func<bool> showCompanion,
+        Func<bool> allDoors,
+        Func<string> doorKey,
         Action openPrivacy)
         : base(log, "settings.title", 384f, 720f)
     {
@@ -46,6 +51,8 @@ internal sealed class SettingsPanel : CcSidePanel
         _executeCompanion = executeCompanion;
         _toolsOnly = toolsOnly;
         _showCompanion = showCompanion;
+        _allDoors = allDoors;
+        _doorKey = doorKey;
         _openPrivacy = openPrivacy;
     }
 
@@ -69,7 +76,21 @@ internal sealed class SettingsPanel : CcSidePanel
         _showCompanionToggle = AddToggle(
             gui, font, headerColor, "Show Hulgi once he joins", left + 12f, y,
             value => Report(_executeCompanion(new[] { "show", value ? "on" : "off" })));
-        y -= 32f;
+        y -= 30f;
+
+        // The owner's rule: a door is closed to companions until its owner says
+        // otherwise. The per-door switch is on the door itself; this is the
+        // "every door" override, and the reminder of where the switch is.
+        _allDoorsToggle = AddToggle(
+            gui, font, headerColor, "Companions may use every door", left + 12f, y,
+            value => Report(_executeCompanion(new[] { "doors", "all", value ? "on" : "off" })),
+            labelWidth: 260f);
+        y -= 26f;
+        AddBody(
+            gui, font,
+            "Otherwise only doors you allow: look at a door and press " + _doorKey() + ".",
+            11, new Color(1f, 1f, 1f, 0.72f), ref y, 18f);
+        y -= 4f;
 
         AddButton(gui, "Replay introduction", left + (half * 0.5f), y, half - 4f, 28f,
             () => Report(_executeCompanion(new[] { "story" })));
@@ -174,6 +195,11 @@ internal sealed class SettingsPanel : CcSidePanel
         if (_showCompanionToggle != null)
         {
             SetToggleSilently(_showCompanionToggle, _showCompanion());
+        }
+
+        if (_allDoorsToggle != null)
+        {
+            SetToggleSilently(_allDoorsToggle, _allDoors());
         }
 
         Report("Action results appear here.");

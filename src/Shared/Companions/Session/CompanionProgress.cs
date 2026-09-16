@@ -102,6 +102,29 @@ internal sealed class CompanionProgress
 
     public bool CanReplayStory => QuestStateMachine.CanReplayStory(QuestState);
 
+    /// <summary>True when the companion has joined but the player has not yet
+    /// been told. Every product with a companion shows its own "&lt;name&gt;
+    /// joined your crew" the first time he appears, and asks this first.
+    /// </summary>
+    public bool ShouldAnnounceJoin =>
+        HasCompanion &&
+        !(_sidecar.TryGetQuest(_questId, out CompanionQuestRecord record) && record.JoinAnnounced);
+
+    /// <summary>Records the joined-your-crew notice and saves it. Returns true
+    /// only once it is on disk - show the notice only then, the same ordering
+    /// every other consequence here follows: told once, even across a
+    /// crash.</summary>
+    public bool AnnounceJoin()
+    {
+        if (!ShouldAnnounceJoin || !_sidecar.MarkJoinAnnounced(_questId))
+        {
+            return false;
+        }
+
+        Save();
+        return !_sidecar.IsDirty;
+    }
+
     /// <summary>True when there is unsaved progress. Should be false whenever
     /// the player is about to be shown a consequence of that progress.</summary>
     public bool HasUnsavedChanges => _sidecar.IsDirty;
@@ -130,6 +153,39 @@ internal sealed class CompanionProgress
         }
 
         return outcome;
+    }
+
+    /// <summary>Starts this character's introduction again from the beginning:
+    /// the collectible is offered again and the companion leaves until he is
+    /// met again. For testing and for a player who wants to replay it.
+    ///
+    /// Access is monotonic and a reset does not get an exception. A tool grant
+    /// earned by finishing the quest is read off the quest record rather than
+    /// written as its own row, so dropping the record alone would lock a
+    /// character with no other evidence out of tools they already had. The
+    /// grant is therefore written down first, and the reset is saved at once.
+    /// Refused on a read-only sidecar, and a no-op for a quest never
+    /// started.</summary>
+    public bool ResetQuest()
+    {
+        if (_sidecar.IsReadOnly || !_sidecar.TryGetQuest(_questId, out _))
+        {
+            return false;
+        }
+
+        if (Decision.IsUnlocked && _sidecar.GrantedReason == UnlockReason.NotUnlocked)
+        {
+            _sidecar.RecordUnlockGrant(Decision.Reason);
+        }
+
+        if (!_sidecar.ResetQuest(_questId))
+        {
+            return false;
+        }
+
+        Save();
+        Resolve();
+        return true;
     }
 
     /// <summary>Records that the collectible has been removed from the world.
@@ -225,12 +281,23 @@ internal sealed class CompanionProgress
             Save();
         }
 
+        // Rows quarantined by the load have to reach disk under their marker or
+        // the same damage is reported again next session - which is the whole
+        // of #292. It gets its own save rather than riding on the grant's,
+        // because the common cases (a grant already recorded, a finished
+        // introduction) persist nothing and would leave the marker unwritten
+        // forever.
+        if (_sidecar.NeedsQuarantineRewrite && Save(force: true))
+        {
+            _sidecar.QuarantineRewritten();
+        }
+
         Decision = decision;
     }
 
-    private bool Save()
+    private bool Save(bool force = false)
     {
-        CompanionSidecarStore.SaveReport report = _store.Save(_sidecar);
+        CompanionSidecarStore.SaveReport report = _store.Save(_sidecar, force);
         if (!report.Saved)
         {
             if (report.Notice != null)

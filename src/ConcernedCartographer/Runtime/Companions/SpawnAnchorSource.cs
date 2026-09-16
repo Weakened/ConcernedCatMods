@@ -238,6 +238,48 @@ internal sealed class SpawnAnchorSource : IAnchorSource
         }
     }
 
+    /// <summary>How far the world start's own structure reaches from its
+    /// centre - for the temple, the ring of standing stones - measured from the
+    /// location's solid colliders, or zero when there is no location there.
+    ///
+    /// Measured rather than assumed: the owner wants the compass outside the
+    /// circle, and a hardcoded radius is right for one build of the location
+    /// and wrong for the next. Triggers and terrain are not structure; the
+    /// answer is capped so a location with one far-flung collider cannot push
+    /// the compass out of sight.</summary>
+    public static float MeasureStructureRadius(Vector3 center)
+    {
+        try
+        {
+            Location location = Location.GetZoneLocation(center);
+            if (location == null)
+            {
+                return 0f;
+            }
+
+            float reach = 0f;
+            foreach (Collider collider in location.GetComponentsInChildren<Collider>(includeInactive: false))
+            {
+                if (collider == null || collider.isTrigger || collider is TerrainCollider ||
+                    collider.GetComponent<Heightmap>() != null)
+                {
+                    continue;
+                }
+
+                Bounds bounds = collider.bounds;
+                float fromCentre = new Vector2(bounds.center.x - center.x, bounds.center.z - center.z).magnitude +
+                    Mathf.Max(bounds.extents.x, bounds.extents.z);
+                reach = Mathf.Max(reach, fromCentre);
+            }
+
+            return Mathf.Min(reach, 14f);
+        }
+        catch (Exception)
+        {
+            return 0f;
+        }
+    }
+
     private static bool IsUsable(Vector3 point)
     {
         return !(float.IsNaN(point.x) || float.IsNaN(point.y) || float.IsNaN(point.z))

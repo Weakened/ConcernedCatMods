@@ -1,11 +1,96 @@
-# NPC_HANDOFF — Concerned Cartographer 1.1.0 candidate (Hulgi)
+# NPC_HANDOFF — Concerned Cartographer 1.1.1 candidate (Hulgi)
 
-Epic #264. Leaves #265, #266, #267, #268, #269.
+Epic #264. Leaves #265, #266, #267, #268, #269, #303. Owner reference #298.
 **Candidate only. Nothing has been published, and no version has been tagged.**
 
 ---
 
-## The candidate
+## 1.1.1 — the first build anybody played
+
+1.1.0 below was written, unit-tested and packaged without a single minute of
+play. On 2026-09-15 it was played, on Valheim 1.0.12 in an isolated profile,
+character and world. Four things it claimed were not true, and the section
+after this one preserves the 1.1.0 record exactly as it was written so the
+difference stays visible.
+
+| Item | Value |
+|---|---|
+| Package | `TheConcernedCat-ConcernedCartographer-1.1.1` |
+| Path | `artifacts/thunderstore/TheConcernedCat-ConcernedCartographer-1.1.1.zip` |
+| ZIP SHA256 | `D2FD728E8E5BB500D154B6BF28593C8D22DFEAA9F1DB36EF67C931A1C15F1706` |
+| ZIP bytes | 916,516 |
+| DLL SHA256 | `0FC7C1FA44206427DDFAE9BC6AB797BFDCA69EEDD63EA652E141FBF602B73FC5` |
+| DLL bytes | 695,808 |
+| InformationalVersion | `1.1.1+2e3ce79ca8650f5cbbb49abe92edad6a5293f017` |
+| Source | `feat/cc-npc-006-hulgi-appearance` @ `2e3ce79` |
+| Checksums | `artifacts/thunderstore/SHA256SUMS-ConcernedCartographer-1.1.1.txt` |
+
+The 1.1.0 ZIP is untouched and still hashes to
+`686B0CC749E907338086BBB0FD01D77C7BE567742CFC4432537B2293FD0CC49B`.
+
+### What playing it found
+
+1. **Every `cc_*` console command was dead on Valheim 1.0.x.** Jötunn 2.29.2
+   reflects for a twelve-parameter `Terminal.ConsoleCommand` constructor; 1.0.12
+   has thirteen. All seven commands logged "No suitable constructor" at startup
+   and answered *is not a recognized command* in game — including
+   `cc_companion toolsonly on`, which the design relies on as the way to the map
+   tools for somebody who never finds the compass. Fixed by registering against
+   whatever constructor the build has, matched by shape, with Jötunn as fallback
+   and the accepted command list written to the log.
+2. **A brand new character in a brand new world was granted access as an
+   EXISTING user.** The plugin writes its own starter `survey-rules.tsv` during
+   startup and the legacy probe then read that file back as proof of prior use.
+   #264's story gate could not engage for anybody, ever. Fixed; a fresh install
+   now reports `access pending introduction (NotUnlocked)`.
+3. **He never sat down.** Sitting in Valheim is an animator *parameter*
+   (`emote_sit`, or the chair's own `m_attachAnimation`), and the code was
+   searching for animator *states* with those names. Both the ground idle and
+   furniture were affected. Fixed, and seating now uses the seat's own
+   attachment point, heading and animation.
+4. **The reference colour could never be read.** It converts through four
+   inspector colours on `PlayerCustomizaton`, which lives in the start scene and
+   is gone before any world exists. Captured at the menu now and cached.
+
+### Live evidence, 1.1.1
+
+Valheim 1.0.12, Unity 6000.0.75f1, BepInEx 5.4.23.3, Jötunn 2.29.2. Isolated
+profile `TCC-HulgiSmoke`, disposable character HULGISMOKE, disposable world
+HulgiSmokeWorld. No owner save was used and none was written.
+
+- `Console commands registered: cc_roads, cc_pins, cc_atlas, cc_survey, cc_routes, cc_sync, cc_companion`
+- `Read the game's customization palette: hair ramp (1, 0.931, 0.706) to (1, 0.488, 0.279), level 0.1 to 1, skin ramp (1, 1, 1) to (0.3, 0.3, 0.3)`
+- `hair -> Long Braid (Hair11) [DisplayName]  MATCHES REFERENCE`
+- `beard -> Handlebar (Beard26) [DisplayName]  MATCHES REFERENCE`
+- `hair colour -> (0.766, 0.394, 0.234) from the live customization palette (tone 0.94, level 0.74)`
+- Compass found by proximity, four-page story read, **Welcome aboard, Hulgi.**,
+  `Hulgi has joined your camp. Concerned Cartographer is ready.`
+- `pose=SitOnGround state=emote_sit` — the ground idle, on the game's own parameter.
+- Spoken dialogue and ambient lines seen on screen.
+- Relog: `quest Recruited, access granted (QuestCompleted)`, compass retired,
+  actor rebuilt with the same appearance.
+- The character-creation screen's three sliders are labelled **Skin Tone**,
+  **Hair Tone**, **Blondness**, which settles #298's open question: Blondness is
+  `m_hairLevel`.
+
+### Open on 1.1.1, and not claimed
+
+- **#305 — Hulgi has no hair.** Long Braid renders 0.99 m from his head on this
+  build, so the fit check removes it with a notice rather than leaving a braid
+  floating beside him. The beard is correct. Appearance is therefore *not*
+  finished.
+- **#306 — furniture seating has not been seen working.** The mechanism is in
+  and unit-tested, but no chair fell inside his placement band during testing,
+  and a seat built after he settles is not noticed until something else moves
+  him.
+- **The wardrobe has not been seen on him.** The owner's September 15 note asks
+  for a rag tunic and leather pants; both are implemented, unit-tested and in
+  this package, and the in-game pass for them was stopped when the owner
+  returned to the machine rather than run to a conclusion.
+
+---
+
+## The 1.1.0 candidate (superseded, preserved)
 
 | Item | Value |
 |---|---|

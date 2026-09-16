@@ -1,3 +1,4 @@
+using TheConcernedCat.Companions.Surroundings;
 using BepInEx.Configuration;
 using UnityEngine;
 
@@ -56,7 +57,14 @@ internal sealed class CartographerSettings
         ConfigEntry<bool> companionToolsOnly,
         ConfigEntry<bool> companionVisible,
         ConfigEntry<bool> companionAmbientChatter,
-        ConfigEntry<float> companionAmbientIntervalSeconds)
+        ConfigEntry<bool> companionWander,
+        ConfigEntry<float> companionAmbientIntervalSeconds,
+        ConfigEntry<string> companionHairPreset,
+        ConfigEntry<string> companionBeardPreset,
+        ConfigEntry<string> companionChestPreset,
+        ConfigEntry<string> companionLegsPreset,
+        ConfigEntry<DoorAccessPolicy> companionDoorAccess,
+        ConfigEntry<KeyCode> companionDoorHotkey)
     {
         Enabled = enabled;
         CaptureConstructionActions = captureConstructionActions;
@@ -108,7 +116,14 @@ internal sealed class CartographerSettings
         CompanionToolsOnly = companionToolsOnly;
         CompanionVisible = companionVisible;
         CompanionAmbientChatter = companionAmbientChatter;
+        CompanionWander = companionWander;
         CompanionAmbientIntervalSeconds = companionAmbientIntervalSeconds;
+        CompanionHairPreset = companionHairPreset;
+        CompanionBeardPreset = companionBeardPreset;
+        CompanionChestPreset = companionChestPreset;
+        CompanionLegsPreset = companionLegsPreset;
+        CompanionDoorAccess = companionDoorAccess;
+        CompanionDoorHotkey = companionDoorHotkey;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -178,7 +193,37 @@ internal sealed class CartographerSettings
     /// works regardless of this.</summary>
     public ConfigEntry<bool> CompanionAmbientChatter { get; }
 
+    /// <summary>Whether he gets up and moves around his camp at all.
+    /// Presentation only, and off changes nothing but how still he is.
+    /// </summary>
+    public ConfigEntry<bool> CompanionWander { get; }
+
     public ConfigEntry<float> CompanionAmbientIntervalSeconds { get; }
+
+    /// <summary>An explicit hair preset for Hulgi, by customization-screen
+    /// label or prefab id. Empty means the owner's reference default. A value
+    /// set here is never overwritten by a later default change - CC-NPC-006
+    /// requires a customized appearance to survive.</summary>
+    public ConfigEntry<string> CompanionHairPreset { get; }
+
+    /// <summary>An explicit beard preset for Hulgi, on the same terms.</summary>
+    public ConfigEntry<string> CompanionBeardPreset { get; }
+
+    /// <summary>An explicit tunic for Hulgi. Clothing only.</summary>
+    public ConfigEntry<string> CompanionChestPreset { get; }
+
+    /// <summary>Explicit trousers for Hulgi. Clothing only.</summary>
+    public ConfigEntry<string> CompanionLegsPreset { get; }
+
+    /// <summary>Which doors companions may use: only those the player lets them
+    /// through (the default), or every door the player could open. The doors
+    /// themselves are remembered per world beside the companion data, never in
+    /// the world.</summary>
+    public ConfigEntry<DoorAccessPolicy> CompanionDoorAccess { get; }
+
+    /// <summary>The key that, while looking at a door, lets companions use it
+    /// or stops them. None hides the hint and disables the key.</summary>
+    public ConfigEntry<KeyCode> CompanionDoorHotkey { get; }
 
     public static CartographerSettings Bind(ConfigFile config)
     {
@@ -296,8 +341,22 @@ internal sealed class CartographerSettings
                 "Show Hulgi once he has joined you. This is presentation only - hiding him never affects your tools, your progress or your data."),
             config.Bind("Companions", "AmbientChatter", false,
                 "Let Hulgi make the occasional unprompted remark while you are standing near him. OFF by default. Speaking to him directly always works whether this is on or off."),
+            config.Bind("Companions", "Wander", true,
+                "Let Hulgi get up now and then and move around his camp - and head for shelter when it turns dark or wet. Presentation only: he never leaves the area, never blocks anything, and never touches the world. Turn this off and he simply sits still."),
             config.Bind("Companions", "AmbientIntervalSeconds", 45f, new ConfigDescription(
                 "Shortest gap between unprompted remarks, in seconds. Only used when AmbientChatter is on.",
-                new AcceptableValueRange<float>(15f, 600f))));
+                new AcceptableValueRange<float>(15f, 600f))),
+            config.Bind("Companions", "HairPreset", "",
+                "Give Hulgi a specific hair preset, by the character-creation label (\"Long Braid\") or the prefab id (\"Hair11\"). Leave empty for his own look. Run 'cc_companion appearance' in game to list what this build offers. A name this build does not have falls back to his default rather than leaving him bald."),
+            config.Bind("Companions", "BeardPreset", "",
+                "Give Hulgi a specific beard preset, by the character-creation label (\"Handlebar\") or the prefab id (\"Beard26\"). Leave empty for his own look."),
+            config.Bind("Companions", "ChestGarment", "",
+                "What Hulgi wears on his torso, by item name (\"Rag tunic\") or prefab id (\"ArmorRagsChest\"). Clothing only: he is not carrying it, it is not taken from anywhere, and it has no armour value. Leave empty for the default."),
+            config.Bind("Companions", "LegsGarment", "",
+                "What Hulgi wears on his legs, by item name (\"Leather pants\") or prefab id (\"ArmorLeatherLegs\"). Clothing only. Leave empty for the default."),
+            config.Bind("Companions", "DoorAccess", DoorAccessPolicy.OnlyAllowedDoors,
+                "Which doors companions may use to go in and out of buildings. OnlyAllowedDoors (default): a door is closed to them until you look at it and press DoorAccessHotkey - they never walk into a building through a door you have not opened to them, and never use it to leave one either. AllDoors: every door you could open yourself. Either way they only ever use a door you could open (no keys, guard stones respected) and close it behind them. Your choices are kept per world with the companion data, never in the world."),
+            config.Bind("Companions", "DoorAccessHotkey", KeyCode.F8,
+                "While looking at a door, press this to let companions use it, or to stop them. The door's own prompt shows it. None disables the key and the prompt."));
     }
 }

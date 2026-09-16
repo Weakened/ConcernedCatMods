@@ -11,7 +11,7 @@ public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernedcartographer";
     public const string PluginName = "Concerned Cartographer";
-    public const string PluginVersion = "1.1.0";
+    public const string PluginVersion = "1.2.0";
 
     private CartographerRuntime? _runtime;
     private CrashReportingHub? _crashHub;
@@ -44,19 +44,49 @@ public sealed class Plugin : BaseUnityPlugin
         // hook fires right after that reconstruction so managed markers
         // re-claim their saved renderings and rebind their cc:* sprites.
         MinimapManager.OnVanillaMapDataLoaded += HandleMapDataLoaded;
-        CommandManager.Instance.AddConsoleCommand(new RoadToolsCommand(_runtime));
-        CommandManager.Instance.AddConsoleCommand(new PinToolsCommand(_runtime));
-        CommandManager.Instance.AddConsoleCommand(new AtlasToolsCommand(_runtime));
-        CommandManager.Instance.AddConsoleCommand(new SurveyToolsCommand(_runtime));
-        CommandManager.Instance.AddConsoleCommand(new RouteToolsCommand(_runtime));
-        CommandManager.Instance.AddConsoleCommand(new SyncToolsCommand(_runtime));
-        CommandManager.Instance.AddConsoleCommand(new CompanionToolsCommand(_runtime));
+        // The companion's reference hair colour is a lerp between four colours
+        // that only exist on the character-creation screen. Start looking for
+        // them now, while that screen is still reachable; by the time a world
+        // is loaded it is gone.
+        Runtime.Companions.CustomizationPaletteReader.BeginWatching(Logger);
+        RegisterConsoleCommands();
         Logger.LogInfo($"{PluginName} {PluginVersion} loaded");
         LogEnvironment(settings);
     }
 
+    /// <summary>Adds every console command to the game's own command table.
+    ///
+    /// Registered through <see cref="VanillaConsoleCommands"/> rather than
+    /// Jötunn's manager because Jötunn 2.29.2 looks for a
+    /// <c>Terminal.ConsoleCommand</c> constructor Valheim 1.0.12 no longer has,
+    /// and every command silently failed to appear. What actually ended up in
+    /// the table is logged, because "the console says it is not a recognized
+    /// command" is how that was eventually noticed.</summary>
+    private void RegisterConsoleCommands()
+    {
+        Jotunn.Entities.ConsoleCommand[] commands =
+        {
+            new RoadToolsCommand(_runtime!),
+            new PinToolsCommand(_runtime!),
+            new AtlasToolsCommand(_runtime!),
+            new SurveyToolsCommand(_runtime!),
+            new RouteToolsCommand(_runtime!),
+            new SyncToolsCommand(_runtime!),
+            new CompanionToolsCommand(_runtime!),
+        };
+
+        var names = new string[commands.Length];
+        for (int index = 0; index < commands.Length; index++)
+        {
+            names[index] = commands[index].Name;
+            VanillaConsoleCommands.Register(commands[index], Logger);
+        }
+
+        Logger.LogInfo(VanillaConsoleCommands.Describe(names));
+    }
+
     /// <summary>The release identity including the build commit (SDK stamps
-    /// InformationalVersion as "1.1.0+&lt;sha&gt;"). Shared by the crash
+    /// InformationalVersion as "1.1.1+&lt;sha&gt;"). Shared by the crash
     /// context and the RC15 lifecycle log line, and safe to log: it names
     /// this build of the mod and nothing about the player.</summary>
     private static string ResolveInformationalVersion()

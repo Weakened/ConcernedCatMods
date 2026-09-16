@@ -187,6 +187,8 @@ internal sealed class CartographerRuntime : IDisposable
             ExecuteCompanionCommand,
             () => settings.CompanionToolsOnly.Value,
             () => settings.CompanionVisible.Value,
+            () => settings.CompanionDoorAccess.Value == TheConcernedCat.Companions.Surroundings.DoorAccessPolicy.AllDoors,
+            () => settings.CompanionDoorHotkey.Value.ToString(),
             () => _consentPanel.ShowSettings());
         _systemMarkersPanel = new SystemMarkersPanel(log);
 
@@ -3122,11 +3124,13 @@ internal sealed class CartographerRuntime : IDisposable
             case "where":
             {
                 CompanionStatus status = _companions.Status;
+                string? where = _companions.DescribeActorPosition();
                 return $"Home point: {status.AnchorKind}" +
                     (status.StartLocationName != null
                         ? $" (world start location \"{status.StartLocationName}\")"
                         : "") +
-                    $". Collectible present: {status.CompassPresent}.";
+                    $". Collectible present: {status.CompassPresent}." +
+                    (where == null ? " Hulgi is not placed." : " Hulgi is at " + where + ".");
             }
 
             case "appearance":
@@ -3134,15 +3138,54 @@ internal sealed class CartographerRuntime : IDisposable
                 // audit's own prescribed way to establish the hair and beard
                 // preset names, which are asset-bundle data rather than API and
                 // were deliberately never guessed.
-                return Runtime.Companions.AppearanceCatalog.Read().Describe();
+                return Runtime.Companions.AppearanceCatalog.Read().Describe(
+                    hairOverride: _settings.CompanionHairPreset.Value,
+                    beardOverride: _settings.CompanionBeardPreset.Value,
+                    chestOverride: _settings.CompanionChestPreset.Value,
+                    legsOverride: _settings.CompanionLegsPreset.Value) +
+                    DescribeCustomizationSliders();
+
+            case "pose":
+                // Presentation only: writes an animator bool on our own model.
+                // Here so that clothing can be checked in more than the one
+                // pose the ordinary lifecycle produces.
+                return _companions.ForcePose(
+                    args.Length > 1 ? args[1].ToLowerInvariant() : "?");
 
             case "path":
                 return "Companion data: " + Runtime.Companions.CartographerLegacyProbe.DataDirectory;
 
+            case "reset":
+                return _companions.Reset(args.Length > 1 ? args[1] : null);
+
+            case "placement":
+                return _companions.DescribePlacement();
+
+            case "summon":
+                return _companions.Summon();
+
+            case "drink":
+                return _companions.Drink(args.Length > 1 ? args[1] : null);
+
+            case "doors":
+                return _companions.Doors(args);
+
             default:
                 return "Unknown subcommand. Use: status, toolsonly <on|off>, story, show <on|off>, " +
-                    "where, appearance, path.";
+                    "where, placement, summon, drink [toast|plain], doors [list|clear|all <on|off>], appearance, " +
+                    "pose <stand|ground|seat>, path, reset [quest|bed|day|all].";
         }
+    }
+
+    /// <summary>Appends the character-creation slider labels when that screen
+    /// is actually present. It is only there in the main menu, so this is
+    /// silent in a loaded world rather than reporting an absence as a fault -
+    /// it exists to record, once, which on-screen label corresponds to which of
+    /// the game's two hair sliders.</summary>
+    private static string DescribeCustomizationSliders()
+    {
+        string? sliders = Runtime.Companions.CustomizationPaletteReader.DescribeSliders();
+        return sliders == null ? "" : Environment.NewLine + "  customization sliders: " + sliders;
     }
 
     private static bool ParseOnOff(string value, bool current)
@@ -3191,8 +3234,7 @@ internal sealed class CartographerRuntime : IDisposable
         }
 
         builder.AppendLine(
-            $"  seating          : {(status.FreeSeatSeen ? "free seat detected nearby" : "no free seat seen")} " +
-            "- furniture use is PENDING in-game evidence, so he sits on the ground beside it");
+            "  seating          : " + status.Seating);
         builder.AppendLine($"  dialogue lines   : {status.DialogueLineCount}");
         builder.AppendLine($"  ambient chatter  : {status.AmbientChatter} (off by default)");
         builder.AppendLine($"  known biomes     : {status.KnownBiomesObserved}");

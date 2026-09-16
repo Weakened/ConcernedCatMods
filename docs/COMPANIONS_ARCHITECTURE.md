@@ -37,6 +37,7 @@ Quest           QuestState, QuestTransition, QuestStateMachine
 Persistence     CompanionSidecar, CompanionSidecarCodec, CompanionSidecarStore, CompanionQuestRecord
 Unlock          LegacyEvidence, UnlockReason, UnlockDecision, UnlockPolicy
 Placement       CompanionAnchor, IAnchorSource, IPlacementProbe, PlacementRules, PlacementPlanner
+Surroundings    CommonSense, CampSnapshot, CompanionTemperament, DoorAccessBook, DoorPortal, RouteDoors
 Dialogue        DialogueLine, DialogueCatalog, DialogueContext, DialogueRotation
 Session         CompanionProgress   (the seam a game adapter talks to)
 ```
@@ -297,6 +298,67 @@ collider carries no registration — nothing knows about it until something
 touches it — so removing one leaves no trace, while leaving one in place would
 mean a player walking into an invisible wall where their companion stands.
 
+### The body is assembled dark
+
+Extraction is only half of the no-wake rule, and the other half was missing
+until production reported it. **Re-parenting is what wakes a subtree**: the
+instant the visual transform lands under an active parent, Unity runs `Awake`
+on every component inside it. The new root used to be created the ordinary way,
+which is to say *active*, so the extracted body woke the moment it was
+re-parented into it — and the second line of `CharacterAnimEvent.Awake` is a
+dereference of `GetComponentInParent<Character>()`, which the refusal above has
+just guaranteed is not there.
+
+So it threw. Every build, for every player, since Hulgi had a body
+(`CONCERNED-CARTOGRAPHER-8`, seen on 1.1.2). Worse than the log line: that
+component's `OnEnable` adds it to a static list `MonoUpdaters` walks every
+FixedUpdate and LateUpdate, so a half-constructed one does not merely fail once
+— it sits in the game's own update loop for the rest of the session.
+
+`CompanionActor` now creates the root **inactive**, re-parents into the dark,
+removes the source character's own `MonoBehaviour`s while nothing has run, and
+switches the light on afterwards. Removing is not stripping: the distinction
+the whole adapter rests on is *whether the component ever woke*, and none of
+these did.
+
+The rule is a type test rather than another name list, because the problem is
+not one class: a script inside a character's visual subtree is game code
+written for a live character, and this figure has none. Nothing that draws him
+is a `MonoBehaviour` — `Animator`, `Renderer`, `SkinnedMeshRenderer`, `LODGroup`
+and `Transform` are all built-in components — so the pass cannot take away the
+body, the rig or the animation. Anything Unity refuses to destroy (a
+`[RequireComponent]` dependency, which it refuses by writing to the log rather
+than by throwing) is named, and for the **body** that is the end of the
+candidate: it **fails closed**. A script that survives both passes is a script
+that will wake the instant the figure is switched on — disabling it is not
+safety, because Unity runs `Awake` on activation either way — so the root is
+never enabled, it is destroyed while still dark, and the next candidate is
+tried. A companion who does not appear is a disappointment; a companion who
+wakes the game's own code inside himself is the defect this whole section is
+about.
+
+Attached hair, beards and garments go through the same pass before they are
+parented on, for the same reason — and there, and only there, the cloth family
+is exempt, because `RemoveCloth` has just run on that same piece and disables
+what Unity refuses to destroy out loud. A survivor on an accessory is named and
+that piece is **refused**: it is destroyed while still isolated under its
+inactive holder, never parented onto him and never enabled. Going without a
+braid is a look. Wearing one that wakes a game script inside him is the defect.
+
+The refusal is per **piece**, which is worth stating precisely because a
+garment is not one object. Hair, a beard and a single-mesh preset are one piece
+each, so refusing it means he goes without that preset. A garment is its
+painted textures plus one `attach_*` mesh per joint, and `ApplyGarmentTextures`
+has already run by then: refusing one mesh leaves the paint on him and the
+report still says the slot is worn. The per-piece log line is what says which
+part was left off, and why.
+
+The body gets no such exemption, and the first cut of this fix wrongly gave it
+one. `RemoveCloth` is never called on the body, so a cloth-named script there
+was skipped by both passes, stayed enabled, and woke with the figure — the same
+defect wearing a different type name. The exemption is now something a caller
+asks for, and only a caller that has actually run `RemoveCloth` may ask.
+
 ### Appearance is enumerated, never assumed
 
 The audit established that stock hair and beard preset names are serialized
@@ -320,6 +382,10 @@ default idle and the report says so.
 
 ### Furniture: detected, reported, deliberately unused
 
+> Superseded. Seats have been used as local poses since the #306 work, and
+> where he sits is now his common sense's to say - see "Common sense and
+> doors" below. Kept for the record of why it started cautious.
+
 The placement probe finds chairs and asks `Chair.IsInUse()`. A free chair is
 reported to the shared planner as `SeatAvailability.Unverified`, **not** `Free`
 — and the planner treats `Unverified` as no seat, so the companion sits on the
@@ -340,3 +406,75 @@ its hook. So every ten seconds the director compares the live world UID and
 player ID against the scope the open sidecar is addressed to, and reopens if
 they differ. Two accessor reads; no progress is ever written to a previous
 world.
+
+## Common sense and doors (owner's rules, 2026-09-16)
+
+The owner's direction, in their words: "have all npcs have a deep understanding
+of their surroundings, and act accordingly. Hulgi likes to hangout by fire and
+have a drink. If it's outside he goes there, if it's inside, he goes there.
+Whichever closest to claimed bed. If no fire inside but there's outside, he sits
+outside during the day and inside if available during night. If they find an
+unclaimed extra bed, they sleep until it's morning." And: doors carry a flag,
+"no npc allowed (by default)", that the player can change.
+
+### A wish list, not a spot
+
+`CommonSense.Preferences(CampSnapshot, CompanionTemperament)` turns the camp -
+home, fires (burning, under a roof or not, how wide their hazard is), beds
+(claimed or not), night, wet - into an ordered list of wishes: a spare bed at
+night, a fire under a roof in the dark or wet, any roof, a fire in the open, and
+home last, always. By day it is the burning fires nearest home, inside or out.
+It never picks a spot; the product walks the list and takes the first wish the
+world can grant. That split is what keeps the owner's rules arguable in a test
+(`CommonSenseTests`) while the world stays the world.
+
+`CommonSense.Rank(wish, onSeat)` is the scale both sides of a move are measured
+on: the wish index, and a seat or bed beating the ground within the same wish.
+A companion moves only for a strictly lower rank than he already has, so equal
+spots never have him pacing, and a camp that has not changed never moves him.
+
+`CompanionTemperament` is what makes it reusable: Hulgi loves a fire and takes
+spare beds; a later companion can like neither without anybody rewriting the
+rules.
+
+### Doors are geometry and permission
+
+`DoorPortal` is a doorway: the plane through a door piece's centre across its
+forward axis (the axis `Door.Open` itself swings against), its floor, a half
+width, whether it is open, whether a player could open it, and whether
+companions may use it. `RouteDoors.Inspect` walks a route leg by leg: a door
+companions may not use anywhere on it forbids the whole route; otherwise the
+first shut door he may use is reported so the walk can open it and close it
+behind him.
+
+`DoorAccessBook` holds the doors companions may use in one world, under a
+`DoorAccessPolicy`: `OnlyAllowedDoors` (the default) or `AllDoors`. Doors are
+remembered by **place and piece type**, not by the game's object id: Valheim
+renumbers every object each time a world loads (`ZDO.Load` assigns
+`++ZDOID.m_loadID`), so an id written tonight names something else tomorrow.
+`DoorAccessStore` keeps one small file per world beside the companion sidecars
+and fails safe in the direction that matters: an unreadable file loads as "no
+doors allowed" and is never written over.
+
+### What the Cartographer adapter does with it
+
+`CampSense` reads the camp from the game's own registries (comfort pieces for
+fires and beds, loaded pieces for doors - no physics buffer to overflow in a big
+base) and plans walks: the navmesh first, a straight line only when the navmesh
+has not built its tiles, and every route checked against the doorways. It also
+finds "outdoors": open ground near home. A spot is somewhere he may **be** only
+if he could walk to it from there through doors he may use - which is what keeps
+him out of a house whose door is closed to companions even when the claimed bed
+he calls home is inside it.
+
+The director resolves each wish to a spot through the same placement probe as
+ever - a ring around the fire just past its hazard (seats first, facing the
+fire), a roof near home, the floor beside a spare bed, somewhere around home -
+and the planner asks "can he get there" lazily, best candidate first, so a
+question that costs a navmesh route is asked once in the ordinary case. Surveys
+run every half minute and at once when a one-second fingerprint of fires, beds,
+seats, doors, their permissions and the hour changes.
+
+Everything is still local presentation. The one thing in the world a companion
+may change is a door companions are allowed to use, opened through the door's
+own RPC and closed behind him; see `CLAUDE.md`.

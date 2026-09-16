@@ -248,6 +248,109 @@ internal static class LocalVisual
         }
     }
 
+    /// <summary>The name the game gives its "pick me up" twinkle. Read out of
+    /// the game's own prefab bundle (1.0.12): a child of exactly this name,
+    /// holding a <c>ParticleSystem</c> and its renderer and nothing else, sits
+    /// under 112 item prefabs - food, meads, berries, mushrooms. No code ever
+    /// refers to it; it is prefab data only.</summary>
+    public const string ItemSparklesChild = "fx_ItemSparkles";
+
+    /// <summary>Gives <paramref name="root"/> the twinkle the game's own items
+    /// have, by copying the <see cref="ItemSparklesChild"/> particle system off
+    /// the first candidate prefab that carries it. Returns where it came from,
+    /// or null when no candidate did.
+    ///
+    /// The first cut of this looked for any particle system on a handful of
+    /// <c>Pickable_*</c> prefabs, and found nothing on every one of them: in the
+    /// game's bundle those prefabs are a mesh, a LOD group and colliders, and
+    /// the sparkle lives on the ITEM prefabs instead. So the child is now looked
+    /// for by the name the game gives it, on items that carry it, with any
+    /// particle system on the candidate as the last resort.
+    ///
+    /// Same discipline as the rest of this file: the copy is made under an
+    /// inactive holder, any script on it is removed while nothing has run, a
+    /// script that will not go refuses that candidate, and colliders are
+    /// removed. What is left is a particle system and nothing else - no
+    /// networking, no pickup, no physics.</summary>
+    public static string? TryAttachSparkle(
+        GameObject root, IReadOnlyList<string> candidatePrefabs, ManualLogSource log)
+    {
+        foreach (string candidate in candidatePrefabs)
+        {
+            GameObject? prefab = FindPrefab(candidate);
+            if (prefab == null)
+            {
+                continue;
+            }
+
+            ParticleSystem? source = FindSparkle(prefab.transform)
+                ?? prefab.GetComponentInChildren<ParticleSystem>(includeInactive: true);
+            if (source == null)
+            {
+                continue;
+            }
+
+            GameObject holder = new GameObject("CC_SparkleHarvest");
+            holder.SetActive(false);
+            try
+            {
+                GameObject copy = UnityEngine.Object.Instantiate(source.gameObject, holder.transform);
+                foreach (MonoBehaviour script in copy.GetComponentsInChildren<MonoBehaviour>(includeInactive: true))
+                {
+                    if (script != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(script);
+                    }
+                }
+
+                if (copy.GetComponentsInChildren<MonoBehaviour>(includeInactive: true).Length > 0)
+                {
+                    UnityEngine.Object.DestroyImmediate(copy);
+                    continue;
+                }
+
+                foreach (Collider collider in copy.GetComponentsInChildren<Collider>(includeInactive: true))
+                {
+                    UnityEngine.Object.DestroyImmediate(collider);
+                }
+
+                copy.name = "sparkle";
+                copy.transform.SetParent(root.transform, worldPositionStays: false);
+                copy.transform.localPosition = Vector3.zero;
+                copy.transform.localRotation = Quaternion.identity;
+                return candidate + "/" + source.gameObject.name;
+            }
+            catch (Exception exception)
+            {
+                log.LogInfo(
+                    $"Could not borrow the pickable sparkle from \"{candidate}\": {SafeLogText.Brief(exception)}");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(holder);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The game's own sparkle child anywhere under
+    /// <paramref name="parent"/>, by name, including inactive children.
+    /// </summary>
+    private static ParticleSystem? FindSparkle(Transform parent)
+    {
+        foreach (ParticleSystem system in parent.GetComponentsInChildren<ParticleSystem>(includeInactive: true))
+        {
+            if (system != null &&
+                string.Equals(system.gameObject.name, ItemSparklesChild, StringComparison.Ordinal))
+            {
+                return system;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Last resort. Unity's own primitive always exists, so this
     /// cannot fail; its collider is removed because collision is decided by
     /// the caller, never inherited from a shape.</summary>

@@ -152,6 +152,65 @@ public sealed class CartographerCompanionTests : IDisposable
         Assert.Equal(LegacyEvidence.None, LegacyEvidenceRule.Evaluate(LegacyEvidenceFacts.None));
     }
 
+    [Fact]
+    public void Evidence_OurOwnFirstRunFilesAreNotEvidenceOfAnything()
+    {
+        // Observed in game: a brand new character on a brand new world in a
+        // brand new profile was granted access as an EXISTING user, because
+        // the plugin writes its starter survey rules during startup and the
+        // probe then read that file back as a deliberate past action. The gate
+        // #264 asks for could never engage for anybody.
+        Assert.True(CartographerFirstRunFiles.IsSelfWritten("survey-rules.tsv"));
+        Assert.True(CartographerFirstRunFiles.IsSelfWritten("author-id.txt"));
+        Assert.True(CartographerFirstRunFiles.IsSelfWritten("cartographer-strings-template.tsv"));
+        Assert.True(CartographerFirstRunFiles.IsSelfWritten("onboarding-shown.txt"));
+        Assert.True(CartographerFirstRunFiles.IsSelfWritten(
+            "concerned-cartographer.ffffffffef0f98ae.ffffffffbfeddb85.companions.tsv"));
+
+        // Exactly the directory listing this build produced on its first run.
+        Assert.True(CartographerFirstRunFiles.IsOnlySelfWritten(new[]
+        {
+            "author-id.txt",
+            "cartographer-strings-template.tsv",
+            "onboarding-shown.txt",
+            "survey-rules.tsv",
+            "concerned-cartographer.ffffffffef0f98ae.ffffffffbfeddb85.companions.tsv",
+        }));
+    }
+
+    [Fact]
+    public void Evidence_AFileAPlayerHadToCreateStillCounts()
+    {
+        // The translator's override has a different name from the template
+        // this build writes, and somebody has to make it.
+        Assert.False(CartographerFirstRunFiles.IsSelfWritten("cartographer-strings.tsv"));
+        Assert.False(CartographerFirstRunFiles.IsSelfWritten("views.tsv"));
+        Assert.False(CartographerFirstRunFiles.IsSelfWritten("468215918.roads.tsv"));
+
+        Assert.False(CartographerFirstRunFiles.IsOnlySelfWritten(new[]
+        {
+            "author-id.txt",
+            "survey-rules.tsv",
+            "468215918.roads.tsv",
+        }));
+    }
+
+    [Fact]
+    public void Evidence_AnEmptyDirectoryIsNotAHistoryButAnUnreadableOneIsNotProofEither()
+    {
+        // Nothing there means nothing there.
+        Assert.True(CartographerFirstRunFiles.IsOnlySelfWritten(new string[0]));
+
+        // A listing we could not take, or a name we could not read, is not
+        // evidence that a player is new. Every unknown in this rule resolves
+        // towards granting: telling a new player the story a few minutes late
+        // costs nothing, and telling a returning one they are new takes their
+        // toolbar away.
+        Assert.False(CartographerFirstRunFiles.IsOnlySelfWritten(null));
+        Assert.False(CartographerFirstRunFiles.IsSelfWritten(null));
+        Assert.False(CartographerFirstRunFiles.IsSelfWritten(""));
+    }
+
     // ------------------------------------------------------------------
     // The gate
     // ------------------------------------------------------------------

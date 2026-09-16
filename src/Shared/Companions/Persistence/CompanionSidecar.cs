@@ -17,6 +17,7 @@ internal sealed class CompanionSidecar
         new Dictionary<string, CompanionQuestRecord>(StringComparer.Ordinal);
     private readonly List<string> _order = new List<string>();
     private readonly List<string> _forwardLines = new List<string>();
+    private readonly List<string> _quarantinedLines = new List<string>();
 
     public CompanionSidecar(CompanionScope scope)
     {
@@ -49,9 +50,25 @@ internal sealed class CompanionSidecar
     /// destroyed, but it is not treated as proof of anything.</summary>
     public bool HasForwardData { get; private set; }
 
-    /// <summary>Verbatim lines this build did not consume, re-emitted on save
-    /// so a single run of an older build does not erase them.</summary>
+    /// <summary>Verbatim lines a NEWER build wrote, re-emitted on save so a
+    /// single run of an older build does not erase them.</summary>
     public IReadOnlyList<string> ForwardLines => _forwardLines;
+
+    /// <summary>Lines this build could not use — damaged rows, and duplicate
+    /// quest rows that lost to one already restored.
+    ///
+    /// Kept apart from <see cref="ForwardLines"/> because they answer a
+    /// different question. A forward line is data somebody else owns. A
+    /// quarantined line is damage: it has been reported to the player once,
+    /// and it is carried rather than deleted only because this codec never
+    /// destroys a row it does not understand. Re-emitting it under its own row
+    /// kind is what stops the next session reading it back as damage found
+    /// that session.</summary>
+    public IReadOnlyList<string> QuarantinedLines => _quarantinedLines;
+
+    /// <summary>True when a quarantined row came back from the file already
+    /// marked, i.e. a previous run carried it. Not new damage.</summary>
+    public bool HasPreviouslyCarriedDamage { get; private set; }
 
     public IReadOnlyList<CompanionQuestRecord> Quests
     {
@@ -108,6 +125,27 @@ internal sealed class CompanionSidecar
         return _quests.TryGetValue(questId.Value, out record!);
     }
 
+    /// <summary>Puts one quest back to the start, as if the character had never
+    /// begun it: its record is dropped, presentation-retired flag and all.
+    ///
+    /// Only the quest. The access grant is a different row answering a
+    /// different question, and nothing here touches it - but note that a grant
+    /// earned by completing the quest is NOT a row of its own, so a caller that
+    /// wants the tools to survive must record the grant first. Refused on a
+    /// read-only sidecar, which this build must never rewrite. Returns true
+    /// only when something was actually reset.</summary>
+    public bool ResetQuest(QuestId questId)
+    {
+        if (IsReadOnly || questId.IsEmpty || !_quests.Remove(questId.Value))
+        {
+            return false;
+        }
+
+        _order.Remove(questId.Value);
+        IsDirty = true;
+        return true;
+    }
+
     /// <summary>Returns the record for <paramref name="questId"/>, creating an
     /// unstarted one if needed. Creating a record is not itself progress, so it
     /// does not mark the sidecar dirty.</summary>
@@ -157,6 +195,22 @@ internal sealed class CompanionSidecar
         return true;
     }
 
+    /// <summary>Records that the joined-your-crew notice was given for
+    /// <paramref name="questId"/>. Only for a quest that exists, and never on a
+    /// read-only sidecar: a notice that cannot be remembered would be repeated
+    /// every session.</summary>
+    public bool MarkJoinAnnounced(QuestId questId)
+    {
+        if (IsReadOnly || !_quests.TryGetValue(questId.Value, out CompanionQuestRecord? record) ||
+            !record!.MarkJoinAnnounced())
+        {
+            return false;
+        }
+
+        IsDirty = true;
+        return true;
+    }
+
     /// <summary>True when any quest in this scope has been finished. This is
     /// the evidence the unlock policy reads.</summary>
     public bool HasAnyCompletedQuest()
@@ -187,11 +241,53 @@ internal sealed class CompanionSidecar
     /// distinguishes "a newer build wrote this" from "this row is malformed".</summary>
     internal void AddCarriedLine(string line, bool isForwardData)
     {
-        _forwardLines.Add(line);
         if (isForwardData)
         {
+            _forwardLines.Add(line);
             HasForwardData = true;
+            return;
         }
+
+        _quarantinedLines.Add(line);
+    }
+
+    /// <summary>Takes back a row a previous run already quarantined. Carried
+    /// exactly as before; simply not counted again.</summary>
+    internal void ReadmitQuarantinedLine(string line)
+    {
+        _quarantinedLines.Add(line);
+        HasPreviouslyCarriedDamage = true;
+    }
+
+    /// <summary>True when rows were quarantined this load and the file should
+    /// be rewritten so they come back marked.
+    ///
+    /// Deliberately NOT <see cref="IsDirty"/>. Dirty means "the player made
+    /// progress that has not reached disk", and half this codebase reads it
+    /// that way: the collectible stays in the world while it is set, the
+    /// retire refuses while it is set, and a notice is shown because of it.
+    /// Setting it from a LOAD made a returning player's compass reappear at
+    /// their home point every session and blocked the retire forever. This is
+    /// a separate, quieter request: write the file once, change nothing about
+    /// what the player is told.
+    ///
+    /// A read-only file never asks — not overwriting a newer build's data
+    /// outranks tidying our own bookkeeping, at the cost of the notice
+    /// recurring there.</summary>
+    public bool NeedsQuarantineRewrite { get; private set; }
+
+    internal void RequestQuarantineRewrite()
+    {
+        if (!IsReadOnly)
+        {
+            NeedsQuarantineRewrite = true;
+        }
+    }
+
+    /// <summary>Called once the rewrite has actually been written.</summary>
+    internal void QuarantineRewritten()
+    {
+        NeedsQuarantineRewrite = false;
     }
 
     internal void RestoreGrant(UnlockReason reason)

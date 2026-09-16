@@ -1,6 +1,229 @@
 # Changelog
 
-## 1.1.0 - Hulgi, and the Broken Compass
+## 1.2.0 - Meet Hulgi
+
+**Meet Hulgi**, a drowned cartographer who never made it home and would rather
+you did. A broken compass near where you wake up introduces him, and from then
+on he lives at your camp: by the fire nearest your bed, having a drink now and then,
+under a roof at night, asleep in a spare bed if you have one. He gets up, walks
+over and sits back down the moment any of that changes, talks over his head when
+you speak to him, and only ever goes through the doors you open to him (look at
+a door and press F8). He is local only - no other player sees him, he takes no
+part in your world save, and he never blocks, fights or carries anything - and
+every atlas feature from 1.0.4 is unchanged.
+
+This is the first Thunderstore release with Hulgi. 1.1.0 and 1.1.1 below were
+test builds of him that never reached Thunderstore; everything they list is part
+of this release too. What changed since those builds:
+
+Added
+
+- **"Hulgi joined your crew."** The first time he appears after you meet him,
+  you are told - once per character per world.
+- **`cc_companion reset [quest|bed|day|all]`** to play the introduction again:
+  `quest` brings the Broken Compass back and restarts his introduction, `bed`
+  forgets your bed spawn point in this world (the bed stays; use it to claim it
+  again), `day` returns the world to the morning of day 1, and `all` does all
+  three. Your map tools stay unlocked through every one of them.
+- **He talks like an NPC, not like a notification.** His lines appear over his
+  head, the same bubble the trader uses, instead of across the middle of your
+  screen. Nothing networked: the bubble is drawn locally on your own client, no
+  creature is spawned, and the line does not go into your chat log.
+- **He has common sense about where to be.** He likes a fire and a drink. By
+  day he goes to the burning fire nearest your bed, inside or out, and takes a
+  seat by it if there is one, or sits on the ground facing it. At night, or in
+  the rain, he goes under a roof - a fire under a roof first - and stays by the
+  fire outside only when there is no roof he can get to. If there is a bed
+  nobody has claimed, he sleeps in it until morning; he never touches a claimed
+  bed, and gets up if somebody claims it. He looks again the moment any of that
+  changes: a fire lit or broken, a bed built or claimed, a door opened to him,
+  nightfall, morning.
+- **Doors are closed to companions unless you open them.** Every door starts
+  "no companions". Look at a door and press **F8** to let them use it - its
+  prompt says so - and press it again to stop them. A door they may use, they
+  use both ways: in to a seat by your hearth, out to the fire, opening it and
+  closing it behind them. A door they may not use they never open or walk
+  through, open or shut, so a companion whose bed is in a closed house spends
+  the day by the fire outside it. The choice is remembered per world, on your
+  computer only, never in the world. `Companions/DoorAccess = AllDoors` (or
+  "Companions may use every door" in Settings) opens every door you could open
+  yourself; `cc_companion doors` lists the doors near you and `cc_companion
+  doors clear` closes them all again.
+- **He moves around his camp.** He sits most of the time, gets up occasionally,
+  walks somewhere nearby - around the fire, when he sits by one - stands looking
+  around, and goes back to where he belongs. He does not wander in the dark or
+  the rain, while you are talking to him, or off a seat you built him. He never
+  leaves the area around your home point, never blocks anything and never
+  touches the world - turn it off with `Companions/Wander` if you prefer him
+  still.
+- **He walks to a better spot instead of appearing there.** When somewhere
+  better to sit turns up nearby - a fire lit, a bench built, your bed claimed a
+  short way off - he gets up and walks over, around buildings and through
+  doorways. He gets up first and then walks, and at the other end he sits down
+  as he arrives: off a bench onto the ground in front of it, out of bed onto the
+  floor beside it, and back again, moving while the animation plays rather
+  than sliding away mid-stand or snapping into place. If something stops him on
+  the way he tries another way once, and if that fails too he sits down where
+  he got to and tries again later - he is never simply put there. Only his
+  first appearance, or a move of more than 30 m, places him directly.
+- **He notices a change to his camp within about a second.** Break the campfire
+  and build one somewhere else, and he heads for the new one straight away. It
+  stays cheap: one small check a second of the fires, seats and doors around
+  him, and the full look for a better spot runs only when one of them changed,
+  with a half-minute look as a safety net.
+- **He opens a door he is allowed to use, and closes it behind him.** He walks
+  to it, opens it, steps through and closes it after himself; a door that was
+  already open he leaves as he found it. Only a door you let companions use and
+  could open yourself - never a locked door, and never inside a guard stone's
+  area you have no access to - and nothing else in the world is ever changed.
+- **He has a drink now and then.** Every few minutes a vanilla tankard appears
+  in his hand and he drinks from it, sitting where he is. Now and then he
+  raises a toast first - turning to you if you are near - getting up for it and
+  sitting back down afterwards; from a seat he steps off it to toast, unless
+  something is in the way, in which case he just drinks. The mug is only drawn
+  in his hand while he drinks: it is not an item, and nobody's inventory is
+  touched.
+- **The Broken Compass sparkles** with the game's own item twinkle, and it lies
+  just outside the stone circle rather than in the middle of it.
+- **`cc_companion summon`** sits him on the ground in front of you, to watch him
+  find his way back to the best spot he can reach; **`cc_companion drink
+  [toast|plain]`** has him take a drink now instead of waiting for one; and
+  **`cc_companion placement`** explains where he sits and why - every spot he
+  considered and what ruled it out, and every wish on his list for your camp
+  right now (fire, roof, bed, home), what each came to, and which he is
+  satisfying.
+
+Fixed
+
+- **His hair is on his head.** It was cloth. The game simulates the braid, and
+  a cloth component rebuilds itself against the skeleton it was saved with the
+  moment it is switched on - which, for a piece we have just re-bound to the
+  companion's own body, is a skeleton that no longer exists. Hair carries two of
+  those components. Beards carry none, which is the whole reason the beard
+  landed correctly for a week while the braid hung 0.99 m in the air. Measured
+  in game: 0.26 m from his head against a tolerance of 0.45.
+- **He takes a chair built after he has settled.** The placement plan was made
+  once and revisited only when the home point moved or his seat was lost, so a
+  bench built beside him stood empty until something else forced a rehome. He
+  now looks again whenever a fire, seat or door near him changes, and every half
+  minute besides, and moves only for a strictly better place - a warm spot by a
+  fire over a cold seat, any seat over bare ground - never for an equally good
+  one, so he does not drift around the camp.
+- **Skinned pieces are bound the way the game binds them** - handed the body's
+  bone array whole, rather than matched joint by joint on name. For Hulgi's
+  hair the two happen to produce the same answer, so this fixed nothing on its
+  own; it is here because Unity skins by bone *index*, the game's own contract
+  is the array, and a piece whose bones are ordered differently from the body's
+  would otherwise be drawn somewhere else entirely with nothing to warn you.
+- **Building his body no longer wakes the game's own character script.** His
+  figure was switched on while one of the source character's scripts was still
+  inside it, and that script expects a live character - which a local-only
+  companion deliberately is not. It failed on every placement, wrote an error
+  into your log, and then sat half-built inside the game's own update loop for
+  the rest of the session. His body is now assembled switched off, and the
+  game's own scripts are taken out of it before the light goes on. Nothing you
+  can see changes: he looks, sits, walks, dresses and speaks exactly as before.
+- **Talking to him is not a reach.** Pressing Use on Hulgi made your character
+  raise an arm, the same reach you use to open a chest. The game's own trader
+  and raven don't do that when you talk to them, and neither does he now. The
+  conversation itself is unchanged.
+- **His prompt shows your key, and so does the compass's.** Hovering over him,
+  or over the Broken Compass, showed the literal text `$KEY_Use` instead of the
+  key you press. Both now show your actual binding - a remapped key, or your
+  controller's button while you are playing on one.
+- **He can live in the shelter you build him.** With his home on a bed inside a
+  roofed shelter on a wooden floor - about the most ordinary camp there is - he
+  never appeared at all: every spot near the bed was refused. Two mistakes did
+  it. His footing was read from the top of whatever was highest, so under a
+  roof he was placed on the roof; and the floor he would stand on counted as
+  something in his way. Both are fixed, for placing him and for walking him, so
+  he can also now actually get in out of the rain.
+- **He doesn't walk through walls, and he finds his way around.** He is held by
+  the world the way you are - walls, posts, closed doors, rocks and trees - and
+  uses the game's own pathfinding to walk around buildings and through open
+  doorways, including in out of the rain. If something appears in his way
+  mid-stroll, he stops instead of passing through it. You can still walk
+  straight through him.
+- **He no longer gets up every few seconds at night.** In a camp with no roof in
+  reach he would get up to look for shelter, sit down in the open, and get up
+  again about every fifteen seconds all night. After one look finds nowhere dry
+  he now spends the evening like any other: he stays on a seat you built him,
+  potters about at his usual pace, and still finds a roof if you build one near
+  him.
+
+Added
+
+- `cc_companion pose <stand|ground|seat>` poses him where he sits so his
+  clothing can be looked at in more than one shape - a garment bound correctly
+  and one that merely lines up in a single frozen pose look identical until
+  something moves. Local and not saved; he returns to his own idle when he is
+  next rebuilt.
+- `cc_companion status` now reports how far each attached piece is from where it
+  belongs, so "it fits" can be told from "it fits by four centimetres".
+
+## 1.1.1 - Hulgi, played (test build, not released on Thunderstore)
+
+1.1.0 was written and tested without anybody having played it. This is what
+happened when somebody did, on Valheim 1.0.12.
+
+Fixed
+
+- **Every console command was missing.** `cc_roads`, `cc_pins`, `cc_atlas`,
+  `cc_routes`, `cc_survey`, `cc_sync` and `cc_companion` all failed to register
+  on Valheim 1.0.x and answered "is not a recognized command". That included
+  `cc_companion toolsonly on`, which is the promised way to reach the map tools
+  without ever finding the compass. Commands are now added to the game's own
+  command table directly, matched by shape so a future signature change does not
+  silently remove them again, and what the console accepted is written to the
+  log at startup.
+- **A brand new player was treated as an existing one.** The mod writes its own
+  starter `survey-rules.tsv` during startup, and the check for prior use then
+  found that file and concluded you had played before — so the introduction's
+  gate never engaged for anybody, on any installation. This build's own
+  bookkeeping no longer counts as evidence of a history. Genuine prior data,
+  saved views and translation overrides still do, so nobody upgrading loses
+  anything.
+- **He never actually sat down.** Sitting in Valheim is an animator parameter,
+  not an animation name, and the code was looking for the name. Both the ground
+  sit and seating were affected: the ground idle is now the game's own
+  `emote_sit`, and a free chair is used through the chair's own attachment
+  point, heading and sitting animation. He never claims a seat — the game's
+  occupancy test only sees players — and he gives one up the moment it is
+  destroyed or somebody sits in it. Walking out of range of your own camp does
+  not move him.
+- **He was not dressed.** The extracted model wears whatever the game's own
+  equipment system puts on it, and that system cannot run for a local-only
+  figure - so he stood in his underclothes. He now wears a vanilla rag tunic and
+  leather pants, put on the way the game puts armour on, with the body's own
+  chest and leg textures. It is clothing and nothing else: no item exists, none
+  is taken from anywhere, and no armour value is read. `Companions/ChestGarment`
+  and `LegsGarment` name something else.
+- **His appearance was the presets the design asked for, not the ones you
+  chose.** Hair and beard are now looked up by the exact label on the
+  character-creation screen — Long Braid and Handlebar — against this build's
+  own customization list, and his colour goes through the game's own conversion
+  from the sliders rather than a hard-coded value. `Companions/HairPreset` and
+  `Companions/BeardPreset` override either, by label or prefab id.
+- **A damaged companion entry was reported every session, forever.** A row this
+  build carried last time was counted again as damage found this time. It is now
+  carried without being re-counted, and nothing is dropped.
+- `cc_companion where` says where he actually is.
+
+Known, on this build
+
+- **Hulgi has no hair.** Long Braid renders about a metre from his head on
+  1.0.12, so it is removed rather than left floating; his beard is correct. The
+  log says so when it happens. Tracked as issue #305.
+- **The tunic and trousers have not been seen on him.** They are implemented
+  and unit-tested, and the in-game pass for them was stopped rather than run.
+- **Seating on furniture has not been seen working.** The mechanism is in and
+  tested, but no chair happened to fall where he settles during testing, and a
+  seat built after he has sat down is not noticed until something else moves
+  him. Tracked as issue #306.
+- **Live multiplayer testing of sailing Route Follow** remains outstanding from
+  1.0.4.
+
+## 1.1.0 - Hulgi, and the Broken Compass (test build, not released on Thunderstore)
 
 Added
 

@@ -25,6 +25,104 @@ internal enum AnchorValidity
     Gone = 2,
 }
 
+/// <summary>What has become of the seat the companion is sitting on.
+///
+/// Furniture is not permanent and it is not his. A bench gets taken down, a
+/// stool gets picked up, and the player sits in the chair he was using - all
+/// three are ordinary, and all three have to end with him somewhere sensible
+/// rather than perched in mid-air or overlapping the person who owns the
+/// place.</summary>
+internal enum SeatStatus
+{
+    /// <summary>He is not using a seat, so there is nothing to lose.</summary>
+    NotSeated = 0,
+
+    /// <summary>The seat is still there and still free.</summary>
+    Held = 1,
+
+    /// <summary>The seat is gone, or somebody is in it. He gives it up.</summary>
+    Lost = 2,
+}
+
+/// <summary>What a furniture sweep found, compared with what he is doing now.
+///
+/// The placement planner is deliberately still. It re-plans when the home point
+/// moves and when a seat is lost, and never merely because a fresh sweep liked
+/// a different spot of the same rank — that twitchiness is what makes a
+/// companion look like he is pacing between sessions. An upgrade is the single
+/// exception and it only ever ratchets one way, up the planner's own scale:
+/// bare ground, then a seat, then warmth, then a seat by the fire.
+///
+/// Carrying the comparison as a value rather than a bool is what lets the rule
+/// be stated once, here, instead of in the adapter that happens to do the
+/// sweeping.</summary>
+internal readonly struct SeatUpgrade
+{
+    /// <summary>No sweep happened this pass. The overwhelmingly common case:
+    /// the sweep runs on a slow interval, and not at all once he is seated.
+    /// </summary>
+    public static readonly SeatUpgrade NotSurveyed = default;
+
+    public SeatUpgrade(CompanionPose placed, CompanionPose offered)
+        : this(ValueOf(placed), ValueOf(offered))
+    {
+        Placed = placed;
+        Offered = offered;
+    }
+
+    /// <summary>The comparison the runtime actually makes: the value of the spot
+    /// he is in as the world stands NOW, against the best on offer, both on
+    /// <c>PlacementPlanner.ValueOf</c>'s scale. The pose he was placed in is not
+    /// enough - break the fire beside him and his "by the fire" pose is still
+    /// recorded while the spot has gone cold, and he would never look
+    /// elsewhere.</summary>
+    public SeatUpgrade(int currentValue, int offeredValue)
+    {
+        Surveyed = true;
+        CurrentValue = currentValue;
+        OfferedValue = offeredValue;
+        Placed = default;
+        Offered = default;
+    }
+
+    /// <summary>A pose on the same scale, for callers that only know poses: a
+    /// seat 1, a fire 2, the ground 0.</summary>
+    private static int ValueOf(CompanionPose pose)
+    {
+        switch (pose)
+        {
+            case CompanionPose.SitByFire:
+                return 2;
+            case CompanionPose.SitOnSeat:
+                return 1;
+            default:
+                return 0;
+        }
+    }
+
+    public int CurrentValue { get; }
+
+    public int OfferedValue { get; }
+
+    /// <summary>Whether a sweep actually ran. A sweep that ran and found
+    /// nothing better is not the same as no sweep, and neither moves him.
+    /// </summary>
+    public bool Surveyed { get; }
+
+    /// <summary>The pose he is in.</summary>
+    public CompanionPose Placed { get; }
+
+    /// <summary>The best pose available where he is.</summary>
+    public CompanionPose Offered { get; }
+
+    /// <summary>Strictly better, or nothing. Equal rank never moves him, so a
+    /// sweep that breaks a tie differently from last time costs nothing; worse
+    /// rank never moves him either, so a chair being carried away does not
+    /// shuffle him sideways onto the grass — losing the seat does that, and
+    /// that is a different signal with its own backoff.</summary>
+    public bool IsWorthMoving => Surveyed && OfferedValue > CurrentValue;
+}
+
 /// <summary>What the runtime should do about the companion actor this pass.</summary>
 internal enum ResidencyAction
 {
@@ -52,7 +150,9 @@ internal readonly struct ResidencyInputs
         bool presentationSupported,
         CompanionAnchor currentAnchor,
         CompanionAnchor placedAnchor,
-        AnchorValidity validity)
+        AnchorValidity validity,
+        SeatStatus seat = SeatStatus.NotSeated,
+        SeatUpgrade upgrade = default)
     {
         CompanionRecruited = companionRecruited;
         VisibilityEnabled = visibilityEnabled;
@@ -61,6 +161,8 @@ internal readonly struct ResidencyInputs
         CurrentAnchor = currentAnchor;
         PlacedAnchor = placedAnchor;
         Validity = validity;
+        Seat = seat;
+        Upgrade = upgrade;
     }
 
     /// <summary>Whether the player actually welcomed the companion. Someone who
@@ -83,6 +185,12 @@ internal readonly struct ResidencyInputs
     public CompanionAnchor PlacedAnchor { get; }
 
     public AnchorValidity Validity { get; }
+
+    /// <summary>What has become of the seat he is on, if any.</summary>
+    public SeatStatus Seat { get; }
+
+    /// <summary>What a furniture sweep offered this pass, if one ran.</summary>
+    public SeatUpgrade Upgrade { get; }
 }
 
 /// <summary>Decides whether the companion should be standing somewhere, and
@@ -120,6 +228,28 @@ internal static class ResidencyPlanner
         if (!inputs.ActorPresent)
         {
             return ResidencyAction.Place;
+        }
+
+        // A seat that was taken or taken away is given up at once, and only
+        // then. Re-planning re-probes the furniture, so the next spot is
+        // whatever is actually free - another seat, or the ground beside it.
+        // The check is deliberately before the anchor comparison: the home
+        // point has not moved, so nothing below would notice.
+        if (inputs.Seat == SeatStatus.Lost)
+        {
+            return ResidencyAction.Rehome;
+        }
+
+        // Somebody built him a chair. Nothing above notices, because nothing
+        // above changed: the actor exists, the home point has not moved, and
+        // the seat he is on - the ground - cannot be lost. Without this he
+        // sits beside a new bench until a relog, which is the whole of #306.
+        //
+        // Strictly better only, so this can fire at most twice in a
+        // companion's life: ground to fire, fire to seat.
+        if (inputs.Upgrade.IsWorthMoving)
+        {
+            return ResidencyAction.Rehome;
         }
 
         // The anchor was checked and is gone. This is the only answer that may
