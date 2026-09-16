@@ -650,10 +650,16 @@ def check_companion_body_fails_closed(errors: list[str]) -> list[str]:
     guarded is Unity object lifetime, which no test host here can run: the
     defect (#308) was that re-parenting a prefab subtree into an ACTIVE root
     runs Awake on the game's own scripts, and CharacterAnimEvent.Awake
-    dereferences a Character the extraction has guaranteed is absent. The
-    three conditions below are the whole fix, in the order the method performs
-    them, and each one failing is a regression of a defect that reached
-    production."""
+    dereferences a Character the extraction has guaranteed is absent.
+
+    Everything is anchored on the ONE line that re-parents the visual, because
+    that line is the extraction: a second one is a second extraction path, and
+    it must make its own no-wake decision rather than inherit this one by
+    accident. Around that anchor the audit asks three questions and no more —
+    is the root dark before the visual lands in it, is the script pass run
+    before it is switched on, and does something refuse the candidate in
+    between. Deliberately not a C# parser: this is the smallest check that
+    cannot pass while the defect is present."""
     path = (ROOT / "src" / "ConcernedCartographer" / "Runtime" / "Companions" /
             "CompanionActor.cs")
     if not path.is_file():
@@ -662,35 +668,45 @@ def check_companion_body_fails_closed(errors: list[str]) -> list[str]:
             "longer covers the extraction (was it moved or renamed?)", errors)
         return []
 
-    lines = path.read_text(encoding="utf-8").splitlines()
+    code = [_strip_cs_line_comment(line) for line in
+            path.read_text(encoding="utf-8").splitlines()]
 
-    def only_line(needle: str, what: str) -> int:
-        found = [n for n, line in enumerate(lines) if needle in _strip_cs_line_comment(line)]
-        if len(found) != 1:
-            fail(
-                f"[companions] CC-NPC-010 no-wake audit: expected exactly one {what} "
-                f"({needle!r}) in {path.relative_to(ROOT)}, found {len(found)} — a second "
-                "extraction path must make its own no-wake decision rather than inherit this "
-                "one by accident", errors)
-            return -1
-        return found[0]
+    # `root`, not `_root`: the local being built, never the field that
+    # SetVisible toggles on a finished actor.
+    dark = re.compile(r"(?<![\w.])root\.SetActive\(false\)")
+    lit = re.compile(r"(?<![\w.])root\.SetActive\(true\)")
 
-    born_dark = only_line('root.SetActive(false)', "inactive extraction root")
-    reparent = only_line('visual.transform.SetParent(root.transform', "visual re-parent")
-    pass_call = only_line('RemoveBehaviours(root,', "script-removal pass on the body")
-    enabled = only_line('root.SetActive(true)', "enable of the extraction root")
-    if -1 in (born_dark, reparent, pass_call, enabled):
+    anchors = [n for n, line in enumerate(code)
+               if "visual.transform.SetParent(root.transform" in line]
+    if len(anchors) != 1:
+        fail(
+            "[companions] CC-NPC-010 no-wake audit: expected exactly one re-parent of the "
+            f"extracted visual in {path.relative_to(ROOT)}, found {len(anchors)} — a second "
+            "extraction path must make its own no-wake decision rather than inherit this one",
+            errors)
         return []
 
-    if not born_dark < reparent < pass_call < enabled:
+    reparent = anchors[0]
+    if not any(dark.search(line) for line in code[:reparent]):
         fail(
-            "[companions] CC-NPC-010 no-wake audit: the extraction must create the root inactive, "
-            "re-parent into it, remove the source's scripts, and only then enable it — "
-            f"{path.relative_to(ROOT)} does them in another order, which is how #308 threw on "
-            "every placement", errors)
+            "[companions] CC-NPC-010 no-wake audit: the visual is re-parented into a root that "
+            f"was never made inactive in {path.relative_to(ROOT)}:{reparent + 1} — re-parenting "
+            "into a live object is what runs Awake, and that is exactly how #308 threw on every "
+            "placement", errors)
+        return []
 
-    between = "\n".join(lines[pass_call:enabled])
-    if "survivors.Length > 0" not in between or "return null;" not in between:
+    after = code[reparent:]
+    enable = next((n for n, line in enumerate(after) if lit.search(line)), None)
+    pass_call = next((n for n, line in enumerate(after) if "RemoveBehaviours(root," in line), None)
+    if enable is None or pass_call is None or pass_call > enable:
+        fail(
+            "[companions] CC-NPC-010 no-wake audit: the extracted body must have the source's own "
+            f"scripts removed BEFORE it is switched on in {path.relative_to(ROOT)} — the pass and "
+            "the enable are missing or in the wrong order", errors)
+        return []
+
+    between = "\n".join(after[pass_call:enable])
+    if "survivors" not in between or "return null;" not in between:
         fail(
             "[companions] CC-NPC-010 no-wake audit: nothing refuses the candidate between the "
             f"script-removal pass and root.SetActive(true) in {path.relative_to(ROOT)} — a script "
