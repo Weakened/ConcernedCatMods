@@ -1092,11 +1092,20 @@ internal sealed class CompanionActor
         // Left in place it is a second skeleton inside the actor that no
         // Animator drives, and FindBoneNamed would happily hand a later garment
         // one of its joints.
-        foreach (Transform stray in strays)
+        //
+        // Only when EVERY mesh on the piece was rebound, though. A piece can
+        // carry more than one, they share the one armature, and a mesh that was
+        // refused is still bound to it - tearing it out from under that mesh
+        // would trade a second skeleton for a mesh pointing at destroyed
+        // transforms, which is a worse bug and a harder one to see.
+        if (missed == 0)
         {
-            if (stray != null && stray.parent == piece.transform)
+            foreach (Transform stray in strays)
             {
-                UnityEngine.Object.Destroy(stray.gameObject);
+                if (stray != null && stray.parent == piece.transform)
+                {
+                    UnityEngine.Object.Destroy(stray.gameObject);
+                }
             }
         }
 
