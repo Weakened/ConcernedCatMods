@@ -73,6 +73,15 @@ internal sealed class ActorReport
 
     public CompanionPose Pose { get; set; } = CompanionPose.SitOnGround;
 
+    /// <summary>How far each attached piece was actually drawn from where it
+    /// belongs, once he had been posed and could be measured.
+    ///
+    /// Reported even when everything fits, because "it fits" and "it fits by
+    /// four centimetres" are different amounts of evidence, and the second is
+    /// the one that distinguishes hair that landed from hair that happened to
+    /// be inside a generous tolerance.</summary>
+    public string Fit { get; set; } = "<unmeasured>";
+
     public override string ToString()
     {
         return $"source={SourcePrefab} skeleton={UsedSkeleton} hair={Hair} ({(HairAttached ? "attached" : "not attached")}) " +
@@ -83,7 +92,7 @@ internal sealed class ActorReport
             $"{(HairColourObserved ? " (palette)" : " (fallback)")} skin={SkinColourApplied} " +
             $"chest={Chest} ({(ChestAttached ? "worn" : "not worn")}) " +
             $"legs={Legs} ({(LegsAttached ? "worn" : "not worn")}) " +
-            $"pose={Pose} state={PoseState ?? "<default>"}";
+            $"pose={Pose} state={PoseState ?? "<default>"} fit=[{Fit}]";
     }
 }
 
@@ -850,8 +859,11 @@ internal sealed class CompanionActor
         Transform? head = _helmetJoint ?? FindHeadBone(_root.transform);
         if (head == null)
         {
+            Report.Fit = "no head joint to measure against";
             return;
         }
+
+        var measured = new List<string>();
 
         foreach (KeyValuePair<string, GameObject> piece in _attachedPieces)
         {
@@ -873,7 +885,9 @@ internal sealed class CompanionActor
                 : AppearanceFit.ToleranceMetres;
 
             float distance = DistanceFrom(piece.Value, reference);
-            if (AppearanceFit.Fits(distance, tolerance))
+            bool fits = AppearanceFit.Fits(distance, tolerance);
+            measured.Add($"{piece.Key} {distance:0.00}m/{tolerance:0.00}{(fits ? "" : " REMOVED")}");
+            if (fits)
             {
                 continue;
             }
@@ -889,6 +903,7 @@ internal sealed class CompanionActor
         }
 
         Report.HairColourApplied = Report.HairAttached || Report.BeardAttached;
+        Report.Fit = measured.Count == 0 ? "nothing attached" : string.Join(", ", measured);
     }
 
     private void MarkSlotRemoved(string slot)
