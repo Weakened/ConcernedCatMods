@@ -341,9 +341,16 @@ parented on, for the same reason — and there, and only there, the cloth family
 is exempt, because `RemoveCloth` has just run on that same piece and disables
 what Unity refuses to destroy out loud. A survivor on an accessory is named and
 that piece is **refused**: it is destroyed while still isolated under its
-inactive holder, never parented onto him and never enabled, and he goes without
-the preset. Going without a braid is a look. Wearing one that wakes a game
-script inside him is the defect.
+inactive holder, never parented onto him and never enabled. Going without a
+braid is a look. Wearing one that wakes a game script inside him is the defect.
+
+The refusal is per **piece**, which is worth stating precisely because a
+garment is not one object. Hair, a beard and a single-mesh preset are one piece
+each, so refusing it means he goes without that preset. A garment is its
+painted textures plus one `attach_*` mesh per joint, and `ApplyGarmentTextures`
+has already run by then: refusing one mesh leaves the paint on him and the
+report still says the slot is worn. The per-piece log line is what says which
+part was left off, and why.
 
 The body gets no such exemption, and the first cut of this fix wrongly gave it
 one. `RemoveCloth` is never called on the body, so a cloth-named script there

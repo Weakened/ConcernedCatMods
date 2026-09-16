@@ -720,23 +720,45 @@ def check_companion_body_fails_closed(errors: list[str]) -> list[str]:
         return " ".join(after[index:index + 3])
 
     def refuses(lines: list[str], condition: int, token: str) -> bool:
-        """True when the block opened under `lines[condition]` returns with
-        `token` before that block closes.
+        """True when the guard opened at `lines[condition]` returns with
+        `token` unconditionally, at the top level of its own block.
 
-        Brace counting, not parsing, and only enough of it to tell the refusal
-        apart from an unrelated `return` further down the method - which is
-        exactly what a `return false;` in a later `if (_bodyModel == null)`
-        branch was doing before this existed. Interpolations in this file are
-        balanced, so they cancel out; an unbalanced one would fail the audit
-        loudly rather than pass it quietly."""
+        Brace counting, not parsing, and only as much as the job needs. Three
+        things it must not accept, each of which an earlier version did:
+
+        - a `return` further down the method, outside the guard - which is what
+          a later `if (_bodyModel == null) { return false; }` was doing;
+        - a `return` nested one level deeper, inside a condition of its own,
+          because then the fall-through still wears the piece;
+        - a `return` in an `else` branch, for the same reason.
+
+        Hence `before == 1`: the line must sit directly inside the guard's own
+        braces. A brace that does not balance - an escaped `{{` in a log
+        message, say - therefore ends the scan without a match and fails the
+        audit, rather than running past the block and finding something later.
+        A braceless `if (x) return false;` is accepted, on that line or the one
+        below it, because that is the same guard written shorter."""
         depth = 0
         opened = False
-        for line in lines[condition:]:
+        for offset, line in enumerate(lines[condition:]):
+            before = depth
             depth += line.count("{") - line.count("}")
-            opened = opened or "{" in line
-            if opened and token in line:
+            if not opened:
+                if depth > 0:
+                    opened = True
+                    if token in line:
+                        return True
+                    continue
+                if offset <= 1 and token in line:
+                    return True
+                if offset > 1:
+                    return False
+                continue
+            if before == 1 and token in line:
                 return True
-            if opened and depth <= 0:
+            if before == 1 and re.search(r"(?<!\w)else(?!\w)", line):
+                return False
+            if depth <= 0:
                 return False
         return False
 
@@ -763,16 +785,27 @@ def check_companion_body_fails_closed(errors: list[str]) -> list[str]:
             "disabled component still receives Awake when its object is activated", errors)
         return []
 
+    # Every call site, not just the ones that look like accessories: a new
+    # caller under any local name has to be looked at, and counting only the
+    # ones spelled `piece` would let it in unseen.
+    call_sites = [n for n, line in enumerate(code)
+                  if "RemoveBehaviours(" in line and "private static int" not in line]
+    if len(call_sites) != 3:
+        fail(
+            "[companions] CC-NPC-010 no-wake audit: expected exactly three RemoveBehaviours call "
+            f"sites in {path.relative_to(ROOT)} (the body and the two accessory paths), found "
+            f"{len(call_sites)} — a new caller hands a game prefab's subtree to the live figure "
+            "too, and has to make its own refusal rather than inherit theirs", errors)
+        return []
+
     # Both accessory paths hand their piece to the live figure, so a script
     # that survived removal wakes there exactly as it would in the body.
-    accessories = [n for n, line in enumerate(code)
-                   if "RemoveBehaviours(" in line and "piece," in " ".join(code[n:n + 3])]
+    accessories = [n for n in call_sites if "piece," in " ".join(code[n:n + 3])]
     if len(accessories) != 2:
         fail(
             "[companions] CC-NPC-010 no-wake audit: expected exactly two accessory script passes "
             f"in {path.relative_to(ROOT)}, found {len(accessories)} — hair/beard and garments are "
-            "the two that parent a piece onto the live figure, and a third path must make its own "
-            "refusal rather than inherit theirs", errors)
+            "the two that parent a piece onto the live figure", errors)
         return []
 
     for call in accessories:
