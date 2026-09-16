@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using BepInEx.Logging;
 using TheConcernedCat.Companions.Placement;
@@ -21,7 +22,7 @@ namespace TheConcernedCat.ConcernedCartographer.Runtime.Companions;
 /// it compares solid ground against the live water level, and when the water
 /// level cannot be read it says so once and stops rejecting for water rather
 /// than inventing a shoreline.</summary>
-internal sealed class WorldPlacementProbe : IPlacementProbe
+internal sealed class WorldPlacementProbe : IPlacementProbe, ISeatFinder
 {
     /// <summary>How far above and below the anchor's height to look for
     /// ground. Generous enough for a sloped camp, small enough that a
@@ -333,6 +334,101 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
     /// <summary>True once a free seat has been found near any candidate this
     /// session. Reported by the console tool.</summary>
     public bool SeatSeen { get; private set; }
+
+    /// <summary>A larger buffer than the ground survey's: a ten-metre sphere
+    /// in a base holds a lot of pieces, and a chair that falls off the end of
+    /// the buffer is a chair he silently never finds.</summary>
+    private readonly Collider[] _seatBuffer = new Collider[256];
+    private int _seatMask = -1;
+
+    /// <inheritdoc/>
+    public IReadOnlyList<PlacementProbeSample> FindSeats(WorldPoint center, float radius)
+    {
+        var seats = new List<PlacementProbeSample>();
+        var point = new Vector3(center.X, center.Y, center.Z);
+
+        try
+        {
+            ZoneSystem zones = ZoneSystem.instance;
+            if (zones == null || !zones.IsZoneLoaded(point))
+            {
+                return seats;
+            }
+
+            // Furniture lives on the piece layers; terrain, trees and rocks do
+            // not need sweeping for chairs, and leaving them out keeps the
+            // buffer for what matters.
+            if (_seatMask == -1)
+            {
+                _seatMask = LayerMask.GetMask("piece", "piece_nonsolid", "Default_small");
+            }
+
+            int count = Physics.OverlapSphereNonAlloc(
+                point, radius, _seatBuffer, _seatMask, QueryTriggerInteraction.Collide);
+
+            var seen = new HashSet<Chair>();
+            for (int index = 0; index < count; index++)
+            {
+                Collider hit = _seatBuffer[index];
+                Chair? chair = hit == null ? null : hit.GetComponentInParent<Chair>();
+                if (chair == null || !seen.Add(chair) || chair.m_attachPoint == null)
+                {
+                    continue;
+                }
+
+                // IsInUse asks whether a PLAYER sits there. He yields to one,
+                // and a seat he is posed on never answers it - see the survey.
+                if (chair.IsInUse())
+                {
+                    continue;
+                }
+
+                Transform attach = chair.m_attachPoint;
+                Vector3 at = attach.position;
+                var seatPoint = new WorldPoint(at.x, at.y, at.z);
+                PlacementRejection rejections = IsHazardousFire(at)
+                    ? PlacementRejection.Fire
+                    : PlacementRejection.None;
+                string? animation = string.IsNullOrEmpty(chair.m_attachAnimation)
+                    ? null
+                    : chair.m_attachAnimation;
+
+                seats.Add(new PlacementProbeSample(
+                    seatPoint,
+                    rejections,
+                    DistanceToWarmth(at),
+                    SeatOffer.Free(seatPoint, attach.rotation.eulerAngles.y, animation)));
+            }
+
+            // Nearest first, then by position, so the same world gives the
+            // same order every session.
+            seats.Sort((a, b) =>
+            {
+                int byDistance = a.Position.HorizontalDistanceTo(center)
+                    .CompareTo(b.Position.HorizontalDistanceTo(center));
+                if (byDistance != 0)
+                {
+                    return byDistance;
+                }
+
+                int byX = a.Position.X.CompareTo(b.Position.X);
+                return byX != 0 ? byX : a.Position.Z.CompareTo(b.Position.Z);
+            });
+
+            if (seats.Count > 0)
+            {
+                SeatSeen = true;
+            }
+        }
+        catch (Exception)
+        {
+            // A world that will not answer offers no seats this pass; the ring
+            // sweep still runs.
+            seats.Clear();
+        }
+
+        return seats;
+    }
 
     /// <summary>Whether the seat at <paramref name="seatPosition"/> is still
     /// there and still free.

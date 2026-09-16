@@ -3156,9 +3156,12 @@ internal sealed class CartographerRuntime : IDisposable
             case "reset":
                 return _companions.Reset(args.Length > 1 ? args[1] : null);
 
+            case "placement":
+                return _companions.DescribePlacement();
+
             default:
                 return "Unknown subcommand. Use: status, toolsonly <on|off>, story, show <on|off>, " +
-                    "where, appearance, pose <stand|ground|seat>, path, reset [quest|bed|day|all].";
+                    "where, placement, appearance, pose <stand|ground|seat>, path, reset [quest|bed|day|all].";
         }
     }
 

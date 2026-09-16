@@ -316,9 +316,131 @@ public class PlacementPlannerTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new PlacementRules(minimumRadius: -1f));
     }
 
+    [Fact]
+    public void AStoolInsideTheMinimumRadiusIsTakenWhenTheGroundAroundTheBedIsNot()
+    {
+        // The owner's shelter: a raised floor, a bed, a fire, a chair a metre
+        // and a half from the bed - and every ground spot in the 3-10 m band
+        // refused, because the band falls off the platform. He never appeared.
+        SeatOffer stool = SeatOffer.Free(new WorldPoint(1.2f, 30.4f, 0.8f), 90f, "attach_chair");
+        var probe = new SeatingProbe(
+            _ => PlacementRejection.Occupied,
+            new PlacementProbeSample(stool.Position, PlacementRejection.None, -1f, stool));
+
+        PlacementResult result = new PlacementPlanner().Plan(Bed, probe);
+
+        Assert.True(result.Found);
+        Assert.Equal(CompanionPose.SitOnSeat, result.Pose);
+        Assert.Equal(1.2f, result.Seat.Position.X, 3);
+        Assert.Equal("attach_chair", result.Seat.AttachAnimation);
+    }
+
+    [Fact]
+    public void ASeatOutsideTheBandsOuterEdgeOrHeightLimitIsNotTaken()
+    {
+        SeatOffer far = SeatOffer.Free(new WorldPoint(PlacementRules.DefaultMaximumRadius + 1f, 30f, 0f), 0f, "attach_chair");
+        SeatOffer high = SeatOffer.Free(
+            new WorldPoint(2f, 30f + PlacementRules.DefaultMaximumHeightDelta + 1f, 0f), 0f, "attach_chair");
+        var probe = new SeatingProbe(
+            _ => PlacementRejection.Occupied,
+            new PlacementProbeSample(far.Position, PlacementRejection.None, -1f, far),
+            new PlacementProbeSample(high.Position, PlacementRejection.None, -1f, high));
+
+        PlacementResult result = new PlacementPlanner().Plan(Bed, probe);
+
+        Assert.False(result.Found);
+        Assert.True((result.BlockedBy & PlacementRejection.OutOfRange) != 0);
+    }
+
+    [Fact]
+    public void AnOccupiedOrHazardousSeatFromTheFinderIsNeverTaken()
+    {
+        SeatOffer burning = SeatOffer.Free(new WorldPoint(2f, 30f, 0f), 0f, "attach_chair");
+        var probe = new SeatingProbe(
+            _ => PlacementRejection.Occupied,
+            new PlacementProbeSample(new WorldPoint(1f, 30f, 1f), PlacementRejection.None, -1f, SeatOffer.Occupied),
+            new PlacementProbeSample(burning.Position, PlacementRejection.Fire, -1f, burning));
+
+        Assert.False(new PlacementPlanner().Plan(Bed, probe).Found);
+    }
+
+    [Fact]
+    public void AFoundSeatOutranksClearGroundInTheBand()
+    {
+        SeatOffer bench = SeatOffer.Free(new WorldPoint(-1.5f, 30f, 1f), 180f, "attach_bench");
+        var probe = new SeatingProbe(
+            _ => PlacementRejection.None,
+            new PlacementProbeSample(bench.Position, PlacementRejection.None, -1f, bench));
+
+        PlacementResult result = new PlacementPlanner().Plan(Bed, probe);
+
+        Assert.Equal(CompanionPose.SitOnSeat, result.Pose);
+        Assert.Equal("attach_bench", result.Seat.AttachAnimation);
+    }
+
+    [Fact]
+    public void SeatsAreBoundedAndTheObserverSeesEveryCandidateWithoutChangingTheResult()
+    {
+        var hazards = new List<PlacementProbeSample>();
+        for (int index = 0; index < 20; index++)
+        {
+            SeatOffer offer = SeatOffer.Free(new WorldPoint(1f + (index * 0.1f), 30f, 0f), 0f, "attach_chair");
+            hazards.Add(new PlacementProbeSample(offer.Position, PlacementRejection.Fire, -1f, offer));
+        }
+
+        var probe = new SeatingProbe(_ => PlacementRejection.None, hazards.ToArray());
+        int ground = 0;
+        int seats = 0;
+
+        PlacementResult observed = new PlacementPlanner().Plan(
+            Bed, probe, (sample, rejections, isSeat) =>
+            {
+                if (isSeat)
+                {
+                    seats++;
+                    Assert.Equal(PlacementRejection.Fire, rejections);
+                }
+                else
+                {
+                    ground++;
+                }
+            });
+        PlacementResult unobserved = new PlacementPlanner().Plan(Bed, probe);
+
+        Assert.Equal(PlacementPlanner.MaximumSeats, seats);
+        Assert.Equal(PlacementPlanner.MaximumCandidates, ground);
+        Assert.Equal(unobserved.Found, observed.Found);
+        Assert.Equal(unobserved.Position.X, observed.Position.X, 3);
+        Assert.Equal(unobserved.Pose, observed.Pose);
+    }
+
     private static PlacementProbeSample Clear(WorldPoint position)
     {
         return new PlacementProbeSample(position, PlacementRejection.None, -1f, SeatAvailability.None);
+    }
+
+    /// <summary>A probe that also finds seats: every ground candidate gets the
+    /// same rejection, and the seats are exactly the ones given.</summary>
+    private sealed class SeatingProbe : IPlacementProbe, ISeatFinder
+    {
+        private readonly Func<WorldPoint, PlacementRejection> _ground;
+        private readonly PlacementProbeSample[] _seats;
+
+        public SeatingProbe(Func<WorldPoint, PlacementRejection> ground, params PlacementProbeSample[] seats)
+        {
+            _ground = ground;
+            _seats = seats;
+        }
+
+        public PlacementProbeSample Probe(WorldPoint position)
+        {
+            return new PlacementProbeSample(position, _ground(position), -1f, SeatOffer.None);
+        }
+
+        public IReadOnlyList<PlacementProbeSample> FindSeats(WorldPoint center, float radius)
+        {
+            return _seats;
+        }
     }
 
     private sealed class StubProbe : IPlacementProbe

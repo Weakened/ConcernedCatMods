@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace TheConcernedCat.Companions.Placement;
 
@@ -14,14 +15,29 @@ namespace TheConcernedCat.Companions.Placement;
 /// the configured radius band, so this never becomes a search of the
 /// surroundings, let alone the world. When nothing qualifies, the planner
 /// defers and reports what blocked it. It never relaxes its own rules to
-/// produce an answer.</summary>
+/// produce an answer.
+///
+/// Seats are the one thing the minimum radius does not apply to, and that is a
+/// rule rather than a relaxation. The minimum keeps a companion from sitting on
+/// the ground in the middle of somebody's bedroom; a stool or a chair is a place
+/// somebody built to be sat on, wherever it is. When the probe also implements
+/// <see cref="ISeatFinder"/>, up to <see cref="MaximumSeats"/> free seats inside
+/// the band's OUTER edge and height limit are candidates in their own right,
+/// ranked exactly like ground - a seat scores above bare ground, warmth adds to
+/// either - and a seat no longer disappears because the ground probed beside it
+/// was rejected.</summary>
 internal sealed class PlacementPlanner
 {
     private const int RingCount = 4;
     private const int AnglesPerRing = 12;
 
-    /// <summary>Upper bound on probes per plan.</summary>
+    /// <summary>Upper bound on ground probes per plan.</summary>
     public const int MaximumCandidates = RingCount * AnglesPerRing;
+
+    /// <summary>Upper bound on seats considered per plan, on top of the ground
+    /// probes. A camp has a handful; a hall full of benches does not need every
+    /// one of them weighed.</summary>
+    public const int MaximumSeats = 8;
 
     /// <summary>Fixed per-ring bearing offset, in degrees. Coprime-ish with the
     /// 30 degree angular step so successive rings interleave.</summary>
@@ -34,7 +50,14 @@ internal sealed class PlacementPlanner
         _rules = rules ?? PlacementRules.Default;
     }
 
-    public PlacementResult Plan(CompanionAnchor anchor, IPlacementProbe probe)
+    /// <param name="observe">Optional: told about every candidate - ground and
+    /// seat - with the rejections that decided it, <c>None</c> for a candidate
+    /// that qualified. For diagnostics only; it cannot change the
+    /// result.</param>
+    public PlacementResult Plan(
+        CompanionAnchor anchor,
+        IPlacementProbe probe,
+        Action<PlacementProbeSample, PlacementRejection, bool>? observe = null)
     {
         if (probe == null)
         {
@@ -83,6 +106,7 @@ internal sealed class PlacementPlanner
                 }
 
                 PlacementRejection rejections = sample.Rejections | RangeRejections(anchor, sample);
+                observe?.Invoke(sample, rejections, false);
                 if (rejections != PlacementRejection.None)
                 {
                     blockedBy |= rejections;
@@ -110,6 +134,53 @@ internal sealed class PlacementPlanner
                 bestPosition = sample.Position;
                 bestPose = PoseFor(sample);
                 bestSeat = bestPose == CompanionPose.SitOnSeat ? sample.SeatOffer : SeatOffer.None;
+            }
+        }
+
+        if (probe is ISeatFinder seats)
+        {
+            IReadOnlyList<PlacementProbeSample> found =
+                seats.FindSeats(anchor.Position, _rules.MaximumRadius) ?? Array.Empty<PlacementProbeSample>();
+
+            int considered = 0;
+            foreach (PlacementProbeSample seat in found)
+            {
+                if (considered >= MaximumSeats)
+                {
+                    break;
+                }
+
+                if (!seat.SeatOffer.IsUsable)
+                {
+                    continue;
+                }
+
+                considered++;
+                PlacementRejection rejections = seat.Rejections | SeatRangeRejections(anchor, seat);
+                observe?.Invoke(seat, rejections, true);
+                if (rejections != PlacementRejection.None)
+                {
+                    blockedBy |= rejections;
+                    continue;
+                }
+
+                int score = Score(seat);
+                float radiusError = Math.Abs(
+                    seat.Position.HorizontalDistanceTo(anchor.Position) - idealRadius);
+                bool better = !haveBest
+                    || score > bestScore
+                    || (score == bestScore && radiusError < bestRadiusError);
+                if (!better)
+                {
+                    continue;
+                }
+
+                haveBest = true;
+                bestScore = score;
+                bestRadiusError = radiusError;
+                bestPosition = seat.Position;
+                bestPose = CompanionPose.SitOnSeat;
+                bestSeat = seat.SeatOffer;
             }
         }
 
@@ -168,6 +239,19 @@ internal sealed class PlacementPlanner
         }
 
         return sample.Position.VerticalDistanceTo(anchor.Position) > _rules.MaximumHeightDelta + Tolerance
+            ? PlacementRejection.OutOfRange
+            : PlacementRejection.None;
+    }
+
+    /// <summary>The range rules for a seat found directly: the band's outer
+    /// edge and the height limit, but not its inner edge - see the class
+    /// summary for why that is a rule and not a relaxation.</summary>
+    private PlacementRejection SeatRangeRejections(CompanionAnchor anchor, PlacementProbeSample seat)
+    {
+        const float Tolerance = 0.01f;
+
+        return seat.Position.HorizontalDistanceTo(anchor.Position) > _rules.MaximumRadius + Tolerance ||
+            seat.Position.VerticalDistanceTo(anchor.Position) > _rules.MaximumHeightDelta + Tolerance
             ? PlacementRejection.OutOfRange
             : PlacementRejection.None;
     }

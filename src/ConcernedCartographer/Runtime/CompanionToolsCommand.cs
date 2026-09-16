@@ -39,7 +39,8 @@ internal sealed class CompanionToolsCommand : ConsoleCommand
 
     public override string Help =>
         "Concerned Companions. Subcommands: status, toolsonly <on|off>, story (replay), " +
-        "show <on|off> (companion visibility), where (home point), appearance (list this " +
+        "show <on|off> (companion visibility), where (home point), placement (why he sits " +
+        "where he does, or why he is not placed), appearance (list this " +
         "build's hair/beard presets), pose <stand|ground|seat> (look at him in one), " +
         "path (data folder), reset [quest|bed|day|all] (replay: restart the introduction, " +
         "forget your bed spawn point, return the world to day 1; tools stay unlocked).";

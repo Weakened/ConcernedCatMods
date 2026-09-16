@@ -654,6 +654,75 @@ internal sealed class CompanionDirector : IDisposable
         }
     }
 
+    /// <summary><c>cc_companion placement</c>: runs the same plan residency
+    /// runs, against the live home point, and says what every candidate was
+    /// refused for - so "he never appeared" is a table instead of a guess. The
+    /// full per-candidate list goes to the log; the console gets the summary.
+    /// Changes nothing: the plan is computed and thrown away.</summary>
+    public string DescribePlacement()
+    {
+        if (!_anchor.IsValid)
+        {
+            return "Placement: there is no home point yet, so there is nothing to plan around.";
+        }
+
+        var refused = new Dictionary<PlacementRejection, int>();
+        int ground = 0;
+        int groundUsable = 0;
+        var seatLines = new List<string>();
+
+        PlacementResult result = _hulgiPlanner.Plan(_anchor, _hulgiProbe, (sample, rejections, isSeat) =>
+        {
+            string verdict = rejections == PlacementRejection.None ? "usable" : rejections.ToString();
+            _log.LogInfo(
+                $"[placement] {(isSeat ? "seat  " : "ground")} {sample.Position.X:0.0},{sample.Position.Y:0.0}," +
+                $"{sample.Position.Z:0.0} ({sample.Position.HorizontalDistanceTo(_anchor.Position):0.0} m out, " +
+                $"{sample.Position.Y - _anchor.Position.Y:+0.0;-0.0} m up): {verdict}");
+
+            if (isSeat)
+            {
+                seatLines.Add($"{sample.Position.HorizontalDistanceTo(_anchor.Position):0.0} m away: {verdict}");
+                return;
+            }
+
+            ground++;
+            if (rejections == PlacementRejection.None)
+            {
+                groundUsable++;
+                return;
+            }
+
+            foreach (PlacementRejection flag in Enum.GetValues(typeof(PlacementRejection)))
+            {
+                if (flag != PlacementRejection.None && (rejections & flag) == flag)
+                {
+                    refused[flag] = refused.TryGetValue(flag, out int so) ? so + 1 : 1;
+                }
+            }
+        });
+
+        var reasons = new List<string>();
+        foreach (KeyValuePair<PlacementRejection, int> entry in refused)
+        {
+            reasons.Add($"{entry.Key} {entry.Value}");
+        }
+
+        string outcome = !result.Found
+            ? $"nothing qualifies, so he is not placed (blocked by {result.BlockedBy})"
+            : result.Pose == CompanionPose.SitOnSeat
+                ? $"he sits on the seat at {result.Seat.Position.X:0.0},{result.Seat.Position.Y:0.0},{result.Seat.Position.Z:0.0}"
+                : $"he sits ({result.Pose}) at {result.Position.X:0.0},{result.Position.Y:0.0},{result.Position.Z:0.0}";
+
+        return $"Placement around your {DescribeAnchor(_anchor.Kind)} at {_anchor.Position.X:0.0}," +
+            $"{_anchor.Position.Y:0.0},{_anchor.Position.Z:0.0}:" + Environment.NewLine +
+            $"  ground: {ground} spots in the 3-10 m ring, {groundUsable} usable" +
+            (reasons.Count > 0 ? "; refused for " + string.Join(", ", reasons) : "") + Environment.NewLine +
+            $"  seats: {(seatLines.Count == 0 ? "none free within reach" : string.Join("; ", seatLines))}" +
+            Environment.NewLine +
+            $"  result: {outcome}." + Environment.NewLine +
+            "  Every candidate is listed in the log under [placement].";
+    }
+
     /// <summary>Where the actor actually stands, or null when there is none.
     /// Reported by <c>cc_companion where</c> so "he is somewhere near your
     /// home point" can be checked rather than believed.</summary>
