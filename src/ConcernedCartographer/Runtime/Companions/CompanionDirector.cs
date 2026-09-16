@@ -1277,7 +1277,7 @@ internal sealed class CompanionDirector : IDisposable
             (_walk.Door != null ? DoorSwingSeconds + 4f : 0f);
         _actor.RememberAnchor(_anchor);
 
-        _log.LogInfo(
+        LogActivity(
             $"Hulgi is getting up and walking {_walk.Length:0.0} m to {DescribeSpot(plan)} " +
             $"({DescribeWish(_hangout, _view)})" +
             (_walk.Door == null ? string.Empty : _walk.DoorShut ? ", opening a door on the way" : ", through an open door") +
@@ -1352,7 +1352,7 @@ internal sealed class CompanionDirector : IDisposable
             _walkStage = WalkStage.None;
             _relocating = false;
             EnterRoutine(RoutineState.Settled);
-            _log.LogInfo(_relocation.Pose == CompanionPose.SleepInBed
+            LogActivity(_relocation.Pose == CompanionPose.SleepInBed
                 ? "Hulgi lay down in a spare bed for the night."
                 : $"Hulgi sat down at {DescribeSpot(_relocation)}.");
             return;
@@ -1485,7 +1485,7 @@ internal sealed class CompanionDirector : IDisposable
                 _routineElapsed = 0f;
                 _relocationPatience = (_walk.Length / StrollSpeed * 1.5f) + 6f +
                     (_walk.Door != null ? DoorSwingSeconds + 4f : 0f);
-                _log.LogInfo(
+                LogActivity(
                     $"Hulgi was stopped on his way ({why} at {Describe(_actor.Position)}) and is trying another way.");
                 return;
             }
@@ -1540,7 +1540,7 @@ internal sealed class CompanionDirector : IDisposable
         if (CompanionDoors.StateOf(_walk.Door) != 0)
         {
             UseDoor(_walk.Door);
-            _log.LogInfo("Hulgi closed the door behind him.");
+            LogActivity("Hulgi closed the door behind him.");
         }
     }
 
@@ -1647,7 +1647,7 @@ internal sealed class CompanionDirector : IDisposable
         if (!firstLook)
         {
             LookAgainNow();
-            _log.LogInfo(
+            LogActivity(
                 "Something changed around Hulgi's camp - a fire, a bed, a seat, a door or the hour; he looks again.");
         }
     }
@@ -1767,7 +1767,7 @@ internal sealed class CompanionDirector : IDisposable
         bool started = _actor.BeginDrink(plan, standAt, toWhom, AppearancePlan.HulgiMugs, out string outcome);
         if (started)
         {
-            _log.LogInfo(outcome);
+            LogActivity(outcome);
         }
 
         return outcome;
@@ -1974,7 +1974,7 @@ internal sealed class CompanionDirector : IDisposable
                 }
 
                 _actor.SettleWhereHeStands();
-                _log.LogInfo("Hulgi sat down" + (CampSense.IsSheltered(_actor.Position) ? " under cover." : " in the open."));
+                LogActivity("Hulgi sat down" + (CampSense.IsSheltered(_actor.Position) ? " under cover." : " in the open."));
                 break;
             }
         }
@@ -2048,7 +2048,7 @@ internal sealed class CompanionDirector : IDisposable
         // Up where he sits, turning towards where he is going; the walk waits.
         _actor.StopWalking();
         _actor.BeginRise(_actor.Position, plan.Route.Count > 1 ? plan.Route[1] : point);
-        _log.LogInfo(
+        LogActivity(
             $"Hulgi is getting up and walking {Vector3.Distance(_actor.Position, point):0.0} m " +
             $"to {point.ToString("0.#")}" +
             (_strollRoute.Count > 2 ? $" by a route with {_strollRoute.Count - 2} turn(s)." : "."));
@@ -2853,7 +2853,7 @@ internal sealed class CompanionDirector : IDisposable
             OverheadSpeech.TrySay(
                 head.gameObject, head.position, AtlasStrings.Get("companion.hulgi.name"), text, _log))
         {
-            _log.LogInfo("Hulgi: " + text);
+            LogActivity("Hulgi: " + text);
             return;
         }
 
@@ -2872,6 +2872,18 @@ internal sealed class CompanionDirector : IDisposable
         }
 
         _log.LogInfo(text);
+    }
+
+    /// <summary>A line about what he is doing - a walk, a sit, a drink, a line
+    /// he said, a change in camp. Worth reading while testing and noise in an
+    /// ordinary log, so it is written only with <c>Diagnostics/DebugLogging</c>
+    /// on. Anything that went wrong is logged whatever the setting.</summary>
+    private void LogActivity(string text)
+    {
+        if (_settings.DebugLogging.Value)
+        {
+            _log.LogInfo(text);
+        }
     }
 
     /// <summary>His camp, read now, and kept for the potter that may follow.

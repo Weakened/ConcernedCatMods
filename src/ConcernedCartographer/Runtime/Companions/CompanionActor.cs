@@ -665,16 +665,6 @@ internal sealed class CompanionActor
     /// stops short of a wall rather than touching it.</summary>
     private const float StepLookAheadMetres = 0.35f;
 
-    /// <summary>Whether he could walk from where he is to
-    /// <paramref name="target"/> in a straight line without walking into
-    /// anything solid. Stroll targets are chosen only where this holds; there is
-    /// no pathfinding yet, so a spot behind a wall is simply not
-    /// chosen.</summary>
-    public bool CanWalkStraightTo(Vector3 target)
-    {
-        return _root != null && !CompanionFooting.IsWayBlocked(_root.transform.position, target);
-    }
-
     /// <summary>Whether this build can animate a walk at all. When false he
     /// never strolls - he would slide, and a sliding companion reads as a
     /// broken one where a still companion just reads as still.</summary>
@@ -684,11 +674,12 @@ internal sealed class CompanionActor
     /// <summary>Walks him one step toward <paramref name="target"/>, following
     /// the ground under his feet.
     ///
-    /// Deliberately not pathfinding. He walks the straight line, checks the
-    /// ground he is about to stand on through the same probe that chose his
-    /// spot in the first place, and stops if it will not hold him. A companion
-    /// pottering around a camp does not need to solve a maze, and the failure
-    /// mode of trying is one who walks into a wall forever.</summary>
+    /// One straight step towards the next corner of a route the director has
+    /// already planned through the navmesh and the doors he may use. This is
+    /// only the footwork: it checks what is in front of him and the ground he
+    /// is about to stand on, and stops - saying why, in
+    /// <see cref="LastBlockReason"/> - rather than walk into a wall or off a
+    /// ledge. What to do about a stop is the director's call.</summary>
     /// <param name="checkObstruction">False only for the few steps through a
     /// doorway he has just opened, where the open door leaf beside the frame
     /// would otherwise read as a wall.</param>
@@ -715,9 +706,9 @@ internal sealed class CompanionActor
         Vector3 next = here + (direction * travel);
 
         // Collision with the world, looking a little ahead so he stops short of
-        // a wall rather than with his face in it. A stroll is only ever started
-        // towards a spot with a clear straight line, so this is the safety net
-        // for what changed since - a door closed, a wall built.
+        // a wall rather than with his face in it. The route already goes around
+        // what was there when it was planned, so this is the safety net for
+        // what changed since - a door closed, a wall built.
         if (checkObstruction &&
             CompanionFooting.TryFindObstruction(
                 here, here + (direction * (travel + StepLookAheadMetres)), out string obstruction))
@@ -978,17 +969,6 @@ internal sealed class CompanionActor
 
     /// <summary>Whether he is lying in a bed right now.</summary>
     public bool IsAsleep => _poseParameter != null && Pose == CompanionPose.SleepInBed;
-
-    /// <summary>Sits him at a spot he has just walked to, exactly as a rebuild
-    /// there would have: onto the seat's own attachment point and heading when
-    /// it is a seat, onto the planned ground otherwise. No rebuild, no
-    /// teleport - he is already there.</summary>
-    public void SettleInto(WorldPoint position, CompanionPose pose, SeatOffer seat, Vector3? facing = null)
-    {
-        _seat = seat;
-        _facing = facing;
-        Place(position, pose);
-    }
 
     /// <summary>Puts him on the ground at <paramref name="position"/>, off any
     /// seat. Only for <c>cc_companion summon</c>, which exists to test how he

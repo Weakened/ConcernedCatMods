@@ -13,12 +13,9 @@ namespace TheConcernedCat.ConcernedCartographer.Runtime.Companions;
 internal sealed class CampView
 {
     public CampView(
-        CampSnapshot snapshot, List<Fireplace> fireplaces, List<Bed> beds, List<Door> doors,
-        List<DoorPortal> portals, Vector3 home, Vector3? outdoors)
+        CampSnapshot snapshot, List<Door> doors, List<DoorPortal> portals, Vector3 home, Vector3? outdoors)
     {
         Snapshot = snapshot;
-        Fireplaces = fireplaces;
-        Beds = beds;
         Doors = doors;
         Portals = portals;
         Home = home;
@@ -26,14 +23,6 @@ internal sealed class CampView
     }
 
     public CampSnapshot Snapshot { get; }
-
-    /// <summary>The components behind <see cref="CampSnapshot.Fires"/>, same
-    /// order.</summary>
-    public List<Fireplace> Fireplaces { get; }
-
-    /// <summary>The components behind <see cref="CampSnapshot.Beds"/>, same
-    /// order.</summary>
-    public List<Bed> Beds { get; }
 
     public List<Door> Doors { get; }
 
@@ -137,9 +126,7 @@ internal sealed class CampSense
 
     public CampView Scan(Vector3 home, float radius)
     {
-        var fireplaces = new List<Fireplace>();
         var fires = new List<CampFire>();
-        var beds = new List<Bed>();
         var campBeds = new List<CampBed>();
 
         _pieces.Clear();
@@ -171,7 +158,6 @@ internal sealed class CampSense
             if (fire != null)
             {
                 Vector3 at = fire.transform.position;
-                fireplaces.Add(fire);
                 fires.Add(new CampFire(
                     new WorldPoint(at.x, at.y, at.z), IsBurning(fire), IsSheltered(at), HazardOf(fire)));
                 continue;
@@ -181,7 +167,6 @@ internal sealed class CampSense
             if (bed != null && bed.m_spawnPoint != null)
             {
                 Vector3 at = bed.m_spawnPoint.position;
-                beds.Add(bed);
                 campBeds.Add(new CampBed(
                     new WorldPoint(at.x, at.y, at.z), bed.m_spawnPoint.rotation.eulerAngles.y,
                     IsClaimed(bed), IsSheltered(at)));
@@ -198,7 +183,7 @@ internal sealed class CampSense
 
         var snapshot = new CampSnapshot(
             new WorldPoint(home.x, home.y, home.z), IsNight(), IsWet(), fires, campBeds);
-        return new CampView(snapshot, fireplaces, beds, doors, portals, home, FindOutdoors(home));
+        return new CampView(snapshot, doors, portals, home, FindOutdoors(home));
     }
 
     /// <summary>Plans a walk from <paramref name="from"/> to

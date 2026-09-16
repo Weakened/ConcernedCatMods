@@ -1,6 +1,10 @@
-# Concerned Cartographer V1.1.1
+# Concerned Cartographer V1.2.0
 
-**V1.1.1 by The Concerned Cat introduces Hulgi: a local-only companion who lives at your home point and introduces the atlas, on top of 1.0.4’s sailing Route Follow. He is not a networked creature — no other player can see him, he takes no part in your save, and he never blocks, fights or carries anything. Audited against Valheim 1.0.12.**
+**V1.2.0 by The Concerned Cat introduces Hulgi: a drowned cartographer who lives at your camp, introduces the atlas, and has some common sense about it — by the fire nearest your bed with a drink now and then, under a roof at night, asleep in a spare bed if you have one. He is local only: no other player can see him, he takes no part in your save, and he never blocks, fights or carries anything. Every atlas feature from 1.0.4 is unchanged. Audited against Valheim 1.0.12.**
+
+![Hulgi sitting on a log by the campfire beside the player, saying "The meadows are kind. That is how they talk you into wandering." over his head](https://raw.githubusercontent.com/Weakened/ConcernedCatMods/4b154a596ee4b762c5c9dc23cfad4b2e22846e67/docs/media/concerned-cartographer/hulgi-campfire.jpg)
+
+*Hulgi at the campfire nearest your bed. Press Use to talk to him — he answers over his head, the way a trader does.*
 
 Concerned Cartographer turns Valheim’s map into a living atlas.
 
@@ -8,6 +12,7 @@ The roads your Vikings build can map themselves. Existing pins can become durabl
 
 ## Highlights
 
+* **Hulgi**, a local-only companion who introduces the atlas and then lives at your camp.
 * Dirt paths and paved roads appear as separate map layers.
 * Your successful Pathen and Paved construction actions record roads; walking existing terrain does not create road ink.
 * Existing vanilla pins can be upgraded and edited without being recreated.
@@ -20,6 +25,54 @@ The roads your Vikings build can map themselves. Existing pins can become durabl
 * Fog of war is respected.
 * World saves are never modified.
 * Removing the mod leaves managed pins usable as ordinary vanilla pins.
+
+## Meet Hulgi (new in V1.2.0)
+
+A broken compass lies on the ground near where you wake up. Examine it and Hulgi introduces
+himself — a drowned cartographer who never made it home, and who would rather you did. Welcome
+him and the atlas tools are yours; or choose **Just the tools, thanks** and skip the story
+entirely. Either choice is permanent in the only direction that matters: once the tools are
+unlocked, nothing can lock them again.
+
+![At night inside a cottage, Hulgi lies asleep in a spare bed while the player stands beside it](https://raw.githubusercontent.com/Weakened/ConcernedCatMods/4b154a596ee4b762c5c9dc23cfad4b2e22846e67/docs/media/concerned-cartographer/hulgi-spare-bed.gif)
+
+*Night falls: the fire is outside, so Hulgi comes in through the door you opened to him and sleeps in the spare bed until morning.*
+
+* **He has common sense about where to be.** He likes a fire and a drink. By day he goes to the
+  burning fire nearest your bed, inside or out, and takes a seat by it if there is one. At night
+  or in the rain he goes under a roof — a fire under a roof first — and if there is a bed nobody
+  has claimed, he sleeps in it until morning. He never touches a claimed bed. The moment
+  something changes — a fire lit or broken, a bed built or claimed, nightfall — he gets up, walks
+  over, and sits back down, around buildings and through doorways.
+* **Doors are closed to him until you open them.** Look at a door and press **F8** to let
+  companions use it; its prompt says so, and pressing it again stops them. A door he may use, he
+  opens and closes behind him; a door he may not use, he never walks through. The choice is
+  remembered per world, on your computer only. `Companions/DoorAccess = AllDoors` (or "Companions
+  may use every door" in Settings) opens every door you could open yourself.
+* **He has a drink now and then** — a tankard in his hand, and now and then a toast first, turned
+  to you if you are near. The tankard is only drawn while he drinks; it is not an item.
+* **He talks when spoken to.** Over thirty short lines about his cat, the weather, and travelling
+  carefully. Place-specific remarks only mention biomes *this character* has already visited, so
+  he can never spoil somewhere you have not been. Unprompted chatter is **off by default**.
+* **He lives where you do.** Around your claimed bed, or the world’s starting point if you have
+  not claimed one. Replace the bed and he moves; destroy it and he goes back to the start. Walking
+  away from home does not move him — a bed the game cannot currently see is still your bed.
+  Turn `Companions/Wander` off if you would rather he stayed put.
+* **He is local only.** No other player sees him, he has no networked identity, he takes no part
+  in your world save, he has no collision, and he never fights, carries, stores or picks anything
+  up. The one thing in the world he ever touches is a door you let companions use. Turning
+  `Companions/CompanionsEnabled` off removes all of it and leaves every map tool available.
+* **Existing players are never locked out.** If this installation has ever recorded roads, pins,
+  routes, a survey rule or a saved view — in *any* world — you keep everything on upgrade, and
+  Hulgi is simply someone you can still go and meet. Unreadable or ambiguous data grants access
+  too: the only locked state is a genuinely new character in a world the mod could identify.
+* **You never have to find him.** The Companions section of the Settings panel, and
+  `cc_companion toolsonly on`, both reach the tools without meeting him. Settings is never gated.
+* **Nothing about him can cost you anything.** Hiding him, a lost bed, a death, a failed save or a
+  game build that cannot draw him changes what you see and nothing else.
+
+`cc_companion status` reports exactly what was resolved on your machine, and `cc_companion
+placement` explains where he sits and why.
 
 ## See it in action
 
@@ -55,38 +108,11 @@ The roads your Vikings build can map themselves. Existing pins can become durabl
 
 *Settings with backups, a sanitized support bundle, road-repair tools — and opt-in crash reporting that spells out what is never sent.*
 
-## Hulgi and the Broken Compass (new in V1.1.0, fixed throughout in V1.1.1)
+## Version 1.2.0 and support
 
-A broken compass lies on the ground near where you wake up. Examine it and Hulgi introduces
-himself — a drowned cartographer who never made it home, and who would rather you did. Welcome
-him and the atlas tools are yours; or choose **Just the tools, thanks** and skip the story
-entirely. Either choice is permanent in the only direction that matters: once the tools are
-unlocked, nothing can lock them again.
+Version 1.2.0 is the first Thunderstore release with Hulgi. Versions 1.1.0 and 1.1.1 were test builds of him that never reached Thunderstore; everything they changed is part of this release, and the changelog records them. Every atlas feature from 1.0.4 is unchanged.
 
-* **Existing players are never locked out.** If this installation has ever recorded roads, pins,
-  routes, a survey rule or a saved view — in *any* world — you keep everything on upgrade, and
-  Hulgi is simply someone you can still go and meet. Unreadable or ambiguous data grants access
-  too: the only locked state is a genuinely new character in a world the mod could identify.
-* **You never have to find him.** The Companions section of the Settings panel, and
-  `cc_companion toolsonly on`, both reach the tools without meeting him. Settings is never gated.
-* **He is local only.** No other player sees him, he has no networked identity, he takes no part
-  in your world save, he has no collision, and he never fights, carries, stores or picks anything
-  up. Turning `Companions/CompanionsEnabled` off removes all of it and leaves every map tool
-  available.
-* **He lives where you do.** Near your claimed bed, or the world’s starting point if you have not
-  claimed one. Replace the bed and he moves; destroy it and he goes back to the start. Walking
-  away from home does not move him — a bed the game cannot currently see is still your bed.
-* **He talks when spoken to.** Over thirty short lines about his cat, the weather, and travelling
-  carefully. Place-specific remarks only mention biomes *this character* has already visited, so
-  he can never spoil somewhere you have not been. Unprompted chatter is **off by default**.
-* **Nothing about him can cost you anything.** Hiding him, a lost bed, a death, a failed save or a
-  game build that cannot draw him changes what you see and nothing else.
-
-`cc_companion status` reports exactly what was resolved on your machine.
-
-## Version 1.1.1 and support
-
-Version 1.1.1 is the first build of Hulgi that anybody has actually played, and it fixes what that found: every console command was missing on Valheim 1.0.x, a brand new player was treated as a returning one so the introduction never gated anything, and he never sat down. His hair still renders off his head on 1.0.12 and is removed rather than left floating, which is a known defect and not a finished appearance. Version 1.1.0 introduced Hulgi, the local-only companion described above; every atlas feature from 1.0.4 is unchanged. Version 1.0.4 added optional sailing Route Follow. Mark a route as a sailing route (Routes panel **Sailing** button, or `cc_routes sailing on`), enable `Routes/SailingAutoFollowEnabled`, take the helm with that route selected, and press Q. Cartographer feeds only the bounded rudder input a player supplies by holding the helm key. Your sails stay manual, and wind, physics, speed, collision, damage, ownership and network authority are untouched. Any helm input, any sail step, jump/attack/secondary/dodge, a second Q, leaving the helm, route changes, going too far off route, reaching the end, or 12 seconds without progress cancels it. There is no tacking, obstacle avoidance, docking or pathfinding. **Live multiplayer verification of sailing Route Follow is still outstanding** and is not claimed.
+Version 1.0.4 added optional sailing Route Follow. Mark a route as a sailing route (Routes panel **Sailing** button, or `cc_routes sailing on`), enable `Routes/SailingAutoFollowEnabled`, take the helm with that route selected, and press Q. Cartographer feeds only the bounded rudder input a player supplies by holding the helm key. Your sails stay manual, and wind, physics, speed, collision, damage, ownership and network authority are untouched. Any helm input, any sail step, jump/attack/secondary/dodge, a second Q, leaving the helm, route changes, going too far off route, reaching the end, or 12 seconds without progress cancels it. There is no tacking, obstacle avoidance, docking or pathfinding. **Live multiplayer verification of sailing Route Follow is still outstanding** and is not claimed.
 
 Version 1.0.3 fixed dungeon surveying: Burial Chambers, Troll Caves, Bear Caves, Sunken Crypts, Frost Caves and Hildir's crypt and cave are offered as pending observations when you walk up to them. They never were before, because the survey only examined networked objects and a Valheim dungeon entrance is not one.
 

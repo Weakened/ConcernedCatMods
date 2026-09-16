@@ -1,14 +1,20 @@
 # Changelog
 
-## 1.2.0 - Hulgi, on his feet
+## 1.2.0 - Meet Hulgi
 
-1.1.1 shipped him bald - his hair rendered a metre from his head and the build
-removed it rather than leave it floating - and it shipped a companion who would
-ignore a chair built beside him. Both are fixed. He also stopped being a statue:
-he speaks over his head the way a trader does, he gets up now and then to move
-around his camp, and he has some common sense about where to be - by the fire
-nearest your bed, under a roof at night, in a spare bed if there is one - and
-about whose doors he walks through.
+**Meet Hulgi**, a drowned cartographer who never made it home and would rather
+you did. A broken compass near where you wake up introduces him, and from then
+on he lives at your camp: by the fire nearest your bed, having a drink now and then,
+under a roof at night, asleep in a spare bed if you have one. He gets up, walks
+over and sits back down the moment any of that changes, talks over his head when
+you speak to him, and only ever goes through the doors you open to him (look at
+a door and press F8). He is local only - no other player sees him, he takes no
+part in your world save, and he never blocks, fights or carries anything - and
+every atlas feature from 1.0.4 is unchanged.
+
+This is the first Thunderstore release with Hulgi. 1.1.0 and 1.1.1 below were
+test builds of him that never reached Thunderstore; everything they list is part
+of this release too. What changed since those builds:
 
 Added
 
@@ -155,7 +161,7 @@ Added
 - `cc_companion status` now reports how far each attached piece is from where it
   belongs, so "it fits" can be told from "it fits by four centimetres".
 
-## 1.1.1 - Hulgi, played
+## 1.1.1 - Hulgi, played (test build, not released on Thunderstore)
 
 1.1.0 was written and tested without anybody having played it. This is what
 happened when somebody did, on Valheim 1.0.12.
@@ -217,7 +223,7 @@ Known, on this build
 - **Live multiplayer testing of sailing Route Follow** remains outstanding from
   1.0.4.
 
-## 1.1.0 - Hulgi, and the Broken Compass
+## 1.1.0 - Hulgi, and the Broken Compass (test build, not released on Thunderstore)
 
 Added
 
