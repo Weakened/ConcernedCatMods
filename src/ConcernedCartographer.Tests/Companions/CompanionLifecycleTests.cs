@@ -65,6 +65,76 @@ public sealed class CompanionLifecycleTests : IDisposable
     }
 
     [Fact]
+    public void ResettingAFinishedIntroductionOffersItAgainAndKeepsTheTools()
+    {
+        // The owner's test loop: finish the introduction, reset it, meet the
+        // companion again. A completed quest's access is never written as a
+        // grant of its own - it is read off the quest record - so a reset that
+        // only dropped the record would lock the tools of any character with no
+        // other evidence. Access is monotonic; a test tool is no exception.
+        CompanionScope scope = Scope();
+        CompanionProgress first = Open(scope);
+        first.Advance(QuestTransition.Discover);
+        first.Advance(QuestTransition.Collect);
+        first.Advance(QuestTransition.BeginIntroduction);
+        first.Advance(QuestTransition.Welcome);
+        Assert.Equal(UnlockReason.QuestCompleted, first.Decision.Reason);
+
+        Assert.True(first.ResetQuest());
+
+        Assert.Equal(QuestState.Unstarted, first.QuestState);
+        Assert.True(first.IsUnlocked);
+        Assert.False(first.HasCompanion);
+        Assert.True(first.ShouldPresentCollectible);
+        Assert.False(first.HasUnsavedChanges);
+
+        CompanionProgress relogged = Open(scope);
+        Assert.Equal(QuestState.Unstarted, relogged.QuestState);
+        Assert.True(relogged.IsUnlocked);
+        Assert.Equal(UnlockReason.PreviouslyGranted, relogged.Decision.Reason);
+        Assert.True(relogged.ShouldPresentCollectible);
+
+        // And the introduction can be walked through again from the start.
+        Assert.Equal(QuestTransitionOutcome.Advanced, relogged.Advance(QuestTransition.Discover));
+    }
+
+    [Fact]
+    public void ResettingAnUnstartedIntroductionChangesNothing()
+    {
+        CompanionScope scope = Scope();
+        CompanionProgress progress = Open(scope);
+
+        Assert.False(progress.ResetQuest());
+        Assert.False(progress.IsUnlocked);
+        Assert.False(File.Exists(_store.ResolvePath(scope)));
+    }
+
+    [Fact]
+    public void AResetNeverWritesOverAFileThisBuildMayNotWrite()
+    {
+        // A read-only sidecar belongs to a newer build or could not be moved
+        // aside. Resetting would mean rewriting it; refusing is the only
+        // answer that cannot destroy somebody's data.
+        CompanionScope scope = Scope();
+        string path = _store.ResolvePath(scope);
+        File.WriteAllText(path, "unreadable");
+        for (int attempt = 0; attempt < 21; attempt++)
+        {
+            string taken = attempt == 0
+                ? path + ".corrupt"
+                : path + ".corrupt." + attempt.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            File.WriteAllText(taken, "already here");
+        }
+
+        CompanionProgress progress = Open(scope);
+        progress.Advance(QuestTransition.Welcome);
+
+        Assert.False(progress.ResetQuest());
+        Assert.True(progress.IsUnlocked);
+        Assert.Equal("unreadable", File.ReadAllText(path).Trim());
+    }
+
+    [Fact]
     public void TheWholeIntroductionUnlocksAndSurvivesARelog()
     {
         CompanionScope scope = Scope();

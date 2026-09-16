@@ -132,6 +132,39 @@ internal sealed class CompanionProgress
         return outcome;
     }
 
+    /// <summary>Starts this character's introduction again from the beginning:
+    /// the collectible is offered again and the companion leaves until he is
+    /// met again. For testing and for a player who wants to replay it.
+    ///
+    /// Access is monotonic and a reset does not get an exception. A tool grant
+    /// earned by finishing the quest is read off the quest record rather than
+    /// written as its own row, so dropping the record alone would lock a
+    /// character with no other evidence out of tools they already had. The
+    /// grant is therefore written down first, and the reset is saved at once.
+    /// Refused on a read-only sidecar, and a no-op for a quest never
+    /// started.</summary>
+    public bool ResetQuest()
+    {
+        if (_sidecar.IsReadOnly || !_sidecar.TryGetQuest(_questId, out _))
+        {
+            return false;
+        }
+
+        if (Decision.IsUnlocked && _sidecar.GrantedReason == UnlockReason.NotUnlocked)
+        {
+            _sidecar.RecordUnlockGrant(Decision.Reason);
+        }
+
+        if (!_sidecar.ResetQuest(_questId))
+        {
+            return false;
+        }
+
+        Save();
+        Resolve();
+        return true;
+    }
+
     /// <summary>Records that the collectible has been removed from the world.
     ///
     /// Refuses while the introduction is unfinished or anything is unsaved, so

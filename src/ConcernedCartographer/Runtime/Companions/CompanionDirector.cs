@@ -1079,6 +1079,124 @@ internal sealed class CompanionDirector : IDisposable
         return _actor.ForcePose(what);
     }
 
+    /// <summary><c>cc_companion reset [quest|bed|day|all]</c> - puts parts of
+    /// the companion's story back to the start so it can be played again.
+    /// Added at the owner's request for testing on a disposable world.
+    ///
+    /// Everything here is either this mod's own data or a vanilla call the game
+    /// itself makes: <c>ClearCustomSpawnPoint</c> is what the game does when a
+    /// bed is destroyed, and <c>SetNetTime</c> is what its own
+    /// <c>skiptime</c> does. No save file is edited, and the map tools are
+    /// never locked - see <see cref="CompanionProgress.ResetQuest"/>. The
+    /// order under <c>all</c> matters: time and bed first, so the quest reopens
+    /// against the home point the player is about to test.</summary>
+    public string Reset(string? what)
+    {
+        string part = string.IsNullOrEmpty(what) ? "quest" : what!.ToLowerInvariant();
+        bool all = part == "all";
+        if (!all && part != "quest" && part != "bed" && part != "day")
+        {
+            return "Usage: cc_companion reset [quest|bed|day|all]. quest (the default) restarts " +
+                "Hulgi's introduction; bed forgets your bed spawn point in this world; day returns " +
+                "this world to the morning of day 1; all does all three.";
+        }
+
+        var lines = new List<string>();
+        if (all || part == "day")
+        {
+            lines.Add(ResetDay());
+        }
+
+        if (all || part == "bed")
+        {
+            lines.Add(ForgetBedSpawnPoint());
+        }
+
+        if (all || part == "quest")
+        {
+            lines.Add(ResetIntroduction());
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string ResetDay()
+    {
+        ZNet net = ZNet.instance;
+        EnvMan env = EnvMan.instance;
+        if (net == null || env == null)
+        {
+            return "Day: no world is running, so nothing was changed.";
+        }
+
+        if (!net.IsServer())
+        {
+            return "Day: only the host of this world can change its time - the same rule the " +
+                "game's own skiptime follows. Nothing was changed.";
+        }
+
+        double morning = env.GetMorningStartSec(1);
+        net.SetNetTime(morning);
+        return $"Day: this world is back to the morning of day 1, as a new world starts. Anything " +
+            "in it that waits on time - crops, smelters, fermenters - now has longer to wait.";
+    }
+
+    private string ForgetBedSpawnPoint()
+    {
+        PlayerProfile? profile = Game.instance == null ? null : Game.instance.GetPlayerProfile();
+        if (profile == null)
+        {
+            return "Bed: no character is loaded, so nothing was changed.";
+        }
+
+        if (!profile.HaveCustomSpawnPoint())
+        {
+            return "Bed: you have no bed spawn point in this world, so there was nothing to forget.";
+        }
+
+        profile.ClearCustomSpawnPoint();
+
+        // Re-read the home point on the next tick rather than in five seconds.
+        _anchorElapsed = AnchorRecheckSeconds;
+        return "Bed: your bed spawn point in this world is forgotten, exactly as if the bed had " +
+            "been destroyed. The bed itself is untouched: press Use on it to claim it again, and " +
+            "Hulgi will move to it.";
+    }
+
+    private string ResetIntroduction()
+    {
+        if (_progress == null)
+        {
+            return "Quest: no companion data is open for this character in this world yet, so " +
+                "there was nothing to reset.";
+        }
+
+        if (!_progress.ResetQuest())
+        {
+            return _progress.QuestState == QuestState.Unstarted
+                ? "Quest: the introduction has not been started, so it is already at the beginning."
+                : "Quest: this build is not allowed to rewrite this character's companion data - " +
+                  "it belongs to a newer version, or could not be kept safe - so nothing was reset.";
+        }
+
+        // The same release-and-reopen a change of world or character uses, so
+        // nothing from the finished introduction survives into the new one.
+        ReleaseCompass();
+        _actor.Release();
+        _sinceShelterSearchFailed = float.PositiveInfinity;
+        _anchor = CompanionAnchor.None;
+        _anchorValidity = AnchorValidity.Unknown;
+        _noticedRecorded = false;
+        _resumePage = 0;
+        _progress = null;
+        _proximity.Reset();
+        TryOpenProgress();
+
+        _log.LogInfo("Companion introduction reset by console command; map tools stay unlocked.");
+        return "Quest: Hulgi's introduction starts again. The Broken Compass returns near your home " +
+            "point, and he will join you once you have found it. Your map tools stay unlocked.";
+    }
+
     /// <summary>Whether the seat he is on is still a seat he may have.
     ///
     /// Two things end it, and both are ordinary: the piece is destroyed, and a

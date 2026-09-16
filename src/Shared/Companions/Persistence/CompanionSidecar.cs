@@ -125,6 +125,27 @@ internal sealed class CompanionSidecar
         return _quests.TryGetValue(questId.Value, out record!);
     }
 
+    /// <summary>Puts one quest back to the start, as if the character had never
+    /// begun it: its record is dropped, presentation-retired flag and all.
+    ///
+    /// Only the quest. The access grant is a different row answering a
+    /// different question, and nothing here touches it - but note that a grant
+    /// earned by completing the quest is NOT a row of its own, so a caller that
+    /// wants the tools to survive must record the grant first. Refused on a
+    /// read-only sidecar, which this build must never rewrite. Returns true
+    /// only when something was actually reset.</summary>
+    public bool ResetQuest(QuestId questId)
+    {
+        if (IsReadOnly || questId.IsEmpty || !_quests.Remove(questId.Value))
+        {
+            return false;
+        }
+
+        _order.Remove(questId.Value);
+        IsDirty = true;
+        return true;
+    }
+
     /// <summary>Returns the record for <paramref name="questId"/>, creating an
     /// unstarted one if needed. Creating a record is not itself progress, so it
     /// does not mark the sidecar dirty.</summary>

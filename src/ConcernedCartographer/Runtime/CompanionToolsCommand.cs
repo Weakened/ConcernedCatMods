@@ -41,7 +41,8 @@ internal sealed class CompanionToolsCommand : ConsoleCommand
         "Concerned Companions. Subcommands: status, toolsonly <on|off>, story (replay), " +
         "show <on|off> (companion visibility), where (home point), appearance (list this " +
         "build's hair/beard presets), pose <stand|ground|seat> (look at him in one), " +
-        "path (data folder).";
+        "path (data folder), reset [quest|bed|day|all] (replay: restart the introduction, " +
+        "forget your bed spawn point, return the world to day 1; tools stay unlocked).";
 
     public override void Run(string[] args, Terminal context)
     {

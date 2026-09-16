@@ -3153,9 +3153,12 @@ internal sealed class CartographerRuntime : IDisposable
             case "path":
                 return "Companion data: " + Runtime.Companions.CartographerLegacyProbe.DataDirectory;
 
+            case "reset":
+                return _companions.Reset(args.Length > 1 ? args[1] : null);
+
             default:
                 return "Unknown subcommand. Use: status, toolsonly <on|off>, story, show <on|off>, " +
-                    "where, appearance, pose <stand|ground|seat>, path.";
+                    "where, appearance, pose <stand|ground|seat>, path, reset [quest|bed|day|all].";
         }
     }
 
