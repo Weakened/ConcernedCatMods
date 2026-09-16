@@ -412,6 +412,51 @@ internal sealed class CompanionActor
         }
     }
 
+    /// <summary>Puts him in a pose by hand, so he can be looked at in one.
+    ///
+    /// Presentation only, local only, and not persisted: it writes animator
+    /// bools on our own extracted model and touches nothing in the world, no
+    /// seat is claimed and nothing is sent anywhere. The next residency pass
+    /// that rebuilds him restores the planned pose.
+    ///
+    /// It exists because clothing has to be checked standing, turning, seated
+    /// on the ground and seated on furniture, and the ordinary lifecycle only
+    /// ever produces one of those at a time. A garment that is bound to the
+    /// skeleton correctly and a garment that merely happens to line up in one
+    /// frozen pose look identical until something moves.</summary>
+    public string ForcePose(string what)
+    {
+        if (_root == null || _animator == null)
+        {
+            return "There is no companion model to pose.";
+        }
+
+        switch (what)
+        {
+            case "stand":
+                ClearPoseParameter();
+                if (Report != null)
+                {
+                    Report.PoseState = null;
+                }
+
+                return "Hulgi is standing. He returns to his idle when he is next rebuilt.";
+
+            case "seat":
+                ApplyPose(CompanionPose.SitOnSeat);
+                return $"Hulgi is posed on a seat ({Report?.PoseState ?? "<default>"})" +
+                    (_seat.IsUsable ? "." : " - he has no seat, so this is the ground emote.");
+
+            case "ground":
+                ApplyPose(CompanionPose.SitOnGround);
+                return $"Hulgi is sitting on the ground ({Report?.PoseState ?? "<default>"}).";
+
+            default:
+                return "Usage: cc_companion pose <stand|ground|seat>. Presentation only; he goes " +
+                    "back to his planned pose when he is next rebuilt.";
+        }
+    }
+
     /// <summary>The parameters to try for a pose, best first. A seat's own
     /// animation leads when there is one; the ground emote is the fallback for
     /// everything, which is what makes "sit on the ground" the behaviour that

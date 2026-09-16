@@ -3143,12 +3143,19 @@ internal sealed class CartographerRuntime : IDisposable
                     legsOverride: _settings.CompanionLegsPreset.Value) +
                     DescribeCustomizationSliders();
 
+            case "pose":
+                // Presentation only: writes an animator bool on our own model.
+                // Here so that clothing can be checked in more than the one
+                // pose the ordinary lifecycle produces.
+                return _companions.ForcePose(
+                    args.Length > 1 ? args[1].ToLowerInvariant() : "?");
+
             case "path":
                 return "Companion data: " + Runtime.Companions.CartographerLegacyProbe.DataDirectory;
 
             default:
                 return "Unknown subcommand. Use: status, toolsonly <on|off>, story, show <on|off>, " +
-                    "where, appearance, path.";
+                    "where, appearance, pose <stand|ground|seat>, path.";
         }
     }
 

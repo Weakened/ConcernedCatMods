@@ -57,6 +57,7 @@ internal sealed class CompanionToolsCommand : ConsoleCommand
 
     public override List<string> CommandOptionList()
     {
-        return new List<string> { "status", "toolsonly", "story", "show", "where", "appearance", "path" };
+        return new List<string>
+            { "status", "toolsonly", "story", "show", "where", "appearance", "pose", "path" };
     }
 }

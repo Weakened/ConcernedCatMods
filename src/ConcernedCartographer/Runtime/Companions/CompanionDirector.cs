@@ -703,6 +703,13 @@ internal sealed class CompanionDirector : IDisposable
         };
     }
 
+    /// <summary>Poses him by hand for a look. Presentation only; see
+    /// <see cref="CompanionActor.ForcePose"/>.</summary>
+    public string ForcePose(string what)
+    {
+        return _actor.ForcePose(what);
+    }
+
     /// <summary>Whether the seat he is on is still a seat he may have.
     ///
     /// Two things end it, and both are ordinary: the piece is destroyed, and a
