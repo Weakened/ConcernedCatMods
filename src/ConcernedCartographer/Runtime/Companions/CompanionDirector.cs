@@ -163,6 +163,7 @@ internal sealed class CompanionDirector : IDisposable
     private float _routineElapsed;
     private Vector3 _strollTarget;
     private int _strollTurn;
+    private bool _walkReported;
 
     /// <summary>The plan the furniture sweep just made, kept for the rebuild it
     /// is about to cause. Valid for this residency pass only.</summary>
@@ -721,10 +722,33 @@ internal sealed class CompanionDirector : IDisposable
     /// who sits still just reads as still.</summary>
     private void UpdateRoutine(float deltaTime)
     {
-        if (!_actor.Exists || !_settings.CompanionWander.Value || !_actor.CanWalk ||
+        if (!_actor.Exists || !_settings.CompanionWander.Value ||
             !_settings.CompanionVisible.Value || !_anchor.IsValid)
         {
             return;
+        }
+
+        // Said once, and said out loud. A companion who never gets up because
+        // his animator has no locomotion to drive looks exactly like a
+        // companion who simply has not got up yet, and this project has
+        // shipped three separate features that failed in silence.
+        if (!_actor.CanWalk)
+        {
+            if (!_walkReported)
+            {
+                _walkReported = true;
+                _log.LogInfo(
+                    "This build's companion model has no walking animation to drive, so Hulgi " +
+                    "stays seated rather than sliding around. Nothing else is affected.");
+            }
+
+            return;
+        }
+
+        if (!_walkReported)
+        {
+            _walkReported = true;
+            _log.LogInfo("Hulgi can walk on this build; he will move around his camp.");
         }
 
         _routineElapsed += deltaTime;
@@ -760,6 +784,9 @@ internal sealed class CompanionDirector : IDisposable
                 _actor.StopWalking();
                 _actor.SettleWhereHeStands();
                 EnterRoutine(RoutineState.Settled);
+                _log.LogInfo(
+                    "Hulgi sat down" +
+                    (IsSheltered(_actor.Position) ? " under cover." : " in the open."));
                 break;
         }
     }
@@ -833,6 +860,9 @@ internal sealed class CompanionDirector : IDisposable
         _strollTarget = point;
         _actor.StandUp();
         EnterRoutine(RoutineState.Strolling);
+        _log.LogInfo(
+            $"Hulgi is getting up and walking {Vector3.Distance(_actor.Position, point):0.0} m " +
+            $"to {point.ToString("0.#")}" + (IsNightOrStorm() ? " (looking for shelter)." : "."));
     }
 
     private bool PlayerWithinTalkRange()
