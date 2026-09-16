@@ -51,15 +51,18 @@ internal sealed class CompanionDirector : IDisposable
         "Ruby",
     };
 
-    /// <summary>Vanilla pickables whose twinkle the compass borrows, best first.
-    /// Each is looked up; none is assumed.</summary>
+    /// <summary>Where the compass borrows the game's item twinkle from, best
+    /// first: the effect's own prefab if this build registers it by name, then
+    /// long-standing items the game's bundle shows carrying it (1.0.12). Each
+    /// is looked up; none is assumed.</summary>
     private static readonly string[] SparklePrefabCandidates =
     {
-        "Pickable_Stone",
-        "Pickable_Flint",
-        "Pickable_Branch",
-        "Pickable_Mushroom",
-        "Pickable_Dandelion",
+        LocalVisual.ItemSparklesChild,
+        "Raspberry",
+        "Blueberries",
+        "Mushroom",
+        "Honey",
+        "Carrot",
     };
 
     /// <summary>Hulgi lives further out than the collectible does: close
@@ -2396,8 +2399,8 @@ internal sealed class CompanionDirector : IDisposable
             // objects". The vanilla twinkle, borrowed render-only.
             string? sparkle = LocalVisual.TryAttachSparkle(visual.Root, SparklePrefabCandidates, _log);
             _log.LogInfo(sparkle == null
-                ? "No vanilla pickable sparkle was found on this build, so the compass does not twinkle."
-                : $"The compass twinkles like a pickable (sparkle borrowed from \"{sparkle}\").");
+                ? "No vanilla item sparkle was found on this build, so the compass does not twinkle."
+                : $"The compass twinkles like a dropped item (sparkle borrowed from \"{sparkle}\").");
 
             _compassBehaviour = BrokenCompassObject.Attach(visual.Root, Examine, _log);
             _proximity.Reset();
