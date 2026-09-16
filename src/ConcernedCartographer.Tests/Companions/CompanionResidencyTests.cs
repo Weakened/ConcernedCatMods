@@ -106,10 +106,15 @@ public sealed class CompanionResidencyTests
     }
 
     [Fact]
-    public void Upgrade_NoSweepIsNotTheSameAsASweepThatFoundNothing()
+    public void Upgrade_TheDefaultValueIsInert()
     {
-        // The default value has to be inert, because it is what every pass
-        // that did not sweep passes in - which is almost all of them.
+        // This is the value every pass that did not sweep passes in, which is
+        // almost all of them, so it has to mean "do nothing" on its own.
+        // Two things make it inert and only one of them is load bearing today:
+        // Surveyed is false, and Placed and Offered are both the lowest pose so
+        // the strictly-greater test fails anyway. The redundancy is deliberate
+        // - it is what keeps the default inert if the pose ranks are ever
+        // reordered - but it does mean this pins less than it appears to.
         Assert.False(default(SeatUpgrade).Surveyed);
         Assert.False(default(SeatUpgrade).IsWorthMoving);
         Assert.False(SeatUpgrade.NotSurveyed.IsWorthMoving);
@@ -119,10 +124,6 @@ public sealed class CompanionResidencyTests
             ResidencyPlanner.Decide(Inputs(
                 actorPresent: true, current: Bed(), placed: Bed(),
                 upgrade: SeatUpgrade.NotSurveyed)));
-
-        // A sweep DID run and offered a seat: that is the one that moves him.
-        Assert.True(
-            new SeatUpgrade(CompanionPose.SitOnGround, CompanionPose.SitOnSeat).Surveyed);
     }
 
     [Fact]
@@ -154,19 +155,20 @@ public sealed class CompanionResidencyTests
     }
 
     [Fact]
-    public void Upgrade_ALostSeatOutranksAnOffer()
+    public void Upgrade_ALostSeatAndAnOfferTogetherStillRehomeOnce()
     {
-        // Both say Rehome, so the returned action cannot tell them apart - but
-        // the adapter reads Seat to decide whether the eight-second backoff
-        // applies, and losing a seat must keep it. Pinned because collapsing
-        // the two would turn a seat that keeps being claimed into a rebuild
-        // every two seconds.
-        var inputs = Inputs(
-            actorPresent: true, current: Bed(), placed: Bed(), seat: SeatStatus.Lost,
-            upgrade: new SeatUpgrade(CompanionPose.SitOnGround, CompanionPose.SitOnSeat));
-
-        Assert.Equal(ResidencyAction.Rehome, ResidencyPlanner.Decide(inputs));
-        Assert.Equal(SeatStatus.Lost, inputs.Seat);
+        // Both signals can arrive on the same pass. The planner returns one
+        // action either way; what it must not do is disagree with itself or
+        // report anything other than Rehome when both are shouting.
+        //
+        // Which of the two set it, and therefore whether the adapter applies
+        // its rebuild backoff, is the adapter's business and is NOT pinned
+        // here - that lives in untested Runtime code.
+        Assert.Equal(
+            ResidencyAction.Rehome,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: true, current: Bed(), placed: Bed(), seat: SeatStatus.Lost,
+                upgrade: new SeatUpgrade(CompanionPose.SitOnGround, CompanionPose.SitOnSeat))));
     }
 
     [Fact]

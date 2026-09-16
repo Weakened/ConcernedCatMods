@@ -88,6 +88,17 @@ changes the plan for the better.
 | Visual equipment | `VisEquipment` — a `MonoBehaviour` carrying `SkinnedMeshRenderer m_bodyModel`, `PlayerModel[] m_models`, `ZNetView m_nview` (non-public), `ZNetView m_nViewOverride` (public) | Verified |
 | Non-player appearance | `void VisEquipment.SetupFacialHairNonPlayer()`, `bool VisEquipment.m_isArmorStand` | Unverified |
 | NPC appearance via ZDO | `void VisEquipment.SetupNpcHair(ZDO)`, `void VisEquipment.SetupNpcBeard(ZDO)` | Verified — **must never be used**; takes a ZDO |
+| Skinned attachment | `GameObject VisEquipment.AttachItem(int, int, Transform, bool, bool, int)` (non-public) — for a child named `attach_skin`: parent to `m_bodyModel.transform.parent`, zero the local position and rotation, then for every `SkinnedMeshRenderer` under it assign `rootBone = m_bodyModel.rootBone` and `bones = m_bodyModel.bones` | Verified by decompilation of `assembly_valheim.dll` 1.0.12 — the contract #305 rests on |
+| Armour attachment | `List<GameObject> VisEquipment.AttachArmor(int, int, int)` (non-public) — same bone assignment for `attach_skin`; every other `attach_<joint>` child is parented to the joint found by name under `m_visual` | Verified by decompilation of `assembly_valheim.dll` 1.0.12 |
+
+**A skinned customization mesh is bound by ARRAY, not by joint.** The game never
+re-maps bone to bone: it hands the piece `m_bodyModel.bones` whole, in the body's
+own order, because Unity skins by index and a vanilla hair or armour mesh's
+bindposes are authored against the player skeleton's array layout. Matching the
+same names in the piece's own order produces a complete, plausible binding that
+draws the mesh somewhere else entirely — 0.99 m away, in #305's case — and no
+count or name check can tell the two apart. This is the one place where copying
+the game's line literally matters more than writing a more careful-looking one.
 
 **`BaseAI` self-registers into a static list.** `BaseAI.GetAllInstances()` and the
 backing `m_instances` mean an instantiated AI is reachable process-wide the

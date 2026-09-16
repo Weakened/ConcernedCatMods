@@ -22,8 +22,10 @@ namespace TheConcernedCat.ConcernedCartographer.Runtime;
 /// over.</item>
 /// </list>
 ///
-/// It is a diagnostic and a preference surface. It cannot advance the quest,
-/// grant anything the policy would not grant on its own, or remove access.</summary>
+/// It is a diagnostic, a preference surface and - since <c>pose</c> - a way to
+/// look at him in a shape his own lifecycle does not produce. It cannot advance
+/// the quest, grant anything the policy would not grant on its own, or remove
+/// access.</summary>
 internal sealed class CompanionToolsCommand : ConsoleCommand
 {
     private readonly CartographerRuntime _runtime;
@@ -38,7 +40,8 @@ internal sealed class CompanionToolsCommand : ConsoleCommand
     public override string Help =>
         "Concerned Companions. Subcommands: status, toolsonly <on|off>, story (replay), " +
         "show <on|off> (companion visibility), where (home point), appearance (list this " +
-        "build's hair/beard presets), path (data folder).";
+        "build's hair/beard presets), pose <stand|ground|seat> (look at him in one), " +
+        "path (data folder).";
 
     public override void Run(string[] args, Terminal context)
     {

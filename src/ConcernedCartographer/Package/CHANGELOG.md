@@ -22,9 +22,9 @@ Fixed
 - **He takes a chair built after he has settled.** The placement plan was made
   once and revisited only when the home point moved or his seat was lost, so a
   bench built beside him stood empty until something else forced a rehome. He
-  now looks up every half minute while he is on nothing better than the ground,
-  and moves only for a strictly better seat - never for an equally good one, so
-  he does not drift around the camp. Once he is on a seat he stops looking.
+  now looks up every half minute while he is not already on a seat, and moves
+  only for a strictly better place to sit - never for an equally good one, so he
+  does not drift around the camp. Once he is on a seat he stops looking.
 - **Cloth is stripped from hair and beards too, not only from garments.** The
   game's cloth simulation rebuilds itself against the skeleton it was saved
   with, and for an attached piece that skeleton no longer exists. A braid is
@@ -32,12 +32,11 @@ Fixed
 
 Added
 
-- **He is dressed.** Hulgi wears a vanilla rag tunic and vanilla leather pants,
-  found by their own in-game names in your build's item table. Presentation
-  only: no armour value, no item, nothing transferred, nothing taken.
 - `cc_companion pose <stand|ground|seat>` poses him where he sits so his
-  clothing can be looked at in more than one shape. Local and not saved; he
-  returns to his own idle when he is next rebuilt.
+  clothing can be looked at in more than one shape - a garment bound correctly
+  and one that merely lines up in a single frozen pose look identical until
+  something moves. Local and not saved; he returns to his own idle when he is
+  next rebuilt.
 - `cc_companion status` now reports how far each attached piece is from where it
   belongs, so "it fits" can be told from "it fits by four centimetres".
 

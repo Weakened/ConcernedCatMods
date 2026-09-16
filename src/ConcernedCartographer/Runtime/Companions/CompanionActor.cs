@@ -362,9 +362,15 @@ internal sealed class CompanionActor
     /// absent one is a fact this build told us rather than an exception we
     /// caught. When none exists the model keeps its default idle and the report
     /// says <c>PoseState = null</c>.</summary>
-    private void ApplyPose(CompanionPose pose)
+    /// <summary><paramref name="record"/> is false when the pose is being set
+    /// by hand for a look. What the report says he is doing has to keep meaning
+    /// what the PLANNER decided, because the furniture sweep reads it: a hand
+    /// pose that wrote "on a seat" would tell the sweep it had nothing left to
+    /// look for and stop it finding real chairs, permanently. The animator does
+    /// what it is told either way; only the bookkeeping is withheld.</summary>
+    private void ApplyPose(CompanionPose pose, bool record = true)
     {
-        if (Report != null)
+        if (Report != null && record)
         {
             Report.Pose = pose;
         }
@@ -392,7 +398,7 @@ internal sealed class CompanionActor
 
                 _animator.SetBool(candidate, true);
                 _poseParameter = candidate;
-                if (Report != null)
+                if (Report != null && record)
                 {
                     Report.PoseState = candidate;
                 }
@@ -435,21 +441,16 @@ internal sealed class CompanionActor
         {
             case "stand":
                 ClearPoseParameter();
-                if (Report != null)
-                {
-                    Report.PoseState = null;
-                }
-
                 return "Hulgi is standing. He returns to his idle when he is next rebuilt.";
 
             case "seat":
-                ApplyPose(CompanionPose.SitOnSeat);
-                return $"Hulgi is posed on a seat ({Report?.PoseState ?? "<default>"})" +
+                ApplyPose(CompanionPose.SitOnSeat, record: false);
+                return "Hulgi is posed on a seat" +
                     (_seat.IsUsable ? "." : " - he has no seat, so this is the ground emote.");
 
             case "ground":
-                ApplyPose(CompanionPose.SitOnGround);
-                return $"Hulgi is sitting on the ground ({Report?.PoseState ?? "<default>"}).";
+                ApplyPose(CompanionPose.SitOnGround, record: false);
+                return "Hulgi is sitting on the ground.";
 
             default:
                 return "Usage: cc_companion pose <stand|ground|seat>. Presentation only; he goes " +
@@ -1102,10 +1103,23 @@ internal sealed class CompanionActor
         {
             foreach (Transform stray in strays)
             {
-                if (stray != null && stray.parent == piece.transform)
+                if (stray == null || stray.parent != piece.transform)
                 {
-                    UnityEngine.Object.Destroy(stray.gameObject);
+                    continue;
                 }
+
+                // Some pieces put the mesh INSIDE the armature rather than
+                // beside it. Destroying the armature would take the renderer
+                // with it, and because Destroy is deferred the piece would
+                // vanish a frame later and the fit check would be blamed for
+                // it - it measures no active renderer, gets NaN, and reports
+                // the piece as "not drawn where it was put".
+                if (stray.GetComponentInChildren<Renderer>(includeInactive: true) != null)
+                {
+                    continue;
+                }
+
+                UnityEngine.Object.Destroy(stray.gameObject);
             }
         }
 
@@ -1496,7 +1510,9 @@ internal sealed class CompanionActor
     /// Matched on type NAME rather than by referencing the type, because it
     /// lives in a third-party dependency the game ships and a hard reference
     /// would stop this build loading on any version that ships a different
-    /// one.</summary>
+    /// one. That match is deliberately broad: half a cloth system is worse
+    /// than all of it, so everything in the family goes quiet together.
+    /// </summary>
     private static int RemoveCloth(GameObject piece)
     {
         int removed = 0;
@@ -1524,15 +1540,28 @@ internal sealed class CompanionActor
                 continue;
             }
 
-            try
+            // Disabled rather than destroyed. Destroying is what Unity refuses
+            // when another component declares [RequireComponent] on this one -
+            // and it refuses by writing an error to the player's log and
+            // carrying on, not by throwing, so a try/catch around it catches
+            // nothing and the count comes out wrong. Disabling cannot be
+            // refused, cannot break a dependency, and is enough: a cloth
+            // component that never receives OnEnable never builds itself.
+            if (component is Behaviour behaviour)
             {
-                UnityEngine.Object.DestroyImmediate(component);
-                removed++;
+                if (behaviour.enabled)
+                {
+                    behaviour.enabled = false;
+                    removed++;
+                }
+
+                continue;
             }
-            catch (Exception)
+
+            UnityEngine.Object.DestroyImmediate(component);
+            if (component == null)
             {
-                // Something else on the piece requires it. Leaving one
-                // component behind is better than leaving the piece in pieces.
+                removed++;
             }
         }
 
@@ -1696,8 +1725,28 @@ internal sealed class CompanionActor
         return path;
     }
 
-    private static Transform? FindHeadBone(Transform root)
+    private Transform? FindHeadBone(Transform root)
     {
+        // The animated skeleton first, for the same reason FindBoneNamed does
+        // it: an armature that arrives with an attached piece has a Head too,
+        // nothing drives it, and this transform is the reference every fit
+        // measurement is taken against. Measuring against a bind-pose head
+        // fails every piece at once and blames the pieces.
+        if (_bodyModel != null && _bodyModel.bones != null)
+        {
+            foreach (string wanted in HeadBoneNames)
+            {
+                foreach (Transform bone in _bodyModel.bones)
+                {
+                    if (bone != null &&
+                        string.Equals(bone.name, wanted, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return bone;
+                    }
+                }
+            }
+        }
+
         Transform[] bones = root.GetComponentsInChildren<Transform>(includeInactive: true);
 
         foreach (string wanted in HeadBoneNames)

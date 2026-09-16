@@ -106,13 +106,6 @@ internal sealed class CompanionDirector : IDisposable
     /// round is enough to see it work.</summary>
     private const float SeatUpgradeSeconds = 30f;
 
-    /// <summary>The longest the sweep will ever wait.
-    ///
-    /// Reached only by doubling, and only when an upgrade was attempted and did
-    /// not take - the sweep offered a seat and the rebuilt actor came back on
-    /// the ground anyway. That disagreement would otherwise rebuild a humanoid
-    /// model every thirty seconds for as long as the world is loaded.</summary>
-    private const float SeatUpgradeCeilingSeconds = 480f;
 
     private readonly CartographerSettings _settings;
     private readonly ManualLogSource _log;
@@ -145,8 +138,11 @@ internal sealed class CompanionDirector : IDisposable
     private float _placementRetryElapsed;
     private float _residencyElapsed;
     private float _seatUpgradeElapsed;
-    private float _seatUpgradeWait = SeatUpgradeSeconds;
-    private CompanionPose? _upgradeFrom;
+
+    /// <summary>The plan the furniture sweep just made, kept for the rebuild it
+    /// is about to cause. Valid for this residency pass only.</summary>
+    private PlacementResult _sweptPlan;
+    private bool _sweptPlanValid;
     private float _talkCooldown;
     private float _ambientElapsed;
     private int _conversationTurn;
@@ -498,6 +494,10 @@ internal sealed class CompanionDirector : IDisposable
 
         ApplyVisibilityPreference();
 
+        // A swept plan is good for one pass. Anything that defers the rebuild
+        // to a later pass must re-plan against the world as it is then.
+        _sweptPlanValid = false;
+
         // A frame has passed since anything was built, so a skinned preset has
         // been posed at least once and can now be asked where it actually is.
         _actor.VerifyAppearance();
@@ -532,14 +532,6 @@ internal sealed class CompanionDirector : IDisposable
                 // humanoid model every two seconds. Bounded, the same
                 // disagreement costs one rebuild every eight.
                 bool lostSeat = inputs.Seat == SeatStatus.Lost;
-
-                // Remember what he was doing, so that if the sweep promised a
-                // seat and the rebuild lands him on the grass anyway, the next
-                // sweep waits longer instead of trying again immediately.
-                _upgradeFrom = inputs.Upgrade.IsWorthMoving
-                    ? inputs.Upgrade.Placed
-                    : (CompanionPose?)null;
-
                 _actor.Release();
                 _actorRetryElapsed = lostSeat ? ActorRetrySeconds : 0f;
                 break;
@@ -558,12 +550,17 @@ internal sealed class CompanionDirector : IDisposable
             return;
         }
 
-        PlacementResult placement = _hulgiPlanner.Plan(_anchor, _hulgiProbe);
+        // The sweep, if one ran this pass, already asked the planner this exact
+        // question against this exact world. Asking again in the same call is
+        // forty-eight more probes for an answer that cannot have changed:
+        // there is no frame boundary between the two, so nothing can have been
+        // built, claimed or carried away in between.
+        PlacementResult placement = _sweptPlanValid
+            ? _sweptPlan
+            : _hulgiPlanner.Plan(_anchor, _hulgiProbe);
+
         if (!placement.Found)
         {
-            // Nothing was rebuilt, so there is no outcome to judge. Left set,
-            // this would be judged against some unrelated future rebuild.
-            _upgradeFrom = null;
             _actorRetryElapsed = ActorRetrySeconds;
             _rateLimited.Warning(
                 "companion-actor-placement",
@@ -579,7 +576,6 @@ internal sealed class CompanionDirector : IDisposable
             // Every fallback was exhausted. Presentation is disabled with an
             // actionable notice; the companion still exists, still counts, and
             // still unlocked the tools.
-            _upgradeFrom = null;
             _presentationSupported = false;
             ShowNotice(AtlasStrings.Get("companion.presentationUnavailable"));
             return;
@@ -588,7 +584,6 @@ internal sealed class CompanionDirector : IDisposable
         _actor.RememberAnchor(_anchor);
         _actor.SetVisible(_settings.CompanionVisible.Value);
         _visibilityApplied = _settings.CompanionVisible.Value;
-        JudgeUpgrade();
         _log.LogInfo($"Hulgi settled near your {DescribeAnchor(_anchor.Kind)}: {_actor.Report}.");
     }
 
@@ -653,7 +648,7 @@ internal sealed class CompanionDirector : IDisposable
             return SeatUpgrade.NotSurveyed;
         }
 
-        if (_seatUpgradeElapsed < _seatUpgradeWait)
+        if (_seatUpgradeElapsed < SeatUpgradeSeconds)
         {
             return SeatUpgrade.NotSurveyed;
         }
@@ -661,50 +656,14 @@ internal sealed class CompanionDirector : IDisposable
         _seatUpgradeElapsed = 0f;
 
         PlacementResult offer = _hulgiPlanner.Plan(_anchor, _hulgiProbe);
-        return offer.Found ? new SeatUpgrade(_actor.Pose, offer.Pose) : SeatUpgrade.NotSurveyed;
-    }
-
-    /// <summary>Whether the last upgrade actually happened, and how long to
-    /// wait before believing the sweep again.
-    ///
-    /// The sweep and the rebuild ask the world the same question a second
-    /// apart, and they can disagree - a chair claimed in between, a probe that
-    /// finds a spot the builder then rejects. Undetected, that disagreement is
-    /// a humanoid model torn down and rebuilt every thirty seconds forever.
-    /// Detected, it costs one rebuild, then one at a minute, then two, up to
-    /// eight, and stops being visible at all.</summary>
-    private void JudgeUpgrade()
-    {
-        if (_upgradeFrom == null)
+        if (!offer.Found)
         {
-            return;
+            return SeatUpgrade.NotSurveyed;
         }
 
-        CompanionPose from = _upgradeFrom.Value;
-        _upgradeFrom = null;
-
-        if (_actor.Pose > from)
-        {
-            _seatUpgradeWait = SeatUpgradeSeconds;
-            _log.LogInfo(
-                $"Hulgi moved from {DescribePose(from)} to {DescribePose(_actor.Pose)}.");
-            return;
-        }
-
-        _seatUpgradeWait = Math.Min(_seatUpgradeWait * 2f, SeatUpgradeCeilingSeconds);
-        _log.LogInfo(
-            $"A better seat for Hulgi was offered and did not take; he is still {DescribePose(_actor.Pose)}. " +
-            $"The next look is in {_seatUpgradeWait:0} s.");
-    }
-
-    private static string DescribePose(CompanionPose pose)
-    {
-        return pose switch
-        {
-            CompanionPose.SitOnSeat => "on a seat",
-            CompanionPose.SitByFire => "by a fire",
-            _ => "on the ground",
-        };
+        _sweptPlan = offer;
+        _sweptPlanValid = true;
+        return new SeatUpgrade(_actor.Pose, offer.Pose);
     }
 
     /// <summary>Poses him by hand for a look. Presentation only; see

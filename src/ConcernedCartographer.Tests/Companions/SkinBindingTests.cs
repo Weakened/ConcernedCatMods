@@ -16,7 +16,14 @@ public sealed class SkinBindingTests
         // array is the answer for both. Name-matching produced a complete,
         // plausible, wrong binding for one of them.
         Assert.Equal(SkinBindingMode.AdoptBodySkeleton, SkinBinding.Decide(53, 53));
-        Assert.Equal(SkinBindingMode.AdoptBodySkeleton, SkinBinding.Decide(1, 1));
+
+        // The rule's honest limit: equality is all it has. A mesh that happens
+        // to carry the body's bone count without being authored against the
+        // body's skeleton would be adopted too, and no count or name check can
+        // tell those apart. What catches that is the fit measurement in game,
+        // not this test - which is exactly how #305 was caught in the first
+        // place, by a complete, plausible, wrong binding.
+        Assert.Equal(SkinBindingMode.AdoptBodySkeleton, SkinBinding.Decide(7, 7));
     }
 
     [Fact]
