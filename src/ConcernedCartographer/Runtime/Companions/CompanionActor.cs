@@ -735,6 +735,7 @@ internal sealed class CompanionActor
             }
 
             RemovePhysics(piece);
+            int cloth = RemoveCloth(piece);
 
             // Whether the mesh is SKINNED decides how it attaches, and the
             // child's name is only a hint at that. A skinned mesh is drawn by
@@ -779,7 +780,9 @@ internal sealed class CompanionActor
 
             ApplyEquipOffset(prefab, piece.transform);
             Tint(piece, colour);
-            _log.LogInfo($"[appearance] {slot} {prefabName}: {DescribePiece(prefab, piece)}");
+            _log.LogInfo(
+                $"[appearance] {slot} {prefabName}: {DescribePiece(prefab, piece)}" +
+                (cloth > 0 ? $" cloth-stripped={cloth}" : string.Empty));
 
             GameObject attached = piece;
             piece = null;
@@ -928,22 +931,29 @@ internal sealed class CompanionActor
         return any ? Vector3.Distance(bounds.center, reference) : float.NaN;
     }
 
-    /// <summary>Re-binds a skinned customization mesh onto the body's skeleton,
-    /// bone by bone, matching on name.
+    /// <summary>Binds a skinned customization mesh to the body's skeleton the
+    /// way the game binds one.
     ///
-    /// Copying the body's bone array wholesale is what the game does, and it
-    /// works there because the array it copies is the live one. Here the piece
-    /// arrives carrying its own copy of the armature — instantiating a prefab's
-    /// child brings that child's whole subtree with it — and a mesh bound to an
-    /// armature nothing animates stays in its bind pose forever. On screen that
-    /// is a braid hanging at standing head height while the companion sits on
-    /// the ground beneath it.
+    /// <c>VisEquipment.AttachItem</c>'s attach_skin path is three lines long:
+    /// parent the instance beside the body model, then for every skinned
+    /// renderer under it assign <c>rootBone = m_bodyModel.rootBone</c> and
+    /// <c>bones = m_bodyModel.bones</c> — the body's array, verbatim, in the
+    /// body's own order. That is the whole contract a vanilla customization
+    /// mesh is authored against: its bindposes are indexed against the player
+    /// skeleton's array LAYOUT, so slot 17 means whatever the body's slot 17
+    /// means.
     ///
-    /// Matching by name rather than by index makes the rebind independent of
-    /// how either skeleton happens to be ordered, and lets a partial match be
-    /// detected rather than silently producing a mangled mesh. The piece's own
-    /// armature copy is then thrown away: nothing may keep animating it, and
-    /// nothing needs to.</summary>
+    /// This used to remap bone by bone on name, which preserves the PIECE's
+    /// ordering instead. Where the two orders agree that yields the identical
+    /// array and nothing is wrong — which is why the beard always landed.
+    /// Where they disagree, every vertex is weighted to the wrong joint and the
+    /// mesh is drawn somewhere else entirely: Long Braid came out 0.99 m away,
+    /// at the height an unanimated bind pose puts a head. Same bone count, same
+    /// names, a complete match, and the wrong answer (#305).
+    ///
+    /// Name matching survives only for the case the game never meets — a mesh
+    /// whose bindpose count is not the body's bone count, which cannot be handed
+    /// the body's array at all.</summary>
     private string BindToBody(GameObject piece)
     {
         if (_bodyModel == null)
@@ -951,79 +961,64 @@ internal sealed class CompanionActor
             return "(no body model)";
         }
 
-        var byName = new Dictionary<string, Transform>(StringComparer.Ordinal);
-        foreach (Transform bone in _bodyModel.bones)
+        Transform[] bodyBones = _bodyModel.bones;
+        if (bodyBones == null || bodyBones.Length == 0)
         {
-            if (bone != null && !byName.ContainsKey(bone.name))
-            {
-                byName[bone.name] = bone;
-            }
+            return "(body model has no bones)";
         }
 
-        int rebound = 0;
+        int adopted = 0;
+        int renamed = 0;
         int missed = 0;
+        string ordering = string.Empty;
         var strays = new List<Transform>();
 
         foreach (SkinnedMeshRenderer mesh in
             piece.GetComponentsInChildren<SkinnedMeshRenderer>(includeInactive: true))
         {
-            if (mesh == null || mesh.bones == null)
+            if (mesh == null)
             {
                 continue;
             }
 
-            Transform[] source = mesh.bones;
-            var mapped = new Transform[source.Length];
-            var candidates = new List<Transform>();
-            bool complete = true;
+            Transform[] original = mesh.bones ?? Array.Empty<Transform>();
+            int bindposes = mesh.sharedMesh == null ? -1 : mesh.sharedMesh.bindposes.Length;
 
-            for (int index = 0; index < source.Length; index++)
+            switch (SkinBinding.Decide(bindposes, bodyBones.Length))
             {
-                Transform bone = source[index];
-                if (bone != null && byName.TryGetValue(bone.name, out Transform? match))
-                {
-                    mapped[index] = match!;
-                    if (bone.IsChildOf(piece.transform))
+                case SkinBindingMode.AdoptBodySkeleton:
+                    // The one line the game runs, and the only one that is
+                    // right for a mesh authored against the player skeleton.
+                    if (ordering.Length == 0)
                     {
-                        candidates.Add(bone);
+                        ordering = DescribeBoneOrder(original, bodyBones);
                     }
-                }
-                else
-                {
-                    complete = false;
+
+                    mesh.rootBone = _bodyModel.rootBone;
+                    mesh.bones = bodyBones;
+
+                    // The precomputed local bounds came from the piece's own
+                    // armature; against ours they can cull the mesh from
+                    // perfectly ordinary angles.
+                    mesh.updateWhenOffscreen = true;
+                    CollectStrays(original, piece, strays);
+                    adopted++;
                     break;
-                }
+
+                case SkinBindingMode.MatchByName when RebindByName(mesh, bodyBones, piece, strays):
+                    renamed++;
+                    break;
+
+                default:
+                    missed++;
+                    break;
             }
-
-            if (!complete)
-            {
-                // This mesh is still bound to the armature it arrived with, so
-                // none of that armature may be destroyed on its behalf. The
-                // bones gathered so far are deliberately thrown away rather
-                // than kept: destroying them would leave a mesh pointing at
-                // half a skeleton, which looks like a different bug entirely.
-                missed++;
-                continue;
-            }
-
-            strays.AddRange(candidates);
-
-            Transform? root = mesh.rootBone != null && byName.TryGetValue(mesh.rootBone.name, out Transform? mappedRoot)
-                ? mappedRoot
-                : _bodyModel.rootBone;
-
-            mesh.bones = mapped;
-            mesh.rootBone = root;
-
-            // The precomputed local bounds came from the piece's own armature;
-            // against ours they can cull the mesh from perfectly ordinary
-            // angles.
-            mesh.updateWhenOffscreen = true;
-            rebound++;
         }
 
-        // The armature the piece brought with it is now unused. Left in place
-        // it is a second skeleton nothing drives, sitting inside the actor.
+        // The armature the piece arrived with is now referenced by nothing.
+        // Left in place it is a second skeleton inside the actor that no
+        // Animator drives, and FindBoneNamed would happily hand a later garment
+        // one of its joints.
         foreach (Transform stray in strays)
         {
             if (stray != null && stray.parent == piece.transform)
@@ -1032,7 +1027,111 @@ internal sealed class CompanionActor
             }
         }
 
-        return missed == 0 ? $"(rebound {rebound})" : $"(rebound {rebound}, {missed} unmatched)";
+        var text = new System.Text.StringBuilder("(");
+        text.Append("adopted ").Append(adopted);
+        if (renamed > 0)
+        {
+            text.Append(", name-matched ").Append(renamed);
+        }
+
+        if (missed > 0)
+        {
+            text.Append(", ").Append(missed).Append(" unbound");
+        }
+
+        if (ordering.Length > 0)
+        {
+            text.Append("; ").Append(ordering);
+        }
+
+        return text.Append(')').ToString();
+    }
+
+    /// <summary>Whether the piece's own bone array was in the body's order.
+    /// Purely diagnostic, and the line that settles #305 in the log rather than
+    /// by argument: a piece that reports "order differed at N" is one the old
+    /// name-matching rebind would have drawn in the wrong place.</summary>
+    private static string DescribeBoneOrder(Transform[] pieceBones, Transform[] bodyBones)
+    {
+        if (pieceBones == null || pieceBones.Length == 0)
+        {
+            return "piece carried no bone array";
+        }
+
+        if (pieceBones.Length != bodyBones.Length)
+        {
+            return $"piece bone array was {pieceBones.Length}, body's is {bodyBones.Length}";
+        }
+
+        for (int index = 0; index < pieceBones.Length; index++)
+        {
+            string mine = pieceBones[index] == null ? "<null>" : pieceBones[index].name;
+            string theirs = bodyBones[index] == null ? "<null>" : bodyBones[index].name;
+            if (!string.Equals(mine, theirs, StringComparison.Ordinal))
+            {
+                return $"bone order differed from the body's at {index} ({mine} vs {theirs})";
+            }
+        }
+
+        return "bone order already matched the body's";
+    }
+
+    /// <summary>The fallback for a mesh that cannot take the body's array
+    /// because it does not have the body's bindpose count: match what can be
+    /// matched by name, and refuse the mesh outright rather than half-bind it.
+    /// No vanilla customization item takes this path.</summary>
+    private bool RebindByName(
+        SkinnedMeshRenderer mesh, Transform[] bodyBones, GameObject piece, List<Transform> strays)
+    {
+        if (mesh.bones == null || mesh.bones.Length == 0)
+        {
+            return false;
+        }
+
+        var byName = new Dictionary<string, Transform>(StringComparer.Ordinal);
+        foreach (Transform bone in bodyBones)
+        {
+            if (bone != null && !byName.ContainsKey(bone.name))
+            {
+                byName[bone.name] = bone;
+            }
+        }
+
+        Transform[] source = mesh.bones;
+        var mapped = new Transform[source.Length];
+
+        for (int index = 0; index < source.Length; index++)
+        {
+            Transform bone = source[index];
+            if (bone == null || !byName.TryGetValue(bone.name, out Transform? match))
+            {
+                // Still bound to the armature it arrived with, so none of that
+                // armature may be destroyed on its behalf. A mesh pointing at
+                // half a skeleton looks like a different bug entirely.
+                return false;
+            }
+
+            mapped[index] = match!;
+        }
+
+        CollectStrays(source, piece, strays);
+        mesh.bones = mapped;
+        mesh.rootBone = mesh.rootBone != null && byName.TryGetValue(mesh.rootBone.name, out Transform? root)
+            ? root!
+            : _bodyModel!.rootBone;
+        mesh.updateWhenOffscreen = true;
+        return true;
+    }
+
+    private static void CollectStrays(Transform[] bones, GameObject piece, List<Transform> strays)
+    {
+        foreach (Transform bone in bones)
+        {
+            if (bone != null && bone.IsChildOf(piece.transform))
+            {
+                strays.Add(bone);
+            }
+        }
     }
 
     /// <summary>What the attached piece actually is: which child was taken,
@@ -1262,9 +1361,28 @@ internal sealed class CompanionActor
         }
     }
 
-    /// <summary>A bone by exact name anywhere under the actor.</summary>
+    /// <summary>A bone by exact name, the animated skeleton first.
+    ///
+    /// Searching the whole subtree was fine until something else got attached
+    /// into it. An armature that arrives with a customization piece has the
+    /// same joint names as the real one and is driven by nothing, so a plain
+    /// name search could hand a garment a dead LeftHand and leave a sleeve
+    /// standing still. The body model's own bone array is the skeleton the
+    /// Animator actually moves; the subtree walk stays only as the fallback for
+    /// a joint the body model does not list, such as an attachment point.</summary>
     private Transform? FindBoneNamed(string name)
     {
+        if (_bodyModel != null && _bodyModel.bones != null)
+        {
+            foreach (Transform bone in _bodyModel.bones)
+            {
+                if (bone != null && string.Equals(bone.name, name, StringComparison.Ordinal))
+                {
+                    return bone;
+                }
+            }
+        }
+
         if (_root == null)
         {
             return null;
@@ -1281,18 +1399,62 @@ internal sealed class CompanionActor
         return null;
     }
 
-    /// <summary>Cloth simulation needs colliders the game binds for it. A
-    /// static presentation object has none, so an unbound <c>Cloth</c> is
-    /// simulation nobody asked for on a figure that never moves.</summary>
-    private static void RemoveCloth(GameObject piece)
+    /// <summary>Strips cloth simulation off an attached piece.
+    ///
+    /// Cloth needs colliders and a bone map that the game binds for it out of a
+    /// live <c>VisEquipment</c>. A static presentation figure has neither, so
+    /// an unbound cloth component is simulation nobody asked for on somebody
+    /// who never moves - and on 1.0.12 it is worse than useless: MagicaCloth
+    /// builds itself when the object is enabled, against the transforms it was
+    /// serialized with. On a piece whose armature we have just swapped for the
+    /// body's, that is a mesh being driven by a skeleton that is no longer
+    /// there. Hair and beards get the same treatment as garments for exactly
+    /// that reason; a braid is one of the things the game simulates.
+    ///
+    /// Matched on type NAME rather than by referencing the type, because it
+    /// lives in a third-party dependency the game ships and a hard reference
+    /// would stop this build loading on any version that ships a different
+    /// one.</summary>
+    private static int RemoveCloth(GameObject piece)
     {
+        int removed = 0;
+
         foreach (Cloth cloth in piece.GetComponentsInChildren<Cloth>(includeInactive: true))
         {
             if (cloth != null)
             {
                 UnityEngine.Object.DestroyImmediate(cloth);
+                removed++;
             }
         }
+
+        foreach (Component component in
+            piece.GetComponentsInChildren<Component>(includeInactive: true))
+        {
+            if (component == null || component is Transform || component is Renderer)
+            {
+                continue;
+            }
+
+            string name = component.GetType().Name;
+            if (name.IndexOf("Cloth", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                continue;
+            }
+
+            try
+            {
+                UnityEngine.Object.DestroyImmediate(component);
+                removed++;
+            }
+            catch (Exception)
+            {
+                // Something else on the piece requires it. Leaving one
+                // component behind is better than leaving the piece in pieces.
+            }
+        }
+
+        return removed;
     }
 
     /// <summary>Finds the child the game would attach, matching its own search:
