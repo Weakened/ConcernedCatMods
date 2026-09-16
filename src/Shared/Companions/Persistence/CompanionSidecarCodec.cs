@@ -113,6 +113,12 @@ internal static class CompanionSidecarCodec
             ((int)record.State).ToString(CultureInfo.InvariantCulture),
             record.Revision.ToString(CultureInfo.InvariantCulture),
             record.PresentationRetired ? "1" : "0",
+
+            // Added after the first five fields, where an older build keeps
+            // unknown trailing fields and writes them back verbatim - so an
+            // older build carries it, and a file from before it reads as
+            // "not announced".
+            record.JoinAnnounced ? "1" : "0",
         };
 
         foreach (string extra in record.UnknownFields)
@@ -387,13 +393,25 @@ internal static class CompanionSidecarCodec
 
         bool retired = string.Equals(fields[4], "1", StringComparison.Ordinal);
 
+        // The join flag is read only when the field is exactly 0 or 1. Anything
+        // else in that position is not ours to interpret, and stays an unknown
+        // field carried verbatim, as it always was.
+        int firstUnknown = QuestFieldCount;
+        bool joinAnnounced = false;
+        if (fields.Length > QuestFieldCount &&
+            (fields[QuestFieldCount] == "0" || fields[QuestFieldCount] == "1"))
+        {
+            joinAnnounced = fields[QuestFieldCount] == "1";
+            firstUnknown = QuestFieldCount + 1;
+        }
+
         var extras = new List<string>();
-        for (int index = QuestFieldCount; index < fields.Length; index++)
+        for (int index = firstUnknown; index < fields.Length; index++)
         {
             extras.Add(fields[index]);
         }
 
-        record = CompanionQuestRecord.Restore(questId, state, revision, retired, extras);
+        record = CompanionQuestRecord.Restore(questId, state, revision, retired, extras, joinAnnounced);
         return QuestRowOutcome.Parsed;
     }
 }

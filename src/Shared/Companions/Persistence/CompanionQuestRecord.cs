@@ -39,6 +39,12 @@ internal sealed class CompanionQuestRecord
     /// this quest.</summary>
     public bool PresentationRetired { get; private set; }
 
+    /// <summary>True once the player has been told this companion joined their
+    /// crew. Told once per character per world, when the companion first
+    /// appears after recruitment - and told again after a reset, because a
+    /// reset drops the whole record.</summary>
+    public bool JoinAnnounced { get; private set; }
+
     public IReadOnlyList<string> UnknownFields => _unknownFields;
 
     /// <summary>Applies a transition through <see cref="QuestStateMachine"/>.
@@ -70,16 +76,31 @@ internal sealed class CompanionQuestRecord
         return true;
     }
 
+    /// <summary>Marks the joined-your-crew notice as given. Idempotent; returns
+    /// true only on the call that actually changed it.</summary>
+    public bool MarkJoinAnnounced()
+    {
+        if (JoinAnnounced)
+        {
+            return false;
+        }
+
+        JoinAnnounced = true;
+        Revision++;
+        return true;
+    }
+
     /// <summary>Restores a record read from disk without running it through the
     /// state machine. Only the codec calls this.</summary>
     internal static CompanionQuestRecord Restore(
         QuestId questId, QuestState state, int revision, bool presentationRetired,
-        IEnumerable<string>? unknownFields)
+        IEnumerable<string>? unknownFields, bool joinAnnounced = false)
     {
         var record = new CompanionQuestRecord(questId, state)
         {
             Revision = revision < 0 ? 0 : revision,
             PresentationRetired = presentationRetired,
+            JoinAnnounced = joinAnnounced,
         };
 
         if (unknownFields != null)

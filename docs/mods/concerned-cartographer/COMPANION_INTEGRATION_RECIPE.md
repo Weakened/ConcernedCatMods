@@ -144,6 +144,28 @@ to be *inside* the extracted subtree, **refuse the candidate** rather than
 cleaning it up. That is what keeps "a finished actor has never contained one of
 those" an auditable property rather than an intention.
 
+### Tell the player when a companion joins the crew
+
+Owner rule, for every crew member: the first time the companion actually
+appears after joining, show **"&lt;Name&gt; joined your crew"** as a centre
+message. Once per character per world - and again after `cc_companion reset`,
+because a reset drops the quest record the flag lives on.
+
+The shared layer keeps the flag; your product owns the words. Right after your
+actor is successfully built:
+
+```csharp
+if (progress.ShouldAnnounceJoin && progress.AnnounceJoin())
+{
+    // AnnounceJoin returns true only once the flag is on disk, so the notice
+    // is never repeated after a crash. Your own localized string, your name.
+    ShowNotice(Strings.Get("companion.<name>.joinedCrew"), MessageHud.MessageType.Center);
+}
+```
+
+A read-only sidecar never announces: a notice that cannot be remembered would
+be repeated every session.
+
 ---
 
 ## 5. Gate only what your product added

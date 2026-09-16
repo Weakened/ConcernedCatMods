@@ -10,6 +10,13 @@ move around his camp.
 
 Added
 
+- **"Hulgi joined your crew."** The first time he appears after you meet him,
+  you are told - once per character per world.
+- **`cc_companion reset [quest|bed|day|all]`** to play the introduction again:
+  `quest` brings the Broken Compass back and restarts his introduction, `bed`
+  forgets your bed spawn point in this world (the bed stays; use it to claim it
+  again), `day` returns the world to the morning of day 1, and `all` does all
+  three. Your map tools stay unlocked through every one of them.
 - **He talks like an NPC, not like a notification.** His lines appear over his
   head, the same bubble the trader uses, instead of across the middle of your
   screen. Nothing networked: the bubble is drawn locally on your own client, no

@@ -99,6 +99,33 @@ public sealed class CompanionLifecycleTests : IDisposable
     }
 
     [Fact]
+    public void TheCrewIsToldOnceWhenTheCompanionJoinsAndAgainAfterAReset()
+    {
+        CompanionScope scope = Scope();
+        CompanionProgress progress = Open(scope);
+        Assert.False(progress.ShouldAnnounceJoin);
+        Assert.False(progress.AnnounceJoin());
+
+        progress.Advance(QuestTransition.Collect);
+        progress.Advance(QuestTransition.Welcome);
+        Assert.True(progress.ShouldAnnounceJoin);
+
+        Assert.True(progress.AnnounceJoin());
+        Assert.False(progress.ShouldAnnounceJoin);
+        Assert.False(progress.AnnounceJoin());
+
+        // Remembered on disk, so a relog does not repeat it.
+        CompanionProgress relogged = Open(scope);
+        Assert.False(relogged.ShouldAnnounceJoin);
+
+        // A reset drops the record, so meeting him again is news again.
+        Assert.True(relogged.ResetQuest());
+        relogged.Advance(QuestTransition.Collect);
+        relogged.Advance(QuestTransition.Welcome);
+        Assert.True(relogged.ShouldAnnounceJoin);
+    }
+
+    [Fact]
     public void ResettingAnUnstartedIntroductionChangesNothing()
     {
         CompanionScope scope = Scope();

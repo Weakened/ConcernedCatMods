@@ -102,6 +102,29 @@ internal sealed class CompanionProgress
 
     public bool CanReplayStory => QuestStateMachine.CanReplayStory(QuestState);
 
+    /// <summary>True when the companion has joined but the player has not yet
+    /// been told. Every product with a companion shows its own "&lt;name&gt;
+    /// joined your crew" the first time he appears, and asks this first.
+    /// </summary>
+    public bool ShouldAnnounceJoin =>
+        HasCompanion &&
+        !(_sidecar.TryGetQuest(_questId, out CompanionQuestRecord record) && record.JoinAnnounced);
+
+    /// <summary>Records the joined-your-crew notice and saves it. Returns true
+    /// only once it is on disk - show the notice only then, the same ordering
+    /// every other consequence here follows: told once, even across a
+    /// crash.</summary>
+    public bool AnnounceJoin()
+    {
+        if (!ShouldAnnounceJoin || !_sidecar.MarkJoinAnnounced(_questId))
+        {
+            return false;
+        }
+
+        Save();
+        return !_sidecar.IsDirty;
+    }
+
     /// <summary>True when there is unsaved progress. Should be false whenever
     /// the player is about to be shown a consequence of that progress.</summary>
     public bool HasUnsavedChanges => _sidecar.IsDirty;

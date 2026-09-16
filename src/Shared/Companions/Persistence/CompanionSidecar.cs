@@ -195,6 +195,22 @@ internal sealed class CompanionSidecar
         return true;
     }
 
+    /// <summary>Records that the joined-your-crew notice was given for
+    /// <paramref name="questId"/>. Only for a quest that exists, and never on a
+    /// read-only sidecar: a notice that cannot be remembered would be repeated
+    /// every session.</summary>
+    public bool MarkJoinAnnounced(QuestId questId)
+    {
+        if (IsReadOnly || !_quests.TryGetValue(questId.Value, out CompanionQuestRecord? record) ||
+            !record!.MarkJoinAnnounced())
+        {
+            return false;
+        }
+
+        IsDirty = true;
+        return true;
+    }
+
     /// <summary>True when any quest in this scope has been finished. This is
     /// the evidence the unlock policy reads.</summary>
     public bool HasAnyCompletedQuest()

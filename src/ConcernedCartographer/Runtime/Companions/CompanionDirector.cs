@@ -642,6 +642,16 @@ internal sealed class CompanionDirector : IDisposable
         _actor.SetVisible(_settings.CompanionVisible.Value);
         _visibilityApplied = _settings.CompanionVisible.Value;
         _log.LogInfo($"Hulgi settled near your {DescribeAnchor(_anchor.Kind)}: {_actor.Report}.");
+
+        // The first time he actually appears after joining, the player is told
+        // - once, remembered on disk before it is shown, and again only after a
+        // reset. The owner's rule for every crew member from here on; the
+        // shared layer keeps the flag, each product says its own name.
+        if (_progress != null && _progress.ShouldAnnounceJoin && _progress.AnnounceJoin())
+        {
+            ShowNotice(AtlasStrings.Get("companion.hulgi.joinedCrew"), MessageHud.MessageType.Center);
+            _log.LogInfo("Told the player that Hulgi joined their crew.");
+        }
     }
 
     /// <summary>Where the actor actually stands, or null when there is none.
@@ -1579,7 +1589,15 @@ internal sealed class CompanionDirector : IDisposable
         _promptVisible = visible;
         if (visible)
         {
-            ShowNotice(AtlasStrings.Get("companion.compass.prompt"), MessageHud.MessageType.TopLeft);
+            // The key is the player's own binding, resolved by the game - not a
+            // hardcoded [E], which is wrong for anybody who remapped Use or is on
+            // a controller.
+            // AtlasStrings.Format, so a translation with a broken placeholder
+            // falls back instead of throwing out of the presence pass.
+            ShowNotice(
+                AtlasStrings.Format(
+                    "companion.compass.prompt", Localization.instance.Localize("$KEY_Use")),
+                MessageHud.MessageType.TopLeft);
         }
     }
 

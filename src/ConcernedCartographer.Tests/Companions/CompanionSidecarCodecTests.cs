@@ -41,6 +41,55 @@ public class CompanionSidecarCodecTests
     }
 
     [Fact]
+    public void TheJoinNoticeFlagRoundTripsAndOlderRowsReadAsNotAnnounced()
+    {
+        var original = new CompanionSidecar(Scope());
+        original.Apply(Quest, QuestTransition.Welcome);
+        Assert.True(original.MarkJoinAnnounced(Quest));
+
+        List<string> lines = Serialize(original);
+        CompanionSidecarCodec.ParseResult parsed = CompanionSidecarCodec.Parse(lines, Scope());
+        Assert.True(parsed.Sidecar.TryGetQuest(Quest, out CompanionQuestRecord announced));
+        Assert.True(announced.JoinAnnounced);
+        Assert.Empty(announced.UnknownFields);
+
+        // A row written before the flag existed ends at the retired field.
+        // It must read as "not announced", with nothing invented as unknown.
+        string questRow = lines.Single(line => line.StartsWith("q\t", StringComparison.Ordinal));
+        string olderRow = questRow.Substring(0, questRow.LastIndexOf('\t'));
+        List<string> older = lines.Select(line => line == questRow ? olderRow : line).ToList();
+        CompanionSidecarCodec.ParseResult parsedOlder = CompanionSidecarCodec.Parse(older, Scope());
+        Assert.Equal(SidecarLoadOutcome.Loaded, parsedOlder.Outcome);
+        Assert.True(parsedOlder.Sidecar.TryGetQuest(Quest, out CompanionQuestRecord plain));
+        Assert.False(plain.JoinAnnounced);
+        Assert.Empty(plain.UnknownFields);
+    }
+
+    [Fact]
+    public void AFieldThatIsNotAJoinFlagIsStillCarriedVerbatim()
+    {
+        // Something other than 0 or 1 where the flag would sit belongs to some
+        // other build. It is not read as the flag, and it is written back
+        // exactly as found - the promise the codec has always kept.
+        var original = new CompanionSidecar(Scope());
+        original.Apply(Quest, QuestTransition.Welcome);
+        List<string> lines = Serialize(original);
+        string questRow = lines.Single(line => line.StartsWith("q\t", StringComparison.Ordinal));
+        string olderRow = questRow.Substring(0, questRow.LastIndexOf('\t'));
+        string foreignRow = olderRow + "\tsomething-newer";
+
+        CompanionSidecarCodec.ParseResult parsed = CompanionSidecarCodec.Parse(
+            lines.Select(line => line == questRow ? foreignRow : line).ToList(), Scope());
+
+        Assert.True(parsed.Sidecar.TryGetQuest(Quest, out CompanionQuestRecord record));
+        Assert.False(record.JoinAnnounced);
+        Assert.Equal(new[] { "something-newer" }, record.UnknownFields);
+        Assert.Contains(
+            Serialize(parsed.Sidecar),
+            line => line.StartsWith("q\t", StringComparison.Ordinal) && line.EndsWith("\tsomething-newer", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void MissingInputIsMissingRatherThanCorrupt()
     {
         Assert.Equal(SidecarLoadOutcome.Missing, CompanionSidecarCodec.Parse(null, Scope()).Outcome);
