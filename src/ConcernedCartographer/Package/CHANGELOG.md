@@ -30,6 +30,13 @@ Fixed
   occupancy test only sees players — and he gives one up the moment it is
   destroyed or somebody sits in it. Walking out of range of your own camp does
   not move him.
+- **He was not dressed.** The extracted model wears whatever the game's own
+  equipment system puts on it, and that system cannot run for a local-only
+  figure - so he stood in his underclothes. He now wears a vanilla rag tunic and
+  leather pants, put on the way the game puts armour on, with the body's own
+  chest and leg textures. It is clothing and nothing else: no item exists, none
+  is taken from anywhere, and no armour value is read. `Companions/ChestGarment`
+  and `LegsGarment` name something else.
 - **His appearance was the presets the design asked for, not the ones you
   chose.** Hair and beard are now looked up by the exact label on the
   character-creation screen — Long Braid and Handlebar — against this build's
@@ -46,6 +53,8 @@ Known, on this build
 - **Hulgi has no hair.** Long Braid renders about a metre from his head on
   1.0.12, so it is removed rather than left floating; his beard is correct. The
   log says so when it happens. Tracked as issue #305.
+- **The tunic and trousers have not been seen on him.** They are implemented
+  and unit-tested, and the in-game pass for them was stopped rather than run.
 - **Seating on furniture has not been seen working.** The mechanism is in and
   tested, but no chair happened to fall where he settles during testing, and a
   seat built after he has sat down is not noticed until something else moves
