@@ -91,6 +91,32 @@ internal readonly struct CustomizationPalette
         observed: false);
 }
 
+/// <summary>Whether an attached hair or beard actually ended up on the head.
+///
+/// Attaching a customization preset can succeed and still be wrong: Valheim's
+/// hair and beards are skinned meshes, drawn by their bones rather than by
+/// their transform, so one bound to the wrong skeleton renders wherever that
+/// skeleton happens to be. Observed on 1.0.12: the braid hung at standing head
+/// height while the companion sat on the ground a metre below it.
+///
+/// So the attachment is checked rather than assumed. A preset that cannot be
+/// shown in the right place is taken off again — a companion with no hair is
+/// incomplete, and a companion with a braid floating beside him is broken.</summary>
+internal static class AppearanceFit
+{
+    /// <summary>How far a piece may sit from the head before it is not on the
+    /// head. Generous enough for a tall hairstyle or a long beard, tight enough
+    /// that a whole body-length of error cannot pass.</summary>
+    public const float ToleranceMetres = 0.45f;
+
+    /// <summary>True when a piece centred <paramref name="distanceFromHead"/>
+    /// away is close enough to be wearing.</summary>
+    public static bool Fits(float distanceFromHead)
+    {
+        return !float.IsNaN(distanceFromHead) && distanceFromHead <= ToleranceMetres;
+    }
+}
+
 /// <summary>Turns customization-screen slider positions into the colours the
 /// game would store for them.
 ///

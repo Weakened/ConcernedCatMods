@@ -474,6 +474,10 @@ internal sealed class CompanionDirector : IDisposable
 
         ApplyVisibilityPreference();
 
+        // A frame has passed since anything was built, so a skinned preset has
+        // been posed at least once and can now be asked where it actually is.
+        _actor.VerifyAppearance();
+
         var inputs = new ResidencyInputs(
             _progress.HasCompanion,
             _settings.CompanionVisible.Value,
@@ -535,6 +539,24 @@ internal sealed class CompanionDirector : IDisposable
         _actor.SetVisible(_settings.CompanionVisible.Value);
         _visibilityApplied = _settings.CompanionVisible.Value;
         _log.LogInfo($"Hulgi settled near your {DescribeAnchor(_anchor.Kind)}: {_actor.Report}.");
+    }
+
+    /// <summary>Where the actor actually stands, or null when there is none.
+    /// Reported by <c>cc_companion where</c> so "he is somewhere near your
+    /// home point" can be checked rather than believed.</summary>
+    public string? DescribeActorPosition()
+    {
+        if (!_actor.Exists)
+        {
+            return null;
+        }
+
+        Vector3 at = _actor.Position;
+        Player? player = Player.m_localPlayer;
+        string distance = player == null
+            ? ""
+            : $", {Vector3.Distance(player.transform.position, at):0.0} m from you";
+        return $"({at.x:0.0}, {at.y:0.0}, {at.z:0.0}){distance}";
     }
 
     /// <summary>Where he is sitting, in one line.</summary>

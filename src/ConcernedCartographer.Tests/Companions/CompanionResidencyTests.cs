@@ -473,6 +473,36 @@ public sealed class CompanionResidencyTests
         Assert.Equal(0.50f, AppearanceColour.HulgiSkin(palette)!.Value.R, 4);
     }
 
+    // ------------------------------------------------------------------
+    // Appearance fit
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Fit_APresetDrawnAwayFromTheHeadIsNotWorn()
+    {
+        // Observed on 1.0.12: hair reported "attached" and rendered 0.99 m
+        // from the head, hanging at standing height over a seated companion.
+        // Attaching is not the same as wearing, and only one of them is what
+        // the owner asked for.
+        Assert.False(AppearanceFit.Fits(0.99f));
+        Assert.False(AppearanceFit.Fits(AppearanceFit.ToleranceMetres + 0.01f));
+    }
+
+    [Fact]
+    public void Fit_ATallHairstyleOrLongBeardStillCounts()
+    {
+        Assert.True(AppearanceFit.Fits(0f));
+        Assert.True(AppearanceFit.Fits(0.3f));
+        Assert.True(AppearanceFit.Fits(AppearanceFit.ToleranceMetres));
+    }
+
+    [Fact]
+    public void Fit_APieceThatCannotBeMeasuredIsNotAssumedToBeRight()
+    {
+        // No renderer to measure means no evidence it landed anywhere.
+        Assert.False(AppearanceFit.Fits(float.NaN));
+    }
+
     private static string[] Names(IReadOnlyList<AppearanceOption> options)
     {
         var names = new string[options.Count];

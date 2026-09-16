@@ -3122,11 +3122,13 @@ internal sealed class CartographerRuntime : IDisposable
             case "where":
             {
                 CompanionStatus status = _companions.Status;
+                string? where = _companions.DescribeActorPosition();
                 return $"Home point: {status.AnchorKind}" +
                     (status.StartLocationName != null
                         ? $" (world start location \"{status.StartLocationName}\")"
                         : "") +
-                    $". Collectible present: {status.CompassPresent}.";
+                    $". Collectible present: {status.CompassPresent}." +
+                    (where == null ? " Hulgi is not placed." : " Hulgi is at " + where + ".");
             }
 
             case "appearance":

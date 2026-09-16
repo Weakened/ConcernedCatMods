@@ -47,6 +47,18 @@ internal sealed class ActorReport
     /// possible with an observed palette; never guessed.</summary>
     public bool SkinColourApplied { get; set; }
 
+    /// <summary>True when a preset was attached and then removed because it was
+    /// not being drawn on the head. Reported, because "no hair" and "no hair
+    /// because this build draws it in the wrong place" are different answers
+    /// and only one of them is a defect.</summary>
+    public bool AppearanceRejected { get; set; }
+
+    /// <summary>Where hair and beard were attached, and how that point was
+    /// found. Reported because "attached" on its own turned out to be
+    /// compatible with a braid hovering over a bald head: the attachment
+    /// succeeded and the point was wrong.</summary>
+    public string Joint { get; set; } = "<none>";
+
     /// <summary>The animator state actually used for the pose, or null when
     /// none of the candidates existed and the model kept its default.</summary>
     public string? PoseState { get; set; }
@@ -56,7 +68,9 @@ internal sealed class ActorReport
     public override string ToString()
     {
         return $"source={SourcePrefab} skeleton={UsedSkeleton} hair={Hair} ({(HairAttached ? "attached" : "not attached")}) " +
-            $"beard={Beard} ({(BeardAttached ? "attached" : "not attached")}) " +
+            $"beard={Beard} ({(BeardAttached ? "attached" : "not attached")})" +
+            (AppearanceRejected ? " REJECTED-BY-FIT-CHECK " : " ") +
+            $"joint={Joint} " +
             $"colour={(HairColourApplied ? HairColour.ToString() : "not applied")}" +
             $"{(HairColourObserved ? " (palette)" : " (fallback)")} skin={SkinColourApplied} " +
             $"pose={Pose} state={PoseState ?? "<default>"}";
@@ -114,7 +128,11 @@ internal sealed class CompanionActor
     /// <c>SetBool(attachAnimation, true)</c>.</summary>
     private const string DefaultSeatParameter = "attach_chair";
 
-    private static readonly string[] HeadBoneFragments = { "head", "neck" };
+    /// <summary>Bone names to look for, best first. Exact matches are tried
+    /// before fragments, because a rig that contains both "Head" and
+    /// "HeadTarget" should give up the one the game animates, and a neck is a
+    /// last resort rather than an equal alternative.</summary>
+    private static readonly string[] HeadBoneNames = { "head", "neck" };
 
     /// <summary>The shader property Valheim tints skin, hair and beards with.
     /// Cached as an id the way the game caches it.</summary>
@@ -138,6 +156,18 @@ internal sealed class CompanionActor
     /// <summary>The extracted model's body renderer, for the skin tint and for
     /// re-binding a skinned customization mesh to the right bones.</summary>
     private SkinnedMeshRenderer? _bodyModel;
+
+    /// <summary>How the last customization piece was attached. Reported,
+    /// because the two modes fail in different ways and the report used to say
+    /// only that something was attached.</summary>
+    private string _attachMode = "none";
+
+    /// <summary>Pieces attached this build, by slot, so the fit check can take
+    /// one off again.</summary>
+    private readonly Dictionary<string, GameObject> _attachedPieces =
+        new Dictionary<string, GameObject>(StringComparer.Ordinal);
+
+    private bool _verified;
 
     /// <summary>The seat he was placed on, if any.</summary>
     private SeatOffer _seat;
@@ -185,6 +215,8 @@ internal sealed class CompanionActor
     {
         Release();
         _seat = seat;
+        _verified = false;
+        _attachedPieces.Clear();
 
         foreach (string candidate in sourceCandidates)
         {
@@ -581,6 +613,11 @@ internal sealed class CompanionActor
             Report.HairColourObserved = palette.Observed;
 
             Transform? joint = _helmetJoint ?? FindHeadBone(_root.transform);
+            Report.Joint = joint == null
+                ? "<none>"
+                : PathOf(joint) + (_helmetJoint != null ? " (VisEquipment.m_helmet)" : " (name search)") +
+                  DescribeScale(joint);
+
             if (joint == null)
             {
                 _log.LogInfo(
@@ -594,6 +631,7 @@ internal sealed class CompanionActor
                 Report.BeardAttached = TryAttachCustomization(
                     Report.Beard.PrefabName, joint, "beard", hairColour);
                 Report.HairColourApplied = Report.HairAttached || Report.BeardAttached;
+                Report.Joint += " via " + _attachMode;
             }
 
             Report.SkinColourApplied = TryApplyBodyColours(palette, hairColour);
@@ -640,7 +678,7 @@ internal sealed class CompanionActor
             // The game instantiates the item's "attach" child, never the item
             // prefab itself: the prefab root is an ItemDrop with a ZNetView on
             // it, and the visible mesh is one level down.
-            GameObject? attach = FindAttachChild(prefab, out bool skinned);
+            GameObject? attach = FindAttachChild(prefab, out bool namedForSkin);
             if (attach == null)
             {
                 _log.LogInfo(
@@ -660,37 +698,55 @@ internal sealed class CompanionActor
 
             RemovePhysics(piece);
 
+            // Whether the mesh is SKINNED decides how it attaches, and the
+            // child's name is only a hint at that. A skinned mesh is drawn by
+            // its bones, not by its transform: its vertices are authored in
+            // the character's own space, so hanging one off a head joint draws
+            // it wherever the body's head would be if the body were standing
+            // at the origin. That is what a braid floating a metre over a
+            // seated, bald companion looked like in game - the attachment
+            // reported success every time, and the mesh was never being drawn
+            // where it was attached.
+            bool skinned = namedForSkin ||
+                piece.GetComponentInChildren<SkinnedMeshRenderer>(includeInactive: true) != null;
+
             if (skinned && _bodyModel != null)
             {
-                // A skinned customization mesh deforms with the body, so it is
-                // bound to the body's bones and parented beside it - the game's
-                // own attach_skin path.
-                piece.transform.SetParent(_bodyModel.transform.parent, worldPositionStays: false);
+                // Bound to the body's own skeleton and parented beside it -
+                // the game's attach_skin path, which is the only thing that
+                // makes a skinned customization mesh follow an animation.
+                piece.transform.SetParent(_bodyModel.transform.parent);
                 piece.transform.localPosition = Vector3.zero;
                 piece.transform.localRotation = Quaternion.identity;
-                foreach (SkinnedMeshRenderer mesh in
-                    piece.GetComponentsInChildren<SkinnedMeshRenderer>(includeInactive: true))
-                {
-                    if (mesh != null)
-                    {
-                        mesh.rootBone = _bodyModel.rootBone;
-                        mesh.bones = _bodyModel.bones;
-                    }
-                }
+                _attachMode = "skinned " + BindToBody(piece);
             }
             else
             {
-                piece.transform.SetParent(joint, worldPositionStays: false);
+                // SetParent's default - worldPositionStays: true - is load
+                // bearing, and not for the reason its name suggests. Position
+                // and rotation are overwritten on the next two lines either
+                // way; what it actually preserves here is world SCALE, by
+                // recomputing localScale against the joint's own. Valheim's
+                // player rig does not hang its attachment points at unit
+                // scale, so parenting with `false` leaves the piece at the
+                // joint's scale instead of its own - and a hair mesh whose
+                // vertices sit away from its pivot then draws that offset
+                // multiplied, which is a braid hovering a metre above a bald
+                // head. Observed exactly that way in game.
+                piece.transform.SetParent(joint);
                 piece.transform.localPosition = Vector3.zero;
                 piece.transform.localRotation = Quaternion.identity;
+                _attachMode = skinned ? "joint (no body model to bind to)" : "joint";
             }
 
             ApplyEquipOffset(prefab, piece.transform);
             Tint(piece, colour);
+            _log.LogInfo($"[appearance] {slot} {prefabName}: {DescribePiece(prefab, piece)}");
 
             GameObject attached = piece;
             piece = null;
             attached.SetActive(true);
+            _attachedPieces[slot] = attached;
             return true;
         }
         catch (Exception exception)
@@ -708,6 +764,254 @@ internal sealed class CompanionActor
 
             UnityEngine.Object.DestroyImmediate(holder);
         }
+    }
+
+    /// <summary>Checks that what was attached is actually being drawn on the
+    /// head, and takes it off if it is not.
+    ///
+    /// Run a moment after construction rather than during it: a skinned mesh is
+    /// drawn by its bones, and on the frame it is created those bones have not
+    /// been posed yet, so every piece looks correct no matter how it is bound.
+    /// The caller ticks this once the animator has had a frame.
+    ///
+    /// Removing is the point. An attachment that reports success while the
+    /// mesh renders a metre away is the failure this exists to catch, and
+    /// leaving it on screen would make a bug out of a gap.</summary>
+    public void VerifyAppearance()
+    {
+        if (_verified || _root == null || Report == null || _attachedPieces.Count == 0)
+        {
+            return;
+        }
+
+        _verified = true;
+        Transform? head = _helmetJoint ?? FindHeadBone(_root.transform);
+        if (head == null)
+        {
+            return;
+        }
+
+        foreach (KeyValuePair<string, GameObject> piece in _attachedPieces)
+        {
+            if (piece.Value == null)
+            {
+                continue;
+            }
+
+            float distance = DistanceFromHead(piece.Value, head);
+            if (AppearanceFit.Fits(distance))
+            {
+                continue;
+            }
+
+            _log.LogInfo(
+                $"The companion's {piece.Key} preset did not land on his head on this build " +
+                $"({distance:0.00} m away), so it has been removed rather than left floating. He keeps " +
+                "the model's own look; nothing else is affected.");
+
+            if (string.Equals(piece.Key, "hair", StringComparison.Ordinal))
+            {
+                Report.HairAttached = false;
+            }
+            else
+            {
+                Report.BeardAttached = false;
+            }
+
+            Report.AppearanceRejected = true;
+            UnityEngine.Object.Destroy(piece.Value);
+        }
+
+        Report.HairColourApplied = Report.HairAttached || Report.BeardAttached;
+    }
+
+    /// <summary>How far a piece is drawn from the head, using rendered bounds
+    /// rather than transforms: for a skinned mesh the transform is exactly the
+    /// thing that does not tell you where it ended up.</summary>
+    private static float DistanceFromHead(GameObject piece, Transform head)
+    {
+        bool any = false;
+        Bounds bounds = default;
+        foreach (Renderer renderer in piece.GetComponentsInChildren<Renderer>(includeInactive: false))
+        {
+            if (renderer == null)
+            {
+                continue;
+            }
+
+            if (!any)
+            {
+                bounds = renderer.bounds;
+                any = true;
+            }
+            else
+            {
+                bounds.Encapsulate(renderer.bounds);
+            }
+        }
+
+        return any ? Vector3.Distance(bounds.center, head.position) : float.NaN;
+    }
+
+    /// <summary>Re-binds a skinned customization mesh onto the body's skeleton,
+    /// bone by bone, matching on name.
+    ///
+    /// Copying the body's bone array wholesale is what the game does, and it
+    /// works there because the array it copies is the live one. Here the piece
+    /// arrives carrying its own copy of the armature — instantiating a prefab's
+    /// child brings that child's whole subtree with it — and a mesh bound to an
+    /// armature nothing animates stays in its bind pose forever. On screen that
+    /// is a braid hanging at standing head height while the companion sits on
+    /// the ground beneath it.
+    ///
+    /// Matching by name rather than by index makes the rebind independent of
+    /// how either skeleton happens to be ordered, and lets a partial match be
+    /// detected rather than silently producing a mangled mesh. The piece's own
+    /// armature copy is then thrown away: nothing may keep animating it, and
+    /// nothing needs to.</summary>
+    private string BindToBody(GameObject piece)
+    {
+        if (_bodyModel == null)
+        {
+            return "(no body model)";
+        }
+
+        var byName = new Dictionary<string, Transform>(StringComparer.Ordinal);
+        foreach (Transform bone in _bodyModel.bones)
+        {
+            if (bone != null && !byName.ContainsKey(bone.name))
+            {
+                byName[bone.name] = bone;
+            }
+        }
+
+        int rebound = 0;
+        int missed = 0;
+        var strays = new List<Transform>();
+
+        foreach (SkinnedMeshRenderer mesh in
+            piece.GetComponentsInChildren<SkinnedMeshRenderer>(includeInactive: true))
+        {
+            if (mesh == null || mesh.bones == null)
+            {
+                continue;
+            }
+
+            Transform[] source = mesh.bones;
+            var mapped = new Transform[source.Length];
+            bool complete = true;
+
+            for (int index = 0; index < source.Length; index++)
+            {
+                Transform bone = source[index];
+                if (bone != null && byName.TryGetValue(bone.name, out Transform? match))
+                {
+                    mapped[index] = match!;
+                    if (!bone.IsChildOf(piece.transform))
+                    {
+                        continue;
+                    }
+
+                    strays.Add(bone);
+                }
+                else
+                {
+                    complete = false;
+                    break;
+                }
+            }
+
+            if (!complete)
+            {
+                missed++;
+                continue;
+            }
+
+            Transform? root = mesh.rootBone != null && byName.TryGetValue(mesh.rootBone.name, out Transform? mappedRoot)
+                ? mappedRoot
+                : _bodyModel.rootBone;
+
+            mesh.bones = mapped;
+            mesh.rootBone = root;
+
+            // The precomputed local bounds came from the piece's own armature;
+            // against ours they can cull the mesh from perfectly ordinary
+            // angles.
+            mesh.updateWhenOffscreen = true;
+            rebound++;
+        }
+
+        // The armature the piece brought with it is now unused. Left in place
+        // it is a second skeleton nothing drives, sitting inside the actor.
+        foreach (Transform stray in strays)
+        {
+            if (stray != null && stray.parent == piece.transform)
+            {
+                UnityEngine.Object.Destroy(stray.gameObject);
+            }
+        }
+
+        return missed == 0 ? $"(rebound {rebound})" : $"(rebound {rebound}, {missed} unmatched)";
+    }
+
+    /// <summary>What the attached piece actually is: which child was taken,
+    /// what draws it, and what it is bound to. Diagnostic; one line per
+    /// attachment, and the only way to tell a mesh that is in the wrong place
+    /// from a mesh that is drawn somewhere other than where it was put.</summary>
+    private string DescribePiece(GameObject prefab, GameObject piece)
+    {
+        var text = new System.Text.StringBuilder();
+        Transform offset = prefab.transform.Find("equipoffset");
+        if (_bodyModel != null)
+        {
+            text.Append("body bones=").Append(_bodyModel.bones == null ? 0 : _bodyModel.bones.Length)
+                .Append(" root=").Append(_bodyModel.rootBone == null ? "<null>" : _bodyModel.rootBone.name)
+                .Append(" bodyBindposes=").Append(
+                    _bodyModel.sharedMesh == null ? -1 : _bodyModel.sharedMesh.bindposes.Length)
+                .Append(" bodyWorld=").Append(_bodyModel.transform.position.ToString("0.###"))
+                .Append(" bodyBounds=").Append(_bodyModel.bounds.center.ToString("0.###"))
+                .Append(' ');
+        }
+
+        text.Append("equipoffset=").Append(
+            offset == null ? "<none>" : offset.localPosition.ToString("0.###"));
+        text.Append(" children=");
+        for (int index = 0; index < prefab.transform.childCount; index++)
+        {
+            if (index > 0)
+            {
+                text.Append('|');
+            }
+
+            text.Append(prefab.transform.GetChild(index).name);
+        }
+
+        foreach (Renderer renderer in piece.GetComponentsInChildren<Renderer>(includeInactive: true))
+        {
+            if (renderer == null)
+            {
+                continue;
+            }
+
+            text.Append(" [").Append(renderer.GetType().Name).Append(' ').Append(renderer.name);
+            if (renderer is SkinnedMeshRenderer skinned)
+            {
+                text.Append(" bones=").Append(skinned.bones == null ? 0 : skinned.bones.Length);
+                text.Append(" root=").Append(
+                    skinned.rootBone == null ? "<null>" : skinned.rootBone.name);
+                text.Append(" bindposes=").Append(
+                    skinned.sharedMesh == null ? -1 : skinned.sharedMesh.bindposes.Length);
+            }
+
+            text.Append(" localPos=").Append(renderer.transform.localPosition.ToString("0.###"));
+            text.Append(" worldPos=").Append(renderer.transform.position.ToString("0.###"));
+            text.Append(" bounds=").Append(renderer.bounds.center.ToString("0.###"));
+            text.Append(" parent=").Append(
+                renderer.transform.parent == null ? "<root>" : renderer.transform.parent.name);
+            text.Append(']');
+        }
+
+        return text.ToString();
     }
 
     /// <summary>Finds the child the game would attach, matching its own search:
@@ -826,18 +1130,57 @@ internal sealed class CompanionActor
         }
     }
 
+    /// <summary>The joint's world scale, when it is not 1. Silent otherwise,
+    /// because a unit-scale joint says nothing; a joint that is not unit scale
+    /// is exactly why attachment has to be parented the way the game parents
+    /// it.</summary>
+    private static string DescribeScale(Transform joint)
+    {
+        Vector3 scale = joint.lossyScale;
+        bool unit = Mathf.Abs(scale.x - 1f) < 0.01f &&
+            Mathf.Abs(scale.y - 1f) < 0.01f &&
+            Mathf.Abs(scale.z - 1f) < 0.01f;
+        return unit ? "" : $" scale=({scale.x:0.###}, {scale.y:0.###}, {scale.z:0.###})";
+    }
+
+    /// <summary>A transform's path under the actor root. Diagnostic only, and
+    /// the thing that turns "the hair is in the wrong place" into a fact about
+    /// which object it is parented to.</summary>
+    private static string PathOf(Transform transform)
+    {
+        string path = transform.name;
+        Transform? parent = transform.parent;
+        int guard = 0;
+        while (parent != null && guard++ < 12)
+        {
+            path = parent.name + "/" + path;
+            parent = parent.parent;
+        }
+
+        return path;
+    }
+
     private static Transform? FindHeadBone(Transform root)
     {
-        foreach (Transform bone in root.GetComponentsInChildren<Transform>(includeInactive: true))
-        {
-            if (bone == null || string.IsNullOrEmpty(bone.name))
-            {
-                continue;
-            }
+        Transform[] bones = root.GetComponentsInChildren<Transform>(includeInactive: true);
 
-            foreach (string fragment in HeadBoneFragments)
+        foreach (string wanted in HeadBoneNames)
+        {
+            foreach (Transform bone in bones)
             {
-                if (bone.name.IndexOf(fragment, StringComparison.OrdinalIgnoreCase) >= 0)
+                if (bone != null && string.Equals(bone.name, wanted, StringComparison.OrdinalIgnoreCase))
+                {
+                    return bone;
+                }
+            }
+        }
+
+        foreach (string wanted in HeadBoneNames)
+        {
+            foreach (Transform bone in bones)
+            {
+                if (bone != null && !string.IsNullOrEmpty(bone.name) &&
+                    bone.name.IndexOf(wanted, StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     return bone;
                 }
