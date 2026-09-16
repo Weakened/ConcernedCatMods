@@ -55,9 +55,10 @@ Fixed
   raise an arm, the same reach you use to open a chest. The game's own trader
   and raven don't do that when you talk to them, and neither does he now. The
   conversation itself is unchanged.
-- **His prompt shows your key.** Hovering over him showed the literal text
-  `$KEY_Use` instead of the key you press. It now shows your actual binding - a
-  remapped key, or your controller's button while you are playing on one.
+- **His prompt shows your key, and so does the compass's.** Hovering over him,
+  or over the Broken Compass, showed the literal text `$KEY_Use` instead of the
+  key you press. Both now show your actual binding - a remapped key, or your
+  controller's button while you are playing on one.
 - **He no longer gets up every few seconds at night.** In a camp with no roof in
   reach he would get up to look for shelter, sit down in the open, and get up
   again about every fifteen seconds all night. After one look finds nowhere dry
