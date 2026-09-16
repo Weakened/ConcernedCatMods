@@ -910,7 +910,8 @@ internal sealed class CompanionActor
             visual.transform.localRotation = Quaternion.identity;
 
             RemovePhysics(root);
-            int quieted = RemoveBehaviours(root, out string quietedNames, out string survivors);
+            int quieted = RemoveBehaviours(
+                root, clothHandledByCaller: false, out string quietedNames, out string survivors);
 
             if (survivors.Length > 0)
             {
@@ -1059,10 +1060,19 @@ internal sealed class CompanionActor
     /// and the body's caller refuses the whole candidate on it rather than
     /// switching on over the top: a disabled script is not a safe one, because
     /// Unity runs <c>Awake</c> on activation either way.
-    /// The cloth family is left to <c>RemoveCloth</c>,
-    /// which disables it for exactly that reason and should not have the
-    /// decision re-litigated one method later.</summary>
-    private static int RemoveBehaviours(GameObject subtree, out string names, out string survivors)
+    /// <paramref name="survivors"/> is empty - never a placeholder - when
+    /// nothing is left, because the body's caller tests exactly that.
+    ///
+    /// <paramref name="clothHandledByCaller"/> exempts the cloth family, and
+    /// only a caller that has just run <c>RemoveCloth</c> on this same subtree
+    /// may ask for it: that method disables what Unity will not let it destroy,
+    /// and re-attempting the destroy here would trade one logged error for
+    /// another. The body passes false, because nothing runs RemoveCloth on the
+    /// body - an exemption it was granted unconditionally in the first cut of
+    /// this method, which left a cloth-named script enabled inside the figure
+    /// and woke it with everything else.</summary>
+    private static int RemoveBehaviours(
+        GameObject subtree, bool clothHandledByCaller, out string names, out string survivors)
     {
         var removed = new List<string>();
         var refused = new List<string>();
@@ -1089,14 +1099,24 @@ internal sealed class CompanionActor
                     continue;
                 }
 
-                if (type.Name.IndexOf("Cloth", StringComparison.OrdinalIgnoreCase) >= 0)
+                if (clothHandledByCaller &&
+                    type.Name.IndexOf("Cloth", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
-                    // RemoveCloth owns that family, and disables rather than
-                    // destroys for a documented reason: those components
-                    // declare [RequireComponent] on each other, and Unity
-                    // refuses the destroy by writing an error to the player's
-                    // log. Attempting it again here would trade one logged
-                    // error for another, which is not a fix.
+                    // Only where RemoveCloth has just run on this same subtree.
+                    // It disables rather than destroys for a documented reason:
+                    // those components declare [RequireComponent] on each
+                    // other, and Unity refuses the destroy by writing an error
+                    // to the player's log, so attempting it again here would
+                    // trade one logged error for another.
+                    //
+                    // The body does NOT get this exemption, and the first cut
+                    // of this method gave it one - a skip conditioned on
+                    // nothing, next to a comment claiming RemoveCloth owned the
+                    // family. RemoveCloth is never called on the body. A
+                    // cloth-named script there was therefore skipped by both,
+                    // stayed enabled, and woke with the figure: the #308 defect
+                    // wearing a different type name. Found by review of the fix
+                    // for #308, which is the honest place to admit it.
                     continue;
                 }
 
@@ -1289,7 +1309,8 @@ internal sealed class CompanionActor
             // is what keeps a game script out of the figure, and a garment is
             // not the figure. Tightening this to a refusal is tracked on #308
             // and deliberately not done in the same change.
-            int pieceScripts = RemoveBehaviours(piece, out string pieceScriptNames, out _);
+            int pieceScripts = RemoveBehaviours(
+                piece, clothHandledByCaller: true, out string pieceScriptNames, out _);
 
             // Whether the mesh is SKINNED decides how it attaches, and the
             // child's name is only a hint at that. A skinned mesh is drawn by
@@ -1849,7 +1870,7 @@ internal sealed class CompanionActor
 
             RemovePhysics(piece);
             RemoveCloth(piece);
-            if (RemoveBehaviours(piece, out string garmentScripts, out _) > 0)
+            if (RemoveBehaviours(piece, clothHandledByCaller: true, out string garmentScripts, out _) > 0)
             {
                 _log.LogInfo(
                     $"[appearance] {slot} {prefabName} ({jointName}): scripts-quieted=[{garmentScripts}]");

@@ -658,8 +658,10 @@ def check_companion_body_fails_closed(errors: list[str]) -> list[str]:
     accident. Around that anchor the audit asks three questions and no more —
     is the root dark before the visual lands in it, is the script pass run
     before it is switched on, and does something refuse the candidate in
-    between. Deliberately not a C# parser: this is the smallest check that
-    cannot pass while the defect is present."""
+    between. Deliberately not a C# parser: it is the smallest check that
+    cannot pass while the body is switched on over a script the pass could not
+    remove - which is narrower than "while the defect is present", and is what
+    it actually verifies."""
     path = (ROOT / "src" / "ConcernedCartographer" / "Runtime" / "Companions" /
             "CompanionActor.cs")
     if not path.is_file():
@@ -687,7 +689,14 @@ def check_companion_body_fails_closed(errors: list[str]) -> list[str]:
         return []
 
     reparent = anchors[0]
-    if not any(dark.search(line) for line in code[:reparent]):
+
+    # Bounded to THIS root's lifetime - from the line that creates it to the
+    # line the visual lands on. Searching the whole file above would let an
+    # unrelated `root.SetActive(false)` in some earlier method stand in for the
+    # one that matters.
+    born = next((n for n in range(reparent - 1, -1, -1)
+                 if re.search(r"(?<![\w.])root\s*=\s*new GameObject\(", code[n])), None)
+    if born is None or not any(dark.search(line) for line in code[born:reparent]):
         fail(
             "[companions] CC-NPC-010 no-wake audit: the visual is re-parented into a root that "
             f"was never made inactive in {path.relative_to(ROOT)}:{reparent + 1} — re-parenting "
@@ -696,8 +705,16 @@ def check_companion_body_fails_closed(errors: list[str]) -> list[str]:
         return []
 
     after = code[reparent:]
+
+    # A call may wrap across lines, so each position is read together with the
+    # two lines below it. Cheap, and it keeps a formatting change from being
+    # reported as a missing guard.
+    def statement(index: int) -> str:
+        return " ".join(after[index:index + 3])
+
     enable = next((n for n, line in enumerate(after) if lit.search(line)), None)
-    pass_call = next((n for n, line in enumerate(after) if "RemoveBehaviours(root," in line), None)
+    pass_call = next((n for n, line in enumerate(after)
+                      if "RemoveBehaviours(" in line and "root," in statement(n)), None)
     if enable is None or pass_call is None or pass_call > enable:
         fail(
             "[companions] CC-NPC-010 no-wake audit: the extracted body must have the source's own "
@@ -705,13 +722,18 @@ def check_companion_body_fails_closed(errors: list[str]) -> list[str]:
             "the enable are missing or in the wrong order", errors)
         return []
 
-    between = "\n".join(after[pass_call:enable])
-    if "survivors" not in between or "return null;" not in between:
+    # From AFTER the pass line, or the `out string survivors` declaration on it
+    # would satisfy the test on its own; and the return has to follow the
+    # condition, or any unrelated `return null;` in the window would do.
+    between = after[pass_call + 1:enable]
+    guard = next((n for n, line in enumerate(between) if "survivors.Length > 0" in line), None)
+    if guard is None or not any("return null;" in line for line in between[guard:]):
         fail(
             "[companions] CC-NPC-010 no-wake audit: nothing refuses the candidate between the "
             f"script-removal pass and root.SetActive(true) in {path.relative_to(ROOT)} — a script "
             "this build will not let us destroy must fail the extraction closed, because a "
             "disabled component still receives Awake when its object is activated", errors)
+        return []
 
     return [
         "[companions] CC-NPC-010 no-wake audit: the extracted body is assembled dark, and a "

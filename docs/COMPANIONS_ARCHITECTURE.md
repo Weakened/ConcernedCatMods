@@ -337,11 +337,17 @@ wakes the game's own code inside himself is the defect this whole section is
 about.
 
 Attached hair, beards and garments go through the same pass before they are
-parented on, for the same reason — except for the cloth family, which
-`RemoveCloth` already disables deliberately, precisely because Unity refuses to
-destroy it out loud. A survivor on a garment is named and left disabled rather
-than refusing the preset: the body's rule is what keeps game code out of the
-figure, and a garment is not the figure.
+parented on, for the same reason — and there, and only there, the cloth family
+is exempt, because `RemoveCloth` has just run on that same piece and disables
+what Unity refuses to destroy out loud. A survivor on a garment is named and
+left disabled rather than refusing the preset: the body's rule is what keeps
+game code out of the figure, and a garment is not the figure.
+
+The body gets no such exemption, and the first cut of this fix wrongly gave it
+one. `RemoveCloth` is never called on the body, so a cloth-named script there
+was skipped by both passes, stayed enabled, and woke with the figure — the same
+defect wearing a different type name. The exemption is now something a caller
+asks for, and only a caller that has actually run `RemoveCloth` may ask.
 
 ### Appearance is enumerated, never assumed
 
