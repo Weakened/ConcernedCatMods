@@ -106,6 +106,26 @@ internal sealed class CompanionDirector : IDisposable
     /// round is enough to see it work.</summary>
     private const float SeatUpgradeSeconds = 30f;
 
+    /// <summary>Walking pace. A stroll, not a march: he is crossing a camp, not
+    /// going anywhere.</summary>
+    private const float StrollSpeed = 1.6f;
+
+    /// <summary>How far from home a stroll may take him. The same band the
+    /// planner places him in, so he never appears to leave.</summary>
+    private const float StrollNearMetres = 3.5f;
+
+    private const float StrollFarMetres = 9f;
+
+    /// <summary>How many spots he will consider before giving up and staying
+    /// seated. Bounded, and the bound is reported in the log rather than
+    /// hidden.</summary>
+    private const int StrollCandidates = 12;
+
+    /// <summary>The angle between one stroll's direction and the next. An
+    /// irrational-ish turn so the candidates spiral around the camp instead of
+    /// retracing a circle.</summary>
+    private const float StrollTurnDegrees = 137f;
+
 
     private readonly CartographerSettings _settings;
     private readonly ManualLogSource _log;
@@ -138,6 +158,11 @@ internal sealed class CompanionDirector : IDisposable
     private float _placementRetryElapsed;
     private float _residencyElapsed;
     private float _seatUpgradeElapsed;
+
+    private RoutineState _routine = RoutineState.Settled;
+    private float _routineElapsed;
+    private Vector3 _strollTarget;
+    private int _strollTurn;
 
     /// <summary>The plan the furniture sweep just made, kept for the rebuild it
     /// is about to cause. Valid for this residency pass only.</summary>
@@ -375,6 +400,7 @@ internal sealed class CompanionDirector : IDisposable
                 UpdateResidency();
             }
 
+            UpdateRoutine(deltaTime);
             UpdateProximityAndInput();
             UpdateCompanionInput();
             UpdateAmbientChatter(deltaTime);
@@ -653,6 +679,14 @@ internal sealed class CompanionDirector : IDisposable
             return SeatUpgrade.NotSurveyed;
         }
 
+        // Not while he is on his feet. A rehome tears the actor down and
+        // rebuilds it at the planned spot, which mid-stroll is a companion
+        // teleporting across his own camp.
+        if (_routine != RoutineState.Settled)
+        {
+            return SeatUpgrade.NotSurveyed;
+        }
+
         if (_seatUpgradeElapsed < SeatUpgradeSeconds)
         {
             return SeatUpgrade.NotSurveyed;
@@ -669,6 +703,177 @@ internal sealed class CompanionDirector : IDisposable
         _sweptPlan = offer;
         _sweptPlanValid = true;
         return new SeatUpgrade(_actor.Pose, offer.Pose);
+    }
+
+
+    /// <summary>The bit of him that is not a statue.
+    ///
+    /// He sits most of the time, gets up occasionally, walks somewhere else in
+    /// his camp, stands looking at it for a moment, and sits back down - and
+    /// when it turns dark or wet he goes and finds a roof. That is the whole of
+    /// it. <see cref="CampRoutine"/> owns when; this owns where and how, and
+    /// keeps both inside the rules: he walks a straight line over ground the
+    /// same probe already approved, he never leaves the camp band, he blocks
+    /// nothing, and nothing he does touches the world or the save.
+    ///
+    /// Off by setting, and off entirely on a build whose animator has no
+    /// locomotion to drive - a companion who slides reads as broken, where one
+    /// who sits still just reads as still.</summary>
+    private void UpdateRoutine(float deltaTime)
+    {
+        if (!_actor.Exists || !_settings.CompanionWander.Value || !_actor.CanWalk ||
+            !_settings.CompanionVisible.Value || !_anchor.IsValid)
+        {
+            return;
+        }
+
+        _routineElapsed += deltaTime;
+
+        bool finished = false;
+        if (_routine == RoutineState.Strolling)
+        {
+            WalkStep step = _actor.StepToward(_strollTarget, deltaTime, StrollSpeed);
+            finished = step != WalkStep.Walking;
+        }
+
+        var inputs = new RoutineInputs(
+            _routine,
+            _routineElapsed,
+            finished,
+            PlayerWithinTalkRange(),
+            IsSheltered(_actor.Position),
+            IsNightOrStorm(),
+            _actor.Pose);
+
+        switch (CampRoutine.Decide(inputs))
+        {
+            case RoutineAction.Stroll:
+                BeginStroll();
+                break;
+
+            case RoutineAction.Stand:
+                _actor.StopWalking();
+                EnterRoutine(RoutineState.Standing);
+                break;
+
+            case RoutineAction.Settle:
+                _actor.StopWalking();
+                _actor.SettleWhereHeStands();
+                EnterRoutine(RoutineState.Settled);
+                break;
+        }
+    }
+
+    private void EnterRoutine(RoutineState state)
+    {
+        _routine = state;
+        _routineElapsed = 0f;
+    }
+
+    /// <summary>Picks somewhere to go and gets him up.
+    ///
+    /// The candidates are points around his home at walking distance, taken at
+    /// a turning angle so consecutive strolls do not retrace the same line, and
+    /// each one is put through the placement probe that chose his original spot
+    /// - so he can only ever walk to ground he could have been placed on. In
+    /// the dark or the wet the first sheltered candidate wins outright; that is
+    /// the whole of "he knows to come in out of the rain".
+    ///
+    /// If nothing passes, he stays sitting. A stroll is a nicety, and there is
+    /// no version of this worth a companion standing in a river for.</summary>
+    private void BeginStroll()
+    {
+        bool wantsShelter = IsNightOrStorm();
+        Vector3 home = new Vector3(_anchor.Position.X, _anchor.Position.Y, _anchor.Position.Z);
+        Vector3? fallback = null;
+
+        for (int step = 0; step < StrollCandidates; step++)
+        {
+            _strollTurn++;
+
+            // A turning angle rather than a random one: same world, same walk,
+            // and no two consecutive strolls along the same line.
+            float angle = _strollTurn * StrollTurnDegrees * Mathf.Deg2Rad;
+            float radius = StrollNearMetres +
+                ((_strollTurn % 3) * (StrollFarMetres - StrollNearMetres) / 2f);
+            var candidate = new WorldPoint(
+                home.x + (Mathf.Cos(angle) * radius),
+                home.y,
+                home.z + (Mathf.Sin(angle) * radius));
+
+            PlacementProbeSample sample = _hulgiProbe.Probe(candidate);
+            if (!sample.IsUsable)
+            {
+                continue;
+            }
+
+            var point = new Vector3(
+                sample.Position.X, sample.Position.Y, sample.Position.Z);
+
+            if (wantsShelter && !IsSheltered(point))
+            {
+                fallback ??= point;
+                continue;
+            }
+
+            StrollTo(point);
+            return;
+        }
+
+        if (fallback.HasValue)
+        {
+            // Nowhere dry within reach. Moving anyway is better than sitting in
+            // the open pretending the weather is fine.
+            StrollTo(fallback.Value);
+        }
+    }
+
+    private void StrollTo(Vector3 point)
+    {
+        _strollTarget = point;
+        _actor.StandUp();
+        EnterRoutine(RoutineState.Strolling);
+    }
+
+    private bool PlayerWithinTalkRange()
+    {
+        Player player = Player.m_localPlayer;
+        return player != null &&
+            Vector3.Distance(player.transform.position, _actor.Position) <= TalkRadius;
+    }
+
+    /// <summary>Whether that point has a roof over it. The game's own test, the
+    /// one it uses to decide whether a player is sheltered from rain.</summary>
+    private static bool IsSheltered(Vector3 point)
+    {
+        try
+        {
+            return Cover.IsUnderRoof(point + (Vector3.up * 0.5f));
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Whether a person would want to be indoors. Night, or weather
+    /// wet enough that the game itself considers you exposed.</summary>
+    private static bool IsNightOrStorm()
+    {
+        try
+        {
+            EnvMan env = EnvMan.instance;
+            if (env == null)
+            {
+                return false;
+            }
+
+            return !EnvMan.IsDaylight() || EnvMan.IsWet();
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     /// <summary>Poses him by hand for a look. Presentation only; see

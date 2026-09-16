@@ -96,6 +96,21 @@ internal sealed class ActorReport
     }
 }
 
+    /// <summary>How a step toward a destination went.</summary>
+    internal enum WalkStep
+    {
+        /// <summary>Still going.</summary>
+        Walking = 0,
+
+        /// <summary>Close enough. Stop.</summary>
+        Arrived = 1,
+
+        /// <summary>The ground ahead could not be stood on, or the zone is not
+        /// loaded. Stop, and stop where he is rather than pushing into
+        /// it.</summary>
+        Blocked = 2,
+    }
+
 /// <summary>Builds and owns Hulgi's body.
 ///
 /// Nothing from a game prefab is ever allowed to wake, and nothing is ever
@@ -425,6 +440,191 @@ internal sealed class CompanionActor
                 "The companion's idle pose could not be applied on this build; he keeps the model's " +
                 $"default: {SafeLogText.Brief(exception)}");
         }
+    }
+
+
+    /// <summary>The animator floats the game drives a player's legs with.
+    /// Discovered rather than assumed - a controller without them leaves him
+    /// sliding, which is worse than leaving him sitting, so the absence is
+    /// checked once and reported.</summary>
+    private const string ForwardSpeedParameter = "forward_speed";
+
+    private const string SidewaySpeedParameter = "sideway_speed";
+
+    private const string TurnSpeedParameter = "turn_speed";
+
+    /// <summary>How close counts as arrived. Generous on purpose: the
+    /// destination is a probed patch of ground, not a doorway, and grinding the
+    /// last few centimetres looks worse than stopping short.</summary>
+    private const float ArrivalMetres = 0.6f;
+
+    /// <summary>Whether this build can animate a walk at all. When false he
+    /// never strolls - he would slide, and a sliding companion reads as a
+    /// broken one where a still companion just reads as still.</summary>
+    public bool CanWalk =>
+        _animator != null && HasFloatParameter(ForwardSpeedParameter);
+
+    /// <summary>Walks him one step toward <paramref name="target"/>, following
+    /// the ground under his feet.
+    ///
+    /// Deliberately not pathfinding. He walks the straight line, checks the
+    /// ground he is about to stand on through the same probe that chose his
+    /// spot in the first place, and stops if it will not hold him. A companion
+    /// pottering around a camp does not need to solve a maze, and the failure
+    /// mode of trying is one who walks into a wall forever.</summary>
+    public WalkStep StepToward(Vector3 target, float deltaTime, float speed)
+    {
+        if (_root == null)
+        {
+            return WalkStep.Blocked;
+        }
+
+        Vector3 here = _root.transform.position;
+        Vector3 flat = new Vector3(target.x - here.x, 0f, target.z - here.z);
+        float distance = flat.magnitude;
+
+        if (distance <= ArrivalMetres)
+        {
+            return WalkStep.Arrived;
+        }
+
+        Vector3 direction = flat / distance;
+        float travel = Mathf.Min(speed * deltaTime, distance);
+        Vector3 next = here + (direction * travel);
+
+        if (!TryGroundAt(next, out float height))
+        {
+            return WalkStep.Blocked;
+        }
+
+        next.y = height;
+
+        // A step that would climb or drop more than a person steps is a wall
+        // or a hole, whichever way it goes.
+        if (Mathf.Abs(next.y - here.y) > 0.6f)
+        {
+            return WalkStep.Blocked;
+        }
+
+        _root.transform.position = next;
+        _root.transform.rotation = Quaternion.Slerp(
+            _root.transform.rotation,
+            Quaternion.LookRotation(direction, Vector3.up),
+            Mathf.Clamp01(deltaTime * 6f));
+
+        SetLocomotion(speed);
+        return WalkStep.Walking;
+    }
+
+    /// <summary>Stops the legs. Called whatever ended the stroll, including the
+    /// actor being torn down, because an animator left with speed on its
+    /// parameters keeps walking on the spot.</summary>
+    public void StopWalking()
+    {
+        SetLocomotion(0f);
+    }
+
+    private void SetLocomotion(float speed)
+    {
+        if (_animator == null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (HasFloatParameter(ForwardSpeedParameter))
+            {
+                _animator.SetFloat(ForwardSpeedParameter, speed);
+            }
+
+            if (HasFloatParameter(SidewaySpeedParameter))
+            {
+                _animator.SetFloat(SidewaySpeedParameter, 0f);
+            }
+
+            if (HasFloatParameter(TurnSpeedParameter))
+            {
+                _animator.SetFloat(TurnSpeedParameter, 0f);
+            }
+        }
+        catch (Exception)
+        {
+            // A controller that will not take a float is not worth a notice
+            // every frame of every stroll.
+        }
+    }
+
+    private static bool TryGroundAt(Vector3 point, out float height)
+    {
+        height = point.y;
+
+        try
+        {
+            ZoneSystem zones = ZoneSystem.instance;
+            if (zones == null || !zones.IsZoneLoaded(point))
+            {
+                return false;
+            }
+
+            if (!zones.GetSolidHeight(point + (Vector3.up * 2f), out float found, out Vector3 normal, out GameObject _))
+            {
+                return false;
+            }
+
+            // The same slope limit the placement probe uses. Ground he could
+            // not have been placed on is ground he should not walk onto.
+            if (Vector3.Dot(normal, Vector3.up) < 0.75f)
+            {
+                return false;
+            }
+
+            height = found;
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private bool HasFloatParameter(string name)
+    {
+        if (_animator == null || string.IsNullOrEmpty(name))
+        {
+            return false;
+        }
+
+        foreach (AnimatorControllerParameter parameter in _animator.parameters)
+        {
+            if (parameter != null &&
+                parameter.type == AnimatorControllerParameterType.Float &&
+                string.Equals(parameter.name, name, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Gets him on his feet for a stroll. Clears the sitting
+    /// parameter without touching what the planner thinks his pose is - that
+    /// belongs to where he SETTLES, and a stroll is a round trip.</summary>
+    public void StandUp()
+    {
+        ClearPoseParameter();
+    }
+
+    /// <summary>Sits him down wherever the stroll left him.
+    ///
+    /// This one DOES update the report, because it is the truth now: he is on
+    /// the ground somewhere other than the spot the planner picked, and the
+    /// furniture sweep reading "on the ground" is exactly right - if there is a
+    /// seat near where he has wandered to, he should be offered it.</summary>
+    public void SettleWhereHeStands()
+    {
+        ApplyPose(CompanionPose.SitOnGround);
     }
 
     /// <summary>Puts him in a pose by hand, so he can be looked at in one.

@@ -56,6 +56,7 @@ internal sealed class CartographerSettings
         ConfigEntry<bool> companionToolsOnly,
         ConfigEntry<bool> companionVisible,
         ConfigEntry<bool> companionAmbientChatter,
+        ConfigEntry<bool> companionWander,
         ConfigEntry<float> companionAmbientIntervalSeconds,
         ConfigEntry<string> companionHairPreset,
         ConfigEntry<string> companionBeardPreset,
@@ -112,6 +113,7 @@ internal sealed class CartographerSettings
         CompanionToolsOnly = companionToolsOnly;
         CompanionVisible = companionVisible;
         CompanionAmbientChatter = companionAmbientChatter;
+        CompanionWander = companionWander;
         CompanionAmbientIntervalSeconds = companionAmbientIntervalSeconds;
         CompanionHairPreset = companionHairPreset;
         CompanionBeardPreset = companionBeardPreset;
@@ -185,6 +187,11 @@ internal sealed class CartographerSettings
     /// for an evening and tiresome by the second. Speaking to him always
     /// works regardless of this.</summary>
     public ConfigEntry<bool> CompanionAmbientChatter { get; }
+
+    /// <summary>Whether he gets up and moves around his camp at all.
+    /// Presentation only, and off changes nothing but how still he is.
+    /// </summary>
+    public ConfigEntry<bool> CompanionWander { get; }
 
     public ConfigEntry<float> CompanionAmbientIntervalSeconds { get; }
 
@@ -319,6 +326,8 @@ internal sealed class CartographerSettings
                 "Show Hulgi once he has joined you. This is presentation only - hiding him never affects your tools, your progress or your data."),
             config.Bind("Companions", "AmbientChatter", false,
                 "Let Hulgi make the occasional unprompted remark while you are standing near him. OFF by default. Speaking to him directly always works whether this is on or off."),
+            config.Bind("Companions", "Wander", true,
+                "Let Hulgi get up now and then and move around his camp - and head for shelter when it turns dark or wet. Presentation only: he never leaves the area, never blocks anything, and never touches the world. Turn this off and he simply sits still."),
             config.Bind("Companions", "AmbientIntervalSeconds", 45f, new ConfigDescription(
                 "Shortest gap between unprompted remarks, in seconds. Only used when AmbientChatter is on.",
                 new AcceptableValueRange<float>(15f, 600f))),
