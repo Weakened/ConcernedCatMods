@@ -144,7 +144,9 @@ internal sealed class ActorReport
 /// dereference of the <c>Character</c> this figure deliberately does not have.
 /// They are destroyed while the object is still inactive, and the light is
 /// switched on after they are gone. That is removal, not stripping: not one of
-/// them has run.
+/// them has run. And if one of them cannot be destroyed on some build, the
+/// candidate is <b>refused</b> like any other - never switched on over the top
+/// of it.
 ///
 /// Every step below it has a fallback, and the last fallback is "no actor,
 /// with a notice". None of them touches the player's access, progress or
@@ -908,7 +910,25 @@ internal sealed class CompanionActor
             visual.transform.localRotation = Quaternion.identity;
 
             RemovePhysics(root);
-            int quieted = RemoveBehaviours(root, out string quietedNames);
+            int quieted = RemoveBehaviours(root, out string quietedNames, out string survivors);
+
+            if (survivors.Length > 0)
+            {
+                // Fail closed. A script this build will not let us destroy is a
+                // script that wakes the instant the figure is switched on, and
+                // disabling it is not safety: Unity runs Awake on activation
+                // whether a component is enabled or not. So the candidate is
+                // REFUSED exactly as a forbidden component is - the root is
+                // never enabled, the finally below destroys it while it is
+                // still dark, and the next candidate is tried. A companion who
+                // does not appear is a disappointment; a companion who wakes
+                // the game's own code inside himself is a defect.
+                _log.LogInfo(
+                    $"\"{candidateName}\" carries {survivors} inside its visual subtree and this build " +
+                    "will not let it be destroyed, so the candidate was refused rather than switched " +
+                    "on. Nothing was enabled. Trying the next candidate.");
+                return null;
+            }
 
             // Nothing inside can run any more, so it is safe to switch on.
             // Everything after this line - the pose, the appearance, the hover
@@ -1034,11 +1054,15 @@ internal sealed class CompanionActor
     /// disabled instead and named in the summary, so that case is visible
     /// rather than silent - which is also why the count returned covers both
     /// halves: a build that refused every one of them must still say so out
-    /// loud rather than look like a build that found nothing.
+    /// loud rather than look like a build that found nothing. Anything still
+    /// standing after both passes is named in <paramref name="survivors"/>,
+    /// and the body's caller refuses the whole candidate on it rather than
+    /// switching on over the top: a disabled script is not a safe one, because
+    /// Unity runs <c>Awake</c> on activation either way.
     /// The cloth family is left to <c>RemoveCloth</c>,
     /// which disables it for exactly that reason and should not have the
     /// decision re-litigated one method later.</summary>
-    private static int RemoveBehaviours(GameObject subtree, out string names)
+    private static int RemoveBehaviours(GameObject subtree, out string names, out string survivors)
     {
         var removed = new List<string>();
         var refused = new List<string>();
@@ -1101,10 +1125,15 @@ internal sealed class CompanionActor
         }
 
         names = removed.Count == 0 ? "<none>" : string.Join(", ", removed);
+
+        // What is still in there after both passes. The caller decides what
+        // that means: the body refuses outright rather than switch on over the
+        // top of it, and reports here are the evidence for that decision.
+        survivors = string.Join(", ", refused);
         if (refused.Count > 0)
         {
             names += $" (still present, disabled instead because this build refuses to destroy them: " +
-                $"{string.Join(", ", refused)})";
+                $"{survivors})";
         }
 
         // Both halves, so a build where everything was refused still says so
@@ -1255,7 +1284,12 @@ internal sealed class CompanionActor
             // about to be parented into a LIVE figure, which is what wakes it.
             // Whatever scripts an item's attachment mesh carries, they were
             // written for a character that is wearing it.
-            int pieceScripts = RemoveBehaviours(piece, out string pieceScriptNames);
+            // A survivor here is named in the line below and left disabled,
+            // rather than refusing the preset: the body's own fail-closed rule
+            // is what keeps a game script out of the figure, and a garment is
+            // not the figure. Tightening this to a refusal is tracked on #308
+            // and deliberately not done in the same change.
+            int pieceScripts = RemoveBehaviours(piece, out string pieceScriptNames, out _);
 
             // Whether the mesh is SKINNED decides how it attaches, and the
             // child's name is only a hint at that. A skinned mesh is drawn by
@@ -1815,7 +1849,7 @@ internal sealed class CompanionActor
 
             RemovePhysics(piece);
             RemoveCloth(piece);
-            if (RemoveBehaviours(piece, out string garmentScripts) > 0)
+            if (RemoveBehaviours(piece, out string garmentScripts, out _) > 0)
             {
                 _log.LogInfo(
                     $"[appearance] {slot} {prefabName} ({jointName}): scripts-quieted=[{garmentScripts}]");

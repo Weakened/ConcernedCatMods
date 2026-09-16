@@ -642,6 +642,67 @@ def check_teamster_no_internet_egress(errors: list[str]) -> list[str]:
     ]
 
 
+def check_companion_body_fails_closed(errors: list[str]) -> list[str]:
+    """CC-NPC-010 no-wake audit: the extracted companion body must be built
+    dark and refused rather than switched on over a surviving game script.
+
+    This is a source audit rather than a unit test because the thing being
+    guarded is Unity object lifetime, which no test host here can run: the
+    defect (#308) was that re-parenting a prefab subtree into an ACTIVE root
+    runs Awake on the game's own scripts, and CharacterAnimEvent.Awake
+    dereferences a Character the extraction has guaranteed is absent. The
+    three conditions below are the whole fix, in the order the method performs
+    them, and each one failing is a regression of a defect that reached
+    production."""
+    path = (ROOT / "src" / "ConcernedCartographer" / "Runtime" / "Companions" /
+            "CompanionActor.cs")
+    if not path.is_file():
+        fail(
+            "[companions] CC-NPC-010 no-wake audit: CompanionActor.cs is missing — the audit no "
+            "longer covers the extraction (was it moved or renamed?)", errors)
+        return []
+
+    lines = path.read_text(encoding="utf-8").splitlines()
+
+    def only_line(needle: str, what: str) -> int:
+        found = [n for n, line in enumerate(lines) if needle in _strip_cs_line_comment(line)]
+        if len(found) != 1:
+            fail(
+                f"[companions] CC-NPC-010 no-wake audit: expected exactly one {what} "
+                f"({needle!r}) in {path.relative_to(ROOT)}, found {len(found)} — a second "
+                "extraction path must make its own no-wake decision rather than inherit this "
+                "one by accident", errors)
+            return -1
+        return found[0]
+
+    born_dark = only_line('root.SetActive(false)', "inactive extraction root")
+    reparent = only_line('visual.transform.SetParent(root.transform', "visual re-parent")
+    pass_call = only_line('RemoveBehaviours(root,', "script-removal pass on the body")
+    enabled = only_line('root.SetActive(true)', "enable of the extraction root")
+    if -1 in (born_dark, reparent, pass_call, enabled):
+        return []
+
+    if not born_dark < reparent < pass_call < enabled:
+        fail(
+            "[companions] CC-NPC-010 no-wake audit: the extraction must create the root inactive, "
+            "re-parent into it, remove the source's scripts, and only then enable it — "
+            f"{path.relative_to(ROOT)} does them in another order, which is how #308 threw on "
+            "every placement", errors)
+
+    between = "\n".join(lines[pass_call:enabled])
+    if "survivors.Length > 0" not in between or "return null;" not in between:
+        fail(
+            "[companions] CC-NPC-010 no-wake audit: nothing refuses the candidate between the "
+            f"script-removal pass and root.SetActive(true) in {path.relative_to(ROOT)} — a script "
+            "this build will not let us destroy must fail the extraction closed, because a "
+            "disabled component still receives Awake when its object is activated", errors)
+
+    return [
+        "[companions] CC-NPC-010 no-wake audit: the extracted body is assembled dark, and a "
+        "surviving game script refuses the candidate instead of being switched on",
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -683,6 +744,7 @@ def main() -> int:
     report.extend(check_teamster_authority_policy(errors))
     report.extend(check_teamster_no_force_injection(errors))
     report.extend(check_teamster_no_internet_egress(errors))
+    report.extend(check_companion_body_fails_closed(errors))
 
     prohibited = []
     for path in ROOT.rglob("*.dll"):

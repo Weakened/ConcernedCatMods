@@ -327,11 +327,21 @@ is a `MonoBehaviour` — `Animator`, `Renderer`, `SkinnedMeshRenderer`, `LODGrou
 and `Transform` are all built-in components — so the pass cannot take away the
 body, the rig or the animation. Anything Unity refuses to destroy (a
 `[RequireComponent]` dependency, which it refuses by writing to the log rather
-than by throwing) is disabled instead and named in the log line, so that case is
-visible rather than silent. Attached hair, beards and garments go through the
-same pass before they are parented on, for the same reason — except for the
-cloth family, which `RemoveCloth` already disables deliberately, precisely
-because Unity refuses to destroy it out loud.
+than by throwing) is named, and for the **body** that is the end of the
+candidate: it **fails closed**. A script that survives both passes is a script
+that will wake the instant the figure is switched on — disabling it is not
+safety, because Unity runs `Awake` on activation either way — so the root is
+never enabled, it is destroyed while still dark, and the next candidate is
+tried. A companion who does not appear is a disappointment; a companion who
+wakes the game's own code inside himself is the defect this whole section is
+about.
+
+Attached hair, beards and garments go through the same pass before they are
+parented on, for the same reason — except for the cloth family, which
+`RemoveCloth` already disables deliberately, precisely because Unity refuses to
+destroy it out loud. A survivor on a garment is named and left disabled rather
+than refusing the preset: the body's rule is what keeps game code out of the
+figure, and a garment is not the figure.
 
 ### Appearance is enumerated, never assumed
 
