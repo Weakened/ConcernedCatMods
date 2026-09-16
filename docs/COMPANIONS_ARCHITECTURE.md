@@ -475,6 +475,25 @@ question that costs a navmesh route is asked once in the ordinary case. Surveys
 run every half minute and at once when a one-second fingerprint of fires, beds,
 seats, doors, their permissions and the hour changes.
 
+### A walk that does not work is remembered (#310)
+
+A walk that is stopped re-plans once from where he stands, and otherwise he sits
+down where he got to - he is never put anywhere. `WalkSetbacks` is what he takes
+from it: the spot, and, when a step was refused, the place and the way he was
+going. For a while (a minute, doubling each time the same trouble stops him
+again, at most five) a walk is refused if it goes to that spot or through that
+place in the same direction. A walk away from the place, or across it another
+way, is still open.
+
+The place matters more than the spot. The navmesh can believe in a way through
+that his body does not fit - in game at `b35c2d8`, under a raised wall - and
+then every spot beyond it is routed through the same gap: remembering spots
+alone had him walk into that wall for spot after spot around the fire behind it,
+six times in a minute. Remembering the place turns that into one bump and a
+walk round the other side. Nothing is permanent, because the player may take the
+wall down; `cc_companion summon` forgets it all, and `cc_companion placement`
+lists what he is leaving alone.
+
 Everything is still local presentation. The one thing in the world a companion
 may change is a door companions are allowed to use, opened through the door's
 own RPC and closed behind him; see `CLAUDE.md`.

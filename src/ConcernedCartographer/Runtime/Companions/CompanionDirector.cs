@@ -261,14 +261,16 @@ internal sealed class CompanionDirector : IDisposable
     /// was refused. Once, then he gives up for now.</summary>
     private bool _walkRetried;
 
-    /// <summary>A spot he could not get to on foot just now, and until when he
-    /// does not try it again - so a blocked walk is not retried every pass.
-    /// </summary>
-    private Vector3 _unreachableTarget;
-    private float _unreachableUntil;
+    /// <summary>Walks that did not get there lately: the spots, and the places
+    /// that stopped him with the way he was going, each left alone for a while
+    /// and longer each time the same one stops him again. Several at once:
+    /// remembering one spot let him alternate between two spots behind the same
+    /// wall, six bumps in a minute, in game at b35c2d8 (#310).</summary>
+    private readonly WalkSetbacks _setbacks = new WalkSetbacks();
 
-    /// <summary>How long a spot he could not reach is left alone.</summary>
-    private const float UnreachableSeconds = 60f;
+    /// <summary>Scratch: a planned walk, corner to corner, as the shared layer
+    /// reads it.</summary>
+    private readonly List<WorldPoint> _walkCorners = new List<WorldPoint>();
 
     /// <summary>How far in front of a seat, or beside a bed, he stands before he
     /// sits down on it and after he gets up from it.</summary>
@@ -440,6 +442,7 @@ internal sealed class CompanionDirector : IDisposable
         _actor.Release();
         ResetMotion();
         _doors.Forget();
+        _setbacks.Clear();
         _view = null;
         _anchorValidity = AnchorValidity.Unknown;
         _presentationSupported = true;
@@ -1184,18 +1187,43 @@ internal sealed class CompanionDirector : IDisposable
 
     /// <summary>Whether he could walk from <paramref name="from"/> to
     /// <paramref name="target"/> through doors he may use, near enough to walk
-    /// rather than be put there. The walk is kept when he could.</summary>
+    /// rather than be put there, and not to a spot or through a place that
+    /// stopped him lately. The walk is kept when he could.</summary>
     private bool CanWalkTo(Vector3 from, Vector3 target, CampView view)
     {
         if (!_actor.CanWalk || Flat(from, target) > WalkRelocateMetres ||
-            (Time.time < _unreachableUntil && Flat(target, _unreachableTarget) <= 1.5f) ||
-            !_camp.TryPlanWalk(from, target, view, _scratchWalk))
+            _setbacks.RefusesSpot(CampSense.ToPoint(target), Time.time) ||
+            !_camp.TryPlanWalk(from, target, view, _scratchWalk) ||
+            GoesWhereHeWasStopped(_scratchWalk))
         {
             return false;
         }
 
         _foundWalk.CopyFrom(_scratchWalk);
         return true;
+    }
+
+    /// <summary>Whether a planned walk goes through a place that stopped him
+    /// lately, the way it stopped him: up to the door, through it, and on.
+    /// </summary>
+    private bool GoesWhereHeWasStopped(WalkPlan plan)
+    {
+        _walkCorners.Clear();
+        foreach (Vector3 corner in plan.Route)
+        {
+            _walkCorners.Add(CampSense.ToPoint(corner));
+        }
+
+        if (plan.Door != null)
+        {
+            _walkCorners.Add(CampSense.ToPoint(plan.Exit));
+            foreach (Vector3 corner in plan.AfterDoor)
+            {
+                _walkCorners.Add(CampSense.ToPoint(corner));
+            }
+        }
+
+        return _setbacks.RefusesRoute(_walkCorners, Time.time);
     }
 
     /// <summary>Starts the walk to the best spot he can reach, when there is one
@@ -1318,9 +1346,9 @@ internal sealed class CompanionDirector : IDisposable
     /// stops him - and then he sits exactly where a rebuild would have put him.
     /// A door on the way is walked up to, opened if it is shut and he still may,
     /// stepped through, and closed again behind him once he is clear of it. If
-    /// he cannot get there on foot at all, he is put there the old way, rather
-    /// than left standing in the middle of the camp, and the log says where the
-    /// walk stopped.</summary>
+    /// he cannot get there on foot at all, he sits down where he got to - never
+    /// put there - the log says where the walk stopped, and he remembers it
+    /// (<see cref="WalkSetbacks"/>).</summary>
     private void TickRelocation(float deltaTime)
     {
         if (!_actor.Exists)
@@ -1467,12 +1495,14 @@ internal sealed class CompanionDirector : IDisposable
             : _actor.LastBlockReason ?? step.ToString();
 
         // Once more, from where he stands. What stopped him may have been a door
-        // somebody closed, or the corner of something the first route cut.
+        // somebody closed, or the corner of something the first route cut. Not
+        // by a way that has already stopped him lately.
         if (!_walkRetried)
         {
             _walkRetried = true;
             CampView view = ScanCamp();
-            if (_camp.TryPlanWalk(_actor.Position, _relocationTarget, view, _scratchWalk))
+            if (_camp.TryPlanWalk(_actor.Position, _relocationTarget, view, _scratchWalk) &&
+                !GoesWhereHeWasStopped(_scratchWalk))
             {
                 _walk.CopyFrom(_scratchWalk);
                 _doorPhase = _walk.Door != null ? DoorPhase.ToDoor : DoorPhase.None;
@@ -1491,21 +1521,32 @@ internal sealed class CompanionDirector : IDisposable
             }
         }
 
-        // No teleport. He sits down where he got to, and leaves that spot alone
-        // for a minute; the next look around camp may find him another, or the
-        // same one once whatever was in the way has gone.
+        // No teleport. He sits down where he got to, and remembers the spot -
+        // and, when a step was refused, the place and the way he was going - so
+        // the next look around camp finds him somewhere else to be, or a way
+        // round, rather than the next spot behind the same wall. The same
+        // trouble again is left alone for longer.
         _walkStage = WalkStage.None;
         _relocating = false;
-        _unreachableTarget = _relocationTarget;
-        _unreachableUntil = Time.time + UnreachableSeconds;
+        WalkSetback setback = step == WalkStep.Blocked && _actor.LastBlockReason != null &&
+            _actor.LastBlockHeading != Vector3.zero
+            ? _setbacks.Remember(
+                CampSense.ToPoint(_relocationTarget),
+                CampSense.ToPoint(_actor.Position),
+                CampSense.ToPoint(_actor.Position + _actor.LastBlockHeading),
+                Time.time)
+            : _setbacks.Remember(CampSense.ToPoint(_relocationTarget), Time.time);
         _actor.SettleWhereHeStands();
         EnterRoutine(RoutineState.Settled);
         _log.LogInfo(
             $"Hulgi could not get to {DescribeSpot(_relocation)} on foot ({why} at {Describe(_actor.Position)}, " +
             $"{Flat(_actor.Position, _relocationTarget):0.0} m short" +
             (endedAt == DoorPhase.None ? string.Empty : ", at the door: " + endedAt) +
-            $"), so he sits down where he is and leaves that spot alone for {UnreachableSeconds:0} s. " +
-            "He is not put there.");
+            "), so he sits down where he is and leaves that spot" +
+            (setback.HasPlace ? ", and that way past where he stopped," : string.Empty) +
+            $" alone for {setback.PauseSeconds:0} s" +
+            (setback.Strikes > 1 ? $" (the same trouble {setback.Strikes} times now)" : string.Empty) +
+            ". He is not put there.");
     }
 
     /// <summary>Everything about a walk or a potter, dropped: he is at rest where
@@ -1698,6 +1739,10 @@ internal sealed class CompanionDirector : IDisposable
         _actor.StopWalking();
         ResetMotion();
         _actor.SetDownAt(new WorldPoint(spot.x, spot.y, spot.z));
+
+        // A fresh start is the point of the test: whatever stopped him before
+        // is tried again, and remembered again if it still stops him.
+        _setbacks.Clear();
         LookAgainNow();
 
         return "Hulgi is sitting two metres in front of you. In a moment he looks around his camp and " +
@@ -2022,7 +2067,8 @@ internal sealed class CompanionDirector : IDisposable
             }
 
             Vector3 point = CampSense.ToVector(sample.Position);
-            if (!_camp.TryPlanWalk(_actor.Position, point, view, _scratchWalk) || _scratchWalk.Door != null)
+            if (!_camp.TryPlanWalk(_actor.Position, point, view, _scratchWalk) || _scratchWalk.Door != null ||
+                GoesWhereHeWasStopped(_scratchWalk))
             {
                 continue;
             }
@@ -2438,8 +2484,9 @@ internal sealed class CompanionDirector : IDisposable
         ReleaseCompass();
         _actor.Release();
 
-        // It may be another world, with its own doors.
+        // It may be another world, with its own doors and walls.
         _doors.Forget();
+        _setbacks.Clear();
         _view = null;
         _anchor = CompanionAnchor.None;
         _anchorValidity = AnchorValidity.Unknown;
@@ -3209,6 +3256,24 @@ internal sealed class CompanionDirector : IDisposable
             if (present && currentWish < 0)
             {
                 text.Append("    he is somewhere none of these covers, so any of them will do.").Append(Environment.NewLine);
+            }
+
+            // What "reachable" is leaving out for now, and why.
+            float now = Time.time;
+            foreach (WalkSetback setback in _setbacks.Remembered)
+            {
+                if (!setback.IsActiveAt(now))
+                {
+                    continue;
+                }
+
+                text.Append($"    leaving alone for another {setback.Until - now:0} s: the walk to {setback.Spot}")
+                    .Append(setback.HasPlace
+                        ? $", and the way past {setback.StoppedAt} that stopped him"
+                        : string.Empty)
+                    .Append(setback.Strikes > 1 ? $" (the same trouble {setback.Strikes} times now)" : string.Empty)
+                    .Append('.')
+                    .Append(Environment.NewLine);
             }
 
             return text.ToString();

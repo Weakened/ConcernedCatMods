@@ -448,6 +448,11 @@ internal sealed class CompanionActor
     /// into, or what was wrong with the ground - for the log.</summary>
     public string? LastBlockReason { get; private set; }
 
+    /// <summary>Which way, flat and of unit length, the step in
+    /// <see cref="LastBlockReason"/> was going. Zero while the last step was
+    /// not refused.</summary>
+    public Vector3 LastBlockHeading { get; private set; }
+
     /// <summary>Gets him up. The sitting pose is let go at once, so the game's
     /// own stand-up transition plays, and he moves while it does from where he
     /// sat to <paramref name="standAt"/> - off a bench onto the ground in front
@@ -714,12 +719,14 @@ internal sealed class CompanionActor
                 here, here + (direction * (travel + StepLookAheadMetres)), out string obstruction))
         {
             LastBlockReason = "walked into " + obstruction;
+            LastBlockHeading = direction;
             return WalkStep.Blocked;
         }
 
         if (!TryGroundAt(next, out float height, out string footing))
         {
             LastBlockReason = footing;
+            LastBlockHeading = direction;
             return WalkStep.Blocked;
         }
 
@@ -730,10 +737,12 @@ internal sealed class CompanionActor
         if (Mathf.Abs(next.y - here.y) > 0.6f)
         {
             LastBlockReason = $"a step of {next.y - here.y:+0.00;-0.00} m";
+            LastBlockHeading = direction;
             return WalkStep.Blocked;
         }
 
         LastBlockReason = null;
+        LastBlockHeading = Vector3.zero;
 
         _root.transform.position = next;
         _root.transform.rotation = Quaternion.Slerp(

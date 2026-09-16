@@ -6,7 +6,7 @@ Valheim mods by **The Concerned Cat**. This repository is a monorepo: shared eng
 
 | Mod | Status | Purpose |
 |---|---|---|
-| [Concerned Cartographer](docs/mods/concerned-cartographer/PROJECT.md) | v1.1.0 Hulgi and the Broken Compass | A living atlas: self-mapping roads, durable managed pins, search and decluttering, road-aware routes, optional walking and sailing Route Follow, and explicit collaborative sharing on Valheim's map. |
+| [Concerned Cartographer](docs/mods/concerned-cartographer/PROJECT.md) | v1.2.1 Meet Hulgi | A living atlas: self-mapping roads, durable managed pins, search and decluttering, road-aware routes, optional walking and sailing Route Follow, and explicit collaborative sharing on Valheim's map. |
 | [Concerned Teamster](docs/mods/concerned-teamster/PROJECT.md) | v1.0.4 stable patch release | Cart truth: measures cart load, grade, traction, and hauling risk, and scores road quality from recorded trips — while vanilla cart physics stay untouched by default. |
 | [Concerned Foreman](docs/mods/concerned-foreman/PROJECT.md) | in design (#270, #273) | Causal building diagnostics: point at a piece and hear why it is stable, exposed, comfortable or about to fail — plus a separately opted-in settlement runtime. |
 

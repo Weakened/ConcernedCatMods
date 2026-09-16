@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.2.1 - Hulgi stops walking into the same wall
+
+Fixed
+
+- **He no longer walks into the same wall again and again.** When something
+  stopped him on his way to a new spot, he sat down where he got to and left
+  *that spot* alone for a minute - but only that one spot. The next look chose
+  the spot beside it, the route went through the same gap, and he walked into
+  the same wall again: six times in a minute, behind one fire, in testing. Now he
+  remembers several walks at once, and above all the place that stopped him and
+  the way he was going. Every spot behind that gap is left alone, and he takes a
+  way round, or settles somewhere else good, instead. His short idle strolls
+  keep clear of it too. If the same place stops him again later, he leaves it
+  alone for longer: a minute, then two, then four, at most five. A wall he
+  cannot see past costs a bump now and then, not one every few seconds, and he
+  still tries again in case you took it down. He is still never teleported.
+  `cc_companion placement` lists what he is leaving alone, and `cc_companion
+  summon` gives him a fresh start.
+
+Everything else is unchanged from 1.2.0.
+
 ## 1.2.0 - Meet Hulgi
 
 **Meet Hulgi**, a drowned cartographer who never made it home and would rather
