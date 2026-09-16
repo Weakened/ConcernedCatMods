@@ -918,7 +918,7 @@ internal sealed class CompanionActor
             if (quieted > 0)
             {
                 _log.LogInfo(
-                    $"[actor] {quieted} of the source character's own script(s) were removed from the " +
+                    $"[actor] {quieted} of the source character's own script(s) were taken out of the " +
                     $"body before it was ever enabled: {quietedNames}.");
             }
 
@@ -1032,7 +1032,10 @@ internal sealed class CompanionActor
     /// destroy - a <c>[RequireComponent]</c> dependency, which it refuses by
     /// writing to the log and carrying on rather than by throwing - is
     /// disabled instead and named in the summary, so that case is visible
-    /// rather than silent. The cloth family is left to <c>RemoveCloth</c>,
+    /// rather than silent - which is also why the count returned covers both
+    /// halves: a build that refused every one of them must still say so out
+    /// loud rather than look like a build that found nothing.
+    /// The cloth family is left to <c>RemoveCloth</c>,
     /// which disables it for exactly that reason and should not have the
     /// decision re-litigated one method later.</summary>
     private static int RemoveBehaviours(GameObject subtree, out string names)
@@ -1078,9 +1081,20 @@ internal sealed class CompanionActor
                 {
                     removed.Add(type.Name);
                 }
-                else if (pass == 1 && script.enabled)
+                else if (pass == 1)
                 {
-                    script.enabled = false;
+                    // Still there, so Unity refused. Disable what can be
+                    // disabled - and name it either way, including one that
+                    // was already disabled. A game script that survives into
+                    // the figure is precisely the thing this is here to make
+                    // visible, and a disabled one is not safe by virtue of
+                    // being disabled: Unity runs Awake on activation whether a
+                    // component is enabled or not.
+                    if (script.enabled)
+                    {
+                        script.enabled = false;
+                    }
+
                     refused.Add(type.Name);
                 }
             }
@@ -1093,7 +1107,9 @@ internal sealed class CompanionActor
                 $"{string.Join(", ", refused)})";
         }
 
-        return removed.Count;
+        // Both halves, so a build where everything was refused still says so
+        // out loud instead of returning zero and logging nothing.
+        return removed.Count + refused.Count;
     }
 
     /// <summary>Gives the extracted model the owner's reference appearance.
@@ -1287,7 +1303,7 @@ internal sealed class CompanionActor
             _log.LogInfo(
                 $"[appearance] {slot} {prefabName}: {DescribePiece(prefab, piece)}" +
                 (cloth > 0 ? $" cloth-stripped={cloth}" : string.Empty) +
-                (pieceScripts > 0 ? $" scripts-removed=[{pieceScriptNames}]" : string.Empty));
+                (pieceScripts > 0 ? $" scripts-quieted=[{pieceScriptNames}]" : string.Empty));
 
             GameObject attached = piece;
             piece = null;
@@ -1802,7 +1818,7 @@ internal sealed class CompanionActor
             if (RemoveBehaviours(piece, out string garmentScripts) > 0)
             {
                 _log.LogInfo(
-                    $"[appearance] {slot} {prefabName} ({jointName}): scripts-removed=[{garmentScripts}]");
+                    $"[appearance] {slot} {prefabName} ({jointName}): scripts-quieted=[{garmentScripts}]");
             }
 
             if (string.Equals(jointName, "skin", StringComparison.Ordinal))

@@ -43,6 +43,14 @@ Fixed
   own; it is here because Unity skins by bone *index*, the game's own contract
   is the array, and a piece whose bones are ordered differently from the body's
   would otherwise be drawn somewhere else entirely with nothing to warn you.
+- **Building his body no longer wakes the game's own character script.** His
+  figure was switched on while one of the source character's scripts was still
+  inside it, and that script expects a live character - which a local-only
+  companion deliberately is not. It failed on every placement, wrote an error
+  into your log, and then sat half-built inside the game's own update loop for
+  the rest of the session. His body is now assembled switched off, and the
+  game's own scripts are taken out of it before the light goes on. Nothing you
+  can see changes: he looks, sits, walks, dresses and speaks exactly as before.
 
 Added
 
