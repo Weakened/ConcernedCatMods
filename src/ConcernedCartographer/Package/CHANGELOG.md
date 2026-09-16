@@ -1,11 +1,26 @@
 # Changelog
 
-## 1.1.2 - Hulgi, dressed and seated
+## 1.2.0 - Hulgi, on his feet
 
-1.1.1 shipped him bald, because his hair rendered a metre from his head and the
-build removed it rather than leave it floating. It also shipped a companion who
-would ignore a chair built beside him. Both are fixed, and this time the
-clothing was looked at rather than assumed.
+1.1.1 shipped him bald - his hair rendered a metre from his head and the build
+removed it rather than leave it floating - and it shipped a companion who would
+ignore a chair built beside him. Both are fixed. He also stopped being a statue:
+he speaks over his head the way a trader does, and he gets up now and then to
+move around his camp.
+
+Added
+
+- **He talks like an NPC, not like a notification.** His lines appear over his
+  head, the same bubble the trader uses, instead of across the middle of your
+  screen. Nothing networked: the bubble is drawn locally on your own client, no
+  creature is spawned, and the line does not go into your chat log.
+- **He moves around his camp.** He sits most of the time, gets up occasionally,
+  walks somewhere else nearby, stands looking around, and sits back down. When
+  it turns dark or wet he goes and finds a roof. He stays put while you are
+  talking to him, and he does not wander off a seat you built him. He never
+  leaves the area around your home point, never blocks anything and never
+  touches the world - turn it off with `Companions/Wander` if you prefer him
+  still.
 
 Fixed
 
