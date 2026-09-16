@@ -48,6 +48,10 @@ internal sealed class WorldPlacementProbe : IPlacementProbe, ISeatFinder
     /// Near a bed is where a camp is; on or against one is not.</summary>
     private const float BedMargin = 1f;
 
+    /// <summary>How close the fire piece itself may be. Beside a fire is the
+    /// coziest place in a camp; in it is not.</summary>
+    private const float FireMargin = 1f;
+
     /// <summary>Slope limit, as the dot product of the ground normal with up.
     /// About 40 degrees — a hillside camp still works, a cliff face does
     /// not.</summary>
@@ -180,8 +184,10 @@ internal sealed class WorldPlacementProbe : IPlacementProbe, ISeatFinder
     {
         try
         {
+            // Heat, and the area around a fire. Near a fire is exactly the cozy
+            // spot the owner asked him to prefer.
             EffectArea? heat = EffectArea.IsPointInsideArea(
-                grounded, EffectArea.Type.Heat, _warmthRadius);
+                grounded, EffectArea.Type.Heat | EffectArea.Type.Fire, _warmthRadius);
             return heat != null ? 0f : -1f;
         }
         catch
@@ -238,9 +244,15 @@ internal sealed class WorldPlacementProbe : IPlacementProbe, ISeatFinder
                 // is - not anywhere within two metres, which in a small
                 // shelter is everywhere and left a bed-anchored companion
                 // nowhere to go.
+                //
+                // Only the bed's SOLID colliders. A bed carries large trigger
+                // volumes - the base area that keeps monsters from spawning in a
+                // camp - and a point inside a trigger sphere is its own closest
+                // point, so every spot within ten metres of the owner's bed read
+                // as "on the bed". Seen in the placement table: Bed on 48 of 48.
                 if (hit.GetComponentInParent<Bed>() != null)
                 {
-                    if (IsWithin(hit, grounded + (Vector3.up * BodyCentre), BedMargin))
+                    if (!hit.isTrigger && IsWithin(hit, grounded + (Vector3.up * BodyCentre), BedMargin))
                     {
                         rejections |= PlacementRejection.Bed;
                     }
@@ -248,8 +260,18 @@ internal sealed class WorldPlacementProbe : IPlacementProbe, ISeatFinder
                     continue;
                 }
 
-                // A doorway is a route, not a room.
-                if (hit.GetComponentInParent<Door>() != null)
+                // The fire itself, as a solid thing he must not sit in. Its
+                // warmth area is a trigger and is warmth, not a hazard - see
+                // IsHazardousFire.
+                if (!hit.isTrigger && hit.GetComponentInParent<Fireplace>() != null &&
+                    IsWithin(hit, grounded + (Vector3.up * 0.3f), FireMargin))
+                {
+                    rejections |= PlacementRejection.Fire;
+                }
+
+                // A doorway is a route, not a room. The door's own collider, not
+                // any area volume hanging off it.
+                if (!hit.isTrigger && hit.GetComponentInParent<Door>() != null)
                 {
                     rejections |= PlacementRejection.Doorway;
                     continue;
@@ -519,8 +541,12 @@ internal sealed class WorldPlacementProbe : IPlacementProbe, ISeatFinder
     {
         try
         {
-            return EffectArea.IsPointInsideArea(grounded, EffectArea.Type.Burning, 0.5f) != null
-                || EffectArea.IsPointInsideArea(grounded, EffectArea.Type.Fire, 0.5f) != null;
+            // Burning only. EffectArea.Type.Fire is the area AROUND a fire - the
+            // one that puts "Fire" in the player's status bar - and it reaches
+            // metres out. Treated as a hazard it refused every fireside spot:
+            // Fire on 29 of 48 candidates around the owner's shelter. The fire
+            // piece itself is refused up close in the neighbourhood survey.
+            return EffectArea.IsPointInsideArea(grounded, EffectArea.Type.Burning, 0.5f) != null;
         }
         catch
         {
