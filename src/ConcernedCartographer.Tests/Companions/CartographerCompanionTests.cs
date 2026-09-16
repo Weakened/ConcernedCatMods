@@ -196,10 +196,19 @@ public sealed class CartographerCompanionTests : IDisposable
     }
 
     [Fact]
-    public void Evidence_AnEmptyOrUnreadableListingIsNotTreatedAsAHistory()
+    public void Evidence_AnEmptyDirectoryIsNotAHistoryButAnUnreadableOneIsNotProofEither()
     {
+        // Nothing there means nothing there.
         Assert.True(CartographerFirstRunFiles.IsOnlySelfWritten(new string[0]));
-        Assert.True(CartographerFirstRunFiles.IsOnlySelfWritten(null));
+
+        // A listing we could not take, or a name we could not read, is not
+        // evidence that a player is new. Every unknown in this rule resolves
+        // towards granting: telling a new player the story a few minutes late
+        // costs nothing, and telling a returning one they are new takes their
+        // toolbar away.
+        Assert.False(CartographerFirstRunFiles.IsOnlySelfWritten(null));
+        Assert.False(CartographerFirstRunFiles.IsSelfWritten(null));
+        Assert.False(CartographerFirstRunFiles.IsSelfWritten(""));
     }
 
     // ------------------------------------------------------------------

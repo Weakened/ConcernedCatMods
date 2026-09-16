@@ -326,6 +326,14 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
             int count = Physics.OverlapSphereNonAlloc(
                 point, SeatRecheckRadius, _overlapBuffer, ~0, QueryTriggerInteraction.Collide);
 
+            // The NEAREST matching seat, not the first collider that happens to
+            // answer. Two attach points can sit inside the same small sphere -
+            // a pair of stools, a bench with two places - and answering for the
+            // wrong one makes this disagree with the planner every pass, which
+            // is a rehome loop rather than a wrong answer.
+            Chair? nearest = null;
+            float nearestDistance = float.MaxValue;
+
             for (int index = 0; index < count; index++)
             {
                 Collider hit = _overlapBuffer[index];
@@ -335,12 +343,19 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
                     continue;
                 }
 
-                if (Vector3.Distance(chair.m_attachPoint.position, point) > SeatRecheckRadius)
+                float distance = Vector3.Distance(chair.m_attachPoint.position, point);
+                if (distance > SeatRecheckRadius || distance >= nearestDistance)
                 {
                     continue;
                 }
 
-                return !chair.IsInUse();
+                nearestDistance = distance;
+                nearest = chair;
+            }
+
+            if (nearest != null)
+            {
+                return !nearest.IsInUse();
             }
 
             // The zone is loaded and nothing is there. The seat is gone.

@@ -495,9 +495,22 @@ internal sealed class CompanionDirector : IDisposable
                 return;
 
             case ResidencyAction.Rehome:
+            {
+                // A rehome caused by losing a seat keeps the ordinary backoff.
+                // Everything else - the anchor moved, a bed was destroyed - is
+                // a player-visible event and settles immediately.
+                //
+                // The backoff is not politeness. The seat re-check asks the
+                // world a slightly different question than the planner does,
+                // and any persistent disagreement between them is a loop:
+                // lose the seat, re-plan onto it, lose it again, rebuilding a
+                // humanoid model every two seconds. Bounded, the same
+                // disagreement costs one rebuild every eight.
+                bool lostSeat = inputs.Seat == SeatStatus.Lost;
                 _actor.Release();
-                _actorRetryElapsed = 0f;
+                _actorRetryElapsed = lostSeat ? ActorRetrySeconds : 0f;
                 break;
+            }
 
             case ResidencyAction.Place:
                 break;

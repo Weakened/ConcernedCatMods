@@ -222,21 +222,35 @@ internal sealed class CompanionSidecar
         HasPreviouslyCarriedDamage = true;
     }
 
-    /// <summary>Asks for a save so newly quarantined rows are written back
-    /// under their marker.
+    /// <summary>True when rows were quarantined this load and the file should
+    /// be rewritten so they come back marked.
     ///
-    /// Without this the fix would never take effect on a quiet session: a load
-    /// that only carries rows changes no progress, so nothing else would ever
-    /// mark the file dirty, the marker would never be written, and the notice
-    /// would recur exactly as #292 describes. A read-only file is left alone —
-    /// not overwriting a newer build's data outranks tidying our own
-    /// bookkeeping.</summary>
+    /// Deliberately NOT <see cref="IsDirty"/>. Dirty means "the player made
+    /// progress that has not reached disk", and half this codebase reads it
+    /// that way: the collectible stays in the world while it is set, the
+    /// retire refuses while it is set, and a notice is shown because of it.
+    /// Setting it from a LOAD made a returning player's compass reappear at
+    /// their home point every session and blocked the retire forever. This is
+    /// a separate, quieter request: write the file once, change nothing about
+    /// what the player is told.
+    ///
+    /// A read-only file never asks — not overwriting a newer build's data
+    /// outranks tidying our own bookkeeping, at the cost of the notice
+    /// recurring there.</summary>
+    public bool NeedsQuarantineRewrite { get; private set; }
+
     internal void RequestQuarantineRewrite()
     {
         if (!IsReadOnly)
         {
-            IsDirty = true;
+            NeedsQuarantineRewrite = true;
         }
+    }
+
+    /// <summary>Called once the rewrite has actually been written.</summary>
+    internal void QuarantineRewritten()
+    {
+        NeedsQuarantineRewrite = false;
     }
 
     internal void RestoreGrant(UnlockReason reason)

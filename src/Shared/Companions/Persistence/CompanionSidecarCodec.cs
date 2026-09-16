@@ -221,12 +221,13 @@ internal static class CompanionSidecarCodec
                 // Carried again, counted never: the player was told once and
                 // there is nothing they can do about it, so telling them every
                 // session only trains them to ignore the notice.
-                if (fields.Length >= 2)
-                {
-                    sidecar.ReadmitQuarantinedLine(
-                        line.Substring(CarriedRow.Length + 1));
-                }
-
+                //
+                // A bare marker with nothing after it is corruption from
+                // outside - this build never writes one - and it is carried
+                // verbatim rather than dropped, because "never destroys a row
+                // it does not understand" has no exceptions.
+                sidecar.ReadmitQuarantinedLine(
+                    fields.Length >= 2 ? line.Substring(CarriedRow.Length + 1) : line);
                 continue;
             }
 
@@ -293,7 +294,10 @@ internal static class CompanionSidecarCodec
 
         if (skipped > 0)
         {
-            // Ask for a rewrite so these rows come back marked next time.
+            // Ask for a rewrite so these rows come back marked next time. This
+            // does not make the sidecar dirty: dirty means unsaved player
+            // progress, and saying so from a load has consequences all over the
+            // presentation layer that have nothing to do with a damaged row.
             sidecar.RequestQuarantineRewrite();
         }
 

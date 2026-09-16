@@ -90,12 +90,17 @@ internal static class CartographerFirstRunFiles
     };
 
     /// <summary>True when <paramref name="fileName"/> is something this build
-    /// wrote for itself rather than something a player did.</summary>
+    /// wrote for itself rather than something a player did.
+    ///
+    /// A name we cannot read is NOT one of ours. Every unknown in this file
+    /// resolves towards "somebody was here", because saying that to a new
+    /// player costs them a few minutes of story and saying the opposite to a
+    /// returning one takes their toolbar away.</summary>
     public static bool IsSelfWritten(string? fileName)
     {
         if (string.IsNullOrEmpty(fileName))
         {
-            return true;
+            return false;
         }
 
         foreach (string name in Names)
@@ -124,7 +129,9 @@ internal static class CartographerFirstRunFiles
     {
         if (fileNames == null)
         {
-            return true;
+            // A listing we could not take is not evidence that there is
+            // nothing there.
+            return false;
         }
 
         foreach (string name in fileNames)

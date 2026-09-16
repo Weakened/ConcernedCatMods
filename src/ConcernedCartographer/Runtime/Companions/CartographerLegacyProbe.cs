@@ -36,20 +36,50 @@ internal sealed class CartographerLegacyProbe
     };
 
     /// <summary>Profile-scoped files that only appear after a deliberate
-    /// action: saving a view, installing a translation.
-    ///
-    /// <c>survey-rules.tsv</c> used to be here and is deliberately gone. The
-    /// plugin writes a starter copy of it during startup, so finding it proved
-    /// only that this mod had been launched — including by the very session
-    /// doing the asking. A brand new character on a brand new world was granted
-    /// access as an existing user because of it, observed in game before this
-    /// was fixed. The translator's override file stays: it has a different name
-    /// from the template this build writes, and somebody has to create it.</summary>
+    /// action: saving a view, installing a translation. The translator's
+    /// override has a different name from the template this build writes, and
+    /// somebody has to create it.</summary>
     private static readonly string[] ProfileFiles =
     {
         "views.tsv",
         "cartographer-strings.tsv",
     };
+
+    /// <summary>Files that count as prior use only if they were already on
+    /// disk when this process started.
+    ///
+    /// <c>survey-rules.tsv</c> is both: the plugin writes a starter copy during
+    /// startup, and a player can edit or import their own. Existence alone
+    /// therefore proved only that the mod had been launched — including by the
+    /// very session doing the asking — and a brand new character on a brand new
+    /// world was granted access as an existing user because of it, observed in
+    /// game.
+    ///
+    /// The timestamp separates the two without reading a byte of the file: a
+    /// copy this session wrote is younger than the session. One a player has
+    /// had since their last install is older, and still counts.</summary>
+    private static readonly string[] PreexistingProfileFiles =
+    {
+        "survey-rules.tsv",
+    };
+
+    /// <summary>When this process began. Everything this build writes for
+    /// itself is younger than this; anything older was already there.</summary>
+    private static readonly DateTime ProcessStartUtc = ResolveProcessStartUtc();
+
+    private static DateTime ResolveProcessStartUtc()
+    {
+        try
+        {
+            return System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime();
+        }
+        catch
+        {
+            // Unknown start time must not turn an old file into a new one, so
+            // it resolves to "everything predates us" - the generous answer.
+            return DateTime.MaxValue;
+        }
+    }
 
     private readonly ManualLogSource _log;
 
@@ -68,6 +98,22 @@ internal sealed class CartographerLegacyProbe
     {
         LegacyEvidenceFacts facts = Gather(worldUid);
         return LegacyEvidenceRule.Evaluate(facts);
+    }
+
+    /// <summary>True when the file was on disk before this session started.
+    /// A timestamp, not contents: this probe has never read a file's bytes and
+    /// still does not.</summary>
+    private static bool ExistedBeforeThisSession(string path)
+    {
+        try
+        {
+            return File.Exists(path) && File.GetLastWriteTimeUtc(path) < ProcessStartUtc;
+        }
+        catch
+        {
+            // An unreadable timestamp is not evidence of a new player.
+            return true;
+        }
     }
 
     /// <summary>Every file name directly in the data directory. Names only —
@@ -125,6 +171,18 @@ internal sealed class CartographerLegacyProbe
                 {
                     profileWide = true;
                     break;
+                }
+            }
+
+            if (!profileWide)
+            {
+                foreach (string file in PreexistingProfileFiles)
+                {
+                    if (ExistedBeforeThisSession(Path.Combine(directory, file)))
+                    {
+                        profileWide = true;
+                        break;
+                    }
                 }
             }
 

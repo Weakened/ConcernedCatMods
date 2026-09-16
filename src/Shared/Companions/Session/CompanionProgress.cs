@@ -225,12 +225,23 @@ internal sealed class CompanionProgress
             Save();
         }
 
+        // Rows quarantined by the load have to reach disk under their marker or
+        // the same damage is reported again next session - which is the whole
+        // of #292. It gets its own save rather than riding on the grant's,
+        // because the common cases (a grant already recorded, a finished
+        // introduction) persist nothing and would leave the marker unwritten
+        // forever.
+        if (_sidecar.NeedsQuarantineRewrite && Save(force: true))
+        {
+            _sidecar.QuarantineRewritten();
+        }
+
         Decision = decision;
     }
 
-    private bool Save()
+    private bool Save(bool force = false)
     {
-        CompanionSidecarStore.SaveReport report = _store.Save(_sidecar);
+        CompanionSidecarStore.SaveReport report = _store.Save(_sidecar, force);
         if (!report.Saved)
         {
             if (report.Notice != null)

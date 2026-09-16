@@ -159,7 +159,8 @@ internal sealed class CompanionActor
 
     /// <summary>How the last customization piece was attached. Reported,
     /// because the two modes fail in different ways and the report used to say
-    /// only that something was attached.</summary>
+    /// only that something was attached. Reset per build, or a build where
+    /// nothing attached inherits the previous build's answer.</summary>
     private string _attachMode = "none";
 
     /// <summary>Pieces attached this build, by slot, so the fit check can take
@@ -216,6 +217,7 @@ internal sealed class CompanionActor
         Release();
         _seat = seat;
         _verified = false;
+        _attachMode = "none";
         _attachedPieces.Clear();
 
         foreach (string candidate in sourceCandidates)
@@ -784,6 +786,14 @@ internal sealed class CompanionActor
             return;
         }
 
+        // A hidden actor has no active renderers, so every piece would measure
+        // as unmeasurable and be destroyed for it. Wait until he is on screen
+        // to judge where his hair is.
+        if (!_root.activeInHierarchy)
+        {
+            return;
+        }
+
         _verified = true;
         Transform? head = _helmetJoint ?? FindHeadBone(_root.transform);
         if (head == null)
@@ -899,6 +909,7 @@ internal sealed class CompanionActor
 
             Transform[] source = mesh.bones;
             var mapped = new Transform[source.Length];
+            var candidates = new List<Transform>();
             bool complete = true;
 
             for (int index = 0; index < source.Length; index++)
@@ -907,12 +918,10 @@ internal sealed class CompanionActor
                 if (bone != null && byName.TryGetValue(bone.name, out Transform? match))
                 {
                     mapped[index] = match!;
-                    if (!bone.IsChildOf(piece.transform))
+                    if (bone.IsChildOf(piece.transform))
                     {
-                        continue;
+                        candidates.Add(bone);
                     }
-
-                    strays.Add(bone);
                 }
                 else
                 {
@@ -923,9 +932,16 @@ internal sealed class CompanionActor
 
             if (!complete)
             {
+                // This mesh is still bound to the armature it arrived with, so
+                // none of that armature may be destroyed on its behalf. The
+                // bones gathered so far are deliberately thrown away rather
+                // than kept: destroying them would leave a mesh pointing at
+                // half a skeleton, which looks like a different bug entirely.
                 missed++;
                 continue;
             }
+
+            strays.AddRange(candidates);
 
             Transform? root = mesh.rootBone != null && byName.TryGetValue(mesh.rootBone.name, out Transform? mappedRoot)
                 ? mappedRoot
@@ -1100,31 +1116,42 @@ internal sealed class CompanionActor
             return false;
         }
 
+        // Skin first, and each half in its own try. They are independent
+        // writes to different submaterials, and a model with only one of them
+        // should lose only the tint it cannot take - not both because the
+        // other threw first.
+        bool skinApplied = false;
+        ColourTriple? skin = AppearanceColour.HulgiSkin(palette);
+        if (skin.HasValue)
+        {
+            skinApplied = TrySetBodyColour(0, skin.Value, "skin tone");
+        }
+
+        TrySetBodyColour(1, hairColour, "hair tint");
+        return skinApplied;
+    }
+
+    /// <summary>One tinted submaterial, through a property block so the shared
+    /// vanilla material is never written to.</summary>
+    private bool TrySetBodyColour(int materialIndex, ColourTriple colour, string what)
+    {
+        if (_bodyModel == null)
+        {
+            return false;
+        }
+
         try
         {
             var block = new MaterialPropertyBlock();
-            var hairTint = new Color(hairColour.R, hairColour.G, hairColour.B, 1f);
-            _bodyModel.GetPropertyBlock(block, 1);
-            block.SetColor(SkinColourProperty, hairTint);
-            _bodyModel.SetPropertyBlock(block, 1);
-
-            ColourTriple? skin = AppearanceColour.HulgiSkin(palette);
-            if (!skin.HasValue)
-            {
-                return false;
-            }
-
-            var skinTint = new Color(skin.Value.R, skin.Value.G, skin.Value.B, 1f);
-            block = new MaterialPropertyBlock();
-            _bodyModel.GetPropertyBlock(block, 0);
-            block.SetColor(SkinColourProperty, skinTint);
-            _bodyModel.SetPropertyBlock(block, 0);
+            _bodyModel.GetPropertyBlock(block, materialIndex);
+            block.SetColor(SkinColourProperty, new Color(colour.R, colour.G, colour.B, 1f));
+            _bodyModel.SetPropertyBlock(block, materialIndex);
             return true;
         }
         catch (Exception exception)
         {
             _log.LogInfo(
-                "The companion's skin tone could not be applied on this build; he keeps the source " +
+                $"The companion's {what} could not be applied on this build; he keeps the source " +
                 $"model's own: {SafeLogText.Brief(exception)}");
             return false;
         }

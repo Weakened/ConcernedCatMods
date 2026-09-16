@@ -73,12 +73,20 @@ internal static class CustomizationPaletteReader
     {
         private const float IntervalSeconds = 0.25f;
 
+        /// <summary>How long to keep looking. Long enough to cover a slow boot
+        /// and a player who reads the menu before creating anybody, short
+        /// enough that a build which simply does not have this screen is not
+        /// scanned four times a second for the rest of the evening.</summary>
+        private const float GiveUpSeconds = 600f;
+
         public ManualLogSource? Log;
 
         private float _elapsed;
+        private float _lifetime;
 
         private void Update()
         {
+            _lifetime += Time.unscaledDeltaTime;
             _elapsed += Time.unscaledDeltaTime;
             if (_elapsed < IntervalSeconds)
             {
@@ -86,7 +94,25 @@ internal static class CustomizationPaletteReader
             }
 
             _elapsed = 0f;
-            if (!Read(Log).Observed)
+
+            bool done;
+            try
+            {
+                done = Read(Log).Observed;
+            }
+            catch (Exception exception)
+            {
+                // A build whose customization type is shaped differently
+                // throws where this is JIT-compiled, not inside it. Catching
+                // here is what stops that becoming an exception every quarter
+                // second for the rest of the session.
+                Log?.LogInfo(
+                    "The companion's reference hair colour cannot be looked up on this build, so his " +
+                    "documented fallback colour is used: " + exception.Message);
+                done = true;
+            }
+
+            if (!done && _lifetime < GiveUpSeconds)
             {
                 return;
             }
