@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using BepInEx.Logging;
 using TheConcernedCat.Companions.Dialogue;
 using TheConcernedCat.Companions.Identity;
@@ -7,6 +8,7 @@ using TheConcernedCat.Companions.Persistence;
 using TheConcernedCat.Companions.Placement;
 using TheConcernedCat.Companions.Quest;
 using TheConcernedCat.Companions.Session;
+using TheConcernedCat.Companions.Surroundings;
 using TheConcernedCat.Companions.Unlock;
 using TheConcernedCat.ConcernedCartographer.Atlas;
 using TheConcernedCat.ConcernedCartographer.Companions;
@@ -70,6 +72,12 @@ internal sealed class CompanionDirector : IDisposable
     /// The 3-10 m band is CC-NPC-004's own requirement.</summary>
     private static readonly PlacementRules HulgiRules =
         new PlacementRules(minimumRadius: 3f, maximumRadius: 10f);
+
+    /// <summary>Where he looks for a roof in the dark or the wet: nearer home
+    /// than he sits by day - a small hut's whole floor is inside three metres
+    /// of its bed - and a little further out.</summary>
+    private static readonly PlacementRules ShelterRules =
+        new PlacementRules(minimumRadius: 1.2f, maximumRadius: 12f);
 
     /// <summary>Sources to extract an animated body from, best first. Every one
     /// is looked up at runtime and refused if its visual subtree turns out to
@@ -158,6 +166,10 @@ internal sealed class CompanionDirector : IDisposable
     /// retracing a circle.</summary>
     private const float StrollTurnDegrees = 137f;
 
+    /// <summary>How far beyond a fire's hazard he sits by it: the ring he takes
+    /// a spot in, and how near counts as already being by that fire.</summary>
+    private const float FireSitReachMetres = 3f;
+
     /// <summary>How far in front of a seat he stands to raise a toast. Enough
     /// to clear the seat's front edge with his whole body.</summary>
     private const float ToastStepMetres = 0.75f;
@@ -192,6 +204,7 @@ internal sealed class CompanionDirector : IDisposable
     private readonly CompanionStoryPanel _storyPanel;
     private readonly CompassProximity _proximity = new CompassProximity();
     private readonly PlacementPlanner _hulgiPlanner = new PlacementPlanner(HulgiRules);
+    private readonly PlacementPlanner _shelterPlanner = new PlacementPlanner(ShelterRules);
     private readonly WorldPlacementProbe _hulgiProbe;
     private readonly BedValidityProbe _bedProbe;
     private readonly CompanionActor _actor;
@@ -232,15 +245,32 @@ internal sealed class CompanionDirector : IDisposable
     }
 
     private DoorPhase _doorPhase;
-    private Door? _exitDoor;
-    private Vector3 _doorCentre;
-    private Vector3 _doorInner;
-    private Vector3 _doorOuter;
     private bool _doorClosedBehind;
+    private bool _doorOpenedByHim;
     private float _doorTimer;
-    private readonly List<Vector3> _afterDoorRoute = new List<Vector3>();
-    private readonly List<Vector3> _doorScratch = new List<Vector3>();
-    private readonly Collider[] _doorBuffer = new Collider[128];
+
+    /// <summary>The walk he is on: its route and, when it goes through a door,
+    /// which door, where he stands to open it and where he steps through to.
+    /// </summary>
+    private readonly WalkPlan _walk = new WalkPlan();
+
+    /// <summary>Scratch for asking whether a walk exists, and the last one that
+    /// did. The planner asks best first and stops at its first yes, so the last
+    /// walk found is the walk to the spot it chose.</summary>
+    private readonly WalkPlan _scratchWalk = new WalkPlan();
+    private readonly WalkPlan _foundWalk = new WalkPlan();
+
+    /// <summary>Where the walk ends, and what he faces when he sits down there.
+    /// </summary>
+    private Vector3 _relocationTarget;
+    private Vector3? _relocationFacing;
+
+    private readonly CompanionDoors _doors;
+    private readonly CampSense _camp;
+
+    /// <summary>The camp as last read, and the wish he is acting on.</summary>
+    private CampView? _view;
+    private HangoutIntent _hangout = new HangoutIntent(HangoutKind.Home, -1, default);
 
     /// <summary>How long a door takes to swing open before he walks through.
     /// </summary>
@@ -252,16 +282,12 @@ internal sealed class CompanionDirector : IDisposable
     /// <summary>Set when the camp fingerprint changed, until the survey it
     /// asked for has run. Lets that one survey happen even mid-wander.</summary>
     private bool _campChanged;
-    private readonly Collider[] _campBuffer = new Collider[256];
-    private int _campMask = -1;
+    private readonly List<Piece> _campPieces = new List<Piece>();
+    private readonly List<Door> _campDoors = new List<Door>();
+    private int _campChecks;
 
     private RoutineState _routine = RoutineState.Settled;
     private float _routineElapsed;
-
-    /// <summary>How long ago a look for somewhere dry found nowhere in reach;
-    /// infinity when there is none on record. Reset by a clear, dry day, so a
-    /// new spell of weather starts with a prompt look.</summary>
-    private float _sinceShelterSearchFailed = float.PositiveInfinity;
 
     private Vector3 _strollTarget;
 
@@ -285,6 +311,9 @@ internal sealed class CompanionDirector : IDisposable
     /// is about to cause. Valid for this residency pass only.</summary>
     private PlacementResult _sweptPlan;
     private bool _sweptPlanValid;
+    private Vector3? _sweptFacing;
+    private readonly WalkPlan _sweptWalk = new WalkPlan();
+    private bool _sweptWalkValid;
     private float _talkCooldown;
     private float _ambientElapsed;
     private int _conversationTurn;
@@ -321,6 +350,11 @@ internal sealed class CompanionDirector : IDisposable
             () => _settings.CompanionBeardPreset.Value,
             () => _settings.CompanionChestPreset.Value,
             () => _settings.CompanionLegsPreset.Value);
+        _doors = new CompanionDoors(
+            log, CartographerLegacyProbe.DataDirectory, () => _settings.CompanionDoorAccess.Value);
+        _camp = new CampSense(_doors);
+        CompanionDoorHover.Install(log);
+        CompanionDoorHover.Describe = DescribeDoorForHover;
         _biomes = new KnownBiomeReader(log);
         _store = new CompanionSidecarStore(CartographerLegacyProbe.DataDirectory);
         _rateLimited = new RateLimitedLog(log, 30f);
@@ -374,7 +408,8 @@ internal sealed class CompanionDirector : IDisposable
     {
         ReleaseCompass();
         _actor.Release();
-        _sinceShelterSearchFailed = float.PositiveInfinity;
+        _doors.Forget();
+        _view = null;
         _anchorValidity = AnchorValidity.Unknown;
         _presentationSupported = true;
         _actorRetryElapsed = 0f;
@@ -534,6 +569,7 @@ internal sealed class CompanionDirector : IDisposable
             UpdateDrinking(deltaTime);
             UpdateProximityAndInput();
             UpdateCompanionInput();
+            UpdateDoorHotkey();
             UpdateAmbientChatter(deltaTime);
         }
         catch (Exception exception)
@@ -563,6 +599,7 @@ internal sealed class CompanionDirector : IDisposable
             evidence,
             _settings.CompanionToolsOnly.Value);
         _toolsOnlyApplied = _settings.CompanionToolsOnly.Value;
+        _doors.UseWorld(scope.World);
 
         // A per-character starting offset, so two characters in the same world
         // do not hear the catalogue in the same order. Deterministic, so one
@@ -659,6 +696,8 @@ internal sealed class CompanionDirector : IDisposable
         // A swept plan is good for one pass. Anything that defers the rebuild
         // to a later pass must re-plan against the world as it is then.
         _sweptPlanValid = false;
+        _sweptWalkValid = false;
+        _sweptFacing = null;
 
         // A frame has passed since anything was built, so a skinned preset has
         // been posed at least once and can now be asked where it actually is.
@@ -740,9 +779,10 @@ internal sealed class CompanionDirector : IDisposable
         // forty-eight more probes for an answer that cannot have changed:
         // there is no frame boundary between the two, so nothing can have been
         // built, claimed or carried away in between.
+        Vector3? facing = _sweptFacing;
         PlacementResult placement = _sweptPlanValid
             ? _sweptPlan
-            : _hulgiPlanner.Plan(_anchor, _hulgiProbe);
+            : PlanWhereHeBelongs(out facing);
 
         if (!placement.Found)
         {
@@ -756,7 +796,7 @@ internal sealed class CompanionDirector : IDisposable
 
         if (!_actor.TryBuild(
                 placement.Position, placement.Pose, _anchor, ActorPrefabCandidates, _log,
-                placement.Seat))
+                placement.Seat, facing))
         {
             // Every fallback was exhausted. Presentation is disabled with an
             // actionable notice; the companion still exists, still counts, and
@@ -769,7 +809,9 @@ internal sealed class CompanionDirector : IDisposable
         _actor.RememberAnchor(_anchor);
         _actor.SetVisible(_settings.CompanionVisible.Value);
         _visibilityApplied = _settings.CompanionVisible.Value;
-        _log.LogInfo($"Hulgi settled near your {DescribeAnchor(_anchor.Kind)}: {_actor.Report}.");
+        _log.LogInfo(
+            $"Hulgi settled near your {DescribeAnchor(_anchor.Kind)} ({DescribeWish(_hangout, _view)}): " +
+            $"{_actor.Report}.");
 
         // The first time he actually appears after joining, the player is told
         // - once, remembered on disk before it is shown, and again only after a
@@ -848,6 +890,7 @@ internal sealed class CompanionDirector : IDisposable
             $"  seats: {(seatLines.Count == 0 ? "none free within reach" : string.Join("; ", seatLines))}" +
             Environment.NewLine +
             $"  result: {outcome}." + Environment.NewLine +
+            ExplainCommonSense() +
             "  Every candidate is listed in the log under [placement].";
     }
 
@@ -885,6 +928,9 @@ internal sealed class CompanionDirector : IDisposable
             case CompanionPose.SitOnSeat:
                 return "on a seat at " + _actor.Seat + " (a local pose only; the seat is not claimed, " +
                     "and he gives it up if anyone sits down or it is taken away)";
+            case CompanionPose.SleepInBed:
+                return "asleep in a spare bed at " + _actor.Seat.Position + " (a local pose only; the bed " +
+                    "is not claimed, and he gets up if anybody claims it)";
             case CompanionPose.SitByFire:
                 return "on the ground by a fire" +
                     (_hulgiProbe.SeatSeen ? "; a seat was seen but was not the best spot" : "");
@@ -894,29 +940,25 @@ internal sealed class CompanionDirector : IDisposable
         }
     }
 
-    /// <summary>Looks for somewhere better to sit, occasionally.
+    /// <summary>Looks around his camp for somewhere better to be - every half
+    /// minute, and at once when something in camp changed.
     ///
-    /// Three things keep this cheap. It does not run at all once he is on a
-    /// seat, because nothing outranks one and a sweep that cannot change the
-    /// answer is a sweep not worth paying for. It does not run without a home
-    /// point, because the planner has nothing to plan around. And it runs on
-    /// its own slow clock rather than the residency tick.
+    /// "Better" is his common sense's word: the wish list for this camp at this
+    /// hour (<see cref="CommonSense"/>), and the best place on it he can walk
+    /// to through doors he may use. He moves only for a strictly better rank
+    /// than the one he already has, so two equally good spots never have him
+    /// pacing, and a camp that has not changed never moves him.
     ///
     /// It reports a comparison, never a decision: whether moving is worth it is
-    /// <see cref="ResidencyPlanner"/>'s to say, and it says yes only to a
-    /// strictly better pose.</summary>
+    /// <see cref="ResidencyPlanner"/>'s to say.</summary>
     private SeatUpgrade ReadSeatUpgrade()
     {
-        // Seated is no longer a reason not to look: a chair inside is worth
-        // leaving when the only fire is now outside.
         if (!_actor.Exists || !_anchor.IsValid)
         {
             return SeatUpgrade.NotSurveyed;
         }
 
-        // Not while he is idly on his feet - unless the camp just changed. A
-        // fire broken or built is worth reacting to mid-wander; the timer alone
-        // is not.
+        // Not while he is idly on his feet - unless the camp just changed.
         if (_routine != RoutineState.Settled && !_campChanged)
         {
             return SeatUpgrade.NotSurveyed;
@@ -937,48 +979,83 @@ internal sealed class CompanionDirector : IDisposable
         _seatUpgradeElapsed = 0f;
         _campChanged = false;
 
-        // Measured against the spot as the world stands now, and only spots
-        // better than it are asked whether he can walk there - route queries
-        // are the expensive part, and most candidates are never better.
-        int current = CurrentSpotValue();
-        PlacementResult offer = _hulgiPlanner.Plan(
-            _anchor, _hulgiProbe, accept: sample =>
-                _hulgiPlanner.ValueOf(sample) > current && CanWalkToSpot(sample.Position));
-        if (!offer.Found)
+        CampView view = ScanCamp();
+        IReadOnlyList<HangoutIntent> wishes = CommonSense.Preferences(view.Snapshot, CompanionTemperament.Hulgi);
+        int current = CurrentRank(view, wishes, out _);
+        if (current == 0)
         {
             return SeatUpgrade.NotSurveyed;
         }
 
-        _sweptPlan = offer;
+        Vector3 from = WalkOrigin();
+        HangoutChoice better = FindBest(view, wishes, current, target => CanWalkTo(from, target, view));
+        if (!better.Found)
+        {
+            return SeatUpgrade.NotSurveyed;
+        }
+
+        _sweptPlan = better.Spot;
         _sweptPlanValid = true;
-        return new SeatUpgrade(current, offer.Value);
+        _sweptFacing = better.Facing;
+        _sweptWalk.CopyFrom(_foundWalk);
+        _sweptWalkValid = true;
+        _hangout = better.Wish;
+        return new SeatUpgrade(RankValue(current), RankValue(better.Rank));
     }
 
-    /// <summary>How good the spot he occupies is right now, on the planner's
-    /// scale: warmth as the world reads it at his feet this moment, and his
-    /// seat if he is on one.</summary>
-    private int CurrentSpotValue()
+    /// <summary>Where a walk from him starts. Usually where he stands; from a
+    /// bed, the floor beside it, on whichever side has room.</summary>
+    private Vector3 WalkOrigin()
     {
-        // Where he sits, not where he may be standing for a toast: measured from
-        // the step in front of his seat, his own seat can look like somewhere
-        // better to go.
-        Vector3 at = _actor.RestingPosition;
-        PlacementProbeSample here = _hulgiProbe.Probe(new WorldPoint(at.x, at.y, at.z));
-        SeatOffer seat = _actor.Pose == CompanionPose.SitOnSeat ? _actor.Seat : SeatOffer.None;
-        return _hulgiPlanner.ValueOf(new PlacementProbeSample(
-            here.Position, PlacementRejection.None, here.DistanceToFire, seat));
+        if (_actor.Pose != CompanionPose.SleepInBed || !_actor.Seat.IsUsable)
+        {
+            return _actor.Position;
+        }
+
+        Vector3 bed = CampSense.ToVector(_actor.Seat.Position);
+        Quaternion heading = Quaternion.Euler(0f, _actor.Seat.YawDegrees, 0f);
+        Vector3[] sides =
+        {
+            heading * Vector3.right, heading * Vector3.left, heading * Vector3.back, heading * Vector3.forward,
+        };
+
+        foreach (Vector3 side in sides)
+        {
+            if (CompanionFooting.TryFind(bed + (side * 1.1f), 0.6f, 2.5f, out Vector3 floor, out Vector3 normal) &&
+                Vector3.Dot(normal, Vector3.up) >= 0.75f &&
+                !CompanionFooting.IsBodyObstructed(floor))
+            {
+                return floor;
+            }
+        }
+
+        return _actor.Position;
     }
 
-    private bool CanWalkToSpot(WorldPoint spot)
+    /// <summary>A rank on the residency planner's scale, where higher is
+    /// better.</summary>
+    private static int RankValue(int rank)
     {
-        var target = new Vector3(spot.X, spot.Y, spot.Z);
-        return _actor.Exists && _actor.CanWalk &&
-            Vector3.Distance(_actor.Position, target) <= WalkRelocateMetres &&
-            (TryRoute(target) || TryPlanDoorExit(target, commit: false));
+        return rank == CommonSense.Nowhere ? int.MinValue + 1 : -rank;
+    }
+
+    /// <summary>Whether he could walk from <paramref name="from"/> to
+    /// <paramref name="target"/> through doors he may use, near enough to walk
+    /// rather than be put there. The walk is kept when he could.</summary>
+    private bool CanWalkTo(Vector3 from, Vector3 target, CampView view)
+    {
+        if (!_actor.CanWalk || Flat(from, target) > WalkRelocateMetres ||
+            !_camp.TryPlanWalk(from, target, view, _scratchWalk))
+        {
+            return false;
+        }
+
+        _foundWalk.CopyFrom(_scratchWalk);
+        return true;
     }
 
     /// <summary>Starts the walk to the best spot he can reach, when there is one
-    /// close enough. False sends the caller down the old rebuild path.</summary>
+    /// close enough. False sends the caller down the rebuild path.</summary>
     private bool TryBeginRelocation()
     {
         if (!_actor.Exists || !_actor.CanWalk || !_settings.CompanionVisible.Value || !_anchor.IsValid)
@@ -986,69 +1063,73 @@ internal sealed class CompanionDirector : IDisposable
             return false;
         }
 
-        PlacementResult plan = _sweptPlanValid
-            ? _sweptPlan
-            : _hulgiPlanner.Plan(_anchor, _hulgiProbe, accept: sample => CanWalkToSpot(sample.Position));
-        if (!plan.Found)
+        PlacementResult plan;
+        Vector3? facing;
+        if (_sweptPlanValid && _sweptWalkValid)
         {
-            return false;
+            plan = _sweptPlan;
+            facing = _sweptFacing;
+            _walk.CopyFrom(_sweptWalk);
         }
-
-        Vector3 target = TargetOf(plan);
-        if (Vector3.Distance(_actor.Position, target) > WalkRelocateMetres)
+        else
         {
-            return false;
-        }
-
-        _doorPhase = DoorPhase.None;
-        _exitDoor = null;
-        if (!TryRoute(target))
-        {
-            if (!TryPlanDoorExit(target, commit: true))
+            // His home moved, or his seat or bed went: anywhere his common sense
+            // accepts that he can walk to.
+            CampView view = ScanCamp();
+            IReadOnlyList<HangoutIntent> wishes = CommonSense.Preferences(view.Snapshot, CompanionTemperament.Hulgi);
+            Vector3 from = WalkOrigin();
+            HangoutChoice choice = FindBest(view, wishes, CommonSense.Nowhere, target => CanWalkTo(from, target, view));
+            if (!choice.Found)
             {
                 return false;
             }
 
-            _doorPhase = DoorPhase.ToDoor;
-            _doorClosedBehind = false;
+            plan = choice.Spot;
+            facing = choice.Facing;
+            _walk.CopyFrom(_foundWalk);
+            _hangout = choice.Wish;
         }
 
-        float length = 0f;
-        for (int index = 1; index < _routeScratch.Count; index++)
+        Vector3 target = TargetOf(plan);
+        if (Flat(_actor.Position, target) > WalkRelocateMetres)
         {
-            length += Vector3.Distance(_routeScratch[index - 1], _routeScratch[index]);
+            return false;
         }
+
+        if (_actor.Pose == CompanionPose.SleepInBed)
+        {
+            // Out of bed first, onto the floor the walk was planned from. A route
+            // cannot start on a mattress: the first step down off one is taller
+            // than a step, and the walk would fail at once.
+            _actor.SetDownAt(CampSense.ToPoint(WalkOrigin()));
+        }
+
+        _doorPhase = _walk.Door != null ? DoorPhase.ToDoor : DoorPhase.None;
+        _doorClosedBehind = false;
+        _doorOpenedByHim = false;
 
         _strollRoute.Clear();
-        _strollRoute.AddRange(_routeScratch);
+        _strollRoute.AddRange(_walk.Route);
         _strollCorner = 1;
-        _strollTarget = target;
+        _strollTarget = _walk.Door != null ? _walk.Approach : target;
+
         _relocation = plan;
+        _relocationTarget = target;
+        _relocationFacing = facing;
         _relocating = true;
         _actor.StandUp();
         EnterRoutine(RoutineState.Strolling);
 
         // Generous: a route with a doorway in it is slower than its length.
-        _relocationPatience = (length / StrollSpeed * 1.5f) + 6f;
+        _relocationPatience = (_walk.Length / StrollSpeed * 1.5f) + 6f +
+            (_walk.Door != null ? DoorSwingSeconds + 4f : 0f);
         _actor.RememberAnchor(_anchor);
 
-        if (_doorPhase == DoorPhase.ToDoor)
-        {
-            // Walked twice more: to the door is in the length already; through it
-            // and on from its far side is not.
-            float after = 0f;
-            for (int index = 1; index < _afterDoorRoute.Count; index++)
-            {
-                after += Vector3.Distance(_afterDoorRoute[index - 1], _afterDoorRoute[index]);
-            }
-
-            _relocationPatience += ((after + 2f) / StrollSpeed * 1.5f) + DoorSwingSeconds + 4f;
-        }
-
         _log.LogInfo(
-            $"Hulgi is getting up and walking {length:0.0} m to {DescribeSpot(plan)}" +
-            (_doorPhase == DoorPhase.ToDoor ? ", out through the door" : "") +
-            (_strollRoute.Count > 2 ? $" by a route with {_strollRoute.Count - 2} turn(s)." : "."));
+            $"Hulgi is getting up and walking {_walk.Length:0.0} m to {DescribeSpot(plan)} " +
+            $"({DescribeWish(_hangout, _view)})" +
+            (_walk.Door == null ? string.Empty : _walk.DoorShut ? ", opening a door on the way" : ", through an open door") +
+            (_walk.Route.Count > 2 ? $", by a route with {_walk.Route.Count - 2} turn(s)." : "."));
         return true;
     }
 
@@ -1064,6 +1145,8 @@ internal sealed class CompanionDirector : IDisposable
     {
         switch (plan.Pose)
         {
+            case CompanionPose.SleepInBed:
+                return "a spare bed";
             case CompanionPose.SitOnSeat:
                 return plan.Value >= 3 ? "a seat by the fire" : "a seat";
             case CompanionPose.SitByFire:
@@ -1076,8 +1159,11 @@ internal sealed class CompanionDirector : IDisposable
     /// <summary>One step of a walk to a new spot, and the arrival. A seat is
     /// arrived at when he is right beside it - the seat itself is often what
     /// stops him - and then he sits exactly where a rebuild would have put him.
-    /// If he cannot get there on foot at all, he is put there the old way,
-    /// rather than left standing in the middle of the camp.</summary>
+    /// A door on the way is walked up to, opened if it is shut and he still may,
+    /// stepped through, and closed again behind him once he is clear of it. If
+    /// he cannot get there on foot at all, he is put there the old way, rather
+    /// than left standing in the middle of the camp, and the log says where the
+    /// walk stopped.</summary>
     private void TickRelocation(float deltaTime)
     {
         if (!_actor.Exists)
@@ -1097,8 +1183,7 @@ internal sealed class CompanionDirector : IDisposable
                     return;
                 }
 
-                if (_exitDoor == null ||
-                    Vector3.Distance(_actor.Position, _doorInner) > 1.2f)
+                if (_walk.Door == null || Flat(_actor.Position, _walk.Approach) > 1.2f)
                 {
                     // Never reached the door. Treated like any failed walk.
                     step = WalkStep.Blocked;
@@ -1106,9 +1191,18 @@ internal sealed class CompanionDirector : IDisposable
                 }
 
                 _actor.StopWalking();
-                if (DoorState(_exitDoor) == 0)
+                if (CompanionDoors.StateOf(_walk.Door) == 0)
                 {
-                    UseDoor(_exitDoor);
+                    // Asked again at the door itself: its owner may have closed it
+                    // to companions, or it may have been locked, while he walked.
+                    if (!_doors.IsAllowed(_walk.Door) || !CompanionDoors.CanOpen(_walk.Door))
+                    {
+                        step = WalkStep.Blocked;
+                        break;
+                    }
+
+                    UseDoor(_walk.Door);
+                    _doorOpenedByHim = true;
                 }
 
                 _doorPhase = DoorPhase.Opening;
@@ -1128,7 +1222,7 @@ internal sealed class CompanionDirector : IDisposable
             case DoorPhase.Through:
                 // The open leaf beside the frame is not a wall, so these few
                 // steps skip the sweep; the doorway itself was just walked up to.
-                step = _actor.StepToward(_doorOuter, deltaTime, StrollSpeed, 0.35f, checkObstruction: false);
+                step = _actor.StepToward(_walk.Exit, deltaTime, StrollSpeed, 0.35f, checkObstruction: false);
                 if (step == WalkStep.Walking && _routineElapsed < _relocationPatience)
                 {
                     return;
@@ -1141,8 +1235,9 @@ internal sealed class CompanionDirector : IDisposable
 
                 _doorPhase = DoorPhase.After;
                 _strollRoute.Clear();
-                _strollRoute.AddRange(_afterDoorRoute);
+                _strollRoute.AddRange(_walk.AfterDoor);
                 _strollCorner = 1;
+                _strollTarget = _relocationTarget;
                 return;
 
             case DoorPhase.After:
@@ -1167,60 +1262,67 @@ internal sealed class CompanionDirector : IDisposable
 
         // However the walk ended, a door he opened does not stay open.
         CloseDoorBehindHim(force: true);
+        DoorPhase endedAt = _doorPhase;
         _doorPhase = DoorPhase.None;
         _relocating = false;
         _actor.StopWalking();
 
-        bool beside = Vector3.Distance(_actor.Position, _strollTarget) <= 1.5f;
+        bool beside = Flat(_actor.Position, _relocationTarget) <= 1.5f;
         if (step == WalkStep.Arrived || beside)
         {
-            _actor.SettleInto(_relocation.Position, _relocation.Pose, _relocation.Seat);
+            _actor.SettleInto(_relocation.Position, _relocation.Pose, _relocation.Seat, _relocationFacing);
             EnterRoutine(RoutineState.Settled);
-            _log.LogInfo($"Hulgi sat down at {DescribeSpot(_relocation)}.");
+            _log.LogInfo(_relocation.Pose == CompanionPose.SleepInBed
+                ? "Hulgi lay down in a spare bed for the night."
+                : $"Hulgi sat down at {DescribeSpot(_relocation)}.");
             return;
         }
 
         _log.LogInfo(
-            "Hulgi could not reach his new spot on foot, so he is put there instead. " +
-            "Nothing about your tools or progress is affected.");
+            $"Hulgi could not reach his new spot on foot ({step} at {Describe(_actor.Position)}, " +
+            $"{Flat(_actor.Position, _relocationTarget):0.0} m short" +
+            (endedAt == DoorPhase.None ? string.Empty : ", at the door: " + endedAt) +
+            "), so he is put there instead. Nothing about your tools or progress is affected.");
         _actor.Release();
         _actorRetryElapsed = 0f;
     }
 
-    /// <summary>Closes the door he came out through, once he is two metres
-    /// clear of it - or at once when <paramref name="force"/> says the walk is
-    /// over. Only a door he opened, only if it is still open, and only once.
-    /// </summary>
+    /// <summary>Closes the door he opened, once he is two metres clear of it -
+    /// or at once when <paramref name="force"/> says the walk is over. Only a
+    /// door he opened, only if it is still open, and only once. A door that was
+    /// open when he got there he leaves as he found it.</summary>
     private void CloseDoorBehindHim(bool force = false)
     {
-        if (_exitDoor == null || _doorClosedBehind)
+        if (_walk.Door == null || _doorClosedBehind || !_doorOpenedByHim)
         {
             return;
         }
 
-        Vector3 flat = _actor.Position - _doorCentre;
-        flat.y = 0f;
-        if (!force && flat.magnitude < 2f)
+        if (!force && Flat(_actor.Position, _walk.DoorCentre) < 2f)
         {
             return;
         }
 
         _doorClosedBehind = true;
-        if (DoorState(_exitDoor) != 0)
+        if (CompanionDoors.StateOf(_walk.Door) != 0)
         {
-            UseDoor(_exitDoor);
+            UseDoor(_walk.Door);
             _log.LogInfo("Hulgi closed the door behind him.");
         }
     }
 
-    /// <summary>Fingerprints what makes a spot good or reachable near his home:
-    /// every fire and whether it burns, every seat, every door and whether it is
-    /// open. When the fingerprint changes he re-plans on the very next pass
-    /// instead of waiting for the half-minute survey - which is what makes him
-    /// notice a campfire being broken, or built, within a second.
+    /// <summary>Fingerprints what his common sense reads: every fire near home
+    /// and whether it burns, every bed and whether anybody claimed it, every
+    /// seat, every door and whether it is open and open to him, and whether it
+    /// is night or wet. When the fingerprint changes he looks again on the very
+    /// next pass instead of waiting for the half-minute survey - which is what
+    /// makes him notice a campfire broken or built, a bed claimed, a door opened
+    /// to companions, or nightfall, within about a second.
     ///
-    /// Order-independent (XOR of per-object hashes), so the order physics
-    /// happens to return colliders in cannot look like a change.</summary>
+    /// Read from the game's own lists of loaded pieces rather than a physics
+    /// query, so a big base cannot overflow a buffer and hide something.
+    /// Order-independent (XOR of per-object hashes), so the order the lists
+    /// happen to hold things in cannot look like a change.</summary>
     private void NoticeCampChanges()
     {
         if (!_actor.Exists || !_anchor.IsValid || _relocating)
@@ -1231,47 +1333,70 @@ internal sealed class CompanionDirector : IDisposable
         int signature = 0;
         try
         {
-            if (_campMask == -1)
+            var home = new Vector3(_anchor.Position.X, _anchor.Position.Y, _anchor.Position.Z);
+            float radius = CompanionTemperament.Hulgi.CampRadiusMetres + 2f;
+
+            _campPieces.Clear();
+            Piece.GetAllComfortPiecesInRadius(home, radius, _campPieces);
+            foreach (Piece piece in _campPieces)
             {
-                _campMask = LayerMask.GetMask("piece", "piece_nonsolid", "Default_small");
+                if (piece == null)
+                {
+                    continue;
+                }
+
+                int state;
+                Fireplace? fire = piece.m_comfortGroup == Piece.ComfortGroup.Fire
+                    ? piece.GetComponent<Fireplace>()
+                    : null;
+                Bed? bed = fire == null ? piece.GetComponent<Bed>() : null;
+                if (fire != null)
+                {
+                    state = fire.IsBurning() ? 1 : 2;
+                }
+                else if (bed != null)
+                {
+                    state = CampSense.IsClaimed(bed) ? 3 : 4;
+                }
+                else if (piece.GetComponentInChildren<Chair>() != null)
+                {
+                    state = 5;
+                }
+                else
+                {
+                    continue;
+                }
+
+                signature ^= Fingerprint(piece.transform.position, state);
             }
 
-            var centre = new Vector3(_anchor.Position.X, _anchor.Position.Y, _anchor.Position.Z);
-            int count = Physics.OverlapSphereNonAlloc(
-                centre, HulgiRules.MaximumRadius + 5f, _campBuffer, _campMask, QueryTriggerInteraction.Collide);
-
-            var seen = new HashSet<Component>();
-            for (int index = 0; index < count; index++)
+            // Doors are not comfort pieces, and the full list of pieces is the
+            // longer walk, so it is refreshed every third look.
+            if (_campChecks++ % 3 == 0)
             {
-                Collider hit = _campBuffer[index];
-                if (hit == null)
+                CompanionDoors.FindDoors(home, radius, _campDoors);
+            }
+
+            foreach (Door door in _campDoors)
+            {
+                if (door == null)
                 {
                     continue;
                 }
 
-                Component? thing = (Component?)hit.GetComponentInParent<Fireplace>()
-                    ?? (Component?)hit.GetComponentInParent<Chair>()
-                    ?? hit.GetComponentInParent<Door>();
-                if (thing == null || !seen.Add(thing))
-                {
-                    continue;
-                }
+                signature ^= Fingerprint(
+                    door.transform.position,
+                    10 + (CompanionDoors.StateOf(door) != 0 ? 1 : 0) + (_doors.IsAllowed(door) ? 2 : 0));
+            }
 
-                Vector3 at = thing.transform.position;
-                int state = thing is Fireplace fire
-                    ? (fire.IsBurning() ? 1 : 2)
-                    : thing is Door door
-                        ? DoorState(door) + 3
-                        : 7;
+            if (CampSense.IsNight())
+            {
+                signature ^= 0x5bd1e995;
+            }
 
-                unchecked
-                {
-                    int hash = (Mathf.RoundToInt(at.x * 4f) * 73856093) ^
-                        (Mathf.RoundToInt(at.y * 4f) * 19349663) ^
-                        (Mathf.RoundToInt(at.z * 4f) * 83492791) ^
-                        (state * 2654435);
-                    signature ^= hash;
-                }
+            if (CampSense.IsWet())
+            {
+                signature ^= 0x27d4eb2d;
             }
         }
         catch (Exception)
@@ -1288,21 +1413,30 @@ internal sealed class CompanionDirector : IDisposable
         _campSignature = signature;
         if (!firstLook)
         {
-            // This very frame, not on the next two-second residency tick.
-            _campChanged = true;
-            _seatUpgradeElapsed = SeatUpgradeSeconds;
-            _residencyElapsed = ResidencyIntervalSeconds;
-            _log.LogInfo("Something changed around Hulgi's camp - a fire, a seat or a door; he looks again.");
+            LookAgainNow();
+            _log.LogInfo(
+                "Something changed around Hulgi's camp - a fire, a bed, a seat, a door or the hour; he looks again.");
         }
     }
 
-    /// <summary>0 closed, anything else open, read the way the door itself
-    /// reads it.</summary>
-    private static int DoorState(Door door)
+    private static int Fingerprint(Vector3 at, int state)
     {
-        ZNetView? view = door.GetComponent<ZNetView>();
-        ZDO? zdo = view == null ? null : view.GetZDO();
-        return zdo == null ? 0 : zdo.GetInt(ZDOVars.s_state);
+        unchecked
+        {
+            return (Mathf.RoundToInt(at.x * 4f) * 73856093) ^
+                (Mathf.RoundToInt(at.y * 4f) * 19349663) ^
+                (Mathf.RoundToInt(at.z * 4f) * 83492791) ^
+                (state * 2654435);
+        }
+    }
+
+    /// <summary>Asks for a look around camp on the very next residency pass,
+    /// this frame rather than in two seconds.</summary>
+    private void LookAgainNow()
+    {
+        _campChanged = true;
+        _seatUpgradeElapsed = SeatUpgradeSeconds;
+        _residencyElapsed = ResidencyIntervalSeconds;
     }
 
     /// <summary><c>cc_companion summon</c>: sits him on the ground two metres in
@@ -1331,11 +1465,12 @@ internal sealed class CompanionDirector : IDisposable
         _actor.StopWalking();
         _actor.SetDownAt(new WorldPoint(spot.x, spot.y, spot.z));
         EnterRoutine(RoutineState.Settled);
-        _seatUpgradeElapsed = SeatUpgradeSeconds;
+        LookAgainNow();
 
-        return "Hulgi is sitting two metres in front of you. Within a couple of seconds he looks " +
-            "for the best spot he can reach on foot and walks there - through open doorways, not " +
-            "closed ones. If nothing reachable is better than where he is, he stays.";
+        return "Hulgi is sitting two metres in front of you. In a moment he looks around his camp and " +
+            "walks to where his common sense says he belongs - by day the fire nearest your bed, at " +
+            "night a spare bed or a roof - through doors you let companions use, and no others. If " +
+            "nowhere he can reach is better than where he is, he stays.";
     }
 
     /// <summary>Every so often, a drink - with a toast in front of it now and
@@ -1357,7 +1492,8 @@ internal sealed class CompanionDirector : IDisposable
             }
 
             bool canDrink = _actor.Exists && _actor.CanDrink && _settings.CompanionVisible.Value &&
-                !_relocating && (_routine == RoutineState.Settled || _routine == RoutineState.Standing);
+                !_relocating && !_actor.IsAsleep &&
+                (_routine == RoutineState.Settled || _routine == RoutineState.Standing);
 
             if (_drinks.Tick(deltaTime, canDrink, out DrinkPlan plan))
             {
@@ -1463,6 +1599,11 @@ internal sealed class CompanionDirector : IDisposable
             return "Drink: Hulgi is walking. Ask again once he has stopped.";
         }
 
+        if (_actor.IsAsleep)
+        {
+            return "Drink: Hulgi is asleep.";
+        }
+
         if (!_actor.CanDrink)
         {
             return "Drink: there is no animated, visible Hulgi to have one.";
@@ -1492,13 +1633,12 @@ internal sealed class CompanionDirector : IDisposable
 
     /// <summary>The bit of him that is not a statue.
     ///
-    /// He sits most of the time, gets up occasionally, walks somewhere else in
-    /// his camp, stands looking at it for a moment, and sits back down - and
-    /// when it turns dark or wet he goes and finds a roof. That is the whole of
-    /// it. <see cref="CampRoutine"/> owns when; this owns where and how, and
-    /// keeps both inside the rules: he walks a straight line over ground the
-    /// same probe already approved, he never leaves the camp band, he blocks
-    /// nothing, and nothing he does touches the world or the save.
+    /// He sits most of the time, gets up occasionally, walks somewhere nearby -
+    /// around the fire he sits by, when he has one - stands looking at it for a
+    /// moment, and goes back to where his common sense says he belongs.
+    /// <see cref="CampRoutine"/> owns when; this owns where and how: over ground
+    /// the placement probe approves, through no door on a potter, blocking
+    /// nothing and changing nothing in the world.
     ///
     /// Off by setting, and off entirely on a build whose animator has no
     /// locomotion to drive - a companion who slides reads as broken, where one
@@ -1552,11 +1692,6 @@ internal sealed class CompanionDirector : IDisposable
 
         _routineElapsed += deltaTime;
 
-        bool nightOrStorm = IsNightOrStorm();
-        _sinceShelterSearchFailed = nightOrStorm
-            ? _sinceShelterSearchFailed + deltaTime
-            : float.PositiveInfinity;
-
         bool finished = false;
         if (_routine == RoutineState.Strolling)
         {
@@ -1569,10 +1704,8 @@ internal sealed class CompanionDirector : IDisposable
             _routineElapsed,
             finished,
             PlayerWithinTalkRange(),
-            IsSheltered(_actor.Position),
-            nightOrStorm,
-            _actor.Pose,
-            _sinceShelterSearchFailed);
+            IsNightOrStorm(),
+            _actor.Pose);
 
         switch (CampRoutine.Decide(inputs))
         {
@@ -1586,21 +1719,24 @@ internal sealed class CompanionDirector : IDisposable
                 break;
 
             case RoutineAction.Settle:
+            {
                 _actor.StopWalking();
-                _actor.SettleWhereHeStands();
+
+                // Back to where he belongs - his seat by the fire - rather than
+                // sitting down wherever the stroll happened to end and getting up
+                // again a moment later.
                 EnterRoutine(RoutineState.Settled);
-                bool covered = IsSheltered(_actor.Position);
-                if (nightOrStorm && !covered)
+                LookAgainNow();
+                SeatUpgrade upgrade = ReadSeatUpgrade();
+                if (upgrade.IsWorthMoving && TryBeginRelocation())
                 {
-                    // However he got here - nowhere dry in reach, a dry spot he
-                    // could not get to, or his patience running out on the way -
-                    // he has looked and he is sitting in the open. Recording only
-                    // the first of those left the other two free to loop.
-                    NoteShelterSearchFailed();
+                    break;
                 }
 
-                _log.LogInfo("Hulgi sat down" + (covered ? " under cover." : " in the open."));
+                _actor.SettleWhereHeStands();
+                _log.LogInfo("Hulgi sat down" + (CampSense.IsSheltered(_actor.Position) ? " under cover." : " in the open."));
                 break;
+            }
         }
     }
 
@@ -1610,22 +1746,20 @@ internal sealed class CompanionDirector : IDisposable
         _routineElapsed = 0f;
     }
 
-    /// <summary>Picks somewhere to go and gets him up.
+    /// <summary>Picks somewhere nearby to potter to and gets him up.
     ///
-    /// The candidates are points around his home at walking distance, taken at
-    /// a turning angle so consecutive strolls do not retrace the same line, and
-    /// each one is put through the placement probe that chose his original spot
-    /// - so he can only ever walk to ground he could have been placed on. In
-    /// the dark or the wet the first sheltered candidate wins outright; that is
-    /// the whole of "he knows to come in out of the rain".
-    ///
-    /// If nothing passes, he stays sitting. A stroll is a nicety, and there is
-    /// no version of this worth a companion standing in a river for.</summary>
+    /// Around the fire he sits by when he has one, around home otherwise, at a
+    /// turning angle so consecutive strolls do not retrace the same line. Every
+    /// candidate goes through the placement probe that chose his spot, and must
+    /// be walkable from where he stands through no door at all: a potter does
+    /// not go through anybody's door. If nothing passes, he stays sitting.
+    /// </summary>
     private void BeginStroll()
     {
-        bool wantsShelter = IsNightOrStorm();
-        Vector3 home = new Vector3(_anchor.Position.X, _anchor.Position.Y, _anchor.Position.Z);
-        Vector3? fallback = null;
+        CampView view = _view ?? ScanCamp();
+        Vector3 centre = _hangout.Kind == HangoutKind.Fire
+            ? CampSense.ToVector(_hangout.Focus)
+            : new Vector3(_anchor.Position.X, _anchor.Position.Y, _anchor.Position.Z);
 
         for (int step = 0; step < StrollCandidates; step++)
         {
@@ -1637,9 +1771,9 @@ internal sealed class CompanionDirector : IDisposable
             float radius = StrollNearMetres +
                 ((_strollTurn % 3) * (StrollFarMetres - StrollNearMetres) / 2f);
             var candidate = new WorldPoint(
-                home.x + (Mathf.Cos(angle) * radius),
-                home.y,
-                home.z + (Mathf.Sin(angle) * radius));
+                centre.x + (Mathf.Cos(angle) * radius),
+                centre.y,
+                centre.z + (Mathf.Sin(angle) * radius));
 
             PlacementProbeSample sample = _hulgiProbe.Probe(candidate);
             if (!sample.IsUsable)
@@ -1647,48 +1781,14 @@ internal sealed class CompanionDirector : IDisposable
                 continue;
             }
 
-            var point = new Vector3(
-                sample.Position.X, sample.Position.Y, sample.Position.Z);
-
-            // Somewhere he can actually get to - around a building, through
-            // an open doorway - and not merely somewhere he can see.
-            if (!TryRoute(point))
+            Vector3 point = CampSense.ToVector(sample.Position);
+            if (!_camp.TryPlanWalk(_actor.Position, point, view, _scratchWalk) || _scratchWalk.Door != null)
             {
                 continue;
             }
 
-            if (wantsShelter && !IsSheltered(point))
-            {
-                fallback ??= point;
-                continue;
-            }
-
-            if (StrollTo(point))
-            {
-                return;
-            }
-        }
-
-        if (wantsShelter)
-        {
-            // Every candidate was looked at and none of them is dry. That is a
-            // fact about this camp, not about this moment, so it is recorded:
-            // the routine will not send him to look again for a while, which is
-            // what stops the up-walk-sit-up loop seen in game at 7287919. His
-            // ordinary pottering still passes through here, so a roof built
-            // nearby is still found at his next stroll; only the extra
-            // get-up-just-to-look is held back.
-            NoteShelterSearchFailed();
-        }
-
-        if (fallback.HasValue)
-        {
-            // Nowhere dry within reach. Moving anyway is better than sitting in
-            // the open pretending the weather is fine.
-            if (StrollTo(fallback.Value))
-            {
-                return;
-            }
+            StrollTo(point, _scratchWalk);
+            return;
         }
 
         // Nothing he could stand on anywhere in the ring. He stays sitting, and
@@ -1697,29 +1797,10 @@ internal sealed class CompanionDirector : IDisposable
         _routineElapsed = 0f;
     }
 
-    /// <summary>Records that a look for somewhere dry came back empty. Said in
-    /// the log once per spell of weather, not once per look.</summary>
-    private void NoteShelterSearchFailed()
+    private void StrollTo(Vector3 point, WalkPlan plan)
     {
-        if (float.IsPositiveInfinity(_sinceShelterSearchFailed))
-        {
-            _log.LogInfo(
-                "Hulgi looked for somewhere dry and ended up in the open, so he is not getting up " +
-                "just to look again for a while.");
-        }
-
-        _sinceShelterSearchFailed = 0f;
-    }
-
-    private bool StrollTo(Vector3 point)
-    {
-        if (!TryRoute(point))
-        {
-            return false;
-        }
-
         _strollRoute.Clear();
-        _strollRoute.AddRange(_routeScratch);
+        _strollRoute.AddRange(plan.Route);
         _strollCorner = 1;
         _strollTarget = point;
         _actor.StandUp();
@@ -1727,171 +1808,14 @@ internal sealed class CompanionDirector : IDisposable
         _log.LogInfo(
             $"Hulgi is getting up and walking {Vector3.Distance(_actor.Position, point):0.0} m " +
             $"to {point.ToString("0.#")}" +
-            (_strollRoute.Count > 2 ? $" by a route with {_strollRoute.Count - 2} turn(s)" : "") +
-            (IsNightOrStorm() ? " (looking for shelter)." : "."));
-        return true;
-    }
-
-    /// <summary>A way from where he stands to <paramref name="point"/> that does
-    /// not go through anything, left in the scratch route.
-    ///
-    /// Asked of the game's own navmesh first - the same pathfinding its
-    /// creatures use, which knows walls from doorways - as a local query only:
-    /// no BaseAI, nothing networked, nothing written. The humanoid agent that
-    /// does not swim, because a camp stroll is not a swim. A full route or
-    /// nothing: a partial one ends at a wall.
-    ///
-    /// The navmesh builds its tiles on first request, so an early ask can come
-    /// back empty for a place that is perfectly reachable. Then, and only then,
-    /// a straight line is accepted - if nothing solid stands anywhere on it.
-    /// Either way he never walks through a wall: that is what the owner asked
-    /// for, and a walk that stops short is better than one that does
-    /// not.</summary>
-    private bool TryRoute(Vector3 point)
-    {
-        return _actor.Exists && TryRouteFrom(_actor.Position, point, _routeScratch);
-    }
-
-    /// <summary>The same question as <see cref="TryRoute"/>, from anywhere - the
-    /// far side of a door, for instance - into <paramref name="route"/>.</summary>
-    private static bool TryRouteFrom(Vector3 from, Vector3 point, List<Vector3> route)
-    {
-        route.Clear();
-
-        try
-        {
-            Pathfinding pathfinding = Pathfinding.instance;
-            if (pathfinding != null &&
-                pathfinding.GetPath(
-                    from, point, route, Pathfinding.AgentType.HumanoidNoSwim,
-                    requireFullPath: true) &&
-                route.Count >= 2)
-            {
-                return true;
-            }
-        }
-        catch (Exception)
-        {
-            // A navmesh that will not answer is treated like one not built yet.
-        }
-
-        route.Clear();
-        if (CompanionFooting.IsWayBlocked(from, point))
-        {
-            return false;
-        }
-
-        route.Add(from);
-        route.Add(point);
-        return true;
-    }
-
-    /// <summary>A way out of the building he is in, through a closed door, to
-    /// <paramref name="target"/>: reach the door from inside, and route onward
-    /// from its far side. Only from under a roof - he lets himself OUT of a
-    /// building, never into one; the owner's rule is that a closed door means
-    /// the chairs inside are not for him, and he takes the log instead.
-    ///
-    /// Only doors the local player could open: no key, closable again, guard
-    /// stone access allowed. With <paramref name="commit"/> the plan is kept
-    /// for the walk; without, it only answers whether one exists.</summary>
-    private bool TryPlanDoorExit(Vector3 target, bool commit)
-    {
-        if (!_actor.Exists || !IsSheltered(_actor.Position))
-        {
-            return false;
-        }
-
-        Vector3 here = _actor.Position;
-        int count;
-        try
-        {
-            count = Physics.OverlapSphereNonAlloc(
-                here, 10f, _doorBuffer, LayerMask.GetMask("piece", "piece_nonsolid", "Default_small"),
-                QueryTriggerInteraction.Ignore);
-        }
-        catch (Exception)
-        {
-            return false;
-        }
-
-        var doors = new List<Door>();
-        for (int index = 0; index < count; index++)
-        {
-            Door? door = _doorBuffer[index] == null ? null : _doorBuffer[index].GetComponentInParent<Door>();
-            if (door != null && !doors.Contains(door) && CanUseDoor(door))
-            {
-                doors.Add(door);
-            }
-        }
-
-        doors.Sort((a, b) =>
-            Vector3.Distance(here, a.transform.position).CompareTo(Vector3.Distance(here, b.transform.position)));
-
-        foreach (Door door in doors)
-        {
-            Collider? leaf = door.GetComponentInChildren<Collider>();
-            Vector3 centre = leaf != null ? leaf.bounds.center : door.transform.position;
-            Vector3 across = door.transform.forward;
-            across.y = 0f;
-            if (across.sqrMagnitude < 0.01f)
-            {
-                continue;
-            }
-
-            across.Normalize();
-            float side = Vector3.Dot(across, here - centre) >= 0f ? 1f : -1f;
-            Vector3 inner = Grounded(centre + (across * side * 1.0f));
-            Vector3 outer = Grounded(centre - (across * side * 1.1f));
-
-            if (!TryRouteFrom(here, inner, _doorScratch) || !TryRouteFrom(outer, target, _afterDoorRoute))
-            {
-                continue;
-            }
-
-            if (commit)
-            {
-                _exitDoor = door;
-                _doorCentre = centre;
-                _doorInner = inner;
-                _doorOuter = outer;
-                _routeScratch.Clear();
-                _routeScratch.AddRange(_doorScratch);
-            }
-
-            return true;
-        }
-
-        return false;
-    }
-
-    private static Vector3 Grounded(Vector3 point)
-    {
-        return CompanionFooting.TryFind(point, 2f, 4f, out Vector3 ground, out _) ? ground : point;
-    }
-
-    /// <summary>A door he may use: closed now, no key, can be closed again, and
-    /// guard-stone access allowed here - the same doors the local player could
-    /// open, and nothing else.</summary>
-    private static bool CanUseDoor(Door door)
-    {
-        try
-        {
-            return DoorState(door) == 0 &&
-                door.m_keyItem == null &&
-                !door.m_canNotBeClosed &&
-                (!door.m_checkGuardStone || PrivateArea.CheckAccess(door.transform.position, 0f, flash: false));
-        }
-        catch (Exception)
-        {
-            return false;
-        }
+            (_strollRoute.Count > 2 ? $" by a route with {_strollRoute.Count - 2} turn(s)." : "."));
     }
 
     /// <summary>Swings a door the way the game does for a player standing where
     /// he stands: through its own UseDoor RPC, away from him. The same RPC
-    /// closes it again. The one thing in the world a companion is allowed to
-    /// change - see CLAUDE.md.</summary>
+    /// closes it again. Only ever a door its owner lets companions use, and one
+    /// a player could open - the single thing in the world a companion may
+    /// change; see CLAUDE.md.</summary>
     private void UseDoor(Door door)
     {
         try
@@ -1941,20 +1865,6 @@ internal sealed class CompanionDirector : IDisposable
         Player player = Player.m_localPlayer;
         return player != null &&
             Vector3.Distance(player.transform.position, _actor.Position) <= TalkRadius;
-    }
-
-    /// <summary>Whether that point has a roof over it. The game's own test, the
-    /// one it uses to decide whether a player is sheltered from rain.</summary>
-    private static bool IsSheltered(Vector3 point)
-    {
-        try
-        {
-            return Cover.IsUnderRoof(point + (Vector3.up * 0.5f));
-        }
-        catch (Exception)
-        {
-            return false;
-        }
     }
 
     /// <summary>Whether a person would want to be indoors. Night, or weather
@@ -2088,7 +1998,7 @@ internal sealed class CompanionDirector : IDisposable
         // nothing from the finished introduction survives into the new one.
         ReleaseCompass();
         _actor.Release();
-        _sinceShelterSearchFailed = float.PositiveInfinity;
+        _view = null;
         _anchor = CompanionAnchor.None;
         _anchorValidity = AnchorValidity.Unknown;
         _noticedRecorded = false;
@@ -2117,6 +2027,13 @@ internal sealed class CompanionDirector : IDisposable
         if (!_actor.Exists || !_actor.Seat.IsUsable)
         {
             return SeatStatus.NotSeated;
+        }
+
+        if (_actor.Pose == CompanionPose.SleepInBed)
+        {
+            // A spare bed stops being his the moment anybody claims it or breaks
+            // it.
+            return BedStillSpare(_actor.Seat.Position) ? SeatStatus.Held : SeatStatus.Lost;
         }
 
         // Null means the ground there is not loaded, so nothing can be
@@ -2175,7 +2092,7 @@ internal sealed class CompanionDirector : IDisposable
             _talkCooldown -= deltaTime;
         }
 
-        if (!_settings.CompanionAmbientChatter.Value || !_actor.Exists)
+        if (!_settings.CompanionAmbientChatter.Value || !_actor.Exists || _actor.IsAsleep)
         {
             return;
         }
@@ -2277,7 +2194,10 @@ internal sealed class CompanionDirector : IDisposable
             "so it is being reopened for the current one. No progress is written to the previous scope.");
         ReleaseCompass();
         _actor.Release();
-        _sinceShelterSearchFailed = float.PositiveInfinity;
+
+        // It may be another world, with its own doors.
+        _doors.Forget();
+        _view = null;
         _anchor = CompanionAnchor.None;
         _anchorValidity = AnchorValidity.Unknown;
         _noticedRecorded = false;
@@ -2711,6 +2631,547 @@ internal sealed class CompanionDirector : IDisposable
         _log.LogInfo(text);
     }
 
+    /// <summary>His camp, read now, and kept for the potter that may follow.
+    /// </summary>
+    private CampView ScanCamp()
+    {
+        var home = new Vector3(_anchor.Position.X, _anchor.Position.Y, _anchor.Position.Z);
+        _view = _camp.Scan(home, CompanionTemperament.Hulgi.CampRadiusMetres);
+        return _view;
+    }
+
+    /// <summary>Where he appears when he is put somewhere rather than walking
+    /// there: the first time he shows up, or after a move too far to walk.
+    ///
+    /// The same common sense as everything else, with one difference: he is not
+    /// anywhere yet, so "can he walk there" becomes "may he be there" - could
+    /// he walk there from the open ground near home through doors he may use.
+    /// That is what keeps him out of a house whose doors are closed to
+    /// companions even when the claimed bed he calls home is inside it, which
+    /// is exactly how he came to sit inside the owner's cottage while the fire
+    /// burned outside.</summary>
+    private PlacementResult PlanWhereHeBelongs(out Vector3? facing)
+    {
+        facing = null;
+        if (!_anchor.IsValid)
+        {
+            return _hulgiPlanner.Plan(_anchor, _hulgiProbe);
+        }
+
+        CampView view = ScanCamp();
+        IReadOnlyList<HangoutIntent> wishes = CommonSense.Preferences(view.Snapshot, CompanionTemperament.Hulgi);
+        HangoutChoice choice = FindBest(
+            view, wishes, CommonSense.Nowhere, target => _camp.IsAllowedPlace(target, view, _scratchWalk));
+        if (!choice.Found)
+        {
+            // Nothing his common sense can place him at through doors he may
+            // use. The plain plan around home still beats not appearing.
+            return _hulgiPlanner.Plan(_anchor, _hulgiProbe);
+        }
+
+        _hangout = choice.Wish;
+        facing = choice.Facing;
+        return choice.Spot;
+    }
+
+    /// <summary>The first wish, best first, that the world can grant and that
+    /// beats <paramref name="betterThan"/>, with the spot it grants.</summary>
+    private HangoutChoice FindBest(
+        CampView view, IReadOnlyList<HangoutIntent> wishes, int betterThan, Func<Vector3, bool> reachable)
+    {
+        for (int index = 0; index < wishes.Count; index++)
+        {
+            if (CommonSense.Rank(index, onSeat: true) >= betterThan)
+            {
+                break;
+            }
+
+            // A wish he already has on the ground is only worth moving for with a
+            // seat.
+            bool seatOnly = CommonSense.Rank(index, onSeat: false) >= betterThan;
+            PlacementResult spot = Resolve(view, wishes[index], reachable, seatOnly, out Vector3? facing, out _);
+            if (!spot.Found)
+            {
+                continue;
+            }
+
+            bool furniture = spot.Pose == CompanionPose.SitOnSeat || spot.Pose == CompanionPose.SleepInBed;
+            int rank = CommonSense.Rank(index, furniture);
+            if (rank < betterThan)
+            {
+                return new HangoutChoice(wishes[index], spot, rank, facing);
+            }
+        }
+
+        return default;
+    }
+
+    /// <summary>The spot one wish comes to in this camp, if the world grants it:
+    /// a seat or a patch of ground by the fire, facing it; a roof near home; a
+    /// spare bed; somewhere around home. Every candidate goes through the same
+    /// placement probe - water, slopes, hazards, beds and doorways - and then
+    /// through <paramref name="reachable"/>, lazily, best first.</summary>
+    private PlacementResult Resolve(
+        CampView view, HangoutIntent wish, Func<Vector3, bool> reachable, bool seatOnly,
+        out Vector3? facing, out string why)
+    {
+        facing = null;
+        why = string.Empty;
+        PlacementResult spot;
+        switch (wish.Kind)
+        {
+            case HangoutKind.Sleep:
+                return ResolveBed(view, wish, reachable, out why);
+
+            case HangoutKind.Fire:
+            {
+                CampFire fire = view.Snapshot.Fires[wish.Target];
+                facing = CampSense.ToVector(fire.Position);
+                var rules = new PlacementRules(
+                    minimumRadius: fire.HazardMetres + 0.6f,
+                    maximumRadius: fire.HazardMetres + FireSitReachMetres,
+                    fireComfortRadius: HulgiRules.FireComfortRadius,
+                    maximumHeightDelta: 1.5f);
+                spot = new PlacementPlanner(rules).Plan(
+                    new CompanionAnchor(AnchorKind.DefaultSpawn, fire.Position),
+                    _hulgiProbe,
+                    accept: sample => (!seatOnly || sample.SeatOffer.IsUsable) && reachable(TargetOf(sample)));
+                break;
+            }
+
+            case HangoutKind.Shelter:
+                spot = _shelterPlanner.Plan(_anchor, _hulgiProbe, accept: sample =>
+                    (!seatOnly || sample.SeatOffer.IsUsable) &&
+                    CampSense.IsSheltered(TargetOf(sample)) &&
+                    reachable(TargetOf(sample)));
+                break;
+
+            default:
+                spot = _hulgiPlanner.Plan(_anchor, _hulgiProbe, accept: sample =>
+                    (!seatOnly || sample.SeatOffer.IsUsable) && reachable(TargetOf(sample)));
+                break;
+        }
+
+        if (!spot.Found)
+        {
+            why = (spot.BlockedBy & PlacementRejection.NotLoaded) != 0
+                ? "the ground there is not loaded yet"
+                : "nowhere there he may reach through doors he may use" +
+                  (spot.BlockedBy == PlacementRejection.None ? string.Empty : $" (also refused: {spot.BlockedBy})");
+        }
+
+        return spot;
+    }
+
+    /// <summary>A spare bed: the floor beside it he can walk to, and the bed's
+    /// own spawn point and heading to lie at. Tried on every side, because a
+    /// bed against a wall has only some.</summary>
+    private PlacementResult ResolveBed(
+        CampView view, HangoutIntent wish, Func<Vector3, bool> reachable, out string why)
+    {
+        why = string.Empty;
+        CampBed bed = view.Snapshot.Beds[wish.Target];
+        Vector3 spawn = CampSense.ToVector(bed.Position);
+        Quaternion heading = Quaternion.Euler(0f, bed.YawDegrees, 0f);
+        Vector3[] sides =
+        {
+            heading * Vector3.right, heading * Vector3.left, heading * Vector3.back, heading * Vector3.forward,
+        };
+
+        foreach (Vector3 side in sides)
+        {
+            Vector3 beside = spawn + (side * 1.1f);
+            if (!CompanionFooting.TryFind(beside, 0.6f, 2.5f, out Vector3 floor, out Vector3 normal) ||
+                Vector3.Dot(normal, Vector3.up) < 0.75f ||
+                CompanionFooting.IsBodyObstructed(floor) ||
+                !reachable(floor))
+            {
+                continue;
+            }
+
+            return PlacementResult.Placed(
+                CampSense.ToPoint(floor), CompanionPose.SleepInBed, 0,
+                SeatOffer.Free(bed.Position, bed.YawDegrees, "attach_bed"), 0);
+        }
+
+        why = "no floor beside it he may reach";
+        return PlacementResult.Deferred(0, PlacementRejection.Occupied);
+    }
+
+    private static Vector3 TargetOf(PlacementProbeSample sample)
+    {
+        WorldPoint point = sample.SeatOffer.IsUsable ? sample.SeatOffer.Position : sample.Position;
+        return new Vector3(point.X, point.Y, point.Z);
+    }
+
+    /// <summary>How well where he is now does, on the same wish list: the first
+    /// wish he already satisfies, and whether he is on a seat or in a bed for
+    /// it. <see cref="CommonSense.Nowhere"/> when he satisfies none - asleep
+    /// after morning, say, or somewhere far from home.</summary>
+    private int CurrentRank(CampView view, IReadOnlyList<HangoutIntent> wishes, out int wishIndex)
+    {
+        wishIndex = -1;
+        if (!_actor.Exists)
+        {
+            return CommonSense.Nowhere;
+        }
+
+        Vector3 resting = _actor.RestingPosition;
+        Vector3 home = CampSense.ToVector(view.Snapshot.Home);
+        bool asleep = _actor.Pose == CompanionPose.SleepInBed;
+        bool furniture = _actor.IsOnFurniture;
+
+        for (int index = 0; index < wishes.Count; index++)
+        {
+            HangoutIntent wish = wishes[index];
+            bool satisfied;
+            switch (wish.Kind)
+            {
+                case HangoutKind.Sleep:
+                    satisfied = asleep && _actor.Seat.IsUsable &&
+                        _actor.Seat.Position.HorizontalDistanceTo(wish.Focus) <= 0.6f &&
+                        Math.Abs(_actor.Seat.Position.Y - wish.Focus.Y) <= 1f;
+                    break;
+
+                case HangoutKind.Fire:
+                {
+                    CampFire fire = view.Snapshot.Fires[wish.Target];
+                    satisfied = !asleep &&
+                        Flat(resting, CampSense.ToVector(fire.Position)) <= fire.HazardMetres + FireSitReachMetres + 0.5f &&
+                        Mathf.Abs(resting.y - fire.Position.Y) <= 2f;
+                    break;
+                }
+
+                case HangoutKind.Shelter:
+                    satisfied = !asleep && CampSense.IsSheltered(resting) &&
+                        Flat(resting, home) <= ShelterRules.MaximumRadius + 1f;
+                    break;
+
+                default:
+                    satisfied = !asleep && Flat(resting, home) <= HulgiRules.MaximumRadius + 2f;
+                    break;
+            }
+
+            if (satisfied)
+            {
+                wishIndex = index;
+                return CommonSense.Rank(index, furniture);
+            }
+        }
+
+        return CommonSense.Nowhere;
+    }
+
+    /// <summary>Whether the bed at <paramref name="where"/> is still there and
+    /// still nobody's. Unloaded ground is not evidence of anything, so it keeps
+    /// the answer yes.</summary>
+    private static bool BedStillSpare(WorldPoint where)
+    {
+        try
+        {
+            Vector3 point = CampSense.ToVector(where);
+            if (ZoneSystem.instance == null || !ZoneSystem.instance.IsZoneLoaded(point))
+            {
+                return true;
+            }
+
+            var pieces = new List<Piece>();
+            Piece.GetAllComfortPiecesInRadius(point, 2.5f, pieces);
+            foreach (Piece piece in pieces)
+            {
+                Bed? bed = piece == null ? null : piece.GetComponent<Bed>();
+                if (bed != null && bed.m_spawnPoint != null && Flat(bed.m_spawnPoint.position, point) <= 0.6f)
+                {
+                    return !CampSense.IsClaimed(bed);
+                }
+            }
+
+            return false;
+        }
+        catch (Exception)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>For <c>cc_companion placement</c>: every wish on his list for
+    /// this camp at this hour, what each one comes to, and which one he is
+    /// satisfying now.</summary>
+    private string ExplainCommonSense()
+    {
+        if (!_anchor.IsValid)
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            CampView view = ScanCamp();
+            IReadOnlyList<HangoutIntent> wishes = CommonSense.Preferences(view.Snapshot, CompanionTemperament.Hulgi);
+            CurrentRank(view, wishes, out int currentWish);
+            bool present = _actor.Exists;
+            Vector3 from = WalkOrigin();
+
+            int open = 0;
+            foreach (DoorPortal portal in view.Portals)
+            {
+                if (portal.Allowed)
+                {
+                    open++;
+                }
+            }
+
+            var text = new StringBuilder();
+            text.Append(
+                $"  common sense ({(view.Snapshot.Night ? "night" : "day")}{(view.Snapshot.Wet ? ", wet" : "")}; " +
+                $"{view.Snapshot.Fires.Count} fire(s), {view.Snapshot.Beds.Count} bed(s), {view.Doors.Count} door(s) " +
+                $"around home, {open} of them open to companions; " +
+                (present ? "\"reachable\" means on foot from where he is" : "\"reachable\" means from the open ground near home") +
+                "):").Append(Environment.NewLine);
+
+            for (int index = 0; index < wishes.Count; index++)
+            {
+                Func<Vector3, bool> reachable = present
+                    ? target => CanWalkTo(from, target, view)
+                    : target => _camp.IsAllowedPlace(target, view, _scratchWalk);
+                PlacementResult spot = Resolve(view, wishes[index], reachable, seatOnly: false, out _, out string why);
+                text.Append($"    {index + 1}. {DescribeWish(wishes[index], view)}: ")
+                    .Append(spot.Found ? $"{DescribeSpot(spot)} at {spot.Position}, reachable" : why)
+                    .Append(index == currentWish ? "  <- where he is now" : string.Empty)
+                    .Append(Environment.NewLine);
+            }
+
+            if (present && currentWish < 0)
+            {
+                text.Append("    he is somewhere none of these covers, so any of them will do.").Append(Environment.NewLine);
+            }
+
+            return text.ToString();
+        }
+        catch (Exception exception)
+        {
+            return $"  common sense: could not be read ({SafeLogText.Brief(exception)})." + Environment.NewLine;
+        }
+    }
+
+    private static string DescribeWish(HangoutIntent wish, CampView? view)
+    {
+        switch (wish.Kind)
+        {
+            case HangoutKind.Sleep:
+                return "a spare bed for the night";
+
+            case HangoutKind.Fire:
+                if (view != null && wish.Target >= 0 && wish.Target < view.Snapshot.Fires.Count)
+                {
+                    CampFire fire = view.Snapshot.Fires[wish.Target];
+                    return $"the fire {fire.Position.HorizontalDistanceTo(view.Snapshot.Home):0.0} m from home, " +
+                        (fire.Sheltered ? "under a roof" : "in the open");
+                }
+
+                return "a fire";
+
+            case HangoutKind.Shelter:
+                return "a roof over his head";
+
+            default:
+                return "somewhere around home";
+        }
+    }
+
+    /// <summary>The line a door's hover text gains while he is with you: the
+    /// key, and what it would do. Nothing before he has joined, and nothing if
+    /// companions are off.</summary>
+    private string? DescribeDoorForHover(Door door)
+    {
+        try
+        {
+            if (_disposed || _progress == null || !_progress.HasCompanion ||
+                !_settings.CompanionsEnabled.Value || !_doors.Ready)
+            {
+                return null;
+            }
+
+            if (_doors.Policy == DoorAccessPolicy.AllDoors)
+            {
+                return AtlasStrings.Get("companion.door.allDoors");
+            }
+
+            bool allowed = _doors.IsAllowed(door);
+            KeyCode key = _settings.CompanionDoorHotkey.Value;
+            if (key == KeyCode.None)
+            {
+                return AtlasStrings.Get(allowed ? "companion.door.stateAllowed" : "companion.door.stateDenied");
+            }
+
+            return $"[<color=yellow><b>{key}</b></color>] " +
+                AtlasStrings.Get(allowed ? "companion.door.stop" : "companion.door.allow");
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The door hotkey: while looking at a door, lets companions use it
+    /// or stops them, remembers that for this world, and has him look again at
+    /// once. Never while a menu, the map, the console or a text field has the
+    /// keyboard.</summary>
+    private void UpdateDoorHotkey()
+    {
+        KeyCode key = _settings.CompanionDoorHotkey.Value;
+        if (key == KeyCode.None || !_doors.Ready || _progress == null || !_progress.HasCompanion ||
+            !Input.GetKeyDown(key))
+        {
+            return;
+        }
+
+        try
+        {
+            if (Minimap.IsOpen() || Minimap.InTextInput() || CcTextFocus.AnyFieldFocused() ||
+                InventoryGui.IsVisible() || (Chat.instance != null && Chat.instance.HasFocus()) ||
+                global::Console.IsVisible())
+            {
+                return;
+            }
+
+            Player player = Player.m_localPlayer;
+            GameObject? hovered = player == null ? null : player.GetHoverObject();
+            Door? door = hovered == null ? null : hovered.GetComponentInParent<Door>();
+            if (door == null)
+            {
+                return;
+            }
+
+            if (_doors.Policy == DoorAccessPolicy.AllDoors)
+            {
+                ShowNotice(AtlasStrings.Get("companion.door.allDoors"), MessageHud.MessageType.Center);
+                return;
+            }
+
+            bool allowed = _doors.Toggle(door);
+            ShowNotice(
+                AtlasStrings.Get(allowed ? "companion.door.nowAllowed" : "companion.door.nowDenied"),
+                MessageHud.MessageType.Center);
+            LookAgainNow();
+        }
+        catch (Exception exception)
+        {
+            _log.LogInfo($"The door could not be changed for companions: {SafeLogText.Brief(exception)}");
+        }
+    }
+
+    /// <summary><c>cc_companion doors [list|clear|all on|off]</c>.</summary>
+    public string Doors(string[] args)
+    {
+        string what = args.Length > 1 ? args[1].ToLowerInvariant() : "list";
+        switch (what)
+        {
+            case "list":
+                return DescribeDoors();
+
+            case "clear":
+            {
+                if (!_doors.Ready)
+                {
+                    return "Doors: no world is loaded.";
+                }
+
+                int forgotten = _doors.ForgetAllDoors();
+                LookAgainNow();
+                return $"Forgot {forgotten} door(s). Every door is closed to companions again until you let " +
+                    $"them through (look at a door and press {_settings.CompanionDoorHotkey.Value}).";
+            }
+
+            case "all":
+            {
+                if (args.Length < 3)
+                {
+                    return "Usage: cc_companion doors all <on|off>. Currently " +
+                        (_doors.Policy == DoorAccessPolicy.AllDoors ? "on." : "off.");
+                }
+
+                string value = args[2].ToLowerInvariant();
+                bool on = value == "on" || value == "true" || value == "1" || value == "yes";
+                _settings.CompanionDoorAccess.Value = on ? DoorAccessPolicy.AllDoors : DoorAccessPolicy.OnlyAllowedDoors;
+                LookAgainNow();
+                return on
+                    ? "Companions may use every door you could open yourself."
+                    : "Companions use only the doors you let them through.";
+            }
+
+            default:
+                return "Usage: cc_companion doors [list|clear|all <on|off>]. list shows the doors near you and " +
+                    "whether companions may use them; clear closes every door to them again; all on lets them " +
+                    "use every door.";
+        }
+    }
+
+    private string DescribeDoors()
+    {
+        var text = new StringBuilder();
+        text.Append(_doors.Policy == DoorAccessPolicy.AllDoors
+            ? "Companions may use every door you could open yourself (Companions -> DoorAccess = AllDoors)."
+            : $"Companions use only doors you let them through: {_doors.Allowed.Count} in this world.");
+
+        Player player = Player.m_localPlayer;
+        if (player != null)
+        {
+            Vector3 here = player.transform.position;
+            var nearby = new List<Door>();
+            CompanionDoors.FindDoors(here, 30f, nearby);
+            nearby.Sort((a, b) => Flat(here, a.transform.position).CompareTo(Flat(here, b.transform.position)));
+            text.Append(Environment.NewLine).Append($"Doors within 30 m of you: {nearby.Count}.");
+            for (int index = 0; index < nearby.Count && index < 12; index++)
+            {
+                Door door = nearby[index];
+                bool open = CompanionDoors.StateOf(door) != 0;
+                text.Append(Environment.NewLine).Append(
+                    $"  {Flat(here, door.transform.position):0.0} m: {(open ? "open" : "shut")}, " +
+                    (_doors.IsAllowed(door) ? "companions may use it" : "closed to companions") +
+                    (open || CompanionDoors.CanOpen(door) ? string.Empty : ", locked or no guard-stone access"));
+            }
+        }
+
+        text.Append(Environment.NewLine).Append(
+            $"Look at a door and press {_settings.CompanionDoorHotkey.Value} to change it.");
+        return text.ToString();
+    }
+
+    private static float Flat(Vector3 a, Vector3 b)
+    {
+        float dx = a.x - b.x;
+        float dz = a.z - b.z;
+        return Mathf.Sqrt((dx * dx) + (dz * dz));
+    }
+
+    private static string Describe(Vector3 point)
+    {
+        return $"({point.x:0.0}, {point.y:0.0}, {point.z:0.0})";
+    }
+
+    /// <summary>A wish and the spot the world granted it.</summary>
+    private readonly struct HangoutChoice
+    {
+        public HangoutChoice(HangoutIntent wish, PlacementResult spot, int rank, Vector3? facing)
+        {
+            Wish = wish;
+            Spot = spot;
+            Rank = rank;
+            Facing = facing;
+        }
+
+        public bool Found => Spot.Found;
+
+        public HangoutIntent Wish { get; }
+
+        public PlacementResult Spot { get; }
+
+        public int Rank { get; }
+
+        public Vector3? Facing { get; }
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -2719,6 +3180,7 @@ internal sealed class CompanionDirector : IDisposable
         }
 
         _disposed = true;
+        CompanionDoorHover.Describe = null;
 
         // Progress is saved inline at every transition, so there is nothing
         // pending here; the objects are what need releasing.

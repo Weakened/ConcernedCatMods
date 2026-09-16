@@ -183,6 +183,10 @@ internal sealed class CompanionActor
     /// <c>SetBool(attachAnimation, true)</c>.</summary>
     private const string DefaultSeatParameter = "attach_chair";
 
+    /// <summary>What a bed asks for: <c>Bed.Interact</c> passes exactly this to
+    /// <c>AttachStart</c>, at the bed's own <c>m_spawnPoint</c>.</summary>
+    private const string BedParameter = "attach_bed";
+
     /// <summary>Bone names to look for, best first. Exact matches are tried
     /// before fragments, because a rig that contains both "Head" and
     /// "HeadTarget" should give up the one the game animates, and a neck is a
@@ -241,8 +245,14 @@ internal sealed class CompanionActor
 
     private bool _verified;
 
-    /// <summary>The seat he was placed on, if any.</summary>
+    /// <summary>The seat he was placed on, if any. A bed he sleeps in is one
+    /// too: a place to be put, at its own point and heading, with its own
+    /// animation.</summary>
     private SeatOffer _seat;
+
+    /// <summary>What he turns to face when he sits on the ground - the fire he
+    /// came to sit by - or null for his usual heading.</summary>
+    private Vector3? _facing;
 
     /// <summary>The animator parameter currently held true for his pose, so it
     /// can be released before another is set.</summary>
@@ -302,10 +312,12 @@ internal sealed class CompanionActor
         CompanionAnchor anchor,
         IReadOnlyList<string> sourceCandidates,
         ManualLogSource log,
-        SeatOffer seat = default)
+        SeatOffer seat = default,
+        Vector3? facing = null)
     {
         Release();
         _seat = seat;
+        _facing = facing;
         _verified = false;
         _attachMode = "none";
         _attachedPieces.Clear();
@@ -365,20 +377,38 @@ internal sealed class CompanionActor
             return;
         }
 
-        bool onSeat = pose == CompanionPose.SitOnSeat && _seat.IsUsable;
+        bool wantsSeat = pose == CompanionPose.SitOnSeat || pose == CompanionPose.SleepInBed;
+        bool onSeat = wantsSeat && _seat.IsUsable;
         WorldPoint where = onSeat ? _seat.Position : position;
-        float yaw = onSeat ? _seat.YawDegrees : 200f;
+        float yaw = onSeat ? _seat.YawDegrees : GroundYaw(position);
 
         // A seat offered but not usable is not a pose we may claim to be in.
         // He is on the probed ground either way; reporting otherwise would tell
         // the furniture sweep it had succeeded and stop it looking again.
-        CompanionPose achieved = pose == CompanionPose.SitOnSeat && !onSeat
+        CompanionPose achieved = wantsSeat && !onSeat
             ? CompanionPose.SitOnGround
             : pose;
 
         _root.transform.position = new Vector3(where.X, where.Y, where.Z);
         _root.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
         ApplyPose(achieved);
+    }
+
+    /// <summary>Which way he sits on the ground: towards what he came to sit by,
+    /// when there is something, and his old fixed heading otherwise.</summary>
+    private float GroundYaw(WorldPoint position)
+    {
+        if (_facing.HasValue)
+        {
+            float dx = _facing.Value.x - position.X;
+            float dz = _facing.Value.z - position.Z;
+            if ((dx * dx) + (dz * dz) > 0.04f)
+            {
+                return Mathf.Atan2(dx, dz) * Mathf.Rad2Deg;
+            }
+        }
+
+        return 200f;
     }
 
     private void PlacedAnchorSet(WorldPoint position)
@@ -788,16 +818,21 @@ internal sealed class CompanionActor
     public void SettleWhereHeStands()
     {
         EndDrink(restore: false);
+        _seat = SeatOffer.None;
         ApplyPose(CompanionPose.SitOnGround);
     }
+
+    /// <summary>Whether he is lying in a bed right now.</summary>
+    public bool IsAsleep => _poseParameter != null && Pose == CompanionPose.SleepInBed;
 
     /// <summary>Sits him at a spot he has just walked to, exactly as a rebuild
     /// there would have: onto the seat's own attachment point and heading when
     /// it is a seat, onto the planned ground otherwise. No rebuild, no
     /// teleport - he is already there.</summary>
-    public void SettleInto(WorldPoint position, CompanionPose pose, SeatOffer seat)
+    public void SettleInto(WorldPoint position, CompanionPose pose, SeatOffer seat, Vector3? facing = null)
     {
         _seat = seat;
+        _facing = facing;
         Place(position, pose);
     }
 
@@ -807,6 +842,7 @@ internal sealed class CompanionActor
     public void SetDownAt(WorldPoint position)
     {
         _seat = SeatOffer.None;
+        _facing = null;
         Place(position, CompanionPose.SitOnGround);
     }
 
@@ -903,6 +939,11 @@ internal sealed class CompanionActor
     /// <summary>Whether he is sitting on furniture rather than on the
     /// ground.</summary>
     public bool IsOnSeat => _poseParameter != null && _seat.IsUsable && Pose == CompanionPose.SitOnSeat;
+
+    /// <summary>Whether he is somewhere built for him to be - a seat, or a bed
+    /// - rather than on the ground. The finer half of his rank.</summary>
+    public bool IsOnFurniture => _seat.IsUsable &&
+        (Pose == CompanionPose.SitOnSeat || Pose == CompanionPose.SleepInBed);
 
     /// <summary>Which way he is facing, flattened; zero when there is no
     /// figure.</summary>
@@ -1623,6 +1664,12 @@ internal sealed class CompanionActor
     /// always works.</summary>
     private IEnumerable<string> PoseParameters(CompanionPose pose)
     {
+        if (pose == CompanionPose.SleepInBed && _seat.IsUsable)
+        {
+            yield return _seat.AttachAnimation ?? BedParameter;
+            yield return BedParameter;
+        }
+
         if (pose == CompanionPose.SitOnSeat && _seat.IsUsable)
         {
             yield return _seat.AttachAnimation ?? DefaultSeatParameter;
@@ -3178,6 +3225,7 @@ internal sealed class CompanionActor
         // The mug goes with the figure it hangs off.
         ForgetDrink();
         _seat = SeatOffer.None;
+        _facing = null;
         _animator = null;
         _helmetJoint = null;
         _rightHandJoint = null;

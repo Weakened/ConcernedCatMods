@@ -187,6 +187,8 @@ internal sealed class CartographerRuntime : IDisposable
             ExecuteCompanionCommand,
             () => settings.CompanionToolsOnly.Value,
             () => settings.CompanionVisible.Value,
+            () => settings.CompanionDoorAccess.Value == TheConcernedCat.Companions.Surroundings.DoorAccessPolicy.AllDoors,
+            () => settings.CompanionDoorHotkey.Value.ToString(),
             () => _consentPanel.ShowSettings());
         _systemMarkersPanel = new SystemMarkersPanel(log);
 
@@ -3165,10 +3167,13 @@ internal sealed class CartographerRuntime : IDisposable
             case "drink":
                 return _companions.Drink(args.Length > 1 ? args[1] : null);
 
+            case "doors":
+                return _companions.Doors(args);
+
             default:
                 return "Unknown subcommand. Use: status, toolsonly <on|off>, story, show <on|off>, " +
-                    "where, placement, summon, drink [toast|plain], appearance, pose <stand|ground|seat>, path, " +
-                    "reset [quest|bed|day|all].";
+                    "where, placement, summon, drink [toast|plain], doors [list|clear|all <on|off>], appearance, " +
+                    "pose <stand|ground|seat>, path, reset [quest|bed|day|all].";
         }
     }
 

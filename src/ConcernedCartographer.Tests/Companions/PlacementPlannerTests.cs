@@ -348,6 +348,45 @@ public class PlacementPlannerTests
     }
 
     [Fact]
+    public void TheAcceptFilterIsAskedBestFirstAndNoFurtherThanItsFirstYes()
+    {
+        // The filter is a route through the navmesh, and the owner's camp has
+        // fifty candidates. Asking all of them to pick the first is fifty
+        // routes a second for one answer.
+        SeatOffer warmSeat = SeatOffer.Free(new WorldPoint(2f, 30f, 2f), 0f, "attach_chair");
+        SeatOffer coldSeat = SeatOffer.Free(new WorldPoint(-7f, 30f, 0f), 90f, "attach_bench");
+        var probe = new SeatingProbe(
+            position => PlacementRejection.None,
+            new PlacementProbeSample(coldSeat.Position, PlacementRejection.None, -1f, coldSeat),
+            new PlacementProbeSample(warmSeat.Position, PlacementRejection.None, 0f, warmSeat));
+
+        var asked = new List<WorldPoint>();
+        PlacementResult result = new PlacementPlanner().Plan(Bed, probe, accept: sample =>
+        {
+            asked.Add(sample.Position);
+            return true;
+        });
+
+        // The warm seat ranks first, is accepted, and nothing else is asked.
+        Assert.Single(asked);
+        Assert.Equal(2f, result.Seat.Position.X, 3);
+        Assert.Equal(3, result.Value);
+
+        // Turn it down, and the next best is asked - the cold seat, which still
+        // outranks bare ground - with one question more and no further.
+        asked.Clear();
+        PlacementResult second = new PlacementPlanner().Plan(Bed, probe, accept: sample =>
+        {
+            asked.Add(sample.Position);
+            return !sample.SeatOffer.IsUsable || sample.Position.X < 0f;
+        });
+        Assert.Equal(2, asked.Count);
+        Assert.Equal(CompanionPose.SitOnSeat, second.Pose);
+        Assert.Equal(-7f, second.Seat.Position.X, 3);
+        Assert.Equal(1, second.Value);
+    }
+
+    [Fact]
     public void AStoolInsideTheMinimumRadiusIsTakenWhenTheGroundAroundTheBedIsNot()
     {
         // The owner's shelter: a raised floor, a bed, a fire, a chair a metre

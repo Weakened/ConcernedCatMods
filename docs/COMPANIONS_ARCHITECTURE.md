@@ -37,6 +37,7 @@ Quest           QuestState, QuestTransition, QuestStateMachine
 Persistence     CompanionSidecar, CompanionSidecarCodec, CompanionSidecarStore, CompanionQuestRecord
 Unlock          LegacyEvidence, UnlockReason, UnlockDecision, UnlockPolicy
 Placement       CompanionAnchor, IAnchorSource, IPlacementProbe, PlacementRules, PlacementPlanner
+Surroundings    CommonSense, CampSnapshot, CompanionTemperament, DoorAccessBook, DoorPortal, RouteDoors
 Dialogue        DialogueLine, DialogueCatalog, DialogueContext, DialogueRotation
 Session         CompanionProgress   (the seam a game adapter talks to)
 ```
@@ -381,6 +382,10 @@ default idle and the report says so.
 
 ### Furniture: detected, reported, deliberately unused
 
+> Superseded. Seats have been used as local poses since the #306 work, and
+> where he sits is now his common sense's to say - see "Common sense and
+> doors" below. Kept for the record of why it started cautious.
+
 The placement probe finds chairs and asks `Chair.IsInUse()`. A free chair is
 reported to the shared planner as `SeatAvailability.Unverified`, **not** `Free`
 — and the planner treats `Unverified` as no seat, so the companion sits on the
@@ -401,3 +406,75 @@ its hook. So every ten seconds the director compares the live world UID and
 player ID against the scope the open sidecar is addressed to, and reopens if
 they differ. Two accessor reads; no progress is ever written to a previous
 world.
+
+## Common sense and doors (owner's rules, 2026-09-16)
+
+The owner's direction, in their words: "have all npcs have a deep understanding
+of their surroundings, and act accordingly. Hulgi likes to hangout by fire and
+have a drink. If it's outside he goes there, if it's inside, he goes there.
+Whichever closest to claimed bed. If no fire inside but there's outside, he sits
+outside during the day and inside if available during night. If they find an
+unclaimed extra bed, they sleep until it's morning." And: doors carry a flag,
+"no npc allowed (by default)", that the player can change.
+
+### A wish list, not a spot
+
+`CommonSense.Preferences(CampSnapshot, CompanionTemperament)` turns the camp -
+home, fires (burning, under a roof or not, how wide their hazard is), beds
+(claimed or not), night, wet - into an ordered list of wishes: a spare bed at
+night, a fire under a roof in the dark or wet, any roof, a fire in the open, and
+home last, always. By day it is the burning fires nearest home, inside or out.
+It never picks a spot; the product walks the list and takes the first wish the
+world can grant. That split is what keeps the owner's rules arguable in a test
+(`CommonSenseTests`) while the world stays the world.
+
+`CommonSense.Rank(wish, onSeat)` is the scale both sides of a move are measured
+on: the wish index, and a seat or bed beating the ground within the same wish.
+A companion moves only for a strictly lower rank than he already has, so equal
+spots never have him pacing, and a camp that has not changed never moves him.
+
+`CompanionTemperament` is what makes it reusable: Hulgi loves a fire and takes
+spare beds; a later companion can like neither without anybody rewriting the
+rules.
+
+### Doors are geometry and permission
+
+`DoorPortal` is a doorway: the plane through a door piece's centre across its
+forward axis (the axis `Door.Open` itself swings against), its floor, a half
+width, whether it is open, whether a player could open it, and whether
+companions may use it. `RouteDoors.Inspect` walks a route leg by leg: a door
+companions may not use anywhere on it forbids the whole route; otherwise the
+first shut door he may use is reported so the walk can open it and close it
+behind him.
+
+`DoorAccessBook` holds the doors companions may use in one world, under a
+`DoorAccessPolicy`: `OnlyAllowedDoors` (the default) or `AllDoors`. Doors are
+remembered by **place and piece type**, not by the game's object id: Valheim
+renumbers every object each time a world loads (`ZDO.Load` assigns
+`++ZDOID.m_loadID`), so an id written tonight names something else tomorrow.
+`DoorAccessStore` keeps one small file per world beside the companion sidecars
+and fails safe in the direction that matters: an unreadable file loads as "no
+doors allowed" and is never written over.
+
+### What the Cartographer adapter does with it
+
+`CampSense` reads the camp from the game's own registries (comfort pieces for
+fires and beds, loaded pieces for doors - no physics buffer to overflow in a big
+base) and plans walks: the navmesh first, a straight line only when the navmesh
+has not built its tiles, and every route checked against the doorways. It also
+finds "outdoors": open ground near home. A spot is somewhere he may **be** only
+if he could walk to it from there through doors he may use - which is what keeps
+him out of a house whose door is closed to companions even when the claimed bed
+he calls home is inside it.
+
+The director resolves each wish to a spot through the same placement probe as
+ever - a ring around the fire just past its hazard (seats first, facing the
+fire), a roof near home, the floor beside a spare bed, somewhere around home -
+and the planner asks "can he get there" lazily, best candidate first, so a
+question that costs a navmesh route is asked once in the ordinary case. Surveys
+run every half minute and at once when a one-second fingerprint of fires, beds,
+seats, doors, their permissions and the hour changes.
+
+Everything is still local presentation. The one thing in the world a companion
+may change is a door companions are allowed to use, opened through the door's
+own RPC and closed behind him; see `CLAUDE.md`.

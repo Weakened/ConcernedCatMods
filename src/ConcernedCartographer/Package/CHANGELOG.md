@@ -5,8 +5,10 @@
 1.1.1 shipped him bald - his hair rendered a metre from his head and the build
 removed it rather than leave it floating - and it shipped a companion who would
 ignore a chair built beside him. Both are fixed. He also stopped being a statue:
-he speaks over his head the way a trader does, and he gets up now and then to
-move around his camp.
+he speaks over his head the way a trader does, he gets up now and then to move
+around his camp, and he has some common sense about where to be - by the fire
+nearest your bed, under a roof at night, in a spare bed if there is one - and
+about whose doors he walks through.
 
 Added
 
@@ -21,10 +23,30 @@ Added
   head, the same bubble the trader uses, instead of across the middle of your
   screen. Nothing networked: the bubble is drawn locally on your own client, no
   creature is spawned, and the line does not go into your chat log.
+- **He has common sense about where to be.** He likes a fire and a drink. By
+  day he goes to the burning fire nearest your bed, inside or out, and takes a
+  seat by it if there is one, or sits on the ground facing it. At night, or in
+  the rain, he goes under a roof - a fire under a roof first - and stays by the
+  fire outside only when there is no roof he can get to. If there is a bed
+  nobody has claimed, he sleeps in it until morning; he never touches a claimed
+  bed, and gets up if somebody claims it. He looks again the moment any of that
+  changes: a fire lit or broken, a bed built or claimed, a door opened to him,
+  nightfall, morning.
+- **Doors are closed to companions unless you open them.** Every door starts
+  "no companions". Look at a door and press **F8** to let them use it - its
+  prompt says so - and press it again to stop them. A door they may use, they
+  use both ways: in to a seat by your hearth, out to the fire, opening it and
+  closing it behind them. A door they may not use they never open or walk
+  through, open or shut, so a companion whose bed is in a closed house spends
+  the day by the fire outside it. The choice is remembered per world, on your
+  computer only, never in the world. `Companions/DoorAccess = AllDoors` (or
+  "Companions may use every door" in Settings) opens every door you could open
+  yourself; `cc_companion doors` lists the doors near you and `cc_companion
+  doors clear` closes them all again.
 - **He moves around his camp.** He sits most of the time, gets up occasionally,
-  walks somewhere else nearby, stands looking around, and sits back down. When
-  it turns dark or wet he goes and finds a roof. He stays put while you are
-  talking to him, and he does not wander off a seat you built him. He never
+  walks somewhere nearby - around the fire, when he sits by one - stands looking
+  around, and goes back to where he belongs. He does not wander in the dark or
+  the rain, while you are talking to him, or off a seat you built him. He never
   leaves the area around your home point, never blocks anything and never
   touches the world - turn it off with `Companions/Wander` if you prefer him
   still.
@@ -37,11 +59,11 @@ Added
   stays cheap: one small check a second of the fires, seats and doors around
   him, and the full look for a better spot runs only when one of them changed,
   with a half-minute look as a safety net.
-- **He opens a door to leave a building, and closes it behind him.** When the
-  better spot is outside and the door is shut, he walks to it, opens it, steps
-  through and closes it after himself. Only an ordinary door you could open
-  yourself - never a locked door, and never inside a guard stone's area you
-  have no access to - and nothing else in the world is ever changed.
+- **He opens a door he is allowed to use, and closes it behind him.** He walks
+  to it, opens it, steps through and closes it after himself; a door that was
+  already open he leaves as he found it. Only a door you let companions use and
+  could open yourself - never a locked door, and never inside a guard stone's
+  area you have no access to - and nothing else in the world is ever changed.
 - **He has a drink now and then.** Every few minutes a vanilla tankard appears
   in his hand and he drinks from it, sitting where he is. Now and then he
   raises a toast first - turning to you if you are near - getting up for it and
@@ -49,13 +71,15 @@ Added
   something is in the way, in which case he just drinks. The mug is only drawn
   in his hand while he drinks: it is not an item, and nobody's inventory is
   touched.
-- **The Broken Compass sparkles** the way the game's own pickables do, and it
-  lies just outside the stone circle rather than in the middle of it.
+- **The Broken Compass sparkles** with the game's own item twinkle, and it lies
+  just outside the stone circle rather than in the middle of it.
 - **`cc_companion summon`** sits him on the ground in front of you, to watch him
   find his way back to the best spot he can reach; **`cc_companion drink
   [toast|plain]`** has him take a drink now instead of waiting for one; and
   **`cc_companion placement`** explains where he sits and why - every spot he
-  considered and what ruled it out.
+  considered and what ruled it out, and every wish on his list for your camp
+  right now (fire, roof, bed, home), what each came to, and which he is
+  satisfying.
 
 Fixed
 

@@ -4,8 +4,8 @@ using Xunit;
 
 namespace TheConcernedCat.ConcernedCartographer.Tests.Companions;
 
-/// <summary>The companion's whole "common sense": when he gets up, when he
-/// stays, and what outranks what.</summary>
+/// <summary>When he gets up for a potter around camp, when he stays, and what
+/// outranks what. Where he spends his time is <c>CommonSenseTests</c>.</summary>
 public sealed class CampRoutineTests
 {
     private static RoutineInputs At(
@@ -13,86 +13,29 @@ public sealed class CampRoutineTests
         float seconds,
         bool arrived = false,
         bool playerNearby = false,
-        bool sheltered = false,
         bool nightOrStorm = false,
-        CompanionPose pose = CompanionPose.SitOnGround,
-        float secondsSinceShelterSearchFailed = float.PositiveInfinity)
+        CompanionPose pose = CompanionPose.SitOnGround)
     {
-        return new RoutineInputs(
-            state, seconds, arrived, playerNearby, sheltered, nightOrStorm, pose,
-            secondsSinceShelterSearchFailed);
+        return new RoutineInputs(state, seconds, arrived, playerNearby, nightOrStorm, pose);
     }
 
     [Fact]
-    public void AFailedLookForShelterIsNotRepeatedEveryFewSeconds()
+    public void AtNightOrInTheRainHeDoesNotPotterAbout()
     {
-        // Seen in game at 7287919: at night, in a camp with no roof in reach,
-        // he got up "looking for shelter", sat down in the open, and got up
-        // again - roughly every fifteen seconds, eighteen times in four
-        // minutes. Having just looked and found nowhere dry, the same empty
-        // field is not worth another look yet.
+        // This used to send him walking around to look for a roof, and in a camp
+        // with no roof in reach that became a loop in game at 7287919: up, walk,
+        // sit in the open, up again, eighteen times in four minutes. He knows his
+        // camp now; if there is a roof or a spare bed he can reach, his common
+        // sense takes him straight there, and the routine keeps out of it.
         Assert.Equal(
             RoutineAction.Continue,
-            CampRoutine.Decide(At(
-                RoutineState.Settled, 0f, nightOrStorm: true,
-                secondsSinceShelterSearchFailed: 1f)));
-
-        // Nor is it a reason to leave a seat somebody built him: the search
-        // that would justify leaving it has just failed.
-        Assert.Equal(
-            RoutineAction.Continue,
-            CampRoutine.Decide(At(
-                RoutineState.Settled, CampRoutine.SettledSeconds * 5f, nightOrStorm: true,
-                pose: CompanionPose.SitOnSeat, secondsSinceShelterSearchFailed: 1f)));
-
-        // In the meantime he potters at the ordinary pace, no faster...
-        Assert.Equal(
-            RoutineAction.Continue,
-            CampRoutine.Decide(At(
-                RoutineState.Settled, CampRoutine.SettledSeconds - 1f, nightOrStorm: true,
-                secondsSinceShelterSearchFailed: 1f)));
-        Assert.Equal(
-            RoutineAction.Stroll,
-            CampRoutine.Decide(At(
-                RoutineState.Settled, CampRoutine.SettledSeconds, nightOrStorm: true,
-                secondsSinceShelterSearchFailed: 1f)));
-
-        // ...and from the ground he looks again once it has been long enough for
-        // something to have changed.
-        Assert.Equal(
-            RoutineAction.Stroll,
-            CampRoutine.Decide(At(
-                RoutineState.Settled, 0f, nightOrStorm: true,
-                secondsSinceShelterSearchFailed: CampRoutine.ShelterRetrySeconds)));
-    }
-
-    [Fact]
-    public void AFailedLookHoldsHimOnASeatForTheRestOfTheWeather()
-    {
-        // Review of the first fix found the slower version of the same loop: on
-        // a seat, the retry fired every five minutes, walked him off the chair
-        // to sit on the grass, and the seat sweep put him back. A seat somebody
-        // built him keeps him until the weather changes...
-        Assert.Equal(
-            RoutineAction.Continue,
-            CampRoutine.Decide(At(
-                RoutineState.Settled, 0f, nightOrStorm: true, pose: CompanionPose.SitOnSeat,
-                secondsSinceShelterSearchFailed: CampRoutine.ShelterRetrySeconds * 10f)));
-
-        // ...and a new spell of weather, with no failure on record, still gets
-        // him up for one honest look.
-        Assert.Equal(
-            RoutineAction.Stroll,
-            CampRoutine.Decide(At(
-                RoutineState.Settled, 0f, nightOrStorm: true, pose: CompanionPose.SitOnSeat)));
+            CampRoutine.Decide(At(RoutineState.Settled, CampRoutine.SettledSeconds * 20f, nightOrStorm: true)));
     }
 
     [Fact]
     public void HeStaysPutWhileSomebodyIsTalkingToHim()
     {
-        // The most broken-looking thing he could do is walk off mid-sentence,
-        // so this outranks every other reason to move - including the storm
-        // rule, which is otherwise the strongest one there is.
+        // The most broken-looking thing he could do is walk off mid-sentence.
         Assert.Equal(
             RoutineAction.Continue,
             CampRoutine.Decide(At(
@@ -105,37 +48,20 @@ public sealed class CampRoutineTests
     }
 
     [Fact]
-    public void HeGetsUpWhenHeIsOutInTheDarkOrTheRain()
-    {
-        // The one case where a perfectly good spot is not good enough, and the
-        // one case that does not wait for the settle interval: a person caught
-        // out in a storm moves now, not in a minute.
-        Assert.Equal(
-            RoutineAction.Stroll,
-            CampRoutine.Decide(At(RoutineState.Settled, 0f, nightOrStorm: true, sheltered: false)));
-
-        // Under a roof in the same weather he is already where he should be.
-        Assert.Equal(
-            RoutineAction.Continue,
-            CampRoutine.Decide(At(RoutineState.Settled, 0f, nightOrStorm: true, sheltered: true)));
-    }
-
-    [Fact]
-    public void HeDoesNotWanderOffASeatSomebodyBuiltHim()
+    public void HeDoesNotWanderOffASeatSomebodyBuiltHimOrOutOfABed()
     {
         // Abandoning the chair you made him for a patch of grass reads as a
-        // bug, not as character. The seat holds him however long he sits on it.
+        // bug, not as character. The seat holds him however long he sits on it,
+        // and so does a bed.
         Assert.Equal(
             RoutineAction.Continue,
             CampRoutine.Decide(At(
-                RoutineState.Settled, CampRoutine.SettledSeconds * 5f,
-                pose: CompanionPose.SitOnSeat)));
+                RoutineState.Settled, CampRoutine.SettledSeconds * 5f, pose: CompanionPose.SitOnSeat)));
 
-        // But a storm still gets him off it, because the roof matters more.
         Assert.Equal(
-            RoutineAction.Stroll,
+            RoutineAction.Continue,
             CampRoutine.Decide(At(
-                RoutineState.Settled, 0f, nightOrStorm: true, pose: CompanionPose.SitOnSeat)));
+                RoutineState.Settled, CampRoutine.SettledSeconds * 5f, pose: CompanionPose.SleepInBed)));
     }
 
     [Fact]
@@ -148,6 +74,11 @@ public sealed class CampRoutineTests
         Assert.Equal(
             RoutineAction.Stroll,
             CampRoutine.Decide(At(RoutineState.Settled, CampRoutine.SettledSeconds)));
+
+        // A warm patch of ground by the fire is still the ground.
+        Assert.Equal(
+            RoutineAction.Stroll,
+            CampRoutine.Decide(At(RoutineState.Settled, CampRoutine.SettledSeconds, pose: CompanionPose.SitByFire)));
     }
 
     [Fact]

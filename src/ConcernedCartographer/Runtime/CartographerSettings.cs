@@ -1,3 +1,4 @@
+using TheConcernedCat.Companions.Surroundings;
 using BepInEx.Configuration;
 using UnityEngine;
 
@@ -61,7 +62,9 @@ internal sealed class CartographerSettings
         ConfigEntry<string> companionHairPreset,
         ConfigEntry<string> companionBeardPreset,
         ConfigEntry<string> companionChestPreset,
-        ConfigEntry<string> companionLegsPreset)
+        ConfigEntry<string> companionLegsPreset,
+        ConfigEntry<DoorAccessPolicy> companionDoorAccess,
+        ConfigEntry<KeyCode> companionDoorHotkey)
     {
         Enabled = enabled;
         CaptureConstructionActions = captureConstructionActions;
@@ -119,6 +122,8 @@ internal sealed class CartographerSettings
         CompanionBeardPreset = companionBeardPreset;
         CompanionChestPreset = companionChestPreset;
         CompanionLegsPreset = companionLegsPreset;
+        CompanionDoorAccess = companionDoorAccess;
+        CompanionDoorHotkey = companionDoorHotkey;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -209,6 +214,16 @@ internal sealed class CartographerSettings
 
     /// <summary>Explicit trousers for Hulgi. Clothing only.</summary>
     public ConfigEntry<string> CompanionLegsPreset { get; }
+
+    /// <summary>Which doors companions may use: only those the player lets them
+    /// through (the default), or every door the player could open. The doors
+    /// themselves are remembered per world beside the companion data, never in
+    /// the world.</summary>
+    public ConfigEntry<DoorAccessPolicy> CompanionDoorAccess { get; }
+
+    /// <summary>The key that, while looking at a door, lets companions use it
+    /// or stops them. None hides the hint and disables the key.</summary>
+    public ConfigEntry<KeyCode> CompanionDoorHotkey { get; }
 
     public static CartographerSettings Bind(ConfigFile config)
     {
@@ -338,6 +353,10 @@ internal sealed class CartographerSettings
             config.Bind("Companions", "ChestGarment", "",
                 "What Hulgi wears on his torso, by item name (\"Rag tunic\") or prefab id (\"ArmorRagsChest\"). Clothing only: he is not carrying it, it is not taken from anywhere, and it has no armour value. Leave empty for the default."),
             config.Bind("Companions", "LegsGarment", "",
-                "What Hulgi wears on his legs, by item name (\"Leather pants\") or prefab id (\"ArmorLeatherLegs\"). Clothing only. Leave empty for the default."));
+                "What Hulgi wears on his legs, by item name (\"Leather pants\") or prefab id (\"ArmorLeatherLegs\"). Clothing only. Leave empty for the default."),
+            config.Bind("Companions", "DoorAccess", DoorAccessPolicy.OnlyAllowedDoors,
+                "Which doors companions may use to go in and out of buildings. OnlyAllowedDoors (default): a door is closed to them until you look at it and press DoorAccessHotkey - they never walk into a building through a door you have not opened to them, and never use it to leave one either. AllDoors: every door you could open yourself. Either way they only ever use a door you could open (no keys, guard stones respected) and close it behind them. Your choices are kept per world with the companion data, never in the world."),
+            config.Bind("Companions", "DoorAccessHotkey", KeyCode.F8,
+                "While looking at a door, press this to let companions use it, or to stop them. The door's own prompt shows it. None disables the key and the prompt."));
     }
 }

@@ -61,7 +61,13 @@ internal sealed class PlacementPlanner
     /// <param name="accept">Optional: a candidate that passes every rule is
     /// still skipped when this says no - without counting as a rejection, since
     /// nothing is wrong with the spot itself. Used to ask for the best spot a
-    /// companion can actually walk to.</param>
+    /// companion can actually walk to.
+    ///
+    /// Asked lazily, best candidate first, and not asked again once one says
+    /// yes. The answer is exactly the one asking every candidate would give -
+    /// the best-ranked candidate it accepts - but a question that costs a
+    /// route through the navmesh is asked once in the ordinary case instead of
+    /// fifty times.</param>
     public PlacementResult Plan(
         CompanionAnchor anchor,
         IPlacementProbe probe,
@@ -80,12 +86,9 @@ internal sealed class PlacementPlanner
 
         float idealRadius = (_rules.MinimumRadius + _rules.MaximumRadius) * 0.5f;
 
-        bool haveBest = false;
-        WorldPoint bestPosition = default;
-        CompanionPose bestPose = CompanionPose.SitOnGround;
-        SeatOffer bestSeat = SeatOffer.None;
-        int bestScore = int.MinValue;
-        float bestRadiusError = float.MaxValue;
+        // Every candidate that passes the rules, in sweep order. Ranked once the
+        // sweep is done, and only then offered to `accept`, best first.
+        var qualified = new List<Qualified>();
 
         PlacementRejection blockedBy = PlacementRejection.None;
         bool sawUnloaded = false;
@@ -122,32 +125,14 @@ internal sealed class PlacementPlanner
                     continue;
                 }
 
-                if (accept != null && !accept(sample))
-                {
-                    continue;
-                }
-
-                int score = Score(sample);
-                float radiusError = Math.Abs(
-                    sample.Position.HorizontalDistanceTo(anchor.Position) - idealRadius);
-
-                // Strictly-better comparisons keep the first candidate in the
-                // fixed sweep order when two spots tie, which is what makes the
-                // choice reproducible.
-                bool better = !haveBest
-                    || score > bestScore
-                    || (score == bestScore && radiusError < bestRadiusError);
-                if (!better)
-                {
-                    continue;
-                }
-
-                haveBest = true;
-                bestScore = score;
-                bestRadiusError = radiusError;
-                bestPosition = sample.Position;
-                bestPose = PoseFor(sample);
-                bestSeat = bestPose == CompanionPose.SitOnSeat ? sample.SeatOffer : SeatOffer.None;
+                CompanionPose pose = PoseFor(sample);
+                qualified.Add(new Qualified(
+                    sample,
+                    pose,
+                    pose == CompanionPose.SitOnSeat ? sample.SeatOffer : SeatOffer.None,
+                    Score(sample),
+                    Math.Abs(sample.Position.HorizontalDistanceTo(anchor.Position) - idealRadius),
+                    qualified.Count));
             }
         }
 
@@ -178,28 +163,13 @@ internal sealed class PlacementPlanner
                     continue;
                 }
 
-                if (accept != null && !accept(seat))
-                {
-                    continue;
-                }
-
-                int score = Score(seat);
-                float radiusError = Math.Abs(
-                    seat.Position.HorizontalDistanceTo(anchor.Position) - idealRadius);
-                bool better = !haveBest
-                    || score > bestScore
-                    || (score == bestScore && radiusError < bestRadiusError);
-                if (!better)
-                {
-                    continue;
-                }
-
-                haveBest = true;
-                bestScore = score;
-                bestRadiusError = radiusError;
-                bestPosition = seat.Position;
-                bestPose = CompanionPose.SitOnSeat;
-                bestSeat = seat.SeatOffer;
+                qualified.Add(new Qualified(
+                    seat,
+                    CompanionPose.SitOnSeat,
+                    seat.SeatOffer,
+                    Score(seat),
+                    Math.Abs(seat.Position.HorizontalDistanceTo(anchor.Position) - idealRadius),
+                    qualified.Count));
             }
         }
 
@@ -213,9 +183,62 @@ internal sealed class PlacementPlanner
             return PlacementResult.Deferred(probed, blockedBy | PlacementRejection.NotLoaded);
         }
 
-        return haveBest
-            ? PlacementResult.Placed(bestPosition, bestPose, probed, bestSeat, bestScore)
-            : PlacementResult.Deferred(probed, blockedBy);
+        // Best score first; then nearest the ideal radius; then the fixed sweep
+        // order, ground before seats - the same tie-breaks the single pass used,
+        // which is what keeps the same world putting him in the same place.
+        qualified.Sort((left, right) =>
+        {
+            int byScore = right.Score.CompareTo(left.Score);
+            if (byScore != 0)
+            {
+                return byScore;
+            }
+
+            int byRadius = left.RadiusError.CompareTo(right.RadiusError);
+            return byRadius != 0 ? byRadius : left.Order.CompareTo(right.Order);
+        });
+
+        foreach (Qualified candidate in qualified)
+        {
+            if (accept != null && !accept(candidate.Sample))
+            {
+                continue;
+            }
+
+            return PlacementResult.Placed(
+                candidate.Sample.Position, candidate.Pose, probed, candidate.Seat, candidate.Score);
+        }
+
+        return PlacementResult.Deferred(probed, blockedBy);
+    }
+
+    /// <summary>A candidate that passed every rule, with what ranks it.
+    /// </summary>
+    private readonly struct Qualified
+    {
+        public Qualified(
+            PlacementProbeSample sample, CompanionPose pose, SeatOffer seat, int score, float radiusError,
+            int order)
+        {
+            Sample = sample;
+            Pose = pose;
+            Seat = seat;
+            Score = score;
+            RadiusError = radiusError;
+            Order = order;
+        }
+
+        public PlacementProbeSample Sample { get; }
+
+        public CompanionPose Pose { get; }
+
+        public SeatOffer Seat { get; }
+
+        public int Score { get; }
+
+        public float RadiusError { get; }
+
+        public int Order { get; }
     }
 
     /// <summary>True when a companion already placed at <paramref name="current"/>

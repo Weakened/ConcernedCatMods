@@ -41,19 +41,15 @@ internal readonly struct RoutineInputs
         float secondsInState,
         bool arrived,
         bool playerNearby,
-        bool sheltered,
         bool nightOrStorm,
-        CompanionPose pose,
-        float secondsSinceShelterSearchFailed = float.PositiveInfinity)
+        CompanionPose pose)
     {
         State = state;
         SecondsInState = secondsInState;
         Arrived = arrived;
         PlayerNearby = playerNearby;
-        Sheltered = sheltered;
         NightOrStorm = nightOrStorm;
         Pose = pose;
-        SecondsSinceShelterSearchFailed = secondsSinceShelterSearchFailed;
     }
 
     public RoutineState State { get; }
@@ -68,43 +64,38 @@ internal readonly struct RoutineInputs
     /// <summary>Whether the player is close enough to be talked to.</summary>
     public bool PlayerNearby { get; }
 
-    /// <summary>Whether he is under a roof.</summary>
-    public bool Sheltered { get; }
-
     /// <summary>Whether it is night, or raining hard enough that a person would
     /// go inside.</summary>
     public bool NightOrStorm { get; }
 
-    /// <summary>The pose he settles into. A seat is somewhere he stays.
+    /// <summary>The pose he is in. A seat or a bed is somewhere he stays.
     /// </summary>
     public CompanionPose Pose { get; }
-
-    /// <summary>How long ago he last looked for somewhere dry and found
-    /// nowhere in reach, or infinity when there is no such failure on record -
-    /// which is the default, and what a fresh spell of weather starts
-    /// from.</summary>
-    public float SecondsSinceShelterSearchFailed { get; }
 }
 
-/// <summary>Decides when the companion gets up, walks, stops and sits down
-/// again.
+/// <summary>Decides when the companion gets up for a potter around camp, and
+/// when he stops and sits again.
 ///
-/// The whole of his "common sense" is three rules, and they are here rather
-/// than in the adapter so they can be argued with in a test instead of in a
-/// playthrough:
+/// Only that. WHERE he spends his time - which fire, which roof, which bed - is
+/// his common sense (<c>CommonSense</c>), asked separately and acted on by the
+/// director, which moves him only for something strictly better than where he
+/// is. This used to carry a rule of its own for getting out of the dark and the
+/// wet; that rule could only look for a roof by walking around, which in a camp
+/// with no roof in reach became a loop in game. A companion who knows his camp
+/// does not need to wander about to find out whether it has a roof.
+///
+/// What is left is three rules, arguable in a test instead of in a playthrough:
 ///
 /// <list type="number">
-/// <item>He stays put when there is a reason to. Somebody is talking to him;
-/// he is on a seat somebody built; it is dark or pouring and he is under a
-/// roof. A companion who wanders off mid-conversation, or who abandons the
-/// chair you made him for a patch of grass, does not read as sensible - it
-/// reads as broken.</item>
-/// <item>Weather and dark push him towards shelter rather than away from it.
-/// Being caught out in a storm is the one case where he will get up from a
-/// perfectly good spot.</item>
+/// <item>He stays put when there is a reason to. Somebody is talking to him; he
+/// is on a seat somebody built, or asleep in a bed; it is dark or pouring. A
+/// companion who wanders off mid-conversation, abandons the chair you made him
+/// for a patch of grass, or goes for a walk in a storm does not read as
+/// sensible.</item>
 /// <item>Otherwise he moves rarely, and pauses when he arrives. The pause is
 /// what separates somebody pottering around a camp from something patrolling
 /// it.</item>
+/// <item>A stroll ends when he arrives or gives up, the same way.</item>
 /// </list>
 ///
 /// Every interval is a floor, never a timer that fires: this is asked on a slow
@@ -123,12 +114,6 @@ internal static class CampRoutine
     /// wherever he got to. Without it, a destination behind a wall is a
     /// companion walking on the spot until the world unloads.</summary>
     public const float StrollPatienceSeconds = 14f;
-
-    /// <summary>How long a failed look for shelter holds before he tries
-    /// again. Long, because nothing about an empty field changes in a minute:
-    /// what changes it is somebody building a roof, and that is worth noticing
-    /// within a few minutes, not within a few seconds.</summary>
-    public const float ShelterRetrySeconds = 300f;
 
     public static RoutineAction Decide(RoutineInputs inputs)
     {
@@ -161,37 +146,17 @@ internal static class CampRoutine
             return RoutineAction.Continue;
         }
 
+        // Nobody potters about in the dark or the rain. Where he should be then
+        // - under a roof, in a spare bed, by a fire - is his common sense's to
+        // say, and it moves him there on its own.
         if (inputs.NightOrStorm)
         {
-            // Under a roof: exactly where he should be, so he stays.
-            if (inputs.Sheltered)
-            {
-                return RoutineAction.Continue;
-            }
-
-            // Out in it: worth getting up for, whatever he is sitting on - once.
-            // This was the one rule here with no floor, and in a camp with no
-            // roof in reach it turned into a loop in game: up, walk, sit "in the
-            // open", up again, every fifteen seconds all night.
-            //
-            // So a look that came back empty holds. On the ground it holds for
-            // ShelterRetrySeconds and then he may look again. On a seat
-            // somebody built him it holds for the rest of this spell of
-            // weather: getting up from a chair every few minutes to sit on the
-            // grass beside it, and being put back on the chair by the seat
-            // sweep, is the same loop at a slower speed. A new spell of weather
-            // starts with no failure on record, so he still looks once.
-            bool neverLooked = float.IsPositiveInfinity(inputs.SecondsSinceShelterSearchFailed);
-            bool lookAgain = inputs.Pose != CompanionPose.SitOnSeat &&
-                inputs.SecondsSinceShelterSearchFailed >= ShelterRetrySeconds;
-            if (neverLooked || lookAgain)
-            {
-                return RoutineAction.Stroll;
-            }
+            return RoutineAction.Continue;
         }
 
-        // A seat somebody built for him is not a thing to wander off from.
-        if (inputs.Pose == CompanionPose.SitOnSeat)
+        // A seat somebody built him, or a bed, is not a thing to wander off
+        // from.
+        if (inputs.Pose == CompanionPose.SitOnSeat || inputs.Pose == CompanionPose.SleepInBed)
         {
             return RoutineAction.Continue;
         }
