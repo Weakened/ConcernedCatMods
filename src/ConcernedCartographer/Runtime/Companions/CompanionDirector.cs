@@ -51,6 +51,17 @@ internal sealed class CompanionDirector : IDisposable
         "Ruby",
     };
 
+    /// <summary>Vanilla pickables whose twinkle the compass borrows, best first.
+    /// Each is looked up; none is assumed.</summary>
+    private static readonly string[] SparklePrefabCandidates =
+    {
+        "Pickable_Stone",
+        "Pickable_Flint",
+        "Pickable_Branch",
+        "Pickable_Mushroom",
+        "Pickable_Dandelion",
+    };
+
     /// <summary>Hulgi lives further out than the collectible does: close
     /// enough to be part of the camp, far enough not to stand in a doorway.
     /// The 3-10 m band is CC-NPC-004's own requirement.</summary>
@@ -202,6 +213,10 @@ internal sealed class CompanionDirector : IDisposable
     private bool _visibilityApplied = true;
     private bool _toolsOnlyApplied;
     private bool _noticedRecorded;
+
+    /// <summary>The measured stone-circle radius is logged once per session,
+    /// not once per placement retry.</summary>
+    private bool _compassRingReported;
     private bool _promptVisible;
     private int _resumePage;
     private bool _disposed;
@@ -1498,7 +1513,7 @@ internal sealed class CompanionDirector : IDisposable
             return;
         }
 
-        PlacementResult placement = _planner.Plan(_anchor, _placementProbe);
+        PlacementResult placement = CompassPlannerFor(_anchor).Plan(_anchor, _placementProbe);
         if (!placement.Found)
         {
             _placementRetryElapsed = PlacementRetrySeconds;
@@ -1510,6 +1525,39 @@ internal sealed class CompanionDirector : IDisposable
         }
 
         SpawnCompass(placement.Position);
+    }
+
+    /// <summary>Near a bed the compass keeps its close band. At the world start
+    /// it goes outside the ring of standing stones - the owner's call: inside
+    /// the circle it read as part of the temple rather than as something lying
+    /// on the ground to pick up. The ring is measured each time from the
+    /// location itself.</summary>
+    private PlacementPlanner CompassPlannerFor(CompanionAnchor anchor)
+    {
+        if (anchor.Kind != AnchorKind.DefaultSpawn)
+        {
+            return _planner;
+        }
+
+        float ring = SpawnAnchorSource.MeasureStructureRadius(
+            new Vector3(anchor.Position.X, anchor.Position.Y, anchor.Position.Z));
+        if (ring <= 0f)
+        {
+            // No location to measure: a generous ring rather than the inside of
+            // whatever might be there.
+            ring = 8f;
+        }
+
+        if (!_compassRingReported)
+        {
+            _compassRingReported = true;
+            _log.LogInfo($"The world start's stone circle reaches {ring:0.0} m; the compass goes just outside it.");
+        }
+
+        return new PlacementPlanner(new PlacementRules(
+            minimumRadius: ring + 1.5f,
+            maximumRadius: ring + 6f,
+            maximumHeightDelta: 3f));
     }
 
     private void SpawnCompass(WorldPoint position)
@@ -1535,6 +1583,14 @@ internal sealed class CompanionDirector : IDisposable
 
             _compass = visual.Root;
             _compassSource = visual.Source;
+
+            // The owner: "we can have the object sparkle similar to collectible
+            // objects". The vanilla twinkle, borrowed render-only.
+            string? sparkle = LocalVisual.TryAttachSparkle(visual.Root, SparklePrefabCandidates, _log);
+            _log.LogInfo(sparkle == null
+                ? "No vanilla pickable sparkle was found on this build, so the compass does not twinkle."
+                : $"The compass twinkles like a pickable (sparkle borrowed from \"{sparkle}\").");
+
             _compassBehaviour = BrokenCompassObject.Attach(visual.Root, Examine, _log);
             _proximity.Reset();
             _noticedRecorded = false;

@@ -248,6 +248,74 @@ internal static class LocalVisual
         }
     }
 
+    /// <summary>Gives <paramref name="root"/> the twinkle vanilla pickables
+    /// have - the stars over a stone or a piece of flint that say "pick me up"
+    /// - by copying that particle system off the first candidate prefab that
+    /// has one. Returns the prefab it came from, or null when none did.
+    ///
+    /// Same discipline as the rest of this file: the copy is made under an
+    /// inactive holder, any script on it is removed while nothing has run, a
+    /// script that will not go refuses that candidate, and colliders are
+    /// removed. What is left is a particle system and nothing else - no
+    /// networking, no pickup, no physics.</summary>
+    public static string? TryAttachSparkle(
+        GameObject root, IReadOnlyList<string> candidatePrefabs, ManualLogSource log)
+    {
+        foreach (string candidate in candidatePrefabs)
+        {
+            GameObject? prefab = FindPrefab(candidate);
+            ParticleSystem? source = prefab == null
+                ? null
+                : prefab.GetComponentInChildren<ParticleSystem>(includeInactive: true);
+            if (source == null)
+            {
+                continue;
+            }
+
+            GameObject holder = new GameObject("CC_SparkleHarvest");
+            holder.SetActive(false);
+            try
+            {
+                GameObject copy = UnityEngine.Object.Instantiate(source.gameObject, holder.transform);
+                foreach (MonoBehaviour script in copy.GetComponentsInChildren<MonoBehaviour>(includeInactive: true))
+                {
+                    if (script != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(script);
+                    }
+                }
+
+                if (copy.GetComponentsInChildren<MonoBehaviour>(includeInactive: true).Length > 0)
+                {
+                    UnityEngine.Object.DestroyImmediate(copy);
+                    continue;
+                }
+
+                foreach (Collider collider in copy.GetComponentsInChildren<Collider>(includeInactive: true))
+                {
+                    UnityEngine.Object.DestroyImmediate(collider);
+                }
+
+                copy.name = "sparkle";
+                copy.transform.SetParent(root.transform, worldPositionStays: false);
+                copy.transform.localPosition = Vector3.zero;
+                copy.transform.localRotation = Quaternion.identity;
+                return candidate;
+            }
+            catch (Exception exception)
+            {
+                log.LogInfo(
+                    $"Could not borrow the pickable sparkle from \"{candidate}\": {SafeLogText.Brief(exception)}");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(holder);
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Last resort. Unity's own primitive always exists, so this
     /// cannot fail; its collider is removed because collision is decided by
     /// the caller, never inherited from a shape.</summary>
