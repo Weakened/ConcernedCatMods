@@ -161,6 +161,12 @@ internal sealed class CompanionDirector : IDisposable
 
     private RoutineState _routine = RoutineState.Settled;
     private float _routineElapsed;
+
+    /// <summary>How long ago a look for somewhere dry found nowhere in reach;
+    /// infinity when there is none on record. Reset by a clear, dry day, so a
+    /// new spell of weather starts with a prompt look.</summary>
+    private float _sinceShelterSearchFailed = float.PositiveInfinity;
+
     private Vector3 _strollTarget;
     private int _strollTurn;
     private bool _walkReported;
@@ -753,6 +759,11 @@ internal sealed class CompanionDirector : IDisposable
 
         _routineElapsed += deltaTime;
 
+        bool nightOrStorm = IsNightOrStorm();
+        _sinceShelterSearchFailed = nightOrStorm
+            ? _sinceShelterSearchFailed + deltaTime
+            : float.PositiveInfinity;
+
         bool finished = false;
         if (_routine == RoutineState.Strolling)
         {
@@ -766,8 +777,9 @@ internal sealed class CompanionDirector : IDisposable
             finished,
             PlayerWithinTalkRange(),
             IsSheltered(_actor.Position),
-            IsNightOrStorm(),
-            _actor.Pose);
+            nightOrStorm,
+            _actor.Pose,
+            _sinceShelterSearchFailed);
 
         switch (CampRoutine.Decide(inputs))
         {
@@ -845,6 +857,25 @@ internal sealed class CompanionDirector : IDisposable
 
             StrollTo(point);
             return;
+        }
+
+        if (wantsShelter)
+        {
+            // Every candidate was looked at and none of them is dry. That is a
+            // fact about this camp, not about this moment, so it is recorded:
+            // the routine will not send him to look again for a while, which is
+            // what stops the up-walk-sit-up loop seen in game at 7287919. His
+            // ordinary pottering still passes through here, so a roof built
+            // nearby is still found at his next stroll; only the extra
+            // get-up-just-to-look is held back. Said once per spell of weather.
+            if (float.IsPositiveInfinity(_sinceShelterSearchFailed))
+            {
+                _log.LogInfo(
+                    "Hulgi looked for somewhere dry and found nowhere in reach of his camp, so he is " +
+                    "not getting up just to look again.");
+            }
+
+            _sinceShelterSearchFailed = 0f;
         }
 
         if (fallback.HasValue)

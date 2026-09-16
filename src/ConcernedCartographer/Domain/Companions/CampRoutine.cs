@@ -43,7 +43,8 @@ internal readonly struct RoutineInputs
         bool playerNearby,
         bool sheltered,
         bool nightOrStorm,
-        CompanionPose pose)
+        CompanionPose pose,
+        float secondsSinceShelterSearchFailed = float.PositiveInfinity)
     {
         State = state;
         SecondsInState = secondsInState;
@@ -52,6 +53,7 @@ internal readonly struct RoutineInputs
         Sheltered = sheltered;
         NightOrStorm = nightOrStorm;
         Pose = pose;
+        SecondsSinceShelterSearchFailed = secondsSinceShelterSearchFailed;
     }
 
     public RoutineState State { get; }
@@ -76,6 +78,12 @@ internal readonly struct RoutineInputs
     /// <summary>The pose he settles into. A seat is somewhere he stays.
     /// </summary>
     public CompanionPose Pose { get; }
+
+    /// <summary>How long ago he last looked for somewhere dry and found
+    /// nowhere in reach, or infinity when there is no such failure on record -
+    /// which is the default, and what a fresh spell of weather starts
+    /// from.</summary>
+    public float SecondsSinceShelterSearchFailed { get; }
 }
 
 /// <summary>Decides when the companion gets up, walks, stops and sits down
@@ -116,6 +124,12 @@ internal static class CampRoutine
     /// companion walking on the spot until the world unloads.</summary>
     public const float StrollPatienceSeconds = 14f;
 
+    /// <summary>How long a failed look for shelter holds before he tries
+    /// again. Long, because nothing about an empty field changes in a minute:
+    /// what changes it is somebody building a roof, and that is worth noticing
+    /// within a few minutes, not within a few seconds.</summary>
+    public const float ShelterRetrySeconds = 300f;
+
     public static RoutineAction Decide(RoutineInputs inputs)
     {
         switch (inputs.State)
@@ -149,9 +163,24 @@ internal static class CampRoutine
 
         if (inputs.NightOrStorm)
         {
-            // Out in it: worth getting up for, whatever he is sitting on.
             // Under a roof: exactly where he should be, so he stays.
-            return inputs.Sheltered ? RoutineAction.Continue : RoutineAction.Stroll;
+            if (inputs.Sheltered)
+            {
+                return RoutineAction.Continue;
+            }
+
+            // Out in it: worth getting up for, whatever he is sitting on - but
+            // only if the last look did not just come back empty. This was the
+            // one rule here with no floor, and in a camp with no roof in reach
+            // it turned into a loop in game: up, walk, sit "in the open", up
+            // again, every fifteen seconds all night. After a failed look he
+            // falls through to the ordinary rules below, which keep him on a
+            // seat somebody built and pace his pottering like any other
+            // evening, until it is worth looking again.
+            if (inputs.SecondsSinceShelterSearchFailed >= ShelterRetrySeconds)
+            {
+                return RoutineAction.Stroll;
+            }
         }
 
         // A seat somebody built for him is not a thing to wander off from.

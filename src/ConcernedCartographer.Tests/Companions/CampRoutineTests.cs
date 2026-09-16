@@ -15,9 +15,60 @@ public sealed class CampRoutineTests
         bool playerNearby = false,
         bool sheltered = false,
         bool nightOrStorm = false,
-        CompanionPose pose = CompanionPose.SitOnGround)
+        CompanionPose pose = CompanionPose.SitOnGround,
+        float secondsSinceShelterSearchFailed = float.PositiveInfinity)
     {
-        return new RoutineInputs(state, seconds, arrived, playerNearby, sheltered, nightOrStorm, pose);
+        return new RoutineInputs(
+            state, seconds, arrived, playerNearby, sheltered, nightOrStorm, pose,
+            secondsSinceShelterSearchFailed);
+    }
+
+    [Fact]
+    public void AFailedLookForShelterIsNotRepeatedEveryFewSeconds()
+    {
+        // Seen in game at 7287919: at night, in a camp with no roof in reach,
+        // he got up "looking for shelter", sat down in the open, and got up
+        // again - roughly every fifteen seconds, eighteen times in four
+        // minutes. Having just looked and found nowhere dry, the same empty
+        // field is not worth another look yet.
+        Assert.Equal(
+            RoutineAction.Continue,
+            CampRoutine.Decide(At(
+                RoutineState.Settled, 0f, nightOrStorm: true,
+                secondsSinceShelterSearchFailed: 1f)));
+
+        // Nor is it a reason to leave a seat somebody built him: the search
+        // that would justify leaving it has just failed.
+        Assert.Equal(
+            RoutineAction.Continue,
+            CampRoutine.Decide(At(
+                RoutineState.Settled, CampRoutine.SettledSeconds * 5f, nightOrStorm: true,
+                pose: CompanionPose.SitOnSeat, secondsSinceShelterSearchFailed: 1f)));
+
+        // In the meantime he potters at the ordinary pace, no faster...
+        Assert.Equal(
+            RoutineAction.Continue,
+            CampRoutine.Decide(At(
+                RoutineState.Settled, CampRoutine.SettledSeconds - 1f, nightOrStorm: true,
+                secondsSinceShelterSearchFailed: 1f)));
+        Assert.Equal(
+            RoutineAction.Stroll,
+            CampRoutine.Decide(At(
+                RoutineState.Settled, CampRoutine.SettledSeconds, nightOrStorm: true,
+                secondsSinceShelterSearchFailed: 1f)));
+
+        // ...and looks again once it has been long enough for something to have
+        // changed, promptly, from a seat or from the ground.
+        Assert.Equal(
+            RoutineAction.Stroll,
+            CampRoutine.Decide(At(
+                RoutineState.Settled, 0f, nightOrStorm: true,
+                secondsSinceShelterSearchFailed: CampRoutine.ShelterRetrySeconds)));
+        Assert.Equal(
+            RoutineAction.Stroll,
+            CampRoutine.Decide(At(
+                RoutineState.Settled, 0f, nightOrStorm: true, pose: CompanionPose.SitOnSeat,
+                secondsSinceShelterSearchFailed: CampRoutine.ShelterRetrySeconds)));
     }
 
     [Fact]
