@@ -194,6 +194,33 @@ internal sealed class CompanionDirector : IDisposable
     private bool _relocating;
     private float _relocationPatience;
 
+    /// <summary>Where a walk out through a door is: heading for the door,
+    /// waiting for it to swing, stepping through, or past it and on his way.
+    /// </summary>
+    private enum DoorPhase
+    {
+        None = 0,
+        ToDoor = 1,
+        Opening = 2,
+        Through = 3,
+        After = 4,
+    }
+
+    private DoorPhase _doorPhase;
+    private Door? _exitDoor;
+    private Vector3 _doorCentre;
+    private Vector3 _doorInner;
+    private Vector3 _doorOuter;
+    private bool _doorClosedBehind;
+    private float _doorTimer;
+    private readonly List<Vector3> _afterDoorRoute = new List<Vector3>();
+    private readonly List<Vector3> _doorScratch = new List<Vector3>();
+    private readonly Collider[] _doorBuffer = new Collider[128];
+
+    /// <summary>How long a door takes to swing open before he walks through.
+    /// </summary>
+    private const float DoorSwingSeconds = 0.9f;
+
     private float _campCheckElapsed;
     private int _campSignature;
 
@@ -908,7 +935,7 @@ internal sealed class CompanionDirector : IDisposable
         var target = new Vector3(spot.X, spot.Y, spot.Z);
         return _actor.Exists && _actor.CanWalk &&
             Vector3.Distance(_actor.Position, target) <= WalkRelocateMetres &&
-            TryRoute(target);
+            (TryRoute(target) || TryPlanDoorExit(target, commit: false));
     }
 
     /// <summary>Starts the walk to the best spot he can reach, when there is one
@@ -929,9 +956,22 @@ internal sealed class CompanionDirector : IDisposable
         }
 
         Vector3 target = TargetOf(plan);
-        if (Vector3.Distance(_actor.Position, target) > WalkRelocateMetres || !TryRoute(target))
+        if (Vector3.Distance(_actor.Position, target) > WalkRelocateMetres)
         {
             return false;
+        }
+
+        _doorPhase = DoorPhase.None;
+        _exitDoor = null;
+        if (!TryRoute(target))
+        {
+            if (!TryPlanDoorExit(target, commit: true))
+            {
+                return false;
+            }
+
+            _doorPhase = DoorPhase.ToDoor;
+            _doorClosedBehind = false;
         }
 
         float length = 0f;
@@ -953,8 +993,22 @@ internal sealed class CompanionDirector : IDisposable
         _relocationPatience = (length / StrollSpeed * 1.5f) + 6f;
         _actor.RememberAnchor(_anchor);
 
+        if (_doorPhase == DoorPhase.ToDoor)
+        {
+            // Walked twice more: to the door is in the length already; through it
+            // and on from its far side is not.
+            float after = 0f;
+            for (int index = 1; index < _afterDoorRoute.Count; index++)
+            {
+                after += Vector3.Distance(_afterDoorRoute[index - 1], _afterDoorRoute[index]);
+            }
+
+            _relocationPatience += ((after + 2f) / StrollSpeed * 1.5f) + DoorSwingSeconds + 4f;
+        }
+
         _log.LogInfo(
             $"Hulgi is getting up and walking {length:0.0} m to {DescribeSpot(plan)}" +
+            (_doorPhase == DoorPhase.ToDoor ? ", out through the door" : "") +
             (_strollRoute.Count > 2 ? $" by a route with {_strollRoute.Count - 2} turn(s)." : "."));
         return true;
     }
@@ -994,12 +1048,87 @@ internal sealed class CompanionDirector : IDisposable
         }
 
         _routineElapsed += deltaTime;
-        WalkStep step = FollowRoute(deltaTime);
-        if (step == WalkStep.Walking && _routineElapsed < _relocationPatience)
+        WalkStep step;
+        switch (_doorPhase)
         {
-            return;
+            case DoorPhase.ToDoor:
+                step = FollowRoute(deltaTime);
+                if (step == WalkStep.Walking && _routineElapsed < _relocationPatience)
+                {
+                    return;
+                }
+
+                if (_exitDoor == null ||
+                    Vector3.Distance(_actor.Position, _doorInner) > 1.2f)
+                {
+                    // Never reached the door. Treated like any failed walk.
+                    step = WalkStep.Blocked;
+                    break;
+                }
+
+                _actor.StopWalking();
+                if (DoorState(_exitDoor) == 0)
+                {
+                    UseDoor(_exitDoor);
+                }
+
+                _doorPhase = DoorPhase.Opening;
+                _doorTimer = DoorSwingSeconds;
+                return;
+
+            case DoorPhase.Opening:
+                _doorTimer -= deltaTime;
+                if (_doorTimer > 0f)
+                {
+                    return;
+                }
+
+                _doorPhase = DoorPhase.Through;
+                return;
+
+            case DoorPhase.Through:
+                // The open leaf beside the frame is not a wall, so these few
+                // steps skip the sweep; the doorway itself was just walked up to.
+                step = _actor.StepToward(_doorOuter, deltaTime, StrollSpeed, 0.35f, checkObstruction: false);
+                if (step == WalkStep.Walking && _routineElapsed < _relocationPatience)
+                {
+                    return;
+                }
+
+                if (step != WalkStep.Arrived)
+                {
+                    break;
+                }
+
+                _doorPhase = DoorPhase.After;
+                _strollRoute.Clear();
+                _strollRoute.AddRange(_afterDoorRoute);
+                _strollCorner = 1;
+                return;
+
+            case DoorPhase.After:
+                step = FollowRoute(deltaTime);
+                CloseDoorBehindHim();
+                if (step == WalkStep.Walking && _routineElapsed < _relocationPatience)
+                {
+                    return;
+                }
+
+                break;
+
+            default:
+                step = FollowRoute(deltaTime);
+                if (step == WalkStep.Walking && _routineElapsed < _relocationPatience)
+                {
+                    return;
+                }
+
+                break;
         }
 
+        // However the walk ended, a door he opened does not stay open.
+        CloseDoorBehindHim(force: true);
+        _doorPhase = DoorPhase.None;
         _relocating = false;
         _actor.StopWalking();
 
@@ -1017,6 +1146,32 @@ internal sealed class CompanionDirector : IDisposable
             "Nothing about your tools or progress is affected.");
         _actor.Release();
         _actorRetryElapsed = 0f;
+    }
+
+    /// <summary>Closes the door he came out through, once he is two metres
+    /// clear of it - or at once when <paramref name="force"/> says the walk is
+    /// over. Only a door he opened, only if it is still open, and only once.
+    /// </summary>
+    private void CloseDoorBehindHim(bool force = false)
+    {
+        if (_exitDoor == null || _doorClosedBehind)
+        {
+            return;
+        }
+
+        Vector3 flat = _actor.Position - _doorCentre;
+        flat.y = 0f;
+        if (!force && flat.magnitude < 2f)
+        {
+            return;
+        }
+
+        _doorClosedBehind = true;
+        if (DoorState(_exitDoor) != 0)
+        {
+            UseDoor(_exitDoor);
+            _log.LogInfo("Hulgi closed the door behind him.");
+        }
     }
 
     /// <summary>Fingerprints what makes a spot good or reachable near his home:
@@ -1396,17 +1551,23 @@ internal sealed class CompanionDirector : IDisposable
     /// not.</summary>
     private bool TryRoute(Vector3 point)
     {
-        _routeScratch.Clear();
-        Vector3 from = _actor.Position;
+        return _actor.Exists && TryRouteFrom(_actor.Position, point, _routeScratch);
+    }
+
+    /// <summary>The same question as <see cref="TryRoute"/>, from anywhere - the
+    /// far side of a door, for instance - into <paramref name="route"/>.</summary>
+    private static bool TryRouteFrom(Vector3 from, Vector3 point, List<Vector3> route)
+    {
+        route.Clear();
 
         try
         {
             Pathfinding pathfinding = Pathfinding.instance;
             if (pathfinding != null &&
                 pathfinding.GetPath(
-                    from, point, _routeScratch, Pathfinding.AgentType.HumanoidNoSwim,
+                    from, point, route, Pathfinding.AgentType.HumanoidNoSwim,
                     requireFullPath: true) &&
-                _routeScratch.Count >= 2)
+                route.Count >= 2)
             {
                 return true;
             }
@@ -1416,15 +1577,140 @@ internal sealed class CompanionDirector : IDisposable
             // A navmesh that will not answer is treated like one not built yet.
         }
 
-        _routeScratch.Clear();
-        if (!_actor.CanWalkStraightTo(point))
+        route.Clear();
+        if (CompanionFooting.IsWayBlocked(from, point))
         {
             return false;
         }
 
-        _routeScratch.Add(from);
-        _routeScratch.Add(point);
+        route.Add(from);
+        route.Add(point);
         return true;
+    }
+
+    /// <summary>A way out of the building he is in, through a closed door, to
+    /// <paramref name="target"/>: reach the door from inside, and route onward
+    /// from its far side. Only from under a roof - he lets himself OUT of a
+    /// building, never into one; the owner's rule is that a closed door means
+    /// the chairs inside are not for him, and he takes the log instead.
+    ///
+    /// Only doors the local player could open: no key, closable again, guard
+    /// stone access allowed. With <paramref name="commit"/> the plan is kept
+    /// for the walk; without, it only answers whether one exists.</summary>
+    private bool TryPlanDoorExit(Vector3 target, bool commit)
+    {
+        if (!_actor.Exists || !IsSheltered(_actor.Position))
+        {
+            return false;
+        }
+
+        Vector3 here = _actor.Position;
+        int count;
+        try
+        {
+            count = Physics.OverlapSphereNonAlloc(
+                here, 10f, _doorBuffer, LayerMask.GetMask("piece", "piece_nonsolid", "Default_small"),
+                QueryTriggerInteraction.Ignore);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+
+        var doors = new List<Door>();
+        for (int index = 0; index < count; index++)
+        {
+            Door? door = _doorBuffer[index] == null ? null : _doorBuffer[index].GetComponentInParent<Door>();
+            if (door != null && !doors.Contains(door) && CanUseDoor(door))
+            {
+                doors.Add(door);
+            }
+        }
+
+        doors.Sort((a, b) =>
+            Vector3.Distance(here, a.transform.position).CompareTo(Vector3.Distance(here, b.transform.position)));
+
+        foreach (Door door in doors)
+        {
+            Collider? leaf = door.GetComponentInChildren<Collider>();
+            Vector3 centre = leaf != null ? leaf.bounds.center : door.transform.position;
+            Vector3 across = door.transform.forward;
+            across.y = 0f;
+            if (across.sqrMagnitude < 0.01f)
+            {
+                continue;
+            }
+
+            across.Normalize();
+            float side = Vector3.Dot(across, here - centre) >= 0f ? 1f : -1f;
+            Vector3 inner = Grounded(centre + (across * side * 1.0f));
+            Vector3 outer = Grounded(centre - (across * side * 1.1f));
+
+            if (!TryRouteFrom(here, inner, _doorScratch) || !TryRouteFrom(outer, target, _afterDoorRoute))
+            {
+                continue;
+            }
+
+            if (commit)
+            {
+                _exitDoor = door;
+                _doorCentre = centre;
+                _doorInner = inner;
+                _doorOuter = outer;
+                _routeScratch.Clear();
+                _routeScratch.AddRange(_doorScratch);
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private static Vector3 Grounded(Vector3 point)
+    {
+        return CompanionFooting.TryFind(point, 2f, 4f, out Vector3 ground, out _) ? ground : point;
+    }
+
+    /// <summary>A door he may use: closed now, no key, can be closed again, and
+    /// guard-stone access allowed here - the same doors the local player could
+    /// open, and nothing else.</summary>
+    private static bool CanUseDoor(Door door)
+    {
+        try
+        {
+            return DoorState(door) == 0 &&
+                door.m_keyItem == null &&
+                !door.m_canNotBeClosed &&
+                (!door.m_checkGuardStone || PrivateArea.CheckAccess(door.transform.position, 0f, flash: false));
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Swings a door the way the game does for a player standing where
+    /// he stands: through its own UseDoor RPC, away from him. The same RPC
+    /// closes it again. The one thing in the world a companion is allowed to
+    /// change - see CLAUDE.md.</summary>
+    private void UseDoor(Door door)
+    {
+        try
+        {
+            ZNetView? view = door.GetComponent<ZNetView>();
+            if (view == null || !view.IsValid())
+            {
+                return;
+            }
+
+            Vector3 fromHim = (_actor.Position - door.transform.position).normalized;
+            view.InvokeRPC("UseDoor", Vector3.Dot(door.transform.forward, fromHim) < 0f);
+        }
+        catch (Exception exception)
+        {
+            _log.LogInfo($"Hulgi could not use the door: {SafeLogText.Brief(exception)}");
+        }
     }
 
     /// <summary>One step along the route: towards the next corner, and on to

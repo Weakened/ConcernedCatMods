@@ -507,8 +507,12 @@ internal sealed class CompanionActor
     /// spot in the first place, and stops if it will not hold him. A companion
     /// pottering around a camp does not need to solve a maze, and the failure
     /// mode of trying is one who walks into a wall forever.</summary>
+    /// <param name="checkObstruction">False only for the few steps through a
+    /// doorway he has just opened, where the open door leaf beside the frame
+    /// would otherwise read as a wall.</param>
     public WalkStep StepToward(
-        Vector3 target, float deltaTime, float speed, float? arrivalMetres = null)
+        Vector3 target, float deltaTime, float speed, float? arrivalMetres = null,
+        bool checkObstruction = true)
     {
         if (_root == null)
         {
@@ -532,7 +536,8 @@ internal sealed class CompanionActor
         // a wall rather than with his face in it. A stroll is only ever started
         // towards a spot with a clear straight line, so this is the safety net
         // for what changed since - a door closed, a wall built.
-        if (CompanionFooting.IsWayBlocked(here, here + (direction * (travel + StepLookAheadMetres))))
+        if (checkObstruction &&
+            CompanionFooting.IsWayBlocked(here, here + (direction * (travel + StepLookAheadMetres))))
         {
             return WalkStep.Blocked;
         }
