@@ -1,6 +1,6 @@
-# Concerned Cartographer V1.1.0
+# Concerned Cartographer V1.1.1
 
-**V1.1.0 by The Concerned Cat introduces Hulgi: a local-only companion who lives at your home point and introduces the atlas, on top of 1.0.4’s sailing Route Follow. He is not a networked creature — no other player can see him, he takes no part in your save, and he never blocks, fights or carries anything. Audited against Valheim 1.0.12.**
+**V1.1.1 by The Concerned Cat introduces Hulgi: a local-only companion who lives at your home point and introduces the atlas, on top of 1.0.4’s sailing Route Follow. He is not a networked creature — no other player can see him, he takes no part in your save, and he never blocks, fights or carries anything. Audited against Valheim 1.0.12.**
 
 Concerned Cartographer turns Valheim’s map into a living atlas.
 
@@ -55,7 +55,7 @@ The roads your Vikings build can map themselves. Existing pins can become durabl
 
 *Settings with backups, a sanitized support bundle, road-repair tools — and opt-in crash reporting that spells out what is never sent.*
 
-## Hulgi and the Broken Compass (new in V1.1.0)
+## Hulgi and the Broken Compass (new in V1.1.0, fixed throughout in V1.1.1)
 
 A broken compass lies on the ground near where you wake up. Examine it and Hulgi introduces
 himself — a drowned cartographer who never made it home, and who would rather you did. Welcome
@@ -84,9 +84,9 @@ unlocked, nothing can lock them again.
 
 `cc_companion status` reports exactly what was resolved on your machine.
 
-## Version 1.1.0 and support
+## Version 1.1.1 and support
 
-Version 1.1.0 introduces Hulgi, the local-only companion described above; every atlas feature from 1.0.4 is unchanged. Version 1.0.4 added optional sailing Route Follow. Mark a route as a sailing route (Routes panel **Sailing** button, or `cc_routes sailing on`), enable `Routes/SailingAutoFollowEnabled`, take the helm with that route selected, and press Q. Cartographer feeds only the bounded rudder input a player supplies by holding the helm key. Your sails stay manual, and wind, physics, speed, collision, damage, ownership and network authority are untouched. Any helm input, any sail step, jump/attack/secondary/dodge, a second Q, leaving the helm, route changes, going too far off route, reaching the end, or 12 seconds without progress cancels it. There is no tacking, obstacle avoidance, docking or pathfinding. **Live multiplayer verification of sailing Route Follow is still outstanding** and is not claimed.
+Version 1.1.1 is the first build of Hulgi that anybody has actually played, and it fixes what that found: every console command was missing on Valheim 1.0.x, a brand new player was treated as a returning one so the introduction never gated anything, and he never sat down. His hair still renders off his head on 1.0.12 and is removed rather than left floating, which is a known defect and not a finished appearance. Version 1.1.0 introduced Hulgi, the local-only companion described above; every atlas feature from 1.0.4 is unchanged. Version 1.0.4 added optional sailing Route Follow. Mark a route as a sailing route (Routes panel **Sailing** button, or `cc_routes sailing on`), enable `Routes/SailingAutoFollowEnabled`, take the helm with that route selected, and press Q. Cartographer feeds only the bounded rudder input a player supplies by holding the helm key. Your sails stay manual, and wind, physics, speed, collision, damage, ownership and network authority are untouched. Any helm input, any sail step, jump/attack/secondary/dodge, a second Q, leaving the helm, route changes, going too far off route, reaching the end, or 12 seconds without progress cancels it. There is no tacking, obstacle avoidance, docking or pathfinding. **Live multiplayer verification of sailing Route Follow is still outstanding** and is not claimed.
 
 Version 1.0.3 fixed dungeon surveying: Burial Chambers, Troll Caves, Bear Caves, Sunken Crypts, Frost Caves and Hildir's crypt and cave are offered as pending observations when you walk up to them. They never were before, because the survey only examined networked objects and a Valheim dungeon entrance is not one.
 

@@ -1,5 +1,58 @@
 # Changelog
 
+## 1.1.1 - Hulgi, played
+
+1.1.0 was written and tested without anybody having played it. This is what
+happened when somebody did, on Valheim 1.0.12.
+
+Fixed
+
+- **Every console command was missing.** `cc_roads`, `cc_pins`, `cc_atlas`,
+  `cc_routes`, `cc_survey`, `cc_sync` and `cc_companion` all failed to register
+  on Valheim 1.0.x and answered "is not a recognized command". That included
+  `cc_companion toolsonly on`, which is the promised way to reach the map tools
+  without ever finding the compass. Commands are now added to the game's own
+  command table directly, matched by shape so a future signature change does not
+  silently remove them again, and what the console accepted is written to the
+  log at startup.
+- **A brand new player was treated as an existing one.** The mod writes its own
+  starter `survey-rules.tsv` during startup, and the check for prior use then
+  found that file and concluded you had played before — so the introduction's
+  gate never engaged for anybody, on any installation. This build's own
+  bookkeeping no longer counts as evidence of a history. Genuine prior data,
+  saved views and translation overrides still do, so nobody upgrading loses
+  anything.
+- **He never actually sat down.** Sitting in Valheim is an animator parameter,
+  not an animation name, and the code was looking for the name. Both the ground
+  sit and seating were affected: the ground idle is now the game's own
+  `emote_sit`, and a free chair is used through the chair's own attachment
+  point, heading and sitting animation. He never claims a seat — the game's
+  occupancy test only sees players — and he gives one up the moment it is
+  destroyed or somebody sits in it. Walking out of range of your own camp does
+  not move him.
+- **His appearance was the presets the design asked for, not the ones you
+  chose.** Hair and beard are now looked up by the exact label on the
+  character-creation screen — Long Braid and Handlebar — against this build's
+  own customization list, and his colour goes through the game's own conversion
+  from the sliders rather than a hard-coded value. `Companions/HairPreset` and
+  `Companions/BeardPreset` override either, by label or prefab id.
+- **A damaged companion entry was reported every session, forever.** A row this
+  build carried last time was counted again as damage found this time. It is now
+  carried without being re-counted, and nothing is dropped.
+- `cc_companion where` says where he actually is.
+
+Known, on this build
+
+- **Hulgi has no hair.** Long Braid renders about a metre from his head on
+  1.0.12, so it is removed rather than left floating; his beard is correct. The
+  log says so when it happens. Tracked as issue #305.
+- **Seating on furniture has not been seen working.** The mechanism is in and
+  tested, but no chair happened to fall where he settles during testing, and a
+  seat built after he has sat down is not noticed until something else moves
+  him. Tracked as issue #306.
+- **Live multiplayer testing of sailing Route Follow** remains outstanding from
+  1.0.4.
+
 ## 1.1.0 - Hulgi, and the Broken Compass
 
 Added

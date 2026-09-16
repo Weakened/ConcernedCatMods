@@ -4,8 +4,8 @@ schemaVersion = "0.0.1"
 [package]
 namespace = "TheConcernedCat"
 name = "ConcernedCartographer"
-versionNumber = "1.1.0"
-description = "v1.1.0: Meet Hulgi. A local-only companion, a short introduction, and the living atlas: roads, markers, routes, survey, search and sharing."
+versionNumber = "1.1.1"
+description = "v1.1.1: Meet Hulgi. A local-only companion, a short introduction, and the living atlas: roads, markers, routes, survey, search and sharing."
 websiteUrl = "https://github.com/Weakened/ConcernedCatMods"
 containsNsfwContent = false
 
