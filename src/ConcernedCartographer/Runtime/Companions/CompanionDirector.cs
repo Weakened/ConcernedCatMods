@@ -250,6 +250,11 @@ internal sealed class CompanionDirector : IDisposable
         // Destroy on them again would be talking to a corpse, so the references
         // are dropped instead.
         _actor.Forget();
+
+        // The speech widget lives on Chat.instance, which does not survive a
+        // return to the main menu. Forgetting it forces a fresh look-up rather
+        // than an invoke against a destroyed component.
+        OverheadSpeech.Forget();
         _compass = null;
         _compassBehaviour = null;
         _compassSource = "none";
@@ -730,7 +735,7 @@ internal sealed class CompanionDirector : IDisposable
         }
 
         _talkCooldown = TalkCooldownSeconds;
-        ShowNotice(AtlasStrings.Get(line.Key), MessageHud.MessageType.Center);
+        Say(AtlasStrings.Get(line.Key));
     }
 
     /// <summary>Ambient remarks, OFF by default.
@@ -1194,6 +1199,28 @@ internal sealed class CompanionDirector : IDisposable
             AnchorKind.DefaultSpawn => "starting point",
             _ => "home point",
         };
+    }
+
+    /// <summary>Hulgi speaking, over his head where a trader speaks.
+    ///
+    /// A centre-screen message is the game telling the player something. A
+    /// bubble over a head is somebody talking to them, and the difference is
+    /// most of what makes him read as a person rather than a notification. The
+    /// old message is kept as the fallback for a build whose chat widget is not
+    /// the shape we expect, because a companion who says nothing at all would
+    /// be a worse failure than one who says it in the wrong place.</summary>
+    private void Say(string text)
+    {
+        Transform? head = _actor.SpeechAnchor;
+        if (head != null &&
+            OverheadSpeech.TrySay(
+                head.gameObject, head.position, AtlasStrings.Get("companion.hulgi.name"), text, _log))
+        {
+            _log.LogInfo("Hulgi: " + text);
+            return;
+        }
+
+        ShowNotice(text, MessageHud.MessageType.Center);
     }
 
     private void ShowNotice(string text, MessageHud.MessageType type = MessageHud.MessageType.TopLeft)

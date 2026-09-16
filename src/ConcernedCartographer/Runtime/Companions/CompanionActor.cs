@@ -237,6 +237,15 @@ internal sealed class CompanionActor
     /// </summary>
     public CompanionPose Pose => Report?.Pose ?? CompanionPose.SitOnGround;
 
+    /// <summary>The joint a line of speech should appear over, or null when
+    /// there is no model. The head bone rather than the root: the game's
+    /// in-world text follows the object it is given, and asks a
+    /// <c>Character</c> for a head point - which this companion deliberately
+    /// does not have, so it would otherwise put his voice at his feet.
+    /// </summary>
+    public Transform? SpeechAnchor =>
+        _root == null ? null : _helmetJoint ?? FindHeadBone(_root.transform);
+
     /// <summary>The home point this actor was built against, so the residency
     /// rule can tell whether it has moved.</summary>
     public CompanionAnchor PlacedAnchor { get; private set; }
