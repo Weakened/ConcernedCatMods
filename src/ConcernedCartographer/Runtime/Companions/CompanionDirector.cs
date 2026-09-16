@@ -858,6 +858,15 @@ internal sealed class CompanionDirector : IDisposable
             var point = new Vector3(
                 sample.Position.X, sample.Position.Y, sample.Position.Z);
 
+            // Somewhere he can actually walk to. His walk is a straight line, so
+            // a spot on the far side of a wall, a post or a rock is not a
+            // stroll, it is a companion pushing into the wall until his
+            // patience runs out.
+            if (!_actor.CanWalkStraightTo(point))
+            {
+                continue;
+            }
+
             if (wantsShelter && !IsSheltered(point))
             {
                 fallback ??= point;

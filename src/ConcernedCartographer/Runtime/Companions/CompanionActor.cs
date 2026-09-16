@@ -479,6 +479,20 @@ internal sealed class CompanionActor
     /// last few centimetres looks worse than stopping short.</summary>
     private const float ArrivalMetres = 0.6f;
 
+    /// <summary>How far past the next step the obstruction sweep looks, so he
+    /// stops short of a wall rather than touching it.</summary>
+    private const float StepLookAheadMetres = 0.35f;
+
+    /// <summary>Whether he could walk from where he is to
+    /// <paramref name="target"/> in a straight line without walking into
+    /// anything solid. Stroll targets are chosen only where this holds; there is
+    /// no pathfinding yet, so a spot behind a wall is simply not
+    /// chosen.</summary>
+    public bool CanWalkStraightTo(Vector3 target)
+    {
+        return _root != null && !CompanionFooting.IsWayBlocked(_root.transform.position, target);
+    }
+
     /// <summary>Whether this build can animate a walk at all. When false he
     /// never strolls - he would slide, and a sliding companion reads as a
     /// broken one where a still companion just reads as still.</summary>
@@ -512,6 +526,15 @@ internal sealed class CompanionActor
         Vector3 direction = flat / distance;
         float travel = Mathf.Min(speed * deltaTime, distance);
         Vector3 next = here + (direction * travel);
+
+        // Collision with the world, looking a little ahead so he stops short of
+        // a wall rather than with his face in it. A stroll is only ever started
+        // towards a spot with a clear straight line, so this is the safety net
+        // for what changed since - a door closed, a wall built.
+        if (CompanionFooting.IsWayBlocked(here, here + (direction * (travel + StepLookAheadMetres))))
+        {
+            return WalkStep.Blocked;
+        }
 
         if (!TryGroundAt(next, out float height))
         {

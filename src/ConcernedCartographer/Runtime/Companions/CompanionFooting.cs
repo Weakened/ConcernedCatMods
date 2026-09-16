@@ -36,6 +36,54 @@ internal static class CompanionFooting
     /// read on the main thread after Unity is up.</summary>
     private static int _solidMask = -1;
 
+    /// <summary>What can stand in his way: the same solid layers minus terrain,
+    /// which the footing and the slope limit already handle. Characters are not
+    /// in it, and neither is <c>piece_nonsolid</c> - he walks through the
+    /// player exactly as the player walks through him, and a rug is not a
+    /// wall.</summary>
+    private static int _obstructionMask = -1;
+
+    /// <summary>His body, for the obstruction sweep: from just above a normal
+    /// step, so the floor and a stair are not walls, to head height.</summary>
+    private const float SweepBottom = 0.55f;
+    private const float SweepTop = 1.6f;
+    private const float SweepRadius = 0.3f;
+
+    /// <summary>Whether something solid - a wall, a post, a closed door, a rock,
+    /// a tree - stands between his body at <paramref name="from"/> and
+    /// <paramref name="to"/>.
+    ///
+    /// The world collision his walk never had. He is moved by setting his
+    /// position, not by physics, so nothing stopped him walking through a wall
+    /// but the ground-follow's step limit, and a wall taller than its search
+    /// window was not even that. A collider he is already standing inside does
+    /// not count against him, which is what Unity's sweep does anyway and is
+    /// what keeps a companion placed against a wall from being unable to move at
+    /// all.</summary>
+    public static bool IsWayBlocked(Vector3 from, Vector3 to)
+    {
+        if (_obstructionMask == -1)
+        {
+            _obstructionMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece");
+        }
+
+        Vector3 flat = new Vector3(to.x - from.x, 0f, to.z - from.z);
+        float distance = flat.magnitude;
+        if (distance < 0.01f)
+        {
+            return false;
+        }
+
+        return Physics.CapsuleCast(
+            from + (Vector3.up * SweepBottom),
+            from + (Vector3.up * SweepTop),
+            SweepRadius,
+            flat / distance,
+            distance,
+            _obstructionMask,
+            QueryTriggerInteraction.Ignore);
+    }
+
     public static bool TryFind(
         Vector3 point, float searchUp, float searchDown, out Vector3 grounded, out Vector3 normal)
     {
