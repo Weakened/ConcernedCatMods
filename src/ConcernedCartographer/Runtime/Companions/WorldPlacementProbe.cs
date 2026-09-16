@@ -25,8 +25,27 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
 {
     /// <summary>How far above and below the anchor's height to look for
     /// ground. Generous enough for a sloped camp, small enough that a
-    /// candidate never resolves onto a roof or the floor of a cave below.</summary>
+    /// candidate never resolves onto a roof or the floor of a cave below.
+    ///
+    /// That was the intent from the start, and the code never did it:
+    /// <c>ZoneSystem.GetSolidHeight</c> adds a thousand metres to whatever
+    /// height it is given and returns the FIRST solid thing below that, so a
+    /// spot under a roof resolved onto the roof. The footing is now found by
+    /// <see cref="CompanionFooting"/> over exactly this window, the same rule
+    /// his walk uses.</summary>
     private const float GroundSearchUp = 6f;
+
+    /// <summary>How far below the anchor's height the footing search
+    /// reaches.</summary>
+    private const float GroundSearchDown = 12f;
+
+    /// <summary>Where the middle of his body is, above his feet. Obstructions
+    /// are measured from here, so the floor he stands on is not one.</summary>
+    private const float BodyCentre = 0.9f;
+
+    /// <summary>How close a bed may be to his body before the spot is refused.
+    /// Near a bed is where a camp is; on or against one is not.</summary>
+    private const float BedMargin = 1f;
 
     /// <summary>Slope limit, as the dot product of the ground normal with up.
     /// About 40 degrees — a hillside camp still works, a cliff face does
@@ -54,8 +73,11 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
 
     /// <summary>Reused across every candidate. The planner probes several
     /// dozen points per attempt, and a fresh array each time would be pure
-    /// garbage for the collector to sweep.</summary>
-    private readonly Collider[] _overlapBuffer = new Collider[32];
+    /// garbage for the collector to sweep. It was 32, and a small shelter -
+    /// posts, rafters, roof tiles, floor, bed, fire - fills that on its own,
+    /// silently dropping whatever came after it, bed and chair
+    /// included.</summary>
+    private readonly Collider[] _overlapBuffer = new Collider[128];
 
     private bool _waterLevelUnavailableLogged;
 
@@ -90,14 +112,14 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
 
             PlacementRejection rejections = PlacementRejection.None;
 
-            Vector3 probeFrom = point + (Vector3.up * GroundSearchUp);
-            if (!zones.GetSolidHeight(probeFrom, out float height, out Vector3 normal, out GameObject _))
+            if (!CompanionFooting.TryFind(
+                    point, GroundSearchUp, GroundSearchDown, out Vector3 grounded, out Vector3 normal))
             {
                 return new PlacementProbeSample(
                     position, PlacementRejection.Unsupported, -1f, SeatOffer.None);
             }
 
-            Vector3 grounded = new Vector3(point.x, height, point.z);
+            float height = grounded.y;
             var groundedPoint = new WorldPoint(grounded.x, grounded.y, grounded.z);
 
             if (Vector3.Dot(normal, Vector3.up) < MinimumUpDot)
@@ -110,10 +132,13 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
                 rejections |= PlacementRejection.Water;
             }
 
-            if (zones.IsBlocked(grounded + (Vector3.up * 0.1f)))
-            {
-                rejections |= PlacementRejection.Unsupported;
-            }
+            // There used to be a ZoneSystem.IsBlocked test here. It does not
+            // ask whether a point is blocked: it casts from two kilometres up
+            // and answers whether ANY piece or rock exists anywhere in that
+            // column. Every spot under a roof or on a floor failed it, which is
+            // why he could not be placed on a platform, and why a shelter
+            // search could never find shelter. Footing with headroom, and a
+            // body-height clearance test below, ask the real questions.
 
             rejections |= SurveyNeighbourhood(grounded, out SeatOffer seat);
 
@@ -208,10 +233,17 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
                 }
 
                 // A bed is somebody's. Standing on one is rude and, for a
-                // respawn point, actively unhelpful.
+                // respawn point, actively unhelpful. On or against it, that
+                // is - not anywhere within two metres, which in a small
+                // shelter is everywhere and left a bed-anchored companion
+                // nowhere to go.
                 if (hit.GetComponentInParent<Bed>() != null)
                 {
-                    rejections |= PlacementRejection.Bed;
+                    if (IsWithin(hit, grounded + (Vector3.up * BodyCentre), BedMargin))
+                    {
+                        rejections |= PlacementRejection.Bed;
+                    }
+
                     continue;
                 }
 
@@ -255,10 +287,14 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
                     continue;
                 }
 
+                // Measured from the middle of his body, not from his feet. From
+                // the feet, the floor piece he is standing on is always within
+                // clearance of itself, so every spot on a built floor came back
+                // Occupied.
                 bool solid = !hit.isTrigger &&
                     (hit.GetComponentInParent<Character>() != null ||
                      hit.GetComponentInParent<Piece>() != null);
-                if (solid && IsWithin(hit, grounded, _clearanceRadius))
+                if (solid && IsWithin(hit, grounded + (Vector3.up * BodyCentre), _clearanceRadius))
                 {
                     rejections |= PlacementRejection.Occupied;
                 }

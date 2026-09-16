@@ -588,10 +588,15 @@ internal sealed class CompanionActor
                 return false;
             }
 
-            if (!zones.GetSolidHeight(point + (Vector3.up * 2f), out float found, out Vector3 normal, out GameObject _))
+            // Not GetSolidHeight: that returns the roof when he walks under
+            // one. The nearest surface with headroom to the height he is
+            // already at - see CompanionFooting.
+            if (!CompanionFooting.TryFind(point, 2f, 4f, out Vector3 footing, out Vector3 normal))
             {
                 return false;
             }
+
+            float found = footing.y;
 
             // The same slope limit the placement probe uses. Ground he could
             // not have been placed on is ground he should not walk onto.

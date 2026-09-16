@@ -59,6 +59,13 @@ Fixed
   or over the Broken Compass, showed the literal text `$KEY_Use` instead of the
   key you press. Both now show your actual binding - a remapped key, or your
   controller's button while you are playing on one.
+- **He can live in the shelter you build him.** With his home on a bed inside a
+  roofed shelter on a wooden floor - about the most ordinary camp there is - he
+  never appeared at all: every spot near the bed was refused. Two mistakes did
+  it. His footing was read from the top of whatever was highest, so under a
+  roof he was placed on the roof; and the floor he would stand on counted as
+  something in his way. Both are fixed, for placing him and for walking him, so
+  he can also now actually get in out of the rain.
 - **He no longer gets up every few seconds at night.** In a camp with no roof in
   reach he would get up to look for shelter, sit down in the open, and get up
   again about every fifteen seconds all night. After one look finds nowhere dry
