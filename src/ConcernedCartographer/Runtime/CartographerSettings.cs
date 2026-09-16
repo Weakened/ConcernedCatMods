@@ -58,7 +58,9 @@ internal sealed class CartographerSettings
         ConfigEntry<bool> companionAmbientChatter,
         ConfigEntry<float> companionAmbientIntervalSeconds,
         ConfigEntry<string> companionHairPreset,
-        ConfigEntry<string> companionBeardPreset)
+        ConfigEntry<string> companionBeardPreset,
+        ConfigEntry<string> companionChestPreset,
+        ConfigEntry<string> companionLegsPreset)
     {
         Enabled = enabled;
         CaptureConstructionActions = captureConstructionActions;
@@ -113,6 +115,8 @@ internal sealed class CartographerSettings
         CompanionAmbientIntervalSeconds = companionAmbientIntervalSeconds;
         CompanionHairPreset = companionHairPreset;
         CompanionBeardPreset = companionBeardPreset;
+        CompanionChestPreset = companionChestPreset;
+        CompanionLegsPreset = companionLegsPreset;
     }
 
     public ConfigEntry<bool> Enabled { get; }
@@ -192,6 +196,12 @@ internal sealed class CartographerSettings
 
     /// <summary>An explicit beard preset for Hulgi, on the same terms.</summary>
     public ConfigEntry<string> CompanionBeardPreset { get; }
+
+    /// <summary>An explicit tunic for Hulgi. Clothing only.</summary>
+    public ConfigEntry<string> CompanionChestPreset { get; }
+
+    /// <summary>Explicit trousers for Hulgi. Clothing only.</summary>
+    public ConfigEntry<string> CompanionLegsPreset { get; }
 
     public static CartographerSettings Bind(ConfigFile config)
     {
@@ -315,6 +325,10 @@ internal sealed class CartographerSettings
             config.Bind("Companions", "HairPreset", "",
                 "Give Hulgi a specific hair preset, by the character-creation label (\"Long Braid\") or the prefab id (\"Hair11\"). Leave empty for his own look. Run 'cc_companion appearance' in game to list what this build offers. A name this build does not have falls back to his default rather than leaving him bald."),
             config.Bind("Companions", "BeardPreset", "",
-                "Give Hulgi a specific beard preset, by the character-creation label (\"Handlebar\") or the prefab id (\"Beard26\"). Leave empty for his own look."));
+                "Give Hulgi a specific beard preset, by the character-creation label (\"Handlebar\") or the prefab id (\"Beard26\"). Leave empty for his own look."),
+            config.Bind("Companions", "ChestGarment", "",
+                "What Hulgi wears on his torso, by item name (\"Rag tunic\") or prefab id (\"ArmorRagsChest\"). Clothing only: he is not carrying it, it is not taken from anywhere, and it has no armour value. Leave empty for the default."),
+            config.Bind("Companions", "LegsGarment", "",
+                "What Hulgi wears on his legs, by item name (\"Leather pants\") or prefab id (\"ArmorLeatherLegs\"). Clothing only. Leave empty for the default."));
     }
 }

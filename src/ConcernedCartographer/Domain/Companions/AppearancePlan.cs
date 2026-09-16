@@ -149,6 +149,22 @@ internal static class AppearancePlan
         shapeFallbacks: new[] { "braid", "long", "sidetail", "swept", "short" },
         familyPrefix: "Hair");
 
+    /// <summary>Hulgi's tunic, from the owner's September 15 wardrobe note:
+    /// the vanilla "Rag tunic". Clothing only — nothing here is an item he
+    /// owns, carries, or can be given, and it changes no stat.</summary>
+    public static readonly AppearanceRequest HulgiChest = new AppearanceRequest(
+        displayName: "Rag tunic",
+        prefabCandidates: new[] { "ArmorRagsChest" },
+        shapeFallbacks: new[] { "rag", "tunic" },
+        familyPrefix: "Armor");
+
+    /// <summary>Hulgi's trousers: the vanilla "Leather pants".</summary>
+    public static readonly AppearanceRequest HulgiLegs = new AppearanceRequest(
+        displayName: "Leather pants",
+        prefabCandidates: new[] { "ArmorLeatherLegs" },
+        shapeFallbacks: new[] { "leather", "pants", "trousers" },
+        familyPrefix: "Armor");
+
     /// <summary>Hulgi's beard: "Handlebar". This replaces the earlier mutton
     /// chops prose, which predates the owner's screenshots.</summary>
     public static readonly AppearanceRequest HulgiBeard = new AppearanceRequest(

@@ -109,11 +109,23 @@ internal static class AppearanceFit
     /// that a whole body-length of error cannot pass.</summary>
     public const float ToleranceMetres = 0.45f;
 
+    /// <summary>How far a garment may sit from the body it is worn on. Looser
+    /// than the head tolerance because a tunic and a pair of trousers are
+    /// measured against the whole body's centre, and either one is legitimately
+    /// half a torso away from it.</summary>
+    public const float GarmentToleranceMetres = 0.85f;
+
     /// <summary>True when a piece centred <paramref name="distanceFromHead"/>
     /// away is close enough to be wearing.</summary>
     public static bool Fits(float distanceFromHead)
     {
-        return !float.IsNaN(distanceFromHead) && distanceFromHead <= ToleranceMetres;
+        return Fits(distanceFromHead, ToleranceMetres);
+    }
+
+    /// <summary>The same question with the tolerance the slot deserves.</summary>
+    public static bool Fits(float distance, float tolerance)
+    {
+        return !float.IsNaN(distance) && distance <= tolerance;
     }
 }
 

@@ -3138,7 +3138,9 @@ internal sealed class CartographerRuntime : IDisposable
                 // were deliberately never guessed.
                 return Runtime.Companions.AppearanceCatalog.Read().Describe(
                     hairOverride: _settings.CompanionHairPreset.Value,
-                    beardOverride: _settings.CompanionBeardPreset.Value) +
+                    beardOverride: _settings.CompanionBeardPreset.Value,
+                    chestOverride: _settings.CompanionChestPreset.Value,
+                    legsOverride: _settings.CompanionLegsPreset.Value) +
                     DescribeCustomizationSliders();
 
             case "path":

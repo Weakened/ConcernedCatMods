@@ -155,7 +155,9 @@ internal sealed class CompanionDirector : IDisposable
             log,
             TalkToCompanion,
             () => _settings.CompanionHairPreset.Value,
-            () => _settings.CompanionBeardPreset.Value);
+            () => _settings.CompanionBeardPreset.Value,
+            () => _settings.CompanionChestPreset.Value,
+            () => _settings.CompanionLegsPreset.Value);
         _biomes = new KnownBiomeReader(log);
         _store = new CompanionSidecarStore(CartographerLegacyProbe.DataDirectory);
         _rateLimited = new RateLimitedLog(log, 30f);

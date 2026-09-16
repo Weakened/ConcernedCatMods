@@ -489,6 +489,53 @@ public sealed class CompanionResidencyTests
     }
 
     [Fact]
+    public void Wardrobe_TheOwnersGarmentsAreLookedUpByNameFirst()
+    {
+        var chest = new[]
+        {
+            new AppearanceOption("ArmorLeatherChest", "Leather tunic"),
+            new AppearanceOption("ArmorRagsChest", "Rag tunic"),
+        };
+        AppearanceChoice tunic = AppearancePlan.Choose(chest, AppearancePlan.HulgiChest);
+        Assert.Equal("ArmorRagsChest", tunic.PrefabName);
+        Assert.True(tunic.MatchesReference);
+
+        var legs = new[]
+        {
+            new AppearanceOption("ArmorRagsLegs", "Rag trousers"),
+            new AppearanceOption("ArmorLeatherLegs", "Leather pants"),
+        };
+        AppearanceChoice pants = AppearancePlan.Choose(legs, AppearancePlan.HulgiLegs);
+        Assert.Equal("ArmorLeatherLegs", pants.PrefabName);
+        Assert.True(pants.MatchesReference);
+    }
+
+    [Fact]
+    public void Wardrobe_AnEmptyOrUnknownBuildLeavesHimInWhateverTheModelWears()
+    {
+        // Clothing is presentation. A build without these items changes how he
+        // looks and nothing else - it can never fail his construction.
+        Assert.Equal(
+            AppearanceMatch.None,
+            AppearancePlan.Choose(new AppearanceOption[0], AppearancePlan.HulgiChest).Match);
+        Assert.Null(AppearancePlan.Choose(null, AppearancePlan.HulgiLegs).PrefabName);
+    }
+
+    [Fact]
+    public void Wardrobe_AGarmentIsMeasuredAgainstTheBodyNotTheHead()
+    {
+        // A tunic's centre is legitimately most of a torso from any single
+        // bone, so the head tolerance would reject a perfectly worn one.
+        Assert.False(AppearanceFit.Fits(0.7f));
+        Assert.True(AppearanceFit.Fits(0.7f, AppearanceFit.GarmentToleranceMetres));
+
+        // And it is still a bound, not an excuse.
+        Assert.False(AppearanceFit.Fits(
+            AppearanceFit.GarmentToleranceMetres + 0.01f, AppearanceFit.GarmentToleranceMetres));
+        Assert.False(AppearanceFit.Fits(float.NaN, AppearanceFit.GarmentToleranceMetres));
+    }
+
+    [Fact]
     public void Fit_ATallHairstyleOrLongBeardStillCounts()
     {
         Assert.True(AppearanceFit.Fits(0f));

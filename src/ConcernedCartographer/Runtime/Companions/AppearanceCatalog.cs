@@ -29,16 +29,28 @@ internal sealed class AppearanceCatalog
     private AppearanceCatalog(
         IReadOnlyList<AppearanceOption> hair,
         IReadOnlyList<AppearanceOption> beards,
+        IReadOnlyList<AppearanceOption> chest,
+        IReadOnlyList<AppearanceOption> legs,
         int totalPrefabs,
         bool available,
         bool localized)
     {
         Hair = hair;
         Beards = beards;
+        Chest = chest;
+        Legs = legs;
         TotalPrefabs = totalPrefabs;
         Available = available;
         Localized = localized;
     }
+
+    /// <summary>Torso garments this build offers. Read for clothing only: the
+    /// companion wears one, he does not own it, and its armour value is never
+    /// looked at.</summary>
+    public IReadOnlyList<AppearanceOption> Chest { get; }
+
+    /// <summary>Leg garments, on the same terms.</summary>
+    public IReadOnlyList<AppearanceOption> Legs { get; }
 
     public IReadOnlyList<AppearanceOption> Hair { get; }
 
@@ -58,18 +70,31 @@ internal sealed class AppearanceCatalog
 
     public static AppearanceCatalog Empty =>
         new AppearanceCatalog(
-            new AppearanceOption[0], new AppearanceOption[0], 0, available: false, localized: false);
+            new AppearanceOption[0], new AppearanceOption[0], new AppearanceOption[0],
+            new AppearanceOption[0], 0, available: false, localized: false);
 
     public static AppearanceCatalog Read()
     {
         bool localized = false;
-        List<AppearanceOption>? hair = ReadCustomizationItems(HairPrefix, ref localized);
-        List<AppearanceOption>? beards = ReadCustomizationItems(BeardPrefix, ref localized);
+        List<AppearanceOption>? hair = ReadItems(
+            ItemDrop.ItemData.ItemType.Customization, HairPrefix, skipVariants: true, ref localized);
+        List<AppearanceOption>? beards = ReadItems(
+            ItemDrop.ItemData.ItemType.Customization, BeardPrefix, skipVariants: true, ref localized);
+        List<AppearanceOption>? chest = ReadItems(
+            ItemDrop.ItemData.ItemType.Chest, "", skipVariants: false, ref localized);
+        List<AppearanceOption>? legs = ReadItems(
+            ItemDrop.ItemData.ItemType.Legs, "", skipVariants: false, ref localized);
 
         if (hair != null && beards != null && (hair.Count > 0 || beards.Count > 0))
         {
             return new AppearanceCatalog(
-                hair, beards, hair.Count + beards.Count, available: true, localized: localized);
+                hair,
+                beards,
+                chest ?? new List<AppearanceOption>(),
+                legs ?? new List<AppearanceOption>(),
+                hair.Count + beards.Count,
+                available: true,
+                localized: localized);
         }
 
         // The customization query was unavailable on this build. Fall back to
@@ -85,6 +110,8 @@ internal sealed class AppearanceCatalog
         return new AppearanceCatalog(
             AppearancePlan.FilterFamily(all, HairPrefix),
             AppearancePlan.FilterFamily(all, BeardPrefix),
+            AppearancePlan.FilterFamily(all, "Armor"),
+            AppearancePlan.FilterFamily(all, "Armor"),
             names.Count,
             available: true,
             localized: false);
@@ -98,7 +125,8 @@ internal sealed class AppearanceCatalog
     /// companion should not wear one either. Read-only in the strictest sense —
     /// names and labels are copied out and nothing is instantiated, modified or
     /// equipped.</summary>
-    private static List<AppearanceOption>? ReadCustomizationItems(string prefix, ref bool localized)
+    private static List<AppearanceOption>? ReadItems(
+        ItemDrop.ItemData.ItemType type, string prefix, bool skipVariants, ref bool localized)
     {
         try
         {
@@ -107,8 +135,7 @@ internal sealed class AppearanceCatalog
                 return null;
             }
 
-            List<ItemDrop> items = ObjectDB.instance.GetAllItems(
-                ItemDrop.ItemData.ItemType.Customization, prefix);
+            List<ItemDrop> items = ObjectDB.instance.GetAllItems(type, prefix);
             if (items == null)
             {
                 return null;
@@ -123,7 +150,8 @@ internal sealed class AppearanceCatalog
                 }
 
                 string prefabName = item.gameObject.name;
-                if (string.IsNullOrEmpty(prefabName) || prefabName.IndexOf('_') >= 0)
+                if (string.IsNullOrEmpty(prefabName) ||
+                    (skipVariants && prefabName.IndexOf('_') >= 0))
                 {
                     continue;
                 }
@@ -226,7 +254,9 @@ internal sealed class AppearanceCatalog
     public string Describe(
         int maxPerFamily = 20,
         string? hairOverride = null,
-        string? beardOverride = null)
+        string? beardOverride = null,
+        string? chestOverride = null,
+        string? legsOverride = null)
     {
         if (!Available)
         {
@@ -249,8 +279,16 @@ internal sealed class AppearanceCatalog
                 ? "the live customization palette (tone " + AppearanceColour.HulgiHairTone +
                   ", level " + AppearanceColour.HulgiHairLevel + ")"
                 : "the built-in fallback; the live palette was not readable this session") + "\n" +
+            "  asked for: tunic \"" + AppearancePlan.HulgiChest.DisplayName + "\", trousers \"" +
+            AppearancePlan.HulgiLegs.DisplayName + "\" (owner wardrobe note, clothing only)\n" +
+            "  chest -> " + Describe(AppearancePlan.Choose(
+                Chest, AppearancePlan.HulgiChest, chestOverride)) + "\n" +
+            "  legs  -> " + Describe(AppearancePlan.Choose(
+                Legs, AppearancePlan.HulgiLegs, legsOverride)) + "\n" +
             "  hair  (" + Hair.Count + "): " + Join(Hair, maxPerFamily) + "\n" +
-            "  beard (" + Beards.Count + "): " + Join(Beards, maxPerFamily);
+            "  beard (" + Beards.Count + "): " + Join(Beards, maxPerFamily) + "\n" +
+            "  chest (" + Chest.Count + "): " + Join(Chest, maxPerFamily) + "\n" +
+            "  legs  (" + Legs.Count + "): " + Join(Legs, maxPerFamily);
     }
 
     private static string Describe(AppearanceChoice choice)

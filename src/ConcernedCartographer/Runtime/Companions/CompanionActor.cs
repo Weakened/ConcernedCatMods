@@ -47,6 +47,14 @@ internal sealed class ActorReport
     /// possible with an observed palette; never guessed.</summary>
     public bool SkinColourApplied { get; set; }
 
+    public AppearanceChoice Chest { get; set; } = AppearanceChoice.None;
+
+    public AppearanceChoice Legs { get; set; } = AppearanceChoice.None;
+
+    public bool ChestAttached { get; set; }
+
+    public bool LegsAttached { get; set; }
+
     /// <summary>True when a preset was attached and then removed because it was
     /// not being drawn on the head. Reported, because "no hair" and "no hair
     /// because this build draws it in the wrong place" are different answers
@@ -73,6 +81,8 @@ internal sealed class ActorReport
             $"joint={Joint} " +
             $"colour={(HairColourApplied ? HairColour.ToString() : "not applied")}" +
             $"{(HairColourObserved ? " (palette)" : " (fallback)")} skin={SkinColourApplied} " +
+            $"chest={Chest} ({(ChestAttached ? "worn" : "not worn")}) " +
+            $"legs={Legs} ({(LegsAttached ? "worn" : "not worn")}) " +
             $"pose={Pose} state={PoseState ?? "<default>"}";
     }
 }
@@ -138,10 +148,21 @@ internal sealed class CompanionActor
     /// Cached as an id the way the game caches it.</summary>
     private static readonly int SkinColourProperty = Shader.PropertyToID("_SkinColor");
 
+    /// <summary>The body shader's garment texture slots, named as the game
+    /// names them.</summary>
+    private static readonly int ChestTexProperty = Shader.PropertyToID("_ChestTex");
+    private static readonly int ChestBumpProperty = Shader.PropertyToID("_ChestBumpMap");
+    private static readonly int ChestMetalProperty = Shader.PropertyToID("_ChestMetal");
+    private static readonly int LegsTexProperty = Shader.PropertyToID("_LegsTex");
+    private static readonly int LegsBumpProperty = Shader.PropertyToID("_LegsBumpMap");
+    private static readonly int LegsMetalProperty = Shader.PropertyToID("_LegsMetal");
+
     private readonly ManualLogSource _log;
     private readonly Action _onTalk;
     private readonly Func<string?> _hairOverride;
     private readonly Func<string?> _beardOverride;
+    private readonly Func<string?> _chestOverride;
+    private readonly Func<string?> _legsOverride;
 
     private GameObject? _root;
     private Animator? _animator;
@@ -181,12 +202,16 @@ internal sealed class CompanionActor
         ManualLogSource log,
         Action onTalk,
         Func<string?>? hairOverride = null,
-        Func<string?>? beardOverride = null)
+        Func<string?>? beardOverride = null,
+        Func<string?>? chestOverride = null,
+        Func<string?>? legsOverride = null)
     {
         _log = log;
         _onTalk = onTalk;
         _hairOverride = hairOverride ?? (() => null);
         _beardOverride = beardOverride ?? (() => null);
+        _chestOverride = chestOverride ?? (() => null);
+        _legsOverride = legsOverride ?? (() => null);
     }
 
     public bool Exists => _root != null;
@@ -637,6 +662,17 @@ internal sealed class CompanionActor
             }
 
             Report.SkinColourApplied = TryApplyBodyColours(palette, hairColour);
+
+            // Clothing. The owner asked for a rag tunic and leather pants, and
+            // that is all this is: a garment drawn on the body. Nothing is
+            // given to him, nothing is taken from anyone, and no armour value
+            // is ever read - he has no health to protect.
+            Report.Chest = AppearancePlan.Choose(
+                catalog.Chest, AppearancePlan.HulgiChest, _chestOverride());
+            Report.Legs = AppearancePlan.Choose(
+                catalog.Legs, AppearancePlan.HulgiLegs, _legsOverride());
+            Report.ChestAttached = TryAttachGarment(Report.Chest.PrefabName, "chest");
+            Report.LegsAttached = TryAttachGarment(Report.Legs.PrefabName, "legs");
         }
         catch (Exception exception)
         {
@@ -808,26 +844,30 @@ internal sealed class CompanionActor
                 continue;
             }
 
-            float distance = DistanceFromHead(piece.Value, head);
-            if (AppearanceFit.Fits(distance))
+            // Hair and beards are measured against the head. A tunic is worn on
+            // the whole body, and its centre is legitimately half a torso from
+            // any single bone, so it is measured against the body instead.
+            bool garment = piece.Key.StartsWith("chest", StringComparison.Ordinal) ||
+                piece.Key.StartsWith("legs", StringComparison.Ordinal);
+            Vector3 reference = garment && _bodyModel != null
+                ? _bodyModel.bounds.center
+                : head.position;
+            float tolerance = garment
+                ? AppearanceFit.GarmentToleranceMetres
+                : AppearanceFit.ToleranceMetres;
+
+            float distance = DistanceFrom(piece.Value, reference);
+            if (AppearanceFit.Fits(distance, tolerance))
             {
                 continue;
             }
 
             _log.LogInfo(
-                $"The companion's {piece.Key} preset did not land on his head on this build " +
+                $"The companion's {piece.Key} piece is not being drawn where it was put on this build " +
                 $"({distance:0.00} m away), so it has been removed rather than left floating. He keeps " +
                 "the model's own look; nothing else is affected.");
 
-            if (string.Equals(piece.Key, "hair", StringComparison.Ordinal))
-            {
-                Report.HairAttached = false;
-            }
-            else
-            {
-                Report.BeardAttached = false;
-            }
-
+            MarkSlotRemoved(piece.Key);
             Report.AppearanceRejected = true;
             UnityEngine.Object.Destroy(piece.Value);
         }
@@ -835,10 +875,35 @@ internal sealed class CompanionActor
         Report.HairColourApplied = Report.HairAttached || Report.BeardAttached;
     }
 
+    private void MarkSlotRemoved(string slot)
+    {
+        if (Report == null)
+        {
+            return;
+        }
+
+        if (slot.StartsWith("hair", StringComparison.Ordinal))
+        {
+            Report.HairAttached = false;
+        }
+        else if (slot.StartsWith("beard", StringComparison.Ordinal))
+        {
+            Report.BeardAttached = false;
+        }
+        else if (slot.StartsWith("chest", StringComparison.Ordinal))
+        {
+            Report.ChestAttached = false;
+        }
+        else if (slot.StartsWith("legs", StringComparison.Ordinal))
+        {
+            Report.LegsAttached = false;
+        }
+    }
+
     /// <summary>How far a piece is drawn from the head, using rendered bounds
     /// rather than transforms: for a skinned mesh the transform is exactly the
     /// thing that does not tell you where it ended up.</summary>
-    private static float DistanceFromHead(GameObject piece, Transform head)
+    private static float DistanceFrom(GameObject piece, Vector3 reference)
     {
         bool any = false;
         Bounds bounds = default;
@@ -860,7 +925,7 @@ internal sealed class CompanionActor
             }
         }
 
-        return any ? Vector3.Distance(bounds.center, head.position) : float.NaN;
+        return any ? Vector3.Distance(bounds.center, reference) : float.NaN;
     }
 
     /// <summary>Re-binds a skinned customization mesh onto the body's skeleton,
@@ -1028,6 +1093,206 @@ internal sealed class CompanionActor
         }
 
         return text.ToString();
+    }
+
+    /// <summary>Puts one garment on the extracted body.
+    ///
+    /// Armour attaches differently from a customization preset, and the
+    /// difference is the whole reason this is its own method: an armour prefab
+    /// can carry SEVERAL <c>attach_*</c> children, and each names the joint it
+    /// belongs on. <c>attach_skin</c> is the skinned piece that deforms with
+    /// the body; <c>attach_&lt;joint&gt;</c> is a rigid piece - a buckle, a
+    /// strap - that hangs off the bone of that name. Transcribed from
+    /// <c>VisEquipment.AttachArmor</c>, including which of the two gets its
+    /// bones rebound.
+    ///
+    /// The body's own chest and leg textures come from the item's armour
+    /// material, which is the half that makes a tunic look like cloth rather
+    /// than like a mesh floating over bare skin.</summary>
+    private bool TryAttachGarment(string? prefabName, string slot)
+    {
+        if (string.IsNullOrEmpty(prefabName) || _root == null)
+        {
+            return false;
+        }
+
+        GameObject? prefab = LocalVisual.FindPrefab(prefabName!);
+        if (prefab == null)
+        {
+            _log.LogInfo(
+                $"The companion's {slot} garment \"{prefabName}\" is not in this build's item table, " +
+                "so he is not wearing it.");
+            return false;
+        }
+
+        bool anything = ApplyGarmentTextures(prefab, slot);
+
+        int children = prefab.transform.childCount;
+        for (int index = 0; index < children; index++)
+        {
+            Transform child = prefab.transform.GetChild(index);
+            if (child == null || !child.gameObject.name.StartsWith("attach_", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            string jointName = child.gameObject.name.Substring("attach_".Length);
+            if (AttachGarmentPiece(child.gameObject, jointName, slot, prefabName!))
+            {
+                anything = true;
+            }
+        }
+
+        return anything;
+    }
+
+    /// <summary>One <c>attach_*</c> child of a garment.</summary>
+    private bool AttachGarmentPiece(
+        GameObject source, string jointName, string slot, string prefabName)
+    {
+        GameObject holder = new GameObject("CC_GarmentHarvest");
+        holder.SetActive(false);
+
+        GameObject? piece = null;
+        try
+        {
+            piece = UnityEngine.Object.Instantiate(source, holder.transform);
+            if (ContainsForbiddenComponent(piece, out string offender))
+            {
+                _log.LogInfo(
+                    $"The companion's {slot} garment \"{prefabName}\" carries {offender}, so it was " +
+                    "not used. Nothing was stripped; the garment was refused.");
+                return false;
+            }
+
+            RemovePhysics(piece);
+            RemoveCloth(piece);
+
+            if (string.Equals(jointName, "skin", StringComparison.Ordinal))
+            {
+                if (_bodyModel == null)
+                {
+                    return false;
+                }
+
+                piece.transform.SetParent(_bodyModel.transform.parent);
+                piece.transform.localPosition = Vector3.zero;
+                piece.transform.localRotation = Quaternion.identity;
+                BindToBody(piece);
+            }
+            else
+            {
+                Transform? joint = FindBoneNamed(jointName);
+                if (joint == null)
+                {
+                    _log.LogInfo(
+                        $"The companion's model has no \"{jointName}\" joint, so part of his {slot} " +
+                        "garment was left off.");
+                    return false;
+                }
+
+                piece.transform.SetParent(joint);
+                piece.transform.localPosition = Vector3.zero;
+                piece.transform.localRotation = Quaternion.identity;
+            }
+
+            GameObject attached = piece;
+            piece = null;
+            attached.SetActive(true);
+            _attachedPieces[slot + ":" + jointName] = attached;
+            return true;
+        }
+        catch (Exception exception)
+        {
+            _log.LogInfo(
+                $"The companion's {slot} garment could not be attached: {SafeLogText.Brief(exception)}");
+            return false;
+        }
+        finally
+        {
+            if (piece != null)
+            {
+                UnityEngine.Object.DestroyImmediate(piece);
+            }
+
+            UnityEngine.Object.DestroyImmediate(holder);
+        }
+    }
+
+    /// <summary>Paints the garment's own textures onto the body, the way the
+    /// game does when you put armour on. Without it the skin underneath still
+    /// reads as bare.</summary>
+    private bool ApplyGarmentTextures(GameObject prefab, string slot)
+    {
+        if (_bodyModel == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            var drop = prefab.GetComponent<ItemDrop>();
+            Material? armour = drop?.m_itemData?.m_shared?.m_armorMaterial;
+            if (armour == null)
+            {
+                return false;
+            }
+
+            bool legs = string.Equals(slot, "legs", StringComparison.Ordinal);
+            int tex = legs ? LegsTexProperty : ChestTexProperty;
+            int bump = legs ? LegsBumpProperty : ChestBumpProperty;
+            int metal = legs ? LegsMetalProperty : ChestMetalProperty;
+
+            // material, not sharedMaterial: this writes textures rather than a
+            // property block, so it must land on this renderer's own instance
+            // and never on the asset every character in the world is drawn
+            // with. Unity destroys the instance with the renderer.
+            Material body = _bodyModel.material;
+            body.SetTexture(tex, armour.GetTexture(tex));
+            body.SetTexture(bump, armour.GetTexture(bump));
+            body.SetTexture(metal, armour.GetTexture(metal));
+            return true;
+        }
+        catch (Exception exception)
+        {
+            _log.LogInfo(
+                $"The companion's {slot} garment texture could not be applied: " +
+                SafeLogText.Brief(exception));
+            return false;
+        }
+    }
+
+    /// <summary>A bone by exact name anywhere under the actor.</summary>
+    private Transform? FindBoneNamed(string name)
+    {
+        if (_root == null)
+        {
+            return null;
+        }
+
+        foreach (Transform bone in _root.GetComponentsInChildren<Transform>(includeInactive: true))
+        {
+            if (bone != null && string.Equals(bone.name, name, StringComparison.Ordinal))
+            {
+                return bone;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Cloth simulation needs colliders the game binds for it. A
+    /// static presentation object has none, so an unbound <c>Cloth</c> is
+    /// simulation nobody asked for on a figure that never moves.</summary>
+    private static void RemoveCloth(GameObject piece)
+    {
+        foreach (Cloth cloth in piece.GetComponentsInChildren<Cloth>(includeInactive: true))
+        {
+            if (cloth != null)
+            {
+                UnityEngine.Object.DestroyImmediate(cloth);
+            }
+        }
     }
 
     /// <summary>Finds the child the game would attach, matching its own search:
