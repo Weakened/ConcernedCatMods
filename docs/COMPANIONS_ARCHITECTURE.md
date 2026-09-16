@@ -339,9 +339,11 @@ about.
 Attached hair, beards and garments go through the same pass before they are
 parented on, for the same reason — and there, and only there, the cloth family
 is exempt, because `RemoveCloth` has just run on that same piece and disables
-what Unity refuses to destroy out loud. A survivor on a garment is named and
-left disabled rather than refusing the preset: the body's rule is what keeps
-game code out of the figure, and a garment is not the figure.
+what Unity refuses to destroy out loud. A survivor on an accessory is named and
+that piece is **refused**: it is destroyed while still isolated under its
+inactive holder, never parented onto him and never enabled, and he goes without
+the preset. Going without a braid is a look. Wearing one that wakes a game
+script inside him is the defect.
 
 The body gets no such exemption, and the first cut of this fix wrongly gave it
 one. `RemoveCloth` is never called on the body, so a cloth-named script there

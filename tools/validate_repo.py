@@ -661,7 +661,14 @@ def check_companion_body_fails_closed(errors: list[str]) -> list[str]:
     between. Deliberately not a C# parser: it is the smallest check that
     cannot pass while the body is switched on over a script the pass could not
     remove - which is narrower than "while the defect is present", and is what
-    it actually verifies."""
+    it actually verifies.
+
+    The second half covers the two accessory paths, which parent a piece onto
+    the LIVE figure and so wake it the same way. Each must refuse its piece on
+    a survivor before that re-parent, and the check is ordered - condition,
+    then the return, then the re-parent - so no comment and no unrelated
+    `return false;` elsewhere in the method can stand in for it. Comments are
+    stripped before any of this is read."""
     path = (ROOT / "src" / "ConcernedCartographer" / "Runtime" / "Companions" /
             "CompanionActor.cs")
     if not path.is_file():
@@ -712,6 +719,27 @@ def check_companion_body_fails_closed(errors: list[str]) -> list[str]:
     def statement(index: int) -> str:
         return " ".join(after[index:index + 3])
 
+    def refuses(lines: list[str], condition: int, token: str) -> bool:
+        """True when the block opened under `lines[condition]` returns with
+        `token` before that block closes.
+
+        Brace counting, not parsing, and only enough of it to tell the refusal
+        apart from an unrelated `return` further down the method - which is
+        exactly what a `return false;` in a later `if (_bodyModel == null)`
+        branch was doing before this existed. Interpolations in this file are
+        balanced, so they cancel out; an unbalanced one would fail the audit
+        loudly rather than pass it quietly."""
+        depth = 0
+        opened = False
+        for line in lines[condition:]:
+            depth += line.count("{") - line.count("}")
+            opened = opened or "{" in line
+            if opened and token in line:
+                return True
+            if opened and depth <= 0:
+                return False
+        return False
+
     enable = next((n for n, line in enumerate(after) if lit.search(line)), None)
     pass_call = next((n for n, line in enumerate(after)
                       if "RemoveBehaviours(" in line and "root," in statement(n)), None)
@@ -727,7 +755,7 @@ def check_companion_body_fails_closed(errors: list[str]) -> list[str]:
     # condition, or any unrelated `return null;` in the window would do.
     between = after[pass_call + 1:enable]
     guard = next((n for n, line in enumerate(between) if "survivors.Length > 0" in line), None)
-    if guard is None or not any("return null;" in line for line in between[guard:]):
+    if guard is None or not refuses(between, guard, "return null;"):
         fail(
             "[companions] CC-NPC-010 no-wake audit: nothing refuses the candidate between the "
             f"script-removal pass and root.SetActive(true) in {path.relative_to(ROOT)} — a script "
@@ -735,9 +763,43 @@ def check_companion_body_fails_closed(errors: list[str]) -> list[str]:
             "disabled component still receives Awake when its object is activated", errors)
         return []
 
+    # Both accessory paths hand their piece to the live figure, so a script
+    # that survived removal wakes there exactly as it would in the body.
+    accessories = [n for n, line in enumerate(code)
+                   if "RemoveBehaviours(" in line and "piece," in " ".join(code[n:n + 3])]
+    if len(accessories) != 2:
+        fail(
+            "[companions] CC-NPC-010 no-wake audit: expected exactly two accessory script passes "
+            f"in {path.relative_to(ROOT)}, found {len(accessories)} — hair/beard and garments are "
+            "the two that parent a piece onto the live figure, and a third path must make its own "
+            "refusal rather than inherit theirs", errors)
+        return []
+
+    for call in accessories:
+        attach = next((n for n in range(call + 1, len(code))
+                       if "piece.transform.SetParent(" in code[n]), None)
+        if attach is None:
+            fail(
+                "[companions] CC-NPC-010 no-wake audit: the accessory pass at "
+                f"{path.relative_to(ROOT)}:{call + 1} is not followed by the re-parent it is "
+                "supposed to guard — the audit no longer covers that path", errors)
+            return []
+
+        window = code[call + 1:attach]
+        guard = next((n for n, line in enumerate(window) if "Survivors.Length > 0" in line), None)
+        if guard is None or not refuses(window, guard, "return false;"):
+            fail(
+                "[companions] CC-NPC-010 no-wake audit: the accessory pass at "
+                f"{path.relative_to(ROOT)}:{call + 1} does not refuse the piece before parenting it "
+                f"on at line {attach + 1} — a source script that survived removal would wake the "
+                "moment the piece joins the live figure", errors)
+            return []
+
     return [
         "[companions] CC-NPC-010 no-wake audit: the extracted body is assembled dark, and a "
         "surviving game script refuses the candidate instead of being switched on",
+        "[companions] CC-NPC-010 no-wake audit: both accessory paths refuse their piece on a "
+        "surviving source script before it is parented onto the live figure",
     ]
 
 

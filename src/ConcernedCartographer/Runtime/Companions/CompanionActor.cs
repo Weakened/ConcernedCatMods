@@ -1057,9 +1057,10 @@ internal sealed class CompanionActor
     /// halves: a build that refused every one of them must still say so out
     /// loud rather than look like a build that found nothing. Anything still
     /// standing after both passes is named in <paramref name="survivors"/>,
-    /// and the body's caller refuses the whole candidate on it rather than
-    /// switching on over the top: a disabled script is not a safe one, because
-    /// Unity runs <c>Awake</c> on activation either way.
+    /// and every caller refuses on it rather than carrying on over the top: a
+    /// disabled script is not a safe one, because Unity runs <c>Awake</c> on
+    /// activation either way. The body refuses the whole candidate and tries
+    /// the next; an accessory refuses that one piece and he goes without it.
     /// <paramref name="survivors"/> is empty - never a placeholder - when
     /// nothing is left, because the body's caller tests exactly that.
     ///
@@ -1304,13 +1305,24 @@ internal sealed class CompanionActor
             // about to be parented into a LIVE figure, which is what wakes it.
             // Whatever scripts an item's attachment mesh carries, they were
             // written for a character that is wearing it.
-            // A survivor here is named in the line below and left disabled,
-            // rather than refusing the preset: the body's own fail-closed rule
-            // is what keeps a game script out of the figure, and a garment is
-            // not the figure. Tightening this to a refusal is tracked on #308
-            // and deliberately not done in the same change.
             int pieceScripts = RemoveBehaviours(
-                piece, clothHandledByCaller: true, out string pieceScriptNames, out _);
+                piece, clothHandledByCaller: true, out string pieceScriptNames,
+                out string pieceSurvivors);
+
+            if (pieceSurvivors.Length > 0)
+            {
+                // Refused, not worn. The piece is still isolated under the
+                // inactive holder and the finally below destroys it there, so
+                // nothing is re-parented, nothing is enabled, and no half
+                // attachment is left on him. He goes without this preset,
+                // which is a look; wearing it would mean a game script waking
+                // inside him, which is the defect.
+                _log.LogInfo(
+                    $"The companion's {slot} preset \"{prefabName}\" keeps {pieceSurvivors} that " +
+                    "this build will not let us remove, so it was refused rather than worn. " +
+                    "Nothing was attached and nothing was enabled.");
+                return false;
+            }
 
             // Whether the mesh is SKINNED decides how it attaches, and the
             // child's name is only a hint at that. A skinned mesh is drawn by
@@ -1870,10 +1882,24 @@ internal sealed class CompanionActor
 
             RemovePhysics(piece);
             RemoveCloth(piece);
-            if (RemoveBehaviours(piece, clothHandledByCaller: true, out string garmentScripts, out _) > 0)
+            if (RemoveBehaviours(
+                    piece, clothHandledByCaller: true, out string garmentScripts,
+                    out string garmentSurvivors) > 0)
             {
                 _log.LogInfo(
                     $"[appearance] {slot} {prefabName} ({jointName}): scripts-quieted=[{garmentScripts}]");
+            }
+
+            if (garmentSurvivors.Length > 0)
+            {
+                // The same refusal as the hair and beard path, for the same
+                // reason: still isolated, destroyed by the finally, never
+                // parented onto him.
+                _log.LogInfo(
+                    $"The companion's {slot} garment \"{prefabName}\" keeps {garmentSurvivors} " +
+                    "that this build will not let us remove, so that part of it was refused rather " +
+                    "than worn.");
+                return false;
             }
 
             if (string.Equals(jointName, "skin", StringComparison.Ordinal))
