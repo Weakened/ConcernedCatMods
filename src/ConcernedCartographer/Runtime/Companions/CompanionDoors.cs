@@ -218,7 +218,9 @@ internal sealed class CompanionDoors
 
         foreach (Piece piece in pieces)
         {
-            Door? door = piece == null ? null : piece.GetComponent<Door>();
+            // In the piece's children too: a door component need not sit on the
+            // piece's own root for every door there is.
+            Door? door = piece == null ? null : piece.GetComponentInChildren<Door>();
             if (door != null)
             {
                 doors.Add(door);

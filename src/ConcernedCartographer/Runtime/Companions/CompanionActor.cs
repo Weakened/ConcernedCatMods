@@ -369,34 +369,45 @@ internal sealed class CompanionActor
     /// figure look like it is standing through the furniture.</summary>
     private void Place(WorldPoint position, CompanionPose pose)
     {
-        // Wherever he is being put, he is not finishing a drink there.
+        // Wherever he is being put, he is not finishing a drink there, and not
+        // halfway through getting up or sitting down either.
         EndDrink(restore: false);
+        _gliding = false;
         PlacedAnchorSet(position);
         if (_root == null)
         {
             return;
         }
 
-        bool wantsSeat = pose == CompanionPose.SitOnSeat || pose == CompanionPose.SleepInBed;
-        bool onSeat = wantsSeat && _seat.IsUsable;
-        WorldPoint where = onSeat ? _seat.Position : position;
-        float yaw = onSeat ? _seat.YawDegrees : GroundYaw(position);
-
-        // A seat offered but not usable is not a pose we may claim to be in.
-        // He is on the probed ground either way; reporting otherwise would tell
-        // the furniture sweep it had succeeded and stop it looking again.
-        CompanionPose achieved = wantsSeat && !onSeat
-            ? CompanionPose.SitOnGround
-            : pose;
-
-        _root.transform.position = new Vector3(where.X, where.Y, where.Z);
-        _root.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+        CompanionPose achieved = ResolvePlacement(position, pose, 200f, out Vector3 where, out Quaternion rotation);
+        _root.transform.SetPositionAndRotation(where, rotation);
         ApplyPose(achieved);
     }
 
+    /// <summary>Where and how a pose puts him. A seat or a bed puts him on its
+    /// own attachment point at its own heading, because that is where the game
+    /// puts a player; the ground puts him on the probed spot, facing what he
+    /// came to sit by. A seat offered but not usable is not a pose he may claim
+    /// to be in: he is on the probed ground either way, and reporting otherwise
+    /// would tell the furniture sweep it had succeeded and stop it looking
+    /// again.</summary>
+    private CompanionPose ResolvePlacement(
+        WorldPoint position, CompanionPose pose, float fallbackYaw, out Vector3 where, out Quaternion rotation)
+    {
+        bool wantsSeat = pose == CompanionPose.SitOnSeat || pose == CompanionPose.SleepInBed;
+        bool onSeat = wantsSeat && _seat.IsUsable;
+        WorldPoint point = onSeat ? _seat.Position : position;
+        float yaw = onSeat ? _seat.YawDegrees : GroundYaw(position, fallbackYaw);
+
+        where = new Vector3(point.X, point.Y, point.Z);
+        rotation = Quaternion.Euler(0f, yaw, 0f);
+        return wantsSeat && !onSeat ? CompanionPose.SitOnGround : pose;
+    }
+
     /// <summary>Which way he sits on the ground: towards what he came to sit by,
-    /// when there is something, and his old fixed heading otherwise.</summary>
-    private float GroundYaw(WorldPoint position)
+    /// when there is something, and <paramref name="fallbackYaw"/>
+    /// otherwise.</summary>
+    private float GroundYaw(WorldPoint position, float fallbackYaw)
     {
         if (_facing.HasValue)
         {
@@ -408,7 +419,131 @@ internal sealed class CompanionActor
             }
         }
 
-        return 200f;
+        return fallbackYaw;
+    }
+
+    /// <summary>How long getting up and sitting down take: long enough for the
+    /// game's own transition to play while he moves, short enough not to
+    /// dawdle.</summary>
+    private const float RiseSeconds = 0.9f;
+
+    private const float SitSeconds = 0.9f;
+
+    /// <summary>A turn on the spot, for somebody already on his feet.</summary>
+    private const float TurnSeconds = 0.3f;
+
+    private bool _gliding;
+    private float _glideElapsed;
+    private float _glideSeconds;
+    private Vector3 _glideFromPosition;
+    private Vector3 _glideToPosition;
+    private Quaternion _glideFromRotation = Quaternion.identity;
+    private Quaternion _glideToRotation = Quaternion.identity;
+
+    /// <summary>Whether he is part way through getting up or sitting down.
+    /// </summary>
+    public bool IsGliding => _gliding && _root != null;
+
+    /// <summary>Why the last step he could not take was refused - what he walked
+    /// into, or what was wrong with the ground - for the log.</summary>
+    public string? LastBlockReason { get; private set; }
+
+    /// <summary>Gets him up. The sitting pose is let go at once, so the game's
+    /// own stand-up transition plays, and he moves while it does from where he
+    /// sat to <paramref name="standAt"/> - off a bench onto the ground in front
+    /// of it, out of a bed onto the floor beside it - turning towards
+    /// <paramref name="lookTowards"/>. Walking starts when this is done, never
+    /// during it: a companion who slides away while still getting up is the
+    /// jank this exists to remove.</summary>
+    public void BeginRise(Vector3 standAt, Vector3? lookTowards)
+    {
+        if (_root == null)
+        {
+            return;
+        }
+
+        EndDrink(restore: false);
+        bool wasSitting = _poseParameter != null;
+        ClearPoseParameter();
+        _seat = SeatOffer.None;
+
+        Quaternion rotation = _root.transform.rotation;
+        if (lookTowards.HasValue)
+        {
+            Vector3 flat = lookTowards.Value - standAt;
+            flat.y = 0f;
+            if (flat.sqrMagnitude > 0.04f)
+            {
+                rotation = Quaternion.LookRotation(flat.normalized, Vector3.up);
+            }
+        }
+
+        StartGlide(standAt, rotation, wasSitting ? RiseSeconds : TurnSeconds);
+    }
+
+    /// <summary>Sits him down where he has walked to. The pose is taken at once,
+    /// so the game's own sitting transition plays, and he moves while it does
+    /// onto the seat's attachment point, the bed, or the exact patch of ground
+    /// - turning to the seat's heading, or towards what he came to sit by, or
+    /// keeping the way he walked in when there is nothing to face.</summary>
+    public void BeginSit(WorldPoint position, CompanionPose pose, SeatOffer seat, Vector3? facing)
+    {
+        if (_root == null)
+        {
+            return;
+        }
+
+        EndDrink(restore: false);
+        _seat = seat;
+        _facing = facing;
+        PlacedAnchorSet(position);
+
+        CompanionPose achieved = ResolvePlacement(
+            position, pose, _root.transform.eulerAngles.y, out Vector3 where, out Quaternion rotation);
+        ApplyPose(achieved);
+        StartGlide(where, rotation, SitSeconds);
+    }
+
+    /// <summary>Moves a rise or a sit along. True once it is finished (or when
+    /// there is none).</summary>
+    public bool TickGlide(float deltaTime)
+    {
+        if (!_gliding || _root == null)
+        {
+            _gliding = false;
+            return true;
+        }
+
+        _glideElapsed += deltaTime;
+        float t = _glideSeconds <= 0f ? 1f : Mathf.Clamp01(_glideElapsed / _glideSeconds);
+        float eased = t * t * (3f - (2f * t));
+        _root.transform.SetPositionAndRotation(
+            Vector3.Lerp(_glideFromPosition, _glideToPosition, eased),
+            Quaternion.Slerp(_glideFromRotation, _glideToRotation, eased));
+
+        if (t < 1f)
+        {
+            return false;
+        }
+
+        _gliding = false;
+        return true;
+    }
+
+    private void StartGlide(Vector3 position, Quaternion rotation, float seconds)
+    {
+        if (_root == null)
+        {
+            return;
+        }
+
+        _glideFromPosition = _root.transform.position;
+        _glideFromRotation = _root.transform.rotation;
+        _glideToPosition = position;
+        _glideToRotation = rotation;
+        _glideElapsed = 0f;
+        _glideSeconds = seconds;
+        _gliding = true;
     }
 
     private void PlacedAnchorSet(WorldPoint position)
@@ -523,6 +658,9 @@ internal sealed class CompanionActor
     /// last few centimetres looks worse than stopping short.</summary>
     private const float ArrivalMetres = 0.6f;
 
+    /// <summary>The steepest ground he walks over: 60 degrees.</summary>
+    private const float WalkableUpDot = 0.5f;
+
     /// <summary>How far past the next step the obstruction sweep looks, so he
     /// stops short of a wall rather than touching it.</summary>
     private const float StepLookAheadMetres = 0.35f;
@@ -581,13 +719,16 @@ internal sealed class CompanionActor
         // towards a spot with a clear straight line, so this is the safety net
         // for what changed since - a door closed, a wall built.
         if (checkObstruction &&
-            CompanionFooting.IsWayBlocked(here, here + (direction * (travel + StepLookAheadMetres))))
+            CompanionFooting.TryFindObstruction(
+                here, here + (direction * (travel + StepLookAheadMetres)), out string obstruction))
         {
+            LastBlockReason = "walked into " + obstruction;
             return WalkStep.Blocked;
         }
 
-        if (!TryGroundAt(next, out float height))
+        if (!TryGroundAt(next, out float height, out string footing))
         {
+            LastBlockReason = footing;
             return WalkStep.Blocked;
         }
 
@@ -597,8 +738,11 @@ internal sealed class CompanionActor
         // or a hole, whichever way it goes.
         if (Mathf.Abs(next.y - here.y) > 0.6f)
         {
+            LastBlockReason = $"a step of {next.y - here.y:+0.00;-0.00} m";
             return WalkStep.Blocked;
         }
+
+        LastBlockReason = null;
 
         _root.transform.position = next;
         _root.transform.rotation = Quaternion.Slerp(
@@ -649,15 +793,17 @@ internal sealed class CompanionActor
         }
     }
 
-    private static bool TryGroundAt(Vector3 point, out float height)
+    private static bool TryGroundAt(Vector3 point, out float height, out string reason)
     {
         height = point.y;
+        reason = string.Empty;
 
         try
         {
             ZoneSystem zones = ZoneSystem.instance;
             if (zones == null || !zones.IsZoneLoaded(point))
             {
+                reason = "ground that is not loaded";
                 return false;
             }
 
@@ -666,23 +812,29 @@ internal sealed class CompanionActor
             // already at - see CompanionFooting.
             if (!CompanionFooting.TryFind(point, 2f, 4f, out Vector3 footing, out Vector3 normal))
             {
+                reason = "nowhere to stand (no surface with headroom)";
                 return false;
             }
 
             float found = footing.y;
 
-            // The same slope limit the placement probe uses. Ground he could
-            // not have been placed on is ground he should not walk onto.
-            if (Vector3.Dot(normal, Vector3.up) < 0.75f)
+            // Steeper than where he may sit, but not unlimited. The navmesh has
+            // already judged the route walkable, and the lip a fire pit digs
+            // into the ground is steep for a few centimetres - holding a walk to
+            // the placement probe's 41 degrees stopped him there. Sixty degrees
+            // is still a wall.
+            if (Vector3.Dot(normal, Vector3.up) < WalkableUpDot)
             {
+                reason = $"ground too steep ({Vector3.Angle(normal, Vector3.up):0} degrees)";
                 return false;
             }
 
             height = found;
             return true;
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            reason = "the ground could not be read: " + exception.GetType().Name;
             return false;
         }
     }
@@ -806,6 +958,7 @@ internal sealed class CompanionActor
     public void StandUp()
     {
         EndDrink(restore: false);
+        _gliding = false;
         ClearPoseParameter();
     }
 
@@ -818,6 +971,7 @@ internal sealed class CompanionActor
     public void SettleWhereHeStands()
     {
         EndDrink(restore: false);
+        _gliding = false;
         _seat = SeatOffer.None;
         ApplyPose(CompanionPose.SitOnGround);
     }
@@ -3224,6 +3378,7 @@ internal sealed class CompanionActor
 
         // The mug goes with the figure it hangs off.
         ForgetDrink();
+        _gliding = false;
         _seat = SeatOffer.None;
         _facing = null;
         _animator = null;
@@ -3257,6 +3412,7 @@ internal sealed class CompanionActor
     {
         _root = null;
         ForgetDrink();
+        _gliding = false;
         _animator = null;
         _poseParameter = null;
         _seat = SeatOffer.None;

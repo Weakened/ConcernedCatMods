@@ -62,6 +62,22 @@ internal static class CompanionFooting
     /// all.</summary>
     public static bool IsWayBlocked(Vector3 from, Vector3 to)
     {
+        return TryFindObstruction(from, to, out _);
+    }
+
+    /// <summary>The same question as <see cref="IsWayBlocked"/>, with the answer
+    /// named - the piece or object he would walk into, and its layer - so a
+    /// walk that stops says why in the log.
+    ///
+    /// One thing is not in his way even though it is solid: the leaf of a door
+    /// that is standing open. Swung open, it sits beside the frame, right where
+    /// a route through the doorway passes, and it stopped him inside an open
+    /// doorway in game at 2374768. Only the leaf - the part the game moves, the
+    /// one with a rigidbody of its own - and only while the door is open; a
+    /// shut door, and the frame of an open one, still stop him.</summary>
+    public static bool TryFindObstruction(Vector3 from, Vector3 to, out string what)
+    {
+        what = string.Empty;
         EnsureObstructionMask();
 
         Vector3 flat = new Vector3(to.x - from.x, 0f, to.z - from.z);
@@ -71,14 +87,72 @@ internal static class CompanionFooting
             return false;
         }
 
-        return Physics.CapsuleCast(
+        int count = Physics.CapsuleCastNonAlloc(
             from + (Vector3.up * SweepBottom),
             from + (Vector3.up * SweepTop),
             SweepRadius,
             flat / distance,
+            SweepBuffer,
             distance,
             _obstructionMask,
             QueryTriggerInteraction.Ignore);
+
+        Collider? blocker = null;
+        float nearest = float.MaxValue;
+        for (int index = 0; index < count; index++)
+        {
+            RaycastHit hit = SweepBuffer[index];
+            if (hit.collider == null)
+            {
+                continue;
+            }
+
+            // Already overlapping where he stands. A single sweep never reports
+            // these, and a companion placed against a wall must still be able to
+            // walk away from it.
+            if (hit.distance <= 0f && hit.point == Vector3.zero)
+            {
+                continue;
+            }
+
+            if (IsOpenDoorLeaf(hit.collider) || hit.distance >= nearest)
+            {
+                continue;
+            }
+
+            nearest = hit.distance;
+            blocker = hit.collider;
+        }
+
+        if (blocker == null)
+        {
+            return false;
+        }
+
+        what = Describe(blocker);
+        return true;
+    }
+
+    private static readonly RaycastHit[] SweepBuffer = new RaycastHit[16];
+
+    private static bool IsOpenDoorLeaf(Collider collider)
+    {
+        if (collider.attachedRigidbody == null)
+        {
+            return false;
+        }
+
+        Door? door = collider.GetComponentInParent<Door>();
+        return door != null && CompanionDoors.StateOf(door) != 0;
+    }
+
+    private static string Describe(Collider collider)
+    {
+        Piece? piece = collider.GetComponentInParent<Piece>();
+        string name = piece != null ? piece.gameObject.name : collider.gameObject.name;
+        name = name.Replace("(Clone)", string.Empty).Trim();
+        return $"{name} ({LayerMask.LayerToName(collider.gameObject.layer)}) at " +
+            $"({collider.bounds.center.x:0.0}, {collider.bounds.center.y:0.0}, {collider.bounds.center.z:0.0})";
     }
 
     /// <summary>Whether something solid already stands where his body would be

@@ -244,6 +244,36 @@ internal sealed class CompanionDirector : IDisposable
         After = 4,
     }
 
+    /// <summary>Where a walk to a new spot is: getting up, on his way, or sitting
+    /// down at the end of it. Walking is never started while he is still
+    /// getting up, and he is never left standing while he sits.</summary>
+    private enum WalkStage
+    {
+        None = 0,
+        Rising = 1,
+        Walking = 2,
+        SittingDown = 3,
+    }
+
+    private WalkStage _walkStage;
+
+    /// <summary>Whether this walk has already been planned again after a step
+    /// was refused. Once, then he gives up for now.</summary>
+    private bool _walkRetried;
+
+    /// <summary>A spot he could not get to on foot just now, and until when he
+    /// does not try it again - so a blocked walk is not retried every pass.
+    /// </summary>
+    private Vector3 _unreachableTarget;
+    private float _unreachableUntil;
+
+    /// <summary>How long a spot he could not reach is left alone.</summary>
+    private const float UnreachableSeconds = 60f;
+
+    /// <summary>How far in front of a seat, or beside a bed, he stands before he
+    /// sits down on it and after he gets up from it.</summary>
+    private const float StandOffMetres = 0.8f;
+
     private DoorPhase _doorPhase;
     private bool _doorClosedBehind;
     private bool _doorOpenedByHim;
@@ -408,6 +438,7 @@ internal sealed class CompanionDirector : IDisposable
     {
         ReleaseCompass();
         _actor.Release();
+        ResetMotion();
         _doors.Forget();
         _view = null;
         _anchorValidity = AnchorValidity.Unknown;
@@ -722,8 +753,8 @@ internal sealed class CompanionDirector : IDisposable
         {
             if (action == ResidencyAction.Remove)
             {
-                _relocating = false;
                 _actor.Release();
+                ResetMotion();
             }
 
             return;
@@ -733,6 +764,7 @@ internal sealed class CompanionDirector : IDisposable
         {
             case ResidencyAction.Remove:
                 _actor.Release();
+                ResetMotion();
                 return;
 
             case ResidencyAction.Rehome:
@@ -806,6 +838,11 @@ internal sealed class CompanionDirector : IDisposable
             return;
         }
 
+        // A new figure starts at rest. Whatever walk or stroll the old one was
+        // on is over: carried across, it had him walk off the bed or seat he was
+        // just built on - the bed-edge sit and the sitting in the air seen in
+        // game at 2374768.
+        ResetMotion();
         _actor.RememberAnchor(_anchor);
         _actor.SetVisible(_settings.CompanionVisible.Value);
         _visibilityApplied = _settings.CompanionVisible.Value;
@@ -1007,13 +1044,96 @@ internal sealed class CompanionDirector : IDisposable
     /// bed, the floor beside it, on whichever side has room.</summary>
     private Vector3 WalkOrigin()
     {
-        if (_actor.Pose != CompanionPose.SleepInBed || !_actor.Seat.IsUsable)
+        if (!_actor.Seat.IsUsable)
         {
             return _actor.Position;
         }
 
-        Vector3 bed = CampSense.ToVector(_actor.Seat.Position);
-        Quaternion heading = Quaternion.Euler(0f, _actor.Seat.YawDegrees, 0f);
+        if (_actor.Pose == CompanionPose.SleepInBed)
+        {
+            return BesideBed(_actor.Seat) ?? _actor.Position;
+        }
+
+        if (_actor.Pose == CompanionPose.SitOnSeat)
+        {
+            return StandSpotFor(_actor.Seat) ?? _actor.Position;
+        }
+
+        return _actor.Position;
+    }
+
+    /// <summary>Where a person stands to sit down on a seat, and stands up to
+    /// after: clear ground just off it, in front first - where the legs go -
+    /// then to either side, then behind. A seat's attachment point is not that
+    /// place: a log bench keeps its attach points on the log's own centre line,
+    /// so a walk that started or ended there started on top of the log, and
+    /// stepping off its end beside a fire pit's lowered ground was a drop too
+    /// big to take - every blocked walk in game at 2374768 stopped there. Null
+    /// when nowhere around the seat is clear.</summary>
+    private Vector3? StandSpotFor(SeatOffer seat)
+    {
+        if (!seat.IsUsable)
+        {
+            return null;
+        }
+
+        Vector3 point = CampSense.ToVector(seat.Position);
+        Quaternion heading = Quaternion.Euler(0f, seat.YawDegrees, 0f);
+        Vector3[] sides =
+        {
+            heading * Vector3.forward, heading * Vector3.right, heading * Vector3.left, heading * Vector3.back,
+        };
+
+        foreach (Vector3 side in sides)
+        {
+            Vector3 candidate = point + (side * StandOffMetres);
+
+            // Ground no higher than the seat's own base - a bench's attach point
+            // is at its foot - so "beside the bench" can never be the top of the
+            // log, which is where the blocked walks started. A little lower is a
+            // seat on a raised floor.
+            if (!CompanionFooting.TryFind(candidate, 0.3f, 1.5f, out Vector3 ground, out Vector3 normal) ||
+                Vector3.Dot(normal, Vector3.up) < 0.75f ||
+                ground.y - point.y > 0.25f ||
+                point.y - ground.y > 0.8f ||
+                CompanionFooting.IsBodyObstructed(ground) ||
+                IsInFlamesOrWater(ground))
+            {
+                continue;
+            }
+
+            return ground;
+        }
+
+        return null;
+    }
+
+    /// <summary>Somewhere nobody stands for a moment: in the flames themselves,
+    /// or under water. Deliberately narrower than where he may SIT - a log is
+    /// often right up against its fire, and the placement probe's margin around
+    /// the fire would leave nowhere to stand up from it.</summary>
+    private static bool IsInFlamesOrWater(Vector3 point)
+    {
+        try
+        {
+            if (EffectArea.IsPointInsideArea(point + (Vector3.up * 0.3f), EffectArea.Type.Burning, 0.3f) != null)
+            {
+                return true;
+            }
+
+            return ZoneSystem.instance != null && point.y < ZoneSystem.instance.m_waterLevel - 0.3f;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>The floor beside a bed, on whichever side has room.</summary>
+    private static Vector3? BesideBed(SeatOffer bed)
+    {
+        Vector3 spawn = CampSense.ToVector(bed.Position);
+        Quaternion heading = Quaternion.Euler(0f, bed.YawDegrees, 0f);
         Vector3[] sides =
         {
             heading * Vector3.right, heading * Vector3.left, heading * Vector3.back, heading * Vector3.forward,
@@ -1021,7 +1141,7 @@ internal sealed class CompanionDirector : IDisposable
 
         foreach (Vector3 side in sides)
         {
-            if (CompanionFooting.TryFind(bed + (side * 1.1f), 0.6f, 2.5f, out Vector3 floor, out Vector3 normal) &&
+            if (CompanionFooting.TryFind(spawn + (side * 1.1f), 0.6f, 2.5f, out Vector3 floor, out Vector3 normal) &&
                 Vector3.Dot(normal, Vector3.up) >= 0.75f &&
                 !CompanionFooting.IsBodyObstructed(floor))
             {
@@ -1029,7 +1149,30 @@ internal sealed class CompanionDirector : IDisposable
             }
         }
 
-        return _actor.Position;
+        return null;
+    }
+
+    /// <summary>Whether a planned spot is the one he already occupies: the same
+    /// seat or bed, or the same patch of ground in the same pose. A walk there
+    /// would be him getting up to sit straight back down.</summary>
+    private bool IsWhereHeIs(PlacementResult plan)
+    {
+        // Sitting (or lying), not merely standing on the spot at the end of a
+        // potter - he should still sit down there.
+        if (!_actor.Exists || _actor.IsGliding || !_actor.IsSitting)
+        {
+            return false;
+        }
+
+        if (plan.Pose == CompanionPose.SitOnSeat || plan.Pose == CompanionPose.SleepInBed)
+        {
+            return _actor.Pose == plan.Pose && _actor.Seat.IsUsable &&
+                _actor.Seat.Position.HorizontalDistanceTo(plan.Seat.Position) <= 0.3f &&
+                Math.Abs(_actor.Seat.Position.Y - plan.Seat.Position.Y) <= 0.5f;
+        }
+
+        return !_actor.Seat.IsUsable && _actor.Pose == plan.Pose &&
+            Flat(_actor.Position, CampSense.ToVector(plan.Position)) <= 0.5f;
     }
 
     /// <summary>A rank on the residency planner's scale, where higher is
@@ -1045,6 +1188,7 @@ internal sealed class CompanionDirector : IDisposable
     private bool CanWalkTo(Vector3 from, Vector3 target, CampView view)
     {
         if (!_actor.CanWalk || Flat(from, target) > WalkRelocateMetres ||
+            (Time.time < _unreachableUntil && Flat(target, _unreachableTarget) <= 1.5f) ||
             !_camp.TryPlanWalk(from, target, view, _scratchWalk))
         {
             return false;
@@ -1090,23 +1234,25 @@ internal sealed class CompanionDirector : IDisposable
             _hangout = choice.Wish;
         }
 
-        Vector3 target = TargetOf(plan);
-        if (Flat(_actor.Position, target) > WalkRelocateMetres)
+        // Already there. With the seat check that used to call a bench "gone"
+        // this was a walk of 0.0 m, a hundred and forty times a session: up,
+        // down, up. However it is asked for, he stays put.
+        if (IsWhereHeIs(plan))
         {
-            return false;
+            return true;
         }
 
-        if (_actor.Pose == CompanionPose.SleepInBed)
+        Vector3 origin = WalkOrigin();
+        Vector3 target = TargetOf(plan);
+        if (Flat(origin, target) > WalkRelocateMetres)
         {
-            // Out of bed first, onto the floor the walk was planned from. A route
-            // cannot start on a mattress: the first step down off one is taller
-            // than a step, and the walk would fail at once.
-            _actor.SetDownAt(CampSense.ToPoint(WalkOrigin()));
+            return false;
         }
 
         _doorPhase = _walk.Door != null ? DoorPhase.ToDoor : DoorPhase.None;
         _doorClosedBehind = false;
         _doorOpenedByHim = false;
+        _walkRetried = false;
 
         _strollRoute.Clear();
         _strollRoute.AddRange(_walk.Route);
@@ -1117,8 +1263,14 @@ internal sealed class CompanionDirector : IDisposable
         _relocationTarget = target;
         _relocationFacing = facing;
         _relocating = true;
-        _actor.StandUp();
         EnterRoutine(RoutineState.Strolling);
+
+        // Up first, in place or onto the spot the walk starts from - off the
+        // bench, out of the bed - turning to face the way he is going. The walk
+        // itself waits for that.
+        _actor.StopWalking();
+        _actor.BeginRise(origin, _walk.Route.Count > 1 ? _walk.Route[1] : target);
+        _walkStage = WalkStage.Rising;
 
         // Generous: a route with a doorway in it is slower than its length.
         _relocationPatience = (_walk.Length / StrollSpeed * 1.5f) + 6f +
@@ -1133,12 +1285,17 @@ internal sealed class CompanionDirector : IDisposable
         return true;
     }
 
-    private static Vector3 TargetOf(PlacementResult plan)
+    /// <summary>Where a walk to a planned spot ends: in front of a seat, beside
+    /// a bed (the plan's own position), or on the spot itself. He sits down
+    /// from there.</summary>
+    private Vector3 TargetOf(PlacementResult plan)
     {
-        WorldPoint point = plan.Pose == CompanionPose.SitOnSeat && plan.Seat.IsUsable
-            ? plan.Seat.Position
-            : plan.Position;
-        return new Vector3(point.X, point.Y, point.Z);
+        if (plan.Pose == CompanionPose.SitOnSeat && plan.Seat.IsUsable)
+        {
+            return StandSpotFor(plan.Seat) ?? CampSense.ToVector(plan.Seat.Position);
+        }
+
+        return CampSense.ToVector(plan.Position);
     }
 
     private static string DescribeSpot(PlacementResult plan)
@@ -1169,6 +1326,35 @@ internal sealed class CompanionDirector : IDisposable
         if (!_actor.Exists)
         {
             _relocating = false;
+            return;
+        }
+
+        if (_walkStage == WalkStage.Rising)
+        {
+            if (!_actor.TickGlide(deltaTime))
+            {
+                return;
+            }
+
+            // On his feet and facing the way. Patience counts from here.
+            _walkStage = WalkStage.Walking;
+            _routineElapsed = 0f;
+            return;
+        }
+
+        if (_walkStage == WalkStage.SittingDown)
+        {
+            if (!_actor.TickGlide(deltaTime))
+            {
+                return;
+            }
+
+            _walkStage = WalkStage.None;
+            _relocating = false;
+            EnterRoutine(RoutineState.Settled);
+            _log.LogInfo(_relocation.Pose == CompanionPose.SleepInBed
+                ? "Hulgi lay down in a spare bed for the night."
+                : $"Hulgi sat down at {DescribeSpot(_relocation)}.");
             return;
         }
 
@@ -1264,27 +1450,74 @@ internal sealed class CompanionDirector : IDisposable
         CloseDoorBehindHim(force: true);
         DoorPhase endedAt = _doorPhase;
         _doorPhase = DoorPhase.None;
-        _relocating = false;
         _actor.StopWalking();
 
-        bool beside = Flat(_actor.Position, _relocationTarget) <= 1.5f;
+        bool beside = Flat(_actor.Position, _relocationTarget) <= 1.0f;
         if (step == WalkStep.Arrived || beside)
         {
-            _actor.SettleInto(_relocation.Position, _relocation.Pose, _relocation.Seat, _relocationFacing);
-            EnterRoutine(RoutineState.Settled);
-            _log.LogInfo(_relocation.Pose == CompanionPose.SleepInBed
-                ? "Hulgi lay down in a spare bed for the night."
-                : $"Hulgi sat down at {DescribeSpot(_relocation)}.");
+            // Down onto the seat, the bed or the spot, while the sitting
+            // animation plays - not snapped there.
+            _actor.BeginSit(_relocation.Position, _relocation.Pose, _relocation.Seat, _relocationFacing);
+            _walkStage = WalkStage.SittingDown;
             return;
         }
 
+        string why = step == WalkStep.Walking
+            ? "ran out of patience"
+            : _actor.LastBlockReason ?? step.ToString();
+
+        // Once more, from where he stands. What stopped him may have been a door
+        // somebody closed, or the corner of something the first route cut.
+        if (!_walkRetried)
+        {
+            _walkRetried = true;
+            CampView view = ScanCamp();
+            if (_camp.TryPlanWalk(_actor.Position, _relocationTarget, view, _scratchWalk))
+            {
+                _walk.CopyFrom(_scratchWalk);
+                _doorPhase = _walk.Door != null ? DoorPhase.ToDoor : DoorPhase.None;
+                _doorClosedBehind = false;
+                _doorOpenedByHim = false;
+                _strollRoute.Clear();
+                _strollRoute.AddRange(_walk.Route);
+                _strollCorner = 1;
+                _strollTarget = _walk.Door != null ? _walk.Approach : _relocationTarget;
+                _routineElapsed = 0f;
+                _relocationPatience = (_walk.Length / StrollSpeed * 1.5f) + 6f +
+                    (_walk.Door != null ? DoorSwingSeconds + 4f : 0f);
+                _log.LogInfo(
+                    $"Hulgi was stopped on his way ({why} at {Describe(_actor.Position)}) and is trying another way.");
+                return;
+            }
+        }
+
+        // No teleport. He sits down where he got to, and leaves that spot alone
+        // for a minute; the next look around camp may find him another, or the
+        // same one once whatever was in the way has gone.
+        _walkStage = WalkStage.None;
+        _relocating = false;
+        _unreachableTarget = _relocationTarget;
+        _unreachableUntil = Time.time + UnreachableSeconds;
+        _actor.SettleWhereHeStands();
+        EnterRoutine(RoutineState.Settled);
         _log.LogInfo(
-            $"Hulgi could not reach his new spot on foot ({step} at {Describe(_actor.Position)}, " +
+            $"Hulgi could not get to {DescribeSpot(_relocation)} on foot ({why} at {Describe(_actor.Position)}, " +
             $"{Flat(_actor.Position, _relocationTarget):0.0} m short" +
             (endedAt == DoorPhase.None ? string.Empty : ", at the door: " + endedAt) +
-            "), so he is put there instead. Nothing about your tools or progress is affected.");
-        _actor.Release();
-        _actorRetryElapsed = 0f;
+            $"), so he sits down where he is and leaves that spot alone for {UnreachableSeconds:0} s. " +
+            "He is not put there.");
+    }
+
+    /// <summary>Everything about a walk or a potter, dropped: he is at rest where
+    /// he is. For a figure just built or just taken away.</summary>
+    private void ResetMotion()
+    {
+        _relocating = false;
+        _walkStage = WalkStage.None;
+        _doorPhase = DoorPhase.None;
+        _strollRoute.Clear();
+        _strollCorner = 0;
+        EnterRoutine(RoutineState.Settled);
     }
 
     /// <summary>Closes the door he opened, once he is two metres clear of it -
@@ -1463,8 +1696,8 @@ internal sealed class CompanionDirector : IDisposable
 
         _relocating = false;
         _actor.StopWalking();
+        ResetMotion();
         _actor.SetDownAt(new WorldPoint(spot.x, spot.y, spot.z));
-        EnterRoutine(RoutineState.Settled);
         LookAgainNow();
 
         return "Hulgi is sitting two metres in front of you. In a moment he looks around his camp and " +
@@ -1661,6 +1894,13 @@ internal sealed class CompanionDirector : IDisposable
             return;
         }
 
+        // Getting up for a potter: nothing else until he is on his feet.
+        if (_actor.IsGliding)
+        {
+            _actor.TickGlide(deltaTime);
+            return;
+        }
+
         if (!_actor.Exists || !_settings.CompanionWander.Value ||
             !_settings.CompanionVisible.Value || !_anchor.IsValid)
         {
@@ -1803,8 +2043,11 @@ internal sealed class CompanionDirector : IDisposable
         _strollRoute.AddRange(plan.Route);
         _strollCorner = 1;
         _strollTarget = point;
-        _actor.StandUp();
         EnterRoutine(RoutineState.Strolling);
+
+        // Up where he sits, turning towards where he is going; the walk waits.
+        _actor.StopWalking();
+        _actor.BeginRise(_actor.Position, plan.Route.Count > 1 ? plan.Route[1] : point);
         _log.LogInfo(
             $"Hulgi is getting up and walking {Vector3.Distance(_actor.Position, point):0.0} m " +
             $"to {point.ToString("0.#")}" +
@@ -2741,9 +2984,15 @@ internal sealed class CompanionDirector : IDisposable
 
             case HangoutKind.Shelter:
                 spot = _shelterPlanner.Plan(_anchor, _hulgiProbe, accept: sample =>
-                    (!seatOnly || sample.SeatOffer.IsUsable) &&
-                    CampSense.IsSheltered(TargetOf(sample)) &&
-                    reachable(TargetOf(sample)));
+                {
+                    if (seatOnly && !sample.SeatOffer.IsUsable)
+                    {
+                        return false;
+                    }
+
+                    Vector3 target = TargetOf(sample);
+                    return CampSense.IsSheltered(target) && reachable(target);
+                });
                 break;
 
             default:
@@ -2798,10 +3047,14 @@ internal sealed class CompanionDirector : IDisposable
         return PlacementResult.Deferred(0, PlacementRejection.Occupied);
     }
 
-    private static Vector3 TargetOf(PlacementProbeSample sample)
+    private Vector3 TargetOf(PlacementProbeSample sample)
     {
-        WorldPoint point = sample.SeatOffer.IsUsable ? sample.SeatOffer.Position : sample.Position;
-        return new Vector3(point.X, point.Y, point.Z);
+        if (sample.SeatOffer.IsUsable)
+        {
+            return StandSpotFor(sample.SeatOffer) ?? CampSense.ToVector(sample.SeatOffer.Position);
+        }
+
+        return CampSense.ToVector(sample.Position);
     }
 
     /// <summary>How well where he is now does, on the same wish list: the first

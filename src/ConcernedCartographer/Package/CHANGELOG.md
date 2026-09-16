@@ -53,7 +53,13 @@ Added
 - **He walks to a better spot instead of appearing there.** When somewhere
   better to sit turns up nearby - a fire lit, a bench built, your bed claimed a
   short way off - he gets up and walks over, around buildings and through
-  doorways. Only a move of more than 30 m still puts him there directly.
+  doorways. He gets up first and then walks, and at the other end he sits down
+  as he arrives: off a bench onto the ground in front of it, out of bed onto the
+  floor beside it, and back again, moving while the animation plays rather
+  than sliding away mid-stand or snapping into place. If something stops him on
+  the way he tries another way once, and if that fails too he sits down where
+  he got to and tries again later - he is never simply put there. Only his
+  first appearance, or a move of more than 30 m, places him directly.
 - **He notices a change to his camp within about a second.** Break the campfire
   and build one somewhere else, and he heads for the new one straight away. It
   stays cheap: one small check a second of the fires, seats and doors around

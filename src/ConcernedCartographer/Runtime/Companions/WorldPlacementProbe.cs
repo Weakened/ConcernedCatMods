@@ -67,6 +67,10 @@ internal sealed class WorldPlacementProbe : IPlacementProbe, ISeatFinder
     /// there", not "is there a chair around here".</summary>
     private const float SeatRecheckRadius = 0.35f;
 
+    /// <summary>How far around a seat's attach point to look for the piece
+    /// that owns it: the whole of a bench, not just the point.</summary>
+    private const float SeatSearchRadius = 1.5f;
+
     /// <summary>Radius for the authored-location sweep. Locations are
     /// large, so this only has to find a piece of one; its own radius
     /// fields decide the rest.</summary>
@@ -477,8 +481,17 @@ internal sealed class WorldPlacementProbe : IPlacementProbe, ISeatFinder
                 return null;
             }
 
+            // Looked for by the seat's ATTACH POINT, from a sphere wide enough to
+            // hold the whole piece, and through the piece as well as up from the
+            // collider. A log bench keeps its Chair components on two "SitPoint"
+            // children and its attach points on the log's own centre line, below
+            // the sit points' colliders (read from the game's piece_logbench01):
+            // a small sphere at the attach point touches only the log, whose
+            // collider has no Chair above it. So the bench always answered "gone",
+            // and in game at 2374768 he got up and sat back down on the same bench
+            // 144 times.
             int count = Physics.OverlapSphereNonAlloc(
-                point, SeatRecheckRadius, _overlapBuffer, ~0, QueryTriggerInteraction.Collide);
+                point, SeatSearchRadius, _overlapBuffer, ~0, QueryTriggerInteraction.Collide);
 
             // The NEAREST matching seat, not the first collider that happens to
             // answer. Two attach points can sit inside the same small sphere -
@@ -487,20 +500,43 @@ internal sealed class WorldPlacementProbe : IPlacementProbe, ISeatFinder
             // is a rehome loop rather than a wrong answer.
             Chair? nearest = null;
             float nearestDistance = float.MaxValue;
+            var seen = new HashSet<Chair>();
 
             for (int index = 0; index < count; index++)
             {
                 Collider hit = _overlapBuffer[index];
-                var chair = hit == null ? null : hit.GetComponentInParent<Chair>();
-                if (chair == null || chair.m_attachPoint == null)
+                if (hit == null)
                 {
                     continue;
+                }
+
+                Chair? above = hit.GetComponentInParent<Chair>();
+                if (above != null)
+                {
+                    Consider(above);
+                }
+
+                Piece? piece = hit.GetComponentInParent<Piece>();
+                if (piece != null)
+                {
+                    foreach (Chair inside in piece.GetComponentsInChildren<Chair>())
+                    {
+                        Consider(inside);
+                    }
+                }
+            }
+
+            void Consider(Chair chair)
+            {
+                if (chair == null || chair.m_attachPoint == null || !seen.Add(chair))
+                {
+                    return;
                 }
 
                 float distance = Vector3.Distance(chair.m_attachPoint.position, point);
                 if (distance > SeatRecheckRadius || distance >= nearestDistance)
                 {
-                    continue;
+                    return;
                 }
 
                 nearestDistance = distance;
