@@ -507,7 +507,8 @@ internal sealed class CompanionActor
     /// spot in the first place, and stops if it will not hold him. A companion
     /// pottering around a camp does not need to solve a maze, and the failure
     /// mode of trying is one who walks into a wall forever.</summary>
-    public WalkStep StepToward(Vector3 target, float deltaTime, float speed)
+    public WalkStep StepToward(
+        Vector3 target, float deltaTime, float speed, float? arrivalMetres = null)
     {
         if (_root == null)
         {
@@ -518,7 +519,7 @@ internal sealed class CompanionActor
         Vector3 flat = new Vector3(target.x - here.x, 0f, target.z - here.z);
         float distance = flat.magnitude;
 
-        if (distance <= ArrivalMetres)
+        if (distance <= (arrivalMetres ?? ArrivalMetres))
         {
             return WalkStep.Arrived;
         }

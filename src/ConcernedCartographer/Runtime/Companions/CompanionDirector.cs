@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using BepInEx.Logging;
 using TheConcernedCat.Companions.Dialogue;
 using TheConcernedCat.Companions.Identity;
@@ -121,6 +122,12 @@ internal sealed class CompanionDirector : IDisposable
     /// hidden.</summary>
     private const int StrollCandidates = 12;
 
+    /// <summary>How close counts as reaching a corner of a route, as opposed to
+    /// its end. Tighter than arrival: a corner is usually a doorway or the edge
+    /// of a wall, and cutting it by half a metre walks him into the frame.
+    /// </summary>
+    private const float CornerArrivalMetres = 0.3f;
+
     /// <summary>The angle between one stroll's direction and the next. An
     /// irrational-ish turn so the candidates spiral around the camp instead of
     /// retracing a circle.</summary>
@@ -168,6 +175,17 @@ internal sealed class CompanionDirector : IDisposable
     private float _sinceShelterSearchFailed = float.PositiveInfinity;
 
     private Vector3 _strollTarget;
+
+    /// <summary>The route he is walking: the navmesh's corners from where he
+    /// stood to the stroll target, and which corner he is heading for.
+    /// </summary>
+    private readonly List<Vector3> _strollRoute = new List<Vector3>();
+    private int _strollCorner;
+
+    /// <summary>Scratch for asking about a route without committing to it.
+    /// </summary>
+    private readonly List<Vector3> _routeScratch = new List<Vector3>();
+
     private int _strollTurn;
     private bool _walkReported;
 
@@ -768,7 +786,7 @@ internal sealed class CompanionDirector : IDisposable
         bool finished = false;
         if (_routine == RoutineState.Strolling)
         {
-            WalkStep step = _actor.StepToward(_strollTarget, deltaTime, StrollSpeed);
+            WalkStep step = FollowRoute(deltaTime);
             finished = step != WalkStep.Walking;
         }
 
@@ -858,11 +876,9 @@ internal sealed class CompanionDirector : IDisposable
             var point = new Vector3(
                 sample.Position.X, sample.Position.Y, sample.Position.Z);
 
-            // Somewhere he can actually walk to. His walk is a straight line, so
-            // a spot on the far side of a wall, a post or a rock is not a
-            // stroll, it is a companion pushing into the wall until his
-            // patience runs out.
-            if (!_actor.CanWalkStraightTo(point))
+            // Somewhere he can actually get to - around a building, through
+            // an open doorway - and not merely somewhere he can see.
+            if (!TryRoute(point))
             {
                 continue;
             }
@@ -873,8 +889,10 @@ internal sealed class CompanionDirector : IDisposable
                 continue;
             }
 
-            StrollTo(point);
-            return;
+            if (StrollTo(point))
+            {
+                return;
+            }
         }
 
         if (wantsShelter)
@@ -893,8 +911,10 @@ internal sealed class CompanionDirector : IDisposable
         {
             // Nowhere dry within reach. Moving anyway is better than sitting in
             // the open pretending the weather is fine.
-            StrollTo(fallback.Value);
-            return;
+            if (StrollTo(fallback.Value))
+            {
+                return;
+            }
         }
 
         // Nothing he could stand on anywhere in the ring. He stays sitting, and
@@ -917,14 +937,98 @@ internal sealed class CompanionDirector : IDisposable
         _sinceShelterSearchFailed = 0f;
     }
 
-    private void StrollTo(Vector3 point)
+    private bool StrollTo(Vector3 point)
     {
+        if (!TryRoute(point))
+        {
+            return false;
+        }
+
+        _strollRoute.Clear();
+        _strollRoute.AddRange(_routeScratch);
+        _strollCorner = 1;
         _strollTarget = point;
         _actor.StandUp();
         EnterRoutine(RoutineState.Strolling);
         _log.LogInfo(
             $"Hulgi is getting up and walking {Vector3.Distance(_actor.Position, point):0.0} m " +
-            $"to {point.ToString("0.#")}" + (IsNightOrStorm() ? " (looking for shelter)." : "."));
+            $"to {point.ToString("0.#")}" +
+            (_strollRoute.Count > 2 ? $" by a route with {_strollRoute.Count - 2} turn(s)" : "") +
+            (IsNightOrStorm() ? " (looking for shelter)." : "."));
+        return true;
+    }
+
+    /// <summary>A way from where he stands to <paramref name="point"/> that does
+    /// not go through anything, left in the scratch route.
+    ///
+    /// Asked of the game's own navmesh first - the same pathfinding its
+    /// creatures use, which knows walls from doorways - as a local query only:
+    /// no BaseAI, nothing networked, nothing written. The humanoid agent that
+    /// does not swim, because a camp stroll is not a swim. A full route or
+    /// nothing: a partial one ends at a wall.
+    ///
+    /// The navmesh builds its tiles on first request, so an early ask can come
+    /// back empty for a place that is perfectly reachable. Then, and only then,
+    /// a straight line is accepted - if nothing solid stands anywhere on it.
+    /// Either way he never walks through a wall: that is what the owner asked
+    /// for, and a walk that stops short is better than one that does
+    /// not.</summary>
+    private bool TryRoute(Vector3 point)
+    {
+        _routeScratch.Clear();
+        Vector3 from = _actor.Position;
+
+        try
+        {
+            Pathfinding pathfinding = Pathfinding.instance;
+            if (pathfinding != null &&
+                pathfinding.GetPath(
+                    from, point, _routeScratch, Pathfinding.AgentType.HumanoidNoSwim,
+                    requireFullPath: true) &&
+                _routeScratch.Count >= 2)
+            {
+                return true;
+            }
+        }
+        catch (Exception)
+        {
+            // A navmesh that will not answer is treated like one not built yet.
+        }
+
+        _routeScratch.Clear();
+        if (!_actor.CanWalkStraightTo(point))
+        {
+            return false;
+        }
+
+        _routeScratch.Add(from);
+        _routeScratch.Add(point);
+        return true;
+    }
+
+    /// <summary>One step along the route: towards the next corner, and on to
+    /// the one after when he reaches it. The end of the route is reached with
+    /// the ordinary arrival distance; the corners before it more tightly.
+    /// </summary>
+    private WalkStep FollowRoute(float deltaTime)
+    {
+        if (_strollRoute.Count < 2)
+        {
+            return _actor.StepToward(_strollTarget, deltaTime, StrollSpeed);
+        }
+
+        int corner = Math.Min(_strollCorner, _strollRoute.Count - 1);
+        bool last = corner == _strollRoute.Count - 1;
+        WalkStep step = _actor.StepToward(
+            _strollRoute[corner], deltaTime, StrollSpeed, last ? (float?)null : CornerArrivalMetres);
+
+        if (step == WalkStep.Arrived && !last)
+        {
+            _strollCorner = corner + 1;
+            return WalkStep.Walking;
+        }
+
+        return step;
     }
 
     private bool PlayerWithinTalkRange()

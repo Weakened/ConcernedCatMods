@@ -66,10 +66,12 @@ Fixed
   roof he was placed on the roof; and the floor he would stand on counted as
   something in his way. Both are fixed, for placing him and for walking him, so
   he can also now actually get in out of the rain.
-- **He doesn't walk through walls.** He only strolls to a spot he can reach in a
-  straight line without walking into anything solid - a wall, a post, a closed
-  door, a rock or a tree - and if something appears in his way mid-stroll, he
-  stops instead of passing through it. You can still walk straight through him.
+- **He doesn't walk through walls, and he finds his way around.** He is held by
+  the world the way you are - walls, posts, closed doors, rocks and trees - and
+  uses the game's own pathfinding to walk around buildings and through open
+  doorways, including in out of the rain. If something appears in his way
+  mid-stroll, he stops instead of passing through it. You can still walk
+  straight through him.
 - **He no longer gets up every few seconds at night.** In a camp with no roof in
   reach he would get up to look for shelter, sit down in the open, and get up
   again about every fifteen seconds all night. After one look finds nowhere dry
