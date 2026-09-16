@@ -297,6 +297,42 @@ collider carries no registration — nothing knows about it until something
 touches it — so removing one leaves no trace, while leaving one in place would
 mean a player walking into an invisible wall where their companion stands.
 
+### The body is assembled dark
+
+Extraction is only half of the no-wake rule, and the other half was missing
+until production reported it. **Re-parenting is what wakes a subtree**: the
+instant the visual transform lands under an active parent, Unity runs `Awake`
+on every component inside it. The new root used to be created the ordinary way,
+which is to say *active*, so the extracted body woke the moment it was
+re-parented into it — and the second line of `CharacterAnimEvent.Awake` is a
+dereference of `GetComponentInParent<Character>()`, which the refusal above has
+just guaranteed is not there.
+
+So it threw. Every build, for every player, since Hulgi had a body
+(`CONCERNED-CARTOGRAPHER-8`, seen on 1.1.2). Worse than the log line: that
+component's `OnEnable` adds it to a static list `MonoUpdaters` walks every
+FixedUpdate and LateUpdate, so a half-constructed one does not merely fail once
+— it sits in the game's own update loop for the rest of the session.
+
+`CompanionActor` now creates the root **inactive**, re-parents into the dark,
+removes the source character's own `MonoBehaviour`s while nothing has run, and
+switches the light on afterwards. Removing is not stripping: the distinction
+the whole adapter rests on is *whether the component ever woke*, and none of
+these did.
+
+The rule is a type test rather than another name list, because the problem is
+not one class: a script inside a character's visual subtree is game code
+written for a live character, and this figure has none. Nothing that draws him
+is a `MonoBehaviour` — `Animator`, `Renderer`, `SkinnedMeshRenderer`, `LODGroup`
+and `Transform` are all built-in components — so the pass cannot take away the
+body, the rig or the animation. Anything Unity refuses to destroy (a
+`[RequireComponent]` dependency, which it refuses by writing to the log rather
+than by throwing) is disabled instead and named in the log line, so that case is
+visible rather than silent. Attached hair, beards and garments go through the
+same pass before they are parented on, for the same reason — except for the
+cloth family, which `RemoveCloth` already disables deliberately, precisely
+because Unity refuses to destroy it out loud.
+
 ### Appearance is enumerated, never assumed
 
 The audit established that stock hair and beard preset names are serialized

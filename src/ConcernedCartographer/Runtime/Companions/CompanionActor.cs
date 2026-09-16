@@ -137,6 +137,15 @@ internal sealed class ActorReport
 /// finished actor has never contained one of those components, rather than
 /// having contained one and been tidied.
 ///
+/// What is kept is then assembled <b>dark</b>. The new root is created
+/// inactive, because re-parenting into a live object is exactly what runs
+/// <c>Awake</c> - and the game's own scripts inside a character's visual,
+/// <c>CharacterAnimEvent</c> first among them, wake straight into a
+/// dereference of the <c>Character</c> this figure deliberately does not have.
+/// They are destroyed while the object is still inactive, and the light is
+/// switched on after they are gone. That is removal, not stripping: not one of
+/// them has run.
+///
 /// Every step below it has a fallback, and the last fallback is "no actor,
 /// with a notice". None of them touches the player's access, progress or
 /// data.</summary>
@@ -883,12 +892,36 @@ internal sealed class CompanionActor
                 }
             }
 
+            // Born dark, and it stays dark until the source's own scripts are
+            // out of it. Re-parenting is what WAKES a subtree: the moment this
+            // transform lands under an active parent, Unity runs Awake on
+            // everything inside it - and the second line of
+            // CharacterAnimEvent.Awake dereferences
+            // GetComponentInParent<Character>(), which the extraction has just
+            // guaranteed is not there. That Awake could only ever throw, and
+            // production duly reported it on every single build.
             root = new GameObject("CC_Hulgi");
+            root.SetActive(false);
+
             visual.transform.SetParent(root.transform, worldPositionStays: false);
             visual.transform.localPosition = Vector3.zero;
             visual.transform.localRotation = Quaternion.identity;
 
             RemovePhysics(root);
+            int quieted = RemoveBehaviours(root, out string quietedNames);
+
+            // Nothing inside can run any more, so it is safe to switch on.
+            // Everything after this line - the pose, the appearance, the hover
+            // - then runs against a live object exactly as it did before.
+            root.SetActive(true);
+
+            if (quieted > 0)
+            {
+                _log.LogInfo(
+                    $"[actor] {quieted} of the source character's own script(s) were removed from the " +
+                    $"body before it was ever enabled: {quietedNames}.");
+            }
+
             _animator = animator;
             _helmetJoint = helmet;
             _bodyModel = body;
@@ -968,6 +1001,99 @@ internal sealed class CompanionActor
                 UnityEngine.Object.DestroyImmediate(body);
             }
         }
+    }
+
+    /// <summary>Takes the source character's own scripts out of a subtree that
+    /// has not been switched on yet, and says what went.
+    ///
+    /// This is not the "instantiate it and strip it afterwards" approach the
+    /// whole extraction exists to avoid, and the difference is the entire
+    /// point: every component here is destroyed while its object is still
+    /// INACTIVE, so none of it has run and none of it can have registered
+    /// itself anywhere. Stripping removes something that already woke. This
+    /// removes something that never will.
+    ///
+    /// The rule is a type test rather than another name list, because the
+    /// problem is not any one class. A MonoBehaviour inside a character's
+    /// visual subtree is game code written for a live character - and the
+    /// refusal above has just guaranteed this figure has no <c>Character</c>,
+    /// no <c>ZNetView</c> and no AI anywhere above it, so that code has
+    /// nothing to be written for. <c>CharacterAnimEvent</c> is the one
+    /// production found: its <c>Awake</c> dereferences
+    /// <c>GetComponentInParent&lt;Character&gt;()</c> immediately, and its
+    /// <c>OnEnable</c> puts it in a static list <c>MonoUpdaters</c> walks every
+    /// FixedUpdate and LateUpdate - so a half-built one does not merely log
+    /// once; it sits inside the game's own update loop for the session.
+    ///
+    /// Nothing that draws him is a MonoBehaviour. <c>Animator</c>,
+    /// <c>Renderer</c>, <c>SkinnedMeshRenderer</c>, <c>LODGroup</c> and
+    /// <c>Transform</c> are all built-in components, so this cannot take away
+    /// the body, the rig, the mesh or the animation. Anything Unity refuses to
+    /// destroy - a <c>[RequireComponent]</c> dependency, which it refuses by
+    /// writing to the log and carrying on rather than by throwing - is
+    /// disabled instead and named in the summary, so that case is visible
+    /// rather than silent. The cloth family is left to <c>RemoveCloth</c>,
+    /// which disables it for exactly that reason and should not have the
+    /// decision re-litigated one method later.</summary>
+    private static int RemoveBehaviours(GameObject subtree, out string names)
+    {
+        var removed = new List<string>();
+        var refused = new List<string>();
+
+        // Twice. A [RequireComponent] destroy is refused while the component
+        // declaring it is still present, and the enumeration order is the
+        // prefab's, not the dependency's; one retry clears the ordinary case
+        // of a dependent that happened to come second.
+        for (int pass = 0; pass < 2; pass++)
+        {
+            foreach (MonoBehaviour script in
+                subtree.GetComponentsInChildren<MonoBehaviour>(includeInactive: true))
+            {
+                if (script == null)
+                {
+                    continue;
+                }
+
+                Type type = script.GetType();
+                if (type.Namespace != null &&
+                    type.Namespace.StartsWith("TheConcernedCat", StringComparison.Ordinal))
+                {
+                    // Ours, put on a figure we own, on purpose.
+                    continue;
+                }
+
+                if (type.Name.IndexOf("Cloth", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    // RemoveCloth owns that family, and disables rather than
+                    // destroys for a documented reason: those components
+                    // declare [RequireComponent] on each other, and Unity
+                    // refuses the destroy by writing an error to the player's
+                    // log. Attempting it again here would trade one logged
+                    // error for another, which is not a fix.
+                    continue;
+                }
+
+                UnityEngine.Object.DestroyImmediate(script);
+                if (script == null)
+                {
+                    removed.Add(type.Name);
+                }
+                else if (pass == 1 && script.enabled)
+                {
+                    script.enabled = false;
+                    refused.Add(type.Name);
+                }
+            }
+        }
+
+        names = removed.Count == 0 ? "<none>" : string.Join(", ", removed);
+        if (refused.Count > 0)
+        {
+            names += $" (still present, disabled instead because this build refuses to destroy them: " +
+                $"{string.Join(", ", refused)})";
+        }
+
+        return removed.Count;
     }
 
     /// <summary>Gives the extracted model the owner's reference appearance.
@@ -1109,6 +1235,12 @@ internal sealed class CompanionActor
             RemovePhysics(piece);
             int cloth = RemoveCloth(piece);
 
+            // Same rule as the body, and for the same reason: this piece is
+            // about to be parented into a LIVE figure, which is what wakes it.
+            // Whatever scripts an item's attachment mesh carries, they were
+            // written for a character that is wearing it.
+            int pieceScripts = RemoveBehaviours(piece, out string pieceScriptNames);
+
             // Whether the mesh is SKINNED decides how it attaches, and the
             // child's name is only a hint at that. A skinned mesh is drawn by
             // its bones, not by its transform: its vertices are authored in
@@ -1154,7 +1286,8 @@ internal sealed class CompanionActor
             Tint(piece, colour);
             _log.LogInfo(
                 $"[appearance] {slot} {prefabName}: {DescribePiece(prefab, piece)}" +
-                (cloth > 0 ? $" cloth-stripped={cloth}" : string.Empty));
+                (cloth > 0 ? $" cloth-stripped={cloth}" : string.Empty) +
+                (pieceScripts > 0 ? $" scripts-removed=[{pieceScriptNames}]" : string.Empty));
 
             GameObject attached = piece;
             piece = null;
@@ -1666,6 +1799,11 @@ internal sealed class CompanionActor
 
             RemovePhysics(piece);
             RemoveCloth(piece);
+            if (RemoveBehaviours(piece, out string garmentScripts) > 0)
+            {
+                _log.LogInfo(
+                    $"[appearance] {slot} {prefabName} ({jointName}): scripts-removed=[{garmentScripts}]");
+            }
 
             if (string.Equals(jointName, "skin", StringComparison.Ordinal))
             {
