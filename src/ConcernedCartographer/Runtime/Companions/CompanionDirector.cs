@@ -561,6 +561,9 @@ internal sealed class CompanionDirector : IDisposable
         PlacementResult placement = _hulgiPlanner.Plan(_anchor, _hulgiProbe);
         if (!placement.Found)
         {
+            // Nothing was rebuilt, so there is no outcome to judge. Left set,
+            // this would be judged against some unrelated future rebuild.
+            _upgradeFrom = null;
             _actorRetryElapsed = ActorRetrySeconds;
             _rateLimited.Warning(
                 "companion-actor-placement",
@@ -576,6 +579,7 @@ internal sealed class CompanionDirector : IDisposable
             // Every fallback was exhausted. Presentation is disabled with an
             // actionable notice; the companion still exists, still counts, and
             // still unlocked the tools.
+            _upgradeFrom = null;
             _presentationSupported = false;
             ShowNotice(AtlasStrings.Get("companion.presentationUnavailable"));
             return;

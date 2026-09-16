@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.1.2 - Hulgi, dressed and seated
+
+1.1.1 shipped him bald, because his hair rendered a metre from his head and the
+build removed it rather than leave it floating. It also shipped a companion who
+would ignore a chair built beside him. Both are fixed, and this time the
+clothing was looked at rather than assumed.
+
+Fixed
+
+- **His hair is on his head.** Unity skins a mesh by bone *index*: a vertex
+  weight names bone slot 17, and the mesh's own bind pose matrix 17 is what
+  undoes slot 17's rest position. A vanilla hair or armour mesh is authored
+  against the player skeleton, so the correct bone array is the body's own,
+  in the body's own order - which is exactly what the game assigns. This build
+  was matching bone to bone by *name* instead, which keeps the mesh's ordering.
+  Where the two orders agree that is the same array and nothing is wrong, which
+  is why the beard was always right; where they disagree every vertex is
+  weighted to the wrong joint and the mesh is drawn somewhere else entirely.
+  Same bone count, same names, a complete match, and a braid 0.99 m in the air.
+- **He takes a chair built after he has settled.** The placement plan was made
+  once and revisited only when the home point moved or his seat was lost, so a
+  bench built beside him stood empty until something else forced a rehome. He
+  now looks up every half minute while he is on nothing better than the ground,
+  and moves only for a strictly better seat - never for an equally good one, so
+  he does not drift around the camp. Once he is on a seat he stops looking.
+- **Cloth is stripped from hair and beards too, not only from garments.** The
+  game's cloth simulation rebuilds itself against the skeleton it was saved
+  with, and for an attached piece that skeleton no longer exists. A braid is
+  exactly the sort of thing it simulates.
+
+Added
+
+- **He is dressed.** Hulgi wears a vanilla rag tunic and vanilla leather pants,
+  found by their own in-game names in your build's item table. Presentation
+  only: no armour value, no item, nothing transferred, nothing taken.
+- `cc_companion pose <stand|ground|seat>` poses him where he sits so his
+  clothing can be looked at in more than one shape. Local and not saved; he
+  returns to his own idle when he is next rebuilt.
+- `cc_companion status` now reports how far each attached piece is from where it
+  belongs, so "it fits" can be told from "it fits by four centimetres".
+
 ## 1.1.1 - Hulgi, played
 
 1.1.0 was written and tested without anybody having played it. This is what
