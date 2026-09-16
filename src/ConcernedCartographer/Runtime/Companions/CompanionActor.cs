@@ -82,6 +82,16 @@ internal sealed class ActorReport
     /// be inside a generous tolerance.</summary>
     public string Fit { get; set; } = "<unmeasured>";
 
+    /// <summary>How the player can reach him: whether the game's own hover
+    /// raycast has anything to hit, or whether he is reachable only by walking
+    /// up and pressing Use.</summary>
+    public string Interaction { get; private set; } = "<none>";
+
+    public void NoteInteraction(string how)
+    {
+        Interaction = how;
+    }
+
     public override string ToString()
     {
         return $"source={SourcePrefab} skeleton={UsedSkeleton} hair={Hair} ({(HairAttached ? "attached" : "not attached")}) " +
@@ -92,7 +102,7 @@ internal sealed class ActorReport
             $"{(HairColourObserved ? " (palette)" : " (fallback)")} skin={SkinColourApplied} " +
             $"chest={Chest} ({(ChestAttached ? "worn" : "not worn")}) " +
             $"legs={Legs} ({(LegsAttached ? "worn" : "not worn")}) " +
-            $"pose={Pose} state={PoseState ?? "<default>"} fit=[{Fit}]";
+            $"pose={Pose} state={PoseState ?? "<default>"} fit=[{Fit}] interact={Interaction}";
     }
 }
 
@@ -606,6 +616,91 @@ internal sealed class CompanionActor
         }
 
         return false;
+    }
+
+
+    /// <summary>Gives him something for the game's hover raycast to hit.
+    ///
+    /// Without this he has a name and a Talk verb that nobody can ever see: the
+    /// extracted model carries no collider - every one of them is stripped,
+    /// because a companion who blocks a doorway is a companion who has gone
+    /// wrong - and <c>Player.FindHoverObject</c> is a physics raycast. No
+    /// collider, no hit, no prompt. Walking up and pressing Use still worked,
+    /// through the proximity fallback, which is exactly why this went unnoticed:
+    /// the interaction worked and only the invitation was missing.
+    ///
+    /// The volume is a child rather than the root, so the model's own layers
+    /// are left alone, and the raycast still finds the right component because
+    /// the game resolves it with <c>GetComponentInParent&lt;Hoverable&gt;</c>.
+    /// It sits on <c>piece_nonsolid</c> - a layer that is in the interact mask
+    /// and, by the game's own collision matrix, does not stop a body. That is
+    /// the same arrangement the Broken Compass already uses.</summary>
+    private void BuildInteractionVolume()
+    {
+        if (_root == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var volume = new GameObject("CC_HulgiInteract");
+            volume.transform.SetParent(_root.transform, worldPositionStays: false);
+            volume.transform.localPosition = Vector3.zero;
+            volume.transform.localRotation = Quaternion.identity;
+
+            var collider = volume.AddComponent<CapsuleCollider>();
+            collider.radius = 0.45f;
+            collider.height = 1.5f;
+            collider.center = new Vector3(0f, 0.75f, 0f);
+
+            int layer = ResolveNonSolidLayer();
+            if (layer >= 0)
+            {
+                volume.layer = layer;
+                Report?.NoteInteraction("hover volume on " + LayerMask.LayerToName(layer));
+                return;
+            }
+
+            // No non-solid layer on this build. A trigger cannot stop a body
+            // either, so he still does not block anything; whether the hover
+            // raycast reaches it depends on the project's trigger query
+            // setting, and the proximity prompt covers the case where it does
+            // not.
+            collider.isTrigger = true;
+            Report?.NoteInteraction("hover volume on a pass-through trigger");
+        }
+        catch (Exception exception)
+        {
+            Report?.NoteInteraction("no hover volume");
+            _log.LogInfo(
+                "The companion could not be given a hover volume, so he is spoken to from the " +
+                $"proximity prompt only: {SafeLogText.Brief(exception)}");
+        }
+    }
+
+    /// <summary>The first interaction layer this build actually has. Named
+    /// rather than numbered: layer indices are project data and have moved
+    /// between versions.</summary>
+    private static int ResolveNonSolidLayer()
+    {
+        foreach (string name in new[] { "piece_nonsolid", "item" })
+        {
+            try
+            {
+                int layer = LayerMask.NameToLayer(name);
+                if (layer >= 0)
+                {
+                    return layer;
+                }
+            }
+            catch
+            {
+                // Try the next name.
+            }
+        }
+
+        return -1;
     }
 
     /// <summary>Gets him on his feet for a stroll. Clears the sitting
@@ -1995,6 +2090,7 @@ internal sealed class CompanionActor
         try
         {
             CompanionHover.Attach(_root, _onTalk, _log);
+            BuildInteractionVolume();
         }
         catch (Exception exception)
         {
