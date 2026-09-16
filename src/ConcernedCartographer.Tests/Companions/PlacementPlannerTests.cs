@@ -167,16 +167,19 @@ public class PlacementPlannerTests
     }
 
     [Fact]
-    public void AFreeSeatOutranksWarmthButAWarmSeatOutranksBoth()
+    public void WarmthOutranksAColdSeatButAWarmSeatOutranksBoth()
     {
         SeatOffer offer = SeatOffer.Free(new WorldPoint(4f, 30f, 4f), 0f, "attach_chair");
 
-        // A cold seat beats a warm patch of ground...
+        // The owner's rule: break the campfire, build one outside, and he
+        // leaves his chair for it. A warm patch of ground beats a cold seat...
         var seatVsFire = new StubProbe(position =>
             position.Z > 3f
                 ? new PlacementProbeSample(position, PlacementRejection.None, -1f, offer)
                 : new PlacementProbeSample(position, PlacementRejection.None, 0f, SeatOffer.None));
-        Assert.Equal(CompanionPose.SitOnSeat, new PlacementPlanner().Plan(Bed, seatVsFire).Pose);
+        PlacementResult warm = new PlacementPlanner().Plan(Bed, seatVsFire);
+        Assert.Equal(CompanionPose.SitByFire, warm.Pose);
+        Assert.Equal(2, warm.Value);
 
         // ...and a seat by the fire beats a seat in the cold.
         var warmSeat = new StubProbe(position =>
@@ -185,6 +188,7 @@ public class PlacementPlannerTests
         PlacementResult result = new PlacementPlanner().Plan(Bed, warmSeat);
         Assert.Equal(CompanionPose.SitOnSeat, result.Pose);
         Assert.True(result.Position.Z > 3f);
+        Assert.Equal(3, result.Value);
     }
 
     [Fact]
@@ -314,6 +318,33 @@ public class PlacementPlannerTests
         Assert.Throws<ArgumentOutOfRangeException>(
             () => new PlacementRules(minimumRadius: 10f, maximumRadius: 3f));
         Assert.Throws<ArgumentOutOfRangeException>(() => new PlacementRules(minimumRadius: -1f));
+    }
+
+    [Fact]
+    public void AnAcceptFilterSkipsSpotsWithoutCallingThemHazards()
+    {
+        // How "the best spot he can walk to" is asked: a closed door makes the
+        // chair inside unreachable, which says nothing bad about the chair.
+        SeatOffer inside = SeatOffer.Free(new WorldPoint(1f, 30f, 1f), 0f, "attach_chair");
+        SeatOffer log = SeatOffer.Free(new WorldPoint(-6f, 30f, 0f), 90f, "attach_bench");
+        var probe = new SeatingProbe(
+            _ => PlacementRejection.Occupied,
+            new PlacementProbeSample(inside.Position, PlacementRejection.None, 0f, inside),
+            new PlacementProbeSample(log.Position, PlacementRejection.None, -1f, log));
+
+        PlacementResult unfiltered = new PlacementPlanner().Plan(Bed, probe);
+        Assert.Equal(1f, unfiltered.Seat.Position.X, 3);
+        Assert.Equal(3, unfiltered.Value);
+
+        PlacementResult reachable = new PlacementPlanner().Plan(
+            Bed, probe, accept: sample => sample.Position.X < 0f);
+        Assert.True(reachable.Found);
+        Assert.Equal(-6f, reachable.Seat.Position.X, 3);
+        Assert.Equal(1, reachable.Value);
+
+        PlacementResult nothing = new PlacementPlanner().Plan(Bed, probe, accept: _ => false);
+        Assert.False(nothing.Found);
+        Assert.Equal(PlacementRejection.Occupied, nothing.BlockedBy);
     }
 
     [Fact]

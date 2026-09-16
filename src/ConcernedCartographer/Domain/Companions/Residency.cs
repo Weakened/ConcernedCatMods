@@ -50,7 +50,8 @@ internal enum SeatStatus
 /// moves and when a seat is lost, and never merely because a fresh sweep liked
 /// a different spot of the same rank — that twitchiness is what makes a
 /// companion look like he is pacing between sessions. An upgrade is the single
-/// exception and it only ever ratchets one way: ground, then fire, then seat.
+/// exception and it only ever ratchets one way, up the planner's own scale:
+/// bare ground, then a seat, then warmth, then a seat by the fire.
 ///
 /// Carrying the comparison as a value rather than a bool is what lets the rule
 /// be stated once, here, instead of in the adapter that happens to do the
@@ -63,11 +64,45 @@ internal readonly struct SeatUpgrade
     public static readonly SeatUpgrade NotSurveyed = default;
 
     public SeatUpgrade(CompanionPose placed, CompanionPose offered)
+        : this(ValueOf(placed), ValueOf(offered))
     {
-        Surveyed = true;
         Placed = placed;
         Offered = offered;
     }
+
+    /// <summary>The comparison the runtime actually makes: the value of the spot
+    /// he is in as the world stands NOW, against the best on offer, both on
+    /// <c>PlacementPlanner.ValueOf</c>'s scale. The pose he was placed in is not
+    /// enough - break the fire beside him and his "by the fire" pose is still
+    /// recorded while the spot has gone cold, and he would never look
+    /// elsewhere.</summary>
+    public SeatUpgrade(int currentValue, int offeredValue)
+    {
+        Surveyed = true;
+        CurrentValue = currentValue;
+        OfferedValue = offeredValue;
+        Placed = default;
+        Offered = default;
+    }
+
+    /// <summary>A pose on the same scale, for callers that only know poses: a
+    /// seat 1, a fire 2, the ground 0.</summary>
+    private static int ValueOf(CompanionPose pose)
+    {
+        switch (pose)
+        {
+            case CompanionPose.SitByFire:
+                return 2;
+            case CompanionPose.SitOnSeat:
+                return 1;
+            default:
+                return 0;
+        }
+    }
+
+    public int CurrentValue { get; }
+
+    public int OfferedValue { get; }
 
     /// <summary>Whether a sweep actually ran. A sweep that ran and found
     /// nothing better is not the same as no sweep, and neither moves him.
@@ -85,7 +120,7 @@ internal readonly struct SeatUpgrade
     /// rank never moves him either, so a chair being carried away does not
     /// shuffle him sideways onto the grass — losing the seat does that, and
     /// that is a different signal with its own backoff.</summary>
-    public bool IsWorthMoving => Surveyed && Offered > Placed;
+    public bool IsWorthMoving => Surveyed && OfferedValue > CurrentValue;
 }
 
 /// <summary>What the runtime should do about the companion actor this pass.</summary>

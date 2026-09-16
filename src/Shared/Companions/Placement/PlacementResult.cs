@@ -5,7 +5,7 @@ internal readonly struct PlacementResult
 {
     private PlacementResult(
         bool found, WorldPoint position, CompanionPose pose, int candidatesProbed,
-        PlacementRejection blockedBy, SeatOffer seat)
+        PlacementRejection blockedBy, SeatOffer seat, int value)
     {
         Found = found;
         Position = position;
@@ -13,7 +13,13 @@ internal readonly struct PlacementResult
         CandidatesProbed = candidatesProbed;
         BlockedBy = blockedBy;
         Seat = seat;
+        Value = value;
     }
+
+    /// <summary>How good the chosen spot is, on the planner's own scale - see
+    /// <see cref="PlacementPlanner.ValueOf"/>. Lets a caller ask "is this better
+    /// than where he is now" with the same rule that chose it.</summary>
+    public int Value { get; }
 
     /// <summary>True when a spot was found. False means defer and try again
     /// later - never place anyway.</summary>
@@ -36,15 +42,16 @@ internal readonly struct PlacementResult
     public SeatOffer Seat { get; }
 
     public static PlacementResult Placed(
-        WorldPoint position, CompanionPose pose, int candidatesProbed, SeatOffer seat = default)
+        WorldPoint position, CompanionPose pose, int candidatesProbed, SeatOffer seat = default,
+        int value = 0)
     {
         return new PlacementResult(
-            true, position, pose, candidatesProbed, PlacementRejection.None, seat);
+            true, position, pose, candidatesProbed, PlacementRejection.None, seat, value);
     }
 
     public static PlacementResult Deferred(int candidatesProbed, PlacementRejection blockedBy)
     {
         return new PlacementResult(
-            false, default, CompanionPose.SitOnGround, candidatesProbed, blockedBy, SeatOffer.None);
+            false, default, CompanionPose.SitOnGround, candidatesProbed, blockedBy, SeatOffer.None, 0);
     }
 }

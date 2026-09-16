@@ -3159,9 +3159,12 @@ internal sealed class CartographerRuntime : IDisposable
             case "placement":
                 return _companions.DescribePlacement();
 
+            case "summon":
+                return _companions.Summon();
+
             default:
                 return "Unknown subcommand. Use: status, toolsonly <on|off>, story, show <on|off>, " +
-                    "where, placement, appearance, pose <stand|ground|seat>, path, reset [quest|bed|day|all].";
+                    "where, placement, summon, appearance, pose <stand|ground|seat>, path, reset [quest|bed|day|all].";
         }
     }
 

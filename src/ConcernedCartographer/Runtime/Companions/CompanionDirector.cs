@@ -118,6 +118,17 @@ internal sealed class CompanionDirector : IDisposable
     /// round is enough to see it work.</summary>
     private const float SeatUpgradeSeconds = 30f;
 
+    /// <summary>How close a new spot must be for him to walk there instead of
+    /// being put there. Beyond it - a bed claimed across the island - a walk
+    /// would take longer than anybody would wait to see him arrive.</summary>
+    private const float WalkRelocateMetres = 30f;
+
+    /// <summary>How often the camp is fingerprinted - fires and whether they
+    /// burn, seats, doors and whether they are open - so a change is noticed in
+    /// about a second and acted on at once, without re-surveying every spot on
+    /// a timer. The full survey stays as a 30-second safety net.</summary>
+    private const float CampCheckSeconds = 1f;
+
     /// <summary>Walking pace. A stroll, not a march: he is crossing a camp, not
     /// going anywhere.</summary>
     private const float StrollSpeed = 1.6f;
@@ -176,6 +187,21 @@ internal sealed class CompanionDirector : IDisposable
     private float _placementRetryElapsed;
     private float _residencyElapsed;
     private float _seatUpgradeElapsed;
+
+    /// <summary>A walk to a new spot, when a nearby rehome or upgrade sent him on
+    /// foot instead of rebuilding him there. Settled into on arrival.</summary>
+    private PlacementResult _relocation;
+    private bool _relocating;
+    private float _relocationPatience;
+
+    private float _campCheckElapsed;
+    private int _campSignature;
+
+    /// <summary>Set when the camp fingerprint changed, until the survey it
+    /// asked for has run. Lets that one survey happen even mid-wander.</summary>
+    private bool _campChanged;
+    private readonly Collider[] _campBuffer = new Collider[256];
+    private int _campMask = -1;
 
     private RoutineState _routine = RoutineState.Settled;
     private float _routineElapsed;
@@ -434,6 +460,14 @@ internal sealed class CompanionDirector : IDisposable
             }
 
             _seatUpgradeElapsed += deltaTime;
+
+            _campCheckElapsed += deltaTime;
+            if (_campCheckElapsed >= CampCheckSeconds)
+            {
+                _campCheckElapsed = 0f;
+                NoticeCampChanges();
+            }
+
             _residencyElapsed += deltaTime;
             if (_residencyElapsed >= ResidencyIntervalSeconds)
             {
@@ -585,7 +619,22 @@ internal sealed class CompanionDirector : IDisposable
             ReadSeatStatus(),
             ReadSeatUpgrade());
 
-        switch (ResidencyPlanner.Decide(inputs))
+        ResidencyAction action = ResidencyPlanner.Decide(inputs);
+
+        // On his way somewhere: only a reason to take him away entirely
+        // interrupts. Everything else waits until he has sat down.
+        if (_relocating)
+        {
+            if (action == ResidencyAction.Remove)
+            {
+                _relocating = false;
+                _actor.Release();
+            }
+
+            return;
+        }
+
+        switch (action)
         {
             case ResidencyAction.Remove:
                 _actor.Release();
@@ -593,6 +642,14 @@ internal sealed class CompanionDirector : IDisposable
 
             case ResidencyAction.Rehome:
             {
+                // Close enough to walk: he gets up and goes, rather than
+                // vanishing and reappearing. The same plan a rebuild would use,
+                // restricted to spots he can actually reach on foot.
+                if (TryBeginRelocation())
+                {
+                    return;
+                }
+
                 // A rehome caused by losing a seat keeps the ordinary backoff.
                 // Everything else - the anchor moved, a bed was destroyed - is
                 // a player-visible event and settles immediately.
@@ -794,15 +851,17 @@ internal sealed class CompanionDirector : IDisposable
     /// strictly better pose.</summary>
     private SeatUpgrade ReadSeatUpgrade()
     {
-        if (!_actor.Exists || !_anchor.IsValid || _actor.Pose >= CompanionPose.SitOnSeat)
+        // Seated is no longer a reason not to look: a chair inside is worth
+        // leaving when the only fire is now outside.
+        if (!_actor.Exists || !_anchor.IsValid)
         {
             return SeatUpgrade.NotSurveyed;
         }
 
-        // Not while he is on his feet. A rehome tears the actor down and
-        // rebuilds it at the planned spot, which mid-stroll is a companion
-        // teleporting across his own camp.
-        if (_routine != RoutineState.Settled)
+        // Not while he is idly on his feet - unless the camp just changed. A
+        // fire broken or built is worth reacting to mid-wander; the timer alone
+        // is not.
+        if (_routine != RoutineState.Settled && !_campChanged)
         {
             return SeatUpgrade.NotSurveyed;
         }
@@ -813,8 +872,15 @@ internal sealed class CompanionDirector : IDisposable
         }
 
         _seatUpgradeElapsed = 0f;
+        _campChanged = false;
 
-        PlacementResult offer = _hulgiPlanner.Plan(_anchor, _hulgiProbe);
+        // Measured against the spot as the world stands now, and only spots
+        // better than it are asked whether he can walk there - route queries
+        // are the expensive part, and most candidates are never better.
+        int current = CurrentSpotValue();
+        PlacementResult offer = _hulgiPlanner.Plan(
+            _anchor, _hulgiProbe, accept: sample =>
+                _hulgiPlanner.ValueOf(sample) > current && CanWalkToSpot(sample.Position));
         if (!offer.Found)
         {
             return SeatUpgrade.NotSurveyed;
@@ -822,7 +888,260 @@ internal sealed class CompanionDirector : IDisposable
 
         _sweptPlan = offer;
         _sweptPlanValid = true;
-        return new SeatUpgrade(_actor.Pose, offer.Pose);
+        return new SeatUpgrade(current, offer.Value);
+    }
+
+    /// <summary>How good the spot he occupies is right now, on the planner's
+    /// scale: warmth as the world reads it at his feet this moment, and his
+    /// seat if he is on one.</summary>
+    private int CurrentSpotValue()
+    {
+        Vector3 at = _actor.Position;
+        PlacementProbeSample here = _hulgiProbe.Probe(new WorldPoint(at.x, at.y, at.z));
+        SeatOffer seat = _actor.Pose == CompanionPose.SitOnSeat ? _actor.Seat : SeatOffer.None;
+        return _hulgiPlanner.ValueOf(new PlacementProbeSample(
+            here.Position, PlacementRejection.None, here.DistanceToFire, seat));
+    }
+
+    private bool CanWalkToSpot(WorldPoint spot)
+    {
+        var target = new Vector3(spot.X, spot.Y, spot.Z);
+        return _actor.Exists && _actor.CanWalk &&
+            Vector3.Distance(_actor.Position, target) <= WalkRelocateMetres &&
+            TryRoute(target);
+    }
+
+    /// <summary>Starts the walk to the best spot he can reach, when there is one
+    /// close enough. False sends the caller down the old rebuild path.</summary>
+    private bool TryBeginRelocation()
+    {
+        if (!_actor.Exists || !_actor.CanWalk || !_settings.CompanionVisible.Value || !_anchor.IsValid)
+        {
+            return false;
+        }
+
+        PlacementResult plan = _sweptPlanValid
+            ? _sweptPlan
+            : _hulgiPlanner.Plan(_anchor, _hulgiProbe, accept: sample => CanWalkToSpot(sample.Position));
+        if (!plan.Found)
+        {
+            return false;
+        }
+
+        Vector3 target = TargetOf(plan);
+        if (Vector3.Distance(_actor.Position, target) > WalkRelocateMetres || !TryRoute(target))
+        {
+            return false;
+        }
+
+        float length = 0f;
+        for (int index = 1; index < _routeScratch.Count; index++)
+        {
+            length += Vector3.Distance(_routeScratch[index - 1], _routeScratch[index]);
+        }
+
+        _strollRoute.Clear();
+        _strollRoute.AddRange(_routeScratch);
+        _strollCorner = 1;
+        _strollTarget = target;
+        _relocation = plan;
+        _relocating = true;
+        _actor.StandUp();
+        EnterRoutine(RoutineState.Strolling);
+
+        // Generous: a route with a doorway in it is slower than its length.
+        _relocationPatience = (length / StrollSpeed * 1.5f) + 6f;
+        _actor.RememberAnchor(_anchor);
+
+        _log.LogInfo(
+            $"Hulgi is getting up and walking {length:0.0} m to {DescribeSpot(plan)}" +
+            (_strollRoute.Count > 2 ? $" by a route with {_strollRoute.Count - 2} turn(s)." : "."));
+        return true;
+    }
+
+    private static Vector3 TargetOf(PlacementResult plan)
+    {
+        WorldPoint point = plan.Pose == CompanionPose.SitOnSeat && plan.Seat.IsUsable
+            ? plan.Seat.Position
+            : plan.Position;
+        return new Vector3(point.X, point.Y, point.Z);
+    }
+
+    private static string DescribeSpot(PlacementResult plan)
+    {
+        switch (plan.Pose)
+        {
+            case CompanionPose.SitOnSeat:
+                return plan.Value >= 3 ? "a seat by the fire" : "a seat";
+            case CompanionPose.SitByFire:
+                return "the fire";
+            default:
+                return "a quiet spot";
+        }
+    }
+
+    /// <summary>One step of a walk to a new spot, and the arrival. A seat is
+    /// arrived at when he is right beside it - the seat itself is often what
+    /// stops him - and then he sits exactly where a rebuild would have put him.
+    /// If he cannot get there on foot at all, he is put there the old way,
+    /// rather than left standing in the middle of the camp.</summary>
+    private void TickRelocation(float deltaTime)
+    {
+        if (!_actor.Exists)
+        {
+            _relocating = false;
+            return;
+        }
+
+        _routineElapsed += deltaTime;
+        WalkStep step = FollowRoute(deltaTime);
+        if (step == WalkStep.Walking && _routineElapsed < _relocationPatience)
+        {
+            return;
+        }
+
+        _relocating = false;
+        _actor.StopWalking();
+
+        bool beside = Vector3.Distance(_actor.Position, _strollTarget) <= 1.5f;
+        if (step == WalkStep.Arrived || beside)
+        {
+            _actor.SettleInto(_relocation.Position, _relocation.Pose, _relocation.Seat);
+            EnterRoutine(RoutineState.Settled);
+            _log.LogInfo($"Hulgi sat down at {DescribeSpot(_relocation)}.");
+            return;
+        }
+
+        _log.LogInfo(
+            "Hulgi could not reach his new spot on foot, so he is put there instead. " +
+            "Nothing about your tools or progress is affected.");
+        _actor.Release();
+        _actorRetryElapsed = 0f;
+    }
+
+    /// <summary>Fingerprints what makes a spot good or reachable near his home:
+    /// every fire and whether it burns, every seat, every door and whether it is
+    /// open. When the fingerprint changes he re-plans on the very next pass
+    /// instead of waiting for the half-minute survey - which is what makes him
+    /// notice a campfire being broken, or built, within a second.
+    ///
+    /// Order-independent (XOR of per-object hashes), so the order physics
+    /// happens to return colliders in cannot look like a change.</summary>
+    private void NoticeCampChanges()
+    {
+        if (!_actor.Exists || !_anchor.IsValid || _relocating)
+        {
+            return;
+        }
+
+        int signature = 0;
+        try
+        {
+            if (_campMask == -1)
+            {
+                _campMask = LayerMask.GetMask("piece", "piece_nonsolid", "Default_small");
+            }
+
+            var centre = new Vector3(_anchor.Position.X, _anchor.Position.Y, _anchor.Position.Z);
+            int count = Physics.OverlapSphereNonAlloc(
+                centre, HulgiRules.MaximumRadius + 5f, _campBuffer, _campMask, QueryTriggerInteraction.Collide);
+
+            var seen = new HashSet<Component>();
+            for (int index = 0; index < count; index++)
+            {
+                Collider hit = _campBuffer[index];
+                if (hit == null)
+                {
+                    continue;
+                }
+
+                Component? thing = (Component?)hit.GetComponentInParent<Fireplace>()
+                    ?? (Component?)hit.GetComponentInParent<Chair>()
+                    ?? hit.GetComponentInParent<Door>();
+                if (thing == null || !seen.Add(thing))
+                {
+                    continue;
+                }
+
+                Vector3 at = thing.transform.position;
+                int state = thing is Fireplace fire
+                    ? (fire.IsBurning() ? 1 : 2)
+                    : thing is Door door
+                        ? DoorState(door) + 3
+                        : 7;
+
+                unchecked
+                {
+                    int hash = (Mathf.RoundToInt(at.x * 4f) * 73856093) ^
+                        (Mathf.RoundToInt(at.y * 4f) * 19349663) ^
+                        (Mathf.RoundToInt(at.z * 4f) * 83492791) ^
+                        (state * 2654435);
+                    signature ^= hash;
+                }
+            }
+        }
+        catch (Exception)
+        {
+            return;
+        }
+
+        if (signature == _campSignature)
+        {
+            return;
+        }
+
+        bool firstLook = _campSignature == 0;
+        _campSignature = signature;
+        if (!firstLook)
+        {
+            // This very frame, not on the next two-second residency tick.
+            _campChanged = true;
+            _seatUpgradeElapsed = SeatUpgradeSeconds;
+            _residencyElapsed = ResidencyIntervalSeconds;
+            _log.LogInfo("Something changed around Hulgi's camp - a fire, a seat or a door; he looks again.");
+        }
+    }
+
+    /// <summary>0 closed, anything else open, read the way the door itself
+    /// reads it.</summary>
+    private static int DoorState(Door door)
+    {
+        ZNetView? view = door.GetComponent<ZNetView>();
+        ZDO? zdo = view == null ? null : view.GetZDO();
+        return zdo == null ? 0 : zdo.GetInt(ZDOVars.s_state);
+    }
+
+    /// <summary><c>cc_companion summon</c>: sits him on the ground two metres in
+    /// front of the player, for testing how he finds his way back to the best
+    /// spot he can reach. He looks again at once.</summary>
+    public string Summon()
+    {
+        Player player = Player.m_localPlayer;
+        if (player == null)
+        {
+            return "Summon: there is no player to bring him to.";
+        }
+
+        if (!_actor.Exists)
+        {
+            return "Summon: Hulgi is not placed right now, so there is nobody to bring over.";
+        }
+
+        Vector3 spot = player.transform.position + (player.transform.forward * 2f);
+        if (CompanionFooting.TryFind(spot, 2f, 4f, out Vector3 ground, out _))
+        {
+            spot = ground;
+        }
+
+        _relocating = false;
+        _actor.StopWalking();
+        _actor.SetDownAt(new WorldPoint(spot.x, spot.y, spot.z));
+        EnterRoutine(RoutineState.Settled);
+        _seatUpgradeElapsed = SeatUpgradeSeconds;
+
+        return "Hulgi is sitting two metres in front of you. Within a couple of seconds he looks " +
+            "for the best spot he can reach on foot and walks there - through open doorways, not " +
+            "closed ones. If nothing reachable is better than where he is, he stays.";
     }
 
 
@@ -841,6 +1160,14 @@ internal sealed class CompanionDirector : IDisposable
     /// who sits still just reads as still.</summary>
     private void UpdateRoutine(float deltaTime)
     {
+        // A walk to a new spot runs whether or not wandering is on: it is how he
+        // moves house, not how he passes the time.
+        if (_relocating)
+        {
+            TickRelocation(deltaTime);
+            return;
+        }
+
         if (!_actor.Exists || !_settings.CompanionWander.Value ||
             !_settings.CompanionVisible.Value || !_anchor.IsValid)
         {

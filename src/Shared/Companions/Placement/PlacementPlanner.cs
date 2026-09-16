@@ -23,9 +23,13 @@ namespace TheConcernedCat.Companions.Placement;
 /// somebody built to be sat on, wherever it is. When the probe also implements
 /// <see cref="ISeatFinder"/>, up to <see cref="MaximumSeats"/> free seats inside
 /// the band's OUTER edge and height limit are candidates in their own right,
-/// ranked exactly like ground - a seat scores above bare ground, warmth adds to
-/// either - and a seat no longer disappears because the ground probed beside it
-/// was rejected.</summary>
+/// ranked exactly like ground, and a seat no longer disappears because the
+/// ground probed beside it was rejected.
+///
+/// Ranking, per <see cref="ValueOf"/>: warmth outranks a seat, a seat outranks
+/// bare ground, and a seat by the fire outranks everything. Warmth first is the
+/// owner's call - break the campfire and build one outside, and he should leave
+/// his chair and head for it.</summary>
 internal sealed class PlacementPlanner
 {
     private const int RingCount = 4;
@@ -54,10 +58,15 @@ internal sealed class PlacementPlanner
     /// seat - with the rejections that decided it, <c>None</c> for a candidate
     /// that qualified. For diagnostics only; it cannot change the
     /// result.</param>
+    /// <param name="accept">Optional: a candidate that passes every rule is
+    /// still skipped when this says no - without counting as a rejection, since
+    /// nothing is wrong with the spot itself. Used to ask for the best spot a
+    /// companion can actually walk to.</param>
     public PlacementResult Plan(
         CompanionAnchor anchor,
         IPlacementProbe probe,
-        Action<PlacementProbeSample, PlacementRejection, bool>? observe = null)
+        Action<PlacementProbeSample, PlacementRejection, bool>? observe = null,
+        Func<PlacementProbeSample, bool>? accept = null)
     {
         if (probe == null)
         {
@@ -113,6 +122,11 @@ internal sealed class PlacementPlanner
                     continue;
                 }
 
+                if (accept != null && !accept(sample))
+                {
+                    continue;
+                }
+
                 int score = Score(sample);
                 float radiusError = Math.Abs(
                     sample.Position.HorizontalDistanceTo(anchor.Position) - idealRadius);
@@ -164,6 +178,11 @@ internal sealed class PlacementPlanner
                     continue;
                 }
 
+                if (accept != null && !accept(seat))
+                {
+                    continue;
+                }
+
                 int score = Score(seat);
                 float radiusError = Math.Abs(
                     seat.Position.HorizontalDistanceTo(anchor.Position) - idealRadius);
@@ -195,7 +214,7 @@ internal sealed class PlacementPlanner
         }
 
         return haveBest
-            ? PlacementResult.Placed(bestPosition, bestPose, probed, bestSeat)
+            ? PlacementResult.Placed(bestPosition, bestPose, probed, bestSeat, bestScore)
             : PlacementResult.Deferred(probed, blockedBy);
     }
 
@@ -256,15 +275,24 @@ internal sealed class PlacementPlanner
             : PlacementRejection.None;
     }
 
+    /// <summary>How good a spot is: 2 for warmth, 1 for a free seat, so a cold
+    /// seat is 1, a warm patch of ground 2 and a seat by the fire 3. Public so
+    /// the spot a companion already occupies can be measured on the same scale
+    /// as the best one on offer.</summary>
+    public int ValueOf(PlacementProbeSample sample)
+    {
+        return Score(sample);
+    }
+
     private int Score(PlacementProbeSample sample)
     {
         int score = 0;
-        if (sample.SeatOffer.IsUsable)
+        if (IsWarm(sample))
         {
             score += 2;
         }
 
-        if (IsWarm(sample))
+        if (sample.SeatOffer.IsUsable)
         {
             score += 1;
         }

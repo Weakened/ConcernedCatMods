@@ -762,6 +762,25 @@ internal sealed class CompanionActor
         ApplyPose(CompanionPose.SitOnGround);
     }
 
+    /// <summary>Sits him at a spot he has just walked to, exactly as a rebuild
+    /// there would have: onto the seat's own attachment point and heading when
+    /// it is a seat, onto the planned ground otherwise. No rebuild, no
+    /// teleport - he is already there.</summary>
+    public void SettleInto(WorldPoint position, CompanionPose pose, SeatOffer seat)
+    {
+        _seat = seat;
+        Place(position, pose);
+    }
+
+    /// <summary>Puts him on the ground at <paramref name="position"/>, off any
+    /// seat. Only for <c>cc_companion summon</c>, which exists to test how he
+    /// finds his way back.</summary>
+    public void SetDownAt(WorldPoint position)
+    {
+        _seat = SeatOffer.None;
+        Place(position, CompanionPose.SitOnGround);
+    }
+
     /// <summary>Puts him in a pose by hand, so he can be looked at in one.
     ///
     /// Presentation only, local only, and not persisted: it writes animator

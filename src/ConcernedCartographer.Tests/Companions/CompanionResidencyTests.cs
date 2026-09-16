@@ -67,6 +67,25 @@ public sealed class CompanionResidencyTests
     }
 
     [Fact]
+    public void Upgrade_AWarmSpotIsWorthLeavingAColdSeatForButNotAWarmSeat()
+    {
+        // The owner's test: he is on a chair inside, the campfire is broken
+        // and rebuilt outside. The chair is now worth 1, the new fireside 2.
+        Assert.Equal(
+            ResidencyAction.Rehome,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: true, current: Bed(), placed: Bed(),
+                upgrade: new SeatUpgrade(currentValue: 1, offeredValue: 2))));
+
+        // A seat already by the fire (3) is never left for warm ground (2).
+        Assert.Equal(
+            ResidencyAction.None,
+            ResidencyPlanner.Decide(Inputs(
+                actorPresent: true, current: Bed(), placed: Bed(),
+                upgrade: new SeatUpgrade(currentValue: 3, offeredValue: 2))));
+    }
+
+    [Fact]
     public void Upgrade_AnEqualOfferNeverMovesHim()
     {
         // The anti-twitch rule. A sweep that finds another patch of ground, or
