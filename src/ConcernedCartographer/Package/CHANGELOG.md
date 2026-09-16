@@ -9,26 +9,25 @@ clothing was looked at rather than assumed.
 
 Fixed
 
-- **His hair is on his head.** Unity skins a mesh by bone *index*: a vertex
-  weight names bone slot 17, and the mesh's own bind pose matrix 17 is what
-  undoes slot 17's rest position. A vanilla hair or armour mesh is authored
-  against the player skeleton, so the correct bone array is the body's own,
-  in the body's own order - which is exactly what the game assigns. This build
-  was matching bone to bone by *name* instead, which keeps the mesh's ordering.
-  Where the two orders agree that is the same array and nothing is wrong, which
-  is why the beard was always right; where they disagree every vertex is
-  weighted to the wrong joint and the mesh is drawn somewhere else entirely.
-  Same bone count, same names, a complete match, and a braid 0.99 m in the air.
+- **His hair is on his head.** It was cloth. The game simulates the braid, and
+  a cloth component rebuilds itself against the skeleton it was saved with the
+  moment it is switched on - which, for a piece we have just re-bound to the
+  companion's own body, is a skeleton that no longer exists. Hair carries two of
+  those components. Beards carry none, which is the whole reason the beard
+  landed correctly for a week while the braid hung 0.99 m in the air. Measured
+  in game: 0.26 m from his head against a tolerance of 0.45.
 - **He takes a chair built after he has settled.** The placement plan was made
   once and revisited only when the home point moved or his seat was lost, so a
   bench built beside him stood empty until something else forced a rehome. He
   now looks up every half minute while he is not already on a seat, and moves
   only for a strictly better place to sit - never for an equally good one, so he
   does not drift around the camp. Once he is on a seat he stops looking.
-- **Cloth is stripped from hair and beards too, not only from garments.** The
-  game's cloth simulation rebuilds itself against the skeleton it was saved
-  with, and for an attached piece that skeleton no longer exists. A braid is
-  exactly the sort of thing it simulates.
+- **Skinned pieces are bound the way the game binds them** - handed the body's
+  bone array whole, rather than matched joint by joint on name. For Hulgi's
+  hair the two happen to produce the same answer, so this fixed nothing on its
+  own; it is here because Unity skins by bone *index*, the game's own contract
+  is the array, and a piece whose bones are ordered differently from the body's
+  would otherwise be drawn somewhere else entirely with nothing to warn you.
 
 Added
 
