@@ -8,7 +8,7 @@ using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
 
-namespace TheConcernedCat.Shared.Settlement.Tests;
+namespace Shared.Settlement.Tests;
 
 /// <summary>Contract revision C1 of the cart and collection slice
 /// (docs/settlement/cart-and-collection/CONTRACTS.md): the rules every agent

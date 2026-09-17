@@ -665,7 +665,8 @@ public sealed class DesignationGuardTests : IDisposable
         Assert.True(File.Exists(_registers.ResolvePath(Scope)));
     }
 
-    [Fact]
+    [WindowsOnlyFact("the injected fault is a sharing violation from a journal held open with FileShare.None; " +
+        "the flag-based test above proves the same rule on every platform")]
     public void ARealJournalWriteFailureAlsoStopsTheRegisterWrite()
     {
         // The same rule against an actual I/O failure rather than a flag: the
