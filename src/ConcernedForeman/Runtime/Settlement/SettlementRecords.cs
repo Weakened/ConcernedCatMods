@@ -67,6 +67,10 @@ internal sealed class SettlementRecords
             Paths.ConfigPath, "ConcernedCatMods", "ConcernedForeman", "settlements");
     }
 
+    /// <summary>This world load's identity epoch; empty until a world's records
+    /// are open.</summary>
+    internal Guid LoadEpoch { get; private set; }
+
     /// <summary>The notice from the most recent load, or null. Held so that
     /// "this settlement is read-only and here is why" is answerable at any time
     /// rather than only in the log line nobody scrolled back to.</summary>
@@ -163,8 +167,11 @@ internal sealed class SettlementRecords
         // written before this moment names nothing now. Generating the epoch
         // HERE -- once per world open, not once per process -- is what makes
         // "before this load" and "during this load" distinguishable, including
-        // when the same world is reopened twice in one session.
-        _register.UseIdentityEpoch(Guid.NewGuid().ToString("N"));
+        // when the same world is reopened twice in one session. Custody uses
+        // the same epoch: it is the load epoch every schema-3 row carries and
+        // the epoch a delivery chest's key belongs to.
+        LoadEpoch = Guid.NewGuid();
+        _register.UseIdentityEpoch(LoadEpoch.ToString("N"));
 
         // Assigned last, so a throw anywhere above cannot leave the scope
         // pointing at a world whose records were never loaded.
@@ -251,5 +258,6 @@ internal sealed class SettlementRecords
         _journal = null;
         _scope = default;
         Notice = null;
+        LoadEpoch = Guid.Empty;
     }
 }

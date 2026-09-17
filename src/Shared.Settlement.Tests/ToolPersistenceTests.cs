@@ -256,22 +256,26 @@ public sealed class ToolPersistenceTests : IDisposable
         // announces a version an older build rejects outright, because such a
         // build cannot account for a tool somebody handed over and half-reading
         // would let it rewrite the file with the handovers deleted.
-        Assert.Equal(2, JournalStore.SchemaVersion);
+        // Schema 3 since gathered-material custody joined the record (#316):
+        // a schema-2 build cannot account for carried stone either, so the
+        // version it refuses moved up with it.
+        Assert.Equal(3, JournalStore.SchemaVersion);
 
         Assert.True(_store.Save(Handed()).Saved);
         string[] written = File.ReadAllLines(_store.ResolvePath(Scope));
 
-        Assert.Contains(written, line => line.StartsWith("v\t2\t", StringComparison.Ordinal));
+        Assert.Contains(written, line => line.StartsWith("v\t3\t", StringComparison.Ordinal));
         Assert.Contains(written, line => line.StartsWith("t\t", StringComparison.Ordinal));
     }
 
     [Fact]
     public void AFileFromANewerBuildIsRefusedWholeRatherThanHalfRead()
     {
+        // v4 now: v3 is this build's own schema (#316).
         File.WriteAllLines(_store.ResolvePath(Scope), new[]
         {
-            "#\tsettlement journal v3",
-            "v\t3\t" + Scope.ToStorageKey(),
+            "#\tsettlement journal v4",
+            "v\t4\t" + Scope.ToStorageKey(),
         });
 
         JournalStore.LoadReport report = _store.Load(Scope);

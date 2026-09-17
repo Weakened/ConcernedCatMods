@@ -42,11 +42,16 @@ internal sealed class DesignationTools
     /// instead of silently doing something else.</summary>
     private UndesignationPlan? _pending;
 
+    /// <summary>The custody subcommands (give, takeback, material answers,
+    /// reconcile), or null where custody is not wired.</summary>
+    private readonly Custody.CustodyTools? _custody;
+
     internal DesignationTools(
         Func<bool> hasAuthority,
         Func<string> describeMissingAuthority,
-        SettlementRecords records)
-        : this(hasAuthority, describeMissingAuthority, records, new WorldDesignationSite())
+        SettlementRecords records,
+        Custody.CustodyTools? custody = null)
+        : this(hasAuthority, describeMissingAuthority, records, new WorldDesignationSite(), custody)
     {
     }
 
@@ -54,12 +59,14 @@ internal sealed class DesignationTools
         Func<bool> hasAuthority,
         Func<string> describeMissingAuthority,
         SettlementRecords records,
-        IDesignationSite site)
+        IDesignationSite site,
+        Custody.CustodyTools? custody = null)
     {
         _hasAuthority = hasAuthority;
         _describeMissingAuthority = describeMissingAuthority;
         _records = records;
         _site = site;
+        _custody = custody;
     }
 
     /// <summary>Drops a plan the player was shown but never confirmed.
@@ -97,12 +104,18 @@ internal sealed class DesignationTools
             case "dismiss": return Dismiss(register, args);
             case "clear": return Clear(register, journal, args);
             case "resolve": return Resolve(journal, args);
+            case "give": return _custody == null ? NoCustody : _custody.Give(journal, args);
+            case "takeback": return _custody == null ? NoCustody : _custody.TakeBack(journal, args);
+            case "reconcile": return _custody == null ? NoCustody : _custody.Reconcile();
             default:
                 return "Unknown subcommand. Try: status, area <radius>, harvest <radius>, " +
                     "supply, recruit [name], dismiss [name], clear <area|harvest|supply> [yes], " +
-                    "resolve <request> mine|his.";
+                    "give axe|hammer, takeback [axe|hammer], reconcile, " +
+                    "resolve <request> mine|his|source|destination [count], resolve <order> lost.";
         }
     }
+
+    private const string NoCustody = "Custody is not available in this build.";
 
     private string Status(SettlementRegister register, SettlementJournal journal)
     {
@@ -170,6 +183,11 @@ internal sealed class DesignationTools
             // better than a status line that implies a worker is standing
             // around when none is.
             text.Append("  (the roster is the record; use cf_worker to put a body in the world)");
+        }
+
+        if (_custody != null)
+        {
+            text.Append(Environment.NewLine).Append(_custody.Status());
         }
 
         ReplayResult state = journal.Replay();
@@ -370,19 +388,24 @@ internal sealed class DesignationTools
 
         if (args == null || args.Length < 3)
         {
-            return "Usage: cf_settle resolve <request> mine|his. \"mine\" means you still have " +
-                "the tool; \"his\" means he does. Run cf_settle status to see which handover " +
-                "is waiting.";
+            return "Usage: cf_settle resolve <request> mine|his for a tool (\"mine\": you still have it; " +
+                "\"his\": he does), <request> source|destination [count] for material, or <order> lost to " +
+                "record what reconciliation found missing. Run cf_settle status to see what is waiting.";
         }
 
         bool workerHasIt;
-        switch (args[2].ToLowerInvariant())
+        string answer = args[2].ToLowerInvariant();
+        switch (answer)
         {
             case "his": workerHasIt = true; break;
             case "mine": workerHasIt = false; break;
+            case "source":
+            case "destination":
+            case "lost":
+                return _custody == null ? NoCustody : _custody.Resolve(args[1], answer, args);
             default:
-                return "Say \"mine\" if you still have it, or \"his\" if he does. Nothing has " +
-                    "been changed.";
+                return "Say \"mine\" or \"his\" for a tool, \"source\" or \"destination\" for material, or " +
+                    "\"lost\" for an order's shortfall. Nothing has been changed.";
         }
 
         RequestId transaction;

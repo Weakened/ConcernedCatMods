@@ -5,32 +5,20 @@ using TheConcernedCat.Settlement.Tools;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 
-/// <summary>What happened when the player tried to hand a tool over.</summary>
-internal enum HandoverOutcome
-{
-    /// <summary>Nothing moved. Zero, so an unfilled result never reads as
-    /// success.</summary>
-    Refused = 0,
-
-    /// <summary>The item is now the worker's. Exactly one of it exists.</summary>
-    Given = 1,
-
-    /// <summary>This transaction had already been carried out. Nothing moved a
-    /// second time.</summary>
-    AlreadyGiven = 2,
-
-    /// <summary>The item reached the worker but could not be taken from the
-    /// player, so where it is now is <b>not recorded</b>. Nothing is guessed
-    /// and nothing further is done.</summary>
-    Uncertain = 3,
-}
-
-/// <summary>Moves one real tool from the player's inventory into a worker's.
+/// <summary>Moves one real tool between the player's inventory and a worker's.
 ///
 /// <b>This is the part a ledger cannot prove.</b> The game-free contract records
 /// what was handed over and makes the record idempotent; only this class
-/// actually moves an item, and until it runs nothing has changed hands. A
-/// dictionary changing state is not a handover.
+/// actually moves an item, and until it runs nothing has changed hands.
+///
+/// <b>What this adapter decides, and what it hands on.</b> It decides what only
+/// the game can: whether the item is a tool this build issues
+/// (<see cref="ToolClassifier"/>), whether it is still usable, and whether it is
+/// a single, non-stacking instance. The move itself — intention persisted, add,
+/// remove, result persisted, and every failure between — is
+/// <see cref="ToolHandoverProcedure"/>, game-free and fault-injected in the
+/// settlement tests. #299's final review found that ordering "defended by
+/// reading alone" while it lived here.
 ///
 /// Verified against the installed 1.0.12 build, and the verification is what
 /// makes the design work: <c>Inventory.RemoveItem(ItemDrop.ItemData)</c> is
@@ -41,54 +29,18 @@ internal enum HandoverOutcome
 /// part of a stack. A single, non-stacking item is refused before it reaches
 /// that branch, so moving a tool is moving one instance between two lists, and
 /// its type, quality, durability and every other field travel with it because
-/// they <i>are</i> it. Nothing needs copying, and <c>ItemData.Clone()</c> is
-/// deliberately never called here — a clone is a second axe.
+/// they <i>are</i> it. <c>ItemData.Clone()</c> is deliberately never called here
+/// — a clone is a second axe.
 ///
-/// <b>The order is add-then-remove, and that is not arbitrary.</b> Neither order
-/// is atomic against a game that can be killed between two statements, so the
-/// question is which failure is survivable:
-///
-/// <list type="bullet">
-/// <item><i>Remove first, then add.</i> If the add fails — a full worker
-/// inventory — the item has already left the player and there is nothing left
-/// holding it. That loses a real tool.</item>
-/// <item><i>Add first, then remove.</i> If the remove fails, the item is
-/// momentarily referenced by two inventories, and we are holding both ends. That
-/// is a duplication we can see.</item>
-/// </list>
-///
-/// A visible duplication beats a silent loss, so add goes first — and the
-/// failure is then reported as <see cref="HandoverOutcome.Uncertain"/> rather
-/// than repaired by guessing, because "the player's inventory no longer holds
-/// the item we took from it" means something else moved it, and removing our
-/// copy could destroy the last reference to it.
-///
-/// <b>The record reaches disk before the item moves, and an earlier version only
-/// reached a list.</b> <c>SettlementJournal.Append</c> mutates memory and sets a
-/// dirty flag; nothing here saved, so a kill between the append and some later
-/// unrelated save lost <i>both</i> rows while the axe had really moved — and the
-/// replay would then conclude "never tried", which is precisely the state the
-/// two-entry design exists to distinguish itself from. So the intention is
-/// written <b>and persisted</b> before anything is touched, and a failure to
-/// persist it is an ordinary refusal with nothing moved.</summary>
+/// <b>Where the tool goes.</b> The worker's inventory is his body's persisted
+/// inventory (D9): the body writes it to its own network object in the same call
+/// as the add, so an issued axe survives a relog, a zone unload and a world
+/// reload with the world save that holds it.</summary>
 internal static class ToolHandover
 {
     /// <summary>Calls a save and turns any answer we did not get into "no".
-    ///
-    /// A save that throws established exactly as much as one that returned
-    /// false, and letting it escape mid-handover would leave an item moved and a
-    /// record un-rolled-back — the worst of the outcomes available.</summary>
-    internal static bool TryPersist(Func<bool> saveNow)
-    {
-        try
-        {
-            return saveNow();
-        }
-        catch (Exception)
-        {
-            return false;
-        }
-    }
+    /// </summary>
+    internal static bool TryPersist(Func<bool> saveNow) => ToolResolution.TryPersist(saveNow);
 
     /// <summary>Hands one specific item from a player to a worker.
     ///
@@ -98,10 +50,10 @@ internal static class ToolHandover
     /// instance moves, and a method that could find its own candidate would
     /// eventually be asked to.</summary>
     /// <param name="saveNow">Writes the journal and returns whether it reached
-    /// disk. It may be called more than once, must be safe to call when nothing
-    /// is dirty, and <b>is allowed to throw</b> — a throw is treated exactly as
-    /// <c>false</c>, because an answer we did not get is not an answer that the
-    /// record is safe.</param>
+    /// disk. It may be called more than once and is allowed to throw — a throw
+    /// is treated exactly as <c>false</c>.</param>
+    /// <param name="stamp">The world time and load for the rows, so the
+    /// world-save marker rule can place them; null only outside a world.</param>
     internal static HandoverOutcome TryGive(
         Humanoid? from,
         Humanoid? to,
@@ -111,38 +63,23 @@ internal static class ToolHandover
         ToolLedger ledger,
         SettlementJournal journal,
         Func<bool> saveNow,
+        JournalStamp? stamp,
         out ToolSpecimen given,
         out string message)
     {
         given = default;
 
-        if (ledger == null || journal == null || saveNow == null
-            || worker.IsEmpty || transaction.IsEmpty)
+        if (ledger == null || journal == null || saveNow == null || worker.IsEmpty || transaction.IsEmpty)
         {
             message = "That handover was not set up properly. Nothing was taken.";
             return HandoverOutcome.Refused;
         }
 
-        // Idempotence first, and before the read-only check. A handover that has
-        // already happened has already happened -- reporting "nothing has been
-        // taken" about a tool that was is a false statement about the player's
-        // own inventory, and an earlier ordering made it.
         if (ledger.TryGet(transaction, out ToolHolding existing))
         {
             given = existing.Tool;
             message = existing.Tool.Kind + " already handed over. Nothing changed.";
             return HandoverOutcome.AlreadyGiven;
-        }
-
-        if (journal.IsReadOnly)
-        {
-            // The record of the handover cannot be written, so the handover must
-            // not happen -- the same rule that stops a designation being cleared
-            // against a journal this build may not write. Taking somebody's axe
-            // on a promise we cannot keep is worse than refusing.
-            message = "He cannot take it: this settlement's record could not be fully read, so " +
-                "nothing new is being written to it. Nothing has been taken.";
-            return HandoverOutcome.Refused;
         }
 
         if (from == null || to == null || selected == null)
@@ -156,12 +93,6 @@ internal static class ToolHandover
         if (source == null || destination == null)
         {
             message = "Nothing was taken: an inventory could not be reached.";
-            return HandoverOutcome.Refused;
-        }
-
-        if (!source.ContainsItem(selected))
-        {
-            message = "Nothing was taken: that item is not yours to give.";
             return HandoverOutcome.Refused;
         }
 
@@ -183,102 +114,53 @@ internal static class ToolHandover
             // branch that mutates m_stack on the SOURCE and can still return
             // false after moving some units. Every real axe and hammer has a
             // maximum stack of one, so this refuses something that does not
-            // exist rather than restricting anything -- but the alternative is
-            // an unqualified claim that AddItem never touches the source, which
-            // is only true off that branch.
+            // exist rather than restricting anything.
             message = "He takes one tool at a time, not a stack.";
             return HandoverOutcome.Refused;
         }
 
-        // Asked before anything moves, so a full worker is an ordinary refusal
-        // rather than a half-completed transfer.
-        if (!destination.CanAddItem(selected))
+        // Equipped items stay referenced by the player's equipment slots after
+        // they leave the inventory; vanilla's own drop unequips first.
+        bool wasEquipped = from.IsItemEquiped(selected);
+        if (wasEquipped)
         {
-            message = "He has no room for that right now.";
-            return HandoverOutcome.Refused;
+            from.UnequipItem(selected, triggerEquipEffects: false);
         }
 
-        // The intention, written and PERSISTED before ANYTHING is touched.
-        //
-        // An earlier version put this between AddItem and RemoveItem, which was
-        // a silent duplication: AddItem ends in m_inventory.Add(item) and does
-        // not remove from the source, so refusing there left the same instance
-        // referenced by both inventories -- while the message said "nothing has
-        // been taken". The window has to be closed on the near side.
-        int beforeIntent = journal.Entries.Count;
-        journal.Append(
-            JournalEntryKind.ToolHandoverStarted, default, transaction,
-            worker: worker, tool: specimen);
+        HandoverOutcome outcome = ToolHandoverProcedure.Give(
+            new InventoryTools(source), new InventoryTools(destination), selected, specimen, worker, transaction,
+            ledger, journal, saveNow, stamp, out message);
 
-        if (!TryPersist(saveNow))
+        if (outcome == HandoverOutcome.Refused && wasEquipped && source.ContainsItem(selected))
         {
-            // Genuinely nothing touched. The intention is rolled OUT rather than
-            // left for some later unrelated save to carry to disk as a record of
-            // something that never happened.
-            journal.TryDiscardUnsaved(beforeIntent);
-
-            message = "He cannot take it: this settlement's record could not be written, so " +
-                "nothing has been taken.";
-            return HandoverOutcome.Refused;
+            from.EquipItem(selected, triggerEquipEffects: false);
         }
 
-        if (!destination.AddItem(selected))
+        if (outcome == HandoverOutcome.Given || outcome == HandoverOutcome.Uncertain)
         {
-            // Nothing moved, but the intention is on disk. Say so in the record
-            // rather than leaving a start with no finish, which would replay as
-            // an unresolved handover and stop this worker until a person
-            // answered a question about an axe that never left the player.
-            journal.Append(
-                JournalEntryKind.ToolResolvedToPlayer, default, transaction,
-                worker: worker, tool: specimen);
-            TryPersist(saveNow);
-
-            message = "He could not take it. Nothing was taken from you.";
-            return HandoverOutcome.Refused;
+            given = specimen;
         }
 
-        if (!source.RemoveItem(selected))
+        if (outcome == HandoverOutcome.Given)
         {
-            // The item reached him but did not leave us -- something else moved
-            // it in between. Removing our side could destroy the last reference,
-            // so this stops and says so instead. The started entry above is left
-            // standing with no finish, which is exactly how a replay learns that
-            // this one is unresolved.
-            ledger.Issue(new ToolHolding(transaction, worker, specimen));
-            ledger.MarkUncertain(transaction);
-
-            message = "Something went wrong mid-handover and it is not recorded whether that " +
-                "item changed hands. Nothing further has been done. Check both inventories " +
-                "before continuing — this build will not guess.";
-            return HandoverOutcome.Uncertain;
+            // Equipping is presentation, and its failure is not the handover's
+            // failure: he owns the tool either way, and the record already says so.
+            try
+            {
+                to.EquipItem(selected);
+            }
+            catch (Exception)
+            {
+                // Presentation.
+            }
         }
 
-        ledger.Issue(new ToolHolding(transaction, worker, specimen));
-        journal.Append(
-            JournalEntryKind.ToolHandoverFinished, default, transaction,
-            worker: worker, tool: specimen);
-
-        // Best effort, and a failure here is already safe: the started entry is
-        // on disk, so a replay reports an unresolved handover and a person says
-        // which way it went. That is the outcome this design is built around
-        // rather than one it is caught out by.
-        TryPersist(saveNow);
-
-        // Equipping is presentation, and its failure is not the handover's
-        // failure: he owns the tool either way, and the record already says so.
-        to.EquipItem(selected);
-
-        given = specimen;
-        message = specimen.Kind == ToolKind.Axe
-            ? "Good edge. He takes the axe."
-            : "Sound handle. He takes the hammer.";
-        return HandoverOutcome.Given;
+        return outcome;
     }
 
-    /// <summary>Gives a tool back, once.
-    ///
-    /// The same ordering argument in reverse, for the same reason: the worker is
-    /// the one holding it, so the player's inventory is added to first.</summary>
+    /// <summary>Gives a tool back, once. The same ordering in reverse: the
+    /// intention written first (#300), the player's inventory added to before
+    /// his is removed from.</summary>
     internal static HandoverOutcome TryReturn(
         Humanoid? worker,
         Humanoid? player,
@@ -287,71 +169,57 @@ internal static class ToolHandover
         ToolLedger ledger,
         SettlementJournal journal,
         Func<bool> saveNow,
+        JournalStamp? stamp,
         out string message)
     {
-        if (ledger == null || journal == null || saveNow == null || transaction.IsEmpty
-            || !ledger.TryGet(transaction, out ToolHolding holding))
-        {
-            message = "There is no record of that tool.";
-            return HandoverOutcome.Refused;
-        }
-
-        if (journal.IsReadOnly)
-        {
-            message = "He cannot give it back yet: this settlement's record could not be fully " +
-                "read, so nothing new is being written to it.";
-            return HandoverOutcome.Refused;
-        }
-
-        if (holding.State == ToolHoldingState.Returned)
-        {
-            message = "You already have that one back.";
-            return HandoverOutcome.AlreadyGiven;
-        }
-
-        if (holding.State == ToolHoldingState.Uncertain)
-        {
-            message = "That handover was interrupted and has not been resolved. Nothing will be " +
-                "moved until it is.";
-            return HandoverOutcome.Uncertain;
-        }
-
         if (worker == null || player == null || held == null)
         {
+            if (ledger != null && ledger.TryGet(transaction, out ToolHolding holding) && holding.State == ToolHoldingState.Returned)
+            {
+                message = "You already have that one back.";
+                return HandoverOutcome.AlreadyGiven;
+            }
+
             message = "Nothing was returned: one of the two of you is not here.";
             return HandoverOutcome.Refused;
         }
 
         Inventory source = worker.GetInventory();
         Inventory destination = player.GetInventory();
-        if (source == null || destination == null || !source.ContainsItem(held))
+        if (source == null || destination == null)
         {
-            message = "Nothing was returned: that item is not his to give back.";
+            message = "Nothing was returned: an inventory could not be reached.";
             return HandoverOutcome.Refused;
         }
 
-        if (!destination.CanAddItem(held) || !destination.AddItem(held))
+        if (worker.IsItemEquiped(held))
         {
-            message = "You have no room for it. He is still holding it.";
-            return HandoverOutcome.Refused;
+            worker.UnequipItem(held, triggerEquipEffects: false);
         }
 
-        if (!source.RemoveItem(held))
+        return ToolHandoverProcedure.Return(
+            new InventoryTools(source), new InventoryTools(destination), held, transaction, ledger!, journal, saveNow,
+            stamp, out message);
+    }
+
+    /// <summary>A vanilla inventory as a tool inventory: exact instances only.
+    /// </summary>
+    private sealed class InventoryTools : IToolInventory<ItemDrop.ItemData>
+    {
+        private readonly Inventory _inventory;
+
+        public InventoryTools(Inventory inventory)
         {
-            ledger.MarkUncertain(transaction);
-            message = "Something went wrong mid-return and it is not recorded whether that item " +
-                "changed hands. Check both inventories — this build will not guess.";
-            return HandoverOutcome.Uncertain;
+            _inventory = inventory;
         }
 
-        ledger.Return(transaction);
-        journal.Append(
-            JournalEntryKind.ToolReturned, default, transaction,
-            worker: holding.Worker, tool: holding.Tool);
-        TryPersist(saveNow);
+        public bool Contains(ItemDrop.ItemData item) => _inventory.ContainsItem(item);
 
-        message = "He hands it back.";
-        return HandoverOutcome.Given;
+        public bool CanAdd(ItemDrop.ItemData item) => _inventory.CanAddItem(item);
+
+        public bool Add(ItemDrop.ItemData item) => _inventory.AddItem(item);
+
+        public bool Remove(ItemDrop.ItemData item) => _inventory.RemoveItem(item);
     }
 }
 
@@ -396,7 +264,7 @@ internal sealed class WorldToolCondition : IToolCondition
             // Matched on kind and identity, not on durability: durability is
             // exactly what has changed since it was handed over.
             if (live.Kind != holding.Tool.Kind
-                || !string.Equals(live.ItemKey, holding.Tool.ItemKey, System.StringComparison.Ordinal))
+                || !string.Equals(live.ItemKey, holding.Tool.ItemKey, StringComparison.Ordinal))
             {
                 continue;
             }
