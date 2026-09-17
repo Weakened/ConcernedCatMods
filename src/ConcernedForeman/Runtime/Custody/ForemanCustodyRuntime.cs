@@ -705,6 +705,17 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
                     continue;
                 }
 
+                // The same gate as every world-effect row: a note written while
+                // a world-save marker is owed would later sit before that marker
+                // and read as part of a save it is not in.
+                if (_core == null || !_core.IsWritable)
+                {
+                    _log("The dropped " + specimen.Kind + " (request " + holding.Transaction.Value + ") was not noted: the " +
+                        "record is not taking new work now (" + (_core == null ? "closed" : _core.WriteBlock.ToString()) +
+                        "). The record still says he holds it.");
+                    break;
+                }
+
                 int before = journal.Entries.Count;
                 journal.Append(
                     JournalEntryKind.ToolReturned, default, holding.Transaction, worker: holding.Worker, tool: holding.Tool,

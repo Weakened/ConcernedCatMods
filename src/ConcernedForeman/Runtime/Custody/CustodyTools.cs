@@ -50,6 +50,11 @@ internal sealed class CustodyTools
             return "Usage: cf_settle give axe|hammer — hold the tool in your hand, stand next to Thorstein.";
         }
 
+        if (!RecordTakesWorldChanges(out string blocked))
+        {
+            return blocked + " Nothing was taken.";
+        }
+
         if (!TryHandoverParties(out Player player, out Humanoid worker, out string refusal))
         {
             return refusal;
@@ -94,6 +99,11 @@ internal sealed class CustodyTools
         if (args != null && args.Length > 1 && !TryParseKind(args[1], out only))
         {
             return "Usage: cf_settle takeback [axe|hammer].";
+        }
+
+        if (!RecordTakesWorldChanges(out string blocked))
+        {
+            return blocked + " He is still holding what he has.";
         }
 
         if (!TryHandoverParties(out Player player, out Humanoid worker, out string refusal))
@@ -232,24 +242,49 @@ internal sealed class CustodyTools
             return "Custody is not open for this world yet.";
         }
 
-        var text = new StringBuilder();
-        text.Append(report.AllMatch
-            ? "Everything the record holds matches what can be checked now."
-            : "Reconciliation:");
+        var lines = new List<string>();
         foreach (ReconciliationFinding finding in report.Findings)
         {
             if (finding.NeedsAttention)
             {
-                text.Append(Environment.NewLine).Append("  ").Append(finding.Sentence);
+                lines.Add(finding.Sentence);
             }
         }
 
         WorkerBodyCensus? census = _custody.Census;
         if (census != null && census.IsDuplicated)
         {
-            text.Append(Environment.NewLine).Append(
-                "  Two bodies in this world carry Thorstein's identity. Neither is used, and neither is removed " +
+            lines.Add(
+                "Two bodies in this world carry Thorstein's identity. Neither is used, and neither is removed " +
                 "automatically.");
+        }
+
+        // Tools are not part of the material matrix, but a tool the record says
+        // he holds and his inventory does not have is the same kind of finding.
+        WorkerBody? body = WorkerBody.FindLive(_custody.WorkerKey.Value);
+        if (body != null && body.Humanoid != null && _records.TryOpen(out _, out SettlementJournal journal))
+        {
+            foreach (ToolHolding holding in journal.Replay().Tools.HeldBy(_custody.ToolWorker))
+            {
+                if (FindIssued(body.Humanoid, holding) == null)
+                {
+                    lines.Add(
+                        "The record says he holds your " + holding.Tool.Kind.ToString().ToLowerInvariant() + " (request " +
+                        holding.Transaction.Value + "), and it is not in his inventory. Nothing was moved or written; " +
+                        "this build has no answer that writes a tool off.");
+                }
+            }
+        }
+
+        if (lines.Count == 0)
+        {
+            return "Everything the record holds matches what can be checked now.";
+        }
+
+        var text = new StringBuilder("Reconciliation:");
+        foreach (string line in lines)
+        {
+            text.Append(Environment.NewLine).Append("  ").Append(line);
         }
 
         return text.ToString();
@@ -288,7 +323,47 @@ internal sealed class CustodyTools
             }
         }
 
+        if (_records.TryOpen(out _, out SettlementJournal journal))
+        {
+            foreach (ToolHolding holding in journal.Replay().Tools.Holdings)
+            {
+                if (holding.State == ToolHoldingState.Returned)
+                {
+                    continue;
+                }
+
+                text.Append(Environment.NewLine).Append("  tool ").Append(holding.Transaction.Value).Append(": ")
+                    .Append(holding.Tool.Kind.ToString().ToLowerInvariant()).Append(' ')
+                    .Append(holding.State == ToolHoldingState.Held ? "held by him" : "unsettled (cf_settle resolve " +
+                        holding.Transaction.Value + " mine|his)");
+            }
+        }
+
         return text.ToString();
+    }
+
+    /// <summary>A handover writes world-effect rows, so it waits exactly where
+    /// a material transfer waits: while the record is read-only, has not yet
+    /// noted which save was loaded, or owes a world-save marker. A row written
+    /// before an owed marker would later sit before that marker and read as
+    /// part of a save it is not in.</summary>
+    private bool RecordTakesWorldChanges(out string refusal)
+    {
+        CustodyCore? core = _custody.Core;
+        if (core == null)
+        {
+            refusal = "Refused: custody is not open for this world yet.";
+            return false;
+        }
+
+        if (!core.IsWritable)
+        {
+            refusal = "Refused: the settlement's record is not taking new work now (" + core.WriteBlock + ").";
+            return false;
+        }
+
+        refusal = string.Empty;
+        return true;
     }
 
     private bool TryHandoverParties(out Player player, out Humanoid worker, out string refusal)
