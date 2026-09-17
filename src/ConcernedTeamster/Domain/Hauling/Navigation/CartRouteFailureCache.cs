@@ -93,8 +93,9 @@ internal sealed class CartRouteFailureCache
     /// the cart was held goes through the same place: the verified corridor's
     /// half width, so a route the cart's own body would drag over that spot.
     /// </param>
-    /// <param name="sameTargetMetres">Two targets this close, flat, put the cart
-    /// on the same ground: one cart length.</param>
+    /// <param name="sameTargetMetres">Two targets this close, flat, are the same
+    /// parking spot: the cart standing on either would overlap the other.
+    /// </param>
     public CartRouteFailureCache(float samePlaceMetres, float sameTargetMetres)
     {
         if (!(samePlaceMetres > 0f) || !(sameTargetMetres > 0f))
@@ -112,8 +113,11 @@ internal sealed class CartRouteFailureCache
 
     public IReadOnlyList<CartRouteSetback> Remembered => _setbacks;
 
-    /// <summary>A cache matched to one cart: the place radius is its corridor's
-    /// half width, the target radius its length.</summary>
+    /// <summary>A cache matched to one cart: both radii are its corridor's half
+    /// width - the cart's half width plus its side clearance. Closer than that,
+    /// the cart's own body covers the remembered spot. It stays well under the
+    /// cart length that staging candidates are spaced by, so a neighbouring
+    /// candidate is never mistaken for a failed one.</summary>
     public static CartRouteFailureCache For(CartFootprint footprint, HaulLimits limits)
     {
         if (limits == null)
@@ -121,9 +125,8 @@ internal sealed class CartRouteFailureCache
             throw new ArgumentNullException(nameof(limits));
         }
 
-        return new CartRouteFailureCache(
-            Math.Max(0.1f, (footprint.WidthMetres * 0.5f) + limits.SideClearanceMetres),
-            Math.Max(0.1f, footprint.LengthMetres));
+        float halfCorridor = Math.Max(0.1f, (footprint.WidthMetres * 0.5f) + limits.SideClearanceMetres);
+        return new CartRouteFailureCache(halfCorridor, halfCorridor);
     }
 
     /// <summary>Remembers a leg to <paramref name="target"/> that failed without

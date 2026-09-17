@@ -23,10 +23,10 @@ namespace TheConcernedCat.ConcernedTeamster.Domain.Hauling.Navigation;
 /// A blocked sweep is not always the end. The navmesh keeps a walker only its
 /// own radius from walls, and a cart is wider; so when a sweep is blocked the
 /// free room either side is measured, and if the passage is wide enough the line
-/// is moved sideways, smoothly and well before the obstacle, and checked again
-/// from where it changed. Each sample is corrected at most once and a route at
-/// most once per cart-and-hitch length of it, so this always ends. The ends of
-/// the route never move.
+/// is moved sideways to centre the cart in it, smoothly and well before the
+/// obstacle, and checked again from where it changed. A route is corrected at
+/// most once per cart-and-hitch length of it (plus one), and each correction
+/// spends probes, so this always ends. The ends of the route never move.
 ///
 /// Game-free: every question goes through <see cref="ICartTerrainProbe"/>, each
 /// clearance question is paid for from the plan's <see cref="CartProbeAllowance"/>,
@@ -117,7 +117,6 @@ internal sealed class CartRouteEvaluator
         private float[] _along = Array.Empty<float>();
         private CartPose[] _poses = Array.Empty<CartPose>();
         private PoseGround[] _ground = Array.Empty<PoseGround>();
-        private bool[] _repaired = Array.Empty<bool>();
         private CartPose[] _subPoses = new CartPose[4];
 
         private int _repairsLeft;
@@ -283,7 +282,6 @@ internal sealed class CartRouteEvaluator
             _along = new float[count];
             _poses = new CartPose[count];
             _ground = new PoseGround[count];
-            _repaired = new bool[count];
             RecomputeAlong(1);
         }
 
@@ -680,23 +678,23 @@ internal sealed class CartRouteEvaluator
                 WorkPoint hit = CartRouteGeometry.Lerp(centreA, centreB, fraction);
                 float alongHit = alongFrom + ((alongTo - alongFrom) * (ta + ((tb - ta) * fraction)));
                 bool turning = Math.Max(a.ArticulationDegrees, b.ArticulationDegrees) > CartRouteGeometry.MaxSweepTurnDegrees;
-                return Repair(index, hit, headingX, headingZ, alongHit, turning, result.Obstacle, out restartAt);
+                return Repair(
+                    index, hit, headingX, headingZ, halfWidth, halfLength, alongHit, turning, result.Obstacle, out restartAt);
             }
 
             return null;
         }
 
+        /// <summary>Measures the free room either side of the box that was
+        /// blocked - with the same extents the sweep used, widened for a turn -
+        /// and, when it fits, moves the line to centre the box in that room.
+        /// </summary>
         private CartRouteAssessment? Repair(
-            int index, WorkPoint hit, float headingX, float headingZ, float alongHit, bool turning, string obstacle,
-            out int restartAt)
+            int index, WorkPoint hit, float headingX, float headingZ, float needHalfWidth, float needHalfLength,
+            float alongHit, bool turning, string obstacle, out int restartAt)
         {
             restartAt = -1;
             CartRouteFinding blocked = turning ? CartRouteFinding.InsideCornerClipped : CartRouteFinding.Obstructed;
-            if (_repaired[index])
-            {
-                return Refuse(blocked, hit, alongHit, obstacle);
-            }
-
             if (_repairsLeft <= 0)
             {
                 return Refuse(CartRouteFinding.RepairsExhausted, hit, alongHit, obstacle);
@@ -709,14 +707,13 @@ internal sealed class CartRouteEvaluator
 
             float leftX = -headingZ;
             float leftZ = headingX;
-            float reach = 2f * _halfCorridor;
-            float halfLength = 0.5f * _length;
+            float reach = 2f * needHalfWidth;
             CartClearanceSample towardsLeft = Sweep(
                 hit, CartRouteGeometry.Offset(hit, leftX, leftZ, reach), headingX, headingZ,
-                CartRouteGeometry.LateralSlabHalfMetres, halfLength, false);
+                CartRouteGeometry.LateralSlabHalfMetres, needHalfLength, false);
             CartClearanceSample towardsRight = Sweep(
                 hit, CartRouteGeometry.Offset(hit, -leftX, -leftZ, reach), headingX, headingZ,
-                CartRouteGeometry.LateralSlabHalfMetres, halfLength, false);
+                CartRouteGeometry.LateralSlabHalfMetres, needHalfLength, false);
             if (!IsMeasured(towardsLeft) || !IsMeasured(towardsRight))
             {
                 return Refuse(
@@ -725,24 +722,22 @@ internal sealed class CartRouteEvaluator
 
             float freeLeft = FreeRoom(towardsLeft, reach);
             float freeRight = FreeRoom(towardsRight, reach);
-            if (freeLeft + freeRight < 2f * _halfCorridor)
+            if (freeLeft + freeRight < 2f * needHalfWidth)
             {
                 return Refuse(CartRouteFinding.MeasuredTooNarrow, hit, alongHit, obstacle);
             }
 
-            float slack = ((freeLeft + freeRight) * 0.5f) - _halfCorridor;
-            float margin = Math.Min(2f * CartRouteGeometry.SamePointMetres, slack);
-            float shift = 0f;
-            if (freeRight < _halfCorridor)
-            {
-                shift = (_halfCorridor - freeRight) + margin;
-            }
-            else if (freeLeft < _halfCorridor)
-            {
-                shift = -((_halfCorridor - freeLeft) + margin);
-            }
-
-            if (Math.Abs(shift) < CartRouteGeometry.SamePointMetres)
+            // Centre the cart in the room measured. A trailing cart touches an
+            // obstacle first at its shallowest, so the least shift that clears the
+            // first contact rarely clears the turn; the middle of the free room
+            // does, and it never leaves the room that was measured clear.
+            // The sweep touched something; a side measured within a few
+            // centimetres of the box's own half width is that contact, seen at
+            // the probes' resolution.
+            float shift = (freeLeft - freeRight) * 0.5f;
+            float tighter = Math.Min(freeLeft, freeRight);
+            if (tighter >= needHalfWidth + CartRouteGeometry.SamePointMetres ||
+                Math.Abs(shift) < CartRouteGeometry.SamePointMetres)
             {
                 // There is room either side, so what blocks the cart is ahead of
                 // it, not beside it: moving the line sideways cannot help.
@@ -755,7 +750,6 @@ internal sealed class CartRouteEvaluator
                 return Refuse(blocked, hit, alongHit, obstacle);
             }
 
-            _repaired[index] = true;
             _repairsLeft--;
             _repairs++;
             restartAt = Math.Min(firstChanged, index);
