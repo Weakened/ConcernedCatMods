@@ -1,13 +1,29 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 
 namespace TheConcernedCat.Settlement.Storage;
 
 /// <summary>Writing a settlement file so that an interrupted write leaves
 /// either the whole old file or the whole new one — on the path that normally
-/// runs. The fallbacks below are <b>not</b> atomic, and #293 tracks detecting
-/// the truncation they can leave.
+/// runs.
+///
+/// <b>Durability, stated exactly.</b> The temporary file's bytes are flushed to
+/// the disk (<c>FileStream.Flush(true)</c>) before it replaces the live file, so
+/// a power loss right after the replace cannot leave a live file whose blocks
+/// were never written. <c>File.Replace</c> is the atomic swap on NTFS. The
+/// directory entry itself is not flushed — .NET offers no way to — so a power
+/// loss in the instant after the replace can still bring back the previous
+/// complete file, never a mixture.
+///
+/// <b>The fallback is not atomic, and says so.</b> When the replace is refused
+/// (a scanner or sync client holding the file, or a runtime without it), the
+/// complete temporary copy is copied over the live file and flushed, and only
+/// then deleted. A crash in the middle of that copy can leave a partial live
+/// file. That is what the record trailer exists for (#293): the next load finds
+/// the closing line missing or wrong, goes read-only, and the complete copy is
+/// still beside it as <c>.tmp</c>.
 ///
 /// Extracted from <c>JournalStore</c> when CF-SET-004 added a second file with
 /// the same requirement. The alternative was a second copy of the
@@ -62,12 +78,19 @@ internal static class AtomicTextFile
         try
         {
             Directory.CreateDirectory(directory);
-            using (var writer = new StreamWriter(temporaryPath, append: false))
+            using (var stream = new FileStream(temporaryPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
             {
                 foreach (string line in lines)
                 {
                     writer.WriteLine(line);
                 }
+
+                // Down to the disk before the swap, not merely into the OS
+                // cache: a replace whose new blocks were never written is a
+                // truncated live file with nothing complete beside it.
+                writer.Flush();
+                stream.Flush(flushToDisk: true);
             }
 
             return null;
@@ -107,9 +130,19 @@ internal static class AtomicTextFile
         }
     }
 
+    /// <summary>The non-atomic fallback. The temporary file is deleted only
+    /// after the copy has been flushed to the disk, so an interruption at any
+    /// point leaves the complete copy behind; the partial live file it may leave
+    /// is caught on the next load by the record trailer.</summary>
     private static void CopyOver(string temporaryPath, string path)
     {
-        File.Copy(temporaryPath, path, overwrite: true);
+        using (var source = new FileStream(temporaryPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+        using (var destination = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            source.CopyTo(destination);
+            destination.Flush(flushToDisk: true);
+        }
+
         TryDelete(temporaryPath);
     }
 

@@ -162,7 +162,20 @@ public sealed class SettlementContractTests : IDisposable
         var ledger = new CustodyLedger();
 
         Assert.Equal(CustodyOutcome.Applied, ledger.Reserve(Held(0)));
-        Assert.Equal(CustodyOutcome.AlreadySatisfied, ledger.Reserve(Held(0, count: 999)));
+
+        // The same request with the same reservation is a retry: satisfied,
+        // nothing taken twice.
+        Assert.Equal(CustodyOutcome.AlreadySatisfied, ledger.Reserve(Held(0)));
+
+        // The same request id with a DIFFERENT reservation used to answer
+        // AlreadySatisfied too, which told the caller the wrong thing had
+        // happened successfully (#283's audit: payload-blind idempotence). It
+        // is refused now, exactly as ToolLedger.Issue refuses a reused id.
+        Assert.Equal(CustodyOutcome.Rejected, ledger.Reserve(Held(0, count: 999)));
+        Assert.Equal(CustodyOutcome.Rejected, ledger.Reserve(Held(0, container: "chest-b")));
+        Assert.Equal(
+            CustodyOutcome.Rejected,
+            ledger.Reserve(new Reservation(RequestId.For(Cottage, 0), Cottage, "chest-a", Wood(), "run-b")));
 
         Assert.Single(ledger.Reservations);
         Assert.Equal(20, ledger.Totals(ReservationState.Held)["Wood"]);

@@ -29,6 +29,15 @@ internal enum JournalLoadOutcome
 
     /// <summary>Unreadable.</summary>
     Unreadable = 5,
+
+    /// <summary>Every line read, but the record ends without its closing line:
+    /// its tail was lost (#293). Everything readable is kept; read-only.
+    /// </summary>
+    Truncated = 6,
+
+    /// <summary>Every line read, but the closing line disagrees with the lines
+    /// above it: rows were lost, added or changed (#293). Read-only.</summary>
+    IntegrityMismatch = 7,
 }
 
 /// <summary>Reads and writes a settlement journal as a tab-separated file.
@@ -45,7 +54,21 @@ internal enum JournalLoadOutcome
 /// player four pages of reading; a settlement journal holds the only record of
 /// whose wood is where, and replacing it with an empty file would silently
 /// destroy that. An unreadable journal makes the settlement read-only and says
-/// so.</summary>
+/// so.
+///
+/// <b>Schema 3</b> adds, all in one bump:
+/// <list type="bullet">
+/// <item>the custody kinds of CONTRACTS.md §5.4, as <c>c</c> rows of named
+/// fields, each with the world time and the load that wrote it;</item>
+/// <item>world time, load epoch and flags on tool rows (an interrupted return,
+/// an attempt the handover itself abandoned — #300);</item>
+/// <item>the container's identity epoch on reservation rows (#294);</item>
+/// <item>a closing line — row count, last sequence, checksum — so a record that
+/// lost its tail on a line boundary no longer loads clean (#293).</item>
+/// </list>
+/// A schema-1 or schema-2 file still loads exactly as it did: it has no closing
+/// line to check, so its completeness is unverified, and the next write stores
+/// it as schema 3.</summary>
 internal sealed class JournalStore
 {
     private const string Extension = ".settlement.tsv";
@@ -60,8 +83,12 @@ internal sealed class JournalStore
     /// with the handovers deleted. Refusing outright is the safe direction, and
     /// it is why the tool rows also carry their own tag rather than extending
     /// the entry row — a version check is a clearer refusal than a pile of
-    /// unreadable lines.</summary>
-    public const int SchemaVersion = 2;
+    /// unreadable lines.
+    ///
+    /// <b>3</b> since gathered-material custody and world-save markers joined
+    /// it, for the same reason: a schema-2 build cannot account for carried
+    /// stone, and would write the file back without it.</summary>
+    public const int SchemaVersion = 3;
 
     /// <summary>Row tag for a material or order entry.</summary>
     private const string EntryTag = "e";
@@ -71,6 +98,9 @@ internal sealed class JournalStore
     /// row would have meant either a synthetic order id or trailing columns
     /// after the variable-length stack list.</summary>
     private const string ToolTag = "t";
+
+    /// <summary>Row tag for a schema-3 custody entry: named fields.</summary>
+    private const string CustodyTag = "c";
 
     private const char Separator = '\t';
     private const char CarriageReturn = '\r';
@@ -93,11 +123,20 @@ internal sealed class JournalStore
         public LoadReport(
             SettlementJournal journal, JournalLoadOutcome outcome, int skippedLines,
             bool readOnly, string? notice)
+            : this(journal, outcome, skippedLines, readOnly, notice, 0, TrailerVerdict.Unspecified)
+        {
+        }
+
+        public LoadReport(
+            SettlementJournal journal, JournalLoadOutcome outcome, int skippedLines,
+            bool readOnly, string? notice, int schemaVersion, TrailerVerdict trailer)
         {
             Journal = journal;
             Outcome = outcome;
             SkippedLines = skippedLines;
             Notice = notice;
+            SchemaVersion = schemaVersion;
+            Trailer = trailer;
 
             if (readOnly)
             {
@@ -109,10 +148,19 @@ internal sealed class JournalStore
         public JournalLoadOutcome Outcome { get; }
         public int SkippedLines { get; }
 
+        /// <summary>The schema the file declared; 0 for a missing or headerless
+        /// file.</summary>
+        public int SchemaVersion { get; }
+
+        /// <summary>What the closing line said. <see cref="TrailerVerdict.Unspecified"/>
+        /// for a file that predates closing lines: its completeness is not
+        /// verifiable, and the status says so.</summary>
+        public TrailerVerdict Trailer { get; }
+
         /// <summary>True when this build must not write over the file. The
-        /// settlement then refuses new work rather than losing the record.</summary>
-        /// <summary>Read straight off the journal, so the two can never
-        /// disagree about whether writing is allowed.</summary>
+        /// settlement then refuses new work rather than losing the record.
+        /// Read straight off the journal, so the two can never disagree about
+        /// whether writing is allowed.</summary>
         public bool ReadOnly => Journal.IsReadOnly;
 
         public string? Notice { get; }
@@ -163,6 +211,10 @@ internal sealed class JournalStore
         int skipped = 0;
         long highestSequence = -1L;
         bool sawHeader = false;
+        int version = 1;
+        var accumulator = new RecordTrailer.Accumulator();
+        TrailerVerdict trailer = TrailerVerdict.Unspecified;
+        bool sawTrailer = false;
 
         foreach (string raw in lines)
         {
@@ -180,12 +232,20 @@ internal sealed class JournalStore
 
             string[] fields = line.Split(Separator);
 
+            if (sawTrailer)
+            {
+                // Nothing may follow a finished record.
+                trailer = TrailerVerdict.LinesAfterTrailer;
+                skipped++;
+                continue;
+            }
+
             if (!sawHeader)
             {
                 sawHeader = true;
                 if (fields.Length >= 3 && string.Equals(fields[0], "v", StringComparison.Ordinal))
                 {
-                    if (!int.TryParse(fields[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int version) ||
+                    if (!int.TryParse(fields[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out version) ||
                         version > SchemaVersion)
                     {
                         return new LoadReport(
@@ -203,17 +263,26 @@ internal sealed class JournalStore
                             "settlement, so it was left untouched and nothing will be written over it.");
                     }
 
+                    accumulator.AddLine(line);
                     continue;
                 }
 
                 // No header at all: an older or hand-made file. Fall through
-                // and try to read it as entries.
-                sawHeader = true;
+                // and try to read it as entries, under the oldest layout.
+                version = 1;
             }
 
-            if ((TryParseEntry(fields, out JournalEntry entry)
-                    || TryParseToolEntry(fields, out entry))
-                && entry.Sequence > highestSequence)
+            if (version >= 3 && RecordTrailer.IsTrailer(fields))
+            {
+                sawTrailer = true;
+                trailer = RecordTrailer.Check(fields, accumulator);
+                continue;
+            }
+
+            accumulator.AddLine(line);
+            accumulator.CountRow(PeekSequence(fields));
+
+            if (TryParseRow(fields, version, out JournalEntry entry) && entry.Sequence > highestSequence)
             {
                 highestSequence = entry.Sequence;
                 journal.Restore(entry);
@@ -227,19 +296,41 @@ internal sealed class JournalStore
             }
         }
 
+        if (version >= 3 && !sawTrailer)
+        {
+            trailer = TrailerVerdict.Missing;
+        }
+
         journal.MarkClean();
+
+        bool damagedTrailer = version >= 3 && trailer != TrailerVerdict.Intact;
 
         if (skipped > 0)
         {
             return new LoadReport(
                 journal, JournalLoadOutcome.LoadedWithSkippedLines, skipped, readOnly: true,
                 skipped.ToString(CultureInfo.InvariantCulture) + " line(s) of this settlement's record " +
-                "could not be read. Everything readable was kept and the file will NOT be rewritten, " +
+                "could not be read" + (damagedTrailer ? ", and " + RecordTrailer.Describe(trailer) : string.Empty) +
+                ". Everything readable was kept and the file will NOT be rewritten, " +
                 "so nothing is lost — but no new work will be started until it is repaired, because a " +
-                "partial record cannot account for materials.");
+                "partial record cannot account for materials.",
+                version, trailer);
         }
 
-        return new LoadReport(journal, JournalLoadOutcome.Loaded, 0, false, null);
+        if (damagedTrailer)
+        {
+            return new LoadReport(
+                journal,
+                trailer == TrailerVerdict.Missing ? JournalLoadOutcome.Truncated : JournalLoadOutcome.IntegrityMismatch,
+                0, readOnly: true,
+                "This settlement's record is not complete: " + RecordTrailer.Describe(trailer) + ". Every " +
+                "line that could be read was kept and the file will NOT be rewritten — but no new work will be " +
+                "started, because a record with lines missing cannot account for materials. A complete copy " +
+                "may be beside it as \"" + Path.GetFileName(path) + TemporarySuffix + "\".",
+                version, trailer);
+        }
+
+        return new LoadReport(journal, JournalLoadOutcome.Loaded, 0, false, null, version, trailer);
     }
 
     public SaveReport Save(SettlementJournal journal, bool readOnly = false)
@@ -295,6 +386,11 @@ internal sealed class JournalStore
 
     public static IEnumerable<string> Serialize(SettlementJournal journal)
     {
+        return RecordTrailer.Seal(Lines(journal), LineSequence);
+    }
+
+    private static IEnumerable<string> Lines(SettlementJournal journal)
+    {
         yield return "#" + Separator + "settlement journal v" +
             SchemaVersion.ToString(CultureInfo.InvariantCulture);
         yield return string.Join(
@@ -303,43 +399,211 @@ internal sealed class JournalStore
 
         foreach (JournalEntry entry in journal.Entries)
         {
-            if (JournalEntryKinds.IsTool(entry.Kind))
-            {
-                yield return string.Join(
-                    Separator.ToString(),
-                    new[]
-                    {
-                        ToolTag,
-                        entry.Sequence.ToString(CultureInfo.InvariantCulture),
-                        ((int)entry.Kind).ToString(CultureInfo.InvariantCulture),
-                        entry.Request.IsEmpty ? "" : entry.Request.Value,
-                        entry.Worker.Value,
-                        ((int)entry.Tool.Kind).ToString(CultureInfo.InvariantCulture),
-                        AtomicTextFile.Escape(entry.Tool.ItemKey),
-                        entry.Tool.Quality.ToString(CultureInfo.InvariantCulture),
-                        entry.Tool.DurabilityAtIssue.ToString("R", CultureInfo.InvariantCulture),
-                        entry.Tool.ToolTier.ToString(CultureInfo.InvariantCulture),
-                    });
-                continue;
-            }
+            yield return FormatRow(entry);
+        }
+    }
 
-            var fields = new List<string>
+    /// <summary>The sequence a row line carries, for the closing line; null for
+    /// anything that is not a row.</summary>
+    private static long? LineSequence(string line)
+    {
+        string[] fields = line.Split(Separator);
+        if (fields.Length < 2 || !IsRowTag(fields[0]))
+        {
+            return null;
+        }
+
+        return PeekSequence(fields);
+    }
+
+    private static bool IsRowTag(string tag) =>
+        string.Equals(tag, EntryTag, StringComparison.Ordinal)
+        || string.Equals(tag, ToolTag, StringComparison.Ordinal)
+        || string.Equals(tag, CustodyTag, StringComparison.Ordinal);
+
+    /// <summary>The sequence column of any row, or -1 when it has none a
+    /// reader could use. Damaged rows still count toward the closing line.
+    /// </summary>
+    private static long PeekSequence(string[] fields)
+    {
+        return fields.Length >= 2
+            && long.TryParse(fields[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out long sequence)
+            && sequence >= 0
+                ? sequence
+                : -1L;
+    }
+
+    private static string FormatRow(JournalEntry entry)
+    {
+        if (entry.Custody != null)
+        {
+            var columns = new List<string>
             {
-                EntryTag,
+                CustodyTag,
                 entry.Sequence.ToString(CultureInfo.InvariantCulture),
                 ((int)entry.Kind).ToString(CultureInfo.InvariantCulture),
-                entry.Order.Value,
-                entry.Request.IsEmpty ? "" : entry.Request.Value,
-                ((int)entry.Transition).ToString(CultureInfo.InvariantCulture),
-                AtomicTextFile.Escape(entry.Container),
+                FormatTime(entry.WorldTime),
+                FormatEpoch(entry.LoadEpoch),
+            };
+            columns.AddRange(CustodyRowCodec.Encode(entry.Custody).Encode());
+            return string.Join(Separator.ToString(), columns.ToArray());
+        }
+
+        if (JournalEntryKinds.IsTool(entry.Kind))
+        {
+            var columns = new List<string>
+            {
+                ToolTag,
+                entry.Sequence.ToString(CultureInfo.InvariantCulture),
+                ((int)entry.Kind).ToString(CultureInfo.InvariantCulture),
+                entry.Request.Value,
+                entry.Worker.Value,
+                ((int)entry.Tool.Kind).ToString(CultureInfo.InvariantCulture),
+                AtomicTextFile.Escape(entry.Tool.ItemKey),
+                entry.Tool.Quality.ToString(CultureInfo.InvariantCulture),
+                entry.Tool.DurabilityAtIssue.ToString("R", CultureInfo.InvariantCulture),
+                entry.Tool.ToolTier.ToString(CultureInfo.InvariantCulture),
+                FormatTime(entry.WorldTime),
+                FormatEpoch(entry.LoadEpoch),
             };
 
-            foreach (MaterialStack stack in entry.Stacks)
+            var flags = new JournalFields();
+            if (entry.ReturnIntent)
             {
-                fields.Add(AtomicTextFile.Escape(stack.Item) + "*" + stack.Count.ToString(CultureInfo.InvariantCulture));
+                flags.Add("stage", "started");
             }
 
-            yield return string.Join(Separator.ToString(), fields.ToArray());
+            if (entry.WrittenByHandover)
+            {
+                flags.Add("by", "handover");
+            }
+
+            if (entry.Note.Length > 0)
+            {
+                flags.Add("note", entry.Note);
+            }
+
+            columns.AddRange(flags.Encode());
+            return string.Join(Separator.ToString(), columns.ToArray());
+        }
+
+        var fields = new List<string>
+        {
+            EntryTag,
+            entry.Sequence.ToString(CultureInfo.InvariantCulture),
+            ((int)entry.Kind).ToString(CultureInfo.InvariantCulture),
+            entry.Order.Value,
+            entry.Request.IsEmpty ? "" : entry.Request.Value,
+            ((int)entry.Transition).ToString(CultureInfo.InvariantCulture),
+            AtomicTextFile.Escape(entry.Container),
+            AtomicTextFile.Escape(entry.ContainerEpoch),
+            FormatTime(entry.WorldTime),
+            FormatEpoch(entry.LoadEpoch),
+        };
+
+        foreach (MaterialStack stack in entry.Stacks)
+        {
+            fields.Add(AtomicTextFile.Escape(stack.Item) + "*" + stack.Count.ToString(CultureInfo.InvariantCulture));
+        }
+
+        return string.Join(Separator.ToString(), fields.ToArray());
+    }
+
+    private static string FormatTime(double? time) =>
+        time.HasValue ? time.Value.ToString("R", CultureInfo.InvariantCulture) : string.Empty;
+
+    private static string FormatEpoch(Guid epoch) =>
+        epoch == Guid.Empty ? string.Empty : epoch.ToString("N", CultureInfo.InvariantCulture);
+
+    private static bool TryParseRow(string[] fields, int version, out JournalEntry entry)
+    {
+        entry = null!;
+        if (fields.Length == 0)
+        {
+            return false;
+        }
+
+        switch (fields[0])
+        {
+            case EntryTag:
+                return TryParseEntry(fields, version, out entry);
+            case ToolTag:
+                return TryParseToolEntry(fields, version, out entry);
+            case CustodyTag:
+                return version >= 3 && TryParseCustody(fields, out entry);
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>World time and load epoch, recorded together or not at all.
+    /// </summary>
+    private static bool TryParseTime(string timeField, string epochField, out double? time, out Guid epoch)
+    {
+        time = null;
+        epoch = Guid.Empty;
+
+        if (timeField.Length == 0 && epochField.Length == 0)
+        {
+            return true;
+        }
+
+        if (!double.TryParse(timeField, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed)
+            || double.IsNaN(parsed)
+            || double.IsInfinity(parsed)
+            || !Guid.TryParseExact(epochField, "N", out epoch)
+            || epoch == Guid.Empty)
+        {
+            return false;
+        }
+
+        time = parsed;
+        return true;
+    }
+
+    private static bool TryParseCustody(string[] fields, out JournalEntry entry)
+    {
+        entry = null!;
+
+        if (fields.Length < 5)
+        {
+            return false;
+        }
+
+        if (!long.TryParse(fields[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out long sequence)
+            || sequence < 0)
+        {
+            return false;
+        }
+
+        if (!int.TryParse(fields[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int kindValue)
+            || !Enum.IsDefined(typeof(JournalEntryKind), kindValue)
+            || !JournalEntryKinds.IsCustody((JournalEntryKind)kindValue))
+        {
+            return false;
+        }
+
+        if (!TryParseTime(fields[3], fields[4], out double? time, out Guid epoch) || !time.HasValue)
+        {
+            // Every custody row carries its world time; one without it could
+            // never be placed against a save.
+            return false;
+        }
+
+        if (!JournalFields.TryDecode(fields, 5, out JournalFields named)
+            || !CustodyRowCodec.TryDecode((JournalEntryKind)kindValue, named, out CustodyRow payload))
+        {
+            return false;
+        }
+
+        try
+        {
+            entry = new JournalEntry(sequence, payload, time.Value, epoch);
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
         }
     }
 
@@ -348,11 +612,12 @@ internal sealed class JournalStore
     /// Every field is validated before the entry is built, and a row that fails
     /// any of them is damage rather than something to repair by guessing which
     /// column was wrong -- the same rule the entry rows follow.</summary>
-    private static bool TryParseToolEntry(string[] fields, out JournalEntry entry)
+    private static bool TryParseToolEntry(string[] fields, int version, out JournalEntry entry)
     {
         entry = null!;
 
-        if (fields.Length < 10 || !string.Equals(fields[0], ToolTag, StringComparison.Ordinal))
+        int minimum = version >= 3 ? 12 : 10;
+        if (fields.Length < minimum || !string.Equals(fields[0], ToolTag, StringComparison.Ordinal))
         {
             return false;
         }
@@ -395,6 +660,42 @@ internal sealed class JournalStore
             return false;
         }
 
+        double? time = null;
+        Guid epoch = Guid.Empty;
+        bool returnIntent = false;
+        bool byHandover = false;
+        string? note = null;
+
+        if (version >= 3)
+        {
+            if (!TryParseTime(fields[10], fields[11], out time, out epoch)
+                || !JournalFields.TryDecode(fields, 12, out JournalFields flags))
+            {
+                return false;
+            }
+
+            foreach (KeyValuePair<string, string> flag in flags.Pairs)
+            {
+                switch (flag.Key)
+                {
+                    case "stage" when string.Equals(flag.Value, "started", StringComparison.Ordinal):
+                        returnIntent = true;
+                        break;
+                    case "by" when string.Equals(flag.Value, "handover", StringComparison.Ordinal):
+                        byHandover = true;
+                        break;
+                    case "note":
+                        note = flag.Value;
+                        break;
+                    default:
+                        // A flag this build does not understand changes what the
+                        // row means. Reading the row without it would be reading
+                        // a different row.
+                        return false;
+                }
+            }
+        }
+
         try
         {
             var specimen = new ToolSpecimen(
@@ -409,7 +710,12 @@ internal sealed class JournalStore
                 null,
                 null,
                 new WorkerId(fields[4]),
-                specimen);
+                specimen,
+                worldTime: time,
+                loadEpoch: epoch,
+                returnIntent: returnIntent,
+                writtenByHandover: byHandover,
+                note: note);
             return true;
         }
         catch (ArgumentException)
@@ -421,11 +727,12 @@ internal sealed class JournalStore
         }
     }
 
-    private static bool TryParseEntry(string[] fields, out JournalEntry entry)
+    private static bool TryParseEntry(string[] fields, int version, out JournalEntry entry)
     {
         entry = null!;
 
-        if (fields.Length < 7 || !string.Equals(fields[0], EntryTag, StringComparison.Ordinal))
+        int stacksStart = version >= 3 ? 10 : 7;
+        if (fields.Length < stacksStart || !string.Equals(fields[0], EntryTag, StringComparison.Ordinal))
         {
             return false;
         }
@@ -438,13 +745,13 @@ internal sealed class JournalStore
 
         if (!int.TryParse(fields[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int kindValue) ||
             !Enum.IsDefined(typeof(JournalEntryKind), kindValue) ||
-            JournalEntryKinds.IsTool((JournalEntryKind)kindValue))
+            !JournalEntryKinds.IsLegacyMaterial((JournalEntryKind)kindValue))
         {
-            // A tool kind on an entry row is damage. Without this the
-            // JournalEntry constructor below -- deliberately outside the try --
-            // throws straight out of Load, and one corrupted tag byte makes
-            // every command for that world fail forever with no read-only mode
-            // and no notice, because no LoadReport is ever built.
+            // A tool or custody kind on an entry row is damage. Without this the
+            // JournalEntry constructor below throws straight out of Load, and one
+            // corrupted tag byte makes every command for that world fail forever
+            // with no read-only mode and no notice, because no LoadReport is ever
+            // built.
             return false;
         }
 
@@ -454,25 +761,32 @@ internal sealed class JournalStore
             return false;
         }
 
-        OrderId order;
-        RequestId request = default;
-        try
+        var kind = (JournalEntryKind)kindValue;
+        if (SettlementJournal.CarriesRequest(kind) && fields[4].Length == 0)
         {
-            order = new OrderId(fields[3]);
-            if (fields[4].Length > 0)
-            {
-                request = new RequestId(fields[4]);
-            }
-        }
-        catch (ArgumentException)
-        {
+            // Every one of these keys off its request, and the replay used to
+            // skip such a row without a word. A row the record cannot use is
+            // damage, so the settlement goes read-only and says so (#283's
+            // audit: silent replay drops).
             return false;
         }
 
         string? container = fields[6].Length == 0 ? null : AtomicTextFile.Unescape(fields[6]);
+        string? containerEpoch = null;
+        double? time = null;
+        Guid epoch = Guid.Empty;
+
+        if (version >= 3)
+        {
+            containerEpoch = fields[7].Length == 0 ? null : AtomicTextFile.Unescape(fields[7]);
+            if (!TryParseTime(fields[8], fields[9], out time, out epoch))
+            {
+                return false;
+            }
+        }
 
         var stacks = new List<MaterialStack>();
-        for (int index = 7; index < fields.Length; index++)
+        for (int index = stacksStart; index < fields.Length; index++)
         {
             int star = fields[index].LastIndexOf('*');
             if (star <= 0 ||
@@ -487,9 +801,25 @@ internal sealed class JournalStore
             stacks.Add(new MaterialStack(AtomicTextFile.Unescape(fields[index].Substring(0, star)), count));
         }
 
-        entry = new JournalEntry(
-            sequence, (JournalEntryKind)kindValue, order, request,
-            (OrderTransition)transitionValue, container, stacks);
-        return true;
+        if (kind == JournalEntryKind.Reserved && (container == null || stacks.Count == 0))
+        {
+            // A reservation that names no container or holds nothing cannot be
+            // replayed. It used to be skipped silently; it is damage.
+            return false;
+        }
+
+        try
+        {
+            entry = new JournalEntry(
+                sequence, kind, new OrderId(fields[3]),
+                fields[4].Length > 0 ? new RequestId(fields[4]) : default,
+                (OrderTransition)transitionValue, container, stacks,
+                containerEpoch: containerEpoch, worldTime: time, loadEpoch: epoch);
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
     }
 }

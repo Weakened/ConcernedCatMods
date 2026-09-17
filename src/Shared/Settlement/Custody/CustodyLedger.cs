@@ -71,7 +71,9 @@ internal sealed class Reservation
 {
     private readonly List<MaterialStack> _stacks = new List<MaterialStack>();
 
-    public Reservation(RequestId request, OrderId order, string container, IEnumerable<MaterialStack> stacks)
+    public Reservation(
+        RequestId request, OrderId order, string container, IEnumerable<MaterialStack> stacks,
+        string? containerEpoch = null)
     {
         if (request.IsEmpty)
         {
@@ -92,6 +94,7 @@ internal sealed class Reservation
         Request = request;
         Order = order;
         Container = container;
+        ContainerEpoch = string.IsNullOrEmpty(containerEpoch) ? null : containerEpoch;
 
         foreach (MaterialStack stack in stacks ?? throw new ArgumentNullException(nameof(stacks)))
         {
@@ -111,6 +114,54 @@ internal sealed class Reservation
     /// <summary>Which container this came out of. Refunds go back to exactly
     /// this one — never to whatever is nearest at the time.</summary>
     public string Container { get; }
+
+    /// <summary>Which run of the world <see cref="Container"/> was a key in
+    /// (#294). A container key is renumbered on every load, so a key alone
+    /// cannot say which chest a reservation came from once the world has been
+    /// reloaded; with the epoch, a reservation matches a designation only when
+    /// both name the same chest in the same run. Null for a reservation written
+    /// before this was recorded, which matches by key alone, as it always did.
+    /// </summary>
+    public string? ContainerEpoch { get; }
+
+    /// <summary>True when this reservation was drawn from exactly the chest a
+    /// designation names: the same key, and — when both record one — the same
+    /// run of the world.</summary>
+    public bool CameFrom(string? containerKey, string? identityEpoch)
+    {
+        if (!string.Equals(Container, containerKey, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return ContainerEpoch == null
+            || identityEpoch == null
+            || string.Equals(ContainerEpoch, identityEpoch, StringComparison.Ordinal);
+    }
+
+    /// <summary>The same reservation: the same order, the same chest in the
+    /// same run, and exactly the same stacks in the same order.</summary>
+    public bool SamePayloadAs(Reservation other)
+    {
+        if (other == null
+            || !Order.Equals(other.Order)
+            || !string.Equals(Container, other.Container, StringComparison.Ordinal)
+            || !string.Equals(ContainerEpoch, other.ContainerEpoch, StringComparison.Ordinal)
+            || _stacks.Count != other._stacks.Count)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < _stacks.Count; index++)
+        {
+            if (!_stacks[index].Equals(other._stacks[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     public IReadOnlyList<MaterialStack> Stacks => _stacks;
 
@@ -216,10 +267,18 @@ internal sealed class CustodyLedger
 
     /// <summary>Records material taken out of a container.
     ///
-    /// A duplicate request id reports <see cref="CustodyOutcome.AlreadySatisfied"/>
-    /// and takes nothing, which is precisely what makes a retried reserve safe:
-    /// the adapter that calls this may not know whether its previous attempt
-    /// reached disk, and it does not have to.</summary>
+    /// A duplicate request id with the <b>same</b> reservation reports
+    /// <see cref="CustodyOutcome.AlreadySatisfied"/> and takes nothing, which is
+    /// precisely what makes a retried reserve safe: the adapter that calls this
+    /// may not know whether its previous attempt reached disk, and it does not
+    /// have to.
+    ///
+    /// A duplicate id with a <b>different</b> reservation — another chest, other
+    /// stacks, another order — is <see cref="CustodyOutcome.Rejected"/>. It used
+    /// to answer AlreadySatisfied as well, which told a caller reusing an id
+    /// that the wrong thing had happened successfully and silently kept the
+    /// first payload (#283's audit). <see cref="ToolLedger.Issue"/> already made
+    /// this distinction; this ledger now does too.</summary>
     public CustodyOutcome Reserve(Reservation reservation)
     {
         if (reservation == null)
@@ -227,9 +286,11 @@ internal sealed class CustodyLedger
             throw new ArgumentNullException(nameof(reservation));
         }
 
-        if (_reservations.ContainsKey(reservation.Request.Value))
+        if (_reservations.TryGetValue(reservation.Request.Value, out Reservation? recorded))
         {
-            return CustodyOutcome.AlreadySatisfied;
+            return recorded!.SamePayloadAs(reservation)
+                ? CustodyOutcome.AlreadySatisfied
+                : CustodyOutcome.Rejected;
         }
 
         _reservations.Add(reservation.Request.Value, reservation);

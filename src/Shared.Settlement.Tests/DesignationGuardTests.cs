@@ -324,11 +324,19 @@ public sealed class DesignationGuardTests : IDisposable
             "e\t0\t" + kind.ToString() + "\tcottage-1\t\t0\tchest-a\tWood*20",
         });
 
-        ReplayResult replayed = _journals.Load(Scope).Journal.Replay();
+        JournalStore.LoadReport report = _journals.Load(Scope);
+        ReplayResult replayed = report.Journal.Replay();
 
         Assert.NotNull(replayed);
         Assert.False(replayed.NeedsRepair);
         Assert.Empty(replayed.Ledger.Reservations);
+
+        // And it is no longer skipped without a word (#283's audit: silent
+        // replay drops). A request-carrying row with no request is damage, so
+        // the record goes read-only and says so instead of loading clean with
+        // part of it quietly ignored.
+        Assert.Equal(JournalLoadOutcome.LoadedWithSkippedLines, report.Outcome);
+        Assert.True(report.ReadOnly);
     }
 
     [Fact]
@@ -364,6 +372,23 @@ public sealed class DesignationGuardTests : IDisposable
             // that it has caught exactly what it was built for.
             [JournalEntryKind.ToolResolvedToWorker] = true,
             [JournalEntryKind.ToolResolvedToPlayer] = true,
+
+            // Schema v3 (#316). This test failed a third time the moment they
+            // were declared. Transfers, pickups, a person's answers, losses and
+            // handovers each key off the request they settle; an order's own
+            // acceptance and transitions, a cart baseline (keyed by order and
+            // lease) and a world-save marker (the whole record's) do not.
+            [JournalEntryKind.CollectionAccepted] = false,
+            [JournalEntryKind.CollectionTransition] = false,
+            [JournalEntryKind.PickupStarted] = true,
+            [JournalEntryKind.PickupFinished] = true,
+            [JournalEntryKind.TransferStarted] = true,
+            [JournalEntryKind.TransferFinished] = true,
+            [JournalEntryKind.TransferResolved] = true,
+            [JournalEntryKind.CartBaselineRecorded] = false,
+            [JournalEntryKind.LossRecorded] = true,
+            [JournalEntryKind.HandoverFinished] = true,
+            [JournalEntryKind.WorldSaveMarker] = false,
         };
 
         // Collected, not asserted one at a time. Assert.True stops at the
@@ -516,12 +541,16 @@ public sealed class DesignationGuardTests : IDisposable
             "e\t0\t2\tcottage-1\t\t0\t",
         });
 
-        SettlementJournal journal = _journals.Load(Scope).Journal;
+        JournalStore.LoadReport report = _journals.Load(Scope);
+        SettlementJournal journal = report.Journal;
 
         ReplayResult replayed = journal.Replay();
 
         Assert.NotNull(replayed);
         Assert.False(replayed.NeedsRepair);
+
+        // Damage now, not a clean load with the line ignored (#283's audit).
+        Assert.True(report.ReadOnly);
     }
 
     [Fact]
