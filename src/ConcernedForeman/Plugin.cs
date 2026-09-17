@@ -58,6 +58,10 @@ public sealed class Plugin : BaseUnityPlugin
             cooperation: null,
             sharedEpoch: () => custody.Epoch);
 
+        // A body a collection job holds is never despawned out from under it (ARCH-02).
+        CollectionRuntime collection = _collection;
+        _settlement.MayRetireBody = () => collection.Modes.MayRetireBody;
+
         Logger.LogInfo($"{PluginName} {PluginVersion} loaded");
         Logger.LogInfo(
             "Settlement runtime is " +
