@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using BepInEx;
 using TheConcernedCat.ConcernedTeamster.Adapters;
 using TheConcernedCat.ConcernedTeamster.Domain;
@@ -15,6 +16,15 @@ public sealed class Plugin : BaseUnityPlugin
 
     private bool _cartographerProbePending;
     private bool _compatibilityProbePending;
+
+    // #317: concernedcat.haul/1 for other Concerned Cat mods (DECISIONS.md D7).
+    private static readonly IReadOnlyDictionary<string, object> NoCapabilities = new Dictionary<string, object>();
+    private Adapters.Interop.HaulCapabilityPublisher? _haulCapability;
+
+    /// <summary>What other Concerned Cat mods may call, found by GUID and read
+    /// once per world session; only BCL types cross (DECISIONS.md D7).</summary>
+    public IReadOnlyDictionary<string, object> ConcernedCatCapabilities =>
+        _haulCapability?.Capabilities ?? NoCapabilities;
     private readonly Adapters.LogTailRecorder _logTail = new();
 
     private void Awake()
@@ -56,8 +66,17 @@ public sealed class Plugin : BaseUnityPlugin
         // reasons should not also lose every compatibility notice.
         _compatibilityProbePending = true;
 
+        // #317: publish the haul capability. Gunnar is reached through the source
+        // below; with #313 integrated it is () => _hauling?.Service.
+        _haulCapability = new Adapters.Interop.HaulCapabilityPublisher(() => null, PluginVersion, Logger);
+
         // Read-only telemetry, panels, manifest, and advisory warnings only;
         // nothing mutates carts.
+    }
+
+    private void OnDestroy()
+    {
+        _haulCapability?.Shutdown();
     }
 
     private void Update()
