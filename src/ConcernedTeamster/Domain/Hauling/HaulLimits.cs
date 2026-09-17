@@ -56,6 +56,10 @@ internal sealed class HaulLimits
     /// </summary>
     public float MinUprightDot { get; set; } = 0.5f;
 
+    /// <summary>Steepest ground (rise over run) a loaded cart is left standing
+    /// on when detaching (C2). Provisional until measured.</summary>
+    public float MaxParkingGradeRatio { get; set; } = 0.05f;
+
     // Motion and recovery (agents A and B)
 
     /// <summary>Window over which progress is judged from BOTH bodies.</summary>
@@ -102,6 +106,7 @@ internal sealed class HaulLimits
         Require(MaxHitchAttempts >= 1 && MaxHitchAttempts <= 10, nameof(MaxHitchAttempts));
         Require(MassSettleSeconds >= 0f && MassSettleSeconds <= 30f, nameof(MassSettleSeconds));
         Require(MinUprightDot >= 0.1f && MinUprightDot <= 1f, nameof(MinUprightDot));
+        Require(MaxParkingGradeRatio > 0f && MaxParkingGradeRatio <= MaxGradeRatio, nameof(MaxParkingGradeRatio));
         Require(StallWindowSeconds >= 1f && StallWindowSeconds <= 60f, nameof(StallWindowSeconds));
         Require(StallCartDisplacementMetres > 0f && StallCartDisplacementMetres <= 5f, nameof(StallCartDisplacementMetres));
         Require(MaxRecoveryAttempts >= 0 && MaxRecoveryAttempts <= 10, nameof(MaxRecoveryAttempts));

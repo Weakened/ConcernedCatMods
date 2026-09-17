@@ -183,10 +183,24 @@ Assert-SourceContains $zSyncTransform 'zDO.SetRotation(rotation);' "owner transf
 Assert-SourceContains $zSyncTransform 'private void ClientSync(float dt)' "non-owner transform interpolation"
 
 $resourceText = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($resources))
-$shipRows = [regex]::Matches($resourceText, '"ship_([^"]+)","([^"]+)"')
+# Valheim 1.0.14 (Steam build 25364265) writes its localization table as plain CSV
+# (ship_raft,Raft,...), quoting a cell only when it contains a comma; 1.0.12 quoted
+# every cell ("ship_raft","Raft"). Both forms are read. *_description rows describe
+# the same vessels and are not ship types, so they are not part of the reviewed catalog.
+$shipRows = [regex]::Matches($resourceText, '(?m)^"?ship_([^",
+]+)"?,(?:"([^"]*)"|([^,
+]*))')
 $displayRows = [ordered]@{}
 foreach ($row in $shipRows) {
-    $displayRows[$row.Groups[1].Value] = $row.Groups[2].Value
+    $key = $row.Groups[1].Value
+    if ($key.EndsWith('_description')) {
+        continue
+    }
+
+    $value = if ($row.Groups[2].Success) { $row.Groups[2].Value } else { $row.Groups[3].Value }
+    if (-not $displayRows.Contains($key)) {
+        $displayRows[$key] = $value
+    }
 }
 
 $expectedDisplayRows = [ordered]@{

@@ -191,6 +191,9 @@ internal enum HaulWireReason
     LeaseInvalidated = 14,
     HaulBusy = 15,
 
+    /// <summary>Authority was lost mid-haul (C2; mirrors Teamster's attention reason).</summary>
+    AuthorityLost = 16,
+
     // Cart state
     CartDestroyed = 20,
     CartUnloaded = 21,
@@ -217,4 +220,8 @@ internal enum HaulWireReason
     RendezvousTimedOut = 50,
     UnsafeParking = 51,
     WorkerBodyLost = 52,
+
+    // C2
+    WorkerBodyDuplicated = 53,
+    PausedByPlayer = 54,
 }

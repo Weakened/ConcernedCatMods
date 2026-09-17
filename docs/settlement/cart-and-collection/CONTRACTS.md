@@ -1,6 +1,6 @@
 # Cart pulling and resource collection: contracts
 
-Contract revision **C1**, frozen 2026-09-17 before dependent coding. The compilable half lives in:
+Contract revision **C2** (C1 frozen 2026-09-17 before dependent coding; C2 is additive, see §10). The compilable half lives in:
 
 | Area | Source | Compiled into | Tests |
 |---|---|---|---|
@@ -90,7 +90,7 @@ through the handoff.
 
 ### 2.3 Refusals and attention
 
-`CartAssignmentRefusal`, `HitchRefusal` and `HaulAttentionReason` are exhaustive. Each value has one player sentence,
+`CartAssignmentRefusal`, `HitchRefusal` and `HaulAttentionReason` are exhaustive. C2 adds `WorkerBodyDuplicated` and `PausedByPlayer`. Every `HaulAttentionReason` name has a `HaulWireReason` twin, pinned by a test, and `HaulCommandResult.Detail` carries a wire reason name, such as `HaulBusy`, that no attention reason can say. Each value has one player sentence,
 written by agent A for refusals and agent E for presentation. None is ever `Unspecified`.
 
 ### 2.4 Navigation seam (agent B implements, agent A calls)
@@ -218,6 +218,14 @@ The provider never moves material.
   - **Acceptance** checks `CheckShape()` plus authority, readiness (D12), scope validity, destination availability
     and "no other active order for this worker".
   - **Acceptance is journaled** (`CollectionAccepted`) before any work.
+- **Resuming after a reload (C2).** The definition is immutable, with one exception. After a reload,
+  `ICustodyRuntime.TryRecoverOrder` returns the worker's non-terminal order, and it is adopted **Paused**. Its scope
+  snapshot and container key still carry the previous load's epoch, so the player confirms a rebind:
+  - the scope is re-snapshotted from the same source;
+  - the container is selected again.
+
+  `RecordRebound` journals that as `CollectionRebound`. Quotas, progress and custody never change. Until the rebind,
+  the order stays Paused (`DestinationStale` / `ScopeChanged`).
 - **`WorkScope`**:
   - **Sources:** HarvestDesignation (a copy of the designation circle at acceptance), DefaultCampCircle (30 m on the
     latest valid respawn anchor, shown as a preview before acceptance) or CartographerWorkArea (later).
@@ -324,6 +332,7 @@ untouched, and schema v2 files still load:
 | `LossRecorded` | a person accepting observed loss |
 | `HandoverFinished` | hold-for-player |
 | `WorldSaveMarker` | generation, world time at `WorldSaveStarted` (§5.5) |
+| `CollectionRebound` (C2) | order, the new scope snapshot, the new delivery target |
 
 Every new row also records the world time at which it was written, so the marker rule can place it before or after a
 save.
@@ -472,4 +481,15 @@ player drops, graves, chests, piles, mine rocks, trees and logs, bushes and sapl
 
 | Rev | Date | Change |
 |---|---|---|
+| C2 | 2026-09-17 | Additive, from agents A and C:
+- `CollectionAttentionReason.PausedByPlayer`;
+- `HaulAttentionReason.WorkerBodyDuplicated` and `PausedByPlayer`, with `HaulWireReason.AuthorityLost`,
+  `WorkerBodyDuplicated` and `PausedByPlayer`, so every attention reason has a wire twin (pinned by a test);
+- `HaulCommandResult.Detail`;
+- `HaulLimits.MaxParkingGradeRatio`;
+- `ICustodyRuntime.WorldLoadEpoch`, `TryRecoverOrder` and `RecordRebound`, with journal kind `CollectionRebound`
+  and the post-reload rebind rule (§4).
+
+The game updated to Valheim 1.0.14 the same day. A decompile diff against the audited build found the seam types
+unchanged (`EVIDENCE.md`). |
 | C1 | 2026-09-17 | Initial freeze: Workers, Interop haul/1, Teamster haul domain, collection orders, custody transfers and ports, journal kind names, persistence contract. §6 predicate added from the pickup audit before dispatch. |
