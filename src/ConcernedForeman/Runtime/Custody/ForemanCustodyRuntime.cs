@@ -202,17 +202,23 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
                 continue;
             }
 
-            CollectionAttentionReason reason = report.ReasonFor(order.Order);
-            if (reason == CollectionAttentionReason.Unspecified && _census != null)
+            // The body's own state first (CONTRACTS.md §5.6). Without exactly
+            // one body the stored inventory cannot be read, so reconciliation
+            // can only say "cannot be checked", which would otherwise read as a
+            // generic mismatch and hide the reason a person has to act on.
+            CollectionAttentionReason reason = CollectionAttentionReason.Unspecified;
+            if (_census != null && _census.IsDuplicated)
             {
-                if (_census.IsDuplicated)
-                {
-                    reason = CollectionAttentionReason.WorkerBodyDuplicated;
-                }
-                else if (_census.IsMissing && CarriesAnything(order.Order))
-                {
-                    reason = CollectionAttentionReason.WorkerBodyLost;
-                }
+                reason = CollectionAttentionReason.WorkerBodyDuplicated;
+            }
+            else if (_census != null && _census.IsMissing && CarriesAnything(order.Order))
+            {
+                reason = CollectionAttentionReason.WorkerBodyLost;
+            }
+
+            if (reason == CollectionAttentionReason.Unspecified)
+            {
+                reason = report.ReasonFor(order.Order);
             }
 
             if (reason == CollectionAttentionReason.Unspecified && _core.Ledger.HasUncertainTransfer(order.Order))
