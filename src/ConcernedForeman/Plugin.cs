@@ -45,9 +45,14 @@ public sealed class Plugin : BaseUnityPlugin
         // #315 over #316: Thorstein's collection runs on the custody runtime and shares its
         // world-load epoch, so every key made during one load agrees (CONTRACTS C2).
         ForemanCustodyRuntime custody = _settlement.Custody;
+        CollectionSettings collectionSettings = CollectionSettings.Bind(Config);
+
+        // One carry budget: the worker's inventory port refuses what the loop would
+        // never plan, so the two can't disagree about a full load.
+        custody.CarryWeight = () => collectionSettings.WorkerCarryWeight.Value;
         _collection = new CollectionRuntime(
             settings,
-            CollectionSettings.Bind(Config),
+            collectionSettings,
             message => Logger.LogInfo(message),
             custody,
             cooperation: null,
