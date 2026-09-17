@@ -229,14 +229,14 @@ public sealed class CooperationHaulClientTests
         var nonce = new Guid("0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0");
 
         var ids = new HaulRequestIds(shortOrder, nonce);
-        Assert.Equal("h-collect-1-0f1e2d3c", ids.HaulId);
+        Assert.Equal("h-collect-1", ids.HaulId);
         Assert.Equal("h-collect-1-0f1e2d3c-q1", ids.Next('q'));
         Assert.Equal("h-collect-1-0f1e2d3c-t2", ids.NextTransfer().Value);
         Assert.Equal(2, ids.Issued);
 
         var longIds = new HaulRequestIds(longOrder, nonce);
         Assert.True(WorkSlug.IsValid(longIds.HaulId));
-        Assert.True(longIds.HaulId.Length <= 31);
+        Assert.True(longIds.HaulId.Length <= 22);
         string id = longIds.Next('c');
         for (int index = 0; index < 100000; index++)
         {
@@ -246,8 +246,11 @@ public sealed class CooperationHaulClientTests
         Assert.True(WorkSlug.IsValid(id), id);
         Assert.True(id.Length <= WorkSlug.MaxLength, id);
 
+        // A second run of the same order continues the same haul with its own
+        // request ids.
         var otherRun = new HaulRequestIds(shortOrder, new Guid("1f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"));
-        Assert.NotEqual(ids.HaulId, otherRun.HaulId);
+        Assert.Equal(ids.HaulId, otherRun.HaulId);
+        Assert.NotEqual("h-collect-1-0f1e2d3c-q1", otherRun.Next('q'));
         Assert.Throws<ArgumentOutOfRangeException>(() => ids.Next('Q'));
         Assert.Throws<ArgumentException>(() => new HaulRequestIds(shortOrder, Guid.Empty));
     }
