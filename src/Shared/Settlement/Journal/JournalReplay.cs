@@ -555,6 +555,10 @@ internal static class CustodyReplay
                     Report(repairs, entry, ledger.RecordHandover(handover.Transfer, handover.Order, handover.Item, handover.Count));
                     break;
 
+                case CollectionReboundRow rebound:
+                    Report(repairs, entry, ledger.Rebind(rebound.Order, rebound.Scope, rebound.Delivery));
+                    break;
+
                 case WorldSaveMarkerRow _:
                     break;
             }

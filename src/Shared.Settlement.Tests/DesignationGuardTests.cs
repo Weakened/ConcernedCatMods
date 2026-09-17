@@ -389,6 +389,9 @@ public sealed class DesignationGuardTests : IDisposable
             [JournalEntryKind.LossRecorded] = true,
             [JournalEntryKind.HandoverFinished] = true,
             [JournalEntryKind.WorldSaveMarker] = false,
+
+            // C2: a rebind is keyed by its order, like the order's acceptance.
+            [JournalEntryKind.CollectionRebound] = false,
         };
 
         // Collected, not asserted one at a time. Assert.True stops at the

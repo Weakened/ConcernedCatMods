@@ -371,6 +371,42 @@ internal sealed class HandoverFinishedRow : CustodyRow
     public override RequestId Request => Transfer;
 }
 
+/// <summary>C2: after a reload, the player confirmed an order's scope
+/// re-snapshotted from the same source and its delivery container selected
+/// again. Only the scope and the delivery target change; the rest of the
+/// definition — quotas, participation, the issuer — and every unit of custody
+/// stay exactly as recorded.</summary>
+internal sealed class CollectionReboundRow : CustodyRow
+{
+    public CollectionReboundRow(OrderId order, WorkScope scope, DeliveryTarget delivery)
+    {
+        if (order.IsEmpty)
+        {
+            throw new ArgumentException("A rebind needs its order.", nameof(order));
+        }
+
+        OrderId = order;
+        Scope = scope ?? throw new ArgumentNullException(nameof(scope));
+
+        if (delivery.Kind == DeliveryKind.Unspecified)
+        {
+            throw new ArgumentException("A rebind names a delivery.", nameof(delivery));
+        }
+
+        Delivery = delivery;
+    }
+
+    private OrderId OrderId { get; }
+
+    public WorkScope Scope { get; }
+
+    public DeliveryTarget Delivery { get; }
+
+    public override JournalEntryKind Kind => JournalEntryKind.CollectionRebound;
+
+    public override OrderId Order => OrderId;
+}
+
 /// <summary><c>WorldSaveMarker{generation}</c>; the world time is the row's
 /// own column. See <c>SaveTimeline</c> for the two ways a marker is read: a
 /// save (generation one above the live chain) or a load restatement
@@ -492,6 +528,12 @@ internal static class CustodyRowCodec
 
             case WorldSaveMarkerRow marker:
                 fields.Add("generation", marker.Generation);
+                break;
+
+            case CollectionReboundRow rebound:
+                fields.Add("order", rebound.Order.Value);
+                WriteScope(fields, rebound.Scope);
+                WriteDelivery(fields, rebound.Delivery);
                 break;
 
             default:
@@ -688,6 +730,14 @@ internal static class CustodyRowCodec
                     ? new WorldSaveMarkerRow(generation)
                     : null;
 
+            case JournalEntryKind.CollectionRebound:
+                return reader.Order("order", out OrderId reboundOrder)
+                    && reader.Scope(out WorkScope? reboundScope)
+                    && reader.Delivery(out DeliveryTarget reboundDelivery)
+                    && reboundDelivery.Kind != DeliveryKind.Unspecified
+                        ? new CollectionReboundRow(reboundOrder, reboundScope!, reboundDelivery)
+                        : null;
+
             default:
                 return null;
         }
@@ -717,6 +767,31 @@ internal static class CustodyRowCodec
             .Add(prefix + ".z", source.Position.Z);
     }
 
+    private static void WriteScope(JournalFields fields, WorkScope scope)
+    {
+        fields.AddName("scope.source", scope.Source)
+            .Add("scope.x", scope.Centre.X)
+            .Add("scope.y", scope.Centre.Y)
+            .Add("scope.z", scope.Centre.Z)
+            .Add("scope.r", scope.RadiusMetres)
+            .Add("scope.anchor", scope.AnchorDescription)
+            .Add("scope.rev", scope.SourceRevision)
+            .Add("scope.epoch", scope.WorldLoadEpoch);
+    }
+
+    private static void WriteDelivery(JournalFields fields, DeliveryTarget delivery)
+    {
+        fields.Add("delivery.kind", delivery.Kind == DeliveryKind.Unspecified ? string.Empty : delivery.Kind.ToString());
+        if (delivery.Kind == DeliveryKind.Container)
+        {
+            fields.Add("delivery.key", delivery.ContainerKey)
+                .Add("delivery.epoch", delivery.WorldLoadEpoch)
+                .Add("delivery.x", delivery.Position.X)
+                .Add("delivery.y", delivery.Position.Y)
+                .Add("delivery.z", delivery.Position.Z);
+        }
+    }
+
     private static void WriteDefinition(JournalFields fields, CollectionOrderDefinition definition)
     {
         fields.Add("order", definition.Order.Value)
@@ -729,26 +804,8 @@ internal static class CustodyRowCodec
                 .Add(prefix + ".n", definition.Quotas[index].Requested);
         }
 
-        WorkScope scope = definition.Scope;
-        fields.AddName("scope.source", scope.Source)
-            .Add("scope.x", scope.Centre.X)
-            .Add("scope.y", scope.Centre.Y)
-            .Add("scope.z", scope.Centre.Z)
-            .Add("scope.r", scope.RadiusMetres)
-            .Add("scope.anchor", scope.AnchorDescription)
-            .Add("scope.rev", scope.SourceRevision)
-            .Add("scope.epoch", scope.WorldLoadEpoch);
-
-        DeliveryTarget delivery = definition.Delivery;
-        fields.Add("delivery.kind", delivery.Kind == DeliveryKind.Unspecified ? string.Empty : delivery.Kind.ToString());
-        if (delivery.Kind == DeliveryKind.Container)
-        {
-            fields.Add("delivery.key", delivery.ContainerKey)
-                .Add("delivery.epoch", delivery.WorldLoadEpoch)
-                .Add("delivery.x", delivery.Position.X)
-                .Add("delivery.y", delivery.Position.Y)
-                .Add("delivery.z", delivery.Position.Z);
-        }
+        WriteScope(fields, definition.Scope);
+        WriteDelivery(fields, definition.Delivery);
 
         fields.Add("participation", definition.Participation == ParticipationMode.Unspecified
                 ? string.Empty
@@ -929,47 +986,7 @@ internal static class CustodyRowCodec
                 quotas.Add(new ResourceQuota(resource, n));
             }
 
-            if (!Name("scope.source", out WorkScopeSource scopeSource)
-                || !Float("scope.x", out float sx)
-                || !Float("scope.y", out float sy)
-                || !Float("scope.z", out float sz)
-                || !Float("scope.r", out float radius)
-                || !Text("scope.anchor", out string anchor)
-                || !Int("scope.rev", out int scopeRevision)
-                || !Guid("scope.epoch", out Guid scopeEpoch))
-            {
-                return false;
-            }
-
-            var scope = new WorkScope(scopeSource, new SitePoint(sx, sy, sz), radius, anchor, scopeRevision, scopeEpoch);
-
-            if (!Text("delivery.kind", out string deliveryText))
-            {
-                return false;
-            }
-
-            DeliveryTarget delivery;
-            if (deliveryText.Length == 0)
-            {
-                delivery = default;
-            }
-            else if (!Name("delivery.kind", out DeliveryKind deliveryKind))
-            {
-                return false;
-            }
-            else if (deliveryKind == DeliveryKind.HoldForPlayer)
-            {
-                delivery = DeliveryTarget.HoldForPlayer();
-            }
-            else if (Required("delivery.key", out string containerKey)
-                && Guid("delivery.epoch", out Guid deliveryEpoch)
-                && Float("delivery.x", out float dx)
-                && Float("delivery.y", out float dy)
-                && Float("delivery.z", out float dz))
-            {
-                delivery = DeliveryTarget.ToContainer(containerKey, deliveryEpoch, new SitePoint(dx, dy, dz));
-            }
-            else
+            if (!Scope(out WorkScope? scope) || !Delivery(out DeliveryTarget delivery))
             {
                 return false;
             }
@@ -991,8 +1008,64 @@ internal static class CustodyRowCodec
             }
 
             definition = new CollectionOrderDefinition(
-                order, new WorkerId(worker), quotas, scope, delivery, participation, issuer);
+                order, new WorkerId(worker), quotas, scope!, delivery, participation, issuer);
             return true;
+        }
+
+        public bool Scope(out WorkScope? scope)
+        {
+            scope = null;
+            if (!Name("scope.source", out WorkScopeSource scopeSource)
+                || !Float("scope.x", out float sx)
+                || !Float("scope.y", out float sy)
+                || !Float("scope.z", out float sz)
+                || !Float("scope.r", out float radius)
+                || !Text("scope.anchor", out string anchor)
+                || !Int("scope.rev", out int scopeRevision)
+                || !Guid("scope.epoch", out Guid scopeEpoch))
+            {
+                return false;
+            }
+
+            scope = new WorkScope(scopeSource, new SitePoint(sx, sy, sz), radius, anchor, scopeRevision, scopeEpoch);
+            return true;
+        }
+
+        public bool Delivery(out DeliveryTarget delivery)
+        {
+            delivery = default;
+            if (!Text("delivery.kind", out string deliveryText))
+            {
+                return false;
+            }
+
+            if (deliveryText.Length == 0)
+            {
+                return true;
+            }
+
+            if (!Name("delivery.kind", out DeliveryKind deliveryKind))
+            {
+                return false;
+            }
+
+            if (deliveryKind == DeliveryKind.HoldForPlayer)
+            {
+                delivery = DeliveryTarget.HoldForPlayer();
+                return true;
+            }
+
+            if (Required("delivery.key", out string containerKey)
+                && Guid("delivery.epoch", out Guid deliveryEpoch)
+                && Float("delivery.x", out float dx)
+                && Float("delivery.y", out float dy)
+                && Float("delivery.z", out float dz))
+            {
+                delivery = DeliveryTarget.ToContainer(containerKey, deliveryEpoch, new SitePoint(dx, dy, dz));
+                return true;
+            }
+
+            return false;
         }
     }
 }

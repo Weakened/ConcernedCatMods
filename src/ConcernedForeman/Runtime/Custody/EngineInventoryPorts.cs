@@ -403,9 +403,18 @@ internal sealed class ContainerInventoryPort : EngineInventoryPort
 }
 
 /// <summary>A leased cart's container, above its recorded pre-existing cargo
-/// (D8). Loading and unloading happen while the hauler holds the cart still, so
-/// being attached to a worker is not "in use"; a player pulling it, or anybody
-/// having it open, is.</summary>
+/// (D8).
+///
+/// <b>In use, and the one carve-out (ratified by the lead, C2).</b> Vanilla's
+/// <c>Vagon.InUse()</c> is also true while anything is attached, and loading
+/// happens while the hauler holds the cart still. So this port treats an
+/// attached cart as available only when the joint's connected body is not the
+/// local player's AND nobody has the container open. <b>Precondition the port
+/// cannot check:</b> a cooperative caller executes a transfer here only while it
+/// holds an Accepted <c>acknowledgeWait Transferring</c> at the current haul
+/// revision (agent E enforces that), so the cart cannot move out from under the
+/// transfer. A delivery chest that happens to be a cart's container stays strict
+/// (<see cref="ContainerInventoryPort"/>).</summary>
 internal sealed class CartInventoryPort : EngineInventoryPort
 {
     private readonly Vagon _cart;

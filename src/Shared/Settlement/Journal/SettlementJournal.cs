@@ -105,6 +105,11 @@ internal enum JournalEntryKind
     /// <summary>A world save's snapshot, or a load restating which save the
     /// world is (see <see cref="SaveTimeline"/>).</summary>
     WorldSaveMarker = 20,
+
+    /// <summary>C2: a player-confirmed rebind of an order's scope snapshot and
+    /// delivery target after a reload. Quotas, progress and custody unchanged.
+    /// </summary>
+    CollectionRebound = 21,
 }
 
 /// <summary>Which half of the record an entry belongs to.
@@ -148,6 +153,7 @@ internal static class JournalEntryKinds
             case JournalEntryKind.LossRecorded:
             case JournalEntryKind.HandoverFinished:
             case JournalEntryKind.WorldSaveMarker:
+            case JournalEntryKind.CollectionRebound:
                 return true;
 
             default:
@@ -721,6 +727,7 @@ internal sealed class SettlementJournal
             case JournalEntryKind.CollectionTransition:
             case JournalEntryKind.CartBaselineRecorded:
             case JournalEntryKind.WorldSaveMarker:
+            case JournalEntryKind.CollectionRebound:
                 return false;
         }
 
