@@ -165,6 +165,10 @@ internal sealed class CooperativeDeliveryLoop
 
     public bool IsTerminal => Phase == CooperationPhase.Completed || Phase == CooperationPhase.Cancelled;
 
+    private static bool CommandsWorker(CooperationPhase phase) =>
+        phase == CooperationPhase.ApproachingCart || phase == CooperationPhase.Loading ||
+        phase == CooperationPhase.Hauling || phase == CooperationPhase.Unloading;
+
     private CooperationStep StepForStoppedPhase()
     {
         switch (Phase)
@@ -217,6 +221,11 @@ internal sealed class CooperativeDeliveryLoop
             {
                 return Reconcile(CollectionAttentionReason.HaulerUnavailable, "Concerned Teamster stopped answering.", now);
             }
+        }
+
+        if (!_worker.IsPresent && CommandsWorker(Phase))
+        {
+            return Reconcile(CollectionAttentionReason.WorkerBodyLost, "Thorstein's body is not here.", now);
         }
 
         switch (Phase)
@@ -332,6 +341,11 @@ internal sealed class CooperativeDeliveryLoop
         if (!_custody.IsWritable)
         {
             return PauseFor(CollectionAttentionReason.JournalReadOnly, "The settlement record cannot be written.");
+        }
+
+        if (!_worker.IsPresent)
+        {
+            return PauseFor(CollectionAttentionReason.WorkerBodyLost, "Thorstein's body is not here.");
         }
 
         HaulCall<HelloReply> hello = _client.Hello(now);
@@ -629,9 +643,9 @@ internal sealed class CooperativeDeliveryLoop
             return PauseFor(Known(workerRefusal, CollectionAttentionReason.WorkerBodyLost), "Thorstein's pack cannot be reached.");
         }
 
-        if (!_custody.TryResolveCart(_cartKey, _providerEpoch, out IInventoryPort? cartPort, out _))
+        if (!_custody.TryResolveCart(_cartKey, _providerEpoch, out IInventoryPort? cartPort, out CollectionAttentionReason cartRefusal))
         {
-            return Reconcile(CollectionAttentionReason.CartLeaseLost, "The cart's container cannot be reached.", now);
+            return Reconcile(Known(cartRefusal, CollectionAttentionReason.CartLeaseLost), "The cart's container cannot be reached.", now);
         }
 
         if (!_baselineRecorded)
@@ -797,9 +811,9 @@ internal sealed class CooperativeDeliveryLoop
             return DeadlineOr(now, "a fresh look at the held cart", CooperationStep.Working);
         }
 
-        if (!_custody.TryResolveCart(_cartKey, _providerEpoch, out IInventoryPort? cartPort, out _))
+        if (!_custody.TryResolveCart(_cartKey, _providerEpoch, out IInventoryPort? cartPort, out CollectionAttentionReason cartRefusal))
         {
-            return Reconcile(CollectionAttentionReason.CartLeaseLost, "The cart's container cannot be reached.", now);
+            return Reconcile(Known(cartRefusal, CollectionAttentionReason.CartLeaseLost), "The cart's container cannot be reached.", now);
         }
 
         SitePoint chest = _order.Delivery.Position;

@@ -374,6 +374,55 @@ public sealed class CooperationLoopTests
     }
 
     [Fact]
+    public void AvailabilityNamesWhyGunnarCannotJoinAndReadsNothingElse()
+    {
+        CooperationAvailability Probe(CooperationScenario scenario, out CollectionAttentionReason reason) =>
+            CooperationAvailabilityProbe.Evaluate(scenario.Client, 1f, out reason, out _);
+
+        var ready = new CooperationScenario();
+        Assert.Equal(CooperationAvailability.Available, Probe(ready, out CollectionAttentionReason none));
+        Assert.Equal(CollectionAttentionReason.Unspecified, none);
+        Assert.DoesNotContain(ready.Gunnar.Log, op => op != "hello" && op != "describeLease");
+
+        var absent = new CooperationScenario();
+        absent.Gunnar.Discovery = HaulDiscovery.Hidden(CapabilityStatus.VersionTooLow, "1.0.4", "below 1.0.5");
+        Assert.Equal(CooperationAvailability.ProviderTooOld, Probe(absent, out _));
+
+        var noCart = new CooperationScenario();
+        noCart.Gunnar.LeaseId = string.Empty;
+        Assert.Equal(CooperationAvailability.NoCartAssigned, Probe(noCart, out CollectionAttentionReason noCartReason));
+        Assert.Equal(CollectionAttentionReason.HaulerUnavailable, noCartReason);
+
+        var peers = new CooperationScenario();
+        peers.Gunnar.Authority = WorkAuthorityVerdict.OtherPeersConnected;
+        Assert.Equal(CooperationAvailability.OtherPeersConnected, Probe(peers, out CollectionAttentionReason peersReason));
+        Assert.Equal(CollectionAttentionReason.OtherPeersConnected, peersReason);
+
+        var stopped = new CooperationScenario();
+        stopped.Gunnar.EndControl(HaulWireReason.BrakeEngaged);
+        Assert.Equal(CooperationAvailability.GunnarNeedsAttention, Probe(stopped, out CollectionAttentionReason stoppedReason));
+        Assert.Equal(CollectionAttentionReason.HaulerNeedsAttention, stoppedReason);
+
+        var tipped = new CooperationScenario();
+        tipped.Gunnar.CartUpright = false;
+        Assert.Equal(CooperationAvailability.CartNotUpright, Probe(tipped, out _));
+    }
+
+    [Fact]
+    public void AMissingThorsteinStopsTheRunWhereItWouldHaveMovedHim()
+    {
+        var run = new CooperationScenario();
+        run.RunUntil(tick => tick.Phase == CooperationPhase.Hauling);
+
+        run.Thorstein.IsPresent = false;
+        CooperationTick stopped = run.RunUntil(tick => tick.Step == CooperationStep.Paused || tick.Step == CooperationStep.NeedsAttention);
+
+        Assert.Equal(CollectionAttentionReason.WorkerBodyLost, stopped.Reason);
+        run.AssertLedger(CustodyPlace.Cart, stone: 20, wood: 30);
+        run.AssertInvariants();
+    }
+
+    [Fact]
     public void RendezvousCandidatesAreOrderedDistinctAndBounded()
     {
         var scope = new WorkScope(WorkScopeSource.DefaultCampCircle, new SitePoint(0f, 30f, 0f), 30f, "your bed", 1, CooperationScenario.Epoch);
