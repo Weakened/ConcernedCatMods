@@ -562,6 +562,8 @@ internal sealed class CooperationFakeCustody : ICooperationCustody, IMaterialCus
         return ok;
     }
 
+    public RequestId NextTransferId(OrderId order) => new RequestId(order.Value + "-t-" + (Intents.Count + 1));
+
     public bool RecordCartBaseline(OrderId order, string leaseId, string cartSessionKey, Guid providerEpoch)
     {
         if (BaselineFails)

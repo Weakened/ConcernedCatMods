@@ -49,6 +49,22 @@ public sealed class CooperationLoopTests
         run.AssertInvariants();
     }
 
+    [Theory]
+    [InlineData(50, 100, 1)]
+    [InlineData(20, 25, 2)]
+    public void TickedOnlyAtTheCollectionLoopsCheckpointsTheRunNeverPingPongsAndCompletes(int pack, int cart, int trips)
+    {
+        var run = new CooperationScenario(packUnits: pack, cartUnits: cart) { OwnerTicksOnlyAtCheckpoints = true };
+
+        run.RunUntil(tick => tick.Step == CooperationStep.Delivered, maxTicks: 2000);
+
+        run.AssertLedger(CustodyPlace.Destination, stone: 20, wood: 30);
+        Assert.Equal(trips, run.Loop.DeliveryTrips);
+        int handBacks = run.Ticks.Count(tick => tick.Step == CooperationStep.CollectMore);
+        Assert.True(handBacks <= 2 * trips + 2, "handed back " + handBacks + " times");
+        run.AssertInvariants();
+    }
+
     [Fact]
     public void ACapacityCheckpointTakesASecondTrip()
     {
@@ -272,6 +288,23 @@ public sealed class CooperationLoopTests
     }
 
     [Fact]
+    public void ARetriedCartTransferNeverRunsOnAHoldThatEndedInBetween()
+    {
+        var run = new CooperationScenario();
+        run.Custody.ForcedOutcomes.Enqueue(TransferOutcome.Refused);
+        run.RunUntil(tick => run.Custody.Receipts.Count == 1);
+        Assert.Equal(HaulWirePhase.Unloading, run.Gunnar.Phase);
+
+        run.Gunnar.EndControl(HaulWireReason.PlayerTookOver);
+        CooperationTick stopped = run.RunUntil(tick => tick.Step == CooperationStep.Paused || tick.Step == CooperationStep.NeedsAttention);
+
+        Assert.Single(run.Custody.Receipts);
+        Assert.Equal(CollectionAttentionReason.HaulerNeedsAttention, stopped.Reason);
+        run.AssertLedger(CustodyPlace.Worker, stone: 20, wood: 30);
+        run.AssertInvariants();
+    }
+
+    [Fact]
     public void AnUncertainTransferStopsWithoutReplayOrCompensation()
     {
         var run = new CooperationScenario();
@@ -298,7 +331,9 @@ public sealed class CooperationLoopTests
         run.RunUntil(tick => tick.Phase == CooperationPhase.AwaitingLoad);
 
         run.Loop.Pause(run.Now);
-        Assert.Equal(CooperationStep.Paused, run.Step().Step);
+        CooperationTick paused = run.Step();
+        Assert.Equal(CooperationStep.Paused, paused.Step);
+        Assert.Equal(CollectionAttentionReason.PausedByPlayer, paused.Reason);
         Assert.True(run.Loop.PausedByPlayer);
 
         Assert.True(run.Loop.Resume(run.Now));
@@ -407,14 +442,31 @@ internal sealed class CooperationScenario
 
     public List<CooperationTick> Ticks { get; } = new List<CooperationTick>();
 
+    /// <summary>Tick the run only the way agent C's collection loop does: at a
+    /// carry checkpoint (pack full, or everything still needed covered) with a
+    /// hand-over, and then every frame while it answers Working. Between
+    /// checkpoints time passes without a tick.</summary>
+    public bool OwnerTicksOnlyAtCheckpoints { get; set; }
+
     public CooperationTick Step(float seconds = 0.6f)
     {
+        CooperationStep last = Ticks.Count == 0 ? CooperationStep.Unspecified : Ticks[Ticks.Count - 1].Step;
+        if (OwnerTicksOnlyAtCheckpoints && (last == CooperationStep.Unspecified || last == CooperationStep.CollectMore))
+        {
+            for (int guard = 0; guard < 200 && CollectSome(); guard++)
+            {
+                Now += seconds;
+            }
+
+            Loop.HandOver();
+        }
+
         Now += seconds;
         Gunnar.Now = Now;
         Gunnar.Advance();
         CooperationTick tick = Loop.Tick(Now);
         Ticks.Add(tick);
-        if (tick.Step == CooperationStep.CollectMore)
+        if (tick.Step == CooperationStep.CollectMore && !OwnerTicksOnlyAtCheckpoints)
         {
             CollectSome();
         }
@@ -466,7 +518,7 @@ internal sealed class CooperationScenario
         }
     }
 
-    private void CollectSome()
+    private bool CollectSome()
     {
         foreach (ResourceQuota quota in Order.Quotas)
         {
@@ -481,8 +533,10 @@ internal sealed class CooperationScenario
             GroundUnits -= added;
             if (added > 0)
             {
-                return;
+                return true;
             }
         }
+
+        return false;
     }
 }

@@ -183,6 +183,8 @@ internal static class CooperationReasons
             case HaulWireReason.RendezvousTimedOut:
                 return CollectionAttentionReason.RendezvousTimedOut;
             case HaulWireReason.NoAuthority:
+            case HaulWireReason.AuthorityLost:
+            case HaulWireReason.PausedByPlayer:
             case HaulWireReason.WorkerUnavailable:
             case HaulWireReason.HaulBusy:
             case HaulWireReason.Unspecified:

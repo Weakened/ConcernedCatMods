@@ -372,6 +372,11 @@ internal sealed class HaulProvider
     private static IReadOnlyDictionary<string, string>? RefusalFor(HaulCommandResult result)
     {
         HaulWireReason reason = HaulWireMapping.ToWire(result.Reason);
+        if (reason == HaulWireReason.Unspecified)
+        {
+            reason = HaulWireMapping.FromDetail(result.Detail);
+        }
+
         switch (result.Outcome)
         {
             case HaulCommandOutcome.Accepted:

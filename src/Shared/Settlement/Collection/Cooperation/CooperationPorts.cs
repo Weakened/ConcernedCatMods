@@ -74,6 +74,11 @@ internal interface ICooperationCustody
     /// within reach. Never another chest.</summary>
     bool TryResolveContainer(DeliveryTarget target, out IInventoryPort? port, out CollectionAttentionReason refusal);
 
+    /// <summary>The request id the next transfer carries, minted immediately
+    /// before it executes (the custody runtime's own id scheme, unique for the
+    /// life of the record).</summary>
+    RequestId NextTransferId(OrderId order);
+
     /// <summary>Records the cart's pre-existing cargo before the order first
     /// puts anything in it (<c>CartBaselineRecorded</c>).</summary>
     bool RecordCartBaseline(OrderId order, string leaseId, string cartSessionKey, Guid providerEpoch);

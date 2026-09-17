@@ -58,9 +58,9 @@ internal static class HaulWireMapping
         }
     }
 
-    /// <summary>A haul's attention reason on the wire. Unspecified stays
-    /// Unspecified ("no reason"); every real reason has a wire value, and
-    /// <c>AuthorityLost</c> travels as the wire's <c>NoAuthority</c>.</summary>
+    /// <summary>A haul's attention reason on the wire, name for name (C2 gives
+    /// every attention reason a wire twin). Unspecified stays Unspecified ("no
+    /// reason").</summary>
     public static HaulWireReason ToWire(HaulAttentionReason reason)
     {
         switch (reason)
@@ -96,7 +96,7 @@ internal static class HaulWireMapping
             case HaulAttentionReason.CartUnloaded:
                 return HaulWireReason.CartUnloaded;
             case HaulAttentionReason.AuthorityLost:
-                return HaulWireReason.NoAuthority;
+                return HaulWireReason.AuthorityLost;
             case HaulAttentionReason.OtherPeersConnected:
                 return HaulWireReason.OtherPeersConnected;
             case HaulAttentionReason.HitchFailed:
@@ -111,9 +111,34 @@ internal static class HaulWireMapping
                 return HaulWireReason.WorkerBodyLost;
             case HaulAttentionReason.LeaseInvalidated:
                 return HaulWireReason.LeaseInvalidated;
+            case HaulAttentionReason.WorkerBodyDuplicated:
+                return HaulWireReason.WorkerBodyDuplicated;
+            case HaulAttentionReason.PausedByPlayer:
+                return HaulWireReason.PausedByPlayer;
             default:
                 return HaulWireReason.Unspecified;
         }
+    }
+
+    /// <summary>A wire reason named by <c>HaulCommandResult.Detail</c> (C2), for
+    /// what no attention reason can say, such as <c>HaulBusy</c>. Unspecified
+    /// when the detail is not exactly a wire reason name.</summary>
+    public static HaulWireReason FromDetail(string? detail)
+    {
+        if (string.IsNullOrEmpty(detail))
+        {
+            return HaulWireReason.Unspecified;
+        }
+
+        foreach (string name in System.Enum.GetNames(typeof(HaulWireReason)))
+        {
+            if (string.Equals(name, detail, System.StringComparison.Ordinal))
+            {
+                return (HaulWireReason)System.Enum.Parse(typeof(HaulWireReason), name);
+            }
+        }
+
+        return HaulWireReason.Unspecified;
     }
 
     /// <summary>Why a mutation cannot be served while authority is not

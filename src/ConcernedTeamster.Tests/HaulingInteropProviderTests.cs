@@ -512,7 +512,13 @@ public class HaulingInteropProviderTests
         AssertRefusal(Send(provider, RequestHaul("h-r3", service.Revision)), HaulReplyStatus.Unavailable, HaulWireReason.WorkerUnavailable);
 
         service.ForcedResult = new HaulCommandResult(HaulCommandOutcome.Unavailable, HaulAttentionReason.AuthorityLost, service.Revision);
-        AssertRefusal(Send(provider, RequestHaul("h-r4", service.Revision)), HaulReplyStatus.Unavailable, HaulWireReason.NoAuthority);
+        AssertRefusal(Send(provider, RequestHaul("h-r4", service.Revision)), HaulReplyStatus.Unavailable, HaulWireReason.AuthorityLost);
+
+        // C2: a protocol reason no attention reason can say travels in Detail.
+        service.ForcedResult = new HaulCommandResult(HaulCommandOutcome.Rejected, HaulAttentionReason.Unspecified, service.Revision, "HaulBusy");
+        AssertRefusal(Send(provider, RequestHaul("h-r7", service.Revision)), HaulReplyStatus.Rejected, HaulWireReason.HaulBusy);
+        service.ForcedResult = new HaulCommandResult(HaulCommandOutcome.Rejected, HaulAttentionReason.Unspecified, service.Revision, "not a reason name");
+        AssertRefusal(Send(provider, RequestHaul("h-r8", service.Revision)), HaulReplyStatus.ProviderError, HaulWireReason.WorkerUnavailable);
 
         service.ForcedResult = new HaulCommandResult(HaulCommandOutcome.Stale, HaulAttentionReason.Unspecified, service.Revision);
         AssertRefusal(Send(provider, RequestHaul("h-r5", service.Revision)), HaulReplyStatus.Stale, HaulWireReason.RevisionMismatch);
@@ -548,8 +554,7 @@ public class HaulingInteropProviderTests
             }
 
             Assert.NotEqual(HaulWireReason.Unspecified, wire);
-            string expected = reason == HaulAttentionReason.AuthorityLost ? "NoAuthority" : reason.ToString();
-            Assert.Equal(expected, wire.ToString());
+            Assert.Equal(reason.ToString(), wire.ToString());
         }
     }
 

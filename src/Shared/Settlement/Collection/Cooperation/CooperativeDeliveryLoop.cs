@@ -85,10 +85,13 @@ internal sealed class CooperativeDeliveryLoop
     private int _lastLoadMoved;
 
     // Waiting.
+    private int _tickNumber;
+    private int _holdTick = -1;
     private PhaseDeadline? _deadline;
     private int _watchedCommitted;
     private SitePoint? _walkTarget;
     private bool _commandingWorker;
+    private bool _handedOver;
 
     public CooperativeDeliveryLoop(
         CollectionOrderDefinition order,
@@ -183,6 +186,7 @@ internal sealed class CooperativeDeliveryLoop
 
     public CooperationTick Tick(float now)
     {
+        _tickNumber++;
         switch (Phase)
         {
             case CooperationPhase.Completed:
@@ -238,6 +242,13 @@ internal sealed class CooperativeDeliveryLoop
         }
     }
 
+    /// <summary>The order's owner reached its own carry checkpoint and hands
+    /// Thorstein over (the collection loop ticks this run only then, and while
+    /// it answers Working). Whatever he carries goes to the cart at the next
+    /// opportunity, so the two loops can never disagree about "full" and hand
+    /// him back and forth. Cleared when the run hands him back.</summary>
+    public void HandOver() => _handedOver = true;
+
     /// <summary>The player paused the order: release any hold, stop Gunnar
     /// where he is if he is moving for this order, and hold.</summary>
     public void Pause(float now)
@@ -255,7 +266,7 @@ internal sealed class CooperativeDeliveryLoop
         }
 
         StopWorker();
-        SetPhase(CooperationPhase.Paused, CollectionAttentionReason.Unspecified, "Paused.");
+        SetPhase(CooperationPhase.Paused, CollectionAttentionReason.PausedByPlayer, "Paused.");
         PausedByPlayer = true;
     }
 
@@ -601,6 +612,17 @@ internal sealed class CooperativeDeliveryLoop
             }
         }
 
+        CooperationTick? holdLost = EnsureHoldCurrent(now, out bool holdCurrent);
+        if (holdLost != null)
+        {
+            return holdLost;
+        }
+
+        if (!holdCurrent)
+        {
+            return DeadlineOr(now, "a fresh look at the held cart", CooperationStep.Working);
+        }
+
         if (!_custody.TryResolveWorker(out IInventoryPort? workerPort, out CollectionAttentionReason workerRefusal))
         {
             TryReleaseHoldOnce(now);
@@ -762,6 +784,17 @@ internal sealed class CooperativeDeliveryLoop
             {
                 return DeadlineOr(now, "the cart being held still for unloading", CooperationStep.Working);
             }
+        }
+
+        CooperationTick? holdLost = EnsureHoldCurrent(now, out bool holdCurrent);
+        if (holdLost != null)
+        {
+            return holdLost;
+        }
+
+        if (!holdCurrent)
+        {
+            return DeadlineOr(now, "a fresh look at the held cart", CooperationStep.Working);
         }
 
         if (!_custody.TryResolveCart(_cartKey, _providerEpoch, out IInventoryPort? cartPort, out _))
@@ -1247,6 +1280,7 @@ internal sealed class CooperativeDeliveryLoop
         {
             case HaulCallOutcome.Succeeded:
                 _holdActive = true;
+                _holdTick = _tickNumber;
                 _holdUncertain = false;
                 _holdRevision = call.Reply!.Revision;
                 _haulRevision = call.Reply.Revision;
@@ -1279,6 +1313,49 @@ internal sealed class CooperativeDeliveryLoop
                     ? Reconcile(CollectionAttentionReason.HaulerUnavailable, "Concerned Teamster stopped answering.", now)
                     : null;
         }
+    }
+
+    /// <summary>C3: a transfer at the cart runs only while this run holds an
+    /// Accepted Transferring at the current haul revision - the custody port
+    /// cannot check that, so it is checked here. Granted in this very tick, the
+    /// hold is current (nothing else runs in between). On a later tick it is
+    /// confirmed by a fresh poll, never a cached one: <paramref name="current"/>
+    /// stays false until one is allowed. A hold that is gone ends the run in
+    /// reconciliation, with no transfer.</summary>
+    private CooperationTick? EnsureHoldCurrent(float now, out bool current)
+    {
+        current = false;
+        if (!_holdActive)
+        {
+            return null;
+        }
+
+        if (_holdTick == _tickNumber)
+        {
+            current = true;
+            return null;
+        }
+
+        HaulCall<GetHaulReply> call = _client.GetHaul(_ids.HaulId, now);
+        if (call.FromCache || (call.Outcome == HaulCallOutcome.NoAnswer && !_client.IsProviderLost))
+        {
+            return null;
+        }
+
+        if (call.Succeeded && call.Reply!.Phase == HaulWirePhase.Unloading && call.Reply.Revision == _holdRevision)
+        {
+            _holdTick = _tickNumber;
+            current = true;
+            return null;
+        }
+
+        _holdActive = false;
+        GetHaulReply? haul = call.Reply;
+        return Reconcile(
+            haul != null && haul.HasAttention ? CooperationReasons.ForHaul(haul.Attention) : CollectionAttentionReason.HaulerNeedsAttention,
+            "Gunnar's hold on the cart ended before the transfer (" +
+            (haul != null ? haul.Phase + (haul.HasAttention ? ", " + haul.AttentionName : string.Empty) : Explain(call)) + ").",
+            now);
     }
 
     /// <summary>Tells Gunnar the transfer is done. Null to continue (released,
@@ -1464,7 +1541,7 @@ internal sealed class CooperativeDeliveryLoop
 
             int count = Math.Min(recorded, fits);
             blocked |= count < recorded;
-            var intent = new TransferIntent(_ids.NextTransfer(), _order.Order, from, to, item, count, view.Revision);
+            var intent = new TransferIntent(_custody.NextTransferId(_order.Order), _order.Order, from, to, item, count, view.Revision);
             TransferReceipt receipt = _custody.Executor.Execute(intent, fromPort, toPort);
             switch (receipt.Outcome)
             {
@@ -1618,7 +1695,7 @@ internal sealed class CooperativeDeliveryLoop
             return stillToCollect == 0 && LedgerTotal(CustodyPlace.Cart) > 0 ? Checkpoint.HaulNow : Checkpoint.Collect;
         }
 
-        if (stillToCollect == 0)
+        if (stillToCollect == 0 || _handedOver)
         {
             return Checkpoint.LoadNow;
         }
@@ -1774,7 +1851,15 @@ internal sealed class CooperativeDeliveryLoop
         Detail = detail ?? string.Empty;
     }
 
-    private CooperationTick Emit(CooperationStep step) => new CooperationTick(step, Phase, Reason, Detail, PlanRevision);
+    private CooperationTick Emit(CooperationStep step)
+    {
+        if (step == CooperationStep.CollectMore)
+        {
+            _handedOver = false;
+        }
+
+        return new CooperationTick(step, Phase, Reason, Detail, PlanRevision);
+    }
 
     private static CollectionAttentionReason Known(CollectionAttentionReason reason, CollectionAttentionReason fallback) =>
         reason == CollectionAttentionReason.Unspecified ? fallback : reason;
