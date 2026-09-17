@@ -26,8 +26,10 @@ This is a focused slice of #273's settlement program. It is not a new framework.
 - #296: Work Areas and the default circle.
 - #282 and #283: harvest and custody.
 - #294, #293 and #300: known custody and record defects.
-- Installed game: Valheim 1.0.12 (network 40, build 25253764); `assembly_valheim.dll` SHA-256 `27a766a8…c393a84`;
-  Unity 6000.0.75f1. Test profile: BepInEx 5.4.23.5 and Jötunn 2.30.0 (`CART_SEAM_AUDIT.md` §1). The repository
+- **Installed game:** the audits read Valheim 1.0.12 (network 40, build 25253764; `assembly_valheim.dll` SHA-256
+  `27a766a8…c393a84`). Steam updated the game to **Valheim 1.0.14** (build 25364265; SHA-256 `f6499816…c8017fb6`)
+  on 2026-09-17 at 10:20. The lead diffed the full decompile against the audited build: see `EVIDENCE.md`.
+  Unity is 6000.0.75f1. Test profile: BepInEx 5.4.23.5 and Jötunn 2.30.0 (`CART_SEAM_AUDIT.md` §1). The repository
   builds against JotunnLib 2.29.2.
 
 ## 3. Scope and non-goals
