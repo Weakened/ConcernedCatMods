@@ -12,9 +12,12 @@ namespace TheConcernedCat.ConcernedForeman;
 /// <i>other</i> half — the opt-in settlement runtime from #273 — which is off
 /// until a person turns it on.
 ///
-/// Nothing here installs a patch, hooks a game event or touches world state at
-/// load. Until the settlement runtime is enabled and a worker is deliberately
-/// spawned, this plugin registers two console commands and does nothing else.</summary>
+/// Nothing here installs a patch or touches world state at load. It registers the
+/// worker prefab (so a saved worker body survives a world load), subscribes the
+/// world-save hook (which writes only to Foreman's own settlement record, and
+/// only when custody has unsaved rows), and registers two console commands.
+/// Until the settlement runtime is enabled and a worker is deliberately spawned,
+/// it does nothing else.</summary>
 [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
 [BepInDependency(Jotunn.Main.ModGuid)]
 public sealed class Plugin : BaseUnityPlugin
@@ -30,6 +33,11 @@ public sealed class Plugin : BaseUnityPlugin
     {
         ForemanSettlementSettings settings = ForemanSettlementSettings.Bind(Config);
         _settlement = new SettlementRuntime(settings, message => Logger.LogInfo(message));
+
+        // The worker prefab must be registered before any world's objects are
+        // created, or a saved worker body is destroyed as an unknown prefab (D9);
+        // the world-save hook writes custody markers and nothing else.
+        _settlement.Install();
 
         Logger.LogInfo($"{PluginName} {PluginVersion} loaded");
         Logger.LogInfo(
@@ -69,6 +77,12 @@ public sealed class Plugin : BaseUnityPlugin
         if (_worldWasUp && !worldIsUp)
         {
             _settlement?.OnWorldUnloaded();
+        }
+        else if (!_worldWasUp && worldIsUp)
+        {
+            // As soon as the world is up, before its net time can advance:
+            // custody reads the loaded world time here (CONTRACTS.md §5.5).
+            _settlement?.OnWorldLoaded();
         }
 
         _worldWasUp = worldIsUp;
