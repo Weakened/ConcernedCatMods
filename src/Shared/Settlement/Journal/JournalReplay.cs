@@ -356,7 +356,18 @@ internal static class ToolReplay
                 break;
 
             case JournalEntryKind.ToolResolvedToWorker:
-                if (IsWaiting(fold.Phase))
+                if (entry.WrittenByHandover)
+                {
+                    // A return recorded its intention and the player's
+                    // inventory then refused the tool: nothing moved, he still
+                    // has it. Only ever closes a return; it is never an answer
+                    // about a give.
+                    if (fold.Phase == Phase.ReturnInFlight)
+                    {
+                        fold.Phase = Phase.Held;
+                    }
+                }
+                else if (IsWaiting(fold.Phase))
                 {
                     fold.Phase = Phase.Held;
                 }

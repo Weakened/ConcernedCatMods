@@ -254,11 +254,12 @@ internal sealed class JournalEntry
                 throw new ArgumentException("Only a return has an intention row.", nameof(returnIntent));
             }
 
-            if (writtenByHandover && kind != JournalEntryKind.ToolResolvedToPlayer)
+            if (writtenByHandover
+                && kind != JournalEntryKind.ToolResolvedToPlayer
+                && kind != JournalEntryKind.ToolResolvedToWorker)
             {
                 throw new ArgumentException(
-                    "Only \"the player still has it\" is ever written by the handover itself.",
-                    nameof(writtenByHandover));
+                    "Only a settled answer is ever written by the handover itself.", nameof(writtenByHandover));
             }
         }
         else

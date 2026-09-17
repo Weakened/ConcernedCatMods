@@ -353,23 +353,26 @@ internal static class SaveTimeline
 
     /// <summary>The world at world time <paramref name="loaded"/> is the save of
     /// <paramref name="generation"/>. Decides every world-effect row after that
-    /// save and cuts the chain back to it.</summary>
+    /// save, cuts the chain back to it, and puts the load itself in its place:
+    /// rows written after this point in the record happened after the load, so
+    /// a later load judges them against the loaded time, exactly as it would
+    /// judge rows after a save.</summary>
     private static void ApplyLoad(
         IReadOnlyList<JournalEntry> entries, RowStanding[] standings, List<Link> chain,
         int generation, double loaded, int position, List<string> problems)
     {
         int link = -1;
+        for (int candidate = chain.Count - 1; candidate >= 0; candidate--)
+        {
+            if (chain[candidate].Generation == generation)
+            {
+                link = candidate;
+                break;
+            }
+        }
+
         if (generation > 0)
         {
-            for (int candidate = chain.Count - 1; candidate >= 0; candidate--)
-            {
-                if (chain[candidate].Generation == generation)
-                {
-                    link = candidate;
-                    break;
-                }
-            }
-
             if (link < 0)
             {
                 problems.Add(
@@ -422,7 +425,9 @@ internal static class SaveTimeline
         }
         else
         {
-            chain.RemoveRange(link + 1, chain.Count - link - 1);
+            chain.RemoveRange(link, chain.Count - link);
         }
+
+        chain.Add(new Link(generation, loaded, position));
     }
 }

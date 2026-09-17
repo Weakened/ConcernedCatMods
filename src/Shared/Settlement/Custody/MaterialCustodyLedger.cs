@@ -565,6 +565,22 @@ internal sealed class MaterialCustodyLedger : IMaterialCustodyView
             return CustodyLedgerOutcome.Rejected;
         }
 
+        if (ambiguous)
+        {
+            // The marker rule could not place this receipt: whatever it says is
+            // evidence for a person, never applied. Its intent is ambiguous too
+            // (the rule places both halves of one synchronous call together) or
+            // still open; either way the transfer now waits.
+            if (record.Status != TransferStatus.Open && record.Status != TransferStatus.Ambiguous)
+            {
+                return CustodyLedgerOutcome.Rejected;
+            }
+
+            record.Status = TransferStatus.Ambiguous;
+            record.Evidence = Join(receipt.Evidence, "the result could not be placed before or after the loaded world save");
+            return CustodyLedgerOutcome.Applied;
+        }
+
         switch (record.Status)
         {
             case TransferStatus.Open:
@@ -587,13 +603,6 @@ internal sealed class MaterialCustodyLedger : IMaterialCustodyView
                 return StatusFor(receipt.Outcome) == record.Status && receipt.Accepted == record.Applied
                     ? CustodyLedgerOutcome.AlreadySatisfied
                     : CustodyLedgerOutcome.RejectedDifferentPayload;
-        }
-
-        if (ambiguous)
-        {
-            record.Status = TransferStatus.Ambiguous;
-            record.Evidence = Join(receipt.Evidence, "the receipt could not be placed before or after the loaded world save");
-            return CustodyLedgerOutcome.Applied;
         }
 
         switch (receipt.Outcome)

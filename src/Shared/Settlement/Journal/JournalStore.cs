@@ -296,14 +296,16 @@ internal sealed class JournalStore
             }
         }
 
-        if (version >= 3 && !sawTrailer)
+        if ((version >= 3 && !sawTrailer) || !sawHeader)
         {
+            // A sealed record without its closing line lost its tail, and a
+            // file with no line at all lost everything: no build writes either.
             trailer = TrailerVerdict.Missing;
         }
 
         journal.MarkClean();
 
-        bool damagedTrailer = version >= 3 && trailer != TrailerVerdict.Intact;
+        bool damagedTrailer = (version >= 3 || !sawHeader) && trailer != TrailerVerdict.Intact;
 
         if (skipped > 0)
         {
