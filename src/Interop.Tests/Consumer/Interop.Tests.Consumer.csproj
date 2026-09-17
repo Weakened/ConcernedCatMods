@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <!-- No implicit usings: the shipped products compile these sources for net48
+         without them, so the harness must too. -->
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>TheConcernedCat.Interop.Tests.Consumer</AssemblyName>
+    <RootNamespace>Interop.Tests.Consumer</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- #317 consumer half: exactly the game-free sources Concerned Foreman
+         compiles for concernedcat.haul/1 - the settlement layer (whose
+         Collection/Cooperation folder holds the consumer client) and the shared
+         worker and interop areas. Compiled into THIS assembly, so its internal
+         types are distinct CLR types from the provider harness's. Nothing from
+         Teamster. -->
+    <Compile Include="..\..\Shared\Settlement\**\*.cs" LinkBase="Settlement" />
+    <Compile Include="..\..\Shared\Workers\**\*.cs" LinkBase="Workers" />
+    <Compile Include="..\..\Shared\Interop\**\*.cs" LinkBase="Interop" />
+  </ItemGroup>
+
+</Project>

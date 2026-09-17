@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <!-- No implicit usings: the shipped products compile these sources for net48
+         without them, so the harness must too. -->
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>TheConcernedCat.Interop.Tests.Provider</AssemblyName>
+    <RootNamespace>Interop.Tests.Provider</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- #317 provider half: exactly what Concerned Teamster compiles for
+         concernedcat.haul/1 - Gunnar's haul contract (not the execution or
+         navigation folders, which belong to other agents), the provider domain,
+         and the shared worker and interop areas - plus a fake haul service.
+         Compiled into THIS assembly, so every internal type here is a different
+         CLR type from its namesake in the consumer harness, as it is between the
+         two shipped DLLs. Nothing from Foreman or the settlement layer. -->
+    <Compile Include="..\..\ConcernedTeamster\Domain\Hauling\*.cs" LinkBase="Teamster\Hauling" />
+    <Compile Include="..\..\ConcernedTeamster\Domain\Hauling\Interop\**\*.cs" LinkBase="Teamster\Hauling\Interop" />
+    <Compile Include="..\..\ConcernedTeamster.Tests\HaulingInteropFakeService.cs" LinkBase="Fakes" />
+    <Compile Include="..\..\Shared\Workers\**\*.cs" LinkBase="Workers" />
+    <Compile Include="..\..\Shared\Interop\**\*.cs" LinkBase="Interop" />
+  </ItemGroup>
+
+</Project>
