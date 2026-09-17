@@ -117,9 +117,10 @@ internal static class JointSignalClassifier
         if (!puller.Present || puller.Faulted || puller.Dead)
         {
             return SignalVerdict.End(
-                HaulAttentionReason.WorkerBodyLost,
+                puller.Duplicated ? HaulAttentionReason.WorkerBodyDuplicated : HaulAttentionReason.WorkerBodyLost,
                 releaseJoint: true,
                 LeaseInvalidation.WorkerBodyLost,
+                puller.Duplicated ? "more than one body carries Gunnar's identity" :
                 puller.Faulted ? "Gunnar's worker faulted" : puller.Dead ? "Gunnar's body died" : "Gunnar's body is gone");
         }
 

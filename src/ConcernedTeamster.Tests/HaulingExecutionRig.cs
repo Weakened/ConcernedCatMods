@@ -17,8 +17,12 @@ internal sealed class HaulingExecutionRig
 
     public const float Step = 0.05f;
 
-    public HaulingExecutionRig(Action<HaulLimits>? tuneLimits = null, Action<HaulExecutionLimits>? tuneExecution = null)
+    public HaulingExecutionRig(
+        Action<HaulLimits>? tuneLimits = null,
+        Action<HaulExecutionLimits>? tuneExecution = null,
+        FakeNavigation? navigation = null)
     {
+        Navigation = navigation;
         Limits = HaulLimits.Default;
         tuneLimits?.Invoke(Limits);
         Execution = HaulExecutionLimits.Default;
@@ -56,6 +60,8 @@ internal sealed class HaulingExecutionRig
 
     public FakeLog Log { get; }
 
+    public FakeNavigation? Navigation { get; }
+
     public GunnarHaulService Service { get; }
 
     public HaulExecutor Executor { get; private set; }
@@ -66,7 +72,7 @@ internal sealed class HaulingExecutionRig
 
     public HaulExecutor NewExecutor(Guid epoch, int startingRevision)
     {
-        var ports = new HaulExecutorPorts(Body, Seam, Planner, Monitor, Authority, Clock, Log);
+        var ports = new HaulExecutorPorts(Body, Seam, Planner, Monitor, Authority, Clock, Log, Navigation);
         var executor = new HaulExecutor(ports, WorkerKey.Gunnar, epoch, startingRevision, Limits, Execution);
         Seam.ModeProbe = () => executor.Modes.Mode;
         return executor;
@@ -544,4 +550,95 @@ internal sealed class FakeLog : IHaulExecutionLog
     public void Warning(string message) => Warnings.Add(message);
 
     public void Bug(string message) => Bugs.Add(message);
+}
+
+internal sealed class FakeNavigation : IHaulNavigation
+{
+    private readonly List<string> _journal;
+
+    public FakeNavigation(List<string>? journal = null) => _journal = journal ?? new List<string>();
+
+    public bool UseCartSucceeds { get; set; } = true;
+
+    public int UseCartCalls { get; private set; }
+
+    public int ReleaseCartCalls { get; private set; }
+
+    public List<WorkPoint?> PlannedFrom { get; } = new List<WorkPoint?>();
+
+    public List<CartRouteRequest> Requests { get; } = new List<CartRouteRequest>();
+
+    public List<(WorkPoint Target, WorkPoint Cart, WorkPoint Puller)> Stalls { get; } = new List<(WorkPoint, WorkPoint, WorkPoint)>();
+
+    public CartRouteVerdict NextVerdict { get; set; } = CartRouteVerdict.Suitable;
+
+    public HaulSteeringStatus SteeringStatus { get; set; } = HaulSteeringStatus.Following;
+
+    public bool RefreshDue { get; set; }
+
+    public CartRouteVerdict RefreshVerdict { get; set; } = CartRouteVerdict.Suitable;
+
+    public CartRoutePlan? LastRefreshed { get; private set; }
+
+    public int RefreshCalls { get; private set; }
+
+    public CartFootprint? MeasuredFootprint { get; set; } = new CartFootprint(1.72f, 2.9f, 1.6f);
+
+    private bool _inUse;
+
+    public CartFootprint? Footprint => _inUse ? MeasuredFootprint : null;
+
+    public bool UseCart(CartKey cart)
+    {
+        UseCartCalls++;
+        _journal.Add("UseCart");
+        _inUse = UseCartSucceeds;
+        return _inUse;
+    }
+
+    public void ReleaseCart()
+    {
+        ReleaseCartCalls++;
+        _journal.Add("ReleaseCart");
+        _inUse = false;
+    }
+
+    public CartRoutePlan Plan(CartRouteRequest request, WorkPoint? pullerPosition, float now)
+    {
+        PlannedFrom.Add(pullerPosition);
+        Requests.Add(request);
+        return NextVerdict == CartRouteVerdict.Suitable
+            ? new CartRoutePlan(CartRouteVerdict.Suitable, new[] { request.From, request.To }, 30f, 0.02f, 2.7f, request.To, request.Revision)
+            : CartRoutePlan.Refused(NextVerdict, request.Revision);
+    }
+
+    public HaulSteering Steer(CartRoutePlan plan, WorkPoint pullerPosition, WorkPoint cartPosition)
+    {
+        if (!plan.IsSuitable)
+        {
+            return new HaulSteering(HaulSteeringStatus.NotSuitable, null);
+        }
+
+        return SteeringStatus == HaulSteeringStatus.Following
+            ? new HaulSteering(HaulSteeringStatus.Following, new SteeringGoal(plan.Waypoints[plan.Waypoints.Count - 1], 1f, true, 1, plan.RequestRevision))
+            : new HaulSteering(SteeringStatus, null);
+    }
+
+    public bool NeedsRefresh(CartRoutePlan plan, float now) => RefreshDue;
+
+    public CartRoutePlan Refresh(CartRoutePlan plan, WorkPoint pullerPosition, WorkPoint cartPosition, float now)
+    {
+        RefreshCalls++;
+        RefreshDue = false;
+        LastRefreshed = RefreshVerdict == CartRouteVerdict.Suitable
+            ? new CartRoutePlan(CartRouteVerdict.Suitable, new[] { pullerPosition, plan.Waypoints[plan.Waypoints.Count - 1] }, 20f, 0.02f, 2.7f, plan.StopPoint, plan.RequestRevision)
+            : CartRoutePlan.Refused(RefreshVerdict, plan.RequestRevision);
+        return LastRefreshed;
+    }
+
+    public void RememberStall(WorkPoint legTarget, WorkPoint cartPosition, WorkPoint pullerPosition, float now)
+    {
+        _journal.Add("RememberStall");
+        Stalls.Add((legTarget, cartPosition, pullerPosition));
+    }
 }

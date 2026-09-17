@@ -46,6 +46,10 @@ internal sealed class TeamsterWorkerBody : IPullerBody
 
     internal float CalibratedMassKg => _calibratedMass;
 
+    /// <summary>Set by the runtime's census: more than one body carries Gunnar's
+    /// identity, so none is bound.</summary>
+    internal bool Duplicated { get; set; }
+
     internal string PlayerRotationConstraints => _playerRotationMeasured ? _playerRotation.ToString() : "not measured";
 
     /// <summary>Binds (or unbinds) the one body the runtime found for Gunnar,
@@ -68,7 +72,7 @@ internal sealed class TeamsterWorkerBody : IPullerBody
 
     public PullerBodyFacts Read()
     {
-        var facts = new PullerBodyFacts { CalibratedMassKg = _calibratedMass };
+        var facts = new PullerBodyFacts { CalibratedMassKg = _calibratedMass, Duplicated = Duplicated };
         TeamsterWorkerAI? ai = _ai;
         if (ai == null)
         {

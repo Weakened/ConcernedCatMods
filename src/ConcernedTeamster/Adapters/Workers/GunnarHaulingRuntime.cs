@@ -3,8 +3,12 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using BepInEx.Logging;
+using TheConcernedCat.ConcernedTeamster.Adapters.Navigation;
+using TheConcernedCat.ConcernedTeamster.Domain.Capabilities;
 using TheConcernedCat.ConcernedTeamster.Domain.Hauling;
 using TheConcernedCat.ConcernedTeamster.Domain.Hauling.Execution;
+using TheConcernedCat.ConcernedTeamster.Domain.Load;
+using TheConcernedCat.ConcernedTeamster.Domain.Risk;
 using TheConcernedCat.Workers;
 using UnityEngine;
 
@@ -48,6 +52,7 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
     private GunnarWorkAuthority _authority = null!;
     private ICartRoutePlanner _planner = null!;
     private IHaulMotionMonitor _monitor = null!;
+    private CartNavigationBridge _navigation = null!;
     private CartTelemetryPump? _pump;
     private HaulExecutor? _executor;
     private Guid _epoch;
@@ -99,8 +104,13 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         _body = new TeamsterWorkerBody(_execution);
         _seam = new VagonHitchSeam(_body, EngagedBrakeCartId, _execution);
         _authority = new GunnarWorkAuthority(settings);
-        _planner = new StraightLinePlaceholderPlanner(new StraightSegmentProbe(LeasedCartObservation), _limits, _execution);
-        _monitor = new PlaceholderHaulMotionMonitor(_limits);
+
+        // Agent B's cart navigation (#314): one planner and one query budget for
+        // every haul, with Teamster's shipped climb and descent calibrations.
+        _navigation = new CartNavigationBridge(
+            CartNavigationKit.Create(_limits, LoadClimbModel(), LoadDescentModel()), _seam, _body);
+        _planner = _navigation.Kit.Planner;
+        _monitor = _navigation.Kit.Motion;
         Service = new GunnarHaulService(_authority);
         TeamsterWorkerAI.TickHandler = OnWorkerTick;
         TeamsterWorkerAI.ErrorLog = message => _log.LogError(message);
@@ -108,6 +118,18 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         _log.LogInfo(
             "Gunnar's hauling is " + (settings.GunnarHaulingEnabled.Value ? "ENABLED" : "off (the default)") +
             "; pull strength " + settings.GunnarPullStrength.Value + ", worker body from '" + TeamsterWorkerPrefab.BaseCreature + "'.");
+        GameCapabilityReport navigation = NavigationCapability.Report;
+        if (navigation.Enabled)
+        {
+            _log.LogInfo("Gunnar's cart navigation is available: " + navigation.VerifiedMembers.Count + " game members verified.");
+        }
+        else
+        {
+            _log.LogWarning(
+                "Gunnar's cart navigation is UNAVAILABLE, so every route is refused: missing " +
+                string.Join(", ", navigation.MissingMembers) + ".");
+        }
+
         if (_seam.IsAvailable)
         {
             _log.LogInfo("Gunnar's cart seam is available: " + _seam.Probe.VerifiedMembers.Count + " game members verified.");
@@ -199,7 +221,8 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         _seam.Forget();
         _body.Bind(null);
         _pump = null;
-        var ports = new HaulExecutorPorts(_body, _seam, _planner, _monitor, _authority, this, this);
+        _navigation.ReleaseCart();
+        var ports = new HaulExecutorPorts(_body, _seam, _planner, _monitor, _authority, this, this, _navigation);
         _executor = new HaulExecutor(ports, WorkerKey.Gunnar, _epoch, Service.NextStartingRevision, _limits, _execution);
         Service.Bind(_executor);
         _log.LogInfo("Gunnar's hauling: a world loaded (epoch " + _epoch.ToString("N", CultureInfo.InvariantCulture).Substring(0, 8) + "); leases start empty.");
@@ -328,6 +351,7 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
             _bodyStatus = status;
         }
 
+        _body.Duplicated = status == WorkerBodyStatus.Duplicated;
         TeamsterWorkerAI? bind = status == WorkerBodyStatus.Bound || status == WorkerBodyStatus.Faulted ? candidate : null;
         if (bind != _body.Bound)
         {
@@ -353,6 +377,18 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
 
     public void Bug(string message) => _log.LogError("[bug] " + message);
 
+    private LoadModel? LoadClimbModel()
+    {
+        LoadCalibrationData? calibration = LoadCalibrationSource.TryLoadEmbedded();
+        return calibration != null && calibration.DataVersion > 0 ? new LoadModel(calibration) : null;
+    }
+
+    private RiskModel? LoadDescentModel()
+    {
+        DescentCalibrationData? calibration = DescentCalibrationSource.TryLoadEmbedded();
+        return calibration != null && calibration.DataVersion > 0 ? new RiskModel(calibration) : null;
+    }
+
     private string? EngagedBrakeCartId()
     {
         if (_pump == null)
@@ -361,12 +397,6 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         }
 
         return _pump != null ? _pump.Brake?.EngagedCartId : null;
-    }
-
-    private CartObservation? LeasedCartObservation()
-    {
-        CartLease? lease = _executor?.ActiveLease;
-        return lease == null ? (CartObservation?)null : _seam.Observe(lease.Cart);
     }
 
     // ------------------------------------------------------------------
@@ -646,7 +676,7 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
             !float.TryParse(args[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) ||
             !float.TryParse(args[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float z))
         {
-            return "Usage: ct_haul go <x> <z> [arrival radius]. The placeholder planner accepts only a clear straight run ahead of the cart on flat open ground.";
+            return "Usage: ct_haul go <x> <z> [arrival radius]. Gunnar plans a route the loaded cart fits along (CART_ROUTES.md) and refuses the leg with the reason when there is none.";
         }
 
         float radius = _execution.DefaultArrivalRadiusMetres;

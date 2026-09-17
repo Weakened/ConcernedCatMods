@@ -43,12 +43,6 @@ internal sealed class HaulExecutionLimits
     /// </summary>
     public float RollAwaySpeedMetresPerSecond { get; set; } = 0.5f;
 
-    /// <summary>Steepest ground (rise over run, along or across the cart) Gunnar
-    /// leaves a cart standing on. Unmeasured so far: the descent calibration
-    /// holds only flat and near-flat priors, so the value is conservative and
-    /// the Gate B "unsafe slope" case confirms it.</summary>
-    public float MaxParkingGradeRatio { get; set; } = 0.05f;
-
     /// <summary>The joint load, as a fraction of the cart's own break force, at
     /// which Gunnar stops pulling instead of letting the hitch snap: a pull
     /// that strains that hard is not progress, and escalating is forbidden.
@@ -93,7 +87,6 @@ internal sealed class HaulExecutionLimits
         Require(StoppingTimeoutSeconds >= 2f && StoppingTimeoutSeconds <= 120f, nameof(StoppingTimeoutSeconds));
         Require(DetachSettleSeconds >= 0.5f && DetachSettleSeconds <= 10f, nameof(DetachSettleSeconds));
         Require(RollAwaySpeedMetresPerSecond > 0f && RollAwaySpeedMetresPerSecond <= 3f, nameof(RollAwaySpeedMetresPerSecond));
-        Require(MaxParkingGradeRatio > 0f && MaxParkingGradeRatio <= 0.3f, nameof(MaxParkingGradeRatio));
         Require(JointStrainRatio > 0.1f && JointStrainRatio < 1f, nameof(JointStrainRatio));
         Require(SelectionReachMetres >= 2f && SelectionReachMetres <= 30f, nameof(SelectionReachMetres));
         Require(SelectionConfirmSeconds >= 5f && SelectionConfirmSeconds <= 600f, nameof(SelectionConfirmSeconds));

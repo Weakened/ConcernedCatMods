@@ -14,8 +14,10 @@ internal sealed class HaulExecutorPorts
         IHaulMotionMonitor monitor,
         IHaulAuthority authority,
         IHaulClock clock,
-        IHaulExecutionLog log)
+        IHaulExecutionLog log,
+        IHaulNavigation? navigation = null)
     {
+        Navigation = navigation;
         Body = body ?? throw new ArgumentNullException(nameof(body));
         Seam = seam ?? throw new ArgumentNullException(nameof(seam));
         Planner = planner ?? throw new ArgumentNullException(nameof(planner));
@@ -38,6 +40,10 @@ internal sealed class HaulExecutorPorts
     public IHaulClock Clock { get; }
 
     public IHaulExecutionLog Log { get; }
+
+    /// <summary>The navigation calls beyond the C1 seams, or null to work on
+    /// the contract interfaces alone.</summary>
+    public IHaulNavigation? Navigation { get; }
 }
 
 /// <summary>What a stop request asks for. Zero is unspecified.</summary>
@@ -121,6 +127,10 @@ internal sealed class HaulExecutor
 {
     private const float ApproachArrivalRadiusMetres = 0.25f;
 
+    /// <summary>Within this (flat) of the standing point Gunnar is steered
+    /// straight at it rather than pathfound.</summary>
+    private const float ApproachFineRadiusMetres = 1.5f;
+
     private readonly HaulExecutorPorts _ports;
     private readonly WorkerKey _worker;
     private readonly HaulLimits _limits;
@@ -138,6 +148,7 @@ internal sealed class HaulExecutor
     private float _detachReleasedAt = float.NaN;
     private float _lastWorkerTickAt = float.NaN;
     private bool _legArrived;
+    private bool _cartMeasured;
     private bool _releaseLeaseAfterDetach;
     private HaulStopIntent _pendingStop;
     private HaulAttentionReason _pendingAttention;
@@ -303,6 +314,7 @@ internal sealed class HaulExecutor
         }
 
         _ports.Log.Info("Cart " + cart + " assigned to Gunnar under lease " + leaseId + ".");
+        MeasureLeasedCart(cart);
         return fromBook;
     }
 
@@ -331,6 +343,7 @@ internal sealed class HaulExecutor
 
         _ports.Body.Stop();
         Leases.Release(lease.LeaseId);
+        OnLeaseEnded();
         _ports.Log.Info("Lease " + lease.LeaseId + " released by the player.");
         ReturnToUnassigned();
         return LeaseReleaseOutcome.Released;
@@ -368,7 +381,7 @@ internal sealed class HaulExecutor
         {
             return Answer(
                 HaulCommandOutcome.Unavailable,
-                _ports.Seam.IsAvailable ? HaulAttentionReason.WorkerBodyLost : HaulAttentionReason.HitchFailed,
+                !_ports.Seam.IsAvailable ? HaulAttentionReason.HitchFailed : body.Duplicated ? HaulAttentionReason.WorkerBodyDuplicated : HaulAttentionReason.WorkerBodyLost,
                 HaulCommandDetail.WorkerUnavailable);
         }
 
@@ -424,13 +437,17 @@ internal sealed class HaulExecutor
             }
         }
 
-        if (!cart.TryGetFootprint(out CartFootprint footprint))
+        if ((_ports.Navigation != null && !MeasureLeasedCart(lease.Cart)) || !TryGetFootprint(cart, out CartFootprint footprint))
         {
             return Answer(HaulCommandOutcome.Rejected, HaulAttentionReason.NoRoute, HaulCommandDetail.FootprintUnknown);
         }
 
-        CartRoutePlan plan = _ports.Planner.Plan(
-            new CartRouteRequest(cart.CartPosition, request.Target, footprint, cart.ExpectedMassKg, Revision + 1), now);
+        // Hitched, Gunnar holds the handle where he stands; not yet hitched, he
+        // will hold it at the approach point. Either way the first turn is
+        // predicted from the cart's real heading.
+        WorkPoint puller = fromWaiting ? body.Position : cart.ApproachPoint;
+        CartRoutePlan plan = PlanLeg(
+            new CartRouteRequest(cart.CartPosition, request.Target, footprint, cart.ExpectedMassKg, Revision + 1), puller, now);
         if (plan.Verdict == CartRouteVerdict.BudgetExhausted)
         {
             return Answer(HaulCommandOutcome.Unavailable, HaulAttentionReason.NoRoute, HaulCommandDetail.PlannerBudgetExhausted);
@@ -707,7 +724,9 @@ internal sealed class HaulExecutor
         if (lease != null && HaulId.Length > 0 && IsProgressPhase(Phase) && !IsWorking(body))
         {
             InvalidateLease(lease, LeaseInvalidation.WorkerBodyLost);
-            ChainToAttention(HaulAttentionReason.WorkerBodyLost, "Gunnar's body is not working");
+            ChainToAttention(
+                body.Duplicated ? HaulAttentionReason.WorkerBodyDuplicated : HaulAttentionReason.WorkerBodyLost,
+                body.Duplicated ? "more than one body carries Gunnar's identity" : "Gunnar's body is not working");
         }
     }
 
@@ -819,7 +838,8 @@ internal sealed class HaulExecutor
             return;
         }
 
-        if (body.MotorCommanded && !body.HasPath)
+        bool nearStandingPoint = body.Position.HorizontalDistanceTo(cart.ApproachPoint) <= ApproachFineRadiusMetres;
+        if (!nearStandingPoint && body.MotorCommanded && !body.HasPath)
         {
             if (float.IsNaN(_noPathSince))
             {
@@ -841,6 +861,16 @@ internal sealed class HaulExecutor
         else
         {
             _noPathSince = float.NaN;
+        }
+
+        // The pathfinder stops a walker up to half a metre short, and the hitch
+        // needs him within 60 % of the cart's own detach distance of the handle
+        // (0.6 m for a detach distance of 1 m): the last stretch is steered
+        // straight at the standing point, re-checked every tick.
+        if (nearStandingPoint)
+        {
+            _ports.Body.SteerToward(cart.ApproachPoint);
+            return;
         }
 
         _ports.Body.WalkTo(cart.ApproachPoint, ApproachArrivalRadiusMetres);
@@ -971,6 +1001,7 @@ internal sealed class HaulExecutor
         _ports.Monitor.Sample(now, body.Position, cart.CartPosition, body.MotorCommanded);
         if (cart.BreakForceNewtons > 0f && cart.JointForceNewtons >= _execution.JointStrainRatio * cart.BreakForceNewtons)
         {
+            RememberStall(body, cart, now);
             BeginRecovery(now, FormattableString.Invariant(
                 $"the hitch strained to {cart.JointForceNewtons:0} N of {cart.BreakForceNewtons:0} N"));
             return;
@@ -979,28 +1010,112 @@ internal sealed class HaulExecutor
         HaulMotion motion = _ports.Monitor.Current;
         if (motion == HaulMotion.Stalled || motion == HaulMotion.Wedged)
         {
+            RememberStall(body, cart, now);
             BeginRecovery(now, "motion judged " + motion);
             return;
         }
 
-        SteeringGoal? next = _ports.Planner.NextGoal(Plan, body.Position, cart.CartPosition);
-        if (next == null)
+        // The running plan is checked against the world again at the planner's
+        // own interval; a plan that no longer holds has ended.
+        IHaulNavigation? navigation = _ports.Navigation;
+        if (navigation != null && navigation.NeedsRefresh(Plan, now))
         {
-            BeginRecovery(now, "the route is no longer valid from here");
+            CartRoutePlan refreshed = navigation.Refresh(Plan, body.Position, cart.CartPosition, now);
+            if (!refreshed.IsSuitable)
+            {
+                BeginRecovery(now, "the route no longer holds (" + refreshed.Verdict + ")");
+                return;
+            }
+
+            Plan = refreshed;
+        }
+
+        HaulSteering steering = Steer(Plan, body.Position, cart.CartPosition);
+        if (steering.Status == HaulSteeringStatus.Finished)
+        {
+            Arrive(now);
             return;
         }
 
-        SteeringGoal goal = next.Value;
+        if (steering.Goal == null)
+        {
+            BeginRecovery(
+                now,
+                steering.Status == HaulSteeringStatus.LeftCorridor
+                    ? "Gunnar or the cart left the corridor the route verified"
+                    : "the route is no longer valid from here");
+            return;
+        }
+
+        SteeringGoal goal = steering.Goal.Value;
         if (goal.IsFinalStop && body.Position.HorizontalDistanceTo(goal.Target) <= Leg.ArrivalRadiusMetres)
         {
-            _legArrived = true;
-            _ports.Body.Stop();
-            _deadline = new PhaseDeadline(now, _execution.StoppingTimeoutSeconds);
-            Transition(HaulPhase.Stopping);
+            Arrive(now);
             return;
         }
 
         _ports.Body.SteerToward(goal.Target);
+    }
+
+    private void Arrive(float now)
+    {
+        _legArrived = true;
+        _ports.Body.Stop();
+        _deadline = new PhaseDeadline(now, _execution.StoppingTimeoutSeconds);
+        Transition(HaulPhase.Stopping);
+    }
+
+    private void RememberStall(PullerBodyFacts body, CartObservation cart, float now)
+    {
+        if (_ports.Navigation != null && Leg != null && body.Position.IsFinite && cart.CartPosition.IsFinite)
+        {
+            _ports.Navigation.RememberStall(Leg.Target, cart.CartPosition, body.Position, now);
+        }
+    }
+
+    private HaulSteering Steer(CartRoutePlan plan, WorkPoint puller, WorkPoint cart)
+    {
+        if (_ports.Navigation != null)
+        {
+            return _ports.Navigation.Steer(plan, puller, cart);
+        }
+
+        SteeringGoal? goal = _ports.Planner.NextGoal(plan, puller, cart);
+        return new HaulSteering(goal == null ? HaulSteeringStatus.LeftCorridor : HaulSteeringStatus.Following, goal);
+    }
+
+    private CartRoutePlan PlanLeg(CartRouteRequest request, WorkPoint? puller, float now) =>
+        _ports.Navigation != null ? _ports.Navigation.Plan(request, puller, now) : _ports.Planner.Plan(request, now);
+
+    private bool TryGetFootprint(CartObservation cart, out CartFootprint footprint)
+    {
+        CartFootprint? measured = _ports.Navigation?.Footprint;
+        if (measured.HasValue)
+        {
+            footprint = measured.Value;
+            return true;
+        }
+
+        return cart.TryGetFootprint(out footprint);
+    }
+
+    /// <summary>Measures the leased cart for navigation once per lease. Every
+    /// later leg of the same lease keeps what the planner learned about it.
+    /// </summary>
+    private bool MeasureLeasedCart(CartKey cart)
+    {
+        if (_ports.Navigation == null || _cartMeasured)
+        {
+            return true;
+        }
+
+        _cartMeasured = _ports.Navigation.UseCart(cart);
+        if (!_cartMeasured)
+        {
+            _ports.Log.Warning("Cart " + cart + " could not be measured for route planning; no leg is planned for it until it can be.");
+        }
+
+        return _cartMeasured;
     }
 
     private void BeginRecovery(float now, string why)
@@ -1031,14 +1146,14 @@ internal sealed class HaulExecutor
 
         // The one manoeuvre verified safe: plan again from where the cart
         // actually stands. Nothing pushes, reverses or repositions anything.
-        if (!cart.TryGetFootprint(out CartFootprint footprint))
+        if (!TryGetFootprint(cart, out CartFootprint footprint))
         {
             StopThenAttend(HaulAttentionReason.NoRoute, "the cart's footprint could not be measured");
             return;
         }
 
-        CartRoutePlan plan = _ports.Planner.Plan(
-            new CartRouteRequest(cart.CartPosition, Leg.Target, footprint, cart.ExpectedMassKg, Revision), now);
+        CartRoutePlan plan = PlanLeg(
+            new CartRouteRequest(cart.CartPosition, Leg.Target, footprint, cart.ExpectedMassKg, Revision), body.Position, now);
         if (plan.Verdict == CartRouteVerdict.BudgetExhausted)
         {
             RetryDecision decision = _recoveryRetry.RecordFailure(now);
@@ -1189,6 +1304,7 @@ internal sealed class HaulExecutor
         {
             _releaseLeaseAfterDetach = false;
             Leases.Release(lease.LeaseId);
+            OnLeaseEnded();
             _ports.Log.Info("Lease " + lease.LeaseId + " released after detaching.");
             ReturnToUnassigned();
         }
@@ -1535,8 +1651,17 @@ internal sealed class HaulExecutor
         if (Leases.Invalidate(lease.LeaseId, reason) == LeaseOutcome.Invalidated)
         {
             Revision++;
+            OnLeaseEnded();
             _ports.Log.Info("Lease " + lease.LeaseId + " on cart " + lease.Cart + " ended: " + reason + ".");
         }
+    }
+
+    /// <summary>Navigation forgets the cart whenever its lease ends, however
+    /// it ends.</summary>
+    private void OnLeaseEnded()
+    {
+        _cartMeasured = false;
+        _ports.Navigation?.ReleaseCart();
     }
 
     private void ResetLegState(float now)
@@ -1568,7 +1693,34 @@ internal sealed class HaulExecutor
     private HaulCommandResult Answer(HaulCommandOutcome outcome, HaulAttentionReason reason, HaulCommandDetail detail)
     {
         LastCommandDetail = detail;
-        return new HaulCommandResult(outcome, reason, Revision);
+        string wire = WireDetail(detail);
+        return new HaulCommandResult(
+            outcome, reason, Revision, string.Equals(wire, reason.ToString(), StringComparison.Ordinal) ? string.Empty : wire);
+    }
+
+    /// <summary>The C2 <see cref="HaulCommandResult.Detail"/>: the wire reason name
+    /// for a protocol answer no attention reason can say, empty otherwise.
+    /// </summary>
+    internal static string WireDetail(HaulCommandDetail detail)
+    {
+        switch (detail)
+        {
+            case HaulCommandDetail.StaleRevision:
+                return "RevisionMismatch";
+            case HaulCommandDetail.WorkerUnavailable:
+                return "WorkerUnavailable";
+            case HaulCommandDetail.NoLease:
+                return "NoLease";
+            case HaulCommandDetail.HaulBusy:
+            case HaulCommandDetail.MotionForbidden:
+            case HaulCommandDetail.NotWaitingStill:
+            case HaulCommandDetail.NotUnloading:
+                return "HaulBusy";
+            case HaulCommandDetail.UnknownHaul:
+                return "UnknownHaul";
+            default:
+                return string.Empty;
+        }
     }
 
     private PullerBodyFacts EffectiveBody(float now)

@@ -20,6 +20,10 @@ internal struct PullerBodyFacts
     /// <summary>The worker's tick threw and latched; the body is inert.</summary>
     public bool Faulted { get; set; }
 
+    /// <summary>More than one body carries Gunnar's identity, so none is bound
+    /// (C2 <c>WorkerBodyDuplicated</c>).</summary>
+    public bool Duplicated { get; set; }
+
     public WorkPoint Position { get; set; }
 
     /// <summary>Horizontal facing, not necessarily normalized.</summary>

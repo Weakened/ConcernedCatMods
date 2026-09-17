@@ -304,7 +304,7 @@ public class HaulingExecutionHitchTests
         third.StepOnce();
         Assert.Equal(HaulPhase.Hitching, third.Executor.Phase);
         third.Seam.Observation = third.Seam.Observation.With(o => { o.AnyJointOnClient = false; o.HitchDistanceMetres = 1.5f; });
-        third.Advance(4f);
+        third.Advance(third.Limits.RecoveryBackoffSeconds + 1f);
         Assert.Equal(HaulPhase.Approaching, third.Executor.Phase);
         Assert.Equal(HitchRefusal.OutOfReach, third.Executor.LastHitchRefusal);
         rig.AssertNoBugs();

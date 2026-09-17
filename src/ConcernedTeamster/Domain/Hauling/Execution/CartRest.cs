@@ -57,7 +57,7 @@ internal readonly struct ParkingDecision
 
 /// <summary>The safe-parking rule (CART-06): Gunnar lets go of a cart only on
 /// ground that was actually measured, is out of water, is no steeper than
-/// <see cref="HaulExecutionLimits.MaxParkingGradeRatio"/> along or across the
+/// <see cref="HaulLimits.MaxParkingGradeRatio"/> (C2) along or across the
 /// cart, with the cart upright and already still. Every unknown refuses: a
 /// loaded cart released into a roll cannot be taken back.</summary>
 internal static class ParkingJudge
@@ -86,10 +86,10 @@ internal static class ParkingJudge
 
         float along = Math.Abs(ground.GradeAlongRatio);
         float across = Math.Abs(ground.GradeAcrossRatio);
-        if (!(along <= execution.MaxParkingGradeRatio) || !(across <= execution.MaxParkingGradeRatio))
+        if (!(along <= limits.MaxParkingGradeRatio) || !(across <= limits.MaxParkingGradeRatio))
         {
             return ParkingDecision.Refuse(FormattableString.Invariant(
-                $"the ground slopes {along:0.###} along and {across:0.###} across, more than {execution.MaxParkingGradeRatio:0.###}"));
+                $"the ground slopes {along:0.###} along and {across:0.###} across, more than {limits.MaxParkingGradeRatio:0.###}"));
         }
 
         if (!(cart.UpDot >= limits.MinUprightDot))
