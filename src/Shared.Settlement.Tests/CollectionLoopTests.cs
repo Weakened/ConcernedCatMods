@@ -554,7 +554,7 @@ public sealed class CollectionLoopTests
         rig.Accept(rig.Order(stone: 20, wood: 0));
         Assert.True(rig.RunUntil(() => rig.Pickup.Picks >= 3));
 
-        rig.World.Readiness = FakeWorld.NotReady(ReadinessRefusal.ToolUnusable);
+        rig.World.Readiness = CollectionFakeWorld.NotReady(ReadinessRefusal.ToolUnusable);
         Assert.True(rig.RunUntil(() => rig.Loop.State == CollectionOrderState.Paused));
 
         Assert.Equal(CollectionAttentionReason.ToolBroken, rig.Loop.Reason);
@@ -563,7 +563,7 @@ public sealed class CollectionLoopTests
         Assert.True(rig.Loop.HasActiveOrder);
 
         Assert.Equal(ControlOutcome.Refused, rig.Loop.Resume(rig.Now).Outcome);
-        rig.World.Readiness = FakeWorld.ReadyVerdict();
+        rig.World.Readiness = CollectionFakeWorld.ReadyVerdict();
         Assert.Equal(ControlOutcome.Done, rig.Loop.Resume(rig.Now).Outcome);
         Assert.True(rig.RunUntil(() => rig.Loop.State == CollectionOrderState.Completed));
         Assert.Equal(20, rig.Progress(CollectedResource.Stone).Delivered);
@@ -578,7 +578,7 @@ public sealed class CollectionLoopTests
         rig.Accept(rig.Order(stone: 40, wood: 0));
         Assert.True(rig.RunUntil(() => rig.Pickup.Picks >= 2));
 
-        rig.World.Readiness = FakeWorld.NotReady(ReadinessRefusal.ToolMissing);
+        rig.World.Readiness = CollectionFakeWorld.NotReady(ReadinessRefusal.ToolMissing);
         Assert.True(rig.RunUntil(() => rig.Loop.State == CollectionOrderState.Paused, 100));
 
         Assert.Equal(CollectionAttentionReason.ToolMissing, rig.Loop.Reason);
@@ -1131,8 +1131,8 @@ public sealed class CollectionLoopTests
             {
                 case 0: rig.World.Authority = WorkAuthorityVerdict.OtherPeersConnected; break;
                 case 1: rig.World.Authority = WorkAuthorityVerdict.Granted; break;
-                case 2: rig.World.Readiness = FakeWorld.NotReady(ReadinessRefusal.ToolUnusable); break;
-                case 3: rig.World.Readiness = FakeWorld.ReadyVerdict(); break;
+                case 2: rig.World.Readiness = CollectionFakeWorld.NotReady(ReadinessRefusal.ToolUnusable); break;
+                case 3: rig.World.Readiness = CollectionFakeWorld.ReadyVerdict(); break;
                 case 4: rig.Custody.DestinationRefusal = CollectionAttentionReason.DestinationUnavailable; break;
                 case 5: rig.Custody.DestinationRefusal = CollectionAttentionReason.Unspecified; break;
                 case 6: rig.Pickup.ForcedOutcomes.Enqueue(PickupOutcome.Refused); break;
@@ -1151,7 +1151,7 @@ public sealed class CollectionLoopTests
             if (rig.Loop.State == CollectionOrderState.Paused && random.Next(20) == 0)
             {
                 rig.World.Authority = WorkAuthorityVerdict.Granted;
-                rig.World.Readiness = FakeWorld.ReadyVerdict();
+                rig.World.Readiness = CollectionFakeWorld.ReadyVerdict();
                 rig.Custody.DestinationRefusal = CollectionAttentionReason.Unspecified;
                 rig.Custody.FailRecordTransitions = false;
                 rig.Motion.DeferralFor = _ => WorkerDeferralReason.None;

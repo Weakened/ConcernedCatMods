@@ -72,7 +72,7 @@ public sealed class CollectionIntakeTests
         }
 
         return new CollectionIntakeFacts(
-            authority, custody, writable, another, busy, present, readiness ?? FakeWorld.ReadyVerdict(), scope, previewed,
+            authority, custody, writable, another, busy, present, readiness ?? CollectionFakeWorld.ReadyVerdict(), scope, previewed,
             yields, destination, destinationRefusal, carry, _ => unitWeight, hauler);
     }
 
@@ -104,9 +104,9 @@ public sealed class CollectionIntakeTests
         Assert.Equal(CollectionIntakeRefusal.WorkerBusy, Check(Order(), Facts(busy: true)));
         Assert.Equal(CollectionIntakeRefusal.WorkerAbsent, Check(Order(), Facts(present: false)));
         Assert.Equal(
-            CollectionIntakeRefusal.WorkerNotRecruited, Check(Order(), Facts(readiness: FakeWorld.NotReady(ReadinessRefusal.NotRecruited))));
-        Assert.Equal(CollectionIntakeRefusal.ToolMissing, Check(Order(), Facts(readiness: FakeWorld.NotReady(ReadinessRefusal.ToolMissing))));
-        Assert.Equal(CollectionIntakeRefusal.ToolBroken, Check(Order(), Facts(readiness: FakeWorld.NotReady(ReadinessRefusal.ToolUnusable))));
+            CollectionIntakeRefusal.WorkerNotRecruited, Check(Order(), Facts(readiness: CollectionFakeWorld.NotReady(ReadinessRefusal.NotRecruited))));
+        Assert.Equal(CollectionIntakeRefusal.ToolMissing, Check(Order(), Facts(readiness: CollectionFakeWorld.NotReady(ReadinessRefusal.ToolMissing))));
+        Assert.Equal(CollectionIntakeRefusal.ToolBroken, Check(Order(), Facts(readiness: CollectionFakeWorld.NotReady(ReadinessRefusal.ToolUnusable))));
         Assert.Equal(CollectionIntakeRefusal.ScopeInvalid, Check(Order(), Facts(scope: ScopeCheck.Invalid)));
         Assert.Equal(CollectionIntakeRefusal.ScopeInvalid, Check(Order(), Facts(scope: ScopeCheck.Changed)));
         Assert.Equal(CollectionIntakeRefusal.ScopeInvalid, Check(Order(), Facts(scope: ScopeCheck.Unspecified)));
@@ -172,7 +172,7 @@ public sealed class CollectionIntakeTests
         // Everything wrong at once: the order itself first, then authority.
         CollectionIntakeFacts everythingWrong = Facts(
             authority: WorkAuthorityVerdict.NotHost, custody: false, writable: false, another: true, busy: true,
-            present: false, readiness: FakeWorld.NotReady(ReadinessRefusal.NotRecruited), scope: ScopeCheck.Invalid,
+            present: false, readiness: CollectionFakeWorld.NotReady(ReadinessRefusal.NotRecruited), scope: ScopeCheck.Invalid,
             previewed: false, stoneYield: 0, destination: false, hauler: false);
 
         Assert.Equal(CollectionIntakeRefusal.DuplicateResource, Check(Order(duplicate: true), everythingWrong));
@@ -182,11 +182,11 @@ public sealed class CollectionIntakeTests
     [Fact]
     public void ReadinessMapsToTheSameReasonsAtAcceptanceAndWhileWorking()
     {
-        Assert.Equal(CollectionAttentionReason.Unspecified, CollectionIntake.AttentionFor(FakeWorld.ReadyVerdict()));
+        Assert.Equal(CollectionAttentionReason.Unspecified, CollectionIntake.AttentionFor(CollectionFakeWorld.ReadyVerdict()));
         Assert.Equal(
-            CollectionAttentionReason.WorkerNotRecruited, CollectionIntake.AttentionFor(FakeWorld.NotReady(ReadinessRefusal.NotRecruited)));
-        Assert.Equal(CollectionAttentionReason.ToolMissing, CollectionIntake.AttentionFor(FakeWorld.NotReady(ReadinessRefusal.ToolMissing)));
-        Assert.Equal(CollectionAttentionReason.ToolBroken, CollectionIntake.AttentionFor(FakeWorld.NotReady(ReadinessRefusal.ToolUnusable)));
+            CollectionAttentionReason.WorkerNotRecruited, CollectionIntake.AttentionFor(CollectionFakeWorld.NotReady(ReadinessRefusal.NotRecruited)));
+        Assert.Equal(CollectionAttentionReason.ToolMissing, CollectionIntake.AttentionFor(CollectionFakeWorld.NotReady(ReadinessRefusal.ToolMissing)));
+        Assert.Equal(CollectionAttentionReason.ToolBroken, CollectionIntake.AttentionFor(CollectionFakeWorld.NotReady(ReadinessRefusal.ToolUnusable)));
         Assert.Equal(CollectionIntakeRefusal.ToolMissing, CollectionIntake.FromReadiness(default));
     }
 

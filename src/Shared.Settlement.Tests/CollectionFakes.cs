@@ -58,12 +58,12 @@ internal static class SourceFacts
             canBePicked: canBePicked);
 }
 
-internal sealed class FakeInventory : IInventoryPort
+internal sealed class CollectionFakeInventory : IInventoryPort
 {
     private readonly Dictionary<string, int> _counts = new Dictionary<string, int>(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _capacity = new Dictionary<string, int>(StringComparer.Ordinal);
 
-    public FakeInventory(string describe, int defaultCapacity = 1000)
+    public CollectionFakeInventory(string describe, int defaultCapacity = 1000)
     {
         Describe = describe;
         DefaultCapacity = defaultCapacity;
@@ -110,15 +110,15 @@ internal sealed class FakeCustody : ICollectionCustody, IMaterialCustodyView, IT
     private readonly Dictionary<(string Order, CollectedResource Resource), ResourceProgress> _progress =
         new Dictionary<(string, CollectedResource), ResourceProgress>();
 
-    public FakeCustody(FakeInventory worker, FakeInventory destination)
+    public FakeCustody(CollectionFakeInventory worker, CollectionFakeInventory destination)
     {
         Worker = worker;
         Destination = destination;
     }
 
-    public FakeInventory Worker { get; }
+    public CollectionFakeInventory Worker { get; }
 
-    public FakeInventory Destination { get; }
+    public CollectionFakeInventory Destination { get; }
 
     public bool Writable { get; set; } = true;
 
@@ -520,7 +520,7 @@ internal sealed class FakeProbe : ISurveyProbe
     }
 }
 
-internal sealed class FakeWorld : ICollectionWorld
+internal sealed class CollectionFakeWorld : ICollectionWorld
 {
     public WorkAuthorityVerdict Authority { get; set; } = WorkAuthorityVerdict.Granted;
 
@@ -640,12 +640,12 @@ internal sealed class CollectionRig
         Modes = new ActorModeOwner(WorkerKey.Thorstein);
         Book = new SourceReservationBook(Epoch);
         Motion = new FakeMotion(Modes, Anchor);
-        WorkerInventory = new FakeInventory("Thorstein", defaultCapacity: 32 * 50);
-        Chest = new FakeInventory("chest", defaultCapacity: 1000);
+        WorkerInventory = new CollectionFakeInventory("Thorstein", defaultCapacity: 32 * 50);
+        Chest = new CollectionFakeInventory("chest", defaultCapacity: 1000);
         Custody = new FakeCustody(WorkerInventory, Chest);
         Pickup = new FakePickup(Book, Custody, Motion);
         Probe = new FakeProbe();
-        World = new FakeWorld { Epoch = Epoch, ScopeRevision = ScopeRevision.ForAnchor("bed", Anchor) };
+        World = new CollectionFakeWorld { Epoch = Epoch, ScopeRevision = ScopeRevision.ForAnchor("bed", Anchor) };
         Cooperation = withHauler ? new FakeCooperation() : null;
         Pickup.OnPicked = key =>
         {
@@ -683,9 +683,9 @@ internal sealed class CollectionRig
 
     public FakeMotion Motion { get; }
 
-    public FakeInventory WorkerInventory { get; }
+    public CollectionFakeInventory WorkerInventory { get; }
 
-    public FakeInventory Chest { get; }
+    public CollectionFakeInventory Chest { get; }
 
     public FakeCustody Custody { get; }
 
@@ -693,7 +693,7 @@ internal sealed class CollectionRig
 
     public FakeProbe Probe { get; }
 
-    public FakeWorld World { get; }
+    public CollectionFakeWorld World { get; }
 
     public FakeCooperation? Cooperation { get; }
 

@@ -84,6 +84,8 @@ internal static class CollectionSentences
                 return "Gunnar and Thorstein could not meet in time.";
             case CollectionAttentionReason.CartLeaseLost:
                 return "The cart is no longer assigned to this order.";
+            case CollectionAttentionReason.PausedByPlayer:
+                return "You paused this order; nothing is wrong.";
 
             default:
                 return "A reason was recorded that this build does not know; that is a bug.";
