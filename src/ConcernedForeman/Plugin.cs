@@ -1,6 +1,8 @@
 using BepInEx;
 using TheConcernedCat.ConcernedForeman.Domain.Settlement;
 using TheConcernedCat.ConcernedForeman.Runtime;
+using TheConcernedCat.ConcernedForeman.Runtime.Collection;
+using TheConcernedCat.ConcernedForeman.Runtime.Custody;
 using TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 
 namespace TheConcernedCat.ConcernedForeman;
@@ -27,6 +29,7 @@ public sealed class Plugin : BaseUnityPlugin
     public const string PluginVersion = "0.1.0";
 
     private SettlementRuntime? _settlement;
+    private CollectionRuntime? _collection;
     private bool _worldWasUp;
 
     private void Awake()
@@ -38,6 +41,17 @@ public sealed class Plugin : BaseUnityPlugin
         // created, or a saved worker body is destroyed as an unknown prefab (D9);
         // the world-save hook writes custody markers and nothing else.
         _settlement.Install();
+
+        // #315 over #316: Thorstein's collection runs on the custody runtime and shares its
+        // world-load epoch, so every key made during one load agrees (CONTRACTS C2).
+        ForemanCustodyRuntime custody = _settlement.Custody;
+        _collection = new CollectionRuntime(
+            settings,
+            CollectionSettings.Bind(Config),
+            message => Logger.LogInfo(message),
+            custody,
+            cooperation: null,
+            sharedEpoch: () => custody.Epoch);
 
         Logger.LogInfo($"{PluginName} {PluginVersion} loaded");
         Logger.LogInfo(
@@ -52,6 +66,7 @@ public sealed class Plugin : BaseUnityPlugin
         {
             new WorkerToolsCommand(_settlement),
             new SettlementToolsCommand(_settlement),
+            new CollectCommand(_collection),
         };
 
         var names = new string[commands.Length];
@@ -77,6 +92,7 @@ public sealed class Plugin : BaseUnityPlugin
         if (_worldWasUp && !worldIsUp)
         {
             _settlement?.OnWorldUnloaded();
+            _collection?.OnWorldUnloaded();
         }
         else if (!_worldWasUp && worldIsUp)
         {
@@ -84,6 +100,8 @@ public sealed class Plugin : BaseUnityPlugin
             // custody reads the loaded world time here (CONTRACTS.md §5.5).
             _settlement?.OnWorldLoaded();
         }
+
+        _collection?.Update();
 
         _worldWasUp = worldIsUp;
     }

@@ -1,4 +1,5 @@
 using System;
+using TheConcernedCat.ConcernedForeman.Runtime.Work;
 using TheConcernedCat.Settlement.Worker;
 using UnityEngine;
 
@@ -84,7 +85,47 @@ internal sealed class ForemanWorkerAI : BaseAI
     /// <summary>Told once, when the worker gives up on a goal.</summary>
     internal Action<WorkerDeferralReason>? OnDeferred { get; set; }
 
+    /// <summary>Set by the collection runtime: true while a job holds this
+    /// worker's actor mode (ARCH-02). While it does, only the job's own goal
+    /// calls move him; the console's goto and stop are refused, so two owners
+    /// never steer one body. Anything the gate throws counts as held.</summary>
+    internal Func<bool>? IsHeldByJob { get; set; }
+
+    /// <summary>Called once per owned tick, before movement is planned, so the
+    /// job's mutations (a pick, a deposit) run inside the worker's own
+    /// simulation step and a goal it sets is planned in the same tick. The
+    /// callee catches its own exceptions; anything that still escapes latches
+    /// this worker like any other fault.</summary>
+    internal Action<ForemanWorkerAI, float>? WorkTick { get; set; }
+
     internal bool IsDeferred => _planner.IsDeferred;
+
+    /// <summary>The view is valid and owned by this process.</summary>
+    internal bool IsOwnedAndValid => m_nview != null && m_nview.IsValid() && m_nview.IsOwner();
+
+    /// <summary>Where the walk stands, decided by distance and never by
+    /// <c>MoveTo</c>'s return value (trap 2): within the goal's tolerance on
+    /// the ground plane is arrived, a planner deferral is deferred.</summary>
+    internal WorkerWalkStatus WalkStatus
+    {
+        get
+        {
+            if (!_planner.HasGoal)
+            {
+                return WorkerWalkStatus.Idle;
+            }
+
+            if (_planner.IsDeferred)
+            {
+                return WorkerWalkStatus.Deferred;
+            }
+
+            WorkerGoal goal = _planner.Goal;
+            return ToSitePoint(transform.position).HorizontalDistanceTo(goal.Point) <= goal.ArrivalTolerance
+                ? WorkerWalkStatus.Arrived
+                : WorkerWalkStatus.Walking;
+        }
+    }
 
     internal WorkerDeferralReason DeferredReason => _planner.DeferredReason;
 
@@ -109,8 +150,55 @@ internal sealed class ForemanWorkerAI : BaseAI
     }
 
     /// <summary>Send the worker somewhere. Clears any previous deferral,
-    /// because a new destination is a new question.</summary>
+    /// because a new destination is a new question. Refused while a job holds
+    /// the worker: the job's goal is not replaced from outside it.</summary>
     internal void SetGoal(Vector3 point, float arrivalTolerance = 2f)
+    {
+        if (RefuseWhileHeld("goto"))
+        {
+            return;
+        }
+
+        AssignGoal(point, arrivalTolerance);
+    }
+
+    /// <summary>Take the order away. The worker becomes inert — no movement, no
+    /// planning, no path requests. Refused while a job holds the worker.</summary>
+    internal void ClearGoal()
+    {
+        if (RefuseWhileHeld("stop"))
+        {
+            return;
+        }
+
+        ClearGoalNow();
+    }
+
+    /// <summary>The job's walk, for the motion adapter that has already
+    /// checked the job holds the worker. Re-asking for the goal already being
+    /// walked changes nothing, so a job that repeats itself cannot reset the
+    /// path budget into a spin.</summary>
+    internal bool SetJobGoal(Vector3 point, float arrivalTolerance)
+    {
+        if (_faulted || !(arrivalTolerance > 0f) || float.IsInfinity(arrivalTolerance))
+        {
+            return false;
+        }
+
+        var goal = new WorkerGoal(ToSitePoint(point), arrivalTolerance);
+        if (_planner.HasGoal && !_planner.IsDeferred && _planner.Goal.Equals(goal))
+        {
+            return true;
+        }
+
+        AssignGoal(point, arrivalTolerance);
+        return true;
+    }
+
+    /// <summary>The job's stop, for the motion adapter.</summary>
+    internal void ClearJobGoal() => ClearGoalNow();
+
+    private void AssignGoal(Vector3 point, float arrivalTolerance)
     {
         _planner.AssignGoal(new WorkerGoal(ToSitePoint(point), arrivalTolerance));
         _lastReportedDeferral = WorkerDeferralReason.None;
@@ -120,13 +208,33 @@ internal sealed class ForemanWorkerAI : BaseAI
         _goalIsHazardous = true;
     }
 
-    /// <summary>Take the order away. The worker becomes inert — no movement, no
-    /// planning, no path requests.</summary>
-    internal void ClearGoal()
+    private void ClearGoalNow()
     {
         _planner.ClearGoal();
         _lastReportedDeferral = WorkerDeferralReason.None;
         StopMoving();
+    }
+
+    private bool RefuseWhileHeld(string what)
+    {
+        bool held;
+        try
+        {
+            held = IsHeldByJob != null && IsHeldByJob();
+        }
+        catch
+        {
+            held = true;
+        }
+
+        if (held)
+        {
+            ErrorLog?.Invoke(
+                "The worker is doing an ordered job, so \"" + what + "\" was not applied. " +
+                "Pause or cancel the job first (cf_collect pause).");
+        }
+
+        return held;
     }
 
     /// <summary>Supplies the site checks. Defaults to
@@ -174,6 +282,8 @@ internal sealed class ForemanWorkerAI : BaseAI
         {
             return false;
         }
+
+        WorkTick?.Invoke(this, dt);
 
         _planner.BeginTick();
 
