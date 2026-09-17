@@ -223,6 +223,16 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
             CollectionOrderState target = reason == CollectionAttentionReason.Unspecified
                 ? CollectionOrderState.Paused
                 : CollectionOrderState.NeedsAttention;
+
+            // C2: nothing wrong, but the order's chest key and work-area snapshot
+            // belong to the previous load; it stays Paused until the player
+            // confirms a rebind.
+            if (target == CollectionOrderState.Paused)
+            {
+                reason = order.Definition.Delivery.Kind == DeliveryKind.Container
+                    ? CollectionAttentionReason.DestinationStale
+                    : CollectionAttentionReason.ScopeChanged;
+            }
             if (order.State == target || order.State == CollectionOrderState.NeedsAttention)
             {
                 continue;
@@ -275,6 +285,39 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
 
             return true;
         }
+    }
+
+    /// <summary>C2: the one epoch of this world load — the settlement records'
+    /// identity epoch, which every custody row of the load also carries.
+    /// </summary>
+    public Guid WorldLoadEpoch => _epoch;
+
+    public bool TryRecoverOrder(WorkerId worker, out CollectionOrderDefinition? order, out CollectionOrderState state)
+    {
+        if (_core == null)
+        {
+            order = null;
+            state = CollectionOrderState.Unspecified;
+            return false;
+        }
+
+        return _core.TryRecoverOrder(worker, out order, out state);
+    }
+
+    public bool RecordRebound(OrderId order, WorkScope scope, DeliveryTarget delivery)
+    {
+        if (_core == null)
+        {
+            return false;
+        }
+
+        if (!_core.RecordRebound(order, scope, delivery, out string reason))
+        {
+            _log("Order \"" + order.Value + "\" not rebound: " + reason);
+            return false;
+        }
+
+        return true;
     }
 
     public bool TryResolveWorker(WorkerKey worker, out IInventoryPort? port, out CollectionAttentionReason refusal)

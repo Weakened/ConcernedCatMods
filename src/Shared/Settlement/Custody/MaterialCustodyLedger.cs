@@ -135,7 +135,9 @@ internal sealed class CollectionOrderRecord
         State = CollectionOrderState.Accepted;
     }
 
-    public CollectionOrderDefinition Definition { get; }
+    /// <summary>The definition as accepted, with the scope and delivery of the
+    /// latest player-confirmed rebind (C2).</summary>
+    public CollectionOrderDefinition Definition { get; internal set; }
 
     public OrderId Order => Definition.Order;
 
@@ -310,6 +312,55 @@ internal sealed class MaterialCustodyLedger : IMaterialCustodyView
         _orders.Add(definition.Order.Value, new CollectionOrderRecord(definition));
         _orderSequence.Add(definition.Order.Value);
         return CustodyLedgerOutcome.Applied;
+    }
+
+    /// <summary>C2: a player-confirmed rebind after a reload. Only the scope
+    /// snapshot and the delivery target change, and only in kind: the scope is
+    /// re-snapshotted from the same source, a container is replaced by a
+    /// container and hold-for-player stays hold-for-player. Quotas, custody and
+    /// progress are untouched. The same rebind twice is satisfied.</summary>
+    public CustodyLedgerOutcome Rebind(OrderId order, WorkScope scope, DeliveryTarget delivery)
+    {
+        if (scope == null || !TryGetOrder(order, out CollectionOrderRecord record))
+        {
+            return CustodyLedgerOutcome.Rejected;
+        }
+
+        CollectionOrderDefinition current = record.Definition;
+        if (CollectionOrderStates.IsTerminal(record.State)
+            || scope.Source != current.Scope.Source
+            || delivery.Kind != current.Delivery.Kind)
+        {
+            return CustodyLedgerOutcome.Rejected;
+        }
+
+        var rebound = new CollectionOrderDefinition(
+            current.Order, current.Worker, current.Quotas, scope, delivery, current.Participation, current.IssuedByCharacter);
+        if (CollectionOrders.SameDefinition(current, rebound))
+        {
+            return CustodyLedgerOutcome.AlreadySatisfied;
+        }
+
+        record.Definition = rebound;
+        return CustodyLedgerOutcome.Applied;
+    }
+
+    /// <summary>The worker's non-terminal order, if the record holds one.
+    /// </summary>
+    public bool TryGetActiveOrder(WorkerId worker, out CollectionOrderRecord record)
+    {
+        foreach (string key in _orderSequence)
+        {
+            CollectionOrderRecord candidate = _orders[key];
+            if (candidate.Definition.Worker.Equals(worker) && !CollectionOrderStates.IsTerminal(candidate.State))
+            {
+                record = candidate;
+                return true;
+            }
+        }
+
+        record = null!;
+        return false;
     }
 
     /// <summary>Moves an order along the contract's table. The recorded

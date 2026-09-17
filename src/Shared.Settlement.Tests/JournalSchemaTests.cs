@@ -62,6 +62,10 @@ public sealed class JournalSchemaTests : IDisposable
         journal.AppendCustody(new CartBaselineRow(Order, "lease-1", "1:77", cart.WorldLoadEpoch, new[] { new ItemCount(Stone, 15), new ItemCount(new MaterialItem("Flint", 1, 0), 3) }), time++, Load);
         journal.AppendCustody(new LossRecordedRow(new RequestId("collect-1-lost-11"), Order, cart, Wood, 2, "the cart tipped"), time++, Load);
         journal.AppendCustody(new HandoverFinishedRow(new RequestId("collect-1-t-12"), Order, Stone, 4), time++, Load);
+        journal.AppendCustody(new CollectionReboundRow(
+            Order,
+            new WorkScope(WorkScopeSource.DefaultCampCircle, new TheConcernedCat.Settlement.Worker.SitePoint(10f, 20f, 30f), 30f, "your bed", 4, Load),
+            DeliveryTarget.ToContainer("1:43", Load, new TheConcernedCat.Settlement.Worker.SitePoint(12f, 20f, 31f))), time++, Load);
         journal.AppendCustody(new WorldSaveMarkerRow(7), time, Load);
         return journal;
     }

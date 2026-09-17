@@ -300,6 +300,96 @@ internal sealed class CustodyCore
         return true;
     }
 
+    /// <summary>C2: the worker's non-terminal order after replay, to adopt
+    /// Paused after a reload. Its scope and delivery still carry the previous
+    /// load's epoch until the player confirms a rebind.</summary>
+    public bool TryRecoverOrder(WorkerId worker, out CollectionOrderDefinition? order, out CollectionOrderState state)
+    {
+        if (!worker.IsEmpty && Ledger.TryGetActiveOrder(worker, out CollectionOrderRecord record))
+        {
+            order = record.Definition;
+            state = record.State;
+            return true;
+        }
+
+        order = null;
+        state = CollectionOrderState.Unspecified;
+        return false;
+    }
+
+    /// <summary>C2: journals a player-confirmed rebind (<c>CollectionRebound</c>):
+    /// the scope re-snapshotted from the same source and the delivery chosen
+    /// again, both in this world load. A person's act, so it needs authority;
+    /// it changes no custody, so an owed marker does not block it.</summary>
+    public bool RecordRebound(OrderId order, WorkScope scope, DeliveryTarget delivery, out string reason)
+    {
+        if (scope == null)
+        {
+            throw new ArgumentNullException(nameof(scope));
+        }
+
+        if (!GateRecordOnly(out reason))
+        {
+            return false;
+        }
+
+        if (!HasAuthority())
+        {
+            reason = "work is not authorised here now";
+            return false;
+        }
+
+        if (!Ledger.TryGetOrder(order, out CollectionOrderRecord record) || CollectionOrderStates.IsTerminal(record.State))
+        {
+            reason = "no active order " + order.Value;
+            return false;
+        }
+
+        if (scope.WorldLoadEpoch != Load.LoadEpoch)
+        {
+            reason = "the work area must be snapshotted again in this world load";
+            return false;
+        }
+
+        if (delivery.Kind == DeliveryKind.Container && delivery.WorldLoadEpoch != Load.LoadEpoch)
+        {
+            reason = "the chest must be selected again in this world load";
+            return false;
+        }
+
+        if (scope.Source != record.Definition.Scope.Source)
+        {
+            reason = "a rebind re-snapshots the same kind of work area (" + record.Definition.Scope.Source + ")";
+            return false;
+        }
+
+        if (delivery.Kind != record.Definition.Delivery.Kind)
+        {
+            reason = "a rebind keeps the same kind of delivery (" + record.Definition.Delivery.Kind + ")";
+            return false;
+        }
+
+        var rebound = new CollectionOrderDefinition(
+            order, record.Definition.Worker, record.Definition.Quotas, scope, delivery,
+            record.Definition.Participation, record.Definition.IssuedByCharacter);
+        if (CollectionOrders.SameDefinition(record.Definition, rebound))
+        {
+            reason = string.Empty;
+            return true;
+        }
+
+        if (!Journal.TryRecord(new CollectionReboundRow(order, scope, delivery)))
+        {
+            reason = "the rebind could not be written down";
+            return false;
+        }
+
+        Ledger.CountRecord();
+        Ledger.Rebind(order, scope, delivery);
+        reason = string.Empty;
+        return true;
+    }
+
     public bool RecordTransition(
         OrderId order, CollectionOrderState from, CollectionOrderState to, CollectionAttentionReason reason,
         out string refusal)
