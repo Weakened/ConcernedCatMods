@@ -1,6 +1,7 @@
 using BepInEx;
 using TheConcernedCat.ConcernedForeman.Domain.Settlement;
 using TheConcernedCat.ConcernedForeman.Runtime;
+using TheConcernedCat.ConcernedForeman.Runtime.Collection;
 using TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 
 namespace TheConcernedCat.ConcernedForeman;
@@ -24,12 +25,18 @@ public sealed class Plugin : BaseUnityPlugin
     public const string PluginVersion = "0.1.0";
 
     private SettlementRuntime? _settlement;
+    private CollectionRuntime? _collection;
     private bool _worldWasUp;
 
     private void Awake()
     {
         ForemanSettlementSettings settings = ForemanSettlementSettings.Bind(Config);
         _settlement = new SettlementRuntime(settings, message => Logger.LogInfo(message));
+
+        // #315: Thorstein's collection. No custody runtime is passed yet (agent D, #316), so every
+        // order is refused with a stated reason until integration supplies one.
+        _collection = new CollectionRuntime(
+            settings, CollectionSettings.Bind(Config), message => Logger.LogInfo(message));
 
         Logger.LogInfo($"{PluginName} {PluginVersion} loaded");
         Logger.LogInfo(
@@ -44,6 +51,7 @@ public sealed class Plugin : BaseUnityPlugin
         {
             new WorkerToolsCommand(_settlement),
             new SettlementToolsCommand(_settlement),
+            new CollectCommand(_collection),
         };
 
         var names = new string[commands.Length];
@@ -69,7 +77,10 @@ public sealed class Plugin : BaseUnityPlugin
         if (_worldWasUp && !worldIsUp)
         {
             _settlement?.OnWorldUnloaded();
+            _collection?.OnWorldUnloaded();
         }
+
+        _collection?.Update();
 
         _worldWasUp = worldIsUp;
     }
