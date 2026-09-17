@@ -22,11 +22,12 @@ internal sealed class SettlementToolsCommand : ConsoleCommand
     public override string Name => "cf_settle";
 
     public override string Help =>
-        "Concerned Foreman settlement designation. Subcommands: status, area <radius>, " +
+        "Concerned Foreman settlement designation and custody. Subcommands: status, area <radius>, " +
         "harvest <radius>, supply (look at a chest), recruit [name], dismiss [name], " +
-        "resolve <request> mine|his, " +
-        "clear <area|harvest|supply> [yes]. Requires the settlement runtime to be enabled " +
-        "in the config and this peer to be the host.";
+        "clear <area|harvest|supply> [yes], give axe|hammer (hold it, stand by Thorstein), " +
+        "takeback [axe|hammer], reconcile, resolve <request> mine|his|source|destination [count], " +
+        "resolve <order> lost. Requires the settlement runtime to be enabled in the config and this " +
+        "peer to be the host; custody acts also require nobody else to be connected.";
 
     public override void Run(string[] args, Terminal context)
     {
@@ -48,7 +49,7 @@ internal sealed class SettlementToolsCommand : ConsoleCommand
         return new List<string>
         {
             "status", "area", "harvest", "supply", "recruit", "dismiss", "clear",
-            "resolve",
+            "resolve", "give", "takeback", "reconcile",
         };
     }
 }
