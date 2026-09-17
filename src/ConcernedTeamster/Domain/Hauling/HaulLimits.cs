@@ -16,17 +16,17 @@ internal sealed class HaulLimits
     // Route planning (agent B)
 
     /// <summary>Rise over run a loaded route may not exceed.</summary>
-    public float MaxGradeRatio { get; set; } = 0.25f;
+    public float MaxGradeRatio { get; set; } = 0.12f;
 
     /// <summary>Free width beyond the cart's own width on each side.</summary>
-    public float SideClearanceMetres { get; set; } = 0.3f;
+    public float SideClearanceMetres { get; set; } = 0.5f;
 
     /// <summary>Navmesh path queries allowed per minute, across all hauls.
     /// </summary>
     public int PathQueriesPerMinute { get; set; } = 12;
 
     /// <summary>Clearance probes (swept casts) allowed per plan.</summary>
-    public int ClearanceProbesPerPlan { get; set; } = 64;
+    public int ClearanceProbesPerPlan { get; set; } = 128;
 
     /// <summary>Spacing of clearance and grade samples along a route.</summary>
     public float SampleSpacingMetres { get; set; } = 1.5f;
@@ -59,16 +59,16 @@ internal sealed class HaulLimits
     // Motion and recovery (agents A and B)
 
     /// <summary>Window over which progress is judged from BOTH bodies.</summary>
-    public float StallWindowSeconds { get; set; } = 4f;
+    public float StallWindowSeconds { get; set; } = 2.5f;
 
     /// <summary>Cart displacement below which, over the window, a commanded
     /// pull is not progress.</summary>
-    public float StallCartDisplacementMetres { get; set; } = 0.5f;
+    public float StallCartDisplacementMetres { get; set; } = 0.75f;
 
     public int MaxRecoveryAttempts { get; set; } = 2;
 
     /// <summary>First wait between recoveries; doubles, capped.</summary>
-    public float RecoveryBackoffSeconds { get; set; } = 3f;
+    public float RecoveryBackoffSeconds { get; set; } = 5f;
 
     public float RecoveryBackoffMaxSeconds { get; set; } = 20f;
 
