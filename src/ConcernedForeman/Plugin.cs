@@ -1,6 +1,7 @@
 using BepInEx;
 using TheConcernedCat.ConcernedForeman.Domain.Settlement;
 using TheConcernedCat.ConcernedForeman.Runtime;
+using TheConcernedCat.ConcernedForeman.Runtime.Interop;
 using TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 
 namespace TheConcernedCat.ConcernedForeman;
@@ -25,11 +26,15 @@ public sealed class Plugin : BaseUnityPlugin
 
     private SettlementRuntime? _settlement;
     private bool _worldWasUp;
+    private HaulProviderDiscovery? _haulProvider;
 
     private void Awake()
     {
         ForemanSettlementSettings settings = ForemanSettlementSettings.Bind(Config);
         _settlement = new SettlementRuntime(settings, message => Logger.LogInfo(message));
+
+        // #317: Concerned Teamster's haul capability, probed when a world comes up.
+        _haulProvider = new HaulProviderDiscovery(message => Logger.LogInfo(message));
 
         Logger.LogInfo($"{PluginName} {PluginVersion} loaded");
         Logger.LogInfo(
@@ -66,8 +71,14 @@ public sealed class Plugin : BaseUnityPlugin
     private void Update()
     {
         bool worldIsUp = ZNetScene.instance != null;
+        if (!_worldWasUp && worldIsUp)
+        {
+            _haulProvider?.EnsureProbed();
+        }
+
         if (_worldWasUp && !worldIsUp)
         {
+            _haulProvider?.Forget();
             _settlement?.OnWorldUnloaded();
         }
 
