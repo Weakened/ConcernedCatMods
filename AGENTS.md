@@ -19,12 +19,13 @@ Before changing a product, read `docs/NAMING_CONVENTIONS.md`, then that product'
 - Never publish to Thunderstore without explicit human approval after the manual release checklist passes.
 - Do not change package namespace, package name, plugin GUID, or assembly name without an explicit migration issue.
 - Do not work in unrelated mod folders.
-- Do not let two agents edit the same working tree at the same time.
+- Do not let two agents edit the same working tree at the same time. Parallel agents work one issue per agent in their own worktree; only the lead integrates into `main`, deploys, or operates the game.
 - Preserve client-side behavior until a multiplayer-sync design is approved.
 - Treat Valheim internal APIs as unstable. Keep them behind narrow adapters and log actionable failures.
 - Products never reference each other at compile time; cross-product integration is runtime capability detection only. Code shared between products lives under `src/Shared/<Area>` and is compiled into each consumer as source; it must contain no Unity/BepInEx/Jötunn types and no product namespace.
-- Companions: local-only presentation. No networked NPC, ZDO, custom RPC, native save entity, combat, or loot. Feature access is monotonic and never depends on the companion existing.
-- Teamster: preserve vanilla cart mass and physics by default. No zero-weight defaults, cart teleports, recovery cheats, stamina bypass, pathfinding, world-save mutation, or server-authority takeover. Behavior-mutating features must be explicit, reversible, fail-closed, and authorized by their own issue.
+- Companions: local-only presentation. No networked NPC, ZDO, custom RPC, native save entity, combat, or loot. Feature access is monotonic and never depends on the companion existing; that grant applies to feature access only, never to worker authority or custody.
+- Workers: while an identity performs an explicitly ordered job, its body is owned by that product's opted-in worker runtime (inactive prefab clone, vanilla motor, host with no other peers), never alongside its presentation body. A worker body may keep its identity and inventory in its own network object; mod data is never written into a vanilla object (`docs/settlement/cart-and-collection/DECISIONS.md`).
+- Teamster: preserve vanilla cart mass and physics by default. No zero-weight defaults, cart teleports, recovery cheats, stamina bypass, pathfinding, world-save mutation, or server-authority takeover. Behavior-mutating features must be explicit, reversible, fail-closed, and authorized by their own issue. Scoped carve-out (#313/#314): the opt-in Gunnar worker runtime may pathfind his own body, rely on host-held cart ownership, and attach/detach a player-assigned cart through vanilla `Vagon.AttachTo`/`Detach`; it never teleports carts, changes cart mass or physics, writes forces or velocities, bypasses stamina, toggles the brake, or writes mod data into a vanilla object.
 
 ## Required workflow
 

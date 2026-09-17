@@ -20,6 +20,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Game-free shared source for the Gunnar worker runtime (docs/settlement/cart-and-collection):
+         worker identities, authority, retries, and the cross-product capability contracts. -->
+    <Compile Include="..\Shared\Workers\**\*.cs" LinkBase="Workers" />
+    <Compile Include="..\Shared\Interop\**\*.cs" LinkBase="Interop" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- CT-008: versioned calibration data ships inside the DLL; the same
          file is embedded into the test assembly so tests prove the shipped
          bytes. The stable logical name decouples the resource from folder

@@ -28,6 +28,10 @@
          Shared.Settlement.Tests link them and exercise the whole decision
          surface game-free. -->
     <Compile Include="..\Shared\Settlement\**\*.cs" LinkBase="Settlement" />
+    <!-- Game-free worker authority/actor-mode contracts and the cross-product
+         capability contracts (docs/settlement/cart-and-collection). -->
+    <Compile Include="..\Shared\Workers\**\*.cs" LinkBase="Workers" />
+    <Compile Include="..\Shared\Interop\**\*.cs" LinkBase="Interop" />
   </ItemGroup>
 
   <ItemGroup>

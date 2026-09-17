@@ -1,6 +1,6 @@
 using BepInEx;
-using Jotunn.Managers;
 using TheConcernedCat.ConcernedForeman.Domain.Settlement;
+using TheConcernedCat.ConcernedForeman.Runtime;
 using TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 
 namespace TheConcernedCat.ConcernedForeman;
@@ -37,8 +37,23 @@ public sealed class Plugin : BaseUnityPlugin
             (settings.SettlementRuntimeEnabled.Value ? "ENABLED" : "off (the default)") +
             ". Building diagnostics do not require it.");
 
-        CommandManager.Instance.AddConsoleCommand(new WorkerToolsCommand(_settlement));
-        CommandManager.Instance.AddConsoleCommand(new SettlementToolsCommand(_settlement));
+        // Through the game's own command table, not Jötunn's manager: Jötunn 2.29.2 looks for a
+        // Terminal.ConsoleCommand constructor Valheim 1.0.12 no longer has, so every command
+        // silently did not exist (#307). What the console actually accepted is logged.
+        Jotunn.Entities.ConsoleCommand[] commands =
+        {
+            new WorkerToolsCommand(_settlement),
+            new SettlementToolsCommand(_settlement),
+        };
+
+        var names = new string[commands.Length];
+        for (int index = 0; index < commands.Length; index++)
+        {
+            names[index] = commands[index].Name;
+            VanillaConsoleCommands.Register(commands[index], Logger);
+        }
+
+        Logger.LogInfo(VanillaConsoleCommands.Describe(names));
     }
 
     /// <summary>Notices a world going away.
