@@ -10,8 +10,10 @@
 A merged PR, a running process or a passing test count is **not** gameplay acceptance. Live rows stay `pending` until
 observed.
 
-**Game build for every row:** Valheim 1.0.12 (network 40, Steam build 25253764), `assembly_valheim.dll` SHA-256
-`27a766a8d23a7bd8b6a54fb9ad0452a96c305fb3629b39c40527c09a1c393a84`, Unity 6000.0.75f1. Test profile TCC-HulgiSmoke:
+**Game build.** Every row states its build. Audits: Valheim 1.0.12 (Steam build 25253764), `assembly_valheim.dll`
+SHA-256 `27a766a8d23a7bd8b6a54fb9ad0452a96c305fb3629b39c40527c09a1c393a84`. Since 2026-09-17 10:20: **Valheim 1.0.14**
+(Steam build 25364265), SHA-256 `f64998168a0dd37ec774816808f914ed68376be1b9670cd05a6c2f27c8017fb6`,
+`assembly_utils.dll` `201e2746…4b12dd0`, `UnityEngine.PhysicsModule.dll` unchanged. Unity 6000.0.75f1. Test profile TCC-HulgiSmoke:
 BepInEx 5.4.23.5, Jötunn 2.30.0.
 
 ## Audits (read-only, 2026-09-17)
@@ -23,6 +25,24 @@ BepInEx 5.4.23.5, Jötunn 2.30.0.
 | `FOREMAN_RUNTIME_AUDIT.md` | Foreman worker runtime, ledgers, capability boundary, open defects | adapter-audited: reuse map, rule conflicts R1–R13 |
 
 The audits live in `concernedcat-handoffs/2026-09-17-gunnar-thorstein-work/audits/`, outside the repository.
+
+**Re-verification for Valheim 1.0.14** (lead, 2026-09-17). Full `ilspycmd` decompiles of both builds were diffed.
+- **31 of 630 types changed.**
+- **Unchanged:** `Vagon`, `Pickable`, `ItemDrop`, `Container`, `BaseAI`, `Pathfinding`, `ZDOMan`, `ZNetScene`,
+  `Location`, `PrivateArea`.
+- **Changed:**
+  - `Version` (1.0.12 → 1.0.14);
+  - `Character` (Ashlands heat only);
+  - `Humanoid` (a null check in AI attack selection);
+  - `Inventory` (cheated items no longer stack with normal ones: `FindFreeStackItem` matches `m_cheated`);
+  - `ZNet` (the save and logout flow around `WorldSaveStarted`, which still exists);
+  - `Terminal` (one new command; entries use the same constructor shape);
+  - `TerrainComp` (a private helper renamed);
+  - `Piece` (an achievement parameter renamed);
+  - `Player` (a new private field);
+  - `Minimap`, `Attack`, `SEMan`, UI and settings types (no signature changes).
+
+The seams do not depend on any changed member. Each agent re-runs its own API audit against the new binary.
 
 ## Gate A: contract and compatibility
 

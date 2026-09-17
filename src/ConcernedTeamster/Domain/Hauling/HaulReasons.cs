@@ -116,4 +116,10 @@ internal enum HaulAttentionReason
 
     WorkerBodyLost = 22,
     LeaseInvalidated = 23,
+
+    /// <summary>More than one body carries Gunnar's identity (C2).</summary>
+    WorkerBodyDuplicated = 24,
+
+    /// <summary>The player paused the haul; nothing is wrong (C2).</summary>
+    PausedByPlayer = 25,
 }
