@@ -67,6 +67,22 @@ internal interface ICustodyRuntime
     /// resolution.</summary>
     bool IsWritable { get; }
 
+    /// <summary>C2: the one epoch minted for this world load. Every SourceKey,
+    /// WorkScope, DeliveryTarget and CustodyLocation made during the load uses it.
+    /// </summary>
+    Guid WorldLoadEpoch { get; }
+
+    /// <summary>C2: after replay, the non-terminal collection order recorded for
+    /// <paramref name="worker"/>, so it can be adopted (Paused) after a reload.
+    /// Its scope and delivery target still carry the previous load's epoch until
+    /// the player confirms a rebind.</summary>
+    bool TryRecoverOrder(WorkerId worker, out CollectionOrderDefinition? order, out CollectionOrderState state);
+
+    /// <summary>C2: journals a player-confirmed post-reload rebind of an order's
+    /// scope snapshot and delivery container (<c>CollectionRebound</c>). Quotas,
+    /// progress and custody are unchanged.</summary>
+    bool RecordRebound(OrderId order, WorkScope scope, DeliveryTarget delivery);
+
     /// <summary>The worker body's persisted inventory.</summary>
     bool TryResolveWorker(WorkerKey worker, out IInventoryPort? port, out CollectionAttentionReason refusal);
 

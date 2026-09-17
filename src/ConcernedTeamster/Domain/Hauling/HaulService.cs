@@ -112,10 +112,18 @@ internal enum HaulCommandOutcome
 internal readonly struct HaulCommandResult
 {
     public HaulCommandResult(HaulCommandOutcome outcome, HaulAttentionReason reason, int revision)
+        : this(outcome, reason, revision, string.Empty)
+    {
+    }
+
+    /// <summary>C2: with a protocol-level detail the provider can pass on
+    /// (for example <c>HaulBusy</c>), which has no attention reason.</summary>
+    public HaulCommandResult(HaulCommandOutcome outcome, HaulAttentionReason reason, int revision, string detail)
     {
         Outcome = outcome;
         Reason = reason;
         Revision = revision;
+        Detail = detail ?? string.Empty;
     }
 
     public HaulCommandOutcome Outcome { get; }
@@ -125,6 +133,10 @@ internal readonly struct HaulCommandResult
     public HaulAttentionReason Reason { get; }
 
     public int Revision { get; }
+
+    /// <summary>A wire reason name when <see cref="Reason"/> cannot say it;
+    /// empty otherwise.</summary>
+    public string Detail { get; }
 }
 
 /// <summary>The seam between Gunnar's runtime (agent A implements) and
