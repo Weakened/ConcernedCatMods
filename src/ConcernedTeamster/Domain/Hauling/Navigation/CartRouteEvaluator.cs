@@ -18,7 +18,9 @@ namespace TheConcernedCat.ConcernedTeamster.Domain.Hauling.Navigation;
 /// calibrated climb and descent data when given, doorways, a turn sharper than
 /// a hitch follows, and finally a swept box of the cart's width plus
 /// <see cref="HaulLimits.SideClearanceMetres"/> each side from the previous
-/// pose. The first problem along the route decides.
+/// pose. The first problem along the route decides. The stop is the last sample
+/// whose ground under the cart is within <see cref="HaulLimits.MaxParkingGradeRatio"/>
+/// both along and across.
 ///
 /// A blocked sweep is not always the end. The navmesh keeps a walker only its
 /// own radius from walls, and a cart is wider; so when a sweep is blocked the
@@ -485,26 +487,33 @@ internal sealed class CartRouteEvaluator
 
             if (index > 0)
             {
-                // The grade over about twice the sample spacing behind the axle:
-                // the same three-metre run Teamster's Cart Status readout uses at
-                // the default spacing, so a player can check a refusal with it.
-                int back = 0;
+                // The grade over twice the sample spacing of the axle's own track
+                // behind it, the height there interpolated so the run is exact: the
+                // same three-metre run Teamster's Cart Status readout uses at the
+                // default spacing, so a player can check a refusal with it.
+                float wanted = 2f * _spacing;
                 float run = 0f;
+                float backHeight = atAxle.Height;
+                WorkPoint later = pose.Axle;
                 for (int earlier = index - 1; earlier >= 0; earlier--)
                 {
-                    float distance = CartRouteGeometry.FlatDistance(_poses[earlier].Axle, pose.Axle);
-                    back = earlier;
-                    run = distance;
-                    if (distance >= 2f * _spacing)
+                    float step = CartRouteGeometry.FlatDistance(_poses[earlier].Axle, later);
+                    if (run + step >= wanted && step > 1e-4f)
                     {
+                        backHeight += (_ground[earlier].Axle - backHeight) * ((wanted - run) / step);
+                        run = wanted;
                         break;
                     }
+
+                    run += step;
+                    backHeight = _ground[earlier].Axle;
+                    later = _poses[earlier].Axle;
                 }
 
                 if (run >= 0.5f * _spacing)
                 {
                     ground.HasGrade = true;
-                    ground.Grade = (atAxle.Height - _ground[back].Axle) / run;
+                    ground.Grade = (atAxle.Height - backHeight) / run;
                     if (Math.Abs(ground.Grade) > _maxGrade)
                     {
                         return Refuse(
@@ -832,7 +841,9 @@ internal sealed class CartRouteEvaluator
                 widestArticulation = Math.Max(widestArticulation, _poses[index].ArticulationDegrees);
             }
 
-            float level = CartRouteGeometry.LevelGradeRatio;
+            // Where a loaded cart may be left standing (C2): the running grade and
+            // the tilt across it both within the parking limit.
+            float level = _owner._limits.MaxParkingGradeRatio;
             int stop = -1;
             for (int index = count - 1; index >= 1; index--)
             {

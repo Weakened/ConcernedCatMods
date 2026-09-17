@@ -99,16 +99,24 @@ internal sealed class CartRoutePlanner : ICartRoutePlanner
     /// log.</summary>
     public CartRouteAssessment? LastAssessment { get; private set; }
 
+    /// <summary>Plans the leg <paramref name="request"/> describes:
+    /// <see cref="CartRouteRequest.From"/> is where the cart stands and
+    /// <see cref="CartRouteRequest.To"/> where Gunnar should bring it. Gunnar is
+    /// taken to hold the handle with the cart facing along the route, one hitch
+    /// length along it; when he actually stands somewhere else, use the overload
+    /// with his position. Never throws.</summary>
     public CartRoutePlan Plan(CartRouteRequest request, float now) => Plan(request, null, now);
 
-    /// <summary>Plans a leg for a cart that stands at
-    /// <paramref name="cartPosition"/>, so the first turn is predicted from the
-    /// cart's real side. Never throws.</summary>
-    public CartRoutePlan Plan(CartRouteRequest request, WorkPoint? cartPosition, float now)
+    /// <summary>Plans the leg with Gunnar at <paramref name="pullerPosition"/>
+    /// when known - at the handle of the cart standing at
+    /// <see cref="CartRouteRequest.From"/> - so his line starts where he is and
+    /// the first turn is predicted from the cart's real heading. Never throws.
+    /// </summary>
+    public CartRoutePlan Plan(CartRouteRequest request, WorkPoint? pullerPosition, float now)
     {
         try
         {
-            return PlanCore(request, cartPosition, now);
+            return PlanCore(request, pullerPosition, now);
         }
         catch (Exception exception) when (!(exception is OutOfMemoryException))
         {
@@ -262,11 +270,12 @@ internal sealed class CartRoutePlanner : ICartRoutePlanner
         }
     }
 
-    private CartRoutePlan PlanCore(CartRouteRequest request, WorkPoint? cartPosition, float now)
+    private CartRoutePlan PlanCore(CartRouteRequest request, WorkPoint? pullerPosition, float now)
     {
         CartFootprint footprint = request.Footprint;
         if (!request.From.IsFinite || !request.To.IsFinite || !(footprint.WidthMetres > 0f) ||
-            !(footprint.LengthMetres > 0f) || !CartRouteGeometry.IsFiniteValue(now))
+            !(footprint.LengthMetres > 0f) || !CartRouteGeometry.IsFiniteValue(now) ||
+            (pullerPosition.HasValue && !pullerPosition.Value.IsFinite))
         {
             return Refuse(request.Revision, CartRouteFinding.InvalidRequest, null);
         }
@@ -338,10 +347,99 @@ internal sealed class CartRoutePlanner : ICartRoutePlanner
             return Refuse(request.Revision, CartRouteFinding.RecentFailure, to);
         }
 
+        List<WorkPoint>? line = PullerLine(route, from, pullerPosition, footprint.HitchLengthMetres);
+        if (line == null)
+        {
+            return Refuse(request.Revision, CartRouteFinding.TargetWithinHitch, to);
+        }
+
         var allowance = new CartProbeAllowance(_limits.ClearanceProbesPerPlan);
         CartRouteAssessment assessment = _evaluator.Evaluate(
-            route, footprint, request.LoadedMassKg, cartPosition, true, allowance);
+            line, footprint, request.LoadedMassKg, from, true, allowance);
         return Accept(assessment, request.Revision, footprint, request.LoadedMassKg, now);
+    }
+
+    /// <summary>Gunnar's line for a cart route <paramref name="route"/> that
+    /// starts at the cart. Known at the handle, he joins the route at its point
+    /// nearest him within the first hitch-and-corridor stretch; otherwise he is
+    /// one hitch length along it. Null when the route is no longer than the hitch:
+    /// there is nothing to pull.</summary>
+    private static List<WorkPoint>? PullerLine(
+        List<WorkPoint> route, WorkPoint cart, WorkPoint? pullerPosition, float hitchLength)
+    {
+        float hitch = Math.Max(0f, hitchLength);
+        float total = 0f;
+        for (int index = 1; index < route.Count; index++)
+        {
+            total += CartRouteGeometry.FlatDistance(route[index - 1], route[index]);
+        }
+
+        if (total <= hitch + CartRouteGeometry.SamePointMetres)
+        {
+            return null;
+        }
+
+        var line = new List<WorkPoint>(route.Count + 1);
+        if (pullerPosition.HasValue)
+        {
+            WorkPoint puller = pullerPosition.Value;
+            float reach = hitch + CartRouteGeometry.FlatDistance(cart, puller) + 1f;
+            int bestSegment = 0;
+            float bestAlong = 0f;
+            float bestDistance = float.MaxValue;
+            float walked = 0f;
+            for (int segment = 0; segment + 1 < route.Count && walked <= reach; segment++)
+            {
+                float distance = CartRouteGeometry.FlatDistanceToSegment(puller, route[segment], route[segment + 1], out float along);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    bestSegment = segment;
+                    bestAlong = along;
+                }
+
+                walked += CartRouteGeometry.FlatDistance(route[segment], route[segment + 1]);
+            }
+
+            WorkPoint join = CartRouteGeometry.Lerp(route[bestSegment], route[bestSegment + 1], bestAlong);
+            line.Add(puller);
+            if (CartRouteGeometry.FlatDistance(puller, join) > CartRouteGeometry.SamePointMetres)
+            {
+                line.Add(join);
+            }
+
+            AppendFrom(route, bestSegment + 1, line);
+            return line.Count >= 2 ? line : null;
+        }
+
+        float remaining = hitch;
+        for (int segment = 0; segment + 1 < route.Count; segment++)
+        {
+            float length = CartRouteGeometry.FlatDistance(route[segment], route[segment + 1]);
+            if (remaining <= length)
+            {
+                line.Add(length > 1e-4f
+                    ? CartRouteGeometry.Lerp(route[segment], route[segment + 1], remaining / length)
+                    : route[segment]);
+                AppendFrom(route, segment + 1, line);
+                return line.Count >= 2 ? line : null;
+            }
+
+            remaining -= length;
+        }
+
+        return null;
+    }
+
+    private static void AppendFrom(List<WorkPoint> route, int start, List<WorkPoint> line)
+    {
+        for (int index = start; index < route.Count; index++)
+        {
+            if (CartRouteGeometry.FlatDistance(line[line.Count - 1], route[index]) > CartRouteGeometry.SamePointMetres)
+            {
+                line.Add(route[index]);
+            }
+        }
     }
 
     private CartRoutePlan RefreshCore(CartRoutePlan plan, WorkPoint pullerPosition, WorkPoint cartPosition, float now)

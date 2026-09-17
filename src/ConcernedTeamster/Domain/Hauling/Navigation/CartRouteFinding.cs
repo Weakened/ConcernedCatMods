@@ -90,6 +90,10 @@ internal enum CartRouteFinding
     /// verified, so the plan says nothing about where they are (NoPath: plan
     /// again from here).</summary>
     LeftCorridor = 31,
+
+    /// <summary>The target is within one hitch length of the cart: there is no
+    /// leg to pull (NoPath).</summary>
+    TargetWithinHitch = 32,
 }
 
 /// <summary>How findings, verdicts and attention reasons relate.</summary>
@@ -129,6 +133,7 @@ internal static class CartRouteFindings
             [CartRouteFinding.ProbeBudget] = CartRouteVerdict.BudgetExhausted,
             [CartRouteFinding.NoLevelStop] = CartRouteVerdict.UnsafeStop,
             [CartRouteFinding.LeftCorridor] = CartRouteVerdict.NoPath,
+            [CartRouteFinding.TargetWithinHitch] = CartRouteVerdict.NoPath,
         };
 
     private static readonly Dictionary<CartRouteFinding, string> Descriptions =
@@ -165,6 +170,7 @@ internal static class CartRouteFindings
             [CartRouteFinding.ProbeBudget] = "the clearance probe budget for this plan is spent",
             [CartRouteFinding.NoLevelStop] = "there is no level place along the route to stop the cart",
             [CartRouteFinding.LeftCorridor] = "Gunnar or the cart is outside the corridor the plan verified",
+            [CartRouteFinding.TargetWithinHitch] = "the target is within one hitch length of the cart",
         };
 
     public static CartRouteVerdict VerdictOf(CartRouteFinding finding)

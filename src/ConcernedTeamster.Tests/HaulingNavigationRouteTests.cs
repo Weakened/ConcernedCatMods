@@ -23,13 +23,17 @@ public class HaulingNavigationRouteTests
 
         CartRoutePlan plan = planner.Plan(Request(P(0, 0), P(20, 0)), 0f);
 
+        // The request starts at the cart; Gunnar's line starts at its handle,
+        // one hitch length along the route, and the cart trails from where it is.
         Assert.True(plan.IsSuitable, planner.LastAssessment!.Describe());
-        Assert.Equal(P(0, 0), plan.Waypoints[0]);
+        Assert.Equal(VanillaCart.HitchLengthMetres, plan.Waypoints[0].X, 3);
+        Assert.Equal(0f, plan.Waypoints[0].Z, 3);
         Assert.Equal(P(20, 0), plan.Waypoints[plan.Waypoints.Count - 1]);
         Assert.Equal(plan.Waypoints[plan.Waypoints.Count - 1], plan.StopPoint);
         Assert.Equal(0f, plan.SteepestGradeRatio);
         Assert.Equal(VanillaCart.WidthMetres + (2f * Limits.SideClearanceMetres), plan.NarrowestClearanceMetres, 3);
-        Assert.Equal(20f, plan.LengthMetres, 3);
+        Assert.Equal(20f - VanillaCart.HitchLengthMetres, plan.LengthMetres, 3);
+        Assert.Equal(0f, planner.LastAssessment.CartTrack[0].HorizontalDistanceTo(P(0, 0)), 3);
         Assert.Equal(7, plan.RequestRevision);
         Assert.Equal(1, paths.Calls);
         Assert.InRange(planner.LastAssessment.Costs.ClearanceProbes, 1, Limits.ClearanceProbesPerPlan);
@@ -136,8 +140,33 @@ public class HaulingNavigationRouteTests
         Assert.True(plan.IsSuitable, planner.LastAssessment!.Describe());
         Assert.True(planner.LastAssessment.Costs.Repairs >= 1);
         Assert.Contains(plan.Waypoints, point => point.X > 12.05f || point.Z < -0.05f);
-        Assert.Equal(P(0, 0), plan.Waypoints[0]);
         Assert.Equal(P(12, 12), plan.Waypoints[plan.Waypoints.Count - 1]);
+        Assert.InRange(planner.LastAssessment.Costs.ClearanceProbes, 1, Limits.ClearanceProbesPerPlan);
+    }
+
+    [Fact]
+    public void WithGunnarsRealPositionACartFacingAwayCannotBePulledStraightIntoAReversal()
+    {
+        var (planner, _, _) = Planner();
+
+        // The cart at the origin faces -x: Gunnar holds its handle behind it.
+        CartRoutePlan plan = planner.Plan(Request(P(0, 0), P(20, 0)), P(-VanillaCart.HitchLengthMetres, 0), 0f);
+
+        Assert.Equal(CartRouteVerdict.TooNarrow, plan.Verdict);
+        Assert.Equal(CartRouteFinding.TurnTooSharp, planner.LastAssessment!.Finding);
+
+        CartRoutePlan aligned = planner.Plan(Request(P(0, 0), P(20, 0)), P(VanillaCart.HitchLengthMetres, 0), 1f);
+        Assert.True(aligned.IsSuitable, planner.LastAssessment!.Describe());
+        Assert.Equal(P(VanillaCart.HitchLengthMetres, 0), aligned.Waypoints[0]);
+    }
+
+    [Fact]
+    public void ATargetWithinOneHitchLengthOfTheCartIsNoLeg()
+    {
+        var (planner, _, _) = Planner();
+
+        Assert.Equal(CartRouteVerdict.NoPath, planner.Plan(Request(P(0, 0), P(1.5f, 0)), 0f).Verdict);
+        Assert.Equal(CartRouteFinding.TargetWithinHitch, planner.LastAssessment!.Finding);
     }
 
     [Fact]
@@ -246,6 +275,21 @@ public class HaulingNavigationRouteTests
     }
 
     [Fact]
+    public void TheStopIsJudgedByTheParkingGradeLimit()
+    {
+        var (planner, world, _) = Planner();
+        world.Height = (x, z) => x * 0.04f;
+        Assert.True(Limits.MaxParkingGradeRatio >= 0.04f);
+        Assert.True(planner.Plan(Request(P(0, 0), P(20, 0)), 0f).IsSuitable, planner.LastAssessment!.Describe());
+        Assert.Equal(0f, planner.LastAssessment.StopShortfallMetres, 3);
+
+        var strict = new HaulLimits { MaxParkingGradeRatio = 0.03f };
+        var (strictPlanner, strictWorld, _) = Planner(strict);
+        strictWorld.Height = (x, z) => x * 0.04f;
+        Assert.Equal(CartRouteVerdict.UnsafeStop, strictPlanner.Plan(Request(P(0, 0), P(20, 0)), 0f).Verdict);
+    }
+
+    [Fact]
     public void ARouteWithNoLevelPlaceToStopIsAnUnsafeStop()
     {
         var (planner, world, _) = Planner();
@@ -338,7 +382,7 @@ public class HaulingNavigationRouteTests
         CartRoutePlan plan = planner.Plan(Request(P(0, 0), P(20, 0)), 0f);
 
         Assert.True(plan.IsSuitable, planner.LastAssessment!.Describe());
-        Assert.Equal(P(0, 0), plan.Waypoints[0]);
+        Assert.InRange(plan.Waypoints[0].HorizontalDistanceTo(P(0, 0)), 1f, VanillaCart.HitchLengthMetres + 0.01f);
         Assert.Equal(P(20, 0), plan.Waypoints[plan.Waypoints.Count - 1]);
     }
 

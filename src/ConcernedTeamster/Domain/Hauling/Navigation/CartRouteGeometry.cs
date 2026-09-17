@@ -1,5 +1,4 @@
 using System;
-using TheConcernedCat.ConcernedTeamster.Domain.Terrain;
 using TheConcernedCat.Workers;
 
 namespace TheConcernedCat.ConcernedTeamster.Domain.Hauling.Navigation;
@@ -23,12 +22,6 @@ internal static class CartRouteGeometry
     /// run is a ledge or a gap, not a slope; and obstacles lower than this are
     /// left to the ground checks rather than the clearance sweeps.</summary>
     public const float StepMetres = 0.3f;
-
-    /// <summary>A stretch of ground counts as level enough to leave a loaded
-    /// cart standing when neither its running grade nor its cross slope reaches
-    /// the grade below which Teamster's own readout calls ground Level, whichever
-    /// way it was trending.</summary>
-    public static float LevelGradeRatio => GradeMath.DirectionExitThresholdPercent / 100f;
 
     /// <summary>Straight-line pulls are swept as one box per sample stretch;
     /// where the cart turns more than this within a stretch the box is widened

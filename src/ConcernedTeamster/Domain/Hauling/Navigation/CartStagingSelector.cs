@@ -10,16 +10,16 @@ internal readonly struct CartStagingRequest
 {
     public CartStagingRequest(
         WorkPoint desired,
-        WorkPoint pullerPosition,
-        WorkPoint? cartPosition,
+        WorkPoint cartPosition,
+        WorkPoint? pullerPosition,
         CartFootprint footprint,
         float loadedMassKg,
         float searchRadiusMetres,
         int revision)
     {
         Desired = desired;
-        PullerPosition = pullerPosition;
         CartPosition = cartPosition;
+        PullerPosition = pullerPosition;
         Footprint = footprint;
         LoadedMassKg = loadedMassKg;
         SearchRadiusMetres = searchRadiusMetres;
@@ -30,10 +30,11 @@ internal readonly struct CartStagingRequest
     /// </summary>
     public WorkPoint Desired { get; }
 
-    /// <summary>Where Gunnar is, hitched; routes start here.</summary>
-    public WorkPoint PullerPosition { get; }
+    /// <summary>Where the cart stands; routes start here.</summary>
+    public WorkPoint CartPosition { get; }
 
-    public WorkPoint? CartPosition { get; }
+    /// <summary>Where Gunnar is, when he holds the handle.</summary>
+    public WorkPoint? PullerPosition { get; }
 
     public CartFootprint Footprint { get; }
 
@@ -79,6 +80,8 @@ internal sealed class CartStagingChoice
 
     public CartStagingOutcome Outcome { get; }
 
+    /// <summary>Where Gunnar stops. The cart stands one hitch length behind him,
+    /// on the ground the plan checked for parking.</summary>
     public WorkPoint? Spot { get; }
 
     /// <summary>A plan from Gunnar to <see cref="Spot"/> whose stop is the spot.
@@ -180,20 +183,21 @@ internal sealed class CartStagingSelector
     private CartStagingChoice SelectCore(CartStagingRequest request, float now)
     {
         CartFootprint footprint = request.Footprint;
-        if (!request.Desired.IsFinite || !request.PullerPosition.IsFinite || !(footprint.WidthMetres > 0f) ||
+        if (!request.Desired.IsFinite || !request.CartPosition.IsFinite || !(footprint.WidthMetres > 0f) ||
             !(footprint.LengthMetres > 0f) || !CartRouteGeometry.IsFiniteValue(now) ||
-            !CartRouteGeometry.IsFiniteValue(request.SearchRadiusMetres))
+            !CartRouteGeometry.IsFiniteValue(request.SearchRadiusMetres) ||
+            (request.PullerPosition.HasValue && !request.PullerPosition.Value.IsFinite))
         {
             return new CartStagingChoice(CartStagingOutcome.Invalid, null, null, 0, 0, CartRouteVerdict.Unspecified);
         }
 
         float radius = Math.Max(0f, Math.Min(request.SearchRadiusMetres, _limits.MaxLegMetres));
         float spacing = Math.Max(footprint.LengthMetres, _limits.SampleSpacingMetres);
-        BuildCandidates(request.Desired, request.PullerPosition, spacing, radius, _limits.ClearanceProbesPerPlan, _candidates);
+        BuildCandidates(request.Desired, request.CartPosition, spacing, radius, _limits.ClearanceProbesPerPlan, _candidates);
 
         var allowance = new CartProbeAllowance(_limits.ClearanceProbesPerPlan);
         float halfCorridor = (footprint.WidthMetres * 0.5f) + _limits.SideClearanceMetres;
-        float level = CartRouteGeometry.LevelGradeRatio;
+        float level = _limits.MaxParkingGradeRatio;
         int checkedCount = 0;
         int routes = 0;
         CartRouteVerdict lastVerdict = CartRouteVerdict.Unspecified;
@@ -211,9 +215,9 @@ internal sealed class CartStagingSelector
                 continue;
             }
 
-            if (!CartRouteGeometry.TryFlatDirection(request.PullerPosition, candidate, out float headingX, out float headingZ))
+            if (!CartRouteGeometry.TryFlatDirection(request.CartPosition, candidate, out float headingX, out float headingZ))
             {
-                // The candidate is where Gunnar already stands: not a leg.
+                // The candidate is where the cart already stands: not a leg.
                 continue;
             }
 
@@ -240,8 +244,8 @@ internal sealed class CartStagingSelector
             }
 
             CartRoutePlan plan = _planner.Plan(
-                new CartRouteRequest(request.PullerPosition, candidate, footprint, request.LoadedMassKg, request.Revision),
-                request.CartPosition,
+                new CartRouteRequest(request.CartPosition, candidate, footprint, request.LoadedMassKg, request.Revision),
+                request.PullerPosition,
                 now);
             routes++;
             if (plan.Verdict == CartRouteVerdict.BudgetExhausted)

@@ -21,7 +21,7 @@ public class HaulingNavigationMotionTests
         Assert.True(plan.IsSuitable, planner.LastAssessment!.Describe());
 
         var targets = new List<int>();
-        WorkPoint cart = P(-2.21f, 0f);
+        WorkPoint cart = P(0, 0);
         for (int index = 0; index < plan.Waypoints.Count; index++)
         {
             WorkPoint puller = plan.Waypoints[index];
@@ -403,7 +403,7 @@ public class HaulingNavigationMotionTests
             var selector = new CartStagingSelector(planner, world);
 
             CartStagingChoice choice = selector.Select(
-                new CartStagingRequest(P(20, 0), P(0, 0), P(-2.21f, 0), VanillaCart, 70f, 12f, 3), 0f);
+                new CartStagingRequest(P(20, 0), P(0, 0), P(2.21f, 0), VanillaCart, 70f, 12f, 3), 0f);
 
             Assert.Equal(CartStagingOutcome.Chosen, choice.Outcome);
             Assert.True(choice.Plan!.IsSuitable);
