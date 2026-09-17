@@ -99,7 +99,7 @@ internal sealed class DesignationTools
             case "status": return Status(register, journal);
             case "area": return MarkArea(register, DesignationKind.SettlementArea, args);
             case "harvest": return MarkArea(register, DesignationKind.HarvestArea, args);
-            case "supply": return MarkSupply(register);
+            case "supply": return MarkSupply(register, journal);
             case "recruit": return Recruit(register, args);
             case "dismiss": return Dismiss(register, args);
             case "clear": return Clear(register, journal, args);
@@ -233,7 +233,7 @@ internal sealed class DesignationTools
         return Report(result, register);
     }
 
-    private string MarkSupply(SettlementRegister register)
+    private string MarkSupply(SettlementRegister register, SettlementJournal journal)
     {
         if (!SettlementTargets.TryResolveHoveredContainer(
                 out Container? container, out string? key, out string failure))
@@ -241,11 +241,24 @@ internal sealed class DesignationTools
             return "Refused: " + failure;
         }
 
+        // With the record, so a chest marked before this world was loaded is
+        // replaced through the undesignation cascade: whatever was drawn from it
+        // is returned in the record and its orders cancelled first (#294).
         Vector3 at = container!.transform.position;
         DesignationResult result = register.Designate(
             DesignationRequest.Container(new SitePoint(at.x, at.y, at.z), key),
             _site,
-            _hasAuthority());
+            _hasAuthority(),
+            journal,
+            out UndesignationPlan? replaced);
+
+        if (replaced != null)
+        {
+            _pending = null;
+            string? notice = _records.Save();
+            return "The chest marked before this world was loaded was replaced. " + replaced.Describe() + " " +
+                result.Describe() + (notice == null ? string.Empty : " " + notice);
+        }
 
         return Report(result, register);
     }

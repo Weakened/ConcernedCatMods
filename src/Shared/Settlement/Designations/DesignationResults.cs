@@ -82,6 +82,12 @@ internal enum DesignationRefusal
     /// designated at all. Fail-closed: without one, a key could not later be
     /// told apart from a key left over from a previous run of the world.</summary>
     ContainerIdentityUnavailable = 11,
+
+    /// <summary>The marked chest belongs to a previous run of the world, and
+    /// replacing it has to return or cancel whatever was taken from it first
+    /// (#294). That needs the settlement's record, and this request came
+    /// without it, so nothing was replaced.</summary>
+    StaleContainerNeedsTheRecord = 12,
 }
 
 /// <summary>The answer to one marking request, and why.</summary>
@@ -184,6 +190,11 @@ internal readonly struct DesignationResult
             case DesignationRefusal.ContainerIdentityUnavailable:
                 return "this settlement has no current way to tell one chest from another, " +
                     "so no chest is being marked";
+
+            case DesignationRefusal.StaleContainerNeedsTheRecord:
+                return "the chest marked before this world was loaded can only be replaced together with " +
+                    "the settlement's record, so anything taken from it is returned or accounted for first. " +
+                    "Nothing was replaced; mark the chest again with cf_settle supply";
 
             default:
                 return "no reason was recorded, which is a bug — please report it";

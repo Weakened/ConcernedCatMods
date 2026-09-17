@@ -108,6 +108,78 @@ internal sealed class SettlementRegister
         return result;
     }
 
+    /// <summary>Marks something the player explicitly asked for, with the
+    /// settlement's record — the one way a chest marked in a previous run of
+    /// the world can be replaced (#294).
+    ///
+    /// Replacing a stale chest is an undesignation of the old row followed by a
+    /// designation of the new one, in that order and with the cascade in
+    /// between: whatever was taken from the old chest is returned in the record
+    /// and every order that drew from it is cancelled, journal first, exactly as
+    /// clearing it by hand would. The new chest is checked first — settlement,
+    /// containment, ward — so the cascade never runs for a replacement that
+    /// would then be refused. <paramref name="replaced"/> is the cascade that
+    /// ran, for telling the player what happened to the material; null when
+    /// nothing was replaced.</summary>
+    public DesignationResult Designate(
+        DesignationRequest request, IDesignationSite site, bool authorised, SettlementJournal journal,
+        out UndesignationPlan? replaced)
+    {
+        replaced = null;
+
+        if (journal == null)
+        {
+            throw new ArgumentNullException(nameof(journal));
+        }
+
+        if (!authorised)
+        {
+            return DesignationResult.Refused(DesignationRefusal.NotAuthorised);
+        }
+
+        if (IsReadOnly || journal.IsReadOnly)
+        {
+            return DesignationResult.Refused(DesignationRefusal.RecordReadOnly);
+        }
+
+        if (!journal.Scope.Equals(Scope))
+        {
+            throw new ArgumentException("That journal belongs to a different settlement.", nameof(journal));
+        }
+
+        if (!_book.WouldReplaceStaleContainer(request))
+        {
+            return Designate(request, site, authorised);
+        }
+
+        DesignationResult probe = _book.ProbeOverStaleContainer(request, site);
+        if (probe.Outcome != DesignationOutcome.Designated)
+        {
+            return probe;
+        }
+
+        UndesignationPlan plan = PlanUndesignation(DesignationKind.SupplyContainer, journal.Replay(), authorised);
+        UndesignationOutcome cleared = ApplyUndesignation(plan, journal, authorised);
+        if (cleared != UndesignationOutcome.Removed)
+        {
+            // Nothing was removed and nothing appended; the stale row stays.
+            return DesignationResult.Refused(DesignationRefusal.StaleContainerNeedsTheRecord);
+        }
+
+        replaced = plan;
+
+        // The ward answer is asked again here; if it changed in between, the
+        // stale row is gone (it was inert) and the refusal says why the new one
+        // was not marked.
+        DesignationResult result = _book.Designate(request, site);
+        if (result.Outcome == DesignationOutcome.Designated)
+        {
+            IsDirty = true;
+        }
+
+        return result;
+    }
+
     public RecruitmentResult Recruit(WorkerId id, string role, bool authorised)
     {
         if (!authorised)
@@ -217,13 +289,17 @@ internal sealed class SettlementRegister
         bool clearsSettlement = false;
         bool clearsHarvest = false;
         string? clearedContainer = null;
+        string? clearedEpoch = null;
         foreach (Designation gone in removed)
         {
             switch (gone.Kind)
             {
                 case DesignationKind.SettlementArea: clearsSettlement = true; break;
                 case DesignationKind.HarvestArea: clearsHarvest = true; break;
-                case DesignationKind.SupplyContainer: clearedContainer = gone.ContainerKey; break;
+                case DesignationKind.SupplyContainer:
+                    clearedContainer = gone.ContainerKey;
+                    clearedEpoch = gone.IdentityEpoch;
+                    break;
             }
         }
 
@@ -275,8 +351,11 @@ internal sealed class SettlementRegister
                     continue;
                 }
 
-                if (clearedContainer != null
-                    && string.Equals(reservation.Container, clearedContainer, StringComparison.Ordinal))
+                // The same key AND the same run of the world (#294): keys are
+                // renumbered on every load, so a key alone can match a chest
+                // from another run. A reservation written before epochs were
+                // recorded matches by key, as it always did.
+                if (clearedContainer != null && reservation.CameFrom(clearedContainer, clearedEpoch))
                 {
                     drewFromClearedContainer = true;
                 }
@@ -409,7 +488,8 @@ internal sealed class SettlementRegister
         {
             journal.Append(
                 JournalEntryKind.Refunded, reservation.Order, reservation.Request,
-                container: reservation.Container, stacks: reservation.Stacks);
+                container: reservation.Container, stacks: reservation.Stacks,
+                containerEpoch: reservation.ContainerEpoch);
         }
 
         foreach (OrderId order in plan.OrdersToCancel)

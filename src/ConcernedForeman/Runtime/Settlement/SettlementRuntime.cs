@@ -311,12 +311,43 @@ internal sealed class SettlementRuntime
         return "Order cleared. The worker should stop and stay stopped.";
     }
 
+    /// <summary>Asked before the body is retired (despawned), before anything
+    /// else is touched — not even his goal is cleared on a refusal. The plugin
+    /// wires it to the collection runtime's <c>Modes.MayRetireBody</c>, so a
+    /// body a collection job holds is never retired under that job. Unset means
+    /// nothing else can hold the body. A guard that throws refuses.</summary>
+    internal Func<bool>? MayRetireBody { get; set; }
+
+    private bool MayRetire()
+    {
+        Func<bool>? guard = MayRetireBody;
+        if (guard == null)
+        {
+            return true;
+        }
+
+        try
+        {
+            return guard();
+        }
+        catch (Exception e)
+        {
+            _log("[Settlement] The retire guard failed, so the worker was not retired: " + e.Message);
+            return false;
+        }
+    }
+
     private string Despawn()
     {
         ForemanWorkerAI? worker = Worker;
         if (worker == null)
         {
             return "No worker in loaded ground.";
+        }
+
+        if (!MayRetire())
+        {
+            return "Refused: Thorstein is working. Pause or cancel the order first, then despawn.";
         }
 
         worker.ClearGoal();
