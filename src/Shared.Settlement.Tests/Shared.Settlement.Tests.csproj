@@ -19,6 +19,11 @@
          settlements adds one <Compile Include> line of its own; nothing here
          creates a dependency in either direction. -->
     <Compile Include="..\Shared\Settlement\**\*.cs" LinkBase="Settlement" />
+    <!-- The game-free worker and interop areas are tested here too: they are
+         adopted by Foreman and Teamster, and neither product has a test project
+         that links shared source (docs/settlement/cart-and-collection). -->
+    <Compile Include="..\Shared\Workers\**\*.cs" LinkBase="Workers" />
+    <Compile Include="..\Shared\Interop\**\*.cs" LinkBase="Interop" />
   </ItemGroup>
 
   <ItemGroup>

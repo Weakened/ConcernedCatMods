@@ -36,6 +36,9 @@ jobs:
       - name: Run pure-domain unit tests (Concerned Teamster)
         run: dotnet test src/ConcernedTeamster.Tests/ConcernedTeamster.Tests.csproj --nologo
 
+      - name: Run pure-domain unit tests (shared settlement, workers and interop)
+        run: dotnet test src/Shared.Settlement.Tests/Shared.Settlement.Tests.csproj --nologo
+
       - name: Explain build boundary
         run: |
           echo "Game-linked C# builds are intentionally local or self-hosted."

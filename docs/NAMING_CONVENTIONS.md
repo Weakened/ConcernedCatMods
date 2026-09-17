@@ -118,7 +118,9 @@ Existing areas:
 | Area | Purpose | Consumers |
 |---|---|---|
 | `src/Shared/Companions` | Concerned Companions: identity, quest state, sidecar persistence, unlock decisions, placement planning, dialogue rotation | `ConcernedCartographer` |
-| `src/Shared/Settlement` | Settlement runtime: identity, work orders, custody ledger, replayable journal, worker movement planning | `ConcernedForeman` |
+| `src/Shared/Settlement` | Settlement runtime: identity, work orders, collection orders, custody ledger and transfers, replayable journal, worker movement planning | `ConcernedForeman` |
+| `src/Shared/Workers` | Worker identity, work authority, the single actor-mode owner, bounded retries and deadlines | `ConcernedForeman`, `ConcernedTeamster` |
+| `src/Shared/Interop` | Cross-product runtime capability contracts: a BCL-only capability map and versioned contracts such as `concernedcat.haul/1` | `ConcernedForeman`, `ConcernedTeamster` |
 
 ## Git
 
