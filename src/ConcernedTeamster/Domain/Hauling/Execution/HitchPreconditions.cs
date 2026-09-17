@@ -196,7 +196,7 @@ internal static class HitchPreconditions
 
         if (!puller.RotationLockedUpright)
         {
-            return "Gunnar's body is not locked upright";
+            return "Gunnar's rotation constraints do not match the player's (or were never measured)";
         }
 
         if (!puller.UnitScale)

@@ -1,6 +1,7 @@
 using BepInEx.Configuration;
 using TheConcernedCat.ConcernedTeamster.Domain.Carts;
 using TheConcernedCat.ConcernedTeamster.Domain.Config;
+using TheConcernedCat.ConcernedTeamster.Domain.Hauling.Execution;
 using TheConcernedCat.ConcernedTeamster.Domain.Profiles;
 using TheConcernedCat.ConcernedTeamster.Domain.Ui;
 using TheConcernedCat.ConcernedTeamster.Domain.Warnings;
@@ -37,8 +38,14 @@ internal sealed class TeamsterSettings
         ConfigEntry<bool> onboardingDismissed,
         ConfigEntry<ConfigProfile> activeProfile,
         ConfigEntry<ConfigProfile> lastAppliedProfile,
-        ConfigEntry<int> schemaVersion)
+        ConfigEntry<int> schemaVersion,
+        ConfigEntry<bool> gunnarHaulingEnabled,
+        ConfigEntry<GunnarPullStrength> gunnarPullStrength,
+        ConfigEntry<string> workerBaseCreature)
     {
+        GunnarHaulingEnabled = gunnarHaulingEnabled;
+        GunnarPullStrength = gunnarPullStrength;
+        WorkerBaseCreature = workerBaseCreature;
         Enabled = enabled;
         DebugLogging = debugLogging;
         SampleIntervalSeconds = sampleIntervalSeconds;
@@ -111,6 +118,21 @@ internal sealed class TeamsterSettings
     /// real, on its first post-upgrade load — see
     /// <c>Plugin.ApplyConfigSchemaMigrationIfNeeded</c>.</summary>
     public ConfigEntry<int> SchemaVersion { get; }
+
+    /// <summary>Workers (#313): Gunnar's opt-in hauling runtime. Off by default;
+    /// installing Teamster for telemetry never enrols anyone in a feature that
+    /// moves a real cart (docs/settlement/cart-and-collection/DECISIONS.md D3).
+    /// </summary>
+    public ConfigEntry<bool> GunnarHaulingEnabled { get; }
+
+    /// <summary>Workers (#313): Gunnar's pulling strength. MatchPlayer is the only
+    /// supported value (D5); anything else refuses to haul.</summary>
+    public ConfigEntry<GunnarPullStrength> GunnarPullStrength { get; }
+
+    /// <summary>Workers (#313): the vanilla creature Gunnar's worker body is
+    /// cloned from. A prefab name is data, resolved at run time and failing
+    /// closed; read at plugin start.</summary>
+    public ConfigEntry<string> WorkerBaseCreature { get; }
 
     public static TeamsterSettings Bind(ConfigFile config)
     {
@@ -216,6 +238,18 @@ internal sealed class TeamsterSettings
                 "restart with no Profile change never re-applies it."),
             config.Bind("Internal", "ConfigSchemaVersion", ConfigSchemaVersion.PreVersioning,
                 "Internal bookkeeping — do not edit. Tracks which version of Teamster's config " +
-                "schema this file was last written by, so a future update can migrate safely."));
+                "schema this file was last written by, so a future update can migrate safely."),
+            config.Bind("Workers", "GunnarHaulingEnabled", GunnarHaulingDefaults.HaulingEnabled,
+                "Let Gunnar, the Teamster's worker, hitch himself to a cart you explicitly assign and pull it " +
+                "through the game's own cart attach, walking like any creature. OFF by default. Works only in " +
+                "single player or as the host with nobody else connected; he never takes ownership, never " +
+                "touches the parking brake, never changes cart mass or physics and never teleports anything."),
+            config.Bind("Workers", "GunnarPullStrength", GunnarHaulingDefaults.PullStrength,
+                "How strongly Gunnar pulls. MatchPlayer, the only supported value, gives his body your " +
+                "character's own base mass, so he pulls a cart exactly as hard as you do. Any other value " +
+                "keeps him from hauling."),
+            config.Bind("Workers", "WorkerBaseCreature", GunnarHaulingDefaults.WorkerBaseCreature,
+                "The vanilla creature Gunnar's worker body is cloned from (its mind, loot and gear removed). " +
+                "Read at game start. If it does not exist in your game build, Gunnar is unavailable and the log says why."));
     }
 }

@@ -39,8 +39,10 @@ internal struct PullerBodyFacts
 
     public bool DetectsCollisions { get; set; }
 
-    /// <summary>Rotation about X and Z is frozen, so the joint's anchor 0.8 m
-    /// above the pivot cannot tip the body over.</summary>
+    /// <summary>The body's rotation constraints match the local player's,
+    /// measured at calibration: whatever keeps a player upright under the
+    /// joint's anchor 0.8 m above the pivot keeps Gunnar upright too. False
+    /// until measured.</summary>
     public bool RotationLockedUpright { get; set; }
 
     /// <summary>The body's world scale is one (within tolerance).</summary>
