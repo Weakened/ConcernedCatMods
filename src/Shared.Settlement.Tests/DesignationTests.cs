@@ -596,9 +596,19 @@ public sealed class DesignationTests : IDisposable
         SettlementRegister reloaded = _store.Load(Scope).Register;
         reloaded.UseIdentityEpoch(AfterAReload);
 
-        DesignationResult again = reloaded.Designate(
-            Supply(key: "chest-a-new-id"), Granting(), authorised: true);
+        // Still one step for the player -- but with the settlement's record now
+        // (#294): replacing the stale chest runs the undesignation cascade, so
+        // nothing drawn from it can be orphaned. Without the record the book
+        // refuses rather than overwriting.
+        Assert.Equal(
+            DesignationRefusal.StaleContainerNeedsTheRecord,
+            reloaded.Designate(Supply(key: "chest-a-new-id"), Granting(), authorised: true).Refusal);
 
+        DesignationResult again = reloaded.Designate(
+            Supply(key: "chest-a-new-id"), Granting(), authorised: true, new SettlementJournal(Scope),
+            out UndesignationPlan? replaced);
+
+        Assert.NotNull(replaced);
         Assert.Equal(DesignationOutcome.Designated, again.Outcome);
         Assert.False(reloaded.HasStaleSupplyIdentity);
         Assert.True(reloaded.IsSupplyContainer("chest-a-new-id"));
