@@ -1,6 +1,6 @@
 # Cart pulling and resource collection: contracts
 
-Contract revision **C1**, frozen 2026-09-17 before dependent coding. The compilable half lives in:
+Contract revision **C3** (C1 frozen 2026-09-17 before dependent coding; C2 is additive; C3 is documentation only, see §10). The compilable half lives in:
 
 | Area | Source | Compiled into | Tests |
 |---|---|---|---|
@@ -90,7 +90,7 @@ through the handoff.
 
 ### 2.3 Refusals and attention
 
-`CartAssignmentRefusal`, `HitchRefusal` and `HaulAttentionReason` are exhaustive. Each value has one player sentence,
+`CartAssignmentRefusal`, `HitchRefusal` and `HaulAttentionReason` are exhaustive. C2 adds `WorkerBodyDuplicated` and `PausedByPlayer`. Every `HaulAttentionReason` name has a `HaulWireReason` twin, pinned by a test, and `HaulCommandResult.Detail` carries a wire reason name, such as `HaulBusy`, that no attention reason can say. Each value has one player sentence,
 written by agent A for refusals and agent E for presentation. None is ever `Unspecified`.
 
 ### 2.4 Navigation seam (agent B implements, agent A calls)
@@ -98,9 +98,13 @@ written by agent A for refusals and agent E for presentation. None is ever `Unsp
 - **`ICartRoutePlanner.Plan(CartRouteRequest, now)`** returns a `CartRoutePlan` or a refused verdict. It never throws
   for game reasons.
   - **Suitable:** at least two waypoints; steepest grade, narrowest clearance and a `StopPoint` measured.
-  - **Checks:** footprint width plus side clearance, grade (`MaxGradeRatio`), footing, water, supported crossings and
-    door permission and width. For doors it reuses the shared `RouteDoors` and `DoorAccessBook` semantics and adapts
-    them to cart width.
+  - **Checks:** footprint width plus side clearance, grade (`MaxGradeRatio`), footing, water and supported crossings.
+  - **Doors (C3):** a cart route **never passes a doorway** in this slice (`ForbiddenDoor`), for three reasons:
+    - a door opening (1.39–1.68 m) is narrower than the 1.72 m vanilla cart;
+    - Teamster cannot read the companions' door permissions;
+    - opening a door is an RPC Teamster may not send.
+  - **`CartRouteRequest.From` (C3)** is the **cart's** position. Once hitched, the planner is asked with Gunnar's
+    body position as well, so the first turn uses the cart's real heading.
   - **Budgets:** stays within `PathQueriesPerMinute` and `ClearanceProbesPerPlan`; `BudgetExhausted` when exceeded.
 - **`ICartRoutePlanner.NextGoal(plan, puller, cart)`** returns the next `SteeringGoal`, or null when the plan is done
   or no longer valid from here.
@@ -218,6 +222,14 @@ The provider never moves material.
   - **Acceptance** checks `CheckShape()` plus authority, readiness (D12), scope validity, destination availability
     and "no other active order for this worker".
   - **Acceptance is journaled** (`CollectionAccepted`) before any work.
+- **Resuming after a reload (C2).** The definition is immutable, with one exception. After a reload,
+  `ICustodyRuntime.TryRecoverOrder` returns the worker's non-terminal order, and it is adopted **Paused**. Its scope
+  snapshot and container key still carry the previous load's epoch, so the player confirms a rebind:
+  - the scope is re-snapshotted from the same source;
+  - the container is selected again.
+
+  `RecordRebound` journals that as `CollectionRebound`. Quotas, progress and custody never change. Until the rebind,
+  the order stays Paused (`DestinationStale` / `ScopeChanged`).
 - **`WorkScope`**:
   - **Sources:** HarvestDesignation (a copy of the designation circle at acceptance), DefaultCampCircle (30 m on the
     latest valid respawn anchor, shown as a preview before acceptance) or CartographerWorkArea (later).
@@ -288,6 +300,15 @@ The executor (`ITransferExecutor`, agent D) does, **in this order**:
   a cart it belongs to); ward and privacy access; and reach.
 - A non-owner write is silently discarded by the game, so ownership is load-bearing.
 
+**Carts in use (C3, ratified).** Vanilla `Vagon.InUse()` is true while a cart is attached. The **cart** custody port
+may treat an attached cart as not in use only when **all** of these hold:
+- the joint's connected body is **not** the local player's body;
+- nobody has the cart's container open;
+- the cooperative caller holds an **Accepted `acknowledgeWait Transferring` at the current haul revision**, which
+  agent E enforces before every cart transfer.
+
+A delivery chest that is itself a cart's container stays strict: `m_wagon.InUse()` refuses.
+
 **Why add before remove.** A crash between steps 3 and 4 leaves a duplicate, not a loss. Reconciliation detects it
 from the persisted intent and actual counts, and a person resolves it. The reverse order would lose real items with no
 evidence left.
@@ -324,6 +345,7 @@ untouched, and schema v2 files still load:
 | `LossRecorded` | a person accepting observed loss |
 | `HandoverFinished` | hold-for-player |
 | `WorldSaveMarker` | generation, world time at `WorldSaveStarted` (§5.5) |
+| `CollectionRebound` (C2) | order, the new scope snapshot, the new delivery target |
 
 Every new row also records the world time at which it was written, so the marker rule can place it before or after a
 save.
@@ -343,6 +365,10 @@ Replay stays idempotent and never resolves anything itself. Truncation and seque
   replayed.
 - When net time did not advance, or no marker matches, the result is ambiguous: NeedsAttention `ReconciliationMismatch`
   with the evidence kept.
+- **Load restatement (C3, ratified from agent D).** At load, when rows follow the matched save or the loaded save is
+  older than the record's top, the runtime appends `WorldSaveMarker{generation = the matched generation, time = the
+  loaded world time}`. A marker whose generation already exists in the chain is read as a **load**, not a save.
+  Without it, a crashed session's voided rows would read as confirmed after the next session saves.
 
 After voiding, for each non-terminal order, the ledger's expected counts are compared with the **actual** inventories:
 - Worker: its persisted inventory, excluding tool holdings.
@@ -472,4 +498,19 @@ player drops, graves, chests, piles, mine rocks, trees and logs, bushes and sapl
 
 | Rev | Date | Change |
 |---|---|---|
+| C3 | 2026-09-17 | Documentation only:
+- §2.4: no doorway for carts in this slice; `CartRouteRequest.From` is the cart's position (from agent B).
+- §5.2: the cart in-use exception, ratified with the acknowledged-transfer condition (from agent D).
+- §5.5: the load-restatement marker, ratified (from agent D). |
+| C2 | 2026-09-17 | Additive, from agents A and C:
+- `CollectionAttentionReason.PausedByPlayer`;
+- `HaulAttentionReason.WorkerBodyDuplicated` and `PausedByPlayer`, with `HaulWireReason.AuthorityLost`,
+  `WorkerBodyDuplicated` and `PausedByPlayer`, so every attention reason has a wire twin (pinned by a test);
+- `HaulCommandResult.Detail`;
+- `HaulLimits.MaxParkingGradeRatio`;
+- `ICustodyRuntime.WorldLoadEpoch`, `TryRecoverOrder` and `RecordRebound`, with journal kind `CollectionRebound`
+  and the post-reload rebind rule (§4).
+
+The game updated to Valheim 1.0.14 the same day. A decompile diff against the audited build found the seam types
+unchanged (`EVIDENCE.md`). |
 | C1 | 2026-09-17 | Initial freeze: Workers, Interop haul/1, Teamster haul domain, collection orders, custody transfers and ports, journal kind names, persistence contract. §6 predicate added from the pickup audit before dispatch. |

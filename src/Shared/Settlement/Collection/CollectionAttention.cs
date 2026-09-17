@@ -45,4 +45,9 @@ internal enum CollectionAttentionReason
     HaulerNeedsAttention = 41,
     RendezvousTimedOut = 42,
     CartLeaseLost = 43,
+
+    // Player (C2)
+
+    /// <summary>The player paused the order; nothing is wrong.</summary>
+    PausedByPlayer = 50,
 }
