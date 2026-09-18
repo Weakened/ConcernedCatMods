@@ -84,7 +84,13 @@ Right after the call, verify `m_attachJoin.connectedBody` is the puller's body, 
 is set. If any check fails, call `Detach()` and refuse.
 
 Every teardown path calls `Detach()` **before** the body is destroyed, hidden, disabled or moved: planned stop, cancel,
-world exit, logout, authority loss, player takeover, plugin shutdown.
+world exit, logout, player takeover, plugin shutdown. A body that dies, unloads or turns out to be a duplicate while
+hitched detaches in the first frame the runtime sees it.
+
+**Amended by contract revision C4 (2026-09-17).** Lost authority used to be on that list, but it is not a teardown:
+the body and the cart are both still there. Gunnar stops at once and lets go only where the cart can be parked. Anywhere
+else he holds it, motionless, until the player acts (`CONTRACTS.md` §2.7). CART-06, "never releasing a loaded cart
+into a roll", decided it.
 
 A player grabbing any cart (`DetachAll`), a joint break, ownership loss, cart destruction or unload, or the cart
 tipping ends the haul. It is never re-hitched automatically in the same attempt.
