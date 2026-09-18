@@ -1,3 +1,4 @@
+using System;
 using TheConcernedCat.Settlement.Custody;
 using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Tools;
@@ -55,6 +56,20 @@ internal interface ICollectionCustody
     ITransferExecutor Executor { get; }
 
     bool IsWritable { get; }
+
+    /// <summary>C2: the one epoch of this world load. An order recovered from
+    /// the record carries the previous load's epoch until it is rebound.
+    /// </summary>
+    Guid WorldLoadEpoch { get; }
+
+    /// <summary>C2: the worker's non-terminal order after a reload, to adopt
+    /// Paused. False when there is none.</summary>
+    bool TryRecoverOrder(WorkerId worker, out CollectionOrderDefinition? order, out CollectionOrderState state);
+
+    /// <summary>C2: journals a player-confirmed rebind of the order's work area
+    /// and delivery, both snapshotted in this world load. Quotas, progress and
+    /// custody are unchanged.</summary>
+    bool RecordRebound(OrderId order, WorkScope scope, DeliveryTarget delivery);
 
     bool TryResolveWorker(out IInventoryPort? port, out CollectionAttentionReason refusal);
 

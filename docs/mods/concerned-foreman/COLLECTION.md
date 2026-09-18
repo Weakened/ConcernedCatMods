@@ -76,7 +76,44 @@ every recorded transition against the table.
 | Deposit refused or stale | 3 attempts, 2 s then 4 s backoff, then Paused |
 | Deposit uncertain | NeedsAttention `TransferUncertain`, never retried or compensated |
 | His tick stops (unloaded, destroyed, faulted, not owned) | Paused `ScopeUnloaded` or `WorkerBodyLost`; NeedsAttention `WorkerBodyLost` if he carries order material |
-| Player `pause` / `cancel` | Paused (by the player) / Cancelled: not a refund, carried material stays on him |
+| Player `pause` / `cancel` | Paused `PausedByPlayer` / Cancelled: not a refund, carried material stays on him |
+| The world was reloaded | The order is taken up again from the record, stopped, needing a rebind (below) |
+
+### 3.1 After a reload (C2)
+
+A reload ends the session's loop, its reservations and its survey; the
+settlement record keeps the order. On the next load the runtime asks custody
+for the worker's non-terminal order once a second until it answers, and adopts
+it **stopped, in the state the record gives it**, holding the worker's identity.
+Nothing is journaled by the adoption — custody already recorded the state — and
+nothing resumes by itself.
+
+An adopted order's work area and chest were chosen in the **previous** world
+load, where their keys meant something: a chest key is reassigned on every load,
+so resolving one would find a different chest. So:
+
+- `cf_collect status` shows the order, says it was taken up again, and points at
+  `cf_settle status` for the record's own reason;
+- `cf_collect resume` is **refused** while the rebind is owed, naming it;
+- `cf_collect rebind`, with the player looking at the chest (hold orders need no
+  chest), re-snapshots the work area and the chest in **this** load and journals
+  it (`RecordRebound`). The kind of work area and the kind of delivery cannot
+  change, and quotas, progress and custody are untouched;
+- `cf_collect cancel` always works, which is what lets `cf_settle release` and
+  then `cf_worker despawn` empty and retire him. **This is the path the
+  uninstall procedure depends on.**
+
+Starting a new order while the record holds one is refused as "he already has a
+collection order", not as a failed write, whether or not the loop has adopted it
+yet.
+
+**Hold-for-player orders end when the record shows the materials handed over.**
+The loop cannot hand anything to a player itself — that transfer is the
+settlement's own act — so a hold order sits in `HoldingForPlayer` until the
+record says `HandedOver`, and its status says so and names `cf_collect cancel`
+as the way to end it and leave the load on him for the taking. Until custody's
+handover control accepts a `HoldingForPlayer` order, cancel is the only way it
+ends (R2 M1; the remaining half is in the custody runtime, not here).
 
 ## 4. The natural-source predicate and its evidence
 
@@ -89,14 +126,24 @@ Evidence: `PICKUP_SEAM_AUDIT.md` (bundles and decompile) and `scripts/audit-fore
 | C2 shape | exactly one `Pickable`; no `Piece`, `WearNTear`, `Plant`, `Destructible`, `ItemDrop`, `Container`, `ItemStand`, `Procreation`, `Character`, `PickableItem` anywhere | a placed stone renamed by a mod; crops; anything with added semantics |
 | C2b tag | root `Untagged` | the procreation-born look-alike (tagged `spawned`), independently of C1 |
 | C3 yield | `Stone`/`$item_stone` or `Wood`/`$item_wood` | Frostwood, StoneRock, Flint yields |
-| C3 configuration | amount 1, no extra drops, no aggravation; stone: no respawn, no hide object; branch: respawn and hide object | patched values |
+| C3 configuration | amount 1, scaled floor 1, scaling not opted out, no extra drops, no aggravation; stone: no respawn, no hide object; branch: respawn and hide object | patched values, including the two fields that size the yield (`m_minAmountScaled`, `m_dontScale`) |
 | C4 provenance | no `ZDOVars.s_creator` | a placed variant renamed to an allowlisted prefab |
 | C5 state | not picked, enabled, `CanBePicked()` | picked or disabled sources (recorded as **Exhausted**, not dropped) |
 
-Site clauses at the instant of the pick: owned here (never claimed), inside the order's scope, not in an interior, not
-inside a location (the start temple's stones are excluded, D10), ward `Granted` through `WorldDesignationSite`
-(loaded margin, no flash, `wardCheck: true`), worker ≤ 2 m flat, carry fits the game-scaled yield, a local player
-exists. The tests pin every audited look-alike, every look-alike renamed to an allowlisted prefab (still refused by an
+Site clauses at the instant of the pick: owned here (never claimed), inside the order's scope, not in an interior,
+**not inside a location and not "we could not tell"** (the start temple's stones are excluded, D10), ward `Granted`
+through `WorldDesignationSite` (loaded margin, no flash, `wardCheck: true`), worker ≤ 2 m flat, carry fits the
+game-scaled yield, a local player exists.
+
+The location clause is three-valued for the same reason the ward clause is. The game's loaded-location list is filled
+in each location's `Awake`, and a location's objects are created before its proxy spawns it, so for a few frames after
+a zone loads a temple stone would answer "not in a location". The adapter therefore reads the world's own location
+registry (`ZoneSystem.m_locationInstances`, filled at world generation) for the source's zone and its eight
+neighbours, and answers Inside, Outside or **Unknown — which refuses**.
+
+The survey is honest about the same window: a pass walks one copy of the scene's instance table, and zones fill in
+over many frames, so a pass that ends while the scene is still changing marks its snapshot `TruncatedByBudget`. The
+order then pauses with `SurveyIncomplete` — never with "there is nothing here". The tests pin every audited look-alike, every look-alike renamed to an allowlisted prefab (still refused by an
 independent clause), and each clause on its own.
 
 **Pick, trace, take in one call** (`WorldSourcePickupPort`): `BeginPickup` persisted → snapshot `ItemDrop.s_instances`
@@ -143,8 +190,10 @@ again this session.
 6. **Body.** Found in `BaseAI.BaseAIInstances`: the body with `tcc.worker.key = foreman/thorstein`, else the single
    unkeyed spike body; two of either is a duplicate and neither is used. `SettlementRuntime.Despawn` still destroys a
    body a job holds; it should consult `ActorModeOwner.MayRetireBody`.
-7. **Contract gaps** (C2 requests, also in the handoff): no API to adopt a non-terminal order after a reload; no
-   `CollectionAttentionReason` for a player's pause (Unspecified is recorded).
+7. **C2 answered both earlier gaps** and both are wired here: `TryRecoverOrder`/`RecordRebound` (§3.1) and
+   `PausedByPlayer`. What is **not** wired, because it lives in the custody runtime: a `HoldingForPlayer` order's
+   handover (R2 M1) — `Release` refuses while any order is non-terminal, and `RecordHandover` is called by nothing, so
+   `HandedOver` never rises and hold mode ends only by cancelling.
 8. **The game updated during this work**: Steam build 25364265, `assembly_valheim.dll` SHA-256
    `f64998168a0dd37ec774816808f914ed68376be1b9670cd05a6c2f27c8017fb6` (still reports 1.0.12). The audit passes all
    80 contracts against it; SPEC/EVIDENCE cite the earlier `27a766a8…`.
@@ -208,7 +257,11 @@ and the commit.
 | N15 hold | `cf_collect start 10 0 hold` | Ends "holding the materials for you", 10 Stone on him, chest unchanged; handover through D's control completes it |
 | N16 cancel | `cf_collect cancel` mid-trip | Cancelled; carried stone stays on him (count); chest unchanged by the cancel |
 | N17 console goals | `cf_worker goto x z` while he works | Refused with "pause or cancel the job first"; he keeps working |
-| N18 reload | Save and quit mid-order, reload | This build does not resume the order (reported gap); carried items per D9 (D's evidence) |
+| N18 reload | Save and quit mid-order, reload, then `cf_collect status` | The order is listed again, stopped, saying it was taken up from the record and needs a rebind; `cf_settle status` shows the same order (the two surfaces agree) |
+| N19 rebind | After N18: `cf_collect resume` | Refused, naming the rebind. Then look at the chest and `cf_collect rebind` → accepted; `resume` → he surveys and carries on; his carried stone is unchanged throughout |
+| N20 the uninstall path | After N18, without rebinding: `cf_collect cancel`, then `cf_settle release`, then `cf_worker despawn` | Each is accepted in turn: the order ends, the stone and the tools come back, the body retires. This is §13 of the custody guide end to end |
+| N21 a fresh zone | Walk into a zone you have never visited and immediately `cf_collect start 10 0` | While the zone is still filling, a survey that finds nothing says the look was cut short (`SurveyIncomplete`), never "no eligible sources"; once it settles, he collects |
+| N22 a location reloading | Stand with a 30 m circle overlapping the start temple and force its zone to reload (walk 200 m away and back) | No temple stone is ever picked, including in the seconds right after the zone comes back |
 
 ### 7.4 Runtime unknowns to settle while doing the above
 

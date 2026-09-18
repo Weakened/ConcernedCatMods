@@ -7,10 +7,14 @@ namespace TheConcernedCat.Settlement.Collection.Planning;
 /// <summary>Mints the request ids of the collection loop's own transfers (taking
 /// a drop, depositing a load): the idempotence keys of CONTRACTS.md §5.2.
 ///
-/// <b>Unique per attempt, across reloads.</b> A retry after a refusal is a new
-/// attempt with a new id; an attempt is never replayed under an old one. The
-/// id carries a nonce from the world-load epoch, so a counter that restarts at
-/// zero after a reload cannot collide with a row already in the journal.
+/// <b>Unique per attempt, and across reloads as far as a nonce can make it.</b>
+/// A retry after a refusal is a new attempt with a new id; an attempt is never
+/// replayed under an old one. The counter restarts at zero after a reload, so
+/// the id also carries a nonce from the world-load epoch — 24 bits of it, which
+/// makes a repeat across the reloads of one world improbable rather than
+/// impossible. A repeat fails closed: the same id with a different payload is
+/// rejected and the order stops for a person to look at, so the cost of the
+/// improbable case is a stop, never a double credit.
 ///
 /// <b>Always a valid settlement slug.</b> At most 48 characters of a-z, 0-9 and
 /// single dashes. A long order id is shortened with a hash of the whole id, so

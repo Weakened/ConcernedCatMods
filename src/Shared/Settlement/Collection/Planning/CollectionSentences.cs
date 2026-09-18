@@ -14,6 +14,8 @@ internal static class CollectionSentences
         {
             case CollectionAttentionReason.Unspecified:
                 return "No problem is recorded.";
+            case CollectionAttentionReason.PausedByPlayer:
+                return "You paused it. Nothing is wrong: resume when you want him to carry on.";
 
             case CollectionAttentionReason.NoAuthority:
                 return "Workers may not act here right now: the settlement runtime is off, no world is loaded, or " +

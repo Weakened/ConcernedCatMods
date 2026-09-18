@@ -32,6 +32,8 @@ internal static class SourceFacts
         string? tag = "Untagged",
         bool yieldHasItemDrop = true,
         int amount = 1,
+        int minAmountScaled = 1,
+        bool dontScale = false,
         bool extraDropsEmpty = true,
         float aggravate = 0f,
         long creator = 0L,
@@ -48,6 +50,8 @@ internal static class SourceFacts
             yieldPrefabName: yieldPrefab,
             yieldSharedName: yieldShared,
             amount: amount,
+            minAmountScaled: minAmountScaled,
+            dontScale: dontScale,
             extraDropsEmpty: extraDropsEmpty,
             aggravateRange: aggravate,
             respawnTimeMinutes: respawn,
@@ -128,6 +132,24 @@ internal sealed class FakeCustody : ICollectionCustody, IMaterialCustodyView, IT
 
     public bool Uncertain { get; set; }
 
+    /// <summary>What the record holds across a reload, for adoption (C2).
+    /// </summary>
+    public CollectionOrderDefinition? RecoverableOrder { get; set; }
+
+    public CollectionOrderState RecoveredState { get; set; } = CollectionOrderState.Paused;
+
+    public Guid Epoch { get; set; } = CollectionRig.Epoch;
+
+    public bool AllowRebind { get; set; } = true;
+
+    /// <summary>Deliberately wrong: credit the count the intent asked for
+    /// instead of the count the inventories actually moved. Only one test turns
+    /// it on, to prove the conservation check can fail.</summary>
+    public bool CreditWithoutMeasuring { get; set; }
+
+    public List<(OrderId Order, WorkScope Scope, DeliveryTarget Delivery)> Rebinds { get; } =
+        new List<(OrderId, WorkScope, DeliveryTarget)>();
+
     public bool WorkerResolvable { get; set; } = true;
 
     public CollectionAttentionReason DestinationRefusal { get; set; } = CollectionAttentionReason.Unspecified;
@@ -150,6 +172,40 @@ internal sealed class FakeCustody : ICollectionCustody, IMaterialCustodyView, IT
     public ITransferExecutor Executor => this;
 
     public bool IsWritable => Writable;
+
+    public Guid WorldLoadEpoch => Epoch;
+
+    public bool TryRecoverOrder(WorkerId worker, out CollectionOrderDefinition? order, out CollectionOrderState state)
+    {
+        order = RecoverableOrder != null && RecoverableOrder.Worker.Equals(worker) ? RecoverableOrder : null;
+        state = order != null ? RecoveredState : CollectionOrderState.Unspecified;
+        return order != null;
+    }
+
+    public bool RecordRebound(OrderId order, WorkScope scope, DeliveryTarget delivery)
+    {
+        if (!AllowRebind || !Writable)
+        {
+            return false;
+        }
+
+        Assert.Equal(Epoch, scope.WorldLoadEpoch);
+        if (delivery.Kind == DeliveryKind.Container)
+        {
+            Assert.Equal(Epoch, delivery.WorldLoadEpoch);
+        }
+
+        Rebinds.Add((order, scope, delivery));
+        if (RecoverableOrder != null && RecoverableOrder.Order.Equals(order))
+        {
+            RecoverableOrder = new CollectionOrderDefinition(
+                RecoverableOrder.Order, RecoverableOrder.Worker, RecoverableOrder.Quotas, scope, delivery,
+                RecoverableOrder.Participation, RecoverableOrder.IssuedByCharacter);
+        }
+
+        Revision++;
+        return true;
+    }
 
     public ResourceProgress Bucket(CollectionOrderDefinition order, CollectedResource resource)
     {
@@ -205,8 +261,9 @@ internal sealed class FakeCustody : ICollectionCustody, IMaterialCustodyView, IT
         Assert.True(CollectionOrderStates.CanTransition(from, to), "illegal transition recorded: " + from + " -> " + to);
         if (to == CollectionOrderState.Paused || to == CollectionOrderState.NeedsAttention)
         {
-            // Paused by the player is the only reason-less stop.
-            Assert.True(reason != CollectionAttentionReason.Unspecified || to == CollectionOrderState.Paused);
+            // Every stop carries one actionable reason, the player's own pause
+            // included (C4's PausedByPlayer).
+            Assert.NotEqual(CollectionAttentionReason.Unspecified, reason);
         }
 
         if (FailRecordTransitions || !Writable)
@@ -265,9 +322,23 @@ internal sealed class FakeCustody : ICollectionCustody, IMaterialCustodyView, IT
             return new TransferReceipt(intent.Request, TransferOutcome.Stale, 0, intent.From, "stale");
         }
 
-        int accepted = to.Add(intent.Item, Math.Min(intent.Count, to.CanAccept(intent.Item, intent.Count)));
-        int removed = from.Remove(intent.Item, accepted);
-        Assert.Equal(accepted, removed);
+        // Measured, never claimed: the counts before and after decide, exactly
+        // as the shipped executor's rule does. A port that reports one thing
+        // and stores another therefore shows up as a mismatch rather than
+        // being copied into the record.
+        int destinationBefore = to.Count(intent.Item);
+        int sourceBefore = from.Count(intent.Item);
+        to.Add(intent.Item, Math.Min(intent.Count, to.CanAccept(intent.Item, intent.Count)));
+        int gained = to.Count(intent.Item) - destinationBefore;
+        from.Remove(intent.Item, gained);
+        int lost = sourceBefore - from.Count(intent.Item);
+        int accepted = CreditWithoutMeasuring ? intent.Count : gained;
+        if (!CreditWithoutMeasuring && gained != lost)
+        {
+            return new TransferReceipt(
+                intent.Request, TransferOutcome.Uncertain, 0, intent.From,
+                "gained " + gained + " but lost " + lost);
+        }
 
         CollectionOrderDefinition? order = null;
         foreach (CollectionOrderDefinition candidate in Accepted)
@@ -496,6 +567,9 @@ internal sealed class FakeProbe : ISurveyProbe
 
     public int OverDeliver { get; set; }
 
+    /// <summary>The world gained or lost objects while the pass ran.</summary>
+    public bool SceneMoved { get; set; }
+
     public bool IsLoaded(SitePoint point) => Loaded(point);
 
     public void Begin(WorkScope scope)
@@ -516,7 +590,7 @@ internal sealed class FakeProbe : ISurveyProbe
         }
 
         MaxReturnedPerCall = Math.Max(MaxReturnedPerCall, into.Count - before);
-        return new DiscoveryStep(examined, _cursor >= Candidates.Count);
+        return new DiscoveryStep(examined, _cursor >= Candidates.Count, SceneMoved);
     }
 }
 
@@ -667,7 +741,7 @@ internal sealed class CollectionRig
                 Probe.Candidates[index] = new SurveyCandidate(
                     key,
                     SourceFacts.Make("Pickable_Branch", "Wood", "$item_wood", 240f, true, picked: true, canBePicked: false),
-                    picked.OwnedHere, picked.InInterior, picked.InsideLocation, picked.Ward, picked.EstimatedYield);
+                    picked.OwnedHere, picked.InInterior, picked.Location, picked.Ward, picked.EstimatedYield);
             }
         };
         Loop = new SoloCollectionLoop(
@@ -756,7 +830,7 @@ internal sealed class CollectionRig
         AreaAccess ward = availability == SourceAvailability.Inaccessible ? AreaAccess.Denied
             : availability == SourceAvailability.Unknown ? AreaAccess.Unavailable
             : AreaAccess.Granted;
-        Probe.Candidates.Add(new SurveyCandidate(key, facts, true, false, false, ward, yield));
+        Probe.Candidates.Add(new SurveyCandidate(key, facts, true, false, LocationStanding.Outside, ward, yield));
         if (availability == SourceAvailability.Available)
         {
             Pickup.Add(key, resource, yield);

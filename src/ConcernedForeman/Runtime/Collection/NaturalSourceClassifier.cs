@@ -93,6 +93,8 @@ internal static class NaturalSourceClassifier
             yieldPrefabName: yieldPrefab != null ? Utils.GetPrefabName(yieldPrefab) : null,
             yieldSharedName: yieldDrop != null ? yieldDrop.m_itemData?.m_shared?.m_name : null,
             amount: pickable != null ? pickable.m_amount : 0,
+            minAmountScaled: pickable != null ? pickable.m_minAmountScaled : 0,
+            dontScale: pickable != null && pickable.m_dontScale,
             extraDropsEmpty: pickable == null || pickable.m_extraDrops == null || pickable.m_extraDrops.IsEmpty(),
             aggravateRange: pickable != null ? pickable.m_aggravateRange : 0f,
             respawnTimeMinutes: pickable != null ? pickable.m_respawnTimeMinutes : 0f,

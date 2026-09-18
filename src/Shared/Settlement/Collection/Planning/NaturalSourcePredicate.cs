@@ -119,6 +119,8 @@ internal sealed class NaturalSourceFacts
         string? yieldPrefabName,
         string? yieldSharedName,
         int amount,
+        int minAmountScaled,
+        bool dontScale,
         bool extraDropsEmpty,
         float aggravateRange,
         float respawnTimeMinutes,
@@ -137,6 +139,8 @@ internal sealed class NaturalSourceFacts
         YieldPrefabName = yieldPrefabName;
         YieldSharedName = yieldSharedName;
         Amount = amount;
+        MinAmountScaled = minAmountScaled;
+        DontScale = dontScale;
         ExtraDropsEmpty = extraDropsEmpty;
         AggravateRange = aggravateRange;
         RespawnTimeMinutes = respawnTimeMinutes;
@@ -170,6 +174,14 @@ internal sealed class NaturalSourceFacts
     public string? YieldSharedName { get; }
 
     public int Amount { get; }
+
+    /// <summary>The floor the game applies after world scaling. Vanilla's is 1;
+    /// a patched one sizes the yield just as <c>m_amount</c> does.</summary>
+    public int MinAmountScaled { get; }
+
+    /// <summary>Whether the source opts out of the world's drop scaling.
+    /// Vanilla's two do not.</summary>
+    public bool DontScale { get; }
 
     public bool ExtraDropsEmpty { get; }
 
@@ -263,9 +275,33 @@ internal enum SiteRefusal
     /// </summary>
     CarryCapacity = 8,
 
+    /// <summary>Whether the source belongs to a world location could not be
+    /// established. D10 excludes locations, so an unknown answer refuses.
+    /// </summary>
+    LocationUnknown = 10,
+
     /// <summary>The game's pick path dereferences the local player and would
     /// throw without one.</summary>
     NoLocalPlayer = 9,
+}
+
+/// <summary>Whether a source belongs to a world location (D10). Three-valued
+/// on purpose: the game's own loaded-location list is empty for the moments
+/// between a zone's objects being created and its location awaking, and
+/// "we could not tell" must refuse rather than admit a temple stone.</summary>
+internal enum LocationStanding
+{
+    /// <summary>Nobody asked. Refuses, like every other unfilled answer.
+    /// </summary>
+    Unspecified = 0,
+
+    Outside = 1,
+
+    Inside = 2,
+
+    /// <summary>The world's location registry could not be consulted.
+    /// </summary>
+    Unknown = 3,
 }
 
 /// <summary>The site facts the adapter reads at the instant of a pick (or, for
@@ -277,7 +313,7 @@ internal readonly struct SourceSiteFacts
         bool ownedHere,
         bool inScope,
         bool inInterior,
-        bool insideLocation,
+        LocationStanding location,
         AreaAccess ward,
         float workerDistanceMetres,
         bool capacityFits,
@@ -286,7 +322,7 @@ internal readonly struct SourceSiteFacts
         OwnedHere = ownedHere;
         InScope = inScope;
         InInterior = inInterior;
-        InsideLocation = insideLocation;
+        Location = location;
         Ward = ward;
         WorkerDistanceMetres = workerDistanceMetres;
         CapacityFits = capacityFits;
@@ -299,7 +335,9 @@ internal readonly struct SourceSiteFacts
 
     public bool InInterior { get; }
 
-    public bool InsideLocation { get; }
+    /// <summary>Whether a world location covers the source. Unknown refuses.
+    /// </summary>
+    public LocationStanding Location { get; }
 
     /// <summary>The existing designation-site answer: loaded margin, no flash,
     /// <c>wardCheck: true</c>, exceptions refuse.</summary>
@@ -388,11 +426,17 @@ internal static class NaturalSourcePredicate
         }
 
         // ...and the configuration is the vanilla one.
-        if (facts.Amount != 1 || !facts.ExtraDropsEmpty || facts.AggravateRange != 0f)
+        // The three numbers the game multiplies into the drop count are all
+        // pinned: m_amount, the scaled floor, and whether scaling applies at
+        // all. A patched one of any of them would size the yield.
+        if (facts.Amount != 1 || facts.MinAmountScaled != 1 || facts.DontScale ||
+            !facts.ExtraDropsEmpty || facts.AggravateRange != 0f)
         {
             return NaturalSourceVerdict.Failed(
                 NaturalSourceKind.Unspecified, SourceClause.C3Configuration,
-                "amount " + facts.Amount + ", extra drops " + (facts.ExtraDropsEmpty ? "none" : "present") +
+                "amount " + facts.Amount + ", scaled floor " + facts.MinAmountScaled +
+                (facts.DontScale ? ", unscaled" : string.Empty) +
+                ", extra drops " + (facts.ExtraDropsEmpty ? "none" : "present") +
                 ", aggravate range " + facts.AggravateRange);
         }
 
@@ -446,9 +490,17 @@ internal static class NaturalSourcePredicate
             return SiteRefusal.Interior;
         }
 
-        if (site.InsideLocation)
+        switch (site.Location)
         {
-            return SiteRefusal.InsideLocation;
+            case LocationStanding.Outside:
+                break;
+            case LocationStanding.Inside:
+                return SiteRefusal.InsideLocation;
+            default:
+                // Unknown, and nobody asked, both refuse: D10 excludes
+                // locations, and a window in which the answer is not available
+                // is not a window in which the answer is "no".
+                return SiteRefusal.LocationUnknown;
         }
 
         switch (site.Ward)
@@ -487,12 +539,12 @@ internal static class NaturalSourcePredicate
             return SourceAvailability.Exhausted;
         }
 
-        if (site.InInterior || site.InsideLocation || site.Ward == AreaAccess.Denied)
+        if (site.InInterior || site.Location == LocationStanding.Inside || site.Ward == AreaAccess.Denied)
         {
             return SourceAvailability.Inaccessible;
         }
 
-        if (!site.OwnedHere || site.Ward != AreaAccess.Granted)
+        if (!site.OwnedHere || site.Ward != AreaAccess.Granted || site.Location != LocationStanding.Outside)
         {
             // Not owned here, or the ward could not be asked: we do not know
             // whether he could pick it, which is not the same as "he cannot".
@@ -517,6 +569,8 @@ internal static class NaturalSourcePredicate
                 return "It is inside a dungeon, not on open ground.";
             case SiteRefusal.InsideLocation:
                 return "It belongs to a place in the world, such as the start temple, and he leaves those alone.";
+            case SiteRefusal.LocationUnknown:
+                return "He could not tell whether it belongs to a place in the world, so he leaves it alone.";
             case SiteRefusal.WardDenied:
                 return "Somebody else's ward covers it.";
             case SiteRefusal.WardUnknown:

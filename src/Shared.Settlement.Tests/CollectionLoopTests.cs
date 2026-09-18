@@ -853,7 +853,7 @@ public sealed class CollectionLoopTests
         Assert.Equal(ControlOutcome.Done, pause.Outcome);
         Assert.Equal(CollectionOrderState.Paused, rig.Loop.State);
         Assert.True(rig.Loop.PausedByPlayer);
-        Assert.Equal(CollectionAttentionReason.Unspecified, rig.Loop.Reason);
+        Assert.Equal(CollectionAttentionReason.PausedByPlayer, rig.Loop.Reason);
         Assert.Equal(CollectionWalkStatus.Idle, rig.Motion.Status);
         Assert.Equal(0, rig.Book.Count);
         Assert.Equal(ActorMode.Paused, rig.Modes.Mode);
@@ -1188,5 +1188,109 @@ public sealed class CollectionLoopTests
         Assert.Contains("reserved estimate 1, not counted", report);
         Assert.Contains("Last solo survey", report);
         Assert.Contains("still to collect 5", report);
+    }
+
+    // --- R2 M4: the harness has teeth, and the pick-time recheck is load-bearing ---------------------------
+
+    [Fact]
+    public void TheConservationCheckFailsWhenTheRecordCreditsWhatWasAskedRatherThanWhatMoved()
+    {
+        // The whole conservation argument rests on crediting measured counts.
+        // With the record crediting the intent's count instead, the chest and
+        // the ledger part company — and the check that is named for catching
+        // that must actually catch it.
+        var rig = new CollectionRig();
+        AddStones(rig, 6);
+        rig.Custody.CreditWithoutMeasuring = true;
+        rig.Accept(rig.Order(stone: 6, wood: 0));
+        Assert.True(rig.RunUntil(() => rig.Loop.State == CollectionOrderState.Delivering));
+
+        // The chest can take two of the six he carries. A record that credits
+        // the six it asked to move has parted company with the chest.
+        rig.Chest.Limit(CollectedResource.Stone, 2);
+        Assert.True(rig.RunUntil(() => rig.Custody.Executed.Count >= 1));
+        rig.Tick(5);
+
+        Assert.Equal(2, rig.Chest.Count(MaterialItem.Of(CollectedResource.Stone)));
+        Assert.Equal(6, rig.Progress(CollectedResource.Stone).Delivered);
+        Assert.Throws<Xunit.Sdk.EqualException>(() => AssertConserved(rig, CollectedResource.Stone));
+    }
+
+    [Fact]
+    public void AChestThatFillsDuringTheWalkIsCaughtBeforeThePickNotAfterIt()
+    {
+        var rig = new CollectionRig();
+        rig.AddSource(CollectedResource.Stone, 2f, 0f);
+        rig.AddSource(CollectedResource.Stone, 12f, 0f);
+        rig.Motion.Speed = 1f;
+        rig.Accept(rig.Order(stone: 5, wood: 0));
+
+        Assert.True(rig.RunUntil(() => rig.Pickup.Picks == 1 && rig.Loop.Phase == CollectionPhase.WalkingToSource));
+
+        // The selector already approved this source; only the check in the same
+        // tick as the pick can see the chest fill up behind him.
+        rig.Chest.Limit(CollectedResource.Stone, 1);
+        Assert.True(rig.RunUntil(() => rig.Loop.Phase != CollectionPhase.WalkingToSource));
+
+        Assert.Equal(1, rig.Pickup.Picks);
+        Assert.Equal(0, rig.Book.Count);
+        AssertConserved(rig, CollectedResource.Stone);
+        AssertClean(rig);
+    }
+
+    [Fact]
+    public void APackThatFillsDuringTheWalkIsCaughtBeforeThePick()
+    {
+        var rig = new CollectionRig();
+        rig.AddSource(CollectedResource.Stone, 2f, 0f);
+        rig.AddSource(CollectedResource.Stone, 12f, 0f);
+        rig.Motion.Speed = 1f;
+        rig.Accept(rig.Order(stone: 5, wood: 0));
+
+        Assert.True(rig.RunUntil(() => rig.Pickup.Picks == 1 && rig.Loop.Phase == CollectionPhase.WalkingToSource));
+
+        // His inventory has no room for another stone by the time he arrives.
+        rig.WorkerInventory.Limit(CollectedResource.Stone, 1);
+        Assert.True(rig.RunUntil(() => rig.Loop.Phase != CollectionPhase.WalkingToSource));
+
+        Assert.Equal(1, rig.Pickup.Picks);
+        AssertConserved(rig, CollectedResource.Stone);
+        AssertClean(rig);
+    }
+
+    [Fact]
+    public void AnAreaSurveyedWhileTheWorldWasStillFillingSaysTheLookWasShort()
+    {
+        // R2 M2: a survey over a scene that was still being created has not
+        // seen the ground; it must not answer "there is nothing here".
+        var rig = new CollectionRig();
+        rig.Probe.SceneMoved = true;
+        rig.Accept(rig.Order(stone: 5, wood: 0));
+
+        Assert.True(rig.RunUntil(() => rig.Loop.State == CollectionOrderState.Paused));
+
+        Assert.Equal(CollectionAttentionReason.SurveyIncomplete, rig.Loop.Reason);
+        Assert.NotEqual(CollectionAttentionReason.NoEligibleSources, rig.Loop.Reason);
+    }
+
+    [Fact]
+    public void AHoldOrderSaysHowItsMaterialsComeBack()
+    {
+        // R2 M1: hold mode ends when the settlement record shows the materials
+        // handed over. The order must say so, and cancelling must always be
+        // available so nothing is stranded on him.
+        var rig = new CollectionRig();
+        AddStones(rig, 6);
+        rig.Accept(rig.Order(stone: 5, wood: 0, hold: true));
+        Assert.True(rig.RunUntil(() => rig.Loop.State == CollectionOrderState.HoldingForPlayer));
+
+        string report = rig.Loop.Describe();
+        Assert.Contains("holding everything for you", report);
+        Assert.Contains("handed over", report);
+        Assert.Contains("cf_collect cancel", report);
+
+        Assert.Equal(ControlOutcome.Done, rig.Loop.Cancel(rig.Now).Outcome);
+        Assert.Equal(5, rig.WorkerInventory.Count(MaterialItem.Of(CollectedResource.Stone)));
+        Assert.Equal(ActorMode.Resting, rig.Modes.Mode);
     }
 }
