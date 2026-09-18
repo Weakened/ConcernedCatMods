@@ -11,27 +11,7 @@ namespace TheConcernedCat.Settlement.Worker;
 /// the whole runtime.</summary>
 internal readonly struct WorkerGoal : IEquatable<WorkerGoal>
 {
-    /// <summary>The default height tolerance: one and a half metres.
-    ///
-    /// A Valheim storey is two metres, so anything at or beyond that is another
-    /// floor and standing under it is not standing at it (#334). Below two
-    /// leaves room for the things that are not another floor: a pickable's
-    /// pivot sitting above the ground it rests on, and the last metre of an
-    /// approach across a bank.
-    ///
-    /// A tolerance tighter than the real gap does not strand a worker — it only
-    /// means the worker keeps walking, and the gap closes as it arrives. What a
-    /// tolerance too <i>wide</i> does is report a worker on the floor below as
-    /// having arrived, and then every pickup, handover and delivery aimed at
-    /// that goal happens through a ceiling.</summary>
-    public const float DefaultHeightTolerance = 1.5f;
-
     public WorkerGoal(SitePoint point, float arrivalTolerance)
-        : this(point, arrivalTolerance, DefaultHeightTolerance)
-    {
-    }
-
-    public WorkerGoal(SitePoint point, float arrivalTolerance, float heightTolerance)
     {
         if (!(arrivalTolerance > 0f) || float.IsInfinity(arrivalTolerance))
         {
@@ -41,17 +21,8 @@ internal readonly struct WorkerGoal : IEquatable<WorkerGoal>
                 "A zero tolerance can never be satisfied by a moving body.");
         }
 
-        if (!(heightTolerance > 0f) || float.IsInfinity(heightTolerance))
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(heightTolerance), heightTolerance,
-                "Height tolerance must be a positive, finite number of metres, " +
-                "for the same reason the arrival tolerance must be.");
-        }
-
         Point = point;
         ArrivalTolerance = arrivalTolerance;
-        HeightTolerance = heightTolerance;
     }
 
     public SitePoint Point { get; }
@@ -63,32 +34,15 @@ internal readonly struct WorkerGoal : IEquatable<WorkerGoal>
     /// turn every order into a permanent near-miss.</summary>
     public float ArrivalTolerance { get; }
 
-    /// <summary>How far above or below the goal still counts as arrived.
-    ///
-    /// Separate from <see cref="ArrivalTolerance"/> because the two answer
-    /// different questions: one is how close on the ground a body with width
-    /// and momentum can be asked to stand, the other is whether it is on the
-    /// right floor at all.</summary>
-    public float HeightTolerance { get; }
-
     /// <summary>The default standing distance: two metres, which is roughly a
     /// humanoid's own radius plus a step, and wide enough that arrival is not
     /// sensitive to where exactly the pathfinder puts the last node.</summary>
     public static WorkerGoal At(SitePoint point) => new(point, 2f);
 
-    /// <summary>True when <paramref name="position"/> is close enough on the
-    /// ground <b>and</b> on the same floor.</summary>
-    public bool IsReachedFrom(SitePoint position)
-    {
-        return position.HorizontalDistanceTo(Point) <= ArrivalTolerance
-            && position.VerticalDistanceTo(Point) <= HeightTolerance;
-    }
-
     public bool Equals(WorkerGoal other)
     {
         return Point.Equals(other.Point)
-            && ArrivalTolerance.Equals(other.ArrivalTolerance)
-            && HeightTolerance.Equals(other.HeightTolerance);
+            && ArrivalTolerance.Equals(other.ArrivalTolerance);
     }
 
     public override bool Equals(object? obj) => obj is WorkerGoal other && Equals(other);
@@ -97,13 +51,11 @@ internal readonly struct WorkerGoal : IEquatable<WorkerGoal>
     {
         unchecked
         {
-            int hash = (Point.GetHashCode() * 31) + ArrivalTolerance.GetHashCode();
-            return (hash * 31) + HeightTolerance.GetHashCode();
+            return (Point.GetHashCode() * 31) + ArrivalTolerance.GetHashCode();
         }
     }
 
-    public override string ToString() =>
-        $"{Point} +/-{ArrivalTolerance:0.##}m, +/-{HeightTolerance:0.##}m up";
+    public override string ToString() => $"{Point} +/-{ArrivalTolerance:0.##}m";
 }
 
 /// <summary>What the game adapter can see this tick.
