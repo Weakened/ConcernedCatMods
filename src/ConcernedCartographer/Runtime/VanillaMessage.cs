@@ -46,11 +46,16 @@ internal static class VanillaMessage
 
     /// <summary>Shows a vanilla HUD message, or does nothing if this game
     /// build has no recognisable Character.Message. Never throws.</summary>
-    public static void Show(Character? character, MessageHud.MessageType type, string text)
+    /// <returns>True when the message was actually handed to the game. The
+    /// two silent cases - no resolvable method, and no local player yet - look
+    /// identical to a caller that ignores this, which is how a one-time tip
+    /// got consumed before a player existed to see it. Most callers may still
+    /// ignore it: a lost toast is usually not worth a branch.</returns>
+    public static bool Show(Character? character, MessageHud.MessageType type, string text)
     {
         if (MessageInvoker is null || character == null)
         {
-            return;
+            return false;
         }
 
         try
@@ -60,10 +65,12 @@ internal static class VanillaMessage
             arguments[1] = text;
             Array.Copy(TrailingDefaults, 0, arguments, 2, TrailingDefaults.Length);
             MessageInvoker(character, arguments);
+            return true;
         }
         catch
         {
             // A toast is never worth taking a caller down with it.
+            return false;
         }
     }
 

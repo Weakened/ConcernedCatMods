@@ -20,19 +20,42 @@ Exact path depends on the active mod-manager profile.
 
 ### Markers the mod writes for itself
 
-Two files in that folder are not data a person edits: `author-id.dat`, the
-profile's generated author identity, and `onboarding-shown.dat`, the marker that
-the first-run tip has been shown.
+Two files are not data a person edits: the profile's generated author identity,
+and the marker saying the first-run tip has been shown. Since 1.2.2 they live in
+a `state` subfolder of the product's directory:
 
-They end in `.dat` rather than `.txt` because a mod manager's configuration
-editor offered `author-id.txt` for editing (#304), and that file is a generated
-GUID: editing or deleting it changes who the atlas believes wrote this profile's
-entries, which is what the non-owner-delete policy is keyed on.
+```text
+BepInEx/config/ConcernedCatMods/ConcernedCartographer/state/author-id.dat
+BepInEx/config/ConcernedCatMods/ConcernedCartographer/state/onboarding-shown.dat
+```
 
-A `.txt` written by a build before 1.2.2 is adopted once on startup — copied to
-the `.dat` name, then removed — so the identity does not change across the
-upgrade. Adoption is best effort: if it fails, a fresh identity is generated and
-only the audit labels differ.
+A mod manager's configuration editor offered `author-id.txt` for editing
+(#304), and that file is a generated GUID: editing or deleting it changes who
+the atlas believes wrote this profile's entries, which is what the
+non-owner-delete policy is keyed on.
+
+**A subfolder rather than a rename.** The reporter's diagnosis was the location,
+and a subfolder is correct whichever files that editor lists. It also matters for
+something else entirely: `CartographerLegacyProbe` decides new-player versus
+returning-player by listing this directory with `Directory.GetFiles` and asking
+whether every name is one this build writes for itself. `GetFiles` does not
+return subdirectories, so a marker under `state` is invisible to it. A rename in
+place would not have been — `author-id.dat` is not in
+`CartographerFirstRunFiles.Names`, so every new player would have been classed
+as a returning one and the #264 introduction would never have run again.
+
+**Upgrading.** A `.txt` an older build left in the product directory is adopted
+once: read, checked (an author identity must parse as a GUID), copied, read
+back, and only then removed. A failure at any point leaves the old file exactly
+where it is and is written to the log, so the next start tries again. Nothing is
+deleted unread.
+
+If adoption never succeeds, a fresh identity is generated. That is not only a
+cosmetic difference: entries this profile wrote under the old identity are then
+owned by an identity it no longer has, and the non-owner-delete policy will
+refuse to delete them. The old file is kept precisely so that case is
+recoverable by hand.
+
 
 ## Road atlas
 
@@ -239,7 +262,7 @@ Receive-path caps, enforced in order: version match; author strings sanitized (m
 
 Semantics: only Table/Server-scoped entities travel (Private never leaves the machine); tombstones travel so deletions propagate; incoming state lands in a review inbox and **nothing auto-applies**; a strictly higher revision wins, equal-revision divergence is a conflict (taking the remote side creates a NEW local revision so both sides converge); non-owner deletions are rejected; the preview lists deletions by name.
 
-Author identity (`author-id.txt`, a GUID per profile) is labeling for audit columns, not authentication.
+Author identity (`state/author-id.dat`, a GUID per profile) is labeling for audit columns, not authentication.
 
 ## Localization overrides (v0.7+)
 

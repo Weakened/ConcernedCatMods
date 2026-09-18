@@ -21,6 +21,12 @@ public sealed class Plugin : BaseUnityPlugin
         CartographerSettings settings = CartographerSettings.Bind(Config);
         Persistence.LocalizationPersistence.Initialize(Logger);
 
+        // #304: move this mod's own bookkeeping out of the settings folder,
+        // both markers together, before anything reads or writes either. It
+        // never throws, and a failure leaves the older build's file where it
+        // is and says so.
+        Persistence.AuthorIdentity.AdoptMarkers(Logger);
+
         // Crash reporting (#97) attaches before the runtime exists so even
         // construction-time failures are captured; it is fully inert until
         // the player consents AND a DSN is configured.
