@@ -29,6 +29,24 @@ TCC-Dev profile (`Valheim version: 0.221.12 (network version 36)`, logged
 2026-08-26), which ran exactly this assembly. `Version.GetVersionString` cannot
 be executed off-game, so the runtime banner resolves it reflectively.
 
+### Serialized Cart.prefab recheck (Valheim 1.0.14)
+
+The installed `Cart.prefab` was read again on 2026-09-17 after Steam updated
+Valheim to **1.0.14**, build **25364265**. Its serialized values override the C#
+field initializers before a live cart exists:
+
+| Field | C# initializer | Installed `Cart.prefab` |
+|---|---:|---:|
+| `m_detachDistance` | 2.0 | **1.0** |
+| `m_breakForce` | 10000 | **100000** |
+| `m_baseMass` | 20 | **50** |
+| `m_itemWeightMassFactor` | 1.0 | **0.1** |
+
+The prefab also carries a `Floating` component. Teamster telemetry and Gunnar
+read these values from the **live `Vagon` instance**, so their runtime mass and
+hitch calculations already used the serialized truth. The old embedded calibration
+priors/derived rows were the affected path: #321 revises them to data version 2.
+
 ## The cart component: `Vagon`
 
 `public class Vagon : UnityEngine.MonoBehaviour, Hoverable, Interactable` —
@@ -40,8 +58,8 @@ component type and its static instance registry.
 
 | Member | Verified signature | Semantics (decompiled) |
 |---|---|---|
-| `m_baseMass` | `public float m_baseMass` (prefab default `20f`) | Empty-cart physics mass before cargo. |
-| `m_itemWeightMassFactor` | `public float m_itemWeightMassFactor` (prefab default `1f`) | Cargo-weight-to-mass multiplier. |
+| `m_baseMass` | `public float m_baseMass` (C# initializer `20f`; installed `Cart.prefab` **50f**) | Empty-cart physics mass before cargo. |
+| `m_itemWeightMassFactor` | `public float m_itemWeightMassFactor` (C# initializer `1f`; installed `Cart.prefab` **0.1f**) | Cargo-weight-to-mass multiplier. |
 | `m_container` | `public Container m_container` | The cart's cargo container; may be null on malformed prefabs. |
 | `IsAttached()` | `public bool IsAttached()` | True when a local `ConfigurableJoint` (`m_attachJoin`) exists; otherwise falls back to the replicated ZDO bool `ZDOVars.s_attachJointHash`, so **observers see remote attachment state**. |
 | `IsAttached(Character)` | `public bool IsAttached(Character character)` | Local-truth check: compares `m_attachJoin.connectedBody.gameObject` with the character's GameObject. Only meaningful on the client that owns the joint (pulling is client-local physics). |

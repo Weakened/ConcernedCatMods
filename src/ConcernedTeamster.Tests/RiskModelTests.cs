@@ -241,8 +241,8 @@ row: 5 | 100 | 1 | Runaway | Prior | easier ran away");
         DescentCalibrationData? data = DescentCalibrationSource.TryLoadEmbedded();
 
         Assert.NotNull(data);
-        Assert.Equal(1, data!.DataVersion);
-        Assert.Equal("0.221.12", data.GameVersion);
+        Assert.Equal(2, data!.DataVersion);
+        Assert.Equal("1.0.14", data.GameVersion);
         Assert.Empty(data.Errors);
         Assert.Equal(4, data.Rows.Count);
         Assert.Equal(0, data.MeasuredRowCount); // honest: no descent runs yet
@@ -254,15 +254,15 @@ row: 5 | 100 | 1 | Runaway | Prior | easier ran away");
         RiskModel model = new(DescentCalibrationSource.TryLoadEmbedded()!);
 
         // Stationary flat priors prove the trivial safe cases.
-        Assert.Equal(RiskLevel.Safe, model.Query(0f, 200f, 0f).Level);
-        Assert.Equal(CalibrationBasis.Prior, model.Query(0.5f, 60f, 0f).Basis);
+        Assert.Equal(RiskLevel.Safe, model.Query(0f, 60f, 0f).Level);
+        Assert.Equal(CalibrationBasis.Prior, model.Query(0.5f, 50f, 0f).Basis);
 
         // The uncalibrated middle is honestly unknown.
-        Assert.Equal(RiskLevel.Unknown, model.Query(10f, 220f, 2f).Level);
-        Assert.Equal(RiskLevel.Unknown, model.Query(0f, 200f, 0.1f).Level);
+        Assert.Equal(RiskLevel.Unknown, model.Query(10f, 70f, 2f).Level);
+        Assert.Equal(RiskLevel.Unknown, model.Query(0f, 70f, 0.1f).Level);
 
         // The physics bounds refuse impossible descents with certainty.
-        RiskVerdict impossible = model.Query(35f, 9000f, 1f);
+        RiskVerdict impossible = model.Query(35f, 90000f, 1f);
         Assert.Equal(RiskLevel.Danger, impossible.Level);
         Assert.Equal(CalibrationBasis.DerivedConstant, impossible.Basis);
     }
