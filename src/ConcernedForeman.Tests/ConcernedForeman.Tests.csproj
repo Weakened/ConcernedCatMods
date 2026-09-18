@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>TheConcernedCat.ConcernedForeman.Tests</AssemblyName>
+    <!-- The linked product sources are written for the plugin's net48 target and
+         C# 10. Nothing here may depend on a newer language feature, so the
+         sources keep compiling in both places. -->
+    <LangVersion>10</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- #316 / review R2 M4: no test project compiled ConcernedForeman at all,
+         so the adapter layer - the only code that touches the game - was proved
+         by reading. These are the shipped sources, linked exactly as the shared
+         ones are elsewhere, and compiled against the vanilla surface stubbed in
+         VanillaStubs.cs. The stubs are the GAME; the logic under test is the
+         real shipped file, never a copy of it. -->
+    <Compile Include="..\ConcernedForeman\Runtime\Custody\EngineInventoryPorts.cs" Link="Product/EngineInventoryPorts.cs" />
+    <Compile Include="..\ConcernedForeman\Runtime\Custody\WorkerBody.cs" Link="Product/WorkerBody.cs" />
+    <Compile Include="..\ConcernedForeman\Runtime\Settlement\ToolClassifier.cs" Link="Product/ToolClassifier.cs" />
+    <Compile Include="..\ConcernedForeman\Runtime\Settlement\SettlementTargets.cs" Link="Product/SettlementTargets.cs" />
+
+    <!-- The game-free layers those sources sit on, the same way
+         Shared.Settlement.Tests links them. -->
+    <Compile Include="..\Shared\Settlement\**\*.cs" LinkBase="Settlement" />
+    <Compile Include="..\Shared\Workers\**\*.cs" LinkBase="Workers" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

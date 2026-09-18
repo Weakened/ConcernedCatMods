@@ -279,33 +279,52 @@ internal sealed class WorkerBody : MonoBehaviour
 
     /// <summary>An unavoidable death: every carried item goes on the ground in
     /// the same frame, through vanilla's own drop, so nothing is destroyed with
-    /// the body; the runtime records where.</summary>
+    /// the body; the runtime records where.
+    ///
+    /// <b>One item at a time, and the report always happens.</b> Vanilla's
+    /// <c>DropItem</c> touches the animator, the drop effects and the visual
+    /// equipment, and this body is a clone: one null on one stack must not take
+    /// the rest of his inventory down with it, and must not cost the runtime the
+    /// record of what did reach the ground.</summary>
     private void OnDeath()
     {
+        if (_inventory == null || _humanoid == null)
+        {
+            return;
+        }
+
+        Vector3 where = transform.position;
+        var dropped = new List<DroppedItem>();
         try
         {
-            if (_inventory == null || _humanoid == null)
-            {
-                return;
-            }
-
-            Vector3 where = transform.position;
-            var dropped = new List<DroppedItem>();
             foreach (ItemDrop.ItemData item in new List<ItemDrop.ItemData>(_inventory.GetAllItems()))
             {
                 int count = item.m_stack;
                 string prefab = item.m_dropPrefab != null ? item.m_dropPrefab.name : string.Empty;
-                if (_humanoid.DropItem(_inventory, item, count))
+                try
                 {
-                    dropped.Add(new DroppedItem(prefab, item.m_shared.m_name, item.m_quality, item.m_variant, count, item));
+                    if (_humanoid.DropItem(_inventory, item, count))
+                    {
+                        dropped.Add(new DroppedItem(prefab, item.m_shared.m_name, item.m_quality, item.m_variant, count, item));
+                    }
+                }
+                catch (Exception exception)
+                {
+                    ErrorLog?.Invoke("Worker body \"" + Key + "\" died and its " + prefab +
+                        " could not be dropped, so it is lost with the body: " + exception);
                 }
             }
-
-            Died?.Invoke(this, dropped, where);
         }
-        catch (Exception exception)
+        finally
         {
-            ErrorLog?.Invoke("Worker body \"" + Key + "\" died and its items could not all be dropped: " + exception);
+            try
+            {
+                Died?.Invoke(this, dropped, where);
+            }
+            catch (Exception exception)
+            {
+                ErrorLog?.Invoke("Worker body \"" + Key + "\" died and the loss could not all be recorded: " + exception);
+            }
         }
     }
 
