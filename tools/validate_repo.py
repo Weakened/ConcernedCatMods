@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Static repository and Thunderstore package-source validation.
 
-Validates every product in the monorepo (Concerned Cartographer and
-Concerned Teamster) on every run. This intentionally does not require
+Validates every product in the monorepo (Concerned Cartographer, Concerned
+Teamster, Concerned Foreman and Concerned Steward) on every run. This intentionally does not require
 Valheim or its licensed assemblies.
 
 ``--product`` scopes only the binary/version flags (``--require-binary``,
@@ -44,6 +44,13 @@ PRODUCTS: dict[str, dict[str, object]] = {
         "csproj": "ConcernedForeman.csproj",
         "package_name": "ConcernedForeman",
         "dll_name": "TheConcernedCat.ConcernedForeman.dll",
+    },
+    "steward": {
+        "display": "Concerned Steward",
+        "project_dir": ROOT / "src" / "ConcernedSteward",
+        "csproj": "ConcernedSteward.csproj",
+        "package_name": "ConcernedSteward",
+        "dll_name": "TheConcernedCat.ConcernedSteward.dll",
     },
 }
 
@@ -279,11 +286,31 @@ CROSS_PRODUCT_RULES: tuple[tuple[str, str, str], ...] = (
     ("interop", "src/Interop.Tests/Consumer", "ConcernedTeamster"),
     ("interop", "src/Interop.Tests/Consumer", "ConcernedForeman"),
     ("interop", "src/Interop.Tests/Consumer", "ConcernedCartographer"),
+    # CS-001 (#340): the Steward is a fourth independent product and inherits
+    # the same rule in both directions. Its only shared code is source-linked
+    # from src/Shared, which belongs to no product; it finds a hauler at
+    # runtime through a GUID string and the BCL capability map, never a
+    # reference.
+    ("steward", "src/ConcernedSteward", "ConcernedCartographer"),
+    ("steward", "src/ConcernedSteward", "ConcernedTeamster"),
+    ("steward", "src/ConcernedSteward", "ConcernedForeman"),
+    ("steward", "src/ConcernedSteward.Tests", "ConcernedCartographer"),
+    ("steward", "src/ConcernedSteward.Tests", "ConcernedTeamster"),
+    ("steward", "src/ConcernedSteward.Tests", "ConcernedForeman"),
+    ("teamster", "src/ConcernedTeamster", "ConcernedSteward"),
+    ("teamster", "src/ConcernedTeamster.Tests", "ConcernedSteward"),
+    ("cartographer", "src/ConcernedCartographer", "ConcernedSteward"),
+    ("cartographer", "src/ConcernedCartographer.Tests", "ConcernedSteward"),
+    ("foreman", "src/ConcernedForeman", "ConcernedSteward"),
+    ("foreman", "src/ConcernedForeman.Tests", "ConcernedSteward"),
+    ("interop", "src/Interop.Tests", "ConcernedSteward"),
+    ("interop", "src/Interop.Tests/Provider", "ConcernedSteward"),
+    ("interop", "src/Interop.Tests/Consumer", "ConcernedSteward"),
 )
 
 
 def check_cross_product_independence(errors: list[str]) -> list[str]:
-    """Fails on any compile-time reference between the two products.
+    """Fails on any compile-time reference between any two products.
 
     Csproj side: Compile (source-linking, the repo's own sharing idiom),
     ProjectReference, Reference (Include AND child text, so a HintPath under
@@ -296,7 +323,8 @@ def check_cross_product_independence(errors: list[str]) -> list[str]:
             r"^\s*(?:global\s+)?using\s+(?:static\s+)?(?:\w+\s*=\s*)?"
             r"TheConcernedCat\." + target + r"\b|"
             r"InternalsVisibleTo\(\s*\"TheConcernedCat\." + target + r"\b")
-        for target in {"ConcernedCartographer", "ConcernedTeamster", "ConcernedForeman"}
+        for target in {
+            "ConcernedCartographer", "ConcernedTeamster", "ConcernedForeman", "ConcernedSteward"}
     }
     checked_projects = 0
     for owner, project_rel, target in CROSS_PRODUCT_RULES:
