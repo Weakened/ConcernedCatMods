@@ -48,19 +48,16 @@ internal sealed class SettlementRuntime
         _log = log;
         _records = new SettlementRecords(log);
         _custody = new ForemanCustodyRuntime(_records, WorkAuthority, log);
-        // #286: housing is measured on demand from the real beds, through the
-        // book the register already holds, so the answer is never older than
-        // the question.
-        _housing = new WorldHousing(
-            () => _records.TryOpen(out SettlementRegister register, out SettlementJournal _)
-                && register.TryGet(DesignationKind.SettlementArea, out Designation area)
-                    ? area
-                    : null,
-            log);
+        // #286: housing is measured on demand from the real beds, so the answer
+        // is never older than the question. The area comes from the caller that
+        // already opened the register — asking for it a second time here gave a
+        // transient world-identity failure a way to be reported as "your
+        // settlement houses nobody".
+        _housing = new WorldHousing(_sitePolicy, log);
 
         _designations = new DesignationTools(
             HasAuthority, DescribeMissingAuthority, _records, new CustodyTools(this, _custody, _records),
-            () => _housing.Measure());
+            area => _housing.Measure(area));
 
         WorkerBody.Loaded = OnWorkerBodyLoaded;
         WorkerBody.Died = (body, dropped, where) => _custody.OnWorkerDied(body, dropped, where);

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using TheConcernedCat.Settlement.Designations;
 using TheConcernedCat.Settlement.Housing;
 using TheConcernedCat.Settlement.Worker;
@@ -22,7 +23,10 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 /// (<c>$msg_bedtooexposed</c>);</item>
 /// <item><c>CheckFire</c> → <c>EffectArea.IsPointInsideArea(bed.transform.position,
 /// EffectArea.Type.Heat)</c> (<c>$msg_bednofire</c>);</item>
-/// <item>ownership → <c>ZDOVars.s_owner</c>.</item>
+/// <item>ownership → <c>ZDOVars.s_owner</c> against
+/// <c>Game.instance.GetPlayerProfile().GetPlayerID()</c>, plus vanilla's own
+/// public <c>Bed.IsCurrent()</c>. See <see cref="BedClaim"/> for why that has to
+/// be three-way.</item>
 /// </list>
 ///
 /// Both of the first two are <b>public, static and take a point</b>, so they can
@@ -34,70 +38,92 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 ///
 /// <b>It reads and nothing else.</b> No bed is claimed, no owner is written, no
 /// piece is touched. `Bed.Interact` is never called — it would claim the bed for
-/// whoever interacted.</summary>
+/// whoever interacted. `Bed.IsCurrent()` only compares two positions.</summary>
 internal sealed class WorldHousing
 {
-    /// <summary>How far above and below the settlement circle to look. The
-    /// designation is a circle on the ground and a bed can be upstairs, so the
-    /// query is widened vertically and the horizontal containment test the
-    /// designation already owns decides. Over-collect and filter exactly.
-    /// </summary>
+    /// <summary>How far above and below the settlement circle to look.
+    ///
+    /// The designation is a <b>circle on the ground</b> and a bed can be
+    /// upstairs or in a cellar, so the collection radius is the diagonal of that
+    /// circle and this height — <c>sqrt(r² + v²)</c> — and the designation's own
+    /// horizontal test then decides. Widening the sphere by a flat
+    /// <c>r + v</c> instead would reach this far <i>sideways</i> too, and sweep
+    /// in a neighbour's longhouse.</summary>
     private const float VerticalReachMetres = 32f;
 
-    /// <summary>A hard cap on one survey, so its cost cannot grow with the size
-    /// of somebody's base.</summary>
+    /// <summary>A hard cap on how many beds one survey will probe.
+    ///
+    /// <c>Cover.GetCoverForPoint</c> is a sphere cast plus a ring of rays — this
+    /// product's own building-diagnostics audit (§2.2) records that it is not
+    /// free — so this bounds the expensive part at 64 per command. What it does
+    /// <i>not</i> bound is the piece walk below, which is vanilla's own
+    /// <c>s_allPieces</c> list; that is the same cost the Steward's fuel survey
+    /// already accepts, and it is a walk, not a probe.</summary>
     private const int MaxBeds = 64;
 
-    private readonly Func<Designation?> _settlementArea;
+    private readonly WorkerSitePolicy _sitePolicy;
     private readonly Action<string>? _log;
 
-    /// <param name="settlementArea">The marked settlement, or null when none is
-    /// marked. A function rather than a value: a measurement is only as good as
-    /// the moment it is asked for.</param>
-    internal WorldHousing(Func<Designation?> settlementArea, Action<string>? log = null)
+    /// <summary>Reused between surveys so a command does not allocate a list the
+    /// size of the player's base each time it is run.</summary>
+    private readonly List<Piece> _pieces = new List<Piece>();
+
+    internal WorldHousing(WorkerSitePolicy sitePolicy, Action<string>? log = null)
     {
-        _settlementArea = settlementArea ?? throw new ArgumentNullException(nameof(settlementArea));
+        _sitePolicy = sitePolicy ?? throw new ArgumentNullException(nameof(sitePolicy));
         _log = log;
     }
 
     /// <summary>What the settlement can house right now.
     ///
-    /// A bed that cannot be measured comes back as
-    /// <see cref="HousingFacts.Unmeasured"/> rather than being dropped, because
-    /// "there is a bed here I could not check" and "there is no bed here" are
-    /// different answers and only one of them is a reason to build.</summary>
-    internal HousingCapacity Measure()
+    /// The area is <b>passed in</b> rather than looked up again. Its caller has
+    /// already opened the register and established that a settlement is marked,
+    /// and re-deriving it here gave a second, silent way to fail that reported
+    /// "your settlement houses nobody" when the truth was "I could not work out
+    /// which settlement you meant".</summary>
+    internal HousingCapacity Measure(Designation area)
     {
-        Designation? area = _settlementArea();
-        if (area == null)
+        if (area == null || !area.IsArea)
         {
-            return HousingCapacity.None;
+            return HousingCapacity.NotSurveyed;
         }
 
-        var facts = new List<HousingFacts>();
-        foreach (Bed bed in FindBeds(area))
+        if (!TryFindBeds(area, out List<Bed> beds, out bool truncated))
+        {
+            return HousingCapacity.NotSurveyed;
+        }
+
+        var facts = new List<HousingFacts>(beds.Count);
+        foreach (Bed bed in beds)
         {
             facts.Add(Measure(bed, area));
-            if (facts.Count >= MaxBeds)
-            {
-                Report("more than " + MaxBeds + " beds are in the settlement; only the first were checked");
-                break;
-            }
         }
 
-        return HousingCapacity.Measure(facts);
+        return HousingCapacity.Measure(facts, truncated, !IsGroundFullyLoaded(area));
     }
 
     private HousingFacts Measure(Bed bed, Designation area)
     {
-        string key = KeyOf(bed);
+        string key;
+        try
+        {
+            key = KeyOf(bed);
+        }
+        catch (Exception)
+        {
+            // Even naming the bed failed, which means its transform is gone. A
+            // key is still owed, because a fact with no key is a fact that
+            // cannot be read out.
+            key = "a bed";
+        }
+
         try
         {
             ZNetView? view = bed.GetComponent<ZNetView>();
             if (view == null || !view.IsValid())
             {
-                // Present in the scene and not yet a live object: not a bed
-                // that failed, a bed that could not be asked about.
+                // Present in the scene and not yet a live object: not a bed that
+                // failed, a bed that could not be asked about.
                 return HousingFacts.Unmeasured(key);
             }
 
@@ -105,10 +131,13 @@ internal sealed class WorldHousing
             Cover.GetCoverForPoint(spawn, out float cover, out bool underRoof);
 
             bool warm = EffectArea.IsPointInsideArea(bed.transform.position, EffectArea.Type.Heat) != null;
-            bool claimed = view.GetZDO().GetLong(ZDOVars.s_owner, 0L) != 0L;
+
+            // Recomputed rather than assumed from the collection filter: the two
+            // agree, and if a float edge ever made them disagree the rule is the
+            // one that should win.
             bool inside = area.Contains(ToSitePoint(bed.transform.position));
 
-            return new HousingFacts(key, true, inside, underRoof, cover, warm, claimed);
+            return new HousingFacts(key, true, inside, underRoof, cover, warm, ClaimOf(bed, view));
         }
         catch (Exception exception)
         {
@@ -117,59 +146,175 @@ internal sealed class WorldHousing
         }
     }
 
-    /// <summary>Beds near the settlement. Deliberately not every bed in the
-    /// world: the designation's own radius bounds it, widened vertically so a
-    /// bed upstairs is found and then filtered by the real horizontal test.
-    /// </summary>
-    private static IEnumerable<Bed> FindBeds(Designation area)
+    /// <summary>Whose bed it is, three ways.
+    ///
+    /// <c>Bed.IsMine()</c> and <c>Bed.GetOwner()</c> are <b>private</b> in the
+    /// stock assembly, so this does what they do rather than calling them —
+    /// reading <c>ZDOVars.s_owner</c> and comparing it to the local profile's
+    /// player id, both public — and reaches for vanilla's own public
+    /// <c>IsCurrent()</c> only for the one comparison it alone can make.
+    /// Depending on a publicized private would put a shipped product at the
+    /// mercy of how the build machine was set up.</summary>
+    private static BedClaim ClaimOf(Bed bed, ZNetView view)
     {
-        var found = new List<Bed>();
-        Bed[] beds;
-        try
+        long owner = view.GetZDO().GetLong(ZDOVars.s_owner, 0L);
+        if (owner == 0L)
         {
-            beds = UnityEngine.Object.FindObjectsByType<Bed>(FindObjectsSortMode.None);
-        }
-        catch (Exception)
-        {
-            return found;
+            return BedClaim.Unclaimed;
         }
 
-        float reach = area.Radius + VerticalReachMetres;
-        Vector3 centre = new Vector3(area.Centre.X, area.Centre.Y, area.Centre.Z);
-        foreach (Bed bed in beds)
+        Game? game = Game.instance;
+        PlayerProfile? profile = game == null ? null : game.GetPlayerProfile();
+        if (profile == null)
         {
-            if (bed != null && Vector3.Distance(bed.transform.position, centre) <= reach)
-            {
-                found.Add(bed);
-            }
+            // Somebody owns it and there is no profile to compare against. The
+            // conservative answer is that it is not ours to offer.
+            return BedClaim.SomebodyElses;
         }
 
-        return found;
+        if (profile.GetPlayerID() != owner)
+        {
+            return BedClaim.SomebodyElses;
+        }
+
+        return bed.IsCurrent() ? BedClaim.YoursAndCurrent : BedClaim.YoursButNotCurrent;
     }
 
-    /// <summary>Identity for one world load. A bed has no name and its uid is
-    /// reassigned on load, which is why nothing here is persisted from it.
-    /// </summary>
-    private static string KeyOf(Bed bed)
+    /// <summary>The beds inside the settlement, bounded twice.
+    ///
+    /// Found through <c>Piece.GetAllPiecesInRadius</c> rather than
+    /// <c>FindObjectsByType&lt;Bed&gt;</c>, which is the pattern the Steward's
+    /// fuel survey already established, and which buys two things beyond not
+    /// scanning the scene:
+    ///
+    /// <list type="bullet">
+    /// <item>vanilla's own call <b>skips the ghost layer</b>
+    /// (<c>s_allPiece.gameObject.layer != s_ghostLayer</c>). The hammer's
+    /// placement preview is a real <c>Bed</c> component on a live GameObject
+    /// whose <c>ZNetView</c> has been destroyed, and a scene-wide type query
+    /// finds it — so opening the build menu used to add a phantom bed nobody
+    /// could check;</item>
+    /// <item>a piece is what a player <i>built</i>, which is what a settlement is
+    /// made of.</item>
+    /// </list>
+    ///
+    /// Returns false only when the query itself failed, which is a different
+    /// answer from finding nothing.</summary>
+    private bool TryFindBeds(Designation area, out List<Bed> beds, out bool truncated)
+    {
+        beds = new List<Bed>();
+        truncated = false;
+
+        _pieces.Clear();
+        try
+        {
+            float queryRadius = (float)Math.Sqrt(
+                ((double)area.Radius * area.Radius) +
+                ((double)VerticalReachMetres * VerticalReachMetres));
+            Piece.GetAllPiecesInRadius(ToVector3(area.Centre), queryRadius, _pieces);
+        }
+        catch (Exception exception)
+        {
+            // Not "no beds". Nobody looked, and the readout has to say so.
+            Report("the settlement's pieces could not be listed, so housing was not measured (" +
+                exception.GetType().Name + ")");
+            return false;
+        }
+
+        foreach (Piece piece in _pieces)
+        {
+            if (piece == null)
+            {
+                continue;
+            }
+
+            // Bed.Awake reads its own ZNetView off its own GameObject, so the
+            // two are always on the same object. Looking in children would find
+            // a bed belonging to a different piece.
+            Bed? bed = piece.GetComponent<Bed>();
+            if (bed == null)
+            {
+                continue;
+            }
+
+            if (!area.Contains(ToSitePoint(bed.transform.position)))
+            {
+                // Filtered here rather than judged later: a neighbour's bed is
+                // not advice, it is noise, and counting it against the budget
+                // would let somebody else's longhouse push the player's own beds
+                // out of their own survey.
+                continue;
+            }
+
+            if (beds.Count >= MaxBeds)
+            {
+                // Tested before the add, so exactly MaxBeds beds is a complete
+                // survey rather than one that claims it skipped something.
+                truncated = true;
+                break;
+            }
+
+            beds.Add(bed);
+        }
+
+        _pieces.Clear();
+        return true;
+    }
+
+    /// <summary>Whether the whole settlement's ground is loaded.
+    ///
+    /// This is the only way the player can be told about beds in an unloaded
+    /// zone, and it has to be asked at the <i>area</i>, not the bed: an object in
+    /// an unloaded zone is not in <c>s_allPieces</c> at all, so it produces a
+    /// shorter list rather than an unmeasurable entry. A per-bed "could not be
+    /// checked" can never fire for it.
+    ///
+    /// Five points — the centre and the four compass edges — because a zone is
+    /// 64 m and a settlement is usually smaller than one; the answer is
+    /// best-effort and is reported as a caveat, never as a refusal.</summary>
+    private bool IsGroundFullyLoaded(Designation area)
     {
         try
         {
-            ZNetView? view = bed.GetComponent<ZNetView>();
-            if (view != null && view.IsValid())
+            Vector3 centre = ToVector3(area.Centre);
+            if (!_sitePolicy.IsInLoadedGround(centre))
             {
-                return "bed " + view.GetZDO().m_uid;
+                return false;
             }
+
+            float r = area.Radius;
+            return _sitePolicy.IsInLoadedGround(centre + new Vector3(r, 0f, 0f))
+                && _sitePolicy.IsInLoadedGround(centre + new Vector3(-r, 0f, 0f))
+                && _sitePolicy.IsInLoadedGround(centre + new Vector3(0f, 0f, r))
+                && _sitePolicy.IsInLoadedGround(centre + new Vector3(0f, 0f, -r));
         }
         catch (Exception)
         {
-            // Fall through to the position, which is at least recognisable.
+            // Could not establish it. Saying the ground is incomplete is the
+            // answer that qualifies the count rather than overstating it.
+            return false;
         }
+    }
 
+    /// <summary>A place the player can walk to.
+    ///
+    /// Deliberately <b>not</b> the bed's uid. A <c>ZDOID</c> is reassigned in
+    /// load order on every world load — the reason this product keeps an
+    /// identity epoch beside every persisted key — so a number printed here
+    /// names a different object after a reload, and it is a number the player
+    /// cannot find in the world either way. Coordinates are at least somewhere
+    /// to stand.</summary>
+    private static string KeyOf(Bed bed)
+    {
         Vector3 at = bed.transform.position;
-        return "bed at " + at.x.ToString("0") + "," + at.z.ToString("0");
+        return "the bed at " +
+            Mathf.RoundToInt(at.x).ToString(CultureInfo.InvariantCulture) + ", " +
+            Mathf.RoundToInt(at.z).ToString(CultureInfo.InvariantCulture);
     }
 
     private static SitePoint ToSitePoint(Vector3 point) => new SitePoint(point.x, point.y, point.z);
+
+    private static Vector3 ToVector3(SitePoint point) => new Vector3(point.X, point.Y, point.Z);
 
     private void Report(string what)
     {
