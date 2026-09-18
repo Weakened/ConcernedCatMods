@@ -5,7 +5,7 @@ repository: `src/ConcernedForeman`, version **0.1.0**, carrying the settlement
 worker spike and nothing else. **Nothing is published, there is no tag, and no
 part of it has been observed running in a game.** The diagnostics half — the
 actual product promise below — has no code yet; CF-001's research obligations
-remain open.
+are discharged in `BUILDING_DIAGNOSTICS_AUDIT.md`.
 
 **Promise:** *Point at a building or a station and Foreman explains why it is
 stable, exposed, comfortable, or about to fail.* Under #273 it also gains an
@@ -111,7 +111,35 @@ Its first bounded proof is [`FIRST_COTTAGE_GRAPH.md`](FIRST_COTTAGE_GRAPH.md).
 
 ---
 
-## Research the contract still owes
+## Research the contract owed — done
+
+CF-001's three outstanding obligations are discharged in
+[`BUILDING_DIAGNOSTICS_AUDIT.md`](BUILDING_DIAGNOSTICS_AUDIT.md), against
+Valheim 1.0.14 (Steam build 25364265):
+
+- **Current pain signals and the existing tools**, from the tools' own pages.
+  The closest maintained thing shows a **percentage**; the one that came nearest
+  to a heatmap shows *health*, not support, and is marked deprecated. Nothing
+  found traces a support chain or names a weak link.
+- **The installed-game audit** of all four subsystems, with real signatures and
+  the complete per-material support table read out of the binary.
+- **The CF-002 go/no-go test**, written down before CF-002 starts.
+
+**The gate passes.** `WearNTear` retains each piece's supporting colliders *and
+each neighbour's contributed support value*, so a chain to ground is a traversal
+of the game's own data rather than a reconstruction, and the weakest link is the
+step with the largest proportional drop. `SE_Rested.CalculateComfortLevel(bool,
+Vector3)` is public and static, so comfort is answerable for a hypothetical
+without inventing a model. `Player.InShelter()` is two explicit conditions, so
+"exposed" has an exact cause.
+
+The audit also records what each subsystem still owes in **observation** — a
+static read of the assembly is not evidence about a running game, and CF-002's
+gate is written to stop if the cached data turns out not to be readable when a
+player actually hovers a piece.
+
+<details>
+<summary>The obligations as originally recorded</summary>
 
 CF-001 is not finished by this document. It also owes:
 
@@ -128,3 +156,5 @@ CF-001 is not finished by this document. It also owes:
 - **The CF-002 go/no-go test**, written down before CF-002 starts.
 
 These are recorded here as outstanding rather than quietly dropped.
+
+</details>
