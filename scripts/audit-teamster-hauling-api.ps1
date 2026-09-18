@@ -96,6 +96,8 @@ $requirements = @(
     @("Vagon", "game", "Vagon.m_baseMass", 'public float m_baseMass\b'),
     @("Vagon", "game", "Vagon.m_itemWeightMassFactor", 'public float m_itemWeightMassFactor\b'),
     @("Vagon", "game", "Vagon.m_container", 'public Container m_container;'),
+    @("Vagon", "game", "Vagon.m_chair (someone sitting in the cart, D4.4)", '\bChair m_chair\b'),
+    @("Chair", "game", "Chair.IsInUse()", 'public bool IsInUse\(\)'),
     @("Vagon", "game", "Vagon.m_nview", 'private ZNetView m_nview;'),
     @("Vagon", "game", "Vagon.m_body", 'private Rigidbody m_body;'),
     @("Vagon", "game", "Vagon.m_instances", 'private static List<Vagon> m_instances\b'),
@@ -253,8 +255,11 @@ foreach ($token in $forbidden) {
     }
 }
 
+# Exact counts, not a floor (review R-313 m7): a second attach, mass write or
+# network-object write inside an allowed type is a change that has to be made on
+# purpose, and shows up here the moment it is not.
 function Assert-OnlyIn {
-    param([string]$Token, [scriptblock]$Allowed, [string]$Rule, [int]$Minimum = 0)
+    param([string]$Token, [scriptblock]$Allowed, [string]$Rule, [int]$Expected = -1)
 
     $hits = @($calls | Where-Object { $_.Line.Contains($Token) })
     $ilSummary[$Token] = $hits.Count
@@ -264,16 +269,17 @@ function Assert-OnlyIn {
         }
     }
 
-    if ($hits.Count -lt $Minimum) {
-        $failures.Add("Teamster IL uses $Token $($hits.Count) time(s), expected at least $Minimum")
+    if ($Expected -ge 0 -and $hits.Count -ne $Expected) {
+        $failures.Add("Teamster IL uses $Token $($hits.Count) time(s), expected exactly $Expected")
     }
 }
 
 Assert-OnlyIn 'Vagon::AttachTo' { param($h) $h.Type.StartsWith($workersNamespace) } "the cart's attach is called only by Gunnar's worker runtime" 1
-Assert-OnlyIn 'Vagon::Detach' { param($h) $h.Type.StartsWith($workersNamespace) } "the cart's detach is called only by Gunnar's worker runtime" 1
+Assert-OnlyIn 'Vagon::Detach(' { param($h) $h.Type.StartsWith($workersNamespace) } "the cart's detach is called only by Gunnar's worker runtime" 2
+Assert-OnlyIn 'Vagon::DetachAll' { param($h) $false } "no Teamster code detaches every cart on the client" 0
 Assert-OnlyIn 'Rigidbody::set_mass' { param($h) $h.Type -eq ($workersNamespace + "TeamsterWorkerBody") } "a mass is written only by Gunnar's own calibration" 1
 Assert-OnlyIn 'stfld float32 [assembly_valheim]Character::m_originalMass' { param($h) $h.Type -eq ($workersNamespace + "TeamsterWorkerBody") } "the base mass is written only by Gunnar's own calibration" 1
-Assert-OnlyIn 'Rigidbody::set_constraints' { param($h) $h.Type -eq "TheConcernedCat.ConcernedTeamster.Adapters.CartBrakeAdapter" } "constraints are written only by the parking brake"
+Assert-OnlyIn 'Rigidbody::set_constraints' { param($h) $h.Type -eq "TheConcernedCat.ConcernedTeamster.Adapters.CartBrakeAdapter" } "constraints are written only by the parking brake" 2
 Assert-OnlyIn 'ZDO::Set(' {
     param($h)
     if ($h.Type -ne ($workersNamespace + "TeamsterWorkerPrefab")) { return $false }

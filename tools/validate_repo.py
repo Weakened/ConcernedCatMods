@@ -585,12 +585,29 @@ def check_teamster_no_force_injection(errors: list[str]) -> list[str]:
 # apply vanilla's extra pull mass itself. CT-002/CT-026/CT-028 stay absolute for
 # every other folder; this audit only narrows what the one allowance permits.
 TEAMSTER_WORKER_CALIBRATION_FILE = "TeamsterWorkerBody.cs"
-TEAMSTER_CART_ATTACH_CALLS = re.compile(r"\.AttachTo\s*\(|\.Detach\s*\(\s*\)")
-TEAMSTER_MASS_WRITE = re.compile(r"(\.mass|\bm_originalMass)\s*[-+*/]?=(?!=)")
+
+# The one file that may write Gunnar's identity into his own worker object, and
+# the one place the prefab clone is built (so it is also the only file allowed
+# the factory's own component surgery).
+TEAMSTER_WORKER_IDENTITY_FILE = "TeamsterWorkerPrefab.cs"
+
+# `Detach()` and `DetachAll()` both release joints, and `DetachAll` releases
+# every cart on the client (review R-313 m7).
+TEAMSTER_CART_ATTACH_CALLS = re.compile(r"\.AttachTo\s*\(|\.Detach\s*\(|\.DetachAll\s*\(")
+TEAMSTER_MASS_WRITE = re.compile(r"(\.mass|\bm_originalMass|\bm_baseMass)\s*[-+*/&|^]?=(?!=)")
+
+# Compound forms (`|=`, `&=`, `^=`) count: `constraints |= FreezeAll` is still a
+# constraint write.
 TEAMSTER_WORKER_FORBIDDEN_ASSIGNMENT = re.compile(
     r"\.(position|localPosition|rotation|localRotation|velocity|linearVelocity|angularVelocity|"
-    r"isKinematic|useGravity|detectCollisions|constraints|connectedBody|m_attachJoin|m_attachedObject)"
-    r"\s*[-+*/]?=(?!=)")
+    r"isKinematic|useGravity|detectCollisions|constraints|connectedBody|enabled|"
+    r"m_attachJoin|m_attachedObject|m_useRequester|"
+    r"m_breakForce|m_detachDistance|m_playerExtraPullMass|m_spring|m_springDamping|"
+    r"m_itemWeightMassFactor|m_attachOffset|m_attachPoint|"
+    r"xMotion|yMotion|zMotion|angularXMotion|angularYMotion|angularZMotion|"
+    r"anchor|connectedAnchor|autoConfigureConnectedAnchor|breakForce|breakTorque|"
+    r"xDrive|yDrive|zDrive|targetPosition|targetRotation)"
+    r"\s*[-+*/&|^]?=(?!=)")
 TEAMSTER_WORKER_FORBIDDEN_TOKENS = (
     "Teleport",
     "MovePosition",
@@ -609,7 +626,34 @@ TEAMSTER_WORKER_FORBIDDEN_TOKENS = (
     "RPC_RequestOwn",
     ".Interact(",
     "SetExtraMass",
+    "SetMass",
+    "UpdateMass",
+    "DetachAll",
+    ".Translate(",
+    ".Rotate(",
+    ".RotateAround(",
 )
+
+# Allowed only in the prefab factory, which builds the inactive clone and strips
+# the base creature's components; anywhere else in the runtime, switching
+# components on and off or reaching through reflection is out of scope.
+TEAMSTER_WORKER_FACTORY_ONLY_TOKENS = (
+    "SetActive",
+    "DestroyImmediate",
+    "GetMethod(",
+    "GetField(",
+    "GetProperty(",
+    "MethodInfo",
+    "FieldInfo",
+    "PropertyInfo",
+    "Activator.CreateInstance",
+)
+
+# Never anywhere in Teamster outside the worker runtime: using a cart, applying
+# vanilla's extra pull mass, or writing a body's kinematic flag or joint link.
+# (The parking brake's own constraint write stays where CT-002 allows it.)
+TEAMSTER_OUTSIDE_WORKERS_TOKENS = (".Interact(", "SetExtraMass")
+TEAMSTER_OUTSIDE_WORKERS_ASSIGNMENT = re.compile(r"\.(isKinematic|connectedBody)\s*[-+*/&|^]?=(?!=)")
 
 
 def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
@@ -642,14 +686,33 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
                 problems.append(f"a mass write outside Gunnar's calibration file ({TEAMSTER_WORKER_CALIBRATION_FILE})")
             if in_workers:
                 set_calls = TEAMSTER_WORKER_SET_CALL.findall(code)
-                if set_calls and len(set_calls) != len(TEAMSTER_WORKER_IDENTITY_SET.findall(code)):
-                    problems.append("a network-object write with a key other than a \"tcc.worker.\" literal")
+                if set_calls and (path.name != TEAMSTER_WORKER_IDENTITY_FILE
+                                  or len(set_calls) != len(TEAMSTER_WORKER_IDENTITY_SET.findall(code))):
+                    # The key alone is not enough: the object written has to be
+                    # Gunnar's own worker, which only the factory creates
+                    # (review R-313 m7).
+                    problems.append(
+                        "a network-object write outside "
+                        f"{TEAMSTER_WORKER_IDENTITY_FILE}, or with a key other than a \"tcc.worker.\" literal")
                 assignment = TEAMSTER_WORKER_FORBIDDEN_ASSIGNMENT.search(code)
                 if assignment:
                     problems.append(f"a forbidden write '{assignment.group(0).strip()}'")
                 for token in TEAMSTER_WORKER_FORBIDDEN_TOKENS:
                     if token in code:
                         problems.append(f"the forbidden token {token!r}")
+                if path.name != TEAMSTER_WORKER_IDENTITY_FILE:
+                    for token in TEAMSTER_WORKER_FACTORY_ONLY_TOKENS:
+                        if token in code:
+                            problems.append(
+                                f"the token {token!r}, which belongs to the prefab factory "
+                                f"({TEAMSTER_WORKER_IDENTITY_FILE}) alone")
+            else:
+                for token in TEAMSTER_OUTSIDE_WORKERS_TOKENS:
+                    if token in code:
+                        problems.append(f"the forbidden token {token!r} outside Adapters/Workers")
+                outside = TEAMSTER_OUTSIDE_WORKERS_ASSIGNMENT.search(code)
+                if outside:
+                    problems.append(f"a forbidden write '{outside.group(0).strip()}' outside Adapters/Workers")
             for problem in problems:
                 hits += 1
                 fail(
@@ -658,9 +721,10 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
                     "methods, calibrates only his own body and writes only his own identity", errors)
 
     return [
-        f"[interop] #313 worker-runtime scope audit: {worker_files} worker files; cart attach/detach only in "
-        f"Adapters/Workers, mass writes only in {TEAMSTER_WORKER_CALIBRATION_FILE}, network-object writes only "
-        f"'tcc.worker.*' keys, no teleport/pose/velocity/ownership writes ({hits} violations)",
+        f"[interop] #313 worker-runtime scope audit: {worker_files} worker files; cart attach/detach/detach-all only "
+        f"in Adapters/Workers, mass writes only in {TEAMSTER_WORKER_CALIBRATION_FILE}, network-object writes only "
+        f"'tcc.worker.*' keys in {TEAMSTER_WORKER_IDENTITY_FILE}, no teleport/pose/velocity/constraint/joint/cart-"
+        f"tuning writes, no component surgery or reflection outside the prefab factory ({hits} violations)",
     ]
 
 
