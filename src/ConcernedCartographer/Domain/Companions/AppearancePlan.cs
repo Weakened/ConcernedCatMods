@@ -132,7 +132,8 @@ internal readonly struct AppearanceChoice
 /// at runtime by the adapter — the same call the game's own customization
 /// screen makes — and this picks from it.
 ///
-/// CC-NPC-006 supplies the owner's exact customization-screen labels, so the
+/// CC-NPC-006 supplies the owner's exact customization-screen labels
+/// (<c>docs/companions/APPEARANCE_REFERENCE.md</c>), so the
 /// label is the primary key and the prefab id from Jötunn's generated 1.0.7
 /// list is a secondary one. Both are looked <i>for</i>; neither is assumed.
 /// The chain then degrades through shape, family and finally "no item at all",
