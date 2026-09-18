@@ -16,6 +16,7 @@ public sealed class Plugin : BaseUnityPlugin
     private bool _cartographerProbePending;
     private bool _compatibilityProbePending;
     private readonly Adapters.LogTailRecorder _logTail = new();
+    private Adapters.Workers.GunnarHaulingRuntime? _hauling;
 
     private void Awake()
     {
@@ -56,8 +57,15 @@ public sealed class Plugin : BaseUnityPlugin
         // reasons should not also lose every compatibility notice.
         _compatibilityProbePending = true;
 
-        // Read-only telemetry, panels, manifest, and advisory warnings only;
-        // nothing mutates carts.
+        // #313: Gunnar's opt-in hauling runtime. Always installed, so a world saved
+        // with Gunnar in it keeps his body; it touches no cart until
+        // Workers/GunnarHaulingEnabled is on and a cart is explicitly assigned.
+        _hauling = Adapters.Workers.GunnarHaulingRuntime.Install(gameObject, settings, Logger);
+    }
+
+    private void OnDestroy()
+    {
+        Adapters.Workers.GunnarHaulingRuntime.Uninstall(_hauling);
     }
 
     private void Update()

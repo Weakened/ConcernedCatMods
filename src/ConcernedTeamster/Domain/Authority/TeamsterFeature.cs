@@ -33,9 +33,16 @@ public enum TeamsterFeature
     /// <summary>Optional Cartographer route profiling (v0.5).</summary>
     RouteProfiling,
 
-    /// <summary>The explicit, reversible parking brake — the ONLY feature
-    /// that mutates cart state.</summary>
+    /// <summary>The explicit, reversible parking brake — a mutation of cart
+    /// state (the root body's constraints) under live local authority.</summary>
     ParkingBrake,
+
+    /// <summary>Gunnar's opt-in worker runtime (#313): attaches and detaches a
+    /// player-assigned cart through the cart's own attach and detach, and
+    /// moves only his own body through the vanilla motor. A mutation under
+    /// live local authority, additionally gated by the work authority rule
+    /// (docs/settlement/cart-and-collection/DECISIONS.md D3, D4).</summary>
+    GunnarHauling,
 }
 
 /// <summary>What a feature does to the cart. Only <see cref="Mutation"/>
