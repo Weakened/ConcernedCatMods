@@ -18,6 +18,22 @@ BepInEx/config/ConcernedCatMods/ConcernedCartographer/
 
 Exact path depends on the active mod-manager profile.
 
+### Markers the mod writes for itself
+
+Two files in that folder are not data a person edits: `author-id.dat`, the
+profile's generated author identity, and `onboarding-shown.dat`, the marker that
+the first-run tip has been shown.
+
+They end in `.dat` rather than `.txt` because a mod manager's configuration
+editor offered `author-id.txt` for editing (#304), and that file is a generated
+GUID: editing or deleting it changes who the atlas believes wrote this profile's
+entries, which is what the non-owner-delete policy is keyed on.
+
+A `.txt` written by a build before 1.2.2 is adopted once on startup — copied to
+the `.dat` name, then removed — so the identity does not change across the
+upgrade. Adoption is best effort: if it fails, a fresh identity is generated and
+only the audit labels differ.
+
 ## Road atlas
 
 File:

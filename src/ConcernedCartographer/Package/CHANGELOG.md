@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.2 - Two files stop pretending to be settings
+
+Fixed
+
+- **The mod's own bookkeeping no longer shows up in your config editor.** Gale
+  listed `author-id.txt` beside the real settings file, as though it were
+  something to edit (#304). It is not: it is a random identity generated once
+  per profile, and changing it changes who your atlas thinks drew your own
+  roads and pins. It, and the marker that remembers the first-run tip, are now
+  `author-id.dat` and `onboarding-shown.dat`. Your existing identity is carried
+  across on the first start and the old file is removed, so nothing you have
+  drawn changes hands.
+
 ## 1.2.1 - Hulgi stops walking into the same wall
 
 Fixed

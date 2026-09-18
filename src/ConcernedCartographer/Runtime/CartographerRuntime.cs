@@ -2011,8 +2011,13 @@ internal sealed class CartographerRuntime : IDisposable
         _onboardingChecked = true;
         try
         {
-            string path = System.IO.Path.Combine(
-                BepInEx.Paths.ConfigPath, "ConcernedCatMods", "ConcernedCartographer", "onboarding-shown.txt");
+            // ".dat", and an older build's ".txt" adopted once: a config editor
+            // listed the marker among the files a player may edit (#304), and
+            // this one is written and read by the mod alone.
+            string path = Storage.MarkerFile.Adopt(
+                Persistence.AuthorIdentity.Directory,
+                "onboarding-shown" + Storage.MarkerFile.Extension,
+                "onboarding-shown.txt");
             if (System.IO.File.Exists(path))
             {
                 return;
