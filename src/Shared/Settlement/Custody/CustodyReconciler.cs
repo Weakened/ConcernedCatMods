@@ -216,7 +216,11 @@ internal static class CustodyReconciler
         var places = new List<PlaceItem>();
         var seen = new HashSet<PlaceItem>();
 
-        foreach (Holding holding in ledger.Holdings)
+        // Everything the record holds now, and everything a running order has
+        // ever held: a place the record has emptied is still worth looking at,
+        // or "more than the record expects" could never be seen there at all
+        // (review R2, m1).
+        foreach (Holding holding in Concat(ledger.Holdings, ledger.EverHeld))
         {
             if (IsObservable(holding.Location.Place) && seen.Add(new PlaceItem(holding.Location, holding.Item)))
             {
@@ -303,7 +307,7 @@ internal static class CustodyReconciler
     private static IReadOnlyList<OrderId> HoldersAt(MaterialCustodyLedger ledger, PlaceItem place)
     {
         var orders = new List<OrderId>();
-        foreach (Holding holding in ledger.Holdings)
+        foreach (Holding holding in Concat(ledger.Holdings, ledger.EverHeld))
         {
             if (holding.Location.Equals(place.Location) && holding.Item.Equals(place.Item) && !orders.Contains(holding.Order))
             {
@@ -312,6 +316,19 @@ internal static class CustodyReconciler
         }
 
         return orders;
+    }
+
+    private static IEnumerable<Holding> Concat(IReadOnlyList<Holding> first, IReadOnlyList<Holding> second)
+    {
+        foreach (Holding holding in first)
+        {
+            yield return holding;
+        }
+
+        foreach (Holding holding in second)
+        {
+            yield return holding;
+        }
     }
 
     private static ReconciliationFinding PlaceFinding(PlaceItem place, IReadOnlyList<OrderId> holders, int expected, int? actual)

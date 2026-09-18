@@ -311,7 +311,7 @@ inventory.
 | `cf_settle resolve <request> mine\|his` | a person's answer about an unsettled tool handover: `mine` means you have it, `his` means he does | settlement authority |
 | `cf_settle give axe\|hammer` | a tool handover (§5). Hold the tool and stand within 4 m of him | work authority; a writable record |
 | `cf_settle takeback [axe\|hammer]` | a return of every tool the record says he holds (of that kind) | as above |
-| `cf_settle release` | hands you everything the record says he still carries for orders that have **ended**, as ordinary transfers. Refused while any order is still open, so nothing is taken from under a running job | as above |
+| `cf_settle release` | hands you everything the record says he still carries for orders that have **ended**, and for an order **holding for you**, as ordinary transfers. Each hand-over is written to the record as it goes, which is the only thing that ends a hold order (review R2, M1). Refused while any other order is still open, so nothing is taken from under a running job | as above |
 
 - **Settlement authority:** `[Settlement] SettlementRuntimeEnabled = true`, and this peer is the host.
 - **Work authority:** additionally a loaded world, not a dedicated server, and **nobody else connected**.
@@ -416,6 +416,9 @@ body, with everything in it** (D9). So before removing the mod, in the world he 
 2. **Take your tools back:** stand next to him and run `cf_settle takeback`.
 3. **Take the material back:** standing next to him, `cf_settle release`. It hands you everything the record says he
    still carries for those ended orders. If your inventory fills up, make room and run it again.
+
+   After a reload the order is taken up again from the record, stopped (`COLLECTION.md` §3.1), so step 1 ends it and
+   this step empties him. Neither needs the order's work area or chest to be rebound.
 4. **Check:**
    - `cf_settle status` shows no `tool …` lines, carried and in cart are 0 for every order, and no repairs are waiting;
    - `cf_settle reconcile` says everything matches.
@@ -451,9 +454,10 @@ record then writes material off; tools stay recorded as held (§5).
 | L7 | P0, then a known save. Run `cf_settle give axe`, kill, and load. Then make a known save with him holding the axe, run `cf_settle takeback axe`, kill, and load. | First: you have the axe, status lists no tool, and `takeback` says he is not holding any tool you gave him. Second: he holds it again, status lists it as held, and `takeback` returns it. |
 | L8 | Make a known save. Run P and let him work for at least two minutes after that save, so the loaded save cannot be mistaken for the last marker's. From a second PowerShell window, lock the journal: `$l = [IO.File]::Open('<journal path>', 'Open', 'ReadWrite', 'None')`. Wait about a minute, then log out. Release the lock (`$l.Close()`) and load the world. | While locked nothing new moves, and at logout the log says `The world was saved, but the settlement record could not note it…`. After the load, the log reports M ≥ 1 changes that could not be placed, and the order is `NeedsAttention (TransferUncertain)`. `cf_settle status` lists a repair line per uncertain pickup and take, each with its `cf_settle resolve …` answer, and `cf_settle reconcile` describes the takes against his actual inventory. Answer each one as the inventories show (his stones arrived: `destination`; a pickup: `source`). Afterwards `cf_settle reconcile` has no transfer finding left. |
 | L9 | He carries N and holds the axe. Let him die, for example to a hostile creature; this build has no command for it. | The log says `The worker died at (x, y, z)…`, and N Stone and the axe lie there with no other loot. Status shows lost N and the axe as unsettled. Pick the axe up and run `cf_settle resolve give-… mine`, which answers `Recorded: you have it.` |
-| L10 | Run `cf_worker despawn` three times: while an order runs; after `cf_collect cancel` while he still carries or holds a tool; and after `cf_settle takeback` and `cf_settle release`. | `Refused: Thorstein is working…`, then `Refused: he is carrying…`, then `Worker despawned.` |
+| L10 | Run `cf_worker despawn` three times: while an order runs; after `cf_collect cancel` while he still carries or holds a tool; and after `cf_settle takeback` and `cf_settle release`. | `Refused: Thorstein is working…`, then `Refused: he is carrying…` (and he has not moved: the refusal is decided before his goal is cleared), then `Worker despawned.` |
 | L11 | Follow §13 in the disposable world. Remove the DLL, load the world, restore the DLL, and load again. | Without the mod, the world loads cleanly. With it back, status shows no holdings and `cf_worker spawn` works. |
 | L12 | Negative, disposable world only: remove the DLL while he carries N, load, restore the DLL, load. Then run `cf_worker spawn`, `cf_settle reconcile` and `cf_settle resolve <order> lost`. | At load the order is `NeedsAttention (WorkerBodyLost)`. After the spawn, reconcile shows below expected, and `lost` records N. Tools stay recorded as held (§5). |
+| L13 | Run `cf_collect start 5 0 hold`; when `cf_settle status` shows carried ≥ 1, stand next to him and run `cf_settle release`. | He hands the stone over, the record notes the hand-over, and the order reaches `Completed` without being cancelled. `cf_settle reconcile` says everything matches. |
 
 **Kill points and evidence.**
 - **Not reachable live:** a kill between an intent and its result, or between an add and its remove. Nobody can time

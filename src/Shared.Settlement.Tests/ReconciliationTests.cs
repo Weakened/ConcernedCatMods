@@ -191,6 +191,83 @@ public sealed class ReconciliationTests : IDisposable
         Assert.Equal(RowStanding.Record, StandingOf(report, journal, completion));
     }
 
+    [Theory]
+    [InlineData(59.0, true)]
+    [InlineData(61.0, false)]
+    public void TheSnapshotToleranceIsWhatDecidesVoidedOrAmbiguous(double gap, bool voided)
+    {
+        // The save thread reads the net time after writing the chunks, so a
+        // loaded time a little after the marker IS that marker's save, and rows
+        // after it were rolled back. Further out, the loaded world is a later
+        // save nobody could mark, and a row at or before it may be in it. The
+        // difference is silently discarding a row versus asking a person about
+        // it, and until now only 0.3 s and 4940 s were pinned (review R2, M4).
+        SettlementJournal journal = Accepted();
+        Marker(journal, 1, 60, First);
+        JournalEntry row = Effect(journal, 60 + (gap / 2), First, 1);
+
+        SaveTimelineReport report = SaveTimeline.Classify(journal.Entries, new WorldLoad(60 + gap, Second));
+
+        Assert.Equal(60.0, SaveTimeline.SnapshotToleranceSeconds);
+        Assert.Equal(
+            voided ? RowStanding.Voided : RowStanding.Ambiguous,
+            StandingOf(report, journal, row));
+    }
+
+    [Fact]
+    public void AnOrderReachingCompletedIsAWorldEffectAndIsVoidedWithTheDeliveryThatMadeIt()
+    {
+        // Completion is concluded from delivery credit, which the world holds:
+        // a completion the loaded save does not contain must not stand, or an
+        // order would read as finished with its material back on the ground.
+        SettlementJournal journal = Accepted();
+        Marker(journal, 1, 60, First);
+        JournalEntry completion = journal.AppendCustody(
+            new CollectionTransitionRow(Order, CollectionOrderState.Delivering, CollectionOrderState.Completed, CollectionAttentionReason.Unspecified),
+            70, First);
+        JournalEntry paused = journal.AppendCustody(
+            new CollectionTransitionRow(Order, CollectionOrderState.Collecting, CollectionOrderState.Paused, CollectionAttentionReason.PausedByPlayer),
+            71, First);
+
+        SaveTimelineReport report = SaveTimeline.Classify(journal.Entries, new WorldLoad(60, Second));
+
+        Assert.Equal(RowStanding.Voided, StandingOf(report, journal, completion));
+        Assert.Equal(RowStanding.Record, StandingOf(report, journal, paused));
+    }
+
+    [Fact]
+    public void MaterialAtAPlaceTheRecordHasEmptiedIsStillSeen()
+    {
+        // Review R2, m1: only non-zero holdings were ever observed, so once an
+        // order delivered everything it carried, nothing looked at the worker
+        // again -- and "everything matches" was said about a place nobody had
+        // counted. A running order's places are watched even when empty.
+        var world = new FakeWorld();
+        var disk = new FaultyDisk(world, new JournalStore(_root));
+        FakeInventory worker = world.Inventory("worker");
+        FakeInventory chest = world.Inventory("chest");
+        CustodyProcess process = CustodyProcess.Start(world, disk);
+        Gather(process, worker, 10);
+        Assert.Equal(
+            TransferOutcome.Completed,
+            process.Core.Executor.Execute(Intent(process.Core, WorkerAt(), ChestAt(Epoch), 10), worker, chest).Outcome);
+        Assert.Equal(0, process.Ledger.HoldingAt(Order, WorkerAt(), Stone));
+
+        Assert.True(CustodyReconciler.Reconcile(process.Ledger, new Observer(worker), false).AllMatch);
+
+        // Somebody puts stone in his inventory. It belongs to no order, and the
+        // record must say so rather than quietly crediting or ignoring it.
+        worker.Raw(Stone, 4);
+
+        ReconciliationReport report = CustodyReconciler.Reconcile(process.Ledger, new Observer(worker), false);
+        ReconciliationFinding extra = Assert.Single(
+            report.Findings, finding => finding.Kind == ReconciliationFindingKind.AboveExpected);
+        Assert.Equal(0, extra.Expected);
+        Assert.Equal(4, extra.Actual);
+        Assert.Contains("None of the extra is credited", extra.Sentence);
+        Assert.False(report.AllMatch);
+    }
+
     [Fact]
     public void RowsWrittenBeforeSchemaThreeAreNeverVoided()
     {

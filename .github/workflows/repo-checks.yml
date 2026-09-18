@@ -39,6 +39,12 @@ jobs:
       - name: Run pure-domain unit tests (shared settlement, workers and interop)
         run: dotnet test src/Shared.Settlement.Tests/Shared.Settlement.Tests.csproj --nologo
 
+      # CF-NPC-005: the Foreman adapters are linked into this project and
+      # compiled against a stubbed Valheim surface, so the layer that touches
+      # the game is covered here without the game being present.
+      - name: Run adapter unit tests (Concerned Foreman)
+        run: dotnet test src/ConcernedForeman.Tests/ConcernedForeman.Tests.csproj --nologo
+
       - name: Explain build boundary
         run: |
           echo "Game-linked C# builds are intentionally local or self-hosted."
