@@ -22,8 +22,8 @@ namespace TheConcernedCat.ConcernedForeman;
 ///
 /// The product's promise is causal building diagnostics, and that half is
 /// read-only and client-safe. This build carries two things instead: the first
-/// slice of the <i>other</i> half Ã¢â‚¬â€ the opt-in settlement runtime from #273,
-/// which touches no world state until a person turns it on Ã¢â‚¬â€ and ladder
+/// slice of the <i>other</i> half — the opt-in settlement runtime from #273,
+/// which touches no world state until a person turns it on — and ladder
 /// climbing (#326, #328).
 ///
 /// Ladder climbing is the one thing here that patches the game at load, and
@@ -103,7 +103,7 @@ public sealed class Plugin : BaseUnityPlugin
             (settings.SettlementRuntimeEnabled.Value ? "ENABLED" : "off (the default)") +
             ". Building diagnostics do not require it.");
 
-        // Through the game's own command table, not JÃƒÂ¶tunn's manager: JÃƒÂ¶tunn 2.29.2 looks for a
+        // Through the game's own command table, not Jötunn's manager: Jötunn 2.29.2 looks for a
         // Terminal.ConsoleCommand constructor Valheim 1.0.12 no longer has, so every command
         // silently did not exist (#307). What the console actually accepted is logged.
         Jotunn.Entities.ConsoleCommand[] commands =
@@ -177,7 +177,7 @@ public sealed class Plugin : BaseUnityPlugin
     /// ladders keep teleporting, and the reason is logged once.
     ///
     /// With `Ladders/Enabled = false` at startup <b>no patch is installed at
-    /// all</b> Ã¢â‚¬â€ not the motor's two, not the interaction's one Ã¢â‚¬â€ and the game
+    /// all</b> — not the motor's two, not the interaction's one — and the game
     /// behaves as if Concerned Foreman were not here.</summary>
     private void InstallLadders()
     {
