@@ -94,6 +94,14 @@ Each mod is an independently versioned product.
 issue keys `CF-###` (diagnostics) and `CF-SET-###` (settlement runtime) /
 profiles `TCF-Clean/Dev/Compat`.
 
+**Concerned Steward** (added by CS-NPC-001) follows every row of the table above:
+`Concerned Steward` / `src/ConcernedSteward` / `ConcernedSteward.csproj` /
+`ConcernedSteward.Tests` / `TheConcernedCat.ConcernedSteward` /
+`TheConcernedCat.ConcernedSteward.dll` /
+`com.theconcernedcat.valheim.concernedsteward` / `TheConcernedCat` /
+`ConcernedSteward` / `docs/mods/concerned-steward` / `concerned-steward/v0.1.0` /
+issue key `CS-###` / profiles `TCS-Clean/Dev/Compat`.
+
 Each product is fully independent: its own DLL, plugin GUID, package, changelog, versions, tags, and release lifecycle. Products never reference each other at compile time.
 
 Do not use `ConcernedCat` and `TheConcernedCat` interchangeably in identifiers. Use:
@@ -127,6 +135,15 @@ holds. Products still never reference each other.
 | Visibility | every type `internal` | `internal sealed class CompanionRegistry` |
 | Adoption | one `Compile` item in the consuming `.csproj` | `<Compile Include="..\Shared\Companions\**\*.cs" LinkBase="Companions" />` |
 
+A product may adopt **part** of an area instead of the whole of it, as one
+`Compile` item per subfolder, when the rest would be dead weight in its DLL —
+Concerned Steward takes four subfolders of `Settlement` rather than the
+collection-order machinery it does not use. A partial adoption must come with a
+test that asserts the chosen subset is **closed**: nothing inside it reaches
+out. Without that test the next edit to the area breaks a product's build for a
+reason nobody can see from the area itself, which is precisely what compiling
+the whole area protects against.
+
 Rules for anything under `src/Shared`:
 
 - No Unity, BepInEx, or Jötunn types. Shared code must compile into a test
@@ -141,9 +158,9 @@ Existing areas:
 | Area | Purpose | Consumers |
 |---|---|---|
 | `src/Shared/Companions` | Concerned Companions: identity, quest state, sidecar persistence, unlock decisions, placement planning, dialogue rotation | `ConcernedCartographer` |
-| `src/Shared/Settlement` | Settlement runtime: identity, work orders, collection orders, custody ledger and transfers, replayable journal, worker movement planning | `ConcernedForeman` |
-| `src/Shared/Workers` | Worker identity, work authority, the single actor-mode owner, bounded retries and deadlines | `ConcernedForeman`, `ConcernedTeamster` |
-| `src/Shared/Interop` | Cross-product runtime capability contracts: a BCL-only capability map and versioned contracts such as `concernedcat.haul/1` | `ConcernedForeman`, `ConcernedTeamster` |
+| `src/Shared/Settlement` | Settlement runtime: identity, work orders, collection orders, custody ledger and transfers, replayable journal, worker movement planning | `ConcernedForeman`, `ConcernedSteward` (partial: `Identity`, `Worker`, `Designations`, `Storage`) |
+| `src/Shared/Workers` | Worker identity, work authority, the single actor-mode owner, bounded retries and deadlines | `ConcernedForeman`, `ConcernedTeamster`, `ConcernedSteward` |
+| `src/Shared/Interop` | Cross-product runtime capability contracts: a BCL-only capability map and versioned contracts such as `concernedcat.haul/1` and `concernedcat.presence/1` | `ConcernedForeman`, `ConcernedTeamster`, `ConcernedSteward`, `ConcernedCartographer` (presence only) |
 | `src/Shared/Ladders` | Ladder geometry, mounting, climb motion, exits and climb safety, game-free (`docs/mods/concerned-foreman/LADDERS.md`) | `ConcernedForeman` |
 
 ## Git
