@@ -1,6 +1,6 @@
 # Cart pulling and resource collection: contracts
 
-Contract revision **C2** (C1 frozen 2026-09-17 before dependent coding; C2 is additive, see §10). The compilable half lives in:
+Contract revision **C4** (C1 frozen 2026-09-17 before dependent coding; C2 is additive; C3 and C4 are documentation only, see §10). The compilable half lives in:
 
 | Area | Source | Compiled into | Tests |
 |---|---|---|---|
@@ -11,7 +11,7 @@ Contract revision **C2** (C1 frozen 2026-09-17 before dependent coding; C2 is ad
 
 **Change control.** A change to a name, value, transition or semantic in this document or in those files is a contract
 revision:
-- bump **C1 → C2** here;
+- bump the revision here;
 - add a row to §10;
 - ask the lead, who owns contract files.
 
@@ -98,9 +98,13 @@ written by agent A for refusals and agent E for presentation. None is ever `Unsp
 - **`ICartRoutePlanner.Plan(CartRouteRequest, now)`** returns a `CartRoutePlan` or a refused verdict. It never throws
   for game reasons.
   - **Suitable:** at least two waypoints; steepest grade, narrowest clearance and a `StopPoint` measured.
-  - **Checks:** footprint width plus side clearance, grade (`MaxGradeRatio`), footing, water, supported crossings and
-    door permission and width. For doors it reuses the shared `RouteDoors` and `DoorAccessBook` semantics and adapts
-    them to cart width.
+  - **Checks:** footprint width plus side clearance, grade (`MaxGradeRatio`), footing, water and supported crossings.
+  - **Doors (C3):** a cart route **never passes a doorway** in this slice (`ForbiddenDoor`), for three reasons:
+    - a door opening (1.39–1.68 m) is narrower than the 1.72 m vanilla cart;
+    - Teamster cannot read the companions' door permissions;
+    - opening a door is an RPC Teamster may not send.
+  - **`CartRouteRequest.From` (C3)** is the **cart's** position. Once hitched, the planner is asked with Gunnar's
+    body position as well, so the first turn uses the cart's real heading.
   - **Budgets:** stays within `PathQueriesPerMinute` and `ClearanceProbesPerPlan`; `BudgetExhausted` when exceeded.
 - **`ICartRoutePlanner.NextGoal(plan, puller, cart)`** returns the next `SteeringGoal`, or null when the plan is done
   or no longer valid from here.
@@ -133,9 +137,11 @@ written by agent A for refusals and agent E for presentation. None is ever `Unsp
     decided from the cart's up axis, ownership and the local player's joint state;
   - not owner: `OwnershipLost`;
   - brake engaged or `FreezeAll`: `BrakeEngaged`, then detach;
-  - authority verdict not Granted: `AuthorityLost` or `OtherPeersConnected`, then detach.
-- **Detach first** on every teardown path: planned stop, cancel, world exit, logout, authority loss, player takeover,
-  plugin destroy, body retirement.
+  - authority verdict not Granted: `AuthorityLost` or `OtherPeersConnected`, then the lost-authority stop (§2.7).
+- **Detach first** on every teardown path: planned stop, cancel, world exit, logout, player takeover, plugin destroy,
+  body retirement. A body that dies, unloads or turns out to be a duplicate while hitched is also a teardown path; it
+  detaches in the first frame the runtime sees it, and before the body is unbound. Lost authority is not a teardown
+  (§2.7).
 - **Capability probe at startup:** `AttachTo`, `Detach`, `m_attachJoin`, `m_bodies`, `m_attachPoint`,
   `m_attachOffset`, `m_detachDistance`, `m_breakForce`, `m_playerExtraPullMass`, `InUse()`, `IsAttached()`. Anything
   missing means hauling is unavailable (`HitchRefusal.SeamUnavailable`), logged once, with telemetry and brake
@@ -156,6 +162,23 @@ written by agent A for refusals and agent E for presentation. None is ever `Unsp
 - **Mass:** calibrated per D5 at spawn and re-checked before each hitch.
 - **Re-binding:** by key on world load. A second body with the same key means NeedsAttention (`WorkerBodyDuplicated`
   in presentation); neither is destroyed automatically.
+
+### 2.7 Lost authority while hitched (C4)
+
+The work authority verdict can stop being Granted while Gunnar holds a cart that is still here: a peer connects
+(`OtherPeersConnected`), or authority is lost (`AuthorityLost`). CART-06 forbids releasing a loaded cart into a roll,
+so this is a stop, not an immediate release:
+1. **At once:** Gunnar stops moving. The motor stops and no leg is accepted. An Unloading hold ends, with a new
+   revision, so the consumer's hold check refuses any further transfer. The haul rests in Paused
+   (`OtherPeersConnected`) or NeedsAttention (`AuthorityLost`), with the joint still held.
+2. **Once the cart is still** (`StillForSeconds`), upright, and on ground within `MaxParkingGradeRatio`, Gunnar lets
+   go. The phase and reason stay the same, and the lease follows D6.
+3. **Otherwise he keeps holding it, motionless.** Status and the log say he is holding the cart because it would roll
+   there. Nothing resumes or re-hitches on its own, even when authority returns. The hold ends when:
+   - the player takes the cart (vanilla's Use detaches it: `PlayerTookOver`);
+   - the player gives a detach or release command, which works without authority because it only gives up control;
+   - the player engages the parking brake (`BrakeEngaged`, then detach);
+   - a teardown path from §2.5 runs.
 
 ## 3. `concernedcat.haul/1` capability (`TheConcernedCat.Interop.Haul`)
 
@@ -189,8 +212,8 @@ written by agent A for refusals and agent E for presentation. None is ever `Unsp
 | `describeLease` | `providerEpoch` | `leaseId`, `cartSessionKey`, `cartPosition`, `cartStill`, `cartUpright`, `attached`, `phase`, `revision` | Returns `Rejected/NoLease` when none is active. The consumer resolves the cart's container in its own process from `cartSessionKey` for loading and unloading, within this epoch only. |
 | `requestHaul` | `providerEpoch`, `requestId`, `expectedRevision`, `orderId`, `haulId`, `leaseId`, `purpose` (`HaulLegPurpose`), `target` (point), `arrivalRadius` | `haulId`, `phase`, `revision` | Starts a leg to `target`. Legal when no haul is active (then Ready → Approaching/Hitching/Pulling as needed), or when this `haulId`'s haul is in Ready or Waiting. Otherwise `Rejected/HaulBusy`. One haul per Gunnar. The provider plans with `ICartRoutePlanner`; an unsuitable route answers `Rejected` with the route reason and does not move. |
 | `getHaul` | `providerEpoch`, `haulId` | `phase`, `reason` (attention), `revision`, `arrived`, `attached`, `cartPosition`, `workerPosition`, `cartStill` | `arrived` is true once the leg's final goal is reached and the phase is Waiting with `cartStill`. Polling is no faster than `HaulLimits.PollIntervalSeconds`. |
-| `acknowledgeWait` | `providerEpoch`, `requestId`, `expectedRevision`, `haulId`, `activity` (`HaulWaitActivity`) | `phase`, `revision` | `Transferring` is legal only in Waiting with the cart still (→ Unloading; the cart must not move). `Done` is legal only in Unloading (→ Waiting). A transfer never starts without an Accepted `Transferring` at the current revision. |
-| `cancelHaul` | `providerEpoch`, `requestId`, `haulId`, `disposition` (`HaulCancelDisposition`) | `phase`, `revision` | Stops safely. `StopAndWait` ends in Waiting when hitched; `DetachAndPark` ends in Ready after Detaching on suitable ground, or NeedsAttention/`UnsafeParking`. Never refused while Unloading, but it completes only after the consumer's `Done` (the consumer must first finish or abandon its transfer through custody). |
+| `acknowledgeWait` | `providerEpoch`, `requestId`, `expectedRevision`, `haulId`, `activity` (`HaulWaitActivity`) | `phase`, `revision` | `Transferring` is legal only in Waiting with the cart still (→ Unloading; the cart must not move). `Done` is legal only in Unloading (→ Waiting). A transfer never starts without an Accepted `Transferring` at the current revision. **Hold liveness (C4):** while Unloading, every `getHaul`, `acknowledgeWait` or `cancelHaul` naming the haul keeps the hold alive, and the consumer calls `getHaul` at least every third of `RendezvousTimeoutSeconds` while it holds. After `RendezvousTimeoutSeconds` with no such call, the provider ends the hold itself: Unloading → NeedsAttention `RendezvousTimedOut`, new revision. The consumer's hold check then refuses further transfers, and it reconciles the cart (§5.5). |
+| `cancelHaul` | `providerEpoch`, `requestId`, `haulId`, `disposition` (`HaulCancelDisposition`) | `phase`, `revision` | Stops safely. `StopAndWait` ends in Waiting when a moving haul is hitched; on a haul that is already stopped (Ready, Waiting, Paused or NeedsAttention) it is Accepted with no transition and no pending intent (C4). `DetachAndPark` ends in Ready after Detaching on suitable ground, or NeedsAttention/`UnsafeParking`. Never refused while Unloading, but it completes only after the consumer's `Done` (the consumer must first finish or abandon its transfer through custody) or when the hold ends by the liveness deadline, whichever comes first. |
 
 ### 3.3 Provider-ended control
 
@@ -296,6 +319,15 @@ The executor (`ITransferExecutor`, agent D) does, **in this order**:
   a cart it belongs to); ward and privacy access; and reach.
 - A non-owner write is silently discarded by the game, so ownership is load-bearing.
 
+**Carts in use (C3, ratified).** Vanilla `Vagon.InUse()` is true while a cart is attached. The **cart** custody port
+may treat an attached cart as not in use only when **all** of these hold:
+- the joint's connected body is **not** the local player's body;
+- nobody has the cart's container open;
+- the cooperative caller holds an **Accepted `acknowledgeWait Transferring` at the current haul revision**, which
+  agent E enforces before every cart transfer.
+
+A delivery chest that is itself a cart's container stays strict: `m_wagon.InUse()` refuses.
+
 **Why add before remove.** A crash between steps 3 and 4 leaves a duplicate, not a loss. Reconciliation detects it
 from the persisted intent and actual counts, and a person resolves it. The reverse order would lose real items with no
 evidence left.
@@ -352,6 +384,10 @@ Replay stays idempotent and never resolves anything itself. Truncation and seque
   replayed.
 - When net time did not advance, or no marker matches, the result is ambiguous: NeedsAttention `ReconciliationMismatch`
   with the evidence kept.
+- **Load restatement (C3, ratified from agent D).** At load, when rows follow the matched save or the loaded save is
+  older than the record's top, the runtime appends `WorldSaveMarker{generation = the matched generation, time = the
+  loaded world time}`. A marker whose generation already exists in the chain is read as a **load**, not a save.
+  Without it, a crashed session's voided rows would read as confirmed after the next session saves.
 
 After voiding, for each non-terminal order, the ledger's expected counts are compared with the **actual** inventories:
 - Worker: its persisted inventory, excluding tool holdings.
@@ -457,6 +493,9 @@ player drops, graves, chests, piles, mine rocks, trees and logs, bushes and sapl
 | Hitch | joint verified | `MaxHitchAttempts`, with backoff | Detach | lease, brake, player joint |
 | Pull leg | final goal reached, cart still | stall: `MaxRecoveryAttempts`, then NeedsAttention | Stopping → Waiting or Detaching | any §3.3 event |
 | Rendezvous wait | both present and cart still | `RendezvousTimeoutSeconds` → NeedsAttention `RendezvousTimedOut` | cancel haul `StopAndWait` | provider loss |
+| Unload hold (C4) | the consumer's `Done` | consumer silent for `RendezvousTimeoutSeconds` → NeedsAttention `RendezvousTimedOut` | cancel haul: completes after `Done` or at the deadline | any §3.3 event; lost authority (§2.7) |
+| Detach (C4) | joint gone, and the cart still through the executor's settle window | the settle is checked every frame together with the body and lease checks, so it cannot stall when the worker tick stops; a roll after release → NeedsAttention `UnsafeParking` | none: a started detach completes | body or cart loss, reported with that reason |
+| Lost-authority hold (C4) | the cart is still on parkable ground, then released | none: Gunnar holds, motionless, until the player acts (§2.7) | player takeover, a detach or release command, the brake | a teardown path (§2.5) |
 | Deliver to container | receipt | destination full → Paused `DestinationFull` (materials retained) | stop | container stale → `DestinationStale` |
 
 ## 8. Persistence summary
@@ -479,9 +518,26 @@ player drops, graves, chests, piles, mine rocks, trees and logs, bushes and sapl
 
 ## 10. Revision log
 
-| Rev | Date | Change |
-|---|---|---|
-| C2 | 2026-09-17 | Additive, from agents A and C:
+### C4 (2026-09-17): documentation only
+
+From agent E and the independent review of agent A (`R-313`):
+- **§2.5 and §2.7:** lost authority stops Gunnar at once, but he lets go of the cart only on parkable ground.
+  Otherwise he holds it, motionless, until the player acts. CART-06 wins over the old "then detach", and
+  `DECISIONS.md` D4 is amended to match.
+- **§2.5:** a body that dies, unloads or turns out to be a duplicate while hitched is a teardown path.
+- **§3.2 and §7:** an unload hold ends when the consumer is silent for `RendezvousTimeoutSeconds`.
+- **§3.2:** `StopAndWait` on a haul that is already stopped is Accepted with no transition.
+- **§7:** rows for the unload hold, the detach and the lost-authority hold.
+
+### C3 (2026-09-17): documentation only
+
+- **§2.4:** no doorway for carts in this slice; `CartRouteRequest.From` is the cart's position (from agent B).
+- **§5.2:** the cart in-use exception, ratified with the acknowledged-transfer condition (from agent D).
+- **§5.5:** the load-restatement marker, ratified (from agent D).
+
+### C2 (2026-09-17): additive
+
+From agents A and C:
 - `CollectionAttentionReason.PausedByPlayer`;
 - `HaulAttentionReason.WorkerBodyDuplicated` and `PausedByPlayer`, with `HaulWireReason.AuthorityLost`,
   `WorkerBodyDuplicated` and `PausedByPlayer`, so every attention reason has a wire twin (pinned by a test);
@@ -491,5 +547,9 @@ player drops, graves, chests, piles, mine rocks, trees and logs, bushes and sapl
   and the post-reload rebind rule (§4).
 
 The game updated to Valheim 1.0.14 the same day. A decompile diff against the audited build found the seam types
-unchanged (`EVIDENCE.md`). |
-| C1 | 2026-09-17 | Initial freeze: Workers, Interop haul/1, Teamster haul domain, collection orders, custody transfers and ports, journal kind names, persistence contract. §6 predicate added from the pickup audit before dispatch. |
+unchanged (`EVIDENCE.md`).
+
+### C1 (2026-09-17): initial freeze
+
+Workers, Interop haul/1, the Teamster haul domain, collection orders, custody transfers and ports, journal kind names
+and the persistence contract. The §6 predicate was added from the pickup audit before dispatch.

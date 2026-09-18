@@ -24,6 +24,9 @@
          that links shared source (docs/settlement/cart-and-collection). -->
     <Compile Include="..\Shared\Workers\**\*.cs" LinkBase="Workers" />
     <Compile Include="..\Shared\Interop\**\*.cs" LinkBase="Interop" />
+    <!-- CF-LAD-001: the ladder domain is game-free for the same reason, and
+         Foreman adopts it with one line of its own. -->
+    <Compile Include="..\Shared\Ladders\**\*.cs" LinkBase="Ladders" />
   </ItemGroup>
 
   <ItemGroup>
