@@ -75,12 +75,51 @@ The primary deliverable makes existing ladder pieces climbable instead of telepo
 The vanilla `Ladder.Interact` teleport stays available behind a setting, because some players use it deliberately;
 the default is to climb (`Ladders/UseTeleport = false`).
 
+**Which pieces** (CF-LAD-004, #328). Two rules, in order, in
+`src/ConcernedForeman/Domain/Ladders/LadderAdmission.cs`:
+
+1. a **prefab name the feature knows** is admitted without measuring — the two buildable pieces, as **data** in one
+   string array, so adding one after an audit is a string, and a name that is not in the loaded game simply never
+   matches and can never throw;
+2. anything else carrying a `Ladder` is admitted only if it **measures like a ladder**: tall enough to be worth
+   climbing, narrow enough, thin enough, and standing up. A hammer-placed piece is not asked to prove it is thin as
+   well, because a player put it there to go up.
+
+The loaded game is the authority: every measurement comes off the object standing in the world, and a verdict is
+reached once per prefab and remembered by name. The thresholds err towards admitting — a refused ladder still
+teleports, which is vanilla and therefore safe, but it is also a promise broken. `cf_ladders here` prints the numbers
+that should tighten them.
+
+**The interaction** is one Harmony prefix on `Ladder.Interact`, in
+`src/ConcernedForeman/Runtime/Ladders/LadderInteraction.cs`, under its own Harmony id. It calls
+`ClimbController.TryMountByUse` and suppresses the teleport only when that returns true; it never duplicates or wraps
+CF-LAD-002's two motor patches. A climber's Use never teleports them. The ladder's hover text is vanilla's.
+
 ### L3. A Foreman ladder piece only if the game's piece cannot stack
 
 Whether `wood_stepladder` snaps end-to-end into tall runs is a fact to be **observed in game** (G2). If it does, no new
 piece is built and §3 of the brief is met by the vanilla piece. If it does not, the follow-up is a Foreman piece
 cloned from the vanilla prefab with added snap points — and that decision is the **owner's**, because a custom piece
 makes a world depend on the mod: uninstalling would delete those ladders from the world. It will not be done silently.
+
+**How it will be observed** (CF-LAD-004, #328). The full script, with what to capture at each step, is in the handoff
+folder: `2026-09-17-foreman-ladders/L-D/HANDOFF.md` §"Stacking, observed not assumed". In summary, in a disposable
+world, with `Ladders/Enabled = false` so the answer is about the game and not about this mod:
+
+1. `cf_ladders list` — every prefab carrying a `Ladder`, its size, and vanilla's teleport target.
+2. Place one `wood_stepladder` against a wall; `cf_ladders snaps` — does the piece have snap points at its foot and
+   head at all? A piece with none cannot stack, and the rest of the run is already answered.
+3. Bring a second ghost to the head of the first: does it turn green, and does it snap, and at what spacing?
+4. The invalid cases — no support, inside the first piece, facing the wrong way — must still show a red ghost and
+   refuse. A feature that made an illegal placement legal would be a defect.
+5. Hammer rotation (`Q`/`E` or the mouse wheel) must behave exactly as it does anywhere else.
+6. Repeat to five pieces, then measure the whole run with `cf_ladders here 24`.
+
+**Result: not yet observed.** The table below is filled in from the game, with the build number, or it stays empty.
+
+| Observed | Build | Do two pieces snap end to end? | Spacing | Ghost valid / invalid correct? | Rotation unaffected? |
+|---|---|---|---|---|---|
+| — | — | — | — | — | — |
 
 ### L4. The climb is local, input-driven and uses only state the game already replicates
 
@@ -220,6 +259,27 @@ needs a human in Unity.
 | `NpcClimbing` | `false` | Off until NPC traversal passes its own gate. |
 
 Nothing else, unless a gate proves it is needed.
+
+**Bound** (CF-LAD-004, #328) in `src/ConcernedForeman/Runtime/Ladders/LadderSettings.cs`, the way Foreman binds
+everything else. What the values mean, and what happens to a silly one, is in
+`src/ConcernedForeman/Domain/Ladders/LadderSettingValues.cs`, which has no BepInEx in it and is tested.
+
+| Setting | Reaches | Range |
+|---|---|---|
+| `Enabled` | `ClimbOptions.Enabled`, read live every frame | — |
+| `AutoMount` | `ClimbOptions.AutoMount` | — |
+| `ClimbSpeed` | `ClimbOptions.ClimbSpeedMultiplier` → `ClimbLimits.SpeedMultiplier` | 0.25 – 3 |
+| `StaminaCost` | `ClimbOptions.StaminaPerSecond` → `ClimbLimits.StaminaPerSecond` | 0 – 10 |
+| `UseTeleport` | the interaction prefix only; nothing in the domain | — |
+| `NpcClimbing` | nothing yet (CF-LAD-005) | — |
+
+Two rules hold this together. The configured ranges are **exactly** the ranges `ClimbLimits.Validate` accepts, and a
+test fails if they ever drift apart — otherwise a number a config file accepts becomes a throw at the moment somebody
+walks into a ladder. And a value outside them is **clamped, never thrown**: `LadderSettingValues.Sanitised` and
+`ClimbOptions.ToLimits` agree, so a hand-edited `NaN` costs a player nothing.
+
+`Enabled` has two different meanings by design, and both are "vanilla": **false at startup means no patch is installed
+at all**, and false later means every patch falls straight through and a climb in progress ends on the next frame.
 
 ---
 
