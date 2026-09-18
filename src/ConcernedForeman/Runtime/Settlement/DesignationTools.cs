@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Text;
 using TheConcernedCat.Settlement.Designations;
+using TheConcernedCat.Settlement.Housing;
 using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Journal;
 using TheConcernedCat.Settlement.Recruitment;
@@ -46,12 +47,19 @@ internal sealed class DesignationTools
     /// reconcile), or null where custody is not wired.</summary>
     private readonly Custody.CustodyTools? _custody;
 
+    /// <summary>#286: measures the settlement's housing on demand, or null
+    /// where nothing can measure it. A function rather than a value because a
+    /// measurement taken at startup would be stale by the time anybody asked.
+    /// </summary>
+    private readonly Func<HousingCapacity>? _housing;
+
     internal DesignationTools(
         Func<bool> hasAuthority,
         Func<string> describeMissingAuthority,
         SettlementRecords records,
-        Custody.CustodyTools? custody = null)
-        : this(hasAuthority, describeMissingAuthority, records, new WorldDesignationSite(), custody)
+        Custody.CustodyTools? custody = null,
+        Func<HousingCapacity>? housing = null)
+        : this(hasAuthority, describeMissingAuthority, records, new WorldDesignationSite(), custody, housing)
     {
     }
 
@@ -60,13 +68,15 @@ internal sealed class DesignationTools
         Func<string> describeMissingAuthority,
         SettlementRecords records,
         IDesignationSite site,
-        Custody.CustodyTools? custody = null)
+        Custody.CustodyTools? custody = null,
+        Func<HousingCapacity>? housing = null)
     {
         _hasAuthority = hasAuthority;
         _describeMissingAuthority = describeMissingAuthority;
         _records = records;
         _site = site;
         _custody = custody;
+        _housing = housing;
     }
 
     /// <summary>Drops a plan the player was shown but never confirmed.
@@ -97,6 +107,7 @@ internal sealed class DesignationTools
         switch (subcommand)
         {
             case "status": return Status(register, journal);
+            case "housing": return Housing(register);
             case "area": return MarkArea(register, DesignationKind.SettlementArea, args);
             case "harvest": return MarkArea(register, DesignationKind.HarvestArea, args);
             case "supply": return MarkSupply(register, journal);
@@ -109,7 +120,7 @@ internal sealed class DesignationTools
             case "release": return _custody == null ? NoCustody : _custody.Release();
             case "reconcile": return _custody == null ? NoCustody : _custody.Reconcile();
             default:
-                return "Unknown subcommand. Try: status, area <radius>, harvest <radius>, " +
+                return "Unknown subcommand. Try: status, housing, area <radius>, harvest <radius>, " +
                     "supply, recruit [name], dismiss [name], clear <area|harvest|supply> [yes], " +
                     "give axe|hammer, takeback [axe|hammer], release, reconcile, " +
                     "resolve <request> mine|his|source|destination [count], resolve <order> lost.";
@@ -117,6 +128,24 @@ internal sealed class DesignationTools
     }
 
     private const string NoCustody = "Custody is not available in this build.";
+
+    /// <summary>#286: what the settlement can actually house, measured from the
+    /// real beds with vanilla's own rules rather than asserted by a blueprint.
+    /// Read-only: no bed is claimed and nothing is written.</summary>
+    private string Housing(SettlementRegister register)
+    {
+        if (_housing == null)
+        {
+            return "This build cannot measure housing.";
+        }
+
+        if (!register.HasSettlementArea)
+        {
+            return "No settlement area is marked, so there is nowhere for anybody to live yet.";
+        }
+
+        return _housing().Describe();
+    }
 
     private string Status(SettlementRegister register, SettlementJournal journal)
     {
