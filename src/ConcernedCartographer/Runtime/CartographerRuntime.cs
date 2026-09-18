@@ -2014,27 +2014,35 @@ internal sealed class CartographerRuntime : IDisposable
             return;
         }
 
-        _onboardingChecked = true;
         try
         {
-            // ".dat", and an older build's ".txt" adopted once: a config editor
-            // listed the marker among the files a player may edit (#304), and
-            // this one is written and read by the mod alone.
-            string path = Storage.MarkerFile.Adopt(
-                Persistence.AuthorIdentity.Directory,
-                "onboarding-shown" + Storage.MarkerFile.Extension,
-                "onboarding-shown.txt");
+            // The marker lives under "state" so a config editor does not offer
+            // it for editing (#304); it was adopted from an older build's
+            // ".txt" at startup, in one place with the author identity.
+            string path = Persistence.AuthorIdentity.OnboardingMarker.Path;
             if (System.IO.File.Exists(path))
+            {
+                _onboardingChecked = true;
+                return;
+            }
+
+            // Shown BEFORE the marker is written. VanillaMessage.Show is a
+            // no-op while there is no local player, and this pass can run
+            // before one exists - writing first consumed the one-time tip and
+            // nobody ever saw it. Leaving _onboardingChecked false until the
+            // tip is actually shown is the other half: the next pass tries
+            // again rather than the tip being lost for the session.
+            if (!VanillaMessage.Show(
+                    Player.m_localPlayer,
+                    MessageHud.MessageType.Center,
+                    AtlasStrings.Get("hud.onboarding")))
             {
                 return;
             }
 
+            _onboardingChecked = true;
             System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
             System.IO.File.WriteAllText(path, DateTime.UtcNow.ToString("o"));
-            VanillaMessage.Show(
-                Player.m_localPlayer,
-                MessageHud.MessageType.Center,
-                AtlasStrings.Get("hud.onboarding"));
         }
         catch
         {

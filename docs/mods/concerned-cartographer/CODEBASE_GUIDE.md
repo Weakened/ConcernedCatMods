@@ -1175,7 +1175,7 @@ Per-world `<world-uid>.routes-atlas.tsv` + `.journal` with the same snapshot/jou
 
 ### `Persistence/AuthorIdentity.cs` (v0.6)
 
-Stable local author GUID in `author-id.txt` (profile config root). Used for audit labels and the self-echo filter; it is labeling, not authentication.
+Stable local author GUID in `state/author-id.dat` (under the profile config root; `author-id.txt` before 1.2.2, adopted once on upgrade). Used for audit labels and the self-echo filter; it is labeling, not authentication.
 
 ### `Persistence/LocalizationPersistence.cs` (v0.7)
 
@@ -1294,8 +1294,9 @@ BepInEx/config/ConcernedCatMods/ConcernedCartographer/
 ├─ views.tsv                                 (profile-level saved views)
 ├─ survey-rules.tsv                          (shareable survey rules)
 ├─ cartographer-strings.tsv                  (optional localization overrides)
-├─ author-id.txt                             (local author GUID for sync labels)
-├─ onboarding-shown.txt                      (one-time tip marker)
+├─ state/                                    (files the mod writes for itself, #304)
+│  ├─ author-id.dat                          (local author GUID for sync labels)
+│  └─ onboarding-shown.dat                   (one-time tip marker)
 └─ backups/<timestamp>/                      (cc_atlas backup snapshots)
 ```
 
