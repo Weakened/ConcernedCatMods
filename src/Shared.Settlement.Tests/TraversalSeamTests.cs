@@ -269,6 +269,21 @@ public class TraversalSeamTests
     }
 
     [Fact]
+    public void EveryPublishedLinkIsListedInTheSameOrderEveryTime()
+    {
+        var network = new TraversalLinkNetwork();
+        network.Publish(Link("c", x: 30f));
+        network.Publish(Link("a", x: 10f));
+        network.Publish(Link("b", x: 20f));
+
+        Assert.Equal(new[] { "a", "b", "c" }, network.All().Select(link => link.Id).ToArray());
+
+        network.Retire("b");
+        Assert.Equal(new[] { "a", "c" }, network.All().Select(link => link.Id).ToArray());
+        Assert.Empty(new TraversalLinkNetwork().All());
+    }
+
+    [Fact]
     public void ADestinationOnTheSameLevelIsAWalkAndNoLinkIsInvolved()
     {
         var network = new TraversalLinkNetwork();
