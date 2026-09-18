@@ -284,8 +284,14 @@ internal sealed class CollectionRuntime
 
         try
         {
+            // Thorstein by name rather than through the custody facade: the
+            // facade is an interface several products implement and does not
+            // expose a worker, and Foreman employs exactly one — which
+            // `ForemanCustodyRuntime` itself asserts by setting the same
+            // constant. `TheFirstProofEmploysOneWorker` is the test that would
+            // fail first if that stopped being true.
             _carried ??= new CarriedVisual(
-                () => WorkerBody.FindLive(_custody.WorkerKey.Value),
+                () => WorkerBody.FindLive(WorkerKey.Thorstein.Value),
                 message => _log(message));
 
             CollectionOrderDefinition? order = world.Loop?.Order;

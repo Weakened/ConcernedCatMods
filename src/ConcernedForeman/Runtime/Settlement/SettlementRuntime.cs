@@ -4,6 +4,7 @@ using System.Globalization;
 using TheConcernedCat.ConcernedForeman.Domain.Settlement;
 using TheConcernedCat.ConcernedForeman.Runtime.Custody;
 using TheConcernedCat.Settlement.Custody;
+using TheConcernedCat.Settlement.Designations;
 using TheConcernedCat.Settlement.Journal;
 using TheConcernedCat.Settlement.Register;
 using TheConcernedCat.Settlement.Tools;
@@ -32,6 +33,10 @@ internal sealed class SettlementRuntime
     private readonly Action<string> _log;
     private readonly WorkerSitePolicy _sitePolicy = new WorldSitePolicy();
     private readonly SettlementRecords _records;
+
+    /// <summary>#286: measures the settlement's housing from the real beds.
+    /// Read-only.</summary>
+    private readonly WorldHousing _housing;
     private readonly DesignationTools _designations;
     private readonly ForemanCustodyRuntime _custody;
 
@@ -43,8 +48,19 @@ internal sealed class SettlementRuntime
         _log = log;
         _records = new SettlementRecords(log);
         _custody = new ForemanCustodyRuntime(_records, WorkAuthority, log);
+        // #286: housing is measured on demand from the real beds, through the
+        // book the register already holds, so the answer is never older than
+        // the question.
+        _housing = new WorldHousing(
+            () => _records.TryOpen(out SettlementRegister register, out SettlementJournal _)
+                && register.TryGet(DesignationKind.SettlementArea, out Designation area)
+                    ? area
+                    : null,
+            log);
+
         _designations = new DesignationTools(
-            HasAuthority, DescribeMissingAuthority, _records, new CustodyTools(this, _custody, _records));
+            HasAuthority, DescribeMissingAuthority, _records, new CustodyTools(this, _custody, _records),
+            () => _housing.Measure());
 
         WorkerBody.Loaded = OnWorkerBodyLoaded;
         WorkerBody.Died = (body, dropped, where) => _custody.OnWorkerDied(body, dropped, where);
