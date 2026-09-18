@@ -139,6 +139,106 @@ internal sealed class CustodyTools
             : string.Join(" ", messages.ToArray());
     }
 
+    /// <summary><c>cf_settle release</c>: "Release everything" (D9) for
+    /// material. Everything the record says he still carries for an order that
+    /// has ended is handed to you, standing next to him, through the ordinary
+    /// executor — intent, move, receipt — so the record and both inventories
+    /// agree afterwards.
+    ///
+    /// Cancelling an order is not a refund and does not empty him, and nothing
+    /// else in this build can take material out of a worker body: without this,
+    /// the uninstall rule ("return carried items and tools before removing the
+    /// mod") could not be carried out for a cancelled order. Refused while any
+    /// order is still open, so nothing is taken from under a running job.
+    /// Tools are <c>cf_settle takeback</c>.</summary>
+    internal string Release()
+    {
+        if (!_runtime.HasWorkAuthority())
+        {
+            return "Refused: " + _runtime.DescribeMissingAuthority() + ".";
+        }
+
+        if (!RecordTakesWorldChanges(out string blocked))
+        {
+            return blocked + " Nothing was moved.";
+        }
+
+        CustodyCore core = _custody.Core!;
+        foreach (CollectionOrderRecord order in core.Ledger.Orders)
+        {
+            if (!CollectionOrderStates.IsTerminal(order.State))
+            {
+                return "Refused: order " + order.Order.Value + " is still " + order.State +
+                    ". Let it finish or cancel it (cf_collect cancel) first. Nothing was moved.";
+            }
+        }
+
+        var carried = new List<Holding>();
+        foreach (Holding holding in core.Ledger.Holdings)
+        {
+            if (holding.Location.Place == CustodyPlace.Worker && holding.Count > 0)
+            {
+                carried.Add(holding);
+            }
+        }
+
+        if (carried.Count == 0)
+        {
+            return "The record says he carries nothing for any order.";
+        }
+
+        if (!TryHandoverParties(out Player player, out Humanoid _, out string refusal))
+        {
+            return refusal;
+        }
+
+        if (!_custody.TryResolveWorker(_custody.WorkerKey, out IInventoryPort? workerPort, out CollectionAttentionReason why)
+            || workerPort == null)
+        {
+            return "Refused: his inventory cannot be used now (" + why + "). Nothing was moved.";
+        }
+
+        var yours = new PlayerInventoryPort(player, _custody.WorkerPosition, HandoverReach);
+        var you = new CustodyLocation(
+            CustodyPlace.Player,
+            "player/" + player.GetPlayerID().ToString(CultureInfo.InvariantCulture),
+            _custody.Epoch);
+
+        var messages = new List<string>();
+        foreach (Holding holding in carried)
+        {
+            var intent = new TransferIntent(
+                CustodyIds.ForTransfer(holding.Order, core.Ledger), holding.Order, holding.Location, you,
+                holding.Item, holding.Count, core.Ledger.Revision);
+
+            TransferReceipt receipt = _custody.Executor.Execute(intent, workerPort, yours);
+            string what = holding.Count.ToString(CultureInfo.InvariantCulture) + " " + holding.Item;
+            switch (receipt.Outcome)
+            {
+                case TransferOutcome.Completed:
+                    messages.Add("He hands you " + what + ".");
+                    break;
+
+                case TransferOutcome.Partial:
+                    messages.Add("He hands you " + receipt.Accepted.ToString(CultureInfo.InvariantCulture) + " of " +
+                        what + "; the rest stays with him. Make room and run cf_settle release again.");
+                    break;
+
+                case TransferOutcome.Uncertain:
+                    messages.Add("Handing you " + what + " has no certain outcome (" + receipt.Evidence +
+                        "). Nothing was credited or given back. Check both inventories, then: cf_settle resolve " +
+                        intent.Request.Value + " source|destination");
+                    break;
+
+                default:
+                    messages.Add("He could not hand you " + what + ": " + receipt.Evidence);
+                    break;
+            }
+        }
+
+        return string.Join(" ", messages.ToArray());
+    }
+
     /// <summary>The material answers to <c>cf_settle resolve</c>:
     /// <c>&lt;request&gt; source</c>, <c>&lt;request&gt; destination [count]</c>, and
     /// <c>&lt;order&gt; lost</c> for the shortfalls reconciliation reports.</summary>

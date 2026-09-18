@@ -106,11 +106,12 @@ internal sealed class DesignationTools
             case "resolve": return Resolve(journal, args);
             case "give": return _custody == null ? NoCustody : _custody.Give(journal, args);
             case "takeback": return _custody == null ? NoCustody : _custody.TakeBack(journal, args);
+            case "release": return _custody == null ? NoCustody : _custody.Release();
             case "reconcile": return _custody == null ? NoCustody : _custody.Reconcile();
             default:
                 return "Unknown subcommand. Try: status, area <radius>, harvest <radius>, " +
                     "supply, recruit [name], dismiss [name], clear <area|harvest|supply> [yes], " +
-                    "give axe|hammer, takeback [axe|hammer], reconcile, " +
+                    "give axe|hammer, takeback [axe|hammer], release, reconcile, " +
                     "resolve <request> mine|his|source|destination [count], resolve <order> lost.";
         }
     }
