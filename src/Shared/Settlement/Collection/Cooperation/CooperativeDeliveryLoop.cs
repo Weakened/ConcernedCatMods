@@ -74,6 +74,8 @@ internal sealed class CooperativeDeliveryLoop
     private bool _holdActive;
     private bool _holdUncertain;
     private int _holdRevision;
+    private float _holdTouchedAt;
+    private bool _cartAttached;
 
     // Completing.
     private CancelHaulMessage? _pendingCancel;
@@ -226,6 +228,25 @@ internal sealed class CooperativeDeliveryLoop
         if (!_worker.IsPresent && CommandsWorker(Phase))
         {
             return Reconcile(CollectionAttentionReason.WorkerBodyLost, "Thorstein's body is not here.", now);
+        }
+
+        // C4 hold liveness: while the cart is held, a call naming the haul at
+        // least every third of the rendezvous timeout keeps the hold alive. The
+        // provider ends it itself after a whole timeout of silence, and the hold
+        // check then refuses any transfer.
+        if (_holdActive && now - _holdTouchedAt >= _limits.RendezvousTimeoutSeconds / 3f)
+        {
+            if (!TryPollHaul(now, out GetHaulReply? held, out CooperationTick? ended))
+            {
+                if (ended != null)
+                {
+                    return ended;
+                }
+            }
+            else if (held!.Phase != HaulWirePhase.Unloading)
+            {
+                _holdActive = false;
+            }
         }
 
         switch (Phase)
@@ -1145,6 +1166,7 @@ internal sealed class CooperativeDeliveryLoop
         if (own.Succeeded)
         {
             GetHaulReply haul = own.Reply!;
+            Observe(haul, own.FromCache, now);
             if (!CooperationReasons.IsProviderEnded(haul.Phase))
             {
                 _pendingLeg = null;
@@ -1183,12 +1205,7 @@ internal sealed class CooperativeDeliveryLoop
         {
             case HaulCallOutcome.Succeeded:
                 haul = call.Reply!;
-                _haulRevision = haul.Revision;
-                if (haul.CartPosition.HasValue)
-                {
-                    _cartPosition = ToSite(haul.CartPosition.Value);
-                }
-
+                Observe(haul, call.FromCache, now);
                 if (CooperationReasons.IsProviderEnded(haul.Phase))
                 {
                     string why = haul.HasAttention ? haul.AttentionName : haul.Phase.ToString();
@@ -1223,6 +1240,25 @@ internal sealed class CooperativeDeliveryLoop
                 }
 
                 return false;
+        }
+    }
+
+    /// <summary>What a haul answer tells this run whatever it was asked for:
+    /// the revision it must quote next, whether Gunnar still holds the cart
+    /// (C4 2.7: a stop does not mean he let go), where the cart is, and - for a
+    /// fresh answer - that the hold was named just now (C4 liveness).</summary>
+    private void Observe(GetHaulReply haul, bool fromCache, float now)
+    {
+        _haulRevision = haul.Revision;
+        _cartAttached = haul.Attached;
+        if (!fromCache)
+        {
+            _holdTouchedAt = now;
+        }
+
+        if (haul.CartPosition.HasValue)
+        {
+            _cartPosition = ToSite(haul.CartPosition.Value);
         }
     }
 
@@ -1295,6 +1331,7 @@ internal sealed class CooperativeDeliveryLoop
             case HaulCallOutcome.Succeeded:
                 _holdActive = true;
                 _holdTick = _tickNumber;
+                _holdTouchedAt = now;
                 _holdUncertain = false;
                 _holdRevision = call.Reply!.Revision;
                 _haulRevision = call.Reply.Revision;
@@ -1354,6 +1391,11 @@ internal sealed class CooperativeDeliveryLoop
         if (call.FromCache || (call.Outcome == HaulCallOutcome.NoAnswer && !_client.IsProviderLost))
         {
             return null;
+        }
+
+        if (call.Succeeded)
+        {
+            Observe(call.Reply!, call.FromCache, now);
         }
 
         if (call.Succeeded && call.Reply!.Phase == HaulWirePhase.Unloading && call.Reply.Revision == _holdRevision)
@@ -1462,9 +1504,14 @@ internal sealed class CooperativeDeliveryLoop
             call = _client.CancelHaul(cancel, now);
         }
 
+        // C4: StopAndWait on a haul that already stopped is Accepted with no
+        // transition, and a haul that has ended answers UnknownHaul. Neither is
+        // a failure: Gunnar is not moving either way.
         LastCancelOutcome = call.Succeeded
             ? disposition + " accepted (" + call.Reply!.Phase + ")"
-            : disposition + " not confirmed (" + Explain(call) + ")";
+            : call.Outcome == HaulCallOutcome.Refused && call.Reason == HaulWireReason.UnknownHaul
+                ? disposition + " needed nothing: that haul had already ended"
+                : disposition + " not confirmed (" + Explain(call) + ")";
     }
 
     // --- Transfers ----------------------------------------------------------------------------------
@@ -1653,7 +1700,8 @@ internal sealed class CooperativeDeliveryLoop
         {
             return Attention(
                 CollectionAttentionReason.CartLeaseLost,
-                detail + " The record shows " + DescribeLedger(CustodyPlace.Cart) + " in the cart, which cannot be reached to confirm it.");
+                detail + " The record shows " + DescribeLedger(CustodyPlace.Cart) + " in the cart, which cannot be reached to confirm it" +
+                (_cartAttached ? " while Gunnar still holds it." : "."));
         }
 
         var evidence = new StringBuilder();
@@ -1673,7 +1721,10 @@ internal sealed class CooperativeDeliveryLoop
             return Attention(CollectionAttentionReason.ReconciliationMismatch, detail + evidence);
         }
 
-        return PauseFor(reason, detail + " " + DescribeLedger(CustodyPlace.Cart) + " stay in the cart.");
+        return PauseFor(
+            reason,
+            detail + " " + DescribeLedger(CustodyPlace.Cart) + " stay in the cart" +
+            (_cartAttached ? ", which Gunnar is still holding." : "."));
     }
 
     // --- Checkpoints ------------------------------------------------------------------------------

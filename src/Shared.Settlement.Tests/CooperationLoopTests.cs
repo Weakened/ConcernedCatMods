@@ -423,6 +423,87 @@ public sealed class CooperationLoopTests
     }
 
     [Fact]
+    public void AHeldCartIsNamedOftenEnoughToKeepTheHoldAlive()
+    {
+        // The chest refuses every deposit, so the hold is kept while the loop
+        // retries with backoff - the longest a hold realistically lasts - and
+        // the owner ticks it only every 25 s.
+        var run = new CooperationScenario();
+        run.Custody.ForcedOutcomes.Enqueue(TransferOutcome.Refused);
+        run.Custody.ForcedOutcomes.Enqueue(TransferOutcome.Refused);
+        run.Custody.ForcedOutcomes.Enqueue(TransferOutcome.Refused);
+
+        run.RunUntil(tick => tick.Step == CooperationStep.NeedsAttention || tick.Step == CooperationStep.Paused, seconds: 25f);
+
+        Assert.Equal(0, run.Gunnar.HoldTimeouts);
+        Assert.True(
+            run.Gunnar.LongestHoldSilence < CooperationLimits.Default.RendezvousTimeoutSeconds / 3f,
+            "the hold went unnamed for " + run.Gunnar.LongestHoldSilence + " s");
+        Assert.NotEqual(HaulWirePhase.Unloading, run.Gunnar.Phase);
+        run.AssertInvariants();
+    }
+
+    [Fact]
+    public void AHoldTheProviderEndedItselfRunsNoTransferAndReconciles()
+    {
+        var run = new CooperationScenario();
+        run.Custody.ForcedOutcomes.Enqueue(TransferOutcome.Refused);
+        run.RunUntil(tick => run.Custody.Receipts.Count == 1);
+        Assert.Equal(HaulWirePhase.Unloading, run.Gunnar.Phase);
+
+        // C4: the liveness deadline passes on the provider's side.
+        run.Gunnar.EndControl(HaulWireReason.RendezvousTimedOut);
+        CooperationTick stopped = run.RunUntil(
+            tick => tick.Step == CooperationStep.NeedsAttention || tick.Step == CooperationStep.Paused);
+
+        Assert.Single(run.Custody.Receipts);
+        Assert.Equal(CollectionAttentionReason.RendezvousTimedOut, stopped.Reason);
+        run.AssertLedger(CustodyPlace.Worker, stone: 20, wood: 30);
+        run.AssertInvariants();
+    }
+
+    [Fact]
+    public void AStopAndWaitOnAHaulThatAlreadyStoppedIsNotAFailure()
+    {
+        var run = new CooperationScenario();
+        run.RunUntil(tick => tick.Phase == CooperationPhase.Hauling);
+        run.Gunnar.EndControl(HaulWireReason.BrakeEngaged);
+        run.RunUntil(tick => tick.Step == CooperationStep.Paused || tick.Step == CooperationStep.NeedsAttention);
+
+        HaulWirePhase before = run.Gunnar.Phase;
+        int revision = run.Gunnar.Revision;
+        run.Loop.Cancel(detachAndPark: false, run.Now);
+
+        Assert.Contains(HaulCancelDisposition.StopAndWait, run.Gunnar.Cancels);
+        Assert.Contains("accepted", run.Loop.LastCancelOutcome);
+        Assert.Equal(before, run.Gunnar.Phase);
+        Assert.Equal(revision, run.Gunnar.Revision);
+        run.AssertInvariants();
+    }
+
+    [Fact]
+    public void AfterALostAuthorityStopTheCartMayStillBeHitchedAndIsNeverTransferredFrom()
+    {
+        var run = new CooperationScenario();
+        run.RunUntil(tick => tick.Phase == CooperationPhase.Hauling);
+        int receipts = run.Custody.Receipts.Count;
+        Assert.True(run.Gunnar.Attached);
+
+        // C4 2.7: he stops but keeps holding the cart, because letting go there
+        // would let it roll.
+        run.Gunnar.EndControl(HaulWireReason.AuthorityLost, keepAttached: true);
+        CooperationTick stopped = run.RunUntil(
+            tick => tick.Step == CooperationStep.Paused || tick.Step == CooperationStep.NeedsAttention);
+
+        Assert.True(run.Gunnar.Attached);
+        Assert.Equal(CollectionAttentionReason.HaulerUnavailable, stopped.Reason);
+        Assert.Contains("Gunnar is still holding", stopped.Detail);
+        Assert.Equal(receipts, run.Custody.Receipts.Count);
+        run.AssertLedger(CustodyPlace.Cart, stone: 20, wood: 30);
+        run.AssertInvariants();
+    }
+
+    [Fact]
     public void RendezvousCandidatesAreOrderedDistinctAndBounded()
     {
         var scope = new WorkScope(WorkScopeSource.DefaultCampCircle, new SitePoint(0f, 30f, 0f), 30f, "your bed", 1, CooperationScenario.Epoch);
@@ -523,11 +604,11 @@ internal sealed class CooperationScenario
         return tick;
     }
 
-    public CooperationTick RunUntil(Func<CooperationTick, bool> stop, int maxTicks = 4000)
+    public CooperationTick RunUntil(Func<CooperationTick, bool> stop, int maxTicks = 4000, float seconds = 0.6f)
     {
         for (int index = 0; index < maxTicks; index++)
         {
-            CooperationTick tick = Step();
+            CooperationTick tick = Step(seconds);
             if (stop(tick))
             {
                 return tick;

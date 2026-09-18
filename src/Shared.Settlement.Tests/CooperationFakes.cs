@@ -25,6 +25,8 @@ internal sealed class CooperationFakeGunnar : IHaulEndpointSource
     private HaulCancelDisposition? _cancelAfterUnloading;
     private WorkPoint _legStart;
     private float _legStartedAt;
+    private float _holdTouchedAt;
+    private float _lastNamedCallAt;
 
     public CooperationFakeGunnar(Guid epoch, WorkPoint cartPosition)
     {
@@ -98,13 +100,29 @@ internal sealed class CooperationFakeGunnar : IHaulEndpointSource
 
     public List<string> Log { get; } = new List<string>();
 
+    /// <summary>C4: the consumer must name the haul at least every third of
+    /// this while it holds the cart; after a whole one of silence the provider
+    /// ends the hold itself.</summary>
+    public float HoldLivenessSeconds { get; set; } = CooperationLimits.Default.RendezvousTimeoutSeconds;
+
+    /// <summary>Holds this provider ended on its own liveness deadline.
+    /// </summary>
+    public int HoldTimeouts { get; private set; }
+
+    /// <summary>The longest the consumer went without naming the haul while
+    /// the cart was held.</summary>
+    public float LongestHoldSilence { get; private set; }
+
     /// <summary>Anything a well-behaved consumer must never cause.</summary>
     public List<string> Violations { get; } = new List<string>();
 
-    public void EndControl(HaulWireReason reason)
+    /// <summary>Provider-ended control (§3.3). C4 2.7: on a lost-authority stop
+    /// Gunnar may keep holding the cart, so the joint can survive the stop.
+    /// </summary>
+    public void EndControl(HaulWireReason reason, bool keepAttached = false)
     {
         Attention = reason;
-        Attached = false;
+        Attached = keepAttached && Attached;
         Arrived = false;
         Phase = HaulWirePhase.NeedsAttention;
         Revision++;
@@ -128,6 +146,15 @@ internal sealed class CooperationFakeGunnar : IHaulEndpointSource
 
     public void Advance()
     {
+        // C4: a hold nobody has named for a whole liveness window ends here,
+        // exactly as the real provider ends it.
+        if (Phase == HaulWirePhase.Unloading && Now - _holdTouchedAt >= HoldLivenessSeconds)
+        {
+            HoldTimeouts++;
+            EndControl(HaulWireReason.RendezvousTimedOut);
+            return;
+        }
+
         bool moving = Phase == HaulWirePhase.Approaching || Phase == HaulWirePhase.Pulling;
         if (!moving || Target == null || Now - _legStartedAt < TravelSeconds)
         {
@@ -164,6 +191,7 @@ internal sealed class CooperationFakeGunnar : IHaulEndpointSource
 
         Advance();
         HaulRequestReading reading = HaulRequestReader.Read(wire);
+        NoteNamedCall(reading);
         if (!reading.IsValid)
         {
             Violations.Add("malformed request: " + reading.Detail);
@@ -322,6 +350,8 @@ internal sealed class CooperationFakeGunnar : IHaulEndpointSource
                 {
                     Holds++;
                     Phase = HaulWirePhase.Unloading;
+                    _holdTouchedAt = Now;
+                    _lastNamedCallAt = Now;
                     Revision++;
                 }
                 else
@@ -352,12 +382,46 @@ internal sealed class CooperationFakeGunnar : IHaulEndpointSource
                     return null;
                 }
 
+                // C4: StopAndWait on a haul that has already stopped is
+                // Accepted with no transition and no pending intent.
                 ApplyCancel(cancel.Disposition);
                 return null;
 
             default:
                 return HaulRefusal.ToWire(HaulReplyStatus.Rejected, HaulWireReason.UnknownOp, null);
         }
+    }
+
+    /// <summary>Every getHaul, acknowledgeWait or cancelHaul naming the haul
+    /// keeps the hold alive (C4), and the silence between such calls is
+    /// measured while the cart is held.</summary>
+    private void NoteNamedCall(HaulRequestReading reading)
+    {
+        if (!reading.IsValid)
+        {
+            return;
+        }
+
+        string named = reading.Message switch
+        {
+            GetHaulMessage get => get.HaulId,
+            AcknowledgeWaitMessage acknowledgement => acknowledgement.HaulId,
+            CancelHaulMessage cancel => cancel.HaulId,
+            _ => string.Empty,
+        };
+
+        if (named.Length == 0 || HaulId.Length == 0 || named != HaulId)
+        {
+            return;
+        }
+
+        if (Phase == HaulWirePhase.Unloading)
+        {
+            LongestHoldSilence = Math.Max(LongestHoldSilence, Now - _lastNamedCallAt);
+            _holdTouchedAt = Now;
+        }
+
+        _lastNamedCallAt = Now;
     }
 
     private void ApplyCancel(HaulCancelDisposition disposition)
