@@ -8,6 +8,33 @@ namespace ConcernedTeamster.Tests;
 /// truth first — the domain never invents or clamps what the game reports.</summary>
 public class CartSnapshotTests
 {
+    /// <summary>#321: the installed `Cart.prefab` serializes base mass 50 and
+    /// cargo factor 0.1, overriding the C# field initializers 20 and 1.0 that
+    /// the calibration documents assumed. The runtime was never wrong — it
+    /// reads both off the live `Vagon` — and this pins that, so a future
+    /// "simplification" to a constant changes a red test rather than every
+    /// load warning in the product.</summary>
+    [Fact]
+    public void TheRealCartPrefabsValuesAreWhatTheRuntimeUses()
+    {
+        // Set C of CALIBRATION_PROTOCOL: 50 stone + 50 wood, at the game's own
+        // item weight of 2.0 each.
+        CartSnapshot prefabValues = CartSnapshot.Create(
+            "1234:5", baseMass: 50f, cargoWeight: 200f, cargoDataAvailable: true,
+            itemWeightMassFactor: 0.1f, isAttached: true, isPulledByLocalPlayer: false);
+
+        Assert.Equal(70f, prefabValues.TotalMass);
+
+        // What the docs used to assume, for the same cargo. The gap is the
+        // whole of #321.
+        CartSnapshot codeInitializers = CartSnapshot.Create(
+            "1234:5", baseMass: 20f, cargoWeight: 200f, cargoDataAvailable: true,
+            itemWeightMassFactor: 1f, isAttached: true, isPulledByLocalPlayer: false);
+
+        Assert.Equal(220f, codeInitializers.TotalMass);
+        Assert.NotEqual(prefabValues.TotalMass, codeInitializers.TotalMass);
+    }
+
     [Fact]
     public void Create_ComputesTotalMassWithTheVanillaFormula()
     {
