@@ -55,15 +55,16 @@ internal sealed class LadderAuditCommand : ConsoleCommand
 
     internal string Execute(string[] args)
     {
-        string subcommand = args != null && args.Length > 1 ? args[1].ToLowerInvariant() : "list";
+        string[] given = args ?? Array.Empty<string>();
+        string subcommand = given.Length > 1 ? given[1].ToLowerInvariant() : "list";
         switch (subcommand)
         {
             case "list":
                 return ListPrefabs();
             case "here":
-                return MeasureNearby(Radius(args), snapPoints: false);
+                return MeasureNearby(Radius(given), snapPoints: false);
             case "snaps":
-                return MeasureNearby(Radius(args), snapPoints: true);
+                return MeasureNearby(Radius(given), snapPoints: true);
             default:
                 return "Unknown subcommand. " + Help;
         }
@@ -148,7 +149,9 @@ internal sealed class LadderAuditCommand : ConsoleCommand
             return "No player, so there is nothing to measure from.";
         }
 
-        Ladder[] ladders = UnityEngine.Object.FindObjectsOfType<Ladder>();
+        // Unsorted: this is a manual audit, and the sort would be the most
+        // expensive part of it.
+        Ladder[] ladders = UnityEngine.Object.FindObjectsByType<Ladder>(FindObjectsSortMode.None);
         if (ladders == null || ladders.Length == 0)
         {
             return "No ladder is loaded anywhere near you.";
