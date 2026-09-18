@@ -215,9 +215,9 @@ row: 10 | 250 | Climbs | Measured | strong witness");
         LoadCalibrationData? data = LoadCalibrationSource.TryLoadEmbedded();
 
         Assert.NotNull(data);
-        Assert.Equal(1, data!.DataVersion);
-        Assert.Equal("0.221.12", data.GameVersion);
-        Assert.Equal("2026-09-04", data.Generated);
+        Assert.Equal(2, data!.DataVersion);
+        Assert.Equal("1.0.14", data.GameVersion);
+        Assert.Equal("2026-09-18", data.Generated);
         Assert.Contains("CALIBRATION_PROTOCOL.md", data.Protocol);
         Assert.Empty(data.Errors);
         Assert.Equal(5, data.Rows.Count);
@@ -229,21 +229,21 @@ row: 10 | 250 | Climbs | Measured | strong witness");
     {
         LoadModel model = new(LoadCalibrationSource.TryLoadEmbedded()!);
 
-        // Flat priors prove flat hauling up to the heaviest prior set.
-        Assert.Equal(Climbability.Yes, model.Query(0f, 150f).Climbability);
-        Assert.Equal(CalibrationBasis.Prior, model.Query(0f, 150f).Basis);
+        // Flat priors prove flat hauling up to the heaviest revised prior set.
+        Assert.Equal(Climbability.Yes, model.Query(0f, 60f).Climbability);
+        Assert.Equal(CalibrationBasis.Prior, model.Query(0f, 60f).Basis);
 
         // The uncalibrated middle is honestly unknown.
-        Assert.Equal(Climbability.Unknown, model.Query(10f, 220f).Climbability);
-        Assert.Equal(Climbability.Unknown, model.Query(0f, 221f).Climbability);
+        Assert.Equal(Climbability.Unknown, model.Query(10f, 70f).Climbability);
+        Assert.Equal(Climbability.Unknown, model.Query(0f, 71f).Climbability);
 
         // The physics bound refuses impossible hauls with certainty basis.
-        LoadVerdict impossible = model.Query(35f, 9000f);
+        LoadVerdict impossible = model.Query(35f, 90000f);
         Assert.Equal(Climbability.No, impossible.Climbability);
         Assert.Equal(CalibrationBasis.DerivedConstant, impossible.Basis);
 
         // Recommended flat load is the heaviest proven prior set.
-        Assert.Equal(220f, model.RecommendedMaxMass(0f)!.TotalMass);
+        Assert.Equal(70f, model.RecommendedMaxMass(0f)!.TotalMass);
         Assert.Null(model.RecommendedMaxMass(5f));
     }
 }
