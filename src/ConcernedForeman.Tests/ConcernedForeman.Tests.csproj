@@ -28,6 +28,7 @@
          Shared.Settlement.Tests links them. -->
     <Compile Include="..\Shared\Settlement\**\*.cs" LinkBase="Settlement" />
     <Compile Include="..\Shared\Workers\**\*.cs" LinkBase="Workers" />
+    <Compile Include="..\Shared\Interop\**\*.cs" LinkBase="Interop" />
   </ItemGroup>
 
   <ItemGroup>

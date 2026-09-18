@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using BepInEx;
 using TheConcernedCat.ConcernedTeamster.Adapters;
 using TheConcernedCat.ConcernedTeamster.Domain;
@@ -15,8 +16,19 @@ public sealed class Plugin : BaseUnityPlugin
 
     private bool _cartographerProbePending;
     private bool _compatibilityProbePending;
+    private bool _haulWorldWasUp;
     private readonly Adapters.LogTailRecorder _logTail = new();
     private Adapters.Workers.GunnarHaulingRuntime? _hauling;
+    private Adapters.Interop.HaulCapabilityPublisher? _haulCapability;
+    private Adapters.Interop.HaulPanelBridge? _haulPanel;
+
+    private static readonly IReadOnlyDictionary<string, object> NoCapabilities =
+        new Dictionary<string, object>();
+
+    /// <summary>Cross-product capabilities are plain BCL objects discovered by
+    /// GUID at runtime; no product takes a compile-time dependency on Teamster.</summary>
+    public IReadOnlyDictionary<string, object> ConcernedCatCapabilities =>
+        _haulCapability?.Capabilities ?? NoCapabilities;
 
     private void Awake()
     {
@@ -61,15 +73,42 @@ public sealed class Plugin : BaseUnityPlugin
         // with Gunnar in it keeps his body; it touches no cart until
         // Workers/GunnarHaulingEnabled is on and a cart is explicitly assigned.
         _hauling = Adapters.Workers.GunnarHaulingRuntime.Install(gameObject, settings, Logger);
+
+        // #317: publish Gunnar's real service through concernedcat.haul/1.
+        _haulCapability = new Adapters.Interop.HaulCapabilityPublisher(
+            () => _hauling?.Service, PluginVersion, Logger);
+
+        // The panel talks to the same runtime and service as the capability.
+        _haulPanel = new Adapters.Interop.HaulPanelBridge(
+            arguments => _hauling?.Execute(arguments) ?? "Gunnar's hauling runtime is unavailable.",
+            () => _hauling?.Service,
+            () => settings.GunnarHaulingEnabled.Value,
+            () => _hauling?.SeamAvailable ?? false);
+        gameObject.AddComponent<Ui.Hauling.GunnarHaulPanelHost>().Initialize(
+            () => settings.GunnarHaulingEnabled.Value && CartAdapter.HasLocalPlayer(),
+            () => Domain.Ui.UiScaleOptions.ResolveEffectiveScale(
+                UnityEngine.Screen.width, UnityEngine.Screen.height, settings.UiScale.Value),
+            _haulPanel.Facts,
+            _haulPanel.Execute,
+            Logger);
     }
 
     private void OnDestroy()
     {
+        _haulCapability?.Shutdown();
         Adapters.Workers.GunnarHaulingRuntime.Uninstall(_hauling);
     }
 
     private void Update()
     {
+        bool worldIsUp = ZNetScene.instance != null;
+        if (_haulWorldWasUp && !worldIsUp)
+        {
+            _haulPanel?.Forget();
+        }
+
+        _haulWorldWasUp = worldIsUp;
+
         if (_cartographerProbePending)
         {
             _cartographerProbePending = false;

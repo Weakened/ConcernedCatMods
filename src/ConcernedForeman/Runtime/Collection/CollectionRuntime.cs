@@ -474,8 +474,9 @@ internal sealed class CollectionRuntime
             !int.TryParse(args[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int wood) ||
             stone < 0 || wood < 0 || stone > CollectedResources.MaxQuota || wood > CollectedResources.MaxQuota)
         {
-            return "Usage: cf_collect start <stone> <wood> [hold], each 0-" + CollectedResources.MaxQuota +
-                ". Look at the chest he should deliver to, or add \"hold\" for him to keep the materials for you.";
+            return "Usage: cf_collect start <stone> <wood> [hold] [gunnar], each 0-" + CollectedResources.MaxQuota +
+                ". Look at the chest he should deliver to, add \"hold\" for him to keep the materials, or add " +
+                "\"gunnar\" to use the assigned cart.";
         }
 
         if (stone == 0 && wood == 0)
@@ -483,7 +484,29 @@ internal sealed class CollectionRuntime
             return "Refused: " + CollectionIntake.Describe(CollectionIntakeRefusal.NoQuotas);
         }
 
-        bool hold = args.Length > 3 && string.Equals(args[3], "hold", StringComparison.OrdinalIgnoreCase);
+        bool hold = false;
+        bool withGunnar = false;
+        for (int index = 3; index < args.Length; index++)
+        {
+            if (string.Equals(args[index], "hold", StringComparison.OrdinalIgnoreCase))
+            {
+                hold = true;
+            }
+            else if (string.Equals(args[index], "gunnar", StringComparison.OrdinalIgnoreCase))
+            {
+                withGunnar = true;
+            }
+            else
+            {
+                return "Usage: cf_collect start <stone> <wood> [hold] [gunnar]. Unknown option: " + args[index];
+            }
+        }
+
+        if (hold && withGunnar)
+        {
+            return "Refused: a cooperative Gunnar order delivers to a chest. Choose a chest, or turn off Gunnar to use hold-for-player.";
+        }
+
         DeliveryTarget delivery;
         if (hold)
         {
@@ -542,7 +565,7 @@ internal sealed class CollectionRuntime
             quotas,
             scope,
             delivery,
-            ParticipationMode.Solo,
+            withGunnar ? ParticipationMode.WithHauler : ParticipationMode.Solo,
             issuedBy);
 
         CollectionIntakeRefusal refusal = world.Loop.Accept(order, previewed, yields, Time.time);
@@ -552,7 +575,8 @@ internal sealed class CollectionRuntime
         }
 
         return "Accepted " + order.Order.Value + ": " + (stone > 0 ? stone + " Stone " : string.Empty) +
-            (wood > 0 ? wood + " Wood " : string.Empty) + (hold ? "held for you" : "to that chest") + ", in " +
+            (wood > 0 ? wood + " Wood " : string.Empty) + (hold ? "held for you" : "to that chest") +
+            (withGunnar ? ", with Gunnar and his assigned cart" : ", solo") + ", in " +
             scope.AnchorDescription + " (radius " + scope.RadiusMetres.ToString("0.#", CultureInfo.InvariantCulture) +
             " m). He looks over the area on his own first. Only newly delivered units count.";
     }
