@@ -5,6 +5,7 @@ using System.Text;
 using TheConcernedCat.ConcernedForeman.Domain.Settlement;
 using TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 using TheConcernedCat.ConcernedForeman.Runtime.Work;
+using TheConcernedCat.ConcernedForeman.Runtime.Custody;
 using TheConcernedCat.Settlement.Collection;
 using TheConcernedCat.Settlement.Collection.Planning;
 using TheConcernedCat.Settlement.Designations;
@@ -56,6 +57,11 @@ internal sealed class CollectionRuntime
     private Guid _ownEpoch;
     private WorldState? _world;
     private ForemanWorkerAI? _body;
+
+    /// <summary>#284: what the ledger says he carries, in his hand. Presentation
+    /// only — it reads the custody view and writes nothing but the worker's own
+    /// right-hand visual.</summary>
+    private CarriedVisual? _carried;
     private BodyLookupOutcome _bodyOutcome = BodyLookupOutcome.Missing;
     private float _bodyLookedAt = float.NegativeInfinity;
     private PreviewToken? _preview;
@@ -267,6 +273,38 @@ internal sealed class CollectionRuntime
         body.IsHeldByJob = null;
     }
 
+    /// <summary>Brings the worker's hand into line with the custody ledger
+    /// (#284). Never throws into the tick and never touches the ledger.</summary>
+    private void ShowWhatHeCarries(WorldState world)
+    {
+        if (_custody == null)
+        {
+            return;
+        }
+
+        try
+        {
+            _carried ??= new CarriedVisual(
+                () => WorkerBody.FindLive(_custody.WorkerKey.Value),
+                message => _log(message));
+
+            CollectionOrderDefinition? order = world.Loop?.Order;
+            if (order == null)
+            {
+                _carried.Clear();
+                return;
+            }
+
+            _carried.Refresh(_custody.View, order.Order);
+        }
+        catch (Exception)
+        {
+            // Presentation. A worker who is carrying stone and not shown
+            // holding it is a disappointment; a tick that stops because of it
+            // would be a defect.
+        }
+    }
+
     private void OnWorkerTick(ForemanWorkerAI body, float dt)
     {
         WorldState? world = _world;
@@ -278,6 +316,11 @@ internal sealed class CollectionRuntime
         try
         {
             world.Loop.Tick(Time.time);
+
+            // After the loop, so the hand shows the ledger as it stands at the
+            // end of this tick rather than as it stood before a pick or a
+            // deposit. Costs nothing when the answer has not changed.
+            ShowWhatHeCarries(world);
         }
         catch (Exception exception)
         {

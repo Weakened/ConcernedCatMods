@@ -20,6 +20,20 @@ internal static class CollectedResources
     /// <summary>Upper bound of one resource in one order.</summary>
     public const int MaxQuota = 500;
 
+    /// <summary>Every resource that can actually be collected, without
+    /// <see cref="CollectedResource.Unspecified"/> — which is the absence of a
+    /// resource and has no item prefab, as <see cref="ItemPrefabName"/> says by
+    /// throwing.
+    ///
+    /// Here so that code which must consider all of them says so, rather than
+    /// each caller writing the same two names out and one of them being missed
+    /// when a third arrives.</summary>
+    public static readonly CollectedResource[] All =
+    {
+        CollectedResource.Stone,
+        CollectedResource.Wood,
+    };
+
     /// <summary>The game's item prefab name for a resource.</summary>
     public static string ItemPrefabName(CollectedResource resource)
     {
