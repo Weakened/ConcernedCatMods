@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>TheConcernedCat.ConcernedSteward.Tests</AssemblyName>
+    <!-- The linked product sources are written for the plugin's net48 target and
+         C# 10. Nothing here may depend on a newer language feature, so the
+         sources keep compiling in both places. -->
+    <LangVersion>10</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The whole game-free domain, linked rather than copied: these are the
+         shipped files, and a test that passed against a copy would prove
+         nothing about what ships. -->
+    <Compile Include="..\ConcernedSteward\Domain\**\*.cs" LinkBase="Product\Domain" />
+
+    <!-- The adapters, compiled against the vanilla surface stubbed in
+         VanillaStubs.cs. These are the only Steward sources that touch the
+         game, and one of them can destroy a player's item, so leaving them out
+         would mean the layer that matters most was proved by reading. The stubs
+         are the GAME; every type under test here is the real shipped file.
+
+         The Jotunn prefab builder, the BaseAI subclass and the plugin wiring
+         are deliberately NOT linked: BaseAI's protected members and Jotunn's
+         prefab manager are not honestly stubbable, and a stub elaborate enough
+         to host them would be testing itself. That boundary is the same one
+         Concerned Foreman drew, for the same reason. -->
+    <Compile Include="..\ConcernedSteward\Runtime\StewardIdentity.cs" Link="Product\Runtime\StewardIdentity.cs" />
+    <Compile Include="..\ConcernedSteward\Runtime\WorldFuelTargets.cs" Link="Product\Runtime\WorldFuelTargets.cs" />
+    <Compile Include="..\ConcernedSteward\Runtime\WorldItemStores.cs" Link="Product\Runtime\WorldItemStores.cs" />
+    <Compile Include="..\ConcernedSteward\Runtime\StewardBody.cs" Link="Product\Runtime\StewardBody.cs" />
+    <Compile Include="..\ConcernedSteward\Runtime\StewardCensus.cs" Link="Product\Runtime\StewardCensus.cs" />
+    <Compile Include="..\ConcernedSteward\Runtime\StewardWorldFacts.cs" Link="Product\Runtime\StewardWorldFacts.cs" />
+
+
+    <!-- The same shared subset the product adopts, linked the same way, so the
+         tests exercise exactly what ships. SharedSubsetClosureTests asserts the
+         subset stays closed. -->
+    <Compile Include="..\Shared\Workers\**\*.cs" LinkBase="Workers" />
+    <Compile Include="..\Shared\Interop\**\*.cs" LinkBase="Interop" />
+    <Compile Include="..\Shared\Settlement\Identity\**\*.cs" LinkBase="Settlement\Identity" />
+    <Compile Include="..\Shared\Settlement\Worker\**\*.cs" LinkBase="Settlement\Worker" />
+    <Compile Include="..\Shared\Settlement\Designations\**\*.cs" LinkBase="Settlement\Designations" />
+    <Compile Include="..\Shared\Settlement\Storage\**\*.cs" LinkBase="Settlement\Storage" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>
