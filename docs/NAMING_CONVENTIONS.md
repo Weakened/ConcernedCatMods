@@ -121,6 +121,7 @@ Existing areas:
 | `src/Shared/Settlement` | Settlement runtime: identity, work orders, collection orders, custody ledger and transfers, replayable journal, worker movement planning | `ConcernedForeman` |
 | `src/Shared/Workers` | Worker identity, work authority, the single actor-mode owner, bounded retries and deadlines | `ConcernedForeman`, `ConcernedTeamster` |
 | `src/Shared/Interop` | Cross-product runtime capability contracts: a BCL-only capability map and versioned contracts such as `concernedcat.haul/1` | `ConcernedForeman`, `ConcernedTeamster` |
+| `src/Shared/Ladders` | Ladder geometry, mounting, climb motion, exits and climb safety, game-free (`docs/mods/concerned-foreman/LADDERS.md`) | `ConcernedForeman` |
 
 ## Git
 
