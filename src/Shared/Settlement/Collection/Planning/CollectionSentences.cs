@@ -99,7 +99,13 @@ internal static class CollectionSentences
             case CollectionOrderState.Accepted:
                 return "accepted";
             case CollectionOrderState.Surveying:
-                return "surveying (solo survey by Thorstein)";
+                // Deliberately does not say who. This loop is Thorstein's and
+                // knows nothing about presence; whether Hulgi is standing in
+                // the survey is the order panel's to say, because the panel is
+                // the thing that asked (#317). A sentence here saying "solo"
+                // would be wrong exactly when the panel beside it says
+                // otherwise.
+                return "surveying the area";
             case CollectionOrderState.Collecting:
                 return "collecting";
             case CollectionOrderState.WaitingForHauler:

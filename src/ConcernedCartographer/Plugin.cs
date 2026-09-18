@@ -1,7 +1,10 @@
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using BepInEx;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedCartographer.Reporting;
 using TheConcernedCat.ConcernedCartographer.Runtime;
+using TheConcernedCat.ConcernedCartographer.Runtime.Interop;
 
 namespace TheConcernedCat.ConcernedCartographer;
 
@@ -13,8 +16,18 @@ public sealed class Plugin : BaseUnityPlugin
     public const string PluginName = "Concerned Cartographer";
     public const string PluginVersion = "1.2.2";
 
+    private static readonly IReadOnlyDictionary<string, object> NoCapabilities =
+        new ReadOnlyDictionary<string, object>(new Dictionary<string, object>());
+
     private CartographerRuntime? _runtime;
     private CrashReportingHub? _crashHub;
+    private PresenceCapabilityPublisher? _presenceCapability;
+
+    /// <summary>What other Concerned Cat mods can call at runtime (#317). Read
+    /// by GUID and by name, never by reference: no product references another
+    /// at compile time, and only mscorlib types cross.</summary>
+    public IReadOnlyDictionary<string, object> ConcernedCatCapabilities =>
+        _presenceCapability?.Capabilities ?? NoCapabilities;
 
     private void Awake()
     {
@@ -36,6 +49,22 @@ public sealed class Plugin : BaseUnityPlugin
         }
 
         _runtime = new CartographerRuntime(settings, Logger);
+
+        // #317: publish whether a companion is here and free, so a Foreman
+        // survey can honestly call itself joint. Read-only, and the runtime is
+        // reached through a function so a rebuild cannot leave this answering
+        // about a companion who is gone.
+        try
+        {
+            _presenceCapability = new PresenceCapabilityPublisher(
+                () => _runtime?.Companions, PluginVersion, Logger);
+        }
+        catch (System.Exception exception)
+        {
+            _presenceCapability = null;
+            Logger.LogWarning(
+                $"Presence capability not published this session; other mods will survey solo: {SafeLogText.Brief(exception)}");
+        }
 
         MinimapManager.OnVanillaMapAvailable += HandleMapAvailable;
         // RC15: vanilla loads the character's saved map AFTER Minimap.Start
@@ -273,6 +302,8 @@ public sealed class Plugin : BaseUnityPlugin
     {
         MinimapManager.OnVanillaMapAvailable -= HandleMapAvailable;
         MinimapManager.OnVanillaMapDataLoaded -= HandleMapDataLoaded;
+        _presenceCapability?.Shutdown();
+        _presenceCapability = null;
         _runtime?.Dispose();
         _runtime = null;
 

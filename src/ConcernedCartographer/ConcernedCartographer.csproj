@@ -27,6 +27,12 @@
          are pure C# with no Unity/BepInEx/Jotunn types, which is what lets the
          test project link them and exercise the whole layer game-free. -->
     <Compile Include="..\Shared\Companions\**\*.cs" LinkBase="Companions" />
+    <!-- #317: the runtime capability contract, so Cartographer can publish
+         whether a companion is here and free. Only the map and the presence
+         contract: the haul contract belongs to Teamster and Foreman, and
+         compiling it here would put a contract in a DLL that never speaks it. -->
+    <Compile Include="..\Shared\Interop\CapabilityMap.cs" Link="Interop/CapabilityMap.cs" />
+    <Compile Include="..\Shared\Interop\Presence\**\*.cs" LinkBase="Interop/Presence" />
   </ItemGroup>
 
   <ItemGroup>

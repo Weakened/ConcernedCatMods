@@ -144,6 +144,12 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly CompanionStoryPanel _storyPanel;
     private readonly CompanionDirector _companions;
 
+    /// <summary>The companion director, for the read-only
+    /// <c>concernedcat.presence/1</c> capability and nothing else (#317). It is
+    /// exposed rather than handed out at construction because the publisher
+    /// must not hold a reference across a runtime rebuild.</summary>
+    internal CompanionDirector Companions => _companions;
+
     public CartographerRuntime(CartographerSettings settings, ManualLogSource log)
     {
         _settings = settings;

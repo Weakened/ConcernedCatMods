@@ -952,6 +952,32 @@ internal sealed class CompanionDirector : IDisposable
         return $"({at.x:0.0}, {at.y:0.0}, {at.z:0.0}){distance}";
     }
 
+    /// <summary>What another Concerned Cat mod is told about him, through
+    /// <c>concernedcat.presence/1</c>. Read-only by construction: it returns
+    /// three booleans and a position, and there is no companion op anywhere in
+    /// that contract that changes anything.
+    ///
+    /// <b>Free</b> is deliberately narrow. He is free when a body exists, is
+    /// shown, and is not in the middle of something — relocating, strolling or
+    /// asleep. A companion who is walking somewhere is not helping anybody
+    /// survey, and SPEC GATHER-03's "a busy or absent Hulgi is never credited"
+    /// is only true if this method is the one that decides it.</summary>
+    public CompanionPresenceFacts PresenceFacts()
+    {
+        if (!_actor.Exists)
+        {
+            return new CompanionPresenceFacts(IsUnlocked, present: false, visible: false, free: false, position: null);
+        }
+
+        bool visible = _settings.CompanionVisible.Value;
+        bool free = visible
+            && !_relocating
+            && _routine != RoutineState.Strolling
+            && !_actor.IsAsleep;
+
+        return new CompanionPresenceFacts(IsUnlocked, present: true, visible, free, _actor.Position);
+    }
+
     /// <summary>Where he is sitting, in one line.</summary>
     private string DescribeSeating()
     {
