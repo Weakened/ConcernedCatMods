@@ -32,6 +32,10 @@
          capability contracts (docs/settlement/cart-and-collection). -->
     <Compile Include="..\Shared\Workers\**\*.cs" LinkBase="Workers" />
     <Compile Include="..\Shared\Interop\**\*.cs" LinkBase="Interop" />
+    <!-- Game-free ladder geometry, mounting, climbing and safety
+         (docs/mods/concerned-foreman/LADDERS.md). The Valheim side lives in
+         this product, under Runtime/Ladders. -->
+    <Compile Include="..\Shared\Ladders\**\*.cs" LinkBase="Ladders" />
   </ItemGroup>
 
   <ItemGroup>

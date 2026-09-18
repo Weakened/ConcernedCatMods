@@ -52,6 +52,10 @@ public sealed class Plugin : BaseUnityPlugin
             new WorkerToolsCommand(_settlement),
             new SettlementToolsCommand(_settlement),
             new CollectCommand(_collection),
+            // Read-only measurement of the game's own ladders (CF-LAD-001). It
+            // places nothing and changes nothing; it exists so the ladder work
+            // is built on measurements instead of guesses.
+            new Runtime.Ladders.LadderAuditCommand(message => Logger.LogInfo(message)),
         };
 
         var names = new string[commands.Length];

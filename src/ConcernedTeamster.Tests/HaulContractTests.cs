@@ -77,6 +77,31 @@ public class HaulContractTests
     }
 
     [Fact]
+    public void EveryAttentionReasonHasAWireName()
+    {
+        // C2: the provider passes attention reasons on by name, so a reason with
+        // no wire twin would arrive as "unknown" on the Foreman side.
+        foreach (string name in Enum.GetNames<HaulAttentionReason>())
+        {
+            if (name == nameof(HaulAttentionReason.Unspecified))
+            {
+                continue;
+            }
+
+            Assert.True(Enum.TryParse(name, out HaulWireReason _), name + " has no HaulWireReason twin");
+        }
+    }
+
+    [Fact]
+    public void AParkedCartMayNotStandSteeperThanARouteMayClimb()
+    {
+        HaulLimits limits = HaulLimits.Default.Validate();
+        Assert.True(limits.MaxParkingGradeRatio <= limits.MaxGradeRatio);
+        limits.MaxParkingGradeRatio = limits.MaxGradeRatio + 0.01f;
+        Assert.Throws<ArgumentOutOfRangeException>(() => limits.Validate());
+    }
+
+    [Fact]
     public void OneLeasePerWorkerOneLeasePerCartAndPayloadCheckedIds()
     {
         var book = new CartLeaseBook(Epoch);
