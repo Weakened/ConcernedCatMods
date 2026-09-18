@@ -64,6 +64,7 @@ internal readonly struct WorkerKey : IEquatable<WorkerKey>
 {
     public const string ForemanProduct = "foreman";
     public const string TeamsterProduct = "teamster";
+    public const string StewardProduct = "steward";
 
     public WorkerKey(string product, string worker)
     {
@@ -76,6 +77,16 @@ internal readonly struct WorkerKey : IEquatable<WorkerKey>
 
     /// <summary>The Teamster: hauls an assigned cart.</summary>
     public static WorkerKey Gunnar => new WorkerKey(TeamsterProduct, "gunnar");
+
+    /// <summary>The Steward: keeps a settlement's fires alight.
+    ///
+    /// Both halves are the role, which reads oddly beside the two above and is
+    /// correct: he has no name yet (#340 leaves it to the owner), and the left
+    /// half names the runtime that owns the body while the right half names the
+    /// identity. <b>Naming him will not change this key.</b> A saved body is
+    /// found by it, so it is as permanent as Thorstein's is, and the display
+    /// name lives somewhere it can be edited without a migration.</summary>
+    public static WorkerKey Steward => new WorkerKey(StewardProduct, "steward");
 
     public string Product { get; }
 

@@ -1,0 +1,38 @@
+[config]
+schemaVersion = "0.0.1"
+
+[package]
+namespace = "TheConcernedCat"
+name = "ConcernedSteward"
+versionNumber = "0.1.0"
+description = "A settlement steward who keeps your fires burning. He works only inside ground you marked, takes wood only from the chest you marked, and is off until you turn him on. Early slice: recruitment and fire-tending."
+websiteUrl = "https://github.com/Weakened/ConcernedCatMods"
+containsNsfwContent = false
+
+[package.dependencies]
+denikson-BepInExPack_Valheim = "5.4.2333"
+ValheimModding-Jotunn = "2.29.2"
+
+[build]
+icon = "./icon.png"
+readme = "./README.md"
+outdir = "../../../artifacts/thunderstore"
+
+[[build.copy]]
+source = "../bin/Release/net48/TheConcernedCat.ConcernedSteward.dll"
+target = "plugins/TheConcernedCat.ConcernedSteward.dll"
+
+[[build.copy]]
+source = "./CHANGELOG.md"
+target = "CHANGELOG.md"
+
+[[build.copy]]
+source = "../../../LICENSE"
+target = "LICENSE"
+
+[publish]
+repository = "https://thunderstore.io"
+communities = ["valheim"]
+
+[publish.categories]
+valheim = ["mods", "client-side", "utility", "ai-generated"]
