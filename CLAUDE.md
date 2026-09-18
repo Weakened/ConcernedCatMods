@@ -26,13 +26,22 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
 
 ```powershell
 pwsh ./scripts/bootstrap.ps1
+pwsh ./scripts/verify.ps1      # the gate: solution build, every test, validator
 pwsh ./scripts/build.ps1
 pwsh ./scripts/deploy.ps1
 python ./tools/validate_repo.py
 pwsh ./scripts/package.ps1
 ```
 
-A build may be impossible on a machine without the user's licensed Valheim installation and the configured BepInEx profile. In that case, complete static checks, clearly report the missing dependency, and do not claim the build passed.
+**Build evidence comes from `scripts/verify.ps1` and nothing else.** `dotnet test
+<sln>` does **not** build non-test product projects, so a green solution-wide
+test run can be true over product assemblies that do not compile — that is how a
+red `main` shipped at `694a6e3` (#360). CI cannot close it either: every step in
+`repo-checks.yml` is `dotnet test` against a test project, because the products
+reference the licensed game assemblies no runner has. Quote verify's summary
+block; never quote a bare `dotnet test`.
+
+A build may be impossible on a machine without the user's licensed Valheim installation and the configured BepInEx profile. In that case, complete static checks, clearly report the missing dependency, and do not claim the build passed. `verify.ps1` refuses to run there rather than degrading to a green that means less than it looks.
 
 ## Completion report
 
