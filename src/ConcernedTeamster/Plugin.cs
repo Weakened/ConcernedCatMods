@@ -70,6 +70,23 @@ public sealed class Plugin : BaseUnityPlugin
         // below; with #313 integrated it is () => _hauling?.Service.
         _haulCapability = new Adapters.Interop.HaulCapabilityPublisher(() => null, PluginVersion, Logger);
 
+        // #317: Gunnar's panel. Every source here is the inert one this branch
+        // can compile; with #313 integrated they are
+        //   runtime:  arguments => _hauling!.Execute(arguments)
+        //   service:  () => _hauling?.Service
+        //   enabled:  () => settings.GunnarHaulingEnabled.Value
+        //   seam:     () => _hauling!.SeamAvailable
+        // and the button shows while a world is up and hauling is enabled.
+        var haulPanel = new Adapters.Interop.HaulPanelBridge(
+            _ => "Gunnar's hauling runtime is not part of this build yet.", () => null, () => false, () => false);
+        gameObject.AddComponent<Ui.Hauling.GunnarHaulPanelHost>().Initialize(
+            () => false,
+            () => Domain.Ui.UiScaleOptions.ResolveEffectiveScale(
+                UnityEngine.Screen.width, UnityEngine.Screen.height, settings.UiScale.Value),
+            haulPanel.Facts,
+            haulPanel.Execute,
+            Logger);
+
         // Read-only telemetry, panels, manifest, and advisory warnings only;
         // nothing mutates carts.
     }
