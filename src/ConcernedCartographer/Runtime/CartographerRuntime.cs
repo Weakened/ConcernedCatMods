@@ -413,7 +413,6 @@ internal sealed class CartographerRuntime : IDisposable
         _renderer.MarkVectorDataDirty();
         _syncTransport.EnsureRegistered();
         _compatibility.Evaluate(_log);
-        ShowOnboardingOnce();
         if (_settings.DrawCalibrationMarkers.Value)
         {
             _renderer.DrawCalibrationMarkers();
@@ -990,6 +989,18 @@ internal sealed class CartographerRuntime : IDisposable
             }
 
             return;
+        }
+
+        // #264/#304: the first-run tip. Asked here rather than when the map
+        // becomes available, because that runs from Minimap.Start and vanilla
+        // does not assign Player.m_localPlayer until Game.SpawnPlayer roughly
+        // eight seconds later — so the earlier call site could never show it
+        // to anybody, and its "the next pass tries again" was true of a pass
+        // that did not exist. Below the enabled gate, because a mod the player
+        // switched off does not get to introduce itself.
+        if (Player.m_localPlayer != null)
+        {
+            ShowOnboardingOnce();
         }
 
         _companions.Tick(unscaledDeltaTime);
@@ -2014,11 +2025,22 @@ internal sealed class CartographerRuntime : IDisposable
             return;
         }
 
+        // Nothing on this build can show a HUD message - the Character.Message
+        // signature moved, as it did in Valheim 1.0.7. Retire the whole path
+        // rather than re-testing it every frame for a tip that by construction
+        // can never appear, and never fire it at a veteran on the day a game
+        // update happens to restore the signature.
+        if (!VanillaMessage.Available)
+        {
+            _onboardingChecked = true;
+            return;
+        }
+
         try
         {
             // The marker lives under "state" so a config editor does not offer
             // it for editing (#304); it was adopted from an older build's
-            // ".txt" at startup, in one place with the author identity.
+            // file at startup, in one place with the author identity.
             string path = Persistence.AuthorIdentity.OnboardingMarker.Path;
             if (System.IO.File.Exists(path))
             {
@@ -2026,12 +2048,8 @@ internal sealed class CartographerRuntime : IDisposable
                 return;
             }
 
-            // Shown BEFORE the marker is written. VanillaMessage.Show is a
-            // no-op while there is no local player, and this pass can run
-            // before one exists - writing first consumed the one-time tip and
-            // nobody ever saw it. Leaving _onboardingChecked false until the
-            // tip is actually shown is the other half: the next pass tries
-            // again rather than the tip being lost for the session.
+            // Shown BEFORE the marker is written: writing first consumed the
+            // one-time tip when nobody had seen it.
             if (!VanillaMessage.Show(
                     Player.m_localPlayer,
                     MessageHud.MessageType.Center,
@@ -2040,13 +2058,23 @@ internal sealed class CartographerRuntime : IDisposable
                 return;
             }
 
-            _onboardingChecked = true;
             System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
             System.IO.File.WriteAllText(path, DateTime.UtcNow.ToString("o"));
+
+            // Only now. Setting this before the write meant a profile that
+            // could not write the marker showed the tip once per session for
+            // ever, with nothing in the log to explain it.
+            _onboardingChecked = true;
         }
-        catch
+        catch (Exception exception)
         {
-            // A failed tip is never worth an error.
+            // Retired anyway: a tip that cannot record itself must not be
+            // shown again and again, and unlike the old bare catch this says
+            // why once.
+            _onboardingChecked = true;
+            _log.LogWarning(
+                "The first-run tip could not be recorded, so it will not be shown again: " +
+                Reporting.SafeLogText.Brief(exception));
         }
     }
 

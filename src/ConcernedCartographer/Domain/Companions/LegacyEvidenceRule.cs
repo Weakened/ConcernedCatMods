@@ -77,6 +77,15 @@ internal static class CartographerFirstRunFiles
         "survey-rules.tsv",
         "cartographer-strings-template.tsv",
         "onboarding-shown.txt",
+
+        // The build between (commit 6903a65) wrote these two into the product
+        // directory before the markers moved into "state". Only this mod ever
+        // creates them, so a stray one is not evidence that a player was here
+        // — and leaving them out is what made #343's rename grant the unlock
+        // to every fresh install. They are adopted and removed on the next
+        // start; this is what the profile reads as in the meantime.
+        "author-id.dat",
+        "onboarding-shown.dat",
     };
 
     /// <summary>Suffixes this build creates on its own. Companion sidecars are
