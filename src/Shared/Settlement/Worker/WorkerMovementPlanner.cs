@@ -161,17 +161,26 @@ internal sealed class WorkerMovementPlanner
             return Defer(WorkerDeferralReason.Hazardous);
         }
 
-        float distance = observation.Position.HorizontalDistanceTo(_goal.Point);
-
         // Distance is free to measure; a path request is not. Refusing a goal
         // beyond the horizon before spending an attempt is the whole reason
         // this check sits above the budget logic.
-        if (distance > _budget.MaxPlanningDistance)
+        //
+        // The horizon is measured through all three axes, not on the ground
+        // plane: a goal directly overhead is not nearby just because its
+        // shadow is, and the budget exists to bound what the pathfinder is
+        // asked for (#334). Height only ever makes this distance larger, so
+        // the check can refuse a goal it used to allow but never the reverse.
+        if (observation.Position.DistanceTo(_goal.Point) > _budget.MaxPlanningDistance)
         {
             return Defer(WorkerDeferralReason.TooFar);
         }
 
-        if (distance <= _goal.ArrivalTolerance)
+        // Arrival is two questions, because they have different answers: close
+        // enough on the ground the worker walks on, and on the same floor. The
+        // planner used to ask only the first, so a goal straight up read as
+        // arrived and everything downstream — the pickup, the handover, the
+        // delivery — aimed through a ceiling (#334).
+        if (_goal.IsReachedFrom(observation.Position))
         {
             return WorkerAction.Arrive;
         }
