@@ -189,6 +189,31 @@ internal sealed class FuelCustody
         return difference;
     }
 
+    /// <summary>Restores a loss a previous session recorded.
+    ///
+    /// <b>Why only the loss is persisted.</b> Everything else in this ledger can
+    /// be re-established by measurement — what he carries is in his hands, and
+    /// what burned or went back is history that changes nothing about what to do
+    /// next. A loss cannot: the units are gone, so there is nothing left to
+    /// measure, and without this the Steward would forget he had lost a player's
+    /// wood the moment they reloaded and would carry on as though nothing had
+    /// happened.
+    ///
+    /// The withdrawn total is raised with it so the invariant still holds: those
+    /// units really did leave the depot, and saying so is the honest shape of
+    /// the record.</summary>
+    internal void RestoreLoss(int units)
+    {
+        if (units < 1)
+        {
+            return;
+        }
+
+        Withdrawn += units;
+        _unaccounted += units;
+        Revision++;
+    }
+
     /// <summary>Starts a fresh run. Refused while anything is still in his
     /// hands or unaccounted for, because a new run that inherited either would
     /// make the old units unattributable to the job that moved them.</summary>

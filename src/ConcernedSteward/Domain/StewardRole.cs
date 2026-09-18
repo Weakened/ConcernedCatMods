@@ -47,21 +47,18 @@ internal static class StewardRole
     /// <summary>The same, capitalised for the start of a sentence.</summary>
     public const string DisplayNameFallbackCapitalised = "The Steward";
 
-    /// <summary>The product half of the worker key, matching
-    /// <see cref="WorkerKey.ForemanProduct"/> and
-    /// <see cref="WorkerKey.TeamsterProduct"/>.</summary>
-    public const string Product = "steward";
+    /// <summary>The product half of the worker key.</summary>
+    public const string Product = WorkerKey.StewardProduct;
 
     /// <summary>The Steward, across products: <c>steward/steward</c>.
     ///
-    /// Both halves are the role because there is no person yet. That reads
-    /// oddly beside <c>foreman/thorstein</c> and it is still right: the left
-    /// half names the runtime that owns the body and the right half names the
-    /// identity, and today those are the same word. When he is named, the left
-    /// half stays and the right half <b>still stays</b> — a saved body is found
-    /// by this key, so the key survives the naming exactly as it survives a
-    /// reload.</summary>
-    public static WorkerKey Worker => new WorkerKey(Product, RoleKey);
+    /// Taken from the shared table rather than built here, so the set of worker
+    /// identities stays enumerable in one place beside Thorstein's and
+    /// Gunnar's. Both halves are the role because there is no person yet; when
+    /// he is named, <b>this key does not change</b> — a saved body is found by
+    /// it, so the name lives in <see cref="DisplayNameFallback"/> where editing
+    /// it costs nothing.</summary>
+    public static WorkerKey Worker => WorkerKey.Steward;
 
     /// <summary>The Steward's identity inside a settlement record.</summary>
     public static WorkerId WorkerIdentity => new WorkerId(RoleKey);

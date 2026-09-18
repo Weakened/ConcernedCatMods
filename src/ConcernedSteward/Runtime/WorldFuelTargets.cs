@@ -62,6 +62,23 @@ internal sealed class WorldFuelTargets : IFuelTargetPort
     /// built in the first place.</summary>
     private const int MaxSurveyed = 512;
 
+    /// <summary>How close he has to be standing to put wood on a fire.
+    ///
+    /// <b>Vanilla does not check this and it matters.</b> Decompiling
+    /// <c>Fireplace</c> turns up no distance test anywhere in <c>UseItem</c> or
+    /// <c>Interact</c>: the only thing that stops a player fuelling a hearth
+    /// across their base is <c>Player.m_maxInteractDistance</c>, applied earlier,
+    /// at the hover targeting a modded worker never goes through. So without a
+    /// check here the Steward could stand at the chest and light every fire in
+    /// the settlement from where he stands — legitimate by every other rule in
+    /// this product, and obviously a cheat to anybody watching.
+    ///
+    /// Five metres is vanilla's own default for that field, so the Steward is
+    /// held to the reach the game holds a player to. The upkeep loop already
+    /// refuses to feed before it has walked there; this is the second check, in
+    /// the one place that actually performs the mutation.</summary>
+    private const float ReachMetres = 5f;
+
     private readonly Func<string> _epoch;
     private readonly Func<Humanoid?> _body;
     private readonly Func<Vector3, bool> _accessGranted;
@@ -215,6 +232,15 @@ internal sealed class WorldFuelTargets : IFuelTargetPort
         if (body == null)
         {
             return Nothing("the Steward is not here to put anything on the fire");
+        }
+
+        float reach = Vector3.Distance(body.transform.position, fireplace.transform.position);
+        if (reach > ReachMetres)
+        {
+            return Nothing(
+                "he is " + reach.ToString("0.#", CultureInfo.InvariantCulture) + " m from that " +
+                "fire and only reaches " + ReachMetres.ToString("0.#", CultureInfo.InvariantCulture) +
+                " m, the same as a player");
         }
 
         string fuelName = FuelNameOf(fireplace);

@@ -127,6 +127,15 @@ Four consequences, each of which the implementation depends on:
    is **measured**, from the fuel float and the worker's item count, before and
    after.
 
+   This is not a new shape, and it should not be read as one. It is the same
+   rule the settlement custody layer already arrived at independently:
+   `src/Shared/Settlement/Custody/TransferExecutor.cs` classifies every transfer
+   from *"the measured deltas of both inventories"* and never from what `Add`
+   or `Remove` returned (CONTRACTS.md §5.2, step 5). Two different vanilla
+   surfaces, the same conclusion — the game's return values describe what a call
+   attempted, not what it achieved. A third adapter should assume this before it
+   checks, not after.
+
 2. **"Full" is `Mathf.CeilToInt(fuel) >= m_maxFuel`,** not `fuel >= m_maxFuel`.
    At `m_maxFuel = 10`, a fire at `9.5` is full and refuses; a fire at `9.0`
    accepts and lands on `10.0`. So the accepted delta of one unit is
@@ -140,6 +149,23 @@ Four consequences, each of which the implementation depends on:
 
 4. **`RPC_AddFuel` does nothing unless `m_nview.IsOwner()`.** See section 3 —
    this is the sharpest edge in the whole audit.
+
+### 2.1.1 `UseItem` has no range check, and that is a finding
+
+`Fireplace` contains no distance test anywhere — not in `UseItem`, not in
+`Interact`, not in `CanUseItems`. The only thing that stops a player fuelling a
+hearth from across their base is `Player.m_maxInteractDistance` (default `5f`),
+applied earlier, at the hover targeting.
+
+**A modded worker never goes through that targeting.** So a naive adapter that
+is otherwise perfectly honest — real wood, measured deltas, vanilla's own call
+— would let the Steward stand at the chest and light every fire in the
+settlement without moving. Legitimate by every other rule, and obviously a cheat
+to anyone watching.
+
+The Steward is therefore held to vanilla's own number: he must be within **5 m**
+of the fire, checked in the adapter that performs the mutation, in addition to
+the upkeep loop's refusal to feed before it has walked there.
 
 ### 2.2 Why not `Interact`
 
