@@ -67,6 +67,12 @@ internal static class WorkerBodyCensus
     /// found none.</summary>
     public static bool MaySpawn(WorkerBodyStatus status) => status == WorkerBodyStatus.NotFound;
 
+    /// <summary>Whether the runtime may bind or unbind a body this frame. Never
+    /// while a cart's joint holds the current one: the joint is released first,
+    /// and the release needs the body it is connected to (review R-313 B1;
+    /// CONTRACTS.md §2.5, "before the body is unbound").</summary>
+    public static bool MayChangeBinding(bool jointHeld) => !jointHeld;
+
     public static string Describe(WorkerBodyStatus status)
     {
         switch (status)

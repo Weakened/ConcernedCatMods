@@ -14,7 +14,8 @@ internal readonly struct SignalVerdict
         bool pause,
         LeaseInvalidation invalidation,
         string detail,
-        bool stillHeld)
+        bool stillHeld,
+        bool holdsCart)
     {
         Healthy = healthy;
         Reason = reason;
@@ -23,6 +24,7 @@ internal readonly struct SignalVerdict
         Invalidation = invalidation;
         Detail = detail ?? string.Empty;
         _stillHeld = stillHeld;
+        HoldsCart = holdsCart;
     }
 
     private readonly bool _stillHeld;
@@ -49,12 +51,18 @@ internal readonly struct SignalVerdict
     /// <summary>Control ends but Gunnar's joint stays, because the joint is
     /// what holds the cart (a hard lean). Repeating this verdict while a person
     /// is already asked changes nothing.</summary>
-    public bool StillHeld => !Healthy && !ReleaseJoint && _stillHeld;
+    public bool StillHeld => !Healthy && !ReleaseJoint && (_stillHeld || HoldsCart);
+
+    /// <summary>Control ends, Gunnar stops, and the cart is <b>not</b> let go
+    /// here: he keeps holding it until the ground under it is parkable
+    /// (CONTRACTS.md §2.7, C4). Lost authority and a peer connecting are the two;
+    /// CART-06 forbids releasing a loaded cart into a roll.</summary>
+    public bool HoldsCart { get; }
 
     public string Detail { get; }
 
     public static SignalVerdict Fine() =>
-        new SignalVerdict(true, HaulAttentionReason.Unspecified, false, false, LeaseInvalidation.Unspecified, string.Empty, false);
+        new SignalVerdict(true, HaulAttentionReason.Unspecified, false, false, LeaseInvalidation.Unspecified, string.Empty, false, false);
 
     public static SignalVerdict End(
         HaulAttentionReason reason,
@@ -69,7 +77,24 @@ internal readonly struct SignalVerdict
             throw new ArgumentOutOfRangeException(nameof(reason), "Ending control needs a reason.");
         }
 
-        return new SignalVerdict(false, reason, releaseJoint, pause, invalidation, detail, stillHeld && !releaseJoint);
+        return new SignalVerdict(false, reason, releaseJoint, pause, invalidation, detail, stillHeld && !releaseJoint, false);
+    }
+
+    /// <summary>The lost-authority stop of CONTRACTS.md §2.7 (C4): control ends
+    /// with this reason and Gunnar stops at once, but the joint stays until the
+    /// cart can be parked where it stands.</summary>
+    public static SignalVerdict Hold(
+        HaulAttentionReason reason,
+        LeaseInvalidation invalidation,
+        string detail,
+        bool pause = false)
+    {
+        if (reason == HaulAttentionReason.Unspecified)
+        {
+            throw new ArgumentOutOfRangeException(nameof(reason), "Ending control needs a reason.");
+        }
+
+        return new SignalVerdict(false, reason, false, pause, invalidation, detail, true, true);
     }
 }
 
@@ -93,28 +118,30 @@ internal static class JointSignalClassifier
         WorkAuthorityVerdict authority,
         CartObservation cart,
         PullerBodyFacts puller,
-        HaulLimits limits)
+        HaulLimits limits,
+        CartObservation? lastHeld = null)
     {
+        // C4 §2.7: lost authority is not a teardown. Gunnar stops at once and
+        // keeps holding the cart until the ground under it is parkable, because
+        // CART-06 forbids releasing a loaded cart into a roll.
         if (authority == WorkAuthorityVerdict.OtherPeersConnected)
         {
-            return SignalVerdict.End(
+            return SignalVerdict.Hold(
                 HaulAttentionReason.OtherPeersConnected,
-                releaseJoint: true,
                 LeaseInvalidation.Unspecified,
-                "a peer connected; Gunnar lets go and waits",
+                "a peer connected; Gunnar stops and holds the cart until it can be left safely",
                 pause: true);
         }
 
         if (authority != WorkAuthorityVerdict.Granted)
         {
-            return SignalVerdict.End(
+            return SignalVerdict.Hold(
                 HaulAttentionReason.AuthorityLost,
-                releaseJoint: true,
                 LeaseInvalidation.AuthorityLost,
-                "work authority is " + authority);
+                "work authority is " + authority + "; Gunnar stops and holds the cart until it can be left safely");
         }
 
-        if (!puller.Present || puller.Faulted || puller.Dead)
+        if (!puller.Present || puller.Faulted || puller.Dead || puller.Duplicated)
         {
             return SignalVerdict.End(
                 puller.Duplicated ? HaulAttentionReason.WorkerBodyDuplicated : HaulAttentionReason.WorkerBodyLost,
@@ -122,6 +149,17 @@ internal static class JointSignalClassifier
                 LeaseInvalidation.WorkerBodyLost,
                 puller.Duplicated ? "more than one body carries Gunnar's identity" :
                 puller.Faulted ? "Gunnar's worker faulted" : puller.Dead ? "Gunnar's body died" : "Gunnar's body is gone");
+        }
+
+        if (!cart.CapabilityOk)
+        {
+            // The seam itself failed: nothing is known about the cart, so its
+            // lease is not ended as destroyed or unloaded; control ends.
+            return SignalVerdict.End(
+                HaulAttentionReason.HitchFailed,
+                releaseJoint: true,
+                LeaseInvalidation.Unspecified,
+                "the cart seam stopped working; nothing about the cart could be read");
         }
 
         if (!cart.Resolved)
@@ -151,6 +189,18 @@ internal static class JointSignalClassifier
                     "the player grabbed a cart, which detaches every other cart");
             }
 
+            // Vanilla's own evidence first: a hitch that was straining at its
+            // break force or stretched to the detach distance broke by itself,
+            // whoever was watching.
+            if (lastHeld.HasValue && BrokeByItself(lastHeld.Value))
+            {
+                return SignalVerdict.End(
+                    HaulAttentionReason.JointBroke,
+                    releaseJoint: true,
+                    LeaseInvalidation.Unspecified,
+                    "the hitch broke at its break force or detach distance");
+            }
+
             if (cart.LocalPlayerHoveringCart)
             {
                 return SignalVerdict.End(
@@ -174,6 +224,17 @@ internal static class JointSignalClassifier
                 releaseJoint: true,
                 LeaseInvalidation.Unspecified,
                 "the hitch came apart (break force or detach distance)");
+        }
+
+        if (!cart.JointConnectedToPuller && cart.JointConnectedToNothing)
+        {
+            // A joint to nothing holds nobody; releasing it is what vanilla's
+            // own next update would do.
+            return SignalVerdict.End(
+                HaulAttentionReason.JointBroke,
+                releaseJoint: true,
+                LeaseInvalidation.Unspecified,
+                "the cart's joint is connected to nothing");
         }
 
         if (!cart.JointConnectedToPuller)
@@ -216,4 +277,10 @@ internal static class JointSignalClassifier
 
         return SignalVerdict.Fine();
     }
+
+    /// <summary>The last frame Gunnar still held the joint showed it at 90 % of
+    /// the break force or 90 % of the detach distance.</summary>
+    internal static bool BrokeByItself(CartObservation lastHeld) =>
+        (lastHeld.BreakForceNewtons > 0f && lastHeld.JointForceNewtons >= 0.9f * lastHeld.BreakForceNewtons) ||
+        (lastHeld.DetachDistanceMetres > 0f && lastHeld.HitchDistanceMetres >= 0.9f * lastHeld.DetachDistanceMetres);
 }

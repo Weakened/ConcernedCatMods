@@ -36,32 +36,35 @@ public class HaulingExecutionSignalTests
 
     public static IEnumerable<object[]> EachEnding()
     {
-        // name, reason, releases joint, lease invalidation, pauses
-        yield return new object[] { "peer connected", HaulAttentionReason.OtherPeersConnected, true, LeaseInvalidation.Unspecified, true };
-        yield return new object[] { "runtime disabled", HaulAttentionReason.AuthorityLost, true, LeaseInvalidation.AuthorityLost, false };
-        yield return new object[] { "not host", HaulAttentionReason.AuthorityLost, true, LeaseInvalidation.AuthorityLost, false };
-        yield return new object[] { "body gone", HaulAttentionReason.WorkerBodyLost, true, LeaseInvalidation.WorkerBodyLost, false };
-        yield return new object[] { "body faulted", HaulAttentionReason.WorkerBodyLost, true, LeaseInvalidation.WorkerBodyLost, false };
-        yield return new object[] { "body dead", HaulAttentionReason.WorkerBodyLost, true, LeaseInvalidation.WorkerBodyLost, false };
-        yield return new object[] { "cart destroyed", HaulAttentionReason.CartDestroyed, true, LeaseInvalidation.CartDestroyed, false };
-        yield return new object[] { "cart unloaded", HaulAttentionReason.CartUnloaded, true, LeaseInvalidation.CartUnloaded, false };
-        yield return new object[] { "joint gone, ownership moved", HaulAttentionReason.OwnershipLost, true, LeaseInvalidation.OwnershipLost, false };
-        yield return new object[] { "joint gone, player grabbed a cart", HaulAttentionReason.PlayerTookOver, true, LeaseInvalidation.Unspecified, false };
-        yield return new object[] { "joint gone, player using the cart", HaulAttentionReason.PlayerTookOver, true, LeaseInvalidation.Unspecified, false };
-        yield return new object[] { "joint gone, cart tipped", HaulAttentionReason.CartTipped, true, LeaseInvalidation.Unspecified, false };
-        yield return new object[] { "joint gone otherwise", HaulAttentionReason.JointBroke, true, LeaseInvalidation.Unspecified, false };
-        yield return new object[] { "joint now the player's", HaulAttentionReason.PlayerTookOver, false, LeaseInvalidation.Unspecified, false };
-        yield return new object[] { "joint now another body's", HaulAttentionReason.JointBroke, false, LeaseInvalidation.Unspecified, false };
-        yield return new object[] { "ownership moved, joint still here", HaulAttentionReason.OwnershipLost, true, LeaseInvalidation.OwnershipLost, false };
-        yield return new object[] { "brake engaged", HaulAttentionReason.BrakeEngaged, true, LeaseInvalidation.Unspecified, false };
-        yield return new object[] { "root frozen", HaulAttentionReason.BrakeEngaged, true, LeaseInvalidation.Unspecified, false };
-        yield return new object[] { "leaning, still held", HaulAttentionReason.CartTipped, false, LeaseInvalidation.Unspecified, false };
+        // name, reason, releases joint, lease invalidation, pauses, holds the cart (C4 §2.7)
+        yield return new object[] { "peer connected", HaulAttentionReason.OtherPeersConnected, false, LeaseInvalidation.Unspecified, true, true };
+        yield return new object[] { "runtime disabled", HaulAttentionReason.AuthorityLost, false, LeaseInvalidation.AuthorityLost, false, true };
+        yield return new object[] { "not host", HaulAttentionReason.AuthorityLost, false, LeaseInvalidation.AuthorityLost, false, true };
+        yield return new object[] { "body gone", HaulAttentionReason.WorkerBodyLost, true, LeaseInvalidation.WorkerBodyLost, false, false };
+        yield return new object[] { "body faulted", HaulAttentionReason.WorkerBodyLost, true, LeaseInvalidation.WorkerBodyLost, false, false };
+        yield return new object[] { "body dead", HaulAttentionReason.WorkerBodyLost, true, LeaseInvalidation.WorkerBodyLost, false, false };
+        yield return new object[] { "body duplicated", HaulAttentionReason.WorkerBodyDuplicated, true, LeaseInvalidation.WorkerBodyLost, false, false };
+        yield return new object[] { "seam faulted", HaulAttentionReason.HitchFailed, true, LeaseInvalidation.Unspecified, false, false };
+        yield return new object[] { "cart destroyed", HaulAttentionReason.CartDestroyed, true, LeaseInvalidation.CartDestroyed, false, false };
+        yield return new object[] { "cart unloaded", HaulAttentionReason.CartUnloaded, true, LeaseInvalidation.CartUnloaded, false, false };
+        yield return new object[] { "joint gone, ownership moved", HaulAttentionReason.OwnershipLost, true, LeaseInvalidation.OwnershipLost, false, false };
+        yield return new object[] { "joint gone, player grabbed a cart", HaulAttentionReason.PlayerTookOver, true, LeaseInvalidation.Unspecified, false, false };
+        yield return new object[] { "joint gone, player using the cart", HaulAttentionReason.PlayerTookOver, true, LeaseInvalidation.Unspecified, false, false };
+        yield return new object[] { "joint gone, cart tipped", HaulAttentionReason.CartTipped, true, LeaseInvalidation.Unspecified, false, false };
+        yield return new object[] { "joint gone otherwise", HaulAttentionReason.JointBroke, true, LeaseInvalidation.Unspecified, false, false };
+        yield return new object[] { "joint connected to nothing", HaulAttentionReason.JointBroke, true, LeaseInvalidation.Unspecified, false, false };
+        yield return new object[] { "joint now the player's", HaulAttentionReason.PlayerTookOver, false, LeaseInvalidation.Unspecified, false, false };
+        yield return new object[] { "joint now another body's", HaulAttentionReason.JointBroke, false, LeaseInvalidation.Unspecified, false, false };
+        yield return new object[] { "ownership moved, joint still here", HaulAttentionReason.OwnershipLost, true, LeaseInvalidation.OwnershipLost, false, false };
+        yield return new object[] { "brake engaged", HaulAttentionReason.BrakeEngaged, true, LeaseInvalidation.Unspecified, false, false };
+        yield return new object[] { "root frozen", HaulAttentionReason.BrakeEngaged, true, LeaseInvalidation.Unspecified, false, false };
+        yield return new object[] { "leaning, still held", HaulAttentionReason.CartTipped, false, LeaseInvalidation.Unspecified, false, false };
     }
 
     [Theory]
     [MemberData(nameof(EachEnding))]
     public void EachEndingHasItsReasonReleaseAndLeaseRule(
-        string ending, object expectedReason, bool releases, object expectedInvalidation, bool pauses)
+        string ending, object expectedReason, bool releases, object expectedInvalidation, bool pauses, bool holds)
     {
         var reason = (HaulAttentionReason)expectedReason;
         var invalidation = (LeaseInvalidation)expectedInvalidation;
@@ -77,6 +80,8 @@ public class HaulingExecutionSignalTests
             case "body gone": body = body.With(f => f.Present = false); break;
             case "body faulted": body = body.With(f => f.Faulted = true); break;
             case "body dead": body = body.With(f => f.Dead = true); break;
+            case "body duplicated": body = body.With(f => f.Duplicated = true); break;
+            case "seam faulted": cart = cart.With(o => { o.CapabilityOk = false; o.Resolved = false; o.RecordExists = true; }); break;
             case "cart destroyed": cart = cart.With(o => { o.Resolved = false; o.RecordExists = false; }); break;
             case "cart unloaded": cart = cart.With(o => { o.Resolved = false; o.RecordExists = true; }); break;
             case "joint gone, ownership moved": cart = jointGone.With(o => o.IsOwner = false); break;
@@ -84,6 +89,7 @@ public class HaulingExecutionSignalTests
             case "joint gone, player using the cart": cart = jointGone.With(o => o.LocalPlayerHoveringCart = true); break;
             case "joint gone, cart tipped": cart = jointGone.With(o => o.UpDot = 0.05f); break;
             case "joint gone otherwise": cart = jointGone; break;
+            case "joint connected to nothing": cart = cart.With(o => { o.JointConnectedToPuller = false; o.JointConnectedToNothing = true; }); break;
             case "joint now the player's": cart = cart.With(o => { o.JointConnectedToPuller = false; o.JointConnectedToLocalPlayer = true; }); break;
             case "joint now another body's": cart = cart.With(o => o.JointConnectedToPuller = false); break;
             case "ownership moved, joint still here": cart = cart.With(o => o.IsOwner = false); break;
@@ -100,6 +106,7 @@ public class HaulingExecutionSignalTests
         Assert.Equal(releases, verdict.ReleaseJoint);
         Assert.Equal(invalidation, verdict.Invalidation);
         Assert.Equal(pauses, verdict.Pause);
+        Assert.Equal(holds, verdict.HoldsCart);
         Assert.False(string.IsNullOrWhiteSpace(verdict.Detail));
     }
 

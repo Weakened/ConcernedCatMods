@@ -107,12 +107,14 @@ internal static class HitchPreconditions
                 FormattableString.Invariant($"cart bodies weigh {cart.BodyMassSumKg:0.##} kg, its load says {cart.ExpectedMassKg:0.##} kg"));
         }
 
-        // D4.4: nobody is using it: container closed, no joint, no attach flag.
-        if (cart.InUse || cart.ContainerOpen || cart.HasJoint || cart.AttachFlag)
+        // D4.4: nobody is using it: container closed, no joint, no attach flag,
+        // and nobody sitting in its seat (Gunnar would haul them away).
+        if (cart.InUse || cart.ContainerOpen || cart.HasJoint || cart.AttachFlag || cart.SeatOccupied)
         {
             return HitchVerdict.Refuse(
                 HitchRefusal.InUse,
-                cart.ContainerOpen ? "the cart's container is open" : "the cart is already attached to someone");
+                cart.ContainerOpen ? "the cart's container is open" :
+                cart.SeatOccupied ? "someone is sitting in the cart" : "the cart is already attached to someone");
         }
 
         // D4.5: the parking brake is respected, never released.

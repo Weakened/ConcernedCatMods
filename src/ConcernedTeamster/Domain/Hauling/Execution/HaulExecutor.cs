@@ -84,6 +84,10 @@ internal enum BodyRetirementOutcome
     /// <summary>A haul holds Gunnar; bodies are retired only while resting.
     /// </summary>
     RefusedBusy = 2,
+
+    /// <summary>A cart's joint still holds the body and would not let go: a
+    /// jointed body is never destroyed (review R-313 B1).</summary>
+    RefusedStillHitched = 3,
 }
 
 /// <summary>Refuses and reports any phase change the contract table does not
@@ -137,6 +141,7 @@ internal sealed class HaulExecutor
     private readonly HaulExecutionLimits _execution;
     private readonly CartStillnessTracker _stillness;
     private readonly AttentionThrottle _attentionLog = new AttentionThrottle(30f);
+    private readonly AttentionThrottle _releaseLog = new AttentionThrottle(10f);
 
     private BoundedRetry _approachRetry;
     private BoundedRetry _hitchRetry;
@@ -147,9 +152,28 @@ internal sealed class HaulExecutor
     private float _recoveryRetryAt;
     private float _detachReleasedAt = float.NaN;
     private float _lastWorkerTickAt = float.NaN;
+    private float _unloadTouchedAt = float.NaN;
+    private float _hitchReadySince = float.NaN;
     private bool _legArrived;
     private bool _cartMeasured;
     private bool _releaseLeaseAfterDetach;
+
+    /// <summary>The cart Gunnar's joint is on, set at a verified attach and
+    /// cleared only when a release ends it (review R-313 M1). It outlives the
+    /// lease on purpose: the joint is released through this, never through the
+    /// lease.</summary>
+    private CartKey? _attachedCart;
+
+    /// <summary>The last frame whose signals said the joint was Gunnar's, for
+    /// attributing a vanished joint from vanilla's own evidence.</summary>
+    private CartObservation? _lastHeld;
+
+    /// <summary>The §2.7 hold: control ended for this reason and Gunnar is
+    /// holding the cart until it can be left safely. Unspecified when not
+    /// holding.</summary>
+    private HaulAttentionReason _holdReason;
+
+    private string _holdDetail = string.Empty;
     private HaulStopIntent _pendingStop;
     private HaulAttentionReason _pendingAttention;
     private string _pendingAttentionDetail = string.Empty;
@@ -210,8 +234,31 @@ internal sealed class HaulExecutor
     public CartRoutePlan? Plan { get; private set; }
 
     /// <summary>Gunnar believes he holds the joint: verified at attach and
-    /// confirmed by every later frame's signals.</summary>
-    public bool Attached { get; private set; }
+    /// confirmed by every later frame's signals. True for exactly as long as
+    /// <see cref="AttachedCart"/> names a cart, whatever the lease says.
+    /// </summary>
+    public bool Attached => _attachedCart.HasValue;
+
+    /// <summary>The cart the joint is on, or null when Gunnar holds nothing.
+    /// </summary>
+    public CartKey? AttachedCart => _attachedCart;
+
+    /// <summary>A release did not take (the cart still reports the joint, or it
+    /// answered "not ours" for a joint the last frame said was Gunnar's): it is
+    /// retried every frame, and nothing retires the body meanwhile (review
+    /// R-313 M1).</summary>
+    public bool StillHolding { get; private set; }
+
+    /// <summary>Gunnar stopped because authority was lost or a peer connected,
+    /// and is holding the cart until the ground under it is parkable
+    /// (CONTRACTS.md §2.7). Unspecified when he is not.</summary>
+    public HaulAttentionReason HoldingCartBecause => _holdReason;
+
+    public bool HoldingCart => _holdReason != HaulAttentionReason.Unspecified;
+
+    /// <summary>Why the §2.7 hold started, in words, for the status line.
+    /// </summary>
+    public string HoldingCartDetail => _holdDetail;
 
     public HaulStopIntent PendingStop => _pendingStop;
 
@@ -411,6 +458,32 @@ internal sealed class HaulExecutor
         // Revalidate the lease's cart before any motion leg (CONTRACTS.md §2.2).
         CartObservation cart = _ports.Seam.Observe(lease.Cart);
         LastCart = cart;
+
+        // A hitched Gunnar is judged from the joint first, so the joint is
+        // released before anything ends the lease (review R-313 M1).
+        if (fromWaiting)
+        {
+            SignalVerdict signals = JointSignalClassifier.Classify(authority, cart, body, _limits, _lastHeld);
+            if (!signals.Healthy)
+            {
+                if (!IsAlreadyAsked(signals))
+                {
+                    LoseControl(signals, lease);
+                }
+
+                return Answer(HaulCommandOutcome.Rejected, signals.Reason, HaulCommandDetail.HitchUnhealthy);
+            }
+
+            _lastHeld = cart;
+        }
+
+        if (!cart.CapabilityOk)
+        {
+            // A seam that failed mid-call knows nothing about the cart; the
+            // lease does not end as destroyed (review R-313 m2).
+            return Answer(HaulCommandOutcome.Unavailable, HaulAttentionReason.HitchFailed, HaulCommandDetail.WorkerUnavailable);
+        }
+
         if (!cart.Resolved)
         {
             HaulAttentionReason gone = cart.RecordExists ? HaulAttentionReason.CartUnloaded : HaulAttentionReason.CartDestroyed;
@@ -425,16 +498,6 @@ internal sealed class HaulExecutor
             }
 
             return Answer(HaulCommandOutcome.Rejected, gone, HaulCommandDetail.CartUnavailable);
-        }
-
-        if (fromWaiting)
-        {
-            SignalVerdict signals = JointSignalClassifier.Classify(authority, cart, body, _limits);
-            if (!signals.Healthy)
-            {
-                LoseControl(signals, lease);
-                return Answer(HaulCommandOutcome.Rejected, signals.Reason, HaulCommandDetail.HitchUnhealthy);
-            }
         }
 
         if ((_ports.Navigation != null && !MeasureLeasedCart(lease.Cart)) || !TryGetFootprint(cart, out CartFootprint footprint))
@@ -491,6 +554,8 @@ internal sealed class HaulExecutor
             return Answer(HaulCommandOutcome.Rejected, HaulAttentionReason.Unspecified, HaulCommandDetail.UnknownHaul);
         }
 
+        // C4 §3.2: the consumer speaking keeps its hold on the cart alive.
+        TouchUnloadHold(haulId);
         if (transferring)
         {
             WorkAuthorityVerdict authority = _ports.Authority.Evaluate();
@@ -509,6 +574,10 @@ internal sealed class HaulExecutor
 
             _ports.Body.Stop();
             Transition(HaulPhase.Unloading);
+
+            // The hold starts now and lasts only as long as the consumer keeps
+            // saying it is there (C4 §3.2).
+            _unloadTouchedAt = now;
             return Answer(HaulCommandOutcome.Accepted, HaulAttentionReason.Unspecified, HaulCommandDetail.Accepted);
         }
 
@@ -517,6 +586,7 @@ internal sealed class HaulExecutor
             return Answer(HaulCommandOutcome.Rejected, HaulAttentionReason.Unspecified, HaulCommandDetail.NotUnloading);
         }
 
+        _unloadTouchedAt = float.NaN;
         Transition(HaulPhase.Waiting);
         HaulStopIntent pending = _pendingStop;
         if (pending != HaulStopIntent.Unspecified)
@@ -540,14 +610,18 @@ internal sealed class HaulExecutor
         if (Phase == HaulPhase.Unloading)
         {
             // Never refused while unloading, but it waits for the consumer's
-            // Done: the cart must not move out from under a transfer.
+            // Done, or for the hold's own deadline (C4 §3.2): the cart must not
+            // move out from under a transfer.
+            TouchUnloadHold(haulId);
             _pendingStop = intent;
             return Answer(HaulCommandOutcome.Accepted, HaulAttentionReason.Unspecified, HaulCommandDetail.Pending);
         }
 
-        if (Phase == HaulPhase.NeedsAttention && Attached && intent == HaulStopIntent.StopAndWait)
+        if (intent == HaulStopIntent.StopAndWait && IsStoppedPhase(Phase))
         {
-            return Answer(HaulCommandOutcome.Rejected, Attention, HaulCommandDetail.CannotWaitWhileNeedingAttention);
+            // C4 §3.2: a haul that has already stopped is asked to stop. Nothing
+            // to do: no transition, no pending intent, and the reason stands.
+            return Answer(HaulCommandOutcome.Accepted, HaulAttentionReason.Unspecified, HaulCommandDetail.Accepted);
         }
 
         RequestStop(intent);
@@ -569,20 +643,24 @@ internal sealed class HaulExecutor
             throw new ArgumentOutOfRangeException(nameof(invalidation), "A teardown needs a reason.");
         }
 
-        _ports.Body.Stop();
         CartLease? lease = ActiveLease;
-        if (HaulId.Length > 0)
+        try
         {
-            Modes.Enter(ActorMode.Recovering, HaulId);
+            _ports.Body.Stop();
+            if (HaulId.Length > 0)
+            {
+                Modes.Enter(ActorMode.Recovering, HaulId);
+            }
+        }
+        finally
+        {
+            // The release happens even when stopping the motor or the identity
+            // threw (review R-313 m9), and through the attached cart rather than
+            // the lease (M1).
+            EndHold();
+            ReleaseAttached("before teardown: " + why);
         }
 
-        if (Attached && lease != null)
-        {
-            ReleaseResult released = _ports.Seam.ReleaseJoint(lease.Cart);
-            _ports.Log.Info("Gunnar let go of cart " + lease.Cart + " before teardown (" + why + "): " + released + ".");
-        }
-
-        Attached = false;
         _pendingStop = HaulStopIntent.Unspecified;
         _releaseLeaseAfterDetach = false;
         if (lease != null)
@@ -603,7 +681,9 @@ internal sealed class HaulExecutor
     }
 
     /// <summary>Retires Gunnar's body. Only while no haul holds him, and the
-    /// joint (should one exist at all) is released first, always.</summary>
+    /// joint (should one exist at all) is released first, always. A joint that
+    /// will not let go refuses the retirement: a body a cart is jointed to is
+    /// never destroyed (review R-313 B1).</summary>
     public BodyRetirementOutcome RetireBody()
     {
         if (HaulId.Length > 0 || !Modes.MayRetireBody)
@@ -611,14 +691,23 @@ internal sealed class HaulExecutor
             return BodyRetirementOutcome.RefusedBusy;
         }
 
-        _ports.Body.Stop();
         CartLease? lease = ActiveLease;
-        if (Attached && lease != null)
+        try
         {
-            _ports.Seam.ReleaseJoint(lease.Cart);
+            _ports.Body.Stop();
+        }
+        finally
+        {
+            EndHold();
+            ReleaseAttached("retiring Gunnar's body");
         }
 
-        Attached = false;
+        if (Attached)
+        {
+            _ports.Log.Warning("Gunnar's body was not retired: a cart still holds his joint.");
+            return BodyRetirementOutcome.RefusedStillHitched;
+        }
+
         if (lease != null)
         {
             InvalidateLease(lease, LeaseInvalidation.WorkerBodyLost);
@@ -647,14 +736,43 @@ internal sealed class HaulExecutor
 
         WorkAuthorityVerdict authority = _ports.Authority.Evaluate();
         PullerBodyFacts body = EffectiveBody(now);
-        CartObservation cart = ReadCart(lease, now);
+
+        // The cart watched is the lease's, or the one Gunnar is still holding:
+        // a joint outlives its lease and is released through its own key.
+        CartObservation cart = ReadCart(lease != null ? lease.Cart : _attachedCart, now);
 
         if (Attached)
         {
+            if (StillHolding)
+            {
+                // A release that did not take is retried every frame until it
+                // does (review R-313 M1); nothing else progresses meanwhile.
+                StopIfMoving(body);
+                ReleaseAttached("retrying a release that did not take");
+                return;
+            }
+
+            if (HoldingCart)
+            {
+                TickHold(now, body, cart, lease);
+                return;
+            }
+
             SignalVerdict verdict = lease == null
                 ? SignalVerdict.End(HaulAttentionReason.LeaseInvalidated, true, LeaseInvalidation.Unspecified, "the lease ended while hitched")
-                : JointSignalClassifier.Classify(authority, cart, body, _limits);
-            if (!verdict.Healthy && !IsAlreadyAsked(verdict))
+                : JointSignalClassifier.Classify(authority, cart, body, _limits, _lastHeld);
+            if (verdict.Healthy)
+            {
+                _lastHeld = cart;
+
+                // Unloading holds the cart hitched, so the hold's own deadline
+                // is watched from here (C4 §3.2).
+                if (Phase == HaulPhase.Unloading && ConsumerWentQuiet(now))
+                {
+                    EndUnloadHold(now);
+                }
+            }
+            else if (!IsAlreadyAsked(verdict))
             {
                 LoseControl(verdict, lease);
             }
@@ -662,12 +780,11 @@ internal sealed class HaulExecutor
             return;
         }
 
-        if (Phase == HaulPhase.Detaching)
-        {
-            return;
-        }
-
-        if (authority == WorkAuthorityVerdict.OtherPeersConnected)
+        // A detach that has started always completes (C4 §7): the joint is
+        // already gone and only the settle window is left, so nothing here
+        // interrupts it.
+        bool detaching = Phase == HaulPhase.Detaching;
+        if (!detaching && authority == WorkAuthorityVerdict.OtherPeersConnected)
         {
             if (HaulId.Length > 0 && Phase != HaulPhase.Paused && Phase != HaulPhase.NeedsAttention)
             {
@@ -678,7 +795,7 @@ internal sealed class HaulExecutor
             return;
         }
 
-        if (authority != WorkAuthorityVerdict.Granted)
+        if (!detaching && authority != WorkAuthorityVerdict.Granted)
         {
             if (lease != null)
             {
@@ -697,11 +814,24 @@ internal sealed class HaulExecutor
             return;
         }
 
-        if (Phase == HaulPhase.Paused && Attention == HaulAttentionReason.OtherPeersConnected)
+        if (!detaching && Phase == HaulPhase.Paused && Attention == HaulAttentionReason.OtherPeersConnected)
         {
             // Nobody else is connected any more: the haul is held, ready for
             // its next leg, but nothing moves until one is requested.
             Transition(HaulPhase.Ready);
+        }
+
+        if (lease != null && !cart.CapabilityOk)
+        {
+            // The seam itself failed: nothing is known about the cart, so its
+            // lease does not end as destroyed or unloaded (review R-313 m2).
+            _ports.Body.Stop();
+            if (HaulId.Length > 0)
+            {
+                ChainToAttention(HaulAttentionReason.HitchFailed, "the cart seam stopped working; nothing about the cart could be read");
+            }
+
+            return;
         }
 
         if (lease != null && !cart.Resolved)
@@ -723,11 +853,65 @@ internal sealed class HaulExecutor
 
         if (lease != null && HaulId.Length > 0 && IsProgressPhase(Phase) && !IsWorking(body))
         {
+            // Nothing keeps walking without a body to command (review R-313 B1).
+            _ports.Body.Stop();
             InvalidateLease(lease, LeaseInvalidation.WorkerBodyLost);
             ChainToAttention(
                 body.Duplicated ? HaulAttentionReason.WorkerBodyDuplicated : HaulAttentionReason.WorkerBodyLost,
                 body.Duplicated ? "more than one body carries Gunnar's identity" : "Gunnar's body is not working");
+            return;
         }
+
+        if (detaching && Phase == HaulPhase.Detaching && lease != null)
+        {
+            // The settle is checked every frame, together with the body and
+            // lease checks, so it cannot stall when the worker tick stops
+            // (review R-313 m1, C4 §7).
+            TickDetaching(now, cart, lease);
+            return;
+        }
+
+        if (Phase == HaulPhase.Unloading && ConsumerWentQuiet(now))
+        {
+            EndUnloadHold(now);
+        }
+    }
+
+    private bool ConsumerWentQuiet(float now) =>
+        !float.IsNaN(_unloadTouchedAt) && now - _unloadTouchedAt >= _limits.RendezvousTimeoutSeconds;
+
+    /// <summary>C4 §3.2: the consumer stopped saying it is there, so the hold on
+    /// the cart ends here rather than lasting forever. A cancel that arrived
+    /// during the transfer completes now.</summary>
+    private void EndUnloadHold(float now)
+    {
+        _unloadTouchedAt = float.NaN;
+        HaulStopIntent pending = _pendingStop;
+        _pendingStop = HaulStopIntent.Unspecified;
+        _ports.Body.Stop();
+        ChainToAttention(
+            HaulAttentionReason.RendezvousTimedOut,
+            FormattableString.Invariant(
+                $"nothing asked about the hold for {_limits.RendezvousTimeoutSeconds:0} s while the cart was held for a transfer"));
+        if (pending != HaulStopIntent.Unspecified)
+        {
+            RequestStop(pending);
+        }
+    }
+
+    /// <summary>C4 §3.2 hold liveness: the cooperating consumer says it is still
+    /// there. Every <c>getHaul</c>, <c>acknowledgeWait</c> and <c>cancelHaul</c>
+    /// naming this haul keeps an Unloading hold alive.</summary>
+    public bool TouchUnloadHold(string haulId)
+    {
+        if (Phase != HaulPhase.Unloading || HaulId.Length == 0 ||
+            !string.Equals(HaulId, haulId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        _unloadTouchedAt = _ports.Clock.Now;
+        return true;
     }
 
     // ------------------------------------------------------------------
@@ -743,22 +927,32 @@ internal sealed class HaulExecutor
         CartLease? lease = ActiveLease;
         if (lease == null)
         {
-            if (Attached)
-            {
-                ObserveFrame();
-            }
-
+            // No lease is no licence to keep walking (review R-313 B1). Any
+            // joint still held is the frame observer's business, every frame.
+            StopIfMoving(EffectiveBody(now));
             return;
         }
 
         WorkAuthorityVerdict authority = _ports.Authority.Evaluate();
         PullerBodyFacts body = EffectiveBody(now);
-        CartObservation cart = ReadCart(lease, now);
+        CartObservation cart = ReadCart(lease.Cart, now);
 
         if (Attached)
         {
-            SignalVerdict verdict = JointSignalClassifier.Classify(authority, cart, body, _limits);
-            if (!verdict.Healthy && !IsAlreadyAsked(verdict))
+            if (StillHolding || HoldingCart)
+            {
+                // A release that did not take, or the §2.7 hold: the frame
+                // observer owns both, and no progress happens under either.
+                StopIfMoving(body);
+                return;
+            }
+
+            SignalVerdict verdict = JointSignalClassifier.Classify(authority, cart, body, _limits, _lastHeld);
+            if (verdict.Healthy)
+            {
+                _lastHeld = cart;
+            }
+            else if (!IsAlreadyAsked(verdict))
             {
                 LoseControl(verdict, lease);
                 return;
@@ -884,6 +1078,34 @@ internal sealed class HaulExecutor
         }
 
         StopIfMoving(body);
+
+        // CART-03 on every attempt, not only at the handover from Approaching
+        // (review R-313 m6): Gunnar faces the way the cart points, and the cart
+        // itself is at rest. Neither spends an attempt until the wait runs out.
+        string? notReady = HitchReadiness(body, cart, out bool facing);
+        if (notReady != null)
+        {
+            if (float.IsNaN(_hitchReadySince))
+            {
+                _hitchReadySince = now;
+            }
+
+            if (now - _hitchReadySince < _execution.StoppingTimeoutSeconds)
+            {
+                if (!facing)
+                {
+                    _ports.Body.Face(cart.HeadingX, cart.HeadingZ);
+                }
+
+                return;
+            }
+
+            _hitchReadySince = float.NaN;
+            HandleHitchRefusal(now, facing ? HitchRefusal.InUse : HitchRefusal.OutOfReach, notReady, cart, lease);
+            return;
+        }
+
+        _hitchReadySince = float.NaN;
         HitchVerdict verdict = HitchPreconditions.Evaluate(
             _ports.Seam.IsAvailable, authority, lease.IsActive, cart, body, _limits, _execution);
         if (!verdict.Allowed)
@@ -900,7 +1122,12 @@ internal sealed class HaulExecutor
             return;
         }
 
-        Attached = true;
+        _attachedCart = lease.Cart;
+        StillHolding = false;
+
+        // The joint is one frame old; what it looked like under load is what
+        // the next healthy frame records.
+        _lastHeld = null;
         LastHitchRefusal = HitchRefusal.Unspecified;
         LastHitchDetail = string.Empty;
         _hitchRetry.Reset();
@@ -1235,12 +1462,16 @@ internal sealed class HaulExecutor
     private void BeginDetaching(float now, CartObservation cart, CartLease? lease)
     {
         _pendingStop = HaulStopIntent.Unspecified;
-        if (lease == null)
+
+        // Through the joint's own cart, so a detach still works when the lease
+        // has already ended (review R-313 M1).
+        CartKey? key = _attachedCart ?? (lease != null ? lease.Cart : (CartKey?)null);
+        if (!key.HasValue)
         {
             return;
         }
 
-        ParkingGround ground = _ports.Seam.ReadGround(lease.Cart);
+        ParkingGround ground = _ports.Seam.ReadGround(key.Value);
         ParkingDecision parking = ParkingJudge.Evaluate(ground, cart, _stillness.IsStill(now), _limits, _execution);
         if (!parking.Safe)
         {
@@ -1255,10 +1486,8 @@ internal sealed class HaulExecutor
         }
 
         // Recovering first: nothing may interrupt a detach in progress.
-        Modes.Enter(ActorMode.Recovering, HaulId.Length > 0 ? HaulId : lease.LeaseId);
-        ReleaseResult released = _ports.Seam.ReleaseJoint(lease.Cart);
-        _ports.Log.Info("Gunnar detached from cart " + lease.Cart + " on suitable ground: " + released + ".");
-        Attached = false;
+        Modes.Enter(ActorMode.Recovering, HaulId.Length > 0 ? HaulId : lease != null ? lease.LeaseId : "detach-" + key.Value);
+        ReleaseResult released = ReleaseAttached("detaching on suitable ground");
         _detachReleasedAt = now;
         _stillness.Reset();
         if (released == ReleaseResult.NotOurs)
@@ -1273,7 +1502,7 @@ internal sealed class HaulExecutor
         }
     }
 
-    private void TickDetaching(float now, CartObservation cart, CartLease lease)
+    private void TickDetaching(float now, CartObservation cart, CartLease? lease)
     {
         if (float.IsNaN(_detachReleasedAt))
         {
@@ -1300,7 +1529,7 @@ internal sealed class HaulExecutor
         }
 
         ClearHaul();
-        if (_releaseLeaseAfterDetach)
+        if (_releaseLeaseAfterDetach && lease != null)
         {
             _releaseLeaseAfterDetach = false;
             Leases.Release(lease.LeaseId);
@@ -1355,7 +1584,7 @@ internal sealed class HaulExecutor
             case HaulPhase.Waiting:
                 if (intent == HaulStopIntent.DetachAndPark)
                 {
-                    BeginDetaching(now, ReadCart(lease, now), lease);
+                    BeginDetaching(now, ReadCart(WatchedCart(lease), now), lease);
                 }
 
                 break;
@@ -1371,9 +1600,16 @@ internal sealed class HaulExecutor
             case HaulPhase.NeedsAttention:
                 if (Attached)
                 {
+                    if (HoldingCart)
+                    {
+                        // CONTRACTS.md §2.7: he is already letting go the moment
+                        // the cart can be left; a command makes no ground safer.
+                        break;
+                    }
+
                     if (intent == HaulStopIntent.DetachAndPark)
                     {
-                        BeginDetaching(now, ReadCart(lease, now), lease);
+                        BeginDetaching(now, ReadCart(WatchedCart(lease), now), lease);
                     }
                     else if (Phase == HaulPhase.Paused)
                     {
@@ -1392,30 +1628,207 @@ internal sealed class HaulExecutor
     }
 
     /// <summary>A person has already been asked about a cart Gunnar still holds
-    /// (a hard lean); the same condition next frame changes nothing, so the
-    /// reason and the revision stay put.</summary>
+    /// (a hard lean, or the §2.7 hold); the same condition next frame changes
+    /// nothing, so the reason and the revision stay put.</summary>
     private bool IsAlreadyAsked(SignalVerdict verdict) =>
-        verdict.StillHeld && Phase == HaulPhase.NeedsAttention;
+        verdict.StillHeld && (Phase == HaulPhase.NeedsAttention || (verdict.Pause && Phase == HaulPhase.Paused));
+
+    // ------------------------------------------------------------------
+    // The joint (review R-313 M1; CONTRACTS.md §2.5, §2.7)
+    // ------------------------------------------------------------------
+
+    /// <summary>Releases any joint Gunnar holds, for a runtime going away on a
+    /// path the executor cannot observe. Safe to call when he holds nothing.
+    /// </summary>
+    public ReleaseResult ReleaseJointNow(string why)
+    {
+        EndHold();
+        return ReleaseAttached(why);
+    }
+
+    /// <summary>Releases the joint through the cart it is on, whatever the lease
+    /// says. The cart is forgotten only when the release ends the joint
+    /// (Released, NoJoint, NoCart, or "not ours" for a joint the last frame did
+    /// not call Gunnar's). Anything else latches <see cref="StillHolding"/>:
+    /// the release is retried every frame and the body is not retired until it
+    /// takes.</summary>
+    private ReleaseResult ReleaseAttached(string why)
+    {
+        CartKey? key = _attachedCart;
+        if (!key.HasValue)
+        {
+            StillHolding = false;
+            return ReleaseResult.NoJoint;
+        }
+
+        CartKey cart = key.Value;
+        ReleaseResult released = _ports.Seam.ReleaseJoint(cart);
+        bool lastSaidOurs = LastCart.HasJoint && LastCart.JointConnectedToPuller;
+        bool ended =
+            released == ReleaseResult.Released ||
+            released == ReleaseResult.NoJoint ||
+            released == ReleaseResult.NoCart ||
+            (released == ReleaseResult.NotOurs && !lastSaidOurs);
+        if (ended)
+        {
+            ForgetAttached();
+            _ports.Log.Info("Gunnar let go of cart " + cart + " (" + why + "): " + released + ".");
+            return released;
+        }
+
+        StillHolding = true;
+        if (_releaseLog.ShouldNotify("release:" + released, _ports.Clock.Now))
+        {
+            _ports.Log.Warning(
+                "Gunnar could not let go of cart " + cart + " (" + why + "): " + released +
+                ". He keeps trying every frame, and his body is not retired while a cart holds it.");
+        }
+
+        return released;
+    }
+
+    private void ForgetAttached()
+    {
+        _attachedCart = null;
+        _lastHeld = null;
+        StillHolding = false;
+    }
+
+    private void EnterHold(SignalVerdict verdict)
+    {
+        _holdReason = verdict.Reason;
+        _holdDetail = verdict.Detail;
+    }
+
+    private void EndHold()
+    {
+        _holdReason = HaulAttentionReason.Unspecified;
+        _holdDetail = string.Empty;
+    }
+
+    /// <summary>The lost-authority hold (CONTRACTS.md §2.7, C4). Gunnar has
+    /// stopped and still holds the cart: every frame the safety checks that do
+    /// not depend on authority keep running, and the moment the cart is still,
+    /// upright and on parkable ground he lets go. The phase and the reason never
+    /// change here, and nothing resumes the haul, even when authority returns.
+    /// </summary>
+    private void TickHold(float now, PullerBodyFacts body, CartObservation cart, CartLease? lease)
+    {
+        StopIfMoving(body);
+        SignalVerdict verdict = JointSignalClassifier.Classify(
+            WorkAuthorityVerdict.Granted, cart, body, _limits, _lastHeld);
+        if (!verdict.Healthy)
+        {
+            if (verdict.StillHeld)
+            {
+                // A leaning cart, or nothing new: he goes on holding it.
+                return;
+            }
+
+            // The player took it, the brake went on, the body or the cart went
+            // away: that ending replaces the hold, with its own reason.
+            EndHold();
+            LoseControl(verdict, lease);
+            return;
+        }
+
+        _lastHeld = cart;
+        ParkingDecision parking = ParkingJudge.Evaluate(
+            _ports.Seam.ReadGround(_attachedCart!.Value), cart, _stillness.IsStill(now), _limits, _execution);
+        if (!parking.Safe)
+        {
+            if (_attentionLog.ShouldNotify("hold:" + _holdReason, now))
+            {
+                _ports.Log.Info(
+                    "Gunnar is holding cart " + _attachedCart.Value + " where he stopped (" + _holdReason + "): " +
+                    parking.Detail + ", so letting go would set it rolling.");
+            }
+
+            return;
+        }
+
+        HaulAttentionReason why = _holdReason;
+        ReleaseAttached("the cart can be left where it stands (" + why + ")");
+        if (Attached)
+        {
+            return;
+        }
+
+        EndHold();
+        _stillness.Reset();
+        if (_releaseLeaseAfterDetach && lease != null)
+        {
+            _releaseLeaseAfterDetach = false;
+            Leases.Release(lease.LeaseId);
+            OnLeaseEnded();
+            _ports.Log.Info("Lease " + lease.LeaseId + " released once Gunnar could put the cart down.");
+        }
+    }
+
+    /// <summary>The cart being watched: the lease's, or the one Gunnar still
+    /// holds after the lease ended.</summary>
+    private CartKey? WatchedCart(CartLease? lease) => lease != null ? lease.Cart : _attachedCart;
+
+    /// <summary>Why this is not a moment to hitch (CART-03), or null when it is.
+    /// </summary>
+    private string? HitchReadiness(PullerBodyFacts body, CartObservation cart, out bool facing)
+    {
+        facing = HeadingErrorDegrees(body, cart) <= _execution.AlignHeadingToleranceDegrees;
+        if (!cart.Resolved)
+        {
+            // Nothing is known about the cart; D4 answers with the real reason.
+            facing = true;
+            return null;
+        }
+
+        if (!facing)
+        {
+            return FormattableString.Invariant(
+                $"Gunnar is {HeadingErrorDegrees(body, cart):0} degrees off the way the cart points");
+        }
+
+        if (!(cart.SpeedMetresPerSecond <= _limits.StillSpeedMetresPerSecond))
+        {
+            return FormattableString.Invariant($"the cart is rolling at {cart.SpeedMetresPerSecond:0.##} m/s");
+        }
+
+        return null;
+    }
 
     private void LoseControl(SignalVerdict verdict, CartLease? lease)
     {
-        _ports.Body.Stop();
-        if (HaulId.Length > 0)
+        try
         {
-            Modes.Enter(ActorMode.Recovering, HaulId);
+            _ports.Body.Stop();
+            if (HaulId.Length > 0)
+            {
+                Modes.Enter(ActorMode.Recovering, HaulId);
+            }
+        }
+        finally
+        {
+            // The joint is dealt with even if stopping the motor or claiming the
+            // identity threw (review R-313 m9), and through the cart it is on,
+            // never through the lease (M1).
+            if (verdict.ReleaseJoint)
+            {
+                ReleaseAttached(verdict.Reason.ToString());
+            }
+            else if (verdict.HoldsCart)
+            {
+                EnterHold(verdict);
+            }
+            else if (!verdict.StillHeld)
+            {
+                // The joint is another body's now: Gunnar holds nothing.
+                ForgetAttached();
+            }
         }
 
-        if (verdict.ReleaseJoint && lease != null)
-        {
-            ReleaseResult released = _ports.Seam.ReleaseJoint(lease.Cart);
-            _ports.Log.Info("Gunnar let go of cart " + lease.Cart + " (" + verdict.Reason + "): " + released + ".");
-        }
-
-        // Only a leaning cart that is still held by Gunnar keeps the joint.
-        Attached = !verdict.ReleaseJoint && LastCart.HasJoint && LastCart.JointConnectedToPuller;
         _pendingStop = HaulStopIntent.Unspecified;
         _pendingAttention = HaulAttentionReason.Unspecified;
         _releaseLeaseAfterDetach = false;
+        _unloadTouchedAt = float.NaN;
         if (verdict.InvalidatesLease && lease != null)
         {
             InvalidateLease(lease, verdict.Invalidation);
@@ -1672,6 +2085,7 @@ internal sealed class HaulExecutor
         _noPathSince = float.NaN;
         _massWaitStartedAt = float.NaN;
         _detachReleasedAt = float.NaN;
+        _hitchReadySince = float.NaN;
         _recoveryRetryAt = 0f;
         _legArrived = false;
         _pendingStop = HaulStopIntent.Unspecified;
@@ -1739,15 +2153,15 @@ internal sealed class HaulExecutor
         return body;
     }
 
-    private CartObservation ReadCart(CartLease? lease, float now)
+    private CartObservation ReadCart(CartKey? key, float now)
     {
-        if (lease == null)
+        if (!key.HasValue)
         {
             _stillness.Reset();
             return default;
         }
 
-        CartObservation cart = _ports.Seam.Observe(lease.Cart);
+        CartObservation cart = _ports.Seam.Observe(key.Value);
         LastCart = cart;
         if (cart.Resolved)
         {
@@ -1770,6 +2184,12 @@ internal sealed class HaulExecutor
     }
 
     private static bool IsWorking(PullerBodyFacts body) => body.Present && !body.Faulted && !body.Dead;
+
+    /// <summary>C4 §3.2: a haul that is not moving and holds no intent to move.
+    /// </summary>
+    private static bool IsStoppedPhase(HaulPhase phase) =>
+        phase == HaulPhase.Ready || phase == HaulPhase.Waiting ||
+        phase == HaulPhase.Paused || phase == HaulPhase.NeedsAttention;
 
     private static bool IsProgressPhase(HaulPhase phase)
     {

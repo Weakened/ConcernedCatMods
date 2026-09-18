@@ -129,6 +129,18 @@ internal sealed class HaulingExecutionRig
         }
     }
 
+    /// <summary>Rendered frames with no worker tick at all: Gunnar's body
+    /// stopped ticking, or was never bound (review R-313 m1).</summary>
+    public void AdvanceFramesOnly(float seconds)
+    {
+        int steps = (int)Math.Ceiling(seconds / Step);
+        for (int index = 0; index < steps; index++)
+        {
+            Clock.Now += Step;
+            Executor.ObserveFrame();
+        }
+    }
+
     /// <summary>Gunnar stands at the handle, facing along the cart's heading.
     /// </summary>
     public void PutBodyAtHandle()
@@ -218,7 +230,9 @@ internal sealed class CartObservationBox
     public bool InUse { set => Value.InUse = value; }
     public bool HasJoint { set => Value.HasJoint = value; }
     public bool JointConnectedToPuller { set => Value.JointConnectedToPuller = value; }
+    public bool JointConnectedToNothing { set => Value.JointConnectedToNothing = value; }
     public bool JointConnectedToLocalPlayer { set => Value.JointConnectedToLocalPlayer = value; }
+    public bool SeatOccupied { set => Value.SeatOccupied = value; }
     public bool AttachFlag { set => Value.AttachFlag = value; }
     public bool BrakeEngaged { set => Value.BrakeEngaged = value; }
     public bool RootFrozen { set => Value.RootFrozen = value; }
@@ -259,6 +273,7 @@ internal sealed class PullerBodyFactsBox
     public float BaseMassKg { set => Value.BaseMassKg = value; }
     public float CalibratedMassKg { set => Value.CalibratedMassKg = value; }
     public bool HasPath { set => Value.HasPath = value; }
+    public bool Duplicated { set => Value.Duplicated = value; }
 }
 
 internal sealed class FakeClock : IHaulClock
@@ -395,6 +410,22 @@ internal sealed class FakeSeam : ICartHitchSeam
 
     public ActorMode ModeAtLastRelease { get; private set; }
 
+    /// <summary>The adapter's remembered attach body (review R-313 B1): set by a
+    /// verified attach, cleared by a release that takes.</summary>
+    public bool RemembersAttachedBody { get; private set; }
+
+    /// <summary>The runtime still has Gunnar's body bound. False models the
+    /// unbind-while-hitched case.</summary>
+    public bool BodyBound { get; set; } = true;
+
+    /// <summary>The joint is connected to some other worker body (a duplicate
+    /// Gunnar), rather than to the player or a stranger.</summary>
+    public bool JointOnAnotherWorkerBody { get; set; }
+
+    /// <summary>The release throws, as a latched seam does; it answers
+    /// StillAttached and the joint stays.</summary>
+    public bool ReleaseFails { get; set; }
+
     public static CartObservation HealthyCart() => new CartObservation
     {
         Resolved = true,
@@ -419,7 +450,18 @@ internal sealed class FakeSeam : ICartHitchSeam
         HitchLengthMetres = 1.5f,
     };
 
-    public CartObservation Observe(CartKey cart) => Observation;
+    /// <summary>What each successive read answers, when a test needs the reads
+    /// within one step to differ, so a decision cannot quietly come from the
+    /// previous frame's observation (review R-313 M2).</summary>
+    public Func<int, CartObservation>? ObserveSequence { get; set; }
+
+    public int ObserveCalls { get; private set; }
+
+    public CartObservation Observe(CartKey cart)
+    {
+        ObserveCalls++;
+        return ObserveSequence != null ? ObserveSequence(ObserveCalls) : Observation;
+    }
 
     public ParkingGround ReadGround(CartKey cart)
     {
@@ -436,6 +478,7 @@ internal sealed class FakeSeam : ICartHitchSeam
             return AttachResult.Refused(HitchRefusal.VerifyFailed, "connected body is not Gunnar's");
         }
 
+        RemembersAttachedBody = true;
         Observation = Observation.With(o =>
         {
             o.HasJoint = true;
@@ -458,11 +501,25 @@ internal sealed class FakeSeam : ICartHitchSeam
             return ReleaseResult.NoCart;
         }
 
-        if (current.HasJoint && !current.JointConnectedToPuller)
+        // The adapter's own rule, not a second copy of it (review R-313 M2).
+        var holder = new JointHolderFacts(
+            current.HasJoint,
+            current.HasJoint && current.JointConnectedToNothing,
+            current.HasJoint && current.JointConnectedToPuller && RemembersAttachedBody,
+            current.HasJoint && current.JointConnectedToPuller && BodyBound,
+            current.HasJoint && JointOnAnotherWorkerBody);
+        if (HitchSeamRules.DecideRelease(holder) == JointReleaseDecision.LeaveAlone)
         {
             return ReleaseResult.NotOurs;
         }
 
+        if (ReleaseFails)
+        {
+            // What a latched seam answers: the cart still holds the joint.
+            return ReleaseResult.StillAttached;
+        }
+
+        RemembersAttachedBody = false;
         bool had = current.HasJoint;
         Observation = current.With(o =>
         {

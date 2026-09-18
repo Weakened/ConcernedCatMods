@@ -28,6 +28,7 @@ internal static class HaulingCapabilityProbe
             Type? character = Game("Character", missingTypes);
             Type? baseAi = Game("BaseAI", missingTypes);
             Type? container = Game("Container", missingTypes);
+            Type? chair = Game("Chair", missingTypes);
             Type? inventory = Game("Inventory", missingTypes);
             Type? znet = Game("ZNet", missingTypes);
             Type? znetPeer = Game("ZNetPeer", missingTypes);
@@ -74,6 +75,7 @@ internal static class HaulingCapabilityProbe
                 new("Vagon", vagon, "m_nview", GameMemberKind.InstanceField, netView),
                 new("Vagon", vagon, "m_body", GameMemberKind.InstanceField, rigidbody),
                 new("Vagon", vagon, "m_container", GameMemberKind.InstanceField, container),
+                new("Vagon", vagon, "m_chair", GameMemberKind.InstanceField, chair),
                 new("Vagon", vagon, "m_baseMass", GameMemberKind.InstanceField, typeof(float)),
                 new("Vagon", vagon, "m_itemWeightMassFactor", GameMemberKind.InstanceField, typeof(float)),
                 new("Vagon", vagon, "m_instances", GameMemberKind.StaticField, vagonList),
@@ -112,6 +114,7 @@ internal static class HaulingCapabilityProbe
 
                 // Cart contents (evidence only) and use.
                 new("Container", container, "IsInUse", GameMemberKind.InstanceMethod, typeof(bool)),
+                new("Chair", chair, "IsInUse", GameMemberKind.InstanceMethod, typeof(bool)),
                 new("Container", container, "GetInventory", GameMemberKind.InstanceMethod, inventory),
                 new("Inventory", inventory, "GetTotalWeight", GameMemberKind.InstanceMethod, typeof(float)),
                 new("Inventory", inventory, "NrOfItems", GameMemberKind.InstanceMethod, typeof(int)),

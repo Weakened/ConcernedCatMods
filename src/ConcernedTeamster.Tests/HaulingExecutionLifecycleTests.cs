@@ -208,7 +208,7 @@ public class HaulingExecutionLifecycleTests
     }
 
     [Fact]
-    public void APeerConnectingLetsGoPausesKeepsTheLeaseAndReadiesWhenAlone()
+    public void APeerConnectingStopsHoldsTheCartThenReadiesWhenAlone()
     {
         var rig = new HaulingExecutionRig();
         rig.RunToPulling();
@@ -216,17 +216,27 @@ public class HaulingExecutionLifecycleTests
         rig.Authority.Verdict = WorkAuthorityVerdict.OtherPeersConnected;
         rig.StepOnce();
 
+        // C4 §2.7: he stops at once, and keeps the cart until it can be left.
         Assert.Equal(HaulPhase.Paused, rig.Executor.Phase);
         Assert.Equal(HaulAttentionReason.OtherPeersConnected, rig.Executor.Attention);
-        Assert.False(rig.Executor.Attached);
-        Assert.Equal(1, rig.Seam.ReleaseCalls);
+        Assert.True(rig.Executor.Attached);
+        Assert.True(rig.Executor.HoldingCart);
+        Assert.Equal(0, rig.Seam.ReleaseCalls);
         Assert.NotNull(rig.Executor.ActiveLease);
         Assert.Equal("haul-1", rig.Executor.HaulId);
 
         // Nothing moves while paused.
         int steers = rig.Body.SteerCommands;
-        rig.Advance(2f);
+        rig.Advance(rig.Limits.StillForSeconds + (4f * HaulingExecutionRig.Step));
         Assert.Equal(steers, rig.Body.SteerCommands);
+
+        // The cart stood still on level ground, so he put it down; the phase and
+        // the reason are exactly the ones he stopped with.
+        Assert.Equal(1, rig.Seam.ReleaseCalls);
+        Assert.False(rig.Executor.Attached);
+        Assert.False(rig.Executor.HoldingCart);
+        Assert.Equal(HaulPhase.Paused, rig.Executor.Phase);
+        Assert.Equal(HaulAttentionReason.OtherPeersConnected, rig.Executor.Attention);
 
         rig.Authority.Verdict = WorkAuthorityVerdict.Granted;
         rig.StepOnce();

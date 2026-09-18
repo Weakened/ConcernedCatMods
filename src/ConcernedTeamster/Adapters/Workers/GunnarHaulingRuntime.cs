@@ -194,9 +194,13 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
             return;
         }
 
+        // The joint is judged before the binding moves (review R-313 B1): a body
+        // that died, unloaded or turned out to be a duplicate detaches in the
+        // first frame the runtime sees it, and before it is unbound
+        // (CONTRACTS.md §2.5).
+        _executor.ObserveFrame();
         AdvanceCensus();
         RefreshBinding();
-        _executor.ObserveFrame();
         LogEvidenceIfDue();
     }
 
@@ -261,12 +265,8 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
     {
         try
         {
-            CartLease? lease = _executor?.ActiveLease;
-            if (lease != null && _executor!.Attached)
-            {
-                _seam.ReleaseJoint(lease.Cart);
-            }
-
+            // Through the joint's own cart, never the lease (review R-313 M1).
+            _executor?.ReleaseJointNow("the hauling runtime faulted");
             _body.Stop();
             Service.Unbind();
             _executor = null;
@@ -342,6 +342,14 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
             loaded++;
             candidate = body;
             distinct.Add(view.GetZDO().m_uid);
+
+            // A body this runtime does not command keeps whatever direction it
+            // last had: the vanilla motor never clears it by itself (review
+            // R-313 B1).
+            if (body != _body.Bound && body.MotorCommanded)
+            {
+                body.Halt();
+            }
         }
 
         WorkerBodyStatus status = WorkerBodyCensus.Decide(_censusComplete, distinct.Count, loaded, candidate != null && candidate.IsFaulted);
@@ -353,7 +361,7 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
 
         _body.Duplicated = status == WorkerBodyStatus.Duplicated;
         TeamsterWorkerAI? bind = status == WorkerBodyStatus.Bound || status == WorkerBodyStatus.Faulted ? candidate : null;
-        if (bind != _body.Bound)
+        if (bind != _body.Bound && WorkerBodyCensus.MayChangeBinding(_executor != null && _executor.Attached))
         {
             _body.Bind(bind);
         }
@@ -455,6 +463,18 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         }
 
         text.Append(". Attached: ").Append(executor.Attached ? "yes" : "no");
+        if (executor.HoldingCart)
+        {
+            text.Append(". HOLDING the cart where he stopped (").Append(executor.HoldingCartBecause)
+                .Append("): ").Append(executor.HoldingCartDetail)
+                .Append(". He lets go as soon as the ground under it is level enough to leave it on");
+        }
+
+        if (executor.StillHolding)
+        {
+            text.Append(". A release did not take: he is still holding the joint and retrying");
+        }
+
         if (executor.LastHitchRefusal != HitchRefusal.Unspecified)
         {
             text.Append(". Last hitch refusal: ").Append(executor.LastHitchRefusal).Append(" (").Append(executor.LastHitchDetail).Append(") - ")
@@ -566,31 +586,50 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
             return "No world is loaded.";
         }
 
-        if (_bodyStatus == WorkerBodyStatus.Duplicated)
+        // Pointing at a worker body retires that body, whether or not the
+        // runtime has it bound: that is the only way to remove an extra body
+        // (Gate B N12), and it is how a duplicate is resolved by hand.
+        Player player = Player.m_localPlayer;
+        GameObject? hover = player != null ? player.GetHoverObject() : null;
+        TeamsterWorkerAI? pointed = hover != null ? hover.GetComponentInParent<TeamsterWorkerAI>() : null;
+        if (pointed != null && pointed != _body.Bound)
         {
-            Player player = Player.m_localPlayer;
-            GameObject? hover = player != null ? player.GetHoverObject() : null;
-            TeamsterWorkerAI? pointed = hover != null ? hover.GetComponentInParent<TeamsterWorkerAI>() : null;
-            if (pointed == null || pointed == _body.Bound)
-            {
-                return "There is more than one Gunnar: point at the extra one and run retire again.";
-            }
-
             ZNetView view = pointed.GetComponent<ZNetView>();
             if (view == null || !view.IsValid() || !view.IsOwner())
             {
                 return "Refused: this game does not own that body.";
             }
 
+            // A body a cart's joint holds is never destroyed (review R-313 B1).
+            if (_seam.IsHeldByAnyCart(pointed.GetComponent<Rigidbody>()))
+            {
+                return "Refused: a cart is hitched to that body. Detach it first ('ct_haul detach', or take the cart yourself).";
+            }
+
             _persistedBodies.Remove(view.GetZDO().m_uid);
             view.Destroy();
-            return "The extra Gunnar was retired.";
+            return "That worker body was retired; Gunnar's own binding is unchanged.";
         }
 
-        BodyRetirementOutcome outcome = _executor.RetireBody();
-        return outcome == BodyRetirementOutcome.Retired
-            ? "Gunnar was retired; his body left the world."
-            : "Refused: Gunnar is busy with a haul. Stop or detach it and resolve any attention first.";
+        if (_bodyStatus == WorkerBodyStatus.Duplicated)
+        {
+            return "There is more than one Gunnar: point at the one to remove and run retire again.";
+        }
+
+        if (_body.Bound != null && _seam.IsHeldByAnyCart(_body.Rigidbody))
+        {
+            return "Refused: a cart is hitched to Gunnar. Detach it first ('ct_haul detach', or take the cart yourself).";
+        }
+
+        switch (_executor.RetireBody())
+        {
+            case BodyRetirementOutcome.Retired:
+                return "Gunnar was retired; his body left the world.";
+            case BodyRetirementOutcome.RefusedStillHitched:
+                return "Refused: a cart still holds Gunnar's joint and would not let go. Take the cart yourself, then retire him.";
+            default:
+                return "Refused: Gunnar is busy with a haul. Stop or detach it and resolve any attention first.";
+        }
     }
 
     private string Assign()

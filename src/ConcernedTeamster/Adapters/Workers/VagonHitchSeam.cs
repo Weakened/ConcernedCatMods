@@ -47,6 +47,7 @@ internal sealed class VagonHitchSeam : ICartHitchSeam
 
     private GameCapabilityReport _probe;
     private string _faultDetail = string.Empty;
+    private Rigidbody? _attachedBody;
     private CartKey _cachedKey;
     private Vagon? _cachedCart;
     private ZDOID _cachedId;
@@ -208,7 +209,7 @@ internal sealed class VagonHitchSeam : ICartHitchSeam
         facts.IsHandCart = observation.IsHandCart;
         facts.ViewValid = observation.ViewValid;
         facts.IsOwner = observation.IsOwner;
-        facts.InUse = observation.InUse || observation.ContainerOpen;
+        facts.InUse = observation.InUse || observation.ContainerOpen || observation.SeatOccupied;
         facts.Braked = observation.BrakeEngaged || observation.RootFrozen;
         facts.UpDot = observation.UpDot;
         facts.PlayerDistanceMetres = float.PositiveInfinity;
@@ -334,10 +335,15 @@ internal sealed class VagonHitchSeam : ICartHitchSeam
         if (joint != null)
         {
             Rigidbody connected = joint.connectedBody;
-            observation.JointConnectedToPuller = connected != null && puller != null && connected == puller;
+            observation.JointConnectedToNothing = connected == null;
+            observation.JointConnectedToPuller = connected != null &&
+                ((_attachedBody != null && connected == _attachedBody) || (puller != null && connected == puller));
             observation.JointConnectedToLocalPlayer = connected != null && playerBody != null && connected == playerBody;
             observation.JointForceNewtons = joint.currentForce.magnitude;
         }
+
+        Chair seat = cart.m_chair;
+        observation.SeatOccupied = seat != null && seat.IsInUse();
 
         bool anyJoint = false;
         bool playerJoint = false;
@@ -496,39 +502,76 @@ internal sealed class VagonHitchSeam : ICartHitchSeam
         }
 
         ZNetView view = cart.m_nview;
-        if (view == null || !view.IsValid() || !view.IsOwner())
-        {
-            return AttachResult.Refused(HitchRefusal.NotOwnedHere, "this client does not own the cart at the moment of attaching");
-        }
-
+        bool anyJoint = false;
         List<Vagon> carts = Vagon.m_instances;
         for (int index = 0; index < carts.Count; index++)
         {
             if (carts[index] != null && carts[index].m_attachJoin != null)
             {
-                return AttachResult.Refused(HitchRefusal.OtherJointOnClient, "a cart on this client holds a joint at the moment of attaching");
+                anyJoint = true;
+                break;
             }
+        }
+
+        bool viewValid = view != null && view.IsValid();
+        AttachResult? refused = HitchSeamRules.GuardBeforeAttach(viewValid, viewValid && view!.IsOwner(), anyJoint);
+        if (refused.HasValue)
+        {
+            return refused.Value;
         }
 
         cart.AttachTo(pullerObject);
 
         ConfigurableJoint joint = cart.m_attachJoin;
-        float expectedMass = _body.CalibratedMassKg + cart.m_playerExtraPullMass;
-        string? problem =
-            joint == null ? "no joint was created" :
-            joint.connectedBody != puller ? "the joint is not connected to Gunnar's rigidbody" :
-            !cart.IsAttached() ? "the cart does not report itself attached" :
-            !view.GetZDO().GetBool(ZDOVars.s_attachJointHash) ? "the cart's attach flag is not set" :
-            !_execution.MassesAgree(puller.mass, expectedMass)
-                ? string.Format(CultureInfo.InvariantCulture, "Gunnar weighs {0:0.##} kg attached, expected {1:0.##} kg", puller.mass, expectedMass)
-                : null;
+        string? problem = HitchSeamRules.VerifyAfterAttach(
+            joint != null,
+            joint != null && joint.connectedBody == puller,
+            cart.IsAttached(),
+            view!.GetZDO().GetBool(ZDOVars.s_attachJointHash),
+            puller.mass,
+            _body.CalibratedMassKg + cart.m_playerExtraPullMass,
+            _execution);
         if (problem != null)
         {
             cart.Detach();
             return AttachResult.Refused(HitchRefusal.VerifyFailed, problem);
         }
 
+        // Remembered until a release succeeds: an unbound, dying or duplicated
+        // Gunnar is still the body this joint belongs to (review R-313 B1).
+        _attachedBody = puller;
         return AttachResult.Verified();
+    }
+
+    /// <summary>True when any cart on this client holds a joint connected to
+    /// <paramref name="body"/>. A body a cart is attached to is never destroyed.
+    /// </summary>
+    internal bool IsHeldByAnyCart(Rigidbody? body)
+    {
+        if (body == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            List<Vagon> carts = Vagon.m_instances;
+            for (int index = 0; index < carts.Count; index++)
+            {
+                Vagon cart = carts[index];
+                if (cart != null && cart.m_attachJoin != null && cart.m_attachJoin.connectedBody == body)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        catch
+        {
+            // Not knowing means held: nothing is destroyed on a guess.
+            return true;
+        }
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -541,19 +584,28 @@ internal sealed class VagonHitchSeam : ICartHitchSeam
         }
 
         ConfigurableJoint joint = cart.m_attachJoin;
-        if (joint != null)
+        Rigidbody? connected = joint != null ? joint.connectedBody : null;
+        Rigidbody? bound = _body.Rigidbody;
+        var holder = new JointHolderFacts(
+            joint != null,
+            joint != null && connected == null,
+            connected != null && _attachedBody != null && connected == _attachedBody,
+            connected != null && bound != null && connected == bound,
+            connected != null && connected.GetComponent<TeamsterWorkerAI>() != null);
+        if (HitchSeamRules.DecideRelease(holder) == JointReleaseDecision.LeaveAlone)
         {
-            Rigidbody connected = joint.connectedBody;
-            Rigidbody? puller = _body.Rigidbody;
-            if (connected != null && (puller == null || connected != puller))
-            {
-                return ReleaseResult.NotOurs;
-            }
+            return ReleaseResult.NotOurs;
         }
 
         bool held = joint != null;
         cart.Detach();
-        return cart.m_attachJoin != null ? ReleaseResult.StillAttached : held ? ReleaseResult.Released : ReleaseResult.NoJoint;
+        if (cart.m_attachJoin != null)
+        {
+            return ReleaseResult.StillAttached;
+        }
+
+        _attachedBody = null;
+        return held ? ReleaseResult.Released : ReleaseResult.NoJoint;
     }
 
     private void TryReleaseAfterFault(CartKey key)

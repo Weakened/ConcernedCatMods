@@ -127,6 +127,13 @@ internal struct CartObservation
     /// </summary>
     public bool JointConnectedToLocalPlayer { get; set; }
 
+    /// <summary>This cart has a joint whose connected body is null or destroyed.
+    /// </summary>
+    public bool JointConnectedToNothing { get; set; }
+
+    /// <summary>Someone sits in the cart's seat (<c>Chair.IsInUse()</c>).</summary>
+    public bool SeatOccupied { get; set; }
+
     /// <summary>The replicated <c>attachJoint</c> flag on the cart's record.
     /// </summary>
     public bool AttachFlag { get; set; }

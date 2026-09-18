@@ -65,10 +65,10 @@ public class HaulingExecutionTeardownTests
     [Fact]
     public void EveryLossOfControlStopsTheMotorAndEntersRecoveringBeforeReleasing()
     {
+        // Lost authority is not one of these any more: C4 §2.7 makes it a stop
+        // with the cart still held (HaulingExecutionHoldTests).
         Action<HaulingExecutionRig>[] losses =
         {
-            r => r.Authority.Verdict = WorkAuthorityVerdict.RuntimeDisabled,
-            r => r.Authority.Verdict = WorkAuthorityVerdict.OtherPeersConnected,
             r => r.Body.Facts = r.Body.Facts.With(f => f.Present = false),
             r => r.Seam.Observation = r.Seam.Observation.With(o => o.BrakeEngaged = true),
             r => r.Seam.Observation = r.Seam.Observation.With(o => o.IsOwner = false),
@@ -120,9 +120,15 @@ public class HaulingExecutionTeardownTests
             Assert.True(rig.Executor.Attached);
             Assert.Equal(0, rig.Seam.ReleaseCalls);
 
-            // A "stop and wait" cannot answer a hitched attention: detaching can.
-            Assert.Equal(HaulCommandOutcome.Rejected, rig.Executor.Cancel("haul-1", detachAndPark: false).Outcome);
-            Assert.Equal(HaulCommandDetail.CannotWaitWhileNeedingAttention, rig.Executor.LastCommandDetail);
+            // C4 §3.2: he has already stopped, so "stop and wait" is accepted
+            // and changes nothing at all - the reason and the cart stay put.
+            int revision = rig.Executor.Revision;
+            Assert.Equal(HaulCommandOutcome.Accepted, rig.Executor.Cancel("haul-1", detachAndPark: false).Outcome);
+            Assert.Equal(revision, rig.Executor.Revision);
+            Assert.Equal(HaulPhase.NeedsAttention, rig.Executor.Phase);
+            Assert.Equal(HaulAttentionReason.UnsafeParking, rig.Executor.Attention);
+            Assert.Equal(HaulStopIntent.Unspecified, rig.Executor.PendingStop);
+            Assert.True(rig.Executor.Attached);
             rig.AssertNoBugs();
         }
     }
