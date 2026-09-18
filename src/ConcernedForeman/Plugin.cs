@@ -22,8 +22,8 @@ namespace TheConcernedCat.ConcernedForeman;
 ///
 /// The product's promise is causal building diagnostics, and that half is
 /// read-only and client-safe. This build carries two things instead: the first
-/// slice of the <i>other</i> half Ã¢â‚¬â€ the opt-in settlement runtime from #273,
-/// which touches no world state until a person turns it on Ã¢â‚¬â€ and ladder
+/// slice of the <i>other</i> half — the opt-in settlement runtime from #273,
+/// which touches no world state until a person turns it on — and ladder
 /// climbing (#326, #328).
 ///
 /// Ladder climbing is the one thing here that patches the game at load, and
@@ -42,6 +42,8 @@ public sealed class Plugin : BaseUnityPlugin
     private SettlementRuntime? _settlement;
     private CollectionRuntime? _collection;
     private HaulProviderDiscovery? _haulProvider;
+    private PresenceProviderDiscovery? _presenceProvider;
+    private SurveyCompanions? _surveyCompanions;
     private ForemanCooperativeDelivery? _cooperativeDelivery;
     private ClimbController? _ladders;
     private LadderSettings? _ladderSettings;
@@ -66,6 +68,20 @@ public sealed class Plugin : BaseUnityPlugin
 
         // #317: discover Teamster by plugin GUID and consume only its BCL capability map.
         _haulProvider = new HaulProviderDiscovery(message => Logger.LogInfo(message));
+
+        // #317: Cartographer says whether Hulgi is here and free, so a survey
+        // can call itself joint when he is actually standing in it. Read-only:
+        // that contract has no op that could fetch him.
+        _presenceProvider = new PresenceProviderDiscovery(message => Logger.LogInfo(message));
+        PresenceProviderDiscovery presence = _presenceProvider;
+        _surveyCompanions = new SurveyCompanions(
+            () =>
+            {
+                presence.EnsureProbed();
+                return presence.Discovery;
+            },
+            PluginVersion,
+            () => Time.time);
         _cooperativeDelivery = new ForemanCooperativeDelivery(
             _haulProvider, custody, () => Time.time, message => Logger.LogInfo(message), PluginVersion);
 
@@ -79,13 +95,14 @@ public sealed class Plugin : BaseUnityPlugin
 
         CollectionRuntime collection = _collection;
         ForemanCooperativeDelivery delivery = _cooperativeDelivery;
+        SurveyCompanions companions = _surveyCompanions;
         delivery.BindMotion(() => collection.Motion);
         _settlement.MayRetireBody = () => collection.Modes.MayRetireBody;
 
         gameObject.AddComponent<Ui.CollectionOrderPanel>().Initialize(
             () => settings.SettlementRuntimeEnabled.Value,
             arguments => collection.Execute(arguments),
-            () => BuildOrderPanelFacts(settings, collection, custody, delivery),
+            () => BuildOrderPanelFacts(settings, collection, custody, delivery, companions),
             delivery.PauseForPlayer,
             () =>
             {
@@ -103,7 +120,7 @@ public sealed class Plugin : BaseUnityPlugin
             (settings.SettlementRuntimeEnabled.Value ? "ENABLED" : "off (the default)") +
             ". Building diagnostics do not require it.");
 
-        // Through the game's own command table, not JÃƒÂ¶tunn's manager: JÃƒÂ¶tunn 2.29.2 looks for a
+        // Through the game's own command table, not Jötunn's manager: Jötunn 2.29.2 looks for a
         // Terminal.ConsoleCommand constructor Valheim 1.0.12 no longer has, so every command
         // silently did not exist (#307). What the console actually accepted is logged.
         Jotunn.Entities.ConsoleCommand[] commands =
@@ -133,7 +150,8 @@ public sealed class Plugin : BaseUnityPlugin
         ForemanSettlementSettings settings,
         CollectionRuntime collection,
         ForemanCustodyRuntime custody,
-        ForemanCooperativeDelivery delivery)
+        ForemanCooperativeDelivery delivery,
+        SurveyCompanions? companions)
     {
         var loop = collection.Loop;
         return new OrderPanelFacts(
@@ -150,7 +168,8 @@ public sealed class Plugin : BaseUnityPlugin
             delivery.ActiveRun?.Phase ?? CooperationPhase.Unspecified,
             delivery.ActiveRun?.Detail ?? delivery.LastAvailabilityDetail,
             delivery.ActiveRun?.DeliveryTrips ?? 0,
-            hulgiSurveying: false);
+            hulgiSurveying: companions != null &&
+                companions.IsHelping(loop?.State ?? CollectionOrderState.Unspecified));
     }
 
     private static IReadOnlyList<ResourceProgress> ProgressFor(
@@ -177,7 +196,7 @@ public sealed class Plugin : BaseUnityPlugin
     /// ladders keep teleporting, and the reason is logged once.
     ///
     /// With `Ladders/Enabled = false` at startup <b>no patch is installed at
-    /// all</b> Ã¢â‚¬â€ not the motor's two, not the interaction's one Ã¢â‚¬â€ and the game
+    /// all</b> — not the motor's two, not the interaction's one — and the game
     /// behaves as if Concerned Foreman were not here.</summary>
     private void InstallLadders()
     {
@@ -242,6 +261,8 @@ public sealed class Plugin : BaseUnityPlugin
             _collection?.OnWorldUnloaded();
             _cooperativeDelivery?.OnWorldUnloaded();
             _haulProvider?.Forget();
+            _presenceProvider?.Forget();
+            _surveyCompanions?.Forget();
 
             // Before anything else drops the scene: a climber is holding a
             // ladder that is about to stop existing.
@@ -251,6 +272,7 @@ public sealed class Plugin : BaseUnityPlugin
         {
             // Teamster's capability map is complete by the first world tick.
             _haulProvider?.EnsureProbed();
+            _presenceProvider?.EnsureProbed();
 
             // Before net time advances, custody reads the loaded world time.
             _settlement?.OnWorldLoaded();

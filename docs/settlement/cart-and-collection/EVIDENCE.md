@@ -83,6 +83,9 @@ progress) and `reviews/R2-315-316-be23c86.md` (Thorstein slice, in progress).
 | ARCH-03 capability map keyed by major, BCL-only | `WorkContractTests.AnEndpointIsFoundOnlyUnderItsContractMajorAndOnlyAsTheBclFunc` | `bbdda45` | automated-tested |
 | GATHER-01 quotas and order shape | `WorkContractTests.OnlyStoneAndWoodAreCollectableAndQuotasAreBounded`, `AnOrderNeedsDistinctQuotasADeliveryAndAMode` | `bbdda45` | automated-tested |
 | COOP-04 progress buckets | `WorkContractTests.ProgressCountsEachUnitOnceAndEstimatesNever` | `bbdda45` | automated-tested |
+| GATHER-03 Hulgi joins a survey only when his own product says he is here and free | `PresenceCapabilityExchangeTests` (19, two assemblies); `SurveyParticipationTests` (28) | #317 | automated-tested |
+| GATHER-03 no false credit: absent, hidden, unknown and busy each keep the survey solo | `PresenceCapabilityExchangeTests.{ANotInstalledCartographerIsSoloWithoutAsking,AHiddenCompanionIsKnownButNotHere,APlayerWhoHasNotMetHimSurveysAlone,ABusyCompanionIsNotCredited}` | #317 | automated-tested |
+| GATHER-03 availability is the provider's answer, never re-derived by the consumer | `PresenceCapabilityExchangeTests.AvailabilityIsTheProvidersAnswerAndNotRederivedHere` | #317 | automated-tested |
 | DATA-01 one order per source | `WorkContractTests.ASourceIsClaimedByOneOrderInOneWorldLoad` | `bbdda45` | automated-tested |
 | Separately built products exchange payloads | #317 two-assembly test | — | pending |
 | Missing or mismatched provider fails safe | #317 | — | pending |
