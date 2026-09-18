@@ -241,31 +241,58 @@ internal sealed class LadderSurvey
         float above = Math.Max(0.1f, _options.TopFloorAboveMetres);
         float below = Math.Max(0.1f, _options.TopFloorBelowMetres);
         var from = new Vector3(standing.x, head.y + above + 0.05f, standing.z);
-        if (!Physics.Raycast(
-                from,
-                Vector3.down,
-                out RaycastHit hit,
-                above + below + 0.1f,
-                _solidLayerMask,
-                QueryTriggerInteraction.Ignore))
+        int hits = Physics.RaycastNonAlloc(
+            from,
+            Vector3.down,
+            _rays,
+            above + below + 0.1f,
+            _solidLayerMask,
+            QueryTriggerInteraction.Ignore);
+
+        // Every surface under the step, highest first, not just the first one
+        // the ray met: a ladder that ends on a platform with a roof over it, or
+        // beside a railing, would otherwise be told there is nowhere to stand
+        // because of the wrong surface. The highest one the character actually
+        // fits on is the landing.
+        float best = float.NaN;
+        for (int taken = 0; taken < hits; taken++)
         {
-            // Nothing under the step at all: the ladder ends in open air, and
-            // stepping off it would be a fall, not an exit.
-            return TopLanding.None;
+            float candidate = float.NaN;
+            for (int index = 0; index < hits; index++)
+            {
+                float y = _rays[index].point.y;
+                if (y > head.y + above || y < head.y - below)
+                {
+                    continue;
+                }
+
+                if (!float.IsNaN(best) && y >= best)
+                {
+                    continue;
+                }
+
+                if (float.IsNaN(candidate) || y > candidate)
+                {
+                    candidate = y;
+                }
+            }
+
+            if (float.IsNaN(candidate))
+            {
+                break;
+            }
+
+            if (HasRoomToStand(new Vector3(standing.x, candidate, standing.z), body))
+            {
+                return new TopLanding(true, new ClimbPoint(run.Top.X, candidate, run.Top.Z));
+            }
+
+            best = candidate;
         }
 
-        float floor = hit.point.y;
-        if (floor > head.y + above || floor < head.y - below)
-        {
-            return TopLanding.None;
-        }
-
-        if (!HasRoomToStand(new Vector3(standing.x, floor, standing.z), body))
-        {
-            return TopLanding.None;
-        }
-
-        return new TopLanding(true, new ClimbPoint(run.Top.X, floor, run.Top.Z));
+        // Nothing to step onto: the ladder ends in open air, against a wall, or
+        // under something too low to stand in. The climber stays on it.
+        return TopLanding.None;
     }
 
     /// <summary>Whether the character's own capsule fits, standing on that
