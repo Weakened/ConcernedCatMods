@@ -12,11 +12,13 @@ namespace TheConcernedCat.ConcernedTeamster.Domain.Authority;
 /// The whole matrix rests on two product invariants:
 /// - Teamster sends NO network messages and takes NO ownership — it only
 ///   reads the game's replicated/local state and writes its own sidecar
-///   files. So an unmodded peer's experience is provably unchanged by
-///   Teamster's presence (there is nothing to alter it with; validator
-///   audited).
-/// - Exactly one feature mutates cart state (the parking brake), and only
-///   under live local vanilla authority; every ambiguity fails closed.</summary>
+///   files, plus (Gunnar only) the identity of his own worker body in that
+///   body's own network object. So an unmodded peer's experience is
+///   unchanged by Teamster's presence except for what vanilla itself
+///   replicates when a cart is pulled (validator audited).
+/// - Exactly two features mutate cart state — the parking brake and the
+///   opt-in Gunnar hauling runtime — and only under live local vanilla
+///   authority; every ambiguity fails closed.</summary>
 public static class CartAuthorityPolicy
 {
     private sealed class Entry
@@ -38,7 +40,9 @@ public static class CartAuthorityPolicy
     // The matrix. Observation features never gate the right to READ (client
     // reading replicated/local state is always allowed); LabelWhenRemote
     // marks the ones whose numbers are owner-fresh and must be flagged when
-    // observed from another client. ParkingBrake is the sole Mutation.
+    // observed from another client. ParkingBrake and GunnarHauling are the
+    // Mutations; GunnarHauling is further gated by the work authority rule
+    // (opted in, host, not dedicated, no peers) before every mutation.
     private static readonly IReadOnlyDictionary<TeamsterFeature, Entry> Matrix =
         new Dictionary<TeamsterFeature, Entry>
         {
@@ -51,6 +55,7 @@ public static class CartAuthorityPolicy
             [TeamsterFeature.TripRecording] = new(FeatureClass.Observation, labelWhenRemote: false),
             [TeamsterFeature.RouteProfiling] = new(FeatureClass.Observation, labelWhenRemote: false),
             [TeamsterFeature.ParkingBrake] = new(FeatureClass.Mutation, labelWhenRemote: false),
+            [TeamsterFeature.GunnarHauling] = new(FeatureClass.Mutation, labelWhenRemote: false),
         };
 
     /// <summary>Every feature the matrix governs — used by the completeness

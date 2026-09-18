@@ -44,19 +44,46 @@ The audits live in `concernedcat-handoffs/2026-09-17-gunnar-thorstein-work/audit
 
 The seams do not depend on any changed member. Each agent re-runs its own API audit against the new binary.
 
+## Contract revisions (merged)
+
+| Rev | Commit | What |
+|---|---|---|
+| C1 | `bbdda45` (PR #318) | The freeze: Workers, Interop `haul/1`, the haul domain, collection orders, custody, journal kinds, persistence |
+| C2 | `69744be` (PR #319) | Additive: player-pause and duplicate-body reasons with their wire twins, `HaulCommandResult.Detail`, `MaxParkingGradeRatio`, `WorldLoadEpoch`/`TryRecoverOrder`/`RecordRebound` |
+| C3 | `1746455` (PR #322) | Documentation: no cart doorways this slice, the cart in-use carve-out, the load-restatement marker |
+| C4 | `323edea` (PR #323) | Documentation: lost authority parks safely or holds, a dead or duplicated body is a teardown path, unload holds end on consumer silence, `StopAndWait` on a stopped haul is Accepted |
+
+## Integration heads, builds and test deployments (lead-verified)
+
+Every number in this table was produced by the lead on this machine, not reported by an agent. Nothing here is
+gameplay evidence, and none of it is merged into `main`.
+
+| What | Head | Checks the lead ran | Deployed |
+|---|---|---|---|
+| Gunnar standalone slice (#313) | `e2b75c7`, worktree `cc-integration/gunnar-e2b75c7` | Teamster 805 tests, validator passed, Release build 0 errors, adapter scan for position/velocity/force/ownership writes | Teamster `1.0.4+e2b75c7`, SHA-256 `71356D30…F16F05`, TCC-HulgiSmoke only, `[Workers] GunnarHaulingEnabled = true` |
+| Agent A's non-live scope (#313) | `4ed1921` | Teamster 813 tests, hauling API audit PASS on 1.0.14 | not deployed; reviewed as `R-313-4ed1921.md` → **not merge-ready** (1 blocker, 2 majors) |
+| Thorstein solo slice (#315, #316) | `be23c86`, branch `integration/thorstein-solo` | Settlement 596 tests, Foreman Release 0 errors, validator passed | Foreman `0.1.0+be23c86`, SHA-256 `3E0B8705…2006`, TCC-HulgiSmoke only, `SettlementRuntimeEnabled = true`, `WorkerCarryWeight = 40` |
+
+Earlier deployments of the same two slices (`thorstein-7b670ae`, `thorstein-6af7fec`, `thorstein-25c075b`) are
+recorded and marked superseded in `concernedcat-handoffs/2026-09-17-gunnar-thorstein-work/runtime/`.
+
+**Independent reviews:** `reviews/R-313-4ed1921.md` (Gunnar mechanics: blocker B1 detach-first on the body-death,
+unload and duplicate paths; majors M1 release-depends-on-lease and M2 untested seam decisions; the fixes are in
+progress) and `reviews/R2-315-316-be23c86.md` (Thorstein slice, in progress).
+
 ## Gate A: contract and compatibility
 
 | Req | Evidence | SHA | Result |
 |---|---|---|---|
-| C1 worker authority rule (D3) | `WorkContractTests.AuthorityIsGrantedOnlyToAnOptedInHostWithNobodyElseConnected` | C1 commit | automated-tested |
-| ARCH-01/02 one job holds an identity | `WorkContractTests.OneJobHoldsAnIdentityAndHomeMayMoveItOnlyWhileResting` | C1 commit | automated-tested |
-| CART-06 phase table | `HaulContractTests.*Phase*`, `TheDocumentedLifecycleIsLegalEndToEnd` | C1 commit | automated-tested |
-| CART-01 one lease per worker and per cart, epoch refusal | `HaulContractTests.OneLeasePerWorkerOneLeasePerCartAndPayloadCheckedIds`, `AReloadEndsEveryLeaseAndStaleKeysNeverComeBack` | C1 commit | automated-tested |
-| ARCH-03 wire enums by name only | `WorkContractTests.EnumsTravelAsExactNamesOnly`, `HaulContractTests.EveryPhaseTravelsUnderItsOwnName` | C1 commit | automated-tested |
-| ARCH-03 capability map keyed by major, BCL-only | `WorkContractTests.AnEndpointIsFoundOnlyUnderItsContractMajorAndOnlyAsTheBclFunc` | C1 commit | automated-tested |
-| GATHER-01 quotas and order shape | `WorkContractTests.OnlyStoneAndWoodAreCollectableAndQuotasAreBounded`, `AnOrderNeedsDistinctQuotasADeliveryAndAMode` | C1 commit | automated-tested |
-| COOP-04 progress buckets | `WorkContractTests.ProgressCountsEachUnitOnceAndEstimatesNever` | C1 commit | automated-tested |
-| DATA-01 one order per source | `WorkContractTests.ASourceIsClaimedByOneOrderInOneWorldLoad` | C1 commit | automated-tested |
+| C1 worker authority rule (D3) | `WorkContractTests.AuthorityIsGrantedOnlyToAnOptedInHostWithNobodyElseConnected` | `bbdda45` | automated-tested |
+| ARCH-01/02 one job holds an identity | `WorkContractTests.OneJobHoldsAnIdentityAndHomeMayMoveItOnlyWhileResting` | `bbdda45` | automated-tested |
+| CART-06 phase table | `HaulContractTests.*Phase*`, `TheDocumentedLifecycleIsLegalEndToEnd` | `bbdda45` | automated-tested |
+| CART-01 one lease per worker and per cart, epoch refusal | `HaulContractTests.OneLeasePerWorkerOneLeasePerCartAndPayloadCheckedIds`, `AReloadEndsEveryLeaseAndStaleKeysNeverComeBack` | `bbdda45` | automated-tested |
+| ARCH-03 wire enums by name only | `WorkContractTests.EnumsTravelAsExactNamesOnly`, `HaulContractTests.EveryPhaseTravelsUnderItsOwnName` | `bbdda45` | automated-tested |
+| ARCH-03 capability map keyed by major, BCL-only | `WorkContractTests.AnEndpointIsFoundOnlyUnderItsContractMajorAndOnlyAsTheBclFunc` | `bbdda45` | automated-tested |
+| GATHER-01 quotas and order shape | `WorkContractTests.OnlyStoneAndWoodAreCollectableAndQuotasAreBounded`, `AnOrderNeedsDistinctQuotasADeliveryAndAMode` | `bbdda45` | automated-tested |
+| COOP-04 progress buckets | `WorkContractTests.ProgressCountsEachUnitOnceAndEstimatesNever` | `bbdda45` | automated-tested |
+| DATA-01 one order per source | `WorkContractTests.ASourceIsClaimedByOneOrderInOneWorldLoad` | `bbdda45` | automated-tested |
 | Separately built products exchange payloads | #317 two-assembly test | — | pending |
 | Missing or mismatched provider fails safe | #317 | — | pending |
 | Hulgi and existing Teamster utilities preserved | full CC and CT suites at each integration | — | pending |

@@ -458,6 +458,25 @@ TEAMSTER_NETWORK_OWNERSHIP_TOKENS = (
     "m_nview.InvokeRPC",
 )
 
+# #313 (CT-NPC-002): the one scoped allowance of the CT-026 audit. Gunnar's
+# opt-in worker runtime writes his identity into his OWN worker body's network
+# object (docs/settlement/cart-and-collection/DECISIONS.md D9). In
+# src/ConcernedTeamster/Adapters/Workers/ only, a network-object write line is
+# allowed when every `.Set(` call on it takes a "tcc.worker." literal key. Every
+# other CT-026 token (RPC, ownership) stays absolute there too, and the
+# worker-runtime scope audit below fails any other key in that folder.
+TEAMSTER_WORKERS_DIR = ("Adapters", "Workers")
+TEAMSTER_WORKER_IDENTITY_WRITE_TOKENS = ("GetZDO().Set", "ZDO.Set")
+TEAMSTER_WORKER_SET_CALL = re.compile(r"\.Set\s*\(")
+TEAMSTER_WORKER_IDENTITY_SET = re.compile(r"\.Set\s*\(\s*\"tcc\.worker\.[a-z0-9][a-z0-9.\-]*\"\s*,")
+
+
+def _is_worker_identity_write(code: str) -> bool:
+    """True when the (comment-stripped) line has at least one `.Set(` call and
+    every one of them writes a "tcc.worker." literal key."""
+    calls = TEAMSTER_WORKER_SET_CALL.findall(code)
+    return bool(calls) and len(calls) == len(TEAMSTER_WORKER_IDENTITY_SET.findall(code))
+
 # CT-041: the beta privacy audit — Teamster has no telemetry and phones
 # nothing home, so no internet-egress-capable API may appear anywhere in
 # its source. This is a different concern from the game-network/ownership
@@ -552,6 +571,160 @@ def check_teamster_no_force_injection(errors: list[str]) -> list[str]:
     return [
         f"[interop] CT-028 no-force audit: {scanned} Teamster source files, "
         f"no force/impulse/velocity-write/teleport calls ({hits} violations)",
+    ] + check_teamster_worker_runtime_scope(errors)
+
+
+# #313 (CT-NPC-002) worker-runtime scope audit. Gunnar's opt-in hauling runtime
+# in src/ConcernedTeamster/Adapters/Workers/ is the only Teamster code allowed
+# to call a cart's own attach and detach, the only code that writes a mass (and
+# only in Gunnar's own calibration file, on his own body), and the only code
+# that writes a network object (only "tcc.worker." keys, on his own worker).
+# Inside that folder it additionally may not teleport or write any position,
+# rotation, velocity, kinematic, gravity, collision, constraint or joint
+# connection, request or claim ownership, send an RPC, interact with a cart, or
+# apply vanilla's extra pull mass itself. CT-002/CT-026/CT-028 stay absolute for
+# every other folder; this audit only narrows what the one allowance permits.
+TEAMSTER_WORKER_CALIBRATION_FILE = "TeamsterWorkerBody.cs"
+
+# The one file that may write Gunnar's identity into his own worker object, and
+# the one place the prefab clone is built (so it is also the only file allowed
+# the factory's own component surgery).
+TEAMSTER_WORKER_IDENTITY_FILE = "TeamsterWorkerPrefab.cs"
+
+# `Detach()` and `DetachAll()` both release joints, and `DetachAll` releases
+# every cart on the client (review R-313 m7).
+TEAMSTER_CART_ATTACH_CALLS = re.compile(r"\.AttachTo\s*\(|\.Detach\s*\(|\.DetachAll\s*\(")
+TEAMSTER_MASS_WRITE = re.compile(r"(\.mass|\bm_originalMass|\bm_baseMass)\s*[-+*/&|^]?=(?!=)")
+
+# Compound forms (`|=`, `&=`, `^=`) count: `constraints |= FreezeAll` is still a
+# constraint write.
+TEAMSTER_WORKER_FORBIDDEN_ASSIGNMENT = re.compile(
+    r"\.(position|localPosition|rotation|localRotation|velocity|linearVelocity|angularVelocity|"
+    r"isKinematic|useGravity|detectCollisions|constraints|connectedBody|enabled|"
+    r"m_attachJoin|m_attachedObject|m_useRequester|"
+    r"m_breakForce|m_detachDistance|m_playerExtraPullMass|m_spring|m_springDamping|"
+    r"m_itemWeightMassFactor|m_attachOffset|m_attachPoint|"
+    r"xMotion|yMotion|zMotion|angularXMotion|angularYMotion|angularZMotion|"
+    r"anchor|connectedAnchor|autoConfigureConnectedAnchor|breakForce|breakTorque|"
+    r"xDrive|yDrive|zDrive|targetPosition|targetRotation)"
+    r"\s*[-+*/&|^]?=(?!=)")
+TEAMSTER_WORKER_FORBIDDEN_TOKENS = (
+    "Teleport",
+    "MovePosition",
+    "MoveRotation",
+    "AddForce",
+    "AddTorque",
+    "AddExplosionForce",
+    "AddRelativeForce",
+    "AddRelativeTorque",
+    "SetPosition",
+    "SetRotation",
+    "SetOwner",
+    "ClaimOwnership",
+    "InvokeRPC",
+    "ZRoutedRpc",
+    "RPC_RequestOwn",
+    ".Interact(",
+    "SetExtraMass",
+    "SetMass",
+    "UpdateMass",
+    "DetachAll",
+    ".Translate(",
+    ".Rotate(",
+    ".RotateAround(",
+)
+
+# Allowed only in the prefab factory, which builds the inactive clone and strips
+# the base creature's components; anywhere else in the runtime, switching
+# components on and off or reaching through reflection is out of scope.
+TEAMSTER_WORKER_FACTORY_ONLY_TOKENS = (
+    "SetActive",
+    "DestroyImmediate",
+    "GetMethod(",
+    "GetField(",
+    "GetProperty(",
+    "MethodInfo",
+    "FieldInfo",
+    "PropertyInfo",
+    "Activator.CreateInstance",
+)
+
+# Never anywhere in Teamster outside the worker runtime: using a cart, applying
+# vanilla's extra pull mass, or writing a body's kinematic flag or joint link.
+# (The parking brake's own constraint write stays where CT-002 allows it.)
+TEAMSTER_OUTSIDE_WORKERS_TOKENS = (".Interact(", "SetExtraMass")
+TEAMSTER_OUTSIDE_WORKERS_ASSIGNMENT = re.compile(r"\.(isKinematic|connectedBody)\s*[-+*/&|^]?=(?!=)")
+
+
+def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
+    """Fails when the worker runtime's allowance reaches beyond Gunnar's own
+    body and the cart's own attach/detach (#313). Comments are stripped."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    workers_dir = teamster_dir.joinpath(*TEAMSTER_WORKERS_DIR)
+    if not workers_dir.is_dir() or not any(workers_dir.glob("*.cs")):
+        fail(
+            "[interop] #313 worker-runtime scope audit: src/ConcernedTeamster/Adapters/Workers has no "
+            "sources, so the audit no longer covers Gunnar's runtime (was it moved?)", errors)
+        return []
+
+    hits = 0
+    worker_files = 0
+    for path in sorted(teamster_dir.rglob("*.cs")):
+        parts = path.relative_to(teamster_dir).parts
+        if parts[0] in ("obj", "bin"):
+            continue
+        in_workers = parts[:2] == TEAMSTER_WORKERS_DIR
+        worker_files += 1 if in_workers else 0
+        rel = path.relative_to(ROOT)
+        for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            code = _strip_cs_line_comment(raw)
+            problems: list[str] = []
+            if not in_workers and TEAMSTER_CART_ATTACH_CALLS.search(code):
+                problems.append("a cart attach/detach call outside Adapters/Workers")
+            if TEAMSTER_MASS_WRITE.search(code) and not (
+                    in_workers and path.name == TEAMSTER_WORKER_CALIBRATION_FILE):
+                problems.append(f"a mass write outside Gunnar's calibration file ({TEAMSTER_WORKER_CALIBRATION_FILE})")
+            if in_workers:
+                set_calls = TEAMSTER_WORKER_SET_CALL.findall(code)
+                if set_calls and (path.name != TEAMSTER_WORKER_IDENTITY_FILE
+                                  or len(set_calls) != len(TEAMSTER_WORKER_IDENTITY_SET.findall(code))):
+                    # The key alone is not enough: the object written has to be
+                    # Gunnar's own worker, which only the factory creates
+                    # (review R-313 m7).
+                    problems.append(
+                        "a network-object write outside "
+                        f"{TEAMSTER_WORKER_IDENTITY_FILE}, or with a key other than a \"tcc.worker.\" literal")
+                assignment = TEAMSTER_WORKER_FORBIDDEN_ASSIGNMENT.search(code)
+                if assignment:
+                    problems.append(f"a forbidden write '{assignment.group(0).strip()}'")
+                for token in TEAMSTER_WORKER_FORBIDDEN_TOKENS:
+                    if token in code:
+                        problems.append(f"the forbidden token {token!r}")
+                if path.name != TEAMSTER_WORKER_IDENTITY_FILE:
+                    for token in TEAMSTER_WORKER_FACTORY_ONLY_TOKENS:
+                        if token in code:
+                            problems.append(
+                                f"the token {token!r}, which belongs to the prefab factory "
+                                f"({TEAMSTER_WORKER_IDENTITY_FILE}) alone")
+            else:
+                for token in TEAMSTER_OUTSIDE_WORKERS_TOKENS:
+                    if token in code:
+                        problems.append(f"the forbidden token {token!r} outside Adapters/Workers")
+                outside = TEAMSTER_OUTSIDE_WORKERS_ASSIGNMENT.search(code)
+                if outside:
+                    problems.append(f"a forbidden write '{outside.group(0).strip()}' outside Adapters/Workers")
+            for problem in problems:
+                hits += 1
+                fail(
+                    f"[interop] #313 worker-runtime scope audit: {problem} in {rel}:{number} — Gunnar moves "
+                    "only through the vanilla motor, attaches and detaches only through the cart's own "
+                    "methods, calibrates only his own body and writes only his own identity", errors)
+
+    return [
+        f"[interop] #313 worker-runtime scope audit: {worker_files} worker files; cart attach/detach/detach-all only "
+        f"in Adapters/Workers, mass writes only in {TEAMSTER_WORKER_CALIBRATION_FILE}, network-object writes only "
+        f"'tcc.worker.*' keys in {TEAMSTER_WORKER_IDENTITY_FILE}, no teleport/pose/velocity/constraint/joint/cart-"
+        f"tuning writes, no component surgery or reflection outside the prefab factory ({hits} violations)",
     ]
 
 
@@ -595,13 +768,21 @@ def check_teamster_authority_policy(errors: list[str]) -> list[str]:
 
     net_hits = 0
     for path in sorted(teamster_dir.rglob("*.cs")):
-        if path.relative_to(teamster_dir).parts[0] in ("obj", "bin"):
+        parts = path.relative_to(teamster_dir).parts
+        if parts[0] in ("obj", "bin"):
             continue
+        in_workers = parts[:2] == TEAMSTER_WORKERS_DIR
         for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-            code = _strip_cs_line_comment(raw).lower()
+            code_raw = _strip_cs_line_comment(raw)
+            code = code_raw.lower()
             for token in TEAMSTER_NETWORK_OWNERSHIP_TOKENS:
                 # Case-insensitive so a lowercased `zdo.set(` cannot slip past.
                 if token.lower() in code:
+                    if (in_workers and token in TEAMSTER_WORKER_IDENTITY_WRITE_TOKENS
+                            and _is_worker_identity_write(code_raw)):
+                        # The one scoped allowance (#313): Gunnar's identity in
+                        # his own worker body's network object.
+                        continue
                     net_hits += 1
                     fail(
                         f"[interop] CT-026 authority audit: outbound-network/ownership token "

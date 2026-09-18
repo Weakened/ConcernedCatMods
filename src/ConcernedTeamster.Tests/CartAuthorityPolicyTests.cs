@@ -29,33 +29,81 @@ public class CartAuthorityPolicyTests
         Assert.Equal(Enum.GetValues<TeamsterFeature>().Length, governed.Count);
     }
 
-    // -- exactly one mutation feature --
+    // -- exactly two mutation features: the brake and Gunnar's hauling (#313) --
+
+    private static bool IsExpectedMutation(TeamsterFeature feature) =>
+        feature == TeamsterFeature.ParkingBrake || feature == TeamsterFeature.GunnarHauling;
 
     [Fact]
-    public void ParkingBrake_IsTheOnlyMutationFeature()
+    public void ParkingBrakeAndGunnarHauling_AreTheOnlyMutationFeatures()
     {
         foreach (TeamsterFeature feature in CartAuthorityPolicy.AllFeatures)
         {
-            bool expectMutation = feature == TeamsterFeature.ParkingBrake;
+            bool expectMutation = IsExpectedMutation(feature);
             Assert.Equal(expectMutation, CartAuthorityPolicy.IsMutation(feature));
             Assert.Equal(
                 expectMutation ? FeatureClass.Mutation : FeatureClass.Observation,
                 CartAuthorityPolicy.ClassOf(feature));
         }
+
+        Assert.Equal(2, CartAuthorityPolicy.AllFeatures.Count(CartAuthorityPolicy.IsMutation));
     }
 
-    // -- mutation truth table: only ParkingBrake + Local --
+    // -- mutation truth table: only the mutation features + Local --
 
     [Fact]
-    public void MayMutate_TrueOnlyForBrakeUnderLocalAuthority()
+    public void MayMutate_TrueOnlyForMutationFeaturesUnderLocalAuthority()
     {
         foreach (TeamsterFeature feature in CartAuthorityPolicy.AllFeatures)
         {
             foreach (CartAuthority authority in AllAuthorities)
             {
-                bool expected = feature == TeamsterFeature.ParkingBrake &&
+                bool expected = IsExpectedMutation(feature) &&
                     authority == CartAuthority.Local;
                 Assert.Equal(expected, CartAuthorityPolicy.MayMutate(feature, authority));
+            }
+        }
+    }
+
+    [Fact]
+    public void GunnarHauling_IsDeniedUnderRemoteAndUnknownAndIsNeverRemoteLabeled()
+    {
+        Assert.True(CartAuthorityPolicy.MayMutate(TeamsterFeature.GunnarHauling, CartAuthority.Local));
+        Assert.False(CartAuthorityPolicy.MayMutate(TeamsterFeature.GunnarHauling, CartAuthority.Remote));
+        Assert.False(CartAuthorityPolicy.MayMutate(TeamsterFeature.GunnarHauling, CartAuthority.Unknown));
+        foreach (CartAuthority authority in AllAuthorities)
+        {
+            Assert.False(CartAuthorityPolicy.RequiresRemoteLabel(TeamsterFeature.GunnarHauling, authority));
+        }
+    }
+
+    // -- Gunnar's hitch enforces THROUGH the policy, like the brake --
+
+    [Fact]
+    public void GunnarHitch_OwnershipGateEqualsThePolicysMutationAuthority()
+    {
+        foreach (CartAuthority authority in AllAuthorities)
+        {
+            TheConcernedCat.ConcernedTeamster.Domain.Hauling.Execution.CartObservation cart = FakeSeam.HealthyCart().With(o =>
+            {
+                o.HitchDistanceMetres = 0.5f;
+                o.CapabilityOk = authority != CartAuthority.Unknown;
+                o.IsOwner = authority == CartAuthority.Local;
+            });
+            TheConcernedCat.ConcernedTeamster.Domain.Hauling.Execution.HitchVerdict verdict =
+                TheConcernedCat.ConcernedTeamster.Domain.Hauling.Execution.HitchPreconditions.Evaluate(
+                    seamAvailable: true,
+                    TheConcernedCat.Workers.WorkAuthorityVerdict.Granted,
+                    leaseActive: true,
+                    cart,
+                    FakeBody.Healthy(),
+                    TheConcernedCat.ConcernedTeamster.Domain.Hauling.HaulLimits.Default,
+                    TheConcernedCat.ConcernedTeamster.Domain.Hauling.Execution.HaulExecutionLimits.Default);
+
+            Assert.Equal(CartAuthorityPolicy.MayMutate(TeamsterFeature.GunnarHauling, authority), verdict.Allowed);
+            if (!verdict.Allowed)
+            {
+                Assert.Equal(TheConcernedCat.ConcernedTeamster.Domain.Hauling.HitchRefusal.NotOwnedHere, verdict.Refusal);
             }
         }
     }
