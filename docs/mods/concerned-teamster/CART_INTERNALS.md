@@ -29,6 +29,39 @@ TCC-Dev profile (`Valheim version: 0.221.12 (network version 36)`, logged
 2026-08-26), which ran exactly this assembly. `Version.GetVersionString` cannot
 be executed off-game, so the runtime banner resolves it reflectively.
 
+### Serialized Cart.prefab recheck (Valheim 1.0.14)
+
+The installed `Cart.prefab` was read again on 2026-09-17 after Steam updated
+Valheim to **1.0.14**, build **25364265**. Its serialized values override the C#
+field initializers before a live cart exists:
+
+| Field | C# initializer | Installed `Cart.prefab` |
+|---|---:|---:|
+| `m_detachDistance` | 2.0 | **1.0** |
+| `m_breakForce` | 10000 | **100000** |
+| `m_baseMass` | 20 | **50** |
+| `m_itemWeightMassFactor` | 1.0 | **0.1** |
+
+The prefab also carries a `Floating` component.
+
+#### Which calibration inputs came from where (#321 audit)
+
+Every place a cart constant is used, and what it actually reads:
+
+| Consumer | Input | Source | Affected by the prefab override? |
+|---|---|---|---|
+| `CartAdapter.Snapshot` | `m_baseMass`, `m_itemWeightMassFactor` | live `Vagon` instance fields | no — already the serialized truth |
+| `CartSnapshot.TotalMass` | both of the above, passed in | its arguments, never a constant | no (`CartSnapshotTests.TheRealCartPrefabsValuesAreWhatTheRuntimeUses`) |
+| `LoadModel.Query`, `RiskModel.Query` | `totalMass` | a parameter, from the snapshot | no |
+| `HitchPreconditions`, `HaulExecutor` | `HitchReachFraction * DetachDistanceMetres` | `VagonHitchSeam` reads `m_detachDistance` off the instance | no — but the reach is **0.6 m**, not 1.2 m |
+| `JointSignalClassifier` | `BreakForceNewtons` | `VagonHitchSeam` reads `m_breakForce` off the instance | no |
+| `CartLoadCalibration.txt`, `CartDescentCalibration.txt` | base mass, cargo factor, break force | **constants embedded in the data** | **yes** — the only affected path |
+
+So no shipped warning or risk threshold computed a mass from an assumed
+constant: every one of them takes the figure the live cart reports. The embedded
+calibration priors and derived impossibility bounds did, and #321 revises them
+to data version 2 with the bundle values and their provenance.
+
 ## The cart component: `Vagon`
 
 `public class Vagon : UnityEngine.MonoBehaviour, Hoverable, Interactable` —
@@ -40,8 +73,8 @@ component type and its static instance registry.
 
 | Member | Verified signature | Semantics (decompiled) |
 |---|---|---|
-| `m_baseMass` | `public float m_baseMass` (prefab default `20f`) | Empty-cart physics mass before cargo. |
-| `m_itemWeightMassFactor` | `public float m_itemWeightMassFactor` (prefab default `1f`) | Cargo-weight-to-mass multiplier. |
+| `m_baseMass` | `public float m_baseMass` (C# initializer `20f`; installed `Cart.prefab` **50f**) | Empty-cart physics mass before cargo. |
+| `m_itemWeightMassFactor` | `public float m_itemWeightMassFactor` (C# initializer `1f`; installed `Cart.prefab` **0.1f**) | Cargo-weight-to-mass multiplier. |
 | `m_container` | `public Container m_container` | The cart's cargo container; may be null on malformed prefabs. |
 | `IsAttached()` | `public bool IsAttached()` | True when a local `ConfigurableJoint` (`m_attachJoin`) exists; otherwise falls back to the replicated ZDO bool `ZDOVars.s_attachJointHash`, so **observers see remote attachment state**. |
 | `IsAttached(Character)` | `public bool IsAttached(Character character)` | Local-truth check: compares `m_attachJoin.connectedBody.gameObject` with the character's GameObject. Only meaningful on the client that owns the joint (pulling is client-local physics). |

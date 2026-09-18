@@ -9,17 +9,20 @@ and verified-constant derivations, clearly labeled, and the model answers
 ## Fixed cargo sets
 
 Weights use the game's own item weights (stone 2.0, wood 2.0 — quality
-scaling does not apply to materials). Cart base mass is 20 and the
-cargo-to-mass factor is 1.0 (verified in CART_INTERNALS.md), so **total
-cart mass = 20 + cargo weight**.
+scaling does not apply to materials). The installed Valheim 1.0.14
+`Cart.prefab` serializes `m_baseMass = 50` and
+`m_itemWeightMassFactor = 0.1` (bundle audit, Steam build 25364265;
+see CART_INTERNALS.md). The C# field initializers are 20 and 1.0, but the
+prefab overrides them before a live cart exists. Therefore **total cart
+mass = 50 + cargo weight × 0.1** for the vanilla cart.
 
 | Set | Contents | Cargo weight | Total cart mass |
 |---|---|---|---|
-| A (empty) | nothing | 0 | 20 |
-| B (light) | 25 stone | 50 | 70 |
-| C (working) | 50 stone + 50 wood | 200 | 220 |
-| D (heavy) | 150 stone | 300 | 320 |
-| E (max ore run) | 300 stone (6 full slots + 6 more) | 600 | 620 |
+| A (empty) | nothing | 0 | 50 |
+| B (light) | 25 stone | 50 | 55 |
+| C (working) | 50 stone + 50 wood | 200 | 70 |
+| D (heavy) | 150 stone | 300 | 80 |
+| E (max ore run) | 300 stone (6 full slots + 6 more) | 600 | 110 |
 
 ## Measured grades
 
@@ -86,10 +89,10 @@ profiles arrive with CT-043). The shipped file contains:
   intent (carts are routinely pulled on flat ground); labeled as priors,
   awaiting protocol confirmation.
 - `DerivedConstant` rows: physical impossibility bounds computed from
-  decompile-verified constants (joint break force 10000, spring 5000,
-  cart mass formula) — for example a 3600+ mass cart on a 30% grade
-  exceeds the break force just hanging there (mass × 9.81 × sin θ >
-  10000). These are certain *upper* bounds, not playability claims.
+  installed-game constants. The current `Cart.prefab` serializes joint break
+  force **100000**, base mass **50** and cargo factor **0.1**. The embedded
+  bounds were revised with those values in data version 2. These are certain
+  *upper* bounds, not playability claims.
 
 Everything between the priors and the impossibility bounds is **unknown
 by design** until measured. The LoadModel says so explicitly.
