@@ -94,7 +94,31 @@ internal sealed class DesignationBook
     public int Count => _designations.Count;
 
     /// <summary>Marks something, or refuses and says why.</summary>
-    public DesignationResult Designate(DesignationRequest request, IDesignationSite site)
+    public DesignationResult Designate(DesignationRequest request, IDesignationSite site) =>
+        Evaluate(request, site, overStaleContainer: false, commit: true);
+
+    /// <summary>What marking this chest would answer if the chest row from a
+    /// previous run of the world were already gone. Changes nothing.
+    ///
+    /// Replacing a stale chest has to run the undesignation cascade first
+    /// (#294), and the cascade must not run for a replacement that is then
+    /// refused — so the register asks this before it touches the record.
+    /// </summary>
+    internal DesignationResult ProbeOverStaleContainer(DesignationRequest request, IDesignationSite site) =>
+        Evaluate(request, site, overStaleContainer: true, commit: false);
+
+    /// <summary>True when a chest is marked, its key belongs to a previous run
+    /// of the world, and <paramref name="request"/> names a different chest
+    /// (or the same key in this run, which is a different chest now).</summary>
+    internal bool WouldReplaceStaleContainer(DesignationRequest request)
+    {
+        return request.Kind == DesignationKind.SupplyContainer
+            && _designations.TryGetValue(DesignationKind.SupplyContainer, out Designation? existing)
+            && existing!.IsStaleIdentity(_epoch);
+    }
+
+    private DesignationResult Evaluate(
+        DesignationRequest request, IDesignationSite site, bool overStaleContainer, bool commit)
     {
         if (request.Kind == DesignationKind.None)
         {
@@ -140,24 +164,25 @@ internal sealed class DesignationBook
                 return DesignationResult.Already(existing);
             }
 
-            // A chest whose key was written in a previous run of the world is
-            // not a designation you have to clear first -- it is the memory of
-            // one, and it already resolves to nothing. Re-marking is the
-            // recovery path, so it replaces rather than being refused. Refusing
-            // would leave a player with a row they can see, cannot use, and
-            // cannot replace without first clearing something that is already
-            // inert.
-            //
-            // KNOWN HOLE, tracked in #294: this replacement does not run the
-            // undesignation cascade, so a reservation held against the OLD key
-            // would be orphaned rather than refunded. Nothing writes a
-            // reservation before CF-SET-006, so it is unreachable today -- and
-            // it goes live with that leaf, which is why it is named here rather
-            // than only in an issue.
             if (!existing.IsStaleIdentity(_epoch))
             {
                 return DesignationResult.Refused(
                     DesignationRefusal.AlreadyDesignatedDifferently, existing);
+            }
+
+            // A chest whose key was written in a previous run of the world is
+            // the memory of a designation, and it already resolves to nothing.
+            // Re-marking is still the recovery path -- but no longer by a silent
+            // overwrite here. That overwrite skipped the undesignation cascade,
+            // so a reservation held against the OLD key was orphaned: never
+            // refunded, its order never cancelled, and unreachable by any later
+            // cascade (#294). The replacement now goes through the register
+            // with the settlement's record: it plans and applies the cascade
+            // for the stale row, which removes it, and only then marks the new
+            // chest. Asked without the record, the book refuses.
+            if (!overStaleContainer)
+            {
+                return DesignationResult.Refused(DesignationRefusal.StaleContainerNeedsTheRecord, existing);
             }
         }
 
@@ -189,7 +214,11 @@ internal sealed class DesignationBook
                 return DesignationResult.Refused(DesignationRefusal.WardCheckUnavailable);
         }
 
-        _designations[candidate.Kind] = candidate;
+        if (commit)
+        {
+            _designations[candidate.Kind] = candidate;
+        }
+
         return DesignationResult.Designated(candidate);
     }
 

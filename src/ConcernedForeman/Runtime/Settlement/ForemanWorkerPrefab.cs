@@ -1,5 +1,7 @@
 using System;
+using Jotunn.Entities;
 using Jotunn.Managers;
+using TheConcernedCat.ConcernedForeman.Runtime.Custody;
 using UnityEngine;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Settlement;
@@ -17,29 +19,81 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 /// clone's <c>Awake</c> has not run when the components are swapped, and runs
 /// exactly once when a real instance is spawned.
 ///
+/// <b>Registered at plugin start, and kept (D9, CONTRACTS.md §5.6).</b> The body
+/// is persistent now: its identity and what it carries live in its own network
+/// object and are saved with the world. The host destroys any saved object whose
+/// prefab is not registered when the world's objects are created ("Destroyed
+/// invalid prefab ZDO"), so a prefab built lazily by a console command — as it
+/// was — would let the next load delete the body and everything in it. The
+/// prefab is built as soon as vanilla prefabs exist (Jotunn's
+/// <c>OnVanillaPrefabsAvailable</c>, at the main menu) and added to Jotunn's
+/// custom prefabs, which registers it into every scene before any object in it
+/// is created. It is never unregistered on world unload.
+///
+/// <b>Nothing is minted.</b> The base creature's loot table
+/// (<c>CharacterDrop</c>: the Dverger drops coins, marble and a trophy) is
+/// removed, so a worker death drops only what he really carried; its default
+/// and random gear is cleared, so no item is granted on spawn and the stored
+/// inventory is the only thing in his hands.
+///
 /// <b>The base prefab name is data, not an API.</b> Creature prefab names live
 /// in the game's asset bundles, not in the assembly, so no amount of reading
 /// <c>assembly_valheim.dll</c> can prove one exists. It is therefore
 /// configurable, resolved at runtime, and <b>fails closed</b>: if the named
 /// prefab is missing, or is not a humanoid with the components a worker needs,
 /// no worker prefab is created and the runtime says exactly what was missing.
-/// This is the same rule the companion audit applied to the start-location
-/// name.</summary>
+/// </summary>
 internal static class ForemanWorkerPrefab
 {
-    /// <summary>The name the worker prefab is registered under.</summary>
+    /// <summary>The name the worker prefab is registered under. Saved bodies
+    /// are found by this name; it never changes.</summary>
     internal const string PrefabName = "CF_SettlementWorker";
 
     private static GameObject? _prefab;
+    private static bool _installed;
+    private static string _baseCreature = string.Empty;
+    private static Action<string>? _log;
 
     internal static bool IsReady => _prefab != null;
 
     /// <summary>Why the last <see cref="TryCreate"/> failed, or null.</summary>
     internal static string? LastFailure { get; private set; }
 
+    /// <summary>Builds the prefab as soon as vanilla prefabs are available, at
+    /// plugin start, so it is registered before any world's objects are
+    /// created. Idempotent.</summary>
+    internal static void Install(string baseCreature, Action<string>? log)
+    {
+        if (_installed)
+        {
+            return;
+        }
+
+        _installed = true;
+        _baseCreature = baseCreature ?? string.Empty;
+        _log = log;
+        PrefabManager.OnVanillaPrefabsAvailable += OnVanillaPrefabsAvailable;
+    }
+
+    private static void OnVanillaPrefabsAvailable()
+    {
+        try
+        {
+            if (_prefab != null || TryCreate(_baseCreature, _log))
+            {
+                PrefabManager.OnVanillaPrefabsAvailable -= OnVanillaPrefabsAvailable;
+            }
+        }
+        catch (Exception exception)
+        {
+            LastFailure = "building the worker prefab threw " + exception.GetType().Name;
+            _log?.Invoke("Worker prefab not created: " + exception);
+        }
+    }
+
     /// <summary>Creates the worker prefab from <paramref name="baseCreature"/>.
-    /// Idempotent: a second call with the prefab already built is a no-op, which
-    /// matters because world load can run initialisation more than once.</summary>
+    /// Idempotent: a second call with the prefab already built is a no-op.
+    /// </summary>
     internal static bool TryCreate(string baseCreature, Action<string>? log = null)
     {
         if (_prefab != null)
@@ -58,6 +112,15 @@ internal static class ForemanWorkerPrefab
         if (prefabs == null)
         {
             return Fail("Jotunn's prefab manager is not available yet.", log);
+        }
+
+        GameObject? existing = prefabs.GetPrefab(PrefabName);
+        if (existing != null && existing.GetComponent<WorkerBody>() != null)
+        {
+            // Built earlier in this process (for instance by a lazy fallback)
+            // and still registered with Jotunn.
+            _prefab = existing;
+            return true;
         }
 
         GameObject? basePrefab = prefabs.GetPrefab(baseCreature);
@@ -80,7 +143,7 @@ internal static class ForemanWorkerPrefab
         string? missing = DescribeMissingComponents(clone);
         if (missing != null)
         {
-            prefabs.DestroyPrefab(PrefabName);
+            UnityEngine.Object.DestroyImmediate(clone);
             return Fail(
                 $"'{baseCreature}' cannot be a worker: {missing}. " +
                 "A worker needs a networked humanoid body.",
@@ -93,32 +156,55 @@ internal static class ForemanWorkerPrefab
         }
 
         // Anything that would make the worker tameable, saddleable or a
-        // spawn-point owner is vanilla behaviour this spike does not want.
+        // spawn-point owner is vanilla behaviour this runtime does not want.
         foreach (Tameable tameable in clone.GetComponentsInChildren<Tameable>(includeInactive: true))
         {
             UnityEngine.Object.DestroyImmediate(tameable);
         }
 
-        clone.AddComponent<ForemanWorkerAI>();
+        // No loot is minted when a worker dies: only what he really carried is
+        // dropped, by his body's own death handler.
+        foreach (CharacterDrop drop in clone.GetComponentsInChildren<CharacterDrop>(includeInactive: true))
+        {
+            UnityEngine.Object.DestroyImmediate(drop);
+        }
 
-        Character character = clone.GetComponent<Character>();
+        Humanoid humanoid = clone.GetComponent<Humanoid>();
+        // Humanoid.Start gives non-players their default and random gear on
+        // every instantiation. Empty arrays, not null: GiveDefaultItems reads
+        // each array's length.
+        humanoid.m_defaultItems = new GameObject[0];
+        humanoid.m_randomWeapon = new GameObject[0];
+        humanoid.m_randomArmor = new GameObject[0];
+        humanoid.m_randomShield = new GameObject[0];
+        humanoid.m_randomSets = new Humanoid.ItemSet[0];
+        humanoid.m_randomItems = new Humanoid.RandomItem[0];
+
+        clone.GetComponent<ZNetView>().m_persistent = true;
+
+        clone.AddComponent<ForemanWorkerAI>();
+        clone.AddComponent<WorkerBody>();
+
         // Not an enemy of anyone, and not a boss. Faction behaviour is out of
-        // scope for this leaf; what is in scope is not shipping a worker that
-        // inherits a hostile creature's faction by accident.
+        // scope; what is in scope is not shipping a worker that inherits a
+        // hostile creature's faction by accident.
+        Character character = clone.GetComponent<Character>();
         character.m_faction = Character.Faction.Players;
         character.m_boss = false;
 
+        // Kept by Jotunn and registered into every scene from now on; and into
+        // the current one, when a world is already up.
+        prefabs.AddPrefab(new CustomPrefab(clone, fixReference: false));
         prefabs.RegisterToZNetScene(clone);
         _prefab = clone;
-        log?.Invoke(
-            $"Worker prefab '{PrefabName}' built from '{baseCreature}'.");
+        log?.Invoke($"Worker prefab '{PrefabName}' built from '{baseCreature}' and registered for every world.");
         return true;
     }
 
     /// <summary>Spawns one worker. The caller is responsible for having
-    /// established authority; this refuses anyway if the ground is not loaded,
-    /// because a creature spawned into unloaded ground is a creature nobody
-    /// owns.</summary>
+    /// established authority and stamping its identity; this refuses anyway if
+    /// the ground is not loaded, because a creature spawned into unloaded ground
+    /// is a creature nobody owns.</summary>
     internal static ForemanWorkerAI? Spawn(Vector3 position, Quaternion rotation)
     {
         if (_prefab == null)
@@ -136,27 +222,6 @@ internal static class ForemanWorkerPrefab
         return instance.GetComponent<ForemanWorkerAI>();
     }
 
-    /// <summary>Forgets the built prefab. Called on world unload so a second
-    /// world in the same session rebuilds against its own scene.
-    ///
-    /// It must <b>unregister</b>, not merely drop the reference. Jotunn's
-    /// prefab manager keeps custom prefabs across world loads, and
-    /// <c>CreateClonedPrefab</c> refuses a name that already exists by logging
-    /// and returning null. Nulling the field alone would therefore make every
-    /// world after the first fail to build a worker, reporting the misleading
-    /// "could not clone" until the game was restarted.</summary>
-    internal static void Reset()
-    {
-        _prefab = null;
-        LastFailure = null;
-
-        PrefabManager prefabs = PrefabManager.Instance;
-        if (prefabs != null && prefabs.GetPrefab(PrefabName) != null)
-        {
-            prefabs.DestroyPrefab(PrefabName);
-        }
-    }
-
     private static string? DescribeMissingComponents(GameObject clone)
     {
         if (clone.GetComponent<ZNetView>() == null)
@@ -164,9 +229,9 @@ internal static class ForemanWorkerPrefab
             return "it has no ZNetView, so it cannot be a networked entity";
         }
 
-        if (clone.GetComponent<Character>() == null)
+        if (clone.GetComponent<Humanoid>() == null)
         {
-            return "it has no Character, so it has no body to move";
+            return "it has no Humanoid, so it has no body to move or inventory to carry with";
         }
 
         if (clone.GetComponent<ZSyncAnimation>() == null)

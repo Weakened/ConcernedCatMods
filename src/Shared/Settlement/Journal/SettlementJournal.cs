@@ -16,7 +16,11 @@ namespace TheConcernedCat.Settlement.Journal;
 /// the reserved material and place the piece — so the journal records the
 /// intention before and the outcome after. A replay that finds a start with no
 /// finish therefore <i>knows</i> that something was in flight, which is a
-/// completely different situation from never having tried.</summary>
+/// completely different situation from never having tried.
+///
+/// The values are persisted as numbers, so they are never renumbered: new kinds
+/// are appended (schema v3, CONTRACTS.md §5.4, from
+/// <see cref="CollectionAccepted"/> on).</summary>
 internal enum JournalEntryKind
 {
     OrderTransition = 0,
@@ -38,20 +42,74 @@ internal enum JournalEntryKind
     /// <summary>The item moved and the worker has it. Written AFTER.</summary>
     ToolHandoverFinished = 6,
 
-    /// <summary>The worker gave it back.</summary>
+    /// <summary>The worker gave it back — or, when the entry says
+    /// <see cref="JournalEntry.ReturnIntent"/>, is about to (schema v3): the
+    /// intention written before the return moves anything, so an interrupted
+    /// return is in the record exactly as an interrupted give is (#300).</summary>
     ToolReturned = 7,
 
     /// <summary>A person looked at an interrupted handover and said the worker
     /// really does have the tool.</summary>
     ToolResolvedToWorker = 8,
 
-    /// <summary>A person looked at an interrupted handover and said the player
-    /// really still has it.
+    /// <summary>The player really still has it.
     ///
-    /// Two kinds rather than one carrying a flag, because the answer IS the
-    /// content of the entry and a boolean column would be one more thing a
-    /// damaged row could get subtly wrong.</summary>
+    /// Usually a person's answer. In one case the handover writes it itself:
+    /// the intention was recorded and the worker's inventory then refused the
+    /// item, so nothing moved. Those entries say
+    /// <see cref="JournalEntry.WrittenByHandover"/> (schema v3), and are read
+    /// as "that attempt never happened" rather than as somebody having been
+    /// asked (#300).
+    ///
+    /// Two kinds rather than one carrying a flag for the answer itself, because
+    /// the answer IS the content of the entry and a boolean column would be one
+    /// more thing a damaged row could get subtly wrong.</summary>
     ToolResolvedToPlayer = 9,
+
+    /// <summary>A collection order was accepted: the full definition. Written
+    /// before any work.</summary>
+    CollectionAccepted = 10,
+
+    /// <summary>A collection order changed state, with the reason.</summary>
+    CollectionTransition = 11,
+
+    /// <summary>About to pick a source. Written before the game's own pick.
+    /// </summary>
+    PickupStarted = 12,
+
+    /// <summary>What the pick produced: the traced drops.</summary>
+    PickupFinished = 13,
+
+    /// <summary>A transfer's intent, written before any engine mutation.
+    /// </summary>
+    TransferStarted = 14,
+
+    /// <summary>A transfer's receipt, with the actually accepted units.
+    /// </summary>
+    TransferFinished = 15,
+
+    /// <summary>A person's answer to an uncertain transfer: which side is true.
+    /// </summary>
+    TransferResolved = 16,
+
+    /// <summary>A cart's pre-existing cargo, before an order first used it.
+    /// </summary>
+    CartBaselineRecorded = 17,
+
+    /// <summary>A person accepting observed loss.</summary>
+    LossRecorded = 18,
+
+    /// <summary>Hold-for-player: material handed to the player.</summary>
+    HandoverFinished = 19,
+
+    /// <summary>A world save's snapshot, or a load restating which save the
+    /// world is (see <see cref="SaveTimeline"/>).</summary>
+    WorldSaveMarker = 20,
+
+    /// <summary>C2: a player-confirmed rebind of an order's scope snapshot and
+    /// delivery target after a reload. Quotas, progress and custody unchanged.
+    /// </summary>
+    CollectionRebound = 21,
 }
 
 /// <summary>Which half of the record an entry belongs to.
@@ -77,6 +135,48 @@ internal static class JournalEntryKinds
                 return false;
         }
     }
+
+    /// <summary>The schema-v3 kinds, whose payload is a <see cref="CustodyRow"/>.
+    /// </summary>
+    public static bool IsCustody(JournalEntryKind kind)
+    {
+        switch (kind)
+        {
+            case JournalEntryKind.CollectionAccepted:
+            case JournalEntryKind.CollectionTransition:
+            case JournalEntryKind.PickupStarted:
+            case JournalEntryKind.PickupFinished:
+            case JournalEntryKind.TransferStarted:
+            case JournalEntryKind.TransferFinished:
+            case JournalEntryKind.TransferResolved:
+            case JournalEntryKind.CartBaselineRecorded:
+            case JournalEntryKind.LossRecorded:
+            case JournalEntryKind.HandoverFinished:
+            case JournalEntryKind.WorldSaveMarker:
+            case JournalEntryKind.CollectionRebound:
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>The placement-proof material kinds of schema v1.</summary>
+    public static bool IsLegacyMaterial(JournalEntryKind kind)
+    {
+        switch (kind)
+        {
+            case JournalEntryKind.OrderTransition:
+            case JournalEntryKind.Reserved:
+            case JournalEntryKind.Refunded:
+            case JournalEntryKind.CommitStarted:
+            case JournalEntryKind.CommitFinished:
+                return true;
+
+            default:
+                return false;
+        }
+    }
 }
 
 /// <summary>One immutable line of the journal.</summary>
@@ -93,12 +193,31 @@ internal sealed class JournalEntry
         string? container = null,
         IEnumerable<MaterialStack>? stacks = null,
         WorkerId worker = default,
-        ToolSpecimen tool = default)
+        ToolSpecimen tool = default,
+        string? containerEpoch = null,
+        double? worldTime = null,
+        Guid loadEpoch = default,
+        bool returnIntent = false,
+        bool writtenByHandover = false,
+        string? note = null)
     {
         if (sequence < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(sequence));
         }
+
+        if (JournalEntryKinds.IsCustody(kind))
+        {
+            throw new ArgumentException(
+                "A custody entry is built from its payload; use the payload constructor.", nameof(kind));
+        }
+
+        if (!Enum.IsDefined(typeof(JournalEntryKind), kind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(kind), "Not a kind this build defines.");
+        }
+
+        ValidateTime(worldTime, loadEpoch);
 
         if (JournalEntryKinds.IsTool(kind))
         {
@@ -135,10 +254,39 @@ internal sealed class JournalEntry
                 throw new ArgumentException(
                     "A tool journal entry needs the transaction it is about.", nameof(request));
             }
+
+            if (returnIntent && kind != JournalEntryKind.ToolReturned)
+            {
+                throw new ArgumentException("Only a return has an intention row.", nameof(returnIntent));
+            }
+
+            if (writtenByHandover
+                && kind != JournalEntryKind.ToolResolvedToPlayer
+                && kind != JournalEntryKind.ToolResolvedToWorker)
+            {
+                throw new ArgumentException(
+                    "Only a settled answer is ever written by the handover itself.", nameof(writtenByHandover));
+            }
         }
-        else if (order.IsEmpty)
+        else
         {
-            throw new ArgumentException("A journal entry needs an owning order.", nameof(order));
+            if (order.IsEmpty)
+            {
+                throw new ArgumentException("A journal entry needs an owning order.", nameof(order));
+            }
+
+            if (returnIntent || writtenByHandover)
+            {
+                throw new ArgumentException("Tool flags belong to tool entries.");
+            }
+
+            if (SettlementJournal.CarriesRequest(kind) && request.IsEmpty)
+            {
+                // The same rule as the tool rows, applied to the material kinds
+                // it was missing from: the reader calls such a row damage, so
+                // the writer must not be able to produce one.
+                throw new ArgumentException("This kind of entry needs its request.", nameof(request));
+            }
         }
 
         Sequence = sequence;
@@ -147,8 +295,14 @@ internal sealed class JournalEntry
         Request = request;
         Transition = transition;
         Container = container;
+        ContainerEpoch = containerEpoch;
         Worker = worker;
         Tool = tool;
+        WorldTime = worldTime;
+        LoadEpoch = loadEpoch;
+        ReturnIntent = returnIntent;
+        WrittenByHandover = writtenByHandover;
+        Note = note ?? string.Empty;
 
         if (stacks != null)
         {
@@ -156,6 +310,59 @@ internal sealed class JournalEntry
             {
                 _stacks.Add(stack);
             }
+        }
+
+        if (kind == JournalEntryKind.Reserved && (string.IsNullOrEmpty(container) || _stacks.Count == 0))
+        {
+            // A reservation with no container or nothing in it cannot be
+            // replayed, and the replay used to skip it without a word — the
+            // silent drop #283's audit named. It cannot be written now.
+            throw new ArgumentException("A reservation names its container and what it holds.", nameof(stacks));
+        }
+    }
+
+    /// <summary>A schema-v3 custody entry.</summary>
+    public JournalEntry(long sequence, CustodyRow payload, double worldTime, Guid loadEpoch)
+    {
+        if (sequence < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(sequence));
+        }
+
+        Custody = payload ?? throw new ArgumentNullException(nameof(payload));
+        ValidateTime(worldTime, loadEpoch);
+
+        if (loadEpoch == Guid.Empty)
+        {
+            throw new ArgumentException("A custody entry records which world load wrote it.", nameof(loadEpoch));
+        }
+
+        if (payload.Kind != JournalEntryKind.WorldSaveMarker && payload.Order.IsEmpty)
+        {
+            throw new ArgumentException("A custody entry needs its order.", nameof(payload));
+        }
+
+        Sequence = sequence;
+        Kind = payload.Kind;
+        Order = payload.Order;
+        Request = payload.Request;
+        WorldTime = worldTime;
+        LoadEpoch = loadEpoch;
+        Note = string.Empty;
+    }
+
+    private static void ValidateTime(double? worldTime, Guid loadEpoch)
+    {
+        if (worldTime.HasValue && (double.IsNaN(worldTime.Value) || double.IsInfinity(worldTime.Value)))
+        {
+            throw new ArgumentOutOfRangeException(nameof(worldTime), "A world time is a real number.");
+        }
+
+        if (worldTime.HasValue != (loadEpoch != Guid.Empty))
+        {
+            // Both or neither: a time with no load is not placeable against a
+            // save, and a load with no time is not either.
+            throw new ArgumentException("A world time and a load epoch are recorded together.", nameof(loadEpoch));
         }
     }
 
@@ -167,15 +374,46 @@ internal sealed class JournalEntry
     public string? Container { get; }
     public IReadOnlyList<MaterialStack> Stacks => _stacks;
 
+    /// <summary>Which run of the world <see cref="Container"/> means anything
+    /// in (#294). Null for rows written before schema v3, which match by key
+    /// only.</summary>
+    public string? ContainerEpoch { get; }
+
     /// <summary>Empty unless this is a tool entry.</summary>
     public WorkerId Worker { get; }
 
     /// <summary>Empty unless this is a tool entry.</summary>
     public ToolSpecimen Tool { get; }
 
+    /// <summary>The payload of a schema-v3 custody entry; null otherwise.
+    /// </summary>
+    public CustodyRow? Custody { get; }
+
+    /// <summary>The net world time when the row was written (schema v3). Null
+    /// for rows written before v3, which the world-save marker rule never
+    /// voids.</summary>
+    public double? WorldTime { get; }
+
+    /// <summary>The world load that wrote the row (schema v3).</summary>
+    public Guid LoadEpoch { get; }
+
+    /// <summary>On a <see cref="JournalEntryKind.ToolReturned"/> entry: the
+    /// intention written before a return moves anything.</summary>
+    public bool ReturnIntent { get; }
+
+    /// <summary>On a <see cref="JournalEntryKind.ToolResolvedToPlayer"/> entry:
+    /// written by the handover itself because nothing moved, not by a person.
+    /// </summary>
+    public bool WrittenByHandover { get; }
+
+    /// <summary>Evidence carried by a tool entry (where a dying worker dropped
+    /// a tool, for instance). Empty otherwise.</summary>
+    public string Note { get; }
+
     public override string ToString()
     {
-        return Sequence.ToString(CultureInfo.InvariantCulture) + " " + Kind + " " + Order.Value +
+        return Sequence.ToString(CultureInfo.InvariantCulture) + " " + Kind +
+            (Order.IsEmpty ? "" : " " + Order.Value) +
             (Request.IsEmpty ? "" : " " + Request.Value);
     }
 }
@@ -192,10 +430,25 @@ internal sealed class ReplayResult
         long nextSequence,
         Guid journalInstance,
         IEnumerable<string> repairs)
+        : this(orders, ledger, tools, new MaterialCustodyLedger(), null, nextSequence, journalInstance, repairs)
+    {
+    }
+
+    internal ReplayResult(
+        IReadOnlyDictionary<string, OrderState> orders,
+        CustodyLedger ledger,
+        ToolLedger tools,
+        MaterialCustodyLedger custody,
+        SaveTimelineReport? timeline,
+        long nextSequence,
+        Guid journalInstance,
+        IEnumerable<string> repairs)
     {
         Orders = orders;
         Ledger = ledger;
         Tools = tools;
+        Custody = custody;
+        Timeline = timeline;
         NextSequence = nextSequence;
         JournalInstance = journalInstance;
         foreach (string repair in repairs)
@@ -212,6 +465,14 @@ internal sealed class ReplayResult
     /// record. This is what makes the tool ledger's idempotence claim true
     /// across a reload rather than only within one session.</summary>
     public ToolLedger Tools { get; }
+
+    /// <summary>Gathered material: collection orders, pickups, transfers and
+    /// where every unit is (schema v3).</summary>
+    public MaterialCustodyLedger Custody { get; }
+
+    /// <summary>The world-save marker rule's classification of every row, or
+    /// null for a record with nothing it applies to.</summary>
+    public SaveTimelineReport? Timeline { get; }
 
     public long NextSequence { get; }
 
@@ -247,7 +508,8 @@ internal sealed class ReplayResult
 /// request named — it is never assumed to have succeeded, and never assumed to
 /// have failed. Both assumptions are wrong in one direction each: one conjures
 /// material, the other loses it. #273's gate 3 asks for a repairable journal
-/// and a clear message rather than a guess, and this is where that lives.</summary>
+/// and a clear message rather than a guess, and this is where that lives. The
+/// same holds for every custody transfer and tool handover.</summary>
 internal sealed class SettlementJournal
 {
     private readonly List<JournalEntry> _entries = new List<JournalEntry>();
@@ -294,8 +556,8 @@ internal sealed class SettlementJournal
     public bool IsDirty { get; private set; }
 
     /// <summary>True when this build must not write over the file this journal
-    /// came from: a newer schema, another settlement, or lines it could not
-    /// read.
+    /// came from: a newer schema, another settlement, lines it could not read,
+    /// or a record whose closing line says it is incomplete.
     ///
     /// The flag lives on the journal rather than beside it because a caller
     /// holding a journal must be able to ask whether writing it is allowed
@@ -333,7 +595,8 @@ internal sealed class SettlementJournal
     /// below <see cref="_savedCount"/> is refused outright rather than
     /// clamped — un-writing a persisted entry is not something this type will
     /// do by arithmetic, and a caller asking for it has a bug worth
-    /// seeing.</summary>
+    /// seeing. A refusal is also how a caller learns that a save it was told
+    /// failed did in fact reach disk.</summary>
     public bool TryDiscardUnsaved(int keep)
     {
         if (keep < _savedCount || keep > _entries.Count)
@@ -362,6 +625,10 @@ internal sealed class SettlementJournal
         return true;
     }
 
+    /// <summary>Whether the entry at <paramref name="index"/> is known to have
+    /// reached disk.</summary>
+    public bool IsSaved(int index) => index >= 0 && index < _savedCount;
+
     /// <summary>Appends one line. The sequence is assigned here so a caller
     /// cannot write two entries with the same number, which would make the
     /// order of a replay depend on list insertion rather than on the record.</summary>
@@ -373,10 +640,27 @@ internal sealed class SettlementJournal
         string? container = null,
         IEnumerable<MaterialStack>? stacks = null,
         WorkerId worker = default,
-        ToolSpecimen tool = default)
+        ToolSpecimen tool = default,
+        string? containerEpoch = null,
+        double? worldTime = null,
+        Guid loadEpoch = default,
+        bool returnIntent = false,
+        bool writtenByHandover = false,
+        string? note = null)
     {
         var entry = new JournalEntry(
-            NextSequence, kind, order, request, transition, container, stacks, worker, tool);
+            NextSequence, kind, order, request, transition, container, stacks, worker, tool,
+            containerEpoch, worldTime, loadEpoch, returnIntent, writtenByHandover, note);
+        _entries.Add(entry);
+        _highestSequence = entry.Sequence;
+        IsDirty = true;
+        return entry;
+    }
+
+    /// <summary>Appends one schema-v3 custody line.</summary>
+    public JournalEntry AppendCustody(CustodyRow payload, double worldTime, Guid loadEpoch)
+    {
+        var entry = new JournalEntry(NextSequence, payload, worldTime, loadEpoch);
         _entries.Add(entry);
         _highestSequence = entry.Sequence;
         IsDirty = true;
@@ -407,12 +691,12 @@ internal sealed class SettlementJournal
     ///
     /// <list type="bullet">
     /// <item>An <b>undefined</b> kind never reaches here from a file.
-    /// <c>JournalStore.TryParseEntry</c> rejects any kind value
-    /// <c>Enum.IsDefined</c> does not know, so the line is counted as damage and
-    /// the journal goes read-only.</item>
+    /// <c>JournalStore</c> rejects any kind value <c>Enum.IsDefined</c> does not
+    /// know, so the line is counted as damage and the journal goes
+    /// read-only.</item>
     /// <item>A kind added <b>in code</b> and not classified below falls through
     /// to <c>true</c> — treated as carrying a request, so an entry with an empty
-    /// one is skipped rather than crashing the replay. Fail-safe, but silent,
+    /// one is refused rather than crashing the replay. Fail-safe, but silent,
     /// which is why the mapping is pinned by a test that enumerates every member
     /// of the enum. Add a member without classifying it and that test fails.</item>
     /// </list></summary>
@@ -429,223 +713,35 @@ internal sealed class SettlementJournal
             case JournalEntryKind.ToolReturned:
             case JournalEntryKind.ToolResolvedToWorker:
             case JournalEntryKind.ToolResolvedToPlayer:
+            case JournalEntryKind.PickupStarted:
+            case JournalEntryKind.PickupFinished:
+            case JournalEntryKind.TransferStarted:
+            case JournalEntryKind.TransferFinished:
+            case JournalEntryKind.TransferResolved:
+            case JournalEntryKind.LossRecorded:
+            case JournalEntryKind.HandoverFinished:
                 return true;
 
             case JournalEntryKind.OrderTransition:
+            case JournalEntryKind.CollectionAccepted:
+            case JournalEntryKind.CollectionTransition:
+            case JournalEntryKind.CartBaselineRecorded:
+            case JournalEntryKind.WorldSaveMarker:
+            case JournalEntryKind.CollectionRebound:
                 return false;
         }
 
         return true;
     }
 
-    /// <summary>Rebuilds order states and the custody ledger from the record.</summary>
-    public ReplayResult Replay()
-    {
-        var orders = new Dictionary<string, OrderState>(StringComparer.Ordinal);
-        var ledger = new CustodyLedger();
-        var tools = new ToolLedger();
-        var startedCommits = new Dictionary<string, JournalEntry>(StringComparer.Ordinal);
-        var finishedCommits = new HashSet<string>(StringComparer.Ordinal);
-        var startedHandovers = new Dictionary<string, JournalEntry>(StringComparer.Ordinal);
-        var finishedHandovers = new HashSet<string>(StringComparer.Ordinal);
-        var returnedHandovers = new HashSet<string>(StringComparer.Ordinal);
-        var resolutions = new Dictionary<string, bool>(StringComparer.Ordinal);
+    /// <summary>Rebuilds order states, both custody ledgers and the tool ledger
+    /// from the record, as the record stands: rows after the last save are
+    /// real in this session.</summary>
+    public ReplayResult Replay() => JournalReplay.Run(this, load: null);
 
-        foreach (JournalEntry entry in _entries)
-        {
-            // Four of the five kinds key off a request id, and the codec treats
-            // that field as optional for all of them -- so a damaged or
-            // hand-edited line can carry an empty one. Every such line reaches
-            // a dictionary keyed by RequestId.Value, which is null when the id
-            // is default, and a null key takes the whole replay down.
-            //
-            // Guarding this once, here, is the fix. An earlier version guarded
-            // Refunded, then CommitStarted, each time claiming the class was
-            // closed; CommitFinished was open both times. A guard per case is a
-            // guard somebody forgets.
-            //
-            // CarriesRequest is a positive list because it makes each existing
-            // kind's classification readable and enumerable. It does NOT change
-            // what an unclassified new kind answers -- that falls through to
-            // true, exactly as "anything except OrderTransition" would have.
-            // The only thing that forces a new kind to be classified on purpose
-            // is a test that enumerates the enum; see CarriesRequest itself.
-            if (CarriesRequest(entry.Kind) && entry.Request.IsEmpty)
-            {
-                continue;
-            }
-
-            switch (entry.Kind)
-            {
-                case JournalEntryKind.OrderTransition:
-                {
-                    OrderState current = orders.TryGetValue(entry.Order.Value, out OrderState existing)
-                        ? existing
-                        : OrderState.Draft;
-                    OrderStateMachine.TryApply(current, entry.Transition, out OrderState next);
-                    orders[entry.Order.Value] = next;
-                    break;
-                }
-
-                case JournalEntryKind.Reserved:
-                    // No request check here: the guard above owns that for
-                    // every kind, and leaving a second one would make this the
-                    // case whose regression test proves nothing.
-                    if (entry.Container != null && entry.Stacks.Count > 0)
-                    {
-                        ledger.Reserve(new Reservation(
-                            entry.Request, entry.Order, entry.Container, entry.Stacks));
-                    }
-
-                    break;
-
-                case JournalEntryKind.Refunded:
-                    ledger.Refund(entry.Request);
-                    break;
-
-                case JournalEntryKind.CommitStarted:
-                    startedCommits[entry.Request.Value] = entry;
-                    break;
-
-                case JournalEntryKind.CommitFinished:
-                    finishedCommits.Add(entry.Request.Value);
-                    ledger.Commit(entry.Request);
-                    break;
-
-                // Tool rows are COLLECTED here and applied afterwards, never
-                // applied as they are met. Applying in file order meant a
-                // return could arrive before the holding it refers to existed
-                // -- so it was silently dropped and the tool replayed as still
-                // held. Order of application is a property of the replay, not
-                // of where a row happens to sit in the file.
-                case JournalEntryKind.ToolHandoverStarted:
-                    // First one wins. Last-write-wins would let a second start
-                    // under the same id quietly replace the tool or the worker,
-                    // bypassing the mismatch rejection ToolLedger.Issue makes a
-                    // point of.
-                    if (!startedHandovers.ContainsKey(entry.Request.Value))
-                    {
-                        startedHandovers[entry.Request.Value] = entry;
-                    }
-
-                    break;
-
-                // NOTE: the specimen a holding is built from now comes from
-                // the FIRST row seen for a request -- normally the start, where
-                // it used to come from the finish. The adapter writes the same
-                // specimen to both, so this changes nothing today; it matters if
-                // anything ever writes them differently, and the first row is
-                // the right authority because it is the one that definitely
-                // describes what was picked up.
-                case JournalEntryKind.ToolHandoverFinished:
-                    finishedHandovers.Add(entry.Request.Value);
-                    if (!startedHandovers.ContainsKey(entry.Request.Value))
-                    {
-                        // A finish whose start did not survive is still evidence
-                        // that the tool moved.
-                        startedHandovers[entry.Request.Value] = entry;
-                    }
-
-                    break;
-
-                case JournalEntryKind.ToolReturned:
-                    returnedHandovers.Add(entry.Request.Value);
-                    break;
-
-                case JournalEntryKind.ToolResolvedToWorker:
-                case JournalEntryKind.ToolResolvedToPlayer:
-                    resolutions[entry.Request.Value] =
-                        entry.Kind == JournalEntryKind.ToolResolvedToWorker;
-                    break;
-            }
-        }
-
-        // Anything that started and did not finish is genuinely unknown, and
-        // stays unknown. Both available assumptions are wrong in one direction:
-        // assuming success conjures a piece that may not exist, assuming
-        // failure returns material that may already be a wall.
-        var repairs = new List<string>();
-        foreach (KeyValuePair<string, JournalEntry> pending in startedCommits)
-        {
-            if (finishedCommits.Contains(pending.Key))
-            {
-                continue;
-            }
-
-            JournalEntry entry = pending.Value;
-            ledger.MarkUncertain(entry.Request);
-
-            OrderState current = orders.TryGetValue(entry.Order.Value, out OrderState existing)
-                ? existing
-                : OrderState.Draft;
-            OrderStateMachine.TryApply(current, OrderTransition.FlagForRepair, out OrderState next);
-            orders[entry.Order.Value] = next;
-
-            repairs.Add(
-                "Order \"" + entry.Order.Value + "\" was placing a piece (request \"" +
-                entry.Request.Value + "\") when the session ended, and whether the materials became " +
-                "part of the building is not recorded. The order is paused and nothing has been " +
-                "consumed or returned. Check whether that piece is standing, then resolve the " +
-                "request one way or the other.");
-        }
-
-        // A handover that started and did not finish is genuinely unknown, and
-        // stays unknown -- the same rule as an interrupted material commit, for
-        // the same reason. Assuming it completed hands a worker a tool the
-        // player may still be holding; assuming it did not loses the record of
-        // one they are not.
-        // Every holding is created first, so nothing that refers to one can
-        // arrive before it exists. Then, in the one order that composes: an
-        // unfinished handover becomes unknown, a person's answer settles it, and
-        // only then does a return apply -- because a return is owed from Held,
-        // and a resolution is the thing that can produce Held.
-        foreach (KeyValuePair<string, JournalEntry> handover in startedHandovers)
-        {
-            JournalEntry entry = handover.Value;
-            tools.Issue(new ToolHolding(entry.Request, entry.Worker, entry.Tool));
-        }
-
-        foreach (KeyValuePair<string, JournalEntry> handover in startedHandovers)
-        {
-            if (!finishedHandovers.Contains(handover.Key))
-            {
-                tools.MarkUncertain(handover.Value.Request);
-            }
-        }
-
-        foreach (KeyValuePair<string, bool> answer in resolutions)
-        {
-            if (startedHandovers.TryGetValue(answer.Key, out JournalEntry? resolved))
-            {
-                tools.Resolve(resolved!.Request, answer.Value);
-            }
-        }
-
-        foreach (string returned in returnedHandovers)
-        {
-            if (startedHandovers.TryGetValue(returned, out JournalEntry? entry))
-            {
-                tools.Return(entry!.Request);
-            }
-        }
-
-        foreach (KeyValuePair<string, JournalEntry> handover in startedHandovers)
-        {
-            if (!tools.HasUncertainHandover(handover.Value.Worker)
-                || !tools.TryGet(handover.Value.Request, out ToolHolding holding)
-                || holding.State != ToolHoldingState.Uncertain)
-            {
-                continue;
-            }
-
-            JournalEntry entry = handover.Value;
-            repairs.Add(
-                "A tool was changing hands (" + entry.Tool + ", worker \"" + entry.Worker.Value +
-                "\", request \"" + entry.Request.Value + "\") when the session ended, and whether " +
-                "it moved is not recorded. Nothing has been taken or given back. Check both " +
-                "inventories, then run: cf_settle resolve " + entry.Request.Value + " mine|his");
-        }
-
-        return new ReplayResult(orders, ledger, tools, NextSequence, Instance, repairs);
-    }
+    /// <summary>The replay a world load makes: the same, plus the world-save
+    /// marker rule's decision about what this load rolled back. The caller
+    /// persists the restatement the result names before any other write.
+    /// </summary>
+    public ReplayResult Replay(WorldLoad load) => JournalReplay.Run(this, load);
 }

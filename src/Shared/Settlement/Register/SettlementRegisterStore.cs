@@ -28,6 +28,14 @@ internal enum RegisterLoadOutcome
     ScopeMismatch = 4,
 
     Unreadable = 5,
+
+    /// <summary>Every line read, but the record ends without its closing line:
+    /// its tail was lost (#293). What was read is kept; read-only.</summary>
+    Truncated = 6,
+
+    /// <summary>Every line read, but the closing line disagrees with the lines
+    /// above it (#293). Read-only.</summary>
+    IntegrityMismatch = 7,
 }
 
 /// <summary>Reads and writes what a player marked, as a tab-separated file.
@@ -55,8 +63,11 @@ internal sealed class SettlementRegisterStore
     private const string TemporarySuffix = ".tmp";
 
     /// <summary>Bumped only when a change would confuse an older build. An
-    /// older build refuses a newer file rather than reading half of it.</summary>
-    public const int SchemaVersion = 1;
+    /// older build refuses a newer file rather than reading half of it.
+    ///
+    /// <b>2</b> since the record ends with a closing line (#293). A schema-1
+    /// file has none and still loads; the next write seals it.</summary>
+    public const int SchemaVersion = 2;
 
     private const char Separator = '\t';
     private const char CarriageReturn = '\r';
@@ -144,6 +155,11 @@ internal sealed class SettlementRegisterStore
         var register = new SettlementRegister(scope);
         int skipped = 0;
         bool sawHeader = false;
+        bool sawAnyLine = false;
+        int version = 1;
+        var accumulator = new RecordTrailer.Accumulator();
+        TrailerVerdict trailer = TrailerVerdict.Unspecified;
+        bool sawTrailer = false;
 
         foreach (string raw in lines)
         {
@@ -159,6 +175,14 @@ internal sealed class SettlementRegisterStore
             }
 
             string[] fields = line.Split(Separator);
+            sawAnyLine = true;
+
+            if (sawTrailer)
+            {
+                trailer = TrailerVerdict.LinesAfterTrailer;
+                skipped++;
+                continue;
+            }
 
             if (!sawHeader)
             {
@@ -167,7 +191,7 @@ internal sealed class SettlementRegisterStore
                 {
                     if (!int.TryParse(
                             fields[1], NumberStyles.Integer, CultureInfo.InvariantCulture,
-                            out int version)
+                            out version)
                         || version > SchemaVersion)
                     {
                         register.MarkReadOnly();
@@ -188,12 +212,24 @@ internal sealed class SettlementRegisterStore
                             "written over it.");
                     }
 
+                    accumulator.AddLine(line);
                     continue;
                 }
 
                 // No header at all: an older or hand-made file. Fall through
                 // and try to read it as rows.
+                version = 1;
             }
+
+            if (version >= 2 && RecordTrailer.IsTrailer(fields))
+            {
+                sawTrailer = true;
+                trailer = RecordTrailer.Check(fields, accumulator);
+                continue;
+            }
+
+            accumulator.AddLine(line);
+            accumulator.CountRow(-1L);
 
             if (TryParseDesignation(fields, out Designation designation))
             {
@@ -217,16 +253,39 @@ internal sealed class SettlementRegisterStore
 
         register.MarkClean();
 
+        if ((version >= 2 && !sawTrailer) || !sawAnyLine)
+        {
+            // A sealed record without its closing line lost its tail; a file
+            // with no line at all lost everything. No build writes either.
+            trailer = TrailerVerdict.Missing;
+        }
+
+        bool damagedTrailer = (version >= 2 || !sawAnyLine) && trailer != TrailerVerdict.Intact;
+
         if (skipped > 0)
         {
             register.MarkReadOnly();
             return new LoadReport(
                 register, RegisterLoadOutcome.LoadedWithSkippedLines, skipped,
                 skipped.ToString(CultureInfo.InvariantCulture) + " line(s) of what you marked in " +
-                "this settlement could not be read. Everything readable was kept and the file " +
+                "this settlement could not be read" +
+                (damagedTrailer ? ", and " + RecordTrailer.Describe(trailer) : string.Empty) +
+                ". Everything readable was kept and the file " +
                 "will NOT be rewritten, so nothing is lost — but nothing new will be marked " +
                 "until it is repaired, because a partial record cannot say which container a " +
                 "worker is allowed to take from.");
+        }
+
+        if (damagedTrailer)
+        {
+            register.MarkReadOnly();
+            return new LoadReport(
+                register,
+                trailer == TrailerVerdict.Missing ? RegisterLoadOutcome.Truncated : RegisterLoadOutcome.IntegrityMismatch,
+                0,
+                "What you marked in this settlement is not completely on disk: " + RecordTrailer.Describe(trailer) +
+                ". Everything readable was kept and the file will NOT be rewritten, and nothing new will be " +
+                "marked until it is repaired.");
         }
 
         return new LoadReport(register, RegisterLoadOutcome.Loaded, 0, null);
@@ -283,6 +342,21 @@ internal sealed class SettlementRegisterStore
     }
 
     public static IEnumerable<string> Serialize(SettlementRegister register)
+    {
+        return RecordTrailer.Seal(Lines(register), RowMarker);
+    }
+
+    /// <summary>Every designation and worker row counts toward the closing
+    /// line; the register has no sequences.</summary>
+    private static long? RowMarker(string line)
+    {
+        return line.StartsWith(DesignationTag + Separator, StringComparison.Ordinal)
+            || line.StartsWith(WorkerTag + Separator, StringComparison.Ordinal)
+                ? -1L
+                : (long?)null;
+    }
+
+    private static IEnumerable<string> Lines(SettlementRegister register)
     {
         yield return "#" + Separator + "settlement register v" +
             SchemaVersion.ToString(CultureInfo.InvariantCulture);

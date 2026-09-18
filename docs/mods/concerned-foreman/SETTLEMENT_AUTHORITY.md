@@ -15,9 +15,10 @@ on any third-party NPC mod, and fork nothing. Place pieces through the **host
 player** with the validity, ward and cost checks reimplemented **explicitly**,
 because vanilla's own checks do not live in the method that places. Drive the
 worker as a **`BaseAI` subclass whose `UpdateAI` does none of vanilla's own
-thinking**. Treat the worker's inventory as **visual evidence**, never as the
-ledger — the ledger is a journal of reservations against a designated container,
-with one idempotent commit at placement.
+thinking**. Keep the ledger in a journal — for building material, reservations
+against a designated container with one idempotent commit at placement; for
+gathered material and issued tools, one custody place per unit, reconciled
+against the worker's own persisted inventory (§5a).
 
 ---
 
@@ -57,7 +58,7 @@ warning, take no dependency and no load-order coupling — the shape Teamster's
 | | Hulgi (#264) | Settlement worker (#273) |
 |---|---|---|
 | Networking | none — no `ZNetView`, no ZDO | a real networked entity, host-owned |
-| Save participation | none | the world save owns the pieces it places |
+| Save participation | none | the world save owns the pieces it places, and the worker body's own object (§5a) |
 | Visible to others | **no**, by construction | yes, like any creature |
 | Touches shared state | never | trees, containers, pieces, housing |
 | Fails by | quietly not appearing | refusing to act, with a repairable journal |
@@ -173,12 +174,23 @@ worker.
 
 ## 5. Decision: where material custody commits
 
-**Chosen: a journal of reservations against the designated container. The
-worker's inventory is visual evidence, not the ledger.**
+**Scope of this section (corrected 2026-09-17, #316).** It is about **building
+material for a cottage**: what a reservation against the designated container
+means, and where it commits. **Gathered material and issued tools are
+different**, and §5a states the difference. Where the two disagree below, §5a
+is the current build.
 
-`Humanoid.GetInventory()` is ZDO-backed and can be lost on death, despawn or
-zone unload. If it were the ledger, materials would vanish on events that are
-not cancellations — which #273's gate 3 forbids.
+**Chosen: a journal of reservations against the designated container. For this
+flow the worker's inventory is evidence, not the ledger.**
+
+An unmodified `Humanoid`'s inventory is **not saved at all**: `m_inventory` is a
+plain field with no save or load, rebuilt on every instantiation, so a relog, a
+zone unload or a despawn destroys whatever it holds. The original wording here
+("ZDO-backed and can be lost") understated it. Either way the conclusion stands
+for this flow: if that inventory were the ledger, materials would vanish on
+events that are not cancellations — which #273's gate 3 forbids. A worker body
+that carries gathered material or an issued tool therefore persists its own
+inventory in **its own** network object (§5a, D9).
 
 The flow, and the single commit point:
 
@@ -211,6 +223,48 @@ that the sum of container + reservations + placed cost is unchanged across any
 sequence of failures.
 
 ---
+
+## 5a. Addendum: gathered material and issued tools (#316)
+
+Collection (#315) gave the worker something §5 never had: **real items he holds
+for hours, across reloads**. The full model, the recovery commands and the live
+checklist are in [`CUSTODY_AND_RECOVERY.md`](CUSTODY_AND_RECOVERY.md); this
+section records only what it changes about the decisions above.
+
+**Places, not evidence.** Each unit an order has taken is in exactly one place —
+`SourceGround`, `Worker`, `Cart`, `Destination`, `Player`, `Lost` — recorded in
+the same journal. The journal is still the ledger, but the worker's inventory is
+now one of the places it accounts for, compared against the record on every
+load, not a picture of one.
+
+**The worker body keeps its own inventory (D9).** Its own network object holds
+`tcc.worker.key`, `tcc.worker.inventory` (vanilla's `Inventory.Save` package)
+and `tcc.worker.revision`, written from the inventory's own change callback, in
+the same call as the change. This is mod data in a **mod-created** object; no
+vanilla object is ever written to. It is what makes a relog, a zone unload and a
+despawn refusal honest, and it is the one reason the §2 table's "save
+participation" row now reads "the pieces it places, **and the worker body's own
+object**".
+
+**Carrying is not free of consequence.** §5's "losing it loses nothing from the
+ledger" is true of a *reservation*; it is not true of gathered material:
+
+- **Death** drops everything he carries through vanilla's own drop, and the
+  record moves it to `Lost` with the place, for a person to pick up. Nothing is
+  refunded or re-granted.
+- **Despawn** is refused while a job holds him, and again while he carries
+  anything or the record says he holds tools or material.
+- **Zone unload** loses nothing: the body is re-bound by key and loads its
+  stored inventory before any work resumes.
+
+**The journal is reconciled against the world.** Journal rows reach disk at
+once, world effects only at the next world save, so `ZNet.WorldSaveStarted`
+writes a world-save marker and every load decides which rows the loaded world
+contains; rows the world rolled back are voided and never replayed. What
+survives is then compared with the actual inventories, and every difference
+waits for a person with the command that answers it. Uninstalling the mod is the
+one case the record cannot absorb by itself, which is why "Release everything"
+comes before removing it.
 
 ## 6. What this decision does not cover
 

@@ -1,7 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using TheConcernedCat.ConcernedForeman.Domain.Settlement;
+using TheConcernedCat.ConcernedForeman.Runtime.Custody;
+using TheConcernedCat.Settlement.Custody;
+using TheConcernedCat.Settlement.Journal;
+using TheConcernedCat.Settlement.Register;
+using TheConcernedCat.Settlement.Tools;
 using TheConcernedCat.Settlement.Worker;
+using TheConcernedCat.Workers;
 using UnityEngine;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Settlement;
@@ -9,16 +16,16 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 /// <summary>Owns the settlement runtime's live state, and is the only thing
 /// that decides whether a worker may act.
 ///
-/// <b>Authority, in one place.</b> Three things must all be true before a worker
-/// does anything: the player opted in, this peer is the host, and the world is
-/// loaded. Any one of them failing is a refusal with a reason. They are gathered
-/// here rather than inside the worker so that there is exactly one answer to
-/// "may we act", and so that turning the runtime off in the config stops workers
-/// on the next tick instead of at the next restart.
+/// <b>Authority, in one place.</b> Work — a worker body, a pickup, a transfer —
+/// runs only under the slice's rule (DECISIONS.md D3): opted in, a world, the
+/// host, not dedicated, and nobody else connected. Any clause failing is a
+/// refusal with a reason. Marking ground keeps its original, looser rule
+/// (opted in, host): it moves nothing.
 ///
-/// The spike deliberately holds <b>one</b> worker. Recruitment, multiple
-/// workers and settlement designation are later leaves, and building them here
-/// would make this one unreviewable.</summary>
+/// The runtime holds <b>one</b> worker identity, Thorstein, whose body is
+/// persistent (D9): spawned once, stamped with its key, re-bound by that key
+/// whenever its ground loads, and never despawned while it carries anything.
+/// </summary>
 internal sealed class SettlementRuntime
 {
     private readonly ForemanSettlementSettings _settings;
@@ -26,6 +33,7 @@ internal sealed class SettlementRuntime
     private readonly WorkerSitePolicy _sitePolicy = new WorldSitePolicy();
     private readonly SettlementRecords _records;
     private readonly DesignationTools _designations;
+    private readonly ForemanCustodyRuntime _custody;
 
     private ForemanWorkerAI? _worker;
 
@@ -34,16 +42,32 @@ internal sealed class SettlementRuntime
         _settings = settings;
         _log = log;
         _records = new SettlementRecords(log);
-        _designations = new DesignationTools(HasAuthority, DescribeMissingAuthority, _records);
+        _custody = new ForemanCustodyRuntime(_records, WorkAuthority, log);
+        _designations = new DesignationTools(
+            HasAuthority, DescribeMissingAuthority, _records, new CustodyTools(this, _custody, _records));
+
+        WorkerBody.Loaded = OnWorkerBodyLoaded;
+        WorkerBody.Died = (body, dropped, where) => _custody.OnWorkerDied(body, dropped, where);
+        WorkerBody.ErrorLog = log;
     }
 
-    /// <summary>CF-SET-004's command surface. It shares this object's single
-    /// authority answer rather than carrying one of its own, so marking ground
-    /// is refused in exactly the situations a worker refuses to act.</summary>
+    /// <summary>The custody runtime collection and cooperation consume
+    /// (<c>ICustodyRuntime</c>).</summary>
+    internal ForemanCustodyRuntime Custody => _custody;
+
+    /// <summary>CF-SET-004's command surface.</summary>
     internal string ExecuteSettlement(string[]? args) => _designations.Execute(args);
 
-    /// <summary>The single authority answer. Every clause is a refusal, never an
-    /// assumption: a missing <c>ZNet</c> is "no authority", not "probably solo".</summary>
+    /// <summary>Plugin start: the worker prefab is built as soon as vanilla
+    /// prefabs exist, and the world-save hook is subscribed.</summary>
+    internal void Install()
+    {
+        ForemanWorkerPrefab.Install(_settings.WorkerBaseCreature.Value, _log);
+        ForemanCustodyRuntime.InstallSaveHook();
+    }
+
+    /// <summary>The designation authority answer: opted in and the host. Every
+    /// clause is a refusal, never an assumption.</summary>
     internal bool HasAuthority()
     {
         if (!_settings.SettlementRuntimeEnabled.Value)
@@ -52,16 +76,33 @@ internal sealed class SettlementRuntime
         }
 
         ZNet net = ZNet.instance;
-        if (net == null)
+        return net != null && net.IsServer();
+    }
+
+    /// <summary>The work authority answer (D3), asked before every mutation.
+    /// </summary>
+    internal WorkAuthorityVerdict WorkAuthority()
+    {
+        ZNet net = ZNet.instance;
+        int peers;
+        try
         {
-            return false;
+            peers = net == null ? -1 : net.GetPeers().Count;
+        }
+        catch (Exception)
+        {
+            peers = -1;
         }
 
-        // Solo and local host are the initial targets. On a dedicated server
-        // this peer is a client and owns nothing, so it refuses — the ADR's
-        // "missing authority fails closed", not "take ownership anyway".
-        return net.IsServer();
+        return WorkAuthorityPolicy.Evaluate(new WorkAuthorityFacts(
+            _settings.SettlementRuntimeEnabled.Value,
+            worldLoaded: net != null && ZNetScene.instance != null,
+            isServer: net != null && net.IsServer(),
+            isDedicated: net != null && net.IsDedicated(),
+            connectedPeers: peers));
     }
+
+    internal bool HasWorkAuthority() => WorkAuthority() == WorkAuthorityVerdict.Granted;
 
     internal string Execute(string[]? args)
     {
@@ -80,57 +121,83 @@ internal sealed class SettlementRuntime
         };
     }
 
+    /// <summary>The bound worker body, re-found by key when its ground has
+    /// been unloaded and loaded again.</summary>
+    internal ForemanWorkerAI? Worker
+    {
+        get
+        {
+            if (_worker == null)
+            {
+                WorkerBody? body = WorkerBody.FindLive(_custody.WorkerKey.Value);
+                if (body != null)
+                {
+                    Bind(body.GetComponent<ForemanWorkerAI>());
+                }
+            }
+
+            return _worker;
+        }
+    }
+
     private string Status()
     {
-        string authority = HasAuthority()
-            ? "granted (opted in, host)"
+        string authority = HasWorkAuthority()
+            ? "granted (opted in, host, nobody else connected)"
             : DescribeMissingAuthority();
 
-        if (_worker == null)
+        ForemanWorkerAI? worker = Worker;
+        WorkerBodyCensus? census = _custody.Census;
+        string body = census == null
+            ? string.Empty
+            : census.IsDuplicated
+                ? " TWO BODIES carry this worker's identity; neither is used until one is removed by hand."
+                : census.IsMissing && worker == null ? " No worker body in this world." : string.Empty;
+
+        if (worker == null)
         {
             return
                 $"Settlement runtime: {(_settings.SettlementRuntimeEnabled.Value ? "on" : "off")}. " +
-                $"Authority: {authority}. No worker. " +
+                $"Authority: {authority}. No worker in loaded ground." + body + " " +
                 $"Prefab: {(ForemanWorkerPrefab.IsReady ? "ready" : ForemanWorkerPrefab.LastFailure ?? "not built")}.";
         }
 
-        string goalText = _worker.IsDeferred
-            ? $"deferred ({Describe(_worker.DeferredReason)})"
+        string goalText = worker.IsDeferred
+            ? $"deferred ({Describe(worker.DeferredReason)})"
             : "active";
+        WorkerBody? live = worker.GetComponent<WorkerBody>();
 
         return
             $"Settlement runtime: {(_settings.SettlementRuntimeEnabled.Value ? "on" : "off")}. " +
             $"Authority: {authority}. " +
-            $"Worker at {Format(_worker.transform.position)}, goal {goalText}. " +
-            $"Path requests so far: {_worker.TotalPathRequests}." +
-            (_worker.IsFaulted ? " WORKER FAULTED and is inert; see the log." : string.Empty);
+            $"Worker at {Format(worker.transform.position)}, goal {goalText}, carrying " +
+            $"{(live == null ? 0 : live.ItemCount).ToString(CultureInfo.InvariantCulture)} item stack(s). " +
+            $"Path requests so far: {worker.TotalPathRequests}." + body +
+            (worker.IsFaulted ? " WORKER FAULTED and is inert; see the log." : string.Empty);
     }
 
     internal string DescribeMissingAuthority()
     {
-        if (!_settings.SettlementRuntimeEnabled.Value)
-        {
-            return "refused (the settlement runtime is off; enable it in the config)";
-        }
-
-        if (ZNet.instance == null)
-        {
-            return "refused (no world loaded)";
-        }
-
-        return "refused (this peer is not the host)";
+        return "refused (" + WorkAuthorityPolicy.Describe(WorkAuthority()) + ")";
     }
 
     private string Spawn()
     {
-        if (!HasAuthority())
+        if (!HasWorkAuthority())
         {
             return "Refused: " + DescribeMissingAuthority() + ".";
         }
 
-        if (_worker != null)
+        string key = _custody.WorkerKey.Value;
+        WorkerBodyCensus census = WorldCustodyObjects.Census(key);
+        if (!census.IsMissing)
         {
-            return "A worker already exists. This spike holds one at a time; despawn it first.";
+            // One body per identity (ARCH-01). A body in unloaded ground is
+            // still his body: spawning another would make two Thorsteins.
+            return census.IsDuplicated
+                ? "Refused: this world already holds two bodies for Thorstein. Nothing is created or removed automatically."
+                : "Thorstein already has a body in this world" +
+                    (WorkerBody.FindLive(key) == null ? ", in ground that is not loaded. Go there." : ".");
         }
 
         Player player = Player.m_localPlayer;
@@ -139,8 +206,7 @@ internal sealed class SettlementRuntime
             return "Refused: no local player to spawn next to.";
         }
 
-        string baseCreature = _settings.WorkerBaseCreature.Value;
-        if (!ForemanWorkerPrefab.TryCreate(baseCreature, _log))
+        if (!ForemanWorkerPrefab.IsReady && !ForemanWorkerPrefab.TryCreate(_settings.WorkerBaseCreature.Value, _log))
         {
             return "Refused: " + (ForemanWorkerPrefab.LastFailure ?? "the worker prefab could not be built") + ".";
         }
@@ -152,14 +218,50 @@ internal sealed class SettlementRuntime
             return "Refused: that ground is not loaded.";
         }
 
-        worker.AuthorityGate = HasAuthority;
+        if (!WorkerBody.TryStamp(worker.gameObject, key))
+        {
+            // An identity-less body is never adopted later; say so rather than
+            // leave one standing unexplained.
+            _log("A spawned worker body could not be given its identity; it will not be used.");
+            return "Refused: the new body could not be given its identity, so it will not be used.";
+        }
+
+        Bind(worker);
+        return $"Worker spawned at {Format(position)}. It has no order, so it should do nothing at all.";
+    }
+
+    private void OnWorkerBodyLoaded(WorkerBody body)
+    {
+        if (body == null || !string.Equals(body.Key, _custody.WorkerKey.Value, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        Bind(body.GetComponent<ForemanWorkerAI>());
+    }
+
+    /// <summary>Wires a (re)created body: a body instantiated from its saved
+    /// object comes back with no authority gate and no site policy, and must
+    /// refuse to act until the runtime has given it both.</summary>
+    private void Bind(ForemanWorkerAI? worker)
+    {
+        if (worker == null)
+        {
+            return;
+        }
+
+        WorkerBodyCensus? census = _custody.Census;
+        if (census != null && census.IsDuplicated)
+        {
+            return;
+        }
+
+        worker.AuthorityGate = HasWorkAuthority;
         worker.UseSitePolicy(_sitePolicy);
         worker.OnDeferred = reason => _log($"Worker deferred: {Describe(reason)}");
 
         // A latched fault is an error, not verbose diagnostics. It is reported
-        // unconditionally: with DebugLogging off (the default) a faulted worker
-        // would otherwise go permanently inert with no trace anywhere except a
-        // status command nobody has a reason to run.
+        // unconditionally.
         worker.ErrorLog = _log;
         if (_settings.DebugLogging.Value)
         {
@@ -167,14 +269,14 @@ internal sealed class SettlementRuntime
         }
 
         _worker = worker;
-        return $"Worker spawned at {Format(position)}. It has no order, so it should do nothing at all.";
     }
 
     private string GoTo(string[]? args)
     {
-        if (_worker == null)
+        ForemanWorkerAI? worker = Worker;
+        if (worker == null)
         {
-            return "No worker. Spawn one first.";
+            return "No worker in loaded ground. Spawn one first.";
         }
 
         if (args == null || args.Length < 3
@@ -185,52 +287,86 @@ internal sealed class SettlementRuntime
         }
 
         // Probe from a fixed world ceiling, not from the worker's own height.
-        // Sampling at workerY + 50 puts the origin *below* the terrain whenever
-        // the target is more than fifty metres uphill, so the height resolves to
-        // the wrong surface — and that wrong altitude is then what the hazard
-        // check measures water depth against.
         const float ProbeCeiling = 5000f;
-        float y = _worker.transform.position.y;
+        float y = worker.transform.position.y;
         if (ZoneSystem.instance != null
             && ZoneSystem.instance.GetSolidHeight(new Vector3(x, ProbeCeiling, z), out float ground))
         {
             y = ground;
         }
 
-        _worker.SetGoal(new Vector3(x, y, z));
+        worker.SetGoal(new Vector3(x, y, z));
         return $"Worker ordered to {Format(new Vector3(x, y, z))}.";
     }
 
     private string Stop()
     {
-        if (_worker == null)
+        ForemanWorkerAI? worker = Worker;
+        if (worker == null)
         {
-            return "No worker.";
+            return "No worker in loaded ground.";
         }
 
-        _worker.ClearGoal();
+        worker.ClearGoal();
         return "Order cleared. The worker should stop and stay stopped.";
+    }
+
+    /// <summary>Asked before the body is retired (despawned), before anything
+    /// else is touched — not even his goal is cleared on a refusal. The plugin
+    /// wires it to the collection runtime's <c>Modes.MayRetireBody</c>, so a
+    /// body a collection job holds is never retired under that job. Unset means
+    /// nothing else can hold the body. A guard that throws refuses.</summary>
+    internal Func<bool>? MayRetireBody { get; set; }
+
+    private bool MayRetire()
+    {
+        Func<bool>? guard = MayRetireBody;
+        if (guard == null)
+        {
+            return true;
+        }
+
+        try
+        {
+            return guard();
+        }
+        catch (Exception e)
+        {
+            _log("[Settlement] The retire guard failed, so the worker was not retired: " + e.Message);
+            return false;
+        }
     }
 
     private string Despawn()
     {
-        if (_worker == null)
+        ForemanWorkerAI? worker = Worker;
+        if (worker == null)
         {
-            return "No worker.";
+            return "No worker in loaded ground.";
         }
 
-        // Stop it before anything else. If the destroy below cannot happen we
-        // are about to drop our only handle on this creature, and a worker left
-        // walking with no handle is strictly worse than one standing still.
-        _worker.ClearGoal();
+        if (!MayRetire())
+        {
+            return "Refused: Thorstein is working. Pause or cancel the order first, then despawn.";
+        }
 
-        ZNetView view = _worker.GetComponent<ZNetView>();
+        // Never while he carries anything (D9): despawning would destroy it.
+        // Asked before his goal is cleared, so a refusal really does leave
+        // everything as it was (review R2, m9).
+        WorkerBody? body = worker.GetComponent<WorkerBody>();
+        if (body == null || !body.IsLoaded || body.ItemCount > 0 || RecordSaysHeHolds())
+        {
+            return "Refused: he is carrying " +
+                (body == null ? 0 : body.ItemCount).ToString(CultureInfo.InvariantCulture) +
+                " item stack(s), or the record says he holds tools or material. Release everything first " +
+                "(cf_settle takeback and cf_settle release, or deliver what he carries), then despawn.";
+        }
+
+        worker.ClearGoal();
+
+        ZNetView view = worker.GetComponent<ZNetView>();
         if (view == null || !view.IsValid() || !view.IsOwner())
         {
-            // Keep the reference. Reporting success here and nulling it would
-            // orphan a live creature AND let the next spawn create a second
-            // one, breaking the one-worker-at-a-time invariant this spike
-            // relies on.
             return "Could not despawn: this peer does not own that worker. " +
                 "Its order has been cleared, so it will stand still.";
         }
@@ -240,18 +376,52 @@ internal sealed class SettlementRuntime
         return "Worker despawned.";
     }
 
+    private bool RecordSaysHeHolds()
+    {
+        if (!_records.TryOpen(out SettlementRegister _, out SettlementJournal journal))
+        {
+            return true;
+        }
+
+        ReplayResult replay = journal.Replay();
+        if (replay.Tools.HeldBy(_custody.ToolWorker).Count > 0 || replay.Tools.HasUncertainHandover(_custody.ToolWorker))
+        {
+            return true;
+        }
+
+        foreach (Holding holding in replay.Custody.Holdings)
+        {
+            if (holding.Location.Place == CustodyPlace.Worker)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>A world is up: open custody for this load before anything can
+    /// act.</summary>
+    internal void OnWorldLoaded()
+    {
+        _worker = null;
+        try
+        {
+            _custody.OnWorldLoaded();
+        }
+        catch (Exception exception)
+        {
+            _log("Settlement custody could not be opened for this world; no custody work will start: " + exception);
+        }
+    }
+
     /// <summary>Called when a world unloads, so a second world in the same
-    /// session does not inherit a dead reference or a prefab built against a
-    /// scene that no longer exists.</summary>
+    /// session does not inherit a dead reference or the first world's records.
+    /// The worker prefab stays registered: it is needed by every world.</summary>
     internal void OnWorldUnloaded()
     {
         _worker = null;
-        ForemanWorkerPrefab.Reset();
-
-        // The records are dropped too, so a second world in the same session
-        // reads its own files instead of inheriting the first world's
-        // settlement -- and with them any unconfirmed clear the player was
-        // shown, which belonged to the world that just went away.
+        _custody.OnWorldUnloaded();
         _records.Forget();
         _designations.Forget();
     }
@@ -262,8 +432,7 @@ internal sealed class SettlementRuntime
             CultureInfo.InvariantCulture, "({0:0.#}, {1:0.#}, {2:0.#})", point.x, point.y, point.z);
     }
 
-    /// <summary>A deferral reason as a sentence. #273's gate 5 requires the
-    /// worker to explain itself, and an enum name is not an explanation.</summary>
+    /// <summary>A deferral reason as a sentence.</summary>
     private static string Describe(WorkerDeferralReason reason)
     {
         return reason switch

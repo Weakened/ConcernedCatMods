@@ -1,6 +1,8 @@
 using BepInEx;
 using TheConcernedCat.ConcernedForeman.Domain.Settlement;
 using TheConcernedCat.ConcernedForeman.Runtime;
+using TheConcernedCat.ConcernedForeman.Runtime.Collection;
+using TheConcernedCat.ConcernedForeman.Runtime.Custody;
 using TheConcernedCat.ConcernedForeman.Runtime.Ladders;
 using TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 using TheConcernedCat.Ladders;
@@ -12,8 +14,8 @@ namespace TheConcernedCat.ConcernedForeman;
 ///
 /// The product's promise is causal building diagnostics, and that half is
 /// read-only and client-safe. This build carries two things instead: the first
-/// slice of the <i>other</i> half â€” the opt-in settlement runtime from #273,
-/// which touches no world state until a person turns it on â€” and ladder
+/// slice of the <i>other</i> half Ã¢â‚¬â€ the opt-in settlement runtime from #273,
+/// which touches no world state until a person turns it on Ã¢â‚¬â€ and ladder
 /// climbing (#326, #328).
 ///
 /// Ladder climbing is the one thing here that patches the game at load, and
@@ -30,6 +32,7 @@ public sealed class Plugin : BaseUnityPlugin
     public const string PluginVersion = "0.1.0";
 
     private SettlementRuntime? _settlement;
+    private CollectionRuntime? _collection;
     private ClimbController? _ladders;
     private LadderSettings? _ladderSettings;
     private ClimbPose? _climbPose;
@@ -41,19 +44,40 @@ public sealed class Plugin : BaseUnityPlugin
         ForemanSettlementSettings settings = ForemanSettlementSettings.Bind(Config);
         _settlement = new SettlementRuntime(settings, message => Logger.LogInfo(message));
 
+        // The worker prefab must be registered before any world's objects are
+        // created, or a saved worker body is destroyed as an unknown prefab (D9).
+        _settlement.Install();
+
+        // #315 over #316: Thorstein's collection runs on the custody runtime and shares its
+        // world-load epoch, so every key made during one load agrees (CONTRACTS C2).
+        ForemanCustodyRuntime custody = _settlement.Custody;
+        CollectionSettings collectionSettings = CollectionSettings.Bind(Config);
+        custody.CarryWeight = () => collectionSettings.WorkerCarryWeight.Value;
+        _collection = new CollectionRuntime(
+            settings,
+            collectionSettings,
+            message => Logger.LogInfo(message),
+            custody,
+            cooperation: null,
+            sharedEpoch: () => custody.Epoch);
+
+        CollectionRuntime collection = _collection;
+        _settlement.MayRetireBody = () => collection.Modes.MayRetireBody;
+
         Logger.LogInfo($"{PluginName} {PluginVersion} loaded");
         Logger.LogInfo(
             "Settlement runtime is " +
             (settings.SettlementRuntimeEnabled.Value ? "ENABLED" : "off (the default)") +
             ". Building diagnostics do not require it.");
 
-        // Through the game's own command table, not JÃ¶tunn's manager: JÃ¶tunn 2.29.2 looks for a
+        // Through the game's own command table, not JÃƒÂ¶tunn's manager: JÃƒÂ¶tunn 2.29.2 looks for a
         // Terminal.ConsoleCommand constructor Valheim 1.0.12 no longer has, so every command
         // silently did not exist (#307). What the console actually accepted is logged.
         Jotunn.Entities.ConsoleCommand[] commands =
         {
             new WorkerToolsCommand(_settlement),
             new SettlementToolsCommand(_settlement),
+            new CollectCommand(_collection),
             // Read-only measurement of the game's own ladders (CF-LAD-001). It
             // places nothing and changes nothing; it exists so the ladder work
             // is built on measurements instead of guesses.
@@ -78,7 +102,7 @@ public sealed class Plugin : BaseUnityPlugin
     /// ladders keep teleporting, and the reason is logged once.
     ///
     /// With `Ladders/Enabled = false` at startup <b>no patch is installed at
-    /// all</b> â€” not the motor's two, not the interaction's one â€” and the game
+    /// all</b> Ã¢â‚¬â€ not the motor's two, not the interaction's one Ã¢â‚¬â€ and the game
     /// behaves as if Concerned Foreman were not here.</summary>
     private void InstallLadders()
     {
@@ -140,12 +164,19 @@ public sealed class Plugin : BaseUnityPlugin
         if (_worldWasUp && !worldIsUp)
         {
             _settlement?.OnWorldUnloaded();
+            _collection?.OnWorldUnloaded();
 
             // Before anything else drops the scene: a climber is holding a
             // ladder that is about to stop existing.
             _ladders?.OnWorldUnloaded();
         }
+        else if (!_worldWasUp && worldIsUp)
+        {
+            // Before net time advances, custody reads the loaded world time.
+            _settlement?.OnWorldLoaded();
+        }
 
+        _collection?.Update();
         _worldWasUp = worldIsUp;
 
         if (_ladders != null)
