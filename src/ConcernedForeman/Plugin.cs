@@ -107,9 +107,18 @@ public sealed class Plugin : BaseUnityPlugin
         // Presentation is deliberately downstream of traversal. If either
         // visual/audio adapter fails, the safe climb still runs.
         _climbPose = new ClimbPose(message => Logger.LogInfo(message));
-        _climbPose.Install();
-        _climbSounds = new ClimbSounds(message => Logger.LogInfo(message));
-        _climbSounds.Install();
+        if (_climbPose.Install())
+        {
+            _climbSounds = new ClimbSounds(message => Logger.LogInfo(message));
+            _climbSounds.Install();
+        }
+        else
+        {
+            // ClimbSounds asks Valheim's FootStep system for its Climbing
+            // effect. That classification depends on the pose's wall-running
+            // flag; without the pose, silence is more truthful than a jog sound.
+            Logger.LogInfo("Ladder rung audio is disabled because the climbing pose is unavailable.");
+        }
 
         // And the Use key, which vanilla spends on a teleport. Its own Harmony
         // id, because the climb's patches and this one come out at different
