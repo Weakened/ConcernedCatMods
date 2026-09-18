@@ -187,6 +187,7 @@ internal sealed class MemoryUpkeepJournal : IUpkeepJournal
 {
     private readonly List<UpkeepIntent> _open = new List<UpkeepIntent>();
     private readonly List<string> _lines = new List<string>();
+    private readonly List<UpkeepReceipt> _receipts = new List<UpkeepReceipt>();
 
     /// <summary>Set by a test, or by a store whose file went read-only.</summary>
     public bool Writable { get; set; } = true;
@@ -202,8 +203,23 @@ internal sealed class MemoryUpkeepJournal : IUpkeepJournal
 
     public IReadOnlyList<UpkeepIntent> UnresolvedIntents => _open;
 
-    /// <summary>Every row, in order, for assertions about ordering.</summary>
+    /// <summary>Every row still standing, in order, for assertions about
+    /// ordering. Cleared by <see cref="Compact"/>, exactly as the file-backed
+    /// store drops resolved rows.</summary>
     public IReadOnlyList<string> Lines => _lines;
+
+    /// <summary>Every receipt this journal was ever asked to write, kept
+    /// forever.
+    ///
+    /// <b>The real store does not keep this and should not.</b> Its file is
+    /// recovery state, not an audit log: a resolved step is dropped, because
+    /// keeping it would grow the file without bound to answer a question
+    /// nothing asks, and its evidence sentence is already in the game log. The
+    /// in-memory journal keeps the list anyway so a test can assert what was
+    /// written <i>before</i> compaction discarded it — an assertion that would
+    /// otherwise be impossible to make without bending the real behaviour to
+    /// suit the test.</summary>
+    public IReadOnlyList<UpkeepReceipt> Receipts => _receipts;
 
     public bool TryRecordIntent(in UpkeepIntent intent)
     {
@@ -249,6 +265,7 @@ internal sealed class MemoryUpkeepJournal : IUpkeepJournal
         _lines.Add("receipt\t" + receipt.Request.Value + "\t" + receipt.Step + "\t" +
             receipt.Outcome + "\t" + receipt.Moved.ToString(CultureInfo.InvariantCulture) + "\t" +
             receipt.Evidence);
+        _receipts.Add(receipt);
         return true;
     }
 

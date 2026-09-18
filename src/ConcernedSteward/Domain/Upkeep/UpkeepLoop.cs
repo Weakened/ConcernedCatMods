@@ -275,11 +275,19 @@ internal sealed class UpkeepLoop
         // he is carrying, so the first thing he does is put it back.
         if (_custody.Carried > 0)
         {
-            if (_retry.IsWaiting(tick.Now))
+            // The same throttle the idle scan uses, and for a sharper reason: a
+            // chest with no room refuses the deposit, which returns him here
+            // still carrying, which would send him straight back. Three ticks
+            // per lap, a walk each time, for as long as the chest stays full.
+            // Waiting out the scan interval turns that into one attempt every
+            // fifteen seconds, which recovers by itself the moment somebody
+            // makes room and costs nothing while nobody does.
+            if (tick.Now < _nextScanAt)
             {
                 return;
             }
 
+            _nextScanAt = tick.Now + _limits.ScanIntervalSeconds;
             BeginJobIfNeeded();
             Enter(UpkeepPhase.Returning, tick.Now,
                 "Carrying " + _custody.Carried.ToString(CultureInfo.InvariantCulture) +
@@ -304,6 +312,20 @@ internal sealed class UpkeepLoop
 
         _nextScanAt = tick.Now + _limits.ScanIntervalSeconds;
 
+        // The chest is asked about before the fires are, and that ordering is
+        // about the sentence rather than the logic. A chest that is empty or
+        // open makes every fire ineligible, so a scan run first would report
+        // the fires -- "they burn something the chest does not stock" -- which
+        // is technically true of an empty chest and reads like a different
+        // problem entirely.
+        if (!tick.Depot.IsAvailable)
+        {
+            Say(tick, "depot-unavailable",
+                "The marked supply chest is not reachable right now, so the Steward is waiting. " +
+                "It may be open, or its part of the world may not be loaded.");
+            return;
+        }
+
         IReadOnlyList<FuelTargetObservation> offered;
         IReadOnlyCollection<string> stocked;
         try
@@ -327,18 +349,19 @@ internal sealed class UpkeepLoop
         FuelTargetObservation? chosen = LastScan.Next;
         if (chosen == null)
         {
-            _explanation = DescribeNothingToDo(LastScan, tick);
+            if (stocked.Count == 0)
+            {
+                Say(tick, "depot-empty",
+                    "The marked supply chest is empty, so the Steward has nothing to tend the " +
+                    "fires with.");
+                return;
+            }
+
+            _explanation = DescribeNothingToDo(LastScan);
             return;
         }
 
         FuelTargetObservation target = chosen.Value;
-        if (!tick.Depot.IsAvailable)
-        {
-            Say(tick, "depot-unavailable",
-                "The marked supply chest is not reachable right now, so the Steward is waiting.");
-            return;
-        }
-
         int wanted = FuelMath.UnitsToFill(target.Fuel, target.MaxFuel, _limits.MaxUnitsPerTrip);
         int stock = SafeCount(tick.Depot, target.FuelItemName);
         if (stock <= 0)
@@ -383,7 +406,7 @@ internal sealed class UpkeepLoop
             " for a fire at " + FuelMath.Describe(target.Fuel, target.MaxFuel) + ".");
     }
 
-    private string DescribeNothingToDo(FuelTargetScan scan, in UpkeepTick tick)
+    private string DescribeNothingToDo(FuelTargetScan scan)
     {
         if (scan.Examined == 0)
         {
@@ -758,6 +781,7 @@ internal sealed class UpkeepLoop
                 _custody.RecordReturned(measurement.Moved);
                 if (_custody.Carried > 0)
                 {
+                    _nextScanAt = tick.Now + _limits.ScanIntervalSeconds;
                     StopAndIdle(tick,
                         "The supply chest only had room for " +
                         measurement.Moved.ToString(CultureInfo.InvariantCulture) + ". The Steward " +
@@ -770,9 +794,11 @@ internal sealed class UpkeepLoop
                 break;
 
             case UpkeepOutcome.Declined:
+                _nextScanAt = tick.Now + _limits.ScanIntervalSeconds;
                 StopAndIdle(tick,
                     "There is no room in the supply chest, so the Steward is still holding " +
-                    carried.ToString(CultureInfo.InvariantCulture) + " " + _fuelItemName + ".");
+                    carried.ToString(CultureInfo.InvariantCulture) + " " + _fuelItemName +
+                    ". He will try again when there is room.");
                 break;
 
             default:
