@@ -110,20 +110,34 @@ verdict.
      and sideways is pure horizontal loss;
    - the piece takes the **maximum** over all candidates.
 
-**The constants**, exactly as the binary has them:
+**The constants**, every case of the switch, exactly as the binary has them.
+Fractions are given as the binary writes them, because `1f / 13f` is what the
+code says and `0.0769` is a rounding of it:
 
 | Material | max | min | verticalLoss | horizontalLoss |
 |---|---:|---:|---:|---:|
 | Wood | 100 | 10 | 0.125 | 0.2 |
-| HardWood | 140 | 10 | 0.1 | 0.1667 |
+| HardWood | 140 | 10 | 0.1 | 1/6 ≈ 0.1667 |
+| Timberwood | 200 | 10 | 1/13 ≈ 0.0769 | 0.2 |
 | Stone | 1000 | 100 | 0.125 | 1.0 |
-| Iron | 1500 | 20 | 0.0769 | 0.0769 |
+| Ice | 1000 | 100 | 0.125 | 1/3 ≈ 0.3333 |
+| Iron | 1500 | 20 | 1/13 ≈ 0.0769 | 1/13 ≈ 0.0769 |
 | Marble | 1500 | 100 | 0.125 | 0.5 |
-| Ashstone | 2000 | 100 | 0.1 | 0.3333 |
-| Ancient | 5000 | 100 | — | — |
+| Ashstone | 2000 | 100 | 0.1 | 1/3 ≈ 0.3333 |
+| Ancient | 5000 | 100 | 1/15 ≈ 0.0667 | 0.25 |
+| *(default)* | 0 | 0 | 0 | 0 |
 
 The horizontal figure for Stone being `1.0` is why stone does not cantilever and
 iron does: iron loses the same small fraction in both directions.
+
+**The default row is not padding.** `GetMaterialProperties` has a `default` arm
+returning zeroes, and `GetSupportColorValue` divides by
+`maxSupport * 0.5f - minSupport`. A material this table does not name therefore
+produces a division by zero rather than a small number, so any traversal must
+treat an unrecognised `m_materialType` as *unknown* and refuse, never as a weak
+one. That is the same rule §2.1 already states for an empty
+`m_supportColliders`, and it is why this table is exhaustive rather than
+illustrative.
 
 **Verdict: the chain is traceable and the weakest link is identifiable.** Each
 piece retains its neighbours *and each neighbour's contributed value*, so a walk
