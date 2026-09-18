@@ -27,6 +27,13 @@
     <!-- CF-LAD-001: the ladder domain is game-free for the same reason, and
          Foreman adopts it with one line of its own. -->
     <Compile Include="..\Shared\Ladders\**\*.cs" LinkBase="Ladders" />
+    <!-- CF-LAD-004: the ladder feature's own decisions that are not the shared
+         domain's - which pieces are admitted, what the `Ladders` settings mean,
+         and what pressing Use does. They carry no Unity, BepInEx or Jotunn type
+         either, and they are tested rather than asserted. They sit under
+         Foreman's Domain folder because src/Shared/Ladders belongs to the lead;
+         moving them there later is a `git mv` and the deletion of this line. -->
+    <Compile Include="..\ConcernedForeman\Domain\Ladders\**\*.cs" LinkBase="ForemanLadders" />
   </ItemGroup>
 
   <ItemGroup>
