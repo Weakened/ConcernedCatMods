@@ -59,6 +59,7 @@ internal sealed class CollectionRuntime
     private BodyLookupOutcome _bodyOutcome = BodyLookupOutcome.Missing;
     private float _bodyLookedAt = float.NegativeInfinity;
     private PreviewToken? _preview;
+    private float _adoptionAskedAt = float.NegativeInfinity;
     private bool _faulted;
     private string _fault = string.Empty;
 
@@ -118,6 +119,7 @@ internal sealed class CollectionRuntime
             }
 
             RefreshBody();
+            AdoptRecoveredOrder();
             _world.Loop?.Supervise(Time.time);
         }
         catch (Exception exception)
@@ -207,6 +209,35 @@ internal sealed class CollectionRuntime
             Detach(_body);
             _body = chosen;
             Attach(_body);
+        }
+    }
+
+    /// <summary>C2 (B1): after a reload the record still holds the worker's
+    /// order; the loop is new and holds none. Ask custody for it until it
+    /// answers, so the player can see it, rebind it or cancel it — without
+    /// which neither the material in his body nor the body itself can be
+    /// released. Asked at most once a second, and only while no order is held.
+    /// </summary>
+    private void AdoptRecoveredOrder()
+    {
+        SoloCollectionLoop? loop = _world?.Loop;
+        if (loop == null || loop.HasActiveOrder)
+        {
+            return;
+        }
+
+        float now = Time.time;
+        if (now - _adoptionAskedAt < 1f && now >= _adoptionAskedAt)
+        {
+            return;
+        }
+
+        _adoptionAskedAt = now;
+        if (loop.AdoptRecovered(now))
+        {
+            _log(
+                "Collection: took up order " + loop.Order!.Order.Value + " again from the settlement record, stopped" +
+                (loop.NeedsRebind ? " and waiting for its work area and chest to be chosen again (cf_collect rebind)." : "."));
         }
     }
 
@@ -309,10 +340,13 @@ internal sealed class CollectionRuntime
                     return Control(loop => loop.Pause(Time.time));
                 case "resume":
                     return Control(loop => loop.Resume(Time.time));
+                case "rebind":
+                    return Rebind();
                 case "cancel":
                     return Control(loop => loop.Cancel(Time.time));
                 default:
-                    return "Unknown subcommand. Try: status, preview [radius], start <stone> <wood> [hold], pause, resume, cancel.";
+                    return "Unknown subcommand. Try: status, preview [radius], start <stone> <wood> [hold], " +
+                        "rebind (look at the chest), pause, resume, cancel.";
             }
         }
         catch (Exception exception)
@@ -523,6 +557,42 @@ internal sealed class CollectionRuntime
             " m). He looks over the area on his own first. Only newly delivered units count.";
     }
 
+    /// <summary>C2 (B1): the player confirms where an order recovered from the
+    /// record works and where it delivers, both chosen in this world load.
+    /// </summary>
+    private string Rebind()
+    {
+        WorldState? world = _world;
+        SoloCollectionLoop? loop = world?.Loop;
+        if (world == null || loop == null || loop.Order == null)
+        {
+            return "There is no collection order.";
+        }
+
+        CollectionOrderDefinition order = loop.Order;
+        if (!TryBuildScopeOfKind(order.Scope.Source, order.Scope.RadiusMetres, world.Epoch, out WorkScope? scope, out string failure))
+        {
+            return "Refused: " + failure;
+        }
+
+        DeliveryTarget delivery;
+        if (order.Delivery.Kind == DeliveryKind.HoldForPlayer)
+        {
+            delivery = DeliveryTarget.HoldForPlayer();
+        }
+        else if (SettlementTargets.TryResolveHoveredContainer(out Container? container, out string? key, out string chestFailure))
+        {
+            delivery = DeliveryTarget.ToContainer(
+                key!, world.Epoch, NaturalSourceClassifier.ToSitePoint(container!.transform.position));
+        }
+        else
+        {
+            return "Refused: look at the chest this order should deliver to: " + chestFailure;
+        }
+
+        return loop.Rebind(scope!, delivery, Time.time).Message;
+    }
+
     private string Control(Func<SoloCollectionLoop, ControlResult> act)
     {
         SoloCollectionLoop? loop = _world?.Loop;
@@ -568,6 +638,47 @@ internal sealed class CollectionRuntime
             " m circle around " + anchor.Describe() + " at " + anchor.Point + ". It stays put when you walk away. " +
             "Run cf_collect start within ten minutes to use exactly this area.";
         return true;
+    }
+
+    /// <summary>A work area of exactly the kind an order already has,
+    /// snapshotted in this world load. A rebind never changes the kind, and an
+    /// assigned area that cannot be read never falls back to the circle.
+    /// </summary>
+    private bool TryBuildScopeOfKind(
+        WorkScopeSource source, float radius, Guid epoch, out WorkScope? scope, out string failure)
+    {
+        scope = null;
+        switch (source)
+        {
+            case WorkScopeSource.HarvestDesignation:
+                if (!_scopes.TryGetHarvestArea(out Designation? harvest, out failure))
+                {
+                    failure = "the settlement record could not be read (" + failure + "), so the harvest area is unknown";
+                    return false;
+                }
+
+                if (harvest == null)
+                {
+                    failure = "this order works in the harvest area, and none is marked now. Mark it again, or cancel the order.";
+                    return false;
+                }
+
+                scope = WorkScopeBuilder.FromHarvest(harvest, epoch);
+                return true;
+
+            case WorkScopeSource.DefaultCampCircle:
+                if (!RespawnAnchorSource.TryGetLatest(out RespawnAnchor anchor, out failure))
+                {
+                    return false;
+                }
+
+                scope = WorkScopeBuilder.FromAnchor(anchor, radius, epoch);
+                return true;
+
+            default:
+                failure = "this order's kind of work area has no provider in this build";
+                return false;
+        }
     }
 
     private static string Format(Vector3 point) =>

@@ -224,8 +224,11 @@ public sealed class CollectionPredicateTests
 
     private static SourceSiteFacts Site(
         bool owned = true, bool inScope = true, bool interior = false, bool location = false,
-        AreaAccess ward = AreaAccess.Granted, float distance = 1f, bool capacity = true, bool player = true) =>
-        new SourceSiteFacts(owned, inScope, interior, location, ward, distance, capacity, player);
+        AreaAccess ward = AreaAccess.Granted, float distance = 1f, bool capacity = true, bool player = true,
+        LocationStanding? standing = null) =>
+        new SourceSiteFacts(
+            owned, inScope, interior, standing ?? (location ? LocationStanding.Inside : LocationStanding.Outside),
+            ward, distance, capacity, player);
 
     [Fact]
     public void SiteClausesRefuseInTheOrderAPlayerWouldFixThem()
@@ -273,6 +276,64 @@ public sealed class CollectionPredicateTests
             string sentence = NaturalSourcePredicate.Describe(refusal);
             Assert.False(string.IsNullOrWhiteSpace(sentence));
             Assert.DoesNotContain("bug", sentence);
+        }
+    }
+
+    [Fact]
+    public void AnUnknownLocationAnswerRefusesTheSameWayAnUnknownWardDoes()
+    {
+        const float Reach = 2f;
+        Assert.Equal(
+            SiteRefusal.Unspecified,
+            NaturalSourcePredicate.CheckSite(Site(standing: LocationStanding.Outside), Reach));
+        Assert.Equal(
+            SiteRefusal.InsideLocation,
+            NaturalSourcePredicate.CheckSite(Site(standing: LocationStanding.Inside), Reach));
+        Assert.Equal(
+            SiteRefusal.LocationUnknown,
+            NaturalSourcePredicate.CheckSite(Site(standing: LocationStanding.Unknown), Reach));
+
+        // Nobody asked is also a refusal: the default must never admit.
+        Assert.Equal(
+            SiteRefusal.LocationUnknown,
+            NaturalSourcePredicate.CheckSite(Site(standing: LocationStanding.Unspecified), Reach));
+    }
+
+    [Fact]
+    public void ASurveyRecordsAnUnknownLocationAsUnknownNotAvailable()
+    {
+        NaturalSourceVerdict eligible = NaturalSourcePredicate.Classify(SourceFacts.VanillaStone());
+
+        Assert.Equal(
+            SourceAvailability.Unknown,
+            NaturalSourcePredicate.SurveyAvailability(eligible, Site(standing: LocationStanding.Unknown)));
+        Assert.Equal(
+            SourceAvailability.Unknown,
+            NaturalSourcePredicate.SurveyAvailability(eligible, Site(standing: LocationStanding.Unspecified)));
+        Assert.Equal(
+            SourceAvailability.Inaccessible,
+            NaturalSourcePredicate.SurveyAvailability(eligible, Site(standing: LocationStanding.Inside)));
+    }
+
+    [Theory]
+    [InlineData(1, false, true)]
+    [InlineData(50, false, false)]
+    [InlineData(2, false, false)]
+    [InlineData(1, true, false)]
+    public void TheTwoFieldsThatSizeTheYieldArePinnedToo(int minAmountScaled, bool dontScale, bool eligible)
+    {
+        // R2 m6: the game's drop count is m_dontScale ? m_amount :
+        // max(m_minAmountScaled, scaled). A patched floor or an opt-out of
+        // scaling sizes the yield exactly as m_amount does.
+        NaturalSourceVerdict verdict = NaturalSourcePredicate.Classify(
+            SourceFacts.Make(
+                "Pickable_Stone", "Stone", "$item_stone", 0f, false,
+                minAmountScaled: minAmountScaled, dontScale: dontScale));
+
+        Assert.Equal(eligible, verdict.IsEligible);
+        if (!eligible)
+        {
+            Assert.Equal(SourceClause.C3Configuration, verdict.FailedClause);
         }
     }
 }

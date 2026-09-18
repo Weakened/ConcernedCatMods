@@ -32,10 +32,11 @@ internal sealed class WorldSourceSurvey : ISurveyProbe
     private readonly SourceDirectory _directory;
     private readonly IDesignationSite _site;
     private readonly List<ZNetView> _entries = new List<ZNetView>();
-    private readonly Dictionary<long, AreaAccess> _wardByCell = new Dictionary<long, AreaAccess>();
+    private readonly Dictionary<(long X, long Z), AreaAccess> _wardByCell = new Dictionary<(long, long), AreaAccess>();
 
     private WorkScope? _scope;
     private int _cursor;
+    private int _sceneCountAtBegin;
 
     public WorldSourceSurvey(SourceDirectory directory, IDesignationSite site)
     {
@@ -62,6 +63,8 @@ internal sealed class WorldSourceSurvey : ISurveyProbe
         {
             _entries.AddRange(scene.m_instances.Values);
         }
+
+        _sceneCountAtBegin = _entries.Count;
     }
 
     public DiscoveryStep Discover(int maxEntries, int maxCandidates, List<SurveyCandidate> into)
@@ -108,22 +111,31 @@ internal sealed class WorldSourceSurvey : ISurveyProbe
                 facts,
                 ownedHere: view.IsOwner(),
                 inInterior: Character.InInterior(position),
-                insideLocation: Location.IsInsideLocation(position, 0f),
+                location: WorldLocationSense.At(position),
                 ward: WardAt(position),
                 estimatedYield: yield));
             _directory.Remember(key, view);
             found++;
         }
 
-        return new DiscoveryStep(examined, _cursor >= _entries.Count);
+        // The copy this pass walks is one moment of the scene. Zones fill in
+        // over many frames (ZNetScene creates a budgeted handful of objects per
+        // frame), so a pass that ends while the scene is still changing has not
+        // seen everything there is: say so, rather than let "nothing found"
+        // stand for ground that was never examined (GATHER-03).
+        ZNetScene current = ZNetScene.instance;
+        bool sceneMoved = current == null || current.m_instances.Count != _sceneCountAtBegin;
+        return new DiscoveryStep(examined, _cursor >= _entries.Count, sceneMoved);
     }
 
     private AreaAccess WardAt(Vector3 position)
     {
         long cellX = (long)Math.Floor(position.x / WardCellSize);
         long cellZ = (long)Math.Floor(position.z / WardCellSize);
-        long cell = (cellX * 73856093L) ^ (cellZ * 19349663L);
 
+        // Keyed by the cell itself: a hash of it could collide, and a collision
+        // would carry one cell's "no ward here" to another cell a ward denies.
+        (long X, long Z) cell = (cellX, cellZ);
         if (!_wardByCell.TryGetValue(cell, out AreaAccess cellAccess))
         {
             var centre = new SitePoint(

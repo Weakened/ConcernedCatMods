@@ -22,12 +22,15 @@ public sealed class CollectionSurveyTests
 
     private static SurveyCandidate Candidate(
         NaturalSourceFacts facts, float dx, float dz, AreaAccess ward = AreaAccess.Granted, int yield = 1,
-        bool owned = true, bool interior = false, bool location = false, Guid? epoch = null, string? session = null)
+        bool owned = true, bool interior = false, bool location = false, Guid? epoch = null, string? session = null,
+        LocationStanding? standing = null)
     {
         var key = new SourceKey(
             facts.NetworkPrefabName ?? "Unknown", session ?? ("0000000000000001:" + (++_next).ToString("x8")), epoch ?? Epoch,
             new SitePoint(Centre.X + dx, Centre.Y, Centre.Z + dz));
-        return new SurveyCandidate(key, facts, owned, interior, location, ward, yield);
+        return new SurveyCandidate(
+            key, facts, owned, interior,
+            standing ?? (location ? LocationStanding.Inside : LocationStanding.Outside), ward, yield);
     }
 
     private static SurveyScheduler Run(SurveyScheduler survey, float start = 0f, int maxTicks = 10000)
@@ -274,5 +277,69 @@ public sealed class CollectionSurveyTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new SurveyScheduler(CollectionParameters.Default, Scope(), new FakeProbe(), 1, SurveyProvenance.Unspecified, 0f));
+    }
+
+    [Fact]
+    public void ASceneThatChangedUnderThePassIsTruncatedNotEmpty()
+    {
+        // A zone's objects are created over many frames, so a pass that walks a
+        // copy of the scene taken at one moment has not seen everything there
+        // is. R2 M2: "nothing found" must never stand for that.
+        var probe = new FakeProbe { SceneMoved = true };
+        probe.Candidates.Add(Candidate(SourceFacts.VanillaStone(), 1f, 1f));
+
+        SurveyScheduler survey = Run(new SurveyScheduler(
+            CollectionParameters.Default, Scope(), probe, 1, SurveyProvenance.SoloForeman, 0f));
+
+        Assert.True(survey.Snapshot!.TruncatedByBudget);
+        Assert.True(survey.Accounting.TruncatedByBudget);
+
+        // What it did see is still recorded.
+        Assert.Single(survey.Snapshot.Sources);
+    }
+
+    [Fact]
+    public void ASteadySceneIsNotTruncated()
+    {
+        var probe = new FakeProbe();
+        probe.Candidates.Add(Candidate(SourceFacts.VanillaStone(), 1f, 1f));
+
+        SurveyScheduler survey = Run(new SurveyScheduler(
+            CollectionParameters.Default, Scope(), probe, 1, SurveyProvenance.SoloForeman, 0f));
+
+        Assert.False(survey.Snapshot!.TruncatedByBudget);
+    }
+
+    [Fact]
+    public void ASurveyNeverAnswersThePickTimeQuestions()
+    {
+        // The site facts a survey builds carry no reach, no capacity and no
+        // local player: it must not be able to admit a source on facts it never
+        // established (R2 n3).
+        var probe = new FakeProbe();
+        probe.Candidates.Add(Candidate(SourceFacts.VanillaStone(), 1f, 1f));
+
+        SurveyScheduler survey = Run(new SurveyScheduler(
+            CollectionParameters.Default, Scope(), probe, 1, SurveyProvenance.SoloForeman, 0f));
+
+        Assert.Equal(SourceAvailability.Available, Assert.Single(survey.Snapshot!.Sources).Availability);
+    }
+
+    [Fact]
+    public void ALocationTheWorldKnowsAboutButHasNotBuiltYetIsNotCollectable()
+    {
+        // R2 M3: while a location's objects are being created its Location
+        // component does not exist, and "we could not tell" must refuse.
+        var probe = new FakeProbe();
+        probe.Candidates.Add(Candidate(SourceFacts.VanillaStone(), 1f, 1f, standing: LocationStanding.Unknown));
+        probe.Candidates.Add(Candidate(SourceFacts.VanillaStone(), 2f, 2f, standing: LocationStanding.Inside));
+        probe.Candidates.Add(Candidate(SourceFacts.VanillaStone(), 3f, 3f, standing: LocationStanding.Unspecified));
+
+        SurveyScheduler survey = Run(new SurveyScheduler(
+            CollectionParameters.Default, Scope(), probe, 1, SurveyProvenance.SoloForeman, 0f));
+
+        Assert.Equal(0, survey.Accounting.Available(CollectedResource.Stone));
+        Assert.Equal(1, survey.Accounting.Inaccessible(CollectedResource.Stone));
+        Assert.Equal(2, survey.Accounting.Unknown(CollectedResource.Stone));
     }
 }

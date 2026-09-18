@@ -262,7 +262,11 @@ internal sealed class SoloCollectionLoop
             authority: _world.EvaluateAuthority(),
             custodyAvailable: true,
             journalWritable: _custody.IsWritable,
-            anotherOrderActive: HasActiveOrder,
+            // The record's answer, not only this session's: after a reload the
+            // loop may not have adopted the order yet, and "another order is
+            // active" is the truth the player needs rather than a refusal from
+            // the journal further down (B1).
+            anotherOrderActive: HasActiveOrder || RecordHoldsAnotherOrder(order),
             workerBusy: _modes.JobId != null && !_modes.IsHeldBy(order.Order.Value),
             workerPresent: _motion.IsPresent,
             readiness: _world.AssessReadiness(order.Worker),
@@ -297,10 +301,168 @@ internal sealed class SoloCollectionLoop
         return CollectionIntakeRefusal.Unspecified;
     }
 
+    private bool RecordHoldsAnotherOrder(CollectionOrderDefinition order)
+    {
+        return _custody.TryRecoverOrder(order.Worker, out CollectionOrderDefinition? recorded, out _) &&
+            recorded != null && !recorded.Order.Equals(order.Order);
+    }
+
+    /// <summary>C2 (B1): adopts the non-terminal order the record kept across a
+    /// reload, in the state the record gives it. Nothing is journaled here —
+    /// custody already recorded the state on load — and nothing resumes by
+    /// itself: the order is stopped, its identity is held so nothing else takes
+    /// the worker, and the player can see it, rebind it or cancel it.
+    ///
+    /// <b>Why adoption alone matters.</b> Without it every command that could
+    /// end the order answers "there is no order" while the record says there is
+    /// one, so the material in the worker's body cannot be released and the body
+    /// cannot be retired — and the uninstall procedure would then delete both.
+    /// </summary>
+    public bool AdoptRecovered(float now)
+    {
+        if (_order != null && !CollectionOrderStates.IsTerminal(State))
+        {
+            return false;
+        }
+
+        if (!_custody.TryRecoverOrder(_workerId, out CollectionOrderDefinition? recovered, out CollectionOrderState recordedState) ||
+            recovered == null || CollectionOrderStates.IsTerminal(recordedState))
+        {
+            return false;
+        }
+
+        string jobId = recovered.Order.Value;
+        if (_modes.JobId != null && !_modes.IsHeldBy(jobId))
+        {
+            // Another job holds the worker; adopting would take him from it.
+            return false;
+        }
+
+        StartOrder(recovered, now);
+        Adopted = true;
+        _pausedFrom = CollectionOrderState.Surveying;
+
+        // The record's own state, kept as it stands: custody decided it during
+        // its load (Paused with a reason, or NeedsAttention).
+        State = recordedState == CollectionOrderState.NeedsAttention
+            ? CollectionOrderState.NeedsAttention
+            : CollectionOrderState.Paused;
+        Reason = RecoveredReason(recovered);
+        Phase = CollectionPhase.Stopped;
+        _modes.Enter(ActorMode.Paused, jobId);
+        return true;
+    }
+
+    /// <summary>What an adopted order is stopped for. The record keeps the
+    /// reason it was paused with and the recovery seam does not hand it over,
+    /// so this states only what this build can establish now: an uncertain
+    /// transfer, "the record and the world disagree", or the stale snapshot -
+    /// and the status line points at the record for the rest.</summary>
+    private CollectionAttentionReason RecoveredReason(CollectionOrderDefinition recovered)
+    {
+        if (_custody.View.HasUncertainTransfer(recovered.Order))
+        {
+            return CollectionAttentionReason.TransferUncertain;
+        }
+
+        if (State == CollectionOrderState.NeedsAttention)
+        {
+            return CollectionAttentionReason.ReconciliationMismatch;
+        }
+
+        return recovered.Delivery.Kind == DeliveryKind.Container
+            ? CollectionAttentionReason.DestinationStale
+            : CollectionAttentionReason.ScopeChanged;
+    }
+
+    /// <summary>True while the adopted order's work area and delivery still
+    /// belong to a previous world load: neither resolves now, so nothing may
+    /// resume until a person confirms a rebind.</summary>
+    public bool NeedsRebind
+    {
+        get
+        {
+            CollectionOrderDefinition? order = _order;
+            if (order == null)
+            {
+                return false;
+            }
+
+            Guid epoch = _custody.WorldLoadEpoch;
+            if (epoch == Guid.Empty)
+            {
+                return true;
+            }
+
+            return order.Scope.WorldLoadEpoch != epoch ||
+                (order.Delivery.Kind == DeliveryKind.Container && order.Delivery.WorldLoadEpoch != epoch);
+        }
+    }
+
+    /// <summary>True when this order came from the record rather than from a
+    /// player's `start` in this session.</summary>
+    public bool Adopted { get; private set; }
+
+    /// <summary>C2: the player confirms where the order works and where it
+    /// delivers, both snapshotted in this world load. Custody checks the epochs
+    /// and that the kinds are unchanged; quotas, progress and custody are
+    /// untouched.</summary>
+    public ControlResult Rebind(WorkScope scope, DeliveryTarget delivery, float now)
+    {
+        CollectionOrderDefinition? order = _order;
+        if (order == null || CollectionOrderStates.IsTerminal(State))
+        {
+            return new ControlResult(ControlOutcome.Refused, "There is no active collection order.");
+        }
+
+        if (scope == null)
+        {
+            return new ControlResult(ControlOutcome.Refused, "No work area could be established to rebind to.");
+        }
+
+        if (scope.Source != order.Scope.Source)
+        {
+            return new ControlResult(
+                ControlOutcome.Refused,
+                "A rebind keeps the same kind of work area (" + order.Scope.Source + "). Cancel the order and give a new one.");
+        }
+
+        if (delivery.Kind != order.Delivery.Kind)
+        {
+            return new ControlResult(
+                ControlOutcome.Refused,
+                "A rebind keeps the same kind of delivery (" + order.Delivery.Kind + "). Cancel the order and give a new one.");
+        }
+
+        if (!_custody.RecordRebound(order.Order, scope, delivery))
+        {
+            return new ControlResult(
+                ControlOutcome.Refused, "The rebind could not be written to the settlement record; nothing changed.");
+        }
+
+        _order = new CollectionOrderDefinition(
+            order.Order, order.Worker, order.Quotas, scope, delivery, order.Participation, order.IssuedByCharacter);
+        _snapshot = null;
+        _failed.Clear();
+        _spentThisSnapshot.Clear();
+        if (State == CollectionOrderState.Paused &&
+            (Reason == CollectionAttentionReason.DestinationStale || Reason == CollectionAttentionReason.ScopeChanged))
+        {
+            Reason = CollectionAttentionReason.Unspecified;
+        }
+
+        return new ControlResult(
+            ControlOutcome.Done,
+            "Rebound to " + scope.AnchorDescription + " and " +
+            (delivery.Kind == DeliveryKind.HoldForPlayer ? "holding for you" : "that chest") +
+            ". Nothing he carries changed. Resume when you are ready.");
+    }
+
     private void StartOrder(CollectionOrderDefinition order, float now)
     {
         _order = order;
         _jobId = order.Order.Value;
+        Adopted = false;
         State = CollectionOrderState.Accepted;
         Reason = CollectionAttentionReason.Unspecified;
         Phase = CollectionPhase.Surveying;
@@ -426,7 +588,7 @@ internal sealed class SoloCollectionLoop
         }
 
         _pausedFrom = State;
-        if (!Transition(CollectionOrderState.Paused, CollectionAttentionReason.Unspecified, now))
+        if (!Transition(CollectionOrderState.Paused, CollectionAttentionReason.PausedByPlayer, now))
         {
             return new ControlResult(ControlOutcome.Refused, "It could not be paused; that is a bug.");
         }
@@ -463,6 +625,20 @@ internal sealed class SoloCollectionLoop
         if (State != CollectionOrderState.Paused)
         {
             return new ControlResult(ControlOutcome.Unchanged, "It is already working.");
+        }
+
+        if (NeedsRebind)
+        {
+            // C2 (B1): the order's work area and chest were chosen in a
+            // previous world load, where their keys meant something. Nothing
+            // resumes on a stale key, and no other chest is ever substituted.
+            return new ControlResult(
+                ControlOutcome.Refused,
+                _order!.Delivery.Kind == DeliveryKind.Container
+                    ? "This order was given before the world was reloaded. Look at the chest it should deliver to and " +
+                        "run cf_collect rebind, or cancel it."
+                    : "This order was given before the world was reloaded. Run cf_collect rebind to set its work area " +
+                        "again, or cancel it.");
         }
 
         PausedByPlayer = false;
@@ -1818,9 +1994,33 @@ internal sealed class SoloCollectionLoop
             }
         }
 
+        if (Adopted)
+        {
+            text.AppendLine().Append("  Taken up again from the settlement record after a reload; ")
+                .Append("cf_settle status has the record's own reason.");
+        }
+
+        if (NeedsRebind)
+        {
+            text.AppendLine().Append("  This order was given before the world was reloaded. Its work area and ")
+                .Append(_order.Delivery.Kind == DeliveryKind.Container ? "chest have" : "work area has")
+                .Append(" to be chosen again (cf_collect rebind) before it can go on. What he carries is unchanged, ")
+                .Append("and cf_collect cancel always works.");
+        }
+
         text.AppendLine().Append("  Work area: ").Append(_order.Scope.Source).Append(" around ")
             .Append(_order.Scope.AnchorDescription).Append(", radius ")
             .Append(_order.Scope.RadiusMetres.ToString("0.#", CultureInfo.InvariantCulture)).Append(" m.");
+        if (State == CollectionOrderState.HoldingForPlayer)
+        {
+            // The order ends when the record shows the materials handed over,
+            // which is the settlement's own handover act, not something the
+            // loop can do to itself. Say so plainly, with the way out.
+            text.AppendLine().Append("  He is holding everything for you. It stays on him until the settlement record ")
+                .Append("shows it handed over; cf_collect cancel ends the order and leaves what he carries with him, ")
+                .Append("ready to be taken back.");
+        }
+
         text.AppendLine().Append("  Delivery: ")
             .Append(_order.Delivery.Kind == DeliveryKind.HoldForPlayer ? "hold for you" : "chest " + _order.Delivery.ContainerKey)
             .Append("; ").Append(_order.Participation == ParticipationMode.Solo ? "solo" : "with the hauler").Append('.');

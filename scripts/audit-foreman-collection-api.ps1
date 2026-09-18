@@ -117,6 +117,7 @@ foreach ($field in @(
         'public int m_amount = 1;',
         'public int m_minAmountScaled = 1;',
         'public bool m_dontScale;',
+        'public float m_hoverOffset;',
         'public DropTable m_extraDrops = new DropTable();',
         'public float m_respawnTimeMinutes;',
         'public float m_aggravateRange;',
@@ -208,7 +209,24 @@ Assert-Contains (Get-TypeSource -TypeName "StringExtensionMethods" -Assembly $ut
 
 # --- 5. Site clauses --------------------------------------------------------------------------------------
 Assert-Contains (Get-TypeSource "Character") 'public static bool InInterior(Vector3 position) { return position.y > 3000f; }' "Character.InInterior"
-Assert-Contains (Get-TypeSource "Location") 'public static bool IsInsideLocation(Vector3 point, float distance)' "Location.IsInsideLocation"
+$location = Get-TypeSource "Location"
+Assert-Contains $location 'public static bool IsInsideLocation(Vector3 point, float distance)' "Location.IsInsideLocation"
+# M3: the loaded-component list is filled in Awake, which is why it cannot be
+# the only answer — the world's own registry is read as well.
+Assert-Contains $location 'private static List<Location> s_allLocations = new List<Location>();' `
+    "IsInsideLocation reads only the locations whose objects exist"
+Assert-Order $location @(
+    'private void Awake()',
+    's_allLocations.Add(this);') "a location joins that list only when its component awakes"
+$zoneLocationRegistry = Get-TypeSource "ZoneSystem"
+foreach ($member in @(
+        'public Dictionary<Vector2s, LocationInstance> m_locationInstances = new Dictionary<Vector2s, LocationInstance>();',
+        'public static Vector2s GetZone(Vector3 point)',
+        'public ZoneLocation m_location;',
+        'public Vector3 m_position;',
+        'public float m_exteriorRadius;')) {
+    Assert-Contains $zoneLocationRegistry $member "the world's location registry, which answers before a location is built"
+}
 Assert-Contains (Get-TypeSource "PrivateArea") 'public static bool CheckAccess(Vector3 point, float radius = 0f, bool flash = true, bool wardCheck = false)' "PrivateArea.CheckAccess, through WorldDesignationSite"
 Assert-Contains (Get-TypeSource "Player") 'public static Player m_localPlayer = null;' "Player.m_localPlayer (the pick path dereferences it)"
 $zones = Get-TypeSource "ZoneSystem"
@@ -263,6 +281,8 @@ $forbidden = [ordered]@{
     'ZDO::SetOwner' = "setting an owner"
     'ItemDrop::Pickup' = "ItemDrop.Pickup (the non-player trap)"
     'ItemDrop::Interact' = "ItemDrop.Interact (the non-player trap)"
+    'Vagon::AttachTo' = "attaching a cart, which belongs to Teamster alone"
+    'Vagon::Detach' = "detaching a cart, which belongs to Teamster alone"
 }
 foreach ($token in $forbidden.Keys) {
     if ($foremanIl.Contains($token, [StringComparison]::Ordinal)) {
@@ -270,7 +290,9 @@ foreach ($token in $forbidden.Keys) {
     }
 }
 
-$required = @('Pickable::Interact', 'Humanoid::Pickup', 'ItemDrop::s_instances', 'ZNetScene::m_instances')
+$required = @(
+    'Pickable::Interact', 'Humanoid::Pickup', 'ItemDrop::s_instances', 'ZNetScene::m_instances',
+    'ZoneSystem::m_locationInstances', 'Location::IsInsideLocation')
 foreach ($token in $required) {
     if (-not $foremanIl.Contains($token, [StringComparison]::Ordinal)) {
         throw "The Foreman DLL does not use $token; the audit no longer describes the adapters."

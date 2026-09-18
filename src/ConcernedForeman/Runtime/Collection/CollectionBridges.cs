@@ -4,6 +4,7 @@ using TheConcernedCat.Settlement.Collection;
 using TheConcernedCat.Settlement.Collection.Planning;
 using TheConcernedCat.Settlement.Custody;
 using TheConcernedCat.Settlement.Identity;
+using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Collection;
@@ -26,6 +27,14 @@ internal sealed class CustodyBridge : ICollectionCustody
     public ITransferExecutor Executor => _custody.Executor;
 
     public bool IsWritable => _custody.IsWritable;
+
+    public Guid WorldLoadEpoch => _custody.WorldLoadEpoch;
+
+    public bool TryRecoverOrder(WorkerId worker, out CollectionOrderDefinition? order, out CollectionOrderState state) =>
+        _custody.TryRecoverOrder(worker, out order, out state);
+
+    public bool RecordRebound(OrderId order, WorkScope scope, DeliveryTarget delivery) =>
+        _custody.RecordRebound(order, scope, delivery);
 
     public bool TryResolveWorker(out IInventoryPort? port, out CollectionAttentionReason refusal) =>
         _custody.TryResolveWorker(_worker, out port, out refusal);

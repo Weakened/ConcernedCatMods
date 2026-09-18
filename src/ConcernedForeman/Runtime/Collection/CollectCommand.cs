@@ -22,7 +22,8 @@ internal sealed class CollectCommand : ConsoleCommand
 
     public override string Help =>
         "Concerned Foreman collection (Thorstein). Subcommands: status, preview [radius], " +
-        "start <stone> <wood> [hold] (look at the destination chest, or add hold), pause, resume, cancel. " +
+        "start <stone> <wood> [hold] (look at the destination chest, or add hold), rebind (after a reload, " +
+        "looking at the chest), pause, resume, cancel. " +
         "Requires the settlement runtime enabled, single player or a host with nobody else connected.";
 
     public override void Run(string[] args, Terminal context)
@@ -41,5 +42,5 @@ internal sealed class CollectCommand : ConsoleCommand
     }
 
     public override List<string> CommandOptionList() =>
-        new List<string> { "status", "preview", "start", "pause", "resume", "cancel" };
+        new List<string> { "status", "preview", "start", "rebind", "pause", "resume", "cancel" };
 }

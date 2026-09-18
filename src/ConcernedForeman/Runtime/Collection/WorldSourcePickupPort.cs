@@ -142,7 +142,7 @@ internal sealed class WorldSourcePickupPort : ISourcePickupPort
             ownedHere: view.IsOwner(),
             inScope: definition.Scope.Contains(NaturalSourceClassifier.ToSitePoint(position)),
             inInterior: Character.InInterior(position),
-            insideLocation: Location.IsInsideLocation(position, 0f),
+            location: WorldLocationSense.At(position),
             ward: _site.CheckAccess(NaturalSourceClassifier.ToSitePoint(position), 0f),
             workerDistanceMetres: Utils.DistanceXZ(body.transform.position, position),
             capacityFits: expected >= 1 && CarryFits(humanoid, workerPort, item, resource, expected),
@@ -198,8 +198,12 @@ internal sealed class WorldSourcePickupPort : ISourcePickupPort
                 Utils.DistanceXZ(candidate.transform.position, position) <= 3f;
             if (!ours)
             {
-                // Something else spawned during the call (another mod's hook):
-                // it is not this order's and stays in the world.
+                // Something else spawned during the call (another mod's hook)
+                // that is not this yield, not owned here, or not at the source:
+                // it is not this order's and stays in the world. A hook that
+                // spawns this very item, owned here, within three metres of the
+                // source, inside this call is indistinguishable from the game's
+                // own drop and would be taken; nothing in the game does that.
                 untraced++;
                 continue;
             }
@@ -320,22 +324,24 @@ internal sealed class WorldSourcePickupPort : ISourcePickupPort
             thrown = exception;
         }
 
-        int delta = inventory.CountItems(sharedName, -1, matchWorldLevel: false) - before;
+        int after = inventory.CountItems(sharedName, -1, matchWorldLevel: false);
         bool dropGone = itemDrop == null || dropView == null || !dropView.IsValid();
-        string evidence = "inventory " + before + " -> " + (before + delta) + ", drop " + (dropGone ? "gone" : "still in the world") +
-            (thrown != null ? ", threw " + thrown.GetType().Name : string.Empty);
 
-        TransferReceipt receipt;
-        if (thrown == null && added && delta == drop.Count && dropGone)
+        // The verdict is the tested game-free rule's, over what was measured.
+        TransferOutcome outcome = TakeClassification.Classify(
+            new TakeObservation(drop.Count, thrown != null, added, before, after, dropGone),
+            out int accepted,
+            out string evidence);
+        if (thrown != null)
         {
-            receipt = new TransferReceipt(intent.Request, TransferOutcome.Completed, delta, intent.From, evidence);
+            evidence += " (" + thrown.GetType().Name + ")";
         }
-        else if (thrown == null && !added && delta == 0 && !dropGone)
+
+        if (outcome == TransferOutcome.Refused)
         {
             Restore(itemDrop, "the game refused the pickup");
-            receipt = new TransferReceipt(intent.Request, TransferOutcome.Refused, 0, intent.From, evidence);
         }
-        else
+        else if (outcome == TransferOutcome.Uncertain)
         {
             // Counts that do not add up are never guessed at.
             if (!dropGone)
@@ -343,9 +349,10 @@ internal sealed class WorldSourcePickupPort : ISourcePickupPort
                 Restore(itemDrop, "the take ended uncertain");
             }
 
-            receipt = new TransferReceipt(intent.Request, TransferOutcome.Uncertain, Math.Max(0, delta), intent.From, evidence);
             _log("Collection: an uncertain take at " + traced.Source + ": " + evidence + ".");
         }
+
+        var receipt = new TransferReceipt(intent.Request, outcome, accepted, intent.From, evidence);
 
         if (!_custody.FinishTransfer(receipt))
         {

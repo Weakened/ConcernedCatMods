@@ -15,7 +15,7 @@ internal readonly struct SurveyCandidate
         NaturalSourceFacts facts,
         bool ownedHere,
         bool inInterior,
-        bool insideLocation,
+        LocationStanding location,
         AreaAccess ward,
         int estimatedYield)
     {
@@ -23,7 +23,7 @@ internal readonly struct SurveyCandidate
         Facts = facts ?? throw new ArgumentNullException(nameof(facts));
         OwnedHere = ownedHere;
         InInterior = inInterior;
-        InsideLocation = insideLocation;
+        Location = location;
         Ward = ward;
         EstimatedYield = estimatedYield;
     }
@@ -36,7 +36,7 @@ internal readonly struct SurveyCandidate
 
     public bool InInterior { get; }
 
-    public bool InsideLocation { get; }
+    public LocationStanding Location { get; }
 
     public AreaAccess Ward { get; }
 
@@ -48,16 +48,22 @@ internal readonly struct SurveyCandidate
 /// <summary>How far one discovery step got.</summary>
 internal readonly struct DiscoveryStep
 {
-    public DiscoveryStep(int entriesExamined, bool finished)
+    public DiscoveryStep(int entriesExamined, bool finished, bool sceneMoved = false)
     {
         EntriesExamined = entriesExamined;
         Finished = finished;
+        SceneMoved = sceneMoved;
     }
 
     public int EntriesExamined { get; }
 
-    /// <summary>Every loaded object of the pass has been examined.</summary>
+    /// <summary>Every object of the pass has been examined.</summary>
     public bool Finished { get; }
+
+    /// <summary>The world gained or lost objects while the pass ran, so the
+    /// pass did not see everything that is there. The snapshot says so rather
+    /// than claiming the ground is empty (GATHER-03).</summary>
+    public bool SceneMoved { get; }
 }
 
 /// <summary>The game side of a survey (the Foreman adapter implements it over
@@ -261,6 +267,12 @@ internal sealed class SurveyScheduler
         DiscoveryStep step = _probe.Discover(
             _parameters.SurveyEntriesPerTick, _parameters.SurveyCandidatesPerTick, _buffer);
         Accounting.EntriesExamined += Math.Max(0, step.EntriesExamined);
+        if (step.SceneMoved)
+        {
+            // Objects appeared or went away while this pass ran: what it did
+            // not examine is unknown, never "nothing".
+            Accounting.TruncatedByBudget = true;
+        }
 
         int processed = 0;
         foreach (SurveyCandidate candidate in _buffer)
@@ -301,11 +313,14 @@ internal sealed class SurveyScheduler
             ownedHere: candidate.OwnedHere,
             inScope: Scope.Contains(candidate.Key.Position),
             inInterior: candidate.InInterior,
-            insideLocation: candidate.InsideLocation,
+            location: candidate.Location,
             ward: candidate.Ward,
+            // Reach, capacity and the local player are pick-time questions.
+            // A survey never answers them, so it never pretends to: the
+            // availability rule below reads none of these three.
             workerDistanceMetres: float.NaN,
-            capacityFits: true,
-            localPlayerPresent: true);
+            capacityFits: false,
+            localPlayerPresent: false);
 
         if (!site.InScope)
         {
