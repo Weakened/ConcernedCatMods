@@ -108,6 +108,93 @@ public sealed class CustodyRecoveryTests : IDisposable
     }
 
     [Fact]
+    public void AReloadRestatesWhyAnOrderIsParkedAndKeepsThePlayersOwnPause()
+    {
+        // Review R2, m8: an order already in the target state kept whatever
+        // reason stopped it last session, because a same-state transition was
+        // answered "already satisfied" and wrote nothing.
+        (FakeWorld _, CustodyProcess process, FakeInventory _) = Carrying(5);
+        Assert.True(process.Core.RecordTransition(
+            Order, CollectionOrderState.Surveying, CollectionOrderState.Paused, CollectionAttentionReason.DestinationFull, out _));
+
+        CustodyProcess restarted = process.Restart();
+        Assert.True(restarted.Ledger.TryGetOrder(Order, out CollectionOrderRecord parked));
+        Assert.Equal(CollectionAttentionReason.DestinationFull, parked.Reason);
+
+        Assert.True(restarted.Core.RecordTransition(
+            Order, CollectionOrderState.Paused, CollectionOrderState.Paused, CollectionAttentionReason.DestinationStale, out string why), why);
+        Assert.Equal(CollectionAttentionReason.DestinationStale, parked.Reason);
+
+        // Written down, so the next load reads the same reason.
+        restarted.SaveWorld();
+        CustodyProcess again = restarted.Restart();
+        Assert.True(again.Ledger.TryGetOrder(Order, out CollectionOrderRecord reloaded));
+        Assert.Equal(CollectionAttentionReason.DestinationStale, reloaded.Reason);
+
+        // The same reason again changes nothing.
+        int rows = again.Journal.Entries.Count;
+        Assert.True(again.Core.RecordTransition(
+            Order, CollectionOrderState.Paused, CollectionOrderState.Paused, CollectionAttentionReason.DestinationStale, out _));
+        Assert.Equal(rows, again.Journal.Entries.Count);
+    }
+
+    [Fact]
+    public void ATransferTheWorldRolledBackIsNeverStartedAgainUnderItsOwnId()
+    {
+        // The replay registers a voided intent so its id answers Stale rather
+        // than looking unused. Nothing asserted this before (review R2, M4).
+        var world = new FakeWorld();
+        var disk = new FaultyDisk(world, new JournalStore(_root));
+        FakeInventory worker = world.Inventory("worker");
+        FakeInventory chest = world.Inventory("chest");
+        CustodyProcess process = CustodyProcess.Start(world, disk);
+        Gather(process, worker, 10);
+        process.SaveWorld();
+
+        TransferIntent delivery = Intent(process.Core, WorkerAt(), ChestAt(Epoch), 10);
+        Assert.Equal(TransferOutcome.Completed, process.Core.Executor.Execute(delivery, worker, chest).Outcome);
+
+        // Killed before the next save: the delivery is rolled back with the world.
+        CustodyProcess restarted = process.Restart();
+        Assert.Equal(10, restarted.Ledger.HoldingAt(Order, WorkerAt(), Stone));
+        Assert.True(restarted.Ledger.TryGetTransfer(delivery.Request, out TransferRecord voided));
+        Assert.Equal(TransferStatus.Voided, voided.Status);
+
+        TransferReceipt again = restarted.Core.Executor.Execute(delivery, worker, chest);
+        Assert.Equal(TransferOutcome.Stale, again.Outcome);
+        Assert.Contains("rolled back", again.Evidence);
+        Assert.Equal(10, restarted.Ledger.HoldingAt(Order, WorkerAt(), Stone));
+    }
+
+    [Fact]
+    public void AVoidedRowStillCountsTowardTheRevisionThatMintsIds()
+    {
+        // Ids are minted from the revision, and the revision counts EVERY row
+        // the record holds, voided ones included; otherwise a reload would mint
+        // an id the file already carries. The old test asserted ">=" against a
+        // premise that never produced a voided row at all (review R2, M4).
+        var world = new FakeWorld();
+        var disk = new FaultyDisk(world, new JournalStore(_root));
+        FakeInventory worker = world.Inventory("worker");
+        FakeInventory chest = world.Inventory("chest");
+        CustodyProcess process = CustodyProcess.Start(world, disk);
+        Gather(process, worker, 10);
+        process.SaveWorld();
+
+        int rowsBefore = process.Journal.Entries.Count;
+        int revisionBefore = process.Ledger.Revision;
+        TransferIntent delivery = Intent(process.Core, WorkerAt(), ChestAt(Epoch), 10);
+        Assert.Equal(TransferOutcome.Completed, process.Core.Executor.Execute(delivery, worker, chest).Outcome);
+        Assert.Equal(rowsBefore + 2, process.Journal.Entries.Count);
+
+        CustodyProcess restarted = process.Restart();
+
+        // Two voided rows, one restatement marker: every one of them counted.
+        Assert.Equal(revisionBefore + 3, restarted.Ledger.Revision);
+        Assert.NotEqual(delivery.Request.Value, CustodyIds.ForTransfer(Order, restarted.Ledger).Value);
+    }
+
+    [Fact]
     public void ARebindMustBelongToThisLoadAndKeepItsKinds()
     {
         (FakeWorld _, CustodyProcess process, FakeInventory _) = Carrying(5);

@@ -239,7 +239,16 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
                     ? CollectionAttentionReason.DestinationStale
                     : CollectionAttentionReason.ScopeChanged;
             }
-            if (order.State == target || order.State == CollectionOrderState.NeedsAttention)
+            // The player's own pause survives a reload; every other reason is
+            // re-derived from what is true now, including one the order was
+            // already carrying (review R2, m8).
+            if (order.State == CollectionOrderState.Paused
+                && order.Reason == CollectionAttentionReason.PausedByPlayer)
+            {
+                continue;
+            }
+
+            if (order.State == target && order.Reason == reason)
             {
                 continue;
             }

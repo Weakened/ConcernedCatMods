@@ -143,7 +143,9 @@ internal sealed class TransferExecutor : ITransferExecutor
 
         if (canAccept < 1)
         {
-            return Refused(intent, to.Describe + " has no room for " + intent.Item);
+            // "you has no room" is what naming the place first produced, and a
+            // port's name is a phrase ("you", "the chest"), not a noun.
+            return Refused(intent, "there is no room for " + intent.Item + " in " + to.Describe);
         }
 
         // ------------------------------------------------------------------

@@ -350,17 +350,19 @@ internal sealed class SettlementRuntime
             return "Refused: Thorstein is working. Pause or cancel the order first, then despawn.";
         }
 
-        worker.ClearGoal();
-
         // Never while he carries anything (D9): despawning would destroy it.
+        // Asked before his goal is cleared, so a refusal really does leave
+        // everything as it was (review R2, m9).
         WorkerBody? body = worker.GetComponent<WorkerBody>();
         if (body == null || !body.IsLoaded || body.ItemCount > 0 || RecordSaysHeHolds())
         {
             return "Refused: he is carrying " +
                 (body == null ? 0 : body.ItemCount).ToString(CultureInfo.InvariantCulture) +
                 " item stack(s), or the record says he holds tools or material. Release everything first " +
-                "(cf_settle takeback, or deliver what he carries), then despawn.";
+                "(cf_settle takeback and cf_settle release, or deliver what he carries), then despawn.";
         }
+
+        worker.ClearGoal();
 
         ZNetView view = worker.GetComponent<ZNetView>();
         if (view == null || !view.IsValid() || !view.IsOwner())

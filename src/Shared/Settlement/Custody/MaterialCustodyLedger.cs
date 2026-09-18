@@ -377,6 +377,17 @@ internal sealed class MaterialCustodyLedger : IMaterialCustodyView
 
         if (record.State == to && from == to)
         {
+            // A load restating why an order is parked: the state is the same and
+            // the reason may not be. Without this an order came back from a
+            // reload still saying whatever stopped it last time (review R2, m8).
+            if (reason != CollectionAttentionReason.Unspecified
+                && record.Reason != reason
+                && (to == CollectionOrderState.Paused || to == CollectionOrderState.NeedsAttention))
+            {
+                record.Reason = reason;
+                return CustodyLedgerOutcome.Applied;
+            }
+
             return CustodyLedgerOutcome.AlreadySatisfied;
         }
 
@@ -950,6 +961,32 @@ internal sealed class MaterialCustodyLedger : IMaterialCustodyView
         }
 
         return total;
+    }
+
+    /// <summary>Every place and item this record has ever held for an order
+    /// that has not ended — <b>including the ones it has emptied</b> — in the
+    /// order they first appeared.
+    ///
+    /// Reconciliation needs the emptied ones: a place the record says holds
+    /// nothing is exactly where material nobody accounted for would otherwise
+    /// go unseen, because nothing would ever look there (review R2, m1).
+    /// </summary>
+    public IReadOnlyList<Holding> EverHeld
+    {
+        get
+        {
+            var list = new List<Holding>();
+            foreach (HoldingKey key in _holdingSequence)
+            {
+                if (TryGetOrder(key.Order, out CollectionOrderRecord record)
+                    && !CollectionOrderStates.IsTerminal(record.State))
+                {
+                    list.Add(new Holding(key.Order, key.Location, key.Item, _holdings[key]));
+                }
+            }
+
+            return list;
+        }
     }
 
     /// <summary>Non-zero holdings, in the order they first appeared.</summary>

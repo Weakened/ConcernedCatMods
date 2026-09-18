@@ -400,7 +400,13 @@ internal sealed class CustodyCore
             return false;
         }
 
-        if (record.State == to && from == to)
+        bool refreshingReason = record.State == to
+            && from == to
+            && reason != CollectionAttentionReason.Unspecified
+            && record.Reason != reason
+            && (to == CollectionOrderState.Paused || to == CollectionOrderState.NeedsAttention);
+
+        if (record.State == to && from == to && !refreshingReason)
         {
             refusal = string.Empty;
             return true;
@@ -412,7 +418,7 @@ internal sealed class CustodyCore
             return false;
         }
 
-        if (!CollectionOrderStates.CanTransition(from, to))
+        if (!refreshingReason && !CollectionOrderStates.CanTransition(from, to))
         {
             refusal = "an order cannot go from " + from + " to " + to;
             return false;

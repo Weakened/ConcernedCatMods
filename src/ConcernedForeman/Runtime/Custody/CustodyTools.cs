@@ -166,7 +166,7 @@ internal sealed class CustodyTools
         CustodyCore core = _custody.Core!;
         foreach (CollectionOrderRecord order in core.Ledger.Orders)
         {
-            if (!CollectionOrderStates.IsTerminal(order.State))
+            if (!MayRelease(order.State))
             {
                 return "Refused: order " + order.Order.Value + " is still " + order.State +
                     ". Let it finish or cancel it (cf_collect cancel) first. Nothing was moved.";
@@ -176,7 +176,10 @@ internal sealed class CustodyTools
         var carried = new List<Holding>();
         foreach (Holding holding in core.Ledger.Holdings)
         {
-            if (holding.Location.Place == CustodyPlace.Worker && holding.Count > 0)
+            if (holding.Location.Place == CustodyPlace.Worker
+                && holding.Count > 0
+                && core.Ledger.TryGetOrder(holding.Order, out CollectionOrderRecord record)
+                && MayRelease(record.State))
             {
                 carried.Add(holding);
             }
@@ -213,6 +216,16 @@ internal sealed class CustodyTools
 
             TransferReceipt receipt = _custody.Executor.Execute(intent, workerPort, yours);
             string what = holding.Count.ToString(CultureInfo.InvariantCulture) + " " + holding.Item;
+
+            // The hand-over the record documents: what reached you, said once,
+            // so a hold-for-player order can be finished by the only thing that
+            // finishes it (review R2, M1).
+            if (receipt.Accepted > 0
+                && !core.RecordHandover(intent.Request, holding.Order, holding.Item, receipt.Accepted, out string noted))
+            {
+                messages.Add("(the hand-over could not be noted in the record: " + noted + ")");
+            }
+
             switch (receipt.Outcome)
             {
                 case TransferOutcome.Completed:
@@ -442,6 +455,13 @@ internal sealed class CustodyTools
         return text.ToString();
     }
 
+    /// <summary>Whose material may be handed back: an order that has ended, and
+    /// an order holding for the player, because that hand-over is the thing the
+    /// mode is waiting for. Anything still running keeps what it carries.
+    /// </summary>
+    private static bool MayRelease(CollectionOrderState state) =>
+        CollectionOrderStates.IsTerminal(state) || state == CollectionOrderState.HoldingForPlayer;
+
     /// <summary>A handover writes world-effect rows, so it waits exactly where
     /// a material transfer waits: while the record is read-only, has not yet
     /// noted which save was loaded, or owes a world-save marker. A row written
@@ -473,6 +493,17 @@ internal sealed class CustodyTools
         if (player == null)
         {
             refusal = "Refused: there is no local player.";
+            return false;
+        }
+
+        // The same refusal every material path makes: with two bodies carrying
+        // his identity, a tool handed to one of them is handed to the body the
+        // record will not look at (review R2, m2).
+        WorkerBodyCensus? census = _custody.Census;
+        if (census != null && census.IsDuplicated)
+        {
+            refusal = "Refused: two bodies in this world carry Thorstein's identity, so nothing is given to " +
+                "either of them. Run cf_settle reconcile.";
             return false;
         }
 
