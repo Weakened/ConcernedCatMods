@@ -41,6 +41,29 @@ It must return `C:/code/ConcernedCatMods` (path separators may differ).
 | Solution | PascalCase | `ConcernedCatMods.sln` |
 | Root documentation | UPPER_SNAKE_CASE where conventional | `README.md`, `AGENTS.md`, `CLAUDE.md` |
 
+### Adding a project to the solution
+
+`ConcernedCatMods.sln` belongs to the lead (`docs/settlement/cart-and-collection/TASKS.md` §2).
+Add a project **by hand**: a `Project`/`EndProject` pair, its twelve
+`ProjectConfigurationPlatforms` rows, and one `NestedProjects` row putting it under
+the `src` folder.
+
+**Do not use `dotnet sln add`.** It also creates solution folders mirroring the
+directory layout, and a folder whose name matches a project makes MSBuild refuse
+the whole solution with MSB5004 — which is exactly what broke `main` in #341.
+It exits 0 and warns about none of it.
+
+Two rules the validator enforces, because neither is visible from a green CI run:
+
+- every `src/**/*.csproj` is listed in the solution — a project nobody's solution
+  mentions still restores and still never runs;
+- no two entries share a name **within the same solution folder**, which is
+  MSBuild's own uniqueness key. Two projects called `Provider` under different
+  folders are fine.
+
+CI additionally runs `dotnet restore ConcernedCatMods.sln`, so MSBuild's own
+loader is the authority on whether the file is well formed.
+
 ## Mods
 
 Each mod is an independently versioned product.
