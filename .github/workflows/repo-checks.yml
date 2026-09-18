@@ -30,6 +30,17 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      # #341: every step below runs a test project by PATH, so the solution
+      # itself was never loaded and could be unloadable while CI stayed green -
+      # which is exactly what happened. This asks MSBuild to load it, with
+      # MSBuild's own rules: duplicate entry names (MSB5004), a nesting row
+      # pointing at a project that is not there (MSB5009/MSB5023), a missing
+      # format header (MSB5010), a missing EndProject (MSB5012) and leftover
+      # merge-conflict markers all fail here. `dotnet sln list` is NOT a
+      # substitute: it exits 0 on a solution MSBuild refuses.
+      - name: Load the solution
+        run: dotnet restore ConcernedCatMods.sln
+
       - name: Run pure-domain unit tests (Concerned Cartographer)
         run: dotnet test src/ConcernedCartographer.Tests/ConcernedCartographer.Tests.csproj --nologo
 

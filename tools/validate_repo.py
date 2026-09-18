@@ -1144,50 +1144,143 @@ def check_companion_talk_is_not_a_reach(errors: list[str]) -> list[str]:
 
 SOLUTION_FOLDER_TYPE = "{2150E333-8FDC-42A3-9474-1A3956D46DE8}"
 
+SOLUTION_ENTRY = re.compile(
+    r'^\s*Project\("(?P<type>\{[0-9A-Fa-f-]+\})"\)\s*=\s*'
+    r'"(?P<name>[^"]*)"\s*,\s*"(?P<path>[^"]*)"\s*,\s*"(?P<guid>\{[0-9A-Fa-f-]+\})"\s*$',
+    re.MULTILINE)
+
+SOLUTION_NESTING = re.compile(
+    r'^\s*(?P<child>\{[0-9A-Fa-f-]+\})\s*=\s*(?P<parent>\{[0-9A-Fa-f-]+\})\s*$',
+    re.MULTILINE)
+
+ADD_A_PROJECT = (
+    "add it by hand (a Project/EndProject pair, its 12 ProjectConfigurationPlatforms "
+    "rows, and a NestedProjects row under the src folder) — `dotnet sln add` also "
+    "creates solution folders mirroring the directories, and a folder whose name "
+    "matches a project is what broke the solution in #341"
+)
+
 
 def check_solution_integrity(errors: list[str]) -> list[str]:
-    """The solution loads: unique names, real project files, and nothing left out.
+    """What loading the solution cannot tell us, plus a friendlier duplicate-name check.
 
-    MSBuild refuses a solution whose entries share a name (MSB5004), so
-    `dotnet build`/`dotnet test` against the .sln stops dead — while CI, which
-    runs each test project by path, stays green. That is how a duplicate name
-    reached main once; this check is so it cannot again.
+    MSBuild is the authority on whether the file loads, and CI now asks it
+    directly (`dotnet restore ConcernedCatMods.sln` in repo-checks.yml), which
+    covers duplicate names, dangling nesting rows, a missing header, a missing
+    EndProject and conflict markers — with MSBuild's own rules rather than a
+    regex approximating them. That step exists because #341's real cause was
+    that no CI step ever loaded the solution at all.
+
+    Two things a load cannot know are checked here:
+
+    * a `src/**/*.csproj` that is in the repository and in nobody's solution.
+      A restore of a solution that never mentions it exits 0, and the suite
+      inside it simply never runs;
+    * duplicate entry names, kept as a fast local pre-check so the failure
+      arrives with an explanation instead of as MSB5004.
+
+    The duplicate key is the **solution-folder-qualified** name, which is
+    MSBuild's own key: two projects called `Provider` under different folders
+    are legal and must not be rejected here.
     """
     solution = ROOT / "ConcernedCatMods.sln"
     if not solution.is_file():
-        fail("Missing required file: ConcernedCatMods.sln", errors)
+        fail("[solution] Missing required file: ConcernedCatMods.sln", errors)
         return []
 
-    entry = re.compile(
-        r'^Project\("(?P<type>\{[0-9A-Fa-f-]+\})"\)\s*=\s*'
-        r'"(?P<name>[^"]+)",\s*"(?P<path>[^"]+)",\s*"(?P<guid>\{[0-9A-Fa-f-]+\})"',
-        re.MULTILINE)
+    try:
+        text = solution.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeDecodeError) as exception:
+        # Never let this abort the run: every later check, including the
+        # prohibited-DLL sweep, still has to report.
+        fail(f"[solution] ConcernedCatMods.sln could not be read as UTF-8 "
+             f"({type(exception).__name__}); MSBuild will not load it either", errors)
+        return []
 
-    names: dict[str, str] = {}
-    listed: set[Path] = set()
+    declared = len(re.findall(r'^\s*Project\("', text, re.MULTILINE))
+    entries = list(SOLUTION_ENTRY.finditer(text))
+    if len(entries) != declared:
+        fail(f"[solution] ConcernedCatMods.sln has {declared} Project entries but "
+             f"{len(entries)} could be parsed; the unparsed ones are exempt from "
+             f"every rule below, so this is fixed before anything else is trusted", errors)
+        return []
+
+    if declared == 0:
+        fail("[solution] ConcernedCatMods.sln declares no projects at all", errors)
+        return []
+
+    folders: dict[str, str] = {}
+    parents: dict[str, str] = {}
+    names: dict[str, tuple[str, str]] = {}
+    listed: set[str] = set()
     projects = 0
-    for match in entry.finditer(solution.read_text(encoding="utf-8-sig")):
-        name, kind, raw = match["name"], match["type"], match["path"]
-        previous = names.get(name.casefold())
+
+    for match in SOLUTION_NESTING.finditer(text):
+        parents[match["child"].upper()] = match["parent"].upper()
+
+    for match in entries:
+        if match["type"].upper() == SOLUTION_FOLDER_TYPE:
+            folders[match["guid"].upper()] = match["name"]
+
+    def qualified(guid: str, name: str) -> str:
+        """MSBuild's uniqueness key: the path of folder names down to this entry."""
+        segments = [name]
+        seen = {guid.upper()}
+        parent = parents.get(guid.upper())
+        while parent is not None and parent not in seen and parent in folders:
+            seen.add(parent)
+            segments.append(folders[parent])
+            parent = parents.get(parent)
+        return "\\".join(reversed(segments)).casefold()
+
+    for match in entries:
+        name, kind, raw, guid = match["name"], match["type"].upper(), match["path"], match["guid"]
+        key = qualified(guid, name)
+        previous = names.get(key)
         if previous is not None:
-            fail(f"ConcernedCatMods.sln has two entries named '{name}' "
-                 f"({previous} and {'folder' if kind == SOLUTION_FOLDER_TYPE else 'project'}); "
+            fail(f"[solution] ConcernedCatMods.sln has two entries named '{name}' in the same "
+                 f"place (a {previous[0]} at {previous[1]} and a "
+                 f"{'folder' if kind == SOLUTION_FOLDER_TYPE else 'project'} at {raw}); "
                  f"MSBuild refuses the solution with MSB5004", errors)
-        names[name.casefold()] = "folder" if kind == SOLUTION_FOLDER_TYPE else "project"
+        names[key] = ("folder" if kind == SOLUTION_FOLDER_TYPE else "project", raw)
+
         if kind == SOLUTION_FOLDER_TYPE:
             continue
+
         projects += 1
-        path = ROOT / raw.replace("\\", "/")
-        if not path.is_file():
-            fail(f"ConcernedCatMods.sln references a missing project: {raw}", errors)
+        if not raw.casefold().endswith(".csproj"):
+            fail(f"[solution] ConcernedCatMods.sln lists '{raw}' as a project, but only a "
+                 f".csproj can be built; MSBuild fails this with MSB4025 or MSB4040", errors)
             continue
-        listed.add(path.resolve())
+
+        candidate = Path(raw.replace("\\", "/"))
+        if candidate.is_absolute() or ".." in candidate.parts:
+            fail(f"[solution] ConcernedCatMods.sln points at '{raw}', which is outside the "
+                 f"repository; every project path must be relative to the solution", errors)
+            continue
+
+        path = ROOT / candidate
+        if not path.is_file():
+            fail(f"[solution] ConcernedCatMods.sln references a project file that is not "
+                 f"there: {raw}", errors)
+        # Recorded whether or not it exists. A case-wrong path on Windows finds
+        # the file and canonicalises, on Linux it does not — and reporting the
+        # same project as both missing and unlisted would be two errors that
+        # contradict each other.
+        listed.add(candidate.as_posix().casefold())
 
     for csproj in sorted((ROOT / "src").rglob("*.csproj")):
-        if csproj.resolve() not in listed:
-            fail(f"{csproj.relative_to(ROOT)} exists but is not in ConcernedCatMods.sln", errors)
+        parts = csproj.relative_to(ROOT).parts
+        if "bin" in parts or "obj" in parts:
+            continue
+        if csproj.relative_to(ROOT).as_posix().casefold() not in listed:
+            fail(f"[solution] {csproj.relative_to(ROOT)} exists but is not in "
+                 f"ConcernedCatMods.sln, so no solution-wide build or test ever reaches it. "
+                 f"The solution belongs to the lead (docs/settlement/cart-and-collection/"
+                 f"TASKS.md §2): {ADD_A_PROJECT}", errors)
 
-    return [f"[solution] {projects} projects, every name unique and every project file present"]
+    return [f"[solution] {projects} projects, every path inside the repository, "
+            f"every name unique in its folder, nothing under src/ left out"]
 
 
 def main() -> int:

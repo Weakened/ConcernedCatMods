@@ -26,6 +26,10 @@ Push-Location $root
 try {
     Write-Host "Running repository metadata validation..."
     python ./tools/validate_repo.py
+    # PowerShell does not stop on a native non-zero exit even under
+    # Set-StrictMode and $ErrorActionPreference = 'Stop', so without this the
+    # validator's ERROR lines scroll past and bootstrap reports success.
+    if ($LASTEXITCODE -ne 0) { throw "Repository validation failed." }
 
     Write-Host "Restoring NuGet packages..."
     dotnet restore ./ConcernedCatMods.sln
