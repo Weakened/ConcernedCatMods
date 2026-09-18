@@ -3,13 +3,53 @@
 All notable changes to Concerned Foreman are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
-## 0.1.0 - The worker actor spike (unreleased)
+## 0.1.0 - The worker actor spike, and ladders you can climb (unreleased)
 
 The first code this product has ever had. **Not published, and not a
-playable release**: it is the worker actor spike from CF-SET-002 (#279),
-and the thing it is meant to prove has not yet been observed in a game.
+playable release**: it is the worker actor spike from CF-SET-002 (#279)
+plus the ladder feature from CF-LAD-001..005 (#324), and **nothing in it
+has been observed working in a game**. The version has deliberately not
+moved: 0.1.0 has never shipped, so these are still its notes.
 
-### Added
+### Added — climbable ladders (#324)
+
+- **Valheim's ladders are climbable instead of teleporting.** Walk into
+  one, or press Use, and your character takes hold of it: forward climbs
+  up, back climbs down, releasing stops, and you step off at the bottom,
+  over the edge at the top, or jump away.
+- **The game's own pieces, unchanged.** `wood_stepladder`, the grausten
+  stone ladder, and anything else in the game built as a ladder that
+  measures like one. No new piece, no new recipe, no new entry in the
+  hammer, and nothing of this mod's written into a world: uninstall and
+  every ladder you built is still standing, teleporting again.
+- **The `Ladders` configuration section**: `Enabled`, `AutoMount`,
+  `ClimbSpeed`, `StaminaCost`, `UseTeleport`, `NpcClimbing`. The defaults
+  are the whole feature — a player who never opens the config file
+  climbs ladders.
+- **Off is off.** With `Ladders/Enabled = false` at startup, nothing is
+  patched at all — not the player's motor, not the ladder's Use — and
+  the game behaves as if Concerned Foreman were not installed.
+  `UseTeleport = true` hands the Use key back to vanilla's teleport in
+  every state, while walking into a ladder still climbs it.
+
+### Known limits — ladders
+
+- **Unproven.** The automated suite covers the decisions; it proves
+  nothing about Valheim. No climb has been watched in a game.
+- **Stacking is unobserved.** Whether two vanilla ladder pieces snap end
+  to end into one tall run has not been tested. If they do not, each
+  piece is its own climb and a tall run stops and re-grabs at each join.
+  Whether a Concerned Foreman ladder piece is ever added is the owner's
+  decision and has not been taken.
+- **The climb pose is not an authored animation.** Valheim ships no climb
+  clip and this mod ships no game art, so the pose is built from the
+  game's own wall-running lean.
+- **Multiplayer is untested**, and no settlement worker can climb:
+  `NpcClimbing` is bound, off, and nothing reads it.
+- **A ladder on a moving ship ends the climb** as soon as the ship moves,
+  and **jumping off is a let-go, not a push.**
+
+### Added — the settlement worker (#279)
 
 - The **settlement runtime**, off by default. Turning it on is a separate,
   explicit choice; the product's building-diagnostics half never requires it.
@@ -26,7 +66,7 @@ and the thing it is meant to prove has not yet been observed in a game.
 - The `cf_worker` console command (`status`, `spawn`, `goto <x> <z>`,
   `stop`, `despawn`), which exists so the above can actually be watched.
 
-### Known limits
+### Known limits — the settlement worker
 
 - **No offscreen work.** The worker acts only in loaded ground, and says so.
 - **Solo and local host only.** On a dedicated server the runtime refuses.

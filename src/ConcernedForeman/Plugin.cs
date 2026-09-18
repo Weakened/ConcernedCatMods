@@ -1,5 +1,4 @@
 using BepInEx;
-using BepInEx.Configuration;
 using TheConcernedCat.ConcernedForeman.Domain.Settlement;
 using TheConcernedCat.ConcernedForeman.Runtime;
 using TheConcernedCat.ConcernedForeman.Runtime.Ladders;
@@ -12,13 +11,16 @@ namespace TheConcernedCat.ConcernedForeman;
 /// <summary>Concerned Foreman.
 ///
 /// The product's promise is causal building diagnostics, and that half is
-/// read-only and client-safe. This build carries only the first slice of the
-/// <i>other</i> half — the opt-in settlement runtime from #273 — which is off
-/// until a person turns it on.
+/// read-only and client-safe. This build carries two things instead: the first
+/// slice of the <i>other</i> half — the opt-in settlement runtime from #273,
+/// which touches no world state until a person turns it on — and ladder
+/// climbing (#326, #328).
 ///
-/// Nothing here installs a patch, hooks a game event or touches world state at
-/// load. Until the settlement runtime is enabled and a worker is deliberately
-/// spawned, this plugin registers two console commands and does nothing else.</summary>
+/// Ladder climbing is the one thing here that patches the game at load, and
+/// only ever the local player's own motor and the ladder's own Use: with
+/// `Ladders/Enabled = false` nothing is patched at all. Nothing in this plugin
+/// creates, moves, damages or writes to a piece, and no ladder is changed by
+/// climbing it.</summary>
 [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
 [BepInDependency(Jotunn.Main.ModGuid)]
 public sealed class Plugin : BaseUnityPlugin
@@ -29,7 +31,7 @@ public sealed class Plugin : BaseUnityPlugin
 
     private SettlementRuntime? _settlement;
     private ClimbController? _ladders;
-    private ConfigEntry<bool>? _laddersEnabled;
+    private LadderSettings? _ladderSettings;
     private bool _worldWasUp;
 
     private void Awake()
@@ -68,22 +70,20 @@ public sealed class Plugin : BaseUnityPlugin
         InstallLadders();
     }
 
-    /// <summary>Ladder climbing (#326). This is the first thing Foreman patches
-    /// at load, so it is deliberately explicit and it fails towards vanilla: if
-    /// the game's own motor cannot be bound, nothing is patched, ladders keep
-    /// teleporting, and the reason is logged once.
+    /// <summary>Ladder climbing (#326, #328). This is the first thing Foreman
+    /// patches at load, so it is deliberately explicit and it fails towards
+    /// vanilla: if the game's own motor cannot be bound, nothing is patched,
+    /// ladders keep teleporting, and the reason is logged once.
     ///
-    /// The whole `Ladders` settings section belongs to #328; this one switch is
-    /// here so the feature can be turned off before that lands.</summary>
+    /// With `Ladders/Enabled = false` at startup <b>no patch is installed at
+    /// all</b> — not the motor's two, not the interaction's one — and the game
+    /// behaves as if Concerned Foreman were not here.</summary>
     private void InstallLadders()
     {
-        _laddersEnabled = Config.Bind(
-            "Ladders",
-            "Enabled",
-            true,
-            "Climb ladders instead of vanilla's teleport. Off restores the game's own behaviour exactly.");
+        _ladderSettings = LadderSettings.Bind(Config);
 
-        var options = new ClimbOptions { Enabled = _laddersEnabled.Value };
+        var options = new ClimbOptions();
+        _ladderSettings.ApplyTo(options);
         _ladders = new ClimbController(options, message => Logger.LogInfo(message));
         if (!options.Enabled)
         {
@@ -94,7 +94,19 @@ public sealed class Plugin : BaseUnityPlugin
         if (!_ladders.Install(PluginGuid + ".ladders"))
         {
             Logger.LogInfo("Ladder climbing is unavailable: " + ClimbMotor.Unavailable + ". Ladders are unchanged.");
+            return;
         }
+
+        // Which pieces count (#328). Data, not code: the rules are in
+        // Domain/Ladders/LadderAdmission and the measurements come from the
+        // loaded game.
+        _ladders.Survey.Admits = new LadderPieces(message => Logger.LogInfo(message)).Admits;
+
+        // And the Use key, which vanilla spends on a teleport. Its own Harmony
+        // id, because the climb's patches and this one come out at different
+        // times for different reasons.
+        LadderInteraction.Install(
+            PluginGuid + ".ladders.interaction", _ladders, _ladderSettings, message => Logger.LogInfo(message));
     }
 
     /// <summary>Notices a world going away.
@@ -120,9 +132,9 @@ public sealed class Plugin : BaseUnityPlugin
 
         if (_ladders != null)
         {
-            // Read live, so switching the setting off ends a climb on the next
+            // Read live, so switching a setting off ends a climb on the next
             // frame rather than at the next restart.
-            _ladders.Options.Enabled = _laddersEnabled == null || _laddersEnabled.Value;
+            _ladderSettings?.ApplyTo(_ladders.Options);
             _ladders.Update(Time.deltaTime);
         }
     }
@@ -132,5 +144,6 @@ public sealed class Plugin : BaseUnityPlugin
     private void OnDestroy()
     {
         _ladders?.Stop();
+        LadderInteraction.Remove();
     }
 }
