@@ -71,6 +71,17 @@ internal static class StewardRole
     /// Foreman's vocabulary for a product Foreman does not know about.</summary>
     public const string Role = "steward";
 
+    /// <summary>The name his body's prefab is registered under.
+    ///
+    /// <b>Never change this either.</b> A saved body is found by its prefab
+    /// name when a world's objects are created, and the host destroys any saved
+    /// object whose prefab is not registered — so renaming it would delete
+    /// every existing Steward and everything in his pack. It lives here beside
+    /// the identity slug rather than in the prefab factory because it is the
+    /// same kind of thing: a contract with a player's save file, not an
+    /// implementation detail of the factory that happens to build it.</summary>
+    public const string BodyPrefabName = "CS_Steward";
+
     /// <summary>The job id every upkeep job is held under, for the actor-mode
     /// owner. One identity, one runtime, one job at a time.</summary>
     public const string UpkeepJobId = "steward/upkeep";

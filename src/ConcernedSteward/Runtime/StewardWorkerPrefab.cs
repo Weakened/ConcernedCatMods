@@ -1,6 +1,7 @@
 using System;
 using Jotunn.Entities;
 using Jotunn.Managers;
+using TheConcernedCat.ConcernedSteward.Domain;
 using UnityEngine;
 
 namespace TheConcernedCat.ConcernedSteward.Runtime;
@@ -44,9 +45,10 @@ namespace TheConcernedCat.ConcernedSteward.Runtime;
 internal static class StewardWorkerPrefab
 {
     /// <summary>The name the prefab is registered under. Saved bodies are found
-    /// by this name; <b>it never changes</b>, including when the Steward is
-    /// finally named.</summary>
-    internal const string PrefabName = "CS_Steward";
+    /// by it, so it never changes — including when the Steward is finally
+    /// named. It is declared with the rest of his permanent identity rather
+    /// than here, because that is the kind of thing it is.</summary>
+    internal const string PrefabName = StewardRole.BodyPrefabName;
 
     private static GameObject? _prefab;
     private static bool _installed;
