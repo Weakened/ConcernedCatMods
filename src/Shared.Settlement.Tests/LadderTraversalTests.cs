@@ -410,6 +410,25 @@ public sealed class LadderTraversalTests
     }
 
     [Fact]
+    public void Falling_past_a_ladder_you_let_go_of_is_not_leaving_its_band()
+    {
+        // The frames of a fall past the ladder say "you are not moving into it",
+        // and that must not count as having left it.
+        Assert.False(MountGate.LeavesTheBand(MountRefusal.LookingAway));
+        Assert.False(MountGate.LeavesTheBand(MountRefusal.CharacterBusy));
+        Assert.False(MountGate.LeavesTheBand(MountRefusal.AlreadyClimbing));
+        Assert.False(MountGate.LeavesTheBand(MountRefusal.Disabled));
+
+        // Walking away does.
+        Assert.True(MountGate.LeavesTheBand(MountRefusal.TooFar));
+        Assert.True(MountGate.LeavesTheBand(MountRefusal.OffToTheSide));
+        Assert.True(MountGate.LeavesTheBand(MountRefusal.WrongSide));
+        Assert.True(MountGate.LeavesTheBand(MountRefusal.OutOfSpan));
+        Assert.True(MountGate.LeavesTheBand(MountRefusal.NotClimbable));
+        Assert.True(MountGate.LeavesTheBand(MountRefusal.Unspecified));
+    }
+
+    [Fact]
     public void Stepping_off_at_either_end_lets_the_ladder_be_climbed_again_at_once()
     {
         var gate = new MountGate();

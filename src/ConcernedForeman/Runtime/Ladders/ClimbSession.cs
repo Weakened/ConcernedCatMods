@@ -262,6 +262,30 @@ internal sealed class MountGate
     /// band, so walking back into the ladder may grab it again.</summary>
     public void OutOfTheBand() => _mustLeaveTheBand = false;
 
+    /// <summary>Whether a refusal means the character is nowhere near a ladder
+    /// any more, as opposed to standing at one and not asking for it.
+    ///
+    /// It matters because letting go halfway up drops the character straight
+    /// back down through the mounting band, where "not moving into the ladder"
+    /// is true on nearly every frame of the fall. Counting that as having left
+    /// the ladder would let auto-mount catch them again on the way past, which
+    /// is precisely what letting go must not do.</summary>
+    public static bool LeavesTheBand(MountRefusal refusal)
+    {
+        switch (refusal)
+        {
+            case MountRefusal.Unspecified:
+            case MountRefusal.NotClimbable:
+            case MountRefusal.TooFar:
+            case MountRefusal.OffToTheSide:
+            case MountRefusal.WrongSide:
+            case MountRefusal.OutOfSpan:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     public void Reset()
     {
         _cooldown = 0f;
