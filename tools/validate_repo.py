@@ -1283,6 +1283,51 @@ def check_solution_integrity(errors: list[str]) -> list[str]:
             f"every name unique in its folder, nothing under src/ left out"]
 
 
+# The characters a UTF-8 lead byte turns into when its bytes are read as
+# Windows-1252: a run starting with one of those, followed by another
+# character from the same block, is text that was decoded with the wrong
+# codec and re-encoded. Written as escapes rather than literals, so this
+# file does not itself contain what it is looking for.
+MOJIBAKE_LEAD = "\u00c2\u00c3\u00e2"
+MOJIBAKE_TAIL = (
+    "\u0080-\u00bf\u20ac\u201a\u0192\u201e\u2026\u2020\u2021\u02c6\u2030"
+    "\u0160\u2039\u0152\u017d\u2018\u2019\u201c\u201d\u2022\u2013\u2014"
+    "\u02dc\u2122\u0161\u203a\u0153\u017e\u0178")
+MOJIBAKE = re.compile("[" + MOJIBAKE_LEAD + "][" + MOJIBAKE_TAIL + "]")
+
+
+def check_no_mojibake(errors: list[str]) -> list[str]:
+    """No tracked text file carries double-encoded UTF-8.
+
+    An em dash that went through a cp1252 round trip comes back as a run of
+    seven unreadable characters. Worse than unreadable, it is silent: the file
+    is still valid UTF-8, so nothing complains, and it survives every review
+    that does not happen to look at that line. A Foreman comment carried one
+    through four merges before this check existed.
+    """
+    scanned = 0
+    for path in sorted(ROOT.rglob("*")):
+        if path.suffix.lower() not in (".cs", ".md", ".ps1", ".py", ".txt", ".json", ".toml", ".yml"):
+            continue
+        parts = path.relative_to(ROOT).parts
+        if any(part in ("bin", "obj", ".git", "artifacts", "node_modules") for part in parts):
+            continue
+        if parts and parts[0] == ".claude":
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        scanned += 1
+        match = MOJIBAKE.search(text)
+        if match is not None:
+            line = text.count(chr(10), 0, match.start()) + 1
+            fail(f"[encoding] {path.relative_to(ROOT)}:{line} carries double-encoded UTF-8 "
+                 f"({match.group(0)!r}); the file is valid UTF-8, so only this check sees it", errors)
+
+    return [f"[encoding] {scanned} text files scanned, none double-encoded"]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -1318,6 +1363,7 @@ def main() -> int:
         ))
 
     report.extend(check_solution_integrity(errors))
+    report.extend(check_no_mojibake(errors))
     check_teamster_adapter_isolation(errors)
     report.extend(check_cross_product_independence(errors))
     report.extend(check_teamster_cartographer_contract(errors))
