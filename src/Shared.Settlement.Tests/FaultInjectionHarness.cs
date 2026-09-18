@@ -48,7 +48,10 @@ internal sealed class FakeWorld
 
     public bool Authority { get; set; } = true;
 
-    /// <summary>The named step the process dies at.</summary>
+    /// <summary>The named step the process dies at: the first time it is
+    /// reached, or with a <c>#n</c> suffix the n-th time in this world — for
+    /// steps that share a name, like a return's intention and its result, which
+    /// are both <c>ToolReturned</c> rows.</summary>
     public string? KillAt { get; set; }
 
     /// <summary>Every step reached, in order — the ordering evidence.</summary>
@@ -62,7 +65,17 @@ internal sealed class FakeWorld
         }
 
         _steps.Add(name);
-        if (string.Equals(KillAt, name, StringComparison.Ordinal))
+        int reached = 0;
+        foreach (string step in _steps)
+        {
+            if (string.Equals(step, name, StringComparison.Ordinal))
+            {
+                reached++;
+            }
+        }
+
+        if (string.Equals(KillAt, name, StringComparison.Ordinal)
+            || string.Equals(KillAt, name + "#" + reached.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal))
         {
             Dead = true;
             throw new ProcessKilled(name);

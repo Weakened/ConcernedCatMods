@@ -202,17 +202,23 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
                 continue;
             }
 
-            CollectionAttentionReason reason = report.ReasonFor(order.Order);
-            if (reason == CollectionAttentionReason.Unspecified && _census != null)
+            // The body's own state first (CONTRACTS.md §5.6). Without exactly
+            // one body the stored inventory cannot be read, so reconciliation
+            // can only say "cannot be checked", which would otherwise read as a
+            // generic mismatch and hide the reason a person has to act on.
+            CollectionAttentionReason reason = CollectionAttentionReason.Unspecified;
+            if (_census != null && _census.IsDuplicated)
             {
-                if (_census.IsDuplicated)
-                {
-                    reason = CollectionAttentionReason.WorkerBodyDuplicated;
-                }
-                else if (_census.IsMissing && CarriesAnything(order.Order))
-                {
-                    reason = CollectionAttentionReason.WorkerBodyLost;
-                }
+                reason = CollectionAttentionReason.WorkerBodyDuplicated;
+            }
+            else if (_census != null && _census.IsMissing && CarriesAnything(order.Order))
+            {
+                reason = CollectionAttentionReason.WorkerBodyLost;
+            }
+
+            if (reason == CollectionAttentionReason.Unspecified)
+            {
+                reason = report.ReasonFor(order.Order);
             }
 
             if (reason == CollectionAttentionReason.Unspecified && _core.Ledger.HasUncertainTransfer(order.Order))
@@ -703,6 +709,17 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
                     || !string.Equals(holding.Tool.ItemKey, specimen.ItemKey, StringComparison.Ordinal))
                 {
                     continue;
+                }
+
+                // The same gate as every world-effect row: a note written while
+                // a world-save marker is owed would later sit before that marker
+                // and read as part of a save it is not in.
+                if (_core == null || !_core.IsWritable)
+                {
+                    _log("The dropped " + specimen.Kind + " (request " + holding.Transaction.Value + ") was not noted: the " +
+                        "record is not taking new work now (" + (_core == null ? "closed" : _core.WriteBlock.ToString()) +
+                        "). The record still says he holds it.");
+                    break;
                 }
 
                 int before = journal.Entries.Count;

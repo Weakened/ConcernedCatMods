@@ -89,7 +89,17 @@ internal readonly struct JournalStamp
 ///
 /// A return writes its intention first now, as a give always did: an
 /// interrupted return is in the record, and the same command that settles an
-/// interrupted give settles it (#300 item 1).</summary>
+/// interrupted give settles it (#300 item 1).
+///
+/// <b>Whatever either method answers, the ledger it was handed then says what
+/// a replay of the journal says</b> about that transaction — held, returned,
+/// no holding, or unsettled — including when a closing row could not be
+/// written. The tests hold every path to that.
+///
+/// What a player is told about a failed write is true in this session, where
+/// the record is what <c>cf_settle resolve</c> reads. It is not promised to
+/// outlive a reload: when the world was not saved after the attempt, the load
+/// rolls the attempt back with the world and there is nothing to answer.</summary>
 internal static class ToolHandoverProcedure
 {
     public static HandoverOutcome Give<TItem>(
@@ -157,11 +167,19 @@ internal static class ToolHandoverProcedure
                 JournalEntryKind.ToolResolvedToPlayer, default, transaction, worker: worker, tool: specimen,
                 worldTime: stamp?.WorldTime, loadEpoch: stamp?.LoadEpoch ?? default, writtenByHandover: true));
 
-            message = closed
-                ? "He could not take it. Nothing was taken from you."
-                : "He could not take it, and nothing was taken from you — but that could not be written " +
-                    "down, so after a reload you will be asked whether he has it. Answer: cf_settle resolve " +
-                    transaction.Value + " mine";
+            if (closed)
+            {
+                message = "He could not take it. Nothing was taken from you.";
+                return HandoverOutcome.Refused;
+            }
+
+            // Nothing moved, but the record still holds an intention with no
+            // result, which is an unsettled handover. The ledger says so too.
+            ledger.Issue(new ToolHolding(transaction, worker, specimen));
+            ledger.MarkUncertain(transaction);
+            message = "He could not take it, and nothing was taken from you — but that could not be written " +
+                "down, so the record shows the handover as unsettled. Answer: cf_settle resolve " +
+                transaction.Value + " mine";
             return HandoverOutcome.Refused;
         }
 
@@ -265,10 +283,15 @@ internal static class ToolHandoverProcedure
                 JournalEntryKind.ToolResolvedToWorker, default, transaction, worker: holding.Worker, tool: holding.Tool,
                 worldTime: stamp?.WorldTime, loadEpoch: stamp?.LoadEpoch ?? default, writtenByHandover: true));
 
-            message = closed
-                ? "You have no room for it. He is still holding it."
-                : "You have no room for it and he is still holding it — but that could not be written down, " +
-                    "so after a reload you will be asked about it. Answer: cf_settle resolve " + transaction.Value + " his";
+            if (closed)
+            {
+                message = "You have no room for it. He is still holding it.";
+                return HandoverOutcome.Refused;
+            }
+
+            ledger.MarkUncertain(transaction);
+            message = "You have no room for it and he is still holding it — but that could not be written down, " +
+                "so the record shows the return as unsettled. Answer: cf_settle resolve " + transaction.Value + " his";
             return HandoverOutcome.Refused;
         }
 
