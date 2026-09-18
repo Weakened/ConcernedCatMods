@@ -42,21 +42,6 @@ internal readonly struct SitePoint : IEquatable<SitePoint>
         return Math.Abs(Y - other.Y);
     }
 
-    /// <summary>Straight-line distance through all three axes.
-    ///
-    /// Only for the questions where height is part of the answer — the
-    /// planning horizon, which asks whether a goal is worth a path request at
-    /// all, and where a goal two storeys up genuinely is further away than the
-    /// ground plane says. Walking distance is still
-    /// <see cref="HorizontalDistanceTo"/>.</summary>
-    public float DistanceTo(SitePoint other)
-    {
-        float dx = X - other.X;
-        float dy = Y - other.Y;
-        float dz = Z - other.Z;
-        return (float)Math.Sqrt((dx * dx) + (dy * dy) + (dz * dz));
-    }
-
     public bool Equals(SitePoint other)
     {
         return X.Equals(other.X) && Y.Equals(other.Y) && Z.Equals(other.Z);

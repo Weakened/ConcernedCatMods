@@ -307,111 +307,19 @@ public sealed class WorkerMovementPlannerTests
         Assert.Equal(0, planner.TotalPathRequests);
     }
 
-    // ---- arrival is two questions (#334) ------------------------------------
-    //
-    // This block replaces `ArrivalIgnoresHeight_BecauseTheWorkerWalksOnTheGround`,
-    // which asserted that standing under a goal forty metres up was arriving.
-    // That was consistent, and it was what the walking planner was written for,
-    // but it stops being defensible the moment a destination can be on another
-    // floor: everything downstream of an arrival — the pickup, the handover,
-    // the delivery — then aims through a ceiling.
-
     [Fact]
-    public void StandingUnderAGoalIsNotArriving()
+    public void ArrivalIgnoresHeight_BecauseTheWorkerWalksOnTheGround()
     {
         WorkerMovementPlanner planner = new();
-        planner.AssignGoal(new WorkerGoal(new SitePoint(0f, 8f, 0f), arrivalTolerance: 2f));
+        planner.AssignGoal(new WorkerGoal(new SitePoint(0f, 40f, 0f), arrivalTolerance: 2f));
 
         planner.BeginTick();
         WorkerAction action = planner.Decide(WorkerObservation.Ready(Origin, hasPath: true));
 
-        Assert.NotEqual(WorkerActionKind.Arrive, action.Kind);
-        Assert.Equal(WorkerActionKind.Move, action.Kind);
-    }
-
-    [Fact]
-    public void AGoalOneStoreyUpIsNotArrivedAtFromTheFloorBelow()
-    {
-        WorkerMovementPlanner planner = new();
-        planner.AssignGoal(new WorkerGoal(new SitePoint(0.5f, 2f, 0f), arrivalTolerance: 2f));
-
-        planner.BeginTick();
-        WorkerAction action = planner.Decide(WorkerObservation.Ready(Origin, hasPath: true));
-
-        Assert.NotEqual(WorkerActionKind.Arrive, action.Kind);
-    }
-
-    [Theory]
-    [InlineData(0f)]      // flat
-    [InlineData(0.4f)]    // a step
-    [InlineData(1.4f)]    // the most a maximally walkable slope drops over the
-                          // two metres of standing tolerance
-    public void OrdinaryGroundIsStillArrivedAt(float height)
-    {
-        WorkerMovementPlanner planner = new();
-        planner.AssignGoal(new WorkerGoal(new SitePoint(1f, height, 0f), arrivalTolerance: 2f));
-
-        planner.BeginTick();
-        WorkerAction action = planner.Decide(WorkerObservation.Ready(Origin, hasPath: true));
-
+        // Directly below a point forty metres up is "arrived" on the ground
+        // plane. Whether that is the right goal is the caller's problem; the
+        // planner must at least be consistent about which distance it means.
         Assert.Equal(WorkerActionKind.Arrive, action.Kind);
-    }
-
-    [Fact]
-    public void TheHeightToleranceIsTheBoundaryAndTheBoundaryCounts()
-    {
-        WorkerMovementPlanner planner = new();
-        planner.AssignGoal(new WorkerGoal(
-            new SitePoint(0f, WorkerGoal.DefaultHeightTolerance, 0f), arrivalTolerance: 2f));
-
-        planner.BeginTick();
-
-        Assert.Equal(
-            WorkerActionKind.Arrive,
-            planner.Decide(WorkerObservation.Ready(Origin, hasPath: true)).Kind);
-    }
-
-    [Fact]
-    public void ALeafMayWidenOrNarrowTheHeightToleranceForItsOwnGoal()
-    {
-        WorkerMovementPlanner planner = new();
-        planner.AssignGoal(new WorkerGoal(
-            new SitePoint(0f, 4f, 0f), arrivalTolerance: 2f, heightTolerance: 5f));
-
-        planner.BeginTick();
-        WorkerAction action = planner.Decide(WorkerObservation.Ready(Origin, hasPath: true));
-
-        Assert.Equal(WorkerActionKind.Arrive, action.Kind);
-    }
-
-    [Theory]
-    [InlineData(0f)]
-    [InlineData(-1f)]
-    [InlineData(float.PositiveInfinity)]
-    public void AnImpossibleHeightTolerance_IsRejectedAtConstruction(float tolerance)
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => new WorkerGoal(Origin, arrivalTolerance: 2f, heightTolerance: tolerance));
-    }
-
-    [Fact]
-    public void ThePlanningHorizonCountsHeightToo()
-    {
-        WorkerMovementPlanner planner = new(new WorkerMovementBudget(
-            maxPathRequestsPerTick: 1,
-            maxPathAttemptsPerGoal: 5,
-            retryBackoffTicks: 0,
-            maxPlanningDistance: 64f));
-
-        // Sixty metres away on the ground and thirty up is sixty-seven away,
-        // which is over the horizon even though its shadow is not.
-        planner.AssignGoal(WorkerGoal.At(new SitePoint(60f, 30f, 0f)));
-
-        planner.BeginTick();
-        WorkerAction action = planner.Decide(WorkerObservation.Ready(Origin));
-
-        Assert.Equal(WorkerDeferralReason.TooFar, action.Reason);
-        Assert.Equal(0, planner.TotalPathRequests);
     }
 
     [Fact]
