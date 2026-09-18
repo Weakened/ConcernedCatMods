@@ -1142,6 +1142,54 @@ def check_companion_talk_is_not_a_reach(errors: list[str]) -> list[str]:
     ]
 
 
+SOLUTION_FOLDER_TYPE = "{2150E333-8FDC-42A3-9474-1A3956D46DE8}"
+
+
+def check_solution_integrity(errors: list[str]) -> list[str]:
+    """The solution loads: unique names, real project files, and nothing left out.
+
+    MSBuild refuses a solution whose entries share a name (MSB5004), so
+    `dotnet build`/`dotnet test` against the .sln stops dead — while CI, which
+    runs each test project by path, stays green. That is how a duplicate name
+    reached main once; this check is so it cannot again.
+    """
+    solution = ROOT / "ConcernedCatMods.sln"
+    if not solution.is_file():
+        fail("Missing required file: ConcernedCatMods.sln", errors)
+        return []
+
+    entry = re.compile(
+        r'^Project\("(?P<type>\{[0-9A-Fa-f-]+\})"\)\s*=\s*'
+        r'"(?P<name>[^"]+)",\s*"(?P<path>[^"]+)",\s*"(?P<guid>\{[0-9A-Fa-f-]+\})"',
+        re.MULTILINE)
+
+    names: dict[str, str] = {}
+    listed: set[Path] = set()
+    projects = 0
+    for match in entry.finditer(solution.read_text(encoding="utf-8-sig")):
+        name, kind, raw = match["name"], match["type"], match["path"]
+        previous = names.get(name.casefold())
+        if previous is not None:
+            fail(f"ConcernedCatMods.sln has two entries named '{name}' "
+                 f"({previous} and {'folder' if kind == SOLUTION_FOLDER_TYPE else 'project'}); "
+                 f"MSBuild refuses the solution with MSB5004", errors)
+        names[name.casefold()] = "folder" if kind == SOLUTION_FOLDER_TYPE else "project"
+        if kind == SOLUTION_FOLDER_TYPE:
+            continue
+        projects += 1
+        path = ROOT / raw.replace("\\", "/")
+        if not path.is_file():
+            fail(f"ConcernedCatMods.sln references a missing project: {raw}", errors)
+            continue
+        listed.add(path.resolve())
+
+    for csproj in sorted((ROOT / "src").rglob("*.csproj")):
+        if csproj.resolve() not in listed:
+            fail(f"{csproj.relative_to(ROOT)} exists but is not in ConcernedCatMods.sln", errors)
+
+    return [f"[solution] {projects} projects, every name unique and every project file present"]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -1176,6 +1224,7 @@ def main() -> int:
             expected_version=args.expected_version if key in scoped else None,
         ))
 
+    report.extend(check_solution_integrity(errors))
     check_teamster_adapter_isolation(errors)
     report.extend(check_cross_product_independence(errors))
     report.extend(check_teamster_cartographer_contract(errors))
