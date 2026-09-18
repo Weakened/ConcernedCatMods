@@ -1,4 +1,3 @@
-using TheConcernedCat.ConcernedForeman.Runtime.Ladders;
 using TheConcernedCat.Ladders;
 
 namespace Shared.Settlement.Tests;

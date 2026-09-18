@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using HarmonyLib;
+using TheConcernedCat.Ladders;
 using UnityEngine;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Ladders;

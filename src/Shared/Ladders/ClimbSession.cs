@@ -1,7 +1,6 @@
 using System;
-using TheConcernedCat.Ladders;
 
-namespace TheConcernedCat.ConcernedForeman.Runtime.Ladders;
+namespace TheConcernedCat.Ladders;
 
 /// <summary>What a climb is doing, for anything that has to draw or sound it.</summary>
 internal enum ClimbPhase

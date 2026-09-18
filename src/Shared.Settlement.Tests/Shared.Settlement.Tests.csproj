@@ -27,17 +27,6 @@
     <!-- CF-LAD-001: the ladder domain is game-free for the same reason, and
          Foreman adopts it with one line of its own. -->
     <Compile Include="..\Shared\Ladders\**\*.cs" LinkBase="Ladders" />
-    <!-- CF-LAD-002: the climb's own decision core. These two files live beside
-         the Valheim adapter they drive (Foreman owns the climb; there is no
-         ladder product) but contain no Unity, BepInEx or Jotunn type at all,
-         which is exactly why they can be compiled here and exercised with the
-         world faked. Two named files, not a glob: the rest of
-         ConcernedForeman/Runtime is Valheim-facing and must never appear in a
-         test assembly. If the lead would rather they lived under
-         src\Shared\Ladders, moving them needs nothing but deleting these two
-         lines. -->
-    <Compile Include="..\ConcernedForeman\Runtime\Ladders\ClimbSession.cs" Link="Ladders/ClimbSession.cs" />
-    <Compile Include="..\ConcernedForeman\Runtime\Ladders\ClimbOptions.cs" Link="Ladders/ClimbOptions.cs" />
   </ItemGroup>
 
   <ItemGroup>

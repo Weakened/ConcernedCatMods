@@ -1,7 +1,6 @@
 using System;
-using TheConcernedCat.Ladders;
 
-namespace TheConcernedCat.ConcernedForeman.Runtime.Ladders;
+namespace TheConcernedCat.Ladders;
 
 /// <summary>The climb's switches and the numbers the Valheim side needs, in one
 /// game-free object.
