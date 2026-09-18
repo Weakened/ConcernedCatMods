@@ -12,8 +12,8 @@ namespace TheConcernedCat.ConcernedForeman;
 ///
 /// The product's promise is causal building diagnostics, and that half is
 /// read-only and client-safe. This build carries two things instead: the first
-/// slice of the <i>other</i> half — the opt-in settlement runtime from #273,
-/// which touches no world state until a person turns it on — and ladder
+/// slice of the <i>other</i> half â€” the opt-in settlement runtime from #273,
+/// which touches no world state until a person turns it on â€” and ladder
 /// climbing (#326, #328).
 ///
 /// Ladder climbing is the one thing here that patches the game at load, and
@@ -32,6 +32,8 @@ public sealed class Plugin : BaseUnityPlugin
     private SettlementRuntime? _settlement;
     private ClimbController? _ladders;
     private LadderSettings? _ladderSettings;
+    private ClimbPose? _climbPose;
+    private ClimbSounds? _climbSounds;
     private bool _worldWasUp;
 
     private void Awake()
@@ -45,7 +47,7 @@ public sealed class Plugin : BaseUnityPlugin
             (settings.SettlementRuntimeEnabled.Value ? "ENABLED" : "off (the default)") +
             ". Building diagnostics do not require it.");
 
-        // Through the game's own command table, not Jötunn's manager: Jötunn 2.29.2 looks for a
+        // Through the game's own command table, not JÃ¶tunn's manager: JÃ¶tunn 2.29.2 looks for a
         // Terminal.ConsoleCommand constructor Valheim 1.0.12 no longer has, so every command
         // silently did not exist (#307). What the console actually accepted is logged.
         Jotunn.Entities.ConsoleCommand[] commands =
@@ -76,7 +78,7 @@ public sealed class Plugin : BaseUnityPlugin
     /// ladders keep teleporting, and the reason is logged once.
     ///
     /// With `Ladders/Enabled = false` at startup <b>no patch is installed at
-    /// all</b> — not the motor's two, not the interaction's one — and the game
+    /// all</b> â€” not the motor's two, not the interaction's one â€” and the game
     /// behaves as if Concerned Foreman were not here.</summary>
     private void InstallLadders()
     {
@@ -101,6 +103,13 @@ public sealed class Plugin : BaseUnityPlugin
         // Domain/Ladders/LadderAdmission and the measurements come from the
         // loaded game.
         _ladders.Survey.Admits = new LadderPieces(message => Logger.LogInfo(message)).Admits;
+
+        // Presentation is deliberately downstream of traversal. If either
+        // visual/audio adapter fails, the safe climb still runs.
+        _climbPose = new ClimbPose(message => Logger.LogInfo(message));
+        _climbPose.Install();
+        _climbSounds = new ClimbSounds(message => Logger.LogInfo(message));
+        _climbSounds.Install();
 
         // And the Use key, which vanilla spends on a teleport. Its own Harmony
         // id, because the climb's patches and this one come out at different
@@ -144,6 +153,8 @@ public sealed class Plugin : BaseUnityPlugin
     private void OnDestroy()
     {
         _ladders?.Stop();
+        _climbSounds?.Remove();
+        _climbPose?.Remove();
         LadderInteraction.Remove();
     }
 }
