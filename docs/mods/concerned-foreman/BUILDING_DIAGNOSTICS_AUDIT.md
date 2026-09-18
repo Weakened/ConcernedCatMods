@@ -152,10 +152,21 @@ Two conditions, both explicit: at least **80 % cover**, *and* under a roof.
 **Verdict: "why is this station exposed" has an exact answer** — which of the
 two failed, and by how much for the first.
 
-**What it owes in observation:** how `m_coverPercentage` and `m_underRoof` are
-refreshed, and whether they can be evaluated for a point that is not the
-player's own position. `Cover.GetCoverageForPoint`-shaped surfaces need
-confirming before any claim about a *station's* shelter rather than a player's.
+**Answered since this audit was written (#286, PR #355):** shelter *can* be
+evaluated for a point that is not the player's. `Cover.GetCoverForPoint(Vector3
+startPos, out float coverPercentage, out bool underRoof, float minDistance =
+0.5f)` is **public and static**, in `assembly_utils`, and `Player.UpdateCover`
+is simply one of its callers — it passes `GetCenterPoint()`. Vanilla itself uses
+it for a point that is not a player's in `Bed.CheckExposure`, which asks about
+the bed's spawn point.
+
+So a claim about a *station's* or a *bed's* shelter is a real measurement, not an
+extrapolation from the player's. `WorldHousing` does exactly that.
+
+**What it still owes in observation:** how often the answer changes as a
+building is altered around a fixed point — the call is a sphere cast and a ring
+of rays, so it is not free, and a diagnostic that re-asks it every frame would
+be the unbudgeted cost this product keeps refusing elsewhere.
 
 ### 2.3 Comfort — `SE_Rested` and `Piece`
 
