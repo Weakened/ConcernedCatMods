@@ -6,7 +6,7 @@ Issue: [CF-NPC-005 (#316)](https://github.com/Weakened/ConcernedCatMods/issues/3
 [#294](https://github.com/Weakened/ConcernedCatMods/issues/294),
 [#299](https://github.com/Weakened/ConcernedCatMods/issues/299) and
 [#300](https://github.com/Weakened/ConcernedCatMods/issues/300).
-Contract: `docs/settlement/cart-and-collection/CONTRACTS.md` §5 (revision C3), decisions D9 and D14.
+Contract: `docs/settlement/cart-and-collection/CONTRACTS.md` §5 (read at revision C4), decisions D9 and D14.
 Authority decisions this extends: [`SETTLEMENT_AUTHORITY.md`](SETTLEMENT_AUTHORITY.md) §5a.
 
 **Evidence state.** Each claim below is one of:
