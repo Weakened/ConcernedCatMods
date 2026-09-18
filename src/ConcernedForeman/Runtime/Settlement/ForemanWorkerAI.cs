@@ -120,8 +120,10 @@ internal sealed class ForemanWorkerAI : BaseAI
                 return WorkerWalkStatus.Deferred;
             }
 
-            WorkerGoal goal = _planner.Goal;
-            return ToSitePoint(transform.position).HorizontalDistanceTo(goal.Point) <= goal.ArrivalTolerance
+            // The goal owns this test, so this answer and the planner's own
+            // Arrive cannot drift apart — which is what a second copy of the
+            // comparison here would do the moment either changed (#334).
+            return _planner.Goal.IsReachedFrom(ToSitePoint(transform.position))
                 ? WorkerWalkStatus.Arrived
                 : WorkerWalkStatus.Walking;
         }
