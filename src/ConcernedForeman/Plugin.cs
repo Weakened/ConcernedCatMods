@@ -1,11 +1,19 @@
+using System;
+using System.Collections.Generic;
 using BepInEx;
 using TheConcernedCat.ConcernedForeman.Domain.Settlement;
 using TheConcernedCat.ConcernedForeman.Runtime;
 using TheConcernedCat.ConcernedForeman.Runtime.Collection;
 using TheConcernedCat.ConcernedForeman.Runtime.Custody;
+using TheConcernedCat.ConcernedForeman.Runtime.Cooperation;
+using TheConcernedCat.ConcernedForeman.Runtime.Interop;
 using TheConcernedCat.ConcernedForeman.Runtime.Ladders;
 using TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 using TheConcernedCat.Ladders;
+using TheConcernedCat.Settlement.Collection;
+using TheConcernedCat.Settlement.Collection.Cooperation;
+using TheConcernedCat.Settlement.Custody;
+using TheConcernedCat.Workers;
 using UnityEngine;
 
 namespace TheConcernedCat.ConcernedForeman;
@@ -33,6 +41,8 @@ public sealed class Plugin : BaseUnityPlugin
 
     private SettlementRuntime? _settlement;
     private CollectionRuntime? _collection;
+    private HaulProviderDiscovery? _haulProvider;
+    private ForemanCooperativeDelivery? _cooperativeDelivery;
     private ClimbController? _ladders;
     private LadderSettings? _ladderSettings;
     private ClimbPose? _climbPose;
@@ -48,21 +58,44 @@ public sealed class Plugin : BaseUnityPlugin
         // created, or a saved worker body is destroyed as an unknown prefab (D9).
         _settlement.Install();
 
-        // #315 over #316: Thorstein's collection runs on the custody runtime and shares its
-        // world-load epoch, so every key made during one load agrees (CONTRACTS C2).
+        // #315/#316: Thorstein's collection runs on the custody runtime and shares its
+        // world-load epoch, so every key made during one load agrees.
         ForemanCustodyRuntime custody = _settlement.Custody;
         CollectionSettings collectionSettings = CollectionSettings.Bind(Config);
         custody.CarryWeight = () => collectionSettings.WorkerCarryWeight.Value;
+
+        // #317: discover Teamster by plugin GUID and consume only its BCL capability map.
+        _haulProvider = new HaulProviderDiscovery(message => Logger.LogInfo(message));
+        _cooperativeDelivery = new ForemanCooperativeDelivery(
+            _haulProvider, custody, () => Time.time, message => Logger.LogInfo(message), PluginVersion);
+
         _collection = new CollectionRuntime(
             settings,
             collectionSettings,
             message => Logger.LogInfo(message),
             custody,
-            cooperation: null,
+            cooperation: _cooperativeDelivery,
             sharedEpoch: () => custody.Epoch);
 
         CollectionRuntime collection = _collection;
+        ForemanCooperativeDelivery delivery = _cooperativeDelivery;
+        delivery.BindMotion(() => collection.Motion);
         _settlement.MayRetireBody = () => collection.Modes.MayRetireBody;
+
+        gameObject.AddComponent<Ui.CollectionOrderPanel>().Initialize(
+            () => settings.SettlementRuntimeEnabled.Value,
+            arguments => collection.Execute(arguments),
+            () => BuildOrderPanelFacts(settings, collection, custody, delivery),
+            delivery.PauseForPlayer,
+            () =>
+            {
+                CollectionOrderDefinition? order = collection.Loop?.Order;
+                if (order != null)
+                {
+                    delivery.Cancel(order, detachAndPark: true);
+                }
+            },
+            Logger);
 
         Logger.LogInfo($"{PluginName} {PluginVersion} loaded");
         Logger.LogInfo(
@@ -94,6 +127,48 @@ public sealed class Plugin : BaseUnityPlugin
         Logger.LogInfo(VanillaConsoleCommands.Describe(names));
 
         InstallLadders();
+    }
+
+    private static OrderPanelFacts BuildOrderPanelFacts(
+        ForemanSettlementSettings settings,
+        CollectionRuntime collection,
+        ForemanCustodyRuntime custody,
+        ForemanCooperativeDelivery delivery)
+    {
+        var loop = collection.Loop;
+        return new OrderPanelFacts(
+            settings.SettlementRuntimeEnabled.Value,
+            WorkAuthorityPolicy.Evaluate(
+                CollectionWorldFacts.ReadAuthorityFacts(settings.SettlementRuntimeEnabled.Value)),
+            collection.Motion.IsPresent,
+            loop?.Order,
+            loop?.State ?? CollectionOrderState.Unspecified,
+            loop?.Reason ?? CollectionAttentionReason.Unspecified,
+            loop?.PausedByPlayer ?? false,
+            ProgressFor(loop?.Order, custody.View),
+            delivery.LastAvailability,
+            delivery.ActiveRun?.Phase ?? CooperationPhase.Unspecified,
+            delivery.ActiveRun?.Detail ?? delivery.LastAvailabilityDetail,
+            delivery.ActiveRun?.DeliveryTrips ?? 0,
+            hulgiSurveying: false);
+    }
+
+    private static IReadOnlyList<ResourceProgress> ProgressFor(
+        CollectionOrderDefinition? order,
+        IMaterialCustodyView view)
+    {
+        if (order == null)
+        {
+            return Array.Empty<ResourceProgress>();
+        }
+
+        var progress = new List<ResourceProgress>(order.Quotas.Count);
+        foreach (ResourceQuota quota in order.Quotas)
+        {
+            progress.Add(view.ProgressFor(order, quota.Resource));
+        }
+
+        return progress;
     }
 
     /// <summary>Ladder climbing (#326, #328). This is the first thing Foreman
@@ -165,6 +240,8 @@ public sealed class Plugin : BaseUnityPlugin
         {
             _settlement?.OnWorldUnloaded();
             _collection?.OnWorldUnloaded();
+            _cooperativeDelivery?.OnWorldUnloaded();
+            _haulProvider?.Forget();
 
             // Before anything else drops the scene: a climber is holding a
             // ladder that is about to stop existing.
@@ -172,6 +249,9 @@ public sealed class Plugin : BaseUnityPlugin
         }
         else if (!_worldWasUp && worldIsUp)
         {
+            // Teamster's capability map is complete by the first world tick.
+            _haulProvider?.EnsureProbed();
+
             // Before net time advances, custody reads the loaded world time.
             _settlement?.OnWorldLoaded();
         }
@@ -192,6 +272,8 @@ public sealed class Plugin : BaseUnityPlugin
     /// One of the nine ways a climb ends.</summary>
     private void OnDestroy()
     {
+        _cooperativeDelivery?.OnWorldUnloaded();
+        _haulProvider?.Forget();
         _ladders?.Stop();
         _climbSounds?.Remove();
         _climbPose?.Remove();

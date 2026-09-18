@@ -265,6 +265,20 @@ CROSS_PRODUCT_RULES: tuple[tuple[str, str, str], ...] = (
     # src/Shared, which belongs to no product.
     ("foreman", "src/ConcernedForeman", "ConcernedCartographer"),
     ("foreman", "src/ConcernedForeman", "ConcernedTeamster"),
+    # CC-SET-002 (#317): src/Interop.Tests is the one tree allowed to hold both
+    # halves of a cross-product capability, and only as two separately compiled
+    # harness assemblies that meet through the BCL capability map
+    # (docs/settlement/cart-and-collection/CONTRACTS.md §9). The provider harness
+    # may compile Teamster's haul sources; the consumer harness compiles only
+    # src/Shared. Neither may pull in the other side or a third product, or the
+    # test would stop proving that separately built products agree.
+    ("interop", "src/Interop.Tests", "ConcernedForeman"),
+    ("interop", "src/Interop.Tests", "ConcernedCartographer"),
+    ("interop", "src/Interop.Tests/Provider", "ConcernedForeman"),
+    ("interop", "src/Interop.Tests/Provider", "ConcernedCartographer"),
+    ("interop", "src/Interop.Tests/Consumer", "ConcernedTeamster"),
+    ("interop", "src/Interop.Tests/Consumer", "ConcernedForeman"),
+    ("interop", "src/Interop.Tests/Consumer", "ConcernedCartographer"),
 )
 
 

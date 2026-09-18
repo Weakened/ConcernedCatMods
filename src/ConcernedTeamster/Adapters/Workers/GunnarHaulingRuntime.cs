@@ -68,6 +68,11 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
 
     internal GunnarHaulService Service { get; private set; } = null!;
 
+    /// <summary>Whether the verified vanilla cart attach/detach seam is usable
+    /// on this game build. The player-facing panel reads this without reaching
+    /// into the seam itself.</summary>
+    internal bool SeamAvailable => _seam != null && _seam.IsAvailable;
+
     public float Now => Time.time;
 
     /// <summary>The entry point: registers the worker prefab for every session,
