@@ -1,17 +1,24 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using TheConcernedCat.Companions.Unlock;
+using TheConcernedCat.ConcernedCartographer.Companions;
 using TheConcernedCat.ConcernedCartographer.Storage;
 
-namespace TheConcernedCat.ConcernedCartographer.Tests;
+namespace ConcernedCartographer.Tests;
 
-/// <summary>#304: a mod-manager config editor listed <c>author-id.txt</c> among
-/// the files a player may edit. It is a generated GUID the mod writes for
-/// itself, so it is a <c>.dat</c> marker now — and an older build's <c>.txt</c>
-/// has to become that marker without the identity in it changing.</summary>
+/// <summary>#304: a mod-manager configuration editor listed `author-id.txt`
+/// among the files a player may edit. It is a generated GUID the mod writes for
+/// itself, so both markers move into a `state` subfolder — and the migration
+/// has to carry the identity across without ever being able to lose it.</summary>
 public sealed class MarkerFileTests : IDisposable
 {
+    private const string Identity = "9f2c1b7e4a6d40f8b1c3e5a7d9f0b2c4";
+
     private readonly string _directory =
         Path.Combine(Path.GetTempPath(), "cc-marker-" + Guid.NewGuid().ToString("N"));
+
+    private readonly List<string> _log = new();
 
     public MarkerFileTests() => Directory.CreateDirectory(_directory);
 
@@ -21,75 +28,160 @@ public sealed class MarkerFileTests : IDisposable
         {
             Directory.Delete(_directory, recursive: true);
         }
-        catch (IOException)
+        catch (Exception)
         {
-            // A leftover temp directory is not a test failure.
+            // A leftover temp directory is not a test failure, and the
+            // exception a locked or read-only file throws is not only IOException.
         }
     }
 
-    private string Path_(string name) => Path.Combine(_directory, name);
+    private string Legacy(string name) => Path.Combine(_directory, name);
+
+    private string Marker(string name) => Path.Combine(_directory, MarkerFile.FolderName, name);
+
+    private string Adopt(Func<string, bool>? usable = null) =>
+        MarkerFile.Adopt(_directory, "author-id.dat", "author-id.txt", usable ?? IsGuid, _log.Add);
+
+    private static bool IsGuid(string text) => Guid.TryParseExact(text.Trim(), "N", out _);
+
+    // ---- the regression this shape exists to avoid --------------------------
 
     [Fact]
-    public void TheMarkerIsNotOneOfTheExtensionsAConfigEditorOpens()
+    public void AMarkerIsInvisibleToTheFreshInstallProbe()
     {
-        Assert.DoesNotContain(
-            MarkerFile.Extension,
-            new[] { ".txt", ".cfg", ".json", ".ini", ".yml", ".yaml", ".xml" });
+        // CartographerLegacyProbe lists the product directory with
+        // Directory.GetFiles and asks whether everything in it is a name this
+        // build writes for itself. GetFiles does not return subdirectories, so
+        // a marker under "state" is never in that listing.
+        //
+        // The first attempt at #304 renamed the markers in place instead, and
+        // `author-id.dat` is not in CartographerFirstRunFiles.Names — so every
+        // brand-new player would have been classified as a returning one and
+        // the #264 introduction would never have run for anybody again.
+        Directory.CreateDirectory(Path.Combine(_directory, MarkerFile.FolderName));
+        File.WriteAllText(Marker("author-id.dat"), Identity);
+        File.WriteAllText(Path.Combine(_directory, "cartographer-strings-template.tsv"), "x");
+
+        var listed = new List<string>();
+        foreach (string path in Directory.GetFiles(_directory))
+        {
+            listed.Add(Path.GetFileName(path));
+        }
+
+        Assert.DoesNotContain("author-id.dat", listed);
+
+        // And the same listing WITH the marker in the product directory - the
+        // shape the first attempt shipped - is what it would have cost:
+        var renamedInPlace = new List<string>(listed) { "author-id.dat" };
+        Assert.False(CartographerFirstRunFiles.IsOnlySelfWritten(renamedInPlace));
+        Assert.Equal(
+            LegacyEvidence.Ambiguous,
+            LegacyEvidenceRule.Evaluate(new LegacyEvidenceFacts(
+                thisWorldHasData: false, anyWorldHasData: false, profileWideDataExists: false,
+                configuredBeforeThisRelease: !CartographerFirstRunFiles.IsOnlySelfWritten(renamedInPlace),
+                probeFailed: false)));
+
+        Assert.True(CartographerFirstRunFiles.IsOnlySelfWritten(listed));
+        Assert.Equal(
+            LegacyEvidence.None,
+            LegacyEvidenceRule.Evaluate(new LegacyEvidenceFacts(
+                thisWorldHasData: false, anyWorldHasData: false, profileWideDataExists: false,
+                configuredBeforeThisRelease: !CartographerFirstRunFiles.IsOnlySelfWritten(listed),
+                probeFailed: false)));
     }
 
     [Fact]
-    public void AnOlderBuildsFileBecomesTheMarkerWithItsContentsIntact()
+    public void ANameThisBuildUsedToWriteIsStillRecognisedAsOurs()
     {
-        File.WriteAllText(Path_("author-id.txt"), "9f2c1b7e4a6d40f8b1c3e5a7d9f0b2c4");
+        // A returning player may still have the old file: it is only removed
+        // once the adoption round trip has succeeded, and never if it fails.
+        Assert.True(CartographerFirstRunFiles.IsSelfWritten("author-id.txt"));
+        Assert.True(CartographerFirstRunFiles.IsSelfWritten("onboarding-shown.txt"));
+    }
 
-        string path = MarkerFile.Adopt(_directory, "author-id.dat", "author-id.txt");
+    // ---- carrying the identity across --------------------------------------
 
-        Assert.Equal(Path_("author-id.dat"), path);
-        Assert.Equal("9f2c1b7e4a6d40f8b1c3e5a7d9f0b2c4", File.ReadAllText(path));
+    [Fact]
+    public void AnOlderBuildsIdentityBecomesTheMarkerAndStillParses()
+    {
+        File.WriteAllText(Legacy("author-id.txt"), Identity);
+
+        string path = Adopt();
+
+        Assert.Equal(Marker("author-id.dat"), path);
+        Assert.Equal(Identity, File.ReadAllText(path));
+        Assert.True(Guid.TryParseExact(File.ReadAllText(path).Trim(), "N", out _));
+        Assert.False(File.Exists(Legacy("author-id.txt")));
     }
 
     [Fact]
-    public void TheOldFileIsGoneAfterwardsSoAConfigEditorStopsShowingIt()
+    public void AMarkerThatIsAlreadyThereWinsAndTheOldFileIsNotTouched()
     {
-        File.WriteAllText(Path_("author-id.txt"), "abc");
+        Directory.CreateDirectory(Path.Combine(_directory, MarkerFile.FolderName));
+        File.WriteAllText(Marker("author-id.dat"), Identity);
+        File.WriteAllText(Legacy("author-id.txt"), "an older identity");
 
-        MarkerFile.Adopt(_directory, "author-id.dat", "author-id.txt");
+        string path = Adopt();
 
-        Assert.False(File.Exists(Path_("author-id.txt")));
+        Assert.Equal(Identity, File.ReadAllText(path));
+
+        // Deliberately NOT deleted. The first version removed it here, so one
+        // interrupted copy destroyed the identity on the following start.
+        Assert.True(File.Exists(Legacy("author-id.txt")));
     }
 
     [Fact]
-    public void AMarkerThatIsAlreadyThereWins()
+    public void ContentsThisBuildCannotUseAreLeftAloneAndReported()
     {
-        File.WriteAllText(Path_("author-id.dat"), "current");
-        File.WriteAllText(Path_("author-id.txt"), "stale");
+        File.WriteAllText(Legacy("author-id.txt"), "not a guid");
 
-        string path = MarkerFile.Adopt(_directory, "author-id.dat", "author-id.txt");
+        string path = Adopt();
 
-        Assert.Equal("current", File.ReadAllText(path));
-        Assert.False(File.Exists(Path_("author-id.txt")));
-    }
-
-    [Fact]
-    public void WithNothingToAdoptItJustNamesTheMarkerAndCreatesNoFile()
-    {
-        string path = MarkerFile.Adopt(_directory, "onboarding-shown.dat", "onboarding-shown.txt");
-
-        Assert.Equal(Path_("onboarding-shown.dat"), path);
         Assert.False(File.Exists(path));
+        Assert.True(File.Exists(Legacy("author-id.txt")));
+        Assert.Contains(_log, line => line.Contains("this build can use"));
+    }
+
+    [Fact]
+    public void WithNothingToAdoptItNamesTheMarkerAndCreatesNothing()
+    {
+        string path = MarkerFile.Adopt(
+            _directory, "onboarding-shown.dat", "onboarding-shown.txt", _ => true, _log.Add);
+
+        Assert.Equal(Marker("onboarding-shown.dat"), path);
+        Assert.False(File.Exists(path));
+        Assert.False(Directory.Exists(Path.Combine(_directory, MarkerFile.FolderName)));
+        Assert.Empty(_log);
     }
 
     [Fact]
     public void AdoptingTwiceIsTheSameAsAdoptingOnce()
     {
-        File.WriteAllText(Path_("author-id.txt"), "once");
+        File.WriteAllText(Legacy("author-id.txt"), Identity);
 
-        string first = MarkerFile.Adopt(_directory, "author-id.dat", "author-id.txt");
-        string second = MarkerFile.Adopt(_directory, "author-id.dat", "author-id.txt");
+        string first = Adopt();
+        string second = Adopt();
 
         Assert.Equal(first, second);
-        Assert.Equal("once", File.ReadAllText(second));
-        Assert.Single(Directory.GetFiles(_directory));
+        Assert.Equal(Identity, File.ReadAllText(second));
+        Assert.Single(Directory.GetFiles(Path.Combine(_directory, MarkerFile.FolderName)));
+    }
+
+    [Fact]
+    public void AFailureLeavesTheOldFileReadableAndSaysWhy()
+    {
+        File.WriteAllText(Legacy("author-id.txt"), Identity);
+
+        // A file where the subfolder needs to be: creating the directory
+        // fails, so the copy cannot happen.
+        File.WriteAllText(Path.Combine(_directory, MarkerFile.FolderName), "in the way");
+
+        string path = Adopt();
+
+        Assert.False(File.Exists(path));
+        Assert.Equal(Identity, File.ReadAllText(Legacy("author-id.txt")));
+        Assert.NotEmpty(_log);
+        Assert.Contains(_log, line => line.Contains("left where it is"));
     }
 
     [Fact]
@@ -97,9 +189,26 @@ public sealed class MarkerFileTests : IDisposable
     {
         string missing = Path.Combine(_directory, "not-created-yet");
 
-        string path = MarkerFile.Adopt(missing, "author-id.dat", "author-id.txt");
+        string path = MarkerFile.Adopt(missing, "author-id.dat", "author-id.txt", IsGuid, _log.Add);
 
-        Assert.Equal(Path.Combine(missing, "author-id.dat"), path);
+        Assert.Equal(Path.Combine(missing, MarkerFile.FolderName, "author-id.dat"), path);
         Assert.False(Directory.Exists(missing));
+        Assert.Empty(_log);
+    }
+
+    [Fact]
+    public void AnEmptyDirectoryIsRefusedRatherThanResolvingToSomewhereElse()
+    {
+        Assert.Throws<ArgumentException>(
+            () => MarkerFile.Adopt(string.Empty, "author-id.dat", "author-id.txt"));
+    }
+
+    [Fact]
+    public void TheMarkerIsNotOneOfTheExtensionsAConfigEditorOpens()
+    {
+        foreach (string claimed in new[] { ".txt", ".cfg", ".json", ".ini", ".yml", ".yaml", ".xml" })
+        {
+            Assert.NotEqual(claimed, MarkerFile.Extension, StringComparer.OrdinalIgnoreCase);
+        }
     }
 }

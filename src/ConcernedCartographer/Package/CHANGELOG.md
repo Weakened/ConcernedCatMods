@@ -1,17 +1,28 @@
 # Changelog
 
-## 1.2.2 - Two files stop pretending to be settings
+## 1.2.2 - Two files move out of your settings folder
 
 Fixed
 
-- **The mod's own bookkeeping no longer shows up in your config editor.** Gale
-  listed `author-id.txt` beside the real settings file, as though it were
-  something to edit (#304). It is not: it is a random identity generated once
-  per profile, and changing it changes who your atlas thinks drew your own
-  roads and pins. It, and the marker that remembers the first-run tip, are now
-  `author-id.dat` and `onboarding-shown.dat`. Your existing identity is carried
-  across on the first start and the old file is removed, so nothing you have
-  drawn changes hands.
+- **The mod's own bookkeeping no longer sits among your settings.** Gale listed
+  `author-id.txt` beside the real settings file, as though it were something to
+  edit (#304). It is not: it is a random identity generated once per profile,
+  and changing it changes who your atlas thinks drew your own roads and pins.
+  It, and the marker that remembers the first-run tip, now live in a `state`
+  folder beside them.
+- Your existing identity is carried across on the first start, and the old file
+  is only removed once the new one has been written and read back. If anything
+  goes wrong the old file is left exactly where it is and the log says why, so
+  the next start tries again.
+- **The first-run tip is shown before it is remembered.** It was being marked as
+  shown on a pass that can run before your character exists, so on some starts
+  nobody ever saw it.
+
+Known
+
+- Whether every mod manager stops listing these files has not been checked
+  against Gale itself. If yours still shows them, please say so on #304.
+
 
 ## 1.2.1 - Hulgi stops walking into the same wall
 
