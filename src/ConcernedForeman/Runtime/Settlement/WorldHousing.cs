@@ -55,18 +55,23 @@ internal sealed class WorldHousing
     ///
     /// <c>Cover.GetCoverForPoint</c> is a sphere cast plus a ring of rays — this
     /// product's own building-diagnostics audit (§2.2) records that it is not
-    /// free — so this bounds the expensive part at 64 per command. What it does
-    /// <i>not</i> bound is the piece walk below, which is vanilla's own
-    /// <c>s_allPieces</c> list; that is the same cost the Steward's fuel survey
-    /// already accepts, and it is a walk, not a probe.</summary>
+    /// free — so this bounds the per-bed measurement at 64 per command.
+    /// <see cref="MaxPiecesExamined"/> bounds the other half.</summary>
     private const int MaxBeds = 64;
+
+    /// <summary>A cap on the walk that finds those beds.
+    ///
+    /// <c>Piece.GetAllPiecesInRadius</c> hands back every piece a player has
+    /// built inside the query sphere, and this asks each one whether it is a
+    /// bed. Both halves grow with the size of somebody's base, so capping only
+    /// the probe would have left the survey's real cost unbounded while the
+    /// comment above claimed otherwise. Reaching this is reported the same way
+    /// as reaching the bed cap: the count becomes a floor and the readout says
+    /// so.</summary>
+    private const int MaxPiecesExamined = 4000;
 
     private readonly WorkerSitePolicy _sitePolicy;
     private readonly Action<string>? _log;
-
-    /// <summary>Reused between surveys so a command does not allocate a list the
-    /// size of the player's base each time it is run.</summary>
-    private readonly List<Piece> _pieces = new List<Piece>();
 
     internal WorldHousing(WorkerSitePolicy sitePolicy, Action<string>? log = null)
     {
@@ -88,32 +93,52 @@ internal sealed class WorldHousing
             return HousingCapacity.NotSurveyed;
         }
 
-        if (!TryFindBeds(area, out List<Bed> beds, out bool truncated))
+        Vector3 centre = ToVector3(area.Centre);
+        if (!TryFindBeds(area, centre, out List<FoundBed> beds, out bool truncated))
         {
             return HousingCapacity.NotSurveyed;
         }
 
         var facts = new List<HousingFacts>(beds.Count);
-        foreach (Bed bed in beds)
+        foreach (FoundBed bed in beds)
         {
-            facts.Add(Measure(bed, area));
+            facts.Add(Measure(bed));
         }
 
-        return HousingCapacity.Measure(facts, truncated, !IsGroundFullyLoaded(area));
+        return HousingCapacity.Measure(facts, truncated, !IsGroundFullyLoaded(area, centre));
     }
 
-    private HousingFacts Measure(Bed bed, Designation area)
+    /// <summary>One bed and the position it was found at.
+    ///
+    /// The position is carried rather than re-read because
+    /// <c>bed.transform.position</c> is a native interop call and the survey
+    /// wanted it four times per bed — to filter, to name the place, to ask about
+    /// the fire, and to re-check containment.</summary>
+    private readonly struct FoundBed
     {
+        public FoundBed(Bed bed, Vector3 at)
+        {
+            Bed = bed;
+            At = at;
+        }
+
+        public Bed Bed { get; }
+
+        public Vector3 At { get; }
+    }
+
+    private HousingFacts Measure(FoundBed found)
+    {
+        Bed bed = found.Bed;
         string key;
         try
         {
-            key = KeyOf(bed);
+            key = KeyOf(found.At);
         }
         catch (Exception)
         {
-            // Even naming the bed failed, which means its transform is gone. A
-            // key is still owed, because a fact with no key is a fact that
-            // cannot be read out.
+            // Even naming the bed failed. A key is still owed, because a fact
+            // with no key is a fact that cannot be read out.
             key = "a bed";
         }
 
@@ -130,14 +155,14 @@ internal sealed class WorldHousing
             Vector3 spawn = bed.GetSpawnPoint();
             Cover.GetCoverForPoint(spawn, out float cover, out bool underRoof);
 
-            bool warm = EffectArea.IsPointInsideArea(bed.transform.position, EffectArea.Type.Heat) != null;
+            bool warm = EffectArea.IsPointInsideArea(found.At, EffectArea.Type.Heat) != null;
 
-            // Recomputed rather than assumed from the collection filter: the two
-            // agree, and if a float edge ever made them disagree the rule is the
-            // one that should win.
-            bool inside = area.Contains(ToSitePoint(bed.transform.position));
-
-            return new HousingFacts(key, true, inside, underRoof, cover, warm, ClaimOf(bed, view));
+            // Inside by construction: TryFindBeds applied the designation's own
+            // containment test during collection and kept only beds that passed,
+            // so asking again here would be the same sqrt for the same answer.
+            // HousingRules still owns the rule, for any caller that does not
+            // filter first.
+            return new HousingFacts(key, true, true, underRoof, cover, warm, ClaimOf(bed, view));
         }
         catch (Exception exception)
         {
@@ -200,18 +225,26 @@ internal sealed class WorldHousing
     ///
     /// Returns false only when the query itself failed, which is a different
     /// answer from finding nothing.</summary>
-    private bool TryFindBeds(Designation area, out List<Bed> beds, out bool truncated)
+    private bool TryFindBeds(
+        Designation area, Vector3 centre, out List<FoundBed> beds, out bool truncated)
     {
-        beds = new List<Bed>();
+        beds = new List<FoundBed>();
         truncated = false;
 
-        _pieces.Clear();
+        // A local rather than a reused field. Clearing a field keeps its
+        // capacity, so one survey of a large base would park its high-water-mark
+        // array on a runtime that lives as long as the plugin — and if anything
+        // in the loop below threw, the field would go on holding a strong
+        // reference to every piece in the sphere until somebody happened to run
+        // the command again. This is a command a player types, not a per-frame
+        // loop, so the collector is the right owner.
+        var pieces = new List<Piece>();
         try
         {
             float queryRadius = (float)Math.Sqrt(
                 ((double)area.Radius * area.Radius) +
                 ((double)VerticalReachMetres * VerticalReachMetres));
-            Piece.GetAllPiecesInRadius(ToVector3(area.Centre), queryRadius, _pieces);
+            Piece.GetAllPiecesInRadius(centre, queryRadius, pieces);
         }
         catch (Exception exception)
         {
@@ -221,23 +254,33 @@ internal sealed class WorldHousing
             return false;
         }
 
-        foreach (Piece piece in _pieces)
+        int examined = 0;
+        foreach (Piece piece in pieces)
         {
+            if (examined >= MaxPiecesExamined)
+            {
+                truncated = true;
+                break;
+            }
+
             if (piece == null)
             {
                 continue;
             }
 
+            examined++;
+
             // Bed.Awake reads its own ZNetView off its own GameObject, so the
             // two are always on the same object. Looking in children would find
-            // a bed belonging to a different piece.
-            Bed? bed = piece.GetComponent<Bed>();
-            if (bed == null)
+            // a bed belonging to a different piece. TryGetComponent is the
+            // non-allocating form, and this runs once per built piece in range.
+            if (!piece.TryGetComponent(out Bed bed) || bed == null)
             {
                 continue;
             }
 
-            if (!area.Contains(ToSitePoint(bed.transform.position)))
+            Vector3 at = bed.transform.position;
+            if (!area.Contains(ToSitePoint(at)))
             {
                 // Filtered here rather than judged later: a neighbour's bed is
                 // not advice, it is noise, and counting it against the budget
@@ -254,10 +297,9 @@ internal sealed class WorldHousing
                 break;
             }
 
-            beds.Add(bed);
+            beds.Add(new FoundBed(bed, at));
         }
 
-        _pieces.Clear();
         return true;
     }
 
@@ -272,11 +314,10 @@ internal sealed class WorldHousing
     /// Five points — the centre and the four compass edges — because a zone is
     /// 64 m and a settlement is usually smaller than one; the answer is
     /// best-effort and is reported as a caveat, never as a refusal.</summary>
-    private bool IsGroundFullyLoaded(Designation area)
+    private bool IsGroundFullyLoaded(Designation area, Vector3 centre)
     {
         try
         {
-            Vector3 centre = ToVector3(area.Centre);
             if (!_sitePolicy.IsInLoadedGround(centre))
             {
                 return false;
@@ -304,9 +345,8 @@ internal sealed class WorldHousing
     /// names a different object after a reload, and it is a number the player
     /// cannot find in the world either way. Coordinates are at least somewhere
     /// to stand.</summary>
-    private static string KeyOf(Bed bed)
+    private static string KeyOf(Vector3 at)
     {
-        Vector3 at = bed.transform.position;
         return "the bed at " +
             Mathf.RoundToInt(at.x).ToString(CultureInfo.InvariantCulture) + ", " +
             Mathf.RoundToInt(at.z).ToString(CultureInfo.InvariantCulture);

@@ -240,16 +240,52 @@ internal readonly struct HousingCapacity
 {
     private readonly IReadOnlyList<KeyValuePair<string, HousingRefusal>>? _beds;
 
+    /// <summary>Counted once, here, over the very list this value stores.
+    ///
+    /// They were computed properties, which read like fields at every call site
+    /// and each walked the whole list — so one readout walked it eight times,
+    /// and the first per-frame caller to ask "is there a free bed?" would have
+    /// paid for a survey with nothing at the call site to warn it. Counting in
+    /// the only constructor keeps the invariant that made them properties (a
+    /// count cannot disagree with <see cref="Beds"/>, because nothing can build
+    /// one from a different list) and costs a single pass.</summary>
     private HousingCapacity(
         bool surveyed,
         bool truncated,
         bool groundIncomplete,
-        IReadOnlyList<KeyValuePair<string, HousingRefusal>>? beds)
+        List<KeyValuePair<string, HousingRefusal>>? beds)
     {
         Surveyed = surveyed;
         Truncated = truncated;
         GroundIncomplete = groundIncomplete;
         _beds = beds;
+
+        int habitable = 0;
+        int occupied = 0;
+        int unmeasured = 0;
+        if (beds != null)
+        {
+            for (int i = 0; i < beds.Count; i++)
+            {
+                switch (beds[i].Value)
+                {
+                    case HousingRefusal.None:
+                        habitable++;
+                        break;
+                    case HousingRefusal.YourOwnBed:
+                    case HousingRefusal.AlreadyClaimed:
+                        occupied++;
+                        break;
+                    case HousingRefusal.NotMeasured:
+                        unmeasured++;
+                        break;
+                }
+            }
+        }
+
+        Habitable = habitable;
+        Occupied = occupied;
+        Unmeasured = unmeasured;
     }
 
     /// <summary>A survey actually ran. False is <see cref="NotSurveyed"/>, and
@@ -274,22 +310,21 @@ internal readonly struct HousingCapacity
     /// <summary>Beds somebody new could be admitted to. This is the spare
     /// capacity, not the total — see <see cref="Occupied"/>.
     ///
-    /// Computed rather than stored, so it cannot disagree with
-    /// <see cref="Beds"/>.</summary>
-    public int Habitable => Count(HousingRefusal.None);
+    /// Counted in the constructor from the list below, so it cannot disagree
+    /// with <see cref="Beds"/> and reading it is free.</summary>
+    public int Habitable { get; }
 
     /// <summary>Beds somebody already sleeps in, yours included. Reported beside
     /// <see cref="Habitable"/> rather than folded into it, because "no room"
     /// and "no housing" look identical in a single number and only one of them
     /// is a reason to build.</summary>
-    public int Occupied =>
-        Count(HousingRefusal.YourOwnBed) + Count(HousingRefusal.AlreadyClaimed);
+    public int Occupied { get; }
 
     /// <summary>Beds that could not be checked. Kept apart from the refusals
     /// because "we could not look" and "it is not good enough" are different
     /// answers, and reporting the first as the second is how a player is told
     /// their house is uninhabitable when it is merely unreadable.</summary>
-    public int Unmeasured => Count(HousingRefusal.NotMeasured);
+    public int Unmeasured { get; }
 
     /// <summary>Nobody looked. The answer when there is no settlement to
     /// measure, or when the measurement itself could not be taken.</summary>
@@ -309,7 +344,9 @@ internal readonly struct HousingCapacity
             return NotSurveyed;
         }
 
-        var verdicts = new List<KeyValuePair<string, HousingRefusal>>();
+        var verdicts = beds is ICollection<HousingFacts> known
+            ? new List<KeyValuePair<string, HousingRefusal>>(known.Count)
+            : new List<KeyValuePair<string, HousingRefusal>>();
         foreach (HousingFacts facts in beds)
         {
             verdicts.Add(new KeyValuePair<string, HousingRefusal>(
@@ -317,20 +354,6 @@ internal readonly struct HousingCapacity
         }
 
         return new HousingCapacity(true, truncated, groundIncomplete, verdicts);
-    }
-
-    private int Count(HousingRefusal refusal)
-    {
-        int found = 0;
-        foreach (KeyValuePair<string, HousingRefusal> bed in Beds)
-        {
-            if (bed.Value == refusal)
-            {
-                found++;
-            }
-        }
-
-        return found;
     }
 
     /// <summary>What `cf_settle housing` prints.</summary>
@@ -376,7 +399,11 @@ internal static class HousingSentences
                 "That is not the same as having nowhere to live.";
         }
 
-        var text = new StringBuilder(160 + (capacity.Beds.Count * 56));
+        // A per-bed line is a newline, two spaces, the key ("the bed at
+        // -1234, 5678" is ~24), ": ", and a sentence of up to 46. The header
+        // reaches ~68, and the two caveats add ~240 between them. The old
+        // 160 + 56n was under all three, so it grew chunks anyway.
+        var text = new StringBuilder(320 + (capacity.Beds.Count * 80));
 
         if (capacity.Beds.Count == 0)
         {
@@ -405,9 +432,11 @@ internal static class HousingSentences
 
         AppendCaveats(text, capacity);
 
-        foreach (KeyValuePair<string, HousingRefusal> bed in capacity.Beds)
+        IReadOnlyList<KeyValuePair<string, HousingRefusal>> beds = capacity.Beds;
+        for (int i = 0; i < beds.Count; i++)
         {
-            text.AppendLine().Append("  ").Append(bed.Key).Append(": ").Append(For(bed.Value));
+            text.AppendLine().Append("  ").Append(beds[i].Key).Append(": ")
+                .Append(For(beds[i].Value));
         }
 
         return text.ToString();
