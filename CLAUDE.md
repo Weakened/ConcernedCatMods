@@ -22,6 +22,17 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
 - Workers (owner brief 2026-09-17, `docs/settlement/cart-and-collection/DECISIONS.md` D1, D3, D9, D14): the companion rules above govern presentation. While an identity performs an explicitly ordered job, its body is instead owned by that product's opted-in worker runtime (Foreman: `docs/mods/concerned-foreman/SETTLEMENT_AUTHORITY.md`; Teamster: the Gunnar decisions), built from an inactive prefab clone and moved only through the vanilla motor. The presentation body and the worker body never coexist. Work runs only when opted in, as the host, not dedicated, with no other peers connected; otherwise it refuses and every existing utility keeps working. A worker body may keep its identity and its own inventory (carried materials, issued tools) in its own network object; mod data is never written into a vanilla object.
 - Teamster additionally: preserve vanilla cart mass/physics by default; no zero-weight defaults, cart teleports, recovery cheats, stamina bypass, pathfinding, world-save mutation, or server-authority takeover. Mutating conveniences must be explicit, reversible, fail-closed, and authorized by their own issue. No compile-time dependency between Teamster and Cartographer. The single scoped carve-out (owner brief 2026-09-17, #313/#314): the Gunnar worker runtime, off by default under its own `TeamsterFeature`, may pathfind **his own body**, rely on cart ownership the host already holds, and attach and detach a player-assigned cart through vanilla's own `Vagon.AttachTo`/`Detach`. It still never teleports a cart, changes cart mass or physics defaults, writes forces or velocities, bypasses stamina, toggles the parking brake, or writes mod data into a vanilla object. "No pathfinding" continues to mean no autopilot for the player's own cart.
 
+  A **second scoped carve-out** (owner decision 2026-09-19, #381): Gunnar's collection role may pick up
+  loose branches and stones through vanilla's own `Pickable.Interact`, in the single file
+  `Adapters/Workers/GunnarCollectionPort.cs` and nowhere else, behind the same off-by-default
+  `TeamsterFeature`, failing closed. `validate_repo.py` permits that one token in that one file and
+  refuses it everywhere else; every other forbidden token still fails inside that file, proved by seven
+  planted violations. The port needs no RPC of its own - `Pickable.Interact` runs `RPC_Pick` and the
+  ownership claim inside vanilla, on a pickable this process already owns - so felling a tree
+  (`TreeBase.Damage`) and the cosmetic hammer animation (`ZSyncAnimation.SetTrigger`) were **not**
+  authorized and each needs its own owner decision. Ownership takeover, teleports, forces, cart
+  interaction and arbitrary RPC are untouched.
+
 ## Local commands
 
 ```powershell

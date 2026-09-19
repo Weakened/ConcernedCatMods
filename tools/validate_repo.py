@@ -1204,6 +1204,33 @@ TEAMSTER_WORKER_FACTORY_ONLY_TOKENS = (
 # vanilla's extra pull mass, or writing a body's kinematic flag or joint link.
 # (The parking brake's own constraint write stays where CT-002 allows it.)
 TEAMSTER_OUTSIDE_WORKERS_TOKENS = (".Interact(", "SetExtraMass")
+
+# The one owner-authorized exception to the worker runtime's token list
+# (owner decision, 2026-09-19, for #381 Gunnar collection).
+#
+# Gunnar's collection role has to pick up loose branches and stones, and
+# vanilla's only route to that is `Pickable.Interact`, which Foreman already
+# calls legitimately from its own sanctioned port because Foreman carries no
+# such audit. Rather than let Teamster's source avoid spelling a banned token
+# while the behaviour changed anyway - which would have left this audit green
+# and meaningless - the allowance is explicit, named, and here.
+#
+# It is deliberately narrower than what was asked for. The agent requested three
+# APIs; `Pickable.Interact` is the only one loose pickup needs. Picking runs
+# `RPC_Pick` and the ownership claim *inside vanilla*, on a pickable this process
+# already owns, so the port spells no RPC of its own - verified against Foreman's
+# port, which makes exactly one game call and names no `InvokeRPC` anywhere.
+# Felling a tree (`TreeBase.Damage`) and the cosmetic hammer animation
+# (`ZSyncAnimation.SetTrigger`) are separate capabilities, were NOT authorized,
+# and would each need their own owner decision.
+#
+# So: one token, in one file. Every other forbidden token still fails in that
+# file, and this token still fails in every other file, inside Workers and out.
+# Ownership takeover, teleports, forces, cart interaction and arbitrary RPC are
+# untouched.
+TEAMSTER_COLLECTION_PORT_FILE = "GunnarCollectionPort.cs"
+TEAMSTER_COLLECTION_PORT_TOKEN = ".Interact("
+
 TEAMSTER_OUTSIDE_WORKERS_ASSIGNMENT = re.compile(r"\.(isKinematic|connectedBody)\s*[-+*/&|^]?=(?!=)")
 
 
@@ -1250,6 +1277,11 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
                     problems.append(f"a forbidden write '{assignment.group(0).strip()}'")
                 for token in TEAMSTER_WORKER_FORBIDDEN_TOKENS:
                     if token in code:
+                        if (token == TEAMSTER_COLLECTION_PORT_TOKEN
+                                and path.name == TEAMSTER_COLLECTION_PORT_FILE):
+                            # The owner-authorized collection pickup, and only
+                            # it: every other token below still fails here.
+                            continue
                         problems.append(f"the forbidden token {token!r}")
                 if path.name != TEAMSTER_WORKER_IDENTITY_FILE:
                     for token in TEAMSTER_WORKER_FACTORY_ONLY_TOKENS:
@@ -1272,7 +1304,7 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
                     "methods, calibrates only his own body and writes only his own identity", errors)
 
     return [
-        f"[interop] #313 worker-runtime scope audit: {worker_files} worker files; cart attach/detach/detach-all only "
+        f"[interop] #313 worker-runtime scope audit: {worker_files} worker files; {TEAMSTER_COLLECTION_PORT_TOKEN!r} owner-authorized in {TEAMSTER_COLLECTION_PORT_FILE} alone; cart attach/detach/detach-all only "
         f"in Adapters/Workers, mass writes only in {TEAMSTER_WORKER_CALIBRATION_FILE}, network-object writes only "
         f"'tcc.worker.*' keys in {TEAMSTER_WORKER_IDENTITY_FILE}, no teleport/pose/velocity/constraint/joint/cart-"
         f"tuning writes, no component surgery or reflection outside the prefab factory ({hits} violations)",
