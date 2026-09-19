@@ -16,13 +16,29 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Collection;
 /// <summary><c>[Collection]</c> settings.</summary>
 internal sealed class CollectionSettings
 {
-    private CollectionSettings(ConfigEntry<float> workerCarryWeight)
+    private CollectionSettings(ConfigEntry<float> workerCarryWeight, ConfigEntry<bool> thorsteinCollects)
     {
         WorkerCarryWeight = workerCarryWeight;
+        ThorsteinCollects = thorsteinCollects;
     }
 
     /// <summary><c>Collection/WorkerCarryWeight</c> (CONTRACTS.md §5.6).</summary>
     public ConfigEntry<float> WorkerCarryWeight { get; }
+
+    /// <summary><c>Collection/ThorsteinCollects</c> (#380). <b>Off by default,
+    /// and that is a change to what this product already does.</b>
+    ///
+    /// Thorstein's primary role becomes construction once Gunnar owns the
+    /// hauling, so his collection capability stays in the code and stops being
+    /// something he does unasked. It is a setting rather than a deletion because
+    /// the code is good, it is tested, and a player who wants it back should not
+    /// have to wait for a release.
+    ///
+    /// <b>It gates starting an order and nothing else.</b> Status, preview,
+    /// pause, resume, rebind and cancel keep working with it off, because an
+    /// order already in flight holds real material out of a player's chest and a
+    /// setting that stranded it would be the opposite of conserving.</summary>
+    public ConfigEntry<bool> ThorsteinCollects { get; }
 
     public static CollectionSettings Bind(ConfigFile config)
     {
@@ -36,7 +52,17 @@ internal sealed class CollectionSettings
                 "vanilla gives non-player characters no carry limit. Read when a world loads.",
                 new AcceptableValueRange<float>(
                     CollectionParameters.MinWorkerCarryWeight, CollectionParameters.MaxWorkerCarryWeight)));
-        return new CollectionSettings(carry);
+        ConfigEntry<bool> collects = config.Bind(
+            "Collection",
+            "ThorsteinCollects",
+            false,
+            new ConfigDescription(
+                "Whether Thorstein will accept a new collection order. Off by default: his work is " +
+                "building now, and Gunnar does the collecting and hauling. Turning it off never " +
+                "abandons an order already running - you can still see it, pause it, resume it and " +
+                "cancel it, so nothing that came out of a chest is stranded. Read when a command is " +
+                "given, so it takes effect at once."));
+        return new CollectionSettings(carry, collects);
     }
 }
 
