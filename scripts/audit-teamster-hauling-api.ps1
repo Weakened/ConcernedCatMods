@@ -195,6 +195,20 @@ $requirements = @(
     @("UnityEngine.Rigidbody", "physics", "Rigidbody.constraints", 'public RigidbodyConstraints constraints\b'),
     @("UnityEngine.Rigidbody", "physics", "Rigidbody.linearVelocity", 'public Vector3 linearVelocity\b'),
 
+    # The collection carve-out (#381, owner decision 2026-09-19). Every member
+    # GunnarCollectionPort binds. The runtime twin is HaulingCapabilityProbe;
+    # the two change together.
+    @("Pickable", "game", "Pickable.Interact(Humanoid, bool, bool)", 'public bool Interact\(Humanoid character, bool repeat, bool alt\)'),
+    @("Pickable", "game", "Pickable.Interact routes RPC_Pick rather than returning the yield", 'm_nview\.InvokeRPC\("RPC_Pick", num\);'),
+    @("Pickable", "game", "RPC_Pick drops on the ground and needs the local player", 'private void RPC_Pick\(long sender, int bonus\).*Player\.m_localPlayer\.GetZDOID\(\)'),
+    @("Pickable", "game", "RPC_Pick is owner-only", 'private void RPC_Pick\(long sender, int bonus\) \{ if \(!m_nview\.IsOwner\(\) \|\| m_picked\)'),
+    @("Pickable", "game", "the skill, statistic and bonus branches are Player-only", 'if \(!m_picked && character is Player player\)'),
+    @("Pickable", "game", "Pickable.CanBePicked()", 'public bool CanBePicked\(\)'),
+    @("Pickable", "game", "Pickable.m_itemPrefab / m_amount / m_tarPreventsPicking", 'public GameObject m_itemPrefab;.*public int m_amount = 1;'),
+    @("Humanoid", "game", "Humanoid.Pickup(GameObject, bool, bool)", 'public bool Pickup\(GameObject go, bool autoequip = true, bool autoPickupDelay = true\)'),
+    @("Humanoid", "game", "Pickup takes through the inventory, not by fiat", 'public bool Pickup\(GameObject go, bool autoequip = true, bool autoPickupDelay = true\).*m_inventory\.ContainsItem\(component\.m_itemData\)'),
+    @("ItemDrop", "game", "ItemDrop.m_itemData", 'public ItemData m_itemData = new ItemData\(\);'),
+
     # Jotunn: registering the worker prefab for every session.
     @("Jotunn.Managers.PrefabManager", "jotunn", "PrefabManager.OnVanillaPrefabsAvailable", 'public static event Action OnVanillaPrefabsAvailable;'),
     @("Jotunn.Managers.PrefabManager", "jotunn", "PrefabManager.CreateClonedPrefab(string, GameObject)", 'public GameObject CreateClonedPrefab\(string name, GameObject prefab\)'),

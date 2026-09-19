@@ -35,6 +35,10 @@ internal static class HaulingCapabilityProbe
             Type? znetScene = Game("ZNetScene", missingTypes);
             Type? zoneSystem = Game("ZoneSystem", missingTypes);
             Type? floating = Game("Floating", missingTypes);
+            Type? humanoid = Game("Humanoid", missingTypes);
+            Type? pickable = Game("Pickable", missingTypes);
+            Type? itemDrop = Game("ItemDrop", missingTypes);
+            Type? itemData = Game("ItemDrop+ItemData", missingTypes);
             Type? liquidType = Game("LiquidType", missingTypes);
             Type? heightmap = Game("Heightmap", missingTypes);
             Type? game = Game("Game", missingTypes);
@@ -134,6 +138,22 @@ internal static class HaulingCapabilityProbe
                 new("ZoneSystem", zoneSystem, "GetGroundHeight", GameMemberKind.InstanceMethod, typeof(bool), new[] { vector3, byRefFloat }),
                 new("Floating", floating, "GetLiquidLevel", GameMemberKind.StaticMethod, typeof(float), new[] { vector3, typeof(float), liquidType }),
                 new("Heightmap", heightmap, "GetHeight", GameMemberKind.StaticMethod, typeof(bool), new[] { vector3, byRefFloat }),
+
+                // The collection carve-out (#381). Every member GunnarCollectionPort
+                // binds, verified at start-up like the rest: a changed game
+                // disables collection with one line rather than throwing out of
+                // a worker tick. The audit script checks the same list against
+                // the installed game; the two change together.
+                new("Pickable", pickable, "Interact", GameMemberKind.InstanceMethod, typeof(bool),
+                    new[] { humanoid!, typeof(bool), typeof(bool) }),
+                new("Pickable", pickable, "CanBePicked", GameMemberKind.InstanceMethod, typeof(bool)),
+                new("Pickable", pickable, "m_nview", GameMemberKind.InstanceField, netView),
+                new("Pickable", pickable, "m_itemPrefab", GameMemberKind.InstanceField, gameObject),
+                new("Pickable", pickable, "m_tarPreventsPicking", GameMemberKind.InstanceField, typeof(bool)),
+                new("Humanoid", humanoid, "Pickup", GameMemberKind.InstanceMethod, typeof(bool),
+                    new[] { gameObject!, typeof(bool), typeof(bool) }),
+                new("ItemDrop", itemDrop, "m_itemData", GameMemberKind.InstanceField, itemData),
+                new("ItemDrop+ItemData", itemData, "m_stack", GameMemberKind.InstanceField, typeof(int)),
 
                 // Engine members the joint and body checks read.
                 new("Joint", joint, "connectedBody", GameMemberKind.InstanceProperty, rigidbody),

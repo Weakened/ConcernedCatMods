@@ -102,6 +102,54 @@ progress) and `reviews/R2-315-316-be23c86.md` (Thorstein slice, in progress).
 | CART-06 stall vs wedge, bounded recovery, no oscillation | #314 tests; live | — | pending |
 | CART-06 takeover, brake, authority loss, destroyed or unloaded cart, stale identity after reload | #313 tests; live | — | pending |
 
+## Gate B2: Gunnar on the shared NPC runtime (#381)
+
+Two rows, and they are **the first two to run of anything on this page**, because they are not about the new
+feature: they are about whether the Gunnar who already exists still works now that Concerned Teamster takes his
+identity from the shared NPC runtime. Both are destructive if they fail, and neither needs the collection work
+that is waiting on an owner decision.
+
+| Req | Evidence | SHA | Result |
+|---|---|---|---|
+| B2-1 an existing saved Gunnar survives the library adoption | live | — | pending |
+| B2-2 a hold from the previous world does not survive a reload | live | — | pending |
+
+Disposable world, character and profile only. Both rows need `[General] Enabled = true` and
+`[Workers] GunnarHaulingEnabled = true` in Concerned Teamster's config, and the Concerned NPC package installed
+alongside it — without it the game will refuse to load Teamster and say so in one line, which is itself the
+correct behaviour and worth seeing once.
+
+**B2-1 — an existing saved Gunnar survives the library adoption.** This is the only irreversible one on the page:
+if it fails, a body is deleted with whatever is inside it, silently, on load.
+
+1. Before installing the new build, in the test profile, load the world that already contains Gunnar's body and
+   confirm with `ct_haul status` that it says **Body Bound**. Note whether he is carrying anything.
+2. Quit to the desktop. Install the new build. Start the game again and load the **same** world.
+3. `ct_haul status` must again say **Body Bound**, in the same place, still carrying whatever he was carrying.
+4. Search the log for `Destroyed invalid prefab ZDO`. **There must be none.** One naming
+   `CT_TeamsterWorker` is a failure of this row, and the fix is not to carry on — stop and report it.
+5. The log must also carry, once, at start-up:
+   `Gunnar is registered with the shared NPC runtime as 'teamster/gunnar'.`
+   A line beginning `Gunnar was refused by the shared NPC runtime` is a failure of this row; copy it verbatim.
+
+**B2-2 — a hold from the previous world does not survive a reload.** Gunnar's identity is now held by the shared
+runtime for the life of a job, and a hold that outlived its world would leave him permanently busy with a job
+whose name nothing still has — visible to a player as an NPC who refuses every order for no stated reason.
+
+1. Assign a cart (`ct_haul assign`, then `ct_haul confirm`) and start a haul with `ct_haul go <x> <z>`.
+2. **While he is pulling**, quit to the main menu.
+3. Load the same world again.
+4. `ct_haul status` must show him **resting**, with no haul and no lease: not Pulling, not Paused, and not
+   NeedsAttention about a haul from before. Give him a fresh `ct_haul assign` / `confirm` / `go`: it must be
+   **accepted**.
+5. A refusal at step 4 that names a haul id from the previous session is the failure this row exists to catch.
+
+**Watch for, in both rows and in any other Gunnar row run at the same time:** a haul that is refused where it
+would previously have started. The identity hold now fails closed — no world loaded, or no registration, is a
+refusal rather than a grant — and that is the intended direction, but it is the change most likely to show up as
+"he just will not take the order". If it happens, the log line and `ct_haul status` at that moment are the
+evidence worth capturing.
+
 ## Gate C: Thorstein alone (#315, #316)
 
 | Req | Evidence | SHA | Result |
