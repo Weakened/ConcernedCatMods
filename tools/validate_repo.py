@@ -1123,12 +1123,36 @@ TEAMSTER_INTERNET_EGRESS_TOKENS = (
 
 
 def _strip_cs_line_comment(line: str) -> str:
-    """Everything from the first // (covers // and ///) removed. Teamster's
-    only network/ownership token mentions are in doc comments stating their
-    absence, so comment-stripping keeps the audit true without flagging them.
-    No // appears inside a string literal in the audited files (checked)."""
-    index = line.find("//")
-    return line if index < 0 else line[:index]
+    """Everything from the first // outside a string literal removed.
+
+    This used to be `line.find("//")`, with a docstring asserting no audited
+    file contained a // inside a string. That is not a property anybody
+    enforces, and an independent review showed the cost: one URL in a string
+    truncates the line, and every audit token after it on that line becomes
+    invisible. A scanner that skips quoted text costs four lines and removes
+    the assumption."""
+    index = 0
+    length = len(line)
+    while index < length:
+        char = line[index]
+        if char == '"' or char == "'":
+            # A verbatim string (@"...") has no escapes and doubles its quotes;
+            # both are handled by simply looking for the next unescaped quote.
+            verbatim = index > 0 and line[index - 1] == "@"
+            index += 1
+            while index < length:
+                if line[index] == "\\" and not verbatim:
+                    index += 2
+                    continue
+                if line[index] == char:
+                    break
+                index += 1
+            index += 1
+            continue
+        if char == "/" and index + 1 < length and line[index + 1] == "/":
+            return line[:index]
+        index += 1
+    return line
 
 
 # CT-028: cooperative diagnostics help crews understand a cart without
@@ -1300,8 +1324,47 @@ TEAMSTER_OUTSIDE_WORKERS_TOKENS = (".Interact(", "SetExtraMass")
 # file, and this token still fails in every other file, inside Workers and out.
 # Ownership takeover, teleports, forces, cart interaction and arbitrary RPC are
 # untouched.
-TEAMSTER_COLLECTION_PORT_FILE = "GunnarCollectionPort.cs"
+# The carve-out, pinned three ways after an independent review got a banned
+# cart interaction past the first version of it.
+#
+# By full path, not basename: a second file called GunnarCollectionPort.cs in
+# any other directory inherited the allowance, and the only signal was a worker
+# count nobody pins.
+#
+# By the exact call, not the token: the allowance was for `.Interact(` on any
+# receiver, so `cart.Interact(...)` - the cart interaction the owner said not to
+# weaken - passed inside the authorized file. A text audit cannot know a
+# receiver's type, so the authorized call is pinned verbatim instead. That is
+# the right shape for an authority boundary: changing the call should require
+# re-authorization rather than being waved through by a token match.
+#
+# And once: more than one pick call in the port is a different program.
+TEAMSTER_COLLECTION_PORT_PATH = ("Adapters", "Workers", "GunnarCollectionPort.cs")
 TEAMSTER_COLLECTION_PORT_TOKEN = ".Interact("
+TEAMSTER_COLLECTION_PORT_CALL = re.compile(
+    r"\bsource\s*\.\s*Interact\s*\(\s*_worker\s*,\s*repeat\s*:\s*false\s*,\s*alt\s*:\s*false\s*\)")
+
+
+def _audit_token(token: str) -> re.Pattern:
+    """One literal audit token, tolerant of the whitespace C# allows.
+
+    Tokens were matched as literal substrings of a single stripped line. An
+    independent review defeated that with one space - `Interact (` never
+    contains `.Interact(` - and again by splitting a receiver from its member
+    across two lines. Both compiled against the real game assemblies, so both
+    would have shipped, and the audit stayed green. Every paren-bearing token
+    was affected, which is most of the dangerous ones.
+
+    Whitespace is permitted exactly where C# permits it, around the punctuation,
+    and the match runs over the whole comment-stripped file so a newline is just
+    more whitespace."""
+    out = []
+    for char in token:
+        if char in ".(":
+            out.append(r"\s*" + re.escape(char) + r"\s*")
+        else:
+            out.append(re.escape(char))
+    return re.compile("".join(out))
 
 TEAMSTER_OUTSIDE_WORKERS_ASSIGNMENT = re.compile(r"\.(isKinematic|connectedBody)\s*[-+*/&|^]?=(?!=)")
 
@@ -1347,24 +1410,8 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
                 assignment = TEAMSTER_WORKER_FORBIDDEN_ASSIGNMENT.search(code)
                 if assignment:
                     problems.append(f"a forbidden write '{assignment.group(0).strip()}'")
-                for token in TEAMSTER_WORKER_FORBIDDEN_TOKENS:
-                    if token in code:
-                        if (token == TEAMSTER_COLLECTION_PORT_TOKEN
-                                and path.name == TEAMSTER_COLLECTION_PORT_FILE):
-                            # The owner-authorized collection pickup, and only
-                            # it: every other token below still fails here.
-                            continue
-                        problems.append(f"the forbidden token {token!r}")
-                if path.name != TEAMSTER_WORKER_IDENTITY_FILE:
-                    for token in TEAMSTER_WORKER_FACTORY_ONLY_TOKENS:
-                        if token in code:
-                            problems.append(
-                                f"the token {token!r}, which belongs to the prefab factory "
-                                f"({TEAMSTER_WORKER_IDENTITY_FILE}) alone")
+                pass
             else:
-                for token in TEAMSTER_OUTSIDE_WORKERS_TOKENS:
-                    if token in code:
-                        problems.append(f"the forbidden token {token!r} outside Adapters/Workers")
                 outside = TEAMSTER_OUTSIDE_WORKERS_ASSIGNMENT.search(code)
                 if outside:
                     problems.append(f"a forbidden write '{outside.group(0).strip()}' outside Adapters/Workers")
@@ -1375,11 +1422,50 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
                     "only through the vanilla motor, attaches and detaches only through the cart's own "
                     "methods, calibrates only his own body and writes only his own identity", errors)
 
+        # Tokens are matched over the whole comment-stripped file rather than
+        # line by line, because a space or a newline defeated the substring
+        # match and the Release build was happy either way.
+        code_text = "\n".join(_strip_cs_line_comment(raw) for raw in
+                              path.read_text(encoding="utf-8").splitlines())
+        authorized = tuple(parts) == TEAMSTER_COLLECTION_PORT_PATH
+        allowed_calls = (len(TEAMSTER_COLLECTION_PORT_CALL.findall(code_text))
+                         if authorized else 0)
+        if authorized and allowed_calls > 1:
+            hits += 1
+            fail(
+                f"[interop] #313 worker-runtime scope audit: the authorized pickup appears "
+                f"{allowed_calls} times in {rel}; it is authorized once", errors)
+
+        scanned = (TEAMSTER_WORKER_FORBIDDEN_TOKENS if in_workers
+                   else TEAMSTER_OUTSIDE_WORKERS_TOKENS)
+        if in_workers and path.name != TEAMSTER_WORKER_IDENTITY_FILE:
+            scanned = scanned + TEAMSTER_WORKER_FACTORY_ONLY_TOKENS
+        where = "" if in_workers else " outside Adapters/Workers"
+        for token in scanned:
+            spent = 0
+            for match in _audit_token(token).finditer(code_text):
+                if (token == TEAMSTER_COLLECTION_PORT_TOKEN and authorized
+                        and spent < allowed_calls
+                        and TEAMSTER_COLLECTION_PORT_CALL.search(
+                            code_text, max(0, match.start() - 40), match.end() + 80)):
+                    # The owner-authorized pickup, pinned to its exact call so
+                    # that `.Interact(` on anything else - a cart, a container,
+                    # a door - still fails here.
+                    spent += 1
+                    continue
+                hits += 1
+                fail(
+                    f"[interop] #313 worker-runtime scope audit: the forbidden token {token!r}"
+                    f"{where} in {rel}:{code_text.count(chr(10), 0, match.start()) + 1} — Gunnar "
+                    "moves only through the vanilla motor, attaches and detaches only through the "
+                    "cart's own methods, calibrates only his own body and writes only his own "
+                    "identity", errors)
+
     return [
-        f"[interop] #313 worker-runtime scope audit: {worker_files} worker files; {TEAMSTER_COLLECTION_PORT_TOKEN!r} owner-authorized in {TEAMSTER_COLLECTION_PORT_FILE} alone; cart attach/detach/detach-all only "
+        f"[interop] #313 worker-runtime scope audit: {worker_files} worker files; {TEAMSTER_COLLECTION_PORT_TOKEN!r} owner-authorized as one pinned call in {'/'.join(TEAMSTER_COLLECTION_PORT_PATH)} alone; cart attach/detach/detach-all only "
         f"in Adapters/Workers, mass writes only in {TEAMSTER_WORKER_CALIBRATION_FILE}, network-object writes only "
         f"'tcc.worker.*' keys in {TEAMSTER_WORKER_IDENTITY_FILE}, no teleport/pose/velocity/constraint/joint/cart-"
-        f"tuning writes, no component surgery or reflection outside the prefab factory ({hits} violations)",
+        f"tuning writes, no component surgery or reflection outside the prefab factory (inside Adapters/Workers only; reflection elsewhere in Teamster is not audited by this rule) ({hits} violations)",
     ]
 
 

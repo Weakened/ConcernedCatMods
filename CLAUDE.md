@@ -24,10 +24,18 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
 
   A **second scoped carve-out** (owner decision 2026-09-19, #381): Gunnar's collection role may pick up
   loose branches and stones through vanilla's own `Pickable.Interact`, in the single file
-  `Adapters/Workers/GunnarCollectionPort.cs` and nowhere else, behind the same off-by-default
-  `TeamsterFeature`, failing closed. `validate_repo.py` permits that one token in that one file and
-  refuses it everywhere else; every other forbidden token still fails inside that file, proved by seven
-  planted violations. The port needs no RPC of its own - `Pickable.Interact` runs `RPC_Pick` and the
+  `Adapters/Workers/GunnarCollectionPort.cs` and nowhere else, failing closed. `validate_repo.py`
+  permits **one pinned call** in that one file - matched verbatim, so `.Interact(` on a cart, a
+  container or a door still fails there - and refuses the token everywhere else, inside
+  `Adapters/Workers` and out. Every other forbidden token still fails inside the authorized file.
+  Proved by `tools/tests/test_teamster_carveout.py`, which plants each escape an independent review
+  found and requires the validator to refuse; all six fail against the unfixed validator.
+
+  **Not yet reachable, and the docs must not imply otherwise.** There is no collection
+  `TeamsterFeature`: the port and its job have no call site, and the `featureEnabled` argument is
+  supplied by a caller that does not exist. The slice is inert. When it is wired, it goes behind an
+  off-by-default feature like the first carve-out, and that is when "a player who has not opted in gets
+  none of it" becomes a statement about behaviour rather than about dead code. The port needs no RPC of its own - `Pickable.Interact` runs `RPC_Pick` and the
   ownership claim inside vanilla, on a pickable this process already owns - so felling a tree
   (`TreeBase.Damage`) and the cosmetic hammer animation (`ZSyncAnimation.SetTrigger`) were **not**
   authorized and each needs its own owner decision. Ownership takeover, teleports, forces, cart
