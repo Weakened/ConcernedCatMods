@@ -47,22 +47,25 @@
          adapters are linked: a test that passed against a copy would prove
          nothing about what ships.
 
-         Roles, Bodies and NpcWorldEpoch and nothing else. Everything under
-         Body/ names BaseAI, Humanoid, ZNetView and Jotunn's prefab manager, and
-         this project's VanillaStubs.cs is a DIFFERENT set of stand-ins from the
-         library suite's; linking both would be two games in one assembly. The
-         three areas taken here contain no Unity, BepInEx or Jotunn type at all -
-         only the words appear, in comments - which is why they link cleanly.
-
          One consequence worth knowing: linking makes the library's INTERNAL
          members visible here, including NpcRoleRegistry's own constructor. That
          is what lets these tests build a private registry per test instead of
          reaching for the process-wide Shared one, which is shared with every
          other test running in parallel. The product cannot do that and does not:
-         it uses Shared, which is the one the arbiter's guarantee is about. -->
-    <Compile Include="..\ConcernedNPC\Roles\**\*.cs" LinkBase="ConcernedNPC\Roles" />
-    <Compile Include="..\ConcernedNPC\Bodies\**\*.cs" LinkBase="ConcernedNPC\Bodies" />
-    <Compile Include="..\ConcernedNPC\Work\NpcWorldEpoch.cs" Link="ConcernedNPC\Work\NpcWorldEpoch.cs" />
+         it uses Shared, which is the one the arbiter's guarantee is about.
+
+         Everything EXCEPT Body/ and Plugin.cs. Body/ names BaseAI, Humanoid,
+         ZNetView and Jotunn's prefab manager, and this project's
+         VanillaStubs.cs is a DIFFERENT set of stand-ins from the library
+         suite's; linking both would be two games in one assembly. Plugin.cs is
+         the BepInEx entry point and would drag BepInEx into a project that is
+         otherwise provable on a machine with no game installed. Everything
+         else in the package - the job driver, the planning pipeline, the
+         routing, the containers, the work areas - contains no Unity, BepInEx
+         or Jotunn type at all, which is why it links cleanly. -->
+    <Compile Include="..\ConcernedNPC\**\*.cs"
+             Exclude="..\ConcernedNPC\Plugin.cs;..\ConcernedNPC\Body\**\*.cs;..\ConcernedNPC\bin\**\*.cs;..\ConcernedNPC\obj\**\*.cs"
+             LinkBase="ConcernedNPC" />
 
     <!-- The same shared subset the product adopts, linked the same way, so the
          tests exercise exactly what ships. SharedSubsetClosureTests asserts the
