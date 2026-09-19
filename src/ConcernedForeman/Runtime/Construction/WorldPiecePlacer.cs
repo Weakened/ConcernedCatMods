@@ -139,8 +139,8 @@ internal sealed class WorldPiecePlacer
 /// vanilla piece at a place an NPC chose.
 ///
 /// <b>The signature, read off the installed binary rather than inferred.</b>
-/// <c>Player.PlacePiece(Piece piece, Vector3 pos, Quaternion rot, bool doAttack,
-/// bool cheated)</c>. That was the open question when this file was first
+/// <c>void Player.PlacePiece(Piece piece, Vector3 pos, Quaternion rot, bool
+/// doAttack, bool cheated)</c>. That was the open question when this file was first
 /// written - the shipped build flow is <c>UpdatePlacementGhost</c> then
 /// <c>TryPlacePiece</c>, and if the position had come from the player's own
 /// placement ghost then an NPC could not have aimed it and a call here would
@@ -160,7 +160,15 @@ internal sealed class WorldPiecePlacer
 /// caller, not in <c>PlacePiece</c>, and in this product the paying is custody's
 /// - reserved, moved once, committed once. An installer that also consumed would
 /// be the second place material leaves a chest, which is how a conservation
-/// invariant stops being one.</summary>
+/// invariant stops being one.
+///
+/// <b>It returns void, so there is no success to read.</b> This method does not
+/// hand back whether the piece went up, so "true" here means the call was made
+/// without throwing and nothing more. What actually decides whether a wall is
+/// standing is the same thing that decides it for a wall the player built - the
+/// next look at the site, through <see cref="IPieceSight"/>. That is not a
+/// weakness of this seam, it is why progress is read from the world rather than
+/// remembered from what we asked for.</summary>
 internal sealed class HostPlayerPieceInstaller : IPieceInstaller
 {
     private readonly Func<string, GameObject?> _prefabs;
@@ -191,11 +199,9 @@ internal sealed class HostPlayerPieceInstaller : IPieceInstaller
         var at = new Vector3(placement.At.X, placement.At.Y, placement.At.Z);
         Quaternion facing = Quaternion.Euler(0f, placement.Yaw, 0f);
 
-        if (!player.PlacePiece(piece, at, facing, doAttack: false, cheated: false))
-        {
-            failure = "the game refused to create the piece";
-            return false;
-        }
+        // Void: the call reports nothing back. Whether the piece is standing is
+        // answered by the next look at the site, not by this line.
+        player.PlacePiece(piece, at, facing, doAttack: false, cheated: false);
 
         failure = string.Empty;
         return true;

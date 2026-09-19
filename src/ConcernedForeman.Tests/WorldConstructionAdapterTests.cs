@@ -583,14 +583,39 @@ public sealed class WorldConstructionAdapterTests : IDisposable
     }
 
     [Fact]
-    public void A_placement_the_game_refused_is_a_failure_and_not_a_silent_success()
+    public void The_call_reports_nothing_back_so_the_world_is_what_is_believed()
     {
+        // PlacePiece returns void. "Installed" therefore means the call was made
+        // without throwing, and whether a wall is standing is answered by the
+        // next look at the site - the same way it is answered for a wall the
+        // player built.
         PiecePrefab("wood_wall", ("Wood", 2));
-        Player.m_localPlayer = new Player { PlaceSucceeds = false };
+        Player.m_localPlayer = new Player();
 
         PiecePlacement placement = Placement();
-        Assert.False(new HostPlayerPieceInstaller().Install(in placement, out string failure));
-        Assert.Contains("refused to create", failure);
+        Assert.True(new HostPlayerPieceInstaller().Install(in placement, out _));
+        Assert.Equal(PieceSighting.Missing, Catalogue().Look(Placement()));
+
+        Stand("wood_wall", 0f, 0f, 0f);
+        Assert.Equal(PieceSighting.Standing, Catalogue().Look(Placement()));
+    }
+
+    [Fact]
+    public void A_game_that_threw_while_placing_is_a_failure_rather_than_an_escape()
+    {
+        PiecePrefab("wood_wall", ("Wood", 2));
+        Player.m_localPlayer = new Player
+        {
+            PlaceThrows = new InvalidOperationException("the scene went away"),
+        };
+
+        var placer = new WorldPiecePlacer(
+            new FakeProbe(), new HostPlayerPieceInstaller(), _log.Add);
+
+        PlacementReport report = placer.Place(Wall(), ConstructionRig.Tally(("Wood", 2)), true);
+
+        Assert.Equal(PlacementResult.Failed, report.Result);
+        Assert.Contains("the scene went away", report.Reason);
     }
 
     [Fact]

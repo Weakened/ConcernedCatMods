@@ -571,20 +571,26 @@ public class Player : Humanoid
 
     /// <summary>#380: the real 1.0.x signature, read out of the installed
     /// assembly's own metadata - <c>PlacePiece(piece, pos, rot, doAttack,
-    /// cheated)</c>. The position and rotation are PARAMETERS, which is the fact
-    /// the whole build order rests on: an NPC can aim a placement, and nothing
-    /// has to drive the local player's placement ghost.</summary>
+    /// cheated)</c>, returning VOID. The position and rotation are PARAMETERS,
+    /// which is the fact the whole build order rests on: an NPC can aim a
+    /// placement, and nothing has to drive the local player's placement ghost.
+    /// There is no success to read back, which is why progress is read from the
+    /// world rather than from what was asked for.</summary>
     public List<string> Placed { get; } = new List<string>();
 
-    public bool PlaceSucceeds { get; set; } = true;
+    public Exception? PlaceThrows { get; set; }
 
-    public bool PlacePiece(Piece piece, Vector3 pos, Quaternion rot, bool doAttack, bool cheated)
+    public void PlacePiece(Piece piece, Vector3 pos, Quaternion rot, bool doAttack, bool cheated)
     {
+        if (PlaceThrows != null)
+        {
+            throw PlaceThrows;
+        }
+
         Placed.Add(string.Format(
             System.Globalization.CultureInfo.InvariantCulture,
             "{0}@{1:0.##}/{2:0.##}/{3:0.##} yaw {4:0.##} attack={5} cheated={6}",
             piece.gameObject.name, pos.x, pos.y, pos.z, rot.eulerAngles.y, doAttack, cheated));
-        return PlaceSucceeds;
     }
 
     public GameObject? Hovering { get; set; }
