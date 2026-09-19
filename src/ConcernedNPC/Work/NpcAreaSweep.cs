@@ -104,6 +104,7 @@ internal sealed class NpcAreaSweep
     private bool _areaFailed;
     private int _examined;
     private int _notLoaded;
+    private int _unreadable;
     private int _rejected;
     private int _exhausted;
 
@@ -133,6 +134,7 @@ internal sealed class NpcAreaSweep
         _areaFailed = false;
         _examined = 0;
         _notLoaded = 0;
+        _unreadable = 0;
         _rejected = 0;
         _exhausted = 0;
     }
@@ -199,8 +201,9 @@ internal sealed class NpcAreaSweep
             {
                 // The seam says a probe never throws for a world reason. One
                 // that does has not proved the point is bad, so it counts as
-                // ground nobody looked at.
-                _notLoaded++;
+                // unknown - and as the kind of unknown that walking over
+                // there will not fix.
+                _unreadable++;
                 continue;
             }
 
@@ -211,13 +214,17 @@ internal sealed class NpcAreaSweep
                     break;
 
                 case AreaSampleVerdict.NotLoaded:
-                case AreaSampleVerdict.Unreadable:
-                    // Deliberately together: "I could not tell" and "I have not
-                    // looked yet" are both unknown, and unknown may never add up
-                    // to empty. The report has three counters and the probe has
-                    // four verdicts, so this is where the two compress - always
-                    // towards the answer that keeps a job open.
                     _notLoaded++;
+                    break;
+
+                case AreaSampleVerdict.Unreadable:
+                    // Both are unknown and neither may ever add up to empty, so
+                    // they weigh the same on a conclusion. They are counted
+                    // apart because the fixes differ: ground nobody has streamed
+                    // in comes back when the player walks over there, and a probe
+                    // that cannot answer is a defect that will still be there
+                    // tomorrow.
+                    _unreadable++;
                     break;
 
                 default:
@@ -244,7 +251,8 @@ internal sealed class NpcAreaSweep
     /// <see cref="AreaScanReport.IsConclusive"/> false until there is genuinely
     /// nothing left to look at.</summary>
     private AreaScanReport Report(AreaScanOutcome outcome) =>
-        new AreaScanReport(outcome, _examined, _notLoaded, _rejected, _exhausted, !IsFinished);
+        new AreaScanReport(
+            outcome, _examined, _notLoaded, _rejected, _exhausted, !IsFinished, _unreadable);
 
     /// <summary>A short, deterministic list of points inside an area, for the
     /// one question a role's adapter has to answer before a checkpoint can:
@@ -363,7 +371,8 @@ internal sealed class NpcAreaSweep
         }
         catch (Exception)
         {
-            _notLoaded++;
+            // A filter that throws has judged nothing.
+            _unreadable++;
             return;
         }
 
@@ -382,7 +391,7 @@ internal sealed class NpcAreaSweep
                 break;
 
             default:
-                _notLoaded++;
+                _unreadable++;
                 break;
         }
     }
@@ -399,8 +408,10 @@ internal sealed class NpcAreaSweep
             return AreaScanOutcome.Incomplete;
         }
 
-        if (_notLoaded > 0)
+        if (_notLoaded > 0 || _unreadable > 0)
         {
+            // Unknown of either kind. The outcome stays NotLoaded because
+            // that is what a role acts on; the report says which it was.
             return AreaScanOutcome.NotLoaded;
         }
 

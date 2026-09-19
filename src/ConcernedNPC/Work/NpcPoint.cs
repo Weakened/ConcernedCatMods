@@ -25,7 +25,7 @@ namespace TheConcernedCat.ConcernedNPC.Work;
 /// across the capability boundary as text. Nothing in this library writes text,
 /// so nothing here needs them; adding them now would be inventing a durable
 /// format for a package whose whole safety argument is that it owns none.</summary>
-internal readonly struct NpcPoint : IEquatable<NpcPoint>
+public readonly struct NpcPoint : IEquatable<NpcPoint>
 {
     internal NpcPoint(float x, float y, float z)
     {

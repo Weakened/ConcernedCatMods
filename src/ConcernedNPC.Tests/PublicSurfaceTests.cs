@@ -45,7 +45,16 @@ public class PublicSurfaceTests
         "TheConcernedCat.ConcernedNPC.Roles.NpcRoleRegistry",
         "TheConcernedCat.ConcernedNPC.Roles.RoleRegistration",
         "TheConcernedCat.ConcernedNPC.Roles.RoleRegistrationStatus",
+        "TheConcernedCat.ConcernedNPC.Work.INpcWorkArea",
+        "TheConcernedCat.ConcernedNPC.Work.INpcWorkAreaProvider",
+        "TheConcernedCat.ConcernedNPC.Work.NpcPoint",
+        "TheConcernedCat.ConcernedNPC.Work.NpcWorkAreaDescriptor",
+        "TheConcernedCat.ConcernedNPC.Work.NpcWorkAreaId",
+        "TheConcernedCat.ConcernedNPC.Work.NpcWorkAreaRegistry",
+        "TheConcernedCat.ConcernedNPC.Work.NpcWorkAreaResult",
         "TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch",
+        "TheConcernedCat.ConcernedNPC.Work.ProviderRegistration",
+        "TheConcernedCat.ConcernedNPC.Work.WorkAreaResolution",
     };
 
     [Fact]

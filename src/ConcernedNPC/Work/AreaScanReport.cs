@@ -51,7 +51,8 @@ internal enum AreaScanOutcome
 internal readonly struct AreaScanReport
 {
     internal AreaScanReport(
-        AreaScanOutcome outcome, int examined, int notLoaded, int rejected, int exhausted, bool truncatedByBudget)
+        AreaScanOutcome outcome, int examined, int notLoaded, int rejected, int exhausted,
+        bool truncatedByBudget, int unreadable = 0)
     {
         Outcome = outcome;
         Examined = examined;
@@ -59,6 +60,7 @@ internal readonly struct AreaScanReport
         Rejected = rejected;
         Exhausted = exhausted;
         TruncatedByBudget = truncatedByBudget;
+        Unreadable = unreadable;
     }
 
     /// <summary>The single answer, derived from everything below.</summary>
@@ -78,6 +80,17 @@ internal readonly struct AreaScanReport
     /// <summary>How many were the right thing, already used up.</summary>
     internal int Exhausted { get; }
 
+    /// <summary>How many the probe could not answer for at all - it failed,
+    /// or it said so.
+    ///
+    /// Separate from <see cref="NotLoaded"/> on purpose, because the two are
+    /// different problems wearing the same face: ground that is not streamed
+    /// in comes back when the player walks over, and a probe that cannot
+    /// answer does not. Both are unknown and neither may add up to empty, so
+    /// they count the same towards a conclusion and differently towards a
+    /// diagnosis.</summary>
+    internal int Unreadable { get; }
+
     /// <summary>Whether the pass stopped because it ran out of budget rather
     /// than because it finished. The one flag that turns "nothing found" into
     /// "not finished looking".</summary>
@@ -92,7 +105,8 @@ internal readonly struct AreaScanReport
         && NotLoaded >= 0
         && Rejected >= 0
         && Exhausted >= 0
-        && Examined >= NotLoaded + Rejected + Exhausted;
+        && Unreadable >= 0
+        && Examined >= NotLoaded + Rejected + Exhausted + Unreadable;
 
     /// <summary>Whether this pass proves the area holds nothing more of what was
     /// asked for. True only for <see cref="AreaScanOutcome.Empty"/> and
@@ -104,6 +118,7 @@ internal readonly struct AreaScanReport
     internal bool IsConclusive =>
         (Outcome == AreaScanOutcome.Empty || Outcome == AreaScanOutcome.Exhausted)
         && NotLoaded == 0
+        && Unreadable == 0
         && !TruncatedByBudget
         && CountsAgree;
 }

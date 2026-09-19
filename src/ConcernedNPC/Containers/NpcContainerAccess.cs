@@ -25,32 +25,39 @@ internal enum NpcContainerRefusal
     /// which is the ordinary case rather than the exotic one.</summary>
     NotThisContainer = 2,
 
+    /// <summary>The job named no container. Not a refusal by the player and not
+    /// a fault in the world: a plan reached a step that needs somewhere to put
+    /// something and nobody ever said where. It sorts below
+    /// <see cref="NotEnabled"/> because the player's fix is different - choose a
+    /// chest, rather than enable the one already chosen.</summary>
+    NotDesignated = 3,
+
     /// <summary>The player has not enabled this container for NPCs. The
     /// default, and never an error.</summary>
-    NotEnabled = 3,
+    NotEnabled = 4,
 
     /// <summary>Enabled, but not for this - taking from a deposit-only
     /// container, or the reverse.</summary>
-    UseNotAllowed = 4,
+    UseNotAllowed = 5,
 
     /// <summary>This process does not own the container, and a write by a
     /// non-owner is discarded without telling anyone.</summary>
-    NotOwnedHere = 5,
+    NotOwnedHere = 6,
 
     /// <summary>Somebody has it open, or it rides a cart that is in use. What
     /// is written now is overwritten when their window closes.</summary>
-    InUse = 6,
+    InUse = 7,
 
     /// <summary>A guard stone refuses. The player's fix is the ward.</summary>
-    WardDenied = 7,
+    WardDenied = 8,
 
     /// <summary>The container's own privacy setting refuses. The player's fix is
     /// the chest.</summary>
-    PrivacyDenied = 8,
+    PrivacyDenied = 9,
 
     /// <summary>Too far away for the NPC to reach from where it is standing.
     /// Not a fault: walk closer and ask again.</summary>
-    OutOfReach = 9,
+    OutOfReach = 10,
 }
 
 /// <summary>What an NPC may do with one container right now: what the player
