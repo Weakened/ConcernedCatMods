@@ -34,9 +34,9 @@ internal static class NaturalSourceClassifier
         unchecked((ulong)id.UserID).ToString("x16", CultureInfo.InvariantCulture) + ":" +
         id.ID.ToString("x8", CultureInfo.InvariantCulture);
 
-    internal static SitePoint ToSitePoint(Vector3 point) => new SitePoint(point.x, point.y, point.z);
+    internal static SitePoint ToSitePoint(Vector3 point) => SitePoints.ToSitePoint(point);
 
-    internal static Vector3 ToVector3(SitePoint point) => new Vector3(point.X, point.Y, point.Z);
+    internal static Vector3 ToVector3(SitePoint point) => SitePoints.ToVector3(point);
 
     /// <summary>Describes a candidate network object: its key for this world
     /// load, its facts, and what one pick of it gives under the world's drop

@@ -89,7 +89,7 @@ internal sealed class WorldDesignationSite : IDesignationSite
     /// one overload whose signature was verified, and the step is chosen so the
     /// sampling cannot skip a zone. It runs once when a player marks something,
     /// never on a tick.</summary>
-    private static bool IsSurroundingsLoaded(ZoneSystem zones, Vector3 centre, float radius)
+    internal static bool IsSurroundingsLoaded(ZoneSystem zones, Vector3 centre, float radius)
     {
         float reach = radius + LoadedMargin;
         float min = -reach;
