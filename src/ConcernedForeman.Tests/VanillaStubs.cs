@@ -77,7 +77,7 @@ public class PieceTable : MonoBehaviour
     public List<GameObject> m_pieces = new List<GameObject>();
 }
 
-public class Piece : MonoBehaviour
+public partial class Piece : MonoBehaviour
 {
     /// <summary>Vanilla keeps every placed piece in a static list and filters it
     /// by distance; a test builds the list directly.</summary>
@@ -569,6 +569,24 @@ public class Player : Humanoid
 {
     public static Player? m_localPlayer;
 
+    /// <summary>#380: the real 1.0.x signature, read out of the installed
+    /// assembly's own metadata - <c>PlacePiece(piece, pos, rot, doAttack,
+    /// cheated)</c>. The position and rotation are PARAMETERS, which is the fact
+    /// the whole build order rests on: an NPC can aim a placement, and nothing
+    /// has to drive the local player's placement ghost.</summary>
+    public List<string> Placed { get; } = new List<string>();
+
+    public bool PlaceSucceeds { get; set; } = true;
+
+    public bool PlacePiece(Piece piece, Vector3 pos, Quaternion rot, bool doAttack, bool cheated)
+    {
+        Placed.Add(string.Format(
+            System.Globalization.CultureInfo.InvariantCulture,
+            "{0}@{1:0.##}/{2:0.##}/{3:0.##} yaw {4:0.##} attack={5} cheated={6}",
+            piece.gameObject.name, pos.x, pos.y, pos.z, rot.eulerAngles.y, doAttack, cheated));
+        return PlaceSucceeds;
+    }
+
     public GameObject? Hovering { get; set; }
 
     public long PlayerId { get; set; } = 42L;
@@ -657,5 +675,90 @@ public class ObjectDB
     public Dictionary<string, GameObject> Prefabs { get; } = new Dictionary<string, GameObject>(StringComparer.Ordinal);
 
     public GameObject? GetItemPrefab(string name) =>
+        Prefabs.TryGetValue(name, out GameObject? prefab) ? prefab : null;
+}
+
+/// <summary>#380: the three vanilla surfaces the construction adapters read,
+/// and nothing more of them than the adapters touch.
+///
+/// <c>Piece.Requirement</c> and <c>Piece.m_resources</c> are the <b>real build
+/// cost</b> - the one source #380 allows, and the reason this product carries no
+/// cost table of its own. <c>CraftingStation.HaveBuildStationInRange</c> and the
+/// two <c>ZoneSystem</c> queries are two of the gates CF-SET-003 names.</summary>
+public partial class Piece
+{
+    public class Requirement
+    {
+        public ItemDrop? m_resItem;
+
+        public int m_amount;
+
+        public int m_recover;
+    }
+
+    public Requirement[]? m_resources;
+
+    public CraftingStation? m_craftingStation;
+}
+
+public class CraftingStation : MonoBehaviour
+{
+    /// <summary>Which station names a test says are in range. Vanilla walks a
+    /// static list of live stations and measures; the adapter only ever reads
+    /// the boolean.</summary>
+    public static readonly HashSet<string> InRange = new HashSet<string>(StringComparer.Ordinal);
+
+    public string m_name = string.Empty;
+
+    public static bool HaveBuildStationInRange(string name, Vector3 point) => InRange.Contains(name);
+}
+
+public class ZoneSystem
+{
+    public static ZoneSystem? instance;
+
+    /// <summary>Points a test says are NOT on loaded ground. Empty means all of
+    /// it is loaded, because most tests are not about streaming.</summary>
+    public HashSet<string> Unloaded { get; } = new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>Points the ground height cannot be measured at.</summary>
+    public HashSet<string> NoGround { get; } = new HashSet<string>(StringComparer.Ordinal);
+
+    public Exception? Throws { get; set; }
+
+    public static string Key(Vector3 point) => string.Format(
+        System.Globalization.CultureInfo.InvariantCulture,
+        "{0:0.##}/{1:0.##}/{2:0.##}", point.x, point.y, point.z);
+
+    public bool IsZoneLoaded(Vector3 point)
+    {
+        if (Throws != null)
+        {
+            throw Throws;
+        }
+
+        return !Unloaded.Contains(Key(point));
+    }
+
+    public bool GetSolidHeight(Vector3 point, out float height)
+    {
+        if (Throws != null)
+        {
+            throw Throws;
+        }
+
+        height = 0f;
+        return !NoGround.Contains(Key(point));
+    }
+}
+
+public class ZNetScene
+{
+    public static ZNetScene? instance;
+
+    public Dictionary<string, GameObject> Prefabs { get; } =
+        new Dictionary<string, GameObject>(StringComparer.Ordinal);
+
+    public GameObject? GetPrefab(string name) =>
         Prefabs.TryGetValue(name, out GameObject? prefab) ? prefab : null;
 }

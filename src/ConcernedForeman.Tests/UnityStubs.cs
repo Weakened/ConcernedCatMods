@@ -82,6 +82,33 @@ namespace UnityEngine
         public override int GetHashCode() => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this);
     }
 
+    /// <summary>#380: only what the piece installer builds and what a test
+    /// reads back. A rotation about the vertical axis is the whole of a build
+    /// order's facing, so the stub keeps the three angles and nothing else - a
+    /// real quaternion's arithmetic is not under test anywhere in this
+    /// product.</summary>
+    public readonly struct Quaternion : IEquatable<Quaternion>
+    {
+        private Quaternion(float pitch, float yaw, float roll)
+        {
+            eulerAngles = new Vector3(pitch, yaw, roll);
+        }
+
+        public Vector3 eulerAngles { get; }
+
+        public static Quaternion identity => new Quaternion(0f, 0f, 0f);
+
+        public static Quaternion Euler(float x, float y, float z) => new Quaternion(x, y, z);
+
+        public bool Equals(Quaternion other) => eulerAngles.Equals(other.eulerAngles);
+
+        public override bool Equals(object? obj) => obj is Quaternion other && Equals(other);
+
+        public override int GetHashCode() => eulerAngles.GetHashCode();
+
+        public override string ToString() => "rot" + eulerAngles;
+    }
+
     public class Transform : Object
     {
         public Vector3 position;
