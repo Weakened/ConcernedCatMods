@@ -68,9 +68,16 @@ the identity to `Resting` — so every shipped haul test still asserts exactly w
 - a world unload ends the hold whether or not this product noticed, because the arbiter ends its own holds;
 - an authority in no position to answer (no world, no registration) is a **refusal**, never a grant.
 
-**The residue, stated rather than discovered.** The mode *word* is still Teamster's, kept in
-`WorkerIdentityHold`, because `NpcRoleRegistry.ModeOf` is `internal` to the library. When it opens, `Mode` becomes
-a read of the arbiter's own and this type keeps its shape — a rename, not a redesign.
+**The residue, stated rather than discovered.** `NpcRoleRegistry.ModeOf` is public, so a product can *read* an
+identity's mode owner. It still cannot *drive* one — `Enter` and `Release` on it are internal, and nothing inside
+the library calls them either; the only callers anywhere are its own tests, which link its sources. The arbiter's
+mode is therefore never set by anybody today, and reading it instead of keeping the word in `WorkerIdentityHold`
+would be a regression with three faces: `Mode` would report `Resting` while Gunnar is pulling a loaded cart;
+`JobId` would be null, so the refusal that stops a haul and a collection round holding him at once would stop
+refusing; and `MayRetireBody` would be permanently true, which is the guard on destroying a body a cart is
+jointed to. Either of two library changes closes it — make `Enter`/`Release` public and this becomes a forwarder,
+or have the arbiter enter a mode itself when a body is claimed and this becomes a read. The second keeps "a
+product holds one and cannot drive one" intact and is the better shape.
 
 ## 3. What Gunnar may collect, and what he may not
 

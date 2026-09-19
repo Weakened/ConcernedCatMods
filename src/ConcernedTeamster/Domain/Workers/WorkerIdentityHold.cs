@@ -76,14 +76,29 @@ internal interface IWorkerIdentityAuthority
 /// round - therefore cannot both hold Gunnar, and neither can a job in another
 /// product that ever registers the same identity.
 ///
-/// <b>The residue, stated rather than discovered.</b> The <i>mode word</i> is
-/// still kept here. The shared runtime has its own mode owner per identity and
-/// it is the right home for this, but its accessor is <c>internal</c> to that
-/// assembly, so a product cannot reach it. When it opens, this type keeps its
-/// shape and its <see cref="Mode"/> becomes a read of the arbiter's - a rename,
-/// not a redesign. Until then, one fact about Gunnar lives in two assemblies:
-/// the hold, which is the arbiter's and is enforced, and the word for what he is
-/// doing, which is this product's and is reported.</summary>
+/// <b>The residue, stated rather than discovered, and it is now half a step
+/// smaller than it was.</b> The shared runtime's <c>ModeOf</c> is public, so a
+/// product can <i>read</i> an identity's mode owner. It still cannot
+/// <i>drive</i> one: <c>Enter</c> and <c>Release</c> on it are internal, and
+/// nothing inside that library calls them either - the only callers anywhere are
+/// its own tests, which link its sources.
+///
+/// So the arbiter's mode is, today, never set by anybody. Reading it instead of
+/// keeping the word here would not be a rename, it would be a regression with
+/// three faces: <see cref="Mode"/> would report <see cref="ActorMode.Resting"/>
+/// while Gunnar is pulling a loaded cart; <see cref="JobId"/> would be null, so
+/// the refusal that stops a haul and a collection round holding him at once
+/// would stop refusing; and <see cref="MayRetireBody"/> would be permanently
+/// true, which is the guard on destroying a body a cart is jointed to. So the
+/// word stays here, deliberately, until the arbiter's own mode is driven by
+/// something.
+///
+/// <b>Either of two changes closes it, and both are the library's.</b> Make
+/// <c>Enter</c> and <c>Release</c> public, and this type becomes a forwarder;
+/// or have the arbiter enter a mode itself when a body is claimed, and this type
+/// becomes a read. The second keeps "a product holds one and cannot drive one"
+/// intact and is the better shape, at the cost of a claim carrying which mode it
+/// is for.</summary>
 internal sealed class WorkerIdentityHold
 {
     private readonly IWorkerIdentityAuthority _authority;
