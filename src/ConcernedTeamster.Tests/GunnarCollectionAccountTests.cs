@@ -105,8 +105,14 @@ public sealed class GunnarCollectionAccountTests
         var account = new CollectionAccount();
         account.Record("a", "Stone", 3, StopResult.Took());
 
-        account.RecordDeposit("r1", new DepositResult(DepositOutcome.Refused, null, "the chest is warded"));
-        account.RecordDeposit("r2", new DepositResult(DepositOutcome.Uncertain, null, "nobody could tell"));
+        // Both results carry a measured list, and that is the point: a refusal
+        // can still report what it saw on the way, and an uncertain transfer
+        // reports both counts as its evidence. A test that passed an empty list
+        // would pass with the guard deleted, which is how it was written first
+        // and what a planted defect found.
+        var measured = new[] { new KeyValuePair<string, int>("Stone", 3) };
+        account.RecordDeposit("r1", new DepositResult(DepositOutcome.Refused, measured, "the chest is warded"));
+        account.RecordDeposit("r2", new DepositResult(DepositOutcome.Uncertain, measured, "nobody could tell"));
 
         Assert.Equal(3, account.Ledger.At("Stone", CargoPlace.Carried));
         Assert.Equal(0, account.Ledger.At("Stone", CargoPlace.Delivered));
