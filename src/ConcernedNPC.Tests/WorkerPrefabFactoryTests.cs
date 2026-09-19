@@ -150,10 +150,20 @@ public sealed class WorkerPrefabFactoryTests : IDisposable
 
         Build(creature);
 
-        // One of the three shipped copies made only the first call. Being known
-        // to the framework by name is not the same as being in the network
-        // scene's table when a saved object is recreated, and the difference is
-        // the difference between a saved body coming back and being destroyed.
+        // Both calls happen. What this test does NOT assert, because it is not
+        // true, is that the second one saves a body: read against the shipped
+        // framework, the two AddPrefab overloads are the same call, and what
+        // actually registers a prefab into the network scene is a postfix on
+        // the scene's own wake-up that walks every known prefab on every world
+        // load. The explicit call here is a no-op on the path this factory runs
+        // on, because it builds at the main menu where no scene exists.
+        //
+        // The test is kept as a regression on intent: if somebody drops the
+        // second call, this fails and they have to read the comment in the
+        // factory and find out why it is there - which is that it becomes real
+        // the day the build moves later than the main menu. A stub cannot model
+        // the framework's own patch, so this is the honest limit of what it can
+        // say.
         Assert.Contains(BodyFixtures.ForemanPrefab, manager.Added);
         Assert.Contains(BodyFixtures.ForemanPrefab, manager.RegisteredToScene);
     }

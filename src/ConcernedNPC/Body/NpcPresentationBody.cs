@@ -46,7 +46,7 @@ namespace TheConcernedCat.ConcernedNPC.Body;
 /// name it, or decide which candidate to try. Appearance, props and the
 /// candidate list are the role's: the figure comes back with the joints and the
 /// renderer the source rig offered, and the role goes on from there.</summary>
-internal static class NpcPresentationBody
+public static class NpcPresentationBody
 {
     /// <summary>Extracts one figure, or refuses this candidate.</summary>
     /// <param name="source">The game prefab to take a visual from.</param>
@@ -64,7 +64,7 @@ internal static class NpcPresentationBody
     /// caller on purpose. Empty means "take every script out", which is the
     /// safe answer for a caller that adds none.</param>
     /// <param name="log">Where the refusal and the summary lines go.</param>
-    internal static NpcPresentationFigure TryExtract(
+    public static NpcPresentationFigure TryExtract(
         GameObject? source,
         string candidateName,
         string figureName,

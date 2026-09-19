@@ -53,7 +53,7 @@ namespace TheConcernedCat.ConcernedNPC.Body;
 /// <see cref="INpcBodyMotor"/> and a per-tick callback, and whoever is planning
 /// calls the primitives. Nothing in this file knows what a cart is, what a
 /// shelter is, or why anybody is walking anywhere.</summary>
-internal sealed class NpcBodyMind : BaseAI, INpcBodyMotor
+public sealed class NpcBodyMind : BaseAI, INpcBodyMotor
 {
     private static readonly List<NpcBodyMind> LiveMinds = new List<NpcBodyMind>();
 
@@ -67,22 +67,22 @@ internal sealed class NpcBodyMind : BaseAI, INpcBodyMotor
     /// filters it by its own prefab first and its own identity second; the two
     /// together are what stop two roles that share a key prefix from adopting
     /// each other's bodies.</summary>
-    internal static IReadOnlyList<NpcBodyMind> Live => LiveMinds;
+    public static IReadOnlyList<NpcBodyMind> Live => LiveMinds;
 
     /// <summary>Errors, reported whatever the diagnostic settings say. A
     /// latched fault makes this body permanently inert, which is exactly the
     /// thing a player needs told - routing it through a debug channel would
     /// hide it behind an option that is off by default.</summary>
-    internal static Action<string>? ErrorLog { get; set; }
+    public static Action<string>? ErrorLog { get; set; }
 
     /// <summary>Called once per owned tick, before anything else, so a
     /// runtime's mutations run inside this body's own simulation step and a
     /// goal it sets is acted on in the same tick. Anything that escapes it
     /// latches this body like any other fault.</summary>
-    internal Action<NpcBodyMind, float>? WorkTick { get; set; }
+    public Action<NpcBodyMind, float>? WorkTick { get; set; }
 
     /// <summary>Verbose per-tick logging. Off unless the player asked.</summary>
-    internal Action<string>? DebugLog { get; set; }
+    public Action<string>? DebugLog { get; set; }
 
     public bool IsFaulted => _faulted;
 
@@ -96,7 +96,7 @@ internal sealed class NpcBodyMind : BaseAI, INpcBodyMotor
     /// remembered: it never changes for a body, and re-reading it every tick
     /// would be a network-object read twenty times a second for an answer that
     /// cannot have moved.</summary>
-    internal NpcIdentity Identity
+    public NpcIdentity Identity
     {
         get
         {
@@ -112,7 +112,13 @@ internal sealed class NpcBodyMind : BaseAI, INpcBodyMotor
 
     /// <summary>Tells a freshly built body who it is, so the first tick after a
     /// spawn does not have to go back to the network object for something the
-    /// spawner already knows.</summary>
+    /// spawner already knows.
+    ///
+    /// <b>Internal.</b> The only caller that legitimately knows an identity
+    /// before the object does is the factory that just stamped it. A role that
+    /// could set this could make a body answer with an identity its own network
+    /// object does not carry, and the census - which reads the object - would
+    /// disagree with every runtime that reads the mind.</summary>
     internal void RememberIdentity(NpcIdentity identity)
     {
         _identity = identity;

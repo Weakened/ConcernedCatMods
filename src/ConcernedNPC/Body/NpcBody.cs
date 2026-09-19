@@ -37,7 +37,7 @@ namespace TheConcernedCat.ConcernedNPC.Body;
 /// wrote, which is what makes an existing world load without a migration. A
 /// prefab nobody registered yields no names, and a body with no names is inert
 /// rather than reading somebody else's.</summary>
-internal sealed class NpcBody : MonoBehaviour
+public sealed class NpcBody : MonoBehaviour
 {
     private static readonly List<NpcBody> LiveBodies = new List<NpcBody>();
 
@@ -52,19 +52,19 @@ internal sealed class NpcBody : MonoBehaviour
     /// <summary>Raised once a body has loaded what it stores and is ready to be
     /// bound: at spawn, at world load, and whenever its ground loads
     /// again.</summary>
-    internal static Action<NpcBody>? Loaded { get; set; }
+    public static Action<NpcBody>? Loaded { get; set; }
 
     /// <summary>Raised on death, after every carried item is on the ground and
     /// before the body goes, so a ledger can say what left its hands rather
     /// than quietly balancing.</summary>
-    internal static Action<NpcBody, IReadOnlyList<NpcDroppedItem>, Vector3>? Died { get; set; }
+    public static Action<NpcBody, IReadOnlyList<NpcDroppedItem>, Vector3>? Died { get; set; }
 
     /// <summary>Errors, reported whatever the diagnostic settings say: an inert
     /// body is exactly the thing a player needs told.</summary>
-    internal static Action<string>? ErrorLog { get; set; }
+    public static Action<string>? ErrorLog { get; set; }
 
     /// <summary>Bodies alive in this scene that finished loading.</summary>
-    internal static IReadOnlyList<NpcBody> Live
+    public static IReadOnlyList<NpcBody> Live
     {
         get
         {
@@ -77,7 +77,7 @@ internal sealed class NpcBody : MonoBehaviour
     /// by prefab <b>and then</b> key: two roles may share a key prefix, and a
     /// search by identity alone would hand one role's runtime the other's body.
     /// </summary>
-    internal static NpcBody? FindLive(NpcBodyContract contract, NpcIdentity identity)
+    public static NpcBody? FindLive(NpcBodyContract contract, NpcIdentity identity)
     {
         foreach (NpcBody body in Live)
         {
@@ -94,45 +94,53 @@ internal sealed class NpcBody : MonoBehaviour
     /// <summary>Drops every tracked body. Called when a world goes away, so a
     /// second world in the same session does not inherit the first one's.
     /// </summary>
-    internal static void ForgetAll() => LiveBodies.Clear();
+    public static void ForgetAll() => LiveBodies.Clear();
 
     /// <summary>The prefab this body is an instance of.</summary>
-    internal string PrefabName => _setup.Contract.PrefabName;
+    public string PrefabName => _setup.Contract.PrefabName;
 
     /// <summary>Who this body is, read from its own object.</summary>
-    internal NpcIdentity Identity { get; private set; }
+    public NpcIdentity Identity { get; private set; }
 
     /// <summary>The identity text exactly as it is stored, which is not always
     /// a well-formed identity: a body stamped by an older build, or damaged,
     /// keeps whatever it has and is reported rather than adopted.</summary>
-    internal string StoredKey { get; private set; } = string.Empty;
+    public string StoredKey { get; private set; } = string.Empty;
 
-    internal bool IsLoaded { get; private set; }
+    public bool IsLoaded { get; private set; }
 
     /// <summary>Why this body is inert, or null.</summary>
-    internal string? Fault { get; private set; }
+    public string? Fault { get; private set; }
 
     /// <summary>False when the most recent inventory change could not be
     /// written to the body's own object. Any step involving this body is then
     /// uncertain, never completed.</summary>
-    internal bool LastChangePersisted { get; private set; } = true;
+    public bool LastChangePersisted { get; private set; } = true;
 
-    internal int Revision { get; private set; }
+    public int Revision { get; private set; }
 
-    internal Humanoid? Humanoid => _humanoid;
+    public Humanoid? Humanoid => _humanoid;
 
-    internal Inventory? Inventory => _inventory;
+    public Inventory? Inventory => _inventory;
 
+    /// <summary>The body's own network object.
+    ///
+    /// <b>Internal on purpose, while nearly everything else here is public.</b>
+    /// A role needs to read what this body is and what it carries; it does not
+    /// need the handle that would let it write into the object, and the rule
+    /// that only a body writes its own object is worth more than the
+    /// convenience. <see cref="IsOwned"/> answers the question a role actually
+    /// has.</summary>
     internal ZNetView? View => _view;
 
-    internal bool IsOwned => _view != null && _view.IsValid() && _view.IsOwner();
+    public bool IsOwned => _view != null && _view.IsValid() && _view.IsOwner();
 
     /// <summary>What this body stores, as its role declared at registration.
     /// </summary>
-    internal NpcBodyKeeps Keeps => _setup.Keeps;
+    public NpcBodyKeeps Keeps => _setup.Keeps;
 
     /// <summary>The number of items this body carries, tools included.</summary>
-    internal int ItemCount => _inventory == null ? 0 : _inventory.NrOfItems();
+    public int ItemCount => _inventory == null ? 0 : _inventory.NrOfItems();
 
     /// <summary>Stamps a freshly built body with its identity, before its first
     /// <c>Start</c>. The one place this library writes into a network object,
@@ -245,7 +253,7 @@ internal sealed class NpcBody : MonoBehaviour
 
     /// <summary>Writes the inventory to the body's own object now. Called from
     /// the change callback; also usable to retry a failed write.</summary>
-    internal bool TryPersist()
+    public bool TryPersist()
     {
         try
         {

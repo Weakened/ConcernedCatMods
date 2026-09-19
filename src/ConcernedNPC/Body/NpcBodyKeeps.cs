@@ -15,7 +15,7 @@ namespace TheConcernedCat.ConcernedNPC.Body;
 /// It is also not reversible for free in the other direction. Turning it off
 /// for a role that had it leaves a stored inventory nothing reads, and the
 /// items in it are gone as far as the player is concerned.</summary>
-internal enum NpcBodyKeeps
+public enum NpcBodyKeeps
 {
     /// <summary>Not stated. Refused at registration; never a default.</summary>
     Unspecified = 0,

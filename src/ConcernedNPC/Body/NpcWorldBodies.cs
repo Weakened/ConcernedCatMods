@@ -40,7 +40,7 @@ namespace TheConcernedCat.ConcernedNPC.Body;
 /// standing; an unidentified body is counted and never adopted. Deciding which
 /// of two bodies carrying one identity should go is a person's decision, and
 /// getting it wrong means a player loses whatever was inside.</summary>
-internal sealed class NpcWorldBodies
+public sealed class NpcWorldBodies
 {
     private readonly NpcBodySetup _setup;
     private readonly Dictionary<string, HashSet<ZDOID>> _byIdentity =
@@ -57,14 +57,36 @@ internal sealed class NpcWorldBodies
         _setup = setup;
     }
 
+    /// <summary>A census for one role, or the reason its facts cannot make one.
+    ///
+    /// The role's own facts and nothing else: the same contract its prefab was
+    /// registered under and the same statement of what its body stores. Getting
+    /// either wrong here would read a key nobody wrote, so it is refused rather
+    /// than defaulted - and refused at the one call a role makes, rather than
+    /// silently producing a census that finds nothing and permits a second
+    /// body.</summary>
+    public static bool TryFor(
+        NpcBodyContract contract, NpcBodyKeeps keeps, out NpcWorldBodies? census, out string reason)
+    {
+        census = null;
+        if (!NpcBodySetup.TryCompose(contract, keeps, out NpcBodySetup setup, out reason))
+        {
+            return false;
+        }
+
+        census = new NpcWorldBodies(setup);
+        reason = string.Empty;
+        return true;
+    }
+
     /// <summary>The walk over this world's saved objects has finished. Until it
     /// has, nothing may be built.</summary>
-    internal bool IsComplete { get; private set; }
+    public bool IsComplete { get; private set; }
 
     /// <summary>Bodies of this prefab carrying no identity at all. Reported so
     /// a player can be told there is a stranger in their world; never adopted.
     /// </summary>
-    internal int Unidentified => _unidentified.Count;
+    public int Unidentified => _unidentified.Count;
 
     /// <summary>The prefab this census walks.</summary>
     internal string PrefabName => _setup.Contract.PrefabName;
@@ -72,7 +94,7 @@ internal sealed class NpcWorldBodies
     /// <summary>Forgets everything and starts again. Called when a world is
     /// loaded: every network id in the previous one was renumbered, so a single
     /// id carried across would name some other object.</summary>
-    internal void Restart()
+    public void Restart()
     {
         _byIdentity.Clear();
         _unidentified.Clear();
@@ -87,7 +109,7 @@ internal sealed class NpcWorldBodies
     /// Safe to call after it has finished - it does nothing - and safe to call
     /// with no world up, in which case it does nothing and stays unfinished,
     /// which is the refusing answer.</summary>
-    internal bool Advance()
+    public bool Advance()
     {
         if (IsComplete)
         {
@@ -119,7 +141,7 @@ internal sealed class NpcWorldBodies
     /// <summary>Runs the walk to the end now, for a caller that cannot wait a
     /// frame. Bounded: a world index that never terminates leaves the census
     /// unfinished, which refuses, rather than hanging the game.</summary>
-    internal bool RunToCompletion(int maximumSteps = 100000)
+    public bool RunToCompletion(int maximumSteps = 100000)
     {
         int steps = 0;
         while (!Advance() && steps++ < maximumSteps)
@@ -133,7 +155,7 @@ internal sealed class NpcWorldBodies
     /// gone. Without it, retiring a body would leave the census reporting a
     /// body that no longer exists and refusing to build a replacement for the
     /// rest of the session.</summary>
-    internal void Forget(ZDOID id)
+    public void Forget(ZDOID id)
     {
         _unidentified.Remove(id);
         foreach (KeyValuePair<string, HashSet<ZDOID>> group in _byIdentity)
@@ -146,7 +168,7 @@ internal sealed class NpcWorldBodies
     /// <paramref name="stillExists"/> is the caller's, because asking the world
     /// whether an object still exists is a game call and this type has exactly
     /// one already.</summary>
-    internal void Prune(Func<ZDOID, bool> stillExists)
+    public void Prune(Func<ZDOID, bool> stillExists)
     {
         if (stillExists == null)
         {
@@ -161,7 +183,7 @@ internal sealed class NpcWorldBodies
     }
 
     /// <summary>How many saved bodies carry one identity.</summary>
-    internal int SavedBodiesFor(NpcIdentity identity) =>
+    public int SavedBodiesFor(NpcIdentity identity) =>
         !identity.IsEmpty && _byIdentity.TryGetValue(identity.Value, out HashSet<ZDOID>? bodies)
             ? bodies.Count
             : 0;
@@ -174,7 +196,7 @@ internal sealed class NpcWorldBodies
     /// the one holding the live list.</param>
     /// <param name="loadedIsFaulted">The single loaded body's mind has
     /// latched.</param>
-    internal NpcBodyTally TallyFor(NpcIdentity identity, int loadedBodies, bool loadedIsFaulted) =>
+    public NpcBodyTally TallyFor(NpcIdentity identity, int loadedBodies, bool loadedIsFaulted) =>
         NpcBodyTally.Of(identity, IsComplete, SavedBodiesFor(identity), loadedBodies, Unidentified, loadedIsFaulted);
 
     /// <summary>Reads what a saved body carries without loading it, so a

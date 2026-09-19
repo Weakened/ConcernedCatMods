@@ -28,7 +28,7 @@ namespace TheConcernedCat.ConcernedNPC.Body;
 /// costs nothing, because the only irreversible act - building a new body -
 /// needs <see cref="NpcBodyPresence.Missing"/>, which an unfinished scan can
 /// never produce.</summary>
-internal readonly struct NpcBodyTally
+public readonly struct NpcBodyTally
 {
     private NpcBodyTally(
         NpcIdentity identity,
@@ -47,28 +47,28 @@ internal readonly struct NpcBodyTally
     }
 
     /// <summary>Whose bodies were counted.</summary>
-    internal NpcIdentity Identity { get; }
+    public NpcIdentity Identity { get; }
 
     /// <summary>The walk over the world's saved objects finished.</summary>
-    internal bool ScanComplete { get; }
+    public bool ScanComplete { get; }
 
     /// <summary>Distinct saved objects carrying this identity, loaded or not.
     /// </summary>
-    internal int SavedBodies { get; }
+    public int SavedBodies { get; }
 
     /// <summary>Of those, the ones loaded in this scene now.</summary>
-    internal int LoadedBodies { get; }
+    public int LoadedBodies { get; }
 
     /// <summary>Bodies of this role's prefab carrying no identity at all -
     /// built by a version that did not stamp one, or stamped and then failed.
     /// Reported so a player can be told; never adopted, never destroyed, and
     /// never counted as this identity's.</summary>
-    internal int Unidentified { get; }
+    public int Unidentified { get; }
 
     /// <summary>The single loaded body's mind has latched a fault.</summary>
-    internal bool LoadedIsFaulted { get; }
+    public bool LoadedIsFaulted { get; }
 
-    internal NpcBodyPresence Presence
+    public NpcBodyPresence Presence
     {
         get
         {
@@ -93,13 +93,23 @@ internal readonly struct NpcBodyTally
 
     /// <summary>A body may be built only when the scan finished and found none.
     /// Every other answer, including the unfinished one, is a refusal.</summary>
-    internal bool MaySpawn => Presence == NpcBodyPresence.Missing;
+    public bool MaySpawn => Presence == NpcBodyPresence.Missing;
 
     /// <summary>More than one body carries this identity. Stated separately
     /// from <see cref="Presence"/> because a runtime has to stop working with a
     /// duplicated identity whatever else is true of it.</summary>
-    internal bool IsDuplicated => Presence == NpcBodyPresence.Duplicated;
+    public bool IsDuplicated => Presence == NpcBodyPresence.Duplicated;
 
+    /// <summary><b>Both ways of making one are internal, and that is the point
+    /// of making the type public.</b> A role has to be able to read a tally -
+    /// it decides what the player is told, and it is what the factory takes -
+    /// but a role that could <i>construct</i> one could hand the factory a
+    /// tally saying <see cref="NpcBodyPresence.Missing"/> and build a second
+    /// body for an identity that already has one. The only way a consumer gets
+    /// a tally is <c>NpcWorldBodies.TallyFor</c>, which has counted. A defaulted
+    /// value reports <see cref="NpcBodyPresence.Searching"/>, which permits
+    /// nothing, so even the one construction the language always allows fails
+    /// closed.</summary>
     internal static NpcBodyTally Of(
         NpcIdentity identity,
         bool scanComplete,

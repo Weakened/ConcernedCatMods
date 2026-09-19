@@ -6,7 +6,7 @@ namespace TheConcernedCat.ConcernedNPC.Body;
 /// the empty gear arrays, the faction, the persistence flag, the registration
 /// call and the order they happen in. What is here is what differs between the
 /// shipped copies for a reason rather than by drift.</summary>
-internal readonly struct NpcWorkerPrefabOptions
+public readonly struct NpcWorkerPrefabOptions
 {
     private readonly string? _displayName;
 
@@ -30,9 +30,15 @@ internal readonly struct NpcWorkerPrefabOptions
     /// "pick something".</summary>
     internal string DisplayName => _displayName ?? string.Empty;
 
-    internal static NpcWorkerPrefabOptions Keeping(NpcBodyKeeps keeps) =>
+    /// <summary>The options for a role that has decided what its body
+    /// stores. The only way in: the constructor is internal, so a defaulted
+    /// value carries <see cref="NpcBodyKeeps.Unspecified"/> and is refused
+    /// at registration rather than given a default nobody chose.</summary>
+    public static NpcWorkerPrefabOptions Keeping(NpcBodyKeeps keeps) =>
         new NpcWorkerPrefabOptions(keeps, null);
 
-    internal NpcWorkerPrefabOptions Named(string displayName) =>
+    /// <summary>The same options, with the name the game shows for this
+    /// role's body.</summary>
+    public NpcWorkerPrefabOptions Named(string displayName) =>
         new NpcWorkerPrefabOptions(Keeps, displayName);
 }

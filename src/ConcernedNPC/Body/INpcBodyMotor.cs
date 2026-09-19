@@ -21,7 +21,7 @@ namespace TheConcernedCat.ConcernedNPC.Body;
 /// planning is a decision about points and budgets - and the leaf that writes
 /// the route planner can be proved against this interface with no game at
 /// all.</summary>
-internal interface INpcBodyMotor
+public interface INpcBodyMotor
 {
     /// <summary>The body is owned by this peer and its network object is valid.
     /// False means it must not be commanded at all: another peer owns it.
