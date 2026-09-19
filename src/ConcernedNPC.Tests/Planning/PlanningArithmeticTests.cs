@@ -319,7 +319,7 @@ public sealed class PlanningArithmeticTests
         Assert.Equal(10, books.LeftOver.RequiredOf("wood"));
         Assert.Equal(5, books.Outstanding.RequiredOf("wood"));
         Assert.False(books.IsComplete);
-        Assert.True(books.NeedsAnotherRound);
+        Assert.True(books.HasUnfinishedWork);
     }
 
     /// <summary>A round where everything was done owes nothing and carries

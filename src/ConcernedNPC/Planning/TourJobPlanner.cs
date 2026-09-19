@@ -126,7 +126,7 @@ internal readonly struct JobTourPlan
     ///
     /// <b>A refusal hands back all of them.</b> A plan that is not a plan
     /// reaches nothing, so this is the full count, and
-    /// <see cref="JobReconciliation.NeedsAnotherRound"/> answers true. The
+    /// <see cref="JobReconciliation.HasUnfinishedWork"/> answers true. The
     /// verdict, not this number, is what says whether asking again will help.
     ///
     /// <b>Zero is the claim, not the default.</b> A plan that covers eight trips
@@ -138,9 +138,10 @@ internal readonly struct JobTourPlan
     /// <b>Something has to read it.</b> A correct report with no reader is the
     /// one state in which a guessed cap is dangerous, because a job that stops
     /// after one round looks to a player exactly like a job that lost the rest.
-    /// A role's round loop re-plans while
-    /// <see cref="JobReconciliation.NeedsAnotherRound"/> is true; nothing in
-    /// this library does it for it.</summary>
+    /// What reads it is <see cref="JobReconciliation.HasUnfinishedWork"/>, which
+    /// says only that work remains - <b>whether to plan again is the verdict's
+    /// answer</b>, and a driver that looped on "work remains" would spin for
+    /// ever on a job refused for want of material.</summary>
     internal int LeftForAnotherRound { get; }
 
     /// <summary>Whether this plan reaches every target the job was for.</summary>
@@ -550,9 +551,17 @@ internal sealed class TourJobPlanner : IJobPlanner
             // Not one target is serviced, so there is no plan to walk - and
             // NothingToDo was decided before any of this, on an empty snapshot,
             // because it is the one verdict a job may be closed on.
+            //
+            // The chest cap answers ShortOfMaterial with an <b>empty</b>
+            // shortfall, and the pair is the whole message: the material is
+            // there, and it is not reachable in one round. Not Refused, which
+            // means the caller handed in something malformed and would send a
+            // modder hunting for a bad request that does not exist; and not
+            // BudgetExhausted, which means ask again, on a cap that is
+            // deterministic and would answer the same for ever.
             return chestCapEmptiedATrip
                 ? Refuse(
-                    JobPlanVerdict.Refused,
+                    JobPlanVerdict.ShortOfMaterial,
                     "what the chests one round opens give him does not pay for even the first thing on the trip, so the material has to be brought together before he can start",
                     request.Epoch,
                     budget,

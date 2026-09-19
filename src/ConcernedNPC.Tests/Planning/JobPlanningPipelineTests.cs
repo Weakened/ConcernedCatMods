@@ -453,7 +453,8 @@ public sealed class JobPlanningPipelineTests
             area,
             NpcWorldEpoch.Mint(),
             JobManifest.Empty,
-            Jobs.At(0f, 0f));
+            Jobs.At(0f, 0f),
+            JobManifest.Empty);
 
         Assert.Equal(JobPlanVerdict.Refused, Planner(snapshot).Plan(elsewhere).Verdict);
     }
@@ -760,7 +761,7 @@ public sealed class JobPlanningPipelineTests
         Assert.True(books.Outstanding.IsEmpty);
         Assert.True(books.LeftOver.IsEmpty);
         Assert.False(books.IsComplete);
-        Assert.True(books.NeedsAnotherRound);
+        Assert.True(books.HasUnfinishedWork);
         Assert.Equal(targets.Count - serviced, books.LeftForAnotherRound);
     }
 
@@ -931,7 +932,7 @@ public sealed class JobPlanningPipelineTests
 
         JobReconciliation books = JobReconciler.Reconcile(plan, AllDone(plan));
         Assert.False(books.IsComplete);
-        Assert.True(books.NeedsAnotherRound);
+        Assert.True(books.HasUnfinishedWork);
         Assert.Equal(6, books.LeftForAnotherRound);
     }
 
@@ -979,7 +980,7 @@ public sealed class JobPlanningPipelineTests
         JobReconciliation books = JobReconciler.Reconcile(plan, AllDone(plan));
         Assert.Equal(plan.Plan.Steps.Count, books.Done);
         Assert.False(books.IsComplete);
-        Assert.True(books.NeedsAnotherRound);
+        Assert.True(books.HasUnfinishedWork);
 
         // And once the pause is over the same job plans in full.
         var later = new TourJobPlanner(
@@ -1030,7 +1031,7 @@ public sealed class JobPlanningPipelineTests
         // Ask again: the pause is what this is waiting on, and it ends.
         Assert.Equal(JobPlanVerdict.BudgetExhausted, plan.Plan.Verdict);
         Assert.Equal(targets.Count, plan.LeftForAnotherRound);
-        Assert.True(JobReconciler.Reconcile(plan, null).NeedsAnotherRound);
+        Assert.True(JobReconciler.Reconcile(plan, null).HasUnfinishedWork);
     }
 
     /// <summary>A first trip the chest cap empties is a refusal that says so -
@@ -1060,7 +1061,7 @@ public sealed class JobPlanningPipelineTests
         JobTourPlan plan = Plan(targets, chests);
 
         Assert.NotEqual(JobPlanVerdict.NothingToDo, plan.Plan.Verdict);
-        Assert.Equal(JobPlanVerdict.Refused, plan.Plan.Verdict);
+        Assert.Equal(JobPlanVerdict.ShortOfMaterial, plan.Plan.Verdict);
         Assert.False(plan.Plan.IsActionable);
 
         // The sentence names something the player can act on, and does not claim
@@ -1075,7 +1076,7 @@ public sealed class JobPlanningPipelineTests
 
         JobReconciliation books = JobReconciler.Reconcile(plan, null);
         Assert.False(books.IsComplete);
-        Assert.True(books.NeedsAnotherRound);
+        Assert.True(books.HasUnfinishedWork);
 
         // And carrying four means the eight chests only have to find sixteen,
         // which they do - so the same inputs are a plan rather than a refusal.
@@ -1127,6 +1128,65 @@ public sealed class JobPlanningPipelineTests
         Assert.Equal(2, Services(carrying));
         Assert.Equal(1, carrying.LeftForAnotherRound);
         Assert.False(JobReconciler.Reconcile(carrying, AllDone(carrying)).IsComplete);
+    }
+
+    /// <summary>One verdict, two situations, told apart by the shortfall - and
+    /// the sentence is <c>Reason</c>, never the verdict's own name.
+    ///
+    /// <b>Why this is load-bearing and nothing stated it.</b>
+    /// <c>ShortOfMaterial</c> now covers both "the material is not there" and
+    /// "the material is there and not reachable in one round", because no caller
+    /// branches on the difference: both are terminal until a person acts and
+    /// both produce a player sentence. What a caller <i>can</i> do is tell them
+    /// apart, and the discriminator is not an extra field - it is
+    /// <see cref="JobTourPlan.Shortfall"/>, which the genuine shortage carries
+    /// and the chest cap leaves empty. That is true by construction today
+    /// (<c>Refuse</c> passes <c>JobManifest.Empty</c>, and the whole-job path is
+    /// guarded by a non-empty <c>missing</c>) and it would be silently untrue
+    /// the first time somebody threaded a shortfall through a refusal.
+    ///
+    /// The fixes a player is given are opposite ways round - <i>bring more</i>
+    /// against <i>bring it together</i> - so a role that rendered the verdict's
+    /// name instead of the reason would tell somebody they are out of wood while
+    /// they are standing on it.</summary>
+    [Fact]
+    public void Short_of_material_says_which_kind_of_short_by_its_shortfall()
+    {
+        var targets = new List<JobTarget> { Jobs.Target("section", 40f, 0f, 0, ("wood", 20)) };
+
+        // Not there: four wood in the world and twenty wanted.
+        JobTourPlan absent = Plan(
+            targets,
+            new[] { Jobs.Stock(new PlanningStockContainer("c", Jobs.World, 0f, 0f), ("wood", 4)) });
+
+        Assert.Equal(JobPlanVerdict.ShortOfMaterial, absent.Plan.Verdict);
+        Assert.False(absent.Shortfall.IsEmpty);
+        Assert.Equal(16, absent.Shortfall.RequiredOf("wood"));
+
+        // There, and not within one round: twenty-four wood across twelve
+        // chests, of which one provisioning phase opens eight.
+        var scattered = new List<SourceStock>();
+        for (int index = 0; index < 12; index++)
+        {
+            scattered.Add(Jobs.Stock(
+                new PlanningStockContainer("c" + index.ToString("00"), Jobs.World, index, 0f), ("wood", 2)));
+        }
+
+        JobTourPlan apart = Plan(targets, scattered);
+
+        Assert.Equal(JobPlanVerdict.ShortOfMaterial, apart.Plan.Verdict);
+        Assert.True(apart.Shortfall.IsEmpty);
+
+        // Same verdict, different sentence, and neither sentence is the verdict.
+        Assert.NotEqual(absent.Plan.Reason, apart.Plan.Reason);
+        Assert.NotEqual(string.Empty, absent.Plan.Reason);
+        Assert.NotEqual(string.Empty, apart.Plan.Reason);
+
+        // And neither is a finished job.
+        Assert.False(JobReconciler.Reconcile(absent, null).IsComplete);
+        Assert.False(JobReconciler.Reconcile(apart, null).IsComplete);
+        Assert.True(JobReconciler.Reconcile(absent, null).HasUnfinishedWork);
+        Assert.True(JobReconciler.Reconcile(apart, null).HasUnfinishedWork);
     }
 
     /// <summary>The same shape one trip in: a later trip the chest cap empties
@@ -1408,7 +1468,7 @@ public sealed class JobPlanningPipelineTests
         Assert.Equal(plan.CoversTheWholeJob && plan.Plan.Steps.Count > 0, books.IsComplete);
         if (!plan.CoversTheWholeJob)
         {
-            Assert.True(books.NeedsAnotherRound);
+            Assert.True(books.HasUnfinishedWork);
         }
 
         return serviced;

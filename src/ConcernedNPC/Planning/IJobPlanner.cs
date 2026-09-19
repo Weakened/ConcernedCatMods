@@ -20,7 +20,7 @@ internal readonly struct JobPlanRequest
         NpcWorldEpoch epoch,
         JobManifest wanted,
         NpcPoint startingFrom,
-        JobManifest carrying = default)
+        JobManifest carrying)
     {
         Identity = identity;
         JobId = jobId ?? string.Empty;
@@ -66,11 +66,18 @@ internal readonly struct JobPlanRequest
     /// visibly carrying. Both stopped being rare the day a chest-capped trip
     /// started shrinking instead of refusing.
     ///
-    /// <b>Empty is a claim.</b> It says he is carrying nothing this job may
-    /// spend, which is true of a first round and false of any round after a
-    /// partial one. Nothing in this library can check it: what is actually held
-    /// is the custody ledger's answer, and a planner that guessed at it would be
-    /// a second source of truth about custody.</summary>
+    /// <b>Empty is a claim, and there is no default for it.</b> It says he is
+    /// carrying nothing this job may spend, which is true of a first round and
+    /// false of any round after a partial one. Nothing in this library can check
+    /// it: what is actually held is the custody ledger's answer, and a planner
+    /// that guessed at it would be a second source of truth about custody. So
+    /// the constructor makes every caller say the number rather than letting one
+    /// stay silent and be read as nothing - the same defect, one level up, as a
+    /// refusal that stayed silent about its leftover count and was read as a
+    /// finished job.
+    ///
+    /// After a partial round, <see cref="JobReconciliation.LeftOver"/> is
+    /// exactly the manifest to pass here.</summary>
     internal JobManifest Carrying { get; }
 }
 

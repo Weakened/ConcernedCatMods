@@ -366,7 +366,8 @@ public sealed class SourceAvailabilityTests
                 area,
                 Jobs.World,
                 JobManifest.Empty,
-                Jobs.At(0f, 0f)));
+                Jobs.At(0f, 0f),
+                JobManifest.Empty));
         Assert.Equal(JobPlanVerdict.Planned, plan.Plan.Verdict);
 
         // And this is the one thing that says why.
@@ -419,7 +420,8 @@ public sealed class SourceAvailabilityTests
                 area,
                 Jobs.World,
                 JobManifest.Empty,
-                Jobs.At(0f, 0f)));
+                Jobs.At(0f, 0f),
+                JobManifest.Empty));
     }
 
     /// <summary>An availability that answers whatever it likes, to prove the
