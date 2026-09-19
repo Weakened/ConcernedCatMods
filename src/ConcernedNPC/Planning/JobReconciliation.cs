@@ -69,8 +69,10 @@ public readonly struct JobReconciliation
         int notReached,
         JobManifest outstanding,
         JobManifest leftOver,
-        int leftForAnotherRound)
+        int leftForAnotherRound,
+        bool lookingFinished)
     {
+        LookingFinished = lookingFinished;
         Planned = planned;
         Done = done;
         Skipped = skipped;
@@ -96,8 +98,24 @@ public readonly struct JobReconciliation
     /// of the next round, if there is one.</summary>
     public JobManifest Outstanding { get; }
 
-    /// <summary>What was fetched and not used up. Still carried.</summary>
+    /// <summary>What he is holding when the round ends: what he walked in with,
+    /// plus what he fetched, less what he used.
+    ///
+    /// <b>The first term is not optional, and it used to be missing.</b> Without
+    /// it a round that opened no chest - because he already held everything it
+    /// needed - reports him holding nothing while he is visibly holding all of
+    /// it, and <c>Subtract</c> clamps at nought so the error is always in the
+    /// losing direction. This is the manifest a role feeds back as the next
+    /// round's <see cref="JobPlanRequest.Carrying"/>, so a term missing here
+    /// becomes a settlement reported short of material in the NPC's own
+    /// hands.</summary>
     public JobManifest LeftOver { get; }
+
+    /// <summary>Whether the looking that produced the plan actually finished.
+    /// <b>A job may not be closed without it</b> - see
+    /// <see cref="JobTourPlan.LookingFinished"/> for the failure it exists to
+    /// stop.</summary>
+    public bool LookingFinished { get; }
 
     /// <summary>How many targets of the job the plan never reached at all,
     /// because the plan was for part of the job.
@@ -126,7 +144,8 @@ public readonly struct JobReconciliation
     /// satisfy the first perfectly and it is not a finished job, and an NPC that
     /// said it was would be the most expensive kind of wrong.</summary>
     public bool IsComplete =>
-        Planned > 0 && Failed == 0 && NotReached == 0 && Outstanding.IsEmpty && LeftForAnotherRound == 0;
+        Planned > 0 && Failed == 0 && NotReached == 0 && Outstanding.IsEmpty && LeftForAnotherRound == 0
+        && LookingFinished;
 
     /// <summary>Whether there is more to do. True whenever anything is still
     /// owed or was never planned for, whatever the step counts say.
@@ -142,7 +161,8 @@ public readonly struct JobReconciliation
     /// <see cref="JobPlanVerdict.NothingToDo"/> finishes, and the rest stop and
     /// surface <see cref="JobPlan.Reason"/>.</summary>
     public bool HasUnfinishedWork =>
-        !Outstanding.IsEmpty || Failed > 0 || NotReached > 0 || LeftForAnotherRound > 0;
+        !Outstanding.IsEmpty || Failed > 0 || NotReached > 0 || LeftForAnotherRound > 0
+        || (Planned > 0 && !LookingFinished);
 }
 
 /// <summary>Closing the books on a round.</summary>
@@ -223,6 +243,10 @@ internal static class JobReconciler
         // A failed or unreached one is. That distinction is the whole reason a
         // skip and a failure are different outcomes.
         JobManifest outstanding = ManifestArithmetic.Merge(owed);
+
+        // What he walked in with counts as much as what he picked up here. It
+        // is the term a round that opened no chest has and nothing else does.
+        fetched.Insert(0, plan.Carrying);
         JobManifest leftOver = ManifestArithmetic.Subtract(
             ManifestArithmetic.Merge(fetched), ManifestArithmetic.Merge(consumed));
 
@@ -234,6 +258,7 @@ internal static class JobReconciler
             notReached,
             outstanding,
             leftOver,
-            plan.LeftForAnotherRound);
+            plan.LeftForAnotherRound,
+            plan.LookingFinished);
     }
 }

@@ -79,12 +79,16 @@ internal readonly struct JobTourPlan
         IReadOnlyList<PlannedStep>? steps,
         JobManifest shortfall,
         int budgetSpent,
-        int leftForAnotherRound)
+        int leftForAnotherRound,
+        JobManifest carrying,
+        bool lookingFinished)
     {
         Plan = plan;
         Shortfall = shortfall;
         BudgetSpent = budgetSpent;
         LeftForAnotherRound = leftForAnotherRound < 0 ? 0 : leftForAnotherRound;
+        Carrying = carrying;
+        LookingFinished = lookingFinished;
         _tours = Copy(tours);
         _provisioning = Copy(provisioning);
         _steps = Copy(steps);
@@ -143,6 +147,43 @@ internal readonly struct JobTourPlan
     /// answer</b>, and a driver that looped on "work remains" would spin for
     /// ever on a job refused for want of material.</summary>
     internal int LeftForAnotherRound { get; }
+
+    /// <summary>What the NPC was already holding when this was planned, exactly
+    /// as the request said.
+    ///
+    /// <b>Carried on the plan because reconciliation cannot close the books
+    /// without it.</b> What he holds at the end of a round is what he walked in
+    /// with, plus what he fetched, less what he used. Without the first term a
+    /// round that opened no chest reports him holding nothing while he is
+    /// visibly holding all of it - and the next round, fed that, is told the
+    /// settlement is short of material in his own hands. That is the defect
+    /// <see cref="JobPlanRequest.Carrying"/> exists to stop, one step further
+    /// round the loop.
+    ///
+    /// <b>A refusal carries it too</b>, because a plan that was refused took
+    /// nothing off him.</summary>
+    internal JobManifest Carrying { get; }
+
+    /// <summary>Whether the looking that produced this plan actually finished.
+    ///
+    /// <b>The sixth way a target falls out of a plan, and the one the
+    /// subtraction cannot see.</b> <see cref="LeftForAnotherRound"/> is the
+    /// job's targets less the ones a step reaches, and that is airtight
+    /// <i>below the line where the job's targets are fixed</i>. A scan cut short
+    /// by its own budget fixes that line too low: the plan covers everything the
+    /// scan reached, the subtraction is nought, and every step coming off reads
+    /// as a finished job while the far half of the area was never looked at.
+    ///
+    /// An inconclusive scan that found <i>nothing</i> was always refused. The
+    /// same evidence with one target found was not, because
+    /// <c>AreaScanOutcome.Found</c> wins and nobody asked. So it travels with
+    /// the plan, and <see cref="JobReconciliation.IsComplete"/> will not close a
+    /// job on a scan that did not finish.
+    ///
+    /// Weaker than <see cref="JobSnapshot.IsConclusive"/> on purpose - see
+    /// <see cref="JobSnapshot.LookingFinished"/> for why that one cannot answer
+    /// this question.</summary>
+    internal bool LookingFinished { get; }
 
     /// <summary>Whether this plan reaches every target the job was for.</summary>
     internal bool CoversTheWholeJob => LeftForAnotherRound == 0;
@@ -269,7 +310,7 @@ internal sealed class TourJobPlanner : IJobPlanner
             return Refuse(
                 JobPlanVerdict.Refused,
                 "the job was asked for without an identity, a usable job name, or the two words its steps are written in",
-                epoch,
+                request,
                 budget,
                 leftForAnotherRound: 0);
         }
@@ -279,7 +320,7 @@ internal sealed class TourJobPlanner : IJobPlanner
             return Refuse(
                 JobPlanVerdict.AreaInvalid,
                 "there is no work area to plan against, and nothing here widens to anywhere",
-                epoch,
+                request,
                 budget,
                 leftForAnotherRound: 0);
         }
@@ -289,7 +330,7 @@ internal sealed class TourJobPlanner : IJobPlanner
             return Refuse(
                 JobPlanVerdict.Refused,
                 "what was seen belongs to a different loading of the world, so none of its names mean anything now",
-                epoch,
+                request,
                 budget,
                 leftForAnotherRound: 0);
         }
@@ -299,7 +340,7 @@ internal sealed class TourJobPlanner : IJobPlanner
             return Refuse(
                 JobPlanVerdict.AreaInvalid,
                 "the work area could not be read at all",
-                epoch,
+                request,
                 budget,
                 leftForAnotherRound: 0);
         }
@@ -313,11 +354,11 @@ internal sealed class TourJobPlanner : IJobPlanner
             // there are targets, and a verdict that closes a job while any of
             // them is unserviced is the blocker this planner keeps meeting.
             return _snapshot.IsConclusive
-                ? Refuse(JobPlanVerdict.NothingToDo, string.Empty, epoch, budget, leftForAnotherRound: 0)
+                ? Refuse(JobPlanVerdict.NothingToDo, string.Empty, request, budget, leftForAnotherRound: 0)
                 : Refuse(
                     JobPlanVerdict.BudgetExhausted,
                     "nothing was found and the looking was not finished, so there is nothing to say yet",
-                    epoch,
+                    request,
                     budget,
                     leftForAnotherRound: 0);
         }
@@ -329,7 +370,7 @@ internal sealed class TourJobPlanner : IJobPlanner
                 JobPlanVerdict.Refused,
                 "what was found needs " + over.ToString() +
                 " more than the job was said to be for, and taking a player's material for something nobody asked for is not a plan",
-                epoch,
+                request,
                 budget,
                 targets.Count);
         }
@@ -351,7 +392,9 @@ internal sealed class TourJobPlanner : IJobPlanner
                 null,
                 missing,
                 budget.Spent,
-                targets.Count);
+                targets.Count,
+                request.Carrying,
+                _snapshot.LookingFinished);
         }
 
         TourPartition partition = TourPartitioner.Partition(targets, _capacity, request.StartingFrom, budget);
@@ -360,7 +403,7 @@ internal sealed class TourJobPlanner : IJobPlanner
             return Refuse(
                 JobPlanVerdict.Refused,
                 "one thing on its own needs more than he can carry in a single trip, and this runtime does not decide what half of it would mean",
-                epoch,
+                request,
                 budget,
                 targets.Count);
         }
@@ -382,7 +425,7 @@ internal sealed class TourJobPlanner : IJobPlanner
             return Refuse(
                 JobPlanVerdict.BudgetExhausted,
                 "working out the trips was not finished, so there is nothing to walk yet",
-                epoch,
+                request,
                 budget,
                 targets.Count);
         }
@@ -395,7 +438,7 @@ internal sealed class TourJobPlanner : IJobPlanner
             return Refuse(
                 JobPlanVerdict.Refused,
                 "the trips could not be worked out at all, and a job with things still to service is never a finished job",
-                epoch,
+                request,
                 budget,
                 targets.Count);
         }
@@ -460,7 +503,7 @@ internal sealed class TourJobPlanner : IJobPlanner
                 return Refuse(
                     JobPlanVerdict.BudgetExhausted,
                     "choosing which chests to open was not finished, so there is nothing to walk yet",
-                    request.Epoch,
+                    request,
                     budget,
                     jobTargets);
             }
@@ -488,22 +531,36 @@ internal sealed class TourJobPlanner : IJobPlanner
             }
             else if (!supply.IsComplete)
             {
-                // The whole-job check above passed, so reaching here means the
-                // earlier trips have already committed the material this one
-                // wanted. Saying so is better than planning a trip whose chest
-                // will be empty when he opens it.
+                // The whole-job check above passed and this trip still cannot
+                // be filled. Saying so is better than planning a trip whose
+                // chest will be empty when he opens it.
+                //
+                // Two ways to get here and they are different sentences. On a
+                // later trip the earlier ones have committed the material, and
+                // that is the ordinary case. On trip zero there were no earlier
+                // trips: the whole-job arithmetic and the chest the selector
+                // would actually open have disagreed between one line and the
+                // next - a chest whose permission the player withdrew in
+                // between is the case that happens. Saying "after the earlier
+                // trips" there would name a cause that does not exist.
+                string why = tour.Index == 0
+                    ? "he cannot draw " + ManifestArithmetic.Describe(supply.Shortfall) +
+                      " from any chest he may open, though the total across them said it was there"
+                    : "after the earlier trips there is no longer enough for " +
+                      ManifestArithmetic.Describe(supply.Shortfall);
                 return new JobTourPlan(
                     JobPlan.Refused(
                         JobPlanVerdict.ShortOfMaterial,
-                        "after the earlier trips there is no longer enough for " +
-                        ManifestArithmetic.Describe(supply.Shortfall),
+                        why,
                         request.Epoch),
                     partition.Tours,
                     provisioning,
                     null,
                     supply.Shortfall,
                     budget.Spent,
-                    jobTargets);
+                    jobTargets,
+                    request.Carrying,
+                    _snapshot.LookingFinished);
             }
 
             provisioning.Add(supply);
@@ -563,13 +620,13 @@ internal sealed class TourJobPlanner : IJobPlanner
                 ? Refuse(
                     JobPlanVerdict.ShortOfMaterial,
                     "what the chests one round opens give him does not pay for even the first thing on the trip, so the material has to be brought together before he can start",
-                    request.Epoch,
+                    request,
                     budget,
                     jobTargets)
                 : Refuse(
                     JobPlanVerdict.BudgetExhausted,
                     "nothing in this round could be walked to - every place was refused lately or is beyond this round - so they come back next round",
-                    request.Epoch,
+                    request,
                     budget,
                     jobTargets);
         }
@@ -588,7 +645,9 @@ internal sealed class TourJobPlanner : IJobPlanner
             planned,
             JobManifest.Empty,
             budget.Spent,
-            jobTargets - covered.Count);
+            jobTargets - covered.Count,
+            request.Carrying,
+            _snapshot.LookingFinished);
     }
 
     /// <summary>The largest prefix of a trip's targets that what he will
@@ -740,18 +799,20 @@ internal sealed class TourJobPlanner : IJobPlanner
     /// replaced them with zero, and the job read as over. Every call site now
     /// has to say the number, which is the only way the next one added says it
     /// too.</summary>
-    private static JobTourPlan Refuse(
+    private JobTourPlan Refuse(
         JobPlanVerdict verdict,
         string reason,
-        NpcWorldEpoch epoch,
+        in JobPlanRequest request,
         PlanningBudget budget,
         int leftForAnotherRound) =>
         new JobTourPlan(
-            JobPlan.Refused(verdict, reason, epoch),
+            JobPlan.Refused(verdict, reason, request.Epoch),
             null,
             null,
             null,
             JobManifest.Empty,
             budget.Spent,
-            leftForAnotherRound);
+            leftForAnotherRound,
+            request.Carrying,
+            _snapshot.LookingFinished);
 }

@@ -101,7 +101,7 @@ internal readonly struct TourPartition
     private readonly JobTour[]? _tours;
 
     internal TourPartition(
-        TourPartitionOutcome outcome, IReadOnlyList<JobTour>? tours, JobTarget oversized, int leftOver = 0)
+        TourPartitionOutcome outcome, IReadOnlyList<JobTour>? tours, JobTarget oversized, int leftOver)
     {
         Outcome = outcome;
         Oversized = oversized;
@@ -135,7 +135,20 @@ internal readonly struct TourPartition
     /// <summary>How many targets no trip in this partition reaches. Zero for a
     /// partition that covers the job; the reason
     /// <see cref="TourPartitionOutcome.PartlyPlanned"/> is not a quiet
-    /// truncation.</summary>
+    /// truncation.
+    ///
+    /// <b>The constructor has no default for it</b>, and this is the third type
+    /// that had one. The doc three lines up says everything downstream must
+    /// carry this number; a call site allowed to stay silent says nought, which
+    /// is the claim that the partition covers the job.
+    ///
+    /// <b>A target too malformed to place is counted here, and stays counted.</b>
+    /// It can never be serviced, so a job containing one never completes, and
+    /// that is the direction to fail in: the alternative is a runtime that
+    /// quietly forgets a thing the player asked for and reports the job
+    /// finished. A job whose <c>LeftForAnotherRound</c> is the same number every
+    /// round, with every step coming off, is what a malformed target looks like
+    /// from outside.</summary>
     internal int LeftOver { get; }
 
     /// <summary>Whether these trips cover the job. <b>The question everything
@@ -224,7 +237,8 @@ internal static class TourPartitioner
 
         if (targets == null || targets.Count == 0)
         {
-            return new TourPartition(TourPartitionOutcome.NothingToDo, null, default);
+            // Nothing was offered, so nothing is waiting.
+            return new TourPartition(TourPartitionOutcome.NothingToDo, null, default, 0);
         }
 
         var left = new List<JobTarget>();
@@ -237,7 +251,10 @@ internal static class TourPartitioner
 
             if (!capacity.RoomFor(0, target.Units))
             {
-                return new TourPartition(TourPartitionOutcome.TargetTooLarge, null, target);
+                // No partition at all, so every target offered is waiting - not
+                // just the one that did not fit.
+                return new TourPartition(
+                    TourPartitionOutcome.TargetTooLarge, null, target, targets.Count);
             }
 
             left.Add(target);
@@ -245,7 +262,11 @@ internal static class TourPartitioner
 
         if (left.Count == 0)
         {
-            return new TourPartition(TourPartitionOutcome.NothingToDo, null, default);
+            // Targets were offered and every one of them was too malformed to
+            // place. They are waiting, and they will wait for ever - which is
+            // the honest answer and the safe direction. Reporting nought here
+            // would make a job of unplaceable things report itself finished.
+            return new TourPartition(TourPartitionOutcome.NothingToDo, null, default, targets.Count);
         }
 
         var tours = new List<JobTour>();
