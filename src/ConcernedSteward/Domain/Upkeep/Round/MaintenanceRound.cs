@@ -65,12 +65,14 @@ internal readonly struct RoundPlan
         IReadOnlyList<SupplySighting>? sources,
         RoundManifest manifest,
         RoundManifest shortfall,
-        string reason)
+        string reason,
+        int deferredForMaterial = 0)
     {
         Verdict = verdict;
         Manifest = manifest;
         Shortfall = shortfall;
         Reason = reason ?? string.Empty;
+        DeferredForMaterial = deferredForMaterial < 0 ? 0 : deferredForMaterial;
         _judged = Copy(judged);
         _stops = Copy(stops);
         _sources = Copy(sources);
@@ -100,6 +102,17 @@ internal readonly struct RoundPlan
     /// <summary>Why it was refused, for a player sentence. Empty when prepared.
     /// </summary>
     public string Reason { get; }
+
+    /// <summary>Lights that want fuel and are not in this round, because nothing
+    /// she may take from holds enough of what they burn.
+    ///
+    /// <b>One of the two sources of "left for another round", and the Steward's
+    /// own.</b> The other is the shared planner's, which counts lights a plan
+    /// could not cover for reasons of capacity and chest limits. Both mean the
+    /// same thing to a player and both have to be added before anything calls a
+    /// round finished: a round that serviced everything it could pay for is not
+    /// the same as a settlement that is looked after.</summary>
+    public int DeferredForMaterial { get; }
 
     public bool IsActionable => Verdict == RoundVerdict.Prepared && Stops.Count > 0;
 
@@ -133,7 +146,11 @@ internal readonly struct RoundPlan
         {
             case RoundVerdict.Prepared:
                 return "A round of " + Stops.Count.ToString(CultureInfo.InvariantCulture) +
-                    " light(s), needing " + Manifest.Describe() + ".";
+                    " light(s), needing " + Manifest.Describe() + "." +
+                    (DeferredForMaterial > 0
+                        ? " " + DeferredForMaterial.ToString(CultureInfo.InvariantCulture) +
+                          " more will have to wait: she needs " + Shortfall.Describe() + "."
+                        : string.Empty);
 
             case RoundVerdict.NothingToDo:
                 return Reason.Length == 0
@@ -210,24 +227,15 @@ internal static class MaintenanceRound
             return Refuse(RoundVerdict.NoScope, string.Empty);
         }
 
-        var stocked = new List<string>();
         bool anySource = false;
         if (sources != null)
         {
             foreach (SupplySighting source in sources)
             {
-                if (!source.CanTake)
+                if (source.CanTake)
                 {
-                    continue;
-                }
-
-                anySource = true;
-                foreach (SupplyLine line in source.Lines)
-                {
-                    if (!stocked.Contains(line.Item))
-                    {
-                        stocked.Add(line.Item);
-                    }
+                    anySource = true;
+                    break;
                 }
             }
         }
@@ -237,29 +245,89 @@ internal static class MaintenanceRound
             return Refuse(RoundVerdict.NoSupply, string.Empty);
         }
 
-        List<LightNeed> judged = LightNeeds.Assess(lights, settlement, stocked, epoch, thresholds);
-        List<LightNeed> stops = LightNeeds.StopsIn(judged);
-        if (stops.Count == 0)
+        List<LightNeed> judged = LightNeeds.Assess(lights, settlement, epoch, thresholds);
+        List<LightNeed> wanted = LightNeeds.StopsIn(judged);
+        if (wanted.Count == 0)
         {
             return new RoundPlan(
                 RoundVerdict.NothingToDo, judged, null, sources,
                 RoundManifest.Empty, RoundManifest.Empty, DescribeNothingToDo(judged));
         }
 
-        RoundManifest manifest = RoundManifestArithmetic.Total(stops);
-        RoundManifest shortfall = RoundManifestArithmetic.Shortfall(manifest, sources);
-        if (!shortfall.IsEmpty)
+        // What is free, per item, across every container she may TAKE from. A
+        // container approved only for deposits is not a source, however full it
+        // is.
+        var free = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (SupplySighting source in sources!)
         {
-            // Refused with the whole round's stops still attached, so the
-            // sentence can say how many lights are waiting on the missing
-            // material rather than only naming the material.
-            return new RoundPlan(
-                RoundVerdict.ShortOfMaterial, judged, stops, sources,
-                manifest, shortfall, string.Empty);
+            if (!source.CanTake)
+            {
+                continue;
+            }
+
+            foreach (SupplyLine line in source.Lines)
+            {
+                free.TryGetValue(line.Item, out int running);
+                free[line.Item] = running + line.Units;
+            }
         }
 
+        // Greedy, in the order she would walk them: the most urgent light that
+        // can be paid for in full goes into this round, and one that cannot
+        // waits for the next. Greedy rather than best-fit because "she saw to
+        // the three that were about to go out and came back for the rest" is
+        // something a player watches and understands, and "she saw to the
+        // first, the fourth and the fifth" is not.
+        //
+        // A stop is taken WHOLE or not at all. Half-filling the most urgent
+        // light and leaving nothing for the next one spends a player's wood on
+        // the worst available distribution of it.
+        var affordable = new List<LightNeed>();
+        int deferred = 0;
+        foreach (LightNeed stop in wanted)
+        {
+            free.TryGetValue(stop.Item, out int available);
+            if (stop.Item.Length != 0 && available >= stop.Units)
+            {
+                free[stop.Item] = available - stop.Units;
+                affordable.Add(stop);
+            }
+            else
+            {
+                deferred++;
+            }
+        }
+
+        // Measured against what the WHOLE settlement wants, not against this
+        // round: the sentence a player needs is "she is short of forty resin",
+        // and a shortfall computed after the affordable stops were taken out
+        // would always be empty.
+        RoundManifest shortfall = RoundManifestArithmetic.Shortfall(
+            RoundManifestArithmetic.Total(wanted), sources);
+
+        if (affordable.Count == 0)
+        {
+            // Nothing she can pay for at all. Refused before a step, with the
+            // material named: ten torches and no resin is "she needs forty
+            // resin", never "nothing to tend".
+            return new RoundPlan(
+                RoundVerdict.ShortOfMaterial, judged, null, sources,
+                RoundManifest.Empty, shortfall, string.Empty, deferred);
+        }
+
+        // The manifest is computed over the stops the round ACTUALLY covers,
+        // never over the ones it started with. A round that claimed a total it
+        // did not cover reconciles to finished with half the settlement dark,
+        // and nothing anywhere would say so.
         return new RoundPlan(
-            RoundVerdict.Prepared, judged, stops, sources, manifest, RoundManifest.Empty, string.Empty);
+            RoundVerdict.Prepared,
+            judged,
+            affordable,
+            sources,
+            RoundManifestArithmetic.Total(affordable),
+            shortfall,
+            string.Empty,
+            deferred);
     }
 
     private static string DescribeNothingToDo(IReadOnlyList<LightNeed> judged)

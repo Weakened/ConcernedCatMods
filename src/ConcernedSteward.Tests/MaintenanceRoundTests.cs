@@ -201,7 +201,7 @@ public sealed class MaintenanceRoundTests
         // closest to going out rather than topping everything to full" means.
         LightNeed need = LightNeeds.Assess(
             Lights.Light("hearth", fuel: 6f), Lights.Settlement(),
-            new[] { Lights.Wood }, Lights.Epoch, Shipped);
+            Lights.Epoch, Shipped);
 
         Assert.Equal(FuelTargetStatus.NotDue, need.Status);
         Assert.False(need.IsAStop);
@@ -216,7 +216,7 @@ public sealed class MaintenanceRoundTests
         // would be a walk for nothing.
         LightNeed need = LightNeeds.Assess(
             Lights.Light("brazier", fuel: 10f, maxFuel: 10f, secondsPerUnit: 10f),
-            Lights.Settlement(), new[] { Lights.Wood }, Lights.Epoch, Shipped);
+            Lights.Settlement(), Lights.Epoch, Shipped);
 
         Assert.Equal(FuelTargetStatus.AlreadyFuelled, need.Status);
         Assert.False(need.IsAStop);
@@ -227,7 +227,7 @@ public sealed class MaintenanceRoundTests
     {
         LightNeed need = LightNeeds.Assess(
             Lights.Light("decorative", fuel: 0f, secondsPerUnit: 0f),
-            Lights.Settlement(), new[] { Lights.Wood }, Lights.Epoch, Shipped);
+            Lights.Settlement(), Lights.Epoch, Shipped);
 
         Assert.Equal(FuelTargetStatus.NeverConsumes, need.Status);
         Assert.Equal(float.PositiveInfinity, need.SecondsLeft);
@@ -240,7 +240,7 @@ public sealed class MaintenanceRoundTests
         // fire in the settlement, forever.
         LightNeed need = LightNeeds.Assess(
             Lights.Light("brazier", fuel: 0f, lit: false),
-            Lights.Settlement(), new[] { Lights.Wood }, Lights.Epoch, Shipped);
+            Lights.Settlement(), Lights.Epoch, Shipped);
 
         Assert.Equal(FuelTargetStatus.NotLit, need.Status);
         Assert.False(need.IsAStop);
@@ -263,7 +263,7 @@ public sealed class MaintenanceRoundTests
             Lights.Light(
                 "light", fuel: 0f, ownedHere: owned, accessGranted: access,
                 canRefill: canRefill, infiniteFuel: infinite),
-            Lights.Settlement(), new[] { Lights.Wood }, Lights.Epoch, Shipped);
+            Lights.Settlement(), Lights.Epoch, Shipped);
 
         Assert.Equal(expected, (int)need.Status);
         Assert.False(need.IsAStop);
@@ -274,7 +274,7 @@ public sealed class MaintenanceRoundTests
     {
         LightNeed need = LightNeeds.Assess(
             Lights.Light("far", fuel: 0f, x: 500f),
-            Lights.Settlement(radius: 32f), new[] { Lights.Wood }, Lights.Epoch, Shipped);
+            Lights.Settlement(radius: 32f), Lights.Epoch, Shipped);
 
         Assert.Equal(FuelTargetStatus.OutsideSettlement, need.Status);
     }
@@ -370,23 +370,55 @@ public sealed class MaintenanceRoundTests
         Assert.Equal(0, round.Shortfall.UnitsOf(Lights.Wood));
     }
 
+    /// <summary>Half the wood for two lights is half a round, not no round.
+    ///
+    /// <b>The alternative was considered and rejected.</b> Refusing the whole
+    /// round because one light cannot be paid for would leave a settlement dark
+    /// that had the material to light half of it, and the player's fix — put
+    /// more wood in the chest — is the same either way. What must never happen
+    /// is that the half-round reports itself finished, which is what
+    /// <see cref="RoundPlan.DeferredForMaterial"/> exists to stop.</summary>
     [Fact]
-    public void A_partly_stocked_round_is_still_refused_before_a_single_step()
+    public void Half_the_material_is_half_a_round_and_the_rest_is_counted()
     {
         var lights = new[]
         {
-            Lights.Light("a", fuel: 0f),
-            Lights.Light("b", fuel: 0f, x: 5f),
+            Lights.Light("urgent", fuel: 0f),
+            Lights.Light("less-urgent", fuel: 2f, x: 5f),
         };
 
-        // Ten units for two lights that want ten each.
+        // Ten units. The empty one wants ten; the other wants eight.
         RoundPlan round = MaintenanceRound.Prepare(
             lights, Lights.Settlement(),
             new[] { Lights.Chest("depot", contents: new[] { (Lights.Wood, 10) }) },
             Lights.Epoch, Shipped);
 
+        Assert.Equal(RoundVerdict.Prepared, round.Verdict);
+
+        // The most urgent one, taken whole rather than both taken half.
+        LightNeed only = Assert.Single(round.Stops);
+        Assert.Equal("urgent", only.Light.Key.Value);
+        Assert.Equal(10, round.Manifest.UnitsOf(Lights.Wood));
+
+        // And the other is counted, so nothing can call this a finished
+        // settlement.
+        Assert.Equal(1, round.DeferredForMaterial);
+        Assert.Equal(8, round.Shortfall.UnitsOf(Lights.Wood));
+        Assert.Contains("1 more will have to wait", round.Describe());
+    }
+
+    [Fact]
+    public void A_round_it_cannot_pay_for_at_all_is_refused_before_a_single_step()
+    {
+        RoundPlan round = MaintenanceRound.Prepare(
+            new[] { Lights.Light("a", fuel: 0f) }, Lights.Settlement(),
+            new[] { Lights.Chest("depot", contents: new[] { (Lights.Wood, 3) }) },
+            Lights.Epoch, Shipped);
+
         Assert.Equal(RoundVerdict.ShortOfMaterial, round.Verdict);
-        Assert.Equal(10, round.Shortfall.UnitsOf(Lights.Wood));
+        Assert.Empty(round.Stops);
+        Assert.Equal(1, round.DeferredForMaterial);
+        Assert.Equal(7, round.Shortfall.UnitsOf(Lights.Wood));
     }
 
     [Fact]
@@ -420,26 +452,30 @@ public sealed class MaintenanceRoundTests
         Assert.Equal(10, round.Manifest.UnitsOf(Lights.Wood));
     }
 
+    /// <summary>She does the wood fire and says what the torch needs.
+    ///
+    /// The one-fire-at-a-time loop answers this case with "it burns something
+    /// the chest does not stock" and stops there. A round that totalled the
+    /// settlement first can do better: the torch is a light that needs fuel, it
+    /// is counted, and what it needs is named.</summary>
     [Fact]
-    public void A_light_burning_something_no_approved_chest_stocks_is_not_a_fault()
+    public void A_light_burning_something_no_approved_chest_stocks_is_still_counted_and_named()
     {
         RoundPlan round = MaintenanceRound.Prepare(
             new[]
             {
                 Lights.Light("wood-fire", fuel: 0f),
-                Lights.Light("resin-torch", fuel: 0f, item: Lights.Resin, x: 5f),
+                Lights.Light("resin-torch", fuel: 0f, maxFuel: 4f, item: Lights.Resin, x: 5f),
             },
             Lights.Settlement(),
             new[] { Lights.Chest("depot", contents: new[] { (Lights.Wood, 50) }) },
             Lights.Epoch, Shipped);
 
         Assert.Equal(RoundVerdict.Prepared, round.Verdict);
-        Assert.Single(round.Stops);
-        Assert.Equal("wood-fire", round.Stops[0].Light.Key.Value);
-        Assert.Contains(
-            round.Judged,
-            need => need.Light.Key.Value == "resin-torch"
-                && need.Status == FuelTargetStatus.WrongFuel);
+        Assert.Equal("wood-fire", Assert.Single(round.Stops).Light.Key.Value);
+        Assert.Equal(1, round.DeferredForMaterial);
+        Assert.Equal(4, round.Shortfall.UnitsOf(Lights.Resin));
+        Assert.Contains(Lights.Resin, round.Describe());
     }
 
     // ------------------------------------------------------------------
@@ -451,13 +487,13 @@ public sealed class MaintenanceRoundTests
     {
         LightNeed planned = LightNeeds.Assess(
             Lights.Light("hearth", fuel: 1f), Lights.Settlement(),
-            new[] { Lights.Wood }, Lights.Epoch, Shipped);
+            Lights.Epoch, Shipped);
         Assert.True(planned.IsAStop);
 
         LightVerdict verdict = LightRevalidation.Look(
             planned,
             Lights.Light("hearth", fuel: 10f),
-            Lights.Settlement(), new[] { Lights.Wood }, Lights.Epoch, Shipped);
+            Lights.Settlement(), Lights.Epoch, Shipped);
 
         Assert.Equal(LightVerdict.AlreadyDone, verdict);
         Assert.False(LightRevalidation.MeansGo(verdict));
@@ -471,10 +507,10 @@ public sealed class MaintenanceRoundTests
     {
         LightNeed planned = LightNeeds.Assess(
             Lights.Light("torch", fuel: 0f), Lights.Settlement(),
-            new[] { Lights.Wood }, Lights.Epoch, Shipped);
+            Lights.Epoch, Shipped);
 
         LightVerdict verdict = LightRevalidation.Look(
-            planned, null, Lights.Settlement(), new[] { Lights.Wood }, Lights.Epoch, Shipped);
+            planned, null, Lights.Settlement(), Lights.Epoch, Shipped);
 
         Assert.Equal(LightVerdict.Gone, verdict);
         Assert.True(LightRevalidation.IsSettled(verdict));
@@ -485,11 +521,11 @@ public sealed class MaintenanceRoundTests
     {
         LightNeed planned = LightNeeds.Assess(
             Lights.Light("torch", fuel: 0f), Lights.Settlement(),
-            new[] { Lights.Wood }, Lights.Epoch, Shipped);
+            Lights.Epoch, Shipped);
 
         LightVerdict verdict = LightRevalidation.Look(
             planned, Lights.Light("torch", fuel: 0f, x: 4f),
-            Lights.Settlement(), new[] { Lights.Wood }, Lights.Epoch, Shipped);
+            Lights.Settlement(), Lights.Epoch, Shipped);
 
         Assert.Equal(LightVerdict.Moved, verdict);
 
@@ -503,11 +539,11 @@ public sealed class MaintenanceRoundTests
     {
         LightNeed planned = LightNeeds.Assess(
             Lights.Light("torch", fuel: 0f), Lights.Settlement(),
-            new[] { Lights.Wood }, Lights.Epoch, Shipped);
+            Lights.Epoch, Shipped);
 
         LightVerdict verdict = LightRevalidation.Look(
             planned, Lights.Light("torch", fuel: 0f, accessGranted: false),
-            Lights.Settlement(), new[] { Lights.Wood }, Lights.Epoch, Shipped);
+            Lights.Settlement(), Lights.Epoch, Shipped);
 
         Assert.Equal(LightVerdict.Refused, verdict);
         Assert.False(LightRevalidation.IsSettled(verdict));
@@ -713,13 +749,13 @@ public sealed class MaintenanceRoundTests
 
         // Shipped: six minutes left, over the five-minute threshold.
         Assert.False(LightNeeds
-            .Assess(light, Lights.Settlement(), new[] { Lights.Wood }, Lights.Epoch, Shipped)
+            .Assess(light, Lights.Settlement(), Lights.Epoch, Shipped)
             .IsAStop);
 
         // A player who wants her fussier says so.
         var fussy = new MaintenanceThresholds(600f, 1200f, 10);
         LightNeed need = LightNeeds.Assess(
-            light, Lights.Settlement(), new[] { Lights.Wood }, Lights.Epoch, fussy);
+            light, Lights.Settlement(), Lights.Epoch, fussy);
         Assert.True(need.IsAStop);
         Assert.Equal(4, need.Units);
     }
