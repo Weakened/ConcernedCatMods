@@ -13,8 +13,16 @@ internal interface IJobCommitment
     /// <summary>Whose it is.</summary>
     string JobId { get; }
 
-    /// <summary>How many holds are believed to be outstanding.</summary>
-    int Held { get; }
+    /// <summary>How many subjects this commitment <b>newly</b> took out.
+    ///
+    /// <b>Not "how many this job holds", and never a reason to skip a
+    /// cancel.</b> A job re-establishing its holds after an interruption is
+    /// answered <see cref="ReservationOutcome.AlreadySatisfied"/> for every
+    /// subject it already had, and none of those is counted here - so a caller
+    /// written as <c>if (c.NewlyTaken > 0) c.Cancel();</c> would leak the whole
+    /// job's reservations on exactly the path recovery takes. Cancelling is
+    /// unconditional and always safe; that is what the latch is for.</summary>
+    int NewlyTaken { get; }
 
     /// <summary>Whether the refund has happened.</summary>
     bool IsCancelled { get; }
@@ -67,7 +75,7 @@ internal sealed class JobCommitment<TSubject> : IJobCommitment
     public string JobId { get; }
 
     /// <inheritdoc />
-    public int Held => _taken.Count;
+    public int NewlyTaken => _taken.Count;
 
     /// <inheritdoc />
     public bool IsCancelled { get; private set; }
@@ -154,14 +162,14 @@ internal sealed class JobCommitments : IJobCommitment
     public string JobId { get; }
 
     /// <inheritdoc />
-    public int Held
+    public int NewlyTaken
     {
         get
         {
             int total = 0;
             foreach (IJobCommitment part in _parts)
             {
-                total += part.Held;
+                total += part.NewlyTaken;
             }
 
             return total;
@@ -221,8 +229,10 @@ internal readonly struct JobReservationResult
 {
     private readonly ReservationAttempt[]? _attempts;
 
-    internal JobReservationResult(IReadOnlyList<ReservationAttempt>? attempts)
+    internal JobReservationResult(IReadOnlyList<ReservationAttempt>? attempts, bool rolledBack = false)
     {
+        RolledBack = rolledBack;
+
         if (attempts == null || attempts.Count == 0)
         {
             _attempts = null;
@@ -240,6 +250,15 @@ internal readonly struct JobReservationResult
     }
 
     internal IReadOnlyList<ReservationAttempt> Attempts => _attempts ?? Array.Empty<ReservationAttempt>();
+
+    /// <summary>Whether the attempt was abandoned and everything it had taken
+    /// was given back.
+    ///
+    /// <b>True means the books are exactly as they were.</b> A plan that got
+    /// four steps in and was refused the fifth has no business leaving four
+    /// holds behind it: the plan is not walkable, so the holds belong to nobody
+    /// and nothing will release them until the world unloads.</summary>
+    internal bool RolledBack { get; }
 
     /// <summary>How many were newly taken.</summary>
     internal int Taken
@@ -297,11 +316,18 @@ internal readonly struct JobReservationResult
         }
     }
 
-    /// <summary>Whether every step of the plan may act.</summary>
+    /// <summary>Whether every step of the plan may act. <b>The one question
+    /// before walking</b>, and false is never a partial success - see
+    /// <see cref="RolledBack"/>.</summary>
     internal bool AllHeld
     {
         get
         {
+            if (RolledBack)
+            {
+                return false;
+            }
+
             foreach (ReservationAttempt attempt in Attempts)
             {
                 if (!attempt.IsHeld)
@@ -347,7 +373,15 @@ internal readonly struct JobReservationResult
 /// has already walked past three, and the moment it finds the fourth taken it
 /// has to decide what to do with material it fetched for it. Reserving the whole
 /// plan up front turns that into a decision made once, standing still, with the
-/// whole job in front of it.</summary>
+/// whole job in front of it.
+///
+/// <b>All of it or none of it.</b> The first subject this job may not have ends
+/// the attempt, and everything already taken is given straight back. The
+/// alternative - keep going, report the conflicts, let the caller decide - reads
+/// as flexible and is not: it leaves a plan nobody will walk holding a tree
+/// somebody else wants, until the world unloads. A caller that dropped the
+/// result on the floor would never release them, and dropping a result on the
+/// floor is the commonest thing any caller does.</summary>
 internal static class PlanReservations
 {
     /// <summary>Reserves every subject the plan names. Steps whose kind has no
@@ -362,6 +396,7 @@ internal static class PlanReservations
         var attempts = new List<ReservationAttempt>();
         foreach (PlannedStep step in plan.Steps)
         {
+            ReservationAttempt attempt;
             if (step.IsCollect)
             {
                 INpcContainer? container = step.Source.Container;
@@ -370,24 +405,38 @@ internal static class PlanReservations
                     continue;
                 }
 
-                attempts.Add(new ReservationAttempt(
+                attempt = new ReservationAttempt(
                     step.Step.Index,
                     ReservationId.For(containers.JobId, step.Step.Index),
                     containers.Reserve(container, step.Step.Index),
-                    true));
-                continue;
+                    true);
+            }
+            else
+            {
+                if (targets == null)
+                {
+                    continue;
+                }
+
+                attempt = new ReservationAttempt(
+                    step.Step.Index,
+                    ReservationId.For(targets.JobId, step.Step.Index),
+                    targets.Reserve(step.Target, step.Step.Index),
+                    false);
             }
 
-            if (targets == null)
+            attempts.Add(attempt);
+
+            if (attempt.IsHeld)
             {
                 continue;
             }
 
-            attempts.Add(new ReservationAttempt(
-                step.Step.Index,
-                ReservationId.For(targets.JobId, step.Step.Index),
-                targets.Reserve(step.Target, step.Step.Index),
-                false));
+            // Stop here and put everything back. The plan cannot be walked as
+            // written, so nothing it took out is doing anybody any good.
+            targets?.Cancel();
+            containers?.Cancel();
+            return new JobReservationResult(attempts, rolledBack: true);
         }
 
         return new JobReservationResult(attempts);

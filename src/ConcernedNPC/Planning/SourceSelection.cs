@@ -61,6 +61,34 @@ internal readonly struct SourceDraw
     internal bool IsEmpty => _take == null;
 }
 
+/// <summary>Why a provisioning plan stopped before it had covered the manifest,
+/// when it did.
+///
+/// <b>Both values mean "this is not what the world is short of".</b> A
+/// truncated selection's shortfall is what is missing <i>given the stops it was
+/// allowed</i>, and telling a player the settlement is short of thirteen wood
+/// that is demonstrably sitting in chests nine to twelve is a sentence that
+/// names the wrong fix. They are two values rather than one because the right
+/// answer differs: one of them comes back better next tick and the other never
+/// will.</summary>
+internal enum SourceTruncation
+{
+    /// <summary>It finished. Whatever the shortfall says is about the world.
+    /// </summary>
+    None = 0,
+
+    /// <summary>It stopped at <see cref="SourceSelector.MostStops"/> chests.
+    /// <b>Deterministic</b>: asking again gives the identical answer, so this
+    /// is never "ask again". What it means is that this trip is too big for one
+    /// provisioning phase, and the trip has to get smaller.</summary>
+    ChestCap = 1,
+
+    /// <summary>The shared planning budget ran out mid-choice. The next call
+    /// gets a fresh one and may well finish, so this <i>is</i> "ask
+    /// again".</summary>
+    BudgetSpent = 2,
+}
+
 /// <summary>Why a provisioning plan is what it is.</summary>
 internal enum SourceSelectionOutcome
 {
@@ -95,12 +123,12 @@ internal readonly struct SourcePlan
         IReadOnlyList<SourceDraw>? draws,
         JobManifest shortfall,
         float travelMetres,
-        bool truncated)
+        SourceTruncation truncation)
     {
         Outcome = outcome;
         Shortfall = shortfall;
         TravelMetres = travelMetres;
-        Truncated = truncated;
+        Truncation = truncation;
 
         if (draws == null || draws.Count == 0)
         {
@@ -133,11 +161,15 @@ internal readonly struct SourcePlan
     /// through every chest.</summary>
     internal float TravelMetres { get; }
 
+    /// <summary>Which of its own limits the search stopped on, if any.
+    /// <b>Read before the shortfall is ever turned into a sentence</b>: a
+    /// truncated plan's shortfall is what is missing <i>given the stops it was
+    /// allowed</i>, not what the world is short of.</summary>
+    internal SourceTruncation Truncation { get; }
+
     /// <summary>Whether the search stopped on its own limit rather than because
-    /// it had finished. A truncated plan's shortfall is what is missing
-    /// <i>given the stops it was allowed</i>, not what the world is short
-    /// of.</summary>
-    internal bool Truncated { get; }
+    /// it had finished.</summary>
+    internal bool Truncated => Truncation != SourceTruncation.None;
 
     /// <summary>How many chests have to be opened.</summary>
     internal int Stops => Draws.Count;
@@ -200,7 +232,13 @@ internal readonly struct SourcePlan
 /// <b>What it never does.</b> It moves nothing. It reserves nothing. It reads
 /// no inventory - the counts come from the snapshot, and the custody layer is
 /// what actually withdraws and what records that a withdrawal may or may not
-/// have happened.</summary>
+/// have happened.
+///
+/// <b>What it does ask, when it is given somewhere to ask.</b> Every count it
+/// uses goes through <see cref="INpcSourceAvailability"/>, so units another job
+/// has already set aside are not offered to this one. Without it the selector
+/// plans against raw observations, and two jobs a tick apart will both plan the
+/// same pile.</summary>
 internal static class SourceSelector
 {
     /// <summary>The most chests one provisioning phase will open. A round that
@@ -216,7 +254,11 @@ internal static class SourceSelector
     /// <param name="budget">How much choosing is allowed. One unit per stop
     /// chosen.</param>
     internal static SourcePlan Select(
-        JobManifest wanted, IReadOnlyList<SourceStock>? sources, NpcPoint from, PlanningBudget budget)
+        JobManifest wanted,
+        IReadOnlyList<SourceStock>? sources,
+        NpcPoint from,
+        PlanningBudget budget,
+        INpcSourceAvailability? availability = null)
     {
         if (budget == null)
         {
@@ -225,13 +267,14 @@ internal static class SourceSelector
 
         if (wanted.IsEmpty)
         {
-            return new SourcePlan(SourceSelectionOutcome.NothingNeeded, null, JobManifest.Empty, 0f, false);
+            return new SourcePlan(
+                SourceSelectionOutcome.NothingNeeded, null, JobManifest.Empty, 0f, SourceTruncation.None);
         }
 
         JobManifest remaining = wanted;
         NpcPoint cursor = from;
         float travel = 0f;
-        bool truncated = false;
+        SourceTruncation truncation = SourceTruncation.None;
         var draws = new List<SourceDraw>();
         var used = new HashSet<string>(StringComparer.Ordinal);
 
@@ -239,17 +282,19 @@ internal static class SourceSelector
         {
             if (draws.Count >= MostStops)
             {
-                truncated = true;
+                truncation = SourceTruncation.ChestCap;
                 break;
             }
 
             if (!budget.TrySpend())
             {
-                truncated = true;
+                truncation = SourceTruncation.BudgetSpent;
                 break;
             }
 
-            if (!TryChoose(remaining, sources, cursor, used, out SourceStock chosen, out List<StockLine> take))
+            if (!TryChoose(
+                    remaining, sources, cursor, used, availability,
+                    out SourceStock chosen, out List<StockLine> take))
             {
                 break;
             }
@@ -275,7 +320,7 @@ internal static class SourceSelector
             outcome = SourceSelectionOutcome.Partial;
         }
 
-        return new SourcePlan(outcome, draws, remaining, travel, truncated);
+        return new SourcePlan(outcome, draws, remaining, travel, truncation);
     }
 
     /// <summary>One round of the greedy: the best container for what is still
@@ -285,6 +330,7 @@ internal static class SourceSelector
         IReadOnlyList<SourceStock>? sources,
         NpcPoint cursor,
         HashSet<string> used,
+        INpcSourceAvailability? availability,
         out SourceStock chosen,
         out List<StockLine> take)
     {
@@ -310,7 +356,7 @@ internal static class SourceSelector
                 continue;
             }
 
-            List<StockLine> offer = Offer(remaining, source);
+            List<StockLine> offer = Offer(remaining, source, availability);
             if (offer.Count == 0)
             {
                 continue;
@@ -383,12 +429,13 @@ internal static class SourceSelector
     /// capped at the need. <b>The cap is the no-overcollection rule</b>: an NPC
     /// that took a chest's whole stack because it was there has moved a player's
     /// material for nothing and has to put it back.</summary>
-    private static List<StockLine> Offer(JobManifest remaining, SourceStock source)
+    private static List<StockLine> Offer(
+        JobManifest remaining, SourceStock source, INpcSourceAvailability? availability)
     {
         var offer = new List<StockLine>();
         foreach (JobManifestLine line in remaining.Lines)
         {
-            int held = source.UnitsOf(line.Item);
+            int held = source.UnitsOf(line.Item, availability);
             if (held <= 0)
             {
                 continue;

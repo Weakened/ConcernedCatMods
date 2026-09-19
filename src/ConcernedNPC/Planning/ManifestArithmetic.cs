@@ -96,8 +96,14 @@ internal static class ManifestArithmetic
     /// <b>Only containers that may be used right now count.</b> A chest the
     /// player has not enabled for NPCs, one behind a ward, one somebody has open
     /// - none of them is material, and counting them would have the NPC start a
-    /// job it cannot provision and discover it four stops in.</summary>
-    internal static JobManifest Shortfall(JobManifest wanted, IReadOnlyList<SourceStock>? sources)
+    /// job it cannot provision and discover it four stops in.
+    ///
+    /// <b>And only units no other job has set aside.</b> Units another job holds
+    /// are not this job's material either, and counting them is how two plans
+    /// are built on one pile - see
+    /// <see cref="INpcSourceAvailability"/>.</summary>
+    internal static JobManifest Shortfall(
+        JobManifest wanted, IReadOnlyList<SourceStock>? sources, INpcSourceAvailability? availability = null)
     {
         if (wanted.IsEmpty)
         {
@@ -114,7 +120,7 @@ internal static class ManifestArithmetic
                 {
                     if (source.IsUsable)
                     {
-                        available += source.UnitsOf(line.Item);
+                        available += source.UnitsOf(line.Item, availability);
                     }
                 }
             }

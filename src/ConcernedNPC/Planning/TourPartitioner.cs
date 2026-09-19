@@ -59,7 +59,7 @@ internal enum TourPartitionOutcome
     /// <summary>Nobody partitioned.</summary>
     Unspecified = 0,
 
-    /// <summary>The job is in trips.</summary>
+    /// <summary>The job is in trips, all of it.</summary>
     Planned = 1,
 
     /// <summary>There were no targets to put in one.</summary>
@@ -72,9 +72,27 @@ internal enum TourPartitionOutcome
     /// wall and call it done.</summary>
     TargetTooLarge = 3,
 
-    /// <summary>The partitioner ran out of its budget. Incomplete, not
-    /// impossible.</summary>
+    /// <summary>The partitioner ran out of its budget before it had finished.
+    /// <b>No trips come back with this</b>, and that is the point: a partition
+    /// that did not finish is not a partition, and half of one is worse than
+    /// none because the caller cannot tell which half. Incomplete, not
+    /// impossible - the next call gets a fresh budget and may well finish.
+    /// </summary>
     BudgetExhausted = 4,
+
+    /// <summary>Trips were worked out, and there are targets left over that no
+    /// trip in this plan reaches, because the job needs more trips than one
+    /// plan writes out.
+    ///
+    /// <b>Not a failure, and deliberately not the same answer as a spent
+    /// budget.</b> Asking again changes nothing here - partitioning is
+    /// deterministic, so the same job would hit the same cap forever, and an
+    /// NPC that refused a large job outright would never build a long wall.
+    /// What comes back is a real plan for the trips it does cover, and
+    /// <see cref="TourPartition.LeftOver"/> is how many targets are waiting for
+    /// the round after it. Everything downstream must carry that number, or a
+    /// plan for eight trips out of twelve reports the job finished.</summary>
+    PartlyPlanned = 5,
 }
 
 /// <summary>The job, in trips.</summary>
@@ -82,10 +100,12 @@ internal readonly struct TourPartition
 {
     private readonly JobTour[]? _tours;
 
-    internal TourPartition(TourPartitionOutcome outcome, IReadOnlyList<JobTour>? tours, JobTarget oversized)
+    internal TourPartition(
+        TourPartitionOutcome outcome, IReadOnlyList<JobTour>? tours, JobTarget oversized, int leftOver = 0)
     {
         Outcome = outcome;
         Oversized = oversized;
+        LeftOver = leftOver < 0 ? 0 : leftOver;
 
         if (tours == null || tours.Count == 0)
         {
@@ -112,7 +132,21 @@ internal readonly struct TourPartition
     /// outcome is <see cref="TourPartitionOutcome.TargetTooLarge"/>.</summary>
     internal JobTarget Oversized { get; }
 
-    internal bool IsPlanned => Outcome == TourPartitionOutcome.Planned && Tours.Count > 0;
+    /// <summary>How many targets no trip in this partition reaches. Zero for a
+    /// partition that covers the job; the reason
+    /// <see cref="TourPartitionOutcome.PartlyPlanned"/> is not a quiet
+    /// truncation.</summary>
+    internal int LeftOver { get; }
+
+    /// <summary>Whether these trips cover the job. <b>The question everything
+    /// downstream has to ask</b>, because a plan built from trips that do not
+    /// must not carry the whole job's manifest and must not reconcile to
+    /// finished.</summary>
+    internal bool CoversTheWholeJob => LeftOver == 0;
+
+    internal bool IsPlanned =>
+        (Outcome == TourPartitionOutcome.Planned || Outcome == TourPartitionOutcome.PartlyPlanned)
+        && Tours.Count > 0;
 
     /// <summary>Every target across every trip. What the whole job turns out to
     /// be, after capacity has had its say.</summary>
@@ -216,13 +250,14 @@ internal static class TourPartitioner
 
         var tours = new List<JobTour>();
         NpcPoint cursor = from;
-        bool truncated = false;
+        bool spent = false;
+        bool capped = false;
 
         while (left.Count > 0)
         {
             if (tours.Count >= MostTours)
             {
-                truncated = true;
+                capped = true;
                 break;
             }
 
@@ -243,7 +278,7 @@ internal static class TourPartitioner
             {
                 if (!budget.TrySpend())
                 {
-                    truncated = true;
+                    spent = true;
                     break;
                 }
 
@@ -263,20 +298,30 @@ internal static class TourPartitioner
 
             tours.Add(new JobTour(tours.Count, carrying));
 
-            if (truncated)
+            if (spent)
             {
                 break;
             }
         }
 
-        TourPartitionOutcome outcome = truncated && left.Count > 0
-            ? TourPartitionOutcome.BudgetExhausted
+        if (spent && left.Count > 0)
+        {
+            // Nothing comes back. A trip built against half a budget is a trip
+            // whose own contents depend on where the allowance happened to run
+            // out, and a caller cannot tell that from a trip that was worked
+            // out properly. The next call gets a fresh budget.
+            return new TourPartition(TourPartitionOutcome.BudgetExhausted, null, default, left.Count);
+        }
+
+        // The trip cap is the other thing entirely: these trips are exactly
+        // what they say they are, and there are targets after them. Saying so
+        // is what keeps a nine-trip job from quietly becoming an eight-trip job
+        // that reports itself finished.
+        TourPartitionOutcome outcome = capped && left.Count > 0
+            ? TourPartitionOutcome.PartlyPlanned
             : TourPartitionOutcome.Planned;
 
-        // A budget that ran out after some trips were built is still trips: the
-        // caller gets what was worked out and asks again, which is what
-        // "incomplete, not impossible" means everywhere else in this package.
-        return new TourPartition(outcome, tours, default);
+        return new TourPartition(outcome, tours, default, left.Count);
     }
 
     /// <summary>The highest priority left, nearest to where the trip starts;
