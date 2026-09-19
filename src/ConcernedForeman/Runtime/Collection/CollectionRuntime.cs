@@ -284,14 +284,14 @@ internal sealed class CollectionRuntime
 
         try
         {
-            // Thorstein by name rather than through the custody facade: the
-            // facade is an interface several products implement and does not
-            // expose a worker, and Foreman employs exactly one — which
-            // `ForemanCustodyRuntime` itself asserts by setting the same
-            // constant. `TheFirstProofEmploysOneWorker` is the test that would
-            // fail first if that stopped being true.
+            // `Modes` is this runtime's single answer to "which worker", and
+            // `ForemanWorkerMotion.Worker` already reads the same one. Naming
+            // Thorstein again here would give the product a second source of
+            // truth for it, and the body found by the constant would then be
+            // dressed from `_custody.View`'s ledger — a worker visibly holding
+            // stone that belongs to somebody else's record.
             _carried ??= new CarriedVisual(
-                () => WorkerBody.FindLive(WorkerKey.Thorstein.Value),
+                () => WorkerBody.FindLive(Modes.Worker.Value),
                 message => _log(message));
 
             CollectionOrderDefinition? order = world.Loop?.Order;
@@ -444,6 +444,17 @@ internal sealed class CollectionRuntime
 
         text.AppendLine().Append("  Actor mode: ").Append(Modes.Mode).Append(Modes.JobId != null ? " for " + Modes.JobId : string.Empty)
             .Append(". World load ").Append(_world.Epoch.ToString("N").Substring(0, 8)).Append('.');
+
+        // #284: what the hand is actually showing. Whether Valheim has an
+        // attachable model for a material is a question about its asset bundles
+        // that no static read answers, so the honest form of this feature is to
+        // report what happened rather than to assume it worked — and a report
+        // that only reaches the BepInEx log is a report the player has to go
+        // looking for.
+        if (_carried != null)
+        {
+            text.AppendLine().Append("  ").Append(_carried.Describe());
+        }
         text.AppendLine().Append(_world.Loop != null ? _world.Loop.Describe() : "No collection order.");
         return text.ToString();
     }

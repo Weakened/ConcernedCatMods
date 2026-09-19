@@ -31,7 +31,7 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Custody;
 /// <c>Stone</c> and <c>Wood</c> carry one is a question about the game's asset
 /// bundles that a static read of the assembly cannot answer. So this reports
 /// what actually happened rather than assuming: <see cref="LastOutcome"/> says
-/// whether a model appeared, and <c>cf_settle</c> prints it. #284's acceptance
+/// whether a model appeared, and <c>cf_collect status</c> prints it. #284's acceptance
 /// is that what is visible matches the ledger and is never a decoration that
 /// disagrees with it — a hand that silently shows nothing while claiming to show
 /// stone would be exactly that.</summary>
