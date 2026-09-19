@@ -64,6 +64,19 @@ internal sealed class StewardNpcAdoption
 
     internal StewardNpcRole Role { get; }
 
+    /// <summary>The registry this Steward is registered in.
+    ///
+    /// <b>Handed out rather than reached for, and that is the whole point.</b>
+    /// A job needs the registry its NPC is registered in — the driver refuses
+    /// one it is not given, and refuses a registry the identity is not in,
+    /// because a second registry would be a second arbiter and one identity
+    /// would be doing two jobs without either knowing. Exposing it here means
+    /// the one place that registered the Steward is the one place a job is
+    /// started from, in the product and in a test alike. In a game this is
+    /// <c>NpcRoleRegistry.Shared</c>; in a test it is a private one, and the
+    /// code that uses it cannot tell the difference.</summary>
+    internal NpcRoleRegistry Registry => _registry;
+
     internal NpcIdentity Identity => StewardNpcRole.Id;
 
     /// <summary>True once the library has accepted the Steward's declaration.

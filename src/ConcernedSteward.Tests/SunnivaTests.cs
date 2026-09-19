@@ -331,9 +331,14 @@ public sealed class StewardNpcAdoptionTests
     /// <summary>A registry of this test's own. The product uses the
     /// process-wide <c>Shared</c> one, which is the whole point of the arbiter;
     /// a test that used it would be sharing state with every other test in the
-    /// suite, which runs its collections in parallel.</summary>
-    private static NpcRoleRegistry PrivateRegistry() =>
-        (NpcRoleRegistry)Activator.CreateInstance(typeof(NpcRoleRegistry), nonPublic: true)!;
+    /// suite, which runs its collections in parallel.
+    ///
+    /// Constructed directly rather than through reflection: this project links
+    /// the library's sources, so the internal constructor is visible here, and
+    /// it is what the library's own adoption tests use. A reflection call would
+    /// keep compiling and start returning nothing the day that constructor
+    /// moved.</summary>
+    private static NpcRoleRegistry PrivateRegistry() => new NpcRoleRegistry();
 
     private static StewardNpcAdoption Adopted(out NpcRoleRegistry registry)
     {

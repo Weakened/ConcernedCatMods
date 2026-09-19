@@ -5,6 +5,8 @@ using TheConcernedCat.ConcernedNPC.Jobs;
 using TheConcernedCat.ConcernedNPC.Planning;
 using TheConcernedCat.ConcernedNPC.Roles;
 using TheConcernedCat.ConcernedNPC.Work;
+using TheConcernedCat.ConcernedSteward.Domain;
+using TheConcernedCat.ConcernedSteward.Domain.Npc;
 using TheConcernedCat.ConcernedSteward.Domain.Upkeep;
 using TheConcernedCat.ConcernedSteward.Domain.Upkeep.Round;
 using TheConcernedCat.Settlement.Designations;
@@ -23,18 +25,25 @@ public sealed class MaintenanceDriverTests
 {
     private static readonly MaintenanceThresholds Shipped = MaintenanceThresholds.Default;
 
-    /// <summary>A world load minted by the library, because a role may not mint
-    /// one: an epoch a role derived would be stable across loads and every stale
-    /// hold would match.</summary>
-    private static NpcWorldEpoch World()
-    {
-        var registry = (NpcRoleRegistry)Activator.CreateInstance(
-            typeof(NpcRoleRegistry), nonPublic: true)!;
-        return registry.BeginWorldLoad(out _);
-    }
-
     /// <summary>One arranged settlement, and the handle to change it under her
-    /// feet the way a player would.</summary>
+    /// feet the way a player would.
+    ///
+    /// <b>The registration here is the runtime's, not a shortcut.</b> One
+    /// registry per camp; the Steward declared to it through
+    /// <see cref="StewardNpcAdoption"/> exactly as <c>StewardRuntime.Install</c>
+    /// does; the world epoch minted by that same registry exactly as
+    /// <c>OnWorldLoaded</c> does; and every job started through
+    /// <c>MaintenanceJobRole.DriverFor</c>, which is the call the runtime will
+    /// make. That matters more than it looks: a job now needs an identity the
+    /// registry tracks, the epoch it minted and the registry itself, and a test
+    /// that assembled any of those by hand would be testing a construction the
+    /// product never performs. The gap between the two is where an adoption bug
+    /// hides — this fixture had one, and it hid there.
+    ///
+    /// <b>One registry per camp, deliberately.</b> A fresh one per driver would
+    /// make the arbiter's new one-job-at-a-time refusal unreachable from a test,
+    /// because a second registry is a second arbiter that has never heard of the
+    /// first.</summary>
     private sealed class Camp
     {
         private readonly Dictionary<string, FuelTargetObservation> _lights =
@@ -47,13 +56,21 @@ public sealed class MaintenanceDriverTests
                 _lights[light.Key.Value] = light;
             }
 
-            World = MaintenanceDriverTests.World();
+            Adoption = new StewardNpcAdoption(
+                new NpcRoleRegistry(),
+                new StewardNpcRole(System.IO.Path.Combine(
+                    System.IO.Path.GetTempPath(), "cs-steward-tests")));
+            Assert.True(Adoption.Register().IsRegistered);
+            World = Adoption.NoteWorldLoaded();
+
             Settlement = Lights.Settlement();
             Chests = new List<SupplySighting>
             {
                 Lights.Chest("depot", contents: new[] { (Lights.Wood, 200) }),
             };
         }
+
+        internal StewardNpcAdoption Adoption { get; }
 
         internal NpcWorldEpoch World { get; }
 
@@ -86,18 +103,22 @@ public sealed class MaintenanceDriverTests
         internal MaintenanceJobRole Role() => new MaintenanceJobRole(
             World, () => Round, Look, () => Settlement, () => Lights.Epoch, Shipped);
 
-        internal NpcJobDriver Driver(int unitsPerTrip = 50)
+        /// <summary>Starts a job the way the runtime will: through
+        /// <c>DriverFor</c>, over the adoption that registered her.</summary>
+        internal NpcJobDriver Driver(int unitsPerTrip = 50, string jobId = StewardRole.UpkeepJobId)
         {
             Prepare();
-            return NpcJobDriver.For(
-                MaintenanceJobRole.OrderFor(
-                    Round,
-                    new NpcIdentity("steward", "steward"),
-                    "steward/upkeep",
-                    new SettlementWorkArea(Settlement),
-                    World,
-                    unitsPerTrip),
-                Role());
+            return MaintenanceJobRole.DriverFor(
+                Adoption,
+                Round,
+                jobId,
+                new SettlementWorkArea(Settlement),
+                unitsPerTrip,
+                () => Round,
+                Look,
+                () => Settlement,
+                () => Lights.Epoch,
+                Shipped);
         }
     }
 
@@ -354,11 +375,136 @@ public sealed class MaintenanceDriverTests
         camp.Prepare();
 
         MaintenanceJobRole role = camp.Role();
-        NpcWorldEpoch somewhereElse = World();
+
+        // A second camp is a second registry, which mints a world of its own.
+        // That is the shape of the real case: a different load of a different
+        // world, whose names have nothing to do with these.
+        NpcWorldEpoch somewhereElse = new Camp(Lights.Light("elsewhere", fuel: 0f)).World;
 
         Assert.Empty(role.Candidates(somewhereElse));
         Assert.Empty(role.Sources(somewhereElse));
         Assert.NotEmpty(role.Candidates(camp.World));
+    }
+
+    // ------------------------------------------------------------------
+    // One NPC, one job — newly enforced, so newly worth knowing about
+    // ------------------------------------------------------------------
+
+    /// <summary>A second round while the first is running is refused, and the
+    /// refusal is a sentence rather than a silence.
+    ///
+    /// <b>This is new behaviour and it arrived under this leaf rather than in
+    /// it.</b> Until the arbiter began mediating modes, nothing entered one, so
+    /// a second driver for the Steward would simply have planned a second round
+    /// and two jobs would have walked one body. Recorded as a test because a
+    /// refusal that reads as "nothing to do" is the kind of thing that gets
+    /// found in a bug report.</summary>
+    [Fact]
+    public void A_second_job_for_the_same_Steward_is_refused_while_the_first_is_running()
+    {
+        var camp = new Camp(Lights.Light("hearth", fuel: 0f));
+
+        NpcJobDriver first = camp.Driver();
+        Assert.Equal(NpcJobProgress.Do, first.Next(new NpcPoint(0f, 0f, 0f)).Progress);
+
+        NpcJobDriver second = camp.Driver(jobId: "steward/some-other-errand");
+
+        Assert.Equal(NpcJobProgress.Stopped, second.Progress);
+        Assert.Equal(JobPlanVerdict.Refused, second.Verdict);
+        Assert.Contains("one NPC does one job at a time", second.Reason);
+
+        // And the first is untouched by having been asked.
+        Assert.Equal(NpcJobProgress.Do, first.Next(new NpcPoint(0f, 0f, 0f)).Progress);
+    }
+
+    /// <summary>Re-asking for the SAME job is not a second job.
+    ///
+    /// The upkeep job has one name for the life of the world, and a runtime that
+    /// re-derived its driver after an interruption must not be told its own NPC
+    /// is busy with itself.</summary>
+    [Fact]
+    public void Re_asking_for_the_same_job_takes_the_mode_it_already_holds()
+    {
+        var camp = new Camp(Lights.Light("hearth", fuel: 0f));
+
+        NpcJobDriver first = camp.Driver();
+        Assert.Equal(NpcJobProgress.Do, first.Next(new NpcPoint(0f, 0f, 0f)).Progress);
+
+        NpcJobDriver again = camp.Driver();
+
+        Assert.NotEqual(NpcJobProgress.Stopped, again.Progress);
+        Assert.Equal(NpcJobProgress.Do, again.Next(new NpcPoint(0f, 0f, 0f)).Progress);
+    }
+
+    /// <summary>And a job that has ended gives the mode back, so the next round
+    /// is not refused by the last one.</summary>
+    [Fact]
+    public void A_finished_round_gives_the_identity_back()
+    {
+        var camp = new Camp(Lights.Light("hearth", fuel: 0f));
+
+        NpcJobDriver first = camp.Driver();
+        Walk(first);
+        Assert.Equal(NpcJobProgress.Finished, first.Progress);
+
+        NpcJobDriver next = camp.Driver(jobId: "steward/the-next-errand");
+
+        Assert.NotEqual(NpcJobProgress.Stopped, next.Progress);
+    }
+
+    /// <summary>Retiring a body mid-job is now refused, and nothing in this
+    /// product was relying on it being allowed.
+    ///
+    /// <b>Worth pinning from here rather than only in the library.</b> Until the
+    /// driver entered a mode, <c>MayRetireBody</c> was permanently true and the
+    /// guard never fired; it fires now. The Steward reads neither
+    /// <c>MayRetireBody</c> nor <c>MayRelocateHome</c> anywhere — nothing in
+    /// this product retires or relocates a body at all — so the change costs it
+    /// nothing today. This test is the tripwire for the day something here
+    /// wants to, and the reason it is here is that the answer would otherwise be
+    /// discovered by a body vanishing mid-round.</summary>
+    [Fact]
+    public void Her_body_may_not_be_retired_while_a_round_is_running()
+    {
+        var camp = new Camp(Lights.Light("hearth", fuel: 0f));
+
+        Assert.True(camp.Adoption.Registry.ModeOf(camp.Adoption.Identity)!.MayRetireBody);
+
+        NpcJobDriver driver = camp.Driver();
+        Assert.Equal(NpcJobProgress.Do, driver.Next(new NpcPoint(0f, 0f, 0f)).Progress);
+
+        Assert.False(camp.Adoption.Registry.ModeOf(camp.Adoption.Identity)!.MayRetireBody);
+
+        Walk(driver);
+        Assert.True(camp.Adoption.Registry.ModeOf(camp.Adoption.Identity)!.MayRetireBody);
+    }
+
+    /// <summary>A job needs the registry its NPC is registered in, and an
+    /// unregistered Steward gets a refusal with a reason rather than a plan.
+    ///
+    /// The failure this leaf actually hit: the driver refused before it planned,
+    /// and six tests saw only that no steps came out.</summary>
+    [Fact]
+    public void An_unregistered_Steward_is_refused_with_a_reason_rather_than_planning()
+    {
+        var registry = new NpcRoleRegistry();
+        NpcWorldEpoch world = registry.BeginWorldLoad(out _);
+        Designation settlement = Lights.Settlement();
+
+        // Never offered to the registry: the one line StewardRuntime.Install
+        // performs, left out.
+        NpcJobDriver driver = NpcJobDriver.For(
+            MaintenanceJobRole.OrderFor(
+                default, StewardNpcRole.Id, StewardRole.UpkeepJobId,
+                new SettlementWorkArea(settlement), world, 50),
+            new MaintenanceJobRole(
+                world, () => default, _ => null, () => settlement, () => Lights.Epoch, Shipped),
+            registry);
+
+        Assert.Equal(NpcJobProgress.Stopped, driver.Progress);
+        Assert.Equal(JobPlanVerdict.Refused, driver.Verdict);
+        Assert.Contains("not registered", driver.Reason);
+        Assert.Empty(driver.Steps);
     }
 
     /// <summary>The seven verdicts map one to one, and a mapping that collapsed
