@@ -84,11 +84,7 @@ internal sealed class TerrainIntentPersistence
 
     private static string GetPath(long worldUid)
     {
-        return Path.Combine(
-            Paths.ConfigPath,
-            "ConcernedCatMods",
-            "ConcernedCartographer",
-            worldUid.ToString(CultureInfo.InvariantCulture) + ".terrain-intent.tsv");
+        return CartographerPaths.InRoot(worldUid.ToString(CultureInfo.InvariantCulture) + ".terrain-intent.tsv");
     }
 
     private static void TryDelete(string path)

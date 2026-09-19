@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using BepInEx.Logging;
 using TheConcernedCat.ConcernedCartographer.Reporting;
-using TheConcernedCat.ConcernedCartographer.Runtime.Companions;
 using TheConcernedCat.ConcernedCartographer.Storage;
 
 namespace TheConcernedCat.ConcernedCartographer.Persistence;
@@ -110,7 +109,7 @@ internal static class AuthorIdentity
         try
         {
             MarkerFile.MarkerSearch search = MarkerFile.Resolve(
-                CartographerLegacyProbe.DataDirectory, FileName, PriorFileNames, IsIdentity, Warn(log),
+                CartographerPaths.Root, FileName, PriorFileNames, IsIdentity, Warn(log),
                 out string path, out string? found);
 
             if (search == MarkerFile.MarkerSearch.Found && found is not null)
@@ -189,7 +188,7 @@ internal static class AuthorIdentity
     internal static OnboardingMarkerState FindOnboardingMarker(ManualLogSource log)
     {
         MarkerFile.MarkerSearch search = MarkerFile.Resolve(
-            CartographerLegacyProbe.DataDirectory,
+            CartographerPaths.Root,
             OnboardingMarker.FileName,
             OnboardingMarker.PriorFileNames,
             OnboardingMarker.IsRecorded,
@@ -210,7 +209,7 @@ internal static class AuthorIdentity
         contents is not null && Guid.TryParseExact(contents.Trim(), "N", out _);
 
     private static string MarkerPath(string name) =>
-        Path.Combine(CartographerLegacyProbe.DataDirectory, MarkerFile.FolderName, name);
+        CartographerPaths.InState(name);
 
     private static string? Resolve(
         string name,
@@ -220,7 +219,7 @@ internal static class AuthorIdentity
         out string path)
     {
         MarkerFile.Resolve(
-            CartographerLegacyProbe.DataDirectory, name, priorNames, isUsable, Warn(log),
+            CartographerPaths.Root, name, priorNames, isUsable, Warn(log),
             out path, out string? contents);
         return contents;
     }

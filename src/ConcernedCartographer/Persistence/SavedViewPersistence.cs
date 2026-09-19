@@ -69,6 +69,6 @@ internal sealed class SavedViewPersistence
 
     private static string GetPath()
     {
-        return Path.Combine(Paths.ConfigPath, "ConcernedCatMods", "ConcernedCartographer", "views.tsv");
+        return CartographerPaths.InRoot("views.tsv");
     }
 }
