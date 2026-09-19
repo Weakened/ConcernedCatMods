@@ -103,11 +103,16 @@ internal readonly struct RoutePlan
     private readonly NpcPoint[]? _waypoints;
 
     internal RoutePlan(
-        RouteVerdict verdict, IReadOnlyList<NpcPoint>? waypoints, float lengthMetres, int requestRevision)
+        RouteVerdict verdict,
+        IReadOnlyList<NpcPoint>? waypoints,
+        float lengthMetres,
+        int requestRevision,
+        int planRevision)
     {
         Verdict = verdict;
         LengthMetres = lengthMetres;
         RequestRevision = requestRevision;
+        PlanRevision = planRevision;
 
         if (waypoints == null || waypoints.Count == 0)
         {
@@ -134,17 +139,39 @@ internal readonly struct RoutePlan
     /// <summary>How far the whole route is, in metres.</summary>
     internal float LengthMetres { get; }
 
-    /// <summary>The revision of the request this answers, so a goal from a
-    /// superseded plan is recognised rather than followed.</summary>
+    /// <summary>The revision of the <b>request</b> this answers - what was
+    /// asked for, not which answer this is. Two different routes to the same
+    /// destination share it.</summary>
     internal int RequestRevision { get; }
 
-    /// <summary>The one question before walking. A suitable verdict with fewer
-    /// than two waypoints is not suitable.</summary>
-    internal bool IsSuitable => Verdict == RouteVerdict.Suitable && Waypoints.Count >= 2;
+    /// <summary>Which answer this is: a number the planner increases for every
+    /// plan it produces, in this process.
+    ///
+    /// <b>Distinct from <see cref="RequestRevision"/>, and the distinction is
+    /// the whole point.</b> The ordinary case for re-planning is that the
+    /// destination has not changed at all - the NPC learned that a gap it
+    /// believed in does not fit, and the route now goes the other way round the
+    /// building. Both plans answer the same request. If a goal carried only the
+    /// request's revision, a goal from the abandoned route would be
+    /// bit-identical in the one field meant to tell them apart, and the follower
+    /// would walk it: the exact corner-cutting failure
+    /// <see cref="RouteGoal"/> exists to prevent, one level up.</summary>
+    internal int PlanRevision { get; }
+
+    /// <summary>The one question before walking. Requires a suitable verdict,
+    /// at least two waypoints, a positive length and a destination that is not
+    /// where the NPC already stands - a route to where you already are is not a
+    /// route, and treating one as followable is how an NPC reports arriving
+    /// somewhere it never went.</summary>
+    internal bool IsSuitable =>
+        Verdict == RouteVerdict.Suitable
+        && Waypoints.Count >= 2
+        && LengthMetres > 0f
+        && !Waypoints[0].Equals(Waypoints[Waypoints.Count - 1]);
 
     /// <summary>A plan that is not one. Refuses to be built with a verdict that
     /// would claim success.</summary>
-    internal static RoutePlan Refused(RouteVerdict verdict, int requestRevision)
+    internal static RoutePlan Refused(RouteVerdict verdict, int requestRevision, int planRevision)
     {
         if (verdict == RouteVerdict.Suitable || verdict == RouteVerdict.Unspecified)
         {
@@ -152,7 +179,7 @@ internal readonly struct RoutePlan
                 nameof(verdict), "A refused route needs a verdict that explains it.");
         }
 
-        return new RoutePlan(verdict, null, 0f, requestRevision);
+        return new RoutePlan(verdict, null, 0f, requestRevision, planRevision);
     }
 }
 
@@ -162,8 +189,15 @@ internal readonly struct RoutePlan
 /// <b>What it guarantees.</b> That a follower cannot skip ahead. A route that
 /// bends back near itself passes close to its own later waypoints, and a
 /// follower that simply picked the nearest one would cut the corner and walk
-/// through whatever the bend was going round. The index only ever moves
-/// forward.</summary>
+/// through whatever the bend was going round.
+///
+/// <b>Where the index lives, and why it is here rather than in the planner.</b>
+/// The follower holds it and hands it back, because the alternative - the
+/// planner remembering where each NPC has got to - forces one planner instance
+/// per NPC, and then setback memory is per NPC too, so four NPCs each
+/// rediscover the same impassable gap by each getting stuck in it. One planner,
+/// shared, remembering what does not work for everybody; the progress along a
+/// route belongs to whoever is walking it.</summary>
 internal readonly struct RouteGoal
 {
     internal RouteGoal(NpcPoint target, float arrivalRadiusMetres, bool isFinal, int waypointIndex, int planRevision)
@@ -182,10 +216,14 @@ internal readonly struct RouteGoal
     /// <summary>Whether arriving here ends the route.</summary>
     internal bool IsFinal { get; }
 
-    /// <summary>Which waypoint this is. Only ever increases for one plan.</summary>
+    /// <summary>Which waypoint this is. The follower passes it back on the next
+    /// ask, and the planner never returns a lower one for the same plan.
+    /// </summary>
     internal int WaypointIndex { get; }
 
-    /// <summary>The plan this goal came from, so a goal held across a re-plan is
-    /// discarded rather than walked.</summary>
+    /// <summary>The <see cref="RoutePlan.PlanRevision"/> this goal came from, so
+    /// a goal held across a re-plan is discarded rather than walked - including
+    /// when the re-plan answered the same request as the plan it
+    /// replaced.</summary>
     internal int PlanRevision { get; }
 }

@@ -46,6 +46,12 @@ public enum BodyClaimStatus
     /// required to release.</summary>
     RefusedNoHolder = 7,
 
+    /// <summary>No world is loaded, so there is nowhere for a body to stand. A
+    /// body belongs to one world load and is destroyed with that world's scene;
+    /// a claim made without one could only ever be a claim on a body that does
+    /// not exist.</summary>
+    RefusedNoWorld = 10,
+
     /// <summary>The body is given up and the identity is free. If the holder
     /// also held the identity's mode, that is released with it.</summary>
     Released = 8,

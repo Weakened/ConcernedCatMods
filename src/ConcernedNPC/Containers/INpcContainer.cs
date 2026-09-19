@@ -27,15 +27,14 @@ namespace TheConcernedCat.ConcernedNPC.Containers;
 /// and half of that contract is worse than none: a port with an
 /// <c>Add</c> and no ledger is an invitation to mint items on a retry. The port
 /// arrives with the ledger, in the custody leaf.</summary>
-internal interface INpcContainer
+internal interface INpcContainer : INpcEpochScoped
 {
     /// <summary>How the role names this container, opaque here. Only meaningful
-    /// together with <see cref="Epoch"/>.</summary>
+    /// together with the <see cref="INpcEpochScoped.Epoch"/> it is named in -
+    /// which is why a container is an epoch-scoped subject, and therefore
+    /// something a reservation book can hold and can refuse when the world has
+    /// moved on.</summary>
     string Key { get; }
-
-    /// <summary>The world load <see cref="Key"/> was minted in. An id from any
-    /// other load names a different object.</summary>
-    NpcWorldEpoch Epoch { get; }
 
     /// <summary>Where it stands. For deciding whether to walk over and for
     /// telling a player which chest is meant - never for deciding which

@@ -39,6 +39,14 @@ public interface INpcDataPaths
     /// Returns false when this role keeps no file for that purpose. There are no
     /// purposes yet: this library reads and writes nothing today, and each leaf
     /// that needs one adds it deliberately, knowing that every role must then
-    /// answer it.</summary>
+    /// answer it.
+    ///
+    /// <b>The first purpose must arrive as a declared constant, not a string at
+    /// the call site.</b> False here means both "this role keeps no such file"
+    /// and "nobody has ever heard of that token", so a typo is a feature
+    /// silently switched off - which is the same shape as the first-run bug two
+    /// paragraphs up, arrived at from the other direction. A constant makes a
+    /// typo a compile error, and makes the set of purposes something a reader
+    /// can enumerate.</summary>
     bool TryResolveFile(string purpose, out string absolutePath);
 }

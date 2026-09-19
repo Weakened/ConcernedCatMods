@@ -52,8 +52,11 @@ public readonly struct NpcIdentity : IEquatable<NpcIdentity>
     public string Role { get; }
 
     /// <summary>True for <c>default(NpcIdentity)</c>, which is never a valid
-    /// identity and is never registered.</summary>
-    public bool IsEmpty => string.IsNullOrEmpty(Role);
+    /// identity and is never registered. Both halves are checked: they are
+    /// always either both set or both absent today, so checking one happens to
+    /// work - and a rule that is only correct because of an invariant somewhere
+    /// else is a rule that breaks silently when that invariant moves.</summary>
+    public bool IsEmpty => string.IsNullOrEmpty(Product) || string.IsNullOrEmpty(Role);
 
     /// <summary><c>product/role</c>: the form shipped products already write and
     /// read. Empty for <see cref="IsEmpty"/>.</summary>

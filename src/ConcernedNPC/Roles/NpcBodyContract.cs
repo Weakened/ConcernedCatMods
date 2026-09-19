@@ -9,9 +9,23 @@ namespace TheConcernedCat.ConcernedNPC.Roles;
 /// product today, and every saved NPC in every existing world is found again by
 /// them. They are data passed in here, never constants declared here.
 /// <c>ConcernedNPC</c> supplies no default for either string and no fallback for
-/// a missing one: <c>NpcContractLiteralsTests</c> reads this library's own
-/// sources and fails the build if anything in it so much as writes a prefab
-/// name or a <c>tcc.</c> key in a string literal.
+/// a missing one.
+///
+/// <b>What the audit that backs this actually checks</b>, stated plainly
+/// because the version of this sentence that said "fails the build if anything
+/// in it so much as writes a prefab name" claimed more than it did.
+/// <c>ContractLiteralTests</c> reads this library's own sources and refuses
+/// four things: a string literal that is one of the three shipped prefab names
+/// or is prefab-shaped; a literal containing a mod key prefix; an identifier
+/// shaped like a prefab name; and - in every file but the plugin entry point,
+/// which legitimately owns this package's own BepInEx identity - any string
+/// constant, interpolated string or verbatim string at all, because each of
+/// those is a way to assemble a name that reading literals cannot see.
+/// Adjacent literal concatenation is folded before the literal checks, so
+/// splitting a name in two does not hide it. What it cannot catch is a name
+/// assembled from values computed at run time; the constant ban is what makes
+/// that hard rather than impossible, and this comment is what stops the next
+/// reader believing it is airtight.
 ///
 /// <b>Why that rule is worth a test.</b> The host destroys any saved object
 /// whose prefab is not registered when a world's objects are created - it logs
@@ -27,11 +41,14 @@ namespace TheConcernedCat.ConcernedNPC.Roles;
 /// own prefab, from its own plugin start, forever.</summary>
 public readonly struct NpcBodyContract
 {
+    private readonly string? _prefabName;
+    private readonly string? _zdoKeyPrefix;
+
     private NpcBodyContract(NpcBodyKind kind, string prefabName, string zdoKeyPrefix)
     {
         Kind = kind;
-        PrefabName = prefabName;
-        ZdoKeyPrefix = zdoKeyPrefix;
+        _prefabName = prefabName;
+        _zdoKeyPrefix = zdoKeyPrefix;
     }
 
     /// <summary>Which of the two ways this role's body exists. Drives every
@@ -43,7 +60,7 @@ public readonly struct NpcBodyContract
     /// - and the name saved bodies are found by. Empty for a presentation body,
     /// which has no registered prefab. <b>Changing it for a shipped role deletes
     /// every existing body of that role on the next load.</b></summary>
-    public string PrefabName { get; }
+    public string PrefabName => _prefabName ?? string.Empty;
 
     /// <summary>The prefix, ending in a dot, of every key this role's body
     /// stores itself beneath in its own network object - today <c>tcc.worker.</c>
@@ -51,7 +68,7 @@ public readonly struct NpcBodyContract
     /// nothing. Two roles may share a prefix (Foreman and Teamster do); they may
     /// never share a <see cref="PrefabName"/>, because the prefab is what
     /// separates their bodies before the key is ever read.</summary>
-    public string ZdoKeyPrefix { get; }
+    public string ZdoKeyPrefix => _zdoKeyPrefix ?? string.Empty;
 
     /// <summary>The contract for a local-only figure: no prefab, no keys,
     /// nothing saved. Takes no arguments because there is nothing durable about
@@ -83,6 +100,12 @@ public readonly struct NpcBodyContract
     /// exactly which fact is wrong. Checked before anything is registered, so a
     /// role with a malformed contract is refused whole rather than half
     /// installed.</summary>
+    /// <summary>Whether this contract is internally consistent, and if not,
+    /// exactly which fact is wrong - the same check registration runs, exposed
+    /// so a role can ask before it offers itself rather than having to register
+    /// and read the refusal back out of the outcome.</summary>
+    public bool TryValidate(out string reason) => Validate(out reason);
+
     internal bool Validate(out string reason)
     {
         switch (Kind)

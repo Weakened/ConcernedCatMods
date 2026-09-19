@@ -136,4 +136,27 @@ internal sealed class ActorModeOwner
         Revision++;
         return ActorModeOutcome.Released;
     }
+
+    /// <summary>Releases the identity without the holder's consent, because the
+    /// holder no longer exists.
+    ///
+    /// <b>The only caller is the world going away.</b> A job belongs to one
+    /// world load: when that world is unloaded, the job is over, its body is
+    /// destroyed with the scene, and its id is held by nothing. Ordinary
+    /// <see cref="Release"/> cannot help, because it requires the holder's own
+    /// string and after a reload nothing has it - which is exactly how an
+    /// identity becomes permanently busy for the life of the process. Nothing
+    /// else may use this: a job that could be evicted by another caller is a
+    /// job that can have its body moved out from under it.</summary>
+    internal void AbandonForWorldUnload()
+    {
+        if (JobId == null && Mode == ActorMode.Resting)
+        {
+            return;
+        }
+
+        JobId = null;
+        Mode = ActorMode.Resting;
+        Revision++;
+    }
 }

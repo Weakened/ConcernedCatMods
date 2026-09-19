@@ -120,6 +120,23 @@ public class SlugAgreementTests
     }
 
     [Fact]
+    public void The_longest_legal_identity_round_trips()
+    {
+        // Each half may be MaxLength, so the composed form can be 97 characters.
+        // Nothing anywhere states a ceiling on it, and nothing needs to - but
+        // that is only true while it round-trips, so it is asserted rather than
+        // assumed.
+        string longest = new string('a', NpcSlug.MaxLength);
+        var identity = new NpcIdentity(longest, longest);
+
+        Assert.Equal((NpcSlug.MaxLength * 2) + 1, identity.Value.Length);
+        Assert.True(NpcIdentity.TryParse(identity.Value, out NpcIdentity back));
+        Assert.Equal(identity, back);
+        Assert.True(WorkerKey.TryParse(identity.Value, out WorkerKey key));
+        Assert.Equal(identity.Value, key.Value);
+    }
+
+    [Fact]
     public void Identities_are_keyed_by_product_so_two_products_may_share_a_slug()
     {
         Assert.NotEqual(new NpcIdentity("foreman", "helper"), new NpcIdentity("teamster", "helper"));

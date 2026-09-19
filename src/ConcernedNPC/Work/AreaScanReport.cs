@@ -83,14 +83,27 @@ internal readonly struct AreaScanReport
     /// "not finished looking".</summary>
     internal bool TruncatedByBudget { get; }
 
+    /// <summary>Whether the counts are internally possible: every candidate
+    /// accounted for was examined. If the counts are the evidence an outcome is
+    /// derived from, a report whose counts cannot all be true is evidence of
+    /// nothing, and the outcome resting on it certainly is not.</summary>
+    internal bool CountsAgree =>
+        Examined >= 0
+        && NotLoaded >= 0
+        && Rejected >= 0
+        && Exhausted >= 0
+        && Examined >= NotLoaded + Rejected + Exhausted;
+
     /// <summary>Whether this pass proves the area holds nothing more of what was
     /// asked for. True only for <see cref="AreaScanOutcome.Empty"/> and
     /// <see cref="AreaScanOutcome.Exhausted"/>, and false whenever anything was
-    /// unloaded or the budget ran out, whatever the outcome says - belt and
-    /// braces, because this is the property a finished job is claimed on.
-    /// </summary>
+    /// unloaded, the budget ran out, or the counts do not add up - whatever the
+    /// outcome says. Belt and braces, because this is the property a finished
+    /// job is claimed on, and "he says he is done" is the single most expensive
+    /// thing an NPC can be wrong about.</summary>
     internal bool IsConclusive =>
         (Outcome == AreaScanOutcome.Empty || Outcome == AreaScanOutcome.Exhausted)
         && NotLoaded == 0
-        && !TruncatedByBudget;
+        && !TruncatedByBudget
+        && CountsAgree;
 }
