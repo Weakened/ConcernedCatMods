@@ -617,15 +617,34 @@ ARBITER_BYPASS = re.compile(r"\bnew\s+ActorModeOwner\s*\(")
 # Proposed by the agent that moved the custody ledger, which proved it for its
 # own two folders with a test. This is the mechanical backstop for the folders
 # nobody has written yet.
+# Every File and Directory member except the ones that only ask a question.
+#
+# The first version of this named the members it knew, and a review found six
+# ways past it in a single pass - WriteAllBytes, ReadAllBytes, CreateText,
+# OpenWrite, AppendText, AppendAllLines - because a word boundary after "Open"
+# does not match "OpenWrite". A deny-list over a namespace somebody else owns is
+# the wrong shape: it is only ever as complete as the last person to think about
+# it. Name what may be called instead.
 LIBRARY_FILE_APIS = re.compile(
-    r"\b(?:File\.(?:WriteAllText|ReadAllText|WriteAllLines|ReadAllLines|AppendAllText"
-    r"|Open|Create|Move|Copy|Replace|Delete)|Directory\.(?:Create|CreateDirectory|GetFiles|Delete)"
-    r"|new\s+Stream(?:Writer|Reader)|new\s+File(?:Stream|Info))\b")
+    r"\b(?:File|Directory)\.(?!Exists\b)\w+"
+    r"|\bnew\s+Stream(?:Writer|Reader)\b"
+    r"|\bnew\s+File(?:Stream|Info)\b")
 
 # Refused everywhere in the library, the allow-list included: a path the library
 # composes is a directory it has chosen, and a schema it names is a format it
 # has taken ownership of.
-LIBRARY_FORMAT_OWNERSHIP = re.compile(r"\b(?:Path\.Combine|SchemaVersion)\b")
+# Choosing where data lives, and naming what shape it is in. Refused
+# everywhere, the plumbing included: a library that picks a directory or names a
+# schema has taken ownership of somebody else's save file.
+LIBRARY_FORMAT_OWNERSHIP = re.compile(
+    r"\bPath\.(?:Combine|Join|GetTempPath|GetTempFileName)\b|\bSchemaVersion\b")
+
+# Reading a component of a path somebody else chose. That is not ownership - the
+# plumbing has to check that the path it was handed is absolute and names a
+# directory before it writes there - but it is one string concatenation away
+# from composition, so it is confined to the same two pinned files as the file
+# primitives rather than allowed everywhere.
+LIBRARY_PATH_INSPECTION = re.compile(r"\bPath\.(?:GetDirectoryName|GetFullPath|GetFileName)\b")
 
 # The only two files that may call a file primitive, and what each is for. A
 # third entry is a deliberate edit with a reason, not a convenience.
@@ -672,6 +691,13 @@ def check_the_npc_library_writes_no_file(errors: list[str]) -> list[str]:
                     f"[concernednpc] The NPC library may not compose a path or name a schema: "
                     f"{owned.group(0)!r} at {path.relative_to(ROOT)}:{number}. A role owns where its "
                     "data lives and what shape it is in.", errors)
+
+            inspected = LIBRARY_PATH_INSPECTION.search(line)
+            if inspected and not is_plumbing:
+                fail(
+                    f"[concernednpc] Only the named persistence plumbing may take a path apart: "
+                    f"{inspected.group(0)!r} at {path.relative_to(ROOT)}:{number}. Reading a path's "
+                    "pieces is one concatenation away from choosing where data lives.", errors)
 
             match = LIBRARY_FILE_APIS.search(line)
             if match and not is_plumbing:
