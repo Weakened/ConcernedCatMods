@@ -1324,6 +1324,66 @@ MOJIBAKE_TAIL = (
 MOJIBAKE = re.compile("[" + MOJIBAKE_LEAD + "][" + MOJIBAKE_TAIL + "]")
 
 
+def check_cartographer_paths_have_one_owner(errors: list[str]) -> list[str]:
+    """Only CartographerPaths composes the Cartographer data directory.
+
+    The fresh-install probe decides new-versus-returning player by listing that
+    directory and asking whether everything in it is a name this build writes for
+    itself. So "where does this file land" and "who counts as a returning player"
+    are the same question, and for a long time nothing connected them: the
+    directory was built by eleven separate literal Path.Combine expressions
+    spread across the persistence and runtime layers.
+
+    It has cost twice. survey-rules.tsv made every fresh installation look like a
+    returning player; author-id.dat (#343) did it again and reached main, and
+    because unlock is monotonic the introduction could then never run again on
+    that profile. Both were found by a person, not by a test.
+
+    This is the check that makes the invariant structural: a twelfth literal
+    composition fails here rather than quietly changing who gets an introduction.
+    """
+    owner = Path("src/ConcernedCartographer/CartographerPaths.cs")
+    needle = "Paths.ConfigPath"
+    offenders: list[str] = []
+
+    for path in sorted((ROOT / "src" / "ConcernedCartographer").rglob("*.cs")):
+        relative = path.relative_to(ROOT)
+        if relative == owner:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as problem:
+            errors.append(f"[cartographer-paths] could not read {relative}: {problem}")
+            continue
+
+        for number, line in enumerate(text.splitlines(), start=1):
+            if needle in line and not line.lstrip().startswith("///"):
+                offenders.append(f"{relative}:{number}")
+
+    if not (ROOT / owner).exists():
+        errors.append(
+            "[cartographer-paths] src/ConcernedCartographer/CartographerPaths.cs is missing; "
+            "it is the one place allowed to compose the product's data directory"
+        )
+        return []
+
+    for offender in offenders:
+        errors.append(
+            f"[cartographer-paths] {offender} composes Paths.ConfigPath directly. "
+            "Use CartographerPaths.Root for a file a player edited or caused, or "
+            "CartographerPaths.InState for the mod's own bookkeeping - a file in the "
+            "root changes who the fresh-install probe calls a returning player (#343, #363)."
+        )
+
+    if offenders:
+        return []
+
+    return [
+        "[cartographer-paths] one owner for the data directory; "
+        "no other Cartographer source composes Paths.ConfigPath"
+    ]
+
+
 def check_no_mojibake(errors: list[str]) -> list[str]:
     """No tracked text file carries double-encoded UTF-8.
 
@@ -1392,6 +1452,7 @@ def main() -> int:
 
     report.extend(check_solution_integrity(errors))
     report.extend(check_no_mojibake(errors))
+    report.extend(check_cartographer_paths_have_one_owner(errors))
     check_teamster_adapter_isolation(errors)
     report.extend(check_cross_product_independence(errors))
     report.extend(check_teamster_cartographer_contract(errors))

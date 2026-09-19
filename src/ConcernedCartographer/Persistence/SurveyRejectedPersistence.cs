@@ -71,10 +71,6 @@ internal sealed class SurveyRejectedPersistence
 
     private static string GetPath(long worldUid)
     {
-        return Path.Combine(
-            Paths.ConfigPath,
-            "ConcernedCatMods",
-            "ConcernedCartographer",
-            worldUid.ToString(CultureInfo.InvariantCulture) + ".survey-rejected.tsv");
+        return CartographerPaths.InRoot(worldUid.ToString(CultureInfo.InvariantCulture) + ".survey-rejected.tsv");
     }
 }

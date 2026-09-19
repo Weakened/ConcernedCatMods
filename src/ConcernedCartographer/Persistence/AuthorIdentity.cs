@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using BepInEx.Logging;
 using TheConcernedCat.ConcernedCartographer.Reporting;
-using TheConcernedCat.ConcernedCartographer.Runtime.Companions;
 using TheConcernedCat.ConcernedCartographer.Storage;
 
 namespace TheConcernedCat.ConcernedCartographer.Persistence;
@@ -85,12 +84,12 @@ internal static class AuthorIdentity
         contents is not null && Guid.TryParseExact(contents.Trim(), "N", out _);
 
     private static string MarkerPath(string name) =>
-        Path.Combine(CartographerLegacyProbe.DataDirectory, MarkerFile.FolderName, name);
+        CartographerPaths.InState(name);
 
     private static string Adopt(
         string name, string legacyName, Func<string, bool> isUsable, ManualLogSource log) =>
         MarkerFile.Adopt(
-            CartographerLegacyProbe.DataDirectory, name, legacyName, isUsable,
+            CartographerPaths.Root, name, legacyName, isUsable,
             why => log.LogWarning(
                 $"Moving this mod's own bookkeeping out of your settings folder did not finish: {why}."));
 }

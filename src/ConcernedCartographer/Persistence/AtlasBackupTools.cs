@@ -27,7 +27,7 @@ internal sealed class AtlasBackupTools
     }
 
     private static string DataDirectory =>
-        Path.Combine(Paths.ConfigPath, "ConcernedCatMods", "ConcernedCartographer");
+        CartographerPaths.Root;
 
     private static string BackupRoot => Path.Combine(DataDirectory, "backups");
 

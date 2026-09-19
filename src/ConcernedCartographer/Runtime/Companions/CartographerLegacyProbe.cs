@@ -91,8 +91,7 @@ internal sealed class CartographerLegacyProbe
     /// <summary>The directory every Cartographer sidecar has always lived in.
     /// Also where companion sidecars go, so one folder move takes a player's
     /// whole Cartographer history with it.</summary>
-    public static string DataDirectory => Path.Combine(
-        Paths.ConfigPath, "ConcernedCatMods", "ConcernedCartographer");
+    public static string DataDirectory => CartographerPaths.Root;
 
     public LegacyEvidence Evaluate(long worldUid)
     {
