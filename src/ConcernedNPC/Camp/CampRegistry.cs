@@ -125,8 +125,13 @@ internal sealed class CampRegistry
 
         if (!piece.IsMember)
         {
-            // Terrain edits and natural objects are not stored at all. The
-            // exclusion is free every time after this one.
+            // Terrain edits and natural objects are not stored at all, so the
+            // exclusion is free every time after this one - but a piece this
+            // registry already holds has to be let go of when a role changes
+            // its mind about it. Answering "excluded" while quietly keeping it
+            // in camp is the same shape of defect as a ledger comparing a
+            // payload and ignoring what became of it.
+            Forget(piece.Key);
             return CampPieceOutcome.Excluded;
         }
 

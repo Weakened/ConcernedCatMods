@@ -330,6 +330,34 @@ public class CampSurveyTests
     }
 
     [Fact]
+    public void A_piece_reclassified_as_a_terrain_edit_is_let_go_of_rather_than_quietly_kept()
+    {
+        // The camp-shaped instance of the defect that broke the custody ledger:
+        // an answer decided on part of a piece's identity while the rest of it
+        // changed underneath. The exclusion check ran before the registry was
+        // consulted at all, so a role correcting itself - after a game update,
+        // or after somebody fixes its classifier - was told "excluded" while
+        // the piece went on holding camp open.
+        var camp = new CampFixture();
+        camp.Build(0, 0);
+        string path = camp.Build(40, 0, CampPieceClass.Built);
+        for (int x = 8; x < 40; x += 8)
+        {
+            camp.Build(x, 0);
+        }
+
+        Assert.Equal(6, camp.Survey().Members);
+
+        Assert.Equal(
+            CampPieceOutcome.Excluded,
+            camp.Registry.Note(new CampPiece(path, new NpcPoint(40, 0, 0), CampPieceClass.TerrainEdit, camp.Epoch)));
+
+        Assert.Equal(5, camp.Registry.Known);
+        Assert.Equal(5, camp.Survey().Members);
+        Assert.False(camp.Survey().Contains(new NpcPoint(44, 0, 0)));
+    }
+
+    [Fact]
     public void Forgetting_something_never_known_is_an_ordinary_no()
     {
         var camp = new CampFixture();

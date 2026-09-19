@@ -163,9 +163,186 @@ public class CustodyLedgerTests
         Assert.Equal(0, _ledger.Acquired(Custody.Job, Custody.Timber));
         AssertConserved(0);
 
-        // And its name is still known, so a retry under it is refused rather
-        // than started afresh.
-        Assert.Equal(NpcCustodyOutcome.AlreadySatisfied, Acquire(0, Custody.Body(_world), 10));
+        // And its name is still known, so a LIVE retry under it is refused
+        // rather than started afresh. This assertion used to read
+        // AlreadySatisfied under a comment saying "refused", which is not the
+        // same thing at all: AlreadySatisfied is documented as "nothing changed
+        // and nothing is wrong", and nothing was recorded. See the test below
+        // for what that costs.
+        Assert.Equal(NpcCustodyOutcome.Stale, Acquire(0, Custody.Body(_world), 10));
+        Assert.Equal(0, _ledger.TotalEverywhere(Custody.Job, Custody.Timber));
+
+        // Restating the rolled-back row itself, which is what a replay does, is
+        // still an ordinary success: there is nothing to apply either way.
+        Assert.Equal(
+            NpcCustodyOutcome.AlreadySatisfied,
+            _ledger.Acquire(Custody.Step(0), Custody.Body(_world), Custody.Timber, 10, NpcRowStanding.Voided));
+    }
+
+    [Fact]
+    public void Forty_stone_out_of_a_chest_can_never_be_answered_as_already_recorded()
+    {
+        // The concrete failure, start to finish.
+        //
+        // The player loads yesterday's save. The role's marker rule replays
+        // step 3 - forty stone out of chest A - as Voided, and the ledger
+        // remembers the name and holds nothing, which is right: the stone is
+        // back in the chest. This session the job resumes, physically withdraws
+        // the forty stone through the port, and records it under the name its
+        // plan derives, which is the same name.
+        //
+        // Answering that "already satisfied" put forty units of the player's
+        // stone out of a chest and into no holding. Acquired and
+        // TotalEverywhere both omitted them, so IsConserved stayed true
+        // VACUOUSLY - nothing had ever been recorded to conserve - every later
+        // transfer of them was refused as not held, and reconciliation
+        // eventually reported material from nowhere for a person to guess at.
+        Assert.Equal(
+            NpcCustodyOutcome.Applied,
+            _ledger.Acquire(Custody.Step(3), Custody.Chest(_world), Custody.Timber, 40, NpcRowStanding.Voided));
+
+        NpcCustodyOutcome retry = _ledger.Acquire(Custody.Step(3), Custody.Chest(_world), Custody.Timber, 40);
+
+        Assert.NotEqual(NpcCustodyOutcome.AlreadySatisfied, retry);
+        Assert.Equal(NpcCustodyOutcome.Stale, retry);
+
+        // The job now knows it must take a new name, and under one it works.
+        Assert.Equal(
+            NpcCustodyOutcome.Applied,
+            _ledger.Acquire(Custody.Step(4), Custody.Chest(_world), Custody.Timber, 40));
+        Assert.Equal(40, _ledger.HoldingAt(Custody.Job, Custody.Chest(_world), Custody.Timber));
+        Assert.Equal(40, _ledger.Acquired(Custody.Job, Custody.Timber));
+        Assert.True(_ledger.IsConserved(Custody.Job, Custody.Timber));
+    }
+
+    [Fact]
+    public void A_write_off_is_never_swallowed_by_the_acquisition_at_the_same_step()
+    {
+        // The second face of the same defect. Acquire and RecordLoss shared one
+        // name space, so a role naming a write-off after the step the loss
+        // happened at - the obvious convention - collided with that step's
+        // acquisition: same job, same place, same material, same count. The
+        // person's answer was discarded and the caller was told it had been
+        // applied, while the ledger went on saying the material was on the
+        // body.
+        Assert.Equal(NpcCustodyOutcome.Applied, Acquire(3, Custody.Body(_world), 40));
+
+        Assert.Equal(
+            NpcCustodyOutcome.Applied,
+            _ledger.RecordLoss(Custody.Step(3), Custody.Body(_world), Custody.Timber, 40));
+
+        Assert.Equal(0, _ledger.HoldingAt(Custody.Job, Custody.Body(_world), Custody.Timber));
+        Assert.Equal(
+            40,
+            _ledger.HoldingAt(
+                Custody.Job,
+                new NpcCustodyLocation(NpcCustodyPlace.Lost, Custody.Body(_world).Key, _world),
+                Custody.Timber));
+        AssertConserved(40);
+
+        // Each name space is still idempotent in its own right.
+        Assert.Equal(NpcCustodyOutcome.AlreadySatisfied, Acquire(3, Custody.Body(_world), 40));
+        Assert.Equal(
+            NpcCustodyOutcome.AlreadySatisfied,
+            _ledger.RecordLoss(Custody.Step(3), Custody.Body(_world), Custody.Timber, 40));
+        AssertConserved(40);
+    }
+
+    [Fact]
+    public void A_rolled_back_row_is_remembered_even_when_its_job_has_not_been_opened_yet()
+    {
+        // Replay order is not something a role should have to get right. A
+        // voided row refused for arriving before its job left the name free,
+        // and the next live row under that name then applied units the world
+        // had already undone - a duplication, arrived at by being careful in
+        // the wrong order. The transfer half always remembered unconditionally;
+        // these two halves of one rule now agree.
+        var ledger = new NpcCustodyLedger();
+
+        Assert.Equal(
+            NpcCustodyOutcome.Applied,
+            ledger.Acquire(Custody.Step(0), Custody.Body(_world), Custody.Timber, 10, NpcRowStanding.Voided));
+
+        ledger.OpenJob(Custody.Job);
+
+        Assert.Equal(
+            NpcCustodyOutcome.Stale,
+            ledger.Acquire(Custody.Step(0), Custody.Body(_world), Custody.Timber, 10));
+        Assert.Equal(0, ledger.TotalEverywhere(Custody.Job, Custody.Timber));
+
+        // A live row for a job nobody opened is still refused, because that is
+        // fail-closed and costs nothing.
+        Assert.Equal(
+            NpcCustodyOutcome.Rejected,
+            new NpcCustodyLedger().Acquire(Custody.Step(1), Custody.Body(_world), Custody.Timber, 10));
+    }
+
+    [Fact]
+    public void A_row_the_marker_rule_could_not_place_credits_nothing()
+    {
+        // Custody fails closed. Crediting an unplaceable row and being wrong
+        // asks a player to write off material that never existed; not
+        // crediting it and being wrong leaves real material for reconciliation
+        // to find. Only one of those two destroys something.
+        Assert.Equal(
+            NpcCustodyOutcome.Applied,
+            _ledger.Acquire(
+                Custody.Step(0), Custody.Body(_world), Custody.Timber, 10, NpcRowStanding.Ambiguous));
+
+        Assert.Equal(0, _ledger.TotalEverywhere(Custody.Job, Custody.Timber));
+        Assert.Equal(0, _ledger.Acquired(Custody.Job, Custody.Timber));
+        Assert.Equal(
+            NpcCustodyOutcome.Stale,
+            _ledger.Acquire(Custody.Step(0), Custody.Body(_world), Custody.Timber, 10));
+    }
+
+    [Fact]
+    public void A_voided_result_never_overwrites_a_transfer_that_already_moved_units()
+    {
+        // Voided means "never credited, refunded or replayed; there is nothing
+        // to undo". Writing it over a Completed record left the units moved in
+        // the holdings and the record saying they never moved - and Voided
+        // counts as settled, so reconciliation never looked at it again.
+        // Silent divergence, no finding raised. Its neighbouring branch had
+        // this guard and it did not.
+        Acquire(0, Custody.Body(_world), 5);
+        Move(1, Custody.Body(_world), Custody.Chest(_world), 5);
+
+        Assert.True(_ledger.TryGetTransfer(Custody.Step(1), out NpcTransferRecord record));
+        Assert.Equal(NpcTransferStatus.Completed, record.Status);
+
+        Assert.Equal(
+            NpcCustodyOutcome.Rejected,
+            _ledger.Finish(
+                new NpcTransferReceipt(
+                    Custody.Step(1), NpcTransferOutcome.Completed, 5, Custody.Body(_world), "again"),
+                NpcRowStanding.Voided));
+
+        Assert.Equal(NpcTransferStatus.Completed, record.Status);
+        Assert.Equal(5, _ledger.HoldingAt(Custody.Job, Custody.Chest(_world), Custody.Timber));
+        AssertConserved(5);
+    }
+
+    [Fact]
+    public void A_voided_intent_over_a_live_record_voids_it_rather_than_being_dropped()
+    {
+        // The other half of the same hole: Begin answered "already satisfied"
+        // for a second intent row and dropped whatever standing it carried, so
+        // a rolled-back transfer could sit in the record as live.
+        Acquire(0, Custody.Body(_world), 5);
+        var intent = Intent(1, Custody.Body(_world), Custody.Chest(_world), 5);
+        _ledger.CountRecord();
+        Assert.Equal(NpcCustodyOutcome.Applied, _ledger.Begin(intent));
+
+        Assert.Equal(NpcCustodyOutcome.Applied, _ledger.Begin(intent, NpcRowStanding.Voided));
+
+        Assert.True(_ledger.TryGetTransfer(intent.Request, out NpcTransferRecord record));
+        Assert.Equal(NpcTransferStatus.Voided, record.Status);
+
+        // Again is idempotent; over a record that has moved units it is
+        // refused, exactly as the receipt half is.
+        Assert.Equal(NpcCustodyOutcome.AlreadySatisfied, _ledger.Begin(intent, NpcRowStanding.Voided));
+        AssertConserved(5);
     }
 
     [Fact]
