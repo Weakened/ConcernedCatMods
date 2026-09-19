@@ -156,7 +156,7 @@ correctly. There are six answers and they are not interchangeable:
 | `BudgetExhausted` | Planning ran out of its allowance. Incomplete, not impossible. | Ask again next tick. Never a reason to stop a job. |
 | `ShortOfMaterial` | Understood and not provisionable: the manifest asks for more than is reachable **within one round**. | Stop and tell the player. Asking again unchanged does not help. |
 | `AreaInvalid` | The work area could not be read, or does not exist. | Fail closed; nothing widens to a default. |
-| `Refused` | A defect in the request: malformed, an identity that holds no body, an empty manifest where one was required. | A programmer's problem, not a player's. |
+| `Refused` | The job cannot be worked as it was ordered: a malformed request, an identity that holds no body, an empty manifest where one was required - and also a job that asks for something that cannot be done at all, such as a single target heavier than one trip. | Stop. Mostly a programmer's problem; the oversized-target case is a player's. |
 
 Three rules, each of which exists because it was got wrong first, and each of which cost a blocker.
 
@@ -172,10 +172,17 @@ material by consolidating it, that is the caller which justifies the member.
 **Finishing is decided on the reconciliation; retrying is decided on the verdict.** A plan can execute perfectly
 and still be a plan for eight trips out of twelve, so a job is reported finished only on
 `JobReconciliation.IsComplete`, which asks both questions: did every step come off, and did this plan cover the
-whole job. Whether work is outstanding is a different question from whether another round would help - a terminal
-refusal leaves work outstanding for ever - so `HasUnfinishedWork` states the fact and the verdict decides the
-loop. A runtime keyed only on the fact spins on a refusal, which is why the name says what it is rather than what
-to do about it.
+whole job.
+
+`HasUnfinishedWork` states a fact and never a recommendation, and it is **not** the complement of `IsComplete`.
+A refusal that happened after targets were accepted carries their count, so it answers true and a loop keyed only
+on it spins for ever on a verdict that will never change. A refusal that happened *before* any target was accepted
+- no identity, no area, a stale epoch, an unreadable area - accepted nothing and left nothing, so it answers
+false, and `IsComplete` answers false too. Both false at once is a real state and it is not a contradiction: it
+means no plan was ever made. There is deliberately no third boolean for it, because the verdict already says which
+of the two happened, and a role that reads the verdict never has to ask. This paragraph originally claimed a
+terminal refusal always leaves work outstanding; an independent review showed that is false for the four
+pre-target refusals, and the code was right.
 
 **A parameter that makes a claim never carries a default.** `leftForAnotherRound` defaulting to zero says the plan
 covered the whole job; `carrying` defaulting to empty says the NPC is holding nothing this job may spend. Neither
