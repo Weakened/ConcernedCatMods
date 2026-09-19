@@ -59,7 +59,7 @@ internal readonly struct StepResult
 /// may not have happened". A reconciliation that guessed at real quantities
 /// would be a second source of truth about custody, and the two would
 /// drift.</summary>
-internal readonly struct JobReconciliation
+public readonly struct JobReconciliation
 {
     internal JobReconciliation(
         int planned,
@@ -82,22 +82,22 @@ internal readonly struct JobReconciliation
     }
 
     /// <summary>How many steps the plan had.</summary>
-    internal int Planned { get; }
+    public int Planned { get; }
 
-    internal int Done { get; }
+    public int Done { get; }
 
-    internal int Skipped { get; }
+    public int Skipped { get; }
 
-    internal int Failed { get; }
+    public int Failed { get; }
 
-    internal int NotReached { get; }
+    public int NotReached { get; }
 
     /// <summary>What the targets that were not serviced still need. The manifest
     /// of the next round, if there is one.</summary>
-    internal JobManifest Outstanding { get; }
+    public JobManifest Outstanding { get; }
 
     /// <summary>What was fetched and not used up. Still carried.</summary>
-    internal JobManifest LeftOver { get; }
+    public JobManifest LeftOver { get; }
 
     /// <summary>How many targets of the job the plan never reached at all,
     /// because the plan was for part of the job.
@@ -112,9 +112,12 @@ internal readonly struct JobReconciliation
     /// was nought - which is the claim "this plan left nothing out", on the type
     /// that owns <see cref="IsComplete"/>, the only thing a job may be reported
     /// finished on. A silent parameter that defaults to complete is a latent bug
-    /// while this type is internal and a bug every role author can write without
-    /// noticing the moment it is not.</summary>
-    internal int LeftForAnotherRound { get; }
+    /// while nobody outside could build one, and this type's read surface is
+    /// public now - so the constructor deliberately is not. A role reads a
+    /// reconciliation; only the reconciler writes one, and that is what keeps
+    /// "this plan left nothing out" a thing the pipeline computed rather than a
+    /// thing a caller could assert.</summary>
+    public int LeftForAnotherRound { get; }
 
     /// <summary>Whether every target <b>the job</b> was for was serviced.
     /// <b>The only thing a job may be reported finished on</b> - so it asks two
@@ -122,7 +125,7 @@ internal readonly struct JobReconciliation
     /// plan cover the whole job. A plan for eight trips out of twelve can
     /// satisfy the first perfectly and it is not a finished job, and an NPC that
     /// said it was would be the most expensive kind of wrong.</summary>
-    internal bool IsComplete =>
+    public bool IsComplete =>
         Planned > 0 && Failed == 0 && NotReached == 0 && Outstanding.IsEmpty && LeftForAnotherRound == 0;
 
     /// <summary>Whether there is more to do. True whenever anything is still
@@ -138,7 +141,7 @@ internal readonly struct JobReconciliation
     /// <see cref="JobPlanVerdict.Planned"/> walks,
     /// <see cref="JobPlanVerdict.NothingToDo"/> finishes, and the rest stop and
     /// surface <see cref="JobPlan.Reason"/>.</summary>
-    internal bool HasUnfinishedWork =>
+    public bool HasUnfinishedWork =>
         !Outstanding.IsEmpty || Failed > 0 || NotReached > 0 || LeftForAnotherRound > 0;
 }
 

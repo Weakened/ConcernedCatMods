@@ -14,29 +14,29 @@ namespace TheConcernedCat.ConcernedNPC.Planning;
 /// <b>Zero is not unlimited.</b> A defaulted capacity carries nothing, which
 /// fails closed exactly as every other default in this package does. Unlimited
 /// is a value somebody chose.</summary>
-internal readonly struct NpcCarryCapacity
+public readonly struct NpcCarryCapacity
 {
-    internal NpcCarryCapacity(int unitsPerTour)
+    public NpcCarryCapacity(int unitsPerTour)
     {
         UnitsPerTour = unitsPerTour < 0 ? 0 : unitsPerTour;
     }
 
     /// <summary>How many units fit in one trip.</summary>
-    internal int UnitsPerTour { get; }
+    public int UnitsPerTour { get; }
 
     /// <summary>A capacity nothing exceeds - for a job whose targets consume
     /// nothing, or a role that has already bounded the batch another way.
     /// </summary>
-    internal static NpcCarryCapacity Unlimited => new NpcCarryCapacity(int.MaxValue);
+    public static NpcCarryCapacity Unlimited => new NpcCarryCapacity(int.MaxValue);
 
-    internal bool IsUnlimited => UnitsPerTour == int.MaxValue;
+    public bool IsUnlimited => UnitsPerTour == int.MaxValue;
 
     /// <summary>Whether a whole manifest goes in one trip.</summary>
-    internal bool Fits(JobManifest manifest) => manifest.TotalUnits <= UnitsPerTour;
+    public bool Fits(JobManifest manifest) => manifest.TotalUnits <= UnitsPerTour;
 
     /// <summary>Whether <paramref name="units"/> more fit on top of
     /// <paramref name="carried"/>.</summary>
-    internal bool RoomFor(int carried, int units)
+    public bool RoomFor(int carried, int units)
     {
         if (units <= 0)
         {
@@ -57,7 +57,7 @@ internal readonly struct NpcCarryCapacity
     /// more tours than this turned a batched job into a one-target-at-a-time
     /// loop, which is the failure the whole pipeline exists to prevent, and a
     /// test says so.</summary>
-    internal int FewestToursFor(int units)
+    public int FewestToursFor(int units)
     {
         if (units <= 0)
         {

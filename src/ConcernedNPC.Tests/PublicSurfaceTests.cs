@@ -45,16 +45,40 @@ public class PublicSurfaceTests
     /// <c>NpcDroppedItem</c>), and the other kind of body
     /// (<c>NpcPresentationBody</c>, <c>NpcPresentationFigure</c>).
     ///
+    /// <b>Running a job.</b> The driver a role pumps and what it hands back
+    /// (<c>NpcJobDriver</c>, <c>NpcJobOrder</c>, <c>INpcJobRole</c>,
+    /// <c>NpcJobProgress</c>, <c>NpcJobAdvance</c>); what a role describes its
+    /// work with (<c>JobTarget</c>, <c>JobManifest</c>, <c>JobManifestLine</c>,
+    /// <c>SourceStock</c>, <c>StockLine</c>, <c>NpcCarryCapacity</c>,
+    /// <c>JobStepActions</c>); what it carries out and branches on
+    /// (<c>PlannedStep</c>, <c>JobStep</c>, <c>JobPlanVerdict</c>,
+    /// <c>JobReconciliation</c>, <c>AreaScanReport</c>,
+    /// <c>AreaScanOutcome</c>); the completion condition it answers
+    /// (<c>IStopObserver</c>, <c>RouteStop</c>, <c>StopStatus</c>); the ground
+    /// it reads (<c>INpcAreaProbe</c>, <c>AreaSample</c>,
+    /// <c>AreaSampleVerdict</c>, <c>AreaRejection</c>); the chests it offers
+    /// (<c>INpcContainer</c>, <c>NpcContainerAccess</c>,
+    /// <c>NpcContainerUse</c>, <c>NpcContainerRefusal</c>,
+    /// <c>INpcEpochScoped</c>); and what other jobs have set aside
+    /// (<c>INpcSourceAvailability</c>).
+    ///
     /// <b>What is still internal, and why that is not an oversight.</b> The
     /// arbiter, the mode owner, the slug rules, the build gate, the key
     /// composition, the prefab-to-contract table, the sidecar and the atomic
     /// write. Members too: the built prefab, the eager build, the identity
     /// stamp, the network view and the tally's own constructors, each because
     /// handing it over would let a caller reach past a rule the type exists to
-    /// keep. The rule for adding to this list has not changed - a leaf says
-    /// which role needs it and accepts the version bump - and the reason the
-    /// body group arrives in one edit rather than three is that three role
-    /// leaves discovering it one at a time is three bumps.</summary>
+    /// keep. The whole of <c>Custody/</c> and <c>Storage/</c>, which the job
+    /// pipeline never touches. And the sequencing itself - the snapshot
+    /// builder, the tour planner, the tour plan, the partitioner, the source
+    /// selector, the manifest arithmetic, the budget, the commitments, the
+    /// reservation books, the stop sequencer and the route execution - because
+    /// <c>NpcJobDriver</c> is the door to all of it and a role that named them
+    /// would be a role sequencing a job for itself, three times, differently.
+    /// The rule for adding to this list has not changed - a leaf says which
+    /// role needs it and accepts the version bump - and the reason the body
+    /// group arrives in one edit rather than three is that three role leaves
+    /// discovering it one at a time is three bumps.</summary>
     private static readonly string[] Expected =
     {
         "TheConcernedCat.ConcernedNPC.Bodies.BodyClaim",
@@ -72,6 +96,27 @@ public class PublicSurfaceTests
         "TheConcernedCat.ConcernedNPC.Body.NpcWorkerPrefabFactory",
         "TheConcernedCat.ConcernedNPC.Body.NpcWorkerPrefabOptions",
         "TheConcernedCat.ConcernedNPC.Body.NpcWorldBodies",
+        "TheConcernedCat.ConcernedNPC.Containers.INpcContainer",
+        "TheConcernedCat.ConcernedNPC.Containers.NpcContainerAccess",
+        "TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal",
+        "TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse",
+        "TheConcernedCat.ConcernedNPC.Jobs.INpcJobRole",
+        "TheConcernedCat.ConcernedNPC.Jobs.NpcJobAdvance",
+        "TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver",
+        "TheConcernedCat.ConcernedNPC.Jobs.NpcJobOrder",
+        "TheConcernedCat.ConcernedNPC.Jobs.NpcJobProgress",
+        "TheConcernedCat.ConcernedNPC.Planning.INpcSourceAvailability",
+        "TheConcernedCat.ConcernedNPC.Planning.JobManifest",
+        "TheConcernedCat.ConcernedNPC.Planning.JobManifestLine",
+        "TheConcernedCat.ConcernedNPC.Planning.JobPlanVerdict",
+        "TheConcernedCat.ConcernedNPC.Planning.JobReconciliation",
+        "TheConcernedCat.ConcernedNPC.Planning.JobStep",
+        "TheConcernedCat.ConcernedNPC.Planning.JobStepActions",
+        "TheConcernedCat.ConcernedNPC.Planning.JobTarget",
+        "TheConcernedCat.ConcernedNPC.Planning.NpcCarryCapacity",
+        "TheConcernedCat.ConcernedNPC.Planning.PlannedStep",
+        "TheConcernedCat.ConcernedNPC.Planning.SourceStock",
+        "TheConcernedCat.ConcernedNPC.Planning.StockLine",
         "TheConcernedCat.ConcernedNPC.Roles.INpcDataPaths",
         "TheConcernedCat.ConcernedNPC.Roles.INpcRole",
         "TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract",
@@ -80,6 +125,16 @@ public class PublicSurfaceTests
         "TheConcernedCat.ConcernedNPC.Roles.NpcRoleRegistry",
         "TheConcernedCat.ConcernedNPC.Roles.RoleRegistration",
         "TheConcernedCat.ConcernedNPC.Roles.RoleRegistrationStatus",
+        "TheConcernedCat.ConcernedNPC.Routing.IStopObserver",
+        "TheConcernedCat.ConcernedNPC.Routing.RouteStop",
+        "TheConcernedCat.ConcernedNPC.Routing.StopStatus",
+        "TheConcernedCat.ConcernedNPC.Work.AreaRejection",
+        "TheConcernedCat.ConcernedNPC.Work.AreaSample",
+        "TheConcernedCat.ConcernedNPC.Work.AreaSampleVerdict",
+        "TheConcernedCat.ConcernedNPC.Work.AreaScanOutcome",
+        "TheConcernedCat.ConcernedNPC.Work.AreaScanReport",
+        "TheConcernedCat.ConcernedNPC.Work.INpcAreaProbe",
+        "TheConcernedCat.ConcernedNPC.Work.INpcEpochScoped",
         "TheConcernedCat.ConcernedNPC.Work.INpcWorkArea",
         "TheConcernedCat.ConcernedNPC.Work.INpcWorkAreaProvider",
         "TheConcernedCat.ConcernedNPC.Work.NpcPoint",
@@ -189,6 +244,23 @@ public class PublicSurfaceTests
         // nobody wrote, find no bodies, and permit a second one.
         AssertNoPublicConstructor(typeof(Body.NpcWorkerPrefabFactory));
         AssertNoPublicConstructor(typeof(Body.NpcWorldBodies));
+
+        // And the same rule for the job surface. Each of these is something a
+        // role OBTAINS from the pipeline rather than states, and each one a
+        // role could mint would be a claim about work nobody did: a step the
+        // plan never wrote, a stop the planner never ordered, a report about a
+        // look nobody took, books for a round that never ran, or an
+        // instruction the driver never gave. The driver itself is reached
+        // through NpcJobDriver.For, which is what makes "an order that cannot
+        // be worked comes back already stopped" true of every driver rather
+        // than of the ones that happened to go through the factory.
+        AssertNoPublicConstructor(typeof(Planning.JobStep));
+        AssertNoPublicConstructor(typeof(Planning.PlannedStep));
+        AssertNoPublicConstructor(typeof(Planning.JobReconciliation));
+        AssertNoPublicConstructor(typeof(Routing.RouteStop));
+        AssertNoPublicConstructor(typeof(Work.AreaScanReport));
+        AssertNoPublicConstructor(typeof(TheConcernedCat.ConcernedNPC.Jobs.NpcJobAdvance));
+        AssertNoPublicConstructor(typeof(TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver));
     }
 
     [Fact]

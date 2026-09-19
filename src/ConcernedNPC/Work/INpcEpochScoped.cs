@@ -18,7 +18,7 @@ namespace TheConcernedCat.ConcernedNPC.Work;
 /// to answer, and the alternative - passing the epoch alongside the subject at
 /// the call - is worse, because it lets a caller state an epoch the subject does
 /// not have.</summary>
-internal interface INpcEpochScoped
+public interface INpcEpochScoped
 {
     /// <summary>The world load this thing's name was minted in. Comparing it
     /// with <see cref="NpcWorldEpoch.Matches"/> is how "this name points at

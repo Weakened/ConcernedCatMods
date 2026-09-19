@@ -27,9 +27,9 @@ namespace TheConcernedCat.ConcernedNPC.Planning;
 /// be able to be refused when the name stops meaning anything -
 /// <see cref="INpcEpochScoped"/> is what makes that a check rather than a
 /// hope.</summary>
-internal readonly struct JobTarget : INpcEpochScoped, IEquatable<JobTarget>
+public readonly struct JobTarget : INpcEpochScoped, IEquatable<JobTarget>
 {
-    internal JobTarget(
+    public JobTarget(
         string? key,
         NpcWorldEpoch epoch,
         NpcPoint at,
@@ -48,34 +48,34 @@ internal readonly struct JobTarget : INpcEpochScoped, IEquatable<JobTarget>
     /// <summary>The role's token for this target. Stable for as long as the
     /// world load is, because half of every reservation over it is this name and
     /// the whole of the route's tie-break is.</summary>
-    internal string Key { get; }
+    public string Key { get; }
 
     /// <summary>The world load this name was minted in.</summary>
     public NpcWorldEpoch Epoch { get; }
 
     /// <summary>Where it is.</summary>
-    internal NpcPoint At { get; }
+    public NpcPoint At { get; }
 
     /// <summary>The role's token for what is done to it. Empty means "whatever
     /// this job's ordinary action is", which the planner supplies from the
     /// role's vocabulary.</summary>
-    internal string Action { get; }
+    public string Action { get; }
 
     /// <summary>Higher is serviced sooner. The role has already weighed the walk
     /// against the urgency; nothing here second-guesses it.</summary>
-    internal int Priority { get; }
+    public int Priority { get; }
 
     /// <summary>What doing this one takes. Empty for a target that consumes
     /// nothing - collecting is a job with targets and no manifest, and it must
     /// not be refused for being unprovisioned.</summary>
-    internal JobManifest Needs { get; }
+    public JobManifest Needs { get; }
 
     /// <summary>A target that can be planned: it has a name, a place anybody
     /// could compute, and a world it belongs to.</summary>
-    internal bool IsValid => Key.Length != 0 && At.IsFinite && !Epoch.IsUnknown;
+    public bool IsValid => Key.Length != 0 && At.IsFinite && !Epoch.IsUnknown;
 
     /// <summary>How many units of material this one target takes.</summary>
-    internal int Units => Needs.TotalUnits;
+    public int Units => Needs.TotalUnits;
 
     /// <summary>The same target as far as the route is concerned: a name, a
     /// place, its priority, and reachable until something says otherwise.

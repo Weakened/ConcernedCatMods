@@ -27,7 +27,7 @@ namespace TheConcernedCat.ConcernedNPC.Containers;
 /// and half of that contract is worse than none: a port with an
 /// <c>Add</c> and no ledger is an invitation to mint items on a retry. The port
 /// arrives with the ledger, in the custody leaf.</summary>
-internal interface INpcContainer : INpcEpochScoped
+public interface INpcContainer : INpcEpochScoped
 {
     /// <summary>How the role names this container, opaque here. Only meaningful
     /// together with the <see cref="INpcEpochScoped.Epoch"/> it is named in -

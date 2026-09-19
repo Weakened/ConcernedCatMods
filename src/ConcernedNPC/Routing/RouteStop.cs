@@ -16,7 +16,7 @@ namespace TheConcernedCat.ConcernedNPC.Routing;
 /// stops of equal priority are ordered by where they are. The role decides what
 /// the numbers mean - a lamp about to go out, a target the player asked for
 /// first - and hands them in already decided.</summary>
-internal readonly struct RouteStop : IEquatable<RouteStop>
+public readonly struct RouteStop : IEquatable<RouteStop>
 {
     internal RouteStop(string? key, NpcPoint at, int priority, bool isReachable)
     {
@@ -30,26 +30,26 @@ internal readonly struct RouteStop : IEquatable<RouteStop>
     /// stops are the same distance away, which is why it must be stable for the
     /// life of a round: the same inputs give the same route only if the
     /// tie-break is the same.</summary>
-    internal string Key { get; }
+    public string Key { get; }
 
     /// <summary>Where it is.</summary>
-    internal NpcPoint At { get; }
+    public NpcPoint At { get; }
 
     /// <summary>Higher is visited sooner. Equal priorities are ordered by
     /// travel.</summary>
-    internal int Priority { get; }
+    public int Priority { get; }
 
     /// <summary>Whether the role believes this stop can be got to at all.
     /// <b>False drops it from the route entirely</b> rather than leaving it to
     /// be discovered by walking into it, because the only thing worse than a
     /// long route is a long route that ends in a wall.</summary>
-    internal bool IsReachable { get; }
+    public bool IsReachable { get; }
 
     /// <summary>A stop that can be ordered: it has a name and a place anyone
     /// could compute. A nameless stop is refused rather than given the empty
     /// key, because the empty key is what a defaulted struct has and two of
     /// those would be the same stop.</summary>
-    internal bool IsValid => Key.Length != 0 && At.IsFinite;
+    public bool IsValid => Key.Length != 0 && At.IsFinite;
 
     /// <summary>Stops are the same stop when they have the same name. The place
     /// is deliberately not part of it: a stop that moved a little is still that
@@ -72,7 +72,7 @@ internal readonly struct RouteStop : IEquatable<RouteStop>
 /// a job whose targets were all serviced by the player is finished, a job whose
 /// targets are all unreadable has not started. Collapsing them is how an NPC
 /// declares a round complete because a zone had not streamed in.</summary>
-internal enum StopStatus
+public enum StopStatus
 {
     /// <summary>The role could not tell. <b>Never a yes and never a no</b>: the
     /// stop is left for the next round rather than counted as done or dropped
@@ -129,7 +129,7 @@ internal enum StopStatus
 /// unreadable rather than letting it escape, because one role's broken
 /// completion condition must not stop an unrelated NPC in another
 /// product.</summary>
-internal interface IStopObserver
+public interface IStopObserver
 {
     /// <summary>Is this stop still worth going to, as of now.</summary>
     StopStatus Observe(in RouteStop stop);

@@ -8,22 +8,22 @@ namespace TheConcernedCat.ConcernedNPC.Planning;
 ///
 /// <see cref="Item"/> is opaque here - a role's own token for a material, a tool,
 /// a fuel. This library never learns that one of them is wood.</summary>
-internal readonly struct JobManifestLine
+public readonly struct JobManifestLine
 {
-    internal JobManifestLine(string item, int required)
+    public JobManifestLine(string item, int required)
     {
         Item = item ?? string.Empty;
         Required = required;
     }
 
     /// <summary>The role's token for the thing needed.</summary>
-    internal string Item { get; }
+    public string Item { get; }
 
     /// <summary>How many units of it the whole job needs. Never negative;
     /// zero means the line should not have been written.</summary>
-    internal int Required { get; }
+    public int Required { get; }
 
-    internal bool IsValid => Item.Length != 0 && Required > 0;
+    public bool IsValid => Item.Length != 0 && Required > 0;
 
     public override string ToString() => Required + " " + Item;
 }
@@ -48,11 +48,11 @@ internal readonly struct JobManifestLine
 /// <b>Immutable by construction.</b> The lines are copied in. A manifest handed
 /// to a planner cannot be edited behind it, which is what lets a plan be
 /// compared against the manifest it was computed from.</summary>
-internal readonly struct JobManifest
+public readonly struct JobManifest
 {
     private readonly JobManifestLine[]? _lines;
 
-    internal JobManifest(IEnumerable<JobManifestLine>? lines)
+    public JobManifest(IEnumerable<JobManifestLine>? lines)
     {
         if (lines == null)
         {
@@ -74,16 +74,16 @@ internal readonly struct JobManifest
 
     /// <summary>A job that needs nothing. Not the same as a job with nothing to
     /// do.</summary>
-    internal static JobManifest Empty => default;
+    public static JobManifest Empty => default;
 
     /// <summary>The lines, in the order they were given. Never null.</summary>
-    internal IReadOnlyList<JobManifestLine> Lines => _lines ?? Array.Empty<JobManifestLine>();
+    public IReadOnlyList<JobManifestLine> Lines => _lines ?? Array.Empty<JobManifestLine>();
 
-    internal bool IsEmpty => _lines == null;
+    public bool IsEmpty => _lines == null;
 
     /// <summary>Every unit of every line added together. For "he will need to
     /// carry this much", not for any accounting.</summary>
-    internal int TotalUnits
+    public int TotalUnits
     {
         get
         {
@@ -98,7 +98,7 @@ internal readonly struct JobManifest
     }
 
     /// <summary>How much of one item this job needs, or zero.</summary>
-    internal int RequiredOf(string? item)
+    public int RequiredOf(string? item)
     {
         if (string.IsNullOrEmpty(item))
         {
