@@ -37,13 +37,30 @@ internal interface INpcRoutePlanner
     /// than read, so a test can advance time without waiting for it.</param>
     RoutePlan Plan(in RouteRequest request, float now);
 
-    /// <summary>The next waypoint to walk to, given where the NPC has got to, or
-    /// null when the route is finished or no longer followable.</summary>
-    RouteGoal? NextGoal(in RoutePlan plan, NpcPoint at);
+    /// <summary>The next waypoint to walk to, or null when the route is
+    /// finished or no longer followable.
+    ///
+    /// <paramref name="lastWaypointIndex"/> is the index of the goal the
+    /// follower was last given, or -1 before the first. It is a parameter
+    /// rather than planner state for two reasons, and the second is the
+    /// important one: a pure function of plan and position could only pick the
+    /// nearest waypoint, which is the corner-cutting the goal type exists to
+    /// prevent; and keeping progress inside the planner would force one planner
+    /// per NPC, which would make <see cref="RememberSetback"/> per-NPC too and
+    /// have four NPCs each learn the same impassable gap by each getting stuck
+    /// in it. The planner is shared and remembers what does not work; the
+    /// follower remembers where it has got to.</summary>
+    RouteGoal? NextGoal(in RoutePlan plan, NpcPoint at, int lastWaypointIndex);
 
     /// <summary>Remembers that this walk did not work: where it was going, where
     /// the NPC was stopped, and which way it was heading. Both places and the
     /// heading, because "I cannot get through there, going that way" is the
-    /// lesson, and "nowhere near there" is not.</summary>
+    /// lesson, and "nowhere near there" is not.
+    ///
+    /// Deliberately carries no identity: what one NPC learns about a gap its
+    /// body does not fit through is true for the others, and four NPCs each
+    /// discovering it separately is four NPCs visibly stuck. Whether that
+    /// sharing survives NPCs of different sizes is a behaviour question for the
+    /// route-planner leaf, not a plumbing one.</summary>
     void RememberSetback(NpcPoint destination, NpcPoint stoppedAt, NpcPoint headingTowards, float now);
 }

@@ -73,9 +73,14 @@ internal static class Identities
 
     internal static NpcIdentity Hulgi => new NpcIdentity("cartographer", "hulgi");
 
-    /// <summary>A registry with nothing in it. Never the shared one: a test that
-    /// touched the process-wide registry would leak into every other test in the
-    /// assembly, and the shared registry is the one thing in this package that
-    /// is deliberately global.</summary>
+    /// <summary>A registry with nothing in it, and no world loaded. Never the
+    /// shared one: a test that touched the process-wide registry would leak into
+    /// every other test in the assembly, and the shared registry is the one
+    /// thing in this package that is deliberately global.</summary>
     internal static NpcRoleRegistry EmptyRegistry() => new NpcRoleRegistry();
+
+    /// <summary>A world load nobody else is using. Fresh every call, because
+    /// two calls are two different worlds - which is exactly what a test that
+    /// reloads needs.</summary>
+    internal static Work.NpcWorldEpoch AWorld() => new Work.NpcWorldEpoch(Guid.NewGuid());
 }

@@ -133,12 +133,40 @@ public class ReservationIdTests
     }
 
     [Fact]
-    public void An_id_round_trips_through_its_text()
+    public void An_id_round_trips_through_its_text_exactly()
     {
         ReservationId id = ReservationId.For("build-shelter", 12);
 
         Assert.True(ReservationId.TryParse(id.Value, out ReservationId back));
         Assert.Equal(id, back);
+        Assert.Equal(id.Value, back.Value);
+        Assert.Equal("build-shelter", back.JobId);
+        Assert.Equal(12, back.Step);
+    }
+
+    [Fact]
+    public void Text_that_would_not_round_trip_is_refused_rather_than_normalised()
+    {
+        // "job#007" used to parse into a name whose Value was "job#7", so text
+        // and name disagreed for anything keyed by text.
+        Assert.False(ReservationId.TryParse("job#007", out _));
+        Assert.False(ReservationId.TryParse("job#+7", out _));
+    }
+
+    [Fact]
+    public void A_job_never_conflicts_with_itself_across_a_replan()
+    {
+        // A re-plan that moves the same subject from step 3 to step 2 must not
+        // be refused by the job that already holds it. Conflict is decided on
+        // the job half; the step is carried for the evidence line.
+        ReservationId beforeReplan = ReservationId.For("build-shelter", 3);
+        ReservationId afterReplan = ReservationId.For("build-shelter", 2);
+        ReservationId somebodyElse = ReservationId.For("haul-stone", 3);
+
+        Assert.True(beforeReplan.SameJobAs(afterReplan));
+        Assert.False(beforeReplan.SameJobAs(somebodyElse));
+        Assert.NotEqual(beforeReplan, afterReplan);
+        Assert.False(default(ReservationId).SameJobAs(default));
     }
 
     [Theory]
@@ -187,6 +215,18 @@ public class WorldEpochTests
         Assert.False(NpcWorldEpoch.Unknown.Matches(known));
         Assert.False(known.Matches(NpcWorldEpoch.Unknown));
         Assert.True(known.Matches(known));
+    }
+
+    [Fact]
+    public void Equality_and_matching_deliberately_disagree_about_the_unknown_epoch()
+    {
+        // Equals is value equality; Matches is "may an id from that world be
+        // used now", and the answer for an unknown world is always no. A leaf
+        // reaching for == silently gets the permissive answer, so the split is
+        // pinned here rather than left as a doc comment.
+        Assert.True(NpcWorldEpoch.Unknown == NpcWorldEpoch.Unknown);
+        Assert.True(NpcWorldEpoch.Unknown.Equals(NpcWorldEpoch.Unknown));
+        Assert.False(NpcWorldEpoch.Unknown.Matches(NpcWorldEpoch.Unknown));
     }
 
     [Fact]
@@ -306,6 +346,19 @@ public class JobPlanTests
     }
 
     [Fact]
+    public void A_refusal_never_reports_itself_fresh()
+    {
+        // A refusal carries no area revision, so against a caller that happens
+        // to pass zero it used to answer "not stale" - a value that lies, saved
+        // only by every current caller checking IsActionable first.
+        var epoch = new NpcWorldEpoch(Guid.NewGuid());
+        JobPlan refused = JobPlan.Refused(JobPlanVerdict.AreaInvalid, "gone", epoch);
+
+        Assert.True(refused.IsStale(0, epoch));
+        Assert.True(refused.IsStale(7, epoch));
+    }
+
+    [Fact]
     public void A_plan_cannot_be_edited_behind_its_holder()
     {
         var steps = new List<JobStep> { new JobStep(0, "an-action", "a-subject", default, false, 1) };
@@ -322,32 +375,62 @@ public class RoutePlanTests
 {
     private static readonly NpcPoint Origin = default;
 
+    private static readonly NpcPoint Away = new NpcPoint(10f, 0f, 0f);
+
     [Fact]
     public void A_suitable_route_needs_somewhere_to_walk()
     {
         // The shape a partially-initialised result takes: a suitable verdict
         // with nothing in it. It must not be followable.
-        Assert.False(new RoutePlan(RouteVerdict.Suitable, null, 0f, 1).IsSuitable);
-        Assert.False(new RoutePlan(RouteVerdict.Suitable, new[] { Origin }, 0f, 1).IsSuitable);
-        Assert.True(new RoutePlan(RouteVerdict.Suitable, new[] { Origin, Origin }, 1f, 1).IsSuitable);
+        Assert.False(new RoutePlan(RouteVerdict.Suitable, null, 0f, 1, 1).IsSuitable);
+        Assert.False(new RoutePlan(RouteVerdict.Suitable, new[] { Origin }, 0f, 1, 1).IsSuitable);
+        Assert.True(new RoutePlan(RouteVerdict.Suitable, new[] { Origin, Away }, 10f, 1, 1).IsSuitable);
+    }
+
+    [Fact]
+    public void A_route_to_where_you_already_are_is_not_a_route()
+    {
+        // Treating one as followable is how an NPC reports arriving somewhere it
+        // never went.
+        Assert.False(new RoutePlan(RouteVerdict.Suitable, new[] { Origin, Origin }, 1f, 1, 1).IsSuitable);
+        Assert.False(new RoutePlan(RouteVerdict.Suitable, new[] { Origin, Away }, 0f, 1, 1).IsSuitable);
+    }
+
+    [Fact]
+    public void The_plan_revision_is_not_the_request_revision()
+    {
+        // Two routes to the same destination answer the same request: the NPC
+        // learned a gap does not fit and the route now goes the other way round
+        // the building. If a goal carried only the request's revision, a goal
+        // from the abandoned route would be indistinguishable from a current
+        // one - the corner-cutting failure, one level up.
+        var first = new RoutePlan(RouteVerdict.Suitable, new[] { Origin, Away }, 10f, requestRevision: 7, planRevision: 1);
+        var second = new RoutePlan(RouteVerdict.Suitable, new[] { Origin, Away }, 14f, requestRevision: 7, planRevision: 2);
+
+        Assert.Equal(first.RequestRevision, second.RequestRevision);
+        Assert.NotEqual(first.PlanRevision, second.PlanRevision);
+
+        var stale = new RouteGoal(Away, 1f, true, 1, first.PlanRevision);
+        Assert.NotEqual(second.PlanRevision, stale.PlanRevision);
     }
 
     [Fact]
     public void A_refusal_needs_a_verdict_that_explains_it()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => RoutePlan.Refused(RouteVerdict.Suitable, 1));
-        Assert.Throws<ArgumentOutOfRangeException>(() => RoutePlan.Refused(RouteVerdict.Unspecified, 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => RoutePlan.Refused(RouteVerdict.Suitable, 1, 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => RoutePlan.Refused(RouteVerdict.Unspecified, 1, 1));
 
-        RoutePlan refused = RoutePlan.Refused(RouteVerdict.NoPath, 4);
+        RoutePlan refused = RoutePlan.Refused(RouteVerdict.NoPath, 4, 9);
         Assert.False(refused.IsSuitable);
         Assert.Equal(4, refused.RequestRevision);
+        Assert.Equal(9, refused.PlanRevision);
     }
 
     [Fact]
     public void A_route_cannot_be_edited_behind_its_follower()
     {
-        var waypoints = new List<NpcPoint> { Origin, new NpcPoint(1f, 0f, 0f) };
-        var plan = new RoutePlan(RouteVerdict.Suitable, waypoints, 1f, 1);
+        var waypoints = new List<NpcPoint> { Origin, Away };
+        var plan = new RoutePlan(RouteVerdict.Suitable, waypoints, 10f, 1, 1);
 
         waypoints.Add(new NpcPoint(99f, 0f, 0f));
 
@@ -370,6 +453,18 @@ public class AreaScanTests
         Assert.False(new AreaScanReport(AreaScanOutcome.NotLoaded, 20, 20, 0, 0, false).IsConclusive);
         Assert.False(new AreaScanReport(AreaScanOutcome.Incomplete, 20, 0, 20, 0, true).IsConclusive);
         Assert.False(new AreaScanReport(AreaScanOutcome.Found, 20, 0, 0, 0, false).IsConclusive);
+    }
+
+    [Fact]
+    public void Counts_that_cannot_all_be_true_prove_nothing()
+    {
+        // If the counts are the evidence an outcome is derived from, a report
+        // whose counts do not add up is evidence of nothing - and the outcome
+        // resting on it certainly is not.
+        Assert.False(new AreaScanReport(AreaScanOutcome.Empty, 20, 0, 21, 0, false).CountsAgree);
+        Assert.False(new AreaScanReport(AreaScanOutcome.Empty, 20, 0, 21, 0, false).IsConclusive);
+        Assert.False(new AreaScanReport(AreaScanOutcome.Empty, -1, 0, 0, 0, false).CountsAgree);
+        Assert.True(new AreaScanReport(AreaScanOutcome.Empty, 20, 0, 12, 8, false).CountsAgree);
     }
 
     [Fact]

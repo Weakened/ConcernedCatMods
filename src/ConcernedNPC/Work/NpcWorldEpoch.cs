@@ -25,11 +25,17 @@ namespace TheConcernedCat.ConcernedNPC.Work;
 /// the <c>Guid</c>, because it cannot be confused with a name, cannot be
 /// half-parsed, and has an unambiguous "nobody set this" value. A role whose
 /// existing epoch is text converts at the boundary, and that conversion is the
-/// role's, not this library's: nothing here reads or writes an epoch to
-/// disk.</summary>
-internal readonly struct NpcWorldEpoch : IEquatable<NpcWorldEpoch>
+/// role's, not this library's: nothing here reads or writes an epoch to disk.
+///
+/// <b>Public, because a role has to be able to say which world it is in.</b>
+/// This is one of the few types that genuinely crosses the boundary: a role
+/// tells <c>NpcRoleRegistry.BeginWorldLoad</c> that a world has been loaded, and
+/// every seam inside this package that takes an epoch takes <b>that</b> one -
+/// the registry's - rather than whichever value its own caller happened to
+/// mint.</summary>
+public readonly struct NpcWorldEpoch : IEquatable<NpcWorldEpoch>
 {
-    internal NpcWorldEpoch(Guid value)
+    public NpcWorldEpoch(Guid value)
     {
         Value = value;
     }
@@ -37,18 +43,18 @@ internal readonly struct NpcWorldEpoch : IEquatable<NpcWorldEpoch>
     /// <summary>The epoch nobody set. Matches nothing, including itself as a
     /// key: an id carrying it is refused rather than accepted everywhere.
     /// </summary>
-    internal static NpcWorldEpoch Unknown => default;
+    public static NpcWorldEpoch Unknown => default;
 
-    internal Guid Value { get; }
+    public Guid Value { get; }
 
     /// <summary>True when no epoch was set. Fail closed: treat every id as
     /// stale.</summary>
-    internal bool IsUnknown => Value == Guid.Empty;
+    public bool IsUnknown => Value == Guid.Empty;
 
     /// <summary>Whether an id minted in <paramref name="other"/> may be used
     /// now. False whenever either side is unknown, so a missing epoch never
     /// resolves anything.</summary>
-    internal bool Matches(NpcWorldEpoch other) => !IsUnknown && Value == other.Value;
+    public bool Matches(NpcWorldEpoch other) => !IsUnknown && Value == other.Value;
 
     public bool Equals(NpcWorldEpoch other) => Value == other.Value;
 
@@ -57,4 +63,13 @@ internal readonly struct NpcWorldEpoch : IEquatable<NpcWorldEpoch>
     public override int GetHashCode() => Value.GetHashCode();
 
     public override string ToString() => IsUnknown ? "<unknown epoch>" : Value.ToString("N");
+
+    /// <summary>Value equality, which is <b>not</b> <see cref="Matches"/>: two
+    /// unknown epochs are equal and still match nothing. Equality asks whether
+    /// these are the same value; matching asks whether an id minted in one may
+    /// be used in the other, and for a world nobody has loaded the answer is
+    /// always no.</summary>
+    public static bool operator ==(NpcWorldEpoch left, NpcWorldEpoch right) => left.Equals(right);
+
+    public static bool operator !=(NpcWorldEpoch left, NpcWorldEpoch right) => !left.Equals(right);
 }

@@ -16,18 +16,23 @@ namespace TheConcernedCat.ConcernedNPC.Roles;
 /// every identity registered here formats back into a <c>WorkerKey</c>. If these
 /// rules were ever loosened, a role could register an identity its own product
 /// cannot round-trip through its journal; if they were tightened, an already
-/// shipped worker would stop being addressable. <c>NpcSlugAgreementTests</c>
+/// shipped worker would stop being addressable.
+///
+/// <b>Internal, not public.</b> <see cref="NpcIdentity"/> is the boundary type
+/// and validates its own halves, so a role never needs this; a public duplicate
+/// of a shared-source validator would be one more thing frozen under the
+/// major-version rule for no consumer's benefit. <c>SlugAgreementTests</c>
 /// links the shipped <c>WorkerKey.cs</c> into the test assembly and asserts the
 /// two agree on every input, so the drift fails the build rather than a
 /// player's save.</summary>
-public static class NpcSlug
+internal static class NpcSlug
 {
     /// <summary>The same ceiling <c>WorkSlug.MaxLength</c> uses.</summary>
-    public const int MaxLength = 48;
+    internal const int MaxLength = 48;
 
     /// <summary>1 to <see cref="MaxLength"/> characters of <c>a-z</c>, <c>0-9</c>
     /// or <c>-</c>, without leading, trailing or doubled dashes.</summary>
-    public static bool IsValid(string? value)
+    internal static bool IsValid(string? value)
     {
         if (string.IsNullOrEmpty(value) || value!.Length > MaxLength)
         {

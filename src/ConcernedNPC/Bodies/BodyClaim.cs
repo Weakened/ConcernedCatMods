@@ -12,13 +12,20 @@ namespace TheConcernedCat.ConcernedNPC.Bodies;
 /// become one.</summary>
 public readonly struct BodyClaim
 {
-    internal BodyClaim(BodyClaimStatus status, NpcIdentity identity, NpcBodyKind kind, string holder, string reason)
+    internal BodyClaim(
+        BodyClaimStatus status,
+        NpcIdentity identity,
+        NpcBodyKind kind,
+        string holder,
+        string reason,
+        BodyLease? lease)
     {
         Status = status;
         Identity = identity;
         Kind = kind;
         Holder = holder;
         Reason = reason;
+        Lease = lease;
     }
 
     /// <summary>What happened.</summary>
@@ -37,6 +44,12 @@ public readonly struct BodyClaim
     /// exists, or the holder that has the identity. Empty on a grant, so a log
     /// line never invents a problem.</summary>
     public string Reason { get; }
+
+    /// <summary>Permission to have the body, in a form the body factory can
+    /// require - non-null exactly when <see cref="IsGranted"/> is true, and null
+    /// for every refusal. This is what makes the never-coexist rule structural
+    /// rather than advisory: a refused role has nothing to pass.</summary>
+    public BodyLease? Lease { get; }
 
     /// <summary>The one question before constructing a body. True only for
     /// <see cref="BodyClaimStatus.Claimed"/> and

@@ -17,14 +17,17 @@ internal enum ReservationOutcome
     /// <summary>Taken. This holder has it until it releases it.</summary>
     Reserved = 1,
 
-    /// <summary>This holder already has exactly this. <b>What a retry looks
+    /// <summary>This <b>job</b> already has this subject - under this
+    /// reservation's name, or under another of its own. <b>What a retry looks
     /// like</b>, and the reason a job resumed after a reload can re-reserve
-    /// every step it thought it held without taking anything twice.</summary>
+    /// every step it thought it held without taking anything twice, <i>and</i>
+    /// the reason a re-plan that moves a subject from step 3 to step 2 is not
+    /// refused by the job itself.</summary>
     AlreadySatisfied = 2,
 
-    /// <summary>Somebody else has it. Refused, never taken over: an NPC that
-    /// could evict another's reservation is an NPC that can take material out
-    /// from under a job in flight.</summary>
+    /// <summary>Another <b>job</b> has it. Refused, never taken over: an NPC
+    /// that could evict another's reservation is an NPC that can take material
+    /// out from under a job in flight.</summary>
     HeldByAnother = 3,
 
     /// <summary>The subject was named in a different world load, so the name no
@@ -45,35 +48,42 @@ internal enum ReservationOutcome
 ///
 /// <b>What it guarantees.</b> Four things.
 ///
-/// <i>One holder per subject.</i> A second holder is refused, never queued and
-/// never preferred. Two NPCs walking to the same tree is a wasted trip; two NPCs
+/// <i>One job per subject.</i> A second job is refused, never queued and never
+/// preferred. Two NPCs walking to the same tree is a wasted trip; two NPCs
 /// withdrawing the same forty nails is a player's chest emptied twice over.
 ///
 /// <i>A stale epoch resolves nothing.</i> Every subject is named within one
-/// world load. A reservation taken in a previous load is refused rather than
-/// matched, because the name now points at a different object. A book whose own
-/// epoch is unknown refuses everything, which is the correct behaviour before a
-/// world is loaded.
+/// world load and says so - that is what <see cref="INpcEpochScoped"/> is for,
+/// and it is a constraint rather than a convention precisely so this guarantee
+/// is reachable: a book whose subject could not be asked its epoch could never
+/// produce <see cref="ReservationOutcome.StaleEpoch"/>, and the promise would be
+/// decorative. A reservation over a subject from another load is refused rather
+/// than matched, because the name now points at a different object, and a book
+/// whose own epoch is unknown refuses everything, which is the correct behaviour
+/// before a world is loaded.
 ///
 /// <i>Reserving twice is satisfied, not refused.</i> Idempotence is not a
 /// convenience here - it is what lets a job resumed after an interruption
 /// re-establish its holds by walking its plan again, without a separate "did I
-/// already?" record that could itself be wrong.
+/// already?" record that could itself be wrong. It is decided on the job half of
+/// the reservation's name, so a re-plan that renumbers steps does not make a job
+/// conflict with itself.
 ///
 /// <i>Releasing what you do not hold is an answer.</i> So recovery can release
 /// everything unconditionally without first proving what it had.
 ///
 /// <b>What it is not: durable.</b> Nothing here is written to disk. A world load
 /// begins a new book, every reservation from the previous one is gone, and the
-/// job re-establishes its holds from its plan - which it can, because the ids
+/// job re-establishes its holds from its plan - which it can, because the names
 /// are derived rather than allocated. Persisting reservations would mean
 /// persisting the names of world objects, and those names do not survive a
 /// load.</summary>
 /// <typeparam name="TSubject">What is reserved - a source, a container, a place.
-/// The book never interprets it beyond equality, so it stays this library's
-/// business that something is held and the role's business what it is.
-/// </typeparam>
+/// The book interprets it in exactly two ways, equality and
+/// <see cref="INpcEpochScoped.Epoch"/>, so it stays this library's business that
+/// something is held and the role's business what it is.</typeparam>
 internal interface IReservationBook<TSubject>
+    where TSubject : INpcEpochScoped
 {
     /// <summary>The world load every subject in this book is named within.</summary>
     NpcWorldEpoch Epoch { get; }
@@ -81,19 +91,28 @@ internal interface IReservationBook<TSubject>
     /// <summary>How many reservations are held.</summary>
     int Count { get; }
 
-    /// <summary>Takes <paramref name="subject"/> for <paramref name="holder"/>,
-    /// or says who has it and why not.</summary>
-    ReservationOutcome Reserve(TSubject subject, ReservationId holder);
+    /// <summary>Takes <paramref name="subject"/> under the name
+    /// <paramref name="reservation"/>, or says which job has it and why not.
+    /// Refuses a subject from another world load with
+    /// <see cref="ReservationOutcome.StaleEpoch"/>.</summary>
+    ReservationOutcome Reserve(TSubject subject, ReservationId reservation);
 
     /// <summary>Gives it up. Answers <see cref="ReservationOutcome.NotHeld"/>
-    /// rather than failing when this holder does not have it.</summary>
-    ReservationOutcome Release(TSubject subject, ReservationId holder);
+    /// rather than failing when this reservation's job does not have it.
+    /// </summary>
+    ReservationOutcome Release(TSubject subject, ReservationId reservation);
 
-    /// <summary>Releases everything held by one job - every step's id at once -
-    /// and returns how many. The verb an interruption uses; it never needs to
-    /// know which steps had got as far as reserving.</summary>
+    /// <summary>Releases everything held by one job - every step at once - and
+    /// returns how many. The verb an interruption uses; it never needs to know
+    /// which steps had got as far as reserving.</summary>
     int ReleaseAllFor(string jobId);
 
-    /// <summary>Whether this holder has this subject right now.</summary>
-    bool IsHeldBy(TSubject subject, ReservationId holder);
+    /// <summary>Whether this reservation's job has this subject right now,
+    /// under this name or any other of its own.</summary>
+    bool IsHeldBy(TSubject subject, ReservationId reservation);
+
+    /// <summary>The reservation currently holding this subject, if any. For the
+    /// evidence line that names which job and which step, which is the only
+    /// reason the step is carried at all.</summary>
+    bool TryGetHolder(TSubject subject, out ReservationId reservation);
 }

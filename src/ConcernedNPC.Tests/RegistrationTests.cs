@@ -29,10 +29,26 @@ public class BodyContractTests
     }
 
     [Fact]
-    public void A_defaulted_contract_is_not_a_body()
+    public void A_defaulted_contract_is_not_a_body_and_reads_without_throwing()
     {
+        // A struct's auto-properties default to null, so a consumer reading
+        // .PrefabName.Length off a defaulted contract used to get an NRE on a
+        // public surface - while the property's own doc said "empty".
         Assert.Equal(NpcBodyKind.Unspecified, default(NpcBodyContract).Kind);
+        Assert.Equal(string.Empty, default(NpcBodyContract).PrefabName);
+        Assert.Equal(string.Empty, default(NpcBodyContract).ZdoKeyPrefix);
         Assert.False(default(NpcBodyContract).Validate(out _));
+    }
+
+    [Fact]
+    public void A_role_can_check_its_own_contract_before_offering_it()
+    {
+        // Without a public check, the only way to find out is to register and
+        // read the refusal back out of the outcome.
+        Assert.True(NpcBodyContract.ForWorker("CF_SettlementWorker", "tcc.worker.").TryValidate(out string ok));
+        Assert.Equal(string.Empty, ok);
+        Assert.False(NpcBodyContract.ForWorker("CF_SettlementWorker", "nope").TryValidate(out string why));
+        Assert.Contains("key prefix", why);
     }
 
     [Theory]

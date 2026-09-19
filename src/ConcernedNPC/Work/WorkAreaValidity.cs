@@ -44,11 +44,13 @@ internal enum WorkAreaState
 /// stop.</summary>
 internal readonly struct WorkAreaObservation
 {
-    internal WorkAreaObservation(bool sourcePresent, int currentRevision, bool anyGroundLoaded)
+    internal WorkAreaObservation(
+        bool sourcePresent, int currentRevision, bool anyGroundLoaded, NpcWorldEpoch world)
     {
         SourcePresent = sourcePresent;
         CurrentRevision = currentRevision;
         AnyGroundLoaded = anyGroundLoaded;
+        World = world;
     }
 
     /// <summary>Whether the thing the area was derived from still exists.
@@ -65,4 +67,12 @@ internal readonly struct WorkAreaObservation
     /// points across the area is what the shipped check does, and an area whose
     /// far edge is unloaded is still workable near the player.</summary>
     internal bool AnyGroundLoaded { get; }
+
+    /// <summary>The world this observation was taken in.
+    /// <see cref="WorkAreaState.Invalid"/> is documented to cover "the world it
+    /// belonged to is not this one", and without this a leaf judging an
+    /// observation has no way to reach that answer - it would have to assume
+    /// the area it is being told about belongs to the world it is asking
+    /// from.</summary>
+    internal NpcWorldEpoch World { get; }
 }

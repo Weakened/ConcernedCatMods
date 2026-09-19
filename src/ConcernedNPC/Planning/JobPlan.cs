@@ -166,9 +166,14 @@ internal readonly struct JobPlan
     internal bool IsActionable => Verdict == JobPlanVerdict.Planned && Steps.Count > 0;
 
     /// <summary>Whether the world has moved under this plan. Asked before every
-    /// step. An unknown current epoch is stale, not fresh.</summary>
+    /// step. An unknown current epoch is stale, not fresh - and so is anything
+    /// that is not a plan, because a refusal carries no area revision and would
+    /// otherwise report itself fresh against a caller that happened to pass
+    /// zero.</summary>
     internal bool IsStale(int currentAreaRevision, NpcWorldEpoch currentEpoch) =>
-        currentAreaRevision != AreaRevision || !Epoch.Matches(currentEpoch);
+        Verdict != JobPlanVerdict.Planned
+        || currentAreaRevision != AreaRevision
+        || !Epoch.Matches(currentEpoch);
 
     /// <summary>A plan that is not one, carrying why.</summary>
     internal static JobPlan Refused(JobPlanVerdict verdict, string reason, NpcWorldEpoch epoch)
