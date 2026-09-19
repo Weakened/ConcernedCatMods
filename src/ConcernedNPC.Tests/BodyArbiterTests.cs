@@ -542,4 +542,45 @@ public class BodyLeaseTests
 
         Assert.False(lease.IsActive);
     }
+
+    [Fact]
+    public void A_disposed_lease_cannot_release_the_hold_that_replaced_it()
+    {
+        NpcRoleRegistry registry = Loaded(out NpcIdentity identity);
+
+        BodyClaim first = registry.TryClaimBody(identity, NpcBodyKind.Worker, "job-1");
+        Assert.True(first.IsGranted);
+        BodyLease stale = first.Lease!;
+        stale.Dispose();
+
+        // The same holder, in the same world, immediately afterwards: every
+        // value on the old lease matches the new hold, so only the lease's own
+        // identity distinguishes them.
+        BodyClaim second = registry.TryClaimBody(identity, NpcBodyKind.Worker, "job-1");
+        Assert.True(second.IsGranted);
+
+        Assert.False(stale.IsActive);
+        stale.Dispose();
+        Assert.True(second.Lease!.IsActive);
+    }
+
+    [Fact]
+    public void A_role_is_given_the_epoch_and_a_second_caller_is_given_the_same_one()
+    {
+        NpcRoleRegistry registry = Identities.EmptyRegistry();
+
+        NpcWorldEpoch first = registry.BeginWorldLoad(out int forgottenFirst);
+        NpcWorldEpoch second = registry.BeginWorldLoad(out int forgottenSecond);
+
+        Assert.False(first.IsUnknown);
+        Assert.Equal(first, second);
+        Assert.Equal(0, forgottenFirst);
+        Assert.Equal(0, forgottenSecond);
+
+        // A world that has gone and come back is a different world, whatever it
+        // is called: nothing a role holds from the first survives into it.
+        registry.EndWorldLoad();
+        NpcWorldEpoch afterReload = registry.BeginWorldLoad(out _);
+        Assert.NotEqual(first, afterReload);
+    }
 }

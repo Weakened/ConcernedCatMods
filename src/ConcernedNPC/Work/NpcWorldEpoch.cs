@@ -35,10 +35,24 @@ namespace TheConcernedCat.ConcernedNPC.Work;
 /// mint.</summary>
 public readonly struct NpcWorldEpoch : IEquatable<NpcWorldEpoch>
 {
-    public NpcWorldEpoch(Guid value)
+    /// <summary>Internal on purpose, and this is the whole point of the type.
+    ///
+    /// A role cannot mint an epoch, because the obvious way to mint one is the
+    /// wrong one: a role whose own epoch is text would derive a Guid from the
+    /// world's name, which is stable across loads. The value would then be per
+    /// <i>world</i> rather than per <i>load</i>, every stale hold from the last
+    /// session would match, and the guarantee at the top of this file would be
+    /// worth nothing while looking correct.
+    ///
+    /// So the library mints, through <c>NpcRoleRegistry.BeginWorldLoad</c>, and
+    /// a role receives the epoch rather than choosing it.</summary>
+    internal NpcWorldEpoch(Guid value)
     {
         Value = value;
     }
+
+    /// <summary>A fresh epoch, never equal to any that came before it.</summary>
+    internal static NpcWorldEpoch Mint() => new NpcWorldEpoch(Guid.NewGuid());
 
     /// <summary>The epoch nobody set. Matches nothing, including itself as a
     /// key: an id carrying it is refused rather than accepted everywhere.

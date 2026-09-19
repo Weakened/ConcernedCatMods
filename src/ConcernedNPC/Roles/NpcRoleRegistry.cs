@@ -114,7 +114,32 @@ public sealed class NpcRoleRegistry
     /// once per process - but every body hold and every job from the previous
     /// world ends here, because both belonged to that world's scene and neither
     /// survived it.</summary>
-    public int BeginWorldLoad(NpcWorldEpoch world)
+    /// <summary>Says a world has been loaded, and hands back the epoch every
+    /// seam in this package will expect for it.
+    ///
+    /// A role cannot pass one in, because the natural way for a role to invent
+    /// an epoch - deriving it from the world's name - would be stable across
+    /// loads and would make every stale hold match (see
+    /// <see cref="NpcWorldEpoch"/>). The library mints instead.
+    ///
+    /// Several roles racing to be first is fine: while a world is already
+    /// loaded this returns that same epoch and forgets nothing. The matching
+    /// <see cref="EndWorldLoad"/> is not optional - it is what ends the holds
+    /// of a world that has gone - and it is called from the same place that
+    /// noticed the world arrive.</summary>
+    public NpcWorldEpoch BeginWorldLoad(out int forgotten)
+    {
+        if (!CurrentWorld.IsUnknown)
+        {
+            forgotten = 0;
+            return CurrentWorld;
+        }
+
+        forgotten = BeginWorldLoad(NpcWorldEpoch.Mint());
+        return CurrentWorld;
+    }
+
+    internal int BeginWorldLoad(NpcWorldEpoch world)
     {
         if (world.IsUnknown)
         {

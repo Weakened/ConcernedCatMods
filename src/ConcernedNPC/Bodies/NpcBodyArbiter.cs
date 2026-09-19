@@ -241,9 +241,16 @@ internal sealed class NpcBodyArbiter
     /// <summary>Whether this exact lease still permits a body: the arbiter
     /// records this holder holding this kind for this identity, in the world the
     /// lease was taken in.</summary>
+    /// <summary>Whether this exact lease is the one currently holding.
+    ///
+    /// The identity check is the lease itself, not what it says. Claim, dispose
+    /// and claim again under the same holder in the same world and the values
+    /// match on every field, so a disposed lease would report itself live and
+    /// could release the hold its successor is relying on.</summary>
     internal bool IsHeldBy(BodyLease lease) =>
         lease != null
         && TryGet(lease.Identity, out Record record)
+        && ReferenceEquals(record.Lease, lease)
         && record.HoldsBodyIn(lease.World)
         && record.BodyKind == lease.Kind
         && record.IsBodyHeldBy(lease.Holder);
