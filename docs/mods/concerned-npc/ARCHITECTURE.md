@@ -121,9 +121,16 @@ with a mutation check - moving them would move a shipped safety property out of 
 fireplace adapter, the natural-source predicate, the compass, every role's slug, paths, config keys and storefront
 identity.
 
-**Rewritten rather than moved:** the Steward's separate recruitment implementation, which folds into the shared
-machine, and the fused collection loop, from which the task runner is extracted while survey, select, pick and
-deliver stay Foreman's.
+**Rewritten rather than moved:** the fused collection loop, from which the task runner is extracted while survey,
+select, pick and deliver stay Foreman's.
+
+**A note, not a plan: the Steward's recruitment.** An earlier draft of this section said the Steward's separate
+recruitment implementation folds into the shared machine. There is no shared recruitment machine in this package,
+and inventing one for a single caller so that a sentence in this document comes true would be worse than the
+duplication it claims to remove - a seam with one consumer is that consumer's code with an extra indirection in
+front of it. So the Steward's recruitment stays where it is. If a second role ever needs recruiting, those two
+implementations are what a shared one should be derived from, and that is the point at which this becomes a leaf
+with an issue behind it.
 
 ## 6. The behaviour changes that must not ride along inside a refactor
 
