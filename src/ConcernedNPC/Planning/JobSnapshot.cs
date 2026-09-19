@@ -89,6 +89,27 @@ internal readonly struct JobSnapshot
     /// was unloaded, the budget ran out, or the counts do not add up.</summary>
     internal bool IsConclusive => Report.IsConclusive;
 
+    /// <summary>Whether the looking itself finished - nothing left unloaded,
+    /// nothing the probe could not answer, and the budget not spent part way.
+    ///
+    /// <b>Weaker than <see cref="IsConclusive"/>, and needed precisely because
+    /// it is weaker.</b> <c>IsConclusive</c> asks "does the area hold nothing
+    /// more", which is <i>never</i> true once anything was found - correctly, a
+    /// scan that found twelve sections proves nothing about a thirteenth. So it
+    /// cannot answer the other question: was this list of targets the whole list
+    /// the scan would have produced. A scan cut short after six of twelve
+    /// candidates answers <c>Found</c>, and every downstream count is then taken
+    /// over six targets that happen to be the ones it reached.
+    ///
+    /// This is the property a job may be <i>closed</i> on, because the job's
+    /// targets are fixed from this list and everything after that is a
+    /// subtraction from it.</summary>
+    internal bool LookingFinished =>
+        Report.NotLoaded == 0
+        && Report.Unreadable == 0
+        && !Report.TruncatedByBudget
+        && Report.CountsAgree;
+
     /// <summary>Everything the targets in here need, added up once. <b>This is
     /// the manifest</b>, and it exists before a single step is planned.</summary>
     internal JobManifest Wanted => ManifestArithmetic.Total(Targets);

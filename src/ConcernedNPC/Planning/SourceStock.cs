@@ -96,8 +96,18 @@ internal readonly struct SourceStock : INpcEpochScoped
     internal NpcPoint Position => Container == null ? default : Container.Position;
 
     /// <summary>Whether an NPC may take from it <b>right now</b>. Re-read on
-    /// every call on purpose.</summary>
-    internal bool IsUsable => Container != null && Container.Access.CanTake && _lines != null;
+    /// every call on purpose.
+    ///
+    /// <b>A container nothing can name is not material.</b> The key is how a
+    /// draw is written into a step, how a reservation is taken out over it, and
+    /// the tie-break that makes selection deterministic; a blank one can do none
+    /// of those, and the selector already refuses to choose it. Counting it here
+    /// anyway is what made the whole-job arithmetic and the selector disagree
+    /// about the same chest - the job passed the up-front check and then could
+    /// not be provisioned, and the player was told to bring more of material
+    /// that was there.</summary>
+    internal bool IsUsable =>
+        Container != null && Key.Length != 0 && Container.Access.CanTake && _lines != null;
 
     /// <summary>How many units of one item this job may plan on: what was seen,
     /// less what other jobs have already set aside.

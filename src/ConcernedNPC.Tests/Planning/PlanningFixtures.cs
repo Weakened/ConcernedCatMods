@@ -37,6 +37,52 @@ internal sealed class PlanningStockContainer : INpcContainer
     public NpcContainerAccess Access => new NpcContainerAccess(Allowed, Refusal);
 }
 
+/// <summary>A chest the player takes back between one line of planning and the
+/// next.
+///
+/// <b>Not a contrivance.</b> <see cref="SourceStock.IsUsable"/> re-reads
+/// <see cref="INpcContainer.Access"/> on every call, exactly as the port's
+/// contract requires, because the player can walk into the chest and a ward can
+/// go up between the tick that chose it and the tick that opens it. This makes
+/// that happen on demand: usable for the first <see cref="UsableReads"/> reads
+/// and refused after, so a test can put the whole-job arithmetic and the
+/// per-trip selector on opposite sides of the change.</summary>
+internal sealed class WithdrawnStockContainer : INpcContainer
+{
+    internal WithdrawnStockContainer(string key, NpcWorldEpoch epoch, float x, float z, int usableReads)
+    {
+        Key = key;
+        Epoch = epoch;
+        Position = new NpcPoint(x, 0f, z);
+        UsableReads = usableReads;
+    }
+
+    public string Key { get; }
+
+    public NpcWorldEpoch Epoch { get; }
+
+    public NpcPoint Position { get; }
+
+    public string Describe => Key;
+
+    /// <summary>How many reads answer "yes" before the player takes it back.
+    /// </summary>
+    internal int UsableReads { get; }
+
+    internal int Reads { get; private set; }
+
+    public NpcContainerAccess Access
+    {
+        get
+        {
+            Reads++;
+            return Reads <= UsableReads
+                ? new NpcContainerAccess(NpcContainerUse.Both, NpcContainerRefusal.None)
+                : new NpcContainerAccess(NpcContainerUse.Off, NpcContainerRefusal.InUse);
+        }
+    }
+}
+
 /// <summary>A horizontal circle, which is every work area that ships today. The
 /// library is not allowed to assume it, so the tests use one and the library
 /// never asks for a radius.</summary>
@@ -260,6 +306,23 @@ internal static class Jobs
     /// fetch a second load of what is on its back. A fixture saying "nothing is
     /// different about this test" is the one place that claim is safe, and it is
     /// made once, here, in the open.</summary>
+    /// <summary>A snapshot the scan did not finish taking: the budget runs out
+    /// part way down the candidates, so what comes back is whatever it reached.
+    /// </summary>
+    internal static JobSnapshot CutShortSnapshot(
+        INpcWorkArea area,
+        IReadOnlyList<JobTarget> targets,
+        IReadOnlyList<SourceStock> sources,
+        int scanAllowance) =>
+        JobSnapshotBuilder.Take(
+            area,
+            World,
+            targets,
+            sources,
+            new PlanningStopObserver(),
+            new FakeProbe(),
+            new PlanningBudget(scanAllowance));
+
     internal static JobPlanRequest Request(
         INpcWorkArea? area,
         NpcPoint from,

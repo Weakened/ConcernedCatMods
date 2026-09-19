@@ -1296,18 +1296,278 @@ public sealed class JobPlanningPipelineTests
                 carrying));
     }
 
-    /// <summary>The blocker's invariant, stated once and checked over four axes
-    /// at once: <b>a plan never claims a manifest its own steps do not cover,
-    /// and every target it does not reach is counted - whatever left it out, and
-    /// whether it is a plan or a refusal.</b>
+    /// <summary>A job whose area was never finished being looked at is never a
+    /// finished job.
     ///
-    /// Written as a sweep rather than as one case on purpose. There are now five
-    /// independent ways a target falls out of a plan - a spent budget, the trip
-    /// cap, the chest cap, a walk that failed lately, and more stops than one
-    /// round orders - and the first review's fix went in covering three of them
-    /// while a sweep that could not reach the other two reported everything was
-    /// fine. So the sweep varies what it claims to vary, and the guards at the
-    /// bottom fail if it ever stops reaching a shape.
+    /// <b>The failure this is written against, and why the other guards missed
+    /// it.</b> Everything downstream counts against <c>jobTargets</c>, which is
+    /// the snapshot's target list - and the subtraction that makes
+    /// <c>LeftForAnotherRound</c> airtight is airtight only <i>below</i> the
+    /// line where that list is fixed. A scan cut short by its own budget after
+    /// six of twelve candidates fixes the line too low. The plan then covers all
+    /// six perfectly, the subtraction is nought, every step comes off, and
+    /// <c>IsComplete</c> is true with half the area never looked at.
+    ///
+    /// The one guard that existed asked <c>IsConclusive</c>, and only inside the
+    /// branch where nothing was found - so an inconclusive scan that found
+    /// nothing was refused and the same evidence with one target found sailed
+    /// through, because <c>AreaScanOutcome.Found</c> wins and nobody asked. And
+    /// <c>IsConclusive</c> could not have answered it anyway: it means "the area
+    /// holds nothing more", which is never true once anything was found.
+    /// </summary>
+    [Fact]
+    public void A_scan_that_was_cut_short_never_closes_the_job()
+    {
+        var chest = new PlanningStockContainer("supply", Jobs.World, 0f, 0f);
+        var targets = new List<JobTarget>();
+        for (int index = 0; index < 12; index++)
+        {
+            // A gathering round: twelve things to call at and nothing to fetch
+            // first, so the only thing that can shorten the job is the looking.
+            targets.Add(Jobs.Target("t" + index.ToString("00"), 10f + index, 0f));
+        }
+
+        var area = new FakeArea();
+        var sources = new[] { Jobs.Stock(chest, ("wood", 500)) };
+
+        JobSnapshot cutShort = Jobs.CutShortSnapshot(area, targets, sources, scanAllowance: 6);
+        Assert.False(cutShort.LookingFinished);
+        Assert.True(cutShort.Targets.Count < targets.Count);
+
+        JobTourPlan plan = new TourJobPlanner(cutShort, NpcCarryCapacity.Unlimited, Jobs.Actions)
+            .PlanTours(Jobs.Request(area, Jobs.At(0f, 0f)));
+
+        // A real plan for what was seen - that part is right and stays right.
+        Assert.Equal(JobPlanVerdict.Planned, plan.Plan.Verdict);
+        Assert.Equal(cutShort.Targets.Count, Services(plan));
+        Assert.Equal(0, plan.LeftForAnotherRound);
+        Assert.False(plan.LookingFinished);
+
+        // Every step done, and the job is still not over.
+        JobReconciliation books = JobReconciler.Reconcile(plan, AllDone(plan));
+        Assert.Equal(plan.Plan.Steps.Count, books.Done);
+        Assert.True(books.Outstanding.IsEmpty);
+        Assert.Equal(0, books.LeftForAnotherRound);
+        Assert.False(books.IsComplete);
+        Assert.True(books.HasUnfinishedWork);
+
+        // And the same job, looked at properly, does finish.
+        JobTourPlan whole = Plan(targets, sources);
+        Assert.True(whole.LookingFinished);
+        Assert.True(JobReconciler.Reconcile(whole, AllDone(whole)).IsComplete);
+    }
+
+    /// <summary>Ground the probe could not answer for stops a job being closed
+    /// too, for the same reason and by the same property.</summary>
+    [Fact]
+    public void A_scan_that_could_not_read_the_ground_never_closes_the_job()
+    {
+        var chest = new PlanningStockContainer("supply", Jobs.World, 0f, 0f);
+        var targets = new List<JobTarget>
+        {
+            Jobs.Target("here", 10f, 0f, 0, ("wood", 1)),
+            Jobs.Target("over-there", 20f, 0f, 0, ("wood", 1)),
+        };
+
+        var area = new FakeArea();
+        var probe = new FakeProbe();
+        probe.Say(targets[1].At, AreaSampleVerdict.Unreadable);
+
+        JobSnapshot snapshot = JobSnapshotBuilder.Take(
+            area,
+            Jobs.World,
+            targets,
+            new[] { Jobs.Stock(chest, ("wood", 100)) },
+            new PlanningStopObserver(),
+            probe,
+            PlanningBudget.Unlimited());
+
+        Assert.False(snapshot.LookingFinished);
+
+        JobTourPlan plan = new TourJobPlanner(snapshot, NpcCarryCapacity.Unlimited, Jobs.Actions)
+            .PlanTours(Jobs.Request(area, Jobs.At(0f, 0f)));
+
+        Assert.False(JobReconciler.Reconcile(plan, AllDone(plan)).IsComplete);
+    }
+
+    /// <summary>What he walked in with is still his when the round ends.
+    ///
+    /// <b>The failure this is written against.</b> He arrives holding the twenty
+    /// wood a section needs, so the round opens no chest at all. The round ends
+    /// early. <c>Outstanding</c> correctly says twenty wood; <c>LeftOver</c> -
+    /// what he is holding - said nothing, because it was fetched-less-consumed
+    /// with no term for what he arrived with, and <c>Subtract</c> clamps at
+    /// nought so the error is always in the losing direction. A role feeding
+    /// <c>LeftOver</c> back as the next round's <c>Carrying</c>, which is what
+    /// it is for, then plans a round that is told the settlement is short of
+    /// twenty wood that is in his hands. That is the defect <c>Carrying</c> was
+    /// added to stop, one step further round the loop.</summary>
+    [Fact]
+    public void What_he_walked_in_with_is_still_his_when_the_round_ends()
+    {
+        var targets = new List<JobTarget> { Jobs.Target("section", 10f, 0f, 0, ("wood", 20)) };
+        JobManifest carrying = Jobs.Needs(("wood", 20));
+
+        // No chest holds anything: he is provisioned entirely out of his hands.
+        JobTourPlan plan = PlanCarrying(targets, new List<SourceStock>(), carrying);
+
+        Assert.Equal(JobPlanVerdict.Planned, plan.Plan.Verdict);
+        Assert.Equal(0, Collects(plan));
+        Assert.Equal(1, Services(plan));
+        Assert.Equal(20, plan.Carrying.RequiredOf("wood"));
+
+        // The round ends before he gets there.
+        JobReconciliation stopped = JobReconciler.Reconcile(plan, null);
+        Assert.Equal(20, stopped.Outstanding.RequiredOf("wood"));
+        Assert.Equal(20, stopped.LeftOver.RequiredOf("wood"));
+        Assert.False(stopped.IsComplete);
+
+        // And the next round, fed exactly that, plans rather than refusing.
+        JobTourPlan again = PlanCarrying(targets, new List<SourceStock>(), stopped.LeftOver);
+        Assert.Equal(JobPlanVerdict.Planned, again.Plan.Verdict);
+
+        // Spent, it is gone: he serviced the section and is holding nothing.
+        JobReconciliation done = JobReconciler.Reconcile(plan, AllDone(plan));
+        Assert.True(done.LeftOver.IsEmpty);
+        Assert.True(done.IsComplete);
+    }
+
+    /// <summary>A chest whose permission the player takes back mid-plan is a
+    /// shortage that does not blame trips that never happened.
+    ///
+    /// <b>Two findings in one test.</b> The mid-loop shortage branch - the third
+    /// and last way to reach <c>ShortOfMaterial</c> - was reached by no test at
+    /// all: a <c>throw</c> planted as its first statement left the suite green,
+    /// and so did inverting the shortfall it carries, which is the discriminator
+    /// the verdict's whole meaning now rests on. And its sentence says "after
+    /// the earlier trips there is no longer enough", which on trip zero names a
+    /// cause that does not exist.
+    ///
+    /// Getting here is not exotic. <c>IsUsable</c> re-reads the container's
+    /// permission on every call, exactly as the port requires, so a chest the
+    /// player walks into between the whole-job check and the trip's selection
+    /// counts for the first and not the second.</summary>
+    [Fact]
+    public void A_chest_taken_back_mid_plan_is_a_shortage_that_blames_no_earlier_trip()
+    {
+        // Usable for the whole-job arithmetic's one read, and gone by the time
+        // the selector looks.
+        var chest = new WithdrawnStockContainer("supply", Jobs.World, 0f, 0f, usableReads: 1);
+        var area = new FakeArea();
+        var sources = new[] { new SourceStock(chest, new[] { new StockLine("wood", 100) }) };
+        var targets = new List<JobTarget> { Jobs.Target("section", 10f, 0f, 0, ("wood", 20)) };
+
+        JobSnapshot snapshot = JobSnapshotBuilder.Take(
+            area, Jobs.World, targets, sources, new PlanningStopObserver(), new FakeProbe(),
+            PlanningBudget.Unlimited());
+        JobTourPlan plan = new TourJobPlanner(snapshot, NpcCarryCapacity.Unlimited, Jobs.Actions)
+            .PlanTours(Jobs.Request(area, Jobs.At(0f, 0f)));
+
+        Assert.Equal(JobPlanVerdict.ShortOfMaterial, plan.Plan.Verdict);
+
+        // A genuine shortage, so the discriminator says so.
+        Assert.False(plan.Shortfall.IsEmpty);
+        Assert.Equal(20, plan.Shortfall.RequiredOf("wood"));
+
+        // And the sentence does not blame trips that never happened.
+        Assert.DoesNotContain("earlier trips", plan.Plan.Reason);
+        Assert.NotEqual(string.Empty, plan.Plan.Reason);
+
+        // Nothing is closed and everything is counted.
+        Assert.Equal(targets.Count, plan.LeftForAnotherRound);
+        Assert.False(JobReconciler.Reconcile(plan, null).IsComplete);
+    }
+
+    /// <summary>A chest nothing can name is not material, and the two counters
+    /// agree about it.
+    ///
+    /// <b>Why it mattered.</b> <c>ManifestArithmetic.Shortfall</c> asked only
+    /// whether a container was usable; <c>SourceSelector</c> also refuses one
+    /// with a blank key, because the key is how a draw is written into a step
+    /// and how a reservation is taken out over it. So a blank-keyed chest made
+    /// the whole-job check pass and the provisioning fail, and the player was
+    /// told to bring more of material that was demonstrably there.</summary>
+    [Fact]
+    public void A_chest_nothing_can_name_is_not_material()
+    {
+        var nameless = new PlanningStockContainer(string.Empty, Jobs.World, 0f, 0f);
+        var sources = new[] { Jobs.Stock(nameless, ("wood", 100)) };
+        var targets = new List<JobTarget> { Jobs.Target("section", 10f, 0f, 0, ("wood", 20)) };
+
+        Assert.False(sources[0].IsUsable);
+
+        JobTourPlan plan = Plan(targets, sources);
+
+        // Refused up front with the honest sentence, rather than passing the
+        // check and failing to provision a trip.
+        Assert.Equal(JobPlanVerdict.ShortOfMaterial, plan.Plan.Verdict);
+        Assert.Equal(20, plan.Shortfall.RequiredOf("wood"));
+        Assert.Empty(plan.Tours);
+    }
+
+    /// <summary>A job of targets too malformed to place never reports itself
+    /// finished - and the partition says how many are waiting.
+    ///
+    /// <b>Two corrections in one.</b> The partitioner drops an invalid target
+    /// silently, and its <c>LeftOver</c> defaulted to nought at three of its
+    /// four call sites - on the type whose own doc says everything downstream
+    /// must carry that number. And the claim that a partition with no trips is
+    /// unreachable was wrong: this is how it happens.
+    ///
+    /// The job now stalls for ever rather than closing, which is the direction
+    /// to fail in. A constant <c>LeftForAnotherRound</c> with every step coming
+    /// off is what a malformed target looks like from outside.</summary>
+    [Fact]
+    public void A_job_of_targets_nothing_can_place_never_reports_itself_finished()
+    {
+        var chest = new PlanningStockContainer("supply", Jobs.World, 0f, 0f);
+
+        // A target with no name is not a target anything can service.
+        var nameless = new JobTarget(
+            string.Empty, Jobs.World, Jobs.At(10f, 0f), string.Empty, 0, Jobs.Needs(("wood", 1)));
+        Assert.False(nameless.IsValid);
+
+        TourPartition partition = TourPartitioner.Partition(
+            new[] { nameless }, NpcCarryCapacity.Unlimited, Jobs.At(0f, 0f), PlanningBudget.Unlimited());
+
+        Assert.Empty(partition.Tours);
+        Assert.Equal(1, partition.LeftOver);
+        Assert.False(partition.CoversTheWholeJob);
+
+        // And through the planner, with a snapshot that kept it: no trip comes
+        // back, and the answer is not a finished job.
+        var snapshot = new JobSnapshot(
+            new[] { nameless },
+            new[] { Jobs.Stock(chest, ("wood", 100)) },
+            new AreaScanReport(AreaScanOutcome.Found, 1, 0, 0, 0, false, 0),
+            7,
+            Jobs.World);
+
+        JobTourPlan plan = new TourJobPlanner(snapshot, NpcCarryCapacity.Unlimited, Jobs.Actions)
+            .PlanTours(Jobs.Request(new FakeArea(), Jobs.At(0f, 0f)));
+
+        Assert.NotEqual(JobPlanVerdict.NothingToDo, plan.Plan.Verdict);
+        Assert.Equal(1, plan.LeftForAnotherRound);
+        Assert.False(JobReconciler.Reconcile(plan, null).IsComplete);
+    }
+
+    /// <summary>The blocker's invariant, stated once and checked over five axes
+    /// at once: <b>a plan never claims a manifest its own steps do not cover,
+    /// every target it does not reach is counted - whatever left it out, and
+    /// whether it is a plan or a refusal - and no job is closed on looking that
+    /// did not finish.</b>
+    ///
+    /// Written as a sweep rather than as one case on purpose. There are six
+    /// independent ways a target falls out of a plan - a spent planning budget,
+    /// the trip cap, the chest cap, a walk that failed lately, more stops than
+    /// one round orders, and a scan cut short before it reached the far end of
+    /// the area - and each review has found the sweep blind to the ones that had
+    /// just been fixed. So the sweep varies what it claims to vary, and **every
+    /// shape has a guard at the bottom that fails if it stops being reached**.
+    ///
+    /// The sixth is the one this round added, and it is different in kind: the
+    /// other five fall out below the line where the job's targets are fixed,
+    /// where a subtraction cannot miss them. A truncated scan moves that line.
     ///
     /// <b>The guards are the point.</b> The old version ended with
     /// <c>Assert.True(everPartial == 0 || everPlanned &gt; everPartial)</c>,
@@ -1364,6 +1624,7 @@ public sealed class JobPlanningPipelineTests
         int everChestCapped = 0;
         int everSetbackDropped = 0;
         int everRefused = 0;
+        int everScanCutShort = 0;
 
         foreach (IReadOnlyList<SourceStock> sources in layouts)
         {
@@ -1373,6 +1634,22 @@ public sealed class JobPlanningPipelineTests
                 {
                     JobTourPlan without = PlanWith(targets, sources, capacity, allowance, null);
                     JobTourPlan with = PlanWith(targets, sources, capacity, allowance, refusing);
+
+                    // The sixth axis: the same cell with the looking itself cut
+                    // short. Its plan is over fewer targets, so the invariant is
+                    // checked against what the scan reached - and whatever it
+                    // says, it may not close the job.
+                    JobTourPlan halfLooked =
+                        PlanWith(targets, sources, capacity, allowance, null, scanAllowance: 9);
+                    if (!halfLooked.LookingFinished)
+                    {
+                        everScanCutShort++;
+                        Assert.False(
+                            JobReconciler.Reconcile(halfLooked, AllDone(halfLooked)).IsComplete,
+                            "a job was closed on a scan that did not finish");
+                    }
+
+                    Check(CountOf(halfLooked, targets.Count), halfLooked);
 
                     int servicedWithout = Check(targets.Count, without);
                     int servicedWith = Check(targets.Count, with);
@@ -1428,6 +1705,8 @@ public sealed class JobPlanningPipelineTests
         Assert.True(everChestCapped > 0, "the sweep never crossed MostStops, so it proved nothing about it");
         Assert.True(
             everSetbackDropped > 0, "the sweep never dropped a stop for a setback, so it proved nothing about it");
+        Assert.True(
+            everScanCutShort > 0, "the sweep never cut a scan short, so it proved nothing about it");
     }
 
     /// <summary>The invariant itself, asserted on one plan: the manifest is what
@@ -1485,15 +1764,24 @@ public sealed class JobPlanningPipelineTests
         return results;
     }
 
+    /// <summary>How many of the job's targets this plan's own snapshot held. Not
+    /// the same as the job's, once the scan is allowed to stop early - which is
+    /// exactly the axis that needs it.</summary>
+    private static int CountOf(JobTourPlan plan, int whenWholeJob) =>
+        plan.LookingFinished ? whenWholeJob : Services(plan) + plan.LeftForAnotherRound;
+
     private static JobTourPlan PlanWith(
         IReadOnlyList<JobTarget> targets,
         IReadOnlyList<SourceStock> sources,
         NpcCarryCapacity capacity,
         int allowance,
-        NpcWalkSetbacks? setbacks = null)
+        NpcWalkSetbacks? setbacks = null,
+        int scanAllowance = 0)
     {
         var area = new FakeArea();
-        JobSnapshot snapshot = Snapshot(targets, sources, area);
+        JobSnapshot snapshot = scanAllowance > 0
+            ? Jobs.CutShortSnapshot(area, targets, sources, scanAllowance)
+            : Snapshot(targets, sources, area);
         var planner = new TourJobPlanner(
             snapshot, capacity, Jobs.Actions, setbacks, now: 1f, allowance: allowance);
         return planner.PlanTours(Jobs.Request(area, Jobs.At(0f, 0f)));
