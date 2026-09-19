@@ -4,7 +4,7 @@ param(
     [string]$Configuration = "Debug",
     # Default builds the whole solution (every product), matching historical
     # behavior now that the solution contains Teamster, Foreman and Steward too.
-    [ValidateSet("All", "ConcernedCartographer", "ConcernedTeamster", "ConcernedForeman", "ConcernedSteward")]
+    [ValidateSet("All", "ConcernedCartographer", "ConcernedTeamster", "ConcernedForeman", "ConcernedSteward", "ConcernedNPC")]
     [string]$Product = "All"
 )
 

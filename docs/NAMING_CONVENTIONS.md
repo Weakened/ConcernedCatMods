@@ -104,6 +104,41 @@ issue key `CS-###` / profiles `TCS-Clean/Dev/Compat`.
 
 Each product is fully independent: its own DLL, plugin GUID, package, changelog, versions, tags, and release lifecycle. Products never reference each other at compile time.
 
+### Library packages
+
+A **library** is the second kind of shipped package, added by CNPC-000 (#371), and the difference from a product is
+the point of the category.
+
+A product is a mod a player installs for what it does, and products never reference each other: the day one does, two
+release cadences become one. A library ships no gameplay. It exists so several products can share one runtime **and**
+one release cadence for that runtime, so a compatible fix reaches every product without any of them being rebuilt -
+which source sharing cannot do.
+
+**Concerned NPC** is the first: `Concerned NPC` / `src/ConcernedNPC` / `ConcernedNPC.csproj` /
+`TheConcernedCat.ConcernedNPC` / `TheConcernedCat.ConcernedNPC.dll` /
+`com.theconcernedcat.valheim.concernednpc` / `TheConcernedCat` / `ConcernedNPC` / `docs/mods/concerned-npc` /
+`concerned-npc/v0.1.0` / issue key `CNPC-###`.
+
+A library is validated exactly as a product is - the four package files, a 256x256 icon, one version in three places,
+one DLL in its ZIP - and then four more rules make depending on it safe, all enforced together in
+`check_library_consumers`:
+
+1. the library references no product, in either the csproj or a `using`;
+2. a consumer references it as a `ProjectReference` with `<Private>false</Private>`, so its DLL is never copied into
+   the consumer's output and can never reach the consumer's ZIP;
+3. a consumer pins `TheConcernedCat-<Library>` in its `thunderstore.toml`, so the storefront installs it;
+4. a consumer declares `BepInDependency` on the library's plugin GUID, so a missing package is a clear dependency
+   failure at load rather than a null reference later.
+
+All four or none: a stale pin or a stale dependency left behind after a reference is removed fails the build too.
+
+Unlike `src/Shared`, a library **may** use Unity, BepInEx and Jötunn types, because it is its own assembly rather than
+source compiled into somebody else's. Its registration surface is `public`; everything else stays `internal`.
+
+The cost is real and is the reason this category did not exist before: a change to a library's public surface can
+break an installed consumer. The Thunderstore pin is what protects players, so a breaking change means a major
+version bump and a pin bump in every consumer, together, in one change.
+
 Do not use `ConcernedCat` and `TheConcernedCat` interchangeably in identifiers. Use:
 
 - `The Concerned Cat` for the public creator name;
