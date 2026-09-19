@@ -79,22 +79,6 @@ internal sealed class CollectionLimits
         return this;
     }
 
-    /// <summary>A copy with different numbers, for tests that need a small
-    /// ceiling to reach in a few steps. Production uses
-    /// <see cref="Default"/>.</summary>
-    internal CollectionLimits With(
-        int? mostCandidatesPerSurvey = null,
-        float? surveyRadiusMetres = null,
-        float? pickupReachMetres = null,
-        float? arrivalToleranceMetres = null,
-        float? carrySafetyMarginKilograms = null) =>
-        new CollectionLimits(
-            mostCandidatesPerSurvey ?? MostCandidatesPerSurvey,
-            surveyRadiusMetres ?? SurveyRadiusMetres,
-            pickupReachMetres ?? PickupReachMetres,
-            arrivalToleranceMetres ?? ArrivalToleranceMetres,
-            carrySafetyMarginKilograms ?? CarrySafetyMarginKilograms);
-
     private static void Require(bool condition, string name, string why)
     {
         if (!condition)
