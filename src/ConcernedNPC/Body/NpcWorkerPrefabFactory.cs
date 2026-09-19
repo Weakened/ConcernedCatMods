@@ -43,8 +43,29 @@ namespace TheConcernedCat.ConcernedNPC.Body;
 /// reading the game's code can prove one exists. It is supplied by the role,
 /// resolved at run time, and <b>fails closed</b>: a missing or unsuitable
 /// prefab produces no body and an explanation naming exactly what was
-/// missing.</summary>
-internal sealed class NpcWorkerPrefabFactory
+/// missing.
+///
+/// <b>Public, and exactly this much of it.</b> This is a role's entry point, so
+/// it has to be callable from a product - a library whose own adoption
+/// instructions name an internal type is a library nobody can adopt. What a
+/// role needs is <see cref="TryFor"/>, <see cref="Install"/>,
+/// <see cref="TrySpawn"/>, and the two facts a console command reports
+/// (<see cref="IsReady"/>, <see cref="LastFailure"/>). Three members are
+/// deliberately <i>not</i> part of that:
+///
+/// <list type="bullet">
+/// <item><c>Prefab</c> - handing out the built prefab would end the rule that
+/// bodies are created in one place, because the next line a caller writes is
+/// the engine's own instantiation on it. The validator rule and the audit that
+/// confine creation to this file would both still pass, and the lease would be
+/// bypassed anyway.</item>
+/// <item><c>TryCreate</c> - the timing is the dangerous half of this type.
+/// <see cref="Install"/> arms the build for the one moment it is safe; a
+/// caller that could force it could build after a world's objects were
+/// created.</item>
+/// <item><c>BaseCreature</c> - the role passed it in and already knows it.</item>
+/// </list></summary>
+public sealed class NpcWorkerPrefabFactory
 {
     private readonly NpcBodyContract _contract;
     private readonly NpcWorkerPrefabOptions _options;
@@ -63,11 +84,11 @@ internal sealed class NpcWorkerPrefabFactory
     }
 
     /// <summary>The prefab is built and registered.</summary>
-    internal bool IsReady => _prefab != null;
+    public bool IsReady => _prefab != null;
 
     /// <summary>Why the last attempt failed. Never null: before the first
     /// attempt it says what is being waited for.</summary>
-    internal string LastFailure { get; private set; } = "waiting for the game's prefabs to load";
+    public string LastFailure { get; private set; } = "waiting for the game's prefabs to load";
 
     /// <summary>The prefab, once built. Held so a second call is a no-op and so
     /// a diagnostic can say whether it exists; never handed to a caller that
@@ -75,7 +96,7 @@ internal sealed class NpcWorkerPrefabFactory
     /// </summary>
     internal GameObject? Prefab => _prefab;
 
-    internal NpcBodyContract Contract => _contract;
+    public NpcBodyContract Contract => _contract;
 
     internal string BaseCreature => _baseCreature;
 
@@ -85,7 +106,7 @@ internal sealed class NpcWorkerPrefabFactory
     /// cannot name a prefab or a key prefix is a role that would register a
     /// body under an empty name, and the cost of finding that out later is
     /// every existing body of that role.</summary>
-    internal static bool TryFor(
+    public static bool TryFor(
         NpcBodyContract contract,
         NpcWorkerPrefabOptions options,
         out NpcWorkerPrefabFactory? factory,
@@ -111,7 +132,7 @@ internal sealed class NpcWorkerPrefabFactory
     /// <summary>Arms the build for the moment the game's own prefabs can be
     /// cloned, which is at the main menu - before any world's objects are
     /// created. Idempotent.</summary>
-    internal void Install(string? baseCreature, Action<string>? log)
+    public void Install(string? baseCreature, Action<string>? log)
     {
         _baseCreature = string.IsNullOrWhiteSpace(baseCreature) ? string.Empty : baseCreature!.Trim();
         _log = log;
@@ -255,14 +276,36 @@ internal sealed class NpcWorkerPrefabFactory
             character.m_name = _options.DisplayName;
         }
 
-        // Two calls, not one. The single-call form one of the three copies used
-        // adds the prefab to the manager's own table, which is enough for a
-        // lookup by name but is not the same as being in the network scene's
-        // table when a saved object is recreated. The two-call form is what the
-        // other two ship, it is the one that has been observed keeping saved
-        // bodies across a reload, and the difference between them is the
-        // difference between a body coming back and being destroyed. It is
-        // still the item in this leaf most in need of proof in game.
+        // Two calls, and the reason is NOT the one an earlier version of this
+        // comment gave. That version said the single-argument overload was
+        // weaker - enough for a lookup by name, not enough to be in the network
+        // scene's table - and that the difference was the difference between a
+        // saved body coming back and being destroyed. Read against the shipped
+        // framework, all of that is false, and it is worth writing down why,
+        // because it is the scarier of the two stories and it was the one three
+        // products half believed.
+        //
+        // The single-argument overload IS this one: it constructs the same
+        // wrapper with the same flag and calls the same method. Neither
+        // overload registers anything into the network scene. What does that is
+        // a postfix the framework puts on the scene's own wake-up, which walks
+        // every prefab it knows and registers all of them, on every world load,
+        // forever - so the overload cannot matter. And the explicit call below
+        // is a no-op on the path this factory actually runs on: it early-returns
+        // when there is no scene, and this builds at the main menu, where there
+        // is none.
+        //
+        // Both calls are kept anyway. They cost nothing, they say plainly what
+        // this code intends, and the second becomes genuinely load-bearing the
+        // day anybody moves the build later than the main menu - to a point
+        // where a scene already exists and that load's registration would
+        // otherwise be missed.
+        //
+        // The irreversible failure the architecture describes is real. It is
+        // about the prefab NAME and the TIMING - a saved object whose prefab
+        // hash is not in the scene's table when objects are created is
+        // destroyed - and both of those are preserved here: the name comes from
+        // the role's contract and the build is armed for the main menu.
         prefabs.AddPrefab(new CustomPrefab(clone, fixReference: false));
         prefabs.RegisterToZNetScene(clone);
 
@@ -292,7 +335,7 @@ internal sealed class NpcWorkerPrefabFactory
     /// comes up invalid or unowned is destroyed again rather than left standing
     /// as an unidentified stranger the census would then count forever.
     /// </summary>
-    internal NpcBodyMind? TrySpawn(
+    public NpcBodyMind? TrySpawn(
         BodyLease? lease,
         NpcBodyTally tally,
         Vector3 position,

@@ -10,7 +10,7 @@ namespace TheConcernedCat.ConcernedNPC.Body;
 /// because the whole extraction exists to keep one property true: a finished
 /// figure has never contained a networking or AI component, rather than having
 /// contained one and been tidied.</summary>
-internal readonly struct NpcPresentationFigure
+public readonly struct NpcPresentationFigure
 {
     private NpcPresentationFigure(
         GameObject? root,
@@ -34,37 +34,37 @@ internal readonly struct NpcPresentationFigure
 
     /// <summary>The finished figure, active, with nothing inside it that can
     /// run. Null on a refusal.</summary>
-    internal GameObject? Root { get; }
+    public GameObject? Root { get; }
 
     /// <summary>The animator the figure is posed through.</summary>
-    internal Animator? Animator { get; }
+    public Animator? Animator { get; }
 
     /// <summary>Where the source rig hung a helmet, if it is inside the part
     /// that was kept. Null is normal and means the role goes without.</summary>
-    internal Transform? HelmetJoint { get; }
+    public Transform? HelmetJoint { get; }
 
     /// <summary>Where the source rig hung a right-hand item, if it is inside
     /// the part that was kept.</summary>
-    internal Transform? RightHandJoint { get; }
+    public Transform? RightHandJoint { get; }
 
     /// <summary>The body renderer, for a role that tints skin or swaps
     /// garment textures.</summary>
-    internal SkinnedMeshRenderer? BodyModel { get; }
+    public SkinnedMeshRenderer? BodyModel { get; }
 
     /// <summary>How many of the source character's own scripts were taken out
     /// before the figure was ever switched on. Reported even when it is zero,
     /// so a build that found none is distinguishable from a build that refused
     /// every one.</summary>
-    internal int QuietedScripts { get; }
+    public int QuietedScripts { get; }
 
     /// <summary>Their names, for the log line.</summary>
-    internal string QuietedNames { get; }
+    public string QuietedNames { get; }
 
     /// <summary>Why this candidate was refused, or empty when it was
     /// built.</summary>
-    internal string Refusal { get; }
+    public string Refusal { get; }
 
-    internal bool IsBuilt => Root != null;
+    public bool IsBuilt => Root != null;
 
     internal static NpcPresentationFigure Built(
         GameObject root,

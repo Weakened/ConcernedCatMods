@@ -7,7 +7,7 @@ namespace TheConcernedCat.ConcernedNPC.Body;
 /// a census that found nothing are different answers, and only one of them
 /// permits building a body. Defaulting to either would make a forgotten scan
 /// look like a decided one.</summary>
-internal enum NpcBodyPresence
+public enum NpcBodyPresence
 {
     Unspecified = 0,
 

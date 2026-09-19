@@ -5,11 +5,19 @@ using UnityEngine;
 // The mod-framework half of the game surface. See UnityStubs.cs for why.
 //
 // Only the prefab manager is modelled, and only the six members the worker
-// prefab build uses. The one behaviour that matters is the split between
-// "known to the framework by name" and "registered into the network scene":
-// the factory makes both calls deliberately, and a stub that collapsed them
-// into one could not tell the difference between the two-call form it ships and
-// the single-call form one of the products it replaces used.
+// prefab build uses. It records the two calls the factory makes separately so a
+// test can say that both happened.
+//
+// WHAT THIS STUB CANNOT MODEL, stated because an earlier version of this comment
+// claimed the opposite. In the shipped framework the two AddPrefab overloads are
+// the SAME call - one constructs the wrapper and delegates to the other - and
+// neither registers anything into the network scene. What does that is a postfix
+// the framework puts on the scene's own wake-up, which walks every prefab it
+// knows and registers all of them on every world load. Modelling that would mean
+// modelling a Harmony patch on a type this file does not have, so the stub does
+// not try. It therefore proves that the factory makes both calls and nothing at
+// all about what either call achieves; the reason the second one is kept is in
+// the factory's own comment.
 namespace Jotunn.Managers
 {
     public class PrefabManager
@@ -24,9 +32,10 @@ namespace Jotunn.Managers
         /// <summary>Prefabs added to the framework's own table.</summary>
         public List<string> Added { get; } = new List<string>();
 
-        /// <summary>Prefabs registered into the network scene, which is the
-        /// call that decides whether a saved object is recreated or
-        /// destroyed.</summary>
+        /// <summary>Prefabs the explicit scene-registration call was made for.
+        /// Recorded so a test can assert the call happened - not because the
+        /// call is what decides whether a saved object survives, which it is
+        /// not (see the header).</summary>
         public List<string> RegisteredToScene { get; } = new List<string>();
 
         /// <summary>Set by a test: cloning refuses, the way it does when the

@@ -8,7 +8,7 @@ namespace TheConcernedCat.ConcernedNPC.Body;
 /// the poorer one is derivable from it and the reverse is not, and because the
 /// caller that classifies a tool needs the item itself rather than its
 /// name.</summary>
-internal readonly struct NpcDroppedItem
+public readonly struct NpcDroppedItem
 {
     internal NpcDroppedItem(
         string prefabName, string sharedName, int quality, int variant, int count, ItemDrop.ItemData? item)
@@ -23,23 +23,23 @@ internal readonly struct NpcDroppedItem
 
     /// <summary>The name of the prefab the stack drops as, or empty when the
     /// stack named none.</summary>
-    internal string PrefabName { get; }
+    public string PrefabName { get; }
 
     /// <summary>The item's shared name, as the game would show it.</summary>
-    internal string SharedName { get; }
+    public string SharedName { get; }
 
-    internal int Quality { get; }
+    public int Quality { get; }
 
-    internal int Variant { get; }
+    public int Variant { get; }
 
     /// <summary>How many were on the ground, not how many were carried: a stack
     /// that failed to drop is not reported at all.</summary>
-    internal int Count { get; }
+    public int Count { get; }
 
     /// <summary>The item as it was in the body's inventory, for a caller that
     /// has to classify it. Null only when a caller constructed this without
     /// one.</summary>
-    internal ItemDrop.ItemData? Item { get; }
+    public ItemDrop.ItemData? Item { get; }
 
     public override string ToString() =>
         (SharedName.Length == 0 ? PrefabName : SharedName) + " x" + Count;
