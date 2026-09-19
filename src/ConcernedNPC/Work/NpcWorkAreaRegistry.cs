@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace TheConcernedCat.ConcernedNPC.Work;
 
 /// <summary>What happened when a provider offered itself.</summary>
-public enum ProviderRegistration
+internal enum ProviderRegistration
 {
     /// <summary>Nobody asked.</summary>
     Unspecified = 0,
@@ -51,7 +51,7 @@ public enum ProviderRegistration
 /// <b>Not thread-safe, deliberately.</b> Registration is start-up work on the
 /// main thread and resolution is tick work on the main thread, like everything
 /// else that touches the world here. A lock would suggest otherwise.</summary>
-public sealed class NpcWorkAreaRegistry
+internal sealed class NpcWorkAreaRegistry
 {
     private readonly Dictionary<string, INpcWorkAreaProvider> _providers =
         new Dictionary<string, INpcWorkAreaProvider>(StringComparer.Ordinal);

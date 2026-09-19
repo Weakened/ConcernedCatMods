@@ -27,7 +27,7 @@ namespace TheConcernedCat.ConcernedNPC.Work;
 /// by a load, because nothing here is allocated by the game: both halves are
 /// text a person or a role chose, and the geometry travels beside them in
 /// <see cref="NpcWorkAreaDescriptor"/>.</summary>
-public readonly struct NpcWorkAreaId : IEquatable<NpcWorkAreaId>
+internal readonly struct NpcWorkAreaId : IEquatable<NpcWorkAreaId>
 {
     internal NpcWorkAreaId(string providerId, string key)
     {

@@ -29,11 +29,19 @@ public class PublicSurfaceTests
     /// grant carries (<c>BodyClaim</c>, <c>BodyClaimStatus</c>,
     /// <c>BodyLease</c>).
     ///
-    /// <b>Work areas.</b> The provider side a role registers and the resolution
-    /// it gets back (<c>INpcWorkArea</c>, <c>INpcWorkAreaProvider</c>,
-    /// <c>NpcWorkAreaDescriptor</c>, <c>NpcWorkAreaId</c>,
-    /// <c>NpcWorkAreaRegistry</c>, <c>NpcWorkAreaResult</c>,
-    /// <c>ProviderRegistration</c>, <c>WorkAreaResolution</c>, <c>NpcPoint</c>).
+    /// <b>Work areas.</b> Where an NPC may work, and where anything is
+    /// (<c>INpcWorkArea</c>, <c>NpcPoint</c>). <b>The provider side is not
+    /// here.</b> It was, and it was public and undriveable - every factory on
+    /// <c>NpcWorkAreaResult</c>, every member of the descriptor and the id, and
+    /// both verbs on the registry were internal, so nothing outside could
+    /// register a provider or answer as one. Public and unusable is worse than
+    /// internal, because it advertises a capability that does not exist and the
+    /// next reader believes it. It goes public again with the factories that
+    /// drive it, on the day a role rebuilds a saved area after a reload.
+    ///
+    /// <b>Actor mode.</b> What an identity is doing, readable and not writable
+    /// (<c>ActorModeOwner</c>, <c>ActorMode</c>, <c>ActorModeOutcome</c>,
+    /// reached through <c>NpcRoleRegistry.ModeOf</c>).
     ///
     /// <b>Building a body.</b> The entry point and its inputs and outputs, and
     /// nothing else: the factory (<c>NpcWorkerPrefabFactory</c>), what it is
@@ -81,6 +89,9 @@ public class PublicSurfaceTests
     /// discovering it one at a time is three bumps.</summary>
     private static readonly string[] Expected =
     {
+        "TheConcernedCat.ConcernedNPC.Bodies.ActorMode",
+        "TheConcernedCat.ConcernedNPC.Bodies.ActorModeOutcome",
+        "TheConcernedCat.ConcernedNPC.Bodies.ActorModeOwner",
         "TheConcernedCat.ConcernedNPC.Bodies.BodyClaim",
         "TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus",
         "TheConcernedCat.ConcernedNPC.Bodies.BodyLease",
@@ -136,15 +147,8 @@ public class PublicSurfaceTests
         "TheConcernedCat.ConcernedNPC.Work.INpcAreaProbe",
         "TheConcernedCat.ConcernedNPC.Work.INpcEpochScoped",
         "TheConcernedCat.ConcernedNPC.Work.INpcWorkArea",
-        "TheConcernedCat.ConcernedNPC.Work.INpcWorkAreaProvider",
         "TheConcernedCat.ConcernedNPC.Work.NpcPoint",
-        "TheConcernedCat.ConcernedNPC.Work.NpcWorkAreaDescriptor",
-        "TheConcernedCat.ConcernedNPC.Work.NpcWorkAreaId",
-        "TheConcernedCat.ConcernedNPC.Work.NpcWorkAreaRegistry",
-        "TheConcernedCat.ConcernedNPC.Work.NpcWorkAreaResult",
         "TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch",
-        "TheConcernedCat.ConcernedNPC.Work.ProviderRegistration",
-        "TheConcernedCat.ConcernedNPC.Work.WorkAreaResolution",
     };
 
     [Fact]
@@ -261,6 +265,38 @@ public class PublicSurfaceTests
         AssertNoPublicConstructor(typeof(Work.AreaScanReport));
         AssertNoPublicConstructor(typeof(TheConcernedCat.ConcernedNPC.Jobs.NpcJobAdvance));
         AssertNoPublicConstructor(typeof(TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver));
+
+        // The mode owner is the sharpest case on this list, because reading it
+        // and changing it are the same object. A consumer that could construct
+        // one would run a second mode system for an identity that the arbiter
+        // cannot see - which is the condition that lets one identity end up with
+        // two bodies, and exactly what the shipped products do today from their
+        // own compiled copies. A consumer that could call Enter, Release or
+        // AbandonForWorldUnload would be worse still: not a private mode system
+        // beside the shared one, but a hand inside it.
+        AssertNoPublicConstructor(typeof(Bodies.ActorModeOwner));
+        AssertNotPublic(typeof(Bodies.ActorModeOwner), "Enter");
+        AssertNotPublic(typeof(Bodies.ActorModeOwner), "Release");
+        AssertNotPublic(typeof(Bodies.ActorModeOwner), "AbandonForWorldUnload");
+
+        // And the read surface a role actually needs is there, so the pair is
+        // not merely shut.
+        foreach (string member in new[]
+                 { "Identity", "Mode", "JobId", "Revision", "MayRelocateHome", "MayRetireBody", "IsHeldBy" })
+        {
+            Assert.True(
+                typeof(Bodies.ActorModeOwner).GetMember(
+                    member, BindingFlags.Public | BindingFlags.Instance).Length > 0,
+                "ActorModeOwner." + member + " is not public. Reading a mode is the whole reason the type "
+                + "is reachable at all; without it a role is left with the bypass the validator forbids.");
+        }
+
+        Assert.NotNull(typeof(NpcRoleRegistry).GetMethod("ModeOf", BindingFlags.Public | BindingFlags.Instance));
+    }
+
+    private static void AssertNotPublic(Type type, string member)
+    {
+        Assert.Empty(type.GetMember(member, BindingFlags.Public | BindingFlags.Instance));
     }
 
     [Fact]
