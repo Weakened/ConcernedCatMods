@@ -42,7 +42,13 @@
     <!-- #380: the adapters that read the real recipe, the real ward and the
          real ground. These are the only construction files that touch the game,
          and they are the ones a review would otherwise have to take on trust. -->
-    <Compile Include="..\ConcernedForeman\Runtime\Construction\**\*.cs" LinkBase="Product/Construction" />
+    <Compile Include="..\ConcernedForeman\Runtime\Construction\**\*.cs"
+             Exclude="..\ConcernedForeman\Runtime\Construction\BuildCommand.cs"
+             LinkBase="Product/Construction" />
+    <!-- BuildCommand is a Jotunn ConsoleCommand and nothing else: it forwards
+         its words to BuildOrderRuntime, which IS linked and IS tested. Stubbing
+         Jotunn's entity base class to prove a forward is not evidence about
+         anything, and it is why CollectCommand is not linked here either. -->
 
     <!-- The game-free layers those sources sit on, the same way
          Shared.Settlement.Tests links them. -->

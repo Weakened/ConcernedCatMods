@@ -112,6 +112,11 @@ namespace UnityEngine
     public class Transform : Object
     {
         public Vector3 position;
+
+        /// <summary>#380: a build order takes the facing the player is standing
+        /// in, and that is the only rotation anything in this product reads.
+        /// </summary>
+        public Quaternion rotation = Quaternion.identity;
     }
 
     public class GameObject : Object

@@ -62,8 +62,21 @@ internal readonly struct BuildOrderMarker
 
     /// <summary>A marker a player is still aiming: it has a place and a facing
     /// and it authorises nothing.</summary>
-    internal static BuildOrderMarker Proposed(BuildOrderKind kind, SitePoint at, float yaw) =>
-        new BuildOrderMarker(kind, at, yaw, confirmed: false);
+    /// <returns>A proposal, or nothing at all when the place is not a place.
+    /// <b>The refusal matters more than it looks.</b> A runtime that asks where
+    /// the player is standing while there is no player gets a default point -
+    /// which is the world origin, a perfectly finite coordinate - and a marker
+    /// made from it is a cottage proposed at the middle of the map by a
+    /// question nobody answered.</returns>
+    internal static BuildOrderMarker Proposed(BuildOrderKind kind, SitePoint at, float yaw)
+    {
+        if (kind == BuildOrderKind.None || !IsFinite(at) || float.IsNaN(yaw) || float.IsInfinity(yaw))
+        {
+            return default;
+        }
+
+        return new BuildOrderMarker(kind, at, yaw, confirmed: false);
+    }
 
     /// <summary>The player's confirmation. The one call in this product that
     /// turns a position into permission to place real pieces.</summary>
