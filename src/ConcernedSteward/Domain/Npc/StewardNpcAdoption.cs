@@ -100,7 +100,7 @@ internal sealed class StewardNpcAdoption
         {
             _log?.Invoke(
                 "The Steward could not register with Concerned NPC (" + outcome.Status +
-                ": " + outcome.Reason + "). He will not take a body this session.");
+                ": " + outcome.Reason + "). She will not take a body this session.");
         }
 
         return outcome;

@@ -171,7 +171,7 @@ internal sealed class StewardFiresCommand : ConsoleCommand
             text.AppendLine("Fires the Steward last looked at: " +
                 scan.Examined.ToString(CultureInfo.InvariantCulture) + " of " +
                 scan.Offered.ToString(CultureInfo.InvariantCulture) +
-                (scan.Truncated ? " (more than he looks at in one go)" : string.Empty));
+                (scan.Truncated ? " (more than she looks at in one go)" : string.Empty));
 
             foreach (var verdict in scan.Considered)
             {
@@ -183,7 +183,7 @@ internal sealed class StewardFiresCommand : ConsoleCommand
 
             if (scan.Examined == 0)
             {
-                text.AppendLine("  (nothing — he may not have looked yet, or there is no scope)");
+                text.AppendLine("  (nothing — she may not have looked yet, or there is no scope)");
             }
 
             text.Append(StewardRole.DisplayNameFallbackCapitalised + ": " + _runtime.Loop.Explanation);

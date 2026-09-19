@@ -5,6 +5,7 @@ using System.Linq;
 using TheConcernedCat.ConcernedNPC.Bodies;
 using TheConcernedCat.ConcernedNPC.Roles;
 using TheConcernedCat.ConcernedSteward.Domain;
+using TheConcernedCat.ConcernedSteward.Domain.Appearance;
 using TheConcernedCat.ConcernedSteward.Domain.Npc;
 using TheConcernedCat.ConcernedSteward.Domain.Persistence;
 using TheConcernedCat.ConcernedSteward.Domain.Quest;
@@ -499,6 +500,91 @@ public sealed class StewardNpcAdoptionTests
             Assert.False(paths.TryResolveFile(purpose, out string resolved));
             Assert.Equal(string.Empty, resolved);
         }
+    }
+}
+
+/// <summary>What she looks like, decided without the game running.</summary>
+public sealed class StewardLookTests
+{
+    [Fact]
+    public void The_leather_is_always_the_last_candidate_and_needs_no_dependency()
+    {
+        StewardLook look = StewardLooks.From(
+            modelIndex: 1, preferredChest: null, preferredLegs: null,
+            hairItem: null, hairColour: StewardLooks.DefaultHairColour, skinColour: null);
+
+        Outfit only = Assert.Single(look.Clothing);
+        Assert.Equal(StewardLooks.LeatherChest, only.Chest);
+        Assert.Equal(StewardLooks.LeatherLegs, only.Legs);
+    }
+
+    [Fact]
+    public void A_garment_somebody_named_is_tried_before_the_leather_and_never_instead_of_it()
+    {
+        StewardLook look = StewardLooks.From(
+            modelIndex: 1, preferredChest: "  ArmorSomeRobe  ", preferredLegs: null,
+            hairItem: null, hairColour: null, skinColour: null);
+
+        Assert.Equal(2, look.Clothing.Count);
+        Assert.Equal("ArmorSomeRobe", look.Clothing[0].Chest);
+        Assert.Equal(string.Empty, look.Clothing[0].Legs);
+
+        // The fallback is still there, so a name this build does not have
+        // produces leather rather than nothing.
+        Assert.Equal(StewardLooks.LeatherChest, look.Clothing[1].Chest);
+    }
+
+    [Fact]
+    public void She_is_the_female_model_by_default_and_light_haired()
+    {
+        StewardLook look = StewardLooks.From(
+            modelIndex: 1, preferredChest: null, preferredLegs: null,
+            hairItem: null, hairColour: StewardLooks.DefaultHairColour, skinColour: null);
+
+        Assert.Equal(1, look.ModelIndex);
+        Assert.NotNull(look.HairColour);
+        Assert.True(look.HairColour!.Value.Red > 0.8f);
+        Assert.True(look.HairColour!.Value.Blue < look.HairColour!.Value.Red);
+
+        // Nothing is said about her skin or her hair mesh, because nothing can
+        // be proved about them from the assembly.
+        Assert.Null(look.SkinColour);
+        Assert.Equal(string.Empty, look.HairItem);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("1,2")]
+    [InlineData("1,2,3,4")]
+    [InlineData("red,green,blue")]
+    [InlineData("0.5,,0.5")]
+    public void A_colour_that_cannot_be_read_leaves_the_base_creature_alone(string text)
+    {
+        // Never black. A setting nobody can parse must not be the setting that
+        // turns her into a silhouette.
+        Assert.False(LookColour.TryParse(text, out _));
+
+        StewardLook look = StewardLooks.From(1, null, null, null, text, text);
+        Assert.Null(look.HairColour);
+        Assert.Null(look.SkinColour);
+    }
+
+    [Fact]
+    public void A_colour_outside_the_range_is_clamped_rather_than_refused()
+    {
+        Assert.True(LookColour.TryParse("2,-1,0.5", out LookColour colour));
+        Assert.Equal(1f, colour.Red);
+        Assert.Equal(0f, colour.Green);
+        Assert.Equal(0.5f, colour.Blue);
+    }
+
+    [Fact]
+    public void A_look_that_says_nothing_applies_nothing()
+    {
+        var silent = new StewardLook(0, null, null, null, null);
+
+        Assert.False(silent.SaysAnything);
     }
 }
 

@@ -284,7 +284,7 @@ internal sealed class StewardPackStore : WorldItemStore
         if (body == null || !body.LastChangePersisted)
         {
             throw new InvalidOperationException(
-                "the Steward's inventory change could not be written to his own body");
+                "the Steward's inventory change could not be written to her own body");
         }
     }
 }

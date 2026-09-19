@@ -7,6 +7,7 @@ using BepInEx;
 using BepInEx.Bootstrap;
 using TheConcernedCat.ConcernedSteward.Domain;
 using TheConcernedCat.ConcernedNPC.Roles;
+using TheConcernedCat.ConcernedSteward.Domain.Appearance;
 using TheConcernedCat.ConcernedSteward.Domain.Interop;
 using TheConcernedCat.ConcernedSteward.Domain.Npc;
 using TheConcernedCat.ConcernedSteward.Domain.Persistence;
@@ -45,6 +46,7 @@ internal sealed class StewardRuntime
     private readonly StewardQuest _quest;
     private readonly ResinWatch _resin = new ResinWatch();
     private readonly ResinSightings _sightings;
+    private readonly StewardAppearance _appearance;
     private readonly StewardRecordStore _records;
     private readonly RecordBackedJournal _journal;
     private readonly StewardNpcAdoption _npc;
@@ -83,6 +85,15 @@ internal sealed class StewardRuntime
         _quest = new StewardQuest(new RuntimeQuestRecorder(this));
         _sightings = new ResinSightings(
             () => _settings.QuestPickupItem.Value, message => _log(message));
+        _appearance = new StewardAppearance(
+            () => StewardLooks.From(
+                _settings.ModelIndex.Value,
+                _settings.Garment.Value,
+                _settings.GarmentLegs.Value,
+                hairItem: string.Empty,
+                hairColour: _settings.HairColour.Value,
+                skinColour: string.Empty),
+            message => _log(message));
         _loop = new UpkeepLoop(UpkeepLimits.Default, _journal, Report);
         _motion = new StewardMotion(() => _body);
         _pack = new StewardPackStore(() => _census.Live);
@@ -304,6 +315,11 @@ internal sealed class StewardRuntime
             return;
         }
 
+        // Dressed when a body binds, which is the one moment a live, owned
+        // VisEquipment is in front of us. Idempotent, so re-binding after a
+        // reload costs nothing and a body that arrives undressed is dressed.
+        _appearance.Apply(ai.gameObject);
+
         ai.UseSitePolicy(new WorldStewardSitePolicy());
         ai.ErrorLog = message => _log(message);
         ai.DebugLog = _settings.DebugLogging.Value ? message => _log(message) : null;
@@ -353,7 +369,7 @@ internal sealed class StewardRuntime
 
         _loop.Stop(
             StewardRole.DisplayNameFallbackCapitalised + " died at " +
-            where.ToString() + ". Everything he carried is on the ground there — " +
+            where.ToString() + ". Everything she carried is on the ground there — " +
             Describe(dropped) + ". Nothing was recreated.");
         _log(_loop.Explanation);
     }
@@ -362,7 +378,7 @@ internal sealed class StewardRuntime
     {
         if (dropped == null || dropped.Count == 0)
         {
-            return "he was carrying nothing";
+            return "she was carrying nothing";
         }
 
         var text = new System.Text.StringBuilder();
@@ -438,8 +454,8 @@ internal sealed class StewardRuntime
         _scope.Undesignate(kind);
         _loop.Stop("What the Steward was working on was un-marked.");
         Persist();
-        return "Un-marked. The Steward has stopped; anything he is carrying is still his to " +
-            "put back, and his record still says so.";
+        return "Un-marked. The Steward has stopped; anything she is carrying is still her to " +
+            "put back, and her record still says so.";
     }
 
     /// <summary>Takes the introduction as far as it will go in one command, so
@@ -661,13 +677,13 @@ internal sealed class StewardRuntime
 
         if (!_introduction.Dismiss())
         {
-            return "He does not work here.";
+            return "She does not work here.";
         }
 
         _loop.Stop(StewardSentences.Dismissed());
         Persist();
         return StewardSentences.Dismissed() +
-            " His body stays where it is, and nothing has been destroyed.";
+            " Her body stays where it is, and nothing has been destroyed.";
     }
 
     internal string Acknowledge()
@@ -696,20 +712,20 @@ internal sealed class StewardRuntime
 
         if (!StewardWorkerPrefab.IsReady)
         {
-            return prefix + " He has no body to appear in: " +
+            return prefix + " She has no body to appear in: " +
                 (StewardWorkerPrefab.LastFailure ?? "the prefab was not built") + ".";
         }
 
         Vector3? at = StewardTargets.LocalPlayerPosition();
         if (at == null)
         {
-            return prefix + " There is no local player, so there is nowhere for him to stand.";
+            return prefix + " There is no local player, so there is nowhere for her to stand.";
         }
 
         StewardWorkerAI? spawned = StewardWorkerPrefab.Spawn(at.Value, Quaternion.identity);
         if (spawned == null)
         {
-            return prefix + " He could not appear here; that ground is not loaded.";
+            return prefix + " She could not appear here; that ground is not loaded.";
         }
 
         if (!StewardBody.TryStamp(spawned.gameObject, StewardRole.Worker.Value))
@@ -717,7 +733,7 @@ internal sealed class StewardRuntime
             // Unstamped, so the census will not adopt it and will report it as
             // an unidentified body. Destroying it would be the other option and
             // is worse: it is a live object this process may not own.
-            return prefix + " He appeared but could not be given his identity; he will not work. " +
+            return prefix + " She appeared but could not be given her identity; she will not work. " +
                 "Please report this.";
         }
 

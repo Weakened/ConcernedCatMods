@@ -1,4 +1,5 @@
 using BepInEx.Configuration;
+using TheConcernedCat.ConcernedSteward.Domain.Appearance;
 
 namespace TheConcernedCat.ConcernedSteward.Runtime;
 
@@ -23,13 +24,21 @@ internal sealed class StewardSettings
         ConfigEntry<bool> tendFiresEnabled,
         ConfigEntry<bool> debugLogging,
         ConfigEntry<string> baseCreature,
-        ConfigEntry<string> questPickupItem)
+        ConfigEntry<string> questPickupItem,
+        ConfigEntry<int> modelIndex,
+        ConfigEntry<string> garment,
+        ConfigEntry<string> garmentLegs,
+        ConfigEntry<string> hairColour)
     {
         RuntimeEnabled = runtimeEnabled;
         TendFiresEnabled = tendFiresEnabled;
         DebugLogging = debugLogging;
         BaseCreature = baseCreature;
         QuestPickupItem = questPickupItem;
+        ModelIndex = modelIndex;
+        Garment = garment;
+        GarmentLegs = garmentLegs;
+        HairColour = hairColour;
     }
 
     /// <summary>The master switch. False by default. With it false the Steward
@@ -69,6 +78,40 @@ internal sealed class StewardSettings
     /// down here.</summary>
     public ConfigEntry<string> QuestPickupItem { get; }
 
+    /// <summary>Which of the base creature's models she wears. One is the female
+    /// model where a creature has two, which is vanilla's own convention; a base
+    /// creature with only one model ignores this, because
+    /// <c>VisEquipment.SetModel</c> refuses an index outside its own array.
+    /// </summary>
+    public ConfigEntry<int> ModelIndex { get; }
+
+    /// <summary>A dress or robe to try before the leather.
+    ///
+    /// Empty by default, and that is an honest default rather than a missing
+    /// one. #382 asks for a suitable vanilla dress or robe <i>if one exists</i>,
+    /// and whether one does cannot be established from the installed assembly:
+    /// armour prefab names are asset-bundle data. So the leather tunic and
+    /// leather pants the issue names as the first-playable fallback are what
+    /// ships, and this is the one line to change for anybody — the owner, or a
+    /// player with a clothing mod — who knows a better name. A name this build
+    /// does not have costs a log line and falls through to the leather.
+    ///
+    /// <b>No third-party asset is named here, shipped here, or depended on
+    /// here.</b> #382 allows investigating one only as a future option and only
+    /// with the owner's approval, and nothing in this repository may add, copy
+    /// or redistribute somebody else's work. A player who has one already can
+    /// type its name; that is the whole of the support offered.</summary>
+    public ConfigEntry<string> Garment { get; }
+
+    /// <summary>Legs to go with <see cref="Garment"/>. Leave empty for a
+    /// garment that covers the legs by itself.</summary>
+    public ConfigEntry<string> GarmentLegs { get; }
+
+    /// <summary>Her hair colour, as <c>r,g,b</c> between zero and one. Light
+    /// blonde by default. Anything that cannot be read leaves the base
+    /// creature's own colouring alone rather than turning her black.</summary>
+    public ConfigEntry<string> HairColour { get; }
+
     public static StewardSettings Bind(ConfigFile config)
     {
         ConfigEntry<bool> runtime = config.Bind(
@@ -86,9 +129,9 @@ internal sealed class StewardSettings
             "TendFiresEnabled",
             false,
             "Let the Steward keep the settlement's fires burning with wood from the chest you " +
-            "marked. OFF by default, separately from the runtime switch: recruiting him and " +
-            "letting him reach into your chest are different decisions. He walks the whole " +
-            "way, takes only from the marked chest, and puts back whatever he does not burn.");
+            "marked. OFF by default, separately from the runtime switch: recruiting her and " +
+            "letting her reach into your chest are different decisions. She walks the whole " +
+            "way, takes only from the marked chest, and puts back whatever she does not burn.");
 
         ConfigEntry<bool> debug = config.Bind(
             "Diagnostics",
@@ -104,7 +147,7 @@ internal sealed class StewardSettings
             "The vanilla humanoid prefab the Steward's body is cloned from. Its AI is removed " +
             "and replaced; only the body, animator and network view are kept. If this prefab " +
             "does not exist in your game build, or is not a networked humanoid, no Steward is " +
-            "created and the reason is logged. His final appearance is not settled yet.");
+            "created and the reason is logged. Her final appearance is not settled yet.");
 
         ConfigEntry<string> questItem = config.Bind(
             "Steward",
@@ -115,6 +158,39 @@ internal sealed class StewardSettings
             "the item itself is looked up in the game, so a name this build does not have is " +
             "reported and the introduction simply never starts.");
 
-        return new StewardSettings(runtime, tend, debug, creature, questItem);
+        ConfigEntry<int> model = config.Bind(
+            "Appearance",
+            "ModelIndex",
+            1,
+            "Which of the base creature's models the Steward wears. 1 is the female model where " +
+            "a creature has two. A base creature with only one model ignores this.");
+
+        ConfigEntry<string> garment = config.Bind(
+            "Appearance",
+            "Garment",
+            string.Empty,
+            "A dress or robe for her to wear, by item prefab name, tried before the leather. " +
+            "Empty by default: item prefab names are asset data and this mod will not guess one. " +
+            "A name this game build does not have is reported and the leather is worn instead. " +
+            "No clothing from another mod is included, copied or depended on here; naming one " +
+            "you already have installed is the whole of the support offered.");
+
+        ConfigEntry<string> garmentLegs = config.Bind(
+            "Appearance",
+            "GarmentLegs",
+            string.Empty,
+            "Legs to go with Garment, by item prefab name. Leave empty for a garment that " +
+            "covers the legs by itself.");
+
+        ConfigEntry<string> hairColour = config.Bind(
+            "Appearance",
+            "HairColour",
+            StewardLooks.DefaultHairColour,
+            "Her hair colour, as three numbers between 0 and 1 separated by commas. Light " +
+            "blonde by default. Anything that cannot be read leaves the base creature's own " +
+            "colouring alone.");
+
+        return new StewardSettings(
+            runtime, tend, debug, creature, questItem, model, garment, garmentLegs, hairColour);
     }
 }

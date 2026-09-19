@@ -76,7 +76,7 @@ internal sealed class StewardCensus
                 return "The Steward is here.";
 
             case StewardCensusVerdict.Unloaded:
-                return "The Steward is in the world but his part of it is not loaded, so he is " +
+                return "The Steward is in the world but her part of it is not loaded, so she is " +
                     "not doing anything. Go back to the settlement.";
 
             case StewardCensusVerdict.Missing:
@@ -94,12 +94,12 @@ internal sealed class StewardCensus
 
             case StewardCensusVerdict.Duplicated:
                 return "There are " + Saved.ToString(CultureInfo.InvariantCulture) + " bodies " +
-                    "carrying the Steward's identity. He will not work until there is one. " +
+                    "carrying the Steward's identity. She will not work until there is one. " +
                     "Nothing has been destroyed, because one of them may be carrying your " +
                     "materials — please report this.";
 
             default:
-                return "How many Stewards this world has could not be established, so he is " +
+                return "How many Stewards this world has could not be established, so she is " +
                     "not working.";
         }
     }

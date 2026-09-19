@@ -238,7 +238,7 @@ internal sealed class WorldFuelTargets : IFuelTargetPort
         if (reach > ReachMetres)
         {
             return Nothing(
-                "he is " + reach.ToString("0.#", CultureInfo.InvariantCulture) + " m from that " +
+                "she is " + reach.ToString("0.#", CultureInfo.InvariantCulture) + " m from that " +
                 "fire and only reaches " + ReachMetres.ToString("0.#", CultureInfo.InvariantCulture) +
                 " m, the same as a player");
         }
@@ -261,7 +261,7 @@ internal sealed class WorldFuelTargets : IFuelTargetPort
         {
             return new FeedMeasurement(
                 FeedOutcome.Uncertain, carriedBefore, carriedBefore, fuelBefore, fuelBefore,
-                "the Steward could not read what he was carrying or what the fire held, so he " +
+                "the Steward could not read what she was carrying or what the fire held, so she " +
                 "did not touch it");
         }
 
@@ -297,7 +297,7 @@ internal sealed class WorldFuelTargets : IFuelTargetPort
     {
         string numbers = string.Format(
             CultureInfo.InvariantCulture,
-            " (he held {0} {1} and now holds {2}; the fire was at {3} and is at {4})",
+            " (she held {0} {1} and now holds {2}; the fire was at {3} and is at {4})",
             carriedBefore, fuelName, Text(carriedAfter),
             FuelMath.Describe(fuelBefore, fireplace.m_maxFuel),
             float.IsNaN(fuelAfter) ? "?" : FuelMath.Describe(fuelAfter, fireplace.m_maxFuel));

@@ -136,12 +136,17 @@ public sealed class RecruitmentTests
         Assert.True(introduction.IsEngaged);
     }
 
+    /// <summary>The owner named her in #382, and the whole point of keeping the
+    /// name out of the identity was that naming her would cost one string.
+    ///
+    /// This test used to assert that nothing she says carries a name. It now
+    /// asserts the thing that actually mattered: that the name moved and the
+    /// identity did not. A saved body, a record row and a capability handshake
+    /// written by the build before she was named are found by exactly the same
+    /// three values they always were.</summary>
     [Fact]
-    public void Nothing_he_says_carries_a_name_yet()
+    public void She_has_a_name_now_and_none_of_the_identity_moved_with_it()
     {
-        // The proper name is owner-TBD (#340). A placeholder that reads like a
-        // real one would get into saves, screenshots and changelogs, and
-        // renaming him would then be a migration instead of a text edit.
         string[] lines =
         {
             StewardSentences.ForStage(IntroductionStage.Noticed),
@@ -153,14 +158,38 @@ public sealed class RecruitmentTests
 
         foreach (string line in lines)
         {
+            // Still nobody else's name, and still nothing that reads as a
+            // placeholder.
             Assert.DoesNotContain("Hulgi", line);
             Assert.DoesNotContain("Thorstein", line);
             Assert.DoesNotContain("Gunnar", line);
         }
 
-        Assert.Equal("the Steward", StewardRole.DisplayNameFallback);
+        Assert.Equal("Sunniva", StewardRole.DisplayNameFallback);
+
+        // Unchanged, and this is the half with a cost: renaming any of these
+        // orphans every saved body and every record that used the old one.
         Assert.Equal("steward", StewardRole.RoleKey);
         Assert.Equal("steward/steward", StewardRole.Worker.Value);
+        Assert.Equal("CS_Steward", StewardRole.BodyPrefabName);
+        Assert.Equal("tcc.steward.", StewardRole.BodyKeyPrefix);
+    }
+
+    /// <summary>Every sentence goes through the one constant, so the next rename
+    /// costs the same one edit this one did.</summary>
+    [Fact]
+    public void Her_name_is_spelled_in_exactly_one_place()
+    {
+        foreach (string line in new[]
+        {
+            StewardSentences.ForStage(IntroductionStage.Noticed),
+            StewardSentences.ForStage(IntroductionStage.Engaged),
+            StewardSentences.WelcomeBack(),
+            StewardSentences.Dismissed(),
+        })
+        {
+            Assert.Contains(StewardRole.DisplayNameFallbackCapitalised, line);
+        }
     }
 }
 

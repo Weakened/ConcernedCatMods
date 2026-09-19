@@ -228,7 +228,7 @@ internal sealed class UpkeepLoop
             case UpkeepPhase.Feeding: TickFeed(tick); break;
             case UpkeepPhase.Returning: TickWalk(tick, tick.Scope.DepotPoint, UpkeepPhase.Depositing); break;
             case UpkeepPhase.Depositing: TickDeposit(tick); break;
-            default: StopAndIdle(tick, "The Steward was in no recognised state, so he stopped."); break;
+            default: StopAndIdle(tick, "The Steward was in no recognised state, so she stopped."); break;
         }
     }
 
@@ -261,12 +261,12 @@ internal sealed class UpkeepLoop
 
         if (!_journal.IsWritable)
         {
-            return "The Steward's record cannot be written just now, so he is not moving anything.";
+            return "The Steward's record cannot be written just now, so she is not moving anything.";
         }
 
         if (tick.Motion == null || !tick.Motion.IsPresent)
         {
-            return "The Steward is not here. Recruit him, or wait for his part of the world to load.";
+            return "The Steward is not here. Recruit her, or wait for her part of the world to load.";
         }
 
         // A trip that started against one settlement must not finish against
@@ -274,7 +274,7 @@ internal sealed class UpkeepLoop
         if (_phase != UpkeepPhase.Idle && _scopeRevision != tick.Scope.Revision)
         {
             return "The settlement or the supply chest changed while the Steward was working, " +
-                "so he stopped. He is still carrying whatever he picked up.";
+                "so she stopped. She is still carrying whatever she picked up.";
         }
 
         return null;
@@ -314,8 +314,8 @@ internal sealed class UpkeepLoop
         if (_custody.HasLoss)
         {
             Halt("Some of the wood the Steward took cannot be accounted for (" +
-                _custody.Describe() + "). He has stopped. Run \"cs_steward resolve\" once you " +
-                "have looked, and he will start again.");
+                _custody.Describe() + "). She has stopped. Run \"cs_steward resolve\" once you " +
+                "have looked, and she will start again.");
             return;
         }
 
@@ -407,7 +407,7 @@ internal sealed class UpkeepLoop
         if (!_custody.TryReset())
         {
             _reservation.Release(StewardRole.UpkeepJobId);
-            Halt("The Steward's record still has wood unaccounted for, so he did not start " +
+            Halt("The Steward's record still has wood unaccounted for, so she did not start " +
                 "another trip. " + _custody.Describe() + ".");
             return;
         }
@@ -464,7 +464,7 @@ internal sealed class UpkeepLoop
 
         if (scan.Truncated)
         {
-            text += ". He looks at " + _limits.MaxTargetsScanned.ToString(CultureInfo.InvariantCulture) +
+            text += ". She looks at " + _limits.MaxTargetsScanned.ToString(CultureInfo.InvariantCulture) +
                 " fires at a time and the settlement holds " +
                 scan.Offered.ToString(CultureInfo.InvariantCulture);
         }
@@ -480,7 +480,7 @@ internal sealed class UpkeepLoop
     {
         if (_deadline.IsExpired(tick.Now))
         {
-            GiveUpOnThisLeg(tick, "he could not get there in time");
+            GiveUpOnThisLeg(tick, "she could not get there in time");
             return;
         }
 
@@ -509,12 +509,12 @@ internal sealed class UpkeepLoop
     {
         switch (reason)
         {
-            case WorkerDeferralReason.Unreachable: return "he could not find a way there";
-            case WorkerDeferralReason.TooFar: return "it is further than he will walk in one go";
+            case WorkerDeferralReason.Unreachable: return "she could not find a way there";
+            case WorkerDeferralReason.TooFar: return "it is further than she will walk in one go";
             case WorkerDeferralReason.Hazardous: return "the ground there is dangerous";
-            case WorkerDeferralReason.NoAuthority: return "he is not allowed to act there";
+            case WorkerDeferralReason.NoAuthority: return "she is not allowed to act there";
             case WorkerDeferralReason.OutsideLoadedGround: return "that part of the world is not loaded";
-            default: return "he stopped walking";
+            default: return "she stopped walking";
         }
     }
 
@@ -530,15 +530,15 @@ internal sealed class UpkeepLoop
         if (_custody.Carried > 0 && _phase != UpkeepPhase.Returning)
         {
             Enter(UpkeepPhase.Returning, tick.Now,
-                "The Steward stopped because " + because + ", so he is taking the " +
+                "The Steward stopped because " + because + ", so she is taking the " +
                 _custody.Carried.ToString(CultureInfo.InvariantCulture) +
-                " he is carrying back to the chest.");
+                " she is carrying back to the chest.");
             return;
         }
 
         _reservation.Release(StewardRole.UpkeepJobId);
         string tail = decision.GiveUp
-            ? " He has stopped trying for now."
+            ? " She has stopped trying for now."
             : string.Empty;
         StopAndIdle(tick, "The Steward stopped because " + because + "." + tail);
     }
@@ -552,13 +552,13 @@ internal sealed class UpkeepLoop
         int planned = _reservation.PlannedUnits;
         if (planned < 1 || !_reservation.IsHeldBy(StewardRole.UpkeepJobId))
         {
-            StopAndIdle(tick, "The Steward lost track of which fire he was fetching for.");
+            StopAndIdle(tick, "The Steward lost track of which fire she was fetching for.");
             return;
         }
 
         if (!tick.Depot.IsAvailable || !tick.Carrier.IsAvailable)
         {
-            GiveUpOnThisLeg(tick, "the supply chest or his own pack could not be used");
+            GiveUpOnThisLeg(tick, "the supply chest or her own pack could not be used");
             return;
         }
 
@@ -606,7 +606,7 @@ internal sealed class UpkeepLoop
                 // retried and nothing is put back by guess.
                 Halt("A withdrawal from the supply chest could not be accounted for, so the " +
                     "Steward stopped: " + measurement.Evidence +
-                    ". Nothing was retried. Check the chest and his pack, then run " +
+                    ". Nothing was retried. Check the chest and her pack, then run " +
                     "\"cs_steward resolve\".");
                 break;
         }
@@ -664,7 +664,7 @@ internal sealed class UpkeepLoop
         if (!_journal.TryRecordIntent(intent))
         {
             Enter(UpkeepPhase.Returning, tick.Now,
-                "The Steward could not write down what he was about to do, so he did nothing " +
+                "The Steward could not write down what she was about to do, so she did nothing " +
                 "and is taking the wood back.");
             return;
         }
@@ -714,8 +714,8 @@ internal sealed class UpkeepLoop
                     _custody.Carried.ToString(CultureInfo.InvariantCulture) + " left to carry.";
                 if (!receipted)
                 {
-                    Halt("The Steward put wood on the fire but could not write down that he " +
-                        "had, so he stopped rather than risk doing it twice. " +
+                    Halt("The Steward put wood on the fire but could not write down that she " +
+                        "had, so she stopped rather than risk doing it twice. " +
                         measurement.Evidence);
                 }
 
@@ -740,7 +740,7 @@ internal sealed class UpkeepLoop
                 break;
 
             default:
-                Halt("The Steward could not tell whether the fire took the wood, so he " +
+                Halt("The Steward could not tell whether the fire took the wood, so she " +
                     "stopped. Nothing was tried again. " + measurement.Evidence +
                     ". Run \"cs_steward resolve\" once you have looked.");
                 break;
@@ -757,7 +757,7 @@ internal sealed class UpkeepLoop
             case FuelTargetStatus.InfiniteFuel: return "it never runs out";
             case FuelTargetStatus.OutsideSettlement: return "it is outside the marked settlement";
             case FuelTargetStatus.AccessDenied: return "a ward covers it";
-            case FuelTargetStatus.StaleIdentity: return "it is no longer the fire he set out for";
+            case FuelTargetStatus.StaleIdentity: return "it is no longer the fire she set out for";
             case FuelTargetStatus.WrongFuel: return "it burns something else";
             default: return "it could not be checked";
         }
@@ -802,7 +802,7 @@ internal sealed class UpkeepLoop
                         "The supply chest only had room for " +
                         measurement.Moved.ToString(CultureInfo.InvariantCulture) + ". The Steward " +
                         "is still holding " + _custody.Carried.ToString(CultureInfo.InvariantCulture) +
-                        "; make room and he will put it back.");
+                        "; make room and she will put it back.");
                     return;
                 }
 
@@ -814,7 +814,7 @@ internal sealed class UpkeepLoop
                 StopAndIdle(tick,
                     "There is no room in the supply chest, so the Steward is still holding " +
                     carried.ToString(CultureInfo.InvariantCulture) + " " + _fuelItemName +
-                    ". He will try again when there is room.");
+                    ". She will try again when there is room.");
                 break;
 
             default:
@@ -898,7 +898,7 @@ internal sealed class UpkeepLoop
         {
             return new TransferMeasurement(
                 UpkeepOutcome.Refused, 0, string.Empty,
-                "The Steward could not write down what he was about to do, so he did nothing.");
+                "The Steward could not write down what she was about to do, so she did nothing.");
         }
 
         int requested = Math.Min(asked, room);
@@ -999,7 +999,7 @@ internal sealed class UpkeepLoop
                 return;
             }
 
-            Halt("The Steward's pack could not be counted after loading, and his record has " +
+            Halt("The Steward's pack could not be counted after loading, and her record has " +
                 unresolved.Count.ToString(CultureInfo.InvariantCulture) + " unfinished step(s). " +
                 "Nothing has been tried again. Run \"cs_steward resolve\" once you have looked.");
             return;
@@ -1030,13 +1030,13 @@ internal sealed class UpkeepLoop
 
         if (unresolved.Count > 0 || difference != 0)
         {
-            _explanation = "The Steward stopped mid-errand when the game closed. He is holding " +
+            _explanation = "The Steward stopped mid-errand when the game closed. She is holding " +
                 _custody.Carried.ToString(CultureInfo.InvariantCulture) +
                 " and will put it back before starting anything new" +
                 (difference == 0
                     ? "."
-                    : "; his record was " + Math.Abs(difference).ToString(CultureInfo.InvariantCulture) +
-                      " out and has been corrected to what he is actually carrying.");
+                    : "; her record was " + Math.Abs(difference).ToString(CultureInfo.InvariantCulture) +
+                      " out and has been corrected to what she is actually carrying.");
         }
         else
         {

@@ -212,7 +212,7 @@ public sealed class TargetScanTests
 /// <b>The point of all of these is that the answer changes nothing.</b> Bulk
 /// restocking is not built; the probe exists so the shape of "the other mod is
 /// absent or different" is settled while there is nothing behind it. In every
-/// case below the Steward carries his own wood exactly as before.</summary>
+/// case below the Steward carries her own wood exactly as before.</summary>
 public sealed class RestockProviderTests
 {
     [Fact]
@@ -222,7 +222,7 @@ public sealed class RestockProviderTests
 
         Assert.Equal(CapabilityStatus.Absent, discovery.Status);
         Assert.False(discovery.IsAvailable);
-        Assert.Contains("carries his own wood", discovery.LogLine);
+        Assert.Contains("carries her own wood", discovery.LogLine);
     }
 
     [Fact]
