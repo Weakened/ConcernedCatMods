@@ -99,6 +99,33 @@ internal readonly struct SourceStock : INpcEpochScoped
     /// every call on purpose.</summary>
     internal bool IsUsable => Container != null && Container.Access.CanTake && _lines != null;
 
+    /// <summary>How many units of one item this job may plan on: what was seen,
+    /// less what other jobs have already set aside.
+    ///
+    /// <b>The overload every planning decision goes through.</b> A raw count is
+    /// what the chest holds; this is what is free, and the difference is two
+    /// jobs planning the same forty nails. A null
+    /// <paramref name="availability"/> is the raw count and is the caller
+    /// saying so.</summary>
+    internal int UnitsOf(string? item, INpcSourceAvailability? availability)
+    {
+        int seen = UnitsOf(item);
+        if (availability == null || seen <= 0 || string.IsNullOrEmpty(item))
+        {
+            return seen;
+        }
+
+        int free = availability.AvailableIn(Key, item!, seen);
+        if (free < 0)
+        {
+            return 0;
+        }
+
+        // An implementation that answered with more than is there is answering
+        // about a chest nobody looked in. What was seen is the ceiling.
+        return free > seen ? seen : free;
+    }
+
     /// <summary>How many units of one item it was seen to hold. Summed rather
     /// than first-wins, because two lines for one item mean both and dropping
     /// one under-reports the chest.</summary>

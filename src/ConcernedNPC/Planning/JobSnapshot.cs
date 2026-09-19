@@ -159,6 +159,7 @@ internal static class JobSnapshotBuilder
         int notLoaded = 0;
         int rejected = 0;
         int exhausted = 0;
+        int unreadable = 0;
         bool truncated = false;
 
         if (candidates != null)
@@ -188,9 +189,14 @@ internal static class JobSnapshotBuilder
 
                 if (status == StopStatus.Unreadable)
                 {
-                    // Unknown, never empty. This is the count that stops an
-                    // unstreamed zone being reported as a finished job.
-                    notLoaded++;
+                    // Unknown, never empty - which is what stops an unfinished
+                    // look being reported as a finished job. Counted apart from
+                    // ground nobody has reached because the two are different
+                    // problems wearing the same face: a role whose completion
+                    // condition cannot answer is a defect that will still be
+                    // there tomorrow, and telling the player to walk over there
+                    // fixes nothing at all.
+                    unreadable++;
                     continue;
                 }
 
@@ -231,9 +237,18 @@ internal static class JobSnapshotBuilder
                     continue;
                 }
 
-                // Not loaded, or the probe could not answer. Both are "I did
-                // not see", and neither is "there is nothing there".
-                notLoaded++;
+                if (sample.Verdict == AreaSampleVerdict.NotLoaded)
+                {
+                    notLoaded++;
+                    continue;
+                }
+
+                // The probe could not answer. Unknown like unloaded ground, and
+                // it weighs the same on the conclusion - neither may ever add
+                // up to "there is nothing there" - but it is counted apart,
+                // because walking over there is the fix for one of them and no
+                // part of the fix for the other.
+                unreadable++;
             }
         }
 
@@ -258,12 +273,13 @@ internal static class JobSnapshotBuilder
         }
 
         var report = new AreaScanReport(
-            Outcome(kept.Count, notLoaded, rejected, exhausted, truncated),
+            Outcome(kept.Count, notLoaded + unreadable, rejected, exhausted, truncated),
             examined,
             notLoaded,
             rejected,
             exhausted,
-            truncated);
+            truncated,
+            unreadable);
 
         return new JobSnapshot(kept, sources, report, area.Revision, epoch);
     }
@@ -273,9 +289,15 @@ internal static class JobSnapshotBuilder
     /// Found comes first because something usable having been found is true
     /// whatever else happened; a truncated pass that found work still has work.
     /// <see cref="AreaScanReport.IsConclusive"/> is what stops that being read as
-    /// a finished job, and it is false for anything truncated or unloaded
-    /// whatever this says.</summary>
-    private static AreaScanOutcome Outcome(int kept, int notLoaded, int rejected, int exhausted, bool truncated)
+    /// a finished job, and it is false for anything truncated, unloaded or
+    /// unreadable whatever this says.
+    ///
+    /// <b><paramref name="unknown"/> is unloaded ground and an unanswerable
+    /// probe added together, and that is deliberate.</b> The two are counted
+    /// apart on the report because their fixes differ, and they weigh the same
+    /// here because the conclusion they bear on is the same one: neither may
+    /// ever add up to "there is nothing here".</summary>
+    private static AreaScanOutcome Outcome(int kept, int unknown, int rejected, int exhausted, bool truncated)
     {
         if (kept > 0)
         {
@@ -287,7 +309,7 @@ internal static class JobSnapshotBuilder
             return AreaScanOutcome.Incomplete;
         }
 
-        if (notLoaded > 0)
+        if (unknown > 0)
         {
             return AreaScanOutcome.NotLoaded;
         }

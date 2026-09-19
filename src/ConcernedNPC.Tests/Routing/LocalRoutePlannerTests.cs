@@ -310,6 +310,34 @@ public sealed class LocalRoutePlannerTests
             planner.Plan(new RouteRequest(At(0f, 0f), At(3f, 0f), 5f, 1), 0f).Verdict);
     }
 
+    /// <summary>A tolerance of nothing is refused rather than planned.
+    ///
+    /// <b>The failure this is written against</b> is quiet: the plan comes back
+    /// suitable, the final goal's arrival radius is zero, and the NPC walks to
+    /// the chest and then stands in front of it forever, because arriving would
+    /// take exact float equality. It also makes the zero that a refusal carries
+    /// mean two things at once.</summary>
+    [Fact]
+    public void A_tolerance_of_nothing_is_refused_rather_than_planned()
+    {
+        var planner = new LocalRoutePlanner(new FakeProbe());
+
+        Assert.Equal(
+            RouteVerdict.InvalidRequest,
+            planner.Plan(new RouteRequest(At(0f, 0f), At(40f, 0f), 0f, 1), 0f).Verdict);
+        Assert.Equal(
+            RouteVerdict.InvalidRequest,
+            planner.Plan(new RouteRequest(At(0f, 0f), At(40f, 0f), float.NaN, 1), 0f).Verdict);
+
+        // And the smallest real tolerance is the radius the final goal gets.
+        RoutePlan plan = planner.Plan(new RouteRequest(At(0f, 0f), At(40f, 0f), 0.5f, 1), 0f);
+        Assert.True(plan.IsSuitable);
+        RouteGoal? last = planner.NextGoal(plan, At(0f, 0f), plan.Waypoints.Count - 2);
+        Assert.NotNull(last);
+        Assert.True(last!.Value.IsFinal);
+        Assert.Equal(0.5f, last.Value.ArrivalRadiusMetres);
+    }
+
     /// <summary>A route always starts where the NPC is and ends where it is
     /// going, and never reports the two as the same place.</summary>
     [Fact]

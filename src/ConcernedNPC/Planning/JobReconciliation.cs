@@ -68,7 +68,8 @@ internal readonly struct JobReconciliation
         int failed,
         int notReached,
         JobManifest outstanding,
-        JobManifest leftOver)
+        JobManifest leftOver,
+        int leftForAnotherRound = 0)
     {
         Planned = planned;
         Done = done;
@@ -77,6 +78,7 @@ internal readonly struct JobReconciliation
         NotReached = notReached;
         Outstanding = outstanding;
         LeftOver = leftOver;
+        LeftForAnotherRound = leftForAnotherRound < 0 ? 0 : leftForAnotherRound;
     }
 
     /// <summary>How many steps the plan had.</summary>
@@ -97,14 +99,29 @@ internal readonly struct JobReconciliation
     /// <summary>What was fetched and not used up. Still carried.</summary>
     internal JobManifest LeftOver { get; }
 
-    /// <summary>Whether every target the plan was for was serviced. <b>The only
-    /// thing a job may be reported finished on</b> - and note that it is about
-    /// targets, never about steps having stopped happening.</summary>
-    internal bool IsComplete => Planned > 0 && Failed == 0 && NotReached == 0 && Outstanding.IsEmpty;
+    /// <summary>How many targets of the job the plan never reached at all,
+    /// because the plan was for part of the job.
+    ///
+    /// <b>Not the same as unreached steps.</b> These are targets that were never
+    /// written into a step: the plan covered eight trips of twelve, or one trip
+    /// took more chests than a provisioning phase opens. Carried here because
+    /// this is the type a job is reported finished on, and a count of perfectly
+    /// executed steps says nothing about work the plan left out.</summary>
+    internal int LeftForAnotherRound { get; }
+
+    /// <summary>Whether every target <b>the job</b> was for was serviced.
+    /// <b>The only thing a job may be reported finished on</b> - so it asks two
+    /// questions, not one: did every step of this plan come off, and did this
+    /// plan cover the whole job. A plan for eight trips out of twelve can
+    /// satisfy the first perfectly and it is not a finished job, and an NPC that
+    /// said it was would be the most expensive kind of wrong.</summary>
+    internal bool IsComplete =>
+        Planned > 0 && Failed == 0 && NotReached == 0 && Outstanding.IsEmpty && LeftForAnotherRound == 0;
 
     /// <summary>Whether there is more to do. True whenever anything is still
-    /// owed, whatever the step counts say.</summary>
-    internal bool NeedsAnotherRound => !Outstanding.IsEmpty || Failed > 0 || NotReached > 0;
+    /// owed or was never planned for, whatever the step counts say.</summary>
+    internal bool NeedsAnotherRound =>
+        !Outstanding.IsEmpty || Failed > 0 || NotReached > 0 || LeftForAnotherRound > 0;
 }
 
 /// <summary>Closing the books on a round.</summary>
@@ -189,6 +206,13 @@ internal static class JobReconciler
             ManifestArithmetic.Merge(fetched), ManifestArithmetic.Merge(consumed));
 
         return new JobReconciliation(
-            plan.Steps.Count, done, skipped, failed, notReached, outstanding, leftOver);
+            plan.Steps.Count,
+            done,
+            skipped,
+            failed,
+            notReached,
+            outstanding,
+            leftOver,
+            plan.LeftForAnotherRound);
     }
 }

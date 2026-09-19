@@ -114,6 +114,46 @@ public sealed class RouteExecutionTests
         Assert.False(round.RequestReplan());
     }
 
+    /// <summary>The replan cap belongs to the job, not to the instance.
+    ///
+    /// <b>The failure this is written against.</b> The only sane response to a
+    /// replan is to plan again and start a new round, and a new round starting
+    /// at zero can be told to replan again immediately - so an observer
+    /// answering "gone" for every stop loops forever over a world that never
+    /// changes, which is the precise thing the cap documents itself as the whole
+    /// defence against. Carrying the count forward is what makes it a cap.
+    /// </summary>
+    [Fact]
+    public void The_replan_cap_is_carried_forward_between_rounds()
+    {
+        var observer = new PlanningStopObserver()
+            .Say("a", StopStatus.Gone)
+            .Say("b", StopStatus.Gone);
+        var limits = new RouteExecutionLimits(2);
+
+        int replans = 0;
+        for (int round = 0; round < 6; round++)
+        {
+            var execution = new RouteExecution(Sequence("a", "b"), limits, replans);
+            RouteAdvance advance = execution.Next(observer);
+            replans = execution.Replans;
+
+            if (advance.Progress == RouteProgress.Finished)
+            {
+                break;
+            }
+
+            Assert.Equal(RouteProgress.Replan, advance.Progress);
+        }
+
+        Assert.Equal(limits.MostReplans, replans);
+
+        // And a fresh round handed the spent count does not start again.
+        var last = new RouteExecution(Sequence("a", "b"), limits, replans);
+        Assert.Equal(RouteProgress.Finished, last.Next(observer).Progress);
+        Assert.False(last.RequestReplan());
+    }
+
     /// <summary>One stop going wrong is not a replan. A round that serviced
     /// anything at all is a round that finished.</summary>
     [Fact]

@@ -91,9 +91,14 @@ internal sealed class LocalRoutePlanner : INpcRoutePlanner
     {
         int revision = ++_planRevision;
 
-        if (!request.From.IsFinite || !request.To.IsFinite || request.ArrivalToleranceMetres < 0f ||
-            float.IsNaN(request.ArrivalToleranceMetres))
+        if (!request.From.IsFinite || !request.To.IsFinite || !(request.ArrivalToleranceMetres > 0f))
         {
+            // A tolerance of nothing is refused rather than planned. The final
+            // goal's arrival radius is this number, so zero is a goal reachable
+            // only on exact float equality - an NPC that walks to the chest and
+            // then stands there, never having arrived. It also leaves the zero
+            // that RoutePlan.Refused writes as an unambiguous "there is no
+            // tolerance here" rather than a value somebody meant.
             return RoutePlan.Refused(RouteVerdict.InvalidRequest, request.Revision, revision);
         }
 

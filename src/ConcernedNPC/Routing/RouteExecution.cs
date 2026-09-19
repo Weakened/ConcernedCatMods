@@ -133,8 +133,24 @@ internal sealed class RouteExecution
     private int _at;
     private bool _standing;
 
-    internal RouteExecution(in StopSequence sequence, RouteExecutionLimits limits)
+    /// <summary>Starts a round.</summary>
+    /// <param name="sequence">The stops, in the order to walk them.</param>
+    /// <param name="limits">How much this round may change its mind.</param>
+    /// <param name="alreadyReplanned">How many replans the <i>job</i> has
+    /// already spent getting here.
+    ///
+    /// <b>Without this the cap is not a cap.</b> The only sane response to
+    /// <see cref="RouteProgress.Replan"/> is to plan again and start a new
+    /// execution, and a new execution starting at zero can be told to replan
+    /// again immediately - so an observer answering "gone" for every stop loops
+    /// forever over an unchanged world, which is the exact thing
+    /// <see cref="RouteExecutionLimits.MostReplans"/> documents itself as the
+    /// whole defence against. The count belongs to the job, and the round
+    /// carries it forward.</param>
+    internal RouteExecution(in StopSequence sequence, RouteExecutionLimits limits, int alreadyReplanned = 0)
     {
+        Replans = alreadyReplanned < 0 ? 0 : alreadyReplanned;
+
         IReadOnlyList<RouteStop> stops = sequence.Stops;
         _stops = new RouteStop[stops.Count];
         for (int index = 0; index < stops.Count; index++)
@@ -160,7 +176,9 @@ internal sealed class RouteExecution
     /// </summary>
     internal IReadOnlyList<RouteStop> Deferred => _deferred;
 
-    /// <summary>How many times this round has asked for a new route.</summary>
+    /// <summary>How many times a new route has been asked for - by this round
+    /// and by the rounds it was handed the count from. Not per instance: see the
+    /// constructor.</summary>
     internal int Replans { get; private set; }
 
     /// <summary>How many new targets turned up while the round was being walked.
