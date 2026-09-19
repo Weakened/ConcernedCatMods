@@ -38,8 +38,9 @@ internal static class CollectionSentences
                 return "The work area this order was given no longer exists in this world load. Cancel it and " +
                     "give a new order.";
             case CollectionAttentionReason.ScopeChanged:
-                return "The work area changed after the order was given (the area was redrawn or your bed moved). " +
-                    "He will not follow it. Cancel and give a new order.";
+                return "The work area was chosen in an earlier world load, or it has changed since (the area " +
+                    "was redrawn or your bed moved). He will not follow it until you run cf_collect rebind " +
+                    "to set it again.";
             case CollectionAttentionReason.ScopeUnloaded:
                 return "The work area is not loaded, so he cannot see it. Go closer, then resume.";
             case CollectionAttentionReason.NoEligibleSources:
@@ -64,7 +65,8 @@ internal static class CollectionSentences
             case CollectionAttentionReason.DestinationAccessDenied:
                 return "He is not allowed to use that chest. He keeps what he carries.";
             case CollectionAttentionReason.DestinationStale:
-                return "The chest was chosen before the world was reloaded. Choose it again with a new order.";
+                return "The chest was chosen before the world was reloaded. Run cf_collect rebind, looking at " +
+                    "the chest, to choose it again.";
 
             case CollectionAttentionReason.TransferUncertain:
                 return "A transfer was interrupted and it is not known where those items are. Nothing is replayed. " +
