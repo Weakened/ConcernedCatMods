@@ -23,7 +23,7 @@ public readonly struct JobManifestLine
     /// zero means the line should not have been written.</summary>
     public int Required { get; }
 
-    public bool IsValid => Item.Length != 0 && Required > 0;
+    public bool IsValid => !string.IsNullOrEmpty(Item) && Required > 0;
 
     public override string ToString() => Required + " " + Item;
 }

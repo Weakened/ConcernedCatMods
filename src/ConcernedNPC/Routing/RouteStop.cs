@@ -49,7 +49,7 @@ public readonly struct RouteStop : IEquatable<RouteStop>
     /// could compute. A nameless stop is refused rather than given the empty
     /// key, because the empty key is what a defaulted struct has and two of
     /// those would be the same stop.</summary>
-    public bool IsValid => Key.Length != 0 && At.IsFinite;
+    public bool IsValid => !string.IsNullOrEmpty(Key) && At.IsFinite;
 
     /// <summary>Stops are the same stop when they have the same name. The place
     /// is deliberately not part of it: a stop that moved a little is still that

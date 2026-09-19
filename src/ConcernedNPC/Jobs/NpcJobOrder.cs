@@ -31,6 +31,22 @@ public readonly struct NpcJobOrder
     /// nothing.</summary>
     public const int DefaultRounds = 8;
 
+    /// <summary>How many ticks in a row a job may answer
+    /// <see cref="NpcJobProgress.Waiting"/> before it stops and says so.
+    ///
+    /// <b>A liveness bound, and it exists because "ask again next tick" is only
+    /// honest while the answer can change.</b> A look that runs out of its
+    /// allowance is transient when the world is busy and permanent when the
+    /// allowance is simply too small for the base, and nothing can tell those
+    /// apart from inside. Without a bound the second case is an NPC standing
+    /// still for the life of the process with nothing for a player to read. The
+    /// count resets the moment a round is actually planned, so a job that is
+    /// merely slow is never stopped by it. Like
+    /// <see cref="DefaultRounds"/> it is a pacing guess, it is never written
+    /// anywhere durable, and it is observable in the first play session.
+    /// </summary>
+    public const int DefaultWaits = 300;
+
     /// <summary>Builds an order.</summary>
     /// <param name="identity">Which NPC the job is for.</param>
     /// <param name="jobId">What the job is called. Half of every reservation
@@ -55,6 +71,8 @@ public readonly struct NpcJobOrder
     /// <param name="allowance">What one round may spend looking and planning.
     /// A bound rather than no limit, because "no limit" is how a pathological
     /// world becomes a frame the player feels.</param>
+    /// <param name="waits">How many consecutive ticks the job may spend waiting
+    /// for a look to finish. See <see cref="DefaultWaits"/>.</param>
     public NpcJobOrder(
         NpcIdentity identity,
         string jobId,
@@ -64,7 +82,8 @@ public readonly struct NpcJobOrder
         JobStepActions actions,
         JobManifest ceiling = default,
         int rounds = DefaultRounds,
-        int allowance = TourJobPlanner.DefaultAllowance)
+        int allowance = TourJobPlanner.DefaultAllowance,
+        int waits = DefaultWaits)
     {
         Identity = identity;
         JobId = jobId ?? string.Empty;
@@ -75,6 +94,7 @@ public readonly struct NpcJobOrder
         Ceiling = ceiling;
         Rounds = rounds < 1 ? 1 : rounds;
         Allowance = allowance < 0 ? 0 : allowance;
+        Waits = waits < 1 ? 1 : waits;
     }
 
     /// <summary>Which NPC the job is for.</summary>
@@ -105,9 +125,13 @@ public readonly struct NpcJobOrder
     /// <summary>What one round may spend looking and planning.</summary>
     public int Allowance { get; }
 
+    /// <summary>How many consecutive waiting ticks the job may spend.</summary>
+    public int Waits { get; }
+
     /// <summary>Whether this order can be worked at all: an identity, a name
     /// whose reservations can be spelled, an area, a world, and both
     /// words.</summary>
     public bool IsValid =>
-        !Identity.IsEmpty && JobId.Length != 0 && Area != null && !World.IsUnknown && Actions.IsValid;
+        !Identity.IsEmpty && !string.IsNullOrEmpty(JobId) && Area != null && !World.IsUnknown
+        && Actions.IsValid;
 }

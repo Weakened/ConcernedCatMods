@@ -72,9 +72,19 @@ public readonly struct NpcJobAdvance
     /// <see cref="NpcJobProgress.Do"/>.</summary>
     public bool HasStep { get; }
 
-    /// <summary>The planner's own verdict on the round this answer came from.
-    /// For a runtime that wants to log or branch more finely than
-    /// <see cref="Progress"/> allows.</summary>
+    /// <summary>The verdict on the last plan this job made.
+    ///
+    /// <b>Only meaningful read together with <see cref="Progress"/>, and it is
+    /// not a second progress.</b> Two things end a job after planning has
+    /// already succeeded - the work area kept moving under it, and the round cap
+    /// or a round that achieved nothing - and neither has a verdict of its own,
+    /// so a <see cref="NpcJobProgress.Stopped"/> answer can carry
+    /// <see cref="JobPlanVerdict.Planned"/>. That is not a contradiction: the
+    /// plan really was planned, and then execution ended the job. <b>What
+    /// happened is <see cref="Progress"/>, why is <see cref="Reason"/>, and
+    /// every execution-level termination names its own rule in the reason.</b>
+    /// This is here for a runtime that wants to log the planning outcome, not
+    /// for one deciding what to do next.</summary>
     public JobPlanVerdict Verdict { get; }
 
     /// <summary>Why, in the register of evidence: "nothing he may use holds 40

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
+using TheConcernedCat.ConcernedNPC.Bodies;
 using TheConcernedCat.ConcernedNPC.Containers;
 using TheConcernedCat.ConcernedNPC.Jobs;
 using TheConcernedCat.ConcernedNPC.Planning;
@@ -40,20 +42,37 @@ namespace TheConcernedCat.ConcernedNPC.Tests;
 public sealed class JobAdoptionSurfaceTests : IDisposable
 {
     private readonly NpcWorldEpoch _world;
+    private readonly NpcRoleRegistry _registry = new NpcRoleRegistry();
 
     public JobAdoptionSurfaceTests()
     {
-        // Exactly what a role does: the library mints the epoch and the role
-        // receives it. A role may not invent one.
-        NpcRoleRegistry.Shared.EndWorldLoad();
-        _world = NpcRoleRegistry.Shared.BeginWorldLoad(out _);
+        // Exactly what a product does at plugin start, in the order it does it:
+        // register the role, then say a world has loaded and receive the epoch.
+        // A role may not invent an epoch, and a job for an identity nobody
+        // registered is refused rather than run.
+        foreach (NpcIdentity identity in new[] { Who, Rival, Third })
+        {
+            Assert.Equal(
+                RoleRegistrationStatus.Registered, _registry.Register(new AdoptedNpcRole(identity)).Status);
+        }
+
+        _world = _registry.BeginWorldLoad(out _);
     }
 
     public void Dispose()
     {
-        NpcRoleRegistry.Shared.EndWorldLoad();
+        _registry.EndWorldLoad();
         NpcJobBooks.Forget();
     }
+
+    private static NpcIdentity Who => new NpcIdentity("product", "worker");
+
+    /// <summary>A second product's NPC. Different product, and deliberately the
+    /// same job name, because "collect" and "haul" are what two products
+    /// independently call the same kind of job.</summary>
+    private static NpcIdentity Rival => new NpcIdentity("rival", "worker");
+
+    private static NpcIdentity Third => new NpcIdentity("third", "worker");
 
     [Fact]
     public void A_role_can_reach_every_step_of_running_a_job()
@@ -204,14 +223,15 @@ public sealed class JobAdoptionSurfaceTests : IDisposable
         role.Wants("post0", Point(10f, 0f), 0);
 
         var order = new NpcJobOrder(
-            new NpcIdentity("product", "worker"),
+            Who,
             "job",
             role.Area,
             _world,
             NpcCarryCapacity.Unlimited,
             new JobStepActions("take", "do"),
-            allowance: 0);
-        NpcJobDriver driver = NpcJobDriver.For(order, role);
+            allowance: 0,
+            waits: 3);
+        NpcJobDriver driver = NpcJobDriver.For(order, role, _registry);
 
         NpcJobAdvance advance = driver.Next(Point(0f, 0f));
 
@@ -282,31 +302,74 @@ public sealed class JobAdoptionSurfaceTests : IDisposable
     }
 
     [Fact]
-    public void Two_jobs_in_one_world_do_not_both_get_the_same_target()
+    public void Two_products_that_name_a_job_the_same_do_not_share_or_revoke_each_others_holds()
+    {
+        // The name of a reservation is the job and the step. Two products both
+        // calling a job "collect" is not contrived - it is the obvious name -
+        // and the books are process-wide on purpose, so without the identity in
+        // the name these two are one job as far as the books are concerned.
+        NpcJobDriver mine = Contest(Who, "collect");
+        NpcJobDriver theirs = Contest(Rival, "collect");
+
+        Assert.Equal(NpcJobProgress.Do, mine.Next(Point(0f, 0f)).Progress);
+
+        // Forging: without the identity in the name, the second job asks under
+        // a name the first already holds, is answered AlreadySatisfied, and
+        // walks to a target somebody else is standing at.
+        Assert.Equal(NpcJobProgress.Waiting, theirs.Next(Point(0f, 0f)).Progress);
+
+        // Revoking: giving up a job releases everything held under ITS name.
+        // Without the identity that is the other product's holds as well, and
+        // the target falls to whoever asks next.
+        theirs.Abandon();
+        NpcJobDriver third = Contest(Third, "collect");
+        Assert.Equal(NpcJobProgress.Waiting, third.Next(Point(0f, 0f)).Progress);
+
+        // And the first job still has it.
+        Assert.Equal(NpcJobProgress.Do, mine.Next(Point(0f, 0f)).Progress);
+
+        // Only when the holder gives it up does it become anybody else's.
+        mine.Abandon();
+        Assert.Equal(NpcJobProgress.Do, Contest(Third, "collect").Next(Point(0f, 0f)).Progress);
+    }
+
+    [Fact]
+    public void One_npc_does_one_job_at_a_time_and_the_arbiter_is_what_says_so()
+    {
+        NpcJobDriver first = Contest(Who, "collect");
+        Assert.Equal(NpcJobProgress.Do, first.Next(Point(0f, 0f)).Progress);
+
+        // A second job for the SAME identity is refused outright - before it
+        // plans anything - because the mode owner is held. This is the guard
+        // that had never once been exercised: nothing in this library entered a
+        // mode, so nothing had ever been refused for being busy.
+        NpcJobDriver second = Contest(Who, "haul");
+        Assert.Equal(NpcJobProgress.Stopped, second.Progress);
+        Assert.NotEqual(string.Empty, second.Reason);
+
+        ActorModeOwner? mode = _registry.ModeOf(Who);
+        Assert.NotNull(mode);
+        Assert.Equal(ActorMode.Working, mode!.Mode);
+        Assert.False(mode.MayRetireBody);
+
+        // Giving the job up puts the identity back to resting, and the body
+        // may be retired again.
+        first.Abandon();
+        Assert.Equal(ActorMode.Resting, _registry.ModeOf(Who)!.Mode);
+        Assert.True(_registry.ModeOf(Who)!.MayRetireBody);
+        Assert.Equal(NpcJobProgress.Do, Contest(Who, "haul").Next(Point(0f, 0f)).Progress);
+    }
+
+    private NpcJobDriver Contest(NpcIdentity identity, string jobId)
     {
         var chest = new AdoptedChest("supply", _world, Point(1f, 0f), NpcContainerUse.Take);
-        var first = new AdoptedRole(_world);
-        first.Offer(chest, "wood", 500);
-        first.Wants("post0", Point(10f, 0f), 5);
+        var role = new AdoptedRole(_world);
+        role.Offer(chest, "wood", 500);
+        role.Wants("post0", Point(10f, 0f), 5);
 
-        var second = new AdoptedRole(_world);
-        second.Offer(chest, "wood", 500);
-        second.Wants("post0", Point(10f, 0f), 5);
-
-        NpcJobDriver one = Drive(first, NpcCarryCapacity.Unlimited, "job-one");
-        NpcJobDriver two = Drive(second, NpcCarryCapacity.Unlimited, "job-two");
-
-        Assert.Equal(NpcJobProgress.Do, one.Next(Point(0f, 0f)).Progress);
-
-        // The second job wanted a target the first is holding. It is told to
-        // wait - not refused for good, because the first may give it up - and
-        // it is told that without the role having supplied a book, seen a
-        // reservation, or known that reservations exist.
-        Assert.Equal(NpcJobProgress.Waiting, two.Next(Point(0f, 0f)).Progress);
-
-        // And giving the first job up frees it.
-        one.Abandon();
-        Assert.Equal(NpcJobProgress.Do, two.Next(Point(0f, 0f)).Progress);
+        var order = new NpcJobOrder(
+            identity, jobId, role.Area, _world, NpcCarryCapacity.Unlimited, new JobStepActions("take", "do"));
+        return NpcJobDriver.For(order, role, _registry);
     }
 
     [Fact]
@@ -480,16 +543,299 @@ public sealed class JobAdoptionSurfaceTests : IDisposable
         Assert.False(driver.LastRound.IsComplete);
     }
 
+    [Fact]
+    public void A_third_round_spends_the_carry_it_was_left_and_never_fetches_twice()
+    {
+        var chest = new AdoptedChest("supply", _world, Point(1f, 0f), NpcContainerUse.Take);
+        var role = new AdoptedRole(_world);
+        role.Offer(chest, "wood", 500);
+        role.Wants("post0", Point(10f, 0f), 5);
+        role.Wants("post1", Point(20f, 0f), 5);
+        role.Wants("post2", Point(30f, 0f), 5);
+
+        NpcJobDriver driver = Drive(role, NpcCarryCapacity.Unlimited);
+
+        int collects = 0;
+
+        // One post comes off per round: post0 first time, post1 second time,
+        // post2 third. So the job takes exactly three rounds, and every round
+        // after the first is planned against wood he is already carrying.
+        var failuresLeft = new Dictionary<string, int>(StringComparer.Ordinal)
+        {
+            { "post1", 1 },
+            { "post2", 2 },
+        };
+
+        for (int guard = 0; guard < 500; guard++)
+        {
+            NpcJobAdvance advance = driver.Next(Point(0f, 0f));
+            if (advance.Progress != NpcJobProgress.Do)
+            {
+                break;
+            }
+
+            if (advance.Step.IsCollect)
+            {
+                collects++;
+                driver.Done();
+                continue;
+            }
+
+            string key = advance.Step.Target.Key;
+            if (failuresLeft.TryGetValue(key, out int left) && left > 0)
+            {
+                failuresLeft[key] = left - 1;
+                driver.Failed();
+                continue;
+            }
+
+            role.Complete(key);
+            driver.Done();
+        }
+
+        Assert.Equal(NpcJobProgress.Finished, driver.Progress);
+        Assert.Equal(3, driver.Rounds);
+
+        // Fifteen wood drawn once for fifteen units of work, over three rounds.
+        // The reconciliation already folds the carried-in total into LeftOver,
+        // so the driver ASSIGNS it rather than accumulating - accumulating on
+        // top would count the carry again every round, and the third round is
+        // the first place that shows.
+        Assert.Equal(1, collects);
+        Assert.True(driver.Carrying.IsEmpty);
+    }
+
+    [Fact]
+    public void Giving_up_a_job_that_never_ran_a_round_publishes_no_books_and_keeps_the_carry()
+    {
+        // Somebody else holds the only target, so this job plans and is then
+        // refused its reservations. No round ever runs.
+        NpcJobDriver holder = Contest(Who, "collect");
+        Assert.Equal(NpcJobProgress.Do, holder.Next(Point(0f, 0f)).Progress);
+
+        NpcJobDriver blocked = Contest(Rival, "collect");
+        Assert.Equal(NpcJobProgress.Waiting, blocked.Next(Point(0f, 0f)).Progress);
+        Assert.Equal(0, blocked.Rounds);
+
+        blocked.Abandon();
+
+        // Reconciling a plan nobody walked would report a round of steps "not
+        // reached" with their material outstanding - books for a round that
+        // never happened.
+        Assert.Equal(0, blocked.LastRound.Planned);
+        Assert.True(blocked.LastRound.Outstanding.IsEmpty);
+        Assert.True(blocked.Carrying.IsEmpty);
+    }
+
+    [Fact]
+    public void Giving_up_a_job_mid_round_leaves_the_carry_where_a_role_can_put_it_away()
+    {
+        var chest = new AdoptedChest("supply", _world, Point(1f, 0f), NpcContainerUse.Take);
+        var role = new AdoptedRole(_world);
+        role.Offer(chest, "wood", 500);
+        role.Wants("post0", Point(10f, 0f), 5);
+        role.Wants("post1", Point(20f, 0f), 5);
+
+        NpcJobDriver driver = Drive(role, NpcCarryCapacity.Unlimited);
+
+        NpcJobAdvance advance = driver.Next(Point(0f, 0f));
+        while (advance.Progress == NpcJobProgress.Do && advance.Step.IsCollect)
+        {
+            driver.Done();
+            advance = driver.Next(Point(0f, 0f));
+        }
+
+        // He has fetched ten wood and serviced nothing. The player countermands
+        // the job here.
+        driver.Abandon();
+
+        Assert.Equal(NpcJobProgress.Stopped, driver.Progress);
+
+        // Ten wood is on his back, and the handoff tells every role this is
+        // where it reads what to put away. A role told it is holding nothing
+        // puts nothing away.
+        Assert.Equal(10, driver.Carrying.RequiredOf("wood"));
+    }
+
+    [Fact]
+    public void A_round_of_stops_that_only_moved_is_tried_again_rather_than_ending_the_job()
+    {
+        var role = new AdoptedRole(_world);
+        role.MovesUnderfoot();
+        role.Wants("post0", Point(10f, 0f), 0);
+        role.Wants("post1", Point(20f, 0f), 0);
+
+        var order = new NpcJobOrder(
+            Who, "job", role.Area, _world, NpcCarryCapacity.Unlimited,
+            new JobStepActions("take", "do"), rounds: 3);
+        NpcJobDriver driver = NpcJobDriver.For(order, role, _registry);
+
+        for (int guard = 0; guard < 500; guard++)
+        {
+            if (driver.Next(Point(0f, 0f)).Progress != NpcJobProgress.Do)
+            {
+                break;
+            }
+
+            driver.Done();
+        }
+
+        Assert.Equal(NpcJobProgress.Stopped, driver.Progress);
+
+        // Deferred is the contract's own answer for "it moved" and "nobody
+        // could read it", and both say the stop is still there. A round of
+        // nothing but deferrals achieved nothing YET, which is not the same as
+        // achieving nothing - so the job is tried again until its rounds run
+        // out, rather than ended for good after the first.
+        Assert.Equal(3, driver.Rounds);
+    }
+
+    [Fact]
+    public void Waiting_for_a_look_that_will_never_finish_stops_with_something_to_read()
+    {
+        var role = new AdoptedRole(_world);
+        role.Wants("post0", Point(10f, 0f), 0);
+
+        // An allowance too small to finish looking is deterministic: it is as
+        // true on the hundred thousandth tick as on the first.
+        var order = new NpcJobOrder(
+            Who, "job", role.Area, _world, NpcCarryCapacity.Unlimited,
+            new JobStepActions("take", "do"), allowance: 0, waits: 4);
+        NpcJobDriver driver = NpcJobDriver.For(order, role, _registry);
+
+        Assert.Equal(NpcJobProgress.Waiting, driver.Next(Point(0f, 0f)).Progress);
+        for (int tick = 0; tick < 3; tick++)
+        {
+            driver.Next(Point(0f, 0f));
+        }
+
+        Assert.Equal(NpcJobProgress.Stopped, driver.Next(Point(0f, 0f)).Progress);
+        Assert.NotEqual(string.Empty, driver.Reason);
+        Assert.Equal(0, driver.Rounds);
+    }
+
+    [Fact]
+    public void A_job_that_cannot_be_worked_comes_back_stopped_rather_than_throwing()
+    {
+        var role = new AdoptedRole(_world);
+        var actions = new JobStepActions("take", "do");
+
+        // Every guard on the way in, each with its own sentence and none of
+        // them an exception out of somebody else's NPC.
+        Assert.Equal(
+            NpcJobProgress.Stopped,
+            NpcJobDriver.For(
+                new NpcJobOrder(Who, "job", role.Area, _world, NpcCarryCapacity.Unlimited, actions),
+                null,
+                _registry).Progress);
+
+        Assert.Equal(
+            NpcJobProgress.Stopped,
+            NpcJobDriver.For(
+                new NpcJobOrder(Who, "job", role.Area, _world, NpcCarryCapacity.Unlimited, actions),
+                role,
+                null).Progress);
+
+        foreach (NpcJobOrder bad in new[]
+                 {
+                     new NpcJobOrder(default, "job", role.Area, _world, NpcCarryCapacity.Unlimited, actions),
+                     new NpcJobOrder(Who, string.Empty, role.Area, _world, NpcCarryCapacity.Unlimited, actions),
+                     new NpcJobOrder(Who, "job", null, _world, NpcCarryCapacity.Unlimited, actions),
+                     new NpcJobOrder(
+                         Who, "job", role.Area, NpcWorldEpoch.Unknown, NpcCarryCapacity.Unlimited, actions),
+                     new NpcJobOrder(Who, "job", role.Area, _world, NpcCarryCapacity.Unlimited, default),
+                 })
+        {
+            NpcJobDriver refused = NpcJobDriver.For(bad, role, _registry);
+            Assert.Equal(NpcJobProgress.Stopped, refused.Progress);
+            Assert.NotEqual(string.Empty, refused.Reason);
+            Assert.Equal(NpcJobProgress.Stopped, refused.Next(Point(0f, 0f)).Progress);
+        }
+
+        // And an identity this registry does not track. A product that got its
+        // start-up order wrong is told so rather than crashing on a null owner.
+        NpcJobDriver stranger = NpcJobDriver.For(
+            new NpcJobOrder(
+                new NpcIdentity("nobody", "worker"), "job", role.Area, _world,
+                NpcCarryCapacity.Unlimited, actions),
+            role,
+            _registry);
+        Assert.Equal(NpcJobProgress.Stopped, stranger.Progress);
+        Assert.NotEqual(string.Empty, stranger.Reason);
+    }
+
+    [Fact]
+    public void Two_trips_to_one_chest_are_two_steps_and_not_one()
+    {
+        var chest = new AdoptedChest("supply", _world, Point(1f, 0f), NpcContainerUse.Take);
+        var role = new AdoptedRole(_world);
+        role.Offer(chest, "wood", 500);
+        role.Wants("post0", Point(10f, 0f), 5);
+        role.Wants("post1", Point(20f, 0f), 5);
+
+        // One post per trip, so the round opens the same chest twice. Stops are
+        // the same stop when they have the same name, so a round keyed on the
+        // role's own token for the chest would collapse these two into one and
+        // the second trip would go unprovisioned.
+        NpcJobDriver driver = Drive(role, new NpcCarryCapacity(5));
+
+        var collected = new List<PlannedStep>();
+        var serviced = new List<PlannedStep>();
+        Run(driver, role, collected, serviced);
+
+        Assert.Equal(NpcJobProgress.Finished, driver.Progress);
+        Assert.Equal(2, collected.Count);
+        Assert.Equal(2, serviced.Count);
+        foreach (PlannedStep step in collected)
+        {
+            Assert.Equal("supply", step.Source.Container!.Key);
+        }
+    }
+
+    [Fact]
+    public void Every_widened_struct_answers_for_its_own_defaulted_value()
+    {
+        // default(T) is a construction the language always allows, so an
+        // internal constructor shuts nothing on a struct. What has to be true
+        // instead is that the defaulted value fails closed - and, first of all,
+        // that asking it anything does not throw. Every one of these had a
+        // validity check reading .Length on a string that is null in a
+        // defaulted value, which was harmless while nothing outside could hold
+        // one.
+        Assert.False(default(RouteStop).IsValid);
+        Assert.False(default(JobTarget).IsValid);
+        Assert.False(default(JobManifestLine).IsValid);
+        Assert.False(default(StockLine).IsValid);
+        Assert.False(default(JobStepActions).IsValid);
+        Assert.False(default(NpcJobOrder).IsValid);
+
+        // And the rest answer nothing rather than something plausible.
+        Assert.True(default(JobManifest).IsEmpty);
+        Assert.Equal(0, default(JobManifest).TotalUnits);
+        Assert.Equal(0, default(NpcCarryCapacity).UnitsPerTour);
+        Assert.False(default(NpcCarryCapacity).IsUnlimited);
+        Assert.False(default(SourceStock).IsUsable);
+        Assert.False(default(NpcContainerAccess).CanTake);
+        Assert.False(default(NpcContainerAccess).CanDeposit);
+        Assert.False(default(AreaSample).IsStandable);
+        Assert.False(default(AreaScanReport).IsConclusive);
+        Assert.False(default(JobReconciliation).IsComplete);
+        Assert.False(default(NpcJobAdvance).HasStep);
+
+        // A defaulted order is refused rather than run.
+        Assert.Equal(NpcJobProgress.Stopped, NpcJobDriver.For(default, new AdoptedRole(_world), _registry).Progress);
+    }
+
     private NpcJobDriver Drive(AdoptedRole role, NpcCarryCapacity capacity, string jobId = "job")
     {
         var order = new NpcJobOrder(
-            new NpcIdentity("product", "worker"),
+            Who,
             jobId,
             role.Area,
             _world,
             capacity,
             new JobStepActions("take", "do"));
-        return NpcJobDriver.For(order, role);
+        return NpcJobDriver.For(order, role, _registry);
     }
 
     private static void Run(
@@ -553,6 +899,34 @@ public sealed class JobAdoptionSurfaceTests : IDisposable
             + "role's own work that nothing in this library could compute - so it must be constructable.");
     }
 
+    /// <summary>What a product registers at plugin start, so that one arbiter
+    /// knows the identity a job is for. Its durable facts are the role's own -
+    /// this library never composes one.</summary>
+    private sealed class AdoptedNpcRole : INpcRole
+    {
+        internal AdoptedNpcRole(NpcIdentity identity)
+        {
+            Identity = identity;
+        }
+
+        public NpcIdentity Identity { get; }
+
+        public NpcBodyContract Body => NpcBodyContract.ForPresentation();
+
+        public INpcDataPaths Paths { get; } = new AdoptedPaths();
+    }
+
+    private sealed class AdoptedPaths : INpcDataPaths
+    {
+        public string Root => Path.Combine(Path.GetTempPath(), "adoption-surface-test");
+
+        public bool TryResolveFile(string purpose, out string absolutePath)
+        {
+            absolutePath = Path.Combine(Root, purpose);
+            return purpose.Length != 0;
+        }
+    }
+
     /// <summary>A work area, as a product would write one. Every member it
     /// implements is public; nothing here reaches into the library.</summary>
     private sealed class AdoptedArea : INpcWorkArea
@@ -613,6 +987,8 @@ public sealed class JobAdoptionSurfaceTests : IDisposable
         private readonly List<JobTarget> _targets = new List<JobTarget>();
         private readonly List<SourceStock> _sources = new List<SourceStock>();
         private readonly HashSet<string> _done = new HashSet<string>(StringComparer.Ordinal);
+        private readonly Dictionary<string, int> _looks = new Dictionary<string, int>(StringComparer.Ordinal);
+        private bool _moves;
 
         internal AdoptedRole(NpcWorldEpoch world)
         {
@@ -638,11 +1014,34 @@ public sealed class JobAdoptionSurfaceTests : IDisposable
 
         internal void Complete(string key) => _done.Add(key);
 
+        /// <summary>Every target is where it was when it was looked at and
+        /// somewhere else by the time he gets there. <see cref="StopStatus.Moved"/>
+        /// is the contract's own answer for that, and it means the stop is
+        /// still wanted.</summary>
+        internal void MovesUnderfoot() => _moves = true;
+
         public IReadOnlyList<JobTarget> Candidates(NpcWorldEpoch world) => _targets;
 
         public IReadOnlyList<SourceStock> Sources(NpcWorldEpoch world) => _sources;
 
-        public StopStatus Observe(in RouteStop stop) =>
-            _done.Contains(stop.Key) ? StopStatus.AlreadyDone : StopStatus.Actionable;
+        public StopStatus Observe(in RouteStop stop)
+        {
+            if (_done.Contains(stop.Key))
+            {
+                return StopStatus.AlreadyDone;
+            }
+
+            if (!_moves)
+            {
+                return StopStatus.Actionable;
+            }
+
+            // Each round asks twice about each target: once while looking, once
+            // on the way to it. It is there when looked at and gone from that
+            // spot by the time he arrives.
+            _looks.TryGetValue(stop.Key, out int seen);
+            _looks[stop.Key] = seen + 1;
+            return seen % 2 == 0 ? StopStatus.Actionable : StopStatus.Moved;
+        }
     }
 }
