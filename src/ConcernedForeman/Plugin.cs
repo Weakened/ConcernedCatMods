@@ -49,6 +49,7 @@ public sealed class Plugin : BaseUnityPlugin
     private LadderSettings? _ladderSettings;
     private ClimbPose? _climbPose;
     private ClimbSounds? _climbSounds;
+    private Runtime.Construction.BuildOrderRuntime? _buildOrders;
     private bool _worldWasUp;
 
     private void Awake()
@@ -99,6 +100,21 @@ public sealed class Plugin : BaseUnityPlugin
         delivery.BindMotion(() => collection.Motion);
         _settlement.MayRetireBody = () => collection.Modes.MayRetireBody;
 
+        // #380: Thorstein's work is building. The order is the player's - a
+        // place, a facing, and a confirmation - and this runtime only ever
+        // reads the world and hands it to the decisions in Domain/Construction.
+        _buildOrders = new Runtime.Construction.BuildOrderRuntime(
+            () => WorkAuthorityPolicy.Evaluate(
+                CollectionWorldFacts.ReadAuthorityFacts(settings.SettlementRuntimeEnabled.Value)) ==
+                WorkAuthorityVerdict.Granted,
+            () => WorkAuthorityPolicy.Describe(WorkAuthorityPolicy.Evaluate(
+                CollectionWorldFacts.ReadAuthorityFacts(settings.SettlementRuntimeEnabled.Value))),
+            message => Logger.LogInfo(message));
+        Runtime.Construction.BuildOrderRuntime buildOrders = _buildOrders;
+
+        gameObject.AddComponent<Ui.BuildOrderPanel>().Initialize(
+            () => settings.SettlementRuntimeEnabled.Value, buildOrders, Logger);
+
         gameObject.AddComponent<Ui.CollectionOrderPanel>().Initialize(
             () => settings.SettlementRuntimeEnabled.Value,
             arguments => collection.Execute(arguments),
@@ -132,6 +148,7 @@ public sealed class Plugin : BaseUnityPlugin
             new WorkerToolsCommand(_settlement),
             new SettlementToolsCommand(_settlement),
             new CollectCommand(_collection),
+            new Runtime.Construction.BuildCommand(_buildOrders),
             // Read-only measurement of the game's own ladders (CF-LAD-001). It
             // places nothing and changes nothing; it exists so the ladder work
             // is built on measurements instead of guesses.
@@ -285,6 +302,9 @@ public sealed class Plugin : BaseUnityPlugin
             _haulProvider?.Forget();
             _presenceProvider?.Forget();
             _surveyCompanions?.Forget();
+
+            // A build-order marker names a place in a world that is going away.
+            _buildOrders?.Forget();
 
             // Before anything else drops the scene: a climber is holding a
             // ladder that is about to stop existing.

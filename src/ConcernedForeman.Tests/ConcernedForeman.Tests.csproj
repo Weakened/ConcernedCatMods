@@ -30,6 +30,26 @@
     <Compile Include="..\ConcernedForeman\Runtime\Settlement\WorldHousing.cs" Link="Product/WorldHousing.cs" />
     <Compile Include="..\ConcernedForeman\Runtime\SitePoints.cs" Link="Product/SitePoints.cs" />
 
+    <!-- #380 (CNPC-R1): the construction domain. Game-free on purpose - the
+         blueprint, the real-recipe arithmetic, the phase order, the placement
+         gate's decision table and the round loop all decide things that can be
+         proved with no game installed, and the folder carries no Unity type so
+         it compiles here exactly as it does in the product. The game-bound half
+         of the same feature lives under Runtime/Construction and is linked
+         below against the vanilla stubs. -->
+    <Compile Include="..\ConcernedForeman\Domain\Construction\**\*.cs" LinkBase="Construction" />
+
+    <!-- #380: the adapters that read the real recipe, the real ward and the
+         real ground. These are the only construction files that touch the game,
+         and they are the ones a review would otherwise have to take on trust. -->
+    <Compile Include="..\ConcernedForeman\Runtime\Construction\**\*.cs"
+             Exclude="..\ConcernedForeman\Runtime\Construction\BuildCommand.cs"
+             LinkBase="Product/Construction" />
+    <!-- BuildCommand is a Jotunn ConsoleCommand and nothing else: it forwards
+         its words to BuildOrderRuntime, which IS linked and IS tested. Stubbing
+         Jotunn's entity base class to prove a forward is not evidence about
+         anything, and it is why CollectCommand is not linked here either. -->
+
     <!-- The game-free layers those sources sit on, the same way
          Shared.Settlement.Tests links them. -->
     <Compile Include="..\Shared\Settlement\**\*.cs" LinkBase="Settlement" />
