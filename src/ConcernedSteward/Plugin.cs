@@ -40,7 +40,11 @@ public sealed class Plugin : BaseUnityPlugin
         _steward = new StewardRuntime(settings, message => Logger.LogInfo(message));
         _steward.Install();
 
-        Logger.LogInfo($"{PluginName} {PluginVersion} loaded");
+        // Which build this actually is, not just which version it claims: a test
+        // profile keeps whatever DLL was last copied into it, and two builds of
+        // one version read alike in the log without the commit.
+        Logger.LogInfo(
+            $"{PluginName} {PluginVersion} loaded. Release: ConcernedSteward@{ResolveInformationalVersion()}.");
         Logger.LogInfo(
             "The Steward is " + (settings.RuntimeEnabled.Value ? "ENABLED" : "off (the default)") +
             "; fire tending is " + (settings.TendFiresEnabled.Value ? "ENABLED" : "off (the default)") +
@@ -64,6 +68,24 @@ public sealed class Plugin : BaseUnityPlugin
         }
 
         Logger.LogInfo(VanillaConsoleCommands.Describe(names));
+    }
+
+    /// <summary>The release identity including the build commit (the SDK stamps
+    /// InformationalVersion as "0.1.0+&lt;sha&gt;"), so the load line names the
+    /// exact binary and nothing about the player.</summary>
+    private static string ResolveInformationalVersion()
+    {
+        try
+        {
+            return System.Reflection.CustomAttributeExtensions
+                .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(Plugin).Assembly)
+                ?.InformationalVersion ?? PluginVersion;
+        }
+        catch
+        {
+            // The plain version is an acceptable release identity fallback.
+            return PluginVersion;
+        }
     }
 
     /// <summary>Notices a world arriving and going away, and drives the Steward.

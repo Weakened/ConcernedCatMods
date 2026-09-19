@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using Jotunn.Entities;
+using TheConcernedCat.ConcernedForeman.Domain.Ladders;
 using UnityEngine;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Ladders;
@@ -55,31 +56,31 @@ internal sealed class LadderAuditCommand : ConsoleCommand
 
     internal string Execute(string[] args)
     {
+        // Both positions come from LadderAuditArguments, which is where the
+        // reasoning about them lives and where they are tested: the console
+        // has already taken this command's own name off the front, so the
+        // subcommand is the first argument and the radius the second.
         string[] given = args ?? Array.Empty<string>();
-        string subcommand = given.Length > 1 ? given[1].ToLowerInvariant() : "list";
+        string subcommand = LadderAuditArguments.Subcommand(given);
+        if (!LadderAuditArguments.IsKnown(subcommand))
+        {
+            return "Unknown subcommand. " + Help;
+        }
+
         switch (subcommand)
         {
-            case "list":
+            case LadderAuditArguments.List:
                 return ListPrefabs();
-            case "here":
-                return MeasureNearby(Radius(given), snapPoints: false);
-            case "snaps":
-                return MeasureNearby(Radius(given), snapPoints: true);
+            case LadderAuditArguments.Here:
+                return MeasureNearby(LadderAuditArguments.Radius(given), snapPoints: false);
+            case LadderAuditArguments.Snaps:
+                return MeasureNearby(LadderAuditArguments.Radius(given), snapPoints: true);
             default:
+                // The guard above and this switch are the same three names. If
+                // they ever stop agreeing, say so rather than pick one: a
+                // measurement nobody asked for is what this whole fix is about.
                 return "Unknown subcommand. " + Help;
         }
-    }
-
-    private static float Radius(string[] args)
-    {
-        if (args != null && args.Length > 2 &&
-            float.TryParse(args[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float radius) &&
-            radius > 0f && radius <= 64f)
-        {
-            return radius;
-        }
-
-        return 12f;
     }
 
     /// <summary>Every prefab the scene knows that carries a <c>Ladder</c>, with

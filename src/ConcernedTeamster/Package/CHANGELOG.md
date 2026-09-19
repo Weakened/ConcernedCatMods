@@ -1,12 +1,71 @@
 # Changelog
 
+## 1.0.5 - Gunnar pulls the cart
+
+**Gunnar, the Teamster's worker, hauls a cart you hand him.** He is off by
+default, he works only in single player or as the host with nobody else
+connected, and he never touches a cart you have not explicitly assigned. With
+his setting off, this release behaves as 1.0.4 did apart from the calibration
+correction below.
+
+- **Gunnar and his cart.** A new **Gunnar** button at the right screen edge opens
+  his panel: assign the cart you are looking at, stand where it should end up,
+  and send him. He walks to the handle, hitches himself through the cart's own
+  attach, pulls it the way a character does, and stops, detaches and parks when
+  you say so. His body is a vanilla creature clone, built while inactive, with
+  its mind, taming, talk, loot, breeding and despawn timer removed and no gear
+  given; his identity lives in his own network object, never in the cart and
+  never in a world save. Turn him on with `Workers/GunnarHaulingEnabled` and
+  bring him into the world with `ct_haul spawn`.
+- **Routes a cart can actually take.** His legs are planned for the cart, not for
+  someone on foot: from where the cart stands rather than where he stands, no
+  steeper than 12% rise over run, with half a metre of clearance beyond the
+  cart's own width on each side, and a stopping place no steeper than a loaded
+  cart may be left standing on. A stall, a wedge or a strained joint is
+  remembered, so the next plan goes round the snag instead of back into it.
+- **He can haul for other Concerned Cat mods.** Teamster now publishes the
+  `concernedcat.haul/1` capability: one plain delegate another Concerned Cat mod
+  finds by plugin id and calls from its own update. Concerned Foreman's
+  collection orders are the first to ask. Nothing is registered with the game,
+  nothing runs unless another mod calls, and Gunnar hauls for them only while his
+  setting is on and a cart is assigned. Builds before this one do not carry the
+  capability at all, which is why the mods that ask for it refuse anything below
+  1.0.5.
+- **He does not let go of a cart that would roll.** If a peer connects, or this
+  client stops owning the cart while Gunnar is hitched, he stops moving at once
+  but keeps hold of it. He puts it down only once it is still, upright and on
+  ground shallow enough to leave it on; otherwise he holds it, motionless, and
+  the panel says that is what he is doing. Nothing resumes by itself when
+  authority comes back: you take the cart, tell him to detach or release, or
+  engage the parking brake. Every release goes through the joint he actually
+  recorded, and a release that does not take is retried rather than assumed, so
+  his body is never retired or rebound while a cart is still joined to it.
+- **Load and descent advice recalibrated against the real cart.** The installed
+  `Cart.prefab` overrides the cart class's own field values before any cart
+  exists: base mass 50 rather than 20, and cargo weight counted at a tenth rather
+  than in full. Live readouts always came from the cart in front of you and were
+  right; the embedded calibration priors were not. They are now data version 2,
+  rechecked against Valheim 1.0.14, so load and descent verdicts quote numbers
+  that match the cart you are pulling.
+- **Safety posture.** Gunnar moves only his own body, through the game's own
+  motor, and hitches only through the cart's own attach and detach. No cart is
+  teleported, no force or velocity is written, no cart mass or physics default is
+  changed, no stamina is bypassed, the parking brake is never engaged on your
+  behalf, and nothing is written into a world save or into any vanilla object.
+  The published multiplayer policy now records two mutating features instead of
+  one: the parking brake, and this opt-in runtime, which additionally refuses to
+  act unless you have opted in, you are the host, the server is not dedicated,
+  and nobody else is connected.
+
 ## 1.0.4 - Version-alignment rebuild
 
-**No functional changes, again.** Concerned Teamster is unchanged since 1.0.2; this
-release exists only so both Concerned Cat mods stay on the same version number while
-Concerned Cartographer ships its sailing Route Follow update. Behaviour,
-configuration, sidecar format, cart physics, panels and multiplayer policy are all
-identical.
+**No functional changes, again.** Concerned Teamster was unchanged from 1.0.2
+through 1.0.4; that release existed only so both Concerned Cat mods sat on the
+same version number while Concerned Cartographer shipped its sailing Route Follow
+update. Behaviour, configuration, sidecar format, cart physics, panels and
+multiplayer policy were all identical. The two version numbers no longer track
+each other: 1.0.5 is a real change, and Concerned Cartographer has moved on ahead
+of it.
 
 - Rebuilt from the same source as 1.0.2 and 1.0.3, re-verified against installed Valheim 1.0.12 (Unity 6000.0.75f1, BepInEx 5.4.23.3, Jotunn 2.29.2).
 - Upgrading from 1.0.2 or 1.0.3 is optional and changes nothing you can observe in game. Keep your existing configuration and sidecar files.

@@ -102,18 +102,22 @@ piece is built and §3 of the brief is met by the vanilla piece. If it does not,
 cloned from the vanilla prefab with added snap points — and that decision is the **owner's**, because a custom piece
 makes a world depend on the mod: uninstalling would delete those ladders from the world. It will not be done silently.
 
-**How it will be observed** (CF-LAD-004, #328). The full script, with what to capture at each step, is in the handoff
-folder: `2026-09-17-foreman-ladders/L-D/HANDOFF.md` §"Stacking, observed not assumed". In summary, in a disposable
-world, with `Ladders/Enabled = false` so the answer is about the game and not about this mod:
+**How it will be observed** (CF-LAD-004, #328). The steps below are the procedure of record; there is no fuller script
+anywhere else. Run them in a disposable world, with `Ladders/Enabled = false` so the answer is about the game and not
+about this mod. `cf_ladders` reads and never places, moves or damages a piece, so every placement here is yours with
+the hammer.
 
-1. `cf_ladders list` — every prefab carrying a `Ladder`, its size, and vanilla's teleport target.
-2. Place one `wood_stepladder` against a wall; `cf_ladders snaps` — does the piece have snap points at its foot and
-   head at all? A piece with none cannot stack, and the rest of the run is already answered.
+1. `cf_ladders list` — every prefab carrying a `Ladder`, its size, and vanilla's teleport target. It reads the loaded
+   scene, so a world has to be loaded for it to answer.
+2. Place one `wood_stepladder` against a wall and **stand next to it**: `here` and `snaps` measure the ladders within
+   their radius of where you are standing (12 m when you give none, and anything above 64 m falls back to 12), and
+   say "none in range" when you are away from them. Then `cf_ladders snaps` — does the piece have snap points at its
+   foot and head at all? A piece with none cannot stack, and the rest of the run is already answered.
 3. Bring a second ghost to the head of the first: does it turn green, and does it snap, and at what spacing?
 4. The invalid cases — no support, inside the first piece, facing the wrong way — must still show a red ghost and
    refuse. A feature that made an illegal placement legal would be a defect.
 5. Hammer rotation (`Q`/`E` or the mouse wheel) must behave exactly as it does anywhere else.
-6. Repeat to five pieces, then measure the whole run with `cf_ladders here 24`.
+6. Repeat to five pieces, then stand at the foot of the run and measure the whole of it with `cf_ladders here 24`.
 
 **Result: not yet observed.** The table below is filled in from the game, with the build number, or it stays empty.
 
@@ -305,6 +309,21 @@ No gate may be claimed without the evidence named in it. A passing test suite is
   searches, no per-frame reflection, no per-rung update loops, cached surveys, local detection only.
 - **G7 Packaging.** Foreman builds, packages, documents and changelogs cleanly, with a truthful version. Nothing is
   published.
+
+**What G3 is actually judging.** There is no ladder animation clip in the game and none is shipped, so nothing in the
+climb makes a hand take hold of a rung. What the owner will see is this. The body turns to face the ladder, yaw only,
+and slides along its centreline at 1.8 m/s times the speed setting; the turn and the step onto the centreline are
+eased over the alignment time rather than snapped. While the climb lasts, `ClimbPose` switches on the player's own
+wall-running state and hands vanilla a ground normal pointing straight out of the ladder's face, so the body is leaned
+against the ladder the way a wall-running player is leaned against a slope, by vanilla's own tilt, not by an angle of
+ours. The ordinary locomotion animation is driven from the climb's signed speed, so the legs cycle at climbing pace,
+reverse on the way down, and stop when the climber stops. There is no IK: the arms keep their walking swing, and feet
+land near the rungs only because the body passes them. Sound is one quiet wood contact per rung crossed, never more
+often than once every 0.22 s. Two honest caveats for the judgement: if the log says `Ladder pose unavailable on this
+Valheim build`, none of the above is installed and the climber slides up in a standing idle, which is a different
+thing to judge and should be said in the verdict; and a ladder whose rungs are not named in its mesh falls back to an
+assumed 0.35 m pitch, which moves the contact sounds but nothing else. The gate's question is
+whether that reads as climbing to somebody watching, not whether it matches an authored climb cycle.
 
 **Evidence** goes in the handoff folder as it is captured: the eleven captures the brief lists (§21), each an in-game
 screenshot, plus video or GIF of entry, climb, stop, reverse and both exits if the pipeline allows. Screenshots from

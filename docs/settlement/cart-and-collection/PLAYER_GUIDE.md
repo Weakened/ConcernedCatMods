@@ -24,6 +24,31 @@ work stops where it is — Gunnar keeps holding the cart if letting go there wou
 
 Thorstein also needs to be recruited and to be holding the axe and hammer he was issued.
 
+**Opening the two panels.** Neither panel has a keyboard shortcut. Each is a button on the screen while you are in a
+world, and each appears only when its own setting above is on:
+
+- **Thorstein** at the **left** edge, once `SettlementRuntimeEnabled` is on;
+- **Gunnar** at the **right** edge, just above Teamster's Cart button, once `GunnarHaulingEnabled` is on.
+
+Click the button to open the panel, and click it again or press Escape to close it. If the button is not there, the
+setting is off (or you are not in a world yet). One warning about the config file: Teamster's `Ui / PanelShortcut`
+reads as though it opens a panel, and it does not open this one. It toggles the Cart Status panel, and it is empty by
+default; Gunnar's panel has no shortcut at all.
+
+**Putting the two of them into the world.** Both workers are brought in from the console (F5). These are ordinary
+commands, so `devcommands` is not needed, and each one asks for exactly what the work asks for: the setting on, you as
+the host, and nobody else connected. In this order:
+
+1. `cf_settle area <radius>` — stand where the settlement's middle should be and mark it. Recruiting is refused until
+   you have.
+2. `cf_settle recruit thorstein` — the name matters: an order is always given to `thorstein`.
+3. `cf_worker spawn` — his body appears three metres in front of you. Refused if he already has one in this world,
+   including one standing in ground that is not loaded: go to it instead.
+4. `cf_settle give axe`, then `cf_settle give hammer` — hold the tool in your hand and stand within four metres of
+   him. He needs both, and they need to still be usable, before an order is accepted.
+5. `ct_haul spawn` — Gunnar arrives three metres in front of you and stays in the world until you retire him
+   (`ct_haul retire`). Refused while he already has a body somewhere in the world.
+
 ## 2. Give Gunnar a cart
 
 1. Stand near the cart and **look at it**.

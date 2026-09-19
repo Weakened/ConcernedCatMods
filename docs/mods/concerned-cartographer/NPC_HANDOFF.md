@@ -204,8 +204,17 @@ answer rows 6, 8, 9, 12 and 13 by observation rather than assumption.
 
 1. Create a **fresh mod-manager profile** against Valheim 1.0.12. Do not reuse
    `TCC-Dev`, `TCC-Compat` or either `TCC-v1-Smoke*`.
-2. Install BepInExPack_Valheim 5.4.2333 and Jötunn 2.29.2, then import
-   `TheConcernedCat-ConcernedCartographer-1.1.0.zip`.
+2. Install BepInExPack_Valheim 5.4.2333 and Jötunn 2.29.2, then import a
+   package of the version this repository is on, which is **1.2.2**
+   (`PluginVersion` in `src/ConcernedCartographer/Plugin.cs`, and `<Version>` in
+   the csproj beside it). Not 1.1.0 and not 1.1.1: both are behind the code the
+   rest of this document describes. Build the package rather than hunting for a
+   file: `pwsh ./scripts/package.ps1 -Product ConcernedCartographer` writes
+   `TheConcernedCat-ConcernedCartographer-<version>.zip` into
+   `artifacts/thunderstore/`, named from the version it just built, and that is
+   the file to import. `artifacts/` is git-ignored, so what is already sitting
+   there is whatever this machine last built and is only the right package if
+   its version matches.
 3. Create a **disposable world and a new character**. Never the owner's saves.
 4. Wake up at the start temple. Look around within about ten metres for a small
    object on the ground; walk to it and press the Use key.

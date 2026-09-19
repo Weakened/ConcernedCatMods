@@ -108,12 +108,18 @@ collection order", not as a failed write, whether or not the loop has adopted it
 yet.
 
 **Hold-for-player orders end when the record shows the materials handed over.**
-The loop cannot hand anything to a player itself — that transfer is the
-settlement's own act — so a hold order sits in `HoldingForPlayer` until the
-record says `HandedOver`, and its status says so and names `cf_collect cancel`
-as the way to end it and leave the load on him for the taking. Until custody's
-handover control accepts a `HoldingForPlayer` order, cancel is the only way it
-ends (R2 M1; the remaining half is in the custody runtime, not here).
+The loop cannot hand anything to a player itself; that transfer is the
+settlement's own act, so a hold order sits in `HoldingForPlayer` until the
+record says `HandedOver`. The act is `cf_settle release`, standing within 4 m of
+him: custody treats a holding order as releasable alongside the ended ones,
+hands you everything the record says he carries for it as ordinary transfers,
+and writes a hand-over row for each. `HandedOver` then covers the request, and
+the loop's next tick completes the order (R2 M1, wired in the custody runtime;
+`CUSTODY_AND_RECOVERY.md` §9 is the same fact from custody's side).
+`cf_collect cancel` remains the other way out, and it is not a refund: the order
+ends and the load stays on him for the taking. One rough edge is left: the
+status line a holding order prints still offers only the cancel, so the release
+is not discoverable from it.
 
 ## 4. The natural-source predicate and its evidence
 
@@ -191,9 +197,10 @@ again this session.
    unkeyed spike body; two of either is a duplicate and neither is used. `SettlementRuntime.Despawn` still destroys a
    body a job holds; it should consult `ActorModeOwner.MayRetireBody`.
 7. **C2 answered both earlier gaps** and both are wired here: `TryRecoverOrder`/`RecordRebound` (§3.1) and
-   `PausedByPlayer`. What is **not** wired, because it lives in the custody runtime: a `HoldingForPlayer` order's
-   handover (R2 M1) — `Release` refuses while any order is non-terminal, and `RecordHandover` is called by nothing, so
-   `HandedOver` never rises and hold mode ends only by cancelling.
+   `PausedByPlayer`. The third, a `HoldingForPlayer` order's handover (R2 M1), is wired in the custody runtime, not
+   here: `CustodyTools.Release` counts `HoldingForPlayer` as releasable alongside the terminal states and calls
+   `CustodyCore.RecordHandover` for whatever reaches the player, so `HandedOver` rises and `StepHolding` completes the
+   order with no cancel. Nothing in the loop had to change for it.
 8. **The game updated during this work**: Steam build 25364265, `assembly_valheim.dll` SHA-256
    `f64998168a0dd37ec774816808f914ed68376be1b9670cd05a6c2f27c8017fb6` (still reports 1.0.12). The audit passes all
    80 contracts against it; SPEC/EVIDENCE cite the earlier `27a766a8…`.
@@ -254,7 +261,7 @@ and the commit.
 | N12 unloaded | During an order walk ≥ 200 m away until his zone unloads, return | Paused "not loaded"; `resume` continues |
 | N13 source race | Pick the stone he is walking to before he arrives | Log "Pick refused … gone"; he moves on; no duplicate item anywhere |
 | N14 authority | Turn `SettlementRuntimeEnabled` off mid-order | Paused before the next pick; turn on, `resume` |
-| N15 hold | `cf_collect start 10 0 hold` | Ends "holding the materials for you", 10 Stone on him, chest unchanged; handover through D's control completes it |
+| N15 hold | `cf_collect start 10 0 hold`, then stand next to him and `cf_settle release` | Ends "holding the materials for you", 10 Stone on him, chest unchanged; the release hands the 10 Stone over, the record notes each hand-over, and the order reaches Completed without a cancel |
 | N16 cancel | `cf_collect cancel` mid-trip | Cancelled; carried stone stays on him (count); chest unchanged by the cancel |
 | N17 console goals | `cf_worker goto x z` while he works | Refused with "pause or cancel the job first"; he keeps working |
 | N18 reload | Save and quit mid-order, reload, then `cf_collect status` | The order is listed again, stopped, saying it was taken up from the record and needs a rebind; `cf_settle status` shows the same order (the two surfaces agree) |

@@ -22,7 +22,8 @@ internal sealed class CollectCommand : ConsoleCommand
 
     public override string Help =>
         "Concerned Foreman collection (Thorstein). Subcommands: status, preview [radius], " +
-        "start <stone> <wood> [hold] (look at the destination chest, or add hold), rebind (after a reload, " +
+        "start <stone> <wood> [hold] [gunnar] (look at the destination chest, add hold for him to keep the " +
+        "materials, or add gunnar to use the assigned cart), rebind (after a reload, " +
         "looking at the chest), pause, resume, cancel. " +
         "Requires the settlement runtime enabled, single player or a host with nobody else connected.";
 
@@ -41,6 +42,12 @@ internal sealed class CollectCommand : ConsoleCommand
         context?.AddString(output);
     }
 
+    /// <summary>What the console offers after the name. The start options are
+    /// in it as well: a player who never reads the usage line otherwise has no
+    /// way to find out that the cooperative haul exists.</summary>
     public override List<string> CommandOptionList() =>
-        new List<string> { "status", "preview", "start", "rebind", "pause", "resume", "cancel" };
+        new List<string>
+        {
+            "status", "preview", "start", "rebind", "pause", "resume", "cancel", "hold", "gunnar",
+        };
 }
