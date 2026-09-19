@@ -5,6 +5,7 @@ using TheConcernedCat.ConcernedNPC.Jobs;
 using TheConcernedCat.ConcernedNPC.Planning;
 using TheConcernedCat.ConcernedNPC.Routing;
 using TheConcernedCat.ConcernedNPC.Work;
+using TheConcernedCat.ConcernedSteward.Domain.Npc;
 using TheConcernedCat.Settlement.Designations;
 using TheConcernedCat.Settlement.Worker;
 
@@ -356,6 +357,50 @@ internal sealed class MaintenanceJobRole : INpcJobRole
             new NpcCarryCapacity(unitsPerTrip),
             new JobStepActions(collect: "fetch", service: "tend"),
             ceiling: Ceiling(round));
+
+    /// <summary>Starts one maintenance round, from the one place the Steward is
+    /// registered.
+    ///
+    /// <b>Why this exists rather than three call sites assembling an order.</b>
+    /// A job now needs four things that must all come from the same registry: an
+    /// identity that registry tracks, the world epoch that registry minted, the
+    /// registry itself, and a job name no other driver is holding. Get any of
+    /// them from somewhere else and the driver refuses before it plans — which
+    /// is the right behaviour and an extremely quiet one, because a refusal
+    /// looks exactly like a settlement with nothing to do.
+    ///
+    /// So there is one construction and both the runtime and the tests use it.
+    /// That is not tidiness: the gap between how a product starts a job and how
+    /// its tests start one is precisely where an adoption bug hides, and this
+    /// leaf has already been bitten by it once.</summary>
+    /// <param name="adoption">The Steward's registration. Supplies the identity,
+    /// the world and the registry, all three from the same place.</param>
+    /// <param name="jobId">What this job is called. One driver at a time may
+    /// hold it: a second driver with a different name is refused as busy, and a
+    /// second with the same name takes the mode it already holds.</param>
+    internal static NpcJobDriver DriverFor(
+        StewardNpcAdoption adoption,
+        in RoundPlan round,
+        string jobId,
+        INpcWorkArea area,
+        int unitsPerTrip,
+        Func<RoundPlan> currentRound,
+        Func<FuelTargetKey, FuelTargetObservation?> look,
+        Func<Designation?> settlement,
+        Func<string> epoch,
+        MaintenanceThresholds thresholds)
+    {
+        if (adoption == null)
+        {
+            throw new ArgumentNullException(nameof(adoption));
+        }
+
+        NpcWorldEpoch world = adoption.World;
+        return NpcJobDriver.For(
+            OrderFor(round, adoption.Identity, jobId, area, world, unitsPerTrip),
+            new MaintenanceJobRole(world, currentRound, look, settlement, epoch, thresholds),
+            adoption.Registry);
+    }
 
     private static JobManifest Ceiling(in RoundPlan round)
     {
