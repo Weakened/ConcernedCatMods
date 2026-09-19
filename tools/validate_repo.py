@@ -60,6 +60,39 @@ PRODUCTS: dict[str, dict[str, object]] = {
     },
 }
 
+# CNPC-000 (#371): a LIBRARY is a second kind of shipped package, and the
+# difference from a product is the whole point of the category.
+#
+# A product is a mod a player installs for what it does. Products must never
+# reference each other, because the day one does, two release cadences become
+# one (CT-021, check_cross_product_independence below).
+#
+# A library ships no gameplay. It exists so that several products can share one
+# runtime AND one release cadence for that runtime: a compatible fix to it
+# reaches every product without any of them being rebuilt, which source sharing
+# under src/Shared can never do. That is why a library may be referenced, and
+# why the rules that make the reference safe are enforced here rather than left
+# to whoever edits a csproj next (check_library_consumers).
+#
+# Everything a product must have, a library must have too: the four package
+# files, a 256x256 icon, the version agreeing in three places, and exactly one
+# DLL in its ZIP.
+LIBRARIES: dict[str, dict[str, object]] = {
+    "concernednpc": {
+        "display": "Concerned NPC",
+        "project_dir": ROOT / "src" / "ConcernedNPC",
+        "csproj": "ConcernedNPC.csproj",
+        "package_name": "ConcernedNPC",
+        "dll_name": "TheConcernedCat.ConcernedNPC.dll",
+        "plugin_guid": "com.theconcernedcat.valheim.concernednpc",
+        "namespace": "ConcernedNPC",
+    },
+}
+
+# Both kinds are validated identically as packages; only the relationship rules
+# differ.
+PACKAGES: dict[str, dict[str, object]] = {**PRODUCTS, **LIBRARIES}
+
 EXPECTED_NAMESPACE = "TheConcernedCat"
 EXPECTED_WEBSITE = "https://github.com/Weakened/ConcernedCatMods"
 EXPECTED_DEPENDENCIES = {
@@ -91,8 +124,12 @@ def read_csproj_version(csproj: Path) -> str:
 
 def validate_product(key: str, errors: list[str], require_binary: bool,
                      expected_version: str | None) -> list[str]:
-    """Runs every static check for one product; returns its report lines."""
-    spec = PRODUCTS[key]
+    """Runs every static check for one package; returns its report lines.
+
+    Products and libraries are checked by the same rules: the four package
+    files, a 256x256 icon, one version in three places, one DLL in the ZIP.
+    """
+    spec = PACKAGES[key]
     project_dir: Path = spec["project_dir"]  # type: ignore[assignment]
     package = project_dir / "Package"
     csproj = project_dir / str(spec["csproj"])
@@ -373,6 +410,182 @@ def check_cross_product_independence(errors: list[str]) -> list[str]:
         f"[interop] Cross-product independence: {checked_projects} project trees audited, "
         "no compile-time reference in either direction",
     ]
+
+
+def check_every_product_pair_is_audited(errors: list[str]) -> list[str]:
+    """Fails if a product pair is missing from CROSS_PRODUCT_RULES.
+
+    CROSS_PRODUCT_RULES is written by hand, so a new product added to PRODUCTS
+    is exempt from the independence scan until someone remembers to add its
+    pairs - silently, and with the validator green. This closes that: every
+    ordered pair of distinct products must be covered for the product's own
+    source directory.
+    """
+    covered = {(owner, target) for owner, project_rel, target in CROSS_PRODUCT_RULES
+               if project_rel == f"src/{Path(project_rel).name}"
+               and Path(project_rel).name == str(PRODUCTS.get(owner, {}).get("package_name", ""))}
+    pairs = 0
+    for owner, owner_spec in PRODUCTS.items():
+        for target, target_spec in PRODUCTS.items():
+            if owner == target:
+                continue
+            pairs += 1
+            if (owner, str(target_spec["package_name"])) not in covered:
+                fail(
+                    f"[interop] Cross-product audit does not cover {owner} -> "
+                    f"{target_spec['package_name']}: add "
+                    f'("{owner}", "src/{owner_spec["package_name"]}", '
+                    f'"{target_spec["package_name"]}") to CROSS_PRODUCT_RULES', errors)
+    return [f"[interop] Cross-product audit covers all {pairs} ordered product pairs"]
+
+
+def check_library_consumers(errors: list[str]) -> list[str]:
+    """The rules that make depending on a library package safe.
+
+    A library may be referenced where a product may not, so the reference has
+    to carry its own guarantees, and all of them have to be true together:
+
+    1. The library depends on no product. A shared runtime that reaches back
+       into one of its consumers is a circular dependency wearing a hat.
+    2. A product references it as a ProjectReference with Private false, so the
+       library's DLL is NOT copied into the product's output and cannot be
+       smuggled into the product's ZIP. The player gets it from its own
+       package, once.
+    3. A product that references it pins it in thunderstore.toml, so the
+       storefront installs it.
+    4. A product that references it declares BepInDependency on its plugin
+       GUID, so a missing library is a clear dependency failure at load rather
+       than an NRE somewhere later.
+
+    Three and four without two would ship it twice; two without three would
+    install a mod whose dependency nobody fetches; two without four turns a
+    missing package into a mystery. So it is all four or none, and a stale pin
+    or dependency left behind after a reference is removed fails too.
+    """
+    report: list[str] = []
+    for lib_key, lib_spec in LIBRARIES.items():
+        lib_dir: Path = lib_spec["project_dir"]  # type: ignore[assignment]
+        lib_name = str(lib_spec["package_name"])
+        lib_guid = str(lib_spec["plugin_guid"])
+        if not lib_dir.is_dir():
+            fail(f"[{lib_key}] Library directory is missing: src/{lib_name}", errors)
+            continue
+
+        # 1. The library must not reference any product, in either idiom.
+        product_names = {str(spec["package_name"]) for spec in PRODUCTS.values()}
+        for csproj in sorted(lib_dir.glob("*.csproj")):
+            try:
+                tree = ET.parse(csproj)
+            except Exception as exc:
+                fail(f"[{lib_key}] Could not parse {csproj.name}: {exc}", errors)
+                continue
+            for node in tree.getroot().iter():
+                tag = node.tag.rsplit("}", 1)[-1]
+                if tag not in ("Compile", "ProjectReference", "Reference", "PackageReference"):
+                    continue
+                text = node.attrib.get("Include", "") + "".join(node.itertext())
+                for product_name in product_names:
+                    if product_name in text:
+                        fail(
+                            f"[{lib_key}] A library may not reference a product: "
+                            f"{product_name} in {csproj.relative_to(ROOT)}", errors)
+        product_using = re.compile(
+            r"^\s*(?:global\s+)?using\s+(?:static\s+)?(?:\w+\s*=\s*)?TheConcernedCat\."
+            r"(" + "|".join(sorted(product_names)) + r")\b")
+        for path in sorted(lib_dir.rglob("*.cs")):
+            if path.relative_to(lib_dir).parts[0] in ("obj", "bin"):
+                continue
+            for number, line in enumerate(
+                    path.read_text(encoding="utf-8-sig").splitlines(), start=1):
+                if product_using.search(line):
+                    fail(
+                        f"[{lib_key}] A library may not use a product's namespace: "
+                        f"{path.relative_to(ROOT)}:{number}", errors)
+
+        # 2 to 4, for every product, in both directions.
+        consumers = 0
+        for product_key, product_spec in PRODUCTS.items():
+            project_dir: Path = product_spec["project_dir"]  # type: ignore[assignment]
+            csproj = project_dir / str(product_spec["csproj"])
+            plugin = project_dir / "Plugin.cs"
+            toml_path = project_dir / "Package" / "thunderstore.toml"
+            if not csproj.is_file():
+                continue
+
+            references = []
+            try:
+                tree = ET.parse(csproj)
+            except Exception as exc:
+                fail(f"[{product_key}] Could not parse {csproj.name}: {exc}", errors)
+                continue
+            for node in tree.getroot().iter():
+                tag = node.tag.rsplit("}", 1)[-1]
+                if tag not in ("ProjectReference", "Reference", "PackageReference", "Compile"):
+                    continue
+                text = node.attrib.get("Include", "") + "".join(node.itertext())
+                if lib_name not in text:
+                    continue
+                if tag != "ProjectReference":
+                    fail(
+                        f"[{product_key}] {lib_name} must be a ProjectReference with Private "
+                        f"false, not a <{tag}>: {csproj.relative_to(ROOT)}", errors)
+                    continue
+                references.append(node)
+
+            referenced = bool(references)
+            for node in references:
+                private = node.attrib.get("Private", "")
+                child = node.find("{*}Private")
+                if child is not None:
+                    private = (child.text or "").strip()
+                if private.lower() != "false":
+                    fail(
+                        f"[{product_key}] The {lib_name} ProjectReference needs "
+                        f"<Private>false</Private>, or its DLL is copied into this product's "
+                        f"output and can reach its ZIP: {csproj.relative_to(ROOT)}", errors)
+
+            pinned = False
+            if toml_path.is_file():
+                try:
+                    config = tomllib.loads(toml_path.read_text(encoding="utf-8"))
+                    dependencies = config.get("package", {}).get("dependencies", {})
+                    pinned = f"{EXPECTED_NAMESPACE}-{lib_name}" in dependencies
+                except Exception as exc:
+                    fail(f"[{product_key}] Invalid thunderstore.toml: {exc}", errors)
+
+            declared = False
+            if plugin.is_file():
+                declared = f'BepInDependency("{lib_guid}"' in plugin.read_text(encoding="utf-8")
+
+            if referenced:
+                consumers += 1
+                if not pinned:
+                    fail(
+                        f"[{product_key}] References {lib_name} but does not pin "
+                        f"{EXPECTED_NAMESPACE}-{lib_name} in thunderstore.toml, so the "
+                        "storefront would not install it", errors)
+                if not declared:
+                    fail(
+                        f"[{product_key}] References {lib_name} but declares no "
+                        f'BepInDependency("{lib_guid}"), so a missing library would be an NRE '
+                        "rather than a dependency error", errors)
+            else:
+                if pinned:
+                    fail(
+                        f"[{product_key}] Pins {EXPECTED_NAMESPACE}-{lib_name} in "
+                        "thunderstore.toml but references nothing from it: a stale pin makes "
+                        "players install a package this product does not use", errors)
+                if declared:
+                    fail(
+                        f"[{product_key}] Declares BepInDependency on {lib_guid} but references "
+                        "nothing from it: a stale hard dependency refuses to load without a "
+                        "package this product does not use", errors)
+
+        report.append(
+            f"[{lib_key}] Library package: depends on no product; {consumers} of "
+            f"{len(PRODUCTS)} products consume it, each by ProjectReference with Private false, "
+            "a Thunderstore pin and a BepInDependency")
+    return report
 
 
 # CT-021: Teamster reads these exact Cartographer members reflectively at
@@ -1535,14 +1748,14 @@ def check_no_mojibake(errors: list[str]) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--product", choices=[*PRODUCTS.keys(), "all"], default="cartographer",
+        "--product", choices=[*PACKAGES.keys(), "all"], default="cartographer",
         help="Which product --require-binary/--expected-version apply to "
              "(static validation always covers all products).")
     parser.add_argument("--require-binary", action="store_true")
     parser.add_argument("--expected-version")
     args = parser.parse_args()
 
-    scoped = list(PRODUCTS.keys()) if args.product == "all" else [args.product]
+    scoped = list(PACKAGES.keys()) if args.product == "all" else [args.product]
     errors: list[str] = []
 
     required_root_files = [
@@ -1558,7 +1771,7 @@ def main() -> int:
             fail(f"Missing required file: {path.relative_to(ROOT)}", errors)
 
     report: list[str] = []
-    for key in PRODUCTS:
+    for key in PACKAGES:
         report.extend(validate_product(
             key,
             errors,
@@ -1571,6 +1784,8 @@ def main() -> int:
     report.extend(check_cartographer_root_holds_only_names_the_probe_knows(errors))
     check_teamster_adapter_isolation(errors)
     report.extend(check_cross_product_independence(errors))
+    report.extend(check_every_product_pair_is_audited(errors))
+    report.extend(check_library_consumers(errors))
     report.extend(check_teamster_cartographer_contract(errors))
     report.extend(check_teamster_integration_readonly(errors))
     report.extend(check_teamster_authority_policy(errors))
