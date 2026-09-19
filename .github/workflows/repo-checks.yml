@@ -59,6 +59,12 @@ jobs:
       - name: Run adapter unit tests (Concerned Foreman)
         run: dotnet test src/ConcernedForeman.Tests/ConcernedForeman.Tests.csproj --nologo
 
+      # CNPC-000 (#371): the shared NPC runtime's contracts are game-free, so
+      # they run here like the domain suites rather than only on a machine with
+      # the game installed.
+      - name: Run contract tests (Concerned NPC)
+        run: dotnet test src/ConcernedNPC.Tests/ConcernedNPC.Tests.csproj --nologo
+
       - name: Explain build boundary
         run: |
           echo "Game-linked C# builds are intentionally local or self-hosted."

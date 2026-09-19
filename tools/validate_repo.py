@@ -588,6 +588,59 @@ def check_library_consumers(errors: list[str]) -> list[str]:
     return report
 
 
+# CNPC-000 (#371): the never-coexist rule - one identity never has a
+# presentation body and a worker body at once - is enforced by an arbiter in the
+# library, and the arbiter is only the truth if it is the ONLY thing holding an
+# identity's mode. Today each worker product constructs its own ActorModeOwner
+# from its own compiled copy of the shared source, which is harmless while
+# nothing consumes the library and a silent second owner the moment something
+# does. A review of the contract surface asked for this rule rather than three
+# per-leaf acceptance criteria, because an acceptance criterion is a promise and
+# this is a check.
+ARBITER_BYPASS = re.compile(r"\bnew\s+ActorModeOwner\s*\(")
+
+
+def check_library_consumers_do_not_bypass_the_arbiter(errors: list[str]) -> list[str]:
+    """Once a product consumes the NPC library, its modes come from the arbiter.
+
+    Scoped to consumers on purpose: a product that has not adopted the library
+    still owns its own mode owner, and saying otherwise would fail the build for
+    code that is correct today.
+    """
+    library = LIBRARIES.get("concernednpc")
+    if library is None:
+        return []
+    lib_name = str(library["package_name"])
+
+    checked = 0
+    consumers = 0
+    for product_key, product_spec in PRODUCTS.items():
+        project_dir: Path = product_spec["project_dir"]  # type: ignore[assignment]
+        csproj = project_dir / str(product_spec["csproj"])
+        if not csproj.is_file():
+            continue
+        checked += 1
+        if lib_name not in csproj.read_text(encoding="utf-8-sig"):
+            continue
+        consumers += 1
+        for path in sorted(project_dir.rglob("*.cs")):
+            if path.relative_to(project_dir).parts[0] in ("obj", "bin"):
+                continue
+            for number, line in enumerate(
+                    path.read_text(encoding="utf-8-sig").splitlines(), start=1):
+                if ARBITER_BYPASS.search(line):
+                    fail(
+                        f"[{product_key}] Consumes {lib_name} but builds its own "
+                        f"ActorModeOwner: {path.relative_to(ROOT)}:{number}. One identity would "
+                        "have two mode owners, and the never-coexist rule would be advice rather "
+                        "than enforcement. Take the mode from the arbiter.", errors)
+
+    return [
+        f"[interop] Arbiter bypass audit: {checked} products checked, {consumers} consume "
+        f"{lib_name}, none builds its own mode owner",
+    ]
+
+
 # CT-021: Teamster reads these exact Cartographer members reflectively at
 # runtime (docs/mods/concerned-teamster/CARTOGRAPHER_CONTRACT.md, mirrored in
 # Domain/Cartographer/CartographerContract.cs). Both products live in this
@@ -1786,6 +1839,7 @@ def main() -> int:
     report.extend(check_cross_product_independence(errors))
     report.extend(check_every_product_pair_is_audited(errors))
     report.extend(check_library_consumers(errors))
+    report.extend(check_library_consumers_do_not_bypass_the_arbiter(errors))
     report.extend(check_teamster_cartographer_contract(errors))
     report.extend(check_teamster_integration_readonly(errors))
     report.extend(check_teamster_authority_policy(errors))

@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>TheConcernedCat.ConcernedNPC.Tests</AssemblyName>
+    <!-- The linked library sources are written for the package's net48 target
+         and C# 10. Nothing here may depend on a newer language feature, so the
+         sources keep compiling in both places. -->
+    <LangVersion>10</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The library's own sources, LINKED rather than referenced as an
+         assembly, following ConcernedSteward.Tests.
+
+         Why linked. Two reasons, and the second is the one that matters here.
+         A reference would resolve the net48 output, which a net10 test host
+         cannot load; and a reference would only ever see the public surface,
+         while almost everything in this package is deliberately internal. The
+         arbiter that enforces "one identity, one body" is internal by design -
+         a role reaches it only through the registry - and it has to be tested
+         by trying to break it, which means from inside. These are the shipped
+         files, not copies: a test that passed against a copy would prove
+         nothing about what ships.
+
+         Plugin.cs is deliberately NOT linked. It is the BepInEx entry point and
+         nothing else - it registers no role, patches nothing and holds no
+         logic - and linking it would drag BepInEx into a test project that is
+         otherwise provable on a machine with no game installed. That is the
+         same boundary Concerned Steward and Concerned Foreman drew around their
+         own plugin wiring, for the same reason. -->
+    <Compile Include="..\ConcernedNPC\**\*.cs"
+             Exclude="..\ConcernedNPC\Plugin.cs;..\ConcernedNPC\bin\**\*.cs;..\ConcernedNPC\obj\**\*.cs"
+             LinkBase="Library" />
+
+    <!-- The shipped WorkerKey, linked ONLY so its slug rules can be compared
+         against this library's. NpcIdentity is a separate type because a shared
+         source area's internal type cannot cross an assembly boundary, and the
+         whole safety of that split rests on the two validators agreeing on
+         every input. NpcSlugAgreementTests asserts it. Nothing else in this
+         test project uses the settlement layer, and this is not an adoption of
+         src/Shared/Workers by the package. -->
+    <Compile Include="..\Shared\Workers\WorkerKey.cs" Link="Shipped\WorkerKey.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>
