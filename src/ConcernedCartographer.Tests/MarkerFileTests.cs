@@ -232,13 +232,22 @@ public sealed class MarkerFileTests : IDisposable
     [Fact]
     public void AnUnreadablePriorFileMeansTheCallerMustNotStartASecondIdentity()
     {
-        // A directory where the file belongs: File.ReadAllText throws. The old
-        // code swallowed that silently and the caller minted.
-        Directory.CreateDirectory(Legacy("author-id.txt"));
+        // The real scenario: a mod-manager config editor, an antivirus on-access
+        // scan or a sync client holding the file for a moment during startup.
+        // The old code swallowed the read failure silently and the caller minted
+        // a second identity that then hid this file for ever.
+        File.WriteAllText(Legacy("author-id.txt"), Identity);
+        using (new FileStream(
+            Legacy("author-id.txt"), FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Assert.Equal(MarkerFile.MarkerSearch.PriorFileUnread, Resolve(out string? contents));
+            Assert.Null(contents);
+            Assert.NotEmpty(_log);
+        }
 
-        Assert.Equal(MarkerFile.MarkerSearch.PriorFileUnread, Resolve(out string? contents));
-        Assert.Null(contents);
-        Assert.NotEmpty(_log);
+        // And once the obstruction clears, the identity is still there to find.
+        _log.Clear();
+        Assert.Equal(Identity, Resolved());
     }
 
     [Fact]

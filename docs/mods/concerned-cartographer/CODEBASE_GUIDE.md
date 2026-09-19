@@ -1175,7 +1175,7 @@ Per-world `<world-uid>.routes-atlas.tsv` + `.journal` with the same snapshot/jou
 
 ### `Persistence/AuthorIdentity.cs` (v0.6)
 
-Stable local author GUID in `state/author-id.dat` (under the profile config root; `author-id.txt` before 1.2.2, adopted once on upgrade). Used for audit labels and the self-echo filter; it is labeling, not authentication.
+Stable local author GUID in `state/author-id.dat` (under the profile config root). Two prior locations are adopted on upgrade, newest first: `author-id.dat` in the product directory (the 1.2.2-era build that changed the extension without moving the file) and `author-id.txt` (pre-1.2.2). A prior file that still exists wins over the marker, because its presence proves adoption never finished and it predates the marker; and no new identity is minted while one sits there unread. Used for audit labels and the self-echo filter; it is labeling, not authentication.
 
 ### `Persistence/LocalizationPersistence.cs` (v0.7)
 
