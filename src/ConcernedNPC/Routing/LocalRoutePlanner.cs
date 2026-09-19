@@ -61,12 +61,6 @@ internal sealed class LocalRoutePlanner : INpcRoutePlanner
     /// request.</summary>
     internal const float WaypointRadiusMetres = 1.5f;
 
-    /// <summary>How many plans' arrival tolerances are remembered, so the final
-    /// goal can be given the radius its request asked for. See
-    /// <see cref="NextGoal"/> for why this exists rather than the plan carrying
-    /// it.</summary>
-    internal const int RememberedTolerances = 16;
-
     /// <summary>The lateral offsets tried, in order, around a sample the probe
     /// refuses: a step to the left, a step to the right, then twice as far each
     /// way. Fixed and ordered, so the detour is the same every time the same
@@ -74,7 +68,6 @@ internal sealed class LocalRoutePlanner : INpcRoutePlanner
     private static readonly float[] DetourOffsets = { 2f, -2f, 4f, -4f };
 
     private readonly NpcWalkSetbacks _setbacks = new NpcWalkSetbacks();
-    private readonly List<KeyValuePair<int, float>> _tolerances = new List<KeyValuePair<int, float>>();
     private readonly INpcAreaProbe _probe;
     private int _planRevision;
 
@@ -149,8 +142,9 @@ internal sealed class LocalRoutePlanner : INpcRoutePlanner
             return RoutePlan.Refused(RouteVerdict.RefusedRecently, request.Revision, revision);
         }
 
-        RememberTolerance(revision, request.ArrivalToleranceMetres);
-        return new RoutePlan(RouteVerdict.Suitable, waypoints, Length(waypoints), request.Revision, revision);
+        return new RoutePlan(
+            RouteVerdict.Suitable, waypoints, Length(waypoints), request.ArrivalToleranceMetres,
+            request.Revision, revision);
     }
 
     /// <inheritdoc />
@@ -190,7 +184,7 @@ internal sealed class LocalRoutePlanner : INpcRoutePlanner
         }
 
         bool isFinal = next == last;
-        float radius = isFinal ? ArrivalRadiusFor(plan.PlanRevision) : WaypointRadiusMetres;
+        float radius = isFinal ? plan.ArrivalToleranceMetres : WaypointRadiusMetres;
         return new RouteGoal(waypoints[next], radius, isFinal, next, plan.PlanRevision);
     }
 
@@ -305,41 +299,6 @@ internal sealed class LocalRoutePlanner : INpcRoutePlanner
 
         round = default;
         return false;
-    }
-
-    /// <summary>The arrival radius the request asked for, looked up by the plan
-    /// that answered it.
-    ///
-    /// <b>This exists because the seam has a gap, and papering over it silently
-    /// would be worse than saying so.</b> <see cref="RoutePlan"/> does not carry
-    /// the request's <c>ArrivalToleranceMetres</c>, so a planner asked for the
-    /// next goal of a plan has no way to know how close the destination counted
-    /// as reached - and the final goal's radius is exactly that number. A small
-    /// ring of the last few plans' tolerances closes it honestly: the plan
-    /// revision is unique per plan, so the lookup is exact when it hits, and a
-    /// miss falls back to the waypoint radius rather than inventing a number.
-    /// The proper fix is a field on the plan, which is a change to a frozen
-    /// contract and therefore not this leaf's to make.</summary>
-    private float ArrivalRadiusFor(int planRevision)
-    {
-        for (int index = _tolerances.Count - 1; index >= 0; index--)
-        {
-            if (_tolerances[index].Key == planRevision)
-            {
-                return _tolerances[index].Value;
-            }
-        }
-
-        return WaypointRadiusMetres;
-    }
-
-    private void RememberTolerance(int planRevision, float tolerance)
-    {
-        _tolerances.Add(new KeyValuePair<int, float>(planRevision, tolerance));
-        while (_tolerances.Count > RememberedTolerances)
-        {
-            _tolerances.RemoveAt(0);
-        }
     }
 
     /// <summary>Height along the line, interpolated. The probe answers with the

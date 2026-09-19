@@ -60,11 +60,28 @@ public class PublicSurfaceTests
     [Fact]
     public void The_public_surface_is_exactly_what_is_written_down()
     {
+        // Every exported type, not merely the ones under the expected prefix: a
+        // public type in some other namespace is exactly the escape this test
+        // exists to catch, and a prefix filter would hide it.
+        //
+        // Two namespaces are excluded, and only these two. This assembly links
+        // the library's sources rather than referencing it, which is what makes
+        // "public" here mean the same thing it will mean to a consumer - and it
+        // also means the stand-ins that let the game-bound half compile without
+        // the game are in the same assembly. They are not part of anybody's
+        // surface. The list is written out so that adding a third stub
+        // namespace is a deliberate edit to this test rather than a quiet
+        // widening of what may escape it.
+        // The stand-ins come in two shapes: the modding frameworks, which have
+        // namespaces, and the game's own types, which have none at all.
+        string[] stubNamespaces = { "Jotunn.", "UnityEngine." };
+
         string[] actual = typeof(NpcRoleRegistry).Assembly
             .GetExportedTypes()
             .Where(type => type.FullName != null
-                && type.FullName.StartsWith("TheConcernedCat.ConcernedNPC.", StringComparison.Ordinal)
-                && !type.FullName.StartsWith("TheConcernedCat.ConcernedNPC.Tests.", StringComparison.Ordinal))
+                && type.Namespace != null
+                && !type.FullName.StartsWith("TheConcernedCat.ConcernedNPC.Tests.", StringComparison.Ordinal)
+                && !stubNamespaces.Any(stub => type.FullName!.StartsWith(stub, StringComparison.Ordinal)))
             .Select(type => type.FullName!)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToArray();

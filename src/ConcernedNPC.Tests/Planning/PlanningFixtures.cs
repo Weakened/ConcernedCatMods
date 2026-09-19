@@ -11,9 +11,9 @@ namespace TheConcernedCat.ConcernedNPC.Tests;
 /// <summary>A container, as a test writes one. Permission is settable after the
 /// fact because that is the interesting case: the chest that was fine when the
 /// plan chose it and is not fine when the NPC opens it.</summary>
-internal sealed class FakeContainer : INpcContainer
+internal sealed class PlanningStockContainer : INpcContainer
 {
-    internal FakeContainer(string key, NpcWorldEpoch epoch, float x, float z)
+    internal PlanningStockContainer(string key, NpcWorldEpoch epoch, float x, float z)
     {
         Key = key;
         Epoch = epoch;
@@ -109,7 +109,7 @@ internal sealed class FakeProbe : INpcAreaProbe
 /// actionable unless a test says otherwise, and a test may change its mind
 /// between ticks - which is the whole point of revalidating before every
 /// stop.</summary>
-internal sealed class FakeObserver : IStopObserver
+internal sealed class PlanningStopObserver : IStopObserver
 {
     private readonly Dictionary<string, StopStatus> _answers = new Dictionary<string, StopStatus>();
 
@@ -117,7 +117,7 @@ internal sealed class FakeObserver : IStopObserver
 
     internal bool Throws { get; set; }
 
-    internal FakeObserver Say(string key, StopStatus status)
+    internal PlanningStopObserver Say(string key, StopStatus status)
     {
         _answers[key] = status;
         return this;
@@ -240,7 +240,7 @@ internal static class Jobs
         string key, float x, float z, int priority = 0, params (string Item, int Units)[] needs) =>
         new JobTarget(key, World, new NpcPoint(x, 0f, z), string.Empty, priority, Needs(needs));
 
-    internal static SourceStock Stock(FakeContainer container, params (string Item, int Units)[] lines)
+    internal static SourceStock Stock(PlanningStockContainer container, params (string Item, int Units)[] lines)
     {
         var stock = new List<StockLine>();
         foreach ((string item, int units) in lines)

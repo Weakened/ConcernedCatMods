@@ -382,9 +382,9 @@ public class RoutePlanTests
     {
         // The shape a partially-initialised result takes: a suitable verdict
         // with nothing in it. It must not be followable.
-        Assert.False(new RoutePlan(RouteVerdict.Suitable, null, 0f, 1, 1).IsSuitable);
-        Assert.False(new RoutePlan(RouteVerdict.Suitable, new[] { Origin }, 0f, 1, 1).IsSuitable);
-        Assert.True(new RoutePlan(RouteVerdict.Suitable, new[] { Origin, Away }, 10f, 1, 1).IsSuitable);
+        Assert.False(new RoutePlan(RouteVerdict.Suitable, null, 0f, 0f, 1, 1).IsSuitable);
+        Assert.False(new RoutePlan(RouteVerdict.Suitable, new[] { Origin }, 0f, 0f, 1, 1).IsSuitable);
+        Assert.True(new RoutePlan(RouteVerdict.Suitable, new[] { Origin, Away }, 10f, 0f, 1, 1).IsSuitable);
     }
 
     [Fact]
@@ -392,8 +392,8 @@ public class RoutePlanTests
     {
         // Treating one as followable is how an NPC reports arriving somewhere it
         // never went.
-        Assert.False(new RoutePlan(RouteVerdict.Suitable, new[] { Origin, Origin }, 1f, 1, 1).IsSuitable);
-        Assert.False(new RoutePlan(RouteVerdict.Suitable, new[] { Origin, Away }, 0f, 1, 1).IsSuitable);
+        Assert.False(new RoutePlan(RouteVerdict.Suitable, new[] { Origin, Origin }, 1f, 0f, 1, 1).IsSuitable);
+        Assert.False(new RoutePlan(RouteVerdict.Suitable, new[] { Origin, Away }, 0f, 0f, 1, 1).IsSuitable);
     }
 
     [Fact]
@@ -404,8 +404,8 @@ public class RoutePlanTests
         // the building. If a goal carried only the request's revision, a goal
         // from the abandoned route would be indistinguishable from a current
         // one - the corner-cutting failure, one level up.
-        var first = new RoutePlan(RouteVerdict.Suitable, new[] { Origin, Away }, 10f, requestRevision: 7, planRevision: 1);
-        var second = new RoutePlan(RouteVerdict.Suitable, new[] { Origin, Away }, 14f, requestRevision: 7, planRevision: 2);
+        var first = new RoutePlan(RouteVerdict.Suitable, new[] { Origin, Away }, 10f, arrivalToleranceMetres: 0f, requestRevision: 7, planRevision: 1);
+        var second = new RoutePlan(RouteVerdict.Suitable, new[] { Origin, Away }, 14f, arrivalToleranceMetres: 0f, requestRevision: 7, planRevision: 2);
 
         Assert.Equal(first.RequestRevision, second.RequestRevision);
         Assert.NotEqual(first.PlanRevision, second.PlanRevision);
@@ -430,7 +430,7 @@ public class RoutePlanTests
     public void A_route_cannot_be_edited_behind_its_follower()
     {
         var waypoints = new List<NpcPoint> { Origin, Away };
-        var plan = new RoutePlan(RouteVerdict.Suitable, waypoints, 10f, 1, 1);
+        var plan = new RoutePlan(RouteVerdict.Suitable, waypoints, 10f, 0f, 1, 1);
 
         waypoints.Add(new NpcPoint(99f, 0f, 0f));
 

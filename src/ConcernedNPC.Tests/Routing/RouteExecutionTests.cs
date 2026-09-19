@@ -17,7 +17,7 @@ public sealed class RouteExecutionTests
     [Fact]
     public void Completed_and_destroyed_stops_are_skipped_mid_route()
     {
-        var observer = new FakeObserver();
+        var observer = new PlanningStopObserver();
         RouteExecution round = Round(observer, "a", "b", "c", "d");
 
         Assert.Equal("a", Go(round, observer));
@@ -43,7 +43,7 @@ public sealed class RouteExecutionTests
     [Fact]
     public void A_moved_or_unreadable_stop_is_kept_for_next_round()
     {
-        var observer = new FakeObserver()
+        var observer = new PlanningStopObserver()
             .Say("b", StopStatus.Moved)
             .Say("c", StopStatus.Unreadable);
         RouteExecution round = Round(observer, "a", "b", "c");
@@ -69,7 +69,7 @@ public sealed class RouteExecutionTests
     [Fact]
     public void New_targets_do_not_cause_endless_replanning()
     {
-        var observer = new FakeObserver();
+        var observer = new PlanningStopObserver();
         RouteExecution round = Round(observer, "a", "b", "c");
 
         int serviced = 0;
@@ -102,7 +102,7 @@ public sealed class RouteExecutionTests
     [Fact]
     public void A_round_that_was_all_skipped_asks_once_and_then_stops()
     {
-        var observer = new FakeObserver()
+        var observer = new PlanningStopObserver()
             .Say("a", StopStatus.Gone)
             .Say("b", StopStatus.Gone);
         var round = new RouteExecution(Sequence("a", "b"), new RouteExecutionLimits(1));
@@ -119,7 +119,7 @@ public sealed class RouteExecutionTests
     [Fact]
     public void One_stop_going_wrong_is_not_a_replan()
     {
-        var observer = new FakeObserver().Say("b", StopStatus.Gone);
+        var observer = new PlanningStopObserver().Say("b", StopStatus.Gone);
         RouteExecution round = Round(observer, "a", "b");
 
         Assert.Equal("a", Go(round, observer));
@@ -134,7 +134,7 @@ public sealed class RouteExecutionTests
     [Fact]
     public void A_stop_that_failed_on_arrival_is_skipped_not_replanned()
     {
-        var observer = new FakeObserver();
+        var observer = new PlanningStopObserver();
         RouteExecution round = Round(observer, "a", "b");
 
         Assert.Equal("a", Go(round, observer));
@@ -154,7 +154,7 @@ public sealed class RouteExecutionTests
     [Fact]
     public void Asking_twice_while_standing_still_gives_the_same_stop()
     {
-        var observer = new FakeObserver();
+        var observer = new PlanningStopObserver();
         RouteExecution round = Round(observer, "a", "b");
 
         Assert.Equal("a", Go(round, observer));
@@ -174,7 +174,7 @@ public sealed class RouteExecutionTests
     [Fact]
     public void A_throwing_observer_is_unreadable_rather_than_fatal()
     {
-        var observer = new FakeObserver { Throws = true };
+        var observer = new PlanningStopObserver { Throws = true };
         var round = new RouteExecution(Sequence("a", "b"), RouteExecutionLimits.Default);
 
         RouteAdvance advance = round.Next(observer);
@@ -215,13 +215,13 @@ public sealed class RouteExecutionTests
         Assert.Equal((StopDisposition)disposition, RouteExecution.Decide((StopStatus)status));
     }
 
-    private static RouteExecution Round(FakeObserver observer, params string[] keys)
+    private static RouteExecution Round(PlanningStopObserver observer, params string[] keys)
     {
         _ = observer;
         return new RouteExecution(Sequence(keys), RouteExecutionLimits.Default);
     }
 
-    private static string Go(RouteExecution round, FakeObserver observer)
+    private static string Go(RouteExecution round, PlanningStopObserver observer)
     {
         RouteAdvance advance = round.Next(observer);
         return advance.Progress == RouteProgress.Go ? advance.Stop.Key : advance.Progress.ToString();

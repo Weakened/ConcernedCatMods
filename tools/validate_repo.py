@@ -599,6 +599,97 @@ def check_library_consumers(errors: list[str]) -> list[str]:
 # this is a check.
 ARBITER_BYPASS = re.compile(r"\bnew\s+ActorModeOwner\s*\(")
 
+# CNPC-000 (#371): the NPC library may own the MECHANISM of writing a file, and
+# must never own the FORMAT or the PATH.
+#
+# That distinction is the program's acceptance criterion. A pre-refactor data
+# directory, dropped in unchanged, has to keep working with no migration code
+# having run, and that holds only while every durable name, row tag, schema
+# number and directory stays with the role that already writes it. An atomic
+# write helper handed a path is shared plumbing; a library that composes a path
+# or names a schema has become a second author of somebody else's save file,
+# and it would look perfectly reasonable in review.
+#
+# So the file primitives are confined to a named, pinned allow-list - the two
+# files that exist to be that plumbing - while composing a path and naming a
+# schema are refused everywhere, the allow-list included.
+#
+# Proposed by the agent that moved the custody ledger, which proved it for its
+# own two folders with a test. This is the mechanical backstop for the folders
+# nobody has written yet.
+LIBRARY_FILE_APIS = re.compile(
+    r"\b(?:File\.(?:WriteAllText|ReadAllText|WriteAllLines|ReadAllLines|AppendAllText"
+    r"|Open|Create|Move|Copy|Replace|Delete)|Directory\.(?:Create|CreateDirectory|GetFiles|Delete)"
+    r"|new\s+Stream(?:Writer|Reader)|new\s+File(?:Stream|Info))\b")
+
+# Refused everywhere in the library, the allow-list included: a path the library
+# composes is a directory it has chosen, and a schema it names is a format it
+# has taken ownership of.
+LIBRARY_FORMAT_OWNERSHIP = re.compile(r"\b(?:Path\.Combine|SchemaVersion)\b")
+
+# The only two files that may call a file primitive, and what each is for. A
+# third entry is a deliberate edit with a reason, not a convenience.
+LIBRARY_PERSISTENCE_PLUMBING = {
+    "Persistence/NpcAtomicText.cs": "write to a temporary file then replace, on a path it is given",
+    "Persistence/NpcSidecarFile.cs": "read and write one sidecar whose path and format the role owns",
+}
+
+
+def check_the_npc_library_writes_no_file(errors: list[str]) -> list[str]:
+    """Fails on a file API or a schema constant inside the NPC library.
+
+    The library holds runtime behaviour, never a format. Roles keep their own
+    files, their own row tags and their own schema numbers, because those are
+    what an existing player's save is made of.
+    """
+    library = LIBRARIES.get("concernednpc")
+    if library is None:
+        return []
+    project_dir: Path = library["project_dir"]  # type: ignore[assignment]
+    if not project_dir.is_dir():
+        return []
+
+    scanned = 0
+    seen_plumbing = set()
+    for path in sorted(project_dir.rglob("*.cs")):
+        relative = path.relative_to(project_dir)
+        if relative.parts[0] in ("obj", "bin"):
+            continue
+        scanned += 1
+        key = "/".join(relative.parts)
+        is_plumbing = key in LIBRARY_PERSISTENCE_PLUMBING
+        if is_plumbing:
+            seen_plumbing.add(key)
+
+        for number, line in enumerate(path.read_text(encoding="utf-8-sig").splitlines(), start=1):
+            stripped = line.strip()
+            if stripped.startswith("///") or stripped.startswith("//"):
+                continue
+
+            owned = LIBRARY_FORMAT_OWNERSHIP.search(line)
+            if owned:
+                fail(
+                    f"[concernednpc] The NPC library may not compose a path or name a schema: "
+                    f"{owned.group(0)!r} at {path.relative_to(ROOT)}:{number}. A role owns where its "
+                    "data lives and what shape it is in.", errors)
+
+            match = LIBRARY_FILE_APIS.search(line)
+            if match and not is_plumbing:
+                fail(
+                    f"[concernednpc] Only the named persistence plumbing may touch a file: "
+                    f"{match.group(0)!r} at {path.relative_to(ROOT)}:{number}. Take a path and hand "
+                    "the writing to Persistence/NpcAtomicText.cs.", errors)
+
+    for key in sorted(set(LIBRARY_PERSISTENCE_PLUMBING) - seen_plumbing):
+        fail(
+            f"[concernednpc] The persistence allow-list names {key}, which does not exist. An "
+            "allow-list that outlives its file is an exemption nobody is watching.", errors)
+
+    return [
+        f"[concernednpc] Library persistence audit: {scanned} sources; no path composed, no schema "
+        f"named, file primitives confined to {len(LIBRARY_PERSISTENCE_PLUMBING)} pinned files",
+    ]
+
 
 def check_library_consumers_do_not_bypass_the_arbiter(errors: list[str]) -> list[str]:
     """Once a product consumes the NPC library, its modes come from the arbiter.
@@ -1840,6 +1931,7 @@ def main() -> int:
     report.extend(check_every_product_pair_is_audited(errors))
     report.extend(check_library_consumers(errors))
     report.extend(check_library_consumers_do_not_bypass_the_arbiter(errors))
+    report.extend(check_the_npc_library_writes_no_file(errors))
     report.extend(check_teamster_cartographer_contract(errors))
     report.extend(check_teamster_integration_readonly(errors))
     report.extend(check_teamster_authority_policy(errors))

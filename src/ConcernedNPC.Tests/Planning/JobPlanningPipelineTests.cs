@@ -27,7 +27,7 @@ public sealed class JobPlanningPipelineTests
     [Fact]
     public void Many_targets_are_one_plan_with_one_provisioning_phase()
     {
-        var chest = new FakeContainer("supply", Jobs.World, 0f, 0f);
+        var chest = new PlanningStockContainer("supply", Jobs.World, 0f, 0f);
         var targets = new List<JobTarget>();
         for (int index = 0; index < 6; index++)
         {
@@ -54,7 +54,7 @@ public sealed class JobPlanningPipelineTests
     [Fact]
     public void The_manifest_is_calculated_before_execution()
     {
-        var chest = new FakeContainer("supply", Jobs.World, 0f, 0f);
+        var chest = new PlanningStockContainer("supply", Jobs.World, 0f, 0f);
         var targets = new List<JobTarget>
         {
             Jobs.Target("a", 10f, 0f, 0, ("wood", 5), ("nails", 2)),
@@ -79,9 +79,9 @@ public sealed class JobPlanningPipelineTests
     [Fact]
     public void One_sufficient_chest_beats_two_nearer_ones()
     {
-        var both = new FakeContainer("both", Jobs.World, 40f, 0f);
-        var wood = new FakeContainer("wood", Jobs.World, 1f, 0f);
-        var nails = new FakeContainer("nails", Jobs.World, 2f, 0f);
+        var both = new PlanningStockContainer("both", Jobs.World, 40f, 0f);
+        var wood = new PlanningStockContainer("wood", Jobs.World, 1f, 0f);
+        var nails = new PlanningStockContainer("nails", Jobs.World, 2f, 0f);
 
         JobTourPlan plan = Plan(
             new[] { Jobs.Target("a", 60f, 0f, 0, ("wood", 10), ("nails", 10)) },
@@ -101,9 +101,9 @@ public sealed class JobPlanningPipelineTests
     [Fact]
     public void Several_chests_are_used_when_genuinely_needed()
     {
-        var wood = new FakeContainer("wood", Jobs.World, 1f, 0f);
-        var nails = new FakeContainer("nails", Jobs.World, 2f, 0f);
-        var spare = new FakeContainer("spare", Jobs.World, 3f, 0f);
+        var wood = new PlanningStockContainer("wood", Jobs.World, 1f, 0f);
+        var nails = new PlanningStockContainer("nails", Jobs.World, 2f, 0f);
+        var spare = new PlanningStockContainer("spare", Jobs.World, 3f, 0f);
 
         JobTourPlan plan = Plan(
             new[] { Jobs.Target("a", 60f, 0f, 0, ("wood", 10), ("nails", 10)) },
@@ -138,7 +138,7 @@ public sealed class JobPlanningPipelineTests
     [Fact]
     public void Overflow_creates_planned_batches_and_never_one_target_a_trip()
     {
-        var chest = new FakeContainer("supply", Jobs.World, 0f, 0f);
+        var chest = new PlanningStockContainer("supply", Jobs.World, 0f, 0f);
         var targets = new List<JobTarget>();
         for (int index = 0; index < 9; index++)
         {
@@ -166,7 +166,7 @@ public sealed class JobPlanningPipelineTests
     [Fact]
     public void Batches_are_geographically_coherent()
     {
-        var chest = new FakeContainer("supply", Jobs.World, 0f, 0f);
+        var chest = new PlanningStockContainer("supply", Jobs.World, 0f, 0f);
         var targets = new List<JobTarget>
         {
             Jobs.Target("near1", 10f, 0f, 0, ("wood", 10)),
@@ -284,7 +284,7 @@ public sealed class JobPlanningPipelineTests
     [Fact]
     public void A_job_nothing_can_provision_is_refused_before_it_starts()
     {
-        var chest = new FakeContainer("supply", Jobs.World, 0f, 0f);
+        var chest = new PlanningStockContainer("supply", Jobs.World, 0f, 0f);
         JobTourPlan plan = Plan(
             new[] { Jobs.Target("a", 10f, 0f, 0, ("wood", 50)) },
             new[] { Jobs.Stock(chest, ("wood", 10)) });
@@ -301,7 +301,7 @@ public sealed class JobPlanningPipelineTests
     [Fact]
     public void A_chest_the_player_has_not_enabled_is_not_material()
     {
-        var chest = new FakeContainer("supply", Jobs.World, 0f, 0f) { Allowed = NpcContainerUse.Off };
+        var chest = new PlanningStockContainer("supply", Jobs.World, 0f, 0f) { Allowed = NpcContainerUse.Off };
 
         JobTourPlan plan = Plan(
             new[] { Jobs.Target("a", 10f, 0f, 0, ("wood", 5)) },
@@ -332,7 +332,7 @@ public sealed class JobPlanningPipelineTests
     {
         var area = new FakeArea();
         var probe = new FakeProbe();
-        var observer = new FakeObserver().Say("a", StopStatus.AlreadyDone);
+        var observer = new PlanningStopObserver().Say("a", StopStatus.AlreadyDone);
 
         JobSnapshot conclusive = JobSnapshotBuilder.Take(
             area,
@@ -352,7 +352,7 @@ public sealed class JobPlanningPipelineTests
             Jobs.World,
             new[] { Jobs.Target("a", 10f, 0f) },
             null,
-            new FakeObserver(),
+            new PlanningStopObserver(),
             blind,
             PlanningBudget.Unlimited());
         Assert.False(inconclusive.IsConclusive);
@@ -364,7 +364,7 @@ public sealed class JobPlanningPipelineTests
             Jobs.World,
             new[] { Jobs.Target("a", 10f, 0f), Jobs.Target("b", 11f, 0f) },
             null,
-            new FakeObserver().Say("a", StopStatus.AlreadyDone),
+            new PlanningStopObserver().Say("a", StopStatus.AlreadyDone),
             probe,
             new PlanningBudget(1));
         Assert.True(truncated.Report.TruncatedByBudget);
@@ -378,7 +378,7 @@ public sealed class JobPlanningPipelineTests
     [Fact]
     public void A_job_that_needs_more_than_it_was_asked_for_is_refused()
     {
-        var chest = new FakeContainer("supply", Jobs.World, 0f, 0f);
+        var chest = new PlanningStockContainer("supply", Jobs.World, 0f, 0f);
         JobTourPlan plan = Plan(
             new[] { Jobs.Target("a", 10f, 0f, 0, ("wood", 50)) },
             new[] { Jobs.Stock(chest, ("wood", 500)) },
@@ -407,7 +407,7 @@ public sealed class JobPlanningPipelineTests
     [Fact]
     public void One_planner_asked_twice_answers_the_same()
     {
-        var chest = new FakeContainer("supply", Jobs.World, 0f, 0f);
+        var chest = new PlanningStockContainer("supply", Jobs.World, 0f, 0f);
         var area = new FakeArea();
         JobSnapshot snapshot = Snapshot(
             new[] { Jobs.Target("a", 10f, 0f, 0, ("wood", 5)), Jobs.Target("b", 20f, 0f, 0, ("wood", 5)) },
@@ -440,7 +440,7 @@ public sealed class JobPlanningPipelineTests
     [Fact]
     public void A_snapshot_from_another_world_plans_nothing()
     {
-        var chest = new FakeContainer("supply", Jobs.World, 0f, 0f);
+        var chest = new PlanningStockContainer("supply", Jobs.World, 0f, 0f);
         var area = new FakeArea();
         JobSnapshot snapshot = Snapshot(
             new[] { Jobs.Target("a", 10f, 0f, 0, ("wood", 5)) },
@@ -462,7 +462,7 @@ public sealed class JobPlanningPipelineTests
     [Fact]
     public void No_work_area_is_refused_rather_than_widened()
     {
-        var chest = new FakeContainer("supply", Jobs.World, 0f, 0f);
+        var chest = new PlanningStockContainer("supply", Jobs.World, 0f, 0f);
         JobSnapshot snapshot = Snapshot(
             new[] { Jobs.Target("a", 10f, 0f, 0, ("wood", 5)) },
             new[] { Jobs.Stock(chest, ("wood", 100)) },
@@ -479,7 +479,7 @@ public sealed class JobPlanningPipelineTests
                 Jobs.World,
                 new[] { Jobs.Target("a", 10f, 0f) },
                 null,
-                new FakeObserver(),
+                new PlanningStopObserver(),
                 new FakeProbe(),
                 PlanningBudget.Unlimited()).Report.Outcome);
     }
@@ -489,7 +489,7 @@ public sealed class JobPlanningPipelineTests
     [Fact]
     public void One_target_bigger_than_a_trip_is_refused_rather_than_split()
     {
-        var chest = new FakeContainer("supply", Jobs.World, 0f, 0f);
+        var chest = new PlanningStockContainer("supply", Jobs.World, 0f, 0f);
         JobTourPlan plan = Plan(
             new[] { Jobs.Target("a", 10f, 0f, 0, ("wood", 50)) },
             new[] { Jobs.Stock(chest, ("wood", 500)) },
@@ -513,8 +513,8 @@ public sealed class JobPlanningPipelineTests
     [Fact]
     public void A_later_trip_plans_against_what_the_earlier_ones_left()
     {
-        var near = new FakeContainer("near", Jobs.World, 0f, 0f);
-        var far = new FakeContainer("far", Jobs.World, 50f, 0f);
+        var near = new PlanningStockContainer("near", Jobs.World, 0f, 0f);
+        var far = new PlanningStockContainer("far", Jobs.World, 50f, 0f);
         var targets = new List<JobTarget>
         {
             Jobs.Target("a", 5f, 0f, 0, ("wood", 10)),
@@ -564,7 +564,7 @@ public sealed class JobPlanningPipelineTests
     [Fact]
     public void Nothing_is_drawn_that_the_job_does_not_need()
     {
-        var chest = new FakeContainer("supply", Jobs.World, 0f, 0f);
+        var chest = new PlanningStockContainer("supply", Jobs.World, 0f, 0f);
         JobTourPlan plan = Plan(
             new[] { Jobs.Target("a", 10f, 0f, 0, ("wood", 3), ("nails", 1)) },
             new[] { Jobs.Stock(chest, ("wood", 999), ("nails", 999), ("stone", 999)) });
@@ -591,7 +591,7 @@ public sealed class JobPlanningPipelineTests
             Jobs.World,
             new[] { Jobs.Target("inside", 10f, 0f), Jobs.Target("outside", 90f, 0f) },
             null,
-            new FakeObserver(),
+            new PlanningStopObserver(),
             new FakeProbe(),
             PlanningBudget.Unlimited());
 
@@ -610,7 +610,7 @@ public sealed class JobPlanningPipelineTests
             Jobs.World,
             new[] { Jobs.Target("a", 10f, 0f) },
             null,
-            new FakeObserver { Throws = true },
+            new PlanningStopObserver { Throws = true },
             new FakeProbe(),
             PlanningBudget.Unlimited());
 
@@ -621,8 +621,8 @@ public sealed class JobPlanningPipelineTests
 
     private static JobTourPlan TwoTargetsTwoChests()
     {
-        var wood = new FakeContainer("wood", Jobs.World, 1f, 0f);
-        var nails = new FakeContainer("nails", Jobs.World, 2f, 0f);
+        var wood = new PlanningStockContainer("wood", Jobs.World, 1f, 0f);
+        var nails = new PlanningStockContainer("nails", Jobs.World, 2f, 0f);
         return Plan(
             new[]
             {
@@ -632,7 +632,7 @@ public sealed class JobPlanningPipelineTests
             new[] { Jobs.Stock(wood, ("wood", 100)), Jobs.Stock(nails, ("nails", 100)) });
     }
 
-    private static JobTourPlan Replan(FakeContainer chest) =>
+    private static JobTourPlan Replan(PlanningStockContainer chest) =>
         Plan(
             new[] { Jobs.Target("a", 10f, 0f, 0, ("wood", 5)) },
             new[] { Jobs.Stock(chest, ("wood", 500)) });
@@ -653,7 +653,7 @@ public sealed class JobPlanningPipelineTests
     private static JobSnapshot Snapshot(
         IReadOnlyList<JobTarget> targets, IReadOnlyList<SourceStock> sources, FakeArea area) =>
         JobSnapshotBuilder.Take(
-            area, Jobs.World, targets, sources, new FakeObserver(), new FakeProbe(), PlanningBudget.Unlimited());
+            area, Jobs.World, targets, sources, new PlanningStopObserver(), new FakeProbe(), PlanningBudget.Unlimited());
 
     private static TourJobPlanner Planner(JobSnapshot snapshot) =>
         new TourJobPlanner(snapshot, NpcCarryCapacity.Unlimited, Jobs.Actions);

@@ -49,8 +49,8 @@ public sealed class PlanningArithmeticTests
     [Fact]
     public void A_shortfall_counts_only_what_may_be_used_now()
     {
-        var open = new FakeContainer("open", Jobs.World, 0f, 0f);
-        var warded = new FakeContainer("warded", Jobs.World, 1f, 0f)
+        var open = new PlanningStockContainer("open", Jobs.World, 0f, 0f);
+        var warded = new PlanningStockContainer("warded", Jobs.World, 1f, 0f)
         {
             Refusal = Containers.NpcContainerRefusal.WardDenied,
         };
@@ -230,7 +230,7 @@ public sealed class PlanningArithmeticTests
     [Fact]
     public void Nothing_to_draw_from_is_its_own_answer()
     {
-        var chest = new FakeContainer("chest", Jobs.World, 0f, 0f);
+        var chest = new PlanningStockContainer("chest", Jobs.World, 0f, 0f);
 
         SourcePlan none = SourceSelector.Select(
             Jobs.Needs(("wood", 5)),
@@ -256,8 +256,8 @@ public sealed class PlanningArithmeticTests
     [Fact]
     public void Equally_good_chests_are_decided_by_distance_then_by_name()
     {
-        var far = new FakeContainer("a far", Jobs.World, 50f, 0f);
-        var near = new FakeContainer("z near", Jobs.World, 5f, 0f);
+        var far = new PlanningStockContainer("a far", Jobs.World, 50f, 0f);
+        var near = new PlanningStockContainer("z near", Jobs.World, 5f, 0f);
 
         SourcePlan plan = SourceSelector.Select(
             Jobs.Needs(("wood", 5)),
@@ -266,8 +266,8 @@ public sealed class PlanningArithmeticTests
             PlanningBudget.Unlimited());
         Assert.Equal("z near", plan.Draws[0].Key);
 
-        var left = new FakeContainer("b", Jobs.World, 5f, 0f);
-        var right = new FakeContainer("a", Jobs.World, -5f, 0f);
+        var left = new PlanningStockContainer("b", Jobs.World, 5f, 0f);
+        var right = new PlanningStockContainer("a", Jobs.World, -5f, 0f);
         SourcePlan tied = SourceSelector.Select(
             Jobs.Needs(("wood", 5)),
             new[] { Jobs.Stock(left, ("wood", 50)), Jobs.Stock(right, ("wood", 50)) },
@@ -281,7 +281,7 @@ public sealed class PlanningArithmeticTests
     [Fact]
     public void A_round_is_added_up_from_what_was_planned_and_what_happened()
     {
-        var chest = new FakeContainer("chest", Jobs.World, 0f, 0f);
+        var chest = new PlanningStockContainer("chest", Jobs.World, 0f, 0f);
         var area = new FakeArea();
         JobSnapshot snapshot = JobSnapshotBuilder.Take(
             area,
@@ -293,7 +293,7 @@ public sealed class PlanningArithmeticTests
                 Jobs.Target("c", 30f, 0f, 0, ("wood", 5)),
             },
             new[] { Jobs.Stock(chest, ("wood", 100)) },
-            new FakeObserver(),
+            new PlanningStopObserver(),
             new FakeProbe(),
             PlanningBudget.Unlimited());
 
@@ -327,14 +327,14 @@ public sealed class PlanningArithmeticTests
     [Fact]
     public void A_finished_round_owes_nothing_and_an_unreported_step_is_never_done()
     {
-        var chest = new FakeContainer("chest", Jobs.World, 0f, 0f);
+        var chest = new PlanningStockContainer("chest", Jobs.World, 0f, 0f);
         var area = new FakeArea();
         JobSnapshot snapshot = JobSnapshotBuilder.Take(
             area,
             Jobs.World,
             new[] { Jobs.Target("a", 10f, 0f, 0, ("wood", 5)) },
             new[] { Jobs.Stock(chest, ("wood", 100)) },
-            new FakeObserver(),
+            new PlanningStopObserver(),
             new FakeProbe(),
             PlanningBudget.Unlimited());
 
