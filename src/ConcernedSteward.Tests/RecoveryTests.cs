@@ -156,20 +156,25 @@ public sealed class RecoveryTests
         Assert.Equal(UpkeepPhase.NeedsAttention, loop.Phase);
     }
 
+    /// <summary>Since the Concerned NPC adoption (#382) the identity is held by
+    /// the library's arbiter, for the life of the body, and not by a mode owner
+    /// this assembly compiled for itself - so what this test can still assert
+    /// here, and the only thing it ever really meant, is that a reload leaves no
+    /// trip running and nothing reserved. The arbiter half is proved where it
+    /// lives, in <c>StewardNpcAdoptionTests</c>.</summary>
     [Fact]
-    public void Reloading_releases_the_reservation_and_the_actor_mode()
+    public void Reloading_releases_the_reservation_and_ends_the_trip()
     {
         var f = new StewardFixture();
         f.AddFire("fire-1", fuel: 0f);
         f.Run(3);
         Assert.True(f.Loop.Reservation.IsHeld);
-        Assert.Equal(ActorMode.Working, f.Modes.Mode);
+        Assert.True(f.Loop.IsWorking);
 
         f.Loop.OnWorldLoaded(f.Pack, StewardFixture.Wood);
 
         Assert.False(f.Loop.Reservation.IsHeld);
-        Assert.Equal(ActorMode.Resting, f.Modes.Mode);
-        Assert.True(f.Modes.MayRetireBody);
+        Assert.False(f.Loop.IsWorking);
     }
 
     [Fact]
@@ -194,5 +199,5 @@ public sealed class RecoveryTests
 
     private static UpkeepLoop NewLoop(IUpkeepJournal journal) =>
         new UpkeepLoop(
-            UpkeepLimits.Default, journal, new ActorModeOwner(StewardRole.Worker), _ => { });
+            UpkeepLimits.Default, journal, _ => { });
 }

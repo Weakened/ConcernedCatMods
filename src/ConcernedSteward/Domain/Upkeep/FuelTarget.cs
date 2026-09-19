@@ -78,7 +78,9 @@ internal readonly struct FuelTargetObservation
         bool canRefill,
         bool infiniteFuel,
         bool ownedHere,
-        bool accessGranted)
+        bool accessGranted,
+        float secondsPerUnit = 0f,
+        bool isLit = true)
     {
         Key = key;
         Position = position;
@@ -89,6 +91,8 @@ internal readonly struct FuelTargetObservation
         InfiniteFuel = infiniteFuel;
         OwnedHere = ownedHere;
         AccessGranted = accessGranted;
+        SecondsPerUnit = secondsPerUnit;
+        IsLit = isLit;
     }
 
     public FuelTargetKey Key { get; }
@@ -135,6 +139,34 @@ internal readonly struct FuelTargetObservation
     /// permission is not a permission.</summary>
     public bool AccessGranted { get; }
 
+    /// <summary><c>Fireplace.m_secPerFuel</c>: how many seconds one unit of fuel
+    /// burns for in this piece.
+    ///
+    /// <b>The field that turns a fuel level into a deadline</b>, and the reason
+    /// a maintenance round can prioritise what is closest to going out. It
+    /// differs from piece to piece, so a hearth at 4 of 10 and a torch at 4 of
+    /// 10 are the same number and not the same situation.
+    ///
+    /// Zero means the piece never consumes fuel — vanilla's own
+    /// <c>UpdateFireplace</c> only decays when this is above zero — so it never
+    /// runs out and never needs a stop. Zero is also the default when nobody
+    /// supplied it, which fails in the safe direction: an unstated burn rate
+    /// makes a light ineligible rather than urgent.</summary>
+    public float SecondsPerUnit { get; }
+
+    /// <summary>Whether the piece is switched on.
+    ///
+    /// A fire a player turned off (<c>ZDOVars.s_state</c> is 2) burns nothing,
+    /// so it has no deadline and is never the one closest to going out. It is
+    /// still refillable — vanilla's <c>UseItem</c> does not look at the state —
+    /// which is exactly why this has to be read: without it, an unlit brazier
+    /// sitting at zero fuel would out-rank every fire in the settlement,
+    /// forever.
+    ///
+    /// Defaults to true so an observation that does not state it behaves the way
+    /// every observation did before the round existed.</summary>
+    public bool IsLit { get; }
+
     /// <summary>How far below a full load this fire is, in whole units a person
     /// would recognise. Never negative.</summary>
     public int Deficit => Math.Max(0, (int)Math.Ceiling(MaxFuel) - (int)Math.Ceiling(Fuel));
@@ -179,6 +211,29 @@ internal enum FuelTargetStatus
     /// fault: a Steward with a wood chest simply has nothing to offer a fire
     /// that wants something else.</summary>
     WrongFuel = 9,
+
+    /// <summary>It consumes no fuel at all: <c>Fireplace.m_secPerFuel</c> is
+    /// zero, and vanilla's own <c>UpdateFireplace</c> only decays a fire when
+    /// that is above zero. It will read the same in an hour as it does now, so
+    /// it is never the one closest to going out and a round never walks to it.
+    ///
+    /// <b>Added by #382, and it is a maintenance-round verdict rather than a
+    /// fault.</b> The values above are reasons a fire may not be touched; this
+    /// and the two below it are reasons a fire does not need to be.</summary>
+    NeverConsumes = 10,
+
+    /// <summary>A player turned it off (<c>ZDOVars.s_state</c> is 2). It burns
+    /// nothing while it is off, so it has no deadline — and without this it
+    /// would sit at zero fuel out-ranking every real fire in the settlement,
+    /// forever. Still refillable by hand; simply not urgent.</summary>
+    NotLit = 11,
+
+    /// <summary>It has more burning time left than the threshold, so it is not
+    /// due yet. <b>This is what "prioritise what is closest to going out rather
+    /// than topping everything to full" looks like as a verdict</b>: a fire at
+    /// eight of ten is not a stop, and saying so is what makes a round one trip
+    /// rather than four.</summary>
+    NotDue = 12,
 }
 
 /// <summary>Vanilla's own fuel arithmetic, reproduced exactly.
@@ -245,6 +300,40 @@ internal static class FuelMath
         int units = 0;
         float level = fuel;
         while (units < ceiling && AcceptsOneUnit(level, maxFuel))
+        {
+            level = Clamp(Clamp(level, 0f, maxFuel) + 1f, 0f, maxFuel);
+            units++;
+        }
+
+        return units;
+    }
+
+    /// <summary>How many whole units it takes to raise this fire to
+    /// <paramref name="targetLevel"/>, stepping the way vanilla does.
+    ///
+    /// <b>The arithmetic behind "top it up to what it needs, not to full".</b>
+    /// It is <see cref="UnitsToFill"/> with a second stop condition, and it
+    /// keeps the two vanilla facts that make either of them correct: acceptance
+    /// is a <b>ceiling</b> comparison against <c>m_maxFuel</c>, so a fire at 9.5
+    /// of 10 refuses; and one accepted unit is worth
+    /// <c>Clamp(Clamp(fuel,0,max)+1,0,max)</c>, which is less than one at the
+    /// top of the range. Dividing the gap by one would be wrong in both
+    /// directions.
+    ///
+    /// A target at or below the current level is zero units, never negative, and
+    /// a target above capacity is simply capacity — vanilla clamps there
+    /// anyway.</summary>
+    public static int UnitsToReach(float fuel, float maxFuel, float targetLevel, int ceiling)
+    {
+        if (ceiling < 1 || float.IsNaN(fuel) || float.IsNaN(maxFuel) || float.IsNaN(targetLevel))
+        {
+            return 0;
+        }
+
+        float stop = targetLevel > maxFuel ? maxFuel : targetLevel;
+        int units = 0;
+        float level = fuel;
+        while (units < ceiling && level < stop && AcceptsOneUnit(level, maxFuel))
         {
             level = Clamp(Clamp(level, 0f, maxFuel) + 1f, 0f, maxFuel);
             units++;

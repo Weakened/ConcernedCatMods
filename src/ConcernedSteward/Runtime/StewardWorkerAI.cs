@@ -185,7 +185,7 @@ internal sealed class StewardWorkerAI : BaseAI
             {
                 _loggedFault = true;
                 ErrorLog?.Invoke(
-                    "The Steward faulted and is now inert; he will not act again this session. " +
+                    "The Steward faulted and is now inert; she will not act again this session. " +
                     exception);
             }
 

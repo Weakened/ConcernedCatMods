@@ -114,14 +114,14 @@ internal readonly struct IntroductionResult
         switch (Refusal)
         {
             case IntroductionRefusal.NotAuthorised:
-                return "the Steward is switched off, or this is not a game he can work in";
+                return "the Steward is switched off, or this is not a game she can work in";
 
             case IntroductionRefusal.NoSettlementArea:
-                return "there is nothing marked for him to look after. Stand in the middle of " +
+                return "there is nothing marked for her to look after. Stand in the middle of " +
                     "your settlement and run \"cs_steward area <radius>\"";
 
             case IntroductionRefusal.RecordNotWritable:
-                return "his record could not be written, so nothing was agreed. Nothing is ever " +
+                return "her record could not be written, so nothing was agreed. Nothing is ever " +
                     "agreed in memory alone";
 
             case IntroductionRefusal.OutOfOrder:
@@ -326,16 +326,17 @@ internal static class StewardSentences
         switch (stage)
         {
             case IntroductionStage.Noticed:
-                return "A steward has been watching your settlement. Somebody has been keeping " +
-                    "the fires in, he says, and doing it badly.";
+                return StewardRole.DisplayNameFallbackCapitalised + " has been watching your " +
+                    "settlement. Somebody has been keeping the fires in, she says, and doing " +
+                    "it badly.";
 
             case IntroductionStage.Offered:
-                return "He offers to take that off your hands: mark the chest he may draw from, " +
-                    "and he will see the fires stay lit.";
+                return "She offers to take that off your hands: mark the chest she may draw from, " +
+                    "and she will see the fires stay lit.";
 
             case IntroductionStage.Engaged:
                 return StewardRole.DisplayNameFallbackCapitalised +
-                    " has taken the work. Turn on \"cs_steward tend on\" when you want him to start.";
+                    " has taken the work. Turn on \"cs_steward tend on\" when you want her to start.";
 
             default:
                 return "Nothing has happened yet.";
@@ -347,10 +348,10 @@ internal static class StewardSentences
         switch (stage)
         {
             case IntroductionStage.Noticed:
-                return "He has already noticed. He is waiting to be asked.";
+                return "She has already noticed. She is waiting to be asked.";
 
             case IntroductionStage.Offered:
-                return "He has already offered. Say yes with \"cs_steward recruit\".";
+                return "She has already offered. Say yes with \"cs_steward recruit\".";
 
             case IntroductionStage.Engaged:
                 return StewardRole.DisplayNameFallbackCapitalised +
@@ -367,6 +368,6 @@ internal static class StewardSentences
         StewardRole.DisplayNameFallbackCapitalised + " is back at work. No need for introductions.";
 
     public static string Dismissed() =>
-        StewardRole.DisplayNameFallbackCapitalised + " has been let go. He keeps nothing; " +
-        "anything he was carrying is accounted for in his record.";
+        StewardRole.DisplayNameFallbackCapitalised + " has been let go. She keeps nothing; " +
+        "anything she was carrying is accounted for in her record.";
 }
