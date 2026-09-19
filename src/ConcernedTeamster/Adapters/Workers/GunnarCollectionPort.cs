@@ -337,35 +337,21 @@ internal sealed class GunnarCollectionPort
         _expectedItem = string.Empty;
     }
 
-    /// <summary>Plays one idle gesture on Gunnar's own body.
-    ///
-    /// <b>Cosmetic, and structurally so.</b> This is a transient animation
-    /// trigger on his own character and nothing else: it writes no state, saves
-    /// nothing, and touches no other object in the world. It is in this file
-    /// because it reaches the game through the same replicated path the
-    /// carve-out covers, not because it does anything to a cart.
-    ///
-    /// The trigger is vanilla's own <c>interact</c> gesture rather than a
-    /// bespoke hammer swing, deliberately: it is a parameter every humanoid
-    /// animator in the game already has, where an invented name would warn on
-    /// every call and animate nothing. Whether it reads as "he is fiddling with
-    /// his cart" is an in-game question for the owner, and it is one line to
-    /// change because nothing about it is durable.</summary>
-    public static void PlayIdleGesture(Humanoid? worker, bool featureEnabled, bool seamAvailable)
-    {
-        if (!featureEnabled || !seamAvailable || worker == null || worker.IsDead())
-        {
-            return;
-        }
-
-        ZSyncAnimation animation = worker.m_zanim;
-        if (animation == null)
-        {
-            return;
-        }
-
-        animation.SetTrigger(GunnarHaulingDefaults.IdleGestureTrigger);
-    }
+    // THE IDLE GESTURE IS NOT HERE, AND THAT IS THE POINT.
+    //
+    // An earlier draft of this file played one on Gunnar's own body, on the
+    // reading that the owner's carve-out covered it. It does not. The
+    // authorization that exists is one token - the interaction below - in this
+    // one file; the animation trigger and the tree damage were relayed before
+    // the verification the owner required, and that verification cut the
+    // allowance to what loose pickup actually needs. The validator implements
+    // exactly that, and its own comment says the other two would each need
+    // their own owner decision.
+    //
+    // So the gesture's state machine stays where it is - Domain/Collection's
+    // CartUpkeepIdle, which is game-free and proves it changes nothing - and
+    // the one call that would make it visible waits for a decision rather than
+    // for somebody to notice it went in. It is one line when it comes.
 
     private PickProgress Finish(PickPhase phase, string detail)
     {

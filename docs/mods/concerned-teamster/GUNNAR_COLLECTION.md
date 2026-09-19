@@ -1,7 +1,8 @@
 # Gunnar collects and hauls, in planned batches, without portals (CNPC-R2, #381)
 
-Status: **planning, eligibility and accounting implemented and tested; the pickup port is written under the
-owner's carve-out of 2026-09-19 and awaits the validator allowance that confines it — §6.** Nothing here has been observed in game and
+Status: **planning, eligibility and accounting implemented and tested; the pickup port is written and the
+validator allowance that confines it has landed. The authoritative gate is green. Nothing has been observed in
+game.** Nothing here has been observed in game and
 nothing claims to have been. Concerned Teamster stays at **1.0.5**; nothing is published, tagged or released.
 
 ## 1. What this is
@@ -142,10 +143,19 @@ material is lost or invented.
 
 ## 6. The carve-out: one file, one allowance
 
-**The owner granted it on 2026-09-19.** Gunnar may pick. The allowance is bounded and the boundary is mechanical.
+**The owner granted it on 2026-09-19, and it is exactly one token in exactly one file.**
 
-Every call that spells a token the #313 worker-runtime scope audit forbids lives in **one file**,
-`src/ConcernedTeamster/Adapters/Workers/GunnarCollectionPort.cs`, and nowhere else in this product, now or later.
+`.Interact(`, in `src/ConcernedTeamster/Adapters/Workers/GunnarCollectionPort.cs`, and nowhere else in this
+product, now or later. Every other forbidden token still fails in that file, and that token still fails in every
+other file.
+
+**Two things were relayed as authorized and are not.** `TreeBase.Damage` (felling) and
+`ZSyncAnimation.SetTrigger` (the idle gesture) were named while the owner's approval was being passed on, before
+the verification the owner then required — *allow only what is independently verified as required for loose
+branch and stone pickup*. That verification cut the allowance to one token, because the sanctioned pickup makes
+exactly one game call and names no RPC send at all: the pick routes `RPC_Pick` and claims ownership inside
+vanilla, not in our source. **Felling and the idle gesture each need their own owner decision**, and neither is
+implemented here.
 It stays behind the existing off-by-default `TeamsterFeature`; a player who has not opted in gets none of it. It is
 fail-closed throughout. Nothing else was authorized: no cart teleports, no mass writes, no stamina bypass, no
 forces or velocities, no ownership takeover, no mod data in a vanilla object.
@@ -184,9 +194,13 @@ because moving it would move a shipped safety property out of the product audite
 
 Still deliberately absent, and each for its own reason:
 
-- **Felling.** `TreeBase.Damage` is inside the allowance, but felling brings real damage and drop-table semantics
-  and belongs with #282 rather than riding in on a pickup commit. `CollectableKind` has no fellable value, and a
-  test pins the enum so that adding one sends somebody here first.
+- **Felling.** Not authorized, and it would not have belonged here even if it were: real damage and drop-table
+  semantics belong with #282 rather than riding in on a pickup commit. `CollectableKind` has no fellable value,
+  and a test pins the enum so that adding one sends somebody here first.
+- **The idle gesture's one call.** Not authorized. The state machine that decides when he would do it lives in
+  `Domain/Collection/CartUpkeepIdle` — game-free, and proved by test to change nothing — and the single call that
+  would make it visible is deliberately absent, with the reason written where the call would go. It is one line
+  when a decision comes.
 - **A `TeamsterFeature` value of its own.** The collection runs under the existing off-by-default worker feature.
   A second one lands if and when collection is separately switchable.
 - **A ground probe.** `INpcJobRole.Probe` is null, with the reason in the code: every candidate is a world object
@@ -260,11 +274,13 @@ Gunnar who already exists still works.
    a reason, and the next order must not conjure replacement cargo.
 9. **No route.** Put the work area across water with no walkable approach: `NeedsAttention`, with a reason, and he
    must stay where he is.
-10. **The idle gesture.** Leave him idle beside his cart for ten minutes. He walks over, faces it and plays
-    vanilla's `interact` gesture. The cart's health bar, its cargo and its weight must read identically before and
-    after; nothing may be consumed from his inventory. **Say whether it reads as "he is fiddling with his cart"** —
-    it is a deliberate downgrade from a bespoke hammer swing, because an invented animator parameter would warn on
-    every call and animate nothing, and it is one line to change.
+10. **The idle gesture — a decision to take, not a thing to observe yet.** The one call that would make Gunnar
+    visibly do this is not authorized and is not in the build, so there is nothing to watch. What the owner is
+    being asked is whether to authorize it, knowing two things: it is a transient animation trigger on his own
+    body that saves nothing and touches no other object; and what it would play is vanilla's own `interact`
+    gesture rather than a bespoke hammer swing, because an invented animator parameter warns on every call and
+    animates nothing. Whether that reads as "he is fiddling with his cart" is a thing only a session can answer.
+    One line to change, and nothing durable depends on it.
 11. **What he gets from one source.** Pick a single loose stone with Gunnar and with your own character in the same
     world. The counts must match: he is not a Player, so no skill, statistic or bonus-yield branch runs for him.
 

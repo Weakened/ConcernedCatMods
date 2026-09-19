@@ -39,7 +39,6 @@ internal static class HaulingCapabilityProbe
             Type? pickable = Game("Pickable", missingTypes);
             Type? itemDrop = Game("ItemDrop", missingTypes);
             Type? itemData = Game("ItemDrop+ItemData", missingTypes);
-            Type? syncAnimation = Game("ZSyncAnimation", missingTypes);
             Type? liquidType = Game("LiquidType", missingTypes);
             Type? heightmap = Game("Heightmap", missingTypes);
             Type? game = Game("Game", missingTypes);
@@ -153,11 +152,8 @@ internal static class HaulingCapabilityProbe
                 new("Pickable", pickable, "m_tarPreventsPicking", GameMemberKind.InstanceField, typeof(bool)),
                 new("Humanoid", humanoid, "Pickup", GameMemberKind.InstanceMethod, typeof(bool),
                     new[] { gameObject!, typeof(bool), typeof(bool) }),
-                new("Humanoid", humanoid, "m_zanim", GameMemberKind.InstanceField, syncAnimation),
                 new("ItemDrop", itemDrop, "m_itemData", GameMemberKind.InstanceField, itemData),
                 new("ItemDrop+ItemData", itemData, "m_stack", GameMemberKind.InstanceField, typeof(int)),
-                new("ZSyncAnimation", syncAnimation, "SetTrigger", GameMemberKind.InstanceMethod, typeof(void),
-                    new[] { typeof(string) }),
 
                 // Engine members the joint and body checks read.
                 new("Joint", joint, "connectedBody", GameMemberKind.InstanceProperty, rigidbody),

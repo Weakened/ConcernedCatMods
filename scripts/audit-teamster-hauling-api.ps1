@@ -207,8 +207,6 @@ $requirements = @(
     @("Pickable", "game", "Pickable.m_itemPrefab / m_amount / m_tarPreventsPicking", 'public GameObject m_itemPrefab;.*public int m_amount = 1;'),
     @("Humanoid", "game", "Humanoid.Pickup(GameObject, bool, bool)", 'public bool Pickup\(GameObject go, bool autoequip = true, bool autoPickupDelay = true\)'),
     @("Humanoid", "game", "Pickup takes through the inventory, not by fiat", 'public bool Pickup\(GameObject go, bool autoequip = true, bool autoPickupDelay = true\).*m_inventory\.ContainsItem\(component\.m_itemData\)'),
-    @("Character", "game", "Character.m_zanim", 'protected ZSyncAnimation m_zanim;'),
-    @("ZSyncAnimation", "game", "ZSyncAnimation.SetTrigger(string)", 'public void SetTrigger\(string name\)'),
     @("ItemDrop", "game", "ItemDrop.m_itemData", 'public ItemData m_itemData = new ItemData\(\);'),
 
     # Jotunn: registering the worker prefab for every session.
