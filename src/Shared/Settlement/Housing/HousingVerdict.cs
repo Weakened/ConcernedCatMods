@@ -464,8 +464,13 @@ internal static class HousingSentences
 
         if (capacity.Truncated)
         {
-            text.Append(" There are more beds here than one check will look at, so this is at ")
-                .Append("least, not exactly, what the settlement holds.");
+            // Deliberately not "there are more beds than one check will look
+            // at". Truncation now has two causes — too many beds, and too much
+            // base to finish walking — and a player with thirty beds in a very
+            // large settlement would have been told something false about their
+            // beds. This sentence is true of both.
+            text.Append(" This check stops before it has seen all of a settlement this size, ")
+                .Append("so that is at least, not exactly, what it holds.");
         }
     }
 }

@@ -238,6 +238,18 @@ public sealed class HousingCapacityTests
     }
 
     [Fact]
+    public void ATruncatedSurveyDoesNotClaimAnythingAboutHowManyBedsThereAre()
+    {
+        // Truncation has two causes — too many beds, and too much base to
+        // finish walking — so the caveat must not assert the first. One bed and
+        // a base too large to finish is a real combination, and telling that
+        // player there are more beds than the check will look at is false.
+        string text = HousingCapacity.Measure(new[] { Bed("hut") }, truncated: true).Describe();
+
+        Assert.DoesNotContain("more beds", text);
+    }
+
+    [Fact]
     public void ACompleteSurveyClaimsNothingAboutBedsItDidNotSkip()
     {
         Assert.DoesNotContain("at least", HousingCapacity.Measure(new[] { Bed("hut") }).Describe());
