@@ -47,6 +47,14 @@ that safety for the independence the owner asked for: from now on, a change to t
 an installed consumer. The version in `thunderstore.toml` is what protects players, so a breaking change means a
 major-version bump and a pin bump in every consumer, together, in one change.
 
+There is a sharper version of that cost, and it is worth naming rather than discovering. `NpcBodyMind` is a public
+type that derives from the game's own `BaseAI`, and `TryDrive` now sits on it. So a Valheim update that changes
+`BaseAI` can break an installed consumer **with no change to this library at all** - the breakage arrives from a
+third party, on the player's machine, between two versions that were pinned correctly against each other. Source
+sharing could not do that, because a product compiled its own copy and simply failed to build. This is the price of
+the independence: it is accepted, not overlooked, and it is the reason the game-bound surface is kept as small as it
+can be rather than as large as is convenient.
+
 **What it buys beyond independence.** `src/Shared` may hold no Unity, BepInEx or Jötunn type. A library assembly may.
 The game-bound half of the companion runtime - body construction, the census, presentation extraction, console
 registration - has had no sanctioned home in this repository and exists as three and four near-copies because of it.
