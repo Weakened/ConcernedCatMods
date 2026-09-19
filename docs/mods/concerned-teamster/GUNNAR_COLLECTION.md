@@ -1,7 +1,7 @@
 # Gunnar collects and hauls, in planned batches, without portals (CNPC-R2, #381)
 
-Status: **planning, eligibility and accounting implemented and tested; the engine adapters that would let him
-actually pick anything up are BLOCKED on an owner decision — §6.** Nothing here has been observed in game and
+Status: **planning, eligibility and accounting implemented and tested; the pickup port is written under the
+owner's carve-out of 2026-09-19 and awaits the validator allowance that confines it — §6.** Nothing here has been observed in game and
 nothing claims to have been. Concerned Teamster stays at **1.0.5**; nothing is published, tagged or released.
 
 ## 1. What this is
@@ -140,34 +140,55 @@ A deposit that measured more than is there moves what it can and leaves the disc
 unmeasurable answer both move **nothing**: he still has it, or nobody knows, and writing either down as fact is how
 material is lost or invented.
 
-## 6. What this slice deliberately does not do, and why it is one decision and not three
+## 6. The carve-out: one file, one allowance
 
-**Gunnar cannot pick anything up yet, and the reason is a shipped safety rule rather than missing code.**
+**The owner granted it on 2026-09-19.** Gunnar may pick. The allowance is bounded and the boundary is mechanical.
 
-Every act #381 asks for is a network send from Gunnar's runtime, and Teamster's own audits forbid those outright:
+Every call that spells a token the #313 worker-runtime scope audit forbids lives in **one file**,
+`src/ConcernedTeamster/Adapters/Workers/GunnarCollectionPort.cs`, and nowhere else in this product, now or later.
+It stays behind the existing off-by-default `TeamsterFeature`; a player who has not opted in gets none of it. It is
+fail-closed throughout. Nothing else was authorized: no cart teleports, no mass writes, no stamina bypass, no
+forces or velocities, no ownership takeover, no mod data in a vanilla object.
 
-| The act | The vanilla call | What forbids it |
-|---|---|---|
-| Picking a loose stone or branch | `Pickable.Interact` → `RPC_Pick`, plus an ownership claim | `.Interact(` is banned in **every** Teamster source file (`TEAMSTER_OUTSIDE_WORKERS_TOKENS`, `TEAMSTER_WORKER_FORBIDDEN_TOKENS`) |
-| Felling a permitted sapling or small tree | `TreeBase.Damage` → `InvokeRPC("RPC_Damage")` | `InvokeRPC` and `ZRoutedRpc` are banned inside `Adapters/Workers/`; `ZNetView::InvokeRPC` is also on the hauling audit's IL forbid-list |
-| The idle hammer animation | `ZSyncAnimation.SetTrigger` → `InvokeRPC(Everybody, "SetTrigger")` | the same |
+**Why those calls need an allowance at all.** Picking is `Pickable.Interact`, which routes `RPC_Pick`; the handler
+drops the items on the ground on the *owner's* machine and needs a local player to place its effect. Teamster
+shipped as an observational mod and the audit is what makes that claim true rather than stated, so the interaction
+had to be authorized rather than assumed.
 
-Verified against the installed `assembly_valheim.dll`, not assumed. Concerned Foreman does the first of these
-legitimately (`WorldSourcePickupPort` calls `pickable.Interact`), because Foreman has no such audit; Teamster does,
-because Teamster shipped as an observational mod and the audits are what make that claim true.
+**What the port refuses, and why each refusal is the safe direction:**
 
-So this is **one owner decision**, not three: does Gunnar's opted-in worker runtime gain a bounded, named
-allowance to send the vanilla interactions a player could send themselves — and if so, under which
-`TeamsterFeature` and with which audit text? Routing around it textually (the calls do not literally spell the
-banned tokens in our own source) would be exactly the silent weakening `CLAUDE.md` forbids, so it was not done.
+| Refusal | Because |
+|---|---|
+| the feature is off | nobody who installed Teamster for its telemetry is enrolled in this |
+| the start-up probe did not verify every member | a changed game disables collection with one line rather than throwing out of a worker tick |
+| no local player | the game's own handler dereferences it and would throw |
+| **this client does not own the source** | the pick routes to the owner and the drop happens *there*; a source owned elsewhere would spill its contents somewhere we cannot count. Ownership is required, never taken — the same rule the cart seam follows |
+| the source is one the game will not pick out of tar | that path speaks to the character, and `Character.Message`'s signature is what killed a shipped Cartographer on 1.0.7 |
+| anything unreadable | unknown refuses |
 
-Also deliberately absent, and each for its own reason:
+**Two calls, one window.** The game's pick hands nothing back, so `Begin` starts it and `Poll` gathers what it
+dropped over a bounded window, into Gunnar's own inventory, through vanilla's own `Humanoid.Pickup` — so weight,
+stacking and the pickup delay are the game's arithmetic and not ours. **What is reported is what was measured**,
+never what the source was expected to give, and a window that closes empty asserts nothing about the source,
+because the pick may well have happened.
 
-- **A `TeamsterFeature` value for collection.** The enum documents features that touch a cart or its data. Nothing
-  here touches anything yet, so a policy row describing a runtime that does not exist would be a row nobody can
-  check. It lands with the runtime.
-- **Felling as a target kind.** `CollectableKind` has no fellable value, and a test pins the enum so that adding
-  one sends somebody to read this section first.
+**He gets what a source gives and nothing extra.** Verified against the installed game rather than assumed: the
+skill, statistic and bonus-yield branches inside `Pickable.Interact` are `character is Player` only, and Gunnar is
+not a Player. `audit-teamster-hauling-api.ps1` pins that, that `RPC_Pick` is owner-only, and that it dereferences
+the local player — 114 of 114 members and behaviours verified, up from 102.
+
+**The route that was considered and rejected**, because the next reader will think of it too: moving the pickup
+into ConcernedNPC so that Teamster's own source stays clean. That is the same dodge across an assembly boundary,
+and this repository already has the precedent against it — the cart hitch seam deliberately stays in Teamster
+because moving it would move a shipped safety property out of the product audited for it.
+
+Still deliberately absent, and each for its own reason:
+
+- **Felling.** `TreeBase.Damage` is inside the allowance, but felling brings real damage and drop-table semantics
+  and belongs with #282 rather than riding in on a pickup commit. `CollectableKind` has no fellable value, and a
+  test pins the enum so that adding one sends somebody here first.
+- **A `TeamsterFeature` value of its own.** The collection runs under the existing off-by-default worker feature.
+  A second one lands if and when collection is separately switchable.
 - **A ground probe.** `INpcJobRole.Probe` is null, with the reason in the code: every candidate is a world object
   the survey has just read out of the loaded scene, so its place is proved rather than proposed.
 - **Reservation-aware availability.** `INpcJobRole.Availability` is null. Gunnar's accounting lives where the
@@ -214,7 +235,9 @@ so the contract handed to the shared runtime describes the body this product act
 
 ## 10. In-game, when the blocker in §6 is resolved
 
-**OWNER GO-AROUND PENDING.** Nothing below has been run. Disposable world, character and profile only.
+**OWNER GO-AROUND PENDING.** Nothing below has been run. Disposable world, character and profile only. The two
+rows to run **first** are Gate B2 in `docs/settlement/cart-and-collection/EVIDENCE.md`, which are about whether the
+Gunnar who already exists still works.
 
 1. **Start-up.** With `[Workers] GunnarHaulingEnabled = true`, expect `Gunnar is registered with the shared NPC
    runtime as 'teamster/gunnar'.` and, on world load, `a world loaded (epoch …)`. A log line naming a refusal from
@@ -237,9 +260,13 @@ so the contract handed to the shared runtime describes the body this product act
    a reason, and the next order must not conjure replacement cargo.
 9. **No route.** Put the work area across water with no walkable approach: `NeedsAttention`, with a reason, and he
    must stay where he is.
-10. **The idle hammer.** Leave him idle beside his cart for ten minutes. He walks over, faces it and swings. The
-    cart's health bar, its cargo and its weight must read identically before and after; nothing may be consumed
-    from his inventory.
+10. **The idle gesture.** Leave him idle beside his cart for ten minutes. He walks over, faces it and plays
+    vanilla's `interact` gesture. The cart's health bar, its cargo and its weight must read identically before and
+    after; nothing may be consumed from his inventory. **Say whether it reads as "he is fiddling with his cart"** —
+    it is a deliberate downgrade from a bespoke hammer swing, because an invented animator parameter would warn on
+    every call and animate nothing, and it is one line to change.
+11. **What he gets from one source.** Pick a single loose stone with Gunnar and with your own character in the same
+    world. The counts must match: he is not a Player, so no skill, statistic or bonus-yield branch runs for him.
 
 Evidence rows for `docs/settlement/cart-and-collection/EVIDENCE.md` stay **pending** until observed, with the
 build, profile and scenario recorded.
