@@ -310,7 +310,19 @@ internal static class TourPartitioner
             // whose own contents depend on where the allowance happened to run
             // out, and a caller cannot tell that from a trip that was worked
             // out properly. The next call gets a fresh budget.
-            return new TourPartition(TourPartitionOutcome.BudgetExhausted, null, default, left.Count);
+            //
+            // And the count is every target, not just the unplaced ones: the
+            // trips built so far are being thrown away, so the targets already
+            // moved into them are left over too. Counting only `left` said a
+            // twelve-target job had four waiting when it had twelve.
+            int placed = 0;
+            foreach (JobTour built in tours)
+            {
+                placed += built.Targets.Count;
+            }
+
+            return new TourPartition(
+                TourPartitionOutcome.BudgetExhausted, null, default, left.Count + placed);
         }
 
         // The trip cap is the other thing entirely: these trips are exactly

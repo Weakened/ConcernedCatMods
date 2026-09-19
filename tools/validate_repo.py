@@ -717,6 +717,126 @@ def check_the_npc_library_writes_no_file(errors: list[str]) -> list[str]:
     ]
 
 
+# Two parameters in the planning pipeline are claims rather than quantities, and
+# each silently asserts something nothing in the library can check:
+# `leftForAnotherRound` says "the plan covered the whole job" and `carrying`
+# says "he is holding nothing this job may spend". Both were zero by default at
+# some point, and both times a job read as finished when it was not
+# (#377, #378). The compiler enforces it today; this is what stops the default
+# being put back.
+PLANNING_CLAIM_PARAMETERS = ("leftForAnotherRound", "carrying")
+PLANNING_DEFAULTED_CLAIM = re.compile(
+    r"\b(" + "|".join(PLANNING_CLAIM_PARAMETERS) + r")\s*=\s*[^=]")
+
+
+def _npc_planning_sources() -> list[Path]:
+    """Every planning source of the NPC library, or [] when there is none.
+
+    The callers below fail on an empty result rather than pass it: a rule that
+    quietly audits nothing is worse than no rule, because the build stays green
+    and the guarantee is gone.
+    """
+    library = LIBRARIES.get("concernednpc")
+    if library is None:
+        return []
+    project_dir: Path = library["project_dir"]  # type: ignore[assignment]
+    planning = project_dir / "Planning"
+    if not planning.is_dir():
+        return []
+    return [path for path in sorted(planning.rglob("*.cs"))
+            if path.relative_to(project_dir).parts[0] not in ("obj", "bin")]
+
+
+def _npc_planning_code_lines(path: Path):
+    """Line number and text for every line of real code in one source."""
+    for number, line in enumerate(path.read_text(encoding="utf-8-sig").splitlines(), start=1):
+        stripped = line.strip()
+        if stripped.startswith("///") or stripped.startswith("//"):
+            continue
+        yield number, stripped
+
+
+def check_npc_planning_decides_nothing_to_do_once(errors: list[str]) -> list[str]:
+    """Fails unless exactly one line of planning code answers NothingToDo.
+
+    It is the one verdict a job may be reported finished on without doing
+    anything, and it has had three separate ways in - a conclusive empty
+    snapshot, a trip whose stops were all dropped, and a first trip the chest
+    cap emptied. Every one of them was a blocker, because every one of them was
+    another place that could close a job with its targets untouched.
+
+    So the guarantee is arithmetic rather than argument: one decision site, which
+    a reviewer can read. A fourth way in cannot be added without this failing.
+    """
+    sources = _npc_planning_sources()
+    if not sources:
+        fail(
+            "[concernednpc] The planning folder is missing, so the verdict audit checked "
+            "nothing. Point this rule at the pipeline's new home rather than leaving it green "
+            "over an empty set.", errors)
+        return []
+
+    sites = [f"{path.relative_to(ROOT)}:{number}"
+             for path in sources
+             for number, code in _npc_planning_code_lines(path)
+             if "JobPlanVerdict.NothingToDo" in code]
+
+    if len(sites) != 1:
+        fail(
+            f"[concernednpc] A job may be reported finished on JobPlanVerdict.NothingToDo and on "
+            f"nothing else, so it is decided once: expected 1 site, found {len(sites)} "
+            f"({', '.join(sites) if sites else 'none'}). Each extra one is another way to close a "
+            "job with work still to do.", errors)
+
+    return [
+        f"[concernednpc] Planning verdict audit: {len(sources)} sources; NothingToDo decided at "
+        f"{len(sites)} site",
+    ]
+
+
+def check_npc_planning_never_defaults_a_claim(errors: list[str]) -> list[str]:
+    """Fails on a default value for a parameter that makes a claim.
+
+    `leftForAnotherRound` defaulting to zero says the plan covered the whole job;
+    `carrying` defaulting to empty says the NPC is holding nothing this job may
+    spend. Neither is checkable inside this library - what is actually held is
+    the custody ledger's answer, and what a plan left out is the planner's - so a
+    call site that stays silent is not omitting a detail, it is asserting
+    something it was never asked.
+
+    Both were silent once and both produced the same failure: a job reporting
+    itself finished with targets untouched. Making every call site say the value
+    turns that into CS7036 at build time.
+    """
+    sources = _npc_planning_sources()
+    if not sources:
+        fail(
+            "[concernednpc] The planning folder is missing, so the defaulted-claim audit checked "
+            "nothing. Point this rule at the pipeline's new home rather than leaving it green "
+            "over an empty set.", errors)
+        return []
+
+    for path in sources:
+        for number, code in _npc_planning_code_lines(path):
+            # A statement ends in a semicolon: an assignment to the property of
+            # the same name, or a local with an initialiser, is not a parameter
+            # and is none of this rule's business. A parameter declaration ends
+            # in a comma, a closing paren, or a paren and an expression arrow.
+            if code.endswith(";"):
+                continue
+            match = PLANNING_DEFAULTED_CLAIM.search(code)
+            if match:
+                fail(
+                    f"[concernednpc] {match.group(1)!r} may not have a default value "
+                    f"({path.relative_to(ROOT)}:{number}). It is a claim nothing in this library "
+                    "can check, and a caller that stays silent asserts it by accident.", errors)
+
+    return [
+        f"[concernednpc] Planning claim audit: {len(sources)} sources; "
+        f"{len(PLANNING_CLAIM_PARAMETERS)} claim parameters, none defaulted",
+    ]
+
+
 def check_library_consumers_do_not_bypass_the_arbiter(errors: list[str]) -> list[str]:
     """Once a product consumes the NPC library, its modes come from the arbiter.
 
@@ -1958,6 +2078,8 @@ def main() -> int:
     report.extend(check_library_consumers(errors))
     report.extend(check_library_consumers_do_not_bypass_the_arbiter(errors))
     report.extend(check_the_npc_library_writes_no_file(errors))
+    report.extend(check_npc_planning_decides_nothing_to_do_once(errors))
+    report.extend(check_npc_planning_never_defaults_a_claim(errors))
     report.extend(check_teamster_cartographer_contract(errors))
     report.extend(check_teamster_integration_readonly(errors))
     report.extend(check_teamster_authority_policy(errors))

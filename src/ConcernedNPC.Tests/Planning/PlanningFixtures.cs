@@ -251,9 +251,22 @@ internal static class Jobs
         return new SourceStock(container, stock);
     }
 
+    /// <summary>A request, for a test that has nothing to say about who is
+    /// asking.
+    ///
+    /// <c>carrying</c> defaults to empty <b>here and nowhere else</b>:
+    /// <see cref="JobPlanRequest"/> itself has no default, because a role that
+    /// stayed silent about it would silently claim an empty pair of hands and
+    /// fetch a second load of what is on its back. A fixture saying "nothing is
+    /// different about this test" is the one place that claim is safe, and it is
+    /// made once, here, in the open.</summary>
     internal static JobPlanRequest Request(
-        INpcWorkArea? area, NpcPoint from, JobManifest wanted = default, string jobId = "job") =>
-        new JobPlanRequest(new NpcIdentity("product", "worker"), jobId, area, World, wanted, from);
+        INpcWorkArea? area,
+        NpcPoint from,
+        JobManifest wanted = default,
+        string jobId = "job",
+        JobManifest carrying = default) =>
+        new JobPlanRequest(new NpcIdentity("product", "worker"), jobId, area, World, wanted, from, carrying);
 
     internal static NpcPoint At(float x, float z) => new NpcPoint(x, 0f, z);
 }

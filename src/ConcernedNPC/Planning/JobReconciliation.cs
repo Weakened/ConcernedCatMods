@@ -69,7 +69,7 @@ internal readonly struct JobReconciliation
         int notReached,
         JobManifest outstanding,
         JobManifest leftOver,
-        int leftForAnotherRound = 0)
+        int leftForAnotherRound)
     {
         Planned = planned;
         Done = done;
@@ -106,7 +106,14 @@ internal readonly struct JobReconciliation
     /// written into a step: the plan covered eight trips of twelve, or one trip
     /// took more chests than a provisioning phase opens. Carried here because
     /// this is the type a job is reported finished on, and a count of perfectly
-    /// executed steps says nothing about work the plan left out.</summary>
+    /// executed steps says nothing about work the plan left out.
+    ///
+    /// <b>The constructor has no default for it.</b> It had one, and the default
+    /// was nought - which is the claim "this plan left nothing out", on the type
+    /// that owns <see cref="IsComplete"/>, the only thing a job may be reported
+    /// finished on. A silent parameter that defaults to complete is a latent bug
+    /// while this type is internal and a bug every role author can write without
+    /// noticing the moment it is not.</summary>
     internal int LeftForAnotherRound { get; }
 
     /// <summary>Whether every target <b>the job</b> was for was serviced.
@@ -119,8 +126,19 @@ internal readonly struct JobReconciliation
         Planned > 0 && Failed == 0 && NotReached == 0 && Outstanding.IsEmpty && LeftForAnotherRound == 0;
 
     /// <summary>Whether there is more to do. True whenever anything is still
-    /// owed or was never planned for, whatever the step counts say.</summary>
-    internal bool NeedsAnotherRound =>
+    /// owed or was never planned for, whatever the step counts say.
+    ///
+    /// <b>A statement of fact, and named as one.</b> It was called
+    /// <c>NeedsAnotherRound</c>, which reads as a recommendation - and a driver
+    /// that looped on the recommendation would spin for ever on a job that
+    /// cannot proceed, because "there is unfinished work" is true of a job
+    /// refused for want of material just as it is of a job stopped by the trip
+    /// cap. Whether to plan again is the <b>verdict's</b> answer:
+    /// <see cref="JobPlanVerdict.BudgetExhausted"/> retries,
+    /// <see cref="JobPlanVerdict.Planned"/> walks,
+    /// <see cref="JobPlanVerdict.NothingToDo"/> finishes, and the rest stop and
+    /// surface <see cref="JobPlan.Reason"/>.</summary>
+    internal bool HasUnfinishedWork =>
         !Outstanding.IsEmpty || Failed > 0 || NotReached > 0 || LeftForAnotherRound > 0;
 }
 
