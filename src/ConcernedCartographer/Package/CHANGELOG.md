@@ -10,13 +10,18 @@ Fixed
   and changing it changes who your atlas thinks drew your own roads and pins.
   It, and the marker that remembers the first-run tip, now live in a `state`
   folder beside them.
-- Your existing identity is carried across on the first start, and the old file
-  is only removed once the new one has been written and read back. If anything
-  goes wrong the old file is left exactly where it is and the log says why, so
-  the next start tries again.
-- **The first-run tip is shown before it is remembered.** It was being marked as
-  shown on a pass that can run before your character exists, so on some starts
-  nobody ever saw it.
+- Your existing identity is carried across on the first start, from either place
+  an earlier build kept it, and the old files are only removed once the new one
+  has been written and read back. If anything goes wrong they are left exactly
+  where they are and the log says why, so the next start tries again.
+- **A second identity is never started while an older one is sitting there
+  unread.** If the old file cannot be read for a moment — an antivirus scan, a
+  config editor holding it open — this session adds no audit labels rather than
+  beginning a new identity that would hide the real one for good.
+- **The first-run tip is shown before it is remembered, and it can now appear at
+  all.** It was asked for on a pass that runs before your character exists, so it
+  was never shown to anybody; it is now asked once your character and the HUD are
+  both there, and the marker is written only after the tip has gone out.
 
 Known
 
