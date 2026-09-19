@@ -26,6 +26,22 @@ cart's mass or physics, touch the parking brake, request or take ownership, run 
 peer is connected), unload material (that is Thorstein's custody, #316/#317), or take a cart through a doorway (C3:
 no cart route passes a door in this slice).
 
+## 2a. What changed when Gunnar became a collector (#381)
+
+Two things in this document are now half-true and are corrected here rather than rewritten in place, because the
+rest of it is a record of what shipped at 1.0.5.
+
+- **The actor-mode owner is no longer this product's.** `HaulExecutor.Modes` is a `WorkerIdentityHold`, and the
+  hold behind it comes from the shared NPC runtime's arbiter (`GUNNAR_COLLECTION.md` §2). The vocabulary, the
+  phases and every refusal are unchanged; what changed is that a haul and a collection round cannot both hold
+  Gunnar, and that a world unload ends the hold whether or not this product noticed.
+- **Teamster now consumes a library package.** `ConcernedNPC` is referenced with `<Private>false</Private>`,
+  pinned in `thunderstore.toml` and declared as a `BepInDependency`. It is not copied into Teamster's ZIP; a
+  player installs it once, from its own package.
+
+Nothing about the cart changed. Attach, detach, mass calibration and the route planner are where they were, in the
+folder the worker-runtime scope audit confines them to.
+
 ## 3. Authority and the rule carve-out
 
 The owner's brief of 2026-09-17 (`DECISIONS.md` D1, D3–D6, D14) makes one scoped exception to Teamster's
