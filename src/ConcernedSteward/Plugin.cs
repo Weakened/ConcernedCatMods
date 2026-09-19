@@ -25,6 +25,16 @@ namespace TheConcernedCat.ConcernedSteward;
 /// prefabs exist, at the main menu, whether or not the runtime is on.</summary>
 [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
 [BepInDependency(Jotunn.Main.ModGuid)]
+// CNPC-R3 (#382): the Steward's identity, his body claim and his job planning
+// come from the Concerned NPC library, which ships as its own package. Hard
+// rather than soft: without it there is no arbiter, so there is nothing to stop
+// one identity having two bodies, and the honest failure is one line at load
+// instead of a null reference in the middle of somebody's evening.
+//
+// Spelled out rather than referred to by constant on purpose: the validator
+// reads this file as text (check_library_consumers), and a constant would leave
+// the rule looking satisfied to a reader and unsatisfied to the gate.
+[BepInDependency("com.theconcernedcat.valheim.concernednpc")]
 public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernedsteward";

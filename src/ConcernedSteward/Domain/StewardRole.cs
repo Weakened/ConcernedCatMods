@@ -82,8 +82,26 @@ internal static class StewardRole
     /// implementation detail of the factory that happens to build it.</summary>
     public const string BodyPrefabName = "CS_Steward";
 
-    /// <summary>The job id every upkeep job is held under, for the actor-mode
-    /// owner. One identity, one runtime, one job at a time.</summary>
+    /// <summary>The prefix of every key the Steward's body stores itself under
+    /// in its own network object, trailing dot included.
+    ///
+    /// <b>Never change this either, and it is not a new fact.</b> It is the
+    /// common head of the three literals <c>StewardBody</c> has
+    /// always written — <c>tcc.steward.key</c>, <c>tcc.steward.inventory</c>,
+    /// <c>tcc.steward.revision</c> — named here so it can be handed to Concerned
+    /// NPC as <c>NpcBodyContract.ZdoKeyPrefix</c> without a second spelling of
+    /// it appearing anywhere. Those three literals are deliberately left where
+    /// they are rather than recomposed from this constant: a saved body is read
+    /// by them, and a refactor that rebuilt them from parts would be a change to
+    /// a player's save file wearing the clothes of a tidy-up.
+    /// <c>StewardNpcRoleTests</c> asserts the three still compose from this
+    /// prefix, so the two cannot drift apart unnoticed.</summary>
+    public const string BodyKeyPrefix = "tcc.steward.";
+
+    /// <summary>The job id every upkeep job is held under. One identity, one
+    /// runtime, one job at a time — held through the shared arbiter since the
+    /// Concerned NPC adoption, and by this product's own mode owner before it.
+    /// </summary>
     public const string UpkeepJobId = "steward/upkeep";
 
     /// <summary>Validates that a name an adapter read back out of a save is the

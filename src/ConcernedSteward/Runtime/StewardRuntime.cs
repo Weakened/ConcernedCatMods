@@ -6,8 +6,11 @@ using System.Reflection;
 using BepInEx;
 using BepInEx.Bootstrap;
 using TheConcernedCat.ConcernedSteward.Domain;
+using TheConcernedCat.ConcernedNPC.Roles;
 using TheConcernedCat.ConcernedSteward.Domain.Interop;
+using TheConcernedCat.ConcernedSteward.Domain.Npc;
 using TheConcernedCat.ConcernedSteward.Domain.Persistence;
+using TheConcernedCat.ConcernedSteward.Domain.Quest;
 using TheConcernedCat.ConcernedSteward.Domain.Recruitment;
 using TheConcernedCat.ConcernedSteward.Domain.Scope;
 using TheConcernedCat.ConcernedSteward.Domain.Upkeep;
@@ -39,9 +42,12 @@ internal sealed class StewardRuntime
     private readonly Action<string> _log;
     private readonly StewardScope _scope = new StewardScope();
     private readonly StewardIntroduction _introduction = new StewardIntroduction();
+    private readonly StewardQuest _quest;
+    private readonly ResinWatch _resin = new ResinWatch();
+    private readonly ResinSightings _sightings;
     private readonly StewardRecordStore _records;
     private readonly RecordBackedJournal _journal;
-    private readonly ActorModeOwner _modes = new ActorModeOwner(StewardRole.Worker);
+    private readonly StewardNpcAdoption _npc;
     private readonly UpkeepLoop _loop;
     private readonly StewardMotion _motion;
     private readonly StewardPackStore _pack;
@@ -72,7 +78,12 @@ internal sealed class StewardRuntime
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _records = new StewardRecordStore(recordRoot);
         _journal = new RecordBackedJournal(SaveRecord);
-        _loop = new UpkeepLoop(UpkeepLimits.Default, _journal, _modes, Report);
+        _npc = new StewardNpcAdoption(
+            NpcRoleRegistry.Shared, new StewardNpcRole(recordRoot), message => _log(message));
+        _quest = new StewardQuest(new RuntimeQuestRecorder(this));
+        _sightings = new ResinSightings(
+            () => _settings.QuestPickupItem.Value, message => _log(message));
+        _loop = new UpkeepLoop(UpkeepLimits.Default, _journal, Report);
         _motion = new StewardMotion(() => _body);
         _pack = new StewardPackStore(() => _census.Live);
         _depot = new DepotStore(() => _scope.Resolve().DepotKey);
@@ -86,7 +97,18 @@ internal sealed class StewardRuntime
 
     internal StewardIntroduction Introduction => _introduction;
 
+    /// <summary>Sunniva's introduction: what has been found, read and said.
+    /// Separate from <see cref="Introduction"/> on purpose — that one is
+    /// authority over a player's materials and fails closed; this one is a story
+    /// and is monotonic.</summary>
+    internal StewardQuest Quest => _quest;
+
     internal UpkeepLoop Loop => _loop;
+
+    /// <summary>The Steward's registration with Concerned NPC and his hold on
+    /// his own body. Read by the status command so a player can be told the
+    /// truthful reason when the library refused him one.</summary>
+    internal StewardNpcAdoption Npc => _npc;
 
     internal StewardCensus Census => _census;
 
@@ -109,6 +131,23 @@ internal sealed class StewardRuntime
 
         _installed = true;
 
+        // The Steward declares himself to Concerned NPC before anything else,
+        // once per process. Registration is per process and not per world: the
+        // library says so, and a role re-offered on every load is refused as a
+        // duplicate from the second load onwards.
+        //
+        // His prefab is still registered by THIS product, below, under the name
+        // it has always had. Handing the library durable facts is not the same
+        // as handing it the prefab, and the difference is the one that cannot be
+        // undone: a prefab registered under another name, or later than the main
+        // menu, deletes every saved Steward on the next load.
+        RoleRegistration registration = _npc.Register();
+        if (registration.IsRegistered)
+        {
+            _log("The Steward is registered with Concerned NPC as " +
+                registration.Identity.Value + ".");
+        }
+
         StewardBody.ErrorLog = message => _log(message);
         StewardBody.Loaded = OnBodyLoaded;
         StewardBody.Died = OnBodyDied;
@@ -125,6 +164,13 @@ internal sealed class StewardRuntime
         // run stops resolving at exactly this moment, which is the point.
         _epoch = StewardIdentity.NewEpoch();
         _scope.UseIdentityEpoch(_epoch);
+
+        // Two epochs, deliberately, and they are not the same thing. This
+        // product's own epoch is what makes a remembered fire key or chest key
+        // stale; the library's is what stamps a body hold, and only the library
+        // may mint it. Neither is derived from the other, and neither is
+        // written to disk.
+        _npc.NoteWorldLoaded();
         _restockProbed = false;
         _restock = RestockDiscovery.NotProbed;
 
@@ -144,6 +190,7 @@ internal sealed class StewardRuntime
         _carryingName = report.FuelItemName;
 
         _introduction.Restore(report.Stage, report.Furthest);
+        _quest.Restore(report.QuestStage, report.QuestFurthest);
         foreach (Designation designation in report.Designations)
         {
             if (!_scope.Restore(designation))
@@ -178,6 +225,14 @@ internal sealed class StewardRuntime
     internal void OnWorldUnloaded()
     {
         _loop.Stop("The world went away.");
+
+        // The body hold ends with the world it stood in. Left standing it would
+        // report a body destroyed with the scene as still there, and no holder
+        // string would survive the load to release it.
+        _npc.NoteWorldUnloaded();
+        // The baseline was about a pack that has gone. Kept, the next world's
+        // first reading would be compared against somebody else's inventory.
+        _resin.Forget();
         _body = null;
         _census = new StewardCensus(StewardCensusVerdict.Unknown, 0, 0, null);
         StewardBody.ForgetAll();
@@ -202,6 +257,8 @@ internal sealed class StewardRuntime
 
         EnsureRestockProbed();
         RefreshCensus();
+        WatchForResin();
+        NoticeSheWouldSpeak();
 
         _loop.Tick(new UpkeepTick(
             Time.time,
@@ -219,9 +276,18 @@ internal sealed class StewardRuntime
         _census = StewardCensusTaker.Take(StewardWorkerPrefab.PrefabName, StewardRole.Worker.Value);
         if (_census.Live == null)
         {
+            // No body to hold. Released unconditionally, because releasing one
+            // we do not have changes nothing and checking first is how a hold
+            // survives the thing it was a hold on.
+            _npc.ReleaseBody();
             _body = null;
             return;
         }
+
+        // Re-asked every tick on purpose: asking again as the same holder is
+        // AlreadyHeld, which is a grant, and a runtime that asked once would
+        // never notice the arbiter disagreeing with it.
+        _npc.ClaimBody();
 
         StewardWorkerAI? ai = _census.Live.GetComponent<StewardWorkerAI>();
         if (!ReferenceEquals(ai, _body))
@@ -435,7 +501,154 @@ internal sealed class StewardRuntime
             }
         }
 
+        // She has been taken on. The last beat of her introduction is that she
+        // does not treat it as a posting: she moves in. Told after the
+        // recruitment sentences and never instead of them, and it costs nothing
+        // if it refuses — the employment is already recorded.
+        foreach (string line in AdvanceQuest(StewardQuestStage.Settled))
+        {
+            said.Add(line);
+        }
+
         return EnsureBody(string.Join(" ", said.ToArray()));
+    }
+
+    // ------------------------------------------------------------------
+    // Sunniva's introduction
+    // ------------------------------------------------------------------
+
+    /// <summary>One look at the player's pack, and only while there is a reason
+    /// to look.
+    ///
+    /// <b>It stops costing anything the moment the object is found.</b> After
+    /// that the quest can never produce another, so the watch is not run at all
+    /// - which is why walking the player's stacks every tick is affordable: it
+    /// happens once per world, until it happens.</summary>
+    private void WatchForResin()
+    {
+        if (_quest.ObjectHasBeenFound || _recordReadOnly)
+        {
+            return;
+        }
+
+        ResinSighting sighting = _resin.Observe(
+            _sightings.CountCarried(), _sightings.AWindowIsOpen());
+        if (sighting == ResinSighting.PickedUp)
+        {
+            NoticeResinPickedUp();
+        }
+    }
+
+    /// <summary>A player has picked up resin. Produces the one flint and steel,
+    /// if it has not been produced.
+    ///
+    /// <b>Called from an inventory-changed callback</b>, which is somebody
+    /// else's callback list, so it must never throw and must be cheap when there
+    /// is nothing to do. Both are true: the quest answers "already" on one enum
+    /// comparison, and the one write that can happen is the record the Steward
+    /// writes anyway.</summary>
+    internal void NoticeResinPickedUp()
+    {
+        StewardQuestResult result = _quest.NoticeResinPickedUp(QuestFacts());
+        if (!result.Changed)
+        {
+            return;
+        }
+
+        SayQuest(result.Stage);
+    }
+
+    /// <summary>The player looks at the runes properly.</summary>
+    internal string ReadTheRunes()
+    {
+        if (_quest.Stage < StewardQuestStage.Found)
+        {
+            return "You have nothing with runes on it.";
+        }
+
+        if (_quest.Stage > StewardQuestStage.Found)
+        {
+            return string.Join(
+                " ", StewardQuestSentences.LinesFor(StewardQuestStage.Examined)) + " " +
+                StewardQuestSentences.Describe(_quest.Stage);
+        }
+
+        string[] said = AdvanceQuest(StewardQuestStage.Examined);
+        return said.Length == 0
+            ? "Not yet: " + StewardQuestSentences.DescribeRefusal(
+                _quest.Stage == StewardQuestStage.Found
+                    ? StewardQuestRefusal.NotRecorded
+                    : StewardQuestRefusal.OutOfOrder) + "."
+            : string.Join(" ", said);
+    }
+
+    /// <summary>She turns up, once there is something to turn up to.
+    ///
+    /// The trigger is the settlement being marked and not a timer or a distance:
+    /// the premise of this character is that there is already something worth
+    /// looking after, so the moment a player says "this is mine, this far" is
+    /// the moment she has a reason to be here. Asked from the tick, and silent
+    /// every time but one.</summary>
+    private void NoticeSheWouldSpeak()
+    {
+        if (_quest.Stage != StewardQuestStage.Examined
+            || !_scope.Book.Has(DesignationKind.SettlementArea))
+        {
+            return;
+        }
+
+        AdvanceQuest(StewardQuestStage.Answered);
+    }
+
+    /// <summary>Takes one beat and says it. Returns the lines so a command can
+    /// hand them back and the tick can let them go to the log.</summary>
+    private string[] AdvanceQuest(StewardQuestStage to)
+    {
+        StewardQuestResult result = _quest.Advance(to, QuestFacts());
+        if (!result.Changed)
+        {
+            return Array.Empty<string>();
+        }
+
+        string[] lines = StewardQuestSentences.LinesFor(result.Stage);
+        foreach (string line in lines)
+        {
+            _log(line);
+        }
+
+        return lines;
+    }
+
+    private void SayQuest(StewardQuestStage stage)
+    {
+        foreach (string line in StewardQuestSentences.LinesFor(stage))
+        {
+            _log(line);
+        }
+    }
+
+    private StewardQuestFacts QuestFacts() =>
+        new StewardQuestFacts(
+            somebodyIsThere: StewardWorldFacts.WorldIsUp && CurrentScope() != null,
+            recordWritable: !_recordReadOnly);
+
+    /// <summary>The quest's way of writing a stage down BEFORE it is believed.
+    ///
+    /// A nested type rather than the runtime implementing the interface itself:
+    /// the recorder is one method with one caller, and making the whole runtime
+    /// an <c>IStewardQuestRecorder</c> would put a public-looking write path on
+    /// the type every command already holds.</summary>
+    private sealed class RuntimeQuestRecorder : IStewardQuestRecorder
+    {
+        private readonly StewardRuntime _runtime;
+
+        internal RuntimeQuestRecorder(StewardRuntime runtime)
+        {
+            _runtime = runtime;
+        }
+
+        public bool TryRecord(StewardQuestStage stage, StewardQuestStage furthest) =>
+            _runtime.SaveRecord(_runtime._journal.UnresolvedIntents, stage, furthest);
     }
 
     internal string Dismiss()
@@ -559,7 +772,19 @@ internal sealed class StewardRuntime
 
     private bool Persist() => SaveRecord(_journal.UnresolvedIntents);
 
-    private bool SaveRecord(IReadOnlyList<UpkeepIntent> open)
+    /// <summary>Writes the whole record.
+    ///
+    /// <paramref name="questStage"/> and <paramref name="questFurthest"/> are
+    /// the <b>proposed</b> quest stage rather than the current one, and they
+    /// exist because the quest's guarantee is an ordering: the flint and steel
+    /// is written down before it is believed in, so a game that closes between
+    /// the two comes back with the object found rather than about to be found
+    /// again. Every other caller passes null and gets the quest as it stands.
+    /// </summary>
+    private bool SaveRecord(
+        IReadOnlyList<UpkeepIntent> open,
+        StewardQuestStage? questStage = null,
+        StewardQuestStage? questFurthest = null)
     {
         if (_recordReadOnly)
         {
@@ -579,7 +804,9 @@ internal sealed class StewardRuntime
             _scope.Book.Designations,
             open,
             _loop.Custody.Unaccounted,
-            CarryingName());
+            CarryingName(),
+            questStage ?? _quest.Stage,
+            questFurthest ?? _quest.FurthestReached);
         if (failure == null)
         {
             return true;

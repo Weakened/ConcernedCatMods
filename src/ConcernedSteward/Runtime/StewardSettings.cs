@@ -22,12 +22,14 @@ internal sealed class StewardSettings
         ConfigEntry<bool> runtimeEnabled,
         ConfigEntry<bool> tendFiresEnabled,
         ConfigEntry<bool> debugLogging,
-        ConfigEntry<string> baseCreature)
+        ConfigEntry<string> baseCreature,
+        ConfigEntry<string> questPickupItem)
     {
         RuntimeEnabled = runtimeEnabled;
         TendFiresEnabled = tendFiresEnabled;
         DebugLogging = debugLogging;
         BaseCreature = baseCreature;
+        QuestPickupItem = questPickupItem;
     }
 
     /// <summary>The master switch. False by default. With it false the Steward
@@ -55,6 +57,17 @@ internal sealed class StewardSettings
     /// The final appearance is not settled. This is the placeholder that lets
     /// the rest of the work be proved in a real game.</summary>
     public ConfigEntry<string> BaseCreature { get; }
+
+    /// <summary>The vanilla item whose pickup turns up Sunniva's flint and
+    /// steel.
+    ///
+    /// Configurable for the same reason <see cref="BaseCreature"/> is: an item
+    /// prefab name is asset-bundle data and cannot be proved from the installed
+    /// assembly, so a wrong one has to be a config edit and a logged line rather
+    /// than a guess that compiles. The item's real name — the string vanilla
+    /// itself compares against — is read off this prefab and is never written
+    /// down here.</summary>
+    public ConfigEntry<string> QuestPickupItem { get; }
 
     public static StewardSettings Bind(ConfigFile config)
     {
@@ -93,6 +106,15 @@ internal sealed class StewardSettings
             "does not exist in your game build, or is not a networked humanoid, no Steward is " +
             "created and the reason is logged. His final appearance is not settled yet.");
 
-        return new StewardSettings(runtime, tend, debug, creature);
+        ConfigEntry<string> questItem = config.Bind(
+            "Steward",
+            "QuestPickupItem",
+            "Resin",
+            "The item whose first pickup turns up the flint and steel that begins Sunniva's " +
+            "introduction. Vanilla resin by default. Only the prefab name is read from here; " +
+            "the item itself is looked up in the game, so a name this build does not have is " +
+            "reported and the introduction simply never starts.");
+
+        return new StewardSettings(runtime, tend, debug, creature, questItem);
     }
 }

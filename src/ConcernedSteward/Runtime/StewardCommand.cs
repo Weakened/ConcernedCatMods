@@ -30,7 +30,7 @@ internal sealed class StewardCommand : ConsoleCommand
     public override string Name => "cs_steward";
 
     public override string Help =>
-        "The Steward: area <radius> | depot | clear area|depot | recruit | dismiss | " +
+        "The Steward: area <radius> | depot | clear area|depot | runes | recruit | dismiss | " +
         "resolve | status";
 
     public override void Run(string[] args)
@@ -66,6 +66,10 @@ internal sealed class StewardCommand : ConsoleCommand
 
             case "clear":
                 return Clear(args);
+
+            case "runes":
+            case "flint":
+                return _runtime.ReadTheRunes();
 
             case "recruit":
             case "hire":
@@ -134,7 +138,7 @@ internal sealed class StewardCommand : ConsoleCommand
     public override System.Collections.Generic.List<string> CommandOptionList() =>
         new System.Collections.Generic.List<string>
         {
-            "area", "depot", "clear", "recruit", "dismiss", "resolve", "status",
+            "area", "depot", "clear", "runes", "recruit", "dismiss", "resolve", "status",
         };
 }
 

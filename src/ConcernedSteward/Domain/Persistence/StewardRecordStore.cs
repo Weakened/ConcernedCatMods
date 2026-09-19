@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using TheConcernedCat.ConcernedSteward.Domain.Quest;
 using TheConcernedCat.ConcernedSteward.Domain.Recruitment;
 using TheConcernedCat.ConcernedSteward.Domain.Upkeep;
 using TheConcernedCat.Settlement.Designations;
@@ -40,7 +41,9 @@ internal sealed class RecordLoadReport
         int recordedLoss,
         string fuelItemName,
         int skippedLines,
-        string? notice)
+        string? notice,
+        StewardQuestStage questStage = StewardQuestStage.Unstarted,
+        StewardQuestStage questFurthest = StewardQuestStage.Unstarted)
     {
         Outcome = outcome;
         Stage = stage;
@@ -51,6 +54,8 @@ internal sealed class RecordLoadReport
         FuelItemName = fuelItemName ?? string.Empty;
         SkippedLines = skippedLines;
         Notice = notice;
+        QuestStage = questStage;
+        QuestFurthest = questFurthest;
     }
 
     public RecordLoadOutcome Outcome { get; }
@@ -75,6 +80,16 @@ internal sealed class RecordLoadReport
     public int SkippedLines { get; }
 
     public string? Notice { get; }
+
+    /// <summary>Where Sunniva's introduction stands. Absent from a record
+    /// written before #382, which reads as <see cref="StewardQuestStage.Unstarted"/>
+    /// — the correct answer for a world where nothing has been found.</summary>
+    public StewardQuestStage QuestStage { get; }
+
+    /// <summary>The furthest it has ever got. <b>This is what the one flint and
+    /// steel is refused on</b>, which is why it is carried separately from the
+    /// stage rather than derived from it.</summary>
+    public StewardQuestStage QuestFurthest { get; }
 
     /// <summary>True when new rows may be written. A damaged file is kept, not
     /// rewritten: rewriting it would replace whatever survived with whatever
@@ -122,6 +137,23 @@ internal sealed class StewardRecordStore
     private const string LossTag = "loss";
     private const string CarryingTag = "carrying";
 
+    /// <summary>Sunniva's introduction, added in #382.
+    ///
+    /// <b>A new row tag, not a new format version, and that is the whole of the
+    /// migration story.</b> Every tag above keeps its spelling, its field order
+    /// and its meaning, and <see cref="FormatVersion"/> stays at 1 — so a record
+    /// written before this build loads unchanged and simply has no quest row,
+    /// which reads as "nothing has been found", which is true. The cost, stated
+    /// rather than discovered: a player who downgrades to a build older than
+    /// #382 sees this row counted as one line that could not be read, with the
+    /// notice that says so. It is not dropped and it is not repaired; it is
+    /// skipped, and re-reading it in a newer build finds it intact.
+    ///
+    /// Bumping the format version instead would have been worse in exactly the
+    /// direction that matters: an older build refuses a newer file outright and
+    /// goes read-only over the whole record, designations included.</summary>
+    private const string QuestTag = "quest";
+
     private readonly string _rootDirectory;
 
     internal StewardRecordStore(string rootDirectory)
@@ -164,6 +196,8 @@ internal sealed class StewardRecordStore
         IntroductionStage stage = IntroductionStage.Unmet;
         IntroductionStage furthest = IntroductionStage.Unmet;
         int loss = 0;
+        StewardQuestStage questStage = StewardQuestStage.Unstarted;
+        StewardQuestStage questFurthest = StewardQuestStage.Unstarted;
         string fuelItemName = string.Empty;
         int skipped = 0;
         TrailerVerdict verdict = TrailerVerdict.Missing;
@@ -255,6 +289,14 @@ internal sealed class StewardRecordStore
                     fuelItemName = fields.Length < 2 ? string.Empty : AtomicTextFile.Unescape(fields[1]);
                     break;
 
+                case QuestTag:
+                    if (!TryReadQuest(fields, out questStage, out questFurthest))
+                    {
+                        skipped++;
+                    }
+
+                    break;
+
                 default:
                     skipped++;
                     break;
@@ -270,7 +312,8 @@ internal sealed class StewardRecordStore
                 RecordLoadOutcome.Unreadable, stage, furthest, designations, open, loss, fuelItemName,
                 skipped,
                 "The Steward's record is damaged: " + RecordTrailer.Describe(verdict) +
-                ". He will not write over it. A complete copy may be beside it as a .tmp file.");
+                ". She will not write over it. A complete copy may be beside it as a .tmp file.",
+                questStage, questFurthest);
         }
 
         return new RecordLoadReport(
@@ -278,7 +321,8 @@ internal sealed class StewardRecordStore
             skipped == 0
                 ? null
                 : skipped.ToString(CultureInfo.InvariantCulture) +
-                  " line(s) in the Steward's record could not be read and were left out.");
+                  " line(s) in the Steward's record could not be read and were left out.",
+            questStage, questFurthest);
     }
 
     /// <summary>Writes the whole record. Returns the exception rather than
@@ -291,14 +335,18 @@ internal sealed class StewardRecordStore
         IReadOnlyList<Designation> designations,
         IReadOnlyList<UpkeepIntent> openIntents,
         int recordedLoss,
-        string fuelItemName)
+        string fuelItemName,
+        StewardQuestStage questStage = StewardQuestStage.Unstarted,
+        StewardQuestStage questFurthest = StewardQuestStage.Unstarted)
     {
         string path = ResolvePath(scope);
         string temporary = path + ".tmp";
         Exception? failure = AtomicTextFile.TryWriteTemporary(
             _rootDirectory, temporary,
             RecordTrailer.Seal(
-                Rows(stage, furthest, designations, openIntents, recordedLoss, fuelItemName),
+                Rows(
+                    stage, furthest, designations, openIntents, recordedLoss, fuelItemName,
+                    questStage, questFurthest),
                 _ => -1L));
         if (failure != null)
         {
@@ -323,11 +371,20 @@ internal sealed class StewardRecordStore
         IReadOnlyList<Designation> designations,
         IReadOnlyList<UpkeepIntent> openIntents,
         int recordedLoss,
-        string fuelItemName)
+        string fuelItemName,
+        StewardQuestStage questStage,
+        StewardQuestStage questFurthest)
     {
         yield return Header;
         yield return FormatTag + "\t" + FormatVersion;
         yield return IntroTag + "\t" + (int)stage + "\t" + (int)furthest;
+
+        // Written only once something has been found, so a world where nothing
+        // has happened keeps the file it has always had, byte for byte.
+        if (questFurthest > StewardQuestStage.Unstarted || questStage > StewardQuestStage.Unstarted)
+        {
+            yield return QuestTag + "\t" + (int)questStage + "\t" + (int)questFurthest;
+        }
 
         foreach (Designation designation in designations)
         {
@@ -385,6 +442,27 @@ internal sealed class StewardRecordStore
 
         stage = (IntroductionStage)one;
         furthest = (IntroductionStage)two;
+        return true;
+    }
+
+    /// <summary>Reads the quest row. Both halves are required: a row carrying a
+    /// stage and no high-water mark cannot answer the only question that
+    /// matters, which is whether the flint and steel has ever been found.
+    /// </summary>
+    private static bool TryReadQuest(
+        string[] fields, out StewardQuestStage stage, out StewardQuestStage furthest)
+    {
+        stage = StewardQuestStage.Unstarted;
+        furthest = StewardQuestStage.Unstarted;
+        if (fields.Length < 3
+            || !int.TryParse(fields[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int one)
+            || !int.TryParse(fields[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int two))
+        {
+            return false;
+        }
+
+        stage = (StewardQuestStage)one;
+        furthest = (StewardQuestStage)two;
         return true;
     }
 

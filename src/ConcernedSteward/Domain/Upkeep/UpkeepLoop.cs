@@ -130,7 +130,6 @@ internal sealed class UpkeepLoop
 
     private readonly UpkeepLimits _limits;
     private readonly IUpkeepJournal _journal;
-    private readonly ActorModeOwner _modes;
     private readonly FuelCustody _custody = new FuelCustody();
     private readonly UpkeepReservation _reservation = new UpkeepReservation();
     private readonly AttentionThrottle _throttle;
@@ -149,12 +148,29 @@ internal sealed class UpkeepLoop
     private int _tripsCompleted;
     private int _unitsBurnedTotal;
 
+    /// <summary>Builds the loop.
+    ///
+    /// <b>It no longer takes an actor-mode owner, and that is the Concerned NPC
+    /// adoption rather than a simplification.</b> Until #382 this loop entered
+    /// <c>Working</c> when a trip began and released on every exit, against an
+    /// <c>ActorModeOwner</c> compiled into this assembly out of shared source.
+    /// Nothing ever read it: Foreman and Teamster each compiled their own copy
+    /// of that type, so "one mode owner per identity" was three separate truths
+    /// in three assemblies and none of them could see the others. The Steward's
+    /// identity is now held where every product can see it - through the
+    /// library's arbiter, by <c>StewardNpcAdoption</c>, for the life of the body
+    /// rather than the life of a trip. The validator forbids this product
+    /// constructing a mode owner at all
+    /// (<c>check_library_consumers_do_not_bypass_the_arbiter</c>).
+    ///
+    /// What is NOT lost: whether a trip is running is still this loop's own
+    /// answer, and <see cref="IsWorking"/>, <see cref="Reservation"/> and the
+    /// trip's <c>OrderId</c> are where it always actually lived.</summary>
     public UpkeepLoop(
-        UpkeepLimits limits, IUpkeepJournal journal, ActorModeOwner modes, Action<string>? report = null)
+        UpkeepLimits limits, IUpkeepJournal journal, Action<string>? report = null)
     {
         _limits = limits;
         _journal = journal ?? throw new ArgumentNullException(nameof(journal));
-        _modes = modes ?? throw new ArgumentNullException(nameof(modes));
         _report = report;
         _throttle = new AttentionThrottle(limits.ScanIntervalSeconds * 2f);
         _retry = new BoundedRetry(limits.MaxFailuresPerPhase, limits.ScanIntervalSeconds, limits.ScanIntervalSeconds * 4f);
@@ -959,7 +975,6 @@ internal sealed class UpkeepLoop
     public void OnWorldLoaded(IItemStorePort? carrier, string? fuelItemName)
     {
         _reservation.Release(StewardRole.UpkeepJobId);
-        _modes.Release(StewardRole.UpkeepJobId);
         _nextScanAt = 0f;
         _retry.Reset();
         LastScan = FuelTargetScan.Empty;
@@ -1056,7 +1071,6 @@ internal sealed class UpkeepLoop
     public void Stop(string reason)
     {
         _reservation.Release(StewardRole.UpkeepJobId);
-        _modes.Release(StewardRole.UpkeepJobId);
         if (_phase != UpkeepPhase.NeedsAttention)
         {
             _phase = UpkeepPhase.Idle;
@@ -1079,7 +1093,6 @@ internal sealed class UpkeepLoop
         _tripsCompleted++;
         _job = new OrderId("steward-trip-" + _tripsCompleted.ToString(CultureInfo.InvariantCulture));
         _step = 0;
-        _modes.Enter(ActorMode.Working, StewardRole.UpkeepJobId);
     }
 
     private void CloseJob()
@@ -1091,7 +1104,6 @@ internal sealed class UpkeepLoop
 
         _job = default;
         _step = 0;
-        _modes.Release(StewardRole.UpkeepJobId);
         _journal.Compact();
     }
 
@@ -1152,7 +1164,6 @@ internal sealed class UpkeepLoop
     private void Halt(string reason)
     {
         _reservation.Release(StewardRole.UpkeepJobId);
-        _modes.Release(StewardRole.UpkeepJobId);
         _phase = UpkeepPhase.NeedsAttention;
         _explanation = reason;
         _report?.Invoke(reason);

@@ -383,7 +383,9 @@ internal sealed class WorldFuelTargets : IFuelTargetPort
             fireplace.m_canRefill,
             fireplace.m_infiniteFuel,
             view.IsOwner(),
-            SafeAccess(position));
+            SafeAccess(position),
+            fireplace.m_secPerFuel,
+            ReadIsLit(view));
         return true;
     }
 
@@ -402,6 +404,31 @@ internal sealed class WorldFuelTargets : IFuelTargetPort
         catch (Exception)
         {
             return float.NaN;
+        }
+    }
+
+    /// <summary>Whether the piece is switched on, straight out of its own data.
+    ///
+    /// <c>Fireplace.IsBurning</c> would be the obvious call and it is the wrong
+    /// one here: it also answers false for a fire that is blocked, wet or out of
+    /// fuel, and "out of fuel" is precisely the fire a round exists to serve. So
+    /// the one thing that is actually asked is vanilla's own on/off state —
+    /// <c>ZDOVars.s_state</c>, where 1 is on and 2 is off, defaulting to on for
+    /// the pieces that cannot be turned off at all.
+    ///
+    /// A read and only a read. Unreadable counts as on, which keeps a fire that
+    /// is genuinely burning in the round rather than dropping it for a reason
+    /// nobody could establish.</summary>
+    private static bool ReadIsLit(ZNetView view)
+    {
+        try
+        {
+            ZDO zdo = view.GetZDO();
+            return zdo == null || zdo.GetInt(ZDOVars.s_state, 1) == 1;
+        }
+        catch (Exception)
+        {
+            return true;
         }
     }
 
