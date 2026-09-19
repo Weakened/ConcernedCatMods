@@ -435,6 +435,36 @@ public sealed class MaintenanceRoundTests
         Assert.Equal(RoundVerdict.NoSupply, round.Verdict);
     }
 
+    /// <summary>The shortfall counts what she may TAKE, and nothing else.
+    ///
+    /// Added because a planted defect survived the first round of tests: making
+    /// <c>Shortfall</c> count every approved container rather than only the
+    /// take-able ones changed no verdict anywhere — the affordability pass draws
+    /// only from take-able chests — and so it only corrupted the sentence. She
+    /// would refuse the round and, in the same breath, report that she needs
+    /// nothing, because a deposit bin full of wood had been counted against what
+    /// she was short of.</summary>
+    [Fact]
+    public void A_deposit_bin_full_of_wood_does_not_reduce_what_she_says_she_needs()
+    {
+        var chests = new[]
+        {
+            Lights.Chest("depot", SupplyAccess.Take, contents: new[] { (Lights.Wood, 3) }),
+            Lights.Chest("bin", SupplyAccess.Deposit, x: -20f, contents: new[] { (Lights.Wood, 500) }),
+        };
+
+        RoundPlan round = MaintenanceRound.Prepare(
+            new[] { Lights.Light("a", fuel: 0f) }, Lights.Settlement(), chests,
+            Lights.Epoch, Shipped);
+
+        Assert.Equal(RoundVerdict.ShortOfMaterial, round.Verdict);
+
+        // Ten wanted, three she may take: seven short, not none.
+        Assert.False(round.Shortfall.IsEmpty);
+        Assert.Equal(7, round.Shortfall.UnitsOf(Lights.Wood));
+        Assert.Contains("7 " + Lights.Wood, round.Describe());
+    }
+
     [Fact]
     public void Material_spread_over_two_approved_chests_is_not_a_shortage()
     {
