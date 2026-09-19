@@ -75,9 +75,23 @@ internal sealed class NpcMaterialReservationBook
 
         if (_byName.TryGetValue(reservation.Id.Value, out NpcMaterialReservation? recorded))
         {
-            return recorded!.SamePayloadAs(reservation)
-                ? NpcCustodyOutcome.AlreadySatisfied
-                : NpcCustodyOutcome.RejectedDifferentPayload;
+            if (!recorded!.SamePayloadAs(reservation))
+            {
+                return NpcCustodyOutcome.RejectedDifferentPayload;
+            }
+
+            if (recorded.IsSettled)
+            {
+                // The same defect the ledger's acquisition half had, in the
+                // place nobody looked for it: comparing the payload and not the
+                // state made a committed or refunded claim indistinguishable
+                // from a live one, so re-stating a spent name was answered
+                // "already satisfied" - a success - and set nothing aside. A
+                // name is spent once. A re-plan takes a new one.
+                return NpcCustodyOutcome.Stale;
+            }
+
+            return NpcCustodyOutcome.AlreadySatisfied;
         }
 
         _byName.Add(reservation.Id.Value, reservation);
@@ -157,9 +171,26 @@ internal sealed class NpcMaterialReservationBook
         }
     }
 
-    /// <summary>How many units of one material are reserved out of one
-    /// container by jobs other than <paramref name="exceptJobId"/>.</summary>
-    internal int ReservedIn(NpcCustodyLocation container, NpcMaterial material, string? exceptJobId)
+    /// <summary>How many units of one material are currently set aside out of
+    /// one container, by everything except <paramref name="exceptThis"/>.
+    ///
+    /// <b>The exception is one reservation, not one job, and that is the whole
+    /// correction.</b> It used to exclude every reservation belonging to the
+    /// asking job, which is right when the question is "does this claim
+    /// conflict with itself?" and catastrophic when the question is "how many
+    /// units are free?". A job's step 1 would set aside all forty nails; its
+    /// step 2 would then ask and be told forty were still free, because its own
+    /// hold was excluded, and reserve them again under a different name that
+    /// the payload check has no reason to object to. Eighty nails reserved out
+    /// of a chest holding forty, both <c>Held</c>, both counted.
+    ///
+    /// A re-plan that wants to move a claim from one step to another does not
+    /// need the old exclusion: it refunds the old name first, which the
+    /// one-way latch makes safe and exactly once, and then asks.</summary>
+    /// <param name="exceptThis">A reservation to leave out of the sum, so a
+    /// step can ask what it could have if it were re-planning its own claim.
+    /// <c>default</c> excludes nothing.</param>
+    internal int ReservedIn(NpcCustodyLocation container, NpcMaterial material, ReservationId exceptThis)
     {
         int total = 0;
         foreach (string name in _order)
@@ -167,7 +198,7 @@ internal sealed class NpcMaterialReservationBook
             NpcMaterialReservation reservation = _byName[name];
             if (reservation.State != NpcReservationState.Held
                 || !reservation.CameFrom(container)
-                || string.Equals(reservation.JobId, exceptJobId ?? string.Empty, StringComparison.Ordinal))
+                || (!exceptThis.IsEmpty && reservation.Id.Equals(exceptThis)))
             {
                 continue;
             }
@@ -178,14 +209,26 @@ internal sealed class NpcMaterialReservationBook
         return total;
     }
 
-    /// <summary>What a planner for <paramref name="forJobId"/> may count on: what
-    /// the container actually holds, less what other jobs have already set
-    /// aside. Never below zero - a container emptied by the player under two
-    /// live reservations is a reconciliation finding, not a negative.</summary>
-    internal int AvailableIn(
-        NpcCustodyLocation container, NpcMaterial material, int actuallyPresent, string? forJobId)
+    /// <summary>What a planner may count on: what the container actually holds,
+    /// less everything already set aside out of it. Never below zero - a
+    /// container the player emptied under two live reservations is a
+    /// reconciliation finding, not a negative number handed to a planner.
+    ///
+    /// <b>Null in, null out.</b> <paramref name="actuallyPresent"/> is
+    /// nullable for the same reason the observer seam's count is: a chest that
+    /// could not be read is not an empty chest. A planner told "zero" plans a
+    /// shortfall and sends the player looking for material that is sitting in
+    /// an unloaded zone; a planner told "unknown" waits.</summary>
+    internal int? AvailableIn(
+        NpcCustodyLocation container, NpcMaterial material, int? actuallyPresent, ReservationId exceptThis)
     {
-        int free = (actuallyPresent < 0 ? 0 : actuallyPresent) - ReservedIn(container, material, forJobId);
+        if (!actuallyPresent.HasValue)
+        {
+            return null;
+        }
+
+        int present = actuallyPresent.Value < 0 ? 0 : actuallyPresent.Value;
+        int free = present - ReservedIn(container, material, exceptThis);
         return free < 0 ? 0 : free;
     }
 

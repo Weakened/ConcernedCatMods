@@ -47,8 +47,21 @@ internal sealed class NpcCustodyLedger
         new Dictionary<string, NpcTransferRecord>(StringComparer.Ordinal);
     private readonly List<string> _transferOrder = new List<string>();
 
-    private readonly Dictionary<string, Acquisition> _acquisitions =
-        new Dictionary<string, Acquisition>(StringComparer.Ordinal);
+    /// <summary>Named acquisitions, and - in its own dictionary - named
+    /// write-offs.
+    ///
+    /// <b>Two name spaces, deliberately.</b> They were one, and that was a
+    /// defect: a role naming a write-off after the step it happened at -
+    /// <c>job#3</c>, the obvious convention - collided with the acquisition at
+    /// that same step, and the person's answer was silently discarded as
+    /// "already satisfied" while the ledger went on saying the material was
+    /// still on the body. Acquiring and writing off are different operations;
+    /// a name means one of each, and neither can swallow the other.</summary>
+    private readonly Dictionary<string, Operation> _acquisitions =
+        new Dictionary<string, Operation>(StringComparer.Ordinal);
+
+    private readonly Dictionary<string, Operation> _writeOffs =
+        new Dictionary<string, Operation>(StringComparer.Ordinal);
 
     private readonly Dictionary<HoldingKey, int> _holdings = new Dictionary<HoldingKey, int>();
     private readonly List<HoldingKey> _holdingOrder = new List<HoldingKey>();
@@ -101,11 +114,22 @@ internal sealed class NpcCustodyLedger
     /// material that was not previously recorded anywhere - it picked it up, it
     /// withdrew it from a container, the world gave it to it.
     ///
-    /// <b>Named, and therefore safe to re-state.</b> The same name twice adds
-    /// nothing, which is what stops a resumed job from acquiring the same
-    /// material a second time. A <see cref="NpcRowStanding.Voided"/> standing
-    /// records the name - so a retry under it is refused rather than started -
-    /// and applies nothing.</summary>
+    /// <b>Named, and therefore safe to re-state - but only as the same thing
+    /// it was.</b> Restating a name that applied units adds nothing, which is
+    /// what stops a resumed job from acquiring the same material twice.
+    /// Restating a name that applied <i>nothing</i> - because the marker rule
+    /// voided it, or could not place it - is
+    /// <see cref="NpcCustodyOutcome.Stale"/>, not a success: the world rolled
+    /// that work back, and a live retry under its name must take a new name or
+    /// the units it is carrying land in no holding at all.
+    ///
+    /// <b>A row that applies nothing is remembered even for a job nobody has
+    /// opened.</b> Remembering a name costs nothing and applies nothing, and
+    /// the alternative is worse in exactly one way that matters: a voided row
+    /// refused for arriving before its job would leave the name free, and the
+    /// next live row under it would apply units the world had already undone.
+    /// The transfer half has always remembered unconditionally; these two
+    /// halves of one rule now agree about replay order.</summary>
     internal NpcCustodyOutcome Acquire(
         ReservationId request,
         NpcCustodyLocation at,
@@ -118,27 +142,23 @@ internal sealed class NpcCustodyLedger
             return NpcCustodyOutcome.Rejected;
         }
 
-        var payload = new Acquisition(request.JobId, at, material, count);
-        if (_acquisitions.TryGetValue(request.Value, out Acquisition recorded))
+        var payload = new Operation(request.JobId, at, material, count, Applies(standing));
+        if (_acquisitions.TryGetValue(request.Value, out Operation recorded))
         {
-            return recorded.Equals(payload)
-                ? NpcCustodyOutcome.AlreadySatisfied
-                : NpcCustodyOutcome.RejectedDifferentPayload;
+            return Restated(recorded, payload);
+        }
+
+        if (!payload.Applied)
+        {
+            // Voided or unplaceable: the name is taken, the units are not. Kept
+            // ahead of the open-job check on purpose - see the summary.
+            _acquisitions.Add(request.Value, payload);
+            return NpcCustodyOutcome.Applied;
         }
 
         if (!IsOpen(request.JobId))
         {
             return NpcCustodyOutcome.Rejected;
-        }
-
-        if (standing == NpcRowStanding.Voided)
-        {
-            // The world rolled this back before the record was read. The name
-            // is remembered - so a retry under it is answered rather than
-            // started afresh - and the units never existed as far as custody
-            // is concerned, on either side of the invariant.
-            _acquisitions.Add(request.Value, payload.AsMove());
-            return NpcCustodyOutcome.Applied;
         }
 
         _acquisitions.Add(request.Value, payload);
@@ -153,9 +173,9 @@ internal sealed class NpcCustodyLedger
     internal int Acquired(string? jobId, NpcMaterial material)
     {
         int total = 0;
-        foreach (KeyValuePair<string, Acquisition> pair in _acquisitions)
+        foreach (KeyValuePair<string, Operation> pair in _acquisitions)
         {
-            Acquisition acquisition = pair.Value;
+            Operation acquisition = pair.Value;
             if (string.Equals(acquisition.JobId, jobId ?? string.Empty, StringComparison.Ordinal)
                 && acquisition.Material.Equals(material)
                 && acquisition.Applied)
@@ -165,6 +185,85 @@ internal sealed class NpcCustodyLedger
         }
 
         return total;
+    }
+
+    /// <summary>Whether a standing puts units into the ledger.
+    ///
+    /// <b><see cref="NpcRowStanding.Ambiguous"/> credits nothing</b>, and that
+    /// is a deliberate direction rather than an oversight. A row the marker
+    /// rule could not place before or after the loaded save may or may not have
+    /// happened. Crediting it and being wrong asks a player to write off
+    /// material that never existed; not crediting it and being wrong leaves
+    /// real material for reconciliation to find at a place it can count. Only
+    /// one of those two mistakes destroys something, so custody fails closed,
+    /// as the safety rules require of it.</summary>
+    private static bool Applies(NpcRowStanding standing) =>
+        standing != NpcRowStanding.Voided && standing != NpcRowStanding.Ambiguous;
+
+    /// <summary>Puts a transfer record into the standing the marker rule gave
+    /// its row, and <b>refuses to do so over a record that has already moved
+    /// units</b>.
+    ///
+    /// A row that applies nothing may only land on a record that has applied
+    /// nothing: one still open, or one already in the very standing being
+    /// restated. Anything else is the record and the holdings disagreeing about
+    /// the same units, with the record marked settled so nothing ever looks at
+    /// it again.</summary>
+    private static NpcCustodyOutcome Restanding(NpcTransferRecord record, NpcRowStanding standing)
+    {
+        NpcTransferStatus wanted = standing == NpcRowStanding.Voided
+            ? NpcTransferStatus.Voided
+            : NpcTransferStatus.Ambiguous;
+
+        if (record.Status == wanted)
+        {
+            return NpcCustodyOutcome.AlreadySatisfied;
+        }
+
+        if (record.Status != NpcTransferStatus.Open)
+        {
+            return NpcCustodyOutcome.Rejected;
+        }
+
+        record.Status = wanted;
+        record.Evidence = standing == NpcRowStanding.Voided
+            ? "the world was loaded from a save made before this was written"
+            : "this could not be placed before or after the loaded world save";
+        return NpcCustodyOutcome.Applied;
+    }
+
+    /// <summary>The answer to a named operation arriving a second time.
+    ///
+    /// <b>The bug this method exists to make impossible.</b> Equality over the
+    /// payload alone said a rolled-back row and a live row under one name were
+    /// the same operation, so a live retry was told
+    /// <see cref="NpcCustodyOutcome.AlreadySatisfied"/> - documented as
+    /// "nothing changed and nothing is wrong" - and recorded nothing. Forty
+    /// units of a player's stone could then be physically out of a chest and in
+    /// no holding, with <see cref="IsConserved"/> true because nothing had ever
+    /// been recorded to conserve.</summary>
+    private static NpcCustodyOutcome Restated(Operation recorded, Operation asked)
+    {
+        if (!recorded.SamePayloadAs(asked))
+        {
+            return NpcCustodyOutcome.RejectedDifferentPayload;
+        }
+
+        if (recorded.Applied)
+        {
+            // The ordinary retry: this operation happened, under this name,
+            // with these units. Saying so is what makes a resumed job safe.
+            return NpcCustodyOutcome.AlreadySatisfied;
+        }
+
+        if (!asked.Applied)
+        {
+            // Restating the rolled-back row itself, which a replay does. Still
+            // nothing to apply.
+            return NpcCustodyOutcome.AlreadySatisfied;
+        }
+
+        return NpcCustodyOutcome.Stale;
     }
 
     // ------------------------------------------------------------------
@@ -279,21 +378,29 @@ internal sealed class NpcCustodyLedger
 
         if (_transfers.TryGetValue(intent.Request.Value, out NpcTransferRecord? existing))
         {
-            return existing!.Intent.SamePayloadAs(intent)
-                ? NpcCustodyOutcome.AlreadySatisfied
-                : NpcCustodyOutcome.RejectedDifferentPayload;
+            if (!existing!.Intent.SamePayloadAs(intent))
+            {
+                return NpcCustodyOutcome.RejectedDifferentPayload;
+            }
+
+            if (standing == NpcRowStanding.Voided || standing == NpcRowStanding.Ambiguous)
+            {
+                // The intent row again, this time carrying a standing that
+                // applies nothing. Answering "already satisfied" here dropped
+                // the void on the floor and left a rolled-back transfer sitting
+                // in the record as Completed, with its units moved.
+                return Restanding(existing, standing);
+            }
+
+            return NpcCustodyOutcome.AlreadySatisfied;
         }
 
         var record = new NpcTransferRecord(intent);
-        if (standing == NpcRowStanding.Voided)
+        if (!Applies(standing))
         {
-            record.Status = NpcTransferStatus.Voided;
-            record.Evidence = "the world was loaded from a save made before this was written";
-        }
-        else if (standing == NpcRowStanding.Ambiguous)
-        {
-            record.Status = NpcTransferStatus.Ambiguous;
-            record.Evidence = "this could not be placed before or after the loaded world save";
+            // A fresh record is Open, so this never refuses here; it is the
+            // same call the restated path makes, so the two cannot drift.
+            Restanding(record, standing);
         }
 
         _transfers.Add(intent.Request.Value, record);
@@ -316,26 +423,25 @@ internal sealed class NpcCustodyLedger
             return NpcCustodyOutcome.Rejected;
         }
 
-        if (standing == NpcRowStanding.Voided)
+        if (standing == NpcRowStanding.Voided || standing == NpcRowStanding.Ambiguous)
         {
-            // Both halves of one call are placed together, so a voided receipt
-            // belongs to a voided intent: nothing was applied, nothing is
-            // undone.
-            record.Status = NpcTransferStatus.Voided;
-            record.Evidence = Join(receipt.Evidence, "the world was loaded from a save made before this");
-            return NpcCustodyOutcome.Applied;
-        }
-
-        if (standing == NpcRowStanding.Ambiguous)
-        {
-            if (record.Status != NpcTransferStatus.Open && record.Status != NpcTransferStatus.Ambiguous)
+            // Both halves of one call are placed together, so a receipt that
+            // applies nothing belongs to an intent that applied nothing.
+            //
+            // The guard is the point. Without it, a voided receipt arriving for
+            // a record already Completed rewrote it to Voided - "never
+            // credited, refunded or replayed; there is nothing to undo" - while
+            // its units stayed moved in the holdings, and Voided counts as
+            // settled, so reconciliation never looked at it again. Silent
+            // divergence, no finding raised. Its neighbour had this guard and
+            // it did not.
+            NpcCustodyOutcome restanding = Restanding(record, standing);
+            if (restanding == NpcCustodyOutcome.Applied)
             {
-                return NpcCustodyOutcome.Rejected;
+                record.Evidence = Join(receipt.Evidence, record.Evidence);
             }
 
-            record.Status = NpcTransferStatus.Ambiguous;
-            record.Evidence = Join(receipt.Evidence, "this could not be placed before or after the loaded world save");
-            return NpcCustodyOutcome.Applied;
+            return restanding;
         }
 
         switch (record.Status)
@@ -505,21 +611,37 @@ internal sealed class NpcCustodyLedger
     /// record holds them to <see cref="NpcCustodyPlace.Lost"/>. Never below
     /// zero, and never a subtraction - loss is a place, so the conservation
     /// invariant still holds afterwards, which is what lets a shortfall be
-    /// reported honestly instead of vanishing.</summary>
+    /// reported honestly instead of vanishing.
+    ///
+    /// <b>Write-offs have their own name space.</b> A role may name this after
+    /// the step the loss happened at without colliding with that step's
+    /// acquisition. They shared one, and the collision discarded a person's
+    /// answer while telling the caller it had been applied.</summary>
     internal NpcCustodyOutcome RecordLoss(
-        ReservationId request, NpcCustodyLocation at, NpcMaterial material, int count)
+        ReservationId request,
+        NpcCustodyLocation at,
+        NpcMaterial material,
+        int count,
+        NpcRowStanding standing = NpcRowStanding.Live)
     {
         if (request.IsEmpty || !at.IsSpecified || !material.IsNamed || count < 1)
         {
             return NpcCustodyOutcome.Rejected;
         }
 
-        var payload = new Acquisition(request.JobId, at, material, count);
-        if (_acquisitions.TryGetValue(request.Value, out Acquisition recorded))
+        // A write-off moves units between places; it never creates them, so it
+        // is not counted on the acquired side of the invariant. Applies() here
+        // says only whether this row does anything at all.
+        var payload = new Operation(request.JobId, at, material, count, Applies(standing));
+        if (_writeOffs.TryGetValue(request.Value, out Operation recorded))
         {
-            return recorded.Equals(payload)
-                ? NpcCustodyOutcome.AlreadySatisfied
-                : NpcCustodyOutcome.RejectedDifferentPayload;
+            return Restated(recorded, payload);
+        }
+
+        if (!payload.Applied)
+        {
+            _writeOffs.Add(request.Value, payload);
+            return NpcCustodyOutcome.Applied;
         }
 
         int held = HoldingAt(request.JobId, at, material);
@@ -528,10 +650,7 @@ internal sealed class NpcCustodyLedger
             return NpcCustodyOutcome.Rejected;
         }
 
-        // Recorded among the named operations so the same answer twice is one
-        // answer, and marked as applying nothing of its own to the acquired
-        // total - it moves units, it does not create them.
-        _acquisitions.Add(request.Value, payload.AsMove());
+        _writeOffs.Add(request.Value, payload);
         Move(request.JobId, at, new NpcCustodyLocation(NpcCustodyPlace.Lost, at.Key, at.Epoch), material, count);
         return NpcCustodyOutcome.Applied;
     }
@@ -687,22 +806,26 @@ internal sealed class NpcCustodyLedger
     private static string Join(string first, string second) =>
         string.IsNullOrEmpty(first) ? second : first + "; " + second;
 
-    /// <summary>A named operation that put units into, or moved units within,
-    /// the ledger. Kept so the same name twice is one operation.</summary>
-    private readonly struct Acquisition : IEquatable<Acquisition>
+    /// <summary>One named row the ledger has taken, and whether it did
+    /// anything.
+    ///
+    /// <b>There is no <c>Equals</c> here, on purpose.</b> There used to be, and
+    /// it compared the payload and left <see cref="Applied"/> out, which made a
+    /// rolled-back row and a live row indistinguishable to every caller that
+    /// asked "is this the same operation?" - and one of those two must be
+    /// refused while the other is waved through. Asking that question now means
+    /// calling <see cref="SamePayloadAs"/> and then deciding about
+    /// <see cref="Applied"/> separately, which is a decision somebody has to
+    /// write down rather than one an omission can make for them.</summary>
+    private readonly struct Operation
     {
-        private Acquisition(string jobId, NpcCustodyLocation at, NpcMaterial material, int count, bool applied)
+        internal Operation(string jobId, NpcCustodyLocation at, NpcMaterial material, int count, bool applied)
         {
             JobId = jobId;
             At = at;
             Material = material;
             Count = count;
             Applied = applied;
-        }
-
-        internal Acquisition(string jobId, NpcCustodyLocation at, NpcMaterial material, int count)
-            : this(jobId, at, material, count, true)
-        {
         }
 
         internal string JobId { get; }
@@ -713,22 +836,17 @@ internal sealed class NpcCustodyLedger
 
         internal int Count { get; }
 
-        /// <summary>False for an operation that moved units rather than
-        /// creating them, so that it is not counted twice on the acquired side
-        /// of the conservation invariant.</summary>
+        /// <summary>Whether this row put units where it said. False for a row
+        /// the world rolled back, and for one the marker rule could not place.
+        /// </summary>
         internal bool Applied { get; }
 
-        internal Acquisition AsMove() => new Acquisition(JobId, At, Material, Count, false);
-
-        public bool Equals(Acquisition other) =>
+        /// <summary>The same operation, described. <b>Says nothing about
+        /// whether either of them happened</b> - see the type summary.
+        /// </summary>
+        internal bool SamePayloadAs(Operation other) =>
             string.Equals(JobId, other.JobId, StringComparison.Ordinal)
             && At.Equals(other.At) && Material.Equals(other.Material) && Count == other.Count;
-
-        public override bool Equals(object? obj) => obj is Acquisition other && Equals(other);
-
-        public override int GetHashCode() =>
-            unchecked((StringComparer.Ordinal.GetHashCode(JobId ?? string.Empty) * 397)
-                ^ (At.GetHashCode() * 31) ^ Material.GetHashCode() ^ Count);
     }
 
     private readonly struct HoldingKey : IEquatable<HoldingKey>

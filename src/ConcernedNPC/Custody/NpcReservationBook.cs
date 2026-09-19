@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using TheConcernedCat.ConcernedNPC.Reservations;
 using TheConcernedCat.ConcernedNPC.Work;
 
@@ -45,21 +46,69 @@ internal sealed class NpcReservationBook<TSubject> : IReservationBook<TSubject>
     /// epoch is unknown refuses everything, which is the correct behaviour
     /// before a world is loaded - and is a refusal rather than a throw, because
     /// a role asking too early should be told no, not crash.</param>
+    /// <exception cref="ArgumentException">The subject is a reference type or
+    /// an interface that does not answer <c>Equals(object)</c> as a value. See
+    /// the type summary: this constructor is safe only for a subject that
+    /// compares by what it is rather than by which object it is, and for
+    /// everything else there is
+    /// <see cref="NpcSubjectComparer.ByKey{TSubject}"/>.</exception>
     internal NpcReservationBook(NpcWorldEpoch epoch)
         : this(epoch, null)
     {
     }
 
-    /// <param name="comparer">How subjects are compared. Supplied when the
-    /// subject is a reference type whose equality is not the right one - a
-    /// container read fresh each tick, for instance, where identity is the key
-    /// rather than the object.</param>
+    /// <param name="epoch">The world load this book belongs to.</param>
+    /// <param name="comparer">How subjects are compared. <b>Required for any
+    /// subject that does not carry value equality of its own</b> - a container
+    /// wrapper re-read each tick, for instance, where what identifies it is its
+    /// key and not which object it happens to be this frame.</param>
     internal NpcReservationBook(NpcWorldEpoch epoch, IEqualityComparer<TSubject>? comparer)
     {
+        if (comparer == null)
+        {
+            RefuseUnsafeDefaultComparer();
+        }
+
         Epoch = epoch;
         _held = comparer == null
             ? new Dictionary<TSubject, ReservationId>()
             : new Dictionary<TSubject, ReservationId>(comparer);
+    }
+
+    /// <summary>Refuses to build a book that would silently compare subjects by
+    /// reference.
+    ///
+    /// <b>Why a throw and not a comment.</b> This was documented - "pass the
+    /// right comparer or the book holds nothing" - and documentation is the
+    /// wrong instrument, twice over. First because the consequence is worse
+    /// than the doc said: a role handing a fresh wrapper each tick does not
+    /// find an empty book, it finds a miss, and the book <i>grants the
+    /// reservation again</i>, so two jobs hold one chest and both believe they
+    /// are the only holder. Second because nothing fails when it is got wrong -
+    /// releasing still clears both entries, so the defect leaves no trace at
+    /// all. A constructor that refuses turns that into an exception a test
+    /// catches, at the one moment somebody is in a position to fix it.</summary>
+    private static void RefuseUnsafeDefaultComparer()
+    {
+        Type subject = typeof(TSubject);
+        if (subject.IsValueType)
+        {
+            // A struct's compiler-provided equality compares its fields, which
+            // is what a subject means by "the same subject".
+            return;
+        }
+
+        MethodInfo? equals = subject.GetMethod(nameof(Equals), new[] { typeof(object) });
+        if (equals != null && equals.DeclaringType != typeof(object))
+        {
+            return;
+        }
+
+        throw new ArgumentException(
+            "A reservation book over " + subject.Name + " would compare subjects by reference, so the " +
+            "same chest read twice would be two subjects and could be reserved twice, by two different " +
+            "jobs, with neither of them told. Build it with NpcSubjectComparer.ByKey(subject => " +
+            "subject.Key), or give the subject value equality of its own.");
     }
 
     public NpcWorldEpoch Epoch { get; }

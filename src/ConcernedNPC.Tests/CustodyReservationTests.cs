@@ -26,6 +26,51 @@ internal readonly struct Subject : INpcEpochScoped, IEquatable<Subject>
         unchecked((StringComparer.Ordinal.GetHashCode(Key ?? string.Empty) * 397) ^ Epoch.GetHashCode());
 }
 
+/// <summary>What a role actually reserves: a wrapper it re-reads every tick,
+/// with no equality of its own. The hazardous subject, written down so the
+/// hazard has a test.</summary>
+internal sealed class Wrapper : INpcEpochScoped
+{
+    internal Wrapper(string key, NpcWorldEpoch epoch)
+    {
+        Key = key;
+        Epoch = epoch;
+    }
+
+    internal string Key { get; }
+
+    public NpcWorldEpoch Epoch { get; }
+}
+
+/// <summary>An interface subject, which is what a role will really name -
+/// and which can promise nothing about equality.</summary>
+internal interface IHaveAKey : INpcEpochScoped
+{
+    string Key { get; }
+}
+
+/// <summary>A reference-type subject that does carry value equality, so the
+/// refusal is not a blanket one.</summary>
+internal sealed class KeyedWrapper : INpcEpochScoped
+{
+    internal KeyedWrapper(string key, NpcWorldEpoch epoch)
+    {
+        Key = key;
+        Epoch = epoch;
+    }
+
+    internal string Key { get; }
+
+    public NpcWorldEpoch Epoch { get; }
+
+    public override bool Equals(object? obj) =>
+        obj is KeyedWrapper other
+        && string.Equals(Key, other.Key, StringComparison.Ordinal)
+        && Epoch.Equals(other.Epoch);
+
+    public override int GetHashCode() => StringComparer.Ordinal.GetHashCode(Key);
+}
+
 public class SubjectReservationTests
 {
     private readonly NpcWorldEpoch _world = Identities.AWorld();
@@ -126,6 +171,96 @@ public class SubjectReservationTests
     }
 
     [Fact]
+    public void A_book_that_would_compare_subjects_by_reference_refuses_to_be_built()
+    {
+        // The trap this closes is not "the book holds nothing". A role that
+        // re-reads its container wrapper each tick - which the container seam's
+        // own doc requires - hands a fresh object every tick, so job B misses
+        // in the dictionary and is GRANTED a chest job A already holds. Two
+        // NPCs withdraw from one chest, both believing they are the only
+        // holder, and releasing still clears both so nothing looks wrong.
+        ArgumentException refused = Assert.Throws<ArgumentException>(
+            () => new NpcReservationBook<Wrapper>(_world));
+
+        Assert.Contains("by reference", refused.Message, StringComparison.Ordinal);
+        Assert.Contains(nameof(NpcSubjectComparer.ByKey), refused.Message, StringComparison.Ordinal);
+
+        // An interface subject cannot promise value equality either, so it is
+        // refused for the same reason - and that is the case a role will
+        // actually write.
+        Assert.Throws<ArgumentException>(() => new NpcReservationBook<IHaveAKey>(_world));
+    }
+
+    [Fact]
+    public void A_subject_with_value_equality_of_its_own_needs_no_comparer()
+    {
+        // The refusal must not be a blanket one, or every struct subject pays
+        // for the reference types' problem.
+        var book = new NpcReservationBook<Subject>(_world);
+        Assert.Equal(
+            ReservationOutcome.Reserved, book.Reserve(new Subject("chest-a", _world), Custody.Step(1)));
+
+        // A class that overrides Equals is fine too.
+        var overriding = new NpcReservationBook<KeyedWrapper>(_world);
+        Assert.Equal(
+            ReservationOutcome.Reserved,
+            overriding.Reserve(new KeyedWrapper("chest-a", _world), Custody.Step(1)));
+    }
+
+    [Fact]
+    public void Two_wrappers_for_one_chest_are_one_subject_when_the_book_is_told_how_to_look()
+    {
+        var book = new NpcReservationBook<Wrapper>(
+            _world, NpcSubjectComparer.ByKey<Wrapper>(wrapper => wrapper.Key));
+
+        Assert.Equal(
+            ReservationOutcome.Reserved, book.Reserve(new Wrapper("chest-a", _world), Custody.Step(1)));
+
+        // A different object, the same chest, a different job: refused, which
+        // is the whole promise.
+        Assert.Equal(
+            ReservationOutcome.HeldByAnother,
+            book.Reserve(new Wrapper("chest-a", _world), Custody.OtherStep(1)));
+
+        // And the same job asking again through yet another wrapper is
+        // satisfied rather than granted twice.
+        Assert.Equal(
+            ReservationOutcome.AlreadySatisfied,
+            book.Reserve(new Wrapper("chest-a", _world), Custody.Step(2)));
+        Assert.Equal(1, book.Count);
+
+        // A genuinely different chest is still its own subject.
+        Assert.Equal(
+            ReservationOutcome.Reserved, book.Reserve(new Wrapper("chest-b", _world), Custody.OtherStep(1)));
+    }
+
+    [Fact]
+    public void A_subject_that_cannot_say_what_it_is_matches_nothing_including_another_that_cannot()
+    {
+        // Falling back to a shared blank would make every broken wrapper the
+        // same chest, which is the same failure arrived at from the other side.
+        var book = new NpcReservationBook<Wrapper>(
+            _world, NpcSubjectComparer.ByKey<Wrapper>(wrapper => wrapper.Key));
+
+        Assert.Equal(
+            ReservationOutcome.Reserved, book.Reserve(new Wrapper(string.Empty, _world), Custody.Step(1)));
+        Assert.Equal(
+            ReservationOutcome.Reserved,
+            book.Reserve(new Wrapper(string.Empty, _world), Custody.OtherStep(1)));
+        Assert.Equal(2, book.Count);
+
+        // And a wrapper whose key getter throws is not a match for anything
+        // either, rather than taking the whole tick with it.
+        var throwing = new NpcReservationBook<Wrapper>(
+            _world, NpcSubjectComparer.ByKey<Wrapper>(wrapper => throw new InvalidOperationException("gone")));
+        Assert.Equal(
+            ReservationOutcome.Reserved, throwing.Reserve(new Wrapper("chest-a", _world), Custody.Step(1)));
+        Assert.Equal(
+            ReservationOutcome.Reserved,
+            throwing.Reserve(new Wrapper("chest-a", _world), Custody.OtherStep(1)));
+    }
+
+    [Fact]
     public void A_world_load_starts_a_new_book_and_the_job_re_establishes_its_holds_from_its_plan()
     {
         // Reconcile rather than replay, in its simplest form: the name is
@@ -159,15 +294,58 @@ public class MaterialReservationTests
         NpcCustodyLocation chest = Custody.Chest(_world);
         Assert.Equal(NpcCustodyOutcome.Applied, _book.Reserve(Reservation(Custody.Step(1), chest, 40)));
 
-        Assert.Equal(40, _book.ReservedIn(chest, Custody.Nails, Custody.OtherJob));
-        Assert.Equal(10, _book.AvailableIn(chest, Custody.Nails, 50, Custody.OtherJob));
-
-        // Its own job sees what it set aside as still its own to plan with.
-        Assert.Equal(50, _book.AvailableIn(chest, Custody.Nails, 50, Custody.Job));
+        Assert.Equal(40, _book.ReservedIn(chest, Custody.Nails, default));
+        Assert.Equal(10, _book.AvailableIn(chest, Custody.Nails, 50, default));
 
         // And a chest the player emptied is a reconciliation finding, never a
         // negative number handed to a planner.
-        Assert.Equal(0, _book.AvailableIn(chest, Custody.Nails, 10, Custody.OtherJob));
+        Assert.Equal(0, _book.AvailableIn(chest, Custody.Nails, 10, default));
+    }
+
+    [Fact]
+    public void Two_steps_of_one_job_never_plan_on_the_same_units_either()
+    {
+        // The same failure, moved from two jobs to two steps of one - and the
+        // one the book used to have, because the exclusion was keyed on the job
+        // rather than on the claim. Step 1 sets aside all forty nails; step 2
+        // then asks how many are free and, being told forty, reserves them
+        // again under a name the payload check has no reason to object to.
+        NpcCustodyLocation chest = Custody.Chest(_world);
+        Assert.Equal(NpcCustodyOutcome.Applied, _book.Reserve(Reservation(Custody.Step(1), chest, 40)));
+
+        Assert.Equal(0, _book.AvailableIn(chest, Custody.Nails, 40, Custody.Step(2)));
+        Assert.Equal(40, _book.ReservedIn(chest, Custody.Nails, Custody.Step(2)));
+
+        // Eighty nails out of a chest holding forty is what this stops. The
+        // book cannot refuse the reservation itself - it is not told what the
+        // chest holds - so the arithmetic a planner asks has to be right.
+        Assert.Equal(
+            40, _book.Totals(NpcReservationState.Held)[Custody.Nails.ItemName]);
+    }
+
+    [Fact]
+    public void A_step_re_planning_its_own_claim_can_ask_what_it_would_have_without_it()
+    {
+        // The reason the exclusion exists at all, preserved: a claim asking
+        // about itself must not be blocked by itself.
+        NpcCustodyLocation chest = Custody.Chest(_world);
+        _book.Reserve(Reservation(Custody.Step(1), chest, 40));
+
+        Assert.Equal(40, _book.AvailableIn(chest, Custody.Nails, 40, Custody.Step(1)));
+        Assert.Equal(0, _book.AvailableIn(chest, Custody.Nails, 40, Custody.Step(2)));
+    }
+
+    [Fact]
+    public void A_chest_that_could_not_be_read_is_not_an_empty_chest()
+    {
+        // Null in, null out - the same rule the observer seam already keeps. A
+        // planner told "zero" sends the player looking for material sitting in
+        // an unloaded zone; a planner told "unknown" waits.
+        NpcCustodyLocation chest = Custody.Chest(_world);
+        _book.Reserve(Reservation(Custody.Step(1), chest, 40));
+
+        Assert.Null(_book.AvailableIn(chest, Custody.Nails, null, default));
+        Assert.Equal(0, _book.AvailableIn(chest, Custody.Nails, 0, default));
     }
 
     [Fact]
@@ -209,7 +387,40 @@ public class MaterialReservationTests
             _book.Reserve(Reservation(Custody.Step(1), Custody.Chest(_world), 40)));
 
         Assert.Equal(1, _book.Count);
-        Assert.Equal(40, _book.ReservedIn(Custody.Chest(_world), Custody.Nails, Custody.OtherJob));
+        Assert.Equal(40, _book.ReservedIn(Custody.Chest(_world), Custody.Nails, default));
+    }
+
+    [Fact]
+    public void A_spent_name_cannot_be_reserved_again()
+    {
+        // The same defect the ledger's acquisition half had, in the place
+        // nobody looked for it. Comparing the payload and ignoring the state
+        // made a refunded claim indistinguishable from a live one, so a job
+        // re-stating a name it had already given back was told "already
+        // satisfied" - a success - and held nothing at all.
+        NpcCustodyLocation chest = Custody.Chest(_world);
+        _book.Reserve(Reservation(Custody.Step(1), chest, 40));
+        Assert.Equal(NpcCustodyOutcome.Applied, _book.Refund(Custody.Step(1)));
+
+        Assert.Equal(NpcCustodyOutcome.Stale, _book.Reserve(Reservation(Custody.Step(1), chest, 40)));
+        Assert.Equal(0, _book.ReservedIn(chest, Custody.Nails, default));
+        Assert.Empty(_book.HeldFor(Custody.Job));
+
+        // Committed and uncertain are spent too: a name is spent once,
+        // whichever way it went.
+        _book.Reserve(Reservation(Custody.Step(2), chest, 10));
+        _book.Commit(Custody.Step(2));
+        Assert.Equal(NpcCustodyOutcome.Stale, _book.Reserve(Reservation(Custody.Step(2), chest, 10)));
+
+        _book.Reserve(Reservation(Custody.Step(3), chest, 5));
+        _book.MarkUncertain(Custody.Step(3));
+        Assert.Equal(NpcCustodyOutcome.Stale, _book.Reserve(Reservation(Custody.Step(3), chest, 5)));
+
+        // And a different payload under a spent name is still the louder
+        // complaint, because it is a different defect.
+        Assert.Equal(
+            NpcCustodyOutcome.RejectedDifferentPayload,
+            _book.Reserve(Reservation(Custody.Step(1), chest, 41)));
     }
 
     [Fact]
