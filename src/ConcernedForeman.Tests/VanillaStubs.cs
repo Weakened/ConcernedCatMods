@@ -79,9 +79,108 @@ public class PieceTable : MonoBehaviour
 
 public class Piece : MonoBehaviour
 {
+    /// <summary>Vanilla keeps every placed piece in a static list and filters it
+    /// by distance; a test builds the list directly.</summary>
+    public static readonly List<Piece> s_allPieces = new List<Piece>();
+
     public long Creator { get; set; }
 
     public long GetCreator() => Creator;
+
+    /// <summary>Vanilla's own signature and behaviour, including the two details
+    /// the housing survey depends on: a <b>three-dimensional</b> distance test
+    /// (which is why the caller widens the radius to the diagonal and lets the
+    /// designation apply the real horizontal containment), and the <b>ghost
+    /// layer exclusion</b> that keeps the build menu's placement preview out of
+    /// the result. It appends without clearing.</summary>
+    public static void GetAllPiecesInRadius(Vector3 p, float radius, List<Piece> pieces)
+    {
+        foreach (Piece piece in s_allPieces)
+        {
+            if (piece != null &&
+                piece.gameObject.layer != GhostLayer &&
+                Vector3.Distance(p, piece.transform.position) < radius)
+            {
+                pieces.Add(piece);
+            }
+        }
+    }
+
+    /// <summary>Whatever `LayerMask.NameToLayer("ghost")` resolves to. The value
+    /// does not matter; that the comparison happens does.</summary>
+    public const int GhostLayer = 11;
+}
+
+/// <summary>`ZDOVars.s_owner` is the only key the housing survey reads.</summary>
+public static class ZDOVars
+{
+    public static readonly int s_owner = "owner".GetHashCode();
+}
+
+/// <summary>A vanilla bed. `Bed` and `Piece` sit on one GameObject in every
+/// vanilla bed prefab, which is the arrangement the survey relies on.</summary>
+public class Bed : MonoBehaviour
+{
+    public Vector3 SpawnPoint { get; set; }
+
+    /// <summary>Vanilla's `IsCurrent()` is `IsMine() && Distance(spawn,
+    /// customSpawn) < 1f`, so a test sets the answer rather than the geometry.
+    /// </summary>
+    public bool Current { get; set; }
+
+    public Vector3 GetSpawnPoint() => SpawnPoint;
+
+    public bool IsCurrent() => Current;
+}
+
+/// <summary>`Cover.GetCoverForPoint` is public and static in assembly_utils and
+/// takes a point, which is what makes a bed's shelter measurable rather than
+/// extrapolated from the player's.</summary>
+public static class Cover
+{
+    /// <summary>Set by a test, keyed by the point asked about; anything not set
+    /// answers "no roof, no cover".</summary>
+    public static readonly Dictionary<string, (float Cover, bool UnderRoof)> Answers =
+        new Dictionary<string, (float, bool)>(StringComparer.Ordinal);
+
+    public static void GetCoverForPoint(
+        Vector3 point, out float coverPercentage, out bool underRoof, float minDistance = 0.5f)
+    {
+        if (Answers.TryGetValue(Key(point), out (float Cover, bool UnderRoof) answer))
+        {
+            coverPercentage = answer.Cover;
+            underRoof = answer.UnderRoof;
+            return;
+        }
+
+        coverPercentage = 0f;
+        underRoof = false;
+    }
+
+    public static void Set(Vector3 point, float cover, bool underRoof) =>
+        Answers[Key(point)] = (cover, underRoof);
+
+    public static string Key(Vector3 point) =>
+        point.x.ToString("0.##") + "/" + point.y.ToString("0.##") + "/" + point.z.ToString("0.##");
+}
+
+/// <summary>`EffectArea.IsPointInsideArea` returns the area, or null when the
+/// point is outside every one of them.</summary>
+public class EffectArea : MonoBehaviour
+{
+    public enum Type
+    {
+        Heat = 1,
+        Burning = 2,
+    }
+
+    /// <summary>Points a test has declared warm.</summary>
+    public static readonly HashSet<string> Warm = new HashSet<string>(StringComparer.Ordinal);
+
+    public static EffectArea? IsPointInsideArea(Vector3 point, Type type, float radius = 0f) =>
+        type == Type.Heat && Warm.Contains(Cover.Key(point)) ? Shared : null;
+
+    private static readonly EffectArea Shared = new EffectArea();
 }
 
 public class TerrainOp : MonoBehaviour
@@ -361,6 +460,11 @@ public class ZDO
 
     public int GetInt(string key, int fallback) =>
         _values.TryGetValue(key, out object? value) && value is int number ? number : fallback;
+
+    public void Set(int key, long value) => Write(key.ToString(), value);
+
+    public long GetLong(int key, long fallback) =>
+        _values.TryGetValue(key.ToString(), out object? value) && value is long number ? number : fallback;
 
     public byte[]? GetByteArray(string key, byte[]? fallback) =>
         _values.TryGetValue(key, out object? value) && value is byte[] bytes ? bytes : fallback;

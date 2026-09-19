@@ -1,24 +1,82 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 
 namespace TheConcernedCat.Settlement.Housing;
 
+/// <summary>Who, if anybody, a bed already belongs to.
+///
+/// Three-way rather than two, because <c>Bed.Interact</c> in the installed
+/// 1.0.14 build branches three ways and the middle one is easy to miss:
+///
+/// <list type="bullet">
+/// <item><c>owner == 0</c> — unclaimed; vanilla checks exposure and claims
+/// it;</item>
+/// <item><c>IsMine() &amp;&amp; IsCurrent()</c> — you sleep here;</item>
+/// <item><c>IsMine() &amp;&amp; !IsCurrent()</c> — <b>yours, but not where you
+/// sleep</b>; vanilla checks exposure and simply moves your spawn point back to
+/// it;</item>
+/// <item>anything else — somebody else's, and vanilla refuses with no message at
+/// all.</item>
+/// </list>
+///
+/// The middle case matters because <b>nothing in vanilla ever clears
+/// <c>s_owner</c></b> — <c>Bed.RPC_SetOwner</c> only ever sets it, and claiming a
+/// second bed calls <c>SetCustomSpawnPoint</c> without touching the first. So a
+/// player who has slept in four beds over a playthrough owns four beds forever.
+/// Reading ownership as a plain "claimed or not" would report every one of them
+/// as somebody else's bed and the settlement's capacity as zero, permanently,
+/// with no way for the player to undo it short of demolishing them.</summary>
+internal enum BedClaim
+{
+    /// <summary><c>s_owner == 0</c>. Nobody has ever slept here.</summary>
+    Unclaimed = 0,
+
+    /// <summary>Yours, and your current spawn point. You sleep here.</summary>
+    YoursAndCurrent = 1,
+
+    /// <summary>Yours, but not your spawn point any more. Vanilla lets you take
+    /// it straight back, so it is not a bed in use.</summary>
+    YoursButNotCurrent = 2,
+
+    /// <summary>Owned by a player id that is not yours.</summary>
+    SomebodyElses = 3,
+}
+
 /// <summary>Why a bed does or does not house somebody.
 ///
-/// Every value is one of <b>vanilla's own</b> refusals, read from
-/// <c>Bed.Interact</c> in the installed 1.0.14 build, not a rule invented here:
-/// <c>CheckExposure</c> is the roof and the cover, <c>CheckFire</c> is the
-/// warmth, and the owner is <c>ZDOVars.s_owner</c>. That matters because
-/// CF-SET-009 (#286) asks for capacity <i>measured</i> from the finished
-/// building rather than asserted — and measuring it against a reimplementation
-/// of the game's rules would be asserting it with extra steps.</summary>
+/// <b>Which rules are vanilla's, and which are ours.</b> The distinction is
+/// worth stating exactly, because the value of CF-SET-009 (#286) rests on
+/// capacity being <i>measured</i> rather than asserted, and a rule invented here
+/// and presented as the game's would be an assertion wearing a measurement's
+/// clothes:
+///
+/// <list type="bullet">
+/// <item><see cref="NoRoof"/> and <see cref="TooExposed"/> are
+/// <c>Bed.CheckExposure</c> (<c>$msg_bedneedroof</c>,
+/// <c>$msg_bedtooexposed</c>), which vanilla applies on <b>every</b> path —
+/// claiming a bed and sleeping in one;</item>
+/// <item><see cref="NoFire"/> is <c>Bed.CheckFire</c>
+/// (<c>$msg_bednofire</c>), which vanilla applies on the <b>sleep</b> path only.
+/// It is included because a resident is expected to sleep, not merely to hold a
+/// spawn point;</item>
+/// <item><see cref="AlreadyClaimed"/> and <see cref="YourOwnBed"/> come from
+/// <c>ZDOVars.s_owner</c>, which is vanilla's field, but the decision to treat an
+/// owned bed as unavailable is <b>ours</b>: vanilla shows no message at all for
+/// somebody else's bed;</item>
+/// <item><see cref="OutsideSettlement"/> and <see cref="NotMeasured"/> are
+/// entirely ours.</item>
+/// </list>
+///
+/// Three of vanilla's own bed refusals are deliberately absent, because all three
+/// are properties of the player at one moment rather than of the building:
+/// <c>CheckWet</c> (the player's Wet status), <c>CheckEnemies</c>
+/// (<c>Player.IsSensed</c>) and <c>EnvMan.CanSleep()</c> (it is daytime). A
+/// capacity that fell to zero at noon would not be a capacity.</summary>
 internal enum HousingRefusal
 {
     /// <summary>It houses somebody.</summary>
     None = 0,
-
-    /// <summary>No bed there any more.</summary>
-    NoBed = 1,
 
     /// <summary>Not under a roof. Vanilla: <c>$msg_bedneedroof</c>.</summary>
     NoRoof = 2,
@@ -30,18 +88,30 @@ internal enum HousingRefusal
     /// <summary>No fire in reach. Vanilla: <c>$msg_bednofire</c>.</summary>
     NoFire = 4,
 
-    /// <summary>Somebody already sleeps here. A bed a player claimed is theirs,
-    /// and this never takes one.</summary>
+    /// <summary>Somebody else already sleeps here. A bed another player claimed
+    /// is theirs, and this never takes one.</summary>
     AlreadyClaimed = 5,
 
-    /// <summary>Outside the settlement it would have to belong to.</summary>
+    /// <summary>Outside the settlement it would have to belong to.
+    ///
+    /// Foreman's own adapter filters by the designation's <c>Contains</c> while
+    /// collecting, so in that product this verdict does not arise — a
+    /// neighbour's bed is noise in a readout, not advice, and counting it would
+    /// let their longhouse crowd out the player's own beds. The rule stays
+    /// because it belongs to the rules, and a caller that hands over beds it has
+    /// not filtered is owed an answer rather than a wrong one.</summary>
     OutsideSettlement = 6,
 
-    /// <summary>The measurement could not be taken — an unloaded chunk, a ward
-    /// that would not answer. <b>Not the same as uninhabitable</b>, and it must
-    /// never be reported as though it were: a house that could not be measured
-    /// is a house nobody knows about.</summary>
+    /// <summary>The measurement could not be taken. <b>Not the same as
+    /// uninhabitable</b>, and it must never be reported as though it were: a
+    /// house that could not be measured is a house nobody knows about.</summary>
     NotMeasured = 7,
+
+    /// <summary>Your own bed, and your current spawn point. It houses you, which
+    /// is a different fact from a stranger having taken it — the settlement is
+    /// working, and this is the one bed a player never wants advice about.
+    /// </summary>
+    YourOwnBed = 8,
 }
 
 /// <summary>What was actually observed at one bed. Every field is something an
@@ -56,7 +126,7 @@ internal readonly struct HousingFacts
         bool underRoof,
         float coverPercentage,
         bool warm,
-        bool claimed)
+        BedClaim claim)
     {
         BedKey = bedKey ?? string.Empty;
         Measured = measured;
@@ -64,10 +134,12 @@ internal readonly struct HousingFacts
         UnderRoof = underRoof;
         CoverPercentage = coverPercentage;
         Warm = warm;
-        Claimed = claimed;
+        Claim = claim;
     }
 
-    /// <summary>Identity within one world load. Not a name.</summary>
+    /// <summary>Where the bed is, in words a player can walk to. Not a name and
+    /// not an id: a bed's uid is reassigned on every world load, so a number
+    /// read out here would name a different object after a reload.</summary>
     public string BedKey { get; }
 
     /// <summary>The adapter actually took the measurement. False means every
@@ -76,7 +148,8 @@ internal readonly struct HousingFacts
 
     public bool InsideSettlement { get; }
 
-    /// <summary>`Cover.IsUnderRoof` at the bed's spawn point.</summary>
+    /// <summary>`Cover.GetCoverForPoint`'s roof flag at the bed's spawn point.
+    /// </summary>
     public bool UnderRoof { get; }
 
     /// <summary>`Cover.GetCoverForPoint`'s percentage, 0..1.</summary>
@@ -85,14 +158,14 @@ internal readonly struct HousingFacts
     /// <summary>`EffectArea.IsPointInsideArea(..., Heat)` at the bed.</summary>
     public bool Warm { get; }
 
-    /// <summary>`ZDOVars.s_owner` is set to somebody.</summary>
-    public bool Claimed { get; }
+    /// <summary>Whose bed it is, three ways.</summary>
+    public BedClaim Claim { get; }
 
     /// <summary>A bed the adapter could not measure. Deliberately the only
     /// constructor that is easy to reach, so a half-filled fact is hard to make
     /// by accident.</summary>
     public static HousingFacts Unmeasured(string bedKey) =>
-        new HousingFacts(bedKey, false, false, false, 0f, false, false);
+        new HousingFacts(bedKey, false, false, false, 0f, false, BedClaim.Unclaimed);
 }
 
 /// <summary>Vanilla's own bed rules, applied to measured facts.</summary>
@@ -104,10 +177,9 @@ internal static class HousingRules
 
     /// <summary>Why this bed does or does not house somebody.
     ///
-    /// The order is vanilla's, so the reason a player is given is the first one
-    /// the game itself would give — except that "already claimed" and "outside
-    /// the settlement" come first, because they are ours and they are not about
-    /// the building at all.</summary>
+    /// Ours are asked first, because they are not about the building and telling
+    /// a player to roof somebody else's bed would be advice they must not act
+    /// on. Vanilla's own order follows.</summary>
     public static HousingRefusal Judge(in HousingFacts facts)
     {
         if (!facts.Measured)
@@ -120,11 +192,24 @@ internal static class HousingRules
             return HousingRefusal.OutsideSettlement;
         }
 
-        if (facts.Claimed)
+        // Somebody else's bed short-circuits, and only this one does. Telling a
+        // player to roof a stranger's bed would be advice they must not act on.
+        if (facts.Claim == BedClaim.SomebodyElses)
         {
             return HousingRefusal.AlreadyClaimed;
         }
 
+        // Your own bed does NOT short-circuit. It used to, and the result was
+        // that a raid which took the roof off your spawn bed produced the
+        // reassuring "you sleep here" while `Bed.Interact` would refuse that
+        // same bed with `$msg_bedneedroof` — the readout disagreeing with the
+        // game about the one bed the player most needs to know about.
+        //
+        // `BedClaim.YoursButNotCurrent` falls through for its own reason:
+        // vanilla hands a stale claim straight back to its owner (`Bed.Interact`,
+        // the `IsMine() && !IsCurrent()` branch), and since nothing in vanilla
+        // ever clears `s_owner`, treating it as taken would retire every bed a
+        // player has ever slept in.
         if (!facts.UnderRoof)
         {
             return HousingRefusal.NoRoof;
@@ -140,33 +225,9 @@ internal static class HousingRules
             return HousingRefusal.NoFire;
         }
 
-        return HousingRefusal.None;
-    }
-
-    /// <summary>One sentence a player can act on.</summary>
-    public static string Describe(HousingRefusal refusal)
-    {
-        switch (refusal)
-        {
-            case HousingRefusal.None:
-                return "somebody could sleep here";
-            case HousingRefusal.NoBed:
-                return "there is no bed here any more";
-            case HousingRefusal.NoRoof:
-                return "it needs a roof over it";
-            case HousingRefusal.TooExposed:
-                return "it is under a roof but too open to the weather";
-            case HousingRefusal.NoFire:
-                return "there is no fire near enough to it";
-            case HousingRefusal.AlreadyClaimed:
-                return "somebody already sleeps in it";
-            case HousingRefusal.OutsideSettlement:
-                return "it is outside the settlement";
-            case HousingRefusal.NotMeasured:
-                return "it could not be checked from here";
-            default:
-                return "a reason was recorded that this build does not know; that is a bug";
-        }
+        return facts.Claim == BedClaim.YoursAndCurrent
+            ? HousingRefusal.YourOwnBed
+            : HousingRefusal.None;
     }
 }
 
@@ -176,88 +237,287 @@ internal static class HousingRules
 /// <b>Counted, never asserted.</b> #286's rule is that capacity comes from the
 /// real building and that a blueprint alone houses nobody, so this has no input
 /// except beds that were actually measured. A settlement with a drawn cottage
-/// and no bed in it has a capacity of zero, and says so.</summary>
+/// and no bed in it has a capacity of zero, and says so.
+///
+/// <b>"Nobody looked" is not "nothing is there."</b> A survey that never ran, a
+/// survey that found no beds, a survey cut short at its own budget, and a survey
+/// over ground that is only partly loaded are four different answers. Collapsing
+/// any of them into the affirmative sentence "it houses nobody" is exactly the
+/// confusion <see cref="HousingRefusal.NotMeasured"/> exists to prevent, and a
+/// player told their settlement houses nobody will go and tear down a house that
+/// was fine.</summary>
 internal readonly struct HousingCapacity
 {
-    private readonly IReadOnlyList<KeyValuePair<string, HousingRefusal>> _beds;
+    private readonly IReadOnlyList<KeyValuePair<string, HousingRefusal>>? _beds;
 
+    /// <summary>Counted once, here, over the very list this value stores.
+    ///
+    /// They were computed properties, which read like fields at every call site
+    /// and each walked the whole list — so one readout walked it eight times,
+    /// and the first per-frame caller to ask "is there a free bed?" would have
+    /// paid for a survey with nothing at the call site to warn it. Counting in
+    /// the only constructor keeps the invariant that made them properties (a
+    /// count cannot disagree with <see cref="Beds"/>, because nothing can build
+    /// one from a different list) and costs a single pass.</summary>
     private HousingCapacity(
-        int habitable, int unmeasured, IReadOnlyList<KeyValuePair<string, HousingRefusal>> beds)
+        bool surveyed,
+        bool truncated,
+        bool groundIncomplete,
+        List<KeyValuePair<string, HousingRefusal>>? beds)
     {
+        Truncated = truncated;
+        GroundIncomplete = groundIncomplete;
+
+        // Copied, not aliased. `Beds` hands this list out as IReadOnlyList, and
+        // the caller still holds the List it built — so without the copy a
+        // caller could cast it back, mutate it, and leave the counts below
+        // frozen against a list that no longer matches. The doc used to promise
+        // they "cannot disagree"; now they cannot.
+        _beds = beds == null
+            ? null
+            : new List<KeyValuePair<string, HousingRefusal>>(beds);
+        _ = surveyed;
+
+        int habitable = 0;
+        int occupied = 0;
+        int claimedByOthers = 0;
+        int unmeasured = 0;
+        if (beds != null)
+        {
+            for (int i = 0; i < beds.Count; i++)
+            {
+                switch (beds[i].Value)
+                {
+                    case HousingRefusal.None:
+                        habitable++;
+                        break;
+                    case HousingRefusal.YourOwnBed:
+                        occupied++;
+                        break;
+                    case HousingRefusal.AlreadyClaimed:
+                        claimedByOthers++;
+                        break;
+                    case HousingRefusal.NotMeasured:
+                        unmeasured++;
+                        break;
+                }
+            }
+        }
+
         Habitable = habitable;
+        Occupied = occupied;
+        ClaimedByOthers = claimedByOthers;
         Unmeasured = unmeasured;
-        _beds = beds;
     }
 
-    /// <summary>Beds somebody could be admitted to. This is the capacity.
-    /// </summary>
-    public int Habitable { get; }
+    /// <summary>A survey actually ran. False is <see cref="NotSurveyed"/>, and
+    /// every count below is then meaningless rather than zero.
+    ///
+    /// Derived rather than stored: it was exactly "a list was supplied" in every
+    /// reachable value, and a second flag saying the same thing is a second
+    /// thing that can be wrong.</summary>
+    public bool Surveyed => _beds != null;
 
-    /// <summary>Beds that could not be checked. Kept apart from the refusals
-    /// because "we could not look" and "it is not good enough" are different
-    /// answers, and reporting the first as the second is how a player is told
-    /// their house is uninhabitable when it is merely out of range.</summary>
-    public int Unmeasured { get; }
+    /// <summary>The survey hit its own budget and stopped early, so the counts
+    /// are a floor rather than a total.</summary>
+    public bool Truncated { get; }
+
+    /// <summary>Part of the settlement's ground was not loaded, so beds there
+    /// were not merely unmeasured — they were never seen at all. This is the
+    /// only way that fact can reach a player, because an object in an unloaded
+    /// zone does not exist to be counted.</summary>
+    public bool GroundIncomplete { get; }
 
     /// <summary>Every bed considered, with its verdict, in the order given.
     /// </summary>
     public IReadOnlyList<KeyValuePair<string, HousingRefusal>> Beds =>
         _beds ?? Array.Empty<KeyValuePair<string, HousingRefusal>>();
 
-    public static HousingCapacity None => default;
+    /// <summary>Beds somebody new could be admitted to. This is the spare
+    /// capacity, not the total — see <see cref="Occupied"/>.
+    ///
+    /// Counted in the constructor from the list below, so it cannot disagree
+    /// with <see cref="Beds"/> and reading it is free.</summary>
+    public int Habitable { get; }
 
-    public static HousingCapacity Measure(IEnumerable<HousingFacts>? beds)
+    /// <summary>Beds you sleep in. Reported beside <see cref="Habitable"/>
+    /// rather than folded into it, because "no room" and "no housing" look
+    /// identical in a single number and only one of them is a reason to build.
+    /// </summary>
+    public int Occupied { get; }
+
+    /// <summary>Beds another player has claimed inside the circle.
+    ///
+    /// Counted apart from <see cref="Occupied"/>, not with it. Folded together,
+    /// a settlement overlapping a neighbour's outbuilding with three claimed
+    /// beds read as "4 lived in" — four residents, in a settlement housing one.
+    /// A stranger's bed is not the settlement's occupancy any more than it is
+    /// its capacity.</summary>
+    public int ClaimedByOthers { get; }
+
+    /// <summary>Beds that could not be checked. Kept apart from the refusals
+    /// because "we could not look" and "it is not good enough" are different
+    /// answers, and reporting the first as the second is how a player is told
+    /// their house is uninhabitable when it is merely unreadable.</summary>
+    public int Unmeasured { get; }
+
+    /// <summary>Nobody looked. The answer when there is no settlement to
+    /// measure, or when the measurement itself could not be taken.</summary>
+    public static HousingCapacity NotSurveyed => default;
+
+    /// <param name="truncated">The surveyor stopped at its own budget with beds
+    /// left unexamined.</param>
+    /// <param name="groundIncomplete">Part of the settlement was not loaded, so
+    /// beds there could not appear in <paramref name="beds"/> at all.</param>
+    public static HousingCapacity Measure(
+        IEnumerable<HousingFacts>? beds,
+        bool truncated = false,
+        bool groundIncomplete = false)
     {
         if (beds == null)
         {
-            return None;
+            return NotSurveyed;
         }
 
-        var verdicts = new List<KeyValuePair<string, HousingRefusal>>();
-        int habitable = 0;
-        int unmeasured = 0;
-
+        var verdicts = beds is ICollection<HousingFacts> known
+            ? new List<KeyValuePair<string, HousingRefusal>>(known.Count)
+            : new List<KeyValuePair<string, HousingRefusal>>();
         foreach (HousingFacts facts in beds)
         {
-            HousingRefusal refusal = HousingRules.Judge(facts);
-            verdicts.Add(new KeyValuePair<string, HousingRefusal>(facts.BedKey, refusal));
-
-            if (refusal == HousingRefusal.None)
-            {
-                habitable++;
-            }
-            else if (refusal == HousingRefusal.NotMeasured)
-            {
-                unmeasured++;
-            }
+            verdicts.Add(new KeyValuePair<string, HousingRefusal>(
+                facts.BedKey, HousingRules.Judge(facts)));
         }
 
-        return new HousingCapacity(habitable, unmeasured, verdicts);
+        return new HousingCapacity(true, truncated, groundIncomplete, verdicts);
     }
 
     /// <summary>What `cf_settle housing` prints.</summary>
-    public string Describe()
+    public string Describe() => HousingSentences.For(this);
+}
+
+/// <summary>The player-facing wording, kept off the rules and off the value the
+/// way <c>CollectionSentences</c> and <c>CooperationSentences</c> are: the
+/// readout shows the sentence, never the enum name, and a copy change does not
+/// touch the file the verdict tests pin.</summary>
+internal static class HousingSentences
+{
+    public static string For(HousingRefusal refusal)
     {
-        if (Beds.Count == 0)
+        switch (refusal)
         {
-            return "No beds in the settlement, so it houses nobody.";
+            case HousingRefusal.None:
+                return "somebody could sleep here";
+            case HousingRefusal.NoRoof:
+                return "it needs a roof over it";
+            case HousingRefusal.TooExposed:
+                return "it is under a roof but too open to the weather";
+            case HousingRefusal.NoFire:
+                return "there is no fire near enough to it";
+            case HousingRefusal.AlreadyClaimed:
+                return "somebody else already sleeps in it";
+            case HousingRefusal.YourOwnBed:
+                return "you sleep here";
+            case HousingRefusal.OutsideSettlement:
+                return "it is outside the settlement";
+            case HousingRefusal.NotMeasured:
+                return "it could not be checked";
+            default:
+                return "a reason was recorded that this build does not know; that is a bug";
+        }
+    }
+
+    public static string For(HousingCapacity capacity)
+    {
+        if (!capacity.Surveyed)
+        {
+            return "The settlement's housing could not be checked, so nothing is known about it. " +
+                "That is not the same as having nowhere to live.";
         }
 
-        var text = new System.Text.StringBuilder();
-        text.Append("Housing: ").Append(Habitable).Append(Habitable == 1 ? " place" : " places");
-        if (Unmeasured > 0)
+        var text = new StringBuilder(320 + (capacity.Beds.Count * 80));
+
+        if (capacity.Beds.Count == 0)
         {
-            text.Append(", and ").Append(Unmeasured)
-                .Append(Unmeasured == 1 ? " bed that could not be checked" : " beds that could not be checked");
+            // "It houses nobody" is an affirmative claim, and a survey that
+            // stopped early has not earned it. Both incomplete reasons get the
+            // hedged opening; only a survey that finished and found nothing may
+            // say the settlement houses nobody.
+            text.Append(capacity.GroundIncomplete || capacity.Truncated
+                ? "No beds were found"
+                : "No beds in the settlement, so it houses nobody.");
+        }
+        else
+        {
+            text.Append("Housing: ").Append(capacity.Habitable)
+                .Append(capacity.Habitable == 1 ? " free place" : " free places");
+
+            if (capacity.Occupied > 0)
+            {
+                text.Append(", ").Append(capacity.Occupied).Append(" you live in");
+            }
+
+            if (capacity.ClaimedByOthers > 0)
+            {
+                text.Append(", ").Append(capacity.ClaimedByOthers)
+                    .Append(capacity.ClaimedByOthers == 1
+                        ? " bed somebody else has claimed"
+                        : " beds somebody else has claimed");
+            }
+
+            if (capacity.Unmeasured > 0)
+            {
+                // The noun matters. "1 that could not be checked" reads as
+                // referring back to "free places", which is the opposite of
+                // what Unmeasured means — nothing is known about that bed.
+                text.Append(", ").Append(capacity.Unmeasured)
+                    .Append(capacity.Unmeasured == 1
+                        ? " bed that could not be checked"
+                        : " beds that could not be checked");
+            }
+
+            text.Append('.');
         }
 
-        text.Append('.');
-        foreach (KeyValuePair<string, HousingRefusal> bed in Beds)
+        AppendCaveats(text, capacity);
+
+        IReadOnlyList<KeyValuePair<string, HousingRefusal>> beds = capacity.Beds;
+        for (int i = 0; i < beds.Count; i++)
         {
-            text.AppendLine().Append("  ").Append(bed.Key).Append(": ")
-                .Append(HousingRules.Describe(bed.Value));
+            text.AppendLine().Append("  ").Append(beds[i].Key).Append(": ")
+                .Append(For(beds[i].Value));
         }
 
         return text.ToString();
+    }
+
+    /// <summary>Everything that makes the count a floor rather than a total.
+    /// Both caveats are said in the readout itself and not only in the log,
+    /// because a number a player cannot see is qualified is a number they will
+    /// act on.</summary>
+    private static void AppendCaveats(StringBuilder text, HousingCapacity capacity)
+    {
+        if (capacity.GroundIncomplete)
+        {
+            text.Append(capacity.Beds.Count == 0 ? ", but part" : " Part")
+                .Append(" of the settlement's ground is not loaded, and beds there cannot be seen ")
+                .Append("at all — stand in the settlement and ask again.");
+        }
+        else if (capacity.Truncated && capacity.Beds.Count == 0)
+        {
+            // The hedged opening above left a sentence needing an end.
+            text.Append(", but the check stopped before it had seen all of a settlement this size.");
+            return;
+        }
+
+        if (capacity.Truncated)
+        {
+            // Deliberately not "there are more beds than one check will look
+            // at". Truncation now has two causes — too many beds, and too much
+            // base to finish walking — and a player with thirty beds in a very
+            // large settlement would have been told something false about their
+            // beds. This sentence is true of both.
+            text.Append(" This check stops before it has seen all of a settlement this size, ")
+                .Append("so that is at least, not exactly, what it holds.");
+        }
     }
 }

@@ -50,15 +50,19 @@ internal sealed class DesignationTools
     /// <summary>#286: measures the settlement's housing on demand, or null
     /// where nothing can measure it. A function rather than a value because a
     /// measurement taken at startup would be stale by the time anybody asked.
-    /// </summary>
-    private readonly Func<HousingCapacity>? _housing;
+    ///
+    /// It takes the area rather than finding one. This class has already opened
+    /// the register and knows which settlement the player means; letting the
+    /// measurement re-derive that gave it a second, silent way to fail, and the
+    /// sentence it failed with claimed a measurement had been taken.</summary>
+    private readonly Func<Designation, HousingCapacity>? _housing;
 
     internal DesignationTools(
         Func<bool> hasAuthority,
         Func<string> describeMissingAuthority,
         SettlementRecords records,
         Custody.CustodyTools? custody = null,
-        Func<HousingCapacity>? housing = null)
+        Func<Designation, HousingCapacity>? housing = null)
         : this(hasAuthority, describeMissingAuthority, records, new WorldDesignationSite(), custody, housing)
     {
     }
@@ -69,7 +73,7 @@ internal sealed class DesignationTools
         SettlementRecords records,
         IDesignationSite site,
         Custody.CustodyTools? custody = null,
-        Func<HousingCapacity>? housing = null)
+        Func<Designation, HousingCapacity>? housing = null)
     {
         _hasAuthority = hasAuthority;
         _describeMissingAuthority = describeMissingAuthority;
@@ -139,12 +143,25 @@ internal sealed class DesignationTools
             return "This build cannot measure housing.";
         }
 
-        if (!register.HasSettlementArea)
+        if (!register.TryGet(DesignationKind.SettlementArea, out Designation area))
         {
+            // The register comes back EMPTY AND READ-ONLY when its file could
+            // not be read, is from a newer build, or belongs to another world —
+            // `SettlementRecords.TryOpen` still returns true. So "nothing is
+            // marked" and "I could not read what you marked" arrive here
+            // identically, and answering the first for the second is the same
+            // affirmative-absence bug this command was just corrected for, one
+            // frame up the stack.
+            if (_records.IsReadOnly)
+            {
+                return HousingCapacity.NotSurveyed.Describe() +
+                    (_records.Notice != null ? " " + _records.Notice : string.Empty);
+            }
+
             return "No settlement area is marked, so there is nowhere for anybody to live yet.";
         }
 
-        return _housing().Describe();
+        return _housing(area).Describe();
     }
 
     private string Status(SettlementRegister register, SettlementJournal journal)

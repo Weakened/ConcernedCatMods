@@ -22,7 +22,7 @@ internal sealed class SettlementToolsCommand : ConsoleCommand
     public override string Name => "cf_settle";
 
     public override string Help =>
-        "Concerned Foreman settlement designation and custody. Subcommands: status, area <radius>, " +
+        "Concerned Foreman settlement designation and custody. Subcommands: status, housing, area <radius>, " +
         "harvest <radius>, supply (look at a chest), recruit [name], dismiss [name], " +
         "clear <area|harvest|supply> [yes], give axe|hammer (hold it, stand by Thorstein), " +
         "takeback [axe|hammer], release (hands you what he still carries for ended orders), reconcile, " +
@@ -49,7 +49,7 @@ internal sealed class SettlementToolsCommand : ConsoleCommand
     {
         return new List<string>
         {
-            "status", "area", "harvest", "supply", "recruit", "dismiss", "clear",
+            "status", "housing", "area", "harvest", "supply", "recruit", "dismiss", "clear",
             "resolve", "give", "takeback", "release", "reconcile",
         };
     }
