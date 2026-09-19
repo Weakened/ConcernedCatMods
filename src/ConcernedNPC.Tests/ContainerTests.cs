@@ -531,10 +531,10 @@ public class ContainerTransferTests
         // Forbidden behaviour: bypassing custody. A receipt cannot be made
         // without the permission that authorised the move, and a permit cannot
         // be made for a container that refused.
-        NpcTransferReceipt receipt = NpcTransferReceipt.Record(
+        ContainerMoveResult receipt = ContainerMoveResult.Record(
             null, Identities.AWorld(), NpcTransferPlan.For(5, 5, 5), 5, 5);
 
-        Assert.Equal(NpcTransferOutcome.Refused, receipt.Outcome);
+        Assert.Equal(ContainerMoveOutcome.Refused, receipt.Outcome);
         Assert.Equal(0, receipt.Moved);
         Assert.False(receipt.IsSettled);
     }
@@ -550,12 +550,12 @@ public class ContainerTransferTests
         NpcContainerPermit permit = Permit(world);
         NpcTransferPlan plan = NpcTransferPlan.For(5, 5, 5);
 
-        NpcTransferReceipt first = NpcTransferReceipt.Record(permit, world, plan, 5, 5);
-        NpcTransferReceipt replay = NpcTransferReceipt.Record(permit, world, plan, 5, 5);
+        ContainerMoveResult first = ContainerMoveResult.Record(permit, world, plan, 5, 5);
+        ContainerMoveResult replay = ContainerMoveResult.Record(permit, world, plan, 5, 5);
 
-        Assert.Equal(NpcTransferOutcome.Completed, first.Outcome);
+        Assert.Equal(ContainerMoveOutcome.Completed, first.Outcome);
         Assert.Equal(5, first.Moved);
-        Assert.Equal(NpcTransferOutcome.Refused, replay.Outcome);
+        Assert.Equal(ContainerMoveOutcome.Refused, replay.Outcome);
         Assert.Equal(0, replay.Moved);
         Assert.Contains("already used", replay.Evidence);
     }
@@ -566,10 +566,10 @@ public class ContainerTransferTests
         NpcWorldEpoch yesterday = Identities.AWorld();
         NpcContainerPermit permit = Permit(yesterday);
 
-        NpcTransferReceipt receipt = NpcTransferReceipt.Record(
+        ContainerMoveResult receipt = ContainerMoveResult.Record(
             permit, Identities.AWorld(), NpcTransferPlan.For(5, 5, 5), 5, 5);
 
-        Assert.Equal(NpcTransferOutcome.Refused, receipt.Outcome);
+        Assert.Equal(ContainerMoveOutcome.Refused, receipt.Outcome);
         Assert.False(permit.IsSpent);
     }
 
@@ -582,14 +582,14 @@ public class ContainerTransferTests
         NpcWorldEpoch world = Identities.AWorld();
         NpcTransferPlan plan = NpcTransferPlan.For(5, 5, 5);
 
-        NpcTransferReceipt lost = NpcTransferReceipt.Record(Permit(world), world, plan, 5, 3);
-        NpcTransferReceipt minted = NpcTransferReceipt.Record(Permit(world), world, plan, 3, 5);
+        ContainerMoveResult lost = ContainerMoveResult.Record(Permit(world), world, plan, 5, 3);
+        ContainerMoveResult minted = ContainerMoveResult.Record(Permit(world), world, plan, 3, 5);
 
-        Assert.Equal(NpcTransferOutcome.Uncertain, lost.Outcome);
+        Assert.Equal(ContainerMoveOutcome.Uncertain, lost.Outcome);
         Assert.Equal(0, lost.Moved);
         Assert.Equal(2, lost.Discrepancy);
 
-        Assert.Equal(NpcTransferOutcome.Uncertain, minted.Outcome);
+        Assert.Equal(ContainerMoveOutcome.Uncertain, minted.Outcome);
         Assert.Equal(0, minted.Moved);
         Assert.Equal(-2, minted.Discrepancy);
     }
@@ -599,10 +599,10 @@ public class ContainerTransferTests
     {
         NpcWorldEpoch world = Identities.AWorld();
 
-        NpcTransferReceipt receipt = NpcTransferReceipt.Record(
+        ContainerMoveResult receipt = ContainerMoveResult.Record(
             Permit(world), world, NpcTransferPlan.For(5, 5, 5), 9, 9);
 
-        Assert.Equal(NpcTransferOutcome.Uncertain, receipt.Outcome);
+        Assert.Equal(ContainerMoveOutcome.Uncertain, receipt.Outcome);
         Assert.Equal(0, receipt.Moved);
     }
 
@@ -612,14 +612,14 @@ public class ContainerTransferTests
         NpcWorldEpoch world = Identities.AWorld();
         NpcTransferPlan plan = NpcTransferPlan.For(5, 5, 5);
 
-        NpcTransferReceipt partial = NpcTransferReceipt.Record(Permit(world), world, plan, 3, 3);
-        NpcTransferReceipt nothing = NpcTransferReceipt.Record(Permit(world), world, plan, 0, 0);
+        ContainerMoveResult partial = ContainerMoveResult.Record(Permit(world), world, plan, 3, 3);
+        ContainerMoveResult nothing = ContainerMoveResult.Record(Permit(world), world, plan, 0, 0);
 
-        Assert.Equal(NpcTransferOutcome.Partial, partial.Outcome);
+        Assert.Equal(ContainerMoveOutcome.Partial, partial.Outcome);
         Assert.Equal(3, partial.Moved);
         Assert.True(partial.IsSettled);
 
-        Assert.Equal(NpcTransferOutcome.Nothing, nothing.Outcome);
+        Assert.Equal(ContainerMoveOutcome.Nothing, nothing.Outcome);
         Assert.Equal(0, nothing.Moved);
         Assert.True(nothing.IsSettled);
     }
@@ -629,19 +629,19 @@ public class ContainerTransferTests
     {
         NpcWorldEpoch world = Identities.AWorld();
 
-        NpcTransferReceipt receipt = NpcTransferReceipt.Record(
+        ContainerMoveResult receipt = ContainerMoveResult.Record(
             Permit(world), world, NpcTransferPlan.For(5, 5, 5), -1, 0);
 
-        Assert.Equal(NpcTransferOutcome.Uncertain, receipt.Outcome);
+        Assert.Equal(ContainerMoveOutcome.Uncertain, receipt.Outcome);
         Assert.Equal(0, receipt.Moved);
     }
 
     [Fact]
     public void ADefaultReceiptIsNotASuccess()
     {
-        NpcTransferReceipt receipt = default;
+        ContainerMoveResult receipt = default;
 
-        Assert.Equal(NpcTransferOutcome.Unspecified, receipt.Outcome);
+        Assert.Equal(ContainerMoveOutcome.Unspecified, receipt.Outcome);
         Assert.False(receipt.IsSettled);
         Assert.Equal(0, receipt.Moved);
     }

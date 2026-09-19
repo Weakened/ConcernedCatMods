@@ -64,7 +64,7 @@ internal readonly struct NpcTransferPlan
 }
 
 /// <summary>What one leg of a transfer turned out to have done.</summary>
-internal enum NpcTransferOutcome
+internal enum ContainerMoveOutcome
 {
     /// <summary>Nobody moved anything and nobody said so. Never a success.
     /// </summary>
@@ -104,7 +104,7 @@ internal enum NpcTransferOutcome
 /// moved is that one inventory has that many fewer and the other has that many
 /// more. A caller that reports "I moved thirty" is reporting an intention. So
 /// this takes both measured deltas and compares them, and any disagreement -
-/// in either direction - is <see cref="NpcTransferOutcome.Uncertain"/>. Fewer
+/// in either direction - is <see cref="ContainerMoveOutcome.Uncertain"/>. Fewer
 /// arrived than left is material lost; more arrived than left is material
 /// minted, which is worse, and a retry loop that trusts its own intention is how
 /// you get there.
@@ -119,9 +119,9 @@ internal enum NpcTransferOutcome
 /// compensate or carry custody from one leg to the next; it is the receipt one
 /// leg hands to whatever does. That belongs to the custody leaf, and half a
 /// custody contract is worse than none.</summary>
-internal readonly struct NpcTransferReceipt
+internal readonly struct ContainerMoveResult
 {
-    private NpcTransferReceipt(NpcTransferOutcome outcome, int moved, int discrepancy, string evidence)
+    private ContainerMoveResult(ContainerMoveOutcome outcome, int moved, int discrepancy, string evidence)
     {
         Outcome = outcome;
         Moved = moved;
@@ -129,11 +129,11 @@ internal readonly struct NpcTransferReceipt
         Evidence = evidence;
     }
 
-    internal NpcTransferOutcome Outcome { get; }
+    internal ContainerMoveOutcome Outcome { get; }
 
     /// <summary>How many units are known to have moved. Zero for
-    /// <see cref="NpcTransferOutcome.Uncertain"/> and
-    /// <see cref="NpcTransferOutcome.Refused"/>: an amount nobody can prove is
+    /// <see cref="ContainerMoveOutcome.Uncertain"/> and
+    /// <see cref="ContainerMoveOutcome.Refused"/>: an amount nobody can prove is
     /// not an amount, and crediting one is how a job reports work it did not
     /// do.</summary>
     internal int Moved { get; }
@@ -147,9 +147,9 @@ internal readonly struct NpcTransferReceipt
     internal string Evidence { get; }
 
     /// <summary>Whether this leg is finished and accounted for.</summary>
-    internal bool IsSettled => Outcome == NpcTransferOutcome.Completed
-        || Outcome == NpcTransferOutcome.Partial
-        || Outcome == NpcTransferOutcome.Nothing;
+    internal bool IsSettled => Outcome == ContainerMoveOutcome.Completed
+        || Outcome == ContainerMoveOutcome.Partial
+        || Outcome == ContainerMoveOutcome.Nothing;
 
     /// <summary>Records one leg.
     ///
@@ -158,7 +158,7 @@ internal readonly struct NpcTransferReceipt
     /// player's chest depends on the direction the permit authorises; the
     /// arithmetic does not, because conservation reads the same either way.
     /// </summary>
-    internal static NpcTransferReceipt Record(
+    internal static ContainerMoveResult Record(
         NpcContainerPermit? permit,
         NpcWorldEpoch world,
         NpcTransferPlan plan,
@@ -167,14 +167,14 @@ internal readonly struct NpcTransferReceipt
     {
         if (permit == null)
         {
-            return new NpcTransferReceipt(
-                NpcTransferOutcome.Refused, 0, 0, "nothing authorised this transfer, so nothing is recorded");
+            return new ContainerMoveResult(
+                ContainerMoveOutcome.Refused, 0, 0, "nothing authorised this transfer, so nothing is recorded");
         }
 
         if (!world.Matches(permit.Epoch))
         {
-            return new NpcTransferReceipt(
-                NpcTransferOutcome.Refused,
+            return new ContainerMoveResult(
+                ContainerMoveOutcome.Refused,
                 0,
                 0,
                 "this permission belongs to a world that is no longer loaded, and the container it names is " +
@@ -183,8 +183,8 @@ internal readonly struct NpcTransferReceipt
 
         if (!permit.TryConsume())
         {
-            return new NpcTransferReceipt(
-                NpcTransferOutcome.Refused,
+            return new ContainerMoveResult(
+                ContainerMoveOutcome.Refused,
                 0,
                 0,
                 "this permission was already used; an interrupted transfer asks the container again rather " +
@@ -193,8 +193,8 @@ internal readonly struct NpcTransferReceipt
 
         if (leftTheSource < 0 || arrivedAtTheTarget < 0)
         {
-            return new NpcTransferReceipt(
-                NpcTransferOutcome.Uncertain,
+            return new ContainerMoveResult(
+                ContainerMoveOutcome.Uncertain,
                 0,
                 leftTheSource - arrivedAtTheTarget,
                 "the counts on one side moved the wrong way, so what happened is not known: " +
@@ -203,8 +203,8 @@ internal readonly struct NpcTransferReceipt
 
         if (leftTheSource != arrivedAtTheTarget)
         {
-            return new NpcTransferReceipt(
-                NpcTransferOutcome.Uncertain,
+            return new ContainerMoveResult(
+                ContainerMoveOutcome.Uncertain,
                 0,
                 leftTheSource - arrivedAtTheTarget,
                 "the two sides do not agree, so nothing is credited and nothing is put right automatically: " +
@@ -214,8 +214,8 @@ internal readonly struct NpcTransferReceipt
         int moved = leftTheSource;
         if (moved > plan.Units)
         {
-            return new NpcTransferReceipt(
-                NpcTransferOutcome.Uncertain,
+            return new ContainerMoveResult(
+                ContainerMoveOutcome.Uncertain,
                 0,
                 0,
                 "more moved than was planned, so something else was writing to these inventories at the same " +
@@ -224,14 +224,14 @@ internal readonly struct NpcTransferReceipt
 
         if (moved == 0)
         {
-            return new NpcTransferReceipt(NpcTransferOutcome.Nothing, 0, 0, "nothing moved, and nothing was lost");
+            return new ContainerMoveResult(ContainerMoveOutcome.Nothing, 0, 0, "nothing moved, and nothing was lost");
         }
 
         return moved == plan.Units
-            ? new NpcTransferReceipt(
-                NpcTransferOutcome.Completed, moved, 0, "moved " + Number(moved) + ", as planned")
-            : new NpcTransferReceipt(
-                NpcTransferOutcome.Partial,
+            ? new ContainerMoveResult(
+                ContainerMoveOutcome.Completed, moved, 0, "moved " + Number(moved) + ", as planned")
+            : new ContainerMoveResult(
+                ContainerMoveOutcome.Partial,
                 moved,
                 0,
                 "moved " + Number(moved) + " of " + Number(plan.Units) + "; the rest stays where it was");
