@@ -96,6 +96,18 @@ internal static class CartographerFirstRunFiles
     {
         ".companions.tsv",
         ".companions.tsv.tmp",
+
+        // The quarantine name. `CompanionSidecarStore` renames an unreadable
+        // sidecar to `<name>.companions.tsv.corrupt` (or `.corrupt.1` … `.19`)
+        // in this same directory, and the sidecar itself is written the moment
+        // the companion system opens, with no player involvement. Left out,
+        // a brand-new profile whose first sidecar write was torn is read as a
+        // returning player on the next launch and never sees the #264
+        // introduction — #343 again, through a different file.
+        //
+        // Matched by Contains rather than EndsWith below, because the numbered
+        // variants put digits after it.
+        ".companions.tsv.corrupt",
     };
 
     /// <summary>True when <paramref name="fileName"/> is something this build
@@ -122,7 +134,10 @@ internal static class CartographerFirstRunFiles
 
         foreach (string suffix in Suffixes)
         {
-            if (fileName!.EndsWith(suffix, System.StringComparison.OrdinalIgnoreCase))
+            // Contains, not EndsWith: the sidecar quarantine appends an attempt
+            // number after its suffix (`.corrupt.7`), and EndsWith could not see
+            // those at all.
+            if (fileName!.IndexOf(suffix, System.StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 return true;
             }

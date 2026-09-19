@@ -28,15 +28,21 @@ internal static class AuthorIdentity
 {
     private const string FileName = "author-id" + MarkerFile.Extension;
 
-    /// <summary>Everywhere this marker has lived, oldest first.
+    /// <summary>Everywhere this marker has lived, <b>newest first</b>.
     ///
-    /// <c>author-id.txt</c> is the original. <c>author-id.dat</c> in the
-    /// product directory is the build between (commit <c>6903a65</c>) that
-    /// changed the extension without moving the file — the change #343 shipped
-    /// and #351 replaced. A profile that ran it has neither the original name
-    /// nor the current path, so leaving that entry out silently mints a new
-    /// identity for exactly the machines this migration exists for.</summary>
-    private static readonly string[] LegacyFileNames = { "author-id.txt", "author-id" + MarkerFile.Extension };
+    /// <c>author-id.dat</c> in the product directory is the build between (commit
+    /// <c>6903a65</c>) that changed the extension without moving the file — the
+    /// change #343 shipped and #351 replaced. <c>author-id.txt</c> is the
+    /// original. Newest first because where both exist, the later build's is the
+    /// value the atlas was most recently keyed on.
+    ///
+    /// <b>Literals, deliberately.</b> These were written as
+    /// <c>"author-id" + MarkerFile.Extension</c>, which meant a future change of
+    /// that constant would silently delete a historical location from this list
+    /// and mint a new identity for exactly the profiles the migration exists for.
+    /// A fact about the past cannot be derived from a value that can change.
+    /// </summary>
+    private static readonly string[] PriorFileNames = { "author-id.dat", "author-id.txt" };
 
     private static string? _cached;
 
@@ -46,10 +52,17 @@ internal static class AuthorIdentity
     {
         public const string FileName = "onboarding-shown" + MarkerFile.Extension;
 
-        public static readonly string[] LegacyFileNames =
-            { "onboarding-shown.txt", "onboarding-shown" + MarkerFile.Extension };
+        public static readonly string[] PriorFileNames =
+            { "onboarding-shown.dat", "onboarding-shown.txt" };
 
         public static string Path => MarkerPath(FileName);
+
+        /// <summary>A marker has to say something. <c>_ =&gt; true</c> accepted a
+        /// zero-byte file as a usable value, which is the very "existence is not
+        /// adoption" mistake this migration was written to remove — behind a
+        /// predicate that could not say no. A torn write then permanently ended
+        /// the migration and suppressed the #264 introduction for good.</summary>
+        public static bool IsRecorded(string? contents) => !string.IsNullOrWhiteSpace(contents);
     }
 
     /// <summary>Both markers this product keeps, adopted together at startup.
@@ -64,16 +77,26 @@ internal static class AuthorIdentity
     /// </summary>
     public static void AdoptMarkers(ManualLogSource log)
     {
+        // One guard EACH. A shared try meant any failure resolving the author
+        // marker skipped the onboarding marker entirely — which is exactly the
+        // outcome the paragraph above says adopting them together prevents.
+        Adopt(log, () => Resolve(FileName, PriorFileNames, IsIdentity, log, out _));
+        Adopt(log, () => Resolve(
+            OnboardingMarker.FileName, OnboardingMarker.PriorFileNames,
+            OnboardingMarker.IsRecorded, log, out _));
+    }
+
+    private static void Adopt(ManualLogSource log, Func<string?> resolve)
+    {
         try
         {
-            Resolve(FileName, LegacyFileNames, IsIdentity, log, out _);
-            Resolve(OnboardingMarker.FileName, OnboardingMarker.LegacyFileNames, _ => true, log, out _);
+            resolve();
         }
         catch (Exception exception)
         {
             log.LogWarning(
-                "Moving this mod's own bookkeeping out of your settings folder could not be attempted: " +
-                SafeLogText.Brief(exception));
+                "Moving this mod's own bookkeeping out of your settings folder could not be " +
+                "attempted: " + SafeLogText.Brief(exception));
         }
     }
 
@@ -86,23 +109,45 @@ internal static class AuthorIdentity
 
         try
         {
-            if (Resolve(FileName, LegacyFileNames, IsIdentity, log, out string path) is { } existing)
+            MarkerFile.MarkerSearch search = MarkerFile.Resolve(
+                CartographerLegacyProbe.DataDirectory, FileName, PriorFileNames, IsIdentity, Warn(log),
+                out string path, out string? found);
+
+            if (search == MarkerFile.MarkerSearch.Found && found is not null)
             {
-                _cached = existing.Trim();
+                _cached = found.Trim();
                 return _cached;
+            }
+
+            if (search == MarkerFile.MarkerSearch.PriorFileUnread)
+            {
+                // A file from an older build is sitting right there and could not
+                // be read. Creating an identity now would write a marker that
+                // reads as usable on every later start, and nothing would ever
+                // look at that file again — one bad moment, orphaned for good.
+                //
+                // Empty, not cached: audit labels stay blank for this session and
+                // the next start tries again. PinStore leaves LastAuthor alone
+                // when this is empty, so nothing is mis-attributed meanwhile.
+                log.LogWarning(
+                    "An author identity from an older build is present but could not be read, so " +
+                    "this session adds no audit labels rather than starting a second identity. " +
+                    "It will be tried again next time.");
+                return "";
             }
 
             string created = Guid.NewGuid().ToString("N");
             if (!MarkerFile.TryWrite(path, created, Warn(log)))
             {
-                // Usable for this session, deliberately not cached and not
-                // treated as settled: the next start looks again, and if the
-                // real identity was merely unreadable for a moment it is still
-                // there to be found.
+                // Empty rather than the unsaved value. Returning it stamped a
+                // throwaway identity into pin and route records as OwnerAuthor —
+                // which is not guarded the way LastAuthor is — and the next
+                // session's different GUID then made the player's own deletes be
+                // refused as somebody else's for good.
                 log.LogWarning(
-                    "A new author identity could not be saved, so this session uses a temporary one " +
-                    "and nothing is written over what may already be there.");
-                return created;
+                    "A new author identity could not be saved, so this session adds no audit " +
+                    "labels rather than using one that will not come back.");
+                return "";
             }
 
             _cached = created;
@@ -112,13 +157,54 @@ internal static class AuthorIdentity
         {
             log.LogWarning($"Could not persist an author identity; audit labels stay empty this session: {SafeLogText.Brief(exception)}");
 
-            // Deliberately not cached. An empty identity turns off the sync
-            // self-echo filter, which is how a profile starts re-ingesting its
-            // own broadcast shares; if the failure was transient, the next
+            // Deliberately not cached: if the failure was transient, the next
             // caller should get the real answer rather than a permanent blank.
             return "";
         }
     }
+
+    /// <summary>What is known about the onboarding marker, answered once.</summary>
+    internal readonly struct OnboardingMarkerState
+    {
+        public OnboardingMarkerState(bool alreadyShown, string path)
+        {
+            AlreadyShown = alreadyShown;
+            Path = path;
+        }
+
+        /// <summary>A marker with something in it was found, here or in a prior
+        /// location that has now been adopted.</summary>
+        public bool AlreadyShown { get; }
+
+        /// <summary>Where the marker belongs.</summary>
+        public string Path { get; }
+    }
+
+    /// <summary>Whether the first-run tip has already been shown.
+    ///
+    /// Goes through <see cref="MarkerFile"/> rather than a bare
+    /// <c>File.Exists</c>, so a veteran whose older build's marker has not been
+    /// adopted yet is not told the tip is still owed — and so a zero-byte marker
+    /// does not count as having been shown.</summary>
+    internal static OnboardingMarkerState FindOnboardingMarker(ManualLogSource log)
+    {
+        MarkerFile.MarkerSearch search = MarkerFile.Resolve(
+            CartographerLegacyProbe.DataDirectory,
+            OnboardingMarker.FileName,
+            OnboardingMarker.PriorFileNames,
+            OnboardingMarker.IsRecorded,
+            Warn(log),
+            out string path,
+            out _);
+
+        return new OnboardingMarkerState(search == MarkerFile.MarkerSearch.Found, path);
+    }
+
+    /// <summary>Records that the tip was shown, staged and verified like every
+    /// other marker write.</summary>
+    internal static bool RecordOnboardingShown(string? path, ManualLogSource log) =>
+        !string.IsNullOrEmpty(path) &&
+        MarkerFile.TryWrite(path!, DateTime.UtcNow.ToString("o"), Warn(log));
 
     private static bool IsIdentity(string? contents) =>
         contents is not null && Guid.TryParseExact(contents.Trim(), "N", out _);
@@ -128,13 +214,13 @@ internal static class AuthorIdentity
 
     private static string? Resolve(
         string name,
-        string[] legacyNames,
+        string[] priorNames,
         Func<string, bool> isUsable,
         ManualLogSource log,
         out string path)
     {
-        MarkerFile.TryResolve(
-            CartographerLegacyProbe.DataDirectory, name, legacyNames, isUsable, Warn(log),
+        MarkerFile.Resolve(
+            CartographerLegacyProbe.DataDirectory, name, priorNames, isUsable, Warn(log),
             out path, out string? contents);
         return contents;
     }
