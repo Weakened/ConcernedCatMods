@@ -209,6 +209,15 @@ $requirements = @(
     @("Humanoid", "game", "Pickup takes through the inventory, not by fiat", 'public bool Pickup\(GameObject go, bool autoequip = true, bool autoPickupDelay = true\).*m_inventory\.ContainsItem\(component\.m_itemData\)'),
     @("ItemDrop", "game", "ItemDrop.m_itemData", 'public ItemData m_itemData = new ItemData\(\);'),
 
+    # The two game facts the port's re-pick guard and its worker check exist
+    # for. Both were found by an independent review of the carve-out as
+    # implemented; both are pinned here so a game update that changes either
+    # fails the audit rather than the player's save.
+    @("Pickable", "game", "RPC_Pick marks the source picked through a SECOND routed message, so one pick is not settled when the drop arrives", 'private void RPC_Pick\(long sender, int bonus\).*m_nview\.InvokeRPC\(ZNetView\.Everybody, "RPC_SetPicked", true\);'),
+    @("Pickable", "game", "m_picked is set only by SetPicked, which only RPC_SetPicked calls", 'private void RPC_SetPicked\(long sender, bool picked\) \{ SetPicked\(picked\); \}.*public void SetPicked\(bool picked\) \{ m_picked = picked;'),
+    @("Humanoid", "game", "Pickup DESTROYS the item and answers true for a character with no network record", 'public bool Pickup\(GameObject go, bool autoequip = true, bool autoPickupDelay = true\).*if \(m_nview\.GetZDO\(\) == null\) \{ UnityEngine\.Object\.Destroy\(go\); return true; \}'),
+    @("Character", "game", "Character.m_nview", 'protected ZNetView m_nview;'),
+
     # Jotunn: registering the worker prefab for every session.
     @("Jotunn.Managers.PrefabManager", "jotunn", "PrefabManager.OnVanillaPrefabsAvailable", 'public static event Action OnVanillaPrefabsAvailable;'),
     @("Jotunn.Managers.PrefabManager", "jotunn", "PrefabManager.CreateClonedPrefab(string, GameObject)", 'public GameObject CreateClonedPrefab\(string name, GameObject prefab\)'),

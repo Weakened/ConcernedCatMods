@@ -131,6 +131,13 @@ public sealed class PickAccountingTests
 
         Assert.Equal(2, accounting.Finish());
         Assert.Equal(0, accounting.Taken);
+
+        // "Once" is the load-bearing word, and asking twice is the only way to
+        // tell. Reading Taken cannot: it is gated on a pick being in flight, so
+        // it answers zero whether or not the counter behind it was cleared -
+        // which is how the first version of this test passed with the clearing
+        // deleted.
+        Assert.Equal(0, accounting.Finish());
     }
 
     [Fact]

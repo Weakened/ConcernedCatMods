@@ -176,6 +176,27 @@ had to be authorized rather than assumed.
 | the source is one the game will not pick out of tar | that path speaks to the character, and `Character.Message`'s signature is what killed a shipped Cartographer on 1.0.7 |
 | anything unreadable | unknown refuses |
 
+**Picking writes the world save, and that is inherent to what was authorized.** Teamster's own rule otherwise
+says no world-save mutation, so it is worth stating rather than leaving to be discovered: vanilla's `SetPicked`
+stores the picked flag and the pick time on the source's own network record. That is the capability the owner
+granted — a pick that did not persist would be a pick that undid itself on the next load — and it is the only
+world state this product's collection writes. Nothing mod-shaped is written into any vanilla object.
+
+**Four defects an independent review found, and what closed them.** All four were in the first version of the
+port; none was ever live, because the slice has no call site.
+
+| Defect | What closed it |
+|---|---|
+| A source could be picked **twice** inside the settle window, for a second full yield out of nothing — the game's pick raises *two* routed messages, and between them the source still reports it can be picked | a record of what was picked; a source is refused until the world confirms it, not until the pick finishes |
+| A refused start could report the **previous** pick's count | the count is handed back once, by the `Poll` that finishes, and cleared with it |
+| Vanilla's take **destroys the item and answers true** for a character with no network record; only the source's view was checked | the worker's own record is checked at the start and on every gather |
+| The seed set was taken once, and above the collider ceiling a **pre-existing** item could fall outside it and be credited later | the ceiling is a refusal rather than a clamp, and only single-unit stacks count, up to what the pick expected |
+
+The last of those is **a bound, not a proof of provenance**: a player dropping single units one at a time beside a
+source he is picking would still be counted, and nothing available to this layer can tell those apart. What it
+guarantees is that the error can never exceed what the source was expected to give — a pick can be short, never
+generous.
+
 **Two calls, one window.** The game's pick hands nothing back, so `Begin` starts it and `Poll` gathers what it
 dropped over a bounded window, into Gunnar's own inventory, through vanilla's own `Humanoid.Pickup` — so weight,
 stacking and the pickup delay are the game's arithmetic and not ours. **What is reported is what was measured**,
