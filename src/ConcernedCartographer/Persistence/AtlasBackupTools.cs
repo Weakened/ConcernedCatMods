@@ -26,10 +26,9 @@ internal sealed class AtlasBackupTools
         _log = log;
     }
 
-    private static string DataDirectory =>
-        CartographerPaths.Root;
+    private static string DataDirectory => CartographerPaths.Root;
 
-    private static string BackupRoot => Path.Combine(DataDirectory, "backups");
+    private static string BackupRoot => CartographerPaths.Backups;
 
     private static readonly string[] SidecarSuffixes =
     {
@@ -120,7 +119,7 @@ internal sealed class AtlasBackupTools
     /// whose signature cannot receive the world UID or any path.</summary>
     public string WriteSupportReport(long worldUid, string pluginVersion, string effectiveConfig)
     {
-        string path = Path.Combine(DataDirectory, "support-report.txt");
+        string path = CartographerPaths.InRoot("support-report.txt");
         var sidecars = new List<(string Suffix, string Status)>();
         foreach (string suffix in SidecarSuffixes)
         {

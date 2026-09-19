@@ -43,6 +43,11 @@ internal sealed class CartographerLegacyProbe
     {
         "views.tsv",
         "cartographer-strings.tsv",
+
+        // Only exists because somebody ran `cc_atlas support`. It was reaching
+        // the probe as an unrecognised name, which grants through the weak
+        // "somebody was here" signal rather than saying what it is.
+        "support-report.txt",
     };
 
     /// <summary>Files that count as prior use only if they were already on
@@ -88,11 +93,6 @@ internal sealed class CartographerLegacyProbe
         _log = log;
     }
 
-    /// <summary>The directory every Cartographer sidecar has always lived in.
-    /// Also where companion sidecars go, so one folder move takes a player's
-    /// whole Cartographer history with it.</summary>
-    public static string DataDirectory => CartographerPaths.Root;
-
     public LegacyEvidence Evaluate(long worldUid)
     {
         LegacyEvidenceFacts facts = Gather(worldUid);
@@ -133,7 +133,7 @@ internal sealed class CartographerLegacyProbe
     {
         try
         {
-            string directory = DataDirectory;
+            string directory = CartographerPaths.Root;
             if (!Directory.Exists(directory))
             {
                 // No directory at all is the one genuinely clean state: this

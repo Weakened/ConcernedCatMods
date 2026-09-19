@@ -23,6 +23,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+QUOTE = chr(34)
+
+# The marker extension, mirrored from MarkerFile.Extension. A file with this
+# suffix is this build's own bookkeeping and belongs under "state".
+MARKER_EXTENSION = ".dat"
+
 PRODUCTS: dict[str, dict[str, object]] = {
     "cartographer": {
         "display": "Concerned Cartographer",
@@ -1324,63 +1330,173 @@ MOJIBAKE_TAIL = (
 MOJIBAKE = re.compile("[" + MOJIBAKE_LEAD + "][" + MOJIBAKE_TAIL + "]")
 
 
-def check_cartographer_paths_have_one_owner(errors: list[str]) -> list[str]:
-    """Only CartographerPaths composes the Cartographer data directory.
+def _cartographer_known_names() -> tuple[set[str], set[str]]:
+    """Every file name and suffix the fresh-install probe recognises.
 
-    The fresh-install probe decides new-versus-returning player by listing that
-    directory and asking whether everything in it is a name this build writes for
-    itself. So "where does this file land" and "who counts as a returning player"
-    are the same question, and for a long time nothing connected them: the
-    directory was built by eleven separate literal Path.Combine expressions
-    spread across the persistence and runtime layers.
-
-    It has cost twice. survey-rules.tsv made every fresh installation look like a
-    returning player; author-id.dat (#343) did it again and reached main, and
-    because unlock is monotonic the introduction could then never run again on
-    that profile. Both were found by a person, not by a test.
-
-    This is the check that makes the invariant structural: a twelfth literal
-    composition fails here rather than quietly changing who gets an introduction.
+    Parsed out of the sources rather than restated here, so this check stays true
+    as those lists change instead of becoming a third copy of them.
     """
-    owner = Path("src/ConcernedCartographer/CartographerPaths.cs")
+    names: set[str] = set()
+    suffixes: set[str] = set()
+
+    sources = (
+        ROOT / "src/ConcernedCartographer/Domain/Companions/LegacyEvidenceRule.cs",
+        ROOT / "src/ConcernedCartographer/Runtime/Companions/CartographerLegacyProbe.cs",
+    )
+    for source in sources:
+        if not source.exists():
+            continue
+        for raw in source.read_text(encoding="utf-8-sig").splitlines():
+            code = _strip_cs_line_comment(raw).strip()
+            if not code.startswith(QUOTE) or not code.endswith(QUOTE + ","):
+                continue
+            literal = code[1:-2]
+            if not literal:
+                continue
+            if literal.startswith("."):
+                suffixes.add(literal)
+            else:
+                names.add(literal)
+
+    return names, suffixes
+
+
+def _literal_arguments(code: str, call: str) -> list[str]:
+    """The string literals passed to `call` on this line.
+
+    A non-literal argument (a world uid concatenated with a suffix) is not
+    returned: its suffix is covered by the probe's own suffix list, and guessing
+    at an expression is how a check starts reporting things that are not true.
+    """
+    found: list[str] = []
+    index = code.find(call)
+    while index >= 0:
+        rest = code[index + len(call):].lstrip()
+        if rest.startswith(QUOTE):
+            closing = rest.find(QUOTE, 1)
+            if closing > 0 and rest[closing + 1:].lstrip().startswith(")"):
+                found.append(rest[1:closing])
+        index = code.find(call, index + 1)
+
+    return found
+
+
+def _probe_knows(literal: str, names: set[str], suffixes: set[str]) -> bool:
+    if literal in names:
+        return True
+
+    return any(literal.endswith(suffix) for suffix in suffixes)
+
+
+def check_cartographer_root_holds_only_names_the_probe_knows(errors: list[str]) -> list[str]:
+    """Nothing lands in the probed directory that the probe cannot account for.
+
+    `CartographerLegacyProbe` decides new-versus-returning player by listing the
+    product's data directory and asking whether every name in it is one this
+    build writes for itself. Adding a file there is therefore the same act as
+    changing who gets the #264 introduction, and the mechanism has been wrong
+    twice: `survey-rules.tsv` made every fresh install look like a returning
+    player, and `author-id.dat` (#343) did it again and reached main.
+
+    Two rules, both about the invariant rather than about a spelling:
+
+    1. Only `CartographerPaths` composes the directory, so there is one owner.
+    2. Every name handed to `CartographerPaths.InRoot` is one the probe knows -
+       a name this build writes for itself, or player evidence. A name in
+       neither list is exactly #343.
+
+    Rule 2 is the one that matters, and the first version of this check did not
+    have it: it forbade the token `Paths.ConfigPath` and nothing else, so moving
+    a marker back into the probed root - one token, and #343's shape - passed
+    green. A check that cannot fail on the defect it was written for is worth
+    nothing.
+
+    A marker is additionally required to be under `state/`. `Directory.GetFiles`
+    does not descend, which keeps it out of the probe's listing by construction,
+    and out of the config editor #304 reported.
+    """
+    def flag(message: str) -> None:
+        fail(message, errors)
+
+    project_dir = PRODUCTS["cartographer"]["project_dir"]
+    owner_relative = Path("src/ConcernedCartographer/CartographerPaths.cs")
     needle = "Paths.ConfigPath"
-    offenders: list[str] = []
+    in_root = "CartographerPaths.InRoot("
 
-    for path in sorted((ROOT / "src" / "ConcernedCartographer").rglob("*.cs")):
-        relative = path.relative_to(ROOT)
-        if relative == owner:
-            continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as problem:
-            errors.append(f"[cartographer-paths] could not read {relative}: {problem}")
-            continue
+    if not (ROOT / owner_relative).exists():
+        flag(
+            f"[cartographer-paths] {owner_relative} is missing; it is the one place allowed "
+            "to compose the product's data directory"
+        )
 
-        for number, line in enumerate(text.splitlines(), start=1):
-            if needle in line and not line.lstrip().startswith("///"):
-                offenders.append(f"{relative}:{number}")
-
-    if not (ROOT / owner).exists():
-        errors.append(
-            "[cartographer-paths] src/ConcernedCartographer/CartographerPaths.cs is missing; "
-            "it is the one place allowed to compose the product's data directory"
+    known_names, known_suffixes = _cartographer_known_names()
+    if not known_names:
+        flag(
+            "[cartographer-paths] could not read the probe's known file names, so the "
+            "root-contents rule cannot be checked"
         )
         return []
 
-    for offender in offenders:
-        errors.append(
-            f"[cartographer-paths] {offender} composes Paths.ConfigPath directly. "
-            "Use CartographerPaths.Root for a file a player edited or caused, or "
-            "CartographerPaths.InState for the mod's own bookkeeping - a file in the "
-            "root changes who the fresh-install probe calls a returning player (#343, #363)."
-        )
+    # The shared companion sources are compiled into this product and write into
+    # the same directory, so they are audited with it. They cannot use
+    # CartographerPaths - the shared layer stays BepInEx-free - which is exactly
+    # why they need the second rule rather than the first.
+    roots = [Path(project_dir), ROOT / "src" / "Shared" / "Companions"]
+    checked = 0
 
-    if offenders:
-        return []
+    for root in roots:
+        if not root.exists():
+            continue
+        for path in sorted(root.rglob("*.cs")):
+            relative = path.relative_to(ROOT)
+            if relative == owner_relative:
+                continue
+            if any(part in ("obj", "bin") for part in relative.parts):
+                continue
+
+            try:
+                text = path.read_text(encoding="utf-8-sig")
+            except (OSError, UnicodeDecodeError) as problem:
+                flag(f"[cartographer-paths] could not read {relative}: {problem}")
+                continue
+
+            checked += 1
+            for number, raw in enumerate(text.splitlines(), start=1):
+                code = _strip_cs_line_comment(raw)
+
+                if needle in code:
+                    flag(
+                        f"[cartographer-paths] {relative}:{number} composes {needle} directly. "
+                        "Use CartographerPaths.InRoot(name) for a file a player edited or "
+                        "caused, or CartographerPaths.InState(name) for this build's own "
+                        "bookkeeping - a file in the root decides who the fresh-install probe "
+                        "calls a returning player (#343, #363)."
+                    )
+
+                for literal in _literal_arguments(code, in_root):
+                    if literal.endswith(MARKER_EXTENSION):
+                        flag(
+                            f"[cartographer-paths] {relative}:{number} writes "
+                            + QUOTE + literal + QUOTE
+                            + " into the probed root. A marker belongs under "
+                            "CartographerPaths.InState: Directory.GetFiles does not descend, "
+                            "which keeps it out of the probe's listing and out of a config "
+                            "editor (#304, #343)."
+                        )
+                    elif not _probe_knows(literal, known_names, known_suffixes):
+                        flag(
+                            f"[cartographer-paths] {relative}:{number} writes "
+                            + QUOTE + literal + QUOTE
+                            + " into the probed root, and the probe does not know that name. "
+                            "Add it to CartographerFirstRunFiles (if this build writes it for "
+                            "itself) or to the probe's evidence lists (if a player action "
+                            "creates it) - an unknown name there makes every fresh install "
+                            "look like a returning player (#343)."
+                        )
 
     return [
-        "[cartographer-paths] one owner for the data directory; "
-        "no other Cartographer source composes Paths.ConfigPath"
+        f"[cartographer-paths] one owner for the data directory; {checked} sources audited, "
+        "every name written into it is one the fresh-install probe knows"
     ]
 
 
@@ -1452,7 +1568,7 @@ def main() -> int:
 
     report.extend(check_solution_integrity(errors))
     report.extend(check_no_mojibake(errors))
-    report.extend(check_cartographer_paths_have_one_owner(errors))
+    report.extend(check_cartographer_root_holds_only_names_the_probe_knows(errors))
     check_teamster_adapter_isolation(errors)
     report.extend(check_cross_product_independence(errors))
     report.extend(check_teamster_cartographer_contract(errors))
