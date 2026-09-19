@@ -34,7 +34,8 @@ internal static class CooperationSentences
             case CollectionAttentionReason.ScopeInvalid:
                 return "The work area is not usable. Mark a harvest area, or let him use the camp circle.";
             case CollectionAttentionReason.ScopeChanged:
-                return "The work area changed after the order started. Start a new order for the new area.";
+                return "The work area was chosen in an earlier world load, or has changed since. " +
+                    "Run cf_collect rebind to set it again.";
             case CollectionAttentionReason.ScopeUnloaded:
                 return "The work area is outside loaded ground. Go back there and it continues.";
             case CollectionAttentionReason.NoEligibleSources:

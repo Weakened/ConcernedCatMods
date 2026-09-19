@@ -276,11 +276,19 @@ N4 a fence or narrow gap on the line → `Rejected (TooNarrow)`; something holdi
    `Wedged`; a doorway anywhere on the line → `Rejected (ForbiddenDoor)`.
 N5 a second `go` while pulling → `Rejected … HaulBusy`; re-assigning the same cart → already Gunnar's; one joint.
 N6 Use on the cart while he pulls (or grab another cart) → `PlayerTookOver`, no re-hitch; `detach` → Ready.
-N7 **(C4)** `GunnarHaulingEnabled = false` mid-pull on **level** ground → he stops at once, `AuthorityLost`, lease
-   ended, and lets go within a second or two (`Gunnar let go of cart …`). Repeat on a **slope**: he stops and **keeps
-   holding** it, status says "HOLDING the cart where he stopped", nothing rolls, nothing resumes when the setting is
-   switched back on; taking the cart yourself ends it with `PlayerTookOver`. A second client connecting → `Paused
-   OtherPeersConnected`, same holding rule, lease kept; it leaving → Ready once he has put the cart down.
+N7 **(C4)** authority lost mid-pull. Two ways in, and each needs a tool the dedicated profile does not have; record
+   whichever cannot be run as **not run**, with the reason, rather than leaving a row nobody can fill. If neither can
+   be run, the whole case is not run: nothing else in the build takes authority away under a pull.
+   **The setting** (needs a BepInEx configuration manager, which this profile does not install: nothing else in it can
+   change `GunnarHaulingEnabled` while the game is running, and editing the file with the game shut down tests nothing
+   here, because a haul does not survive a restart). With one installed: off mid-pull on **level** ground → he stops at
+   once, `AuthorityLost`, lease ended, and lets go within a second or two (`Gunnar let go of cart …`); on a **slope**
+   → he stops and **keeps holding** it, status says "HOLDING the cart where he stopped", nothing rolls, and nothing
+   resumes when the setting is switched back on.
+   **A second client** (needs one): connecting → `Paused OtherPeersConnected`, same holding rule, lease kept; it
+   leaving → Ready once he has put the cart down.
+   **Whichever way in was used**, finish it by taking the cart yourself while he holds it: the hold ends with
+   `PlayerTookOver`. That ending is only reachable once he is holding, so it is not a substitute for either tool.
 N8 cart destroyed mid-pull → `CartDestroyed`, lease ended.
 N9 walk away until the idle assigned cart unloads → `CartUnloaded`, Unassigned.
 N10 assign, log out, reload → new epoch, census 1 saved body, Body Bound, no lease; `go` asks to assign; re-assign works.
@@ -291,8 +299,12 @@ N12 `spawn CT_TeamsterWorker` (the vanilla console command) → an **unkeyed** e
     needs two keyed bodies, which `ct_haul spawn` refuses to create.
 N13 Gunnar killed mid-pull → `WorkerBodyLost`, joint released **in that frame**, lease ended, and the cart is left where
     it stood. Watch for the despawn negative test of `CART_SEAM_AUDIT` §7.4: the joint must be gone before the body is.
-N14 sit in the cart (a chair on the handle side), then `ct_haul go` → `InUse` ("someone is sitting in the cart"), no
-    attach; standing up lets him hitch.
+N14 sit in the cart (a chair on the handle side), then `ct_haul go` → the leg is **accepted**: `go` asks only for a
+    lease and a route the cart fits along, and never reads whether the cart is in use. The refusal comes later, at the
+    hitch, and nothing announces it: you have to ask. `ct_haul status` shows `Last hitch refusal: InUse (someone is
+    sitting in the cart)` while he retries with backoff, and when the attempts run out the log says
+    `Gunnar needs attention: HitchFailed - <n> hitch attempts refused; last: InUse (someone is sitting in the cart)`.
+    No attach at any point. Standing up before the attempts run out lets him hitch.
 
 Evidence rows for `docs/settlement/cart-and-collection/EVIDENCE.md` stay **pending** until observed, with the build,
 profile and scenario recorded.

@@ -394,7 +394,7 @@ internal sealed class CollectionRuntime
                 case "cancel":
                     return Control(loop => loop.Cancel(Time.time));
                 default:
-                    return "Unknown subcommand. Try: status, preview [radius], start <stone> <wood> [hold], " +
+                    return "Unknown subcommand. Try: status, preview [radius], start <stone> <wood> [hold] [gunnar], " +
                         "rebind (look at the chest), pause, resume, cancel.";
             }
         }
