@@ -78,11 +78,9 @@ internal static class BodyFixtures
     internal static void ResetWorld()
     {
         ClearRegisteredPrefabs();
-        NpcBody.ForgetAll();
-        NpcBody.Loaded = null;
-        NpcBody.Died = null;
-        NpcBody.ErrorLog = null;
-        NpcBodyMind.ErrorLog = null;
+        ClearLiveBodies();
+        DetachEveryHandler(typeof(NpcBody), "Loaded", "Died", "ErrorLog");
+        DetachEveryHandler(typeof(NpcBodyMind), "ErrorLog");
         PrefabManager.ResetSubscribersForTests();
         PrefabManager.Instance = null!;
         ZDOMan.instance = null!;
@@ -106,6 +104,60 @@ internal static class BodyFixtures
             .GetField("Known", BindingFlags.Static | BindingFlags.NonPublic)!
             .GetValue(null)!;
         table.GetType().GetMethod("Clear")!.Invoke(table, Array.Empty<object>());
+    }
+
+    /// <summary>Empties the live-body list by reflection rather than through a
+    /// method on the shipped type.
+    ///
+    /// Deliberate, and the same judgement as <c>ClearRegisteredPrefabs</c>.
+    /// <c>NpcBody.ForgetAll</c> now takes a role's contract on purpose - one
+    /// product's teardown must not blind another's - so a "forget every role's
+    /// bodies" method would be exactly the member that fix removed, re-added
+    /// for the convenience of the tests that prove it is gone. A test reaches
+    /// in instead.</summary>
+    private static void ClearLiveBodies()
+    {
+        var list = (System.Collections.Generic.List<NpcBody>)typeof(NpcBody)
+            .GetField("LiveBodies", BindingFlags.Static | BindingFlags.NonPublic)!
+            .GetValue(null)!;
+        list.Clear();
+    }
+
+    /// <summary>Drops every subscriber from a named static callback by writing
+    /// null straight into whatever holds it.
+    ///
+    /// <b>Why reflection.</b> The callbacks are events, public for <c>+=</c>
+    /// and <c>-=</c> and nothing else - that is the fix - so there is no
+    /// "forget everybody" on the type, and there must not be: a library that
+    /// can silently unhook a product's handlers is the defect, whoever calls
+    /// it. Reflection keeps that out of the shipped type.
+    ///
+    /// <b>Why it accepts either shape.</b> Whether the member is an event or a
+    /// settable property is asserted in exactly one place,
+    /// <c>BodyAdoptionSurfaceTests</c>, which is where a reader looks for it
+    /// and where the failure message explains what it costs. A fixture that
+    /// threw on the wrong shape would report that same regression as a hundred
+    /// unrelated failures with no explanation in any of them. A member that is
+    /// neither is a rename, and that still throws - otherwise the reset quietly
+    /// stops happening and every test sees the one before it.</summary>
+    private static void DetachEveryHandler(Type type, params string[] callbacks)
+    {
+        foreach (string name in callbacks)
+        {
+            FieldInfo? backing = type.GetField(name, BindingFlags.Static | BindingFlags.NonPublic);
+            if (backing != null)
+            {
+                backing.SetValue(null, null);
+                continue;
+            }
+
+            PropertyInfo slot = type.GetProperty(name, BindingFlags.Static | BindingFlags.Public)
+                ?? throw new InvalidOperationException(
+                    type.FullName + "." + name + " is neither a field-like static event nor a static "
+                    + "property, so the fixture is not resetting it and every test after the first sees "
+                    + "the one before it.");
+            slot.SetValue(null, null);
+        }
     }
 
     private static void ClearLiveMinds()

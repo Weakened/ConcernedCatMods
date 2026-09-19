@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using TheConcernedCat.ConcernedNPC.Bodies;
 using TheConcernedCat.ConcernedNPC.Roles;
 using UnityEngine;
 
@@ -52,8 +53,17 @@ namespace TheConcernedCat.ConcernedNPC.Body;
 /// neither could be exercised without a live creature. Here the mind offers
 /// <see cref="INpcBodyMotor"/> and a per-tick callback, and whoever is planning
 /// calls the primitives. Nothing in this file knows what a cart is, what a
-/// shelter is, or why anybody is walking anywhere.</summary>
-public sealed class NpcBodyMind : BaseAI, INpcBodyMotor
+/// shelter is, or why anybody is walking anywhere.
+///
+/// <b>Why this class does not itself implement <see cref="INpcBodyMotor"/>.</b>
+/// It used to, with every driving verb public, so holding a mind was the same
+/// thing as being allowed to drive it - and the library handed every role's
+/// minds to every consumer in one static list. The verbs are internal now and
+/// the motor is a separate object handed out by <see cref="TryDrive"/> against
+/// the <see cref="BodyLease"/> the arbiter granted. An explicit interface
+/// implementation would not have done: a cast reaches one. There is no motor
+/// without a lease, and no way to cast to one either.</summary>
+public sealed class NpcBodyMind : BaseAI
 {
     private static readonly List<NpcBodyMind> LiveMinds = new List<NpcBodyMind>();
 
@@ -63,17 +73,53 @@ public sealed class NpcBodyMind : BaseAI, INpcBodyMotor
     private bool _identityRead;
     private NpcIdentity _identity;
 
-    /// <summary>Every enabled body of every role, bound or not. A runtime
-    /// filters it by its own prefab first and its own identity second; the two
-    /// together are what stop two roles that share a key prefix from adopting
-    /// each other's bodies.</summary>
-    public static IReadOnlyList<NpcBodyMind> Live => LiveMinds;
+    /// <summary>Every enabled body of every role, bound or not.
+    ///
+    /// <b>Internal.</b> Its own doc used to say "a runtime filters it by its
+    /// own prefab first and its own identity second" - advice delivered across
+    /// an assembly boundary, guarding the one rule the arbiter exists to
+    /// enforce, and a consumer that ignored it could pick another product's
+    /// worker out of this list and drive him. A consumer asks
+    /// <see cref="LiveFor"/>, which does the prefab half itself, and
+    /// <see cref="TryDrive"/>, which does the identity half against a
+    /// lease.</summary>
+    internal static IReadOnlyList<NpcBodyMind> Live => LiveMinds;
+
+    /// <summary>The enabled minds of one role's prefab, and nobody else's.
+    ///
+    /// A contract that is not the one its prefab was registered under names no
+    /// role, and a role that does not exist has no bodies.</summary>
+    public static IReadOnlyList<NpcBodyMind> LiveFor(NpcBodyContract contract)
+    {
+        if (!NpcBodyContracts.IsRegistered(contract))
+        {
+            return Array.Empty<NpcBodyMind>();
+        }
+
+        var mine = new List<NpcBodyMind>();
+        foreach (NpcBodyMind mind in LiveMinds)
+        {
+            if (mind != null && string.Equals(mind.PrefabName, contract.PrefabName, StringComparison.Ordinal))
+            {
+                mine.Add(mind);
+            }
+        }
+
+        return mine;
+    }
 
     /// <summary>Errors, reported whatever the diagnostic settings say. A
     /// latched fault makes this body permanently inert, which is exactly the
     /// thing a player needs told - routing it through a debug channel would
-    /// hide it behind an option that is off by default.</summary>
-    public static Action<string>? ErrorLog { get; set; }
+    /// hide it behind an option that is off by default.
+    ///
+    /// <b>An event, not a settable property.</b> With several products loading
+    /// this library, a property means whichever one assigns it last takes the
+    /// error channel away from the others, silently, and an inert body becomes
+    /// an inert and unreported one. <c>=</c> no longer compiles; <c>+=</c> and
+    /// <c>-=</c> are the operations, and every subscriber is raised
+    /// independently so one throwing handler costs only itself.</summary>
+    public static event Action<string>? ErrorLog;
 
     /// <summary>Called once per owned tick, before anything else, so a
     /// runtime's mutations run inside this body's own simulation step and a
@@ -91,6 +137,12 @@ public sealed class NpcBodyMind : BaseAI, INpcBodyMotor
     public bool IsOwnedAndValid => m_nview != null && m_nview.IsValid() && m_nview.IsOwner();
 
     public bool HasFoundPath => FoundPath();
+
+    /// <summary>The prefab this body is an instance of, read off the object's
+    /// own name - the one fact the host cannot have failed to set, and the same
+    /// one <see cref="ReadIdentity"/> uses.</summary>
+    internal string PrefabName =>
+        NpcBodyContracts.PrefabNameOf(gameObject == null ? string.Empty : gameObject.name);
 
     /// <summary>Who this body is, from its own network object. Read once and
     /// remembered: it never changes for a body, and re-reading it every tick
@@ -123,6 +175,99 @@ public sealed class NpcBodyMind : BaseAI, INpcBodyMotor
     {
         _identity = identity;
         _identityRead = true;
+    }
+
+    /// <summary>Hands back the motor for this body, to a caller that can show
+    /// the lease the arbiter granted for it.
+    ///
+    /// <b>Why the lease is a parameter and not a courtesy.</b> The same reason
+    /// <see cref="NpcBodyBuildGate"/> takes one. The arbiter hands a lease out
+    /// on a grant and only on a grant, so a role that was refused - or that is
+    /// holding somebody else's body - has nothing to pass, and driving a body
+    /// it does not hold stops being a discipline and becomes a refusal it can
+    /// read. The motor that comes back is not this object: it is a separate
+    /// one that re-asks the lease on every command, because a lease that
+    /// expires while a runtime is walking a body is exactly the case a check
+    /// taken once at the start cannot see.
+    ///
+    /// The reads a role legitimately does without holding anything -
+    /// <see cref="IsFaulted"/>, <see cref="Identity"/> - stay on this class.
+    /// Nothing that moves the body does.</summary>
+    /// <param name="lease">The permission the arbiter granted for this
+    /// identity. Null is a refusal, not a default.</param>
+    /// <param name="motor">The motor, or null on a refusal.</param>
+    /// <param name="reason">Why it was refused, in words a role author can act
+    /// on. Empty on success.</param>
+    public bool TryDrive(BodyLease? lease, out INpcBodyMotor? motor, out string reason)
+    {
+        motor = null;
+
+        if (lease == null)
+        {
+            reason = "no lease was supplied, so nothing granted permission to drive this body";
+            return false;
+        }
+
+        if (lease.Kind != NpcBodyKind.Worker)
+        {
+            reason = "the lease permits a " + lease.Kind + " body and this is a worker body's mind";
+            return false;
+        }
+
+        NpcIdentity identity = Identity;
+        if (identity.IsEmpty)
+        {
+            // Not "no", but "not yet": the object may not be up. A remembered
+            // refusal here would outlive its reason.
+            reason = "this body has not read its identity yet, so nothing can be said about who may drive it";
+            return false;
+        }
+
+        if (!lease.Identity.Equals(identity))
+        {
+            reason = "the lease is for " + lease.Identity + " and this body is " + identity;
+            return false;
+        }
+
+        // LAST, and nothing may be added below it, for the reason the build
+        // gate asks it last: every refusal above is a fact that was already
+        // true on entry, and this is the one whose answer can have changed
+        // since the claim was taken.
+        if (!lease.IsActive)
+        {
+            reason = "the lease for " + lease.Identity
+                + " is no longer held, so permission to drive this body has gone";
+            return false;
+        }
+
+        motor = new NpcLeasedMotor(this, lease);
+        reason = string.Empty;
+        return true;
+    }
+
+    /// <summary>Says one thing to every subscriber, each on its own, so a
+    /// product whose log handler throws does not cost another product the
+    /// report - and so nothing thrown in a handler escapes into the game's
+    /// shared AI driver.</summary>
+    internal static void RaiseErrorLog(string message)
+    {
+        Delegate[]? handlers = ErrorLog?.GetInvocationList();
+        if (handlers == null)
+        {
+            return;
+        }
+
+        foreach (Delegate handler in handlers)
+        {
+            try
+            {
+                ((Action<string>)handler)(message);
+            }
+            catch (Exception)
+            {
+                // Reporting a failure must never become one.
+            }
+        }
     }
 
     // Public rather than protected because the build compiles against the
@@ -181,7 +326,7 @@ public sealed class NpcBodyMind : BaseAI, INpcBodyMotor
                 _loggedFault = true;
                 try
                 {
-                    ErrorLog?.Invoke(
+                    RaiseErrorLog(
                         "An NPC body faulted and is now inert; it will not act again this session. " + exception);
                 }
                 catch
@@ -194,9 +339,9 @@ public sealed class NpcBodyMind : BaseAI, INpcBodyMotor
         }
     }
 
-    public bool TryFindPath(Vector3 point) => Pathfinding.instance != null && FindPath(point);
+    internal bool TryFindPath(Vector3 point) => Pathfinding.instance != null && FindPath(point);
 
-    public void WalkTo(Vector3 point, float arrivalRadiusMetres)
+    internal void WalkTo(Vector3 point, float arrivalRadiusMetres)
     {
         if (Pathfinding.instance == null)
         {
@@ -212,7 +357,7 @@ public sealed class NpcBodyMind : BaseAI, INpcBodyMotor
         MoveTo(Time.fixedDeltaTime, point, arrivalRadiusMetres, run: false);
     }
 
-    public void SteerToward(Vector3 point)
+    internal void SteerToward(Vector3 point)
     {
         Vector3 direction = point - transform.position;
         direction.y = 0f;
@@ -228,7 +373,7 @@ public sealed class NpcBodyMind : BaseAI, INpcBodyMotor
         MoveTowards(direction.normalized, run: false);
     }
 
-    public void Face(Vector3 direction)
+    internal void Face(Vector3 direction)
     {
         direction.y = 0f;
         if (direction.sqrMagnitude > 0.0001f)
@@ -237,7 +382,7 @@ public sealed class NpcBodyMind : BaseAI, INpcBodyMotor
         }
     }
 
-    public void Halt()
+    internal void Halt()
     {
         _motorCommanded = false;
         StopMoving();

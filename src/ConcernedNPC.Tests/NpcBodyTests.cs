@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using TheConcernedCat.ConcernedNPC.Body;
+using TheConcernedCat.ConcernedNPC.Roles;
 using UnityEngine;
 
 namespace TheConcernedCat.ConcernedNPC.Tests;
@@ -18,7 +19,7 @@ public sealed class NpcBodyTests : IDisposable
     public NpcBodyTests()
     {
         BodyFixtures.ResetWorld();
-        NpcBody.ErrorLog = _errors.Add;
+        NpcBody.ErrorLog += _errors.Add;
     }
 
     public void Dispose() => BodyFixtures.ResetWorld();
@@ -151,7 +152,7 @@ public sealed class NpcBodyTests : IDisposable
         body.Inventory.AddItem(BodyFixtures.Stack("$item_wood", 2));
 
         IReadOnlyList<NpcDroppedItem>? reported = null;
-        NpcBody.Died = (_, dropped, _) => reported = dropped;
+        NpcBody.Died += (_, dropped, _) => reported = dropped;
 
         body.Humanoid!.m_onDeath!.Invoke();
 
@@ -171,7 +172,7 @@ public sealed class NpcBodyTests : IDisposable
         body.Humanoid!.DropThrows = item => ReferenceEquals(item, bad);
 
         IReadOnlyList<NpcDroppedItem>? reported = null;
-        NpcBody.Died = (_, dropped, _) => reported = dropped;
+        NpcBody.Died += (_, dropped, _) => reported = dropped;
 
         body.Humanoid.m_onDeath!.Invoke();
 
@@ -185,7 +186,7 @@ public sealed class NpcBodyTests : IDisposable
     {
         BodyFixtures.Register(BodyFixtures.ForemanContract());
         NpcBody body = BodyFixtures.SavedBody(BodyFixtures.ForemanPrefab, Stamped);
-        NpcBody.Died = (_, _, _) => throw new InvalidOperationException("the ledger is broken");
+        NpcBody.Died += (_, _, _) => throw new InvalidOperationException("the ledger is broken");
 
         body.Humanoid!.m_onDeath!.Invoke();
 
@@ -214,15 +215,51 @@ public sealed class NpcBodyTests : IDisposable
     }
 
     [Fact]
-    public void A_world_going_away_drops_every_body_it_held()
+    public void A_world_going_away_drops_every_body_of_the_role_that_says_so()
     {
         BodyFixtures.Register(BodyFixtures.ForemanContract());
         BodyFixtures.SavedBody(BodyFixtures.ForemanPrefab, Stamped);
-        Assert.Single(NpcBody.Live);
+        Assert.Single(NpcBody.LiveFor(BodyFixtures.ForemanContract()));
 
-        NpcBody.ForgetAll();
+        NpcBody.ForgetAll(BodyFixtures.ForemanContract());
 
-        Assert.Empty(NpcBody.Live);
+        Assert.Empty(NpcBody.LiveFor(BodyFixtures.ForemanContract()));
+    }
+
+    [Fact]
+    public void One_roles_teardown_leaves_another_roles_bodies_standing()
+    {
+        // ForgetAll used to clear every role's bodies, so whichever product
+        // noticed the world go first blinded the others - and a runtime that
+        // has forgotten a body still in the world is one that will permit a
+        // second body for the same identity.
+        BodyFixtures.Register(BodyFixtures.ForemanContract());
+        BodyFixtures.Register(BodyFixtures.TeamsterContract(), NpcBodyKeeps.IdentityOnly);
+        BodyFixtures.SavedBody(BodyFixtures.ForemanPrefab, Stamped);
+        BodyFixtures.SavedBody(BodyFixtures.TeamsterPrefab, Stamped);
+
+        NpcBody.ForgetAll(BodyFixtures.ForemanContract());
+
+        Assert.Empty(NpcBody.LiveFor(BodyFixtures.ForemanContract()));
+        Assert.Single(NpcBody.LiveFor(BodyFixtures.TeamsterContract()));
+    }
+
+    [Fact]
+    public void A_contract_nobody_registered_reaches_no_bodies_and_forgets_none()
+    {
+        BodyFixtures.Register(BodyFixtures.ForemanContract());
+        BodyFixtures.SavedBody(BodyFixtures.ForemanPrefab, Stamped);
+
+        // The right prefab under the wrong key prefix is not that role's
+        // contract, and is refused rather than quietly treated as it.
+        NpcBodyContract wrongPrefix =
+            NpcBodyContract.ForWorker(BodyFixtures.ForemanPrefab, BodyFixtures.StewardKeyPrefix);
+
+        Assert.Empty(NpcBody.LiveFor(wrongPrefix));
+        Assert.Empty(NpcBody.LiveFor(BodyFixtures.StewardContract()));
+
+        NpcBody.ForgetAll(wrongPrefix);
+        Assert.Single(NpcBody.LiveFor(BodyFixtures.ForemanContract()));
     }
 
     private static void Stamped(ZDO zdo) => zdo.Set(BodyFixtures.WorkerKeyField, "foreman/thorstein");

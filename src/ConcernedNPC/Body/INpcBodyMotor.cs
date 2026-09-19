@@ -20,7 +20,14 @@ namespace TheConcernedCat.ConcernedNPC.Body;
 /// creature. With the planner outside, the mind is the game contact and the
 /// planning is a decision about points and budgets - and the leaf that writes
 /// the route planner can be proved against this interface with no game at
-/// all.</summary>
+/// all.
+///
+/// <b>How a role gets one.</b> Only from
+/// <see cref="NpcBodyMind.TryDrive"/>, against the <c>BodyLease</c> the arbiter
+/// granted for that body's identity - which is what makes "one identity, one
+/// body, driven by its holder" a refusal a role reads rather than a rule it is
+/// asked to keep. The mind itself does not implement this interface, so there
+/// is no cast to a motor either.</summary>
 public interface INpcBodyMotor
 {
     /// <summary>The body is owned by this peer and its network object is valid.

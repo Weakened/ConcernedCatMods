@@ -111,6 +111,27 @@ internal static class NpcBodyContracts
         }
     }
 
+    /// <summary>Whether this contract is the one a role actually registered for
+    /// its prefab - the same name <b>and</b> the same key prefix.
+    ///
+    /// <b>What it is for.</b> Every public way to reach live bodies is filtered
+    /// by a contract, and this is what makes that filter mean "a role's own
+    /// bodies" rather than "whatever prefab name the caller typed". A contract
+    /// nobody registered names no role, so it has no bodies; a contract naming a
+    /// registered prefab under a different key prefix is not that role's
+    /// contract and is refused rather than quietly treated as it.
+    ///
+    /// <b>What it is not.</b> It is not proof of who is asking. This library
+    /// cannot tell one loaded assembly from another, so a consumer that writes
+    /// another product's exact prefab name and key prefix into its own source
+    /// still matches. That is a deliberate act naming another product's durable
+    /// facts, not the accident this guards - which is a role handed every role's
+    /// bodies and told in a doc comment to filter them itself.</summary>
+    internal static bool IsRegistered(NpcBodyContract contract) =>
+        contract.Kind == NpcBodyKind.Worker
+        && TryFind(contract.PrefabName, out NpcBodySetup setup)
+        && string.Equals(setup.Contract.ZdoKeyPrefix, contract.ZdoKeyPrefix, StringComparison.Ordinal);
+
     /// <summary>Strips the suffix the host appends to an instantiated object's
     /// name, so an instance answers with the prefab it came from.
     ///

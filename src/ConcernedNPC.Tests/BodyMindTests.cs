@@ -18,7 +18,7 @@ public sealed class BodyMindTests : IDisposable
     public BodyMindTests()
     {
         BodyFixtures.ResetWorld();
-        NpcBodyMind.ErrorLog = _errors.Add;
+        NpcBodyMind.ErrorLog += _errors.Add;
     }
 
     public void Dispose() => BodyFixtures.ResetWorld();
@@ -89,7 +89,7 @@ public sealed class BodyMindTests : IDisposable
     public void A_fault_while_the_error_log_itself_throws_still_does_not_escape()
     {
         NpcBodyMind mind = Mind();
-        NpcBodyMind.ErrorLog = _ => throw new InvalidOperationException("the log is broken too");
+        NpcBodyMind.ErrorLog += _ => throw new InvalidOperationException("the log is broken too");
         mind.WorkTick = (_, _) => throw new InvalidOperationException("the job is broken");
 
         Assert.False(mind.UpdateAI(0.05f));

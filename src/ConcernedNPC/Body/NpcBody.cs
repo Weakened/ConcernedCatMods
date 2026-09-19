@@ -50,27 +50,82 @@ public sealed class NpcBody : MonoBehaviour
     private Action? _onDeath;
 
     /// <summary>Raised once a body has loaded what it stores and is ready to be
-    /// bound: at spawn, at world load, and whenever its ground loads
-    /// again.</summary>
-    public static Action<NpcBody>? Loaded { get; set; }
+    /// bound: at spawn, at world load, and whenever its ground loads again.
+    ///
+    /// <b>An event and not a settable property, because several products load
+    /// this library into one process.</b> A settable property invites
+    /// <c>Loaded = OnLoaded;</c> - the obvious reading of a setter - and
+    /// whichever product loads second then silently unhooks the first, whose
+    /// NPC never learns its bodies finished loading, never binds them, and
+    /// stands inert in a world where its body demonstrably exists. <c>+=</c>
+    /// happens to combine, so that was a hazard rather than a certainty: it
+    /// works in testing with one product installed and fails for the player
+    /// with two, which is the worst shape a defect can have. An event makes
+    /// <c>=</c> a compile error, leaves <c>+=</c> and <c>-=</c> as the only
+    /// operations, and gives a role a way to detach at teardown - which there
+    /// was no safe way to do at all.
+    ///
+    /// <b>Every subscriber is raised, whatever the one before it did.</b> A
+    /// multicast delegate invoked as a single call stops at the first handler
+    /// that throws, so with one product per handler, one product's defect costs
+    /// another product its event. Each handler is invoked on its own, and one
+    /// that throws is reported through <see cref="ErrorLog"/> and skipped. It
+    /// also no longer makes the body itself inert, which is what a throw out of
+    /// this used to do.</summary>
+    public static event Action<NpcBody>? Loaded;
 
     /// <summary>Raised on death, after every carried item is on the ground and
     /// before the body goes, so a ledger can say what left its hands rather
-    /// than quietly balancing.</summary>
-    public static Action<NpcBody, IReadOnlyList<NpcDroppedItem>, Vector3>? Died { get; set; }
+    /// than quietly balancing. An event for the reason
+    /// <see cref="Loaded"/> is, and raised the same way.</summary>
+    public static event Action<NpcBody, IReadOnlyList<NpcDroppedItem>, Vector3>? Died;
 
     /// <summary>Errors, reported whatever the diagnostic settings say: an inert
-    /// body is exactly the thing a player needs told.</summary>
-    public static Action<string>? ErrorLog { get; set; }
+    /// body is exactly the thing a player needs told. An event for the reason
+    /// <see cref="Loaded"/> is - a second product taking the error channel away
+    /// from the first is how an inert body becomes a silent one.</summary>
+    public static event Action<string>? ErrorLog;
 
-    /// <summary>Bodies alive in this scene that finished loading.</summary>
-    public static IReadOnlyList<NpcBody> Live
+    /// <summary>Bodies alive in this scene that finished loading, of every
+    /// role.
+    ///
+    /// <b>Internal, and it is the change that matters.</b> Handing every role's
+    /// bodies across an assembly boundary and asking each consumer in a doc
+    /// comment to filter by its own prefab made the one rule the arbiter exists
+    /// to enforce into advice a role could ignore. A consumer asks
+    /// <see cref="LiveFor"/>, which does that filtering itself.</summary>
+    internal static IReadOnlyList<NpcBody> Live
     {
         get
         {
             LiveBodies.RemoveAll(body => body == null);
             return LiveBodies;
         }
+    }
+
+    /// <summary>The loaded bodies of one role's prefab, and nobody else's.
+    ///
+    /// The prefab is what separates two roles that share a key prefix - Foreman
+    /// and Teamster do today - so the filter is applied here rather than asked
+    /// for. A contract that is not the one its prefab was registered under
+    /// names no role, and a role that does not exist has no bodies.</summary>
+    public static IReadOnlyList<NpcBody> LiveFor(NpcBodyContract contract)
+    {
+        if (!NpcBodyContracts.IsRegistered(contract))
+        {
+            return Array.Empty<NpcBody>();
+        }
+
+        var mine = new List<NpcBody>();
+        foreach (NpcBody body in Live)
+        {
+            if (string.Equals(body.PrefabName, contract.PrefabName, StringComparison.Ordinal))
+            {
+                mine.Add(body);
+            }
+        }
+
+        return mine;
     }
 
     /// <summary>The one loaded body carrying this identity, or null. Filtered
@@ -91,10 +146,26 @@ public sealed class NpcBody : MonoBehaviour
         return null;
     }
 
-    /// <summary>Drops every tracked body. Called when a world goes away, so a
-    /// second world in the same session does not inherit the first one's.
-    /// </summary>
-    public static void ForgetAll() => LiveBodies.Clear();
+    /// <summary>Drops the tracked bodies of one role's prefab. Called when a
+    /// world goes away, so a second world in the same session does not inherit
+    /// the first one's.
+    ///
+    /// <b>Why it takes a contract.</b> It used to clear every role's bodies at
+    /// once, so one product's world teardown blinded every other product's
+    /// count of what is standing - and a runtime that has forgotten a body
+    /// still in the world is a runtime that will permit a second body for the
+    /// same identity. Each role forgets its own; a contract nobody registered
+    /// forgets nothing.</summary>
+    public static void ForgetAll(NpcBodyContract contract)
+    {
+        if (!NpcBodyContracts.IsRegistered(contract))
+        {
+            return;
+        }
+
+        LiveBodies.RemoveAll(body =>
+            body == null || string.Equals(body.PrefabName, contract.PrefabName, StringComparison.Ordinal));
+    }
 
     /// <summary>The prefab this body is an instance of.</summary>
     public string PrefabName => _setup.Contract.PrefabName;
@@ -164,6 +235,85 @@ public sealed class NpcBody : MonoBehaviour
         return true;
     }
 
+    /// <summary>Gives one subscriber at a time its turn at
+    /// <see cref="Loaded"/>, so a handler that throws costs only itself.
+    ///
+    /// A role binding a body is arbitrary consumer code, and before this was an
+    /// event it ran inside the body's own load with nothing between it and the
+    /// failure path: a subscriber that threw made the body report itself inert
+    /// and save nothing. Now a failure is one product's, it is said out loud,
+    /// and the body is still loaded.</summary>
+    private static void RaiseLoaded(NpcBody body)
+    {
+        Delegate[]? handlers = Loaded?.GetInvocationList();
+        if (handlers == null)
+        {
+            return;
+        }
+
+        foreach (Delegate handler in handlers)
+        {
+            try
+            {
+                ((Action<NpcBody>)handler)(body);
+            }
+            catch (Exception exception)
+            {
+                RaiseErrorLog("NPC body \"" + body.StoredKey + "\" finished loading and a subscriber threw, "
+                    + "so that subscriber has not bound it: " + exception);
+            }
+        }
+    }
+
+    /// <summary>The same, for the one report a ledger cannot afford to miss:
+    /// one subscriber failing to record what hit the ground must not stop the
+    /// next one recording it.</summary>
+    private static void RaiseDied(NpcBody body, IReadOnlyList<NpcDroppedItem> dropped, Vector3 where)
+    {
+        Delegate[]? handlers = Died?.GetInvocationList();
+        if (handlers == null)
+        {
+            return;
+        }
+
+        foreach (Delegate handler in handlers)
+        {
+            try
+            {
+                ((Action<NpcBody, IReadOnlyList<NpcDroppedItem>, Vector3>)handler)(body, dropped, where);
+            }
+            catch (Exception exception)
+            {
+                RaiseErrorLog("NPC body \"" + body.StoredKey
+                    + "\" died and a subscriber could not record the loss: " + exception);
+            }
+        }
+    }
+
+    /// <summary>The same again, and the one that may never throw: it is where
+    /// the other two send their failures.</summary>
+    private static void RaiseErrorLog(string message)
+    {
+        Delegate[]? handlers = ErrorLog?.GetInvocationList();
+        if (handlers == null)
+        {
+            return;
+        }
+
+        foreach (Delegate handler in handlers)
+        {
+            try
+            {
+                ((Action<string>)handler)(message);
+            }
+            catch (Exception)
+            {
+                // Reporting a failure must never become one, and must never
+                // cost the next subscriber the report either.
+            }
+        }
+    }
+
     private void Start()
     {
         try
@@ -175,7 +325,7 @@ public sealed class NpcBody : MonoBehaviour
                 // nothing is ever written. A body whose prefab this library did
                 // not register is not this library's to persist.
                 Fault = "no role registered a body of that prefab, so it has no keys of its own";
-                ErrorLog?.Invoke("An NPC body is inert: " + Fault + ".");
+                RaiseErrorLog("An NPC body is inert: " + Fault + ".");
                 return;
             }
 
@@ -207,7 +357,7 @@ public sealed class NpcBody : MonoBehaviour
 
             IsLoaded = true;
             LiveBodies.Add(this);
-            Loaded?.Invoke(this);
+            RaiseLoaded(this);
         }
         catch (Exception exception)
         {
@@ -215,7 +365,7 @@ public sealed class NpcBody : MonoBehaviour
             // carries must not work, and must not save over what it carries.
             IsLoaded = false;
             Fault = "its stored inventory could not be loaded (" + exception.GetType().Name + ")";
-            ErrorLog?.Invoke("NPC body \"" + StoredKey + "\" is inert: " + Fault + ". " + exception);
+            RaiseErrorLog("NPC body \"" + StoredKey + "\" is inert: " + Fault + ". " + exception);
         }
     }
 
@@ -272,7 +422,7 @@ public sealed class NpcBody : MonoBehaviour
         }
         catch (Exception exception)
         {
-            ErrorLog?.Invoke("NPC body \"" + StoredKey + "\" could not write its inventory: "
+            RaiseErrorLog("NPC body \"" + StoredKey + "\" could not write its inventory: "
                 + exception.GetType().Name + ": " + exception.Message);
             return false;
         }
@@ -351,7 +501,7 @@ public sealed class NpcBody : MonoBehaviour
                 }
                 catch (Exception exception)
                 {
-                    ErrorLog?.Invoke("NPC body \"" + StoredKey + "\" died and its " + prefab
+                    RaiseErrorLog("NPC body \"" + StoredKey + "\" died and its " + prefab
                         + " could not be dropped, so it is lost with the body: " + exception);
                 }
             }
