@@ -23,6 +23,12 @@
     <Compile Include="..\ConcernedForeman\Runtime\Custody\WorkerBody.cs" Link="Product/WorkerBody.cs" />
     <Compile Include="..\ConcernedForeman\Runtime\Settlement\ToolClassifier.cs" Link="Product/ToolClassifier.cs" />
     <Compile Include="..\ConcernedForeman\Runtime\Settlement\SettlementTargets.cs" Link="Product/SettlementTargets.cs" />
+    <!-- #286: the housing adapter. It had no coverage at all, which is why two
+         rounds of independent review found defects in it that no test could see:
+         the ownership read, both budgets, the loaded-ground check and the bed key
+         were all eyeballed. -->
+    <Compile Include="..\ConcernedForeman\Runtime\Settlement\WorldHousing.cs" Link="Product/WorldHousing.cs" />
+    <Compile Include="..\ConcernedForeman\Runtime\SitePoints.cs" Link="Product/SitePoints.cs" />
 
     <!-- The game-free layers those sources sit on, the same way
          Shared.Settlement.Tests links them. -->

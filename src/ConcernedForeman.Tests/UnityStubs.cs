@@ -52,6 +52,8 @@ namespace UnityEngine
 
         public static Vector3 operator +(Vector3 a, Vector3 b) => new Vector3(a.x + b.x, a.y + b.y, a.z + b.z);
 
+        public static float Distance(Vector3 a, Vector3 b) => (a - b).magnitude;
+
         public override string ToString() => "(" + x + ", " + y + ", " + z + ")";
     }
 
@@ -96,6 +98,11 @@ namespace UnityEngine
         }
 
         public Transform transform { get; }
+
+        /// <summary>Vanilla's placement preview is put on the "ghost" layer, and
+        /// `Piece.GetAllPiecesInRadius` skips that layer — which is what keeps a
+        /// build-menu preview out of a bed survey.</summary>
+        public int layer { get; set; }
 
         public GameObject? Parent { get; set; }
 
@@ -152,6 +159,20 @@ namespace UnityEngine
 
         public T? GetComponentInParent<T>()
             where T : class => gameObject.GetComponentInParent<T>();
+
+        public bool TryGetComponent<T>(out T component)
+            where T : class
+        {
+            T? found = gameObject.GetComponent<T>();
+            component = found!;
+            return found != null;
+        }
+    }
+
+    /// <summary>Only what the adapters actually call.</summary>
+    public static class Mathf
+    {
+        public static int RoundToInt(float value) => (int)Math.Round(value, MidpointRounding.AwayFromZero);
     }
 
     public class MonoBehaviour : Component

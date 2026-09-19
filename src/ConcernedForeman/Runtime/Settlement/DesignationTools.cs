@@ -145,6 +145,19 @@ internal sealed class DesignationTools
 
         if (!register.TryGet(DesignationKind.SettlementArea, out Designation area))
         {
+            // The register comes back EMPTY AND READ-ONLY when its file could
+            // not be read, is from a newer build, or belongs to another world —
+            // `SettlementRecords.TryOpen` still returns true. So "nothing is
+            // marked" and "I could not read what you marked" arrive here
+            // identically, and answering the first for the second is the same
+            // affirmative-absence bug this command was just corrected for, one
+            // frame up the stack.
+            if (_records.IsReadOnly)
+            {
+                return HousingCapacity.NotSurveyed.Describe() +
+                    (_records.Notice != null ? " " + _records.Notice : string.Empty);
+            }
+
             return "No settlement area is marked, so there is nowhere for anybody to live yet.";
         }
 

@@ -53,7 +53,16 @@ internal sealed class SettlementRuntime
         // already opened the register — asking for it a second time here gave a
         // transient world-identity failure a way to be reported as "your
         // settlement houses nobody".
-        _housing = new WorldHousing(_sitePolicy, log);
+        // The ground check is the designation site's own grid sampler, not five
+        // point probes: a 48 m settlement's diagonal zones are inside the circle
+        // and were never sampled, so beds there went uncounted with no caveat.
+        _housing = new WorldHousing(
+            area => ZoneSystem.instance != null &&
+                WorldDesignationSite.IsSurroundingsLoaded(
+                    ZoneSystem.instance,
+                    new UnityEngine.Vector3(area.Centre.X, area.Centre.Y, area.Centre.Z),
+                    area.Radius),
+            log);
 
         _designations = new DesignationTools(
             HasAuthority, DescribeMissingAuthority, _records, new CustodyTools(this, _custody, _records),

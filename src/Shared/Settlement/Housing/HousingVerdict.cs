@@ -192,23 +192,24 @@ internal static class HousingRules
             return HousingRefusal.OutsideSettlement;
         }
 
+        // Somebody else's bed short-circuits, and only this one does. Telling a
+        // player to roof a stranger's bed would be advice they must not act on.
         if (facts.Claim == BedClaim.SomebodyElses)
         {
             return HousingRefusal.AlreadyClaimed;
         }
 
-        if (facts.Claim == BedClaim.YoursAndCurrent)
-        {
-            return HousingRefusal.YourOwnBed;
-        }
-
-        // BedClaim.YoursButNotCurrent deliberately falls through to the building
-        // checks. Vanilla itself hands the bed straight back to its owner
-        // (`Bed.Interact`, the `IsMine() && !IsCurrent()` branch, which checks
-        // exposure and re-sets the spawn point), so a stale claim of your own is
-        // a bed that is free — and since nothing in vanilla ever clears
-        // `s_owner`, treating it as taken would retire every bed a player has
-        // ever slept in.
+        // Your own bed does NOT short-circuit. It used to, and the result was
+        // that a raid which took the roof off your spawn bed produced the
+        // reassuring "you sleep here" while `Bed.Interact` would refuse that
+        // same bed with `$msg_bedneedroof` — the readout disagreeing with the
+        // game about the one bed the player most needs to know about.
+        //
+        // `BedClaim.YoursButNotCurrent` falls through for its own reason:
+        // vanilla hands a stale claim straight back to its owner (`Bed.Interact`,
+        // the `IsMine() && !IsCurrent()` branch), and since nothing in vanilla
+        // ever clears `s_owner`, treating it as taken would retire every bed a
+        // player has ever slept in.
         if (!facts.UnderRoof)
         {
             return HousingRefusal.NoRoof;
@@ -224,7 +225,9 @@ internal static class HousingRules
             return HousingRefusal.NoFire;
         }
 
-        return HousingRefusal.None;
+        return facts.Claim == BedClaim.YoursAndCurrent
+            ? HousingRefusal.YourOwnBed
+            : HousingRefusal.None;
     }
 }
 
@@ -262,13 +265,22 @@ internal readonly struct HousingCapacity
         bool groundIncomplete,
         List<KeyValuePair<string, HousingRefusal>>? beds)
     {
-        Surveyed = surveyed;
         Truncated = truncated;
         GroundIncomplete = groundIncomplete;
-        _beds = beds;
+
+        // Copied, not aliased. `Beds` hands this list out as IReadOnlyList, and
+        // the caller still holds the List it built — so without the copy a
+        // caller could cast it back, mutate it, and leave the counts below
+        // frozen against a list that no longer matches. The doc used to promise
+        // they "cannot disagree"; now they cannot.
+        _beds = beds == null
+            ? null
+            : new List<KeyValuePair<string, HousingRefusal>>(beds);
+        _ = surveyed;
 
         int habitable = 0;
         int occupied = 0;
+        int claimedByOthers = 0;
         int unmeasured = 0;
         if (beds != null)
         {
@@ -280,8 +292,10 @@ internal readonly struct HousingCapacity
                         habitable++;
                         break;
                     case HousingRefusal.YourOwnBed:
-                    case HousingRefusal.AlreadyClaimed:
                         occupied++;
+                        break;
+                    case HousingRefusal.AlreadyClaimed:
+                        claimedByOthers++;
                         break;
                     case HousingRefusal.NotMeasured:
                         unmeasured++;
@@ -292,12 +306,17 @@ internal readonly struct HousingCapacity
 
         Habitable = habitable;
         Occupied = occupied;
+        ClaimedByOthers = claimedByOthers;
         Unmeasured = unmeasured;
     }
 
     /// <summary>A survey actually ran. False is <see cref="NotSurveyed"/>, and
-    /// every count below is then meaningless rather than zero.</summary>
-    public bool Surveyed { get; }
+    /// every count below is then meaningless rather than zero.
+    ///
+    /// Derived rather than stored: it was exactly "a list was supplied" in every
+    /// reachable value, and a second flag saying the same thing is a second
+    /// thing that can be wrong.</summary>
+    public bool Surveyed => _beds != null;
 
     /// <summary>The survey hit its own budget and stopped early, so the counts
     /// are a floor rather than a total.</summary>
@@ -321,11 +340,20 @@ internal readonly struct HousingCapacity
     /// with <see cref="Beds"/> and reading it is free.</summary>
     public int Habitable { get; }
 
-    /// <summary>Beds somebody already sleeps in, yours included. Reported beside
-    /// <see cref="Habitable"/> rather than folded into it, because "no room"
-    /// and "no housing" look identical in a single number and only one of them
-    /// is a reason to build.</summary>
+    /// <summary>Beds you sleep in. Reported beside <see cref="Habitable"/>
+    /// rather than folded into it, because "no room" and "no housing" look
+    /// identical in a single number and only one of them is a reason to build.
+    /// </summary>
     public int Occupied { get; }
+
+    /// <summary>Beds another player has claimed inside the circle.
+    ///
+    /// Counted apart from <see cref="Occupied"/>, not with it. Folded together,
+    /// a settlement overlapping a neighbour's outbuilding with three claimed
+    /// beds read as "4 lived in" — four residents, in a settlement housing one.
+    /// A stranger's bed is not the settlement's occupancy any more than it is
+    /// its capacity.</summary>
+    public int ClaimedByOthers { get; }
 
     /// <summary>Beds that could not be checked. Kept apart from the refusals
     /// because "we could not look" and "it is not good enough" are different
@@ -406,15 +434,15 @@ internal static class HousingSentences
                 "That is not the same as having nowhere to live.";
         }
 
-        // A per-bed line is a newline, two spaces, the key ("the bed at
-        // -1234, 5678" is ~24), ": ", and a sentence of up to 46. The header
-        // reaches ~68, and the two caveats add ~240 between them. The old
-        // 160 + 56n was under all three, so it grew chunks anyway.
         var text = new StringBuilder(320 + (capacity.Beds.Count * 80));
 
         if (capacity.Beds.Count == 0)
         {
-            text.Append(capacity.GroundIncomplete
+            // "It houses nobody" is an affirmative claim, and a survey that
+            // stopped early has not earned it. Both incomplete reasons get the
+            // hedged opening; only a survey that finished and found nothing may
+            // say the settlement houses nobody.
+            text.Append(capacity.GroundIncomplete || capacity.Truncated
                 ? "No beds were found"
                 : "No beds in the settlement, so it houses nobody.");
         }
@@ -425,13 +453,26 @@ internal static class HousingSentences
 
             if (capacity.Occupied > 0)
             {
-                text.Append(", ").Append(capacity.Occupied).Append(" lived in");
+                text.Append(", ").Append(capacity.Occupied).Append(" you live in");
+            }
+
+            if (capacity.ClaimedByOthers > 0)
+            {
+                text.Append(", ").Append(capacity.ClaimedByOthers)
+                    .Append(capacity.ClaimedByOthers == 1
+                        ? " bed somebody else has claimed"
+                        : " beds somebody else has claimed");
             }
 
             if (capacity.Unmeasured > 0)
             {
+                // The noun matters. "1 that could not be checked" reads as
+                // referring back to "free places", which is the opposite of
+                // what Unmeasured means — nothing is known about that bed.
                 text.Append(", ").Append(capacity.Unmeasured)
-                    .Append(" that could not be checked");
+                    .Append(capacity.Unmeasured == 1
+                        ? " bed that could not be checked"
+                        : " beds that could not be checked");
             }
 
             text.Append('.');
@@ -460,6 +501,12 @@ internal static class HousingSentences
             text.Append(capacity.Beds.Count == 0 ? ", but part" : " Part")
                 .Append(" of the settlement's ground is not loaded, and beds there cannot be seen ")
                 .Append("at all — stand in the settlement and ask again.");
+        }
+        else if (capacity.Truncated && capacity.Beds.Count == 0)
+        {
+            // The hedged opening above left a sentence needing an end.
+            text.Append(", but the check stopped before it had seen all of a settlement this size.");
+            return;
         }
 
         if (capacity.Truncated)

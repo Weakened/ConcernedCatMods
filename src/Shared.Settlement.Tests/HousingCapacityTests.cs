@@ -121,7 +121,7 @@ public sealed class HousingCapacityTests
     }
 
     [Fact]
-    public void OursAreAskedFirstBecauseTheyAreNotAboutTheBuilding()
+    public void AStrangersBedIsTheOneAnswerThatSkipsTheBuildingChecks()
     {
         // A stranger's bed in a shed with no roof is refused as theirs: telling
         // the player to roof somebody else's bed would be advice they must not
@@ -204,10 +204,12 @@ public sealed class HousingCapacityTests
             Bed("e", cover: 0.5f),
             Bed("f", warm: false),
             Bed("g", inside: false),
+            Bed("h", claim: BedClaim.YoursAndCurrent),
         });
 
         Assert.Equal(2, capacity.Habitable);
         Assert.Equal(1, capacity.Occupied);
+        Assert.Equal(1, capacity.ClaimedByOthers);
         Assert.Equal(0, capacity.Unmeasured);
     }
 
@@ -347,9 +349,86 @@ public sealed class HousingCapacityTests
         }).Describe();
 
         Assert.Contains("0 free places", text);
-        Assert.Contains("2 lived in", text);
         Assert.Contains("you sleep here", text);
         Assert.Contains("somebody else already sleeps in it", text);
+    }
+
+    [Fact]
+    public void AStrangersBedIsNotCountedAsTheSettlementsOwnOccupancy()
+    {
+        // Folded together, a settlement overlapping a neighbour's outbuilding
+        // read as "4 lived in" — four residents, in a settlement housing one.
+        HousingCapacity capacity = HousingCapacity.Measure(new[]
+        {
+            Bed("mine", claim: BedClaim.YoursAndCurrent),
+            Bed("theirs1", claim: BedClaim.SomebodyElses),
+            Bed("theirs2", claim: BedClaim.SomebodyElses),
+            Bed("theirs3", claim: BedClaim.SomebodyElses),
+        });
+
+        Assert.Equal(1, capacity.Occupied);
+        Assert.Equal(3, capacity.ClaimedByOthers);
+        Assert.DoesNotContain("4", capacity.Describe());
+    }
+
+    [Fact]
+    public void YourOwnBedWithNoRoofIsToldTheTruthRatherThanReassured()
+    {
+        // A raid takes the roof off your spawn bed. Vanilla refuses that bed
+        // with $msg_bedneedroof; the readout used to answer "you sleep here" —
+        // disagreeing with the game about the one bed a player most needs to
+        // know about.
+        Assert.Equal(
+            HousingRefusal.NoRoof,
+            HousingRules.Judge(Bed(claim: BedClaim.YoursAndCurrent, roof: false)));
+        Assert.Equal(
+            HousingRefusal.NoFire,
+            HousingRules.Judge(Bed(claim: BedClaim.YoursAndCurrent, warm: false)));
+        Assert.Equal(
+            HousingRefusal.YourOwnBed,
+            HousingRules.Judge(Bed(claim: BedClaim.YoursAndCurrent)));
+    }
+
+    [Fact]
+    public void AnEmptySurveyThatStoppedEarlyNeverClaimsTheSettlementHousesNobody()
+    {
+        // Reachable: the piece budget runs out before any in-circle bed is
+        // reached. "It houses nobody" is an affirmative claim an incomplete
+        // survey has not earned.
+        string truncated = HousingCapacity
+            .Measure(Array.Empty<HousingFacts>(), truncated: true).Describe();
+
+        Assert.DoesNotContain("houses nobody", truncated);
+        Assert.Contains("No beds were found", truncated);
+        Assert.Contains("stopped before", truncated);
+    }
+
+    [Fact]
+    public void TheUnmeasuredCountKeepsItsNoun()
+    {
+        // "0 free places, 1 that could not be checked" reads as a free place
+        // that could not be checked, which is the opposite of what it means.
+        string text = HousingCapacity.Measure(new[]
+        {
+            Bed("hut"),
+            HousingFacts.Unmeasured("far"),
+        }).Describe();
+
+        Assert.Contains("1 bed that could not be checked", text);
+    }
+
+    [Fact]
+    public void TheCountsCannotDriftFromTheListTheyWereTakenFrom()
+    {
+        var supplied = new List<HousingFacts> { Bed("a"), Bed("b") };
+        HousingCapacity capacity = HousingCapacity.Measure(supplied);
+
+        // Mutating what the caller still holds must not move the snapshot, and
+        // must not move the list the value reports either.
+        supplied.Add(Bed("c"));
+
+        Assert.Equal(2, capacity.Habitable);
+        Assert.Equal(2, capacity.Beds.Count);
     }
 
     [Fact]
