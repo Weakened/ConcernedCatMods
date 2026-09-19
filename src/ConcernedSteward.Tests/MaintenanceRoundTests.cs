@@ -634,7 +634,7 @@ public sealed class MaintenanceRoundTests
         Assert.Equal(1, outcome.Failed);
         Assert.Equal(10, outcome.Outstanding.UnitsOf(Lights.Wood));
         Assert.False(outcome.IsComplete);
-        Assert.True(outcome.NeedsAnotherRound);
+        Assert.True(outcome.HasUnfinishedWork);
     }
 
     [Fact]
@@ -677,7 +677,7 @@ public sealed class MaintenanceRoundTests
 
         // ...and it is still not a finished job.
         Assert.False(outcome.IsComplete);
-        Assert.True(outcome.NeedsAnotherRound);
+        Assert.True(outcome.HasUnfinishedWork);
         Assert.Equal(4, outcome.LeftForAnotherRound);
         Assert.Contains("4 more light(s)", outcome.Describe());
     }
@@ -700,6 +700,45 @@ public sealed class MaintenanceRoundTests
 
         Assert.Equal(15f, covered.NextRoundDelaySeconds(15f));
         Assert.Equal(0f, partial.NextRoundDelaySeconds(15f));
+    }
+
+    /// <summary>The other half of the rule, and the one a loop gets wrong.
+    ///
+    /// A settlement short of wood has unfinished work for as long as it is short
+    /// of wood. Going straight back out answers nothing — the chests hold what
+    /// they hold and the next plan reaches the same conclusion — so she waits,
+    /// and the fix is a player putting wood in a chest. A runtime keyed on
+    /// "is there work left" alone plans a round every tick, for ever.</summary>
+    [Fact]
+    public void A_round_that_ran_out_of_material_waits_instead_of_spinning()
+    {
+        var lights = new[]
+        {
+            Lights.Light("paid-for", fuel: 0f),
+            Lights.Light("waiting", fuel: 0f, x: 5f),
+        };
+
+        RoundPlan round = MaintenanceRound.Prepare(
+            lights, Lights.Settlement(),
+            new[] { Lights.Chest("depot", contents: new[] { (Lights.Wood, 10) }) },
+            Lights.Epoch, Shipped);
+
+        Assert.Equal(1, round.DeferredForMaterial);
+
+        RoundOutcome outcome = RoundReconciler.Close(
+            round,
+            new[] { new StopResult(round.Stops[0].Light.Key, StopOutcome.Serviced, 10) },
+            new RoundManifest(new[] { new RoundManifestLine(Lights.Wood, 10) }),
+            leftForAnotherRound: 0);
+
+        // The fact: there is a light in this settlement that wants fuel.
+        Assert.True(outcome.HasUnfinishedWork);
+        Assert.False(outcome.IsComplete);
+
+        // The decision: another round would achieve nothing, so she waits.
+        Assert.False(outcome.AnotherRoundWouldHelp);
+        Assert.Equal(15f, outcome.NextRoundDelaySeconds(15f));
+        Assert.Contains("waiting on fuel", outcome.Describe());
     }
 
     // ------------------------------------------------------------------

@@ -228,6 +228,7 @@ internal readonly struct RoundOutcome
         int failed,
         int notReached,
         int leftForAnotherRound,
+        int deferredForMaterial,
         RoundManifest outstanding,
         RoundManifest surplus)
     {
@@ -237,6 +238,7 @@ internal readonly struct RoundOutcome
         Failed = failed;
         NotReached = notReached;
         LeftForAnotherRound = leftForAnotherRound < 0 ? 0 : leftForAnotherRound;
+        DeferredForMaterial = deferredForMaterial < 0 ? 0 : deferredForMaterial;
         Outstanding = outstanding;
         Surplus = surplus;
     }
@@ -256,6 +258,12 @@ internal readonly struct RoundOutcome
     /// it, and zero is a claim rather than a default.</summary>
     public int LeftForAnotherRound { get; }
 
+    /// <summary>Lights this round could not be provisioned for, carried through
+    /// from the plan. Unfinished work, and <b>not</b> a reason to go straight
+    /// back out: asking again with the same chests gives the same answer.
+    /// </summary>
+    public int DeferredForMaterial { get; }
+
     /// <summary>What the lights that were not serviced still need.</summary>
     public RoundManifest Outstanding { get; }
 
@@ -267,12 +275,36 @@ internal readonly struct RoundOutcome
     /// questions, not one: did every stop of this plan come off, and did this
     /// plan cover the whole round.</summary>
     public bool IsComplete =>
-        Planned > 0 && Failed == 0 && NotReached == 0 && Outstanding.IsEmpty && LeftForAnotherRound == 0;
+        Planned > 0 && Failed == 0 && NotReached == 0 && Outstanding.IsEmpty
+        && LeftForAnotherRound == 0 && DeferredForMaterial == 0;
 
-    /// <summary>Whether there is more to do, whatever the stop counts say.
-    /// </summary>
-    public bool NeedsAnotherRound =>
-        !Outstanding.IsEmpty || Failed > 0 || NotReached > 0 || LeftForAnotherRound > 0;
+    /// <summary>Whether any of the settlement's lights are still owed something.
+    ///
+    /// <b>A fact, and deliberately not an instruction.</b> The name says what it
+    /// is rather than what to do about it, because the two are different
+    /// questions and conflating them is how a runtime spins: a settlement short
+    /// of resin has unfinished work for as long as it is short of resin, and a
+    /// loop keyed on this alone would plan a round every tick, for ever.
+    /// <see cref="AnotherRoundWouldHelp"/> is the one that decides the loop.
+    /// (The shared runtime arrived at the same split for the same reason -
+    /// <c>docs/mods/concerned-npc/ARCHITECTURE.md</c> §7.)</summary>
+    public bool HasUnfinishedWork =>
+        !Outstanding.IsEmpty || Failed > 0 || NotReached > 0
+        || LeftForAnotherRound > 0 || DeferredForMaterial > 0;
+
+    /// <summary>Whether going straight back out would achieve anything.
+    ///
+    /// True for work this round left behind for its own reasons - stops it did
+    /// not reach, stops that failed, and lights the planner could not fit into
+    /// one plan. All of those are answered by planning again with a fresh
+    /// budget and a fresh load.
+    ///
+    /// False for <see cref="DeferredForMaterial"/>, which is the one kind of
+    /// unfinished work a second round cannot touch: the chests hold what they
+    /// hold, the next plan will reach the same conclusion, and the fix is a
+    /// player putting wood in a chest.</summary>
+    public bool AnotherRoundWouldHelp =>
+        Failed > 0 || NotReached > 0 || LeftForAnotherRound > 0;
 
     /// <summary>How long to wait before looking again.
     ///
@@ -281,10 +313,13 @@ internal readonly struct RoundOutcome
     /// because nothing is going to change in the next few seconds. A round that
     /// covered part of the settlement does not wait at all: the lights it never
     /// reached are still burning down, and making a player watch her stand at
-    /// the chest for fifteen seconds between halves of one job is the whole
-    /// benefit of batching thrown away at the last step.</summary>
+    /// the chest for fifteen seconds between halves of one job throws away the
+    /// benefit of batching at the last step.
+    ///
+    /// A round that ran out of material waits, for the reason
+    /// <see cref="AnotherRoundWouldHelp"/> gives.</summary>
     public float NextRoundDelaySeconds(float ordinaryInterval) =>
-        NeedsAnotherRound ? 0f : ordinaryInterval;
+        AnotherRoundWouldHelp ? 0f : ordinaryInterval;
 
     public string Describe()
     {
@@ -322,6 +357,13 @@ internal readonly struct RoundOutcome
             text.Append(LeftForAnotherRound.ToString(CultureInfo.InvariantCulture));
             text.Append(" more light(s) than this round covered are still waiting; she is going " +
                 "straight back out");
+        }
+
+        if (DeferredForMaterial > 0)
+        {
+            text.Append(". ");
+            text.Append(DeferredForMaterial.ToString(CultureInfo.InvariantCulture));
+            text.Append(" more are waiting on fuel nothing she may take from has");
         }
 
         if (!Surplus.IsEmpty)
@@ -421,6 +463,10 @@ internal static class RoundReconciler
             failed,
             notReached,
             leftForAnotherRound,
+            // Carried from the plan rather than taken as a parameter: it is the
+            // plan's own count, and a caller that could state it could state it
+            // wrongly. A number that makes a claim is not a caller's to default.
+            plan.DeferredForMaterial,
             RoundManifestArithmetic.Total(owed),
             RoundManifestArithmetic.Subtract(fetched, new RoundManifest(usedLines)));
     }
