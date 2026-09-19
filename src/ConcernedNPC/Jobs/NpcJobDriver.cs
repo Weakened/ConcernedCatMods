@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using TheConcernedCat.ConcernedNPC.Bodies;
 using TheConcernedCat.ConcernedNPC.Containers;
 using TheConcernedCat.ConcernedNPC.Planning;
 using TheConcernedCat.ConcernedNPC.Roles;
@@ -69,7 +70,24 @@ public sealed class NpcJobDriver
     private readonly NpcJobOrder _order;
     private readonly INpcJobRole _role;
     private readonly NpcJobBooks _books;
+    private readonly NpcRoleRegistry? _registry;
     private readonly StepObserver _observer;
+
+    /// <summary>The name this job's reservations are taken out under.
+    ///
+    /// <b>Composed, never minted, and the identity is in it.</b> A reservation
+    /// is named by its job and its step, and the books are process-wide and
+    /// shared on purpose - so two products that each call a job "collect" or
+    /// "haul" would share grants and release each other's holds. Putting the
+    /// identity in the name namespaces it by product, because that is the one
+    /// part of an order this library already knows is unique.
+    ///
+    /// It stays <b>derived</b> rather than allocated, which is the property
+    /// recovery depends on: a job resumed after an interruption re-establishes
+    /// its holds by walking its plan again, and it can only do that if the same
+    /// order yields the same names without a separate record of what it
+    /// took.</summary>
+    private readonly string _holds;
     private readonly List<StepResult> _results = new List<StepResult>();
     private readonly Dictionary<string, int> _stepOf = new Dictionary<string, int>(StringComparer.Ordinal);
 
@@ -78,15 +96,19 @@ public sealed class NpcJobDriver
     private JobCommitment<JobTarget>? _targetHolds;
     private JobCommitment<INpcContainer>? _containerHolds;
     private PlannedStep _standing;
+    private int _deferred;
+    private int _waits;
     private int _standingAt = -1;
     private bool _isStanding;
     private int _replansSpent;
 
-    private NpcJobDriver(in NpcJobOrder order, INpcJobRole role)
+    private NpcJobDriver(in NpcJobOrder order, INpcJobRole role, NpcRoleRegistry? registry)
     {
         _order = order;
         _role = role;
         _books = NpcJobBooks.ForWorld(order.World);
+        _registry = registry;
+        _holds = order.Identity.Value + "/" + (order.JobId ?? string.Empty);
         _observer = new StepObserver(this);
         Reason = string.Empty;
     }
@@ -95,22 +117,53 @@ public sealed class NpcJobDriver
     /// cannot be worked comes back already <see cref="NpcJobProgress.Stopped"/>
     /// with a reason, because a role that got its start-up order wrong should be
     /// told so rather than take an unrelated NPC out with it.</summary>
-    public static NpcJobDriver For(in NpcJobOrder order, INpcJobRole? role)
+    /// <param name="registry">The registry this identity is registered in -
+    /// <c>NpcRoleRegistry.Shared</c> in a product, a local one in a test.
+    ///
+    /// <b>Passed in rather than reached for, deliberately.</b> Grabbing the
+    /// process-wide one here would make this seam untestable and hide a global
+    /// dependency inside a type whose whole argument is that a role hands in
+    /// everything it supplies.</param>
+    public static NpcJobDriver For(in NpcJobOrder order, INpcJobRole? role, NpcRoleRegistry? registry)
     {
         if (role == null)
         {
-            var refused = new NpcJobDriver(order, NullRole.Instance);
+            var refused = new NpcJobDriver(order, NullRole.Instance, registry);
             refused.Stop(
                 JobPlanVerdict.Refused, "a job needs a role to say what is worth doing and what doing it takes");
             return refused;
         }
 
-        var driver = new NpcJobDriver(order, role);
+        var driver = new NpcJobDriver(order, role, registry);
         if (!order.IsValid)
         {
             driver.Stop(
                 JobPlanVerdict.Refused,
                 "the job was asked for without an identity, a usable job name, a work area, a loaded world, or the two words its steps are written in");
+            return driver;
+        }
+
+        if (registry == null)
+        {
+            driver.Stop(
+                JobPlanVerdict.Refused,
+                "a job needs the registry its NPC is registered in, so that one arbiter knows what that NPC is doing");
+            return driver;
+        }
+
+        // Take the identity's mode before anything else. This is what stops a
+        // second job moving the same body, and what makes MayRetireBody false
+        // while a job is running - the guard on retiring a body mid-job, which
+        // nothing in this library had ever made false because nothing had ever
+        // entered a mode.
+        ActorModeOutcome taken = registry.EnterMode(order.Identity, ActorMode.Working, order.JobId);
+        if (taken != ActorModeOutcome.Entered && taken != ActorModeOutcome.AlreadyInMode)
+        {
+            driver.Stop(
+                JobPlanVerdict.Refused,
+                taken == ActorModeOutcome.RefusedBusy
+                    ? "he is already busy with another job, and one NPC does one job at a time"
+                    : "this NPC is not registered in that registry, so nothing there can say what he is doing");
         }
 
         return driver;
@@ -162,8 +215,11 @@ public sealed class NpcJobDriver
     /// wrong.</summary>
     public int LeftForAnotherRound => _plan.LeftForAnotherRound;
 
-    /// <summary>The steps of the current round, in order, with their subjects
-    /// attached. Empty between rounds.</summary>
+    /// <summary>The steps of the round most recently planned, in order, with
+    /// their subjects attached. <b>Not cleared when a round ends</b> - it is the
+    /// last round's plan until the next one replaces it, so a role reporting on
+    /// a finished or abandoned job can still say what it had set out to
+    /// do.</summary>
     public IReadOnlyList<PlannedStep> Steps => _plan.Steps;
 
     /// <summary>What the last round's books came to.</summary>
@@ -190,6 +246,7 @@ public sealed class NpcJobDriver
 
         if (_isStanding)
         {
+            Progress = NpcJobProgress.Do;
             return new NpcJobAdvance(NpcJobProgress.Do, _standing, true, Verdict, string.Empty);
         }
 
@@ -235,6 +292,7 @@ public sealed class NpcJobDriver
                 _standingAt = _stepOf[advance.Stop.Key];
                 _standing = _plan.Steps[_standingAt];
                 _isStanding = true;
+                Progress = NpcJobProgress.Do;
                 return new NpcJobAdvance(NpcJobProgress.Do, _standing, true, Verdict, string.Empty);
             }
 
@@ -285,6 +343,7 @@ public sealed class NpcJobDriver
 
         _results.Clear();
         _stepOf.Clear();
+        _deferred = 0;
 
         var budget = new PlanningBudget(_order.Allowance);
         JobSnapshot snapshot = JobSnapshotBuilder.Take(
@@ -334,6 +393,22 @@ public sealed class NpcJobDriver
                     return false;
 
                 case JobPlanVerdict.BudgetExhausted:
+                    if (++_waits > _order.Waits)
+                    {
+                        // Transient in principle and permanent in practice: the
+                        // planner answers this for a deterministic condition
+                        // too - an allowance too small to finish looking - and
+                        // that condition is exactly as true on the hundred
+                        // thousandth tick. An NPC standing still for ever with
+                        // nothing for a player to read is worse than one that
+                        // refuses out loud.
+                        Stop(
+                            Verdict,
+                            "he kept running out of the time he is allowed to spend working out what to do, "
+                            + "so there is more here than one round can look at");
+                        return false;
+                    }
+
                     // Incomplete, not impossible, and deliberately not counted
                     // as a round: a look that ran out of what it was allowed to
                     // spend is the ordinary cost of a big base, and a job that
@@ -347,8 +422,8 @@ public sealed class NpcJobDriver
             }
         }
 
-        _targetHolds = new JobCommitment<JobTarget>(_order.JobId, _books.Targets);
-        _containerHolds = new JobCommitment<INpcContainer>(_order.JobId, _books.Containers);
+        _targetHolds = new JobCommitment<JobTarget>(_holds, _books.Targets);
+        _containerHolds = new JobCommitment<INpcContainer>(_holds, _books.Containers);
         JobReservationResult holds = PlanReservations.TakeOut(_plan, _targetHolds, _containerHolds);
         if (!holds.AllHeld)
         {
@@ -363,14 +438,23 @@ public sealed class NpcJobDriver
         }
 
         Rounds++;
+        _waits = 0;
         _route = new RouteExecution(Sequence(), RouteExecutionLimits.Default, _replansSpent);
         return true;
     }
 
     private void EndRound()
     {
-        if (_route == null && _plan.Steps.Count == 0)
+        if (_route == null)
         {
+            // No round ran. A plan may well have been made and then refused its
+            // reservations, so there are steps - but nobody walked one, and
+            // reconciling them would publish books for a round that never
+            // happened: every step "not reached", its material "outstanding",
+            // and Carrying reset to a plan's arithmetic about a trip nobody
+            // took. Carrying is what a role puts away after a death or a
+            // countermand, so overwriting it here is how material a body is
+            // really holding stops being anybody's.
             Release();
             return;
         }
@@ -391,11 +475,13 @@ public sealed class NpcJobDriver
             return false;
         }
 
-        if (LastRound.Done == 0 && LastRound.Skipped == 0)
+        if (LastRound.Done == 0 && LastRound.Skipped == 0 && _deferred == 0)
         {
-            // Nothing was serviced and nothing was even given up on: this round
-            // achieved literally nothing, and a round that achieves nothing
-            // achieves nothing again.
+            // Nothing was serviced, nothing was given up on, and nothing was
+            // even left for later: this round achieved literally nothing, and a
+            // round that achieves nothing achieves nothing again. A round of
+            // deferrals is excluded deliberately - those stops are still
+            // wanted, and the rounds cap is what bounds them.
             Stop(
                 Verdict,
                 reason.Length != 0
@@ -476,7 +562,18 @@ public sealed class NpcJobDriver
             ? (step.Source.IsUsable ? StopStatus.Actionable : StopStatus.Refused)
             : _role.Observe(step.Target.AsStop());
 
-        if (RouteExecution.Decide(status) == StopDisposition.Skip)
+        StopDisposition disposition = RouteExecution.Decide(status);
+        if (disposition == StopDisposition.Defer)
+        {
+            // Still wanted, at a place that moved or that nobody could read.
+            // Counted, because a round of nothing but deferrals achieved
+            // nothing YET - which is not the same as achieving nothing, and
+            // ending a job on it would make a role answering this contract's
+            // own value for "a zone is not loaded" lose its job for good.
+            _deferred++;
+        }
+
+        if (disposition == StopDisposition.Skip)
         {
             // Skipped, not owed: somebody else did it, or it is gone, or it
             // refuses. A deferred stop records nothing, which reconciliation
@@ -498,6 +595,17 @@ public sealed class NpcJobDriver
         _results.Add(new StepResult(_plan.Steps[index].Step.Index, outcome));
     }
 
+    /// <summary>Gives the identity's mode back, exactly as unconditionally as
+    /// the holds: releasing one this job does not hold says so and changes
+    /// nothing.</summary>
+    private void ReleaseMode()
+    {
+        if (_registry != null && !_order.Identity.IsEmpty && !string.IsNullOrEmpty(_order.JobId))
+        {
+            _registry.ReleaseMode(_order.Identity, _order.JobId);
+        }
+    }
+
     private void Release()
     {
         _targetHolds?.Cancel();
@@ -509,6 +617,7 @@ public sealed class NpcJobDriver
     private void Finish()
     {
         Release();
+        ReleaseMode();
         Progress = NpcJobProgress.Finished;
         Reason = string.Empty;
         _route = null;
@@ -519,6 +628,7 @@ public sealed class NpcJobDriver
     private void Stop(JobPlanVerdict verdict, string reason)
     {
         Release();
+        ReleaseMode();
         Verdict = verdict;
         Progress = NpcJobProgress.Stopped;
         Reason = reason ?? string.Empty;

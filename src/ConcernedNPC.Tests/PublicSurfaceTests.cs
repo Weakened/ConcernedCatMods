@@ -315,6 +315,10 @@ public class PublicSurfaceTests
         Assert.True(
             ctors.Length == 0,
             $"{type.FullName} has a public constructor. It must not: a consumer could then manufacture " +
-            "permission this package refused it.");
+            "permission this package refused it.\n\nFor a readonly struct this is the whole of what can be " +
+            "asserted, and it is worth saying plainly: default(T) is a construction the language always " +
+            "allows and no accessibility can prevent. So a widened struct is not shut by having no public " +
+            "constructor - it is shut by its defaulted value failing closed, which is a property of what it " +
+            "answers rather than of who can make one.");
     }
 }

@@ -33,5 +33,5 @@ public readonly struct JobStepActions
 
     /// <summary>Both words present. A planner given half a vocabulary refuses
     /// rather than writing a step nobody can carry out.</summary>
-    public bool IsValid => Collect.Length != 0 && Service.Length != 0;
+    public bool IsValid => !string.IsNullOrEmpty(Collect) && !string.IsNullOrEmpty(Service);
 }

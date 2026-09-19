@@ -30,7 +30,7 @@ public readonly struct StockLine
     /// line should not have been written.</summary>
     public int Units { get; }
 
-    public bool IsValid => Item.Length != 0 && Units > 0;
+    public bool IsValid => !string.IsNullOrEmpty(Item) && Units > 0;
 
     public override string ToString() => Units + " " + Item;
 }

@@ -72,7 +72,7 @@ public readonly struct JobTarget : INpcEpochScoped, IEquatable<JobTarget>
 
     /// <summary>A target that can be planned: it has a name, a place anybody
     /// could compute, and a world it belongs to.</summary>
-    public bool IsValid => Key.Length != 0 && At.IsFinite && !Epoch.IsUnknown;
+    public bool IsValid => !string.IsNullOrEmpty(Key) && At.IsFinite && !Epoch.IsUnknown;
 
     /// <summary>How many units of material this one target takes.</summary>
     public int Units => Needs.TotalUnits;

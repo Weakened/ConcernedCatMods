@@ -74,8 +74,13 @@ public enum ActorModeOutcome
 /// <see cref="MayRetireBody"/>, <see cref="IsHeldBy"/>. It cannot call
 /// <see cref="Enter"/>, <see cref="Release"/> or
 /// <see cref="AbandonForWorldUnload"/>, and it cannot construct one: modes are
-/// changed through the registry's claim and release, so the arbiter sees every
-/// change. Widening the class without narrowing those three would have been
+/// changed through <c>NpcRoleRegistry.EnterMode</c> and <c>ReleaseMode</c>, so
+/// the one arbiter sees every change. <c>NpcJobDriver</c> is what calls them -
+/// a job takes <see cref="ActorMode.Working"/> when it starts and gives it back
+/// when it finishes, stops or is abandoned - and until it existed nothing in
+/// this library called <see cref="Enter"/> at all, which left
+/// <see cref="Mode"/> permanently <see cref="ActorMode.Resting"/> and
+/// <see cref="MayRetireBody"/> permanently true. Widening the class without narrowing those three would have been
 /// worse than the bypass it replaces - today a product runs a private mode
 /// system the arbiter cannot see, and that would have let every product reach
 /// into the shared one.</summary>

@@ -304,7 +304,9 @@ public sealed class NpcRoleRegistry
     /// retiring a body, before offering the player an order - and
     /// <see cref="TryClaimBody"/> answers none of that. What comes back is
     /// read-only: the owner's constructor and its three mutators are internal,
-    /// so the only way to change a mode is still through this registry.
+    /// so the only way to change a mode is <see cref="EnterMode"/> and
+    /// <see cref="ReleaseMode"/> below, which <c>NpcJobDriver</c> calls and
+    /// nothing else does.
     ///
     /// <b>The constructor is the point of the pair.</b> A consuming product
     /// that wrote <c>new ActorModeOwner(...)</c> would run a second mode system
@@ -314,6 +316,48 @@ public sealed class NpcRoleRegistry
     /// compile, which is the difference between a rule and a
     /// guarantee.</summary>
     public Bodies.ActorModeOwner? ModeOf(NpcIdentity identity) => _arbiter.ModeOf(identity);
+
+    /// <summary>Takes an identity's mode for a job, or says why not.
+    ///
+    /// <b>The mediating half of the pair, and the reason the owner's own
+    /// <c>Enter</c> stays internal.</b> Every change to a mode goes through this
+    /// registry, so the one arbiter sees all of them - which is the whole
+    /// difference between this and the three private mode systems the shipped
+    /// products run from their own compiled copies today.
+    ///
+    /// <b>It never throws.</b> An identity this registry does not track, a mode
+    /// that is not a job's to take, or a job with no name each come back as
+    /// <see cref="Bodies.ActorModeOutcome.Unspecified"/>, because four products
+    /// register into one process and one of them getting this wrong must not
+    /// take down the other three.</summary>
+    public Bodies.ActorModeOutcome EnterMode(NpcIdentity identity, Bodies.ActorMode mode, string jobId)
+    {
+        if (mode == Bodies.ActorMode.Unspecified || mode == Bodies.ActorMode.Resting ||
+            string.IsNullOrEmpty(jobId))
+        {
+            // Resting is reached by releasing, never by entering. Refused here
+            // rather than thrown one level down, where the owner's own argument
+            // checks would escape into a caller promised an outcome.
+            return Bodies.ActorModeOutcome.Unspecified;
+        }
+
+        Bodies.ActorModeOwner? owner = _arbiter.ModeOf(identity);
+        return owner == null ? Bodies.ActorModeOutcome.Unspecified : owner.Enter(mode, jobId);
+    }
+
+    /// <summary>Gives an identity's mode back. Releasing one this job does not
+    /// hold says so and changes nothing, so cleanup after a death, a reload or a
+    /// countermand can be unconditional.</summary>
+    public Bodies.ActorModeOutcome ReleaseMode(NpcIdentity identity, string jobId)
+    {
+        if (string.IsNullOrEmpty(jobId))
+        {
+            return Bodies.ActorModeOutcome.Unspecified;
+        }
+
+        Bodies.ActorModeOwner? owner = _arbiter.ModeOf(identity);
+        return owner == null ? Bodies.ActorModeOutcome.Unspecified : owner.Release(jobId);
+    }
 
     private static bool ValidatePaths(INpcDataPaths? paths, out string reason)
     {
