@@ -101,17 +101,38 @@ internal static class ManifestArithmetic
     /// <b>And only units no other job has set aside.</b> Units another job holds
     /// are not this job's material either, and counting them is how two plans
     /// are built on one pile - see
-    /// <see cref="INpcSourceAvailability"/>.</summary>
+    /// <see cref="INpcSourceAvailability"/>.
+    ///
+    /// <b><paramref name="carrying"/> is required and has no default.</b> A
+    /// round that could not fully provision one trip leaves the NPC holding the
+    /// surplus, and the round after it would otherwise tell the player the
+    /// settlement is short of material that is on the NPC's back. That case
+    /// stopped being rare the day a chest-capped trip started shrinking rather
+    /// than refusing, so the parameter is one a caller has to answer rather
+    /// than one it can forget: <see cref="JobManifest.Empty"/> is the honest
+    /// answer for a first round and a false one for any round after a partial
+    /// one.</summary>
     internal static JobManifest Shortfall(
-        JobManifest wanted, IReadOnlyList<SourceStock>? sources, INpcSourceAvailability? availability = null)
+        JobManifest wanted,
+        JobManifest carrying,
+        IReadOnlyList<SourceStock>? sources,
+        INpcSourceAvailability? availability = null)
     {
         if (wanted.IsEmpty)
         {
             return JobManifest.Empty;
         }
 
+        JobManifest outstanding = carrying.IsEmpty ? wanted : Subtract(wanted, carrying);
+        if (outstanding.IsEmpty)
+        {
+            // He is already holding all of it. Nothing about the chests can make
+            // that a shortage.
+            return JobManifest.Empty;
+        }
+
         var lines = new List<JobManifestLine>();
-        foreach (JobManifestLine line in wanted.Lines)
+        foreach (JobManifestLine line in outstanding.Lines)
         {
             int available = 0;
             if (sources != null)

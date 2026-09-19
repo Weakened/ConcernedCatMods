@@ -29,7 +29,30 @@ namespace TheConcernedCat.ConcernedNPC.Planning;
 /// an availability is a pipeline that plans against raw counts, which is the
 /// behaviour above. It is allowed because the first roles will land before their
 /// reservation books do, and it is the caller's decision rather than a silent
-/// one.</summary>
+/// one.
+///
+/// <b>Two requirements on the role, and they are requirements rather than
+/// advice.</b> This seam joins two pairs of vocabularies that nothing in this
+/// library mints, and it compares both ordinally:
+///
+/// <i>A container's name.</i> <c>INpcContainer.Key</c>, which is what a
+/// planner's <see cref="SourceStock"/> is keyed by, must be the same string as
+/// the <c>NpcCustodyLocation.Key</c> a reservation over that container is
+/// recorded under. Keying one by a prefab and a place and the other by a ZDOID's
+/// text means no container ever matches.
+///
+/// <i>An item's name.</i> <see cref="StockLine.Item"/> must be the same string
+/// as the <c>NpcMaterial.ItemName</c> a reservation's stacks carry. "Wood" in
+/// one and "wood" in the other means no item ever matches.
+///
+/// <b>What a mismatch costs, and why it is worse than having no seam.</b>
+/// Nothing matches, nothing is subtracted, and every call answers the raw
+/// observed count: the exact pre-seam behaviour, in the unsafe direction, with a
+/// seam in place saying it is handled. No exception is thrown and no plan looks
+/// wrong. So the shipped implementation counts what it saw and did not match,
+/// and <see cref="NpcReservedSourceAvailability.Agreement"/> is a value a role's
+/// own tests can assert on - see
+/// <see cref="NpcSourceVocabularies"/>.</summary>
 internal interface INpcSourceAvailability
 {
     /// <summary>How many units of <paramref name="item"/> in the container named
@@ -42,6 +65,123 @@ internal interface INpcSourceAvailability
     /// under-provisions, because a stall is visible and an under-provisioned
     /// round is an NPC that walks away from half a wall.</summary>
     int AvailableIn(string containerKey, string item, int observed);
+}
+
+/// <summary>Whether the two role-owned vocabularies this seam joins were seen to
+/// line up.
+///
+/// <b>Every value is a fact about what was compared, not a judgement.</b> A
+/// mismatch cannot be told apart from an ordinary absence by one observation -
+/// "no reservation names any chest I asked about" is what a wrongly-keyed role
+/// looks like and also what a settlement with nothing reserved in those
+/// particular chests looks like. So this reports what happened and a role's own
+/// test, which knows what it reserved, is what turns it into a verdict.</summary>
+internal enum NpcSourceVocabularies
+{
+    /// <summary>Nobody asked, or the book held nothing to compare against.
+    /// </summary>
+    NothingToCompare = 0,
+
+    /// <summary>At least one container name matched, and at least one item name
+    /// inside a matched container matched. The seam is joined.</summary>
+    Agree = 1,
+
+    /// <summary>Reservations were held and <b>not one</b> of them named a
+    /// container that was asked about. Either the role keys containers and
+    /// custody locations differently - in which case nothing is ever subtracted
+    /// and every answer is the raw count - or this job's chests genuinely have
+    /// nothing reserved in them.</summary>
+    NoContainerNameMatched = 2,
+
+    /// <summary>Containers matched and held stacks, and <b>not one</b> of those
+    /// stacks named an item that was asked about. Either the role writes item
+    /// names differently on the two sides, or the reservations in those chests
+    /// are all of materials this job does not want.</summary>
+    NoItemNameMatchedInAMatchedContainer = 3,
+}
+
+/// <summary>What one availability saw while it was being asked.
+///
+/// <b>Why counting is the instrument rather than a throw or a refusal.</b> The
+/// seam's own contract says an implementation that cannot tell answers what was
+/// observed, so failing closed here would stall every job that legitimately has
+/// nothing reserved. And a mismatch is a role defect that produces a plausible
+/// number rather than an error. What is left is to make it <i>visible</i>: a
+/// role's test reserves a known amount in a known chest, plans, and asserts that
+/// the names met.</summary>
+internal readonly struct NpcSourceAvailabilityAgreement
+{
+    internal NpcSourceAvailabilityAgreement(
+        int asks,
+        int heldRowsSeen,
+        int containerNameMatches,
+        int stacksInMatchedContainers,
+        int itemNameMatches,
+        int unitsSubtracted)
+    {
+        Asks = asks;
+        HeldRowsSeen = heldRowsSeen;
+        ContainerNameMatches = containerNameMatches;
+        StacksInMatchedContainers = stacksInMatchedContainers;
+        ItemNameMatches = itemNameMatches;
+        UnitsSubtracted = unitsSubtracted;
+    }
+
+    /// <summary>How many times a planner asked and the book was actually walked.
+    /// </summary>
+    internal int Asks { get; }
+
+    /// <summary>How many held, non-excluded reservations were looked at, summed
+    /// over the asks. A row the book holds across three asks counts three
+    /// times: this is work done, not rows in the book.</summary>
+    internal int HeldRowsSeen { get; }
+
+    /// <summary>How many of those named a container that was being asked about.
+    /// <b>Nought with <see cref="HeldRowsSeen"/> above nought is the container
+    /// half of the mismatch.</b></summary>
+    internal int ContainerNameMatches { get; }
+
+    /// <summary>How many material stacks were looked at inside matched
+    /// containers.</summary>
+    internal int StacksInMatchedContainers { get; }
+
+    /// <summary>How many of those named the item being asked about.
+    /// <b>Nought with <see cref="StacksInMatchedContainers"/> above nought is
+    /// the item half of the mismatch</b> - the one the reviewer named, because
+    /// a container can match while every item name inside it misses.</summary>
+    internal int ItemNameMatches { get; }
+
+    /// <summary>How many units were taken off an observed count in total. Nought
+    /// across a whole plan, with a book that holds something, is the symptom a
+    /// role sees first.</summary>
+    internal int UnitsSubtracted { get; }
+
+    /// <summary>What the counts add up to.</summary>
+    internal NpcSourceVocabularies Vocabularies
+    {
+        get
+        {
+            if (Asks == 0 || HeldRowsSeen == 0)
+            {
+                return NpcSourceVocabularies.NothingToCompare;
+            }
+
+            if (ContainerNameMatches == 0)
+            {
+                return NpcSourceVocabularies.NoContainerNameMatched;
+            }
+
+            return StacksInMatchedContainers > 0 && ItemNameMatches == 0
+                ? NpcSourceVocabularies.NoItemNameMatchedInAMatchedContainer
+                : NpcSourceVocabularies.Agree;
+        }
+    }
+
+    /// <summary>A line for a log or a test failure message.</summary>
+    public override string ToString() =>
+        Vocabularies + ": " + Asks + " asks, " + HeldRowsSeen + " held rows seen, " +
+        ContainerNameMatches + " container names matched, " + ItemNameMatches + " of " +
+        StacksInMatchedContainers + " item names matched, " + UnitsSubtracted + " units subtracted";
 }
 
 /// <summary>The shipped <see cref="INpcSourceAvailability"/>: what a material
@@ -70,11 +210,25 @@ internal interface INpcSourceAvailability
 /// set aside eighty. So the exclusion is a single name, for the one case that
 /// needs it: a re-plan re-stating a claim it already owns. A planner building a
 /// fresh plan excludes nothing and sees every held unit, its own job's
-/// included, which is the conservative and correct answer.</summary>
+/// included, which is the conservative and correct answer.
+///
+/// <b>It counts what it matched, because a mismatch answers plausibly.</b> Both
+/// comparisons below are between vocabularies a role owns on both sides, and
+/// neither is checkable from here: if they disagree, nothing is subtracted, every
+/// answer is the raw observed count, and a plan built on it looks perfectly
+/// well formed. <see cref="Agreement"/> is what a role's own test asserts on -
+/// it reserved a known amount in a known chest, so it knows what the names
+/// should have met.</summary>
 internal sealed class NpcReservedSourceAvailability : INpcSourceAvailability
 {
     private readonly NpcMaterialReservationBook _book;
     private readonly ReservationId _exceptThis;
+    private int _asks;
+    private int _heldRowsSeen;
+    private int _containerNameMatches;
+    private int _stacksInMatchedContainers;
+    private int _itemNameMatches;
+    private int _unitsSubtracted;
 
     /// <summary>Reads a book.</summary>
     /// <param name="book">Where the claims live.</param>
@@ -87,6 +241,19 @@ internal sealed class NpcReservedSourceAvailability : INpcSourceAvailability
         _exceptThis = exceptThis;
     }
 
+    /// <summary>What the two vocabularies looked like over every ask so far.
+    /// <b>Read after planning, asserted on by a role's own tests.</b> See
+    /// <see cref="NpcSourceAvailabilityAgreement"/> for why this is a count
+    /// rather than a throw.</summary>
+    internal NpcSourceAvailabilityAgreement Agreement =>
+        new NpcSourceAvailabilityAgreement(
+            _asks,
+            _heldRowsSeen,
+            _containerNameMatches,
+            _stacksInMatchedContainers,
+            _itemNameMatches,
+            _unitsSubtracted);
+
     /// <inheritdoc />
     public int AvailableIn(string containerKey, string item, int observed)
     {
@@ -95,27 +262,45 @@ internal sealed class NpcReservedSourceAvailability : INpcSourceAvailability
             return observed < 0 ? 0 : observed;
         }
 
+        _asks++;
+
         int reserved = 0;
         foreach (NpcMaterialReservation reservation in _book.Reservations)
         {
-            if (reservation.State != NpcReservationState.Held
-                || !string.Equals(reservation.Container.Key, containerKey, StringComparison.Ordinal)
-                || Excluded(reservation))
+            if (reservation.State != NpcReservationState.Held || Excluded(reservation))
             {
                 continue;
             }
 
+            // Counted before the container name is compared, so "the book held
+            // something and none of it named a chest I asked about" is a state
+            // that can be told from "the book held nothing".
+            _heldRowsSeen++;
+            if (!string.Equals(reservation.Container.Key, containerKey, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            _containerNameMatches++;
             foreach (NpcMaterialStack stack in reservation.Stacks)
             {
+                _stacksInMatchedContainers++;
                 if (string.Equals(stack.Material.ItemName, item, StringComparison.Ordinal))
                 {
+                    _itemNameMatches++;
                     reserved += stack.Count;
                 }
             }
         }
 
         int free = observed - reserved;
-        return free < 0 ? 0 : free;
+        if (free < 0)
+        {
+            free = 0;
+        }
+
+        _unitsSubtracted += observed - free;
+        return free;
     }
 
     private bool Excluded(NpcMaterialReservation reservation) =>

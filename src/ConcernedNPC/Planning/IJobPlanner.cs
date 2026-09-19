@@ -19,7 +19,8 @@ internal readonly struct JobPlanRequest
         INpcWorkArea? area,
         NpcWorldEpoch epoch,
         JobManifest wanted,
-        NpcPoint startingFrom)
+        NpcPoint startingFrom,
+        JobManifest carrying)
     {
         Identity = identity;
         JobId = jobId ?? string.Empty;
@@ -27,6 +28,7 @@ internal readonly struct JobPlanRequest
         Epoch = epoch;
         Wanted = wanted;
         StartingFrom = startingFrom;
+        Carrying = carrying;
     }
 
     /// <summary>Which NPC the job is for.</summary>
@@ -52,6 +54,31 @@ internal readonly struct JobPlanRequest
     /// <summary>Where the NPC is standing now, so the order of the steps is
     /// sensible from where it actually is.</summary>
     internal NpcPoint StartingFrom { get; }
+
+    /// <summary>What the NPC is already holding that this job may spend.
+    ///
+    /// <b>Why a plan has to be told.</b> A round that could not fully provision
+    /// a trip services what it could pay for and leaves the rest carried - the
+    /// reconciliation's <c>LeftOver</c> is exactly that surplus. Without this,
+    /// the round after it counts chests only: it fetches a second load of what
+    /// is already on his back, and it can answer
+    /// <see cref="JobPlanVerdict.ShortOfMaterial"/> about material he is
+    /// visibly carrying. Both stopped being rare the day a chest-capped trip
+    /// started shrinking instead of refusing.
+    ///
+    /// <b>Empty is a claim, and there is no default for it.</b> It says he is
+    /// carrying nothing this job may spend, which is true of a first round and
+    /// false of any round after a partial one. Nothing in this library can check
+    /// it: what is actually held is the custody ledger's answer, and a planner
+    /// that guessed at it would be a second source of truth about custody. So
+    /// the constructor makes every caller say the number rather than letting one
+    /// stay silent and be read as nothing - the same defect, one level up, as a
+    /// refusal that stayed silent about its leftover count and was read as a
+    /// finished job.
+    ///
+    /// After a partial round, <see cref="JobReconciliation.LeftOver"/> is
+    /// exactly the manifest to pass here.</summary>
+    internal JobManifest Carrying { get; }
 }
 
 /// <summary>Working out the whole job before any of it is done.
