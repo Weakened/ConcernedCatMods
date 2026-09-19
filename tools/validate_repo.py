@@ -717,98 +717,174 @@ def check_the_npc_library_writes_no_file(errors: list[str]) -> list[str]:
     ]
 
 
-# Two parameters in the planning pipeline are claims rather than quantities, and
-# each silently asserts something nothing in the library can check:
-# `leftForAnotherRound` says "the plan covered the whole job" and `carrying`
-# says "he is holding nothing this job may spend". Both were zero by default at
-# some point, and both times a job read as finished when it was not
-# (#377, #378). The compiler enforces it today; this is what stops the default
-# being put back.
-PLANNING_CLAIM_PARAMETERS = ("leftForAnotherRound", "carrying")
-PLANNING_DEFAULTED_CLAIM = re.compile(
-    r"\b(" + "|".join(PLANNING_CLAIM_PARAMETERS) + r")\s*=\s*[^=]")
+# The finish verdict. The first version of this rule matched the literal
+# "JobPlanVerdict.NothingToDo" line by line, and an independent reviewer walked
+# past it four ways: an alias, a static import, a cast, and a line break after
+# the dot. Matching the bare identifier instead is worse, not better - a
+# different enum in this same folder has a member of the same name. So the
+# qualified spelling is matched across newlines, and every way of avoiding the
+# qualified spelling is banned outright.
+PLANNING_FINISH_VERDICT = re.compile(r"JobPlanVerdict\s*\.\s*NothingToDo", re.S)
+
+# Reading the verdict is not deciding it: a driver switching on the answer
+# consumes the decision rather than making one.
+PLANNING_VERDICT_READ = re.compile(
+    r"case\s+JobPlanVerdict\s*\.\s*NothingToDo"
+    r"|[=!]=\s*JobPlanVerdict\s*\.\s*NothingToDo"
+    r"|JobPlanVerdict\s*\.\s*NothingToDo\s*[=!]=", re.S)
+
+# Spellings that would let the verdict reach the compiler unqualified.
+PLANNING_VERDICT_INDIRECTION = re.compile(
+    r"using\s+\w+\s*=\s*[\w.]*\bJobPlanVerdict\b"
+    r"|using\s+static\s+[\w.]*\bJobPlanVerdict\b"
+    r"|\(\s*JobPlanVerdict\s*\)")
+
+# Parameters that state a claim rather than a quantity. Zero for
+# `leftForAnotherRound` says the plan covered the whole job; an empty `carrying`
+# says the NPC holds nothing this job may spend. Neither is checkable inside this
+# library, and both were silent once, and both times a job reported itself
+# finished with targets untouched. The neighbours are included because a rule
+# keyed to exactly two literals is one rename away from silence; this is a
+# backstop, and the compiler is the primary enforcement.
+PLANNING_CLAIM_PARAMETERS = re.compile(
+    r"^(?:left|carry|carrying|carried|remaining|outstanding|covered|leftover)"
+    r"|(?:LeftOver|ForAnotherRound|Carried|Carrying|Remaining|Outstanding)$",
+    re.I)
 
 
-def _npc_planning_sources() -> list[Path]:
-    """Every planning source of the NPC library, or [] when there is none.
-
-    The callers below fail on an empty result rather than pass it: a rule that
-    quietly audits nothing is worse than no rule, because the build stays green
-    and the guarantee is gone.
-    """
+def _npc_library_sources(folder=None) -> list[Path]:
+    """Sources of the NPC library, or of one folder of it. [] when absent."""
     library = LIBRARIES.get("concernednpc")
     if library is None:
         return []
     project_dir: Path = library["project_dir"]  # type: ignore[assignment]
-    planning = project_dir / "Planning"
-    if not planning.is_dir():
+    root = project_dir if folder is None else project_dir / folder
+    if not root.is_dir():
         return []
-    return [path for path in sorted(planning.rglob("*.cs"))
+    return [path for path in sorted(root.rglob("*.cs"))
             if path.relative_to(project_dir).parts[0] not in ("obj", "bin")]
 
 
-def _npc_planning_code_lines(path: Path):
-    """Line number and text for every line of real code in one source."""
-    for number, line in enumerate(path.read_text(encoding="utf-8-sig").splitlines(), start=1):
-        stripped = line.strip()
-        if stripped.startswith("///") or stripped.startswith("//"):
+def _npc_code(path: Path) -> str:
+    """The file with comments blanked and line count preserved.
+
+    The first version skipped only lines that *started* with a comment marker, so
+    a trailing `//` both hid a violation and counted a mention.
+    """
+    out = []
+    for raw in path.read_text(encoding="utf-8-sig").splitlines():
+        out.append(re.sub(r"/\*.*?\*/", "", _strip_cs_line_comment(raw)))
+    return "\n".join(out)
+
+
+def _line_of(code: str, index: int) -> int:
+    return code.count("\n", 0, index) + 1
+
+
+def _parameter_defaults(code: str):
+    """(line, parameter name) for each default value, found by scanning.
+
+    A default is an `=` inside parentheses. String and character literals are
+    skipped, `==`/`!=`/`<=`/`>=`/`=>` are not defaults, and attribute arguments
+    are stepped over because their named properties also use `=`. Because the
+    scan tracks parenthesis depth across the whole file, it cannot be evaded by
+    where the newlines fall - which is how a one-line expression-bodied member
+    and a split parameter list both got past the first version of this rule.
+    """
+    depth = 0
+    index = 0
+    length = len(code)
+    while index < length:
+        char = code[index]
+        if char in "\"'":
+            quote = char
+            index += 1
+            while index < length and code[index] != quote:
+                index += 2 if code[index] == "\\" else 1
+            index += 1
             continue
-        yield number, stripped
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth = max(0, depth - 1)
+        elif char == "[":
+            while index < length and code[index] != "]":
+                index += 1
+        elif char == "=" and depth > 0:
+            before = code[index - 1] if index else " "
+            after = code[index + 1] if index + 1 < length else " "
+            if before not in "=!<>" and after not in "=>":
+                end = index
+                while end > 0 and code[end - 1].isspace():
+                    end -= 1
+                start = end
+                while start > 0 and (code[start - 1].isalnum() or code[start - 1] == "_"):
+                    start -= 1
+                yield _line_of(code, index), code[start:end]
+        index += 1
 
 
 def check_npc_planning_decides_nothing_to_do_once(errors: list[str]) -> list[str]:
-    """Fails unless exactly one line of planning code answers NothingToDo.
+    """Fails unless exactly one place in the library decides a job is finished.
 
-    It is the one verdict a job may be reported finished on without doing
-    anything, and it has had three separate ways in - a conclusive empty
-    snapshot, a trip whose stops were all dropped, and a first trip the chest
-    cap emptied. Every one of them was a blocker, because every one of them was
-    another place that could close a job with its targets untouched.
+    NothingToDo is the one verdict a job may be reported finished on without
+    doing anything, and it has had three separate ways in - a conclusive empty
+    snapshot, a trip whose stops were all dropped, and a first trip the chest cap
+    emptied. Every one was a blocker, because every one was another place that
+    could close a job with its targets untouched.
 
-    So the guarantee is arithmetic rather than argument: one decision site, which
-    a reviewer can read. A fourth way in cannot be added without this failing.
+    Scoped to the whole library rather than to Planning/, because the job driver
+    lives in Jobs/ and could otherwise answer the verdict freely.
     """
-    sources = _npc_planning_sources()
+    sources = _npc_library_sources()
     if not sources:
         fail(
-            "[concernednpc] The planning folder is missing, so the verdict audit checked "
-            "nothing. Point this rule at the pipeline's new home rather than leaving it green "
-            "over an empty set.", errors)
+            "[concernednpc] The NPC library is missing, so the verdict audit checked nothing. "
+            "Point this rule at its new home rather than leaving it green over an empty set.",
+            errors)
         return []
 
-    sites = [f"{path.relative_to(ROOT)}:{number}"
-             for path in sources
-             for number, code in _npc_planning_code_lines(path)
-             if "JobPlanVerdict.NothingToDo" in code]
+    sites = []
+    for path in sources:
+        code = _npc_code(path)
+        for indirect in PLANNING_VERDICT_INDIRECTION.finditer(code):
+            fail(
+                f"[concernednpc] The finish verdict may not be reached under another name: "
+                f"{indirect.group(0).strip()!r} at "
+                f"{path.relative_to(ROOT)}:{_line_of(code, indirect.start())}. An alias, a static "
+                "import or a cast puts a second decision site past this audit.", errors)
+        reads = {match.end() for match in PLANNING_VERDICT_READ.finditer(code)}
+        for match in PLANNING_FINISH_VERDICT.finditer(code):
+            if match.end() in reads:
+                continue
+            sites.append(f"{path.relative_to(ROOT)}:{_line_of(code, match.start())}")
 
     if len(sites) != 1:
         fail(
-            f"[concernednpc] A job may be reported finished on JobPlanVerdict.NothingToDo and on "
+            f"[concernednpc] A job may be reported finished on the NothingToDo verdict and on "
             f"nothing else, so it is decided once: expected 1 site, found {len(sites)} "
             f"({', '.join(sites) if sites else 'none'}). Each extra one is another way to close a "
             "job with work still to do.", errors)
 
     return [
-        f"[concernednpc] Planning verdict audit: {len(sources)} sources; NothingToDo decided at "
-        f"{len(sites)} site",
+        f"[concernednpc] Planning verdict audit: {len(sources)} library sources; the finish verdict "
+        f"is decided at {len(sites)} site, reachable under no other name",
     ]
 
 
 def check_npc_planning_never_defaults_a_claim(errors: list[str]) -> list[str]:
-    """Fails on a default value for a parameter that makes a claim.
+    """Fails on a default value for a parameter that states a claim.
 
-    `leftForAnotherRound` defaulting to zero says the plan covered the whole job;
-    `carrying` defaulting to empty says the NPC is holding nothing this job may
-    spend. Neither is checkable inside this library - what is actually held is
-    the custody ledger's answer, and what a plan left out is the planner's - so a
-    call site that stays silent is not omitting a detail, it is asserting
-    something it was never asked.
+    A call site that stays silent about what the plan left out, or about what the
+    NPC is already carrying, is not omitting a detail - it is asserting something
+    it was never asked. Both were silent once and both produced the same failure.
 
-    Both were silent once and both produced the same failure: a job reporting
-    itself finished with targets untouched. Making every call site say the value
-    turns that into CS7036 at build time.
+    The sites are found by scanning parentheses rather than by line shape,
+    because a reviewer got a default past the first version of this rule on a
+    one-line expression-bodied member, whose line ends in a semicolon, and again
+    by splitting the default across two lines.
     """
-    sources = _npc_planning_sources()
+    sources = _npc_library_sources("Planning")
     if not sources:
         fail(
             "[concernednpc] The planning folder is missing, so the defaulted-claim audit checked "
@@ -816,25 +892,21 @@ def check_npc_planning_never_defaults_a_claim(errors: list[str]) -> list[str]:
             "over an empty set.", errors)
         return []
 
+    checked = 0
     for path in sources:
-        for number, code in _npc_planning_code_lines(path):
-            # A statement ends in a semicolon: an assignment to the property of
-            # the same name, or a local with an initialiser, is not a parameter
-            # and is none of this rule's business. A parameter declaration ends
-            # in a comma, a closing paren, or a paren and an expression arrow.
-            if code.endswith(";"):
-                continue
-            match = PLANNING_DEFAULTED_CLAIM.search(code)
-            if match:
+        for number, name in _parameter_defaults(_npc_code(path)):
+            checked += 1
+            if name and PLANNING_CLAIM_PARAMETERS.search(name):
                 fail(
-                    f"[concernednpc] {match.group(1)!r} may not have a default value "
-                    f"({path.relative_to(ROOT)}:{number}). It is a claim nothing in this library "
-                    "can check, and a caller that stays silent asserts it by accident.", errors)
+                    f"[concernednpc] {name!r} states a claim, so it may not carry a default "
+                    f"({path.relative_to(ROOT)}:{number}). Nothing in this library can check it, "
+                    "and a caller that stays silent asserts it by accident.", errors)
 
     return [
-        f"[concernednpc] Planning claim audit: {len(sources)} sources; "
-        f"{len(PLANNING_CLAIM_PARAMETERS)} claim parameters, none defaulted",
+        f"[concernednpc] Planning claim audit: {len(sources)} sources, {checked} parameter defaults "
+        f"scanned, none of them a claim",
     ]
+
 
 
 def check_library_consumers_do_not_bypass_the_arbiter(errors: list[str]) -> list[str]:
