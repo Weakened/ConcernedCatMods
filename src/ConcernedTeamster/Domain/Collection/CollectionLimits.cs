@@ -2,74 +2,43 @@ using System;
 
 namespace TheConcernedCat.ConcernedTeamster.Domain.Collection;
 
-/// <summary>Every budget, ceiling and threshold Gunnar's collection uses, in one
-/// place, each with the reason it is that number (#381).
+/// <summary>Every budget and threshold Gunnar's collection uses that is
+/// <b>his</b>, each with the reason it is that number (#381).
 ///
-/// <b>None of these is ever written to disk.</b> The wave-two review's rule for
-/// wave three, and it is not stylistic: a cap that reaches a save file becomes a
-/// migration the day somebody wants to change it. Nothing here is persisted,
-/// nothing here is derived from a persisted value, and the round loop is written
-/// so that changing any of them changes only how many rounds a job takes, never
-/// whether the job is finished.
+/// <b>What is deliberately not here.</b> How many targets go in one trip, how
+/// many trips a plan writes out and how many rounds a job may take. Those are
+/// the shared runtime's - a job order carries its own round count and the tour
+/// partitioner its own ceiling - and a second set of numbers for the same
+/// questions would be two things to change and one of them forgotten. What is
+/// left is what only this product can answer: how far he is allowed to look, how
+/// close he has to be, and how much of the game's carry limit he may use.
 ///
-/// <b>They are first guesses and they are meant to be observed, not defended.</b>
-/// Nobody has watched Gunnar work in a real base. The two that a player will
-/// actually feel are <see cref="MostTargetsPerBatch"/> and
-/// <see cref="MostRoundsPerJob"/>: the first decides how much he carries in one
-/// go, the second how long he will keep going before he stops and says he is not
-/// finished. Both are observable in the first play session with no instrumentation
-/// - count how often a round comes back with work left over on a job a player
-/// would call small.</summary>
+/// <b>None of these is ever written to disk.</b> Nothing here is persisted or
+/// derived from anything persisted, so changing one changes pacing and never a
+/// save.</summary>
 internal sealed class CollectionLimits
 {
     private CollectionLimits(
-        int mostTargetsPerBatch,
-        int mostRoundsPerJob,
         int mostCandidatesPerSurvey,
         float surveyRadiusMetres,
         float pickupReachMetres,
         float arrivalToleranceMetres,
-        float carrySafetyMarginKilograms,
-        int mostToursPerManifest)
+        float carrySafetyMarginKilograms)
     {
-        MostTargetsPerBatch = mostTargetsPerBatch;
-        MostRoundsPerJob = mostRoundsPerJob;
         MostCandidatesPerSurvey = mostCandidatesPerSurvey;
         SurveyRadiusMetres = surveyRadiusMetres;
         PickupReachMetres = pickupReachMetres;
         ArrivalToleranceMetres = arrivalToleranceMetres;
         CarrySafetyMarginKilograms = carrySafetyMarginKilograms;
-        MostToursPerManifest = mostToursPerManifest;
     }
 
     /// <summary>The shipped numbers.</summary>
     public static CollectionLimits Default { get; } = new CollectionLimits(
-        mostTargetsPerBatch: 24,
-        mostRoundsPerJob: 16,
         mostCandidatesPerSurvey: 256,
         surveyRadiusMetres: 48f,
         pickupReachMetres: 2.2f,
         arrivalToleranceMetres: 1.5f,
-        carrySafetyMarginKilograms: 0f,
-        mostToursPerManifest: 8);
-
-    /// <summary>How many targets one batch may hold, whatever his capacity says.
-    ///
-    /// Capacity is the real limit and this is the ceiling behind it: a batch of
-    /// three hundred feather-light targets is a route nobody can watch and a
-    /// quadratic ordering pass that is no longer free. Twenty-four matches the
-    /// route ceiling the shared runtime's own sequencer uses, so the day this
-    /// batching is replaced by that sequencer the number does not change.</summary>
-    public int MostTargetsPerBatch { get; }
-
-    /// <summary>How many rounds one job may take before he stops and reports.
-    ///
-    /// The round loop exists because a plan that covers part of a job must say
-    /// so and be asked again. Without a ceiling, a job whose targets keep coming
-    /// back unserviced is an NPC walking in a circle for as long as the player
-    /// watches. Sixteen is enough for any batch size against any work area this
-    /// slice allows and small enough that the loop visibly ends.</summary>
-    public int MostRoundsPerJob { get; }
+        carrySafetyMarginKilograms: 0f);
 
     /// <summary>How many candidates one survey may consider. A bound, not a
     /// target: an area with more is reported as truncated and worked in rounds
@@ -95,19 +64,11 @@ internal sealed class CollectionLimits
     /// standing between the player and the semantics they already know.</summary>
     public float CarrySafetyMarginKilograms { get; }
 
-    /// <summary>How many tours one manual manifest may be worked out into. A
-    /// manifest needing more is planned to this many and reports the remainder,
-    /// exactly as a batch does: partly planned is a real answer, refusing a job
-    /// the player can see is doable is not.</summary>
-    public int MostToursPerManifest { get; }
-
     /// <summary>Refuses a set of limits that cannot work rather than clamping it
     /// into one that can. A clamp hides a configuration mistake behind
     /// behaviour nobody asked for.</summary>
     public CollectionLimits Validate()
     {
-        Require(MostTargetsPerBatch >= 1, nameof(MostTargetsPerBatch), "a batch must be able to hold one target");
-        Require(MostRoundsPerJob >= 1, nameof(MostRoundsPerJob), "a job must be able to run one round");
         Require(MostCandidatesPerSurvey >= 1, nameof(MostCandidatesPerSurvey), "a survey must consider something");
         Require(SurveyRadiusMetres > 0f, nameof(SurveyRadiusMetres), "an area has a size");
         Require(PickupReachMetres > 0f, nameof(PickupReachMetres), "he has to be able to reach something");
@@ -115,7 +76,6 @@ internal sealed class CollectionLimits
             "a tolerance of nothing is reachable only on exact float equality");
         Require(CarrySafetyMarginKilograms >= 0f, nameof(CarrySafetyMarginKilograms),
             "a negative margin would raise his carry limit above the game's");
-        Require(MostToursPerManifest >= 1, nameof(MostToursPerManifest), "a manifest must be able to run one tour");
         return this;
     }
 
@@ -123,23 +83,17 @@ internal sealed class CollectionLimits
     /// ceiling to reach in a few steps. Production uses
     /// <see cref="Default"/>.</summary>
     internal CollectionLimits With(
-        int? mostTargetsPerBatch = null,
-        int? mostRoundsPerJob = null,
         int? mostCandidatesPerSurvey = null,
         float? surveyRadiusMetres = null,
         float? pickupReachMetres = null,
         float? arrivalToleranceMetres = null,
-        float? carrySafetyMarginKilograms = null,
-        int? mostToursPerManifest = null) =>
+        float? carrySafetyMarginKilograms = null) =>
         new CollectionLimits(
-            mostTargetsPerBatch ?? MostTargetsPerBatch,
-            mostRoundsPerJob ?? MostRoundsPerJob,
             mostCandidatesPerSurvey ?? MostCandidatesPerSurvey,
             surveyRadiusMetres ?? SurveyRadiusMetres,
             pickupReachMetres ?? PickupReachMetres,
             arrivalToleranceMetres ?? ArrivalToleranceMetres,
-            carrySafetyMarginKilograms ?? CarrySafetyMarginKilograms,
-            mostToursPerManifest ?? MostToursPerManifest);
+            carrySafetyMarginKilograms ?? CarrySafetyMarginKilograms);
 
     private static void Require(bool condition, string name, string why)
     {
