@@ -12,7 +12,7 @@ namespace TheConcernedCat.ConcernedNPC.Planning;
 /// stopped at and rebuilds the sequence after an interruption; it never branches
 /// on what a step means. A <c>switch</c> over these strings anywhere in this
 /// package is the defect the whole package is defined against.</summary>
-internal readonly struct JobStep
+public readonly struct JobStep
 {
     internal JobStep(int index, string action, string subject, NpcPoint at, bool hasPlace, int units)
     {
@@ -27,29 +27,29 @@ internal readonly struct JobStep
     /// <summary>Position in the plan, from zero. Stable for the life of the
     /// plan: it is half of every reservation id the step takes out, so
     /// renumbering steps renumbers reservations.</summary>
-    internal int Index { get; }
+    public int Index { get; }
 
     /// <summary>The role's token for what is done.</summary>
-    internal string Action { get; }
+    public string Action { get; }
 
     /// <summary>The role's token for what it is done to.</summary>
-    internal string Subject { get; }
+    public string Subject { get; }
 
     /// <summary>Where, if anywhere. Meaningless unless <see cref="HasPlace"/>.
     /// </summary>
-    internal NpcPoint At { get; }
+    public NpcPoint At { get; }
 
     /// <summary>Whether this step happens somewhere in particular. A step
     /// without a place is not a step at the origin.</summary>
-    internal bool HasPlace { get; }
+    public bool HasPlace { get; }
 
     /// <summary>How many units this step handles, or zero where the step is not
     /// about a quantity.</summary>
-    internal int Units { get; }
+    public int Units { get; }
 }
 
 /// <summary>Why a plan is what it is.</summary>
-internal enum JobPlanVerdict
+public enum JobPlanVerdict
 {
     /// <summary>Nobody planned. Never a plan.</summary>
     Unspecified = 0,

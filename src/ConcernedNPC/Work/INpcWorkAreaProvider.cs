@@ -6,7 +6,7 @@ namespace TheConcernedCat.ConcernedNPC.Work;
 /// Collapsing them costs a player the one sentence that would tell them what to
 /// do: install the map mod again, re-mark the area, or nothing at all because
 /// the area was deliberately removed.</summary>
-public enum WorkAreaResolution
+internal enum WorkAreaResolution
 {
     /// <summary>Nobody asked. Never an area.</summary>
     Unspecified = 0,
@@ -41,7 +41,7 @@ public enum WorkAreaResolution
 /// and the constructor is the only place that pairing is decided, so no caller
 /// can be handed a plausible-looking area beside a refusal and use the wrong
 /// half.</summary>
-public readonly struct NpcWorkAreaResult
+internal readonly struct NpcWorkAreaResult
 {
     private NpcWorkAreaResult(WorkAreaResolution resolution, INpcWorkArea? area, string reason)
     {
@@ -98,7 +98,7 @@ public readonly struct NpcWorkAreaResult
 /// formed - named, with a shape, with no NaN - because the registry checks that
 /// once before asking anybody. Everything beyond that is the provider's to
 /// judge.</summary>
-public interface INpcWorkAreaProvider
+internal interface INpcWorkAreaProvider
 {
     /// <summary>The id this provider answers to, matched ordinally against
     /// <see cref="NpcWorkAreaId.ProviderId"/>. Supplied by whoever constructs

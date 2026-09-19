@@ -6,7 +6,7 @@ namespace TheConcernedCat.ConcernedNPC.Work;
 /// several kinds of wrong at once and a player asking "why not there" deserves
 /// all of them rather than whichever was checked first.</summary>
 [Flags]
-internal enum AreaRejection
+public enum AreaRejection
 {
     None = 0,
 
@@ -35,7 +35,7 @@ internal enum AreaRejection
 }
 
 /// <summary>What one sampled point turned out to be.</summary>
-internal enum AreaSampleVerdict
+public enum AreaSampleVerdict
 {
     /// <summary>The probe could not answer. Never a yes.</summary>
     Unreadable = 0,
@@ -58,9 +58,9 @@ internal enum AreaSampleVerdict
 }
 
 /// <summary>One point, probed.</summary>
-internal readonly struct AreaSample
+public readonly struct AreaSample
 {
-    internal AreaSample(AreaSampleVerdict verdict, NpcPoint ground, AreaRejection rejection)
+    public AreaSample(AreaSampleVerdict verdict, NpcPoint ground, AreaRejection rejection)
     {
         Verdict = verdict;
         Ground = ground;
@@ -68,19 +68,19 @@ internal readonly struct AreaSample
     }
 
     /// <summary>What the point turned out to be.</summary>
-    internal AreaSampleVerdict Verdict { get; }
+    public AreaSampleVerdict Verdict { get; }
 
     /// <summary>Where the ground actually is beneath or above the point asked
     /// about - the probe searches a band, so the answer is rarely the question.
     /// Only meaningful for <see cref="AreaSampleVerdict.Standable"/>.</summary>
-    internal NpcPoint Ground { get; }
+    public NpcPoint Ground { get; }
 
     /// <summary>Every reason this point was refused, or
     /// <see cref="AreaRejection.None"/>.</summary>
-    internal AreaRejection Rejection { get; }
+    public AreaRejection Rejection { get; }
 
     /// <summary>The one question a caller asks before walking somewhere.</summary>
-    internal bool IsStandable => Verdict == AreaSampleVerdict.Standable;
+    public bool IsStandable => Verdict == AreaSampleVerdict.Standable;
 }
 
 /// <summary>Asking the world about one point: is there ground, is it loaded, may
@@ -111,7 +111,7 @@ internal readonly struct AreaSample
 /// <b>Cost.</b> A probe may be expensive - a raycast, a navmesh query, a
 /// physics overlap - so callers sample a bounded number of candidates per tick
 /// and remember refusals. Nothing here loops until it finds one.</summary>
-internal interface INpcAreaProbe
+public interface INpcAreaProbe
 {
     /// <summary>Probes one point. Never throws for a world reason: a probe that
     /// cannot answer returns <see cref="AreaSampleVerdict.Unreadable"/>, because

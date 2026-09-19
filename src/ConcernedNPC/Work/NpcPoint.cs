@@ -27,31 +27,31 @@ namespace TheConcernedCat.ConcernedNPC.Work;
 /// format for a package whose whole safety argument is that it owns none.</summary>
 public readonly struct NpcPoint : IEquatable<NpcPoint>
 {
-    internal NpcPoint(float x, float y, float z)
+    public NpcPoint(float x, float y, float z)
     {
         X = x;
         Y = y;
         Z = z;
     }
 
-    internal float X { get; }
+    public float X { get; }
 
-    internal float Y { get; }
+    public float Y { get; }
 
-    internal float Z { get; }
+    public float Z { get; }
 
     /// <summary>False for a NaN or infinite component. A position nobody could
     /// compute is never silently treated as the origin.</summary>
-    internal bool IsFinite => IsFiniteValue(X) && IsFiniteValue(Y) && IsFiniteValue(Z);
+    public bool IsFinite => IsFiniteValue(X) && IsFiniteValue(Y) && IsFiniteValue(Z);
 
-    internal float HorizontalDistanceTo(NpcPoint other)
+    public float HorizontalDistanceTo(NpcPoint other)
     {
         float dx = X - other.X;
         float dz = Z - other.Z;
         return (float)Math.Sqrt((dx * dx) + (dz * dz));
     }
 
-    internal float VerticalDistanceTo(NpcPoint other) => Math.Abs(Y - other.Y);
+    public float VerticalDistanceTo(NpcPoint other) => Math.Abs(Y - other.Y);
 
     public bool Equals(NpcPoint other) => X.Equals(other.X) && Y.Equals(other.Y) && Z.Equals(other.Z);
 

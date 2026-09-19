@@ -10,7 +10,7 @@ namespace TheConcernedCat.ConcernedNPC.Containers;
 /// already-working containers start refusing, so the refusal has to name the
 /// thing to go and change, or a player is told only that it does not work.
 /// </summary>
-internal enum NpcContainerRefusal
+public enum NpcContainerRefusal
 {
     /// <summary>Nothing refuses it. Paired with a use the player allowed, this
     /// is a yes.</summary>
@@ -69,32 +69,32 @@ internal enum NpcContainerRefusal
 /// <see cref="NpcContainerRefusal.None"/> in a <c>default</c> value, and
 /// <see cref="CanTake"/> and <see cref="CanDeposit"/> are both false, because
 /// they require an allowance rather than the absence of a refusal.</summary>
-internal readonly struct NpcContainerAccess
+public readonly struct NpcContainerAccess
 {
-    internal NpcContainerAccess(NpcContainerUse allowed, NpcContainerRefusal refusal)
+    public NpcContainerAccess(NpcContainerUse allowed, NpcContainerRefusal refusal)
     {
         Allowed = allowed;
         Refusal = refusal;
     }
 
     /// <summary>What the player allowed for this container.</summary>
-    internal NpcContainerUse Allowed { get; }
+    public NpcContainerUse Allowed { get; }
 
     /// <summary>What the world says about it now, or
     /// <see cref="NpcContainerRefusal.None"/>.</summary>
-    internal NpcContainerRefusal Refusal { get; }
+    public NpcContainerRefusal Refusal { get; }
 
     /// <summary>May an NPC take from it, right now. Requires the allowance
     /// <b>and</b> no refusal: neither half alone is a yes.</summary>
-    internal bool CanTake =>
+    public bool CanTake =>
         Refusal == NpcContainerRefusal.None && (Allowed & NpcContainerUse.Take) == NpcContainerUse.Take;
 
     /// <summary>May an NPC put things into it, right now.</summary>
-    internal bool CanDeposit =>
+    public bool CanDeposit =>
         Refusal == NpcContainerRefusal.None && (Allowed & NpcContainerUse.Deposit) == NpcContainerUse.Deposit;
 
     /// <summary>Whether <paramref name="use"/> - one flag or both - is permitted
     /// right now.</summary>
-    internal bool Permits(NpcContainerUse use) =>
+    public bool Permits(NpcContainerUse use) =>
         use != NpcContainerUse.Off && Refusal == NpcContainerRefusal.None && (Allowed & use) == use;
 }

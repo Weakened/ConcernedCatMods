@@ -16,22 +16,22 @@ namespace TheConcernedCat.ConcernedNPC.Planning;
 /// style rule: a name in here is a name the roles would then have to keep
 /// spelling the same way forever, across a library that ships on its own release
 /// cadence, and the source audit fails the build for one.</summary>
-internal readonly struct JobStepActions
+public readonly struct JobStepActions
 {
-    internal JobStepActions(string? collect, string? service)
+    public JobStepActions(string? collect, string? service)
     {
         Collect = collect ?? string.Empty;
         Service = service ?? string.Empty;
     }
 
     /// <summary>What the role calls taking material out of a container.</summary>
-    internal string Collect { get; }
+    public string Collect { get; }
 
     /// <summary>What the role calls doing the thing to a target, for targets
     /// that do not name their own action.</summary>
-    internal string Service { get; }
+    public string Service { get; }
 
     /// <summary>Both words present. A planner given half a vocabulary refuses
     /// rather than writing a step nobody can carry out.</summary>
-    internal bool IsValid => Collect.Length != 0 && Service.Length != 0;
+    public bool IsValid => Collect.Length != 0 && Service.Length != 0;
 }

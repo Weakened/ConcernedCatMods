@@ -15,22 +15,22 @@ namespace TheConcernedCat.ConcernedNPC.Planning;
 /// value, and the first arithmetic mistake that mixed them would look correct.
 /// Two small types that cannot be passed for one another is the cheapest
 /// possible way to make that mistake fail to compile.</summary>
-internal readonly struct StockLine
+public readonly struct StockLine
 {
-    internal StockLine(string? item, int units)
+    public StockLine(string? item, int units)
     {
         Item = item ?? string.Empty;
         Units = units;
     }
 
     /// <summary>The role's token for the thing.</summary>
-    internal string Item { get; }
+    public string Item { get; }
 
     /// <summary>How many units of it were seen. Never negative; zero means the
     /// line should not have been written.</summary>
-    internal int Units { get; }
+    public int Units { get; }
 
-    internal bool IsValid => Item.Length != 0 && Units > 0;
+    public bool IsValid => Item.Length != 0 && Units > 0;
 
     public override string ToString() => Units + " " + Item;
 }
@@ -52,11 +52,11 @@ internal readonly struct StockLine
 /// call, exactly as the port's own contract requires, because the player can
 /// walk into the chest, a ward can go up and ownership can migrate between the
 /// tick that chose it and the tick that opens it.</summary>
-internal readonly struct SourceStock : INpcEpochScoped
+public readonly struct SourceStock : INpcEpochScoped
 {
     private readonly StockLine[]? _lines;
 
-    internal SourceStock(INpcContainer? container, IEnumerable<StockLine>? lines)
+    public SourceStock(INpcContainer? container, IEnumerable<StockLine>? lines)
     {
         Container = container;
 
@@ -80,24 +80,24 @@ internal readonly struct SourceStock : INpcEpochScoped
 
     /// <summary>The container itself. Null for a defaulted value, which is never
     /// usable.</summary>
-    internal INpcContainer? Container { get; }
+    public INpcContainer? Container { get; }
 
     /// <summary>What it was seen to hold, in the order it was read.</summary>
-    internal IReadOnlyList<StockLine> Lines => _lines ?? Array.Empty<StockLine>();
+    public IReadOnlyList<StockLine> Lines => _lines ?? Array.Empty<StockLine>();
 
     /// <summary>The container's name, or empty. Also the tie-break that makes
     /// source selection deterministic.</summary>
-    internal string Key => Container == null ? string.Empty : Container.Key ?? string.Empty;
+    public string Key => Container == null ? string.Empty : Container.Key ?? string.Empty;
 
     /// <summary>The world load the container's name was minted in.</summary>
     public NpcWorldEpoch Epoch => Container == null ? NpcWorldEpoch.Unknown : Container.Epoch;
 
     /// <summary>Where it stands, for deciding whether to walk over.</summary>
-    internal NpcPoint Position => Container == null ? default : Container.Position;
+    public NpcPoint Position => Container == null ? default : Container.Position;
 
     /// <summary>Whether an NPC may take from it <b>right now</b>. Re-read on
     /// every call on purpose.</summary>
-    internal bool IsUsable => Container != null && Container.Access.CanTake && _lines != null;
+    public bool IsUsable => Container != null && Container.Access.CanTake && _lines != null;
 
     /// <summary>How many units of one item this job may plan on: what was seen,
     /// less what other jobs have already set aside.
@@ -129,7 +129,7 @@ internal readonly struct SourceStock : INpcEpochScoped
     /// <summary>How many units of one item it was seen to hold. Summed rather
     /// than first-wins, because two lines for one item mean both and dropping
     /// one under-reports the chest.</summary>
-    internal int UnitsOf(string? item)
+    public int UnitsOf(string? item)
     {
         if (string.IsNullOrEmpty(item))
         {
