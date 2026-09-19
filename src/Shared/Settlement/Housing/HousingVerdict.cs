@@ -92,7 +92,14 @@ internal enum HousingRefusal
     /// is theirs, and this never takes one.</summary>
     AlreadyClaimed = 5,
 
-    /// <summary>Outside the settlement it would have to belong to.</summary>
+    /// <summary>Outside the settlement it would have to belong to.
+    ///
+    /// Foreman's own adapter filters by the designation's <c>Contains</c> while
+    /// collecting, so in that product this verdict does not arise — a
+    /// neighbour's bed is noise in a readout, not advice, and counting it would
+    /// let their longhouse crowd out the player's own beds. The rule stays
+    /// because it belongs to the rules, and a caller that hands over beds it has
+    /// not filtered is owed an answer rather than a wrong one.</summary>
     OutsideSettlement = 6,
 
     /// <summary>The measurement could not be taken. <b>Not the same as

@@ -108,12 +108,20 @@ internal sealed class WorldHousing
         return HousingCapacity.Measure(facts, truncated, !IsGroundFullyLoaded(area, centre));
     }
 
-    /// <summary>One bed and the position it was found at.
+    /// <summary>One bed inside the settlement, and the position it was found at.
     ///
     /// The position is carried rather than re-read because
     /// <c>bed.transform.position</c> is a native interop call and the survey
     /// wanted it four times per bed — to filter, to name the place, to ask about
-    /// the fire, and to re-check containment.</summary>
+    /// the fire, and to re-check containment.
+    ///
+    /// <b>"Inside the settlement" is part of the type, not a hope.</b> This is
+    /// private and <see cref="TryFindBeds"/> is its only constructor, called
+    /// only after the designation's own <c>Contains</c> has passed — which is
+    /// what lets <see cref="Measure(FoundBed)"/> report
+    /// <c>insideSettlement: true</c> without paying for the test twice. Anything
+    /// that stops filtering there has to stop making these, so the two cannot
+    /// drift apart silently.</summary>
     private readonly struct FoundBed
     {
         public FoundBed(Bed bed, Vector3 at)
