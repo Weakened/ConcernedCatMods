@@ -79,7 +79,10 @@ internal sealed class StewardRuntime
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _records = new StewardRecordStore(recordRoot);
-        _journal = new RecordBackedJournal(SaveRecord);
+        // A lambda rather than a method group: SaveRecord grew two optional
+        // parameters for the quest's write-before-you-believe-it ordering, and
+        // a method group with optional parameters does not convert.
+        _journal = new RecordBackedJournal(open => SaveRecord(open));
         _npc = new StewardNpcAdoption(
             NpcRoleRegistry.Shared, new StewardNpcRole(recordRoot), message => _log(message));
         _quest = new StewardQuest(new RuntimeQuestRecorder(this));

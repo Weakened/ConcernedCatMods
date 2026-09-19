@@ -136,7 +136,7 @@ internal sealed class StewardAppearance
 
         try
         {
-            vis.SetHairItem(hair);
+            vis.SetHairItem(Hash(hair));
             return true;
         }
         catch (Exception exception)
@@ -185,10 +185,10 @@ internal sealed class StewardAppearance
 
             try
             {
-                vis.SetChestItem(outfit.Chest);
+                vis.SetChestItem(Hash(outfit.Chest));
                 if (outfit.Legs.Length != 0)
                 {
-                    vis.SetLegItem(outfit.Legs);
+                    vis.SetLegItem(Hash(outfit.Legs));
                 }
 
                 Wearing = outfit.Describe;
@@ -205,7 +205,7 @@ internal sealed class StewardAppearance
 
         Complain(
             "None of the clothing the Steward was to wear exists in this game build, so she is " +
-            "wearing whatever she was cloned from. Check [Steward] SunnivaGarment.");
+            "wearing whatever she was cloned from. Check [Appearance] Garment.");
         return false;
     }
 
@@ -231,6 +231,15 @@ internal sealed class StewardAppearance
             return false;
         }
     }
+
+    /// <summary>A prefab name as the equipment slots take it.
+    ///
+    /// <c>VisEquipment</c>'s setters take a hash rather than a name, and the
+    /// hash is vanilla's own <c>GetStableHashCode</c> - the same function the
+    /// game uses to turn a name into the number it stores in a ZDO. Computing
+    /// it any other way would produce a number nothing recognises, and an
+    /// invisible garment rather than an error.</summary>
+    private static int Hash(string prefabName) => prefabName.GetStableHashCode();
 
     private static Vector3 ToVector(in LookColour colour) =>
         new Vector3(colour.Red, colour.Green, colour.Blue);
