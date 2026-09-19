@@ -69,6 +69,22 @@ internal enum PlacementRefusal
     /// <summary>The blueprint asked for a piece the game does not have under
     /// that name. Never substituted.</summary>
     NoSuchPiece = 10,
+
+    /// <summary>The site is inside a location the game forbids building in -
+    /// <c>Location.IsInsideNoBuildLocation</c>.</summary>
+    NoBuildZone = 11,
+
+    /// <summary>The piece itself declares a placement constraint - only in this
+    /// biome, not in a dungeon, only on cultivated ground, not on a tilting
+    /// surface - that either fails here or that this runtime cannot judge.
+    ///
+    /// <b>The second case is the point.</b> Vanilla's placement ghost weighs a
+    /// dozen of these and an NPC cannot drive the ghost, so each one this
+    /// runtime does not reimplement has to be a refusal naming the constraint.
+    /// The alternative is a containment that lives in a data file - "the pieces
+    /// we happen to use declare none of them" - which evaporates the day
+    /// somebody adds a piece, with no test going red.</summary>
+    Constraint = 12,
 }
 
 /// <summary>The verdict on one placement.</summary>
@@ -132,8 +148,23 @@ internal interface IPlacementProbe
     /// requires no station answers <see cref="ProbeAnswer.Yes"/>.</summary>
     ProbeAnswer StationInRange(in PiecePlacement placement);
 
-    /// <summary>Whether the ground, biome and terrain accept this piece.
-    /// </summary>
+    /// <summary>Whether the site is outside every location the game forbids
+    /// building in - <c>Location.IsInsideNoBuildLocation</c>.</summary>
+    ProbeAnswer OutsideNoBuildZone(in PiecePlacement placement);
+
+    /// <summary>Whether every placement constraint the piece itself declares is
+    /// satisfied here, <b>and understood at all</b>.</summary>
+    /// <param name="constraint">Which constraint failed, or which one this
+    /// runtime does not implement. Named, because it is the only way a player or
+    /// a later reader learns why a wall will not go up.</param>
+    /// <returns><see cref="ProbeAnswer.Yes"/> only when every constraint the
+    /// piece declares was both understood and satisfied;
+    /// <see cref="ProbeAnswer.No"/> when one is understood and fails; and
+    /// <see cref="ProbeAnswer.CouldNotTell"/> when the piece declares one this
+    /// runtime does not judge.</returns>
+    ProbeAnswer ConstraintsAllow(in PiecePlacement placement, out string constraint);
+
+    /// <summary>Whether the ground and terrain accept this piece.</summary>
     ProbeAnswer GroundAllows(in PiecePlacement placement);
 
     /// <summary>Whether the space is clear.</summary>
@@ -231,6 +262,26 @@ internal static class PlacementGate
         }
 
         verdict = Ask(
+            () => probe.OutsideNoBuildZone(in at),
+            PlacementRefusal.NoBuildZone,
+            "the game forbids building at that place");
+        if (!verdict.MayPlace)
+        {
+            return verdict;
+        }
+
+        // The piece's own constraints, and the one check whose refusal has to
+        // carry a name from the probe rather than a sentence from here: a piece
+        // that declares something this runtime does not judge must say WHICH
+        // thing, or the next person to add a piece to a blueprint has a wall
+        // that will not go up and nothing to read.
+        verdict = AskAboutConstraints(probe, at);
+        if (!verdict.MayPlace)
+        {
+            return verdict;
+        }
+
+        verdict = Ask(
             () => probe.StationInRange(in at),
             PlacementRefusal.Station,
             "the crafting station this piece needs is not in range");
@@ -275,6 +326,38 @@ internal static class PlacementGate
         }
 
         return PlacementVerdict.Allowed;
+    }
+
+    private static PlacementVerdict AskAboutConstraints(IPlacementProbe probe, PiecePlacement at)
+    {
+        ProbeAnswer answer;
+        string constraint;
+        try
+        {
+            answer = probe.ConstraintsAllow(in at, out constraint);
+        }
+        catch (Exception exception)
+        {
+            return PlacementVerdict.Refused(
+                PlacementRefusal.Unchecked,
+                "the piece's own constraints could not be read (" + exception.Message +
+                "), so nothing is placed");
+        }
+
+        if (answer == ProbeAnswer.Yes)
+        {
+            return PlacementVerdict.Allowed;
+        }
+
+        string named = string.IsNullOrEmpty(constraint) ? "a constraint it did not name" : constraint;
+        return answer == ProbeAnswer.No
+            ? PlacementVerdict.Refused(
+                PlacementRefusal.Constraint, "the piece may not be built there: " + named)
+            : PlacementVerdict.Refused(
+                PlacementRefusal.Constraint,
+                "the piece declares " + named +
+                ", which this runtime does not judge, so nothing is placed rather than being " +
+                "placed where the game would have refused it");
     }
 
     private static PlacementVerdict Ask(

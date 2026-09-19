@@ -80,6 +80,7 @@ public sealed class PlacementAuthorityTests
     [InlineData("station", "Station")]
     [InlineData("ground", "Ground")]
     [InlineData("space", "Space")]
+    [InlineData("nobuild", "NoBuildZone")]
     public void Every_check_can_refuse_on_its_own_and_says_which_one_it_was(
         string check, string expectedName)
     {
@@ -97,6 +98,7 @@ public sealed class PlacementAuthorityTests
             case "station": probe.Station = ProbeAnswer.No; break;
             case "ground": probe.Ground = ProbeAnswer.No; break;
             case "space": probe.Space = ProbeAnswer.No; break;
+            case "nobuild": probe.NoBuild = ProbeAnswer.No; break;
         }
 
         Assert.Equal(expected, May(probe).Refusal);
@@ -110,6 +112,7 @@ public sealed class PlacementAuthorityTests
     [InlineData("station")]
     [InlineData("ground")]
     [InlineData("space")]
+    [InlineData("nobuild")]
     public void A_check_that_could_not_be_made_refuses_rather_than_assuming_a_yes(string check)
     {
         var probe = new FakeProbe();
@@ -122,6 +125,7 @@ public sealed class PlacementAuthorityTests
             case "station": probe.Station = ProbeAnswer.CouldNotTell; break;
             case "ground": probe.Ground = ProbeAnswer.CouldNotTell; break;
             case "space": probe.Space = ProbeAnswer.CouldNotTell; break;
+            case "nobuild": probe.NoBuild = ProbeAnswer.CouldNotTell; break;
         }
 
         // This is CF-SET-003's go/no-go in one assertion: a check that cannot be
@@ -200,7 +204,11 @@ public sealed class PlacementAuthorityTests
         May(probe);
 
         Assert.Equal(
-            new[] { "host", "exists", "loaded", "ward", "station", "ground", "space" },
+            new[]
+            {
+                "host", "exists", "loaded", "ward", "nobuild", "constraints", "station",
+                "ground", "space",
+            },
             probe.Asked);
     }
 
@@ -211,6 +219,47 @@ public sealed class PlacementAuthorityTests
             new FakeProbe { Ward = ProbeAnswer.No }, ConstructionRig.Tally(("Wood", 0)));
 
         Assert.Equal(PlacementRefusal.Ward, verdict.Refusal);
+    }
+
+    [Fact]
+    public void A_constraint_this_runtime_does_not_judge_refuses_and_names_it()
+    {
+        // The containment that used to live in a data file - "the four wood
+        // pieces we happen to use declare none of these" - is now a check. A
+        // fifth piece that declares one gets a refusal, not a wall built where
+        // the game would have refused it.
+        PlacementVerdict verdict = May(new FakeProbe
+        {
+            Constraints = ProbeAnswer.CouldNotTell,
+            Constraint = "that it may only be built on cultivated ground",
+        });
+
+        Assert.Equal(PlacementRefusal.Constraint, verdict.Refusal);
+        Assert.Contains("cultivated ground", verdict.Check);
+        Assert.Contains("does not judge", verdict.Check);
+    }
+
+    [Fact]
+    public void A_constraint_that_is_judged_and_fails_reads_as_a_refusal_rather_than_a_gap()
+    {
+        PlacementVerdict verdict = May(new FakeProbe
+        {
+            Constraints = ProbeAnswer.No,
+            Constraint = "it may not be built inside a dungeon, and that place is inside one",
+        });
+
+        Assert.Equal(PlacementRefusal.Constraint, verdict.Refusal);
+        Assert.Contains("may not be built there", verdict.Check);
+        Assert.DoesNotContain("does not judge", verdict.Check);
+    }
+
+    [Fact]
+    public void A_constraint_refusal_that_names_nothing_still_says_so()
+    {
+        PlacementVerdict verdict = May(new FakeProbe { Constraints = ProbeAnswer.CouldNotTell });
+
+        Assert.Equal(PlacementRefusal.Constraint, verdict.Refusal);
+        Assert.Contains("did not name", verdict.Check);
     }
 
     [Fact]

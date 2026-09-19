@@ -134,6 +134,12 @@ internal sealed class FakeProbe : IPlacementProbe
 
     internal ProbeAnswer Space { get; set; } = ProbeAnswer.Yes;
 
+    internal ProbeAnswer NoBuild { get; set; } = ProbeAnswer.Yes;
+
+    internal ProbeAnswer Constraints { get; set; } = ProbeAnswer.Yes;
+
+    internal string Constraint { get; set; } = string.Empty;
+
     internal string? ThrowsFrom { get; set; }
 
     public ProbeAnswer MayActAsHost() => Answer("host", Host);
@@ -143,6 +149,14 @@ internal sealed class FakeProbe : IPlacementProbe
     public ProbeAnswer IsLoaded(in PiecePlacement placement) => Answer("loaded", Loaded);
 
     public ProbeAnswer WardAllows(in PiecePlacement placement) => Answer("ward", Ward);
+
+    public ProbeAnswer OutsideNoBuildZone(in PiecePlacement placement) => Answer("nobuild", NoBuild);
+
+    public ProbeAnswer ConstraintsAllow(in PiecePlacement placement, out string constraint)
+    {
+        constraint = Constraint;
+        return Answer("constraints", Constraints);
+    }
 
     public ProbeAnswer StationInRange(in PiecePlacement placement) => Answer("station", Station);
 

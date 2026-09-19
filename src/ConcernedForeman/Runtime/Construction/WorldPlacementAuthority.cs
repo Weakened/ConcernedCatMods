@@ -175,6 +175,54 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
     }
 
     /// <inheritdoc />
+    public ProbeAnswer OutsideNoBuildZone(in PiecePlacement placement)
+    {
+        try
+        {
+            ZoneSystem zones = ZoneSystem.instance;
+            if (zones == null || !zones.IsZoneLoaded(At(placement)))
+            {
+                // The no-build locations are read off loaded objects, so over
+                // unloaded ground the answer is silence rather than "no
+                // location here" - the same reasoning as the ward.
+                return ProbeAnswer.CouldNotTell;
+            }
+
+            return Location.IsInsideNoBuildLocation(At(placement))
+                ? ProbeAnswer.No
+                : ProbeAnswer.Yes;
+        }
+        catch (Exception)
+        {
+            return ProbeAnswer.CouldNotTell;
+        }
+    }
+
+    /// <inheritdoc />
+    public ProbeAnswer ConstraintsAllow(in PiecePlacement placement, out string constraint)
+    {
+        constraint = string.Empty;
+        try
+        {
+            ZoneSystem zones = ZoneSystem.instance;
+            if (zones == null || !zones.IsZoneLoaded(At(placement)))
+            {
+                constraint = "a loaded world to judge its constraints against";
+                return ProbeAnswer.CouldNotTell;
+            }
+
+            GameObject? found = _prefabs(placement.Piece.Prefab);
+            Piece? piece = found == null ? null : found.GetComponent<Piece>();
+            return PieceConstraints.Judge(piece, At(placement), out constraint);
+        }
+        catch (Exception exception)
+        {
+            constraint = "its constraints could not be read (" + exception.Message + ")";
+            return ProbeAnswer.CouldNotTell;
+        }
+    }
+
+    /// <inheritdoc />
     public ProbeAnswer GroundAllows(in PiecePlacement placement)
     {
         try

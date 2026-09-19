@@ -502,7 +502,7 @@ public class ZNetView : MonoBehaviour
     public void Destroy() => Destroyed = true;
 }
 
-public class Character : MonoBehaviour
+public partial class Character : MonoBehaviour
 {
     public Action? m_onDeath;
 
@@ -699,6 +699,95 @@ public partial class Piece
     public Requirement[]? m_resources;
 
     public CraftingStation? m_craftingStation;
+
+    // Every placement constraint the real Piece declares, with the real names
+    // and the real types, read out of the installed assembly's own metadata.
+    // The restrictive value is `true` for all but the two marked.
+    public bool m_enabled = true;                 // restrictive when FALSE
+
+    public bool m_allowedInDeepSnow = true;       // restrictive when FALSE
+
+    public bool m_isUpgrade;
+
+    public bool m_repairPiece;
+
+    public bool m_removePiece;
+
+    public bool m_groundPiece;
+
+    public bool m_groundOnly;
+
+    public bool m_cultivatedGroundOnly;
+
+    public bool m_vegetationGroundOnly;
+
+    public bool m_waterPiece;
+
+    public bool m_noInWater;
+
+    public bool m_notOnWood;
+
+    public bool m_notOnTiltingSurface;
+
+    public bool m_inCeilingOnly;
+
+    public bool m_notOnFloor;
+
+    public bool m_onlyInTeleportArea;
+
+    public bool m_requireDeepSnow;
+
+    public bool m_allowedInDungeons;
+
+    public float m_spaceRequirement;
+
+    public Piece? m_mustConnectTo;
+
+    public List<Piece>? m_blockingPieces;
+
+    public Heightmap.Biome m_onlyInBiome = Heightmap.Biome.None;
+}
+
+/// <summary>Only the biome enum and the point lookup the constraint reader
+/// uses. The real one is a flags enum, which is why a piece can say "meadows or
+/// plains" and why the mask test is a bitwise and.</summary>
+public static class Heightmap
+{
+    [Flags]
+    public enum Biome
+    {
+        None = 0,
+        Meadows = 1,
+        Swamp = 2,
+        Mountain = 4,
+        BlackForest = 8,
+        Plains = 16,
+    }
+
+    /// <summary>What a test says is where. Meadows unless it says otherwise.
+    /// </summary>
+    public static Biome Here { get; set; } = Biome.Meadows;
+
+    public static Biome FindBiome(Vector3 point) => Here;
+}
+
+/// <summary>`Character.InInterior(point)` is how the game asks whether a place
+/// is inside a dungeon, and it is one of the two constraints this runtime
+/// judges rather than refuses.</summary>
+public partial class Character
+{
+    public static HashSet<string> Interiors { get; } = new HashSet<string>(StringComparer.Ordinal);
+
+    public static bool InInterior(Vector3 position) => Interiors.Contains(ZoneSystem.Key(position));
+}
+
+/// <summary>`Location.IsInsideNoBuildLocation` is vanilla's own no-build zone,
+/// and a gate in its own right.</summary>
+public static class Location
+{
+    public static HashSet<string> NoBuild { get; } = new HashSet<string>(StringComparer.Ordinal);
+
+    public static bool IsInsideNoBuildLocation(Vector3 point) => NoBuild.Contains(ZoneSystem.Key(point));
 }
 
 public class CraftingStation : MonoBehaviour

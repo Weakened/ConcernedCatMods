@@ -30,6 +30,9 @@ public sealed class WorldConstructionAdapterTests : IDisposable
         ZNetScene.instance = new ZNetScene();
         PrivateArea.Access = true;
         Player.m_localPlayer = null;
+        Character.Interiors.Clear();
+        Location.NoBuild.Clear();
+        Heightmap.Here = Heightmap.Biome.Meadows;
     }
 
     private static GameObject Item(string name)
@@ -373,6 +376,133 @@ public sealed class WorldConstructionAdapterTests : IDisposable
         Assert.Equal(ProbeAnswer.CouldNotTell, probe.GroundAllows(in placement));
         Assert.Equal(ProbeAnswer.CouldNotTell, probe.SpaceIsClear(in placement));
         Assert.Equal(ProbeAnswer.CouldNotTell, probe.PieceExists("wood_wall"));
+    }
+
+    // ---- the piece's own constraints -------------------------------------
+
+    [Fact]
+    public void A_plain_piece_that_declares_nothing_passes()
+    {
+        GameObject prefab = PiecePrefab("wood_wall", ("Wood", 2));
+        var probe = new WorldPlacementProbe(() => true);
+        PiecePlacement placement = Placement();
+
+        Assert.Equal(ProbeAnswer.Yes, probe.ConstraintsAllow(in placement, out string named));
+        Assert.Equal(string.Empty, named);
+        Assert.NotNull(prefab);
+    }
+
+    [Theory]
+    [InlineData("groundOnly", "directly on the ground")]
+    [InlineData("cultivated", "cultivated ground")]
+    [InlineData("water", "built on water")]
+    [InlineData("noInWater", "may not be built in water")]
+    [InlineData("tilting", "on a slope")]
+    [InlineData("ceiling", "on a ceiling")]
+    [InlineData("teleport", "teleport area")]
+    [InlineData("deepSnow", "may not be built in deep snow")]
+    [InlineData("space", "clear space around it")]
+    [InlineData("connect", "must connect to something")]
+    public void A_constraint_this_runtime_does_not_implement_refuses_and_says_which(
+        string flag, string expected)
+    {
+        GameObject prefab = PiecePrefab("wood_wall", ("Wood", 2));
+        Piece piece = prefab.GetComponent<Piece>()!;
+        switch (flag)
+        {
+            case "groundOnly": piece.m_groundOnly = true; break;
+            case "cultivated": piece.m_cultivatedGroundOnly = true; break;
+            case "water": piece.m_waterPiece = true; break;
+            case "noInWater": piece.m_noInWater = true; break;
+            case "tilting": piece.m_notOnTiltingSurface = true; break;
+            case "ceiling": piece.m_inCeilingOnly = true; break;
+            case "teleport": piece.m_onlyInTeleportArea = true; break;
+            case "deepSnow": piece.m_allowedInDeepSnow = false; break;
+            case "space": piece.m_spaceRequirement = 2f; break;
+            case "connect": piece.m_mustConnectTo = new GameObject("anchor").Add(new Piece()); break;
+        }
+
+        var probe = new WorldPlacementProbe(() => true);
+        PiecePlacement placement = Placement();
+
+        // CouldNotTell, not No: the piece may well be placeable there, and this
+        // runtime has no way to find out. Either way it is not placed.
+        Assert.Equal(ProbeAnswer.CouldNotTell, probe.ConstraintsAllow(in placement, out string named));
+        Assert.Contains(expected, named);
+    }
+
+    [Fact]
+    public void A_permission_that_is_off_is_as_much_a_constraint_as_a_prohibition_that_is_on()
+    {
+        GameObject prefab = PiecePrefab("wood_wall", ("Wood", 2));
+        prefab.GetComponent<Piece>()!.m_enabled = false;
+
+        var probe = new WorldPlacementProbe(() => true);
+        PiecePlacement placement = Placement();
+
+        Assert.Equal(ProbeAnswer.CouldNotTell, probe.ConstraintsAllow(in placement, out string named));
+        Assert.Contains("not a piece the game currently offers", named);
+    }
+
+    [Fact]
+    public void A_dungeon_is_judged_rather_than_refused()
+    {
+        GameObject prefab = PiecePrefab("wood_wall", ("Wood", 2));
+        prefab.GetComponent<Piece>()!.m_allowedInDungeons = false;
+        var probe = new WorldPlacementProbe(() => true);
+        PiecePlacement placement = Placement();
+
+        // Out in the world it passes, because this runtime really can ask.
+        Assert.Equal(ProbeAnswer.Yes, probe.ConstraintsAllow(in placement, out _));
+
+        Character.Interiors.Add(ZoneSystem.Key(new Vector3(0f, 0f, 0f)));
+        Assert.Equal(ProbeAnswer.No, probe.ConstraintsAllow(in placement, out string named));
+        Assert.Contains("inside a dungeon", named);
+    }
+
+    [Fact]
+    public void A_biome_restriction_is_judged_rather_than_refused()
+    {
+        GameObject prefab = PiecePrefab("wood_wall", ("Wood", 2));
+        prefab.GetComponent<Piece>()!.m_onlyInBiome = Heightmap.Biome.Mountain | Heightmap.Biome.Plains;
+        var probe = new WorldPlacementProbe(() => true);
+        PiecePlacement placement = Placement();
+
+        Heightmap.Here = Heightmap.Biome.Meadows;
+        Assert.Equal(ProbeAnswer.No, probe.ConstraintsAllow(in placement, out string named));
+        Assert.Contains("Meadows", named);
+
+        // A flags mask, so one of the two is enough.
+        Heightmap.Here = Heightmap.Biome.Plains;
+        Assert.Equal(ProbeAnswer.Yes, probe.ConstraintsAllow(in placement, out _));
+    }
+
+    [Fact]
+    public void Constraints_over_unloaded_ground_are_not_judged_at_all()
+    {
+        PiecePrefab("wood_wall", ("Wood", 2));
+        ZoneSystem.instance!.Unloaded.Add(ZoneSystem.Key(new Vector3(0f, 0f, 0f)));
+
+        var probe = new WorldPlacementProbe(() => true);
+        PiecePlacement placement = Placement();
+
+        Assert.Equal(ProbeAnswer.CouldNotTell, probe.ConstraintsAllow(in placement, out string named));
+        Assert.Contains("loaded world", named);
+    }
+
+    [Fact]
+    public void A_no_build_location_is_its_own_gate()
+    {
+        var probe = new WorldPlacementProbe(() => true);
+        PiecePlacement placement = Placement();
+
+        Assert.Equal(ProbeAnswer.Yes, probe.OutsideNoBuildZone(in placement));
+
+        Location.NoBuild.Add(ZoneSystem.Key(new Vector3(0f, 0f, 0f)));
+        Assert.Equal(ProbeAnswer.No, probe.OutsideNoBuildZone(in placement));
+
+        ZoneSystem.instance = null;
+        Assert.Equal(ProbeAnswer.CouldNotTell, probe.OutsideNoBuildZone(in placement));
     }
 
     // ---- the placer ------------------------------------------------------
