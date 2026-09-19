@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 
 namespace TheConcernedCat.ConcernedCartographer.Storage;
@@ -22,13 +23,11 @@ namespace TheConcernedCat.ConcernedCartographer.Storage;
 /// everything in it is a name this build writes for itself. <c>GetFiles</c>
 /// does not return subdirectories, so a marker under <see cref="FolderName"/>
 /// is invisible to that listing and cannot be mistaken for a player's own data.
-/// A bare rename would have been: <c>author-id.dat</c> is not in
-/// <c>CartographerFirstRunFiles.Names</c>, so every brand-new player would have
-/// been classified as a returning one and the #264 introduction would never
-/// have run again for anybody.
-///
-/// <c>backups/</c> already sits beside it and survives updates, so this is the
-/// directory layout the product already has rather than a new idea.</summary>
+/// A bare rename would have been: <c>author-id.dat</c> in the product directory
+/// is a name that listing does not recognise, so every brand-new player would
+/// have been classified as a returning one and the #264 introduction would
+/// never have run again for anybody. That regression shipped once (#343) and
+/// this is the shape that cannot reproduce it.</summary>
 internal static class MarkerFile
 {
     /// <summary>The subfolder. Named for what is in it: state the mod keeps,
@@ -38,127 +37,254 @@ internal static class MarkerFile
     /// <summary>Deliberately not <c>.txt</c>, <c>.cfg</c>, <c>.json</c>,
     /// <c>.ini</c> or <c>.yml</c>. The subfolder is what fixes #304; this is
     /// so the file does not read as configuration if somebody does find it.
+    ///
+    /// <b>Changing this is a migration, not a rename.</b> The prior-location
+    /// lists callers pass are historical facts and must be written as literals,
+    /// never derived from this constant — deriving them would silently rewrite
+    /// history and lose every affected profile's identity the way #343 did.
     /// </summary>
     public const string Extension = ".dat";
 
-    /// <summary>The outcome of looking for a marker, for the caller's log.
-    /// </summary>
-    internal enum Adoption
+    /// <summary>What a search for a marker concluded.</summary>
+    internal enum MarkerSearch
     {
-        /// <summary>Nothing to do: no marker and nothing to adopt.</summary>
-        Nothing,
+        /// <summary>A usable value was found, from the marker or from a prior
+        /// location that has now been adopted.</summary>
+        Found,
 
-        /// <summary>The marker was already there.</summary>
-        AlreadyThere,
+        /// <summary>Nothing is anywhere. The caller may create a value.
+        /// </summary>
+        NothingAnywhere,
 
-        /// <summary>An older build's file became the marker.</summary>
-        Adopted,
-
-        /// <summary>An older build's file is there and could not be adopted.
-        /// It was <b>not</b> deleted.</summary>
-        Failed,
+        /// <summary>A prior location <b>exists</b> and could not be read, or did
+        /// not hold something usable.
+        ///
+        /// <b>The caller must not create a value.</b> Creating one writes a
+        /// marker that will itself read as usable on the next start, and from
+        /// then on nothing looks at the prior file again — which is how one bad
+        /// moment permanently orphaned a profile's identity even after the
+        /// marker's contents were being validated.</summary>
+        PriorFileUnread,
     }
 
-    /// <summary>The marker's path, adopting a value an older build left in the
-    /// product directory if one is there and the marker is not.
+    /// <summary>Finds the value a marker should hold, adopting a prior location
+    /// when there is one.
     ///
-    /// <b>Nothing is deleted unread.</b> The old file's contents are read,
-    /// checked by <paramref name="isUsable"/>, written to the marker, and read
-    /// back; only when the round trip agrees is the old file removed. A failure
-    /// at any point leaves the old file exactly where it was, so the next start
-    /// tries again — which is what the first version of this claimed and did
-    /// not do: it deleted the legacy file whenever a marker existed, so one
-    /// interrupted copy destroyed a player's identity on the following start.
+    /// <b>A prior file that still exists wins.</b> Its continued presence is
+    /// proof that adoption never completed, and it predates the marker — so it
+    /// is the value the profile's pins and routes were actually authored under,
+    /// and the marker beside it is either a partial copy of it or something this
+    /// build minted during a failure. Preferring the marker left real identities
+    /// orphaned while <c>author-id.txt</c> sat unread in the settings folder for
+    /// the life of the profile, which is also the literal #304 report.
     ///
-    /// Every failure is reported through <paramref name="log"/>. A migration
-    /// that can silently lose the identity the atlas is keyed on must not be
-    /// the one thing in this product that says nothing when it fails.</summary>
+    /// <b>Newest prior location first.</b> Where two exist, the later build's is
+    /// the one the atlas was most recently keyed on.
+    ///
+    /// <b>Nothing is deleted unread.</b> Contents are read, checked, staged to a
+    /// temporary file, copied onto the marker, and <i>the marker</i> is then read
+    /// back; only when that round trip agrees is any prior file removed.</summary>
     /// <param name="directory">The product's data directory.</param>
     /// <param name="name">The marker file name, including
     /// <see cref="Extension"/>.</param>
-    /// <param name="legacyName">What the same marker was called before, in
-    /// <paramref name="directory"/> itself.</param>
-    /// <param name="isUsable">Whether adopted contents are worth keeping. A
-    /// marker whose content this build cannot use is not adopted, so the
-    /// caller writes a fresh one rather than inheriting a damaged value.</param>
-    /// <param name="log">Told why an adoption did not happen.</param>
-    public static string Adopt(
+    /// <param name="priorNames">Where this marker has lived before, relative to
+    /// <paramref name="directory"/>, <b>newest first</b>. Literals, not derived
+    /// from <see cref="Extension"/>.</param>
+    /// <param name="isUsable">Whether contents are worth keeping. Required:
+    /// defaulting it to "anything will do" made the unsafe behaviour the one you
+    /// get by leaving an argument out.</param>
+    /// <param name="log">Told why an adoption did not happen. Required, for the
+    /// same reason.</param>
+    /// <param name="path">Where the marker belongs, whether or not one is there.
+    /// Always set.</param>
+    /// <param name="contents">The usable value found, or null.</param>
+    public static MarkerSearch Resolve(
         string directory,
         string name,
-        string legacyName,
-        Func<string, bool>? isUsable = null,
-        Action<string>? log = null)
+        IReadOnlyList<string> priorNames,
+        Func<string, bool> isUsable,
+        Action<string> log,
+        out string path,
+        out string? contents)
     {
         if (string.IsNullOrEmpty(directory))
         {
             throw new ArgumentException("A directory is required.", nameof(directory));
         }
 
-        string marker;
-        string legacy;
-        try
+        if (isUsable == null)
         {
-            marker = Path.Combine(directory, FolderName, name);
-            legacy = Path.Combine(directory, legacyName);
-        }
-        catch (ArgumentException)
-        {
-            // .NET Framework's Path.Combine rejects characters .NET Core
-            // accepts. A bad config path must not take the plugin down with
-            // it — the caller gets a path it will fail to write, and says so.
-            Report(log, "the marker path could not be composed");
-            return Path.Combine(directory, name);
+            throw new ArgumentNullException(nameof(isUsable));
         }
 
-        Adopt(marker, legacy, isUsable, log);
-        return marker;
-    }
+        path = Path.Combine(directory, FolderName, name);
+        contents = null;
+        bool priorFileSeen = false;
 
-    private static void Adopt(string marker, string legacy, Func<string, bool>? isUsable, Action<string>? log)
-    {
         try
         {
-            if (File.Exists(marker))
+            // 1. Prior locations, newest first. A file still sitting in one of
+            //    them means adoption never finished, and it predates the marker.
+            foreach (string priorName in priorNames ?? Array.Empty<string>())
             {
-                // Already adopted, or written fresh. The old file is left
-                // alone: this build does not read it, and deleting somebody's
-                // data because we happen to have our own copy is not ours to
-                // do. It costs one listed file in a folder nothing scans.
-                return;
+                if (string.IsNullOrEmpty(priorName))
+                {
+                    continue;
+                }
+
+                string prior = Path.Combine(directory, priorName);
+                if (!Exists(prior))
+                {
+                    continue;
+                }
+
+                priorFileSeen = true;
+                if (!TryRead(prior, isUsable, log, out string? found) || found is null)
+                {
+                    continue;
+                }
+
+                if (TryWrite(path, found, log))
+                {
+                    // Every prior copy, not only the one adopted from. Leaving
+                    // the others behind keeps a raw GUID visible in the config
+                    // editor for the life of the profile.
+                    RemoveAll(directory, priorNames, log);
+                }
+
+                contents = found;
+                return MarkerSearch.Found;
             }
 
-            if (!File.Exists(legacy))
+            // 2. The marker, read rather than merely counted.
+            if (TryRead(path, isUsable, log, out string? held))
             {
-                return;
+                contents = held;
+                return MarkerSearch.Found;
             }
-
-            string contents = File.ReadAllText(legacy);
-            if (isUsable != null && !isUsable(contents))
-            {
-                Report(log, $"\"{Path.GetFileName(legacy)}\" did not contain something this build can use, " +
-                            "so it was left alone and a new one will be written");
-                return;
-            }
-
-            Directory.CreateDirectory(Path.GetDirectoryName(marker)!);
-            File.WriteAllText(marker, contents);
-
-            // Read it back before removing the only other copy. A write that
-            // reported success and produced something else is exactly the
-            // case that costs a player their identity.
-            if (!string.Equals(File.ReadAllText(marker), contents, StringComparison.Ordinal))
-            {
-                Report(log, $"\"{Path.GetFileName(marker)}\" did not read back as written, so " +
-                            $"\"{Path.GetFileName(legacy)}\" was kept");
-                return;
-            }
-
-            File.Delete(legacy);
         }
         catch (Exception exception)
         {
-            Report(log, $"{exception.GetType().Name} while moving \"{Path.GetFileName(legacy)}\" " +
-                        $"into \"{FolderName}\"; it was left where it is");
+            Report(log, $"{exception.GetType().Name} while looking for \"{name}\"; " +
+                        "nothing was moved or removed");
+            return MarkerSearch.PriorFileUnread;
+        }
+
+        return priorFileSeen ? MarkerSearch.PriorFileUnread : MarkerSearch.NothingAnywhere;
+    }
+
+    /// <summary>Writes a marker, staged through a temporary file the way every
+    /// other writer in this product does, and verified <b>at its destination</b>.
+    ///
+    /// The marker was the only thing here written straight onto its destination,
+    /// and it is the one file whose loss cannot be recovered from anywhere else.
+    /// Reading back the <i>temporary</i> file instead would be near-tautological:
+    /// it is the destination that a filter driver, a disk quota or a
+    /// network-backed config folder can accept and then truncate, and a prior
+    /// file is deleted on the strength of this returning true.</summary>
+    public static bool TryWrite(string path, string contents, Action<string> log)
+    {
+        string temporary = path + ".tmp";
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(temporary, contents);
+            File.Copy(temporary, path, overwrite: true);
+
+            if (!string.Equals(File.ReadAllText(path), contents, StringComparison.Ordinal))
+            {
+                Report(log, $"\"{Path.GetFileName(path)}\" did not read back as written, so " +
+                            "nothing older was removed");
+                Delete(temporary, null);
+                return false;
+            }
+
+            Delete(temporary, null);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            Report(log, $"{exception.GetType().Name} while writing \"{Path.GetFileName(path)}\"");
+            Delete(temporary, null);
+            return false;
+        }
+    }
+
+    private static bool Exists(string path)
+    {
+        try
+        {
+            return File.Exists(path);
+        }
+        catch (Exception)
+        {
+            // Cannot even ask. Treated as present, because the expensive mistake
+            // is deciding nothing is there and creating a second identity.
+            return true;
+        }
+    }
+
+    /// <summary>Reads a candidate, and <b>says so when it cannot</b>.
+    ///
+    /// Swallowing the exception here was worse than it looked: the caller's own
+    /// reporting catch can never see a failure this method has already eaten, so
+    /// an identity could be replaced or created with nothing at all in the log —
+    /// under a doc comment promising every failure is reported.</summary>
+    private static bool TryRead(
+        string path, Func<string, bool> isUsable, Action<string> log, out string? contents)
+    {
+        contents = null;
+        try
+        {
+            if (!File.Exists(path))
+            {
+                return false;
+            }
+
+            string text = File.ReadAllText(path);
+            if (!isUsable(text))
+            {
+                Report(log, $"\"{Path.GetFileName(path)}\" did not contain something this build " +
+                            "can use, so it was left alone");
+                return false;
+            }
+
+            contents = text;
+            return true;
+        }
+        catch (Exception exception)
+        {
+            Report(log, $"{exception.GetType().Name} while reading \"{Path.GetFileName(path)}\"; " +
+                        "it was left where it is");
+            return false;
+        }
+    }
+
+    private static void RemoveAll(
+        string directory, IReadOnlyList<string> priorNames, Action<string> log)
+    {
+        foreach (string priorName in priorNames ?? Array.Empty<string>())
+        {
+            if (!string.IsNullOrEmpty(priorName))
+            {
+                Delete(Path.Combine(directory, priorName), log);
+            }
+        }
+    }
+
+    private static void Delete(string path, Action<string>? log)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception exception)
+        {
+            Report(log, $"{exception.GetType().Name} while removing \"{Path.GetFileName(path)}\"; " +
+                        "it was left where it is");
         }
     }
 

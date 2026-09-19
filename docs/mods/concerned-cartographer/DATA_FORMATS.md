@@ -40,21 +40,38 @@ something else entirely: `CartographerLegacyProbe` decides new-player versus
 returning-player by listing this directory with `Directory.GetFiles` and asking
 whether every name is one this build writes for itself. `GetFiles` does not
 return subdirectories, so a marker under `state` is invisible to it. A rename in
-place would not have been — `author-id.dat` is not in
-`CartographerFirstRunFiles.Names`, so every new player would have been classed
-as a returning one and the #264 introduction would never have run again.
+place would not have been: `author-id.dat` in the product directory was a name
+that listing did not recognise, so every new player was classed as a returning
+one and the #264 introduction could never have run again (#343). Both `.dat`
+names, and the companion sidecar's `.corrupt` quarantine name, are now in
+`CartographerFirstRunFiles` as well, so a file left behind by a failed adoption
+is still not mistaken for a player's own doing.
 
-**Upgrading.** A `.txt` an older build left in the product directory is adopted
-once: read, checked (an author identity must parse as a GUID), copied, read
-back, and only then removed. A failure at any point leaves the old file exactly
-where it is and is written to the log, so the next start tries again. Nothing is
-deleted unread.
+**Upgrading.** Two prior locations are honoured, **newest first**:
+`author-id.dat` in the product directory (the build between, commit `6903a65`)
+and then `author-id.txt` (the original). A file still sitting in either one is
+proof that adoption never finished, and it predates the marker — so it wins over
+the marker beside it, which is either a partial copy of it or a value this build
+minted during a failure.
 
-If adoption never succeeds, a fresh identity is generated. That is not only a
-cosmetic difference: entries this profile wrote under the old identity are then
-owned by an identity it no longer has, and the non-owner-delete policy will
-refuse to delete them. The old file is kept precisely so that case is
-recoverable by hand.
+Adoption reads, checks (an author identity must parse as a GUID), stages to a
+temporary file, copies onto the marker, and reads **the marker** back; only then
+is every prior copy removed. A failure at any point leaves the prior file exactly
+where it is and says why in the log, and the next start tries again.
+
+**A new identity is the last resort.** If a prior file exists but cannot be read,
+no identity is created: creating one writes a marker that reads as usable on every
+later start, and nothing would look at that file again. The session adds no audit
+labels instead, and tries again next time. Minting a value that cannot be saved is
+refused for the same reason — it would be stamped into pin and route records as
+their owner and never come back.
+
+A fresh identity is generated only when there is nothing anywhere to adopt. That
+matters because it is not a cosmetic difference: entries this profile wrote under
+an older identity would then be owned by an identity it no longer has, and the
+non-owner-delete policy would refuse to delete them. A prior file is never
+removed until the marker has been written and read back, precisely so that case
+stays recoverable by hand.
 
 
 ## Road atlas

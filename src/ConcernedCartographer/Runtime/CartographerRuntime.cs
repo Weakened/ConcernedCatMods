@@ -413,7 +413,6 @@ internal sealed class CartographerRuntime : IDisposable
         _renderer.MarkVectorDataDirty();
         _syncTransport.EnsureRegistered();
         _compatibility.Evaluate(_log);
-        ShowOnboardingOnce();
         if (_settings.DrawCalibrationMarkers.Value)
         {
             _renderer.DrawCalibrationMarkers();
@@ -990,6 +989,18 @@ internal sealed class CartographerRuntime : IDisposable
             }
 
             return;
+        }
+
+        // #264/#304: the first-run tip. Asked here rather than when the map
+        // becomes available, because that runs from Minimap.Start and vanilla
+        // does not assign Player.m_localPlayer until Game.SpawnPlayer roughly
+        // eight seconds later — so the earlier call site could never show it
+        // to anybody, and its "the next pass tries again" was true of a pass
+        // that did not exist. Below the enabled gate, because a mod the player
+        // switched off does not get to introduce itself.
+        if (!_onboardingChecked && Player.m_localPlayer != null)
+        {
+            ShowOnboardingOnce();
         }
 
         _companions.Tick(unscaledDeltaTime);
@@ -2006,7 +2017,15 @@ internal sealed class CartographerRuntime : IDisposable
 
     private bool _onboardingChecked;
 
-    /// <summary>One-time first-run tip pointing at the two entry hotkeys.</summary>
+    /// <summary>Where the marker belongs, resolved once per session.</summary>
+    private string? _onboardingMarkerPath;
+
+    /// <summary>One-time first-run tip pointing at the two entry hotkeys.
+    ///
+    /// <b>Asked from the tick, not when the map becomes available.</b> That ran
+    /// from <c>Minimap.Start</c>, and vanilla does not assign
+    /// <c>Player.m_localPlayer</c> until <c>Game.SpawnPlayer</c> — so the only
+    /// call site there ever was could never show it to anybody.</summary>
     private void ShowOnboardingOnce()
     {
         if (_onboardingChecked)
@@ -2014,24 +2033,57 @@ internal sealed class CartographerRuntime : IDisposable
             return;
         }
 
+        // Nothing on this build can show a HUD message: the Character.Message
+        // signature moved, as it did in Valheim 1.0.7. Retire the path for this
+        // session rather than re-testing it every frame for a tip that cannot
+        // appear.
+        //
+        // Deliberately writes no marker. Doing so would suppress a genuine first
+        // run for a real new player. The consequence is honest and worth stating:
+        // if a later game update restores the signature, this profile is still
+        // owed its tip and will get it then.
+        if (!VanillaMessage.Available)
+        {
+            _onboardingChecked = true;
+            return;
+        }
+
+        // The HUD has to exist for a message to land anywhere. VanillaMessage.Show
+        // returns true when the invoke did not throw, which is not the same as a
+        // player having seen it — and the first frame a local player exists is the
+        // frame the HUD is least likely to be ready. Without this the one-time tip
+        // could still be spent unseen, which is the whole failure being fixed.
+        if (MessageHud.instance == null)
+        {
+            return;
+        }
+
         try
         {
-            // The marker lives under "state" so a config editor does not offer
-            // it for editing (#304); it was adopted from an older build's
-            // ".txt" at startup, in one place with the author identity.
-            string path = Persistence.AuthorIdentity.OnboardingMarker.Path;
-            if (System.IO.File.Exists(path))
+            // The marker lives under "state" so a config editor does not offer it
+            // for editing (#304). Asked through MarkerFile so the prior locations
+            // an older build used are honoured: a bare File.Exists here reported
+            // "not shown yet" for a veteran whose `.txt` marker had not been
+            // adopted, and fired the tip at them.
+            //
+            // Answered once per session. This used to be a File.Exists syscall
+            // plus two path compositions every frame for the rest of the session
+            // whenever Show kept failing.
+            if (_onboardingMarkerPath == null)
             {
-                _onboardingChecked = true;
-                return;
+                Persistence.AuthorIdentity.OnboardingMarkerState state =
+                    Persistence.AuthorIdentity.FindOnboardingMarker(_log);
+                if (state.AlreadyShown)
+                {
+                    _onboardingChecked = true;
+                    return;
+                }
+
+                _onboardingMarkerPath = state.Path;
             }
 
-            // Shown BEFORE the marker is written. VanillaMessage.Show is a
-            // no-op while there is no local player, and this pass can run
-            // before one exists - writing first consumed the one-time tip and
-            // nobody ever saw it. Leaving _onboardingChecked false until the
-            // tip is actually shown is the other half: the next pass tries
-            // again rather than the tip being lost for the session.
+            // Shown BEFORE the marker is written: writing first consumed the
+            // one-time tip when nobody had seen it.
             if (!VanillaMessage.Show(
                     Player.m_localPlayer,
                     MessageHud.MessageType.Center,
@@ -2040,13 +2092,28 @@ internal sealed class CartographerRuntime : IDisposable
                 return;
             }
 
+            // Through MarkerFile, staged and verified at its destination, like
+            // every other marker write. A bare WriteAllText here was the one
+            // remaining unstaged write in the product, in the same change whose
+            // whole point was that a torn marker is trusted forever.
+            if (!Persistence.AuthorIdentity.RecordOnboardingShown(_onboardingMarkerPath, _log))
+            {
+                // Said plainly rather than promised away. This is a per-session
+                // flag, so nothing here can stop the tip reappearing on the next
+                // launch — the marker is what does that, and it was not written.
+                _log.LogWarning(
+                    "The first-run tip was shown but could not be recorded, so it may appear " +
+                    "again next time this world is loaded.");
+            }
+
             _onboardingChecked = true;
-            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
-            System.IO.File.WriteAllText(path, DateTime.UtcNow.ToString("o"));
         }
-        catch
+        catch (Exception exception)
         {
-            // A failed tip is never worth an error.
+            _onboardingChecked = true;
+            _log.LogWarning(
+                "The first-run tip could not be recorded, so it may appear again next time: " +
+                Reporting.SafeLogText.Brief(exception));
         }
     }
 
