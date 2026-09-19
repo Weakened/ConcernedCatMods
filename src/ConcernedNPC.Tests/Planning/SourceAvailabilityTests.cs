@@ -224,6 +224,158 @@ public sealed class SourceAvailabilityTests
         Assert.Equal(0, stock.UnitsOf("wood", new GenerousAvailability(-5)));
     }
 
+    /// <summary>When the two vocabularies meet, the seam says so.
+    ///
+    /// The three tests below are one finding between them: this seam compares
+    /// <c>INpcContainer.Key</c> against <c>NpcCustodyLocation.Key</c>, and
+    /// <c>StockLine.Item</c> against <c>NpcMaterial.ItemName</c>, ordinally, and
+    /// <b>both pairs are role-owned on both sides with nothing checking
+    /// them</b>. If a role writes "Wood" into the ledger and "wood" into its
+    /// stock lines, or keys a chest by a prefab and a place while keying custody
+    /// by a ZDOID's text, then nothing matches, nothing is subtracted, and every
+    /// answer is the raw observed count: the exact behaviour the seam was built
+    /// to remove, in the unsafe direction, with a seam in place saying it is
+    /// handled. No exception, no wrong-looking plan.</summary>
+    [Fact]
+    public void When_the_two_vocabularies_meet_the_seam_says_so()
+    {
+        var book = new NpcMaterialReservationBook();
+        var chest = new PlanningStockContainer("chest", Jobs.World, 0f, 0f);
+        SourceStock stock = Jobs.Stock(chest, ("wood", 40));
+        Reserve(book, "a", 0, "chest", "wood", 25);
+
+        var availability = new NpcReservedSourceAvailability(book);
+        Assert.Equal(15, stock.UnitsOf("wood", availability));
+
+        NpcSourceAvailabilityAgreement met = availability.Agreement;
+        Assert.Equal(NpcSourceVocabularies.Agree, met.Vocabularies);
+        Assert.Equal(1, met.Asks);
+        Assert.Equal(1, met.HeldRowsSeen);
+        Assert.Equal(1, met.ContainerNameMatches);
+        Assert.Equal(1, met.ItemNameMatches);
+        Assert.Equal(25, met.UnitsSubtracted);
+    }
+
+    /// <summary>A role that keys chests one way and custody another gets the raw
+    /// count back, and the seam records that not one container name met.
+    /// </summary>
+    [Fact]
+    public void A_container_vocabulary_that_does_not_agree_is_visible_rather_than_silent()
+    {
+        var book = new NpcMaterialReservationBook();
+
+        // The planner's chest is keyed by the role's container name; the ledger
+        // kept the same chest under a ZDOID's text. Both are the role's, and
+        // nothing in this library mints either.
+        var chest = new PlanningStockContainer("chest-by-prefab-and-place", Jobs.World, 0f, 0f);
+        SourceStock stock = Jobs.Stock(chest, ("wood", 40));
+        Reserve(book, "a", 0, "-8123456789:12", "wood", 40);
+
+        var availability = new NpcReservedSourceAvailability(book);
+
+        // Forty wood is spoken for, and the planner is told forty is free.
+        Assert.Equal(40, stock.UnitsOf("wood", availability));
+
+        NpcSourceAvailabilityAgreement seen = availability.Agreement;
+        Assert.Equal(NpcSourceVocabularies.NoContainerNameMatched, seen.Vocabularies);
+        Assert.Equal(1, seen.HeldRowsSeen);
+        Assert.Equal(0, seen.ContainerNameMatches);
+        Assert.Equal(0, seen.UnitsSubtracted);
+    }
+
+    /// <summary>And the half a matching container name hides: the chest is
+    /// found and every item name inside it misses.</summary>
+    [Fact]
+    public void An_item_vocabulary_that_does_not_agree_is_visible_rather_than_silent()
+    {
+        var book = new NpcMaterialReservationBook();
+        var chest = new PlanningStockContainer("chest", Jobs.World, 0f, 0f);
+        SourceStock stock = Jobs.Stock(chest, ("wood", 40));
+
+        // The right chest, and the role spelled the item differently on the two
+        // sides.
+        Reserve(book, "a", 0, "chest", "Wood", 40);
+
+        var availability = new NpcReservedSourceAvailability(book);
+        Assert.Equal(40, stock.UnitsOf("wood", availability));
+
+        NpcSourceAvailabilityAgreement seen = availability.Agreement;
+        Assert.Equal(NpcSourceVocabularies.NoItemNameMatchedInAMatchedContainer, seen.Vocabularies);
+        Assert.Equal(1, seen.ContainerNameMatches);
+        Assert.Equal(1, seen.StacksInMatchedContainers);
+        Assert.Equal(0, seen.ItemNameMatches);
+        Assert.Equal(0, seen.UnitsSubtracted);
+    }
+
+    /// <summary>An empty book is not a mismatch, and neither is nobody having
+    /// asked. The counts distinguish "there was nothing to disagree about" from
+    /// "there was, and it did".</summary>
+    [Fact]
+    public void Nothing_to_compare_is_not_a_disagreement()
+    {
+        var book = new NpcMaterialReservationBook();
+        var chest = new PlanningStockContainer("chest", Jobs.World, 0f, 0f);
+        SourceStock stock = Jobs.Stock(chest, ("wood", 40));
+
+        var neverAsked = new NpcReservedSourceAvailability(book);
+        Assert.Equal(NpcSourceVocabularies.NothingToCompare, neverAsked.Agreement.Vocabularies);
+
+        var asked = new NpcReservedSourceAvailability(book);
+        Assert.Equal(40, stock.UnitsOf("wood", asked));
+        Assert.Equal(NpcSourceVocabularies.NothingToCompare, asked.Agreement.Vocabularies);
+        Assert.Equal(1, asked.Agreement.Asks);
+        Assert.Equal(0, asked.Agreement.HeldRowsSeen);
+    }
+
+    /// <summary>And a whole plan's worth of asking is observable the same way,
+    /// which is how a role's own test finds out that its two name spaces never
+    /// met.</summary>
+    [Fact]
+    public void A_whole_plan_reports_whether_the_names_ever_met()
+    {
+        var book = new NpcMaterialReservationBook();
+        var chest = new PlanningStockContainer("chest", Jobs.World, 0f, 0f);
+        var sources = new[] { Jobs.Stock(chest, ("wood", 100)) };
+        Reserve(book, "somebody-else", 0, "CHEST", "wood", 100);
+
+        var availability = new NpcReservedSourceAvailability(book);
+        var area = new FakeArea();
+        JobSnapshot snapshot = JobSnapshotBuilder.Take(
+            area,
+            Jobs.World,
+            new[] { Jobs.Target("wall", 10f, 0f, 0, ("wood", 100)) },
+            sources,
+            new PlanningStopObserver(),
+            new FakeProbe(),
+            PlanningBudget.Unlimited());
+        var planner = new TourJobPlanner(
+            snapshot,
+            NpcCarryCapacity.Unlimited,
+            Jobs.Actions,
+            setbacks: null,
+            now: 0f,
+            allowance: TourJobPlanner.DefaultAllowance,
+            availability: availability);
+
+        // The plan comes out perfectly formed, on a hundred wood another job
+        // holds, because the chest was never found.
+        JobTourPlan plan = planner.PlanTours(
+            new JobPlanRequest(
+                new Roles.NpcIdentity("product", "worker"),
+                "mine",
+                area,
+                Jobs.World,
+                JobManifest.Empty,
+                Jobs.At(0f, 0f)));
+        Assert.Equal(JobPlanVerdict.Planned, plan.Plan.Verdict);
+
+        // And this is the one thing that says why.
+        Assert.Equal(
+            NpcSourceVocabularies.NoContainerNameMatched, availability.Agreement.Vocabularies);
+        Assert.True(availability.Agreement.Asks > 0);
+        Assert.Equal(0, availability.Agreement.UnitsSubtracted);
+    }
+
     private static ReservationId Reserve(
         NpcMaterialReservationBook book, string jobId, int step, string containerKey, string item, int units)
     {

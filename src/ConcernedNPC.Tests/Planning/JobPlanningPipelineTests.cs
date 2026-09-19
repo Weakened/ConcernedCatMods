@@ -877,8 +877,13 @@ public sealed class JobPlanningPipelineTests
         Assert.Equal(TourPartitionOutcome.BudgetExhausted, partition.Outcome);
         Assert.Empty(partition.Tours);
         Assert.False(partition.IsPlanned);
-        Assert.True(partition.LeftOver > 0);
         Assert.False(partition.CoversTheWholeJob);
+
+        // Every target is left over, not just the ones that were never placed.
+        // The trips built before the allowance ran out are being thrown away,
+        // so the targets inside them are waiting too - counting only the
+        // unplaced ones said a twelve-target job had eleven waiting.
+        Assert.Equal(targets.Count, partition.LeftOver);
 
         // And a partition that did finish says so, with nothing left over.
         TourPartition whole = TourPartitioner.Partition(
@@ -889,97 +894,548 @@ public sealed class JobPlanningPipelineTests
         Assert.Equal(12, whole.Serviced);
     }
 
-    /// <summary>The blocker's invariant, stated once and checked over every
-    /// allowance from nothing to plenty: <b>a plan never claims a manifest its
-    /// own steps do not cover, and every target it does not reach is
-    /// counted.</b>
+    /// <summary>More stops than one round is ordered over: the ones beyond the
+    /// cap wait for the next round, and are counted.
     ///
-    /// Written as a sweep rather than as one case on purpose. The failure had
-    /// two independent causes - a spent budget and the trip cap - and a third
-    /// was reachable through provisioning; a test pinned to one of them would
-    /// have gone green while the other two shipped. What is asserted here is the
-    /// property all three have to preserve, so it holds whichever guard a later
-    /// change removes.</summary>
+    /// <b>The failure this is written against.</b> A berry sweep or a
+    /// designated-harvest round with thirty low-cost targets fits in one trip,
+    /// so capacity never bites and the trip cap never bites. The stop sequencer
+    /// then keeps the twenty-four nearest and reports the other six as beyond
+    /// the round - and the planner used to read only the stops that came back.
+    /// Six targets appeared in no step, in no manifest and in no count, every
+    /// step finished, and the round reconciled as a <b>complete job</b>.
+    /// </summary>
     [Fact]
-    public void A_plan_never_claims_a_manifest_its_steps_do_not_cover()
+    public void Stops_beyond_the_one_round_cap_are_counted_rather_than_lost()
+    {
+        var chest = new PlanningStockContainer("supply", Jobs.World, 0f, 0f);
+        int count = StopSequencer.MostStopsPerRound + 6;
+        var targets = new List<JobTarget>();
+        for (int index = 0; index < count; index++)
+        {
+            targets.Add(Jobs.Target("t" + index.ToString("00"), index + 1, 0f, 0, ("wood", 1)));
+        }
+
+        JobTourPlan plan = Plan(targets, new[] { Jobs.Stock(chest, ("wood", 500)) });
+
+        // One trip - capacity is unlimited here, so nothing but the round cap
+        // can leave a target out.
+        Assert.Equal(JobPlanVerdict.Planned, plan.Plan.Verdict);
+        Assert.Single(plan.Tours);
+        Assert.Equal(count, plan.Tours[0].Targets.Count);
+
+        Assert.Equal(StopSequencer.MostStopsPerRound, Services(plan));
+        Assert.Equal(6, plan.LeftForAnotherRound);
+        Assert.False(plan.CoversTheWholeJob);
+        Assert.Equal(StopSequencer.MostStopsPerRound, plan.Plan.Manifest.RequiredOf("wood"));
+
+        JobReconciliation books = JobReconciler.Reconcile(plan, AllDone(plan));
+        Assert.False(books.IsComplete);
+        Assert.True(books.NeedsAnotherRound);
+        Assert.Equal(6, books.LeftForAnotherRound);
+    }
+
+    /// <summary>A target a walk failed at five minutes ago is left out of the
+    /// round <b>and counted</b>, so the wall does not reconcile as finished with
+    /// a hole in it.
+    ///
+    /// <b>The failure this is written against, exactly as it would happen.</b>
+    /// Thorstein failed to reach wall section seven, so the shared setback
+    /// memory still refuses that spot. The stop sequencer filters section seven
+    /// out of the round - correctly - and the planner walked only the stops that
+    /// came back. The other eleven sections went up, every step reported
+    /// <c>Done</c>, nothing was left over, and <c>IsComplete</c> was true. The
+    /// wall has a hole in it and nothing anywhere says so.</summary>
+    [Fact]
+    public void A_target_a_walk_failed_at_lately_is_counted_rather_than_lost()
     {
         var chest = new PlanningStockContainer("supply", Jobs.World, 0f, 0f);
         var targets = new List<JobTarget>();
         for (int index = 0; index < 12; index++)
         {
-            targets.Add(Jobs.Target("t" + index.ToString("00"), index, 0f, 0, ("wood", 1)));
+            targets.Add(Jobs.Target("section" + index.ToString("00"), 10f + (index * 5f), 0f, 0, ("wood", 1)));
         }
 
-        var sources = new[] { Jobs.Stock(chest, ("wood", 100)) };
-        int everPlanned = 0;
-        int everPartial = 0;
+        var setbacks = new NpcWalkSetbacks();
+        setbacks.Remember(targets[7].At, now: 0f);
 
-        for (int allowance = 0; allowance <= 40; allowance++)
+        var area = new FakeArea();
+        JobSnapshot snapshot = Snapshot(targets, new[] { Jobs.Stock(chest, ("wood", 500)) }, area);
+        var planner = new TourJobPlanner(
+            snapshot, NpcCarryCapacity.Unlimited, Jobs.Actions, setbacks, now: 1f);
+        JobTourPlan plan = planner.PlanTours(Jobs.Request(area, Jobs.At(0f, 0f)));
+
+        Assert.Equal(JobPlanVerdict.Planned, plan.Plan.Verdict);
+        Assert.Equal(11, Services(plan));
+        Assert.Equal(1, plan.LeftForAnotherRound);
+
+        // Section seven is in no step of this plan.
+        foreach (JobStep step in plan.Plan.Steps)
         {
-            JobTourPlan plan = PlanWith(targets, sources, new NpcCarryCapacity(2), allowance);
+            Assert.NotEqual(targets[7].Key, step.Subject);
+        }
 
-            if (plan.Plan.Verdict != JobPlanVerdict.Planned)
+        // Every step done, and the job is still not finished.
+        JobReconciliation books = JobReconciler.Reconcile(plan, AllDone(plan));
+        Assert.Equal(plan.Plan.Steps.Count, books.Done);
+        Assert.False(books.IsComplete);
+        Assert.True(books.NeedsAnotherRound);
+
+        // And once the pause is over the same job plans in full.
+        var later = new TourJobPlanner(
+            snapshot, NpcCarryCapacity.Unlimited, Jobs.Actions, setbacks,
+            now: NpcWalkSetbacks.LongestPauseSeconds + NpcWalkSetbacks.RecallSeconds + 1f);
+        JobTourPlan whole = later.PlanTours(Jobs.Request(area, Jobs.At(0f, 0f)));
+        Assert.Equal(12, Services(whole));
+        Assert.True(whole.CoversTheWholeJob);
+    }
+
+    /// <summary>A round with nothing left to walk to is a refusal, not a walk to
+    /// the chests for nothing.
+    ///
+    /// <b>The shape this is written against.</b> Provisioning happens before the
+    /// round is ordered, so a trip every one of whose stops the sequencer drops
+    /// still has its collect steps written. Reading "are there any steps" rather
+    /// than "is any target serviced" makes that a <c>Planned</c> plan: the NPC
+    /// walks to eight chests, fills his hands and comes back having done
+    /// nothing, and the plan was perfectly well formed. What he is owed is
+    /// counted either way - but the walk is not one a player would forgive.
+    /// </summary>
+    [Fact]
+    public void A_round_with_nothing_left_to_walk_to_is_a_refusal_rather_than_a_walk_for_nothing()
+    {
+        var chest = new PlanningStockContainer("supply", Jobs.World, 0f, 0f);
+        var targets = new List<JobTarget>();
+        for (int index = 0; index < 3; index++)
+        {
+            targets.Add(Jobs.Target("t" + index, 10f + (index * 10f), 0f, 0, ("wood", 1)));
+        }
+
+        var setbacks = new NpcWalkSetbacks();
+        foreach (JobTarget target in targets)
+        {
+            setbacks.Remember(target.At, now: 0f);
+        }
+
+        var area = new FakeArea();
+        JobSnapshot snapshot = Snapshot(targets, new[] { Jobs.Stock(chest, ("wood", 100)) }, area);
+        var planner = new TourJobPlanner(
+            snapshot, NpcCarryCapacity.Unlimited, Jobs.Actions, setbacks, now: 1f);
+        JobTourPlan plan = planner.PlanTours(Jobs.Request(area, Jobs.At(0f, 0f)));
+
+        Assert.False(plan.Plan.IsActionable);
+        Assert.Empty(plan.Plan.Steps);
+        Assert.NotEqual(JobPlanVerdict.NothingToDo, plan.Plan.Verdict);
+
+        // Ask again: the pause is what this is waiting on, and it ends.
+        Assert.Equal(JobPlanVerdict.BudgetExhausted, plan.Plan.Verdict);
+        Assert.Equal(targets.Count, plan.LeftForAnotherRound);
+        Assert.True(JobReconciler.Reconcile(plan, null).NeedsAnotherRound);
+    }
+
+    /// <summary>A first trip the chest cap empties is a refusal that says so -
+    /// never a finished job.
+    ///
+    /// <b>The failure this is written against.</b> A wall section needs twenty
+    /// wood and the player keeps wood in a dozen two-wood chests. The whole-job
+    /// check passes: the wood is demonstrably there. Provisioning stops at the
+    /// eighth chest with sixteen wood, the shrink finds that sixteen does not
+    /// pay for a twenty-wood section and keeps nothing, and the plan came back
+    /// <c>NothingToDo</c> - the one verdict whose own documentation says a job
+    /// may be reported finished on it - with the count of what it had just left
+    /// out thrown away by a default parameter. The job closed with nothing built
+    /// and nothing said.</summary>
+    [Fact]
+    public void A_first_trip_the_chest_cap_empties_is_never_a_finished_job()
+    {
+        var chests = new List<SourceStock>();
+        for (int index = 0; index < 12; index++)
+        {
+            chests.Add(Jobs.Stock(
+                new PlanningStockContainer("c" + index.ToString("00"), Jobs.World, index, 0f), ("wood", 2)));
+        }
+
+        var targets = new List<JobTarget> { Jobs.Target("section", 40f, 0f, 0, ("wood", 20)) };
+
+        JobTourPlan plan = Plan(targets, chests);
+
+        Assert.NotEqual(JobPlanVerdict.NothingToDo, plan.Plan.Verdict);
+        Assert.Equal(JobPlanVerdict.Refused, plan.Plan.Verdict);
+        Assert.False(plan.Plan.IsActionable);
+
+        // The sentence names something the player can act on, and does not claim
+        // the settlement is short of wood that is demonstrably in twelve chests.
+        Assert.DoesNotContain("short", plan.Plan.Reason);
+        Assert.NotEqual(string.Empty, plan.Plan.Reason);
+
+        // And what it did not do is counted, so neither question says the job is
+        // over.
+        Assert.Equal(1, plan.LeftForAnotherRound);
+        Assert.False(plan.CoversTheWholeJob);
+
+        JobReconciliation books = JobReconciler.Reconcile(plan, null);
+        Assert.False(books.IsComplete);
+        Assert.True(books.NeedsAnotherRound);
+
+        // And carrying four means the eight chests only have to find sixteen,
+        // which they do - so the same inputs are a plan rather than a refusal.
+        JobTourPlan carrying = PlanCarrying(targets, chests, Jobs.Needs(("wood", 4)));
+        Assert.Equal(JobPlanVerdict.Planned, carrying.Plan.Verdict);
+        Assert.Equal(1, Services(carrying));
+        Assert.True(carrying.CoversTheWholeJob);
+    }
+
+    /// <summary>A shrunken trip counts what he is already holding alongside what
+    /// the chests gave him, so the carry decides how many targets survive the
+    /// shrink.
+    ///
+    /// <b>The failure this is written against</b> is the half of the carried
+    /// manifest that is easy to wire everywhere but here: provisioning asks for
+    /// less, the shortfall check subtracts it, and then the shrink - the one
+    /// place that decides how much of the trip actually happens - still measures
+    /// against the draws alone. He walks back with a target's worth of material
+    /// in his hands and a target left unserviced.</summary>
+    [Fact]
+    public void A_shrunken_trip_counts_what_he_is_carrying_towards_what_it_can_service()
+    {
+        var chests = new List<SourceStock>();
+        for (int index = 0; index < 16; index++)
+        {
+            chests.Add(Jobs.Stock(
+                new PlanningStockContainer("c" + index.ToString("00"), Jobs.World, index, 0f), ("wood", 2)));
+        }
+
+        // Three ten-wood sections in one trip: thirty wanted, which sixteen
+        // two-wood chests hold between them, and eight chests of two is sixteen
+        // however the carry falls.
+        var targets = new List<JobTarget>
+        {
+            Jobs.Target("a", 40f, 0f, 0, ("wood", 10)),
+            Jobs.Target("b", 41f, 0f, 0, ("wood", 10)),
+            Jobs.Target("c", 42f, 0f, 0, ("wood", 10)),
+        };
+
+        // Sixteen fetched pays for one section.
+        JobTourPlan bare = PlanCarrying(targets, chests, JobManifest.Empty);
+        Assert.Equal(JobPlanVerdict.Planned, bare.Plan.Verdict);
+        Assert.Equal(1, Services(bare));
+        Assert.Equal(2, bare.LeftForAnotherRound);
+
+        // Sixteen fetched plus four already on his back pays for two.
+        JobTourPlan carrying = PlanCarrying(targets, chests, Jobs.Needs(("wood", 4)));
+        Assert.Equal(JobPlanVerdict.Planned, carrying.Plan.Verdict);
+        Assert.Equal(2, Services(carrying));
+        Assert.Equal(1, carrying.LeftForAnotherRound);
+        Assert.False(JobReconciler.Reconcile(carrying, AllDone(carrying)).IsComplete);
+    }
+
+    /// <summary>The same shape one trip in: a later trip the chest cap empties
+    /// still hands back the earlier trips, and still counts everything after
+    /// them.</summary>
+    [Fact]
+    public void A_later_trip_the_chest_cap_empties_keeps_the_trips_before_it()
+    {
+        var chests = new List<SourceStock>
+        {
+            Jobs.Stock(new PlanningStockContainer("big", Jobs.World, 0f, 0f), ("wood", 20)),
+        };
+        for (int index = 0; index < 10; index++)
+        {
+            chests.Add(Jobs.Stock(
+                new PlanningStockContainer("c" + index.ToString("00"), Jobs.World, 1f + index, 0f),
+                ("wood", 2)));
+        }
+
+        // Two twenty-wood sections. The first is paid for by the one big chest;
+        // the second has only two-wood chests left, and eight of them is sixteen.
+        var targets = new List<JobTarget>
+        {
+            Jobs.Target("first", 40f, 0f, 0, ("wood", 20)),
+            Jobs.Target("second", 41f, 0f, 0, ("wood", 20)),
+        };
+
+        JobTourPlan plan = Plan(targets, chests, new NpcCarryCapacity(20));
+
+        Assert.Equal(JobPlanVerdict.Planned, plan.Plan.Verdict);
+        Assert.Equal(1, Services(plan));
+        Assert.Equal(1, plan.LeftForAnotherRound);
+        Assert.False(plan.CoversTheWholeJob);
+        Assert.False(JobReconciler.Reconcile(plan, AllDone(plan)).IsComplete);
+    }
+
+    /// <summary>The round after a shrunken one does not fetch a second load of
+    /// what is already on his back.
+    ///
+    /// <b>The failure this is written against.</b> A chest-capped trip is
+    /// shrunk: the full provisioning draws are still made, only the prefix of
+    /// targets they pay for is serviced, and the surplus is carried - the
+    /// reconciliation's <c>LeftOver</c> is exactly that. The request had no way
+    /// to say so, and <c>Shortfall</c> counted chests only, so the next round
+    /// walked to the chests again for material the NPC was visibly holding. The
+    /// shrink path turned that from a rare case into the normal one.</summary>
+    [Fact]
+    public void A_round_is_told_what_he_is_already_carrying_and_fetches_only_the_rest()
+    {
+        var chest = new PlanningStockContainer("supply", Jobs.World, 0f, 0f);
+        var targets = new List<JobTarget> { Jobs.Target("section", 10f, 0f, 0, ("wood", 20)) };
+        var sources = new[] { Jobs.Stock(chest, ("wood", 20)) };
+
+        // Carrying nothing: twenty wood is fetched.
+        Assert.Equal(20, Fetched(PlanCarrying(targets, sources, JobManifest.Empty)));
+
+        // Carrying twelve: eight is fetched, and the plan still services the
+        // whole section.
+        JobTourPlan part = PlanCarrying(targets, sources, Jobs.Needs(("wood", 12)));
+        Assert.Equal(JobPlanVerdict.Planned, part.Plan.Verdict);
+        Assert.Equal(8, Fetched(part));
+        Assert.Equal(1, Services(part));
+        Assert.True(part.CoversTheWholeJob);
+
+        // Carrying all of it: no chest is opened at all.
+        JobTourPlan carried = PlanCarrying(targets, sources, Jobs.Needs(("wood", 20)));
+        Assert.Equal(JobPlanVerdict.Planned, carried.Plan.Verdict);
+        Assert.Equal(0, Collects(carried));
+        Assert.Equal(1, Services(carried));
+    }
+
+    /// <summary>And a job is never told the settlement is short of material the
+    /// NPC is holding.</summary>
+    [Fact]
+    public void Material_on_his_back_is_not_a_shortage()
+    {
+        var chest = new PlanningStockContainer("supply", Jobs.World, 0f, 0f);
+        var targets = new List<JobTarget> { Jobs.Target("section", 10f, 0f, 0, ("wood", 20)) };
+
+        // Four wood in the chest and sixteen on his back is twenty.
+        var sources = new[] { Jobs.Stock(chest, ("wood", 4)) };
+
+        Assert.Equal(
+            JobPlanVerdict.ShortOfMaterial,
+            PlanCarrying(targets, sources, JobManifest.Empty).Plan.Verdict);
+
+        JobTourPlan carrying = PlanCarrying(targets, sources, Jobs.Needs(("wood", 16)));
+        Assert.Equal(JobPlanVerdict.Planned, carrying.Plan.Verdict);
+        Assert.Equal(4, Fetched(carrying));
+        Assert.True(carrying.CoversTheWholeJob);
+    }
+
+    private static JobTourPlan PlanCarrying(
+        IReadOnlyList<JobTarget> targets, IReadOnlyList<SourceStock> sources, JobManifest carrying)
+    {
+        var area = new FakeArea();
+        JobSnapshot snapshot = Snapshot(targets, sources, area);
+        var planner = new TourJobPlanner(snapshot, NpcCarryCapacity.Unlimited, Jobs.Actions);
+        return planner.PlanTours(
+            new JobPlanRequest(
+                new Roles.NpcIdentity("product", "worker"),
+                "job",
+                area,
+                Jobs.World,
+                JobManifest.Empty,
+                Jobs.At(0f, 0f),
+                carrying));
+    }
+
+    /// <summary>The blocker's invariant, stated once and checked over four axes
+    /// at once: <b>a plan never claims a manifest its own steps do not cover,
+    /// and every target it does not reach is counted - whatever left it out, and
+    /// whether it is a plan or a refusal.</b>
+    ///
+    /// Written as a sweep rather than as one case on purpose. There are now five
+    /// independent ways a target falls out of a plan - a spent budget, the trip
+    /// cap, the chest cap, a walk that failed lately, and more stops than one
+    /// round orders - and the first review's fix went in covering three of them
+    /// while a sweep that could not reach the other two reported everything was
+    /// fine. So the sweep varies what it claims to vary, and the guards at the
+    /// bottom fail if it ever stops reaching a shape.
+    ///
+    /// <b>The guards are the point.</b> The old version ended with
+    /// <c>Assert.True(everPartial == 0 || everPlanned &gt; everPartial)</c>,
+    /// which is satisfied by <c>everPartial == 0</c> - which was the actual
+    /// value, over all forty-one cells, because twelve one-wood targets at
+    /// capacity two against one chest is six trips and one stop: under every cap
+    /// the sweep was written to cross. The invariant was only ever checked as
+    /// <c>12 == 12 + 0</c>.</summary>
+    [Fact]
+    public void A_plan_never_claims_a_manifest_its_steps_do_not_cover()
+    {
+        var targets = new List<JobTarget>();
+        for (int index = 0; index < 12; index++)
+        {
+            // Four units each, so a capacity is a number of targets and a trip
+            // is a number of chests.
+            targets.Add(Jobs.Target("t" + index.ToString("00"), 10f + index, 0f, 0, ("wood", 4)));
+        }
+
+        // One chest that can pay for anything, and twelve that between them can
+        // pay for the job but of which one provisioning phase opens only eight.
+        var oneBigChest = new List<SourceStock>
+        {
+            Jobs.Stock(new PlanningStockContainer("supply", Jobs.World, 0f, 0f), ("wood", 1000)),
+        };
+        var twelveSmallChests = new List<SourceStock>();
+        for (int index = 0; index < 12; index++)
+        {
+            twelveSmallChests.Add(Jobs.Stock(
+                new PlanningStockContainer("c" + index.ToString("00"), Jobs.World, index, 0f), ("wood", 4)));
+        }
+
+        var layouts = new List<IReadOnlyList<SourceStock>> { oneBigChest, twelveSmallChests };
+
+        // Trips of one, two, three, five and all twelve targets. Twelve trips is
+        // over MostTours; one trip of twelve is over nothing, which is the cell
+        // the chest cap needs.
+        var capacities = new List<NpcCarryCapacity>
+        {
+            new NpcCarryCapacity(4),
+            new NpcCarryCapacity(8),
+            new NpcCarryCapacity(12),
+            new NpcCarryCapacity(20),
+            NpcCarryCapacity.Unlimited,
+        };
+
+        var refusing = new NpcWalkSetbacks();
+        refusing.Remember(targets[5].At, now: 0f);
+
+        int everPlanned = 0;
+        int everWhole = 0;
+        int everPartial = 0;
+        int everTripCapped = 0;
+        int everChestCapped = 0;
+        int everSetbackDropped = 0;
+        int everRefused = 0;
+
+        foreach (IReadOnlyList<SourceStock> sources in layouts)
+        {
+            foreach (NpcCarryCapacity capacity in capacities)
             {
-                // Every refusal on this input is an ask-again, never a sentence
-                // about the world and never a finished job.
-                Assert.Equal(JobPlanVerdict.BudgetExhausted, plan.Plan.Verdict);
-                Assert.Empty(plan.Plan.Steps);
+                for (int allowance = 0; allowance <= 40; allowance++)
+                {
+                    JobTourPlan without = PlanWith(targets, sources, capacity, allowance, null);
+                    JobTourPlan with = PlanWith(targets, sources, capacity, allowance, refusing);
+
+                    int servicedWithout = Check(targets.Count, without);
+                    int servicedWith = Check(targets.Count, with);
+
+                    // A refused walk can only ever take a target out of the
+                    // round, never add one.
+                    Assert.True(
+                        servicedWith <= servicedWithout,
+                        "a refused spot made the round bigger: " + servicedWith + " > " + servicedWithout);
+                    if (servicedWith < servicedWithout)
+                    {
+                        everSetbackDropped++;
+                    }
+
+                    if (without.Plan.Verdict != JobPlanVerdict.Planned)
+                    {
+                        everRefused++;
+                        continue;
+                    }
+
+                    everPlanned++;
+                    if (without.CoversTheWholeJob)
+                    {
+                        everWhole++;
+                        continue;
+                    }
+
+                    everPartial++;
+                    if (without.Tours.Count == TourPartitioner.MostTours)
+                    {
+                        everTripCapped++;
+                    }
+
+                    foreach (SourcePlan supply in without.Provisioning)
+                    {
+                        if (supply.Truncation == SourceTruncation.ChestCap)
+                        {
+                            everChestCapped++;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Every shape the sweep exists to reach. Each of these fails loudly the
+        // day a change stops the sweep exercising the path it is named for -
+        // which is the failure that let two blockers through a green suite.
+        Assert.True(everPlanned > 0, "no cell in the sweep produced a plan at all");
+        Assert.True(everWhole > 0, "no cell in the sweep produced a plan for the whole job");
+        Assert.True(everRefused > 0, "no cell in the sweep produced a refusal");
+        Assert.True(everPartial > 0, "no cell in the sweep produced a plan for part of the job");
+        Assert.True(everTripCapped > 0, "the sweep never crossed MostTours, so it proved nothing about it");
+        Assert.True(everChestCapped > 0, "the sweep never crossed MostStops, so it proved nothing about it");
+        Assert.True(
+            everSetbackDropped > 0, "the sweep never dropped a stop for a setback, so it proved nothing about it");
+    }
+
+    /// <summary>The invariant itself, asserted on one plan: the manifest is what
+    /// the steps reach, what is not reached is counted, and reconciliation
+    /// agrees with the plan about whether the job is over.</summary>
+    /// <returns>How many targets this plan services.</returns>
+    private static int Check(int jobTargets, JobTourPlan plan)
+    {
+        int serviced = 0;
+        int servicedUnits = 0;
+        foreach (PlannedStep step in plan.Steps)
+        {
+            if (step.IsCollect)
+            {
                 continue;
             }
 
-            everPlanned++;
-
-            int serviced = 0;
-            int servicedUnits = 0;
-            foreach (PlannedStep step in plan.Steps)
-            {
-                if (step.IsCollect)
-                {
-                    continue;
-                }
-
-                serviced++;
-                servicedUnits += step.Step.Units;
-            }
-
-            // The manifest is exactly what the steps reach.
-            Assert.Equal(servicedUnits, plan.Plan.Manifest.TotalUnits);
-
-            // And nothing the plan leaves out goes unaccounted for.
-            Assert.Equal(targets.Count, serviced + plan.LeftForAnotherRound);
-
-            var results = new List<StepResult>();
-            foreach (JobStep step in plan.Plan.Steps)
-            {
-                results.Add(new StepResult(step.Index, StepOutcome.Done));
-            }
-
-            JobReconciliation books = JobReconciler.Reconcile(plan, results);
-            Assert.Equal(plan.CoversTheWholeJob, books.IsComplete);
-
-            if (!plan.CoversTheWholeJob)
-            {
-                everPartial++;
-                Assert.True(books.NeedsAnotherRound);
-            }
+            serviced++;
+            servicedUnits += step.Step.Units;
         }
 
-        // The sweep has to have reached both shapes, or it proved nothing about
-        // either.
-        Assert.True(everPlanned > 0, "no allowance in the sweep produced a plan at all");
-        Assert.True(everPartial == 0 || everPlanned > everPartial);
+        // A plan never claims a total its own steps do not cover.
+        Assert.Equal(servicedUnits, plan.Plan.Manifest.TotalUnits);
+
+        // And nothing it leaves out goes unaccounted for - including on a
+        // refusal, which reaches none of them.
+        Assert.Equal(
+            jobTargets,
+            serviced + plan.LeftForAnotherRound);
+
+        // A verdict that closes a job may only be reached with nothing left.
+        if (plan.Plan.Verdict == JobPlanVerdict.NothingToDo)
+        {
+            Assert.Equal(0, plan.LeftForAnotherRound);
+        }
+
+        JobReconciliation books = JobReconciler.Reconcile(plan, AllDone(plan));
+        Assert.Equal(plan.CoversTheWholeJob && plan.Plan.Steps.Count > 0, books.IsComplete);
+        if (!plan.CoversTheWholeJob)
+        {
+            Assert.True(books.NeedsAnotherRound);
+        }
+
+        return serviced;
+    }
+
+    private static List<StepResult> AllDone(JobTourPlan plan)
+    {
+        var results = new List<StepResult>();
+        foreach (JobStep step in plan.Plan.Steps)
+        {
+            results.Add(new StepResult(step.Index, StepOutcome.Done));
+        }
+
+        return results;
     }
 
     private static JobTourPlan PlanWith(
         IReadOnlyList<JobTarget> targets,
         IReadOnlyList<SourceStock> sources,
         NpcCarryCapacity capacity,
-        int allowance)
+        int allowance,
+        NpcWalkSetbacks? setbacks = null)
     {
         var area = new FakeArea();
         JobSnapshot snapshot = Snapshot(targets, sources, area);
         var planner = new TourJobPlanner(
-            snapshot, capacity, Jobs.Actions, setbacks: null, now: 0f, allowance: allowance);
+            snapshot, capacity, Jobs.Actions, setbacks, now: 1f, allowance: allowance);
         return planner.PlanTours(Jobs.Request(area, Jobs.At(0f, 0f)));
     }
 
@@ -1025,12 +1481,86 @@ public sealed class JobPlanningPipelineTests
         // Nothing of ours is left in either book, and theirs is untouched.
         Assert.Equal(theirs, targetBook.Count);
         Assert.Equal(0, chestBook.Count);
-        Assert.True(targets.IsCancelled);
-        Assert.True(chests.IsCancelled);
+
+        // And the commitments are still alive. Rolling an attempt back is not
+        // the job ending: a runtime that adjusts its plan and asks again must
+        // be asking a live object, not one that answers Unspecified for ever.
+        Assert.False(targets.IsCancelled);
+        Assert.False(chests.IsCancelled);
+        Assert.Equal(0, targets.NewlyTaken);
+        Assert.Equal(0, chests.NewlyTaken);
+
+        JobTarget free = default;
+        foreach (PlannedStep step in plan.Steps)
+        {
+            if (!step.IsCollect && !step.Target.Equals(contested))
+            {
+                free = step.Target;
+                break;
+            }
+        }
+
+        Assert.Equal(ReservationOutcome.Reserved, targets.Reserve(free, 40));
 
         // And it stopped at the refusal rather than carrying on through the
         // rest of the plan.
         Assert.True(result.Attempts.Count < plan.Steps.Count);
+    }
+
+    /// <summary>A rolled-back attempt gives back what <b>that attempt</b> took,
+    /// and leaves alone what the job already held.
+    ///
+    /// <b>The failure this is written against.</b> The rollback used to be
+    /// <c>Cancel()</c>, which releases by job id. On the documented recovery
+    /// path - a job re-establishing its holds after an interruption, where every
+    /// subject it already owns comes back <c>AlreadySatisfied</c> and therefore
+    /// never enters the list of what this attempt took - a conflict partway
+    /// through released the holds the <i>previous</i> plan legitimately owned.
+    /// <c>RolledBack</c> says in as many words that the books are exactly as
+    /// they were, and they were not: the job silently lost holds this attempt
+    /// never took, to somebody else's NPC.</summary>
+    [Fact]
+    public void A_rolled_back_attempt_leaves_the_jobs_earlier_holds_alone()
+    {
+        JobTourPlan plan = TwoTargetsTwoChests();
+        var targetBook = new FakeBook<JobTarget>(Jobs.World);
+        var chestBook = new FakeBook<INpcContainer>(Jobs.World);
+
+        JobTarget contested = default;
+        foreach (PlannedStep step in plan.Steps)
+        {
+            if (!step.IsCollect)
+            {
+                contested = step.Target;
+                break;
+            }
+        }
+
+        // A hold this job took out under an earlier plan, at a step this attempt
+        // will never walk. It is the job's, it is legitimate, and this attempt
+        // has nothing to do with it.
+        JobTarget earlier = Jobs.Target("from-the-last-plan", 99f, 0f, 0, ("wood", 1));
+        Assert.Equal(
+            ReservationOutcome.Reserved, targetBook.Reserve(earlier, ReservationId.For("mine", 77)));
+
+        // Somebody else has the first target this plan would service.
+        Assert.Equal(
+            ReservationOutcome.Reserved, targetBook.Reserve(contested, ReservationId.For("theirs", 0)));
+
+        var targets = new JobCommitment<JobTarget>("mine", targetBook);
+        var chests = new JobCommitment<INpcContainer>("mine", chestBook);
+        JobReservationResult result = PlanReservations.TakeOut(plan, targets, chests);
+
+        Assert.True(result.RolledBack);
+        Assert.False(result.AllHeld);
+
+        // The earlier hold is still the job's.
+        Assert.True(targetBook.IsHeldBy(earlier, ReservationId.For("mine", 77)));
+
+        // Nothing this attempt took is still out, and no book was swept.
+        Assert.Equal(0, chestBook.Count);
+        Assert.Equal(0, targetBook.ReleaseAllCalls);
+        Assert.Equal(0, chestBook.ReleaseAllCalls);
     }
 
     /// <summary>Re-establishing a job's own holds after an interruption counts

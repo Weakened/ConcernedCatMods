@@ -63,12 +63,29 @@ internal sealed class JobCommitment<TSubject> : IJobCommitment
     where TSubject : INpcEpochScoped
 {
     private readonly IReservationBook<TSubject> _book;
-    private readonly List<TSubject> _taken = new List<TSubject>();
+    private readonly List<Hold> _taken = new List<Hold>();
 
     internal JobCommitment(string? jobId, IReservationBook<TSubject> book)
     {
         JobId = jobId ?? string.Empty;
         _book = book ?? throw new ArgumentNullException(nameof(book));
+    }
+
+    /// <summary>One subject this commitment took out, under the step it was
+    /// taken for. The step is kept because giving a hold back under the name it
+    /// was taken under is the only way to give back exactly that hold and
+    /// nothing else.</summary>
+    private readonly struct Hold
+    {
+        internal Hold(TSubject subject, int step)
+        {
+            Subject = subject;
+            Step = step;
+        }
+
+        internal TSubject Subject { get; }
+
+        internal int Step { get; }
     }
 
     /// <inheritdoc />
@@ -82,7 +99,19 @@ internal sealed class JobCommitment<TSubject> : IJobCommitment
 
     /// <summary>Everything this job took out through this commitment, in the
     /// order it took it.</summary>
-    internal IReadOnlyList<TSubject> Taken => _taken;
+    internal IReadOnlyList<TSubject> Taken
+    {
+        get
+        {
+            var subjects = new List<TSubject>(_taken.Count);
+            foreach (Hold hold in _taken)
+            {
+                subjects.Add(hold.Subject);
+            }
+
+            return subjects;
+        }
+    }
 
     /// <summary>Takes one subject out under the name of one step of the plan.
     ///
@@ -107,7 +136,7 @@ internal sealed class JobCommitment<TSubject> : IJobCommitment
         ReservationOutcome outcome = _book.Reserve(subject, name);
         if (outcome == ReservationOutcome.Reserved)
         {
-            _taken.Add(subject);
+            _taken.Add(new Hold(subject, step));
         }
 
         return outcome;
@@ -125,6 +154,53 @@ internal sealed class JobCommitment<TSubject> : IJobCommitment
 
         IsCancelled = true;
         int released = _book.ReleaseAllFor(JobId);
+        _taken.Clear();
+        return released;
+    }
+
+    /// <summary>Gives back exactly what this commitment newly took, and leaves
+    /// the commitment usable.
+    ///
+    /// <b>Why this is not <see cref="Cancel"/>, which was doing the job.</b>
+    /// Cancel is the right verb for "this job is over": it releases by job id,
+    /// which sweeps up holds taken by an earlier plan of the same job, and it
+    /// latches, so nothing may be reserved through the object afterwards. Both
+    /// are wrong for an attempt that was abandoned.
+    ///
+    /// <i>Releasing by job takes what this attempt never had.</i> On the
+    /// recovery path a job re-establishing its holds is answered
+    /// <see cref="ReservationOutcome.AlreadySatisfied"/> for everything it
+    /// already owned, so none of that enters the list below - and a conflict at
+    /// step five would have handed back the previous plan's legitimate holds
+    /// along with this attempt's two.
+    ///
+    /// <i>Latching kills an object the caller still holds.</i> A runtime that
+    /// keeps one commitment per job, adjusts its plan and tries again would get
+    /// <see cref="ReservationOutcome.Unspecified"/> for ever after, and the
+    /// failure would present as a reservation conflict rather than as a dead
+    /// object.
+    ///
+    /// Each hold goes back under the name it was taken under, so a book that
+    /// decides on the whole name and a book that decides on the job half behave
+    /// the same here.</summary>
+    /// <returns>How many were actually given back.</returns>
+    internal int RollbackNewlyTaken()
+    {
+        if (IsCancelled)
+        {
+            return 0;
+        }
+
+        int released = 0;
+        foreach (Hold hold in _taken)
+        {
+            if (_book.Release(hold.Subject, ReservationId.For(JobId, hold.Step))
+                == ReservationOutcome.Released)
+            {
+                released++;
+            }
+        }
+
         _taken.Clear();
         return released;
     }
@@ -257,7 +333,15 @@ internal readonly struct JobReservationResult
     /// <b>True means the books are exactly as they were.</b> A plan that got
     /// four steps in and was refused the fifth has no business leaving four
     /// holds behind it: the plan is not walkable, so the holds belong to nobody
-    /// and nothing will release them until the world unloads.</summary>
+    /// and nothing will release them until the world unloads.
+    ///
+    /// <b>Exactly as they were, and no further back.</b> What goes back is what
+    /// this attempt newly took, under the names it took them under - not
+    /// everything the job holds. A job re-establishing holds after an
+    /// interruption owns holds this attempt never took, and a rollback that
+    /// released those would make the sentence above false in the one direction
+    /// nobody would check. The commitments stay usable afterwards, so a caller
+    /// that adjusts its plan and asks again is asking a live object.</summary>
     internal bool RolledBack { get; }
 
     /// <summary>How many were newly taken.</summary>
@@ -432,10 +516,14 @@ internal static class PlanReservations
                 continue;
             }
 
-            // Stop here and put everything back. The plan cannot be walked as
-            // written, so nothing it took out is doing anybody any good.
-            targets?.Cancel();
-            containers?.Cancel();
+            // Stop here and put back exactly what this attempt took. The plan
+            // cannot be walked as written, so nothing it took out is doing
+            // anybody any good - but a cancel would also release holds an
+            // earlier plan of the same job legitimately owns, and would latch
+            // the caller's commitments so a second attempt could never reserve
+            // anything again.
+            targets?.RollbackNewlyTaken();
+            containers?.RollbackNewlyTaken();
             return new JobReservationResult(attempts, rolledBack: true);
         }
 

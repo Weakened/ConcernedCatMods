@@ -61,11 +61,11 @@ public sealed class PlanningArithmeticTests
             Jobs.Stock(warded, ("wood", 100)),
         };
 
-        JobManifest missing = ManifestArithmetic.Shortfall(Jobs.Needs(("wood", 10)), sources);
+        JobManifest missing = ManifestArithmetic.Shortfall(Jobs.Needs(("wood", 10)), JobManifest.Empty, sources);
         Assert.Equal(6, missing.RequiredOf("wood"));
 
         warded.Refusal = Containers.NpcContainerRefusal.None;
-        Assert.True(ManifestArithmetic.Shortfall(Jobs.Needs(("wood", 10)), sources).IsEmpty);
+        Assert.True(ManifestArithmetic.Shortfall(Jobs.Needs(("wood", 10)), JobManifest.Empty, sources).IsEmpty);
     }
 
     /// <summary>An empty allowance permits anything, because a role that did not
