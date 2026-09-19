@@ -144,7 +144,48 @@ needs its own issue and its own in-game proof:
 3. The unified census changes what "duplicated" means for each product.
 4. The unified anchor changes which bed counts as home when a player has several.
 
-## 7. The leaves
+## 7. A plan is an answer, and the verdict decides what happens next
+
+Working the whole job out before acting is the point of this package, and it only pays if the answer is read
+correctly. There are six answers and they are not interchangeable:
+
+| Verdict | What it means | What the runtime does with it |
+|---|---|---|
+| `Planned` | An ordered plan for as much of the job as this round covers. | Walk the steps. |
+| `NothingToDo` | The job is already satisfied - decided on a conclusive empty snapshot, before any target is known. | The **only** verdict a job may be reported finished on without doing anything. |
+| `BudgetExhausted` | Planning ran out of its allowance. Incomplete, not impossible. | Ask again next tick. Never a reason to stop a job. |
+| `ShortOfMaterial` | Understood and not provisionable: the manifest asks for more than is reachable **within one round**. | Stop and tell the player. Asking again unchanged does not help. |
+| `AreaInvalid` | The work area could not be read, or does not exist. | Fail closed; nothing widens to a default. |
+| `Refused` | A defect in the request: malformed, an identity that holds no body, an empty manifest where one was required. | A programmer's problem, not a player's. |
+
+Three rules, each of which exists because it was got wrong first, and each of which cost a blocker.
+
+**The player sentence is `Reason`, never the verdict.** `ShortOfMaterial` covers two situations whose fixes are
+opposites, and they are told apart by the shortfall manifest rather than by a verdict of their own: a non-empty
+shortfall means the material is not there and more must be brought, an empty one means it is there and spread
+across more containers than one round opens, and must be brought together. A role that renders the verdict name
+instead of the reason will tell somebody they are out of wood while they are standing on it. There is deliberately
+no seventh verdict for the second case: both are terminal until a player acts, no caller branches on the
+difference, and a surface is not widened for a distinction nobody makes. The day a role responds to scattered
+material by consolidating it, that is the caller which justifies the member.
+
+**Finishing is decided on the reconciliation; retrying is decided on the verdict.** A plan can execute perfectly
+and still be a plan for eight trips out of twelve, so a job is reported finished only on
+`JobReconciliation.IsComplete`, which asks both questions: did every step come off, and did this plan cover the
+whole job. Whether work is outstanding is a different question from whether another round would help - a terminal
+refusal leaves work outstanding for ever - so `HasUnfinishedWork` states the fact and the verdict decides the
+loop. A runtime keyed only on the fact spins on a refusal, which is why the name says what it is rather than what
+to do about it.
+
+**A parameter that makes a claim never carries a default.** `leftForAnotherRound` defaulting to zero says the plan
+covered the whole job; `carrying` defaulting to empty says the NPC is holding nothing this job may spend. Neither
+is checkable here - what is actually held is the custody ledger's answer - so a call site that stays silent is not
+omitting a detail, it is asserting something it was never asked. Both were silent once and both produced the same
+failure, a job reporting itself finished with targets untouched. Two validator rules keep it that way:
+`check_npc_planning_never_defaults_a_claim`, and `check_npc_planning_decides_nothing_to_do_once`, which holds the
+finish verdict to a single decision site because it has had three separate ways in.
+
+## 8. The leaves
 
 | Issue | Leaf |
 |---|---|
@@ -160,7 +201,7 @@ needs its own issue and its own in-game proof:
 | #381 | Gunnar collects and hauls, in planned batches, without portals |
 | #382 | Sunniva: the quest, the move-in, and one planned maintenance round |
 
-## 8. Status
+## 9. Status
 
 The package exists, builds, ships nothing, and is consumed by nobody yet. No role has been moved onto it. Nothing in
 this document has been observed in game, and every gameplay row for this program is OWNER GO-AROUND PENDING.
