@@ -62,4 +62,15 @@ internal static class GunnarHaulingDefaults
 
     /// <summary>The name shown over his body.</summary>
     public const string WorkerDisplayName = "Gunnar";
+
+    /// <summary>The animation trigger Gunnar's idle gesture plays on his own
+    /// body (#381).
+    ///
+    /// Vanilla's own <c>interact</c> gesture, deliberately, rather than a
+    /// bespoke hammer swing: it is a parameter every humanoid animator in the
+    /// game already has, where an invented name would warn on every call and
+    /// animate nothing. Nothing about it is durable - it is a transient trigger
+    /// that saves nothing - so changing it costs one line and no migration.
+    /// </summary>
+    public const string IdleGestureTrigger = "interact";
 }
