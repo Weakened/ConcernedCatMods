@@ -16,7 +16,7 @@ namespace TheConcernedCat.ConcernedNPC.Planning;
 /// book holds the thing, not a string about it. So the tour plan keeps the
 /// subjects alongside, and the <c>JobPlan</c> stays exactly as narrow as it was
 /// written to be.</summary>
-internal readonly struct PlannedStep
+public readonly struct PlannedStep
 {
     internal PlannedStep(
         JobStep step, int tour, bool isCollect, SourceStock source, JobTarget target, JobManifest moves)
@@ -30,20 +30,20 @@ internal readonly struct PlannedStep
     }
 
     /// <summary>The step as the plan carries it.</summary>
-    internal JobStep Step { get; }
+    public JobStep Step { get; }
 
     /// <summary>Which trip it belongs to.</summary>
-    internal int Tour { get; }
+    public int Tour { get; }
 
     /// <summary>Whether this is a chest being opened rather than a target being
     /// serviced.</summary>
-    internal bool IsCollect { get; }
+    public bool IsCollect { get; }
 
     /// <summary>The container, for a collect step.</summary>
-    internal SourceStock Source { get; }
+    public SourceStock Source { get; }
 
     /// <summary>The target, for a service step.</summary>
-    internal JobTarget Target { get; }
+    public JobTarget Target { get; }
 
     /// <summary>What this step moves, item by item: out of the chest for a
     /// collect step, into the work for a service step. <b>The only thing that
@@ -51,7 +51,7 @@ internal readonly struct PlannedStep
     /// fetched minus what was used is what is still being carried at the end of
     /// the round, and a total in units cannot answer that because forty of one
     /// thing and forty of another are the same number.</summary>
-    internal JobManifest Moves { get; }
+    public JobManifest Moves { get; }
 
     /// <summary>The name this step's reservation would be taken under.</summary>
     internal ReservationId ReservationFor(string? jobId) => ReservationId.For(jobId, Step.Index);

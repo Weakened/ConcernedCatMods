@@ -53,7 +53,7 @@ namespace TheConcernedCat.ConcernedNPC.Planning;
 /// and <see cref="NpcReservedSourceAvailability.Agreement"/> is a value a role's
 /// own tests can assert on - see
 /// <see cref="NpcSourceVocabularies"/>.</summary>
-internal interface INpcSourceAvailability
+public interface INpcSourceAvailability
 {
     /// <summary>How many units of <paramref name="item"/> in the container named
     /// <paramref name="containerKey"/> this job may count on, given that

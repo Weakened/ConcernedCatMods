@@ -25,7 +25,7 @@ namespace TheConcernedCat.ConcernedNPC.Work;
 /// <b>Why the label travels with it.</b> Because the alternative is this
 /// library inventing one, and "the work area" is the sort of sentence a player
 /// should recognise from where they marked it, not from a type name.</summary>
-public readonly struct NpcWorkAreaDescriptor
+internal readonly struct NpcWorkAreaDescriptor
 {
     private readonly IReadOnlyList<float>? _shape;
 

@@ -29,11 +29,19 @@ public class PublicSurfaceTests
     /// grant carries (<c>BodyClaim</c>, <c>BodyClaimStatus</c>,
     /// <c>BodyLease</c>).
     ///
-    /// <b>Work areas.</b> The provider side a role registers and the resolution
-    /// it gets back (<c>INpcWorkArea</c>, <c>INpcWorkAreaProvider</c>,
-    /// <c>NpcWorkAreaDescriptor</c>, <c>NpcWorkAreaId</c>,
-    /// <c>NpcWorkAreaRegistry</c>, <c>NpcWorkAreaResult</c>,
-    /// <c>ProviderRegistration</c>, <c>WorkAreaResolution</c>, <c>NpcPoint</c>).
+    /// <b>Work areas.</b> Where an NPC may work, and where anything is
+    /// (<c>INpcWorkArea</c>, <c>NpcPoint</c>). <b>The provider side is not
+    /// here.</b> It was, and it was public and undriveable - every factory on
+    /// <c>NpcWorkAreaResult</c>, every member of the descriptor and the id, and
+    /// both verbs on the registry were internal, so nothing outside could
+    /// register a provider or answer as one. Public and unusable is worse than
+    /// internal, because it advertises a capability that does not exist and the
+    /// next reader believes it. It goes public again with the factories that
+    /// drive it, on the day a role rebuilds a saved area after a reload.
+    ///
+    /// <b>Actor mode.</b> What an identity is doing, readable and not writable
+    /// (<c>ActorModeOwner</c>, <c>ActorMode</c>, <c>ActorModeOutcome</c>,
+    /// reached through <c>NpcRoleRegistry.ModeOf</c>).
     ///
     /// <b>Building a body.</b> The entry point and its inputs and outputs, and
     /// nothing else: the factory (<c>NpcWorkerPrefabFactory</c>), what it is
@@ -45,18 +53,45 @@ public class PublicSurfaceTests
     /// <c>NpcDroppedItem</c>), and the other kind of body
     /// (<c>NpcPresentationBody</c>, <c>NpcPresentationFigure</c>).
     ///
+    /// <b>Running a job.</b> The driver a role pumps and what it hands back
+    /// (<c>NpcJobDriver</c>, <c>NpcJobOrder</c>, <c>INpcJobRole</c>,
+    /// <c>NpcJobProgress</c>, <c>NpcJobAdvance</c>); what a role describes its
+    /// work with (<c>JobTarget</c>, <c>JobManifest</c>, <c>JobManifestLine</c>,
+    /// <c>SourceStock</c>, <c>StockLine</c>, <c>NpcCarryCapacity</c>,
+    /// <c>JobStepActions</c>); what it carries out and branches on
+    /// (<c>PlannedStep</c>, <c>JobStep</c>, <c>JobPlanVerdict</c>,
+    /// <c>JobReconciliation</c>, <c>AreaScanReport</c>,
+    /// <c>AreaScanOutcome</c>); the completion condition it answers
+    /// (<c>IStopObserver</c>, <c>RouteStop</c>, <c>StopStatus</c>); the ground
+    /// it reads (<c>INpcAreaProbe</c>, <c>AreaSample</c>,
+    /// <c>AreaSampleVerdict</c>, <c>AreaRejection</c>); the chests it offers
+    /// (<c>INpcContainer</c>, <c>NpcContainerAccess</c>,
+    /// <c>NpcContainerUse</c>, <c>NpcContainerRefusal</c>,
+    /// <c>INpcEpochScoped</c>); and what other jobs have set aside
+    /// (<c>INpcSourceAvailability</c>).
+    ///
     /// <b>What is still internal, and why that is not an oversight.</b> The
     /// arbiter, the mode owner, the slug rules, the build gate, the key
     /// composition, the prefab-to-contract table, the sidecar and the atomic
     /// write. Members too: the built prefab, the eager build, the identity
     /// stamp, the network view and the tally's own constructors, each because
     /// handing it over would let a caller reach past a rule the type exists to
-    /// keep. The rule for adding to this list has not changed - a leaf says
-    /// which role needs it and accepts the version bump - and the reason the
-    /// body group arrives in one edit rather than three is that three role
-    /// leaves discovering it one at a time is three bumps.</summary>
+    /// keep. The whole of <c>Custody/</c> and <c>Storage/</c>, which the job
+    /// pipeline never touches. And the sequencing itself - the snapshot
+    /// builder, the tour planner, the tour plan, the partitioner, the source
+    /// selector, the manifest arithmetic, the budget, the commitments, the
+    /// reservation books, the stop sequencer and the route execution - because
+    /// <c>NpcJobDriver</c> is the door to all of it and a role that named them
+    /// would be a role sequencing a job for itself, three times, differently.
+    /// The rule for adding to this list has not changed - a leaf says which
+    /// role needs it and accepts the version bump - and the reason the body
+    /// group arrives in one edit rather than three is that three role leaves
+    /// discovering it one at a time is three bumps.</summary>
     private static readonly string[] Expected =
     {
+        "TheConcernedCat.ConcernedNPC.Bodies.ActorMode",
+        "TheConcernedCat.ConcernedNPC.Bodies.ActorModeOutcome",
+        "TheConcernedCat.ConcernedNPC.Bodies.ActorModeOwner",
         "TheConcernedCat.ConcernedNPC.Bodies.BodyClaim",
         "TheConcernedCat.ConcernedNPC.Bodies.BodyClaimStatus",
         "TheConcernedCat.ConcernedNPC.Bodies.BodyLease",
@@ -72,6 +107,27 @@ public class PublicSurfaceTests
         "TheConcernedCat.ConcernedNPC.Body.NpcWorkerPrefabFactory",
         "TheConcernedCat.ConcernedNPC.Body.NpcWorkerPrefabOptions",
         "TheConcernedCat.ConcernedNPC.Body.NpcWorldBodies",
+        "TheConcernedCat.ConcernedNPC.Containers.INpcContainer",
+        "TheConcernedCat.ConcernedNPC.Containers.NpcContainerAccess",
+        "TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal",
+        "TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse",
+        "TheConcernedCat.ConcernedNPC.Jobs.INpcJobRole",
+        "TheConcernedCat.ConcernedNPC.Jobs.NpcJobAdvance",
+        "TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver",
+        "TheConcernedCat.ConcernedNPC.Jobs.NpcJobOrder",
+        "TheConcernedCat.ConcernedNPC.Jobs.NpcJobProgress",
+        "TheConcernedCat.ConcernedNPC.Planning.INpcSourceAvailability",
+        "TheConcernedCat.ConcernedNPC.Planning.JobManifest",
+        "TheConcernedCat.ConcernedNPC.Planning.JobManifestLine",
+        "TheConcernedCat.ConcernedNPC.Planning.JobPlanVerdict",
+        "TheConcernedCat.ConcernedNPC.Planning.JobReconciliation",
+        "TheConcernedCat.ConcernedNPC.Planning.JobStep",
+        "TheConcernedCat.ConcernedNPC.Planning.JobStepActions",
+        "TheConcernedCat.ConcernedNPC.Planning.JobTarget",
+        "TheConcernedCat.ConcernedNPC.Planning.NpcCarryCapacity",
+        "TheConcernedCat.ConcernedNPC.Planning.PlannedStep",
+        "TheConcernedCat.ConcernedNPC.Planning.SourceStock",
+        "TheConcernedCat.ConcernedNPC.Planning.StockLine",
         "TheConcernedCat.ConcernedNPC.Roles.INpcDataPaths",
         "TheConcernedCat.ConcernedNPC.Roles.INpcRole",
         "TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract",
@@ -80,16 +136,19 @@ public class PublicSurfaceTests
         "TheConcernedCat.ConcernedNPC.Roles.NpcRoleRegistry",
         "TheConcernedCat.ConcernedNPC.Roles.RoleRegistration",
         "TheConcernedCat.ConcernedNPC.Roles.RoleRegistrationStatus",
+        "TheConcernedCat.ConcernedNPC.Routing.IStopObserver",
+        "TheConcernedCat.ConcernedNPC.Routing.RouteStop",
+        "TheConcernedCat.ConcernedNPC.Routing.StopStatus",
+        "TheConcernedCat.ConcernedNPC.Work.AreaRejection",
+        "TheConcernedCat.ConcernedNPC.Work.AreaSample",
+        "TheConcernedCat.ConcernedNPC.Work.AreaSampleVerdict",
+        "TheConcernedCat.ConcernedNPC.Work.AreaScanOutcome",
+        "TheConcernedCat.ConcernedNPC.Work.AreaScanReport",
+        "TheConcernedCat.ConcernedNPC.Work.INpcAreaProbe",
+        "TheConcernedCat.ConcernedNPC.Work.INpcEpochScoped",
         "TheConcernedCat.ConcernedNPC.Work.INpcWorkArea",
-        "TheConcernedCat.ConcernedNPC.Work.INpcWorkAreaProvider",
         "TheConcernedCat.ConcernedNPC.Work.NpcPoint",
-        "TheConcernedCat.ConcernedNPC.Work.NpcWorkAreaDescriptor",
-        "TheConcernedCat.ConcernedNPC.Work.NpcWorkAreaId",
-        "TheConcernedCat.ConcernedNPC.Work.NpcWorkAreaRegistry",
-        "TheConcernedCat.ConcernedNPC.Work.NpcWorkAreaResult",
         "TheConcernedCat.ConcernedNPC.Work.NpcWorldEpoch",
-        "TheConcernedCat.ConcernedNPC.Work.ProviderRegistration",
-        "TheConcernedCat.ConcernedNPC.Work.WorkAreaResolution",
     };
 
     [Fact]
@@ -189,6 +248,55 @@ public class PublicSurfaceTests
         // nobody wrote, find no bodies, and permit a second one.
         AssertNoPublicConstructor(typeof(Body.NpcWorkerPrefabFactory));
         AssertNoPublicConstructor(typeof(Body.NpcWorldBodies));
+
+        // And the same rule for the job surface. Each of these is something a
+        // role OBTAINS from the pipeline rather than states, and each one a
+        // role could mint would be a claim about work nobody did: a step the
+        // plan never wrote, a stop the planner never ordered, a report about a
+        // look nobody took, books for a round that never ran, or an
+        // instruction the driver never gave. The driver itself is reached
+        // through NpcJobDriver.For, which is what makes "an order that cannot
+        // be worked comes back already stopped" true of every driver rather
+        // than of the ones that happened to go through the factory.
+        AssertNoPublicConstructor(typeof(Planning.JobStep));
+        AssertNoPublicConstructor(typeof(Planning.PlannedStep));
+        AssertNoPublicConstructor(typeof(Planning.JobReconciliation));
+        AssertNoPublicConstructor(typeof(Routing.RouteStop));
+        AssertNoPublicConstructor(typeof(Work.AreaScanReport));
+        AssertNoPublicConstructor(typeof(TheConcernedCat.ConcernedNPC.Jobs.NpcJobAdvance));
+        AssertNoPublicConstructor(typeof(TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver));
+
+        // The mode owner is the sharpest case on this list, because reading it
+        // and changing it are the same object. A consumer that could construct
+        // one would run a second mode system for an identity that the arbiter
+        // cannot see - which is the condition that lets one identity end up with
+        // two bodies, and exactly what the shipped products do today from their
+        // own compiled copies. A consumer that could call Enter, Release or
+        // AbandonForWorldUnload would be worse still: not a private mode system
+        // beside the shared one, but a hand inside it.
+        AssertNoPublicConstructor(typeof(Bodies.ActorModeOwner));
+        AssertNotPublic(typeof(Bodies.ActorModeOwner), "Enter");
+        AssertNotPublic(typeof(Bodies.ActorModeOwner), "Release");
+        AssertNotPublic(typeof(Bodies.ActorModeOwner), "AbandonForWorldUnload");
+
+        // And the read surface a role actually needs is there, so the pair is
+        // not merely shut.
+        foreach (string member in new[]
+                 { "Identity", "Mode", "JobId", "Revision", "MayRelocateHome", "MayRetireBody", "IsHeldBy" })
+        {
+            Assert.True(
+                typeof(Bodies.ActorModeOwner).GetMember(
+                    member, BindingFlags.Public | BindingFlags.Instance).Length > 0,
+                "ActorModeOwner." + member + " is not public. Reading a mode is the whole reason the type "
+                + "is reachable at all; without it a role is left with the bypass the validator forbids.");
+        }
+
+        Assert.NotNull(typeof(NpcRoleRegistry).GetMethod("ModeOf", BindingFlags.Public | BindingFlags.Instance));
+    }
+
+    private static void AssertNotPublic(Type type, string member)
+    {
+        Assert.Empty(type.GetMember(member, BindingFlags.Public | BindingFlags.Instance));
     }
 
     [Fact]

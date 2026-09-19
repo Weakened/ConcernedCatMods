@@ -295,11 +295,25 @@ public sealed class NpcRoleRegistry
     public BodyClaim ReleaseBody(NpcIdentity identity, NpcBodyKind kind, string holder) =>
         _arbiter.Release(identity, kind, holder, CurrentWorld);
 
-    /// <summary>The identity's single mode owner. Internal: what a job may do
-    /// with an identity's mode is the job pipeline's question, and widening this
-    /// library's public surface is a breaking change for every installed
-    /// consumer, so it waits for the leaf that needs it.</summary>
-    internal Bodies.ActorModeOwner? ModeOf(NpcIdentity identity) => _arbiter.ModeOf(identity);
+    /// <summary>The identity's single mode owner, or null for an identity this
+    /// registry does not track.
+    ///
+    /// <b>Public because reading a mode and changing one are different
+    /// questions, and only the second goes through a claim.</b> A role has to be
+    /// able to ask what an identity is doing - before relocating a home, before
+    /// retiring a body, before offering the player an order - and
+    /// <see cref="TryClaimBody"/> answers none of that. What comes back is
+    /// read-only: the owner's constructor and its three mutators are internal,
+    /// so the only way to change a mode is still through this registry.
+    ///
+    /// <b>The constructor is the point of the pair.</b> A consuming product
+    /// that wrote <c>new ActorModeOwner(...)</c> would run a second mode system
+    /// for one identity that the arbiter cannot see, which is the condition that
+    /// lets one identity end up with two bodies. There is a validator rule
+    /// against writing that line; an internal constructor makes it not
+    /// compile, which is the difference between a rule and a
+    /// guarantee.</summary>
+    public Bodies.ActorModeOwner? ModeOf(NpcIdentity identity) => _arbiter.ModeOf(identity);
 
     private static bool ValidatePaths(INpcDataPaths? paths, out string reason)
     {
