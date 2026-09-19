@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using BepInEx.Logging;
+using TheConcernedCat.ConcernedNPC.Roles;
 using TheConcernedCat.ConcernedTeamster.Adapters.Navigation;
 using TheConcernedCat.ConcernedTeamster.Domain.Capabilities;
 using TheConcernedCat.ConcernedTeamster.Domain.Hauling;
 using TheConcernedCat.ConcernedTeamster.Domain.Hauling.Execution;
 using TheConcernedCat.ConcernedTeamster.Domain.Load;
 using TheConcernedCat.ConcernedTeamster.Domain.Risk;
+using TheConcernedCat.ConcernedTeamster.Domain.Workers;
 using TheConcernedCat.Workers;
 using UnityEngine;
 
@@ -50,6 +52,7 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
     private TeamsterWorkerBody _body = null!;
     private VagonHitchSeam _seam = null!;
     private GunnarWorkAuthority _authority = null!;
+    private IWorkerIdentityAuthority _identity = null!;
     private ICartRoutePlanner _planner = null!;
     private IHaulMotionMonitor _monitor = null!;
     private CartNavigationBridge _navigation = null!;
@@ -109,6 +112,7 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         _body = new TeamsterWorkerBody(_execution);
         _seam = new VagonHitchSeam(_body, EngagedBrakeCartId, _execution);
         _authority = new GunnarWorkAuthority(settings);
+        _identity = RegisterWithTheSharedRuntime(log);
 
         // Agent B's cart navigation (#314): one planner and one query budget for
         // every haul, with Teamster's shipped climb and descent calibrations.
@@ -221,6 +225,16 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
 
     private void OnWorldLoaded()
     {
+        // The shared runtime mints the epoch every hold in this process is
+        // stamped with. Several roles racing to be first is fine: a second
+        // caller is told the same epoch and forgets nothing.
+        NpcRoleRegistry.Shared.BeginWorldLoad(out int forgotten);
+        if (forgotten > 0)
+        {
+            _log.LogInfo("Gunnar's hauling: the shared NPC runtime forgot " + forgotten +
+                " body hold(s) from the previous world.");
+        }
+
         _epoch = Guid.NewGuid();
         _censusComplete = false;
         _censusIndex = 0;
@@ -232,14 +246,58 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         _pump = null;
         _navigation.ReleaseCart();
         var ports = new HaulExecutorPorts(_body, _seam, _planner, _monitor, _authority, this, this, _navigation);
-        _executor = new HaulExecutor(ports, WorkerKey.Gunnar, _epoch, Service.NextStartingRevision, _limits, _execution);
+        _executor = new HaulExecutor(
+            ports, WorkerKey.Gunnar, _epoch, Service.NextStartingRevision, _limits, _execution, _identity);
         Service.Bind(_executor);
         _log.LogInfo("Gunnar's hauling: a world loaded (epoch " + _epoch.ToString("N", CultureInfo.InvariantCulture).Substring(0, 8) + "); leases start empty.");
     }
 
     private void OnWorldUnloaded()
     {
+        // Gunnar's own hold is given back first, inside the teardown, and only
+        // then does the world end for everybody: a release into a world that is
+        // already gone is refused, which would leave the identity held by a job
+        // whose string nothing still has.
         Shutdown("the world unloaded");
+        NpcRoleRegistry.Shared.EndWorldLoad();
+    }
+
+    /// <summary>Tells the shared NPC runtime that Gunnar exists, and hands back
+    /// the authority his identity hold comes from.
+    ///
+    /// Registering declares two durable facts and asks for nothing: this product
+    /// still registers its own prefab, at the same moment it always has, under
+    /// the same name. An identity that is already registered - a plugin object
+    /// rebuilt inside one game session - is not an error: the arbiter keeps one
+    /// record per identity for the life of the process, which is exactly what it
+    /// is for.</summary>
+    private static IWorkerIdentityAuthority RegisterWithTheSharedRuntime(ManualLogSource log)
+    {
+        if (!GunnarNpcRole.TryCreate(out GunnarNpcRole role, out string why))
+        {
+            // A role this product cannot even describe is a programming error,
+            // and it is one that would otherwise be discovered as an unexplained
+            // refusal on the player's first order.
+            throw new InvalidOperationException("Gunnar's NPC role is invalid: " + why);
+        }
+
+        RoleRegistration registration = NpcRoleRegistry.Shared.Register(role);
+        switch (registration.Status)
+        {
+            case RoleRegistrationStatus.Registered:
+                log.LogInfo("Gunnar is registered with the shared NPC runtime as '" + role.Identity.Value + "'.");
+                break;
+            case RoleRegistrationStatus.DuplicateIdentity:
+                log.LogInfo("Gunnar was already registered with the shared NPC runtime as '" +
+                    role.Identity.Value + "'.");
+                break;
+            default:
+                log.LogError("Gunnar was refused by the shared NPC runtime (" + registration.Status + "): " +
+                    registration.Reason);
+                break;
+        }
+
+        return new GunnarIdentityAuthority(NpcRoleRegistry.Shared, role.Identity);
     }
 
     /// <summary>Detach first, then forget the world.</summary>

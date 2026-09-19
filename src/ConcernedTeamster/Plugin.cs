@@ -8,6 +8,13 @@ namespace TheConcernedCat.ConcernedTeamster;
 
 [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
 [BepInDependency(Jotunn.Main.ModGuid)]
+// CNPC-R2 (#381): Gunnar's identity is arbitrated by the shared NPC
+// runtime, so a missing package is a dependency failure at load rather
+// than a null reference later in somebody's evening. Spelled out rather
+// than referenced, because the repository's library audit reads this file
+// as text; NpcLibraryAdoptionTests pins the literal against the library's
+// own constant so the two cannot drift.
+[BepInDependency("com.theconcernedcat.valheim.concernednpc")]
 public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernedteamster";

@@ -1,5 +1,6 @@
 using TheConcernedCat.ConcernedTeamster.Domain.Hauling;
 using TheConcernedCat.ConcernedTeamster.Domain.Hauling.Execution;
+using TheConcernedCat.ConcernedTeamster.Domain.Workers;
 using TheConcernedCat.Workers;
 
 namespace ConcernedTeamster.Tests;
@@ -70,10 +71,18 @@ internal sealed class HaulingExecutionRig
 
     public static WorkPoint Target => new WorkPoint(0f, 0f, 30f);
 
+    /// <summary>One authority for the whole rig, shared by every executor it
+    /// builds. That is the shape a running game has - one arbiter in the
+    /// process, outliving every world load - so a hold a torn-down executor
+    /// failed to give back would still be held by the next one, and a test can
+    /// see it.</summary>
+    public IWorkerIdentityAuthority Identity { get; } = new LocalWorkerIdentityAuthority();
+
     public HaulExecutor NewExecutor(Guid epoch, int startingRevision)
     {
         var ports = new HaulExecutorPorts(Body, Seam, Planner, Monitor, Authority, Clock, Log, Navigation);
-        var executor = new HaulExecutor(ports, WorkerKey.Gunnar, epoch, startingRevision, Limits, Execution);
+        var executor = new HaulExecutor(
+            ports, WorkerKey.Gunnar, epoch, startingRevision, Limits, Execution, Identity);
         Seam.ModeProbe = () => executor.Modes.Mode;
         return executor;
     }
