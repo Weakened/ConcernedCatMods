@@ -1,0 +1,395 @@
+using System;
+using System.Collections.Generic;
+using TheConcernedCat.ConcernedNPC.Containers;
+using TheConcernedCat.ConcernedNPC.Reservations;
+using TheConcernedCat.ConcernedNPC.Work;
+
+namespace TheConcernedCat.ConcernedNPC.Planning;
+
+/// <summary>Everything one job has taken out, and the one verb that gives it all
+/// back.</summary>
+internal interface IJobCommitment
+{
+    /// <summary>Whose it is.</summary>
+    string JobId { get; }
+
+    /// <summary>How many holds are believed to be outstanding.</summary>
+    int Held { get; }
+
+    /// <summary>Whether the refund has happened.</summary>
+    bool IsCancelled { get; }
+
+    /// <summary>Gives everything back, <b>exactly once</b>. Answers how many
+    /// were released, and zero for every call after the first.</summary>
+    int Cancel();
+}
+
+/// <summary>What one job holds in one book, and the guarantee that cancelling it
+/// refunds once.
+///
+/// <b>Why "exactly once" needs a type rather than a discipline.</b> A plan is
+/// cancelled from more places than anybody expects: the player countermands it,
+/// the NPC dies, the world unloads, an interruption gives up, and two of those
+/// can happen in the same frame. Releasing twice is not merely untidy - a book
+/// whose release is counted, or a ledger that refunds material on release, gives
+/// the job its material back twice and the second lot came from nowhere. So the
+/// latch lives here, next to the holds, and every one of those callers can
+/// cancel unconditionally without first proving what it had. That is the same
+/// reason <see cref="ReservationOutcome.NotHeld"/> is an ordinary answer rather
+/// than an error one level down.
+///
+/// <b>Reserving twice is satisfied, not refused</b>, because conflicts are
+/// decided on the job half of a reservation's name. A job that re-establishes
+/// its holds after an interruption by walking its plan again gets
+/// <see cref="ReservationOutcome.AlreadySatisfied"/> for everything it already
+/// had, which is exactly what makes recovery possible without a separate record
+/// of what was taken - and a separate record is the thing that would be
+/// wrong.
+///
+/// <b>What it is not.</b> It is not custody and it holds no material. It records
+/// that a job has the right to act on something; what is actually carried lives
+/// in a ledger, in the custody layer, which is the only place that can say "this
+/// may or may not have happened".</summary>
+/// <typeparam name="TSubject">What is held: a target, a container.</typeparam>
+internal sealed class JobCommitment<TSubject> : IJobCommitment
+    where TSubject : INpcEpochScoped
+{
+    private readonly IReservationBook<TSubject> _book;
+    private readonly List<TSubject> _taken = new List<TSubject>();
+
+    internal JobCommitment(string? jobId, IReservationBook<TSubject> book)
+    {
+        JobId = jobId ?? string.Empty;
+        _book = book ?? throw new ArgumentNullException(nameof(book));
+    }
+
+    /// <inheritdoc />
+    public string JobId { get; }
+
+    /// <inheritdoc />
+    public int Held => _taken.Count;
+
+    /// <inheritdoc />
+    public bool IsCancelled { get; private set; }
+
+    /// <summary>Everything this job took out through this commitment, in the
+    /// order it took it.</summary>
+    internal IReadOnlyList<TSubject> Taken => _taken;
+
+    /// <summary>Takes one subject out under the name of one step of the plan.
+    ///
+    /// A cancelled commitment asks for nothing:
+    /// <see cref="ReservationOutcome.Unspecified"/> is returned and the book is
+    /// not touched, because a job that has given everything back and then
+    /// reserves one more thing has an orphan nobody will ever
+    /// release.</summary>
+    internal ReservationOutcome Reserve(TSubject subject, int step)
+    {
+        if (IsCancelled)
+        {
+            return ReservationOutcome.Unspecified;
+        }
+
+        ReservationId name = ReservationId.For(JobId, step);
+        if (name.IsEmpty)
+        {
+            return ReservationOutcome.Unspecified;
+        }
+
+        ReservationOutcome outcome = _book.Reserve(subject, name);
+        if (outcome == ReservationOutcome.Reserved)
+        {
+            _taken.Add(subject);
+        }
+
+        return outcome;
+    }
+
+    /// <inheritdoc />
+    public int Cancel()
+    {
+        if (IsCancelled)
+        {
+            // The whole point of the type. Every caller may cancel; only the
+            // first one refunds.
+            return 0;
+        }
+
+        IsCancelled = true;
+        int released = _book.ReleaseAllFor(JobId);
+        _taken.Clear();
+        return released;
+    }
+}
+
+/// <summary>Several commitments cancelled together, still exactly once.
+///
+/// A job holds targets in one book and containers in another, and a cancellation
+/// has to give both back without the caller remembering how many books there
+/// were. The latch is here as well as in each part, so cancelling the set twice
+/// refunds once even if somebody also cancelled one of the parts
+/// directly.</summary>
+internal sealed class JobCommitments : IJobCommitment
+{
+    private readonly List<IJobCommitment> _parts = new List<IJobCommitment>();
+
+    internal JobCommitments(string? jobId, params IJobCommitment?[]? parts)
+    {
+        JobId = jobId ?? string.Empty;
+        if (parts == null)
+        {
+            return;
+        }
+
+        foreach (IJobCommitment? part in parts)
+        {
+            if (part != null)
+            {
+                _parts.Add(part);
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public string JobId { get; }
+
+    /// <inheritdoc />
+    public int Held
+    {
+        get
+        {
+            int total = 0;
+            foreach (IJobCommitment part in _parts)
+            {
+                total += part.Held;
+            }
+
+            return total;
+        }
+    }
+
+    /// <inheritdoc />
+    public bool IsCancelled { get; private set; }
+
+    /// <inheritdoc />
+    public int Cancel()
+    {
+        if (IsCancelled)
+        {
+            return 0;
+        }
+
+        IsCancelled = true;
+        int released = 0;
+        foreach (IJobCommitment part in _parts)
+        {
+            released += part.Cancel();
+        }
+
+        return released;
+    }
+}
+
+/// <summary>One step's attempt to take out what it is about to touch.</summary>
+internal readonly struct ReservationAttempt
+{
+    internal ReservationAttempt(int step, ReservationId name, ReservationOutcome outcome, bool isCollect)
+    {
+        Step = step;
+        Name = name;
+        Outcome = outcome;
+        IsCollect = isCollect;
+    }
+
+    internal int Step { get; }
+
+    internal ReservationId Name { get; }
+
+    internal ReservationOutcome Outcome { get; }
+
+    internal bool IsCollect { get; }
+
+    /// <summary>Whether this job may act on the subject: it took it, or it
+    /// already had it. Those are the only two answers that are a yes.</summary>
+    internal bool IsHeld =>
+        Outcome == ReservationOutcome.Reserved || Outcome == ReservationOutcome.AlreadySatisfied;
+}
+
+/// <summary>What happened when a plan reserved everything it is going to
+/// touch.</summary>
+internal readonly struct JobReservationResult
+{
+    private readonly ReservationAttempt[]? _attempts;
+
+    internal JobReservationResult(IReadOnlyList<ReservationAttempt>? attempts)
+    {
+        if (attempts == null || attempts.Count == 0)
+        {
+            _attempts = null;
+        }
+        else
+        {
+            var copy = new ReservationAttempt[attempts.Count];
+            for (int index = 0; index < attempts.Count; index++)
+            {
+                copy[index] = attempts[index];
+            }
+
+            _attempts = copy;
+        }
+    }
+
+    internal IReadOnlyList<ReservationAttempt> Attempts => _attempts ?? Array.Empty<ReservationAttempt>();
+
+    /// <summary>How many were newly taken.</summary>
+    internal int Taken
+    {
+        get
+        {
+            int total = 0;
+            foreach (ReservationAttempt attempt in Attempts)
+            {
+                if (attempt.Outcome == ReservationOutcome.Reserved)
+                {
+                    total++;
+                }
+            }
+
+            return total;
+        }
+    }
+
+    /// <summary>How many another job already had. <b>Not an error</b> - it is
+    /// the ordinary answer when two NPCs want the same tree - but it is the
+    /// number that decides whether this plan can be walked as written.</summary>
+    internal int Conflicts
+    {
+        get
+        {
+            int total = 0;
+            foreach (ReservationAttempt attempt in Attempts)
+            {
+                if (attempt.Outcome == ReservationOutcome.HeldByAnother)
+                {
+                    total++;
+                }
+            }
+
+            return total;
+        }
+    }
+
+    /// <summary>How many were named in a world that has since gone.</summary>
+    internal int Stale
+    {
+        get
+        {
+            int total = 0;
+            foreach (ReservationAttempt attempt in Attempts)
+            {
+                if (attempt.Outcome == ReservationOutcome.StaleEpoch)
+                {
+                    total++;
+                }
+            }
+
+            return total;
+        }
+    }
+
+    /// <summary>Whether every step of the plan may act.</summary>
+    internal bool AllHeld
+    {
+        get
+        {
+            foreach (ReservationAttempt attempt in Attempts)
+            {
+                if (!attempt.IsHeld)
+                {
+                    return false;
+                }
+            }
+
+            return Attempts.Count > 0;
+        }
+    }
+
+    /// <summary>Whether no two steps asked under the same name.
+    ///
+    /// <b>True by construction and checked anyway.</b> A name is the job plus
+    /// the step index, and step indices are unique within a plan, so two steps
+    /// cannot collide unless the plan renumbered itself - which is exactly the
+    /// bug that would make one step release another's hold. It costs a pass over
+    /// a short list to know rather than to believe.</summary>
+    internal bool NamesAreDistinct
+    {
+        get
+        {
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (ReservationAttempt attempt in Attempts)
+            {
+                if (!seen.Add(attempt.Name.Value))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    }
+}
+
+/// <summary>Taking out everything a plan is going to touch, before any of it is
+/// touched.
+///
+/// <b>Reserve after planning and before acting, in one go.</b> Not per step as
+/// the NPC reaches it: a job that reserves the fourth tree when it gets there
+/// has already walked past three, and the moment it finds the fourth taken it
+/// has to decide what to do with material it fetched for it. Reserving the whole
+/// plan up front turns that into a decision made once, standing still, with the
+/// whole job in front of it.</summary>
+internal static class PlanReservations
+{
+    /// <summary>Reserves every subject the plan names. Steps whose kind has no
+    /// book are skipped rather than failed - a role that reserves targets and
+    /// not containers is making a choice this library does not
+    /// second-guess.</summary>
+    internal static JobReservationResult TakeOut(
+        in JobTourPlan plan,
+        JobCommitment<JobTarget>? targets,
+        JobCommitment<INpcContainer>? containers)
+    {
+        var attempts = new List<ReservationAttempt>();
+        foreach (PlannedStep step in plan.Steps)
+        {
+            if (step.IsCollect)
+            {
+                INpcContainer? container = step.Source.Container;
+                if (containers == null || container == null)
+                {
+                    continue;
+                }
+
+                attempts.Add(new ReservationAttempt(
+                    step.Step.Index,
+                    ReservationId.For(containers.JobId, step.Step.Index),
+                    containers.Reserve(container, step.Step.Index),
+                    true));
+                continue;
+            }
+
+            if (targets == null)
+            {
+                continue;
+            }
+
+            attempts.Add(new ReservationAttempt(
+                step.Step.Index,
+                ReservationId.For(targets.JobId, step.Step.Index),
+                targets.Reserve(step.Target, step.Step.Index),
+                false));
+        }
+
+        return new JobReservationResult(attempts);
+    }
+}
