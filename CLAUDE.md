@@ -63,8 +63,14 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   `TeamsterWorkerRecord` writes `tcc.worker.inventory` (vanilla's own `Inventory.Save` package) and
   `tcc.worker.revision` into the body's own network object from vanilla's own change callback —
   byte-compatible with Foreman's worker, never before a successful load, and an absent field loads as an
-  empty inventory rather than a fault. **Death is still open and is the one remaining way this slice
-  loses material**: closing it means spawning item instances, which needs its own owner decision.
+  empty inventory rather than a fault. **Two doors are still open, not one, and both are named rather than
+  closed.** Death is the first: the body is destroyed and what it holds goes with it, and closing that
+  means spawning item instances, which needs its own owner decision. A **ZDO write that fails** is the
+  second: the change that did not reach the network object is lost, because the live inventory has it and
+  the stored package does not. The second is contained rather than fixed - a body whose last change did not
+  persist is handed nothing more to hold - and the containment's limit is stated on purpose: nothing this
+  mod does will clear that refusal, because the only inventory change it makes is a pick and the refusal is
+  what stops the next one. A zone load re-creates the record from the last package that did get written.
   The port needs no RPC of its own - `Pickable.Interact` runs `RPC_Pick` and the
   ownership claim inside vanilla, on a pickable this process already owns - so felling a tree
   (`TreeBase.Damage`) and the cosmetic hammer animation (`ZSyncAnimation.SetTrigger`) were **not**
