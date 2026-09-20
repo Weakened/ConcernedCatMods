@@ -204,10 +204,27 @@ not `Clear`, through `Stop` or through `Adopt`.
 The alternative was to document the loop as permanent. This is better, and narrowly so rather than generally: a
 record that says it finished while something it set in motion had no recorded outcome is not a well-formed ending in
 the first place, and moving it to `NeedsAttention` is monotonic in the conservative direction - it withdraws a claim
-of success and grants nothing. A plan whose custody is `Clear` is untouched, so a job that really did finish is never
-reopened and "this job finished" stays distinguishable from "this job never existed". What the write does **not** do
-is resolve anything: the custody is still uncertain afterwards, so the plan lands squarely in the precondition below.
-It is on the record once instead of being re-decided every load.
+of success and grants nothing.
+
+**What the write buys, stated exactly.** Not an end to the answer. A plan at `NeedsAttention` is answered
+`NeedsAttention` on every load, by `AlreadyOver`'s first branch, and that recurrence is the documented steady state
+rather than something to fix. What stops recurring is the *corrupt-row* decision, and what is gained is that **the
+record stops claiming success** - which is the whole justification and is sufficient on its own. It resolves nothing
+either: the custody is still uncertain afterwards, so the plan lands squarely in the precondition below.
+
+Two things it does not touch. A plan whose custody is `Clear`, so a job that really did finish is never reopened and
+"this job finished" stays distinguishable from "this job never existed". And a plan already at `NeedsAttention`, which
+has nothing to correct - including it would have reopened three verbs on a plan waiting for a person (a second stop, a
+`Suspend`, a `Reattach`), all of which were refused before the allowance existed and are refused again. `Adopt`
+additionally requires the decision itself to be the one that stops the plan, so a fabricated resume-authorising
+response reaches nothing.
+
+Both sites test `Custody != Clear` rather than `NpcPlanState.IsUncertain`, and they have to agree. `IsUncertain` is
+`Uncertain || Unspecified` and excludes `Pending`, while `AlreadyOver` answers for any terminal row that is not
+`Clear` - so narrowing either site to `IsUncertain` makes a terminal-over-`Pending` row unwritable again. That row
+cannot arrive through `Load`, which maps `Pending` to `Uncertain`, so this is defence in depth against exactly what
+`AlreadyOver` names - an older build, a hand edit, a role that found another way - and a test pins the pair rather
+than leaving the match to reading.
 
 ## 6. One logical NPC, one world entity
 

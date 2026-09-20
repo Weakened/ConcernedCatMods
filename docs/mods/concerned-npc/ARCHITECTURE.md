@@ -223,13 +223,14 @@ player's material and then reported success. `NpcPlanRecovery.AlreadyOver` answe
 record whose custody is not `Clear`, as the second line of defence for a record written by something else.
 
 One deliberate exception to "an ending is an ending" comes with that: a terminal record whose custody is not `Clear`
-may be moved to `NeedsAttention`, and only there, so the answer can be written down once instead of being re-decided
-on every load. It withdraws a claim of success and grants nothing, and a plan whose custody is `Clear` is untouched.
+may be moved to `NeedsAttention`, and only there, and only on the decision that means it - so a record cannot go on
+claiming it finished when nothing it did finished. It withdraws a claim of success and grants nothing. A plan whose
+custody is `Clear` is untouched, and so is a plan already at `NeedsAttention`.
 
 **A record in no phase at all is unreadable, not a plan.** `NpcPlanJournal` refuses to hand one back, the recovery
 path answers `NeedsAttention` for one it is handed, and `NpcPlanRun` refuses everything over it except a stop for a
-person - which is available above every other rule, for any plan that has not ended, because a library that can hold
-a state and cannot hand it to a person has a failure nobody is ever told about.
+person - which is available above every other rule, because a library that can hold a state and cannot hand it to a
+person has a failure nobody is ever told about.
 
 **One precondition the role leaves inherit.** A plan that stops for a person has nowhere to go: there is no
 resolution UI, the custody ledger's `CloseOpenIntents` is joined to no plan, and nothing creates the plan that

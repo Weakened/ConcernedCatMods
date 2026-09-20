@@ -221,10 +221,16 @@ internal sealed class NpcPlanRun
     /// form that suits a backward write:
     ///
     /// <list type="bullet">
-    /// <item>an ending is an ending, here as well - nothing is adopted over a
-    /// terminal phase, which is what makes
-    /// <see cref="NpcPlanPhase.NeedsAttention"/> one-way rather than
-    /// nearly one-way;</item>
+    /// <item>an ending is an ending, here as well. There is one exception, added
+    /// later and scoped to it: a record that says it <c>Settled</c> or
+    /// <c>Refunded</c> while something it set in motion had no recorded outcome may
+    /// be moved to <see cref="NpcPlanPhase.NeedsAttention"/>, and only there, and
+    /// only on the decision that means it - otherwise nothing is adopted over a
+    /// terminal phase at all. What keeps
+    /// <see cref="NpcPlanPhase.NeedsAttention"/> one-way is therefore not that
+    /// endings are unwritable but that the exception's only permitted target is
+    /// <see cref="NpcPlanPhase.NeedsAttention"/> itself, and that a plan already
+    /// there is excluded from it;</item>
     /// <item>a movement with no established outcome may be followed only by a
     /// decision that stops the plan for a person;</item>
     /// <item>a state has to say whether anything is in flight;</item>
@@ -257,9 +263,32 @@ internal sealed class NpcPlanRun
         }
 
         if (NpcPlanProgression.IsTerminal(_state.Phase)
-            && !(revalidated.Phase == NpcPlanPhase.NeedsAttention
+            && !(decision.Response == InterruptionResponse.NeedsAttention
+                && revalidated.Phase == NpcPlanPhase.NeedsAttention
+                && _state.Phase != NpcPlanPhase.NeedsAttention
                 && _state.Custody != NpcPlanCustody.Clear))
         {
+            // The one move out of an ending, and only for the decision that means
+            // it. Without the response test a fabricated Continue over a plan
+            // already stopped for a person was saved - nothing about the work
+            // changed and MayAct stayed false, so it was not a live defect, but
+            // this method's own summary promises a caller cannot reach any path by
+            // handing in a made-up outcome, and a resume-authorising response over
+            // a terminal plan was one.
+            //
+            // The three conditions have to read the same as WhyNot's rule, which
+            // does the same job for Stop: the decision means it, the phase moved to
+            // is NeedsAttention, the phase moved from is a terminal one that is not
+            // NeedsAttention - a plan already waiting for a person has nothing to
+            // correct, and including it reopens writes that "one-way" is supposed
+            // to forbid - and the custody is not Clear.
+            //
+            // That last one is deliberately not NpcPlanState.IsUncertain. IsUncertain is Uncertain or
+            // Unspecified and excludes Pending, while NpcPlanRecovery.AlreadyOver
+            // answers NeedsAttention for any terminal row whose custody is not
+            // Clear - Pending included - so narrowing either site to IsUncertain
+            // makes a terminal-over-Pending row unwritable again, which is the bug
+            // this allowance exists to fix. A test pins the pair.
             return NpcPlanSave.Refused(
                 "this plan has ended, and an ending that the next write can undo is not an ending");
         }
@@ -395,7 +424,8 @@ internal sealed class NpcPlanRun
         if (proposed.Phase == NpcPlanPhase.NeedsAttention
             && proposed.CarriesTheSameWorkAs(_state)
             && (!NpcPlanProgression.IsTerminal(_state.Phase)
-                || _state.Custody != NpcPlanCustody.Clear))
+                || (_state.Phase != NpcPlanPhase.NeedsAttention
+                    && _state.Custody != NpcPlanCustody.Clear)))
         {
             // <b>Handing a plan to a person is always available.</b> Whatever is
             // wrong with this plan - a movement with no outcome, a phase nobody
@@ -423,11 +453,22 @@ internal sealed class NpcPlanRun
             // motion had no recorded outcome is not a well-formed ending at all:
             // NpcPlanRecovery answers NeedsAttention for it every time it is
             // loaded, and until this allowance existed no verb could write that
-            // answer down, so the same decision re-issued for ever and nothing
-            // could record that anybody had seen it. A plan whose custody is Clear
-            // is untouched by this, so a job that really did finish is never
-            // reopened and "this job finished" stays distinguishable from "this job
-            // never existed".
+            // answer down, so the record went on claiming success for ever and
+            // nothing could correct it. What the write buys is exactly that - the
+            // record stops claiming it finished - and not an end to the answer: a
+            // plan at NeedsAttention is still answered NeedsAttention on every
+            // load, by AlreadyOver's first branch, which is the documented and
+            // desired steady state.
+            //
+            // <b>Scoped to Settled and Refunded, and to a custody that is not
+            // Clear.</b> Both halves matter. A plan whose custody is Clear is
+            // untouched, so a job that really did finish is never reopened and
+            // "this job finished" stays distinguishable from "this job never
+            // existed". And a plan already at NeedsAttention is excluded, because
+            // it has nothing to correct and including it would quietly reopen three
+            // verbs on a plan stopped for a person - a second NeedsAttention write,
+            // a Suspend and a Reattach, all of which were refused before this
+            // allowance existed and are refused again.
             //
             // This is where the asymmetry in NpcPlanProgression.MayFollow is
             // answered rather than in the table. MayFollow refuses Unspecified on

@@ -936,6 +936,97 @@ public class PlanRunTests
         Assert.Equal(NpcPlanPhase.Settled, finished.Run.State.Phase);
     }
 
+    /// <summary>The same corrupt ending, with the custody still <c>Pending</c>
+    /// rather than <c>Uncertain</c>.
+    ///
+    /// <b>This exists to pin a predicate match, and the match is the whole fix.</b>
+    /// <c>NpcPlanRecovery.AlreadyOver</c> answers <c>NeedsAttention</c> for any
+    /// terminal row whose custody is not <c>Clear</c>, and <c>Pending</c> is one of
+    /// those - while <c>NpcPlanState.IsUncertain</c> is <c>Uncertain</c> or
+    /// <c>Unspecified</c> and excludes it. So narrowing either of the two sites that
+    /// let such a row be written - <c>Adopt</c>'s terminal check or
+    /// <c>WhyNot</c>'s stop-for-a-person rule - to <c>IsUncertain</c>, or to
+    /// <c>Uncertain</c> alone, makes this row unwritable again, which is exactly the
+    /// bug the allowance exists to fix. Both narrowings left all 916 tests green.
+    ///
+    /// <b>Why the row is worth defending against at all.</b> It cannot arrive
+    /// through <c>Load</c>, because <c>AsRecovered</c> maps <c>Pending</c> to
+    /// <c>Uncertain</c>, and <c>WhyNot</c> refuses <c>Pending</c> into an ending
+    /// in-session. It is defence in depth against precisely what
+    /// <c>AlreadyOver</c> names: an older build, a hand edit, a role that found
+    /// another way.</summary>
+    [Fact]
+    public void An_ending_over_a_movement_still_marked_pending_is_writable_and_keeps_its_evidence()
+    {
+        using var world = new PlanRehearsal();
+        world.Start().RunUpTo(5);
+
+        NpcPlanState pendingEnding = world.Run.State.WithPhase(NpcPlanPhase.Settled, "call it done");
+        Assert.Equal(NpcPlanCustody.Pending, pendingEnding.Custody);
+        Assert.False(pendingEnding.IsUncertain);
+
+        NpcPlanRecovered decision = NpcPlanRecovery.Revalidate(pendingEnding, Healthy(world), null);
+        Assert.Equal(InterruptionResponse.NeedsAttention, decision.Outcome.Response);
+        Assert.Equal(NpcPlanPhase.NeedsAttention, decision.Next.Phase);
+
+        // Through Adopt.
+        NpcPlanRun? adopting = NpcPlanRun.Resume(world.Journal(), pendingEnding);
+        Assert.True(adopting!.Adopt(decision.Next, decision.Outcome).IsSaved);
+
+        // Written, and the evidence is preserved rather than laundered on the way:
+        // the custody is still Pending, and it comes back off the disk as the
+        // uncertainty a person resolves.
+        Assert.Equal(NpcPlanCustody.Pending, adopting.State.Custody);
+        Assert.Equal(NpcPlanPhase.NeedsAttention, world.Journal().Load().Plan!.Phase);
+        Assert.Equal(NpcPlanCustody.Uncertain, world.Journal().Load().Plan!.Custody);
+
+        // And through Stop, which is the other site the match has to hold at.
+        NpcPlanRun? stopping = NpcPlanRun.Resume(world.Journal(), pendingEnding);
+        Assert.True(stopping!.Stop(NpcPlanPhase.NeedsAttention, "an ending over an open question").IsSaved);
+        Assert.Equal(NpcPlanCustody.Pending, stopping.State.Custody);
+        Assert.Equal(NpcPlanPhase.NeedsAttention, stopping.State.Phase);
+    }
+
+    /// <summary>A plan already stopped for a person is not reopened by the
+    /// allowance that lets a corrupt ending be corrected.
+    ///
+    /// <b>Three verbs that the allowance widened by accident.</b> Confining it to
+    /// <c>Settled</c> and <c>Refunded</c> restores what was refused before it
+    /// existed: a second <c>NeedsAttention</c> write, a <c>Suspend</c>, and a
+    /// <c>Reattach</c>. All three were conservative - recovery short-circuits in
+    /// <c>AlreadyOver</c> before the epoch is ever consulted, so a refreshed epoch
+    /// was inert - but a plan waiting for a person having three writable verbs is
+    /// not what "one-way" means, and the widening was undocumented.</summary>
+    [Fact]
+    public void A_plan_waiting_for_a_person_is_not_reopened_by_the_allowance_for_a_corrupt_ending()
+    {
+        using var world = new PlanRehearsal();
+        world.Start().RunUpTo(5);
+        Assert.True(world.Run.Stop(NpcPlanPhase.NeedsAttention, "somebody please look").IsSaved);
+        Assert.Equal(NpcPlanCustody.Pending, world.Run.State.Custody);
+
+        // Nothing more is written over it, including the write that put it there.
+        Assert.False(world.Run.Stop(NpcPlanPhase.NeedsAttention, "saying it again").IsSaved);
+        Assert.False(world.Run.Suspend("a boar turned up as well").IsSaved);
+        Assert.False(world.Run.Reattach(world.World, "his things are where the plan says").IsSaved);
+
+        // And not through Adopt either, with the decision the recovery path actually
+        // gives for it - which is the same answer, on every load, for ever. That
+        // recurrence is the documented steady state rather than something to fix.
+        NpcPlanRecovered still = NpcPlanRecovery.Revalidate(world.Run.State, Healthy(world), null);
+        Assert.Equal(InterruptionResponse.NeedsAttention, still.Outcome.Response);
+        Assert.False(world.Run.Adopt(still.Next, still.Outcome).IsSaved);
+
+        // A made-up decision that authorises going on gets no further, which is what
+        // Adopt's summary promises for any invented outcome.
+        var carryOn = new InterruptionOutcome(
+            InterruptionResponse.Continue, InterruptionCause.PausedByPlayer, 0f, "it was paused");
+        NpcPlanSave refused = world.Run.Adopt(
+            world.Run.State.WithPhase(NpcPlanPhase.NeedsAttention, "carry on"), carryOn);
+        Assert.False(refused.IsSaved);
+        Assert.Contains("has ended", refused.Failure);
+    }
+
     private static NpcPlanEvidence Healthy(PlanRehearsal world) =>
         new NpcPlanEvidence(
             world.World,
