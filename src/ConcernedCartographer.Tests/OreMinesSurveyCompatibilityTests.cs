@@ -290,6 +290,10 @@ public class OreMinesSurveyCompatibilityTests
     [Fact]
     public void AFileThatIsAlreadyCurrent_IsNotRewritten()
     {
+        // Every recognized snapshot is a SUPERSEDED set. If the current
+        // starter set ever joined that list, a player already on it would
+        // have his file rewritten and an "upgraded" line written to the
+        // log on every single launch.
         Assert.False(SurveyStarterUpgrade.ShouldUpgrade(SurveyRuleSet.Default().Serialize()));
     }
 

@@ -21,18 +21,14 @@ namespace TheConcernedCat.ConcernedCartographer.Atlas;
 internal static class SurveyStarterUpgrade
 {
     /// <summary>True when the on-disk rules file is an untouched starter
-    /// file from an earlier release and therefore safe to rewrite with the
+    /// file from an EARLIER release and therefore safe to rewrite with the
     /// current starter set. False for a file the player edited, for a file
-    /// that is already the current starter set (nothing to do), and for
-    /// anything unrecognized.</summary>
+    /// that is already current (every snapshot below is a superseded set,
+    /// never the current one, so a current file rewrites nothing and logs
+    /// nothing on every launch), and for anything unrecognized.</summary>
     public static bool ShouldUpgrade(IEnumerable<string> currentFileLines)
     {
         string current = Normalize(currentFileLines);
-        if (current == Normalize(SurveyRuleSet.Default().Serialize()))
-        {
-            return false;
-        }
-
         return current == Normalize(SurveyRuleSet.LegacyStarterSet().Serialize()) ||
                current == Normalize(SurveyRuleSet.Rc8StarterSet().Serialize()) ||
                current == Normalize(SurveyRuleSet.V1StarterSet().Serialize()) ||

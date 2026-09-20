@@ -1,4 +1,4 @@
-# Survey loaded-location surface compatibility (issue #258)
+# Survey loaded-location surface compatibility (issues #258, #385)
 
 Compatibility note for the loaded-world surface the survey reads to offer
 dungeon entrances. Written for issue #258, "bug: Auto pinning dungeons not
@@ -150,6 +150,77 @@ radius collapses the pair into one observation. The audit asserts both
 assets still exist, so this behaviour rests on evidence rather than on an
 assumed name. It is disclosed in the changelog because it can produce
 "Points of interest" observations a 1.0.2 player never saw.
+
+## Third-party locations: OreMines (issue #385)
+
+Issue #385, "feature: Auto Pin compat with the OreMines" (reported by
+kyoknightly), is the same surface seen from the other side. blacks7ar's
+**OreMines** adds its mines as ordinary Valheim world locations, so they
+were already on the `Location.s_allLocations` surface described above and
+already inside every bound — they simply matched no rule, and a rule that
+matches nothing is a silent no-op. The reporter had to pin a copper, a tin
+and a silver mine by hand.
+
+The fix is therefore rule identity only:
+
+| Starter rule | OreMines location prefabs it covers |
+|---|---|
+| `bom_flintmine*` | `BOM_FlintMine01`, `BOM_FlintMine02` |
+| `bom_coppermine*` | `BOM_CopperMine01`, `BOM_CopperMine02` |
+| `bom_tinmine*` | `BOM_TinMine01`, `BOM_TinMine02` |
+| `bom_coalmine*` | `BOM_CoalMine01`, `BOM_CoalMine02` |
+| `bom_ironmine*` | `BOM_IronMine01`, `BOM_IronMine02` |
+| `bom_silvermine*` | `BOM_SilverMine01`, `BOM_SilverMine02` |
+| `bom_blackmetalmine*` | `BOM_BlackMetalMine01`, `BOM_BlackMetalMine02` |
+| `bom_flametalmine*` | `BOM_FlametalMine01`, `BOM_FlametalMine02` |
+
+Each is `cc:mine` / "Resources" with location-scale bounds (80 m duplicate
+radius, 8 h expiry) — a mine is a fixed place, not a respawning deposit.
+
+### Provenance of these names, and its limits
+
+OreMines is **not installed on the audit machine**, so unlike the vanilla
+table above these names were not read out of an installed asset catalog and
+`audit-cartographer-survey-api.ps1` cannot assert them.
+
+- **Primary source:** the eight mine types OreMines 1.2.1 documents for its
+  `UpgradeWorld` commands, recorded in the issue #385 triage note against
+  the public package page
+  (`https://thunderstore.io/c/valheim/p/blacks7ar/OreMines/versions`).
+- **Corroboration, partial:** the reporter, running OreMines in a live
+  world, was told to add `bom_coppermine*` / `bom_tinmine*` /
+  `bom_silvermine*` rules by hand and reported back that he had it working.
+  That supports the `BOM_<Ore>Mine` shape for three of the eight; it is a
+  user report, not an observation of ours.
+- **Consequence if a name is wrong:** a rule that matches nothing. A wrong
+  name is a silent no-op, never a misfire — but also never an error, which
+  is exactly why it must be checked in game rather than assumed. Live
+  verification with OreMines installed is still owed.
+
+Rules are prefixes, so a later `03` variant is covered; they are per mine
+type rather than a blanket `bom_*`, which would pin every prop and piece
+the mod ships and would reach into the author's other mods sharing the
+prefix.
+
+### What is deliberately absent
+
+No assembly reference, no `BepInDependency`, no foreign type, no version
+check, no patch. Compatibility is by location name only, so with OreMines
+absent the rules are inert text that matches nothing:
+`OreMinesSurveyCompatibilityTests` sweeps a vanilla-only world through both
+the previous and the current starter set and requires the two observation
+lists to be identical. No `ZoneSystem` world-database lookup, no fog
+reveal, and no change to any scan radius, duplicate radius, expiry or
+observation budget.
+
+Existing players receive the identities through the same in-place starter
+migration #258 established, now factored into `SurveyStarterUpgrade` in the
+domain so it is under test: an untouched `survey-rules.tsv` from any
+shipped starter set (pre-RC8, RC8/RC9, v1.0-v1.1.0, or v1.0.3-v1.2.2, the
+last pinned to a golden copy in the tests) is rewritten with the current
+set, and a file the player touched at all — a rule added, removed,
+disabled, a bound retuned, a blacklist row or even a comment of his own —
+is left exactly as it is.
 
 ## Fail-closed behaviour
 
