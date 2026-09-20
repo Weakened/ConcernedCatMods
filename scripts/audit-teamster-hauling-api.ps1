@@ -332,17 +332,23 @@ Assert-OnlyIn 'Rigidbody::set_constraints' { param($h) $h.Type -eq "TheConcerned
 # source validator lets write a tcc.worker.* key, so this list is the IL twin of
 # that rule rather than a second, looser one.
 #
-# The count stays pinned to the exact number, and the key constraint is unchanged:
-# a fifth write, or any write without a tcc.worker.* literal in front of it, or a
-# write from any other type, still fails. The window is 24 IL lines rather than 12
-# because the inventory write pushes a ZPackage construction and an
-# Inventory::Save between the key and the Set; it is still a window, and a write
-# with no such key anywhere near it still fails.
+# The count stays pinned to the exact number, and the key constraint holds for
+# EVERY write, which the first version of this widening did not manage: at 24 IL
+# lines the window reached back past the previous `ZDO::Set`, so the second write
+# in a pair was vouched for by the FIRST one's literal. A review proved it -
+# planting a wrong key on the first write failed, planting the same wrong key on
+# the second passed. So the window now stops at the previous `ZDO::Set`: a write
+# can only ever be vouched for by a literal that is its own. Widening it further
+# is safe for the same reason, and the barrier is why.
 Assert-OnlyIn 'ZDO::Set(' {
     param($h)
     if ($h.Type -ne ($workersNamespace + "TeamsterWorkerPrefab") -and
         $h.Type -ne ($workersNamespace + "TeamsterWorkerRecord")) { return $false }
-    $window = ($ilLines[[Math]::Max(0, $h.Index - 24)..$h.Index] -join "`n")
+    $start = [Math]::Max(0, $h.Index - 24)
+    for ($back = $h.Index - 1; $back -ge $start; $back--) {
+        if ($ilLines[$back] -match 'ZDO::Set\(') { $start = $back + 1; break }
+    }
+    $window = ($ilLines[$start..$h.Index] -join "`n")
     return $window -match 'ldstr "tcc\.worker\.[a-z0-9.\-]+"'
 } "a network object is written only with Gunnar's own tcc.worker.* key, by his prefab spawn or his body's own record" 4
 

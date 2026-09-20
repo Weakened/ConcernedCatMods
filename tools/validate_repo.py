@@ -1579,13 +1579,67 @@ TEAMSTER_RETIRE_BODY = re.compile(
 TEAMSTER_RETIRE_DECIDES = "WorkerRetirement.Decide("
 TEAMSTER_RETIRE_ALLOWS = "WorkerRetirement.Allows("
 
-# Every way a body leaves the world: the network object's own no-argument
-# `Destroy()`, and the executor's retirement. Matched by SHAPE rather than by
-# receiver name, because a text audit cannot know a receiver's type and renaming
-# a local would otherwise hide the call — `UnityEngine.Object.Destroy(x)` takes
-# an argument and is a different thing, which is why the empty parentheses are
-# part of the pattern.
+# The shapes that UNAMBIGUOUSLY take a networked body out of the world: the
+# network object's own no-argument `Destroy()`, and the executor's retirement.
+# Matched by shape rather than by receiver name, because a text audit cannot know
+# a receiver's type and renaming a local would otherwise hide the call.
+#
+# THIS SET IS NOT "EVERY WAY A BODY LEAVES THE WORLD", and an earlier version of
+# this comment said it was. An independent review produced a second spelling with
+# the same outcome — body gone, ZDO destroyed, inventory destroyed with it —
+# that this pattern cannot see:
+#
+#     ZNetScene.Destroy(GameObject go)   // assembly_valheim, ZNetScene:116
+#         -> component.ResetZDO(); ZDOMan.instance.DestroyZDO(zdo);
+#            UnityEngine.Object.Destroy(go);
+#
+# It takes an argument, so the empty parentheses above exclude it; planted in a
+# helper it made five removal sites while this rule reported four and passed.
+# A text audit genuinely cannot tell `Destroy(x)` on a body from `Destroy(x)` on
+# a component — both are ordinary GameObject cleanup by spelling — so rather than
+# classify, TEAMSTER_DESTRUCTION_SITES below pins the POPULATION of every
+# destruction-shaped call in the worker folder. That catches the addition this
+# pattern misses; the per-file counts on this narrower pattern already caught a
+# replacement.
 TEAMSTER_BODY_REMOVAL = re.compile(r"\.\s*Destroy\s*\(\s*\)|\bRetireBody\s*\(")
+
+# Every call shaped like a destruction, whatever it is called on: the vanilla
+# scene's `Destroy(go)`, a bare or qualified `Object.Destroy(x)`,
+# `DestroyImmediate`, and Jotunn's `DestroyPrefab`. `OnDestroy()` is a message
+# declaration and not a call, and the word boundary excludes it.
+TEAMSTER_DESTRUCTION = re.compile(r"\b(?:DestroyImmediate|DestroyPrefab|DestroyZDO|Destroy)\s*\(")
+
+# Where anything may be destroyed at all in the worker folder, with how many
+# sites each file holds. A pinned population, like the one pinned pickup call.
+# Most of these are not bodies — a plugin component being removed, the prefab
+# factory's own component surgery — and the rule does not pretend to know which
+# is which. What it guarantees is narrower and still worth having: **a new
+# destruction of any spelling, anywhere in Adapters/Workers, fails this audit
+# until a person records it here and says what guards it.**
+#
+# - GunnarCollectionRuntime.cs: the plugin component in Uninstall.
+# - GunnarHaulingRuntime.cs: the plugin component in Uninstall, and the
+#   pointed-at body in the guarded retire verb.
+# - TeamsterWorkerBody.cs: the bound body, reachable only through
+#   HaulExecutor.RetireBody() and so only from the guarded retire verb.
+# - TeamsterWorkerPrefab.cs: the prefab's own teardown, the factory's component
+#   surgery on the inactive clone (three sites), and the two ways a body that has
+#   JUST been created and came up invalid is cleaned up. That body has held
+#   nothing for any length of time.
+TEAMSTER_DESTRUCTION_SITES = {
+    "GunnarCollectionRuntime.cs": 1,
+    "GunnarHaulingRuntime.cs": 2,
+    "TeamsterWorkerBody.cs": 1,
+    "TeamsterWorkerPrefab.cs": 6,
+}
+
+# A guard that is CONSULTED AND IGNORED passes a source-order check: a bare
+# `WorkerRetirement.Allows(v)` in a log line sits above the removal just as well
+# as a refusal does. Requiring the refusing `if (!...)` shape raises that bar at
+# no parsing cost. It is still not control flow — see the summary line, which
+# says exactly what this establishes and no more.
+TEAMSTER_RETIRE_ALLOWS_GUARD = re.compile(
+    r"if\s*\(\s*!\s*WorkerRetirement\s*\.\s*Allows\s*\(")
 
 # Where a body may leave the world at all, with how many sites each file holds.
 # A pinned population, like the one pinned pickup call: any other count anywhere
@@ -1622,6 +1676,7 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
     # leave the world, counted, against what this rule has been told to expect.
     workers_dir = teamster_dir.joinpath(*TEAMSTER_WORKERS_DIR)
     total_sites = 0
+    total_destructions = 0
     for path in sorted(workers_dir.glob("*.cs")):
         text = "\n".join(_strip_cs_line_comment(line) for line in
                          path.read_text(encoding="utf-8").splitlines())
@@ -1635,6 +1690,20 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
                 "destroyed with the body and nothing is dropped, so a new removal has to say what "
                 "guards it and be recorded in TEAMSTER_BODY_REMOVAL_SITES — it must not appear by "
                 "moving one out of the retire verb", errors)
+
+        # The population of destruction-shaped calls, whatever they are called
+        # on. This is what catches a second spelling — ZNetScene.Destroy(go)
+        # takes an argument and the pattern above cannot see it.
+        destructions = len(TEAMSTER_DESTRUCTION.findall(text))
+        total_destructions += destructions
+        expected_destructions = TEAMSTER_DESTRUCTION_SITES.get(path.name, 0)
+        if destructions != expected_destructions:
+            fail(
+                f"[interop] #381 carried-material audit: {path.relative_to(ROOT)} destroys something "
+                f"{destructions} time(s); this rule expects {expected_destructions}. A text audit "
+                "cannot tell a body from a component here, so the population is pinned instead: if "
+                "this is a new way to take a body out of the world, say what guards it; if it is "
+                "ordinary cleanup, record it in TEAMSTER_DESTRUCTION_SITES", errors)
 
     code = "\n".join(_strip_cs_line_comment(line) for line in
                      runtime.read_text(encoding="utf-8").splitlines())
@@ -1666,7 +1735,7 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
     # stayed green.
     removals = _offsets_of_pattern(body, TEAMSTER_BODY_REMOVAL)
     decisions = _offsets_of(body, TEAMSTER_RETIRE_DECIDES)
-    guards = _offsets_of(body, TEAMSTER_RETIRE_ALLOWS)
+    guards = _offsets_of_pattern(body, TEAMSTER_RETIRE_ALLOWS_GUARD)
 
     if len(decisions) < len(removals):
         fail(
@@ -1678,24 +1747,26 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
     if len(guards) < len(removals):
         fail(
             f"[interop] #381 carried-material audit: the retire verb removes a body "
-            f"{len(removals)} time(s) but asks {TEAMSTER_RETIRE_ALLOWS} only {len(guards)} time(s) — "
-            "deciding without consulting the verdict is not a guard", errors)
+            f"{len(removals)} time(s) but has only {len(guards)} refusing "
+            f"`if (!{TEAMSTER_RETIRE_ALLOWS}...))` — consulting the verdict without refusing on it is "
+            "not a guard, and one shared refusal leaves the other path unguarded", errors)
 
     for index, removal in enumerate(removals):
         above = [guard for guard in guards if guard < removal]
         if len(above) <= index:
             fail(
                 f"[interop] #381 carried-material audit: removal {index + 1} of {len(removals)} in the "
-                f"retire verb has no {TEAMSTER_RETIRE_ALLOWS} of its own above it — that removal can "
-                "destroy gathered material silently. Refuse unless the player spelled the forcing word",
-                errors)
+                f"retire verb has no refusing `if (!{TEAMSTER_RETIRE_ALLOWS}...))` of its own above it "
+                "— that removal can destroy gathered material silently. Refuse unless the player "
+                "spelled the forcing word", errors)
 
     return [
-        f"[interop] #381 carried-material audit: {total_sites} place(s) in Adapters/Workers take a body "
-        f"out of the world, each at a pinned site; the {in_verb} in "
-        f"{'/'.join(TEAMSTER_RETIRE_FILE)} are all inside the retire verb, each with its own "
-        "carried-material guard above it (source order within the verb; the counts are what stop one "
-        "moving out of it)",
+        f"[interop] #381 carried-material audit: {total_destructions} destruction(s) and {total_sites} "
+        "unambiguous body removal(s) across Adapters/Workers, every one at a pinned site, so a new one "
+        f"of any spelling fails here; the {in_verb} in {'/'.join(TEAMSTER_RETIRE_FILE)} are inside the "
+        "retire verb with a refusing `if (!WorkerRetirement.Allows(...))` written above each. What that "
+        "establishes is that the refusal is written above each removal — NOT that control flow obeys "
+        "it, which is WorkerRetirementTests' job and a reviewer's",
     ]
 
 

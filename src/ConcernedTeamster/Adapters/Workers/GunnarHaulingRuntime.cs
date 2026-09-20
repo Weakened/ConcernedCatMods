@@ -86,15 +86,18 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
     /// Gunnar live here, and a second answer to that question would be a second
     /// Gunnar.
     ///
-    /// <b>Bound is not enough, twice over.</b> The binding deliberately includes
+    /// <b>Bound is not enough, three times over.</b> The binding deliberately includes
     /// a <see cref="WorkerBodyStatus.Faulted"/> body, so that the runtime can
     /// still observe and tear down a body whose tick latched - but a faulted
     /// body must not be handed something new to do, and the only check
     /// downstream is alive-or-dead. And a body whose stored inventory could not
     /// be read is inert by construction: picking into it would put a stone
     /// somewhere that never saves, which is the loss
-    /// <see cref="TeamsterWorkerRecord"/> exists to stop. Both answer null, so
-    /// collection simply has nothing to act with - the refusing
+    /// <see cref="TeamsterWorkerRecord"/> exists to stop. And a body whose last
+    /// change could not be <i>written</i> is in the same position from the other
+    /// end - its live inventory and its stored one already disagree - so it is
+    /// not handed anything more to hold until a write succeeds. All three answer
+    /// null, so collection simply has nothing to act with: the refusing
     /// direction.</summary>
     internal Humanoid? BoundBody
     {
@@ -107,7 +110,17 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
             }
 
             TeamsterWorkerRecord? record = TeamsterWorkerRecord.On(ai);
-            return record != null && record.IsLoaded ? ai.GetComponent<Humanoid>() : null;
+            if (record == null || !record.IsLoaded || !record.LastChangePersisted)
+            {
+                // The last one is the write-failure case: his live inventory and
+                // his stored one already disagree, and picking anything else up
+                // would pile more onto a record that is not keeping up. It
+                // recovers by itself - the next change that does persist clears
+                // it - so this stops adding rather than latching anything off.
+                return null;
+            }
+
+            return ai.GetComponent<Humanoid>();
         }
     }
 
@@ -788,8 +801,12 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         try
         {
             TeamsterWorkerRecord? record = TeamsterWorkerRecord.On(ai);
-            if (record == null || !record.IsLoaded)
+            if (record == null || !record.IsLoaded || !record.LastChangePersisted)
             {
+                // A change that could not be written leaves what he holds
+                // uncertain: the live inventory and the stored one disagree, and
+                // nothing here can say which the next load will see. Unknown
+                // refuses, which is the whole point of the verb.
                 return 0;
             }
 

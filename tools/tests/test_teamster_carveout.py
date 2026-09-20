@@ -192,6 +192,48 @@ class CarveOutIsNarrow(unittest.TestCase):
             "a body was destroyed before anything asked what it was carrying",
             marker="#381")
 
+    def test_a_removal_may_not_escape_the_audit_by_using_the_other_spelling(self):
+        # The second way out of the world, which the no-argument `Destroy()`
+        # pattern cannot see: `ZNetScene.Destroy(go)` resets the network object,
+        # destroys the ZDO and then the GameObject - body gone, inventory gone.
+        # Planted in a helper it made five removal sites while the rule reported
+        # four and passed at exit 0. The population of destruction-shaped calls
+        # is what catches it now.
+        with open(HAULING, encoding="utf-8-sig") as handle:
+            original = handle.read()
+        self._restore = original
+        self._restore_path = HAULING
+        anchor = "    private static int ItemsHeldBy(TeamsterWorkerAI? ai, out bool readable)"
+        self.assertEqual(1, original.count(anchor), "the helper anchor moved")
+        with open(HAULING, "w", encoding="utf-8", newline="") as handle:
+            handle.write(original.replace(
+                anchor,
+                "    private static void Sweep(GameObject body)\n"
+                "    {\n"
+                "        ZNetScene.instance.Destroy(body);\n"
+                "    }\n\n" + anchor,
+                1))
+        self.assert_refused(
+            "ZNetScene.Destroy(go) took a body out of the world with the audit still green",
+            marker="#381")
+
+    def test_a_guard_that_is_consulted_and_ignored_does_not_count(self):
+        # A bare `WorkerRetirement.Allows(v)` in a log line sits above the
+        # removal just as well as a refusal does, and the counts stayed at
+        # 2/2/2 while the carrying body was retired regardless of the verdict.
+        # The rule now wants the refusing `if (!...)` shape. It is still not
+        # control flow, and the summary line says so.
+        self.swap_in(
+            HAULING,
+            "            if (!WorkerRetirement.Allows(pointedVerdict))\n"
+            "            {\n"
+            "                return WorkerRetirement.Describe(pointedVerdict, pointedHolds);\n"
+            "            }",
+            "            _log.LogInfo(\"verdict: \" + WorkerRetirement.Allows(pointedVerdict));")
+        self.assert_refused(
+            "a guard that is consulted and then ignored counted as a guard",
+            marker="#381")
+
     def test_a_removal_may_not_escape_the_audit_by_moving_to_another_file(self):
         # The other half of the same escape: scoping the sweep to one file would
         # leave "put the helper next door" open. The population of removals
