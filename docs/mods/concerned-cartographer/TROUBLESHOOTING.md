@@ -130,7 +130,24 @@ Check on both clients:
 
 - `cc_routes status` summarizes the route atlas; routes have their own sidecar (`<world-uid>.routes-atlas.tsv` + journal) with the same snapshot/journal recovery as pins.
 - `cc_atlas backups` lists snapshots; `cc_atlas restore <n>` takes a safety backup first. After a restore, relog so the restored snapshot is authoritative.
-- `cc_atlas support` writes a sanitized report (versions, settings, counts, sizes only — no world UIDs, paths, positions, names, or notes) safe to attach to a bug report.
+- `cc_atlas support` writes a sanitized report (versions, settings, counts, sizes only — no world UIDs, paths, positions, names, or notes) safe to attach to a bug report. The reply tells you where the file is; that location is on your own machine and is not inside the file. The report covers all five per-world sidecars.
+
+### A backup you took but `cc_atlas backups` does not list (fixed in #367)
+
+Two separate causes, both silent, both fixed:
+
+- **The folder name.** `cc_atlas backup` composed the folder name under your own
+  locale's number formatting while `cc_atlas backups` looked for the invariant
+  form. Where those differ, the backup was written successfully under a name the
+  lister could not find — so the backup is *still on disk* and reachable by hand.
+  Look in the product's `backups/` folder for a folder whose name starts with your
+  world's id and ends in `-backup`; copying its `.tsv` files back beside the
+  others, with the game closed, is exactly what `restore` does.
+- **Two missing sidecars.** A backup covered `.roads.tsv`, `.pins.tsv` and
+  `.routes-atlas.tsv` only. Your rejected-observation memory
+  (`.survey-rejected.tsv`) and terrain-intent mask (`.terrain-intent.tsv`) were
+  never copied, so a restore could not bring them back and never said so. Backups
+  taken before this fix still do not contain them; a backup taken after it does.
 
 ## Sidecar corruption
 

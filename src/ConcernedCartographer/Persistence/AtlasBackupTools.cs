@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using BepInEx;
 using BepInEx.Logging;
+using TheConcernedCat.ConcernedCartographer.Companions;
 using TheConcernedCat.ConcernedCartographer.Reporting;
+using TheConcernedCat.ConcernedCartographer.Storage;
 
 namespace TheConcernedCat.ConcernedCartographer.Persistence;
 
@@ -16,7 +17,15 @@ namespace TheConcernedCat.ConcernedCartographer.Persistence;
 /// row counts, and file sizes — never coordinates, names, notes, world
 /// identifiers (including the numeric world UID), or file paths. The
 /// world UID is used here only to LOCATE files on disk; it is never
-/// passed to the report composer and never logged.</summary>
+/// passed to the report composer and never logged.
+///
+/// <b>Names on disk are composed by <see cref="Storage.AtlasBackupNaming"/>,
+/// never by interpolation, and the sidecar family is
+/// <c>CartographerWorldSidecars</c>, never a local copy (#367).</b> Both were
+/// silent losses: a backup folder named under the player's own culture is one
+/// the invariant glob in <see cref="ListBackups"/> cannot find, and a local list
+/// of three of the five sidecars meant two of a player's files were in no backup
+/// and no report while both looked complete.</summary>
 internal sealed class AtlasBackupTools
 {
     private readonly ManualLogSource _log;
@@ -30,22 +39,31 @@ internal sealed class AtlasBackupTools
 
     private static string BackupRoot => CartographerPaths.Backups;
 
-    private static readonly string[] SidecarSuffixes =
-    {
-        ".roads.tsv",
-        ".pins.tsv",
-        ".routes-atlas.tsv",
-    };
+    /// <summary>Every per-world sidecar, from the one list (#367).
+    ///
+    /// This used to be its own array of three of the five, so
+    /// <c>.survey-rejected.tsv</c> (a player's rejected-observation memory, the
+    /// thing that stops the survey re-offering what he already said no to) and
+    /// <c>.terrain-intent.tsv</c> (the exclusion mask) were in no backup, could
+    /// not be restored, kept stale journals across a restore, and were missing
+    /// from the support report while it looked complete. A second copy of a list
+    /// is a "which one is right" problem, and
+    /// <c>CartographerPaths</c> already named the probe's evidence lists as the
+    /// authority. This is now a reference to it, not a copy of it.</summary>
+    private static readonly string[] SidecarSuffixes = CartographerWorldSidecars.Suffixes;
 
     public string Backup(long worldUid, string label = "backup")
     {
-        string stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
-        string target = Path.Combine(BackupRoot, $"{worldUid}-{stamp}-{label}");
+        // Composed by AtlasBackupNaming, invariantly: ListBackups globs for the
+        // invariant uid, and a folder name formatted under the player's own
+        // culture is a backup the lister cannot find (#367).
+        string target = Path.Combine(
+            BackupRoot, AtlasBackupNaming.FolderName(worldUid, DateTime.UtcNow, label));
         Directory.CreateDirectory(target);
         int copied = 0;
         foreach (string suffix in SidecarSuffixes)
         {
-            string source = Path.Combine(DataDirectory, worldUid.ToString(CultureInfo.InvariantCulture) + suffix);
+            string source = Path.Combine(DataDirectory, AtlasBackupNaming.SidecarName(worldUid, suffix));
             if (File.Exists(source))
             {
                 File.Copy(source, Path.Combine(target, Path.GetFileName(source)), overwrite: true);
@@ -68,7 +86,7 @@ internal sealed class AtlasBackupTools
         }
 
         foreach (string directory in Directory.GetDirectories(
-            BackupRoot, worldUid.ToString(CultureInfo.InvariantCulture) + "-*"))
+            BackupRoot, AtlasBackupNaming.SearchPattern(worldUid)))
         {
             backups.Add(directory);
         }
@@ -101,7 +119,7 @@ internal sealed class AtlasBackupTools
         foreach (string suffix in SidecarSuffixes)
         {
             string journal = Path.Combine(
-                DataDirectory, worldUid.ToString(CultureInfo.InvariantCulture) + suffix + ".journal");
+                DataDirectory, AtlasBackupNaming.JournalName(worldUid, suffix));
             if (File.Exists(journal))
             {
                 File.Delete(journal);
@@ -139,7 +157,7 @@ internal sealed class AtlasBackupTools
         var sidecars = new List<(string Suffix, string Status)>();
         foreach (string suffix in SidecarSuffixes)
         {
-            string file = Path.Combine(DataDirectory, worldUid.ToString(CultureInfo.InvariantCulture) + suffix);
+            string file = Path.Combine(DataDirectory, AtlasBackupNaming.SidecarName(worldUid, suffix));
             if (!File.Exists(file))
             {
                 sidecars.Add((suffix, SupportReportComposer.AbsentStatus));
@@ -157,7 +175,9 @@ internal sealed class AtlasBackupTools
             }
         }
 
-        File.WriteAllLines(path, SupportReportComposer.Compose(
+        // AtlasTextFile, not a bare write: the product's data directory may not
+        // exist yet on the profile that is asking for help (#367).
+        AtlasTextFile.WriteLines(path, SupportReportComposer.Compose(
             DateTime.UtcNow, pluginVersion, effectiveConfig, sidecars, ListBackups(worldUid).Count));
         RemoveSupersededReport(path);
         return path;

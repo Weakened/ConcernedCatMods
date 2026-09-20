@@ -5,6 +5,7 @@ using TheConcernedCat.ConcernedCartographer.Atlas;
 using TheConcernedCat.ConcernedCartographer.Map;
 using TheConcernedCat.ConcernedCartographer.Persistence;
 using TheConcernedCat.ConcernedCartographer.Companions;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using TheConcernedCat.ConcernedCartographer.Roads;
 using TheConcernedCat.ConcernedCartographer.Runtime.Companions;
 using TheConcernedCat.ConcernedCartographer.Ui;
@@ -2219,8 +2220,46 @@ internal sealed class CartographerRuntime : IDisposable
         _savedViewPersistence.Save(_savedViews);
     }
 
-    /// <summary>Backs the `cc_atlas` console command: the scriptable drawer.</summary>
+    /// <summary>Backs the `cc_atlas` console command: the scriptable drawer.
+    ///
+    /// <b>The guard is here as well as in the wrapper (#367).</b>
+    /// <c>AtlasToolsCommand.Run</c> does catch, so this was never a crash — but
+    /// it caught with <c>"Atlas tool failed: " + exception.Message</c>, which
+    /// names none of the fourteen subcommands and prints a filesystem
+    /// exception's message verbatim, path and machine user name included. That
+    /// is the one thing this product scrubs everywhere else, and the failure it
+    /// most often reported was <c>cc_atlas support</c> — the command whose whole
+    /// purpose is producing something safe to paste in public. Catching where
+    /// the subcommand is known lets the reply say what was being attempted, and
+    /// <c>ConsoleFailure</c> does the scrubbing.</summary>
     internal string ExecuteAtlasCommand(string[] args)
+    {
+        string subcommand = ResolveSubcommand(args);
+        try
+        {
+            return ExecuteAtlasCommandCore(args, subcommand);
+        }
+        catch (Exception exception)
+        {
+            _log.LogError($"cc_atlas {subcommand} failed: {SafeLogText.Describe(exception)}");
+            return ConsoleFailure.Describe("cc_atlas", subcommand, exception);
+        }
+    }
+
+    /// <summary>The subcommand a `cc_atlas` invocation names, defaulting to
+    /// `status`. Deliberately total: this runs outside the guard below, so it
+    /// must not be the thing that throws.</summary>
+    private static string ResolveSubcommand(string[] args)
+    {
+        if (args is null || args.Length == 0 || string.IsNullOrEmpty(args[0]))
+        {
+            return "status";
+        }
+
+        return args[0].ToLowerInvariant();
+    }
+
+    private string ExecuteAtlasCommandCore(string[] args, string subcommand)
     {
         if (!AtlasAccessAllowed(out string atlasDenial))
         {
@@ -2232,7 +2271,6 @@ internal sealed class CartographerRuntime : IDisposable
             return "Concerned Cartographer: no world is loaded yet.";
         }
 
-        string subcommand = args.Length == 0 ? "status" : args[0].ToLowerInvariant();
         string remainder = args.Length > 1 ? string.Join(" ", args, 1, args.Length - 1) : "";
 
         switch (subcommand)
@@ -2319,7 +2357,10 @@ internal sealed class CartographerRuntime : IDisposable
                     $"reconcile={_settings.ReconcileTerrainChanges.Value}, " +
                     $"survey={_settings.SurveyRulesEnabled.Value}, cluster={_settings.DrawerCluster.Value}, " +
                     $"contrast={_settings.HighContrast.Value}, uiScale={_settings.UiScale.Value}");
-                return "Sanitized support report (no positions/names/notes/world ids/paths) written to " + report;
+                // #367: the old reply claimed "no paths" and then printed one.
+                // The claim is about the FILE's contents; the path is on the
+                // player's own screen so they can find what we ask them to send.
+                return SupportReportComposer.DescribeWrittenReport(report);
             case "views":
                 var names = new System.Text.StringBuilder("Saved views:");
                 if (_savedViews.Views.Count == 0)

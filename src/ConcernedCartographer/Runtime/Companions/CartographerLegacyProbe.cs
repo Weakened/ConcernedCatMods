@@ -26,15 +26,15 @@ namespace TheConcernedCat.ConcernedCartographer.Runtime.Companions;
 internal sealed class CartographerLegacyProbe
 {
     /// <summary>World-scoped sidecar suffixes this product has ever written.
-    /// Any one of them existing proves the mod did real work in some world.</summary>
-    private static readonly string[] WorldSuffixes =
-    {
-        ".roads.tsv",
-        ".pins.tsv",
-        ".routes-atlas.tsv",
-        ".survey-rejected.tsv",
-        ".terrain-intent.tsv",
-    };
+    /// Any one of them existing proves the mod did real work in some world.
+    ///
+    /// <b>The list itself is <see cref="CartographerWorldSidecars"/> (#367).</b>
+    /// A second copy of it in the backup tools listed three of these five, so
+    /// backup, restore and the support report each quietly covered three fifths
+    /// of a player's data. The literals moved to the domain, into a file
+    /// <c>validate_repo.py</c> already harvests them from, so nothing the
+    /// validator could see was lost in the move.</summary>
+    private static readonly string[] WorldSuffixes = CartographerWorldSidecars.Suffixes;
 
     /// <summary>Profile-scoped files that only appear after a deliberate
     /// action: saving a view, installing a translation. The translator's
