@@ -405,6 +405,25 @@ public sealed class ShelterBuildLoopTests
     // ---- withdrawal and cancellation -------------------------------------
 
     [Fact]
+    public void The_sentence_about_a_withdrawal_survives_the_rounds_after_it()
+    {
+        var world = new BuildWorld();
+        ShelterBuildLoop loop = world.Loop();
+        Run(loop, world, 3);
+        world.Authorised = false;
+        loop.Tick(200f);
+
+        // The round AFTER the withdrawal must not replace "40 Wood went back
+        // where it came from" with "there is no confirmed build order". This
+        // programme has already shipped a console that said one thing while the
+        // panel said another; a status line that forgets where the material went
+        // one frame later is the same defect with a clock attached.
+        Run(loop, world, 5, from: 300f);
+
+        Assert.Contains("went back where it came from", loop.Reason);
+    }
+
+    [Fact]
     public void Withdrawing_the_order_puts_the_unspent_material_back_and_says_where_it_went()
     {
         var world = new BuildWorld();

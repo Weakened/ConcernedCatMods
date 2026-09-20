@@ -216,7 +216,18 @@ internal sealed class ShelterBuildLoop
 
     /// <summary>The order was withdrawn, the world is going away, or a person
     /// said stop. Puts back what he still holds and says where it went.
-    /// </summary>
+    ///
+    /// <b>It does not send him back to the chest first, and that is a stated
+    /// limitation rather than an oversight.</b> Custody's reach check is not
+    /// waived for a cancellation, so a withdrawal while he is standing at the
+    /// build site cannot reach the container: the material then stays in his own
+    /// <i>persisted</i> inventory, nothing is lost, and the sentence says "he is
+    /// still carrying X; it is in his own inventory and nothing has been lost"
+    /// rather than implying a refund. A return trip would be a new phase that
+    /// keeps his mode held after the player asked for it back, which is a
+    /// behaviour change and its own issue. Meanwhile nothing has to be handed back
+    /// for it to be useful: the next round of the next order plans against what he
+    /// is already carrying and opens the chest only for the difference.</summary>
     internal ShelterRound Cancel(float now, string why)
     {
         Pose(false);
@@ -293,7 +304,14 @@ internal sealed class ShelterBuildLoop
 
             Pose(false);
             Step = BuildStep.Idle;
-            return new ShelterRound(RoundOutcome.Waiting, 0, 0, null, null, "there is no confirmed build order.");
+
+            // No reason, deliberately. A round with a sentence in it replaces
+            // whatever the last round said, and the round AFTER a withdrawal
+            // would otherwise overwrite "40 Wood went back where it came from"
+            // with "there is no confirmed build order" - which is true and is not
+            // the thing the player needs to read. What the state is now is
+            // answered by Step and by the runtime's own status line.
+            return new ShelterRound(RoundOutcome.Waiting, 0, 0, null, null, string.Empty);
         }
 
         ShelterPlan plan = _plan();
