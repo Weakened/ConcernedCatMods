@@ -492,18 +492,43 @@ asking is remembered until the floor allows it, so nothing that changed is
 dropped - a bench built two seconds after a sweep is taken half a minute later
 rather than never.
 
-The single waiver is a command the local player just gave: `cc_companion summon`,
-or a change to which doors companions may use. A command does not re-score the
-camp, so the strictly-better rule already bounds what repeating one can do - once
-he is in the best spot he can reach, another press has nothing better to offer -
-whereas a camp that changes on its own does re-score it. In practice the floor
-costs the headline case nothing: a settled companion has been waiting far longer
-than thirty seconds by the time anybody finishes building him a chair.
+Note what "strictly better" is and is not worth here. It stops him pacing
+between two equally good spots, and that is all: the rank on the left is scored
+against the world as it stands now, so a fire going out, a player taking his
+chair, or plain nightfall lowers it and re-cocks the ratchet. `Residency.cs` used
+to claim the upgrade "can fire at most twice in a companion's life"; it cannot,
+and the floor is the only thing bounding a camp that flickers.
+
+The floor is waived in exactly four places, all of them a command the local
+player just gave, and **two different reasons** hold that up:
+
+- The three door commands (the hotkey, `cc_companion doors clear`, `doors all`)
+  cannot lower his current rank at all. `CampSnapshot` carries home, the hour,
+  the weather, fires and beds - no doors - and `CurrentRank` reads the snapshot
+  and geometry, never reachability. A toggle only widens or narrows the candidate
+  set, and narrowing never invents a strictly better spot, so the ratchet bounds
+  repeating one on its own.
+- `cc_companion summon` is not like that and must not be justified the same way.
+  It sets him down two metres in front of the player and forgets his walk
+  setbacks, which *does* lower his rank, so every invocation re-cocks the
+  ratchet. What bounds it is one walk-back per typed command - it is a testing
+  command for exactly that.
+
+A look is never taken on a pass whose answer is about to be discarded: while he
+is walking somewhere, only `Remove` interrupts, so the survey is skipped and the
+ask keeps rather than being spent on a decision nobody reads. In practice the
+floor costs the headline case nothing either: a settled companion has been
+waiting far longer than thirty seconds by the time anybody finishes building him
+a chair.
 
 `SeatUpgradeOscillationTests` pins this as a count over simulated time rather
 than as one decision, because "he does not keep getting up" is a property of a
 run of decisions - the same shape of defect as #310's walk retried spot after
-spot.
+spot. Two of its twelve tests are source audits of the director, which no test
+can execute: the waiver's four call sites are counted over the whole file, so a
+fifth one written anywhere fails, and the arguments handed to the gate are pinned
+as text, because an inversion of them (`!settled, !drinking`) breaks *when* he
+looks while every count on *how often* stays green.
 
 ### A walk that does not work is remembered (#310)
 

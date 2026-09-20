@@ -23,11 +23,27 @@ namespace TheConcernedCat.ConcernedCartographer.Companions;
 /// the world likes. They ask for a look; they never shorten the wait.</item>
 /// <item><see cref="PlayerAsked"/> - the local player issued a command that
 /// changed his situation directly: summoned him, or changed which doors
-/// companions may use. A command does not re-score the camp by itself, so the
-/// planner's strictly-better rule already bounds what repeating one can do -
-/// once he is in the best spot he can reach, another press offers nothing
-/// better and he stays put. Being asked is also the one case where waiting
-/// half a minute looks like a bug rather than like patience.</item>
+/// companions may use. Being asked is the one case where waiting half a minute
+/// looks like a bug rather than like patience.</item>
+/// </list>
+///
+/// Two different reasons hold that bypass up, and they are not interchangeable:
+///
+/// <list type="bullet">
+/// <item>A door-permission change cannot re-score him at all. The camp snapshot
+/// the wish list is built from carries home, the hour, the weather, fires and
+/// beds - no doors - and his current rank is read from that snapshot and from
+/// geometry, never from what he can reach. So a toggle can only widen or narrow
+/// the candidate set, and narrowing never invents a strictly better spot:
+/// repeat it all day and the planner has nothing new to offer. Bounded by the
+/// ratchet, and needs no clock.</item>
+/// <item><c>cc_companion summon</c> is different and must not be justified the
+/// same way. It sets him down two metres in front of the player and forgets
+/// what stopped his last walks, which <i>does</i> lower his current rank, so
+/// the ratchet is re-cocked every time and the bypass is what makes him walk
+/// back. What bounds it is one walk-back per invocation, at the pace a person
+/// can type: it is a testing command whose whole purpose is to see him find his
+/// way home again.</item>
 /// </list>
 ///
 /// A refused look is not a lost one. The request is remembered and taken the
@@ -89,7 +105,8 @@ internal sealed class SeatSweepGate
     }
 
     /// <summary>The player asked for one, by summoning him or by changing which
-    /// doors companions may use. The single bypass.</summary>
+    /// doors companions may use. The single bypass; the two reasons it is safe
+    /// are on the type, and they are different reasons.</summary>
     public void PlayerAsked()
     {
         _asked = true;

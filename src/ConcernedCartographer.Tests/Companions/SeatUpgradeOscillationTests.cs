@@ -251,13 +251,12 @@ public sealed class SeatUpgradeOscillationTests
         // The gate above cannot be tested through the director: that file needs
         // Unity, a Player and a loaded world. But the director is where the
         // defect lived - it held the clock in a float field and armed it from
-        // the camp-fingerprint handler - so the wiring is worth a source audit
-        // of its own, in the manner of the Teamster and NPC audits.
+        // the camp-fingerprint handler - so the wiring gets a source audit of
+        // its own, in the manner of the Teamster and NPC audits.
         //
-        // Three things, and all three are about there being exactly one way to
-        // waive the wait:
-        string source = File.ReadAllText(Path.Combine(
-            RepoRoot, "src", "ConcernedCartographer", "Runtime", "Companions", "CompanionDirector.cs"));
+        // Everything below is about there being exactly one way to waive the
+        // wait, and about it being reachable from exactly four places.
+        string source = Director;
 
         // 1. The director keeps no clock of its own to poke. The interval is
         //    named once, where the gate is built.
@@ -268,15 +267,54 @@ public sealed class SeatUpgradeOscillationTests
         Assert.Equal(1, Occurrences(source, "_sweep.PlayerAsked()"));
         Assert.Equal(1, Occurrences(source, "_sweep.CampChanged()"));
 
-        // 3. The camp fingerprint - which counts seats, fires, beds and doors,
-        //    every one of them a thing that flickers - is not the place that
-        //    waives it.
+        // 3. The waiver is reachable from four call sites and no others, each
+        //    one a command the local player just gave. Counted over the whole
+        //    file, not just inside the handler that got it wrong: a rule that
+        //    only forbids the mistake already made would pass a new
+        //    world-driven caller written anywhere else. Five occurrences -
+        //    the declaration and four calls.
+        Assert.Equal(5, Occurrences(source, "LookAgainNow()"));
+        Assert.Equal(1, Occurrences(MethodBody(source, "public string Summon()"), "LookAgainNow()"));
+        Assert.Equal(1, Occurrences(MethodBody(source, "private void UpdateDoorHotkey()"), "LookAgainNow()"));
+        Assert.Equal(2, Occurrences(MethodBody(source, "public string Doors(string[] args)"), "LookAgainNow()"));
+
+        // 4. The camp fingerprint - which counts seats, fires, beds and doors,
+        //    every one of them a thing that flickers - asks without waiving.
         string handler = MethodBody(source, "private void NoticeCampChanges()");
         Assert.Contains("LookAgainSoon()", handler);
         Assert.DoesNotContain("LookAgainNow()", handler);
+        Assert.Contains("_sweep.PlayerAsked()", MethodBody(source, "private void LookAgainNow()"));
+    }
 
-        string waives = MethodBody(source, "private void LookAgainNow()");
-        Assert.Contains("_sweep.PlayerAsked()", waives);
+    [Fact]
+    public void Sweep_TheGateIsAskedTheQuestionItThinksItIsBeingAsked()
+    {
+        // The hole this closes was found by an independent review, and it is
+        // worth stating rather than hiding: the arguments to TryTakeLook can be
+        // inverted - `!settled, !drinking`, so he looks only while walking and
+        // only mid-drink - and every count in this file still passes, because
+        // the bound is about how OFTEN he looks and an inversion breaks WHEN.
+        // Nothing reachable from a test can execute that line: it needs Unity,
+        // a live actor and a routine.
+        //
+        // So the call is pinned as text. It is a weaker thing than a behavioural
+        // test and it is the strongest thing available here.
+        string source = Director;
+
+        Assert.Equal(1, Occurrences(source, "_sweep.TryTakeLook("));
+        Assert.Equal(
+            1,
+            Occurrences(source, "_sweep.TryTakeLook(_routine == RoutineState.Settled, _actor.IsDrinking)"));
+
+        // And the look is not spent on a pass whose answer is thrown away: a
+        // pass taken while he is already walking somewhere discards everything
+        // but Remove, so taking a look there would run a full camp scan, reset
+        // the wait and clear a pending ask for nothing - which would make
+        // SeatSweepGate's "the ask is remembered" false on that path.
+        Assert.Equal(2 + 1, Occurrences(source, "ReadSeatUpgrade()"));
+        Assert.Contains(
+            "_relocating ? SeatUpgrade.NotSurveyed : ReadSeatUpgrade()",
+            MethodBody(source, "private void UpdateResidency()"));
     }
 
     [Fact]
@@ -471,6 +509,13 @@ public sealed class SeatUpgradeOscillationTests
     });
 
     private static string RepoRoot => _repoRoot.Value;
+
+    private static readonly Lazy<string> _director = new(() => File.ReadAllText(Path.Combine(
+        RepoRoot, "src", "ConcernedCartographer", "Runtime", "Companions", "CompanionDirector.cs")));
+
+    /// <summary>The director's source, for the two audits. Read once: it is a
+    /// large file and neither audit changes it.</summary>
+    private static string Director => _director.Value;
 
     private static int Occurrences(string text, string needle)
     {

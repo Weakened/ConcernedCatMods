@@ -747,6 +747,17 @@ internal sealed class CompanionDirector : IDisposable
         // been posed at least once and can now be asked where it actually is.
         _actor.VerifyAppearance();
 
+        // A look is not free and it is not repeatable: taking one runs a full
+        // camp scan, spends the half minute between two looks, and clears the
+        // ask that a camp change left pending. On a pass that is about to throw
+        // its own answer away - he is already walking somewhere, and only
+        // Remove interrupts that (below) - taking one would turn "the ask is
+        // remembered until the wait allows it" into a lie, and a bench built
+        // while he is on his way would wait half a minute after he arrives
+        // instead of being noticed the next pass. So he does not look while he
+        // is walking; the ask keeps.
+        SeatUpgrade upgrade = _relocating ? SeatUpgrade.NotSurveyed : ReadSeatUpgrade();
+
         var inputs = new ResidencyInputs(
             _progress.HasCompanion,
             _settings.CompanionVisible.Value,
@@ -756,7 +767,7 @@ internal sealed class CompanionDirector : IDisposable
             _actor.PlacedAnchor,
             _anchorValidity,
             ReadSeatStatus(),
-            ReadSeatUpgrade());
+            upgrade);
 
         ResidencyAction action = ResidencyPlanner.Decide(inputs);
 
@@ -1739,10 +1750,18 @@ internal sealed class CompanionDirector : IDisposable
     /// this frame rather than in two seconds, and waives the wait between two
     /// looks (#306).
     ///
-    /// Only for a command the local player just gave. A command does not
-    /// re-score the camp, so the planner's strictly-better rule already bounds
-    /// what repeating one can do; a camp that changes on its own does re-score
-    /// it, and must go through <see cref="LookAgainSoon"/> instead.</summary>
+    /// Only for a command the local player just gave, and there are four:
+    /// <see cref="Summon"/>, the door hotkey, and <c>cc_companion doors clear</c>
+    /// and <c>doors all</c>. A door-permission change cannot lower his current
+    /// rank at all - doors are not in the camp snapshot that rank is read from -
+    /// so the planner's strictly-better rule bounds repeating one on its own.
+    /// Summon can and does lower it, and is bounded instead by one walk-back per
+    /// typed command; see <see cref="SeatSweepGate"/>, which spells both out.
+    ///
+    /// Anything the world does by itself goes through
+    /// <see cref="LookAgainSoon"/> instead, and a fifth caller here fails the
+    /// audit in <c>SeatUpgradeOscillationTests</c> until somebody argues for
+    /// it.</summary>
     private void LookAgainNow()
     {
         _sweep.PlayerAsked();
@@ -2062,10 +2081,17 @@ internal sealed class CompanionDirector : IDisposable
 
                 // Soon, not now: a stroll is his own idea, not the player's,
                 // and it comes round on its own timer. Nearly always the wait
-                // is long over by the time one ends - settling, strolling and
-                // standing add up to a minute and a half - and when it is not,
-                // he sits where he stopped and walks back at the next look
-                // rather than turning the routine into a way round the wait.
+                // is long over by the time one ends - 75 s settled, the stroll
+                // itself, then 9 s standing, so 84 s at the least and 98 at a
+                // stroll that runs out of patience - and when it is not, he sits
+                // where he stopped and walks back at the next look rather than
+                // turning the routine into a way round the wait.
+                //
+                // Who can be kept waiting by that is narrow, which is why it is
+                // the right trade: CampRoutine never gets a companion up off a
+                // seat or out of a bed, at night, in a storm, or with the player
+                // in earshot. Only a seatless companion, in daylight, with
+                // nobody about, can be sitting on grass for the rest of a wait.
                 LookAgainSoon();
                 SeatUpgrade upgrade = ReadSeatUpgrade();
                 if (upgrade.IsWorthMoving && TryBeginRelocation())
