@@ -402,6 +402,16 @@ stored package. `WorkerInventoryRecord.Decide` answers `LoadEmpty` — never a r
 `NoReadEverRefuses` pins that no input can produce anything but a load. An old body comes back exactly as it
 always did.
 
+**And a third thing, which the audit got wrong before a review read it.** Widening that IL rule from one write to
+four needed a longer window between a key literal and its `ZDO::Set`, because the inventory write pushes a `ZPackage`
+and an `Inventory.Save` in between. At 24 IL lines the window reached back **past the previous `ZDO::Set`**, so the
+second write of an adjacent pair was vouched for by the *first* one's literal: planting `tcc.bogus.inventory` on the
+first write failed the audit, and planting `tcc.bogus.revision` on the second **passed it**. The window now stops at
+the previous `ZDO::Set`, so a write can only be vouched for by a literal that is its own. Proved against the
+installed assembly rather than reasoned about — first write FAIL/FAIL, second write PASS before and FAIL after, and
+the same plant on the *spawn's* adjacent pair FAIL, with `ZDO::Set(` staying at 4 throughout, so the pinned count
+alone would have seen none of it.
+
 **Two things the off-game audit is worth reading for, since it caught this work.** First, its IL rule pinned
 `ZDO::Set(` to *one* call in *one* type; this made it four in two types, and the audit refused the build until that
 expectation was updated on purpose — which is the rule doing its job, not an obstacle. Second, a

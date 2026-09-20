@@ -335,11 +335,24 @@ Assert-OnlyIn 'Rigidbody::set_constraints' { param($h) $h.Type -eq "TheConcerned
 # The count stays pinned to the exact number, and the key constraint holds for
 # EVERY write, which the first version of this widening did not manage: at 24 IL
 # lines the window reached back past the previous `ZDO::Set`, so the second write
-# in a pair was vouched for by the FIRST one's literal. A review proved it -
-# planting a wrong key on the first write failed, planting the same wrong key on
-# the second passed. So the window now stops at the previous `ZDO::Set`: a write
-# can only ever be vouched for by a literal that is its own. Widening it further
-# is safe for the same reason, and the barrier is why.
+# in a pair was vouched for by the FIRST one's literal. So the window now stops at
+# the previous `ZDO::Set`: a write can only ever be vouched for by a literal that
+# is its own. Widening the 24 further is safe for the same reason, and the barrier
+# is why.
+#
+# Proved against the installed assembly by planting `tcc.bogus.*` on one write at
+# a time and running this audit for real, not by reading it:
+#
+#   plant                                     pre-barrier (f59d4db)   with barrier
+#   1st Set in TryPersist (inventory)         FAIL, 1 finding         FAIL, 1 finding
+#   2nd Set in TryPersist (revision)          PASS  <- the escape     FAIL, 1 finding
+#   2nd Set of the spawn pair (revision)      (not run)               FAIL, 1 finding
+#
+# The spawn's two writes are adjacent too, which is why the third row is here: the
+# barrier has to hold in both types, not just the one the review happened to read.
+# Each finding names the offending type, and `ZDO::Set(` stayed at 4 throughout -
+# the plants changed a key, never a count, so the count alone would have seen
+# nothing.
 Assert-OnlyIn 'ZDO::Set(' {
     param($h)
     if ($h.Type -ne ($workersNamespace + "TeamsterWorkerPrefab") -and
