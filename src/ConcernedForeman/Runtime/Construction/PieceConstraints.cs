@@ -57,6 +57,14 @@ internal static class PieceConstraints
             return ProbeAnswer.CouldNotTell;
         }
 
+        // Vanilla PlacePiece can trigger terrain work as part of instantiation.
+        // NPC terrain clearance is not enabled, even when all other checks pass.
+        if (piece.GetComponent<TerrainModifier>() != null || piece.GetComponent<TerrainOp>() != null)
+        {
+            constraint = "this piece changes terrain; terrain-changing NPC construction is not enabled";
+            return ProbeAnswer.No;
+        }
+
         // 1. The two that are judged, because the game asks them as a plain
         //    yes/no about a point and this runtime can ask the same question.
         if (!piece.m_allowedInDungeons && Character.InInterior(at))
