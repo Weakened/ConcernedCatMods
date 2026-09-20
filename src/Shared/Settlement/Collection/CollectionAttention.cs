@@ -16,6 +16,16 @@ internal enum CollectionAttentionReason
     ToolHandoverUncertain = 6,
     JournalReadOnly = 7,
 
+    /// <summary>Nothing could establish whose identity Thorstein is, so no job
+    /// may hold him and nothing may move him.
+    ///
+    /// <b>Not <see cref="WorkerBodyLost"/>.</b> His body may be standing right in
+    /// front of the player. What is missing is the shared NPC runtime's record of
+    /// who he is, which is decided once at startup and never changes during a
+    /// session. Reported as itself because the two have different causes and
+    /// completely different fixes.</summary>
+    WorkerIdentityUnknown = 8,
+
     // Scope and sources
     ScopeInvalid = 10,
     ScopeChanged = 11,

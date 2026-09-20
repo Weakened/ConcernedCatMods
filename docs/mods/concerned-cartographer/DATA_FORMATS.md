@@ -303,7 +303,31 @@ Author identity (`state/author-id.dat`, a GUID per profile) is labeling for audi
 
 ## Backups (v0.8+)
 
-`cc_atlas backup` copies the atlas sidecars into `backups/<timestamp>/`. Backup folders double as the export/import format (copy them between machines/profiles). `restore <n>` takes its own safety backup first and clears journals so the restored snapshot is authoritative after relog.
+`cc_atlas backup` copies the atlas sidecars into `backups/<world-uid>-<timestamp>-<label>/`. Backup folders double as the export/import format (copy them between machines/profiles). `restore <n>` takes its own safety backup first and clears journals so the restored snapshot is authoritative after relog.
+
+**All five per-world sidecars, and one list of them (#367).** A backup covers
+`.roads.tsv`, `.pins.tsv`, `.routes-atlas.tsv`, `.survey-rejected.tsv` and
+`.terrain-intent.tsv`. It used to cover the first three: the backup tools kept
+their own copy of the list, so a player's rejected-observation memory (what he
+already said no to, which is what stops the survey re-offering it) and his
+terrain-intent exclusion mask were in no backup, could not be restored, and were
+missing from the support report while it read as complete. There is now one list,
+`CartographerWorldSidecars`, and it is the same list the fresh-install probe
+treats as proof a player used this mod — which `CartographerPaths` already named
+as the authority. Adding a suffix there backs it up, restores it, clears its
+journal and reports on it in the same change.
+
+**Names on disk are invariant, always (#367).** The folder name was composed with
+string interpolation, which formats under the player's own culture, while
+`cc_atlas backups` globbed for the invariant world uid. Where the two disagree —
+`NumberFormatInfo.NegativeSign` is culture data and several cultures use U+2212
+rather than ASCII hyphen-minus, so a negative world uid is the realistic trigger
+— the backup is written successfully under a name the lister cannot find:
+`cc_atlas backups` shows nothing, `restore` cannot offer it, and nothing warns,
+because both halves succeed. Every name on disk now comes from
+`AtlasBackupNaming`, by concatenation under `CultureInfo.InvariantCulture`, never
+by interpolation. Log lines and console replies are not names and stay in the
+player's own culture, where their number formatting is the correct one.
 
 ## Schema/version change checklist
 

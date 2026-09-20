@@ -61,7 +61,14 @@ internal sealed class SettlementRecords
         _writer = new SettlementRecordWriter(_journals, _registers);
     }
 
-    private static string DefaultRoot()
+    /// <summary>Where this product's settlement data lives by default.
+    ///
+    /// <b>Internal rather than private since the Concerned NPC adoption</b>, so
+    /// that <c>ForemanNpcRole</c> can declare the same root to the library
+    /// instead of a third place in this product composing the same path. The
+    /// library reads and writes nothing under it; it refuses to register a role
+    /// that cannot say where its data is.</summary>
+    internal static string DefaultRoot()
     {
         return Path.Combine(
             Paths.ConfigPath, "ConcernedCatMods", "ConcernedForeman", "settlements");

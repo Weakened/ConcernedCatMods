@@ -77,14 +77,28 @@ internal static class ForemanWorkerBodies
 /// <summary>Walking Thorstein (the C1 <see cref="IWorkerMotion"/> seam) over
 /// <see cref="ForemanWorkerAI"/>: only the job holding his actor mode may send
 /// him anywhere or stop him, arrival is by distance, and he moves only through
-/// the worker actor's budgeted vanilla motor.</summary>
+/// the worker actor's budgeted vanilla motor.
+///
+/// <b>"Holding his actor mode" is now a question for Concerned NPC's arbiter.</b>
+/// It used to be a question for an <c>ActorModeOwner</c> this assembly built for
+/// itself, which nothing outside this assembly could see - so a second runtime in
+/// the same process could believe it held Thorstein too. The hold handed in here
+/// reads and writes the one mode owner the library keeps for
+/// <c>foreman/thorstein</c>, which is what makes a refusal visible to every
+/// product at once.</summary>
 internal sealed class ForemanWorkerMotion : IWorkerMotion
 {
-    private readonly ActorModeOwner _modes;
+    private readonly IActorModeHold _modes;
     private readonly Func<ForemanWorkerAI?> _body;
     private Vector3 _lastPosition;
 
-    public ForemanWorkerMotion(ActorModeOwner modes, Func<ForemanWorkerAI?> body)
+    /// <param name="modes">Thorstein's mode hold. Since the Concerned NPC
+    /// adoption this is <c>ArbiterActorMode</c> over the library's one arbiter,
+    /// never an owner this product built: the job that walks him takes the mode
+    /// through <c>NpcRoleRegistry.EnterMode</c> and gives it back through
+    /// <c>ReleaseMode</c>, and this port reads the hold to decide whether the
+    /// caller is allowed to move him at all.</param>
+    public ForemanWorkerMotion(IActorModeHold modes, Func<ForemanWorkerAI?> body)
     {
         _modes = modes ?? throw new ArgumentNullException(nameof(modes));
         _body = body ?? throw new ArgumentNullException(nameof(body));

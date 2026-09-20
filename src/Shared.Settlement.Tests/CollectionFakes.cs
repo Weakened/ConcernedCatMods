@@ -364,11 +364,11 @@ internal sealed class FakeCustody : ICollectionCustody, IMaterialCustodyView, IT
 
 internal sealed class FakeMotion : ICollectionMotion
 {
-    private readonly ActorModeOwner _modes;
+    private readonly IActorModeHold _modes;
     private SitePoint? _goal;
     private float _tolerance;
 
-    public FakeMotion(ActorModeOwner modes, SitePoint start)
+    public FakeMotion(IActorModeHold modes, SitePoint start)
     {
         _modes = modes;
         Position = start;
@@ -708,12 +708,20 @@ internal sealed class CollectionRig
 
     private int _nextSource;
 
-    public CollectionRig(CollectionParameters? parameters = null, bool withHauler = false)
+    /// <param name="modes">The mode hold the loop is driven through. Defaults to
+    /// the pre-adoption <see cref="ActorModeOwner"/> this rig has always built, so
+    /// every existing test is unchanged. A test passes one in to stand in for the
+    /// arbiter-backed hold Concerned Foreman now uses — most importantly one that
+    /// refuses with <c>Unspecified</c>, which is what the library answers for an
+    /// identity it does not track and which must not read as permission.</param>
+    public CollectionRig(
+        CollectionParameters? parameters = null, bool withHauler = false, IActorModeHold? modes = null)
     {
         Parameters = parameters ?? CollectionParameters.Default;
         Modes = new ActorModeOwner(WorkerKey.Thorstein);
+        Hold = modes ?? Modes;
         Book = new SourceReservationBook(Epoch);
-        Motion = new FakeMotion(Modes, Anchor);
+        Motion = new FakeMotion(Hold, Anchor);
         WorkerInventory = new CollectionFakeInventory("Thorstein", defaultCapacity: 32 * 50);
         Chest = new CollectionFakeInventory("chest", defaultCapacity: 1000);
         Custody = new FakeCustody(WorkerInventory, Chest);
@@ -745,13 +753,20 @@ internal sealed class CollectionRig
             }
         };
         Loop = new SoloCollectionLoop(
-            Parameters, WorkerKey.Thorstein, new WorkerId("thorstein"), Modes, Book, Motion, Custody, Pickup, Probe,
+            Parameters, WorkerKey.Thorstein, new WorkerId("thorstein"), Hold, Book, Motion, Custody, Pickup, Probe,
             World, Cooperation, new CollectionRequestIds(Epoch));
     }
 
     public CollectionParameters Parameters { get; }
 
+    /// <summary>The rig's own mode owner. Still here, and still what
+    /// <c>rig.Modes.Mode</c> means in every test that reads it, because those
+    /// tests drive the default hold — which IS this owner.</summary>
     public ActorModeOwner Modes { get; }
+
+    /// <summary>The hold the loop and the motion port were actually given: this
+    /// rig's <see cref="Modes"/> unless a test substituted one.</summary>
+    public IActorModeHold Hold { get; }
 
     public SourceReservationBook Book { get; }
 

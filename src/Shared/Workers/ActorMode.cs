@@ -40,14 +40,107 @@ internal enum ActorModeOutcome
     NotHeld = 5,
 }
 
+/// <summary>One worker identity's mode, as the code that drives a job sees it:
+/// what he is doing, which job holds him, and the two verbs that take and give
+/// back the hold.
+///
+/// <b>Why this is an interface and not just <see cref="ActorModeOwner"/>.</b>
+/// Because who owns the mode is no longer the same answer in every product. A
+/// product that has not adopted the Concerned NPC library still holds its
+/// identity in an <see cref="ActorModeOwner"/> compiled into its own assembly;
+/// a product that HAS adopted it must take the mode from the library's one
+/// arbiter instead, or one identity has two mode owners and the never-coexist
+/// rule is advice rather than enforcement
+/// (<c>tools/validate_repo.py check_library_consumers_do_not_bypass_the_arbiter</c>).
+/// This is the seam that lets the game-free job loops in
+/// <c>src/Shared/Settlement</c> be written once against either.
+///
+/// <b>Every member here is one an existing caller already used</b> — nothing was
+/// added for symmetry. Widening it later is a deliberate edit, because each
+/// member is a thing an arbiter-backed implementation has to be able to answer
+/// honestly without inventing a fact.
+///
+/// <b>Reading a mode and changing one are different questions.</b> The readers
+/// are total: they answer for an identity nobody has registered, and the answer
+/// is the closed one — an unknown mode is not <see cref="ActorMode.Resting"/>,
+/// so <see cref="MayRetireBody"/> and <see cref="MayRelocateHome"/> are false
+/// rather than true. Failing open here would let a runtime that could not find
+/// its identity retire a body somebody's job is standing in.</summary>
+internal interface IActorModeHold
+{
+    /// <summary>Whose mode this is. A loop checks it against the worker it was
+    /// built for, so a mis-wiring is a construction-time failure rather than a
+    /// worker walking on somebody else's hold.</summary>
+    WorkerKey Worker { get; }
+
+    /// <summary>Whether this hold can establish whose mode it is holding at all.
+    ///
+    /// <b>This exists so that "nothing could take hold of him" is never reported
+    /// as "he is busy" or "his body is gone".</b> A pre-adoption
+    /// <see cref="ActorModeOwner"/> always knows: it IS the owner, so it answers
+    /// true forever. An arbiter-backed hold answers false when the shared runtime
+    /// never accepted this identity, and then every verb below refuses and every
+    /// permission below is denied - correctly, and for a reason a player cannot
+    /// guess from a refusal labelled "busy" while nothing is busy, or from an
+    /// order paused for a body that is standing right there. The one honest
+    /// diagnosis is at load time, in a log line most people never read, so the
+    /// surfaces a player does look at ask this and say so.</summary>
+    bool IsIdentityKnown { get; }
+
+    ActorMode Mode { get; }
+
+    /// <summary>The job holding the identity, or null when nothing does.</summary>
+    string? JobId { get; }
+
+    bool MayRelocateHome { get; }
+
+    bool MayRetireBody { get; }
+
+    bool IsHeldBy(string? jobId);
+
+    /// <summary>Takes the identity for <paramref name="jobId"/>, or says why
+    /// not. <see cref="ActorModeOutcome.Entered"/> and
+    /// <see cref="ActorModeOutcome.AlreadyInMode"/> are the only two grants;
+    /// <b>every other outcome, including
+    /// <see cref="ActorModeOutcome.Unspecified"/>, is a refusal</b> and a caller
+    /// that treats one of them as a grant runs a job with no hold on the body it
+    /// is moving.</summary>
+    ActorModeOutcome Enter(ActorMode mode, string jobId);
+
+    /// <summary>Gives the identity back. Releasing one this job does not hold
+    /// changes nothing and is not an error, so cleanup after a death, a reload
+    /// or a countermand can be unconditional.</summary>
+    ActorModeOutcome Release(string jobId);
+}
+
+/// <summary>Whether an <see cref="IActorModeHold.Enter"/> outcome actually
+/// granted the hold.
+///
+/// <b>Stated once, here, because getting it wrong is silent.</b> A caller that
+/// asks "is this RefusedBusy?" treats every other refusal - most importantly
+/// <see cref="ActorModeOutcome.Unspecified"/>, which is what an arbiter answers
+/// for an identity it does not track - as permission to proceed, and then drives
+/// a body it has no hold on.</summary>
+internal static class ActorModeGrants
+{
+    public static bool IsGranted(ActorModeOutcome outcome) =>
+        outcome == ActorModeOutcome.Entered || outcome == ActorModeOutcome.AlreadyInMode;
+}
+
 /// <summary>The single actor-mode owner for one worker identity.
 ///
 /// One job at a time holds the identity; while it does, nothing else - a bed
 /// change, hiding presentation, a home relocation - may move, retire or replace
 /// the body, because the job's actual position (and the cart or cargo attached
 /// to it) wins over home. A job moves freely between Surveying, Working, Paused
-/// and Recovering; only releasing it returns the identity to Resting.</summary>
-internal sealed class ActorModeOwner
+/// and Recovering; only releasing it returns the identity to Resting.
+///
+/// <b>This is the pre-adoption implementation of
+/// <see cref="IActorModeHold"/>.</b> A product that consumes the Concerned NPC
+/// library may not construct one - the validator refuses the line - and takes
+/// the same seam over the library's arbiter instead. Products that have not
+/// adopted the library still use this, and it is still correct for them.</summary>
+internal sealed class ActorModeOwner : IActorModeHold
 {
     public ActorModeOwner(WorkerKey worker)
     {
@@ -60,6 +153,10 @@ internal sealed class ActorModeOwner
     }
 
     public WorkerKey Worker { get; }
+
+    /// <summary>Always true. This object is the identity's mode owner, so there
+    /// is nothing for it to fail to establish.</summary>
+    public bool IsIdentityKnown => true;
 
     public ActorMode Mode { get; private set; } = ActorMode.Resting;
 

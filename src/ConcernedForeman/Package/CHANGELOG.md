@@ -11,6 +11,50 @@ plus the ladder feature from CF-LAD-001..005 (#324), and **nothing in it
 has been observed working in a game**. The version has deliberately not
 moved: 0.1.0 has never shipped, so these are still its notes.
 
+### Changed — Thorstein's identity comes from Concerned NPC (#380)
+
+- Concerned Foreman now requires **Concerned NPC**, which ships as its own
+  package. Thorstein's actor mode — what he is doing, and which order holds
+  him — comes from that library's one arbiter instead of from a copy of the
+  rule compiled into this mod. Without the package the mod says so at load
+  rather than failing later.
+- **What that buys a player.** While a collection order holds Thorstein,
+  nothing else running in the same game may take his body: not another mod
+  of ours, not a second runtime in this one. Before this, each mod kept its
+  own private answer to "is he busy?", and none of them could see the
+  others.
+- **If the shared runtime ever refuses Thorstein, you are told which thing
+  went wrong.** This is a new failure mode rather than a fixed bug — there was
+  nothing to fix, because before this change the only answer available was
+  "yes" or "he is busy". Now that a shared runtime can decline him at startup,
+  every surface says so plainly: an order refused for that reason names
+  Concerned NPC and says waiting will not help, and a stopped order says his
+  identity was not accepted rather than blaming a body that is standing right
+  in front of you.
+- **While that is the case, he cannot be dismissed either.** `cf_worker
+  despawn`, and the uninstall step that asks you to retire his body, both
+  refuse — deliberately. A body nothing can account for is not destroyed on a
+  guess, because his tools and gathered materials are inside it. Install or
+  re-enable Concerned NPC and restart, and both work again.
+
+### Unchanged on purpose
+
+- **No durable name moved, and no migration code exists or ran.** His
+  identity is still `foreman/thorstein`, his prefab is still
+  `CF_SettlementWorker`, and his body still stores itself under
+  `tcc.worker.key`, `tcc.worker.inventory` and `tcc.worker.revision`. A
+  settlement folder from the previous build is read by exactly the same
+  names, so an existing Thorstein keeps his issued tools and his
+  designations.
+- Concerned Foreman still registers its own worker prefab, from its own
+  start, under its own name. A prefab registered late, or under a new name,
+  would delete every saved worker on the next load, so that half is
+  deliberately not handed over.
+- The settlement record gains one new pause reason name. A record written by
+  this build and read by an older one shows that pause as "no reason
+  recorded"; nothing else about it changes, and a record written by an older
+  build reads here exactly as it always did.
+
 ### Added — climbable ladders (#324)
 
 - **Valheim's ladders are climbable instead of teleporting.** Walk into
