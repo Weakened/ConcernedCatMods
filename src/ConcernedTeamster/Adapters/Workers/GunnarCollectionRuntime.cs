@@ -41,6 +41,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
     private TeamsterSettings _settings = null!;
     private ManualLogSource? _log;
     private Func<Humanoid?> _worker = null!;
+    private Func<bool> _recordUnwritable = null!;
     private Func<bool> _seamAvailable = null!;
 
     private bool _faulted;
@@ -55,11 +56,12 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
         GameObject host,
         TeamsterSettings settings,
         Func<Humanoid?> worker,
+        Func<bool> recordUnwritable,
         Func<bool> seamAvailable,
         ManualLogSource log)
     {
         GunnarCollectionRuntime runtime = host.AddComponent<GunnarCollectionRuntime>();
-        runtime.Initialize(settings, worker, seamAvailable, log);
+        runtime.Initialize(settings, worker, recordUnwritable, seamAvailable, log);
         var command = new CollectConsoleCommand(runtime);
         VanillaConsoleCommands.Register(command, log);
         log.LogInfo(VanillaConsoleCommands.Describe(new[] { command.Name }));
@@ -80,11 +82,13 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
     private void Initialize(
         TeamsterSettings settings,
         Func<Humanoid?> worker,
+        Func<bool> recordUnwritable,
         Func<bool> seamAvailable,
         ManualLogSource log)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _worker = worker ?? throw new ArgumentNullException(nameof(worker));
+        _recordUnwritable = recordUnwritable ?? throw new ArgumentNullException(nameof(recordUnwritable));
         _seamAvailable = seamAvailable ?? throw new ArgumentNullException(nameof(seamAvailable));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _lifecycle = new CollectionLifecycle(_port);
@@ -268,7 +272,10 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
         return "Gunnar's collection: " + (OptedIn() ? "on" : "OFF (the default)") +
             "; " + WorkAuthorityPolicy.Describe(authority) +
             " Pickup seam " + (_seamAvailable() ? "available" : "UNAVAILABLE") +
-            "; Gunnar " + (worker == null ? "is not here" : worker.IsDead() ? "is down" : "is here") +
+            "; Gunnar " + (_recordUnwritable()
+                ? "is here but could not write down what he is carrying, so he is handed nothing "
+                    + "more; a reload brings him back with what was last saved"
+                : worker == null ? "is not here" : worker.IsDead() ? "is down" : "is here") +
             "; " + (_ordered ? "picking " + _orderedSource : "idle") +
             " (phase " + _port.Phase + ").";
     }
@@ -305,6 +312,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
             authority: Authority(),
             seamAvailable: _seamAvailable(),
             workerPresent: worker != null && !worker.IsDead(),
+            workerRecordUnwritable: _recordUnwritable(),
             pickInFlight: _ordered || _port.Phase == PickPhase.Gathering,
             pointedAtASource: source != null,
             sourceObjectName: sourceName,

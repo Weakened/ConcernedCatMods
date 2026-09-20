@@ -336,9 +336,17 @@ Assert-OnlyIn 'Rigidbody::set_constraints' { param($h) $h.Type -eq "TheConcerned
 # EVERY write, which the first version of this widening did not manage: at 24 IL
 # lines the window reached back past the previous `ZDO::Set`, so the second write
 # in a pair was vouched for by the FIRST one's literal. So the window now stops at
-# the previous `ZDO::Set`: a write can only ever be vouched for by a literal that
-# is its own. Widening the 24 further is safe for the same reason, and the barrier
-# is why.
+# the previous `ZDO::Set`: a write can only be vouched for by a literal that
+# appears AFTER the previous `ZDO::Set`. Widening the 24 further is safe for the
+# same reason, and the barrier is why.
+#
+# That is deliberately weaker than "a literal that is its own", which an earlier
+# version of this comment claimed. The barrier excludes the previous write's
+# literal; it does not prove the literal it finds belongs to THIS write. A
+# decorative `ldstr "tcc.worker.x"` placed in the gap between two `ZDO::Set`
+# calls would still vouch for the second. The escape a review found is closed;
+# the general statement is not, and a reviewer reading the two writes is what
+# covers the rest.
 #
 # Proved against the installed assembly by planting `tcc.bogus.*` on one write at
 # a time and running this audit for real, not by reading it:

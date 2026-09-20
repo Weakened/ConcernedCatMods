@@ -20,6 +20,7 @@ public sealed class CollectionOrderGateTests
         WorkAuthorityVerdict authority = WorkAuthorityVerdict.Granted,
         bool seamAvailable = true,
         bool workerPresent = true,
+        bool workerRecordUnwritable = false,
         bool pickInFlight = false,
         bool pointedAtASource = true,
         string sourceObjectName = Stone,
@@ -33,6 +34,7 @@ public sealed class CollectionOrderGateTests
             authority,
             seamAvailable,
             workerPresent,
+            workerRecordUnwritable,
             pickInFlight,
             pointedAtASource,
             sourceObjectName,
@@ -102,6 +104,84 @@ public sealed class CollectionOrderGateTests
         Assert.Equal(
             CollectionOrderRefusal.NoWorker,
             CollectionOrderGate.Evaluate(Ready(workerPresent: false)));
+    }
+
+    // -- the sentence a player actually reads when a write has failed --
+    //
+    // The defect: a persistence failure makes BoundBody answer null, the runtime
+    // read that as "no worker", and the player was told "Gunnar is not here.
+    // Bring him into the world first." about a Gunnar standing in front of them.
+    // Nothing named the failed write, nothing said he was holding something, and
+    // the only other true sentence reachable was ct_haul retire's unreadable
+    // refusal - whose only escape is `retire force`, which destroys the stone. A
+    // false sentence pointing at the destructive door is worse than a refusal.
+
+    [Fact]
+    public void ABodyWhoseRecordCouldNotBeWritten_IsNotReportedAsAbsent()
+    {
+        // Both flags are what the runtime really passes in that state: BoundBody
+        // answers null, so workerPresent is false AND the record flag is true.
+        // The record flag has to win, or the player gets the falsehood.
+        Assert.Equal(
+            CollectionOrderRefusal.WorkerRecordUnwritable,
+            CollectionOrderGate.Evaluate(
+                Ready(workerPresent: false, workerRecordUnwritable: true)));
+    }
+
+    [Fact]
+    public void ThatRefusalOutranksNoWorker_EvenWithTheBodyReportedPresent()
+    {
+        Assert.Equal(
+            CollectionOrderRefusal.WorkerRecordUnwritable,
+            CollectionOrderGate.Evaluate(Ready(workerRecordUnwritable: true)));
+    }
+
+    [Fact]
+    public void ARoomThatRefusesWorkIsStillReportedFirst()
+    {
+        // Order matters in the other direction too: the player's own switch and
+        // the room come before anything about Gunnar, so a failed write does not
+        // mask "you are not the host".
+        Assert.Equal(
+            CollectionOrderRefusal.FeatureOff,
+            CollectionOrderGate.Evaluate(
+                Ready(featureEnabled: false, workerRecordUnwritable: true)));
+        Assert.Equal(
+            CollectionOrderRefusal.WorkRefused,
+            CollectionOrderGate.Evaluate(
+                Ready(authority: WorkAuthorityVerdict.NotHost, workerRecordUnwritable: true)));
+    }
+
+    [Fact]
+    public void TheSentenceSaysHeIsHereHoldingSomethingAndThatAReloadRestoresHim()
+    {
+        // The three things the old sentence got wrong or left out. Asserted as
+        // content rather than as an exact string so the wording can be improved
+        // without the test becoming a transcription.
+        string said = CollectionOrderGate.Describe(CollectionOrderRefusal.WorkerRecordUnwritable);
+        Assert.Contains("is here", said);
+        Assert.Contains("holding", said);
+        Assert.Contains("could not write", said);
+        Assert.Contains("Reload the world", said);
+
+        // And it must not tell the player Gunnar is absent, which is the whole
+        // defect, nor route them to the door that destroys what he holds.
+        Assert.DoesNotContain("not here", said);
+        Assert.DoesNotContain("force", said);
+    }
+
+    [Fact]
+    public void EveryRefusalStillHasASentenceOfItsOwn()
+    {
+        // A new refusal with no case falls to "nobody recorded", which is the
+        // shape of the defect being fixed: a reason the player cannot act on.
+        foreach (CollectionOrderRefusal refusal in
+                 System.Enum.GetValues(typeof(CollectionOrderRefusal)))
+        {
+            string said = CollectionOrderGate.Describe(refusal);
+            Assert.False(string.IsNullOrWhiteSpace(said));
+            Assert.DoesNotContain("nobody recorded", said);
+        }
     }
 
     [Fact]

@@ -418,6 +418,18 @@ internal sealed class TeamsterWorkerRecord : MonoBehaviour
         // hook symmetric with this component's own enable and disable is simpler
         // to reason about than Unity's message resolution against BaseAI, which
         // declares a private OnDestroy of its own on the same object.
+        //
+        // A STATED ASSUMPTION OF THE CONTAINMENT, recorded rather than proved or
+        // dismissed. While this component is disabled the hook is gone, so a
+        // change made in that window is neither persisted NOR flagged:
+        // `LastChangePersisted` stays true and `WorkerInventoryRecord.Trust`
+        // keeps answering `Trusted`, because it is never asked whether the hook
+        // is live. Everything downstream therefore assumes the hook is attached
+        // whenever the inventory can change, and nothing here asserts it. The
+        // review that found this explicitly did NOT claim it is reachable -
+        // ZNetScene destroys distant objects rather than deactivating them - and
+        // neither does this comment. It is written down because an unasserted
+        // assumption a reader cannot see is worse than one they can.
         if (_inventory != null && _onChanged != null)
         {
             _inventory.m_onChanged = (Action)Delegate.Remove(_inventory.m_onChanged, _onChanged);

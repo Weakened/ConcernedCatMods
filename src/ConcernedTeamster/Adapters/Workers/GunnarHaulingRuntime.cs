@@ -129,6 +129,37 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         }
     }
 
+    /// <summary>Whether there IS a bound body and the only thing wrong with it is
+    /// that its last inventory change could not be written to its own network
+    /// object.
+    ///
+    /// <b>Why this is separate from <see cref="BoundBody"/> rather than folded
+    /// into it.</b> Both a missing body and an unwritable record make
+    /// <see cref="BoundBody"/> answer null, and a caller that can only see null
+    /// told the player <i>"Gunnar is not here. Bring him into the world
+    /// first."</i> about a Gunnar standing in front of them. This is what lets the
+    /// order gate say which of the two it is. It changes no decision - the pick
+    /// is refused either way - only the sentence.
+    ///
+    /// Deliberately narrow: an <i>inert</i> body (no record, or a record that
+    /// could not be read) is NOT this case and answers false, because the useful
+    /// sentence there is a different one and the log already carries
+    /// <see cref="TeamsterWorkerRecord.Fault"/>.</summary>
+    internal bool BoundBodyRecordUnwritable
+    {
+        get
+        {
+            TeamsterWorkerAI? ai = _body != null ? _body.Bound : null;
+            if (ai == null || ai.IsFaulted)
+            {
+                return false;
+            }
+
+            TeamsterWorkerRecord? record = TeamsterWorkerRecord.On(ai);
+            return record != null && record.IsLoaded && !record.LastChangePersisted;
+        }
+    }
+
     public float Now => Time.time;
 
     /// <summary>The entry point: registers the worker prefab for every session,

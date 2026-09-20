@@ -169,6 +169,19 @@ drops the items on the ground on the *owner's* machine and needs a local player 
 shipped as an observational mod and the audit is what makes that claim true rather than stated, so the interaction
 had to be authorized rather than assumed.
 
+**TWO pinned calls, not one, and the enforcement said one for longer than it should have.** A review decompiled
+`Humanoid.Pickup` against the installed assembly: it calls `m_inventory.AddItem(...)` and then
+**`ZNetScene.instance.Destroy(go)`** — the very second spelling of destruction the carried-material rule had just
+been widened for, reached through vanilla, on the dropped item's own network object. The validator pinned only
+`Pickable.Interact`, so **the call that actually moves the material was the unpinned one**, free to change its
+receiver, its arguments or its spelling without re-authorization, while this document and two others said "one
+pinned call". Picking an item up is plainly inside what the owner authorized in substance, and the call predates the
+persistence round, so this was never a widening — it was the *enforcement claim* being wider than the enforcement.
+Both are pinned verbatim now, `.Pickup(` is a forbidden token everywhere else in Teamster exactly as `.Interact(`
+is, and three plants prove it: the take re-pointed at the player inside the authorized file, a take in another
+worker file, and a second take in the port. Each passes the validator as it stood before this fix and is refused
+now.
+
 **What the port refuses, and why each refusal is the safe direction:**
 
 | Refusal | Because |
@@ -437,12 +450,43 @@ is what stops the next one. A zone load re-creates the record clean from the las
 decision being memoryless is what keeps that a *pause* rather than a body latched off for the session; it is not a
 claim that a running game will resume picking on its own.
 
+**And what the player is TOLD when that happens, which was a falsehood this round created.** A review followed the
+path: a failed write makes `BoundBody` answer null, the collection runtime read that as "no worker", and
+`ct_collect pick` printed **"Gunnar is not here. Bring him into the world first."** — about a Gunnar standing in
+front of the player. `ct_collect status` said the same. Nothing named the failed write, nothing said he was holding
+something, nothing hinted that a reload restores him; and the only other true sentence reachable was `ct_haul
+retire`'s unreadable refusal, whose only escape is `retire force`, **which destroys the stone**. So the false
+sentence pointed at the destructive door. This program has shipped one self-contradicting console before (the reload
+advice that told the player to cancel while the panel said rebind) and fixed it as a defect.
+
+There is now a distinct `WorkerRecordUnwritable` refusal, asked **before** "no worker" precisely because a body in
+that state *is* absent as far as `BoundBody` is concerned. It says he is here, that he is still holding what he
+picked up, that the game could not write it down, that he will be handed nothing more until a change does get
+written, and that a reload brings him back with what was last saved — and it says outright that whatever the failed
+write was carrying is gone. `ct_collect status` says the same thing in its own line. Five tests pin it, including one
+that requires the sentence **not** to contain "not here" and **not** to mention `force`, and one that requires every
+refusal in the enum to have a sentence of its own rather than falling through to "a reason nobody recorded".
+
+**A stated assumption of the containment, neither proved nor dismissed.** `TeamsterWorkerRecord.OnDisable` unhooks
+the change callback and `OnEnable` re-hooks it. An inventory change made while the component is disabled would
+therefore be neither persisted **nor** flagged: `LastChangePersisted` stays true and `WorkerInventoryRecord.Trust`
+keeps answering `Trusted`, because it is never asked whether the hook is live. The containment above assumes the
+hook is always attached whenever the inventory can change, and **nothing in the code asserts that**. The reviewer who
+found it explicitly did not claim it is reachable — `ZNetScene` destroys distant objects rather than deactivating
+them — and neither does this document. It is recorded because an unasserted assumption a reader cannot see is worse
+than one they can.
+
 **The door this does NOT close, named rather than left to be found.** *Death.* If Gunnar is killed, his body is
 destroyed and what he holds goes with it. Foreman closes that by dropping every carried item through vanilla's own
 drop as the body dies (§5a, first bullet) — and that precedent does cover this event, unlike the deliberate retire.
 But implementing it means this product **spawning item instances**, which is a capability the 2026-09-19 carve-out
 does not grant and no other owner decision covers. It is one call and a handful of lines behind an owner decision;
 it is not being taken quietly. **Until it is: Gunnar dying loses what he is carrying.**
+
+**A third way material is lost, excluded from "doors" for a reason worth stating.** `ct_haul retire force`
+destroys what a body is carrying. It is not counted among the doors above because **the player is told**: the
+refusal names what he is holding, `force` is a word they have to type, and the forced message states the loss. That
+is consent, not a gap — but "two doors" is only true with that clause attached, so here it is.
 
 **Still never observed in game.** Nothing in §6a, §6b or §6c has been watched happening; §10 is the go-around.
 
@@ -506,7 +550,7 @@ column is f59d4db's own copy of the rule run against the same planted tree.
 | **BLOCKER.** `ZNetScene.Destroy(GameObject go)` (`ZNetScene:116`) resets the network object, destroys the ZDO if owned and destroys the object — the same outcome as `view.Destroy()` — but it takes an argument, so the no-argument `TEAMSTER_BODY_REMOVAL` shape cannot see it. The validator's comment claimed *"Every way a body leaves the world"*, which was **false as written** | `TEAMSTER_DESTRUCTION` pins the **population** of destruction-shaped calls per file, and the comment now says what it does and does not cover | Planting the review's own `Sweep` helper in `GunnarHaulingRuntime.cs`: **exit 0**, with the rule printing *"4 place(s)"* while a fifth sat in the file | **refuses**: *"GunnarHaulingRuntime.cs destroys something 3 time(s); this rule expects 2"*. The same call in a **new** file is a separate test, because the pin is per file: **exit 0** before, *"ZzSweeper.cs destroys something 1 time(s); this rule expects 0"* after |
 | **MINOR.** A guard *consulted and ignored* passed: a bare `WorkerRetirement.Allows(v)` in a log line sits above the removal just as well as a refusal does | The rule wants the refusing `if (!WorkerRetirement.Allows(...))` shape | Replacing the refusal with `_log.LogInfo("verdict: " + WorkerRetirement.Allows(pointedVerdict))`: **exit 0**, pointed body retired whatever the verdict said | **refuses three times**: once on the count, once per removal |
 | **MINOR.** The IL audit's 24-line window was longer than the distance between the two `ZDO::Set` calls in `TryPersist`, so the **second** write was vouched for by the **first** one's literal | The window stops at the previous `ZDO::Set` | `tcc.bogus.inventory` on the first write **FAIL**; `tcc.bogus.revision` on the second **PASS** — the escape | both **FAIL**, and so does the same plant on the *spawn's* adjacent pair. `ZDO::Set(` stayed at **4** in every run, so the pinned count alone would have seen none of it |
-| **MINOR.** `LastChangePersisted` was set and written and **never read** | `WorkerInventoryRecord.Trust(hasRecord, isLoaded, lastChangePersisted)` in `Domain/`, asked by both `BoundBody` and `ItemsHeldBy` | — | 5 new tests; dropping the third term from the decision turns **3 of them red**. See §6c for what this does **not** do: it stops the loss growing, it does not recover the change that failed |
+| **MINOR.** `LastChangePersisted` was set and written and **never read** | `WorkerInventoryRecord.Trust(hasRecord, isLoaded, lastChangePersisted)` in `Domain/`, asked by both `BoundBody` and `ItemsHeldBy` | — | 4 new tests; dropping the third term from the decision turns **3 of them red**. See §6c for what this does **not** do: it stops the loss growing, it does not recover the change that failed |
 | `pwsh ./scripts/verify.ps1`, through the build lock, from this worktree's own copy | **PASSED at `9bc707d`** (`main` `49bb361` merged in first, so the gate ran on the tree that gets merged): Release, 14 assemblies, **4515 tests**, validator exit 0 |
 | `python -m unittest discover -s tools/tests` | **17 passed** (14 before this round) |
 | `pwsh ./scripts/audit-teamster-hauling-api.ps1`, through the build lock | **PASS** post-merge, 125 of 125 members and behaviours, `ZDO::Set(` = 4, 0 failures |

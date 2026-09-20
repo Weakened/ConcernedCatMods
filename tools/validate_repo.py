@@ -1321,6 +1321,7 @@ TEAMSTER_WORKER_FORBIDDEN_TOKENS = (
     "ZRoutedRpc",
     "RPC_RequestOwn",
     ".Interact(",
+    ".Pickup(",
     "SetExtraMass",
     "SetMass",
     "UpdateMass",
@@ -1369,10 +1370,23 @@ TEAMSTER_OUTSIDE_WORKERS_TOKENS = (".Interact(", "SetExtraMass")
 # (`ZSyncAnimation.SetTrigger`) are separate capabilities, were NOT authorized,
 # and would each need their own owner decision.
 #
-# So: one token, in one file. Every other forbidden token still fails in that
-# file, and this token still fails in every other file, inside Workers and out.
+# So: two tokens, in one file. Every other forbidden token still fails in that
+# file, and both of these still fail in every other file, inside Workers and out.
 # Ownership takeover, teleports, forces, cart interaction and arbitrary RPC are
 # untouched.
+#
+# TWO, NOT ONE, AND THE RULE SAID ONE FOR LONGER THAN IT SHOULD HAVE. A review
+# decompiled `Humanoid.Pickup` against the installed assembly: it calls
+# `m_inventory.AddItem(...)` and then `ZNetScene.instance.Destroy(go)` - the very
+# second spelling of destruction the carried-material rule had just been widened
+# for, reached through vanilla, on the dropped item's own network object. So the
+# call that actually MOVES THE MATERIAL was the unpinned one, free to change its
+# receiver, its arguments or its spelling without re-authorization, while this
+# comment and three documents said "one pinned call". Picking an item up is
+# plainly inside what the owner authorized in substance, and the call predates
+# this branch, so the defect was never a widening - it was the ENFORCEMENT CLAIM
+# being wider than the enforcement. Both calls are pinned verbatim now, and the
+# documents say two and say what each does.
 # The carve-out, pinned three ways after an independent review got a banned
 # cart interaction past the first version of it.
 #
@@ -1387,11 +1401,33 @@ TEAMSTER_OUTSIDE_WORKERS_TOKENS = (".Interact(", "SetExtraMass")
 # the right shape for an authority boundary: changing the call should require
 # re-authorization rather than being waved through by a token match.
 #
-# And once: more than one pick call in the port is a different program.
+# And once each: a second pick call or a second take in the port is a different
+# program.
 TEAMSTER_COLLECTION_PORT_PATH = ("Adapters", "Workers", "GunnarCollectionPort.cs")
-TEAMSTER_COLLECTION_PORT_TOKEN = ".Interact("
-TEAMSTER_COLLECTION_PORT_CALL = re.compile(
-    r"\bsource\s*\.\s*Interact\s*\(\s*_worker\s*,\s*repeat\s*:\s*false\s*,\s*alt\s*:\s*false\s*\)")
+
+# Each authorized call: the token that is otherwise forbidden everywhere, the
+# exact call that token is allowed to be, and what it does. Anything else the
+# token could spell still fails inside this file.
+#
+# - `.Interact(` is vanilla's pick on a loose source. It runs `RPC_Pick` and the
+#   ownership claim inside vanilla, on a pickable this process already owns, and
+#   drops the yield on the ground.
+# - `.Pickup(` is vanilla's take of one dropped item into the worker's own
+#   inventory. Inside vanilla it adds to `m_inventory` and then destroys the
+#   dropped item's network object through `ZNetScene.instance.Destroy(go)`. That
+#   destruction is vanilla's, of an `ItemDrop` this mod never created, and is the
+#   reason the pickup is named separately in AUTHORITY_POLICY.md rather than
+#   folded into "picks things up".
+TEAMSTER_COLLECTION_PORT_CALLS = (
+    (".Interact(",
+     re.compile(r"\bsource\s*\.\s*Interact\s*\(\s*_worker\s*,\s*repeat\s*:\s*false\s*,"
+                r"\s*alt\s*:\s*false\s*\)"),
+     "vanilla's pick on a loose source"),
+    (".Pickup(",
+     re.compile(r"\b_worker\s*\.\s*Pickup\s*\(\s*dropped\s*,\s*autoequip\s*:\s*false\s*,"
+                r"\s*autoPickupDelay\s*:\s*false\s*\)"),
+     "vanilla's take of one dropped item, which destroys that item's network object inside vanilla"),
+)
 
 
 def _audit_token(token: str) -> re.Pattern:
@@ -1477,13 +1513,15 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
         code_text = "\n".join(_strip_cs_line_comment(raw) for raw in
                               path.read_text(encoding="utf-8").splitlines())
         authorized = tuple(parts) == TEAMSTER_COLLECTION_PORT_PATH
-        allowed_calls = (len(TEAMSTER_COLLECTION_PORT_CALL.findall(code_text))
-                         if authorized else 0)
-        if authorized and allowed_calls > 1:
-            hits += 1
-            fail(
-                f"[interop] #313 worker-runtime scope audit: the authorized pickup appears "
-                f"{allowed_calls} times in {rel}; it is authorized once", errors)
+        allowed_calls = {}
+        for token, pattern, what in TEAMSTER_COLLECTION_PORT_CALLS:
+            found = len(pattern.findall(code_text)) if authorized else 0
+            allowed_calls[token] = found
+            if found > 1:
+                hits += 1
+                fail(
+                    f"[interop] #313 worker-runtime scope audit: the authorized {token} call "
+                    f"({what}) appears {found} times in {rel}; it is authorized once", errors)
 
         scanned = (TEAMSTER_WORKER_FORBIDDEN_TOKENS if in_workers
                    else TEAMSTER_OUTSIDE_WORKERS_TOKENS)
@@ -1492,14 +1530,16 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
         where = "" if in_workers else " outside Adapters/Workers"
         for token in scanned:
             spent = 0
+            exact = next((pattern for allowed, pattern, _what in TEAMSTER_COLLECTION_PORT_CALLS
+                          if allowed == token), None)
             for match in _audit_token(token).finditer(code_text):
-                if (token == TEAMSTER_COLLECTION_PORT_TOKEN and authorized
-                        and spent < allowed_calls
-                        and TEAMSTER_COLLECTION_PORT_CALL.search(
-                            code_text, max(0, match.start() - 40), match.end() + 80)):
-                    # The owner-authorized pickup, pinned to its exact call so
-                    # that `.Interact(` on anything else - a cart, a container,
-                    # a door - still fails here.
+                if (exact is not None and authorized
+                        and spent < allowed_calls[token]
+                        and exact.search(code_text, max(0, match.start() - 40), match.end() + 80)):
+                    # An owner-authorized call, pinned to its exact spelling so
+                    # that the same token on anything else - `.Interact(` on a
+                    # cart, a container or a door, `.Pickup(` on a different
+                    # receiver or with different arguments - still fails here.
                     spent += 1
                     continue
                 hits += 1
@@ -1511,7 +1551,11 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
                     "identity", errors)
 
     return [
-        f"[interop] #313 worker-runtime scope audit: {worker_files} worker files; {TEAMSTER_COLLECTION_PORT_TOKEN!r} owner-authorized as one pinned call in {'/'.join(TEAMSTER_COLLECTION_PORT_PATH)} alone; cart attach/detach/detach-all only "
+        f"[interop] #313 worker-runtime scope audit: {worker_files} worker files; "
+        f"{' and '.join(repr(token) for token, _p, _w in TEAMSTER_COLLECTION_PORT_CALLS)} "
+        f"owner-authorized as two pinned calls, each verbatim and each once, in "
+        f"{'/'.join(TEAMSTER_COLLECTION_PORT_PATH)} alone (the pick, and the take that destroys the "
+        "dropped item's network object inside vanilla); cart attach/detach/detach-all only "
         f"in Adapters/Workers, mass writes only in {TEAMSTER_WORKER_CALIBRATION_FILE}, network-object writes only "
         f"'tcc.worker.*' keys in {TEAMSTER_WORKER_IDENTITY_FILE}, no teleport/pose/velocity/constraint/joint/cart-"
         f"tuning writes, no component surgery or reflection outside the prefab factory (inside Adapters/Workers only; reflection elsewhere in Teamster is not audited by this rule) ({hits} violations)",
@@ -1633,9 +1677,27 @@ TEAMSTER_RETIRE_ALLOWS = "WorkerRetirement.Allows("
 # A text audit genuinely cannot tell `Destroy(x)` on a body from `Destroy(x)` on
 # a component — both are ordinary GameObject cleanup by spelling — so rather than
 # classify, TEAMSTER_DESTRUCTION_SITES below pins the POPULATION of every
-# destruction-shaped call in the worker folder. That catches the addition this
-# pattern misses; the per-file counts on this narrower pattern already caught a
-# replacement.
+# destruction-shaped call in the worker folder.
+#
+# THE POPULATION PIN ALONE CATCHES AN ADDED DESTRUCTION, NOT A SUBSTITUTED ONE,
+# and an earlier version of this comment claimed it had "already caught a
+# replacement". That was true only where a file's expectation is non-zero. A
+# review proved the hole: rewriting `UnityEngine.Object.Destroy(runtime)` in
+# GunnarCollectionRuntime.cs — a file expecting ZERO removals — as
+# `ZNetScene.instance.Destroy(worker.gameObject)` leaves both counts unchanged,
+# so a body and its inventory left the world from a file with no retirement guard
+# anywhere near it and the audit stayed green.
+#
+# So substitution is now detected rather than described away, by the one thing a
+# text audit CAN read: the receiver written in front of the keyword.
+# TEAMSTER_ROUTED_DESTRUCTION_SITES pins, per file, how many destructions are
+# called on something that is NOT Unity's own `Object` statics. Unity's static
+# `Object.Destroy(x)` destroys a component or a GameObject and nothing else can
+# be routed through it; every way to reach the vanilla scene's removal — a field,
+# a local, `ZNetScene.instance`, a renamed alias — has to name a receiver, and
+# naming one moves a file's routed count. It cannot know what a receiver's TYPE
+# is, and it does not claim to: what it guarantees is that swapping which thing a
+# destruction is routed through changes a pinned number.
 TEAMSTER_BODY_REMOVAL = re.compile(r"\.\s*Destroy\s*\(\s*\)|\bRetireBody\s*\(")
 
 # Every call shaped like a destruction, whatever it is called on: the vanilla
@@ -1644,13 +1706,47 @@ TEAMSTER_BODY_REMOVAL = re.compile(r"\.\s*Destroy\s*\(\s*\)|\bRetireBody\s*\(")
 # declaration and not a call, and the word boundary excludes it.
 TEAMSTER_DESTRUCTION = re.compile(r"\b(?:DestroyImmediate|DestroyPrefab|DestroyZDO|Destroy)\s*\(")
 
+# The dotted receiver written immediately before a destruction keyword, on the
+# same line. Anchored at the end because it is matched against the text that
+# precedes the keyword.
+TEAMSTER_DESTRUCTION_RECEIVER = re.compile(r"[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*$")
+
+# The receivers that mean Unity's own static destroy: a bare call inside a
+# MonoBehaviour, and the qualified spellings of the same method. Everything else
+# is ROUTED through an instance, which is what taking a networked object out of
+# the world requires. A receiver this cannot parse at all (a call, an indexer, a
+# cast) is deliberately treated as routed: unknown counts as the stronger case.
+TEAMSTER_STATIC_DESTROY_RECEIVERS = frozenset({"", "Object", "UnityEngine.Object"})
+
+
+def _destruction_receiver(text: str, start: int) -> str:
+    """The receiver a destruction at `start` is called on, "" for a bare call, or
+    "?" for one this cannot parse (which counts as routed)."""
+    line_start = text.rfind("\n", 0, start) + 1
+    prefix = text[line_start:start].rstrip()
+    if not prefix.endswith("."):
+        return ""
+
+    match = TEAMSTER_DESTRUCTION_RECEIVER.search(prefix[:-1].rstrip())
+    return re.sub(r"\s+", "", match.group(0)) if match else "?"
+
 # Where anything may be destroyed at all in the worker folder, with how many
-# sites each file holds. A pinned population, like the one pinned pickup call.
-# Most of these are not bodies — a plugin component being removed, the prefab
-# factory's own component surgery — and the rule does not pretend to know which
-# is which. What it guarantees is narrower and still worth having: **a new
-# destruction of any spelling, anywhere in Adapters/Workers, fails this audit
-# until a person records it here and says what guards it.**
+# sites each file holds. A pinned population, like the pinned port calls. Most of
+# these are not bodies — a plugin component being removed, the prefab factory's
+# own component surgery — and the rule does not pretend to know which is which.
+# What it guarantees is narrower and still worth having: **a new call spelled
+# `Destroy…(`, anywhere under Adapters/Workers, fails this audit until a person
+# records it here and says what guards it.**
+#
+# KEYED BY PATH RELATIVE TO THE WORKER FOLDER, NOT BY BASENAME, and by rglob
+# rather than glob. Both were defects a review proved. `glob("*.cs")` does not
+# descend, so the same planted `ZNetScene.instance.Destroy(body)` in a new
+# `Workers/Sweep/ZzSweeper.cs` was invisible while the sentence still said
+# "anywhere in Adapters/Workers" — and the #313 scope audit over the very same
+# directory uses rglob and did count that file. Basename keying is the other half:
+# a second file of an allowed name in a subdirectory would otherwise inherit its
+# allowance, which is the exact defect already fixed once in this carve-out for
+# GunnarCollectionPort.cs.
 #
 # - GunnarCollectionRuntime.cs: the plugin component in Uninstall.
 # - GunnarHaulingRuntime.cs: the plugin component in Uninstall, and the
@@ -1666,6 +1762,33 @@ TEAMSTER_DESTRUCTION_SITES = {
     "GunnarHaulingRuntime.cs": 2,
     "TeamsterWorkerBody.cs": 1,
     "TeamsterWorkerPrefab.cs": 6,
+}
+
+# How many of those destructions are routed through an INSTANCE rather than
+# Unity's own `Object` statics. This is the pin that catches a substitution: the
+# counts above do not move when one spelling is swapped for another, and in a file
+# expecting zero removals that swap is how a body leaves the world unguarded.
+#
+# A network object's own `view.Destroy()` is routed too, and is counted here as
+# well as by the removal pin above. Deliberately both: excluding the no-argument
+# shape would mean writing an exception into the one rule whose job is to notice a
+# shape changing, and two counts over the same call cost nothing.
+#
+# - GunnarHaulingRuntime.cs: `view.Destroy()`, the pointed-at body in the guarded
+#   retire verb.
+# - TeamsterWorkerBody.cs: `view.Destroy()`, the bound body, reachable only
+#   through the guarded retire verb.
+# - TeamsterWorkerPrefab.cs: `view.Destroy()` on a body that came up invalid, and
+#   Jotunn's `PrefabManager.Instance.DestroyPrefab`, which unregisters the mod's
+#   own prefab and touches no body in a world.
+#
+# GunnarCollectionRuntime.cs is absent on purpose: it destroys only its own plugin
+# component, through Unity's static. It is also the file the review's substitution
+# plant targeted, precisely because a zero here is what a swap has to break.
+TEAMSTER_ROUTED_DESTRUCTION_SITES = {
+    "GunnarHaulingRuntime.cs": 1,
+    "TeamsterWorkerBody.cs": 1,
+    "TeamsterWorkerPrefab.cs": 2,
 }
 
 # A guard that is CONSULTED AND IGNORED passes a source-order check: a bare
@@ -1712,12 +1835,16 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
     workers_dir = teamster_dir.joinpath(*TEAMSTER_WORKERS_DIR)
     total_sites = 0
     total_destructions = 0
-    for path in sorted(workers_dir.glob("*.cs")):
+    total_routed = 0
+    for path in sorted(workers_dir.rglob("*.cs")):
+        # Relative to the worker folder, so a subdirectory is a different key
+        # rather than the same allowance seen twice.
+        key = path.relative_to(workers_dir).as_posix()
         text = "\n".join(_strip_cs_line_comment(line) for line in
                          path.read_text(encoding="utf-8").splitlines())
         found = len(TEAMSTER_BODY_REMOVAL.findall(text))
         total_sites += found
-        expected = TEAMSTER_BODY_REMOVAL_SITES.get(path.name, 0)
+        expected = TEAMSTER_BODY_REMOVAL_SITES.get(key, 0)
         if found != expected:
             fail(
                 f"[interop] #381 carried-material audit: {path.relative_to(ROOT)} takes a body out of "
@@ -1731,7 +1858,7 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
         # takes an argument and the pattern above cannot see it.
         destructions = len(TEAMSTER_DESTRUCTION.findall(text))
         total_destructions += destructions
-        expected_destructions = TEAMSTER_DESTRUCTION_SITES.get(path.name, 0)
+        expected_destructions = TEAMSTER_DESTRUCTION_SITES.get(key, 0)
         if destructions != expected_destructions:
             fail(
                 f"[interop] #381 carried-material audit: {path.relative_to(ROOT)} destroys something "
@@ -1739,6 +1866,27 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
                 "cannot tell a body from a component here, so the population is pinned instead: if "
                 "this is a new way to take a body out of the world, say what guards it; if it is "
                 "ordinary cleanup, record it in TEAMSTER_DESTRUCTION_SITES", errors)
+
+        # And how many of them are ROUTED through an instance rather than through
+        # Unity's `Object` statics. The counts above cannot see one spelling
+        # swapped for another, and in a file expecting zero removals that swap is
+        # how a body leaves the world with no guard anywhere near it.
+        routed = [receiver for receiver in
+                  (_destruction_receiver(text, found_at.start())
+                   for found_at in TEAMSTER_DESTRUCTION.finditer(text))
+                  if receiver not in TEAMSTER_STATIC_DESTROY_RECEIVERS]
+        total_routed += len(routed)
+        expected_routed = TEAMSTER_ROUTED_DESTRUCTION_SITES.get(key, 0)
+        if len(routed) != expected_routed:
+            fail(
+                f"[interop] #381 carried-material audit: {path.relative_to(ROOT)} routes a destruction "
+                f"through something other than Unity's Object statics {len(routed)} time(s) "
+                f"({', '.join(sorted(set(routed))) or 'none'}); this rule expects {expected_routed}. "
+                "Unity's own static Destroy takes a component or a GameObject out of this process; a "
+                "destruction routed through an instance is how a NETWORKED body leaves the world, "
+                "inventory and all. Swapping one for the other leaves every other count here "
+                "unchanged, which is why this one exists — say what it destroys and what guards it, "
+                "and record it in TEAMSTER_ROUTED_DESTRUCTION_SITES", errors)
 
     code = "\n".join(_strip_cs_line_comment(line) for line in
                      runtime.read_text(encoding="utf-8").splitlines())
@@ -1796,12 +1944,16 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
                 "spelled the forcing word", errors)
 
     return [
-        f"[interop] #381 carried-material audit: {total_destructions} destruction(s) and {total_sites} "
-        "unambiguous body removal(s) across Adapters/Workers, every one at a pinned site, so a new one "
-        f"of any spelling fails here; the {in_verb} in {'/'.join(TEAMSTER_RETIRE_FILE)} are inside the "
-        "retire verb with a refusing `if (!WorkerRetirement.Allows(...))` written above each. What that "
-        "establishes is that the refusal is written above each removal — NOT that control flow obeys "
-        "it, which is WorkerRetirementTests' job and a reviewer's",
+        f"[interop] #381 carried-material audit: {total_destructions} destruction(s), {total_routed} of "
+        f"them routed through an instance, and {total_sites} unambiguous body removal(s) under "
+        "Adapters/Workers and its subdirectories, every one at a pinned site keyed by relative path — "
+        "so a new call spelled `Destroy…(` fails here, and so does re-routing an existing one through a "
+        f"different receiver. The {in_verb} REMOVALS in {'/'.join(TEAMSTER_RETIRE_FILE)} are inside the "
+        "retire verb with a refusing `if (!WorkerRetirement.Allows(...))` written above each (that "
+        "file's other destruction is its own plugin component in Uninstall, nowhere near the verb). "
+        "What that establishes is that the refusal is written above each removal — NOT that control "
+        "flow obeys it, which is WorkerRetirementTests' job and a reviewer's. A destruction reached "
+        "through an alias that spells no `Destroy…(` at all is outside what this text audit can see",
     ]
 
 

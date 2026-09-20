@@ -92,6 +92,10 @@ public sealed class Plugin : BaseUnityPlugin
             gameObject,
             settings,
             () => _hauling?.BoundBody,
+            // Separate from BoundBody because both answer "no body" and only
+            // one of them is true: a write that failed leaves him standing
+            // there. Absent runtime is false - no body, not an unwritable one.
+            () => _hauling?.BoundBodyRecordUnwritable ?? false,
             () => _hauling?.SeamAvailable ?? false,
             Logger);
 

@@ -60,6 +60,22 @@ internal enum CollectionOrderRefusal
     /// no record standing behind it, which is where a second yield comes
     /// from.</summary>
     WorldIsGoingAway = 11,
+
+    /// <summary>He is standing right there, and his last change could not be
+    /// written to his own network object - so what he is carrying and what is
+    /// saved disagree, and he is handed nothing more to hold.
+    ///
+    /// <b>This refusal exists because the one it replaced was a lie.</b> A
+    /// persistence failure makes the hauling runtime's <c>BoundBody</c> answer
+    /// null, the runtime read that as "no worker", and the player was told
+    /// <i>"Gunnar is not here. Bring him into the world first."</i> about a Gunnar
+    /// standing in front of them. Nothing said a write had failed, nothing said
+    /// he was holding something, and the only other true sentence reachable was
+    /// <c>ct_haul retire</c>'s unreadable refusal - whose only escape is
+    /// <c>retire force</c>, which destroys the stone. So the false sentence
+    /// pointed at the destructive door. This one names the failure and points at
+    /// the reload instead.</summary>
+    WorkerRecordUnwritable = 12,
 }
 
 /// <summary>What the runtime read at the moment a pick was ordered. Every field
@@ -77,6 +93,7 @@ internal readonly struct CollectionOrderRequest
         WorkAuthorityVerdict authority,
         bool seamAvailable,
         bool workerPresent,
+        bool workerRecordUnwritable,
         bool pickInFlight,
         bool pointedAtASource,
         string? sourceObjectName,
@@ -90,6 +107,7 @@ internal readonly struct CollectionOrderRequest
         Authority = authority;
         SeamAvailable = seamAvailable;
         WorkerPresent = workerPresent;
+        WorkerRecordUnwritable = workerRecordUnwritable;
         PickInFlight = pickInFlight;
         PointedAtASource = pointedAtASource;
         SourceObjectName = sourceObjectName ?? string.Empty;
@@ -115,6 +133,18 @@ internal readonly struct CollectionOrderRequest
     public bool SeamAvailable { get; }
 
     public bool WorkerPresent { get; }
+
+    /// <summary>Whether a bound, living body's last inventory change failed to
+    /// reach its own network object. A body in that state answers null from
+    /// <c>BoundBody</c>, so <see cref="WorkerPresent"/> is false as well - this
+    /// field is what tells the two apart, and it is asked FIRST so the player is
+    /// told which one it is.
+    ///
+    /// <b>False is the safe default here, unusually.</b> A caller that forgets it
+    /// cannot admit a pick: the body is already absent as far as
+    /// <see cref="WorkerPresent"/> is concerned, so the order still refuses. What
+    /// forgetting loses is the true sentence, not the refusal.</summary>
+    public bool WorkerRecordUnwritable { get; }
 
     public bool PickInFlight { get; }
 
@@ -181,6 +211,15 @@ internal static class CollectionOrderGate
         if (!request.SeamAvailable)
         {
             return CollectionOrderRefusal.SeamUnavailable;
+        }
+
+        // Before "no worker", because a body whose record could not be written
+        // IS absent as far as BoundBody is concerned - and answering "Gunnar is
+        // not here" about a Gunnar standing in front of the player was the
+        // falsehood this clause exists to stop.
+        if (request.WorkerRecordUnwritable)
+        {
+            return CollectionOrderRefusal.WorkerRecordUnwritable;
         }
 
         if (!request.WorkerPresent)
@@ -282,6 +321,13 @@ internal static class CollectionOrderGate
                     "pick anything up. Everything else Teamster does keeps working.";
             case CollectionOrderRefusal.NoWorker:
                 return "Gunnar is not here. Bring him into the world first.";
+            case CollectionOrderRefusal.WorkerRecordUnwritable:
+                return "Gunnar is here, and he is still holding what he picked up - but the game "
+                    + "could not write down what he is carrying, so what he holds and what is "
+                    + "saved no longer agree. He will not be handed anything more until a change "
+                    + "does get written. Reload the world, or log out and back in, and he comes "
+                    + "back with what was last saved; whatever the failed write was carrying is "
+                    + "gone. The log says why the write failed.";
             case CollectionOrderRefusal.AlreadyWorking:
                 return "He is already picking something up.";
             case CollectionOrderRefusal.NothingPointedAt:

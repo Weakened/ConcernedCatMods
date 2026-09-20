@@ -22,6 +22,7 @@ VALIDATOR = os.path.join(ROOT, "tools", "validate_repo.py")
 WORKERS = os.path.join(ROOT, "src", "ConcernedTeamster", "Adapters", "Workers")
 PORT = os.path.join(WORKERS, "GunnarCollectionPort.cs")
 HAULING = os.path.join(WORKERS, "GunnarHaulingRuntime.cs")
+COLLECTION_RUNTIME = os.path.join(WORKERS, "GunnarCollectionRuntime.cs")
 
 STUB = """namespace TheConcernedCat.ConcernedTeamster.Zz;
 
@@ -65,7 +66,13 @@ class CarveOutIsNarrow(unittest.TestCase):
     _restore_path = PORT
 
     def plant_file(self, path, body):
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        directory = os.path.dirname(path)
+        # Remember a directory this test had to create, so tearDown takes it away
+        # again. An empty directory is invisible to `git status`, so one left
+        # behind is not caught by the usual end-of-run check.
+        if not os.path.isdir(directory):
+            self._planted.append(directory)
+        os.makedirs(directory, exist_ok=True)
         with open(path, "w", encoding="utf-8", newline="") as handle:
             handle.write(STUB % body)
         self._planted.append(path)
@@ -126,6 +133,39 @@ class CarveOutIsNarrow(unittest.TestCase):
         # anything inside the authorized file.
         self.edit_port("        ((dynamic)_cart).Interact(_worker, repeat: false, alt: false);")
         self.assert_refused("a cart interaction passed inside the authorized file")
+
+    # -- the take, which is the call that actually moves the material --
+    #
+    # A review decompiled `Humanoid.Pickup` against the installed assembly: it
+    # adds to `m_inventory` and then destroys the dropped item's network object
+    # through `ZNetScene.instance.Destroy(go)`. So the enforcement pinned the
+    # pick and left the TAKE unpinned, free to change its receiver or its
+    # arguments, while the rule and three documents said "one pinned call". The
+    # call itself predates this branch and is plainly inside what the owner
+    # authorized; it was the claim that was too wide, not the code.
+
+    def test_the_take_may_not_change_its_receiver_inside_the_authorized_file(self):
+        self.swap_in_port(
+            "            if (_worker.Pickup(dropped, autoequip: false, autoPickupDelay: false))",
+            "            if (Player.m_localPlayer.Pickup(dropped, autoequip: false, autoPickupDelay: false))")
+        self.assert_refused(
+            "the take was re-pointed at the player and passed inside the authorized file",
+            marker="#313")
+
+    def test_the_take_is_not_allowed_in_another_worker_file(self):
+        self.plant_file(os.path.join(WORKERS, "ZzTaker.cs"),
+                        "        ((dynamic)who).Pickup(cart, autoequip: false, autoPickupDelay: false);")
+        self.assert_refused("a take appeared in a file that was never authorized to have one",
+                            marker="#313")
+
+    def test_the_take_is_authorized_once_and_not_twice(self):
+        self.swap_in_port(
+            "            if (_worker.Pickup(dropped, autoequip: false, autoPickupDelay: false))\n",
+            "            if (_worker.Pickup(dropped, autoequip: false, autoPickupDelay: false))\n"
+            "            {\n"
+            "                _worker.Pickup(dropped, autoequip: false, autoPickupDelay: false);\n"
+            "            }\n")
+        self.assert_refused("a second take in the port passed as the authorized one", marker="#313")
 
     def test_a_comment_marker_inside_a_string_does_not_blind_the_line(self):
         self.plant_file(os.path.join(WORKERS, "ZzUrl.cs"),
@@ -227,6 +267,37 @@ class CarveOutIsNarrow(unittest.TestCase):
                         "        ZNetScene.instance.Destroy((UnityEngine.GameObject)cart);")
         self.assert_refused(
             "ZNetScene.Destroy(go) in a file the rule does not account for stayed invisible",
+            marker="#381")
+
+    def test_a_destruction_may_not_change_what_it_is_routed_through(self):
+        # The hole a second review proved in the fix above: a pinned POPULATION
+        # catches an ADDED destruction and says nothing about a SUBSTITUTED one.
+        # GunnarCollectionRuntime.cs destroys its own plugin component through
+        # Unity's static, and expects zero body removals - so rewriting that one
+        # call as the vanilla scene's removal of a body left every count in the
+        # rule unchanged and the audit green, with a body and its inventory
+        # leaving the world from a file that has no retirement guard anywhere
+        # near it. Detected now by the one thing a text audit can read: which
+        # receiver the destruction is routed through.
+        self.swap_in(
+            COLLECTION_RUNTIME,
+            "            UnityEngine.Object.Destroy(runtime);",
+            "            ZNetScene.instance.Destroy(runtime._worker()!.gameObject);")
+        self.assert_refused(
+            "a destruction re-routed from Unity's static to the vanilla scene left every count "
+            "unchanged and the audit green",
+            marker="#381")
+
+    def test_the_population_pin_descends_into_subdirectories(self):
+        # `glob("*.cs")` does not descend, so the same planted removal one folder
+        # down was invisible while the success sentence said "anywhere in
+        # Adapters/Workers". The #313 scope audit over the very same directory
+        # uses rglob and DID count the file, which is what made this a defect
+        # rather than a judgement call.
+        self.plant_file(os.path.join(WORKERS, "Sweep", "ZzSweeper.cs"),
+                        "        ZNetScene.instance.Destroy((UnityEngine.GameObject)cart);")
+        self.assert_refused(
+            "a removal one directory down was invisible to a rule claiming to cover the folder",
             marker="#381")
 
     def test_a_guard_that_is_consulted_and_ignored_does_not_count(self):
