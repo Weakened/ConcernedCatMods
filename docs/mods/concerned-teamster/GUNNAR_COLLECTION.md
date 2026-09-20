@@ -456,7 +456,7 @@ owes.
 
 | Check | Outcome |
 |---|---|
-| `pwsh ./scripts/verify.ps1 -Configuration Release`, through the build lock | **PASSED at `6e903e7`**: Release, 14 assemblies, **4429 tests**, validator exit 0 |
+| `pwsh ./scripts/verify.ps1 -Configuration Release`, through the build lock | **PASSED at `fe04bb2`**: Release, 14 assemblies, **4437 tests**, validator exit 0 (run from this worktree's own `scripts/verify.ps1`, under the machine-wide build lock, with every source touched first so MSBuild could not skip a rebuild) |
 | `ConcernedTeamster.Tests` | **1133 passed, 0 failed** (1031 before this work) |
 | `python -m unittest discover -s tools/tests` | **14 passed** (8 before this work; six new plants) |
 | `pwsh ./scripts/audit-teamster-hauling-api.ps1`, through the build lock | **PASS**, 125 of 125 members and behaviours, against the installed **Valheim 1.0.15** — including the newly probed `Pickable.m_amount`, `Humanoid.GetInventory`, `Inventory.NrOfItems`/`Save`/`Load`/`m_onChanged`, `ZPackage`, and `ZDO.Set`/`GetByteArray`/`GetInt`; plus the *fact* §6c depends on, that a non-player inventory is a plain field the game never saves — so a game update that starts saving it fails here rather than as duplicated stone in somebody's world |
