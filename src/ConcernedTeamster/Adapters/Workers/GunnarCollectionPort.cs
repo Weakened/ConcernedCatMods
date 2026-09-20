@@ -48,6 +48,28 @@ internal enum PickRefusal
 
     /// <summary>A pick is already in flight. One body picks one thing.</summary>
     Busy = 10,
+
+    /// <summary>This source was picked and the world has not said so yet.
+    ///
+    /// <b>The refusal that stops material being minted.</b> The game's pick
+    /// raises two routed messages: the first drops the items, and a second is
+    /// what finally marks the source picked. Between them the source still
+    /// reports that it can be picked and the game's own guard is still open, so
+    /// picking it again yields a second full load out of nothing. Nothing about
+    /// the world changes in that window, so the only thing that can refuse is a
+    /// record of what we just did.</summary>
+    AwaitingConfirmation = 11,
+
+    /// <summary>Gunnar's own body has no network record. Vanilla's take
+    /// <b>destroys the item and answers true</b> for a character in that state,
+    /// so every gathered unit would be deleted and counted as taken. Refused.
+    /// </summary>
+    WorkerHasNoRecord = 12,
+
+    /// <summary>There is too much lying here to account for. The overlap query
+    /// has a ceiling; a place that reaches it cannot be enumerated, so what was
+    /// already on the ground cannot be told from what this pick made.</summary>
+    PlaceTooCrowded = 13,
 }
 
 /// <summary>Where a started pick has got to.</summary>
@@ -135,19 +157,46 @@ internal sealed class GunnarCollectionPort
 
     /// <summary>The most colliders one gather may look at. A bound, not a
     /// target: an overlap query with no ceiling is a frame a player feels.
-    /// </summary>
-    internal const int MostCollidersPerGather = 64;
+    ///
+    /// <b>Why this is not sixty-four any more.</b> Saturating the buffer is a
+    /// refusal, and the query it bounds used to run against <i>every</i> layer:
+    /// terrain, pieces, characters, triggers. Four metres of any built-up base
+    /// exceeds sixty-four of those, so the exceptional refusal was going to be
+    /// the ordinary outcome and the port would simply never work. The query is
+    /// now masked to the layers a dropped item can be on - see
+    /// <see cref="DropMask"/> - and the ceiling doubled on top of that, so
+    /// saturation means what it says: this many <i>items</i> lying within four
+    /// metres, which is a pile, not a base.</summary>
+    internal const int MostCollidersPerGather = 128;
+
+    /// <summary>The layers a dropped item can be on. <c>ItemDrop</c> prefabs
+    /// carry the game's <c>item</c> layer, which is in the installed game's own
+    /// layer table - the same table <c>audit-teamster-navigation-api.ps1</c>
+    /// already reads that name out of.
+    ///
+    /// <b>Inclusive within that layer, on purpose.</b> This query seeds "what
+    /// was already lying here", and a drop missing from that seed is a drop
+    /// this pick would later credit as its own - so triggers are queried too,
+    /// and a mask that resolves to nothing falls back to every layer rather
+    /// than to an empty seed. What it deliberately does <i>not</i> do is add
+    /// layers no drop is on: every collider admitted for nothing is one closer
+    /// to the ceiling, and the ceiling is a refusal.</summary>
+    private static readonly string[] DropLayers = { "item" };
 
     private readonly Collider[] _hits = new Collider[MostCollidersPerGather];
+    private int _dropMask;
     private readonly HashSet<int> _before = new HashSet<int>();
     private readonly List<GameObject> _found = new List<GameObject>();
 
+    private readonly PickAccounting _accounting = new PickAccounting();
+
     private Humanoid? _worker;
+    private string _sourceKey = string.Empty;
+    private Pickable? _source;
     private Vector3 _at;
     private string _expectedItem = string.Empty;
     private int _expectedUnits;
     private float _deadline;
-    private int _taken;
 
     /// <summary>Where a started pick has got to.</summary>
     public PickPhase Phase { get; private set; } = PickPhase.Idle;
@@ -195,6 +244,16 @@ internal sealed class GunnarCollectionPort
             return PickRefusal.NoWorker;
         }
 
+        // Gunnar's OWN record, not the source's. Vanilla's take destroys the
+        // item and answers true when the taking character has no network
+        // record, so a body in that state would delete everything it gathered
+        // and report it as taken. The source's view was always checked; this is
+        // the same discipline applied to the other half of the transaction.
+        if (!HasNetworkRecord(worker))
+        {
+            return PickRefusal.WorkerHasNoRecord;
+        }
+
         if (source == null)
         {
             return PickRefusal.Unreadable;
@@ -223,25 +282,55 @@ internal sealed class GunnarCollectionPort
 
         if (!source.CanBePicked())
         {
+            // The world says it is picked, which is the confirmation the
+            // accounting was waiting for. Forgetting it here is what keeps the
+            // record from growing for the life of a session.
+            _accounting.Confirmed(KeyOf(source));
             return PickRefusal.NotPickableNow;
         }
 
-        _worker = worker;
-        _at = source.transform.position;
-        _expectedItem = expectedItemPrefab;
-        _expectedUnits = expectedUnits;
-        _deadline = nowSeconds + GatherWindowSeconds;
-        _taken = 0;
+        string key = KeyOf(source);
+        if (key.Length == 0)
+        {
+            return PickRefusal.Unreadable;
+        }
 
-        // Everything already lying here is not this pick's. Recorded before the
+        switch (_accounting.MayBegin(key, expectedUnits, nowSeconds))
+        {
+            case PickGuard.None:
+                break;
+            case PickGuard.AwaitingConfirmation:
+                return PickRefusal.AwaitingConfirmation;
+            case PickGuard.Busy:
+                return PickRefusal.Busy;
+            default:
+                return PickRefusal.Unreadable;
+        }
+
+        _at = source.transform.position;
+
+        // Everything already lying here is not this pick's. Recorded BEFORE the
         // pick, so a stack a player dropped beside the stone can never be
-        // counted as something Gunnar produced.
+        // counted as something Gunnar produced - and refused outright when the
+        // query saturates, because a place too dense to enumerate is one where
+        // that sentence stops being true.
         _before.Clear();
-        Scan(_found);
+        if (!Scan(_found))
+        {
+            return PickRefusal.PlaceTooCrowded;
+        }
+
         for (int index = 0; index < _found.Count; index++)
         {
             _before.Add(_found[index].GetInstanceID());
         }
+
+        _worker = worker;
+        _source = source;
+        _sourceKey = key;
+        _expectedItem = expectedItemPrefab;
+        _expectedUnits = expectedUnits;
+        _deadline = nowSeconds + GatherWindowSeconds;
 
         // THE CARVE-OUT. The one interaction this product is permitted to make,
         // on a source this client already owns, with Gunnar's own body as the
@@ -250,6 +339,9 @@ internal sealed class GunnarCollectionPort
         // nothing extra.
         source.Interact(_worker, repeat: false, alt: false);
 
+        // Recorded only now, after the interaction actually happened, so the
+        // record and the world agree about what was done.
+        _accounting.Began(key, expectedUnits, nowSeconds);
         Phase = PickPhase.Gathering;
         return PickRefusal.None;
     }
@@ -260,15 +352,29 @@ internal sealed class GunnarCollectionPort
     {
         if (Phase != PickPhase.Gathering)
         {
-            return new PickProgress(Phase, _taken, string.Empty);
+            // Zero, not the last pick's total. A finished pick hands its count
+            // back once, through the Poll that finished it; leaving it readable
+            // is how a caller credits units it never gathered.
+            return new PickProgress(Phase, 0, string.Empty);
         }
 
-        if (_worker == null || _worker.IsDead())
+        if (_worker == null || _worker.IsDead() || !HasNetworkRecord(_worker))
         {
             return Finish(PickPhase.Lost, "the worker went away while the drop was in the air");
         }
 
-        Scan(_found);
+        ConfirmIfThePickLanded();
+
+        if (!Scan(_found))
+        {
+            // Too much arrived to enumerate. What is already counted stands;
+            // nothing more is credited, because from here on what was here
+            // before cannot be told from what this pick made.
+            return Finish(
+                _accounting.Taken > 0 ? PickPhase.Done : PickPhase.Lost,
+                "too much is lying here to tell this pick's drops from everything else");
+        }
+
         for (int index = 0; index < _found.Count; index++)
         {
             GameObject dropped = _found[index];
@@ -291,22 +397,32 @@ internal sealed class GunnarCollectionPort
                 continue;
             }
 
-            int stack = item.m_itemData.m_stack;
-            if (stack <= 0)
+            // The game drops each unit of the main yield as its own stack of
+            // one, so anything bigger arriving inside the window is somebody
+            // else's - most likely a player emptying their inventory beside
+            // him. The accounting refuses it, and refuses anything past what
+            // this pick expected, so a pick can be short but never generous.
+            if (!_accounting.MayCredit(item.m_itemData.m_stack))
             {
                 continue;
             }
 
             // Vanilla's own take, so weight, stacking and the pickup delay are
-            // the game's arithmetic and not ours.
+            // the game's arithmetic and not ours. Taken only after the
+            // accounting has agreed to count it, and uncounted again if the
+            // take refuses: counting something still lying there is how a
+            // shortfall becomes invisible.
             if (_worker.Pickup(dropped, autoequip: false, autoPickupDelay: false))
             {
-                _taken += stack;
                 _before.Add(dropped.GetInstanceID());
+            }
+            else
+            {
+                _accounting.Uncredit();
             }
         }
 
-        if (_taken >= _expectedUnits)
+        if (_accounting.IsComplete)
         {
             return Finish(PickPhase.Done, string.Empty);
         }
@@ -316,23 +432,54 @@ internal sealed class GunnarCollectionPort
             // What was measured is what is reported, whether or not it is what
             // the source was expected to give. Nothing is made up to close the
             // gap in either direction.
-            return _taken > 0
-                ? Finish(PickPhase.Done, "the window closed with " + _taken + " of " + _expectedUnits)
+            int gathered = _accounting.Taken;
+            return gathered > 0
+                ? Finish(PickPhase.Done, "the window closed with " + gathered + " of " + _expectedUnits)
                 : Finish(PickPhase.Lost, "nothing this pick made reached him inside the window");
         }
 
-        return new PickProgress(PickPhase.Gathering, _taken, string.Empty);
+        return new PickProgress(PickPhase.Gathering, _accounting.Taken, string.Empty);
     }
 
-    /// <summary>Forgets a pick in flight, because the world or the job it
-    /// belonged to has gone. Takes nothing and asserts nothing.</summary>
+    /// <summary>Forgets a pick in flight, because <b>the job</b> it belonged to
+    /// has gone. Takes nothing and asserts nothing.
+    ///
+    /// <b>What it deliberately keeps.</b> The unconfirmed record. A cancelled
+    /// job is an ordinary caller event and says nothing about whether the
+    /// source has settled - it still exists, and inside the settle window
+    /// neither it nor the game's own guard refuses a second pick. An earlier
+    /// version answered a job ending with a world-scoped reset, and
+    /// <c>Begin - Interact - Forget - Begin</c> on the same source minted a
+    /// second full yield. A world going away is <see cref="ForgetWorld"/>, and
+    /// it is the only thing that may drop that record.</summary>
     public void Forget()
+    {
+        // Free, and it is what bounds the record: if the world has already said
+        // the source is picked, the entry goes now rather than sitting until
+        // the horizon retires it.
+        ConfirmIfThePickLanded();
+        Release();
+        _accounting.ForgetJob();
+    }
+
+    /// <summary>Forgets a pick in flight <b>and</b> every unconfirmed source,
+    /// because the world they named has gone. The sources do not exist in the
+    /// next world, and a record that outlived them would refuse picks of
+    /// whatever inherited their ids.</summary>
+    public void ForgetWorld()
+    {
+        Release();
+        _accounting.ForgetWorld();
+    }
+
+    private void Release()
     {
         Phase = PickPhase.Idle;
         _worker = null;
+        _source = null;
+        _sourceKey = string.Empty;
         _before.Clear();
         _found.Clear();
-        _taken = 0;
         _expectedUnits = 0;
         _expectedItem = string.Empty;
     }
@@ -355,23 +502,75 @@ internal sealed class GunnarCollectionPort
 
     private PickProgress Finish(PickPhase phase, string detail)
     {
+        ConfirmIfThePickLanded();
         Phase = phase;
         _worker = null;
+        _source = null;
+        _sourceKey = string.Empty;
         _before.Clear();
         _found.Clear();
-        return new PickProgress(phase, _taken, detail);
+
+        // The count is handed back here and cleared with it, so a later read
+        // sees a finished pick rather than a live total.
+        return new PickProgress(phase, _accounting.Finish(), detail);
+    }
+
+    /// <summary>Drops the source from the unconfirmed record once the world
+    /// says it is picked. Until it does, that record is the only thing standing
+    /// between one source and two yields.</summary>
+    private void ConfirmIfThePickLanded()
+    {
+        if (_source != null && _sourceKey.Length != 0 && !_source.CanBePicked())
+        {
+            _accounting.Confirmed(_sourceKey);
+        }
+    }
+
+    /// <summary>Whether a character has a network record of its own. Vanilla's
+    /// take destroys the item and answers <b>true</b> without one.</summary>
+    private static bool HasNetworkRecord(Humanoid worker)
+    {
+        ZNetView view = worker.m_nview;
+        return view != null && view.IsValid() && view.GetZDO() != null;
+    }
+
+    /// <summary>A source's identity for the life of this world load: the
+    /// network record's own id, never a position. Two stones a metre apart
+    /// would share a rounded place, and one of them would be refused for the
+    /// other's pick.</summary>
+    private static string KeyOf(Pickable source)
+    {
+        ZNetView view = source.m_nview;
+        if (view == null || !view.IsValid())
+        {
+            return string.Empty;
+        }
+
+        ZDO record = view.GetZDO();
+        return record == null ? string.Empty : record.m_uid.ToString();
     }
 
     /// <summary>Everything lying within the gather radius, bounded. No
     /// reflection, no engine-wide search: one overlap query with a ceiling.
     /// </summary>
-    private void Scan(List<GameObject> into)
+    /// <summary>Everything lying within the gather radius. Answers <b>false</b>
+    /// when the query saturated, which is not the same as finding a lot: a
+    /// saturated query has silently dropped colliders, so the set it produced
+    /// is not the set that is there. The first version treated the ceiling as a
+    /// clamp, which reads as a bound and is not one - above it a thing already
+    /// on the ground can fall outside the seed and be credited later.</summary>
+    private bool Scan(List<GameObject> into)
     {
         into.Clear();
-        int count = Physics.OverlapSphereNonAlloc(_at, GatherRadiusMetres, _hits);
-        if (count > _hits.Length)
+        int count = Physics.OverlapSphereNonAlloc(
+            _at,
+            GatherRadiusMetres,
+            _hits,
+            DropMask,
+            QueryTriggerInteraction.Collide);
+        if (count >= _hits.Length)
         {
-            count = _hits.Length;
+            return false;
         }
 
         for (int index = 0; index < count; index++)
@@ -387,6 +586,31 @@ internal sealed class GunnarCollectionPort
             {
                 into.Add(item.gameObject);
             }
+        }
+
+        return true;
+    }
+
+    /// <summary>The mask the gather query runs against, resolved once.
+    ///
+    /// Falls back to every layer if the game names nothing this file knows -
+    /// a version that renamed its item layer must not quietly hand back an
+    /// empty seed, because an empty seed is what lets a pick credit something
+    /// that was already on the ground.</summary>
+    private int DropMask
+    {
+        get
+        {
+            if (_dropMask == 0)
+            {
+                _dropMask = LayerMask.GetMask(DropLayers);
+                if (_dropMask == 0)
+                {
+                    _dropMask = ~0;
+                }
+            }
+
+            return _dropMask;
         }
     }
 
