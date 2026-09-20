@@ -3,7 +3,8 @@
 Status: **planning, eligibility and accounting implemented and tested; the pickup port is written, the validator
 allowance that confines it has landed, and the port now has a call site behind an off-by-default switch (§6a) with
 the two material-loss paths that wiring opened closed behind it — a deliberate retire (§6b) and every involuntary
-unload, logout and reload (§6c). **Death still loses what he carries and needs an owner decision** (§6c). The
+unload, logout and reload (§6c). **Two doors still lose material and are named rather than left to be found: death,
+which needs an owner decision, and the one change whose write to the network object failed** (§6c). The
 automatic survey-driven job is still unwired. The authoritative gate is green. Nothing has been observed in game**
 and nothing claims to have been. Concerned Teamster stays at **1.0.5**; nothing is published, tagged or released.
 
@@ -408,6 +409,23 @@ process trap worth the line: the updated check first used a script-scope `@(...)
 the scriptblock the audit hands its matcher, and PowerShell resolved it to nothing, so the rule silently refused
 **everything**. That is the safe direction — it could never have produced a false green — but it looks identical to
 a real violation, so the allowed types are compared explicitly instead.
+
+**A write that fails, which is the narrower claim this section is entitled to.** A review pointed out that
+`LastChangePersisted` was set on every change and **never read**: the record knew a write had failed and nothing
+asked. So a pick whose write failed was followed by another, and another, each adding to a live inventory the stored
+package was no longer keeping up with, and all of them lost on the next load. `BoundBody` and `ItemsHeldBy` now both
+ask `WorkerInventoryRecord.Trust`, which refuses a body with no record, an unloaded one, **or one whose last change
+did not reach its object** — so nothing more is handed to a body that is not keeping up, and the retire verb treats
+its contents as unknown rather than as zero, which refuses a non-forced retire. `WorkerInventoryRecordTests` pins
+the decision and that it is memoryless.
+
+What that does **not** do, stated because the alternative is a reader believing otherwise: it does not recover the
+units in the change that failed. Those are in the live inventory and not in the stored package, and the next load
+rebuilds the live one from the stored one. So **a failed write still loses what that one change added**, and nothing
+this mod does will clear the flag afterwards, because the only inventory change it makes is a pick and this refusal
+is what stops the next one. A zone load re-creates the record clean from the last package that did get written. The
+decision being memoryless is what keeps that a *pause* rather than a body latched off for the session; it is not a
+claim that a running game will resume picking on its own.
 
 **The door this does NOT close, named rather than left to be found.** *Death.* If Gunnar is killed, his body is
 destroyed and what he holds goes with it. Foreman closes that by dropping every carried item through vanilla's own

@@ -90,15 +90,22 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
     /// a <see cref="WorkerBodyStatus.Faulted"/> body, so that the runtime can
     /// still observe and tear down a body whose tick latched - but a faulted
     /// body must not be handed something new to do, and the only check
-    /// downstream is alive-or-dead. And a body whose stored inventory could not
-    /// be read is inert by construction: picking into it would put a stone
-    /// somewhere that never saves, which is the loss
-    /// <see cref="TeamsterWorkerRecord"/> exists to stop. And a body whose last
-    /// change could not be <i>written</i> is in the same position from the other
-    /// end - its live inventory and its stored one already disagree - so it is
-    /// not handed anything more to hold until a write succeeds. All three answer
-    /// null, so collection simply has nothing to act with: the refusing
-    /// direction.</summary>
+    /// downstream is alive-or-dead. The other two are the record's, and
+    /// <see cref="WorkerInventoryRecord.Trust"/> decides them together because
+    /// they are one question: a body whose stored inventory could not be read is
+    /// inert by construction - picking into it would put a stone somewhere that
+    /// never saves - and a body whose last change could not be <i>written</i> is
+    /// in the same position from the other end, its live inventory and its stored
+    /// one already disagreeing. All three answer null, so collection simply has
+    /// nothing to act with: the refusing direction.
+    ///
+    /// <b>What the third one does not do.</b> It stops the loss growing; it does
+    /// not undo the change that failed to write, and it cannot make a body
+    /// recover on its own, because the only inventory change this mod makes is a
+    /// pick and this refusal is what stops the next one. A zone load re-creates
+    /// the record and starts it clean, from the last package that did get
+    /// written. <c>WorkerInventoryRecordTests</c> and <c>GUNNAR_COLLECTION.md</c>
+    /// §6c both say so in those words.</summary>
     internal Humanoid? BoundBody
     {
         get
@@ -110,13 +117,11 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
             }
 
             TeamsterWorkerRecord? record = TeamsterWorkerRecord.On(ai);
-            if (record == null || !record.IsLoaded || !record.LastChangePersisted)
+            if (WorkerInventoryRecord.Trust(
+                    record != null,
+                    record != null && record.IsLoaded,
+                    record != null && record.LastChangePersisted) != WorkerRecordTrust.Trusted)
             {
-                // The last one is the write-failure case: his live inventory and
-                // his stored one already disagree, and picking anything else up
-                // would pile more onto a record that is not keeping up. It
-                // recovers by itself - the next change that does persist clears
-                // it - so this stops adding rather than latching anything off.
                 return null;
             }
 
@@ -801,12 +806,15 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         try
         {
             TeamsterWorkerRecord? record = TeamsterWorkerRecord.On(ai);
-            if (record == null || !record.IsLoaded || !record.LastChangePersisted)
+            if (WorkerInventoryRecord.Trust(
+                    record != null,
+                    record != null && record.IsLoaded,
+                    record != null && record.LastChangePersisted) != WorkerRecordTrust.Trusted)
             {
-                // A change that could not be written leaves what he holds
-                // uncertain: the live inventory and the stored one disagree, and
-                // nothing here can say which the next load will see. Unknown
-                // refuses, which is the whole point of the verb.
+                // The same one question as BoundBody's, and deliberately the same
+                // decision: a change that could not be written leaves what he
+                // holds uncertain, and nothing here can say which the next load
+                // will see. Unreadable refuses, which is the point of the verb.
                 return 0;
             }
 

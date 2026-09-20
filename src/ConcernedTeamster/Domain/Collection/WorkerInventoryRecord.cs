@@ -19,6 +19,41 @@ internal enum WorkerRecordLoad
     LoadStored = 2,
 }
 
+/// <summary>Whether a worker body's record can be believed about what the body
+/// holds - which is the same question as whether the body may be handed anything
+/// more to hold. Zero is the unspecified value and it refuses, so a state nobody
+/// decided cannot be picked into.
+///
+/// <b>What this does and does not save.</b> It stops the loss <i>growing</i>: a
+/// body whose last change did not reach its network object is not handed more,
+/// so a second, third and fourth unit are not piled onto a record that is not
+/// keeping up. It does <b>not</b> recover the units in the change that failed -
+/// those are in the live inventory and not in the stored package, and the next
+/// load rebuilds the live one from the stored one. So a failed write still loses
+/// what that one change added. That is a narrower claim than "nothing but death
+/// loses material", and it is the true one.
+///
+/// <b>Nothing latches.</b> This is a decision over the current state and holds
+/// no memory: the same body answers <see cref="Trusted"/> again the moment a
+/// change does persist, and a body re-created by a zone load starts from a
+/// record that has not failed. What a caller must not do is remember a refusal,
+/// which is why this is a function of three booleans and not a
+/// flag.</summary>
+internal enum WorkerRecordTrust
+{
+    /// <summary>Nobody decided, and that refuses.</summary>
+    Unspecified = 0,
+
+    /// <summary>The record cannot be believed: no record, not loaded, or a change
+    /// that did not reach the object. Nothing may be added and no count may be
+    /// reported as fact.</summary>
+    Refuses = 1,
+
+    /// <summary>The record is the account of what the body holds, and the body
+    /// may be handed more.</summary>
+    Trusted = 2,
+}
+
 /// <summary>Reading a worker body's stored inventory (#381), as the part of it
 /// that can be decided without the game.
 ///
@@ -59,4 +94,21 @@ internal static class WorkerInventoryRecord
     /// never written, so "revision 0" always means "has never saved" and a
     /// player reading the record can tell those apart.</summary>
     public static int Next(int revision) => revision < 0 ? 1 : revision + 1;
+
+    /// <summary>Whether a body's record can be believed about what it holds right
+    /// now, which is the same question as whether it may be handed anything
+    /// more.</summary>
+    /// <param name="hasRecord">Whether the body has a record component at all. A
+    /// body without one is not empty, it is unknown: the live inventory the game
+    /// rebuilt is empty whatever the body was carrying.</param>
+    /// <param name="isLoaded">Whether the record read its stored inventory. Not
+    /// loaded means writing would save an empty inventory over a carried
+    /// one.</param>
+    /// <param name="lastChangePersisted">Whether the most recent change reached
+    /// the network object. False means the live inventory and the stored one
+    /// disagree and nothing here can say which the next load will see.</param>
+    public static WorkerRecordTrust Trust(bool hasRecord, bool isLoaded, bool lastChangePersisted) =>
+        hasRecord && isLoaded && lastChangePersisted
+            ? WorkerRecordTrust.Trusted
+            : WorkerRecordTrust.Refuses;
 }

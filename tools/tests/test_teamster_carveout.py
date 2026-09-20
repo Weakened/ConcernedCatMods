@@ -217,6 +217,18 @@ class CarveOutIsNarrow(unittest.TestCase):
             "ZNetScene.Destroy(go) took a body out of the world with the audit still green",
             marker="#381")
 
+    def test_the_other_spelling_does_not_escape_by_moving_to_another_file_either(self):
+        # The population is pinned PER FILE, so the previous test alone would
+        # leave "put the sweep next door" open - exactly the escape the
+        # no-argument pattern already had to close once. Proved separately
+        # rather than assumed: a rule that happened to read only the hauling
+        # runtime would pass the test above and fail this one.
+        self.plant_file(os.path.join(WORKERS, "ZzSweeper.cs"),
+                        "        ZNetScene.instance.Destroy((UnityEngine.GameObject)cart);")
+        self.assert_refused(
+            "ZNetScene.Destroy(go) in a file the rule does not account for stayed invisible",
+            marker="#381")
+
     def test_a_guard_that_is_consulted_and_ignored_does_not_count(self):
         # A bare `WorkerRetirement.Allows(v)` in a log line sits above the
         # removal just as well as a refusal does, and the counts stayed at

@@ -61,6 +61,76 @@ public sealed class WorkerInventoryRecordTests
         Assert.Equal(1, WorkerInventoryRecord.Next(-7));
     }
 
+    // -- a change that did not reach the object (#381, review minor 4) --
+    //
+    // `LastChangePersisted` was written and never read: the record knew a write
+    // had failed and nothing asked. So a pick whose write failed was followed by
+    // another pick, and another, each adding to a live inventory the stored
+    // package was no longer keeping up with, and every one of them lost on the
+    // next load. `Trust` is what both call sites now ask, and these are its
+    // tests.
+
+    [Fact]
+    public void ABodyWhoseLastChangeDidNotReachItsObject_IsNotHandedAnythingMore()
+    {
+        Assert.Equal(WorkerRecordTrust.Refuses, WorkerInventoryRecord.Trust(
+            hasRecord: true, isLoaded: true, lastChangePersisted: false));
+    }
+
+    [Fact]
+    public void TheRefusalIsNotSticky_AChangeThatDoesPersistIsTrustedAgain()
+    {
+        // The property that matters is that this holds no memory: asked again
+        // with the flag back up, the same body is trusted again. A caller that
+        // remembered the refusal would latch a body off for the rest of the
+        // session, which is not what a failed write justifies.
+        Assert.Equal(WorkerRecordTrust.Refuses, WorkerInventoryRecord.Trust(true, true, false));
+        Assert.Equal(WorkerRecordTrust.Trusted, WorkerInventoryRecord.Trust(true, true, true));
+        Assert.Equal(WorkerRecordTrust.Refuses, WorkerInventoryRecord.Trust(true, true, false));
+        Assert.Equal(WorkerRecordTrust.Trusted, WorkerInventoryRecord.Trust(true, true, true));
+    }
+
+    [Fact]
+    public void OnlyAllThreeTogether_IsTrusted()
+    {
+        // Exhaustive, because each of the three refuses for its own reason and a
+        // future edit that drops one would otherwise pass every other test here.
+        foreach (bool hasRecord in new[] { false, true })
+        {
+            foreach (bool isLoaded in new[] { false, true })
+            {
+                foreach (bool persisted in new[] { false, true })
+                {
+                    WorkerRecordTrust trust = WorkerInventoryRecord.Trust(hasRecord, isLoaded, persisted);
+                    Assert.Equal(
+                        hasRecord && isLoaded && persisted
+                            ? WorkerRecordTrust.Trusted
+                            : WorkerRecordTrust.Refuses,
+                        trust);
+                    Assert.NotEqual(WorkerRecordTrust.Unspecified, trust);
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void TheUnspecifiedVerdictIsZeroAndIsNotTrust()
+    {
+        // A state nobody decided must not be pickable into, so the default value
+        // has to be the refusing one.
+        Assert.Equal(WorkerRecordTrust.Unspecified, default(WorkerRecordTrust));
+        Assert.NotEqual(WorkerRecordTrust.Trusted, default(WorkerRecordTrust));
+    }
+
+    // What no test here establishes, stated rather than left to be assumed: that
+    // a refused body ever becomes trusted again in a running game. `Trust` is
+    // memoryless, which is the part that can be decided without the game, but
+    // the only inventory change this mod makes is a pick, and the refusal is
+    // what stops the next one - so nothing this mod does will clear the flag. A
+    // zone load re-creates the record clean, from the last package that did get
+    // written; the units in the change that failed are not in that package and
+    // are lost. GUNNAR_COLLECTION.md §6c says so in those words.
+
     [Fact]
     public void TheFieldNames_AreForemansOwnSpellingAndMustNotDrift()
     {
