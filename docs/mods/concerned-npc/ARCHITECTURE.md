@@ -210,8 +210,18 @@ finish verdict to a single decision site because it has had three separate ways 
 
 ## 9. Status
 
-The package exists, builds, ships nothing, and is consumed by nobody yet. No role has been moved onto it. Nothing in
-this document has been observed in game, and every gameplay row for this program is OWNER GO-AROUND PENDING.
+The package exists, builds and ships nothing yet, but it is **no longer consumed by nobody**: two of five products
+take it today - `ConcernedSteward` and `ConcernedTeamster` both carry the `ProjectReference` and the matching
+`BepInDependency`, so a missing library is a load-time dependency error rather than a null reference at the first
+call. `ConcernedForeman` has not adopted it yet, and that adoption is the seam the arbiter-mediates-mode work exists
+to cross.
+
+One role has been moved onto it in part: the Steward drives `NpcJobDriver` for its maintenance round. Gunnar's
+collection job exists and is not yet constructed by anything.
+
+Nothing in this document has been observed in game, and every gameplay row for this program is OWNER GO-AROUND
+PENDING. That includes the two adoptions above: the dependency wiring is proved by the validator, not by watching an
+NPC work.
 
 **Interim:** the package icon is the Concerned Cat badge cropped from an existing product icon, where it exists at
 55x58 pixels. It is soft at 256x256 and should be replaced with the owner's own logo file before any package is
