@@ -21,6 +21,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 VALIDATOR = os.path.join(ROOT, "tools", "validate_repo.py")
 WORKERS = os.path.join(ROOT, "src", "ConcernedTeamster", "Adapters", "Workers")
 PORT = os.path.join(WORKERS, "GunnarCollectionPort.cs")
+HAULING = os.path.join(WORKERS, "GunnarHaulingRuntime.cs")
 
 STUB = """namespace TheConcernedCat.ConcernedTeamster.Zz;
 
@@ -55,12 +56,13 @@ class CarveOutIsNarrow(unittest.TestCase):
             elif os.path.exists(path):
                 os.remove(path)
         if self._restore is not None:
-            with open(PORT, "w", encoding="utf-8", newline="") as handle:
+            with open(self._restore_path, "w", encoding="utf-8", newline="") as handle:
                 handle.write(self._restore)
         code, out = validate()
         self.assertEqual(0, code, "a plant was left behind:\n" + out[-2000:])
 
     _restore = None
+    _restore_path = PORT
 
     def plant_file(self, path, body):
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -72,20 +74,25 @@ class CarveOutIsNarrow(unittest.TestCase):
         with open(PORT, encoding="utf-8-sig") as handle:
             original = handle.read()
         self._restore = original
+        self._restore_path = PORT
         marker = "        source.Interact(_worker, repeat: false, alt: false);"
         self.assertEqual(1, original.count(marker), "the authorized call moved")
         with open(PORT, "w", encoding="utf-8", newline="") as handle:
             handle.write(original.replace(marker, marker + "\n" + extra))
 
-    def swap_in_port(self, old, new):
-        """Replaces one exact piece of the port. For the lifecycle verbs, whose
-        defect is not an extra call but the wrong one."""
-        with open(PORT, encoding="utf-8-sig") as handle:
+    def swap_in(self, path, old, new):
+        """Replaces one exact piece of a real source file. For defects that are
+        not an extra call but the wrong one, or a guard in the wrong place."""
+        with open(path, encoding="utf-8-sig") as handle:
             original = handle.read()
         self._restore = original
+        self._restore_path = path
         self.assertEqual(1, original.count(old), "the pinned text moved: " + old)
-        with open(PORT, "w", encoding="utf-8", newline="") as handle:
+        with open(path, "w", encoding="utf-8", newline="") as handle:
             handle.write(original.replace(old, new, 1))
+
+    def swap_in_port(self, old, new):
+        self.swap_in(PORT, old, new)
 
     def assert_refused(self, why, marker="#313"):
         code, out = validate()
@@ -151,6 +158,49 @@ class CarveOutIsNarrow(unittest.TestCase):
             "        Release();\n        _accounting.ForgetWorld();")
         self.assert_refused(
             "a cancelled job wiping the unconfirmed-source record re-opens the mint",
+            marker="#381")
+
+    # -- the retire verb may not delete what a worker is carrying (#381) --
+    #
+    # Retiring a body destroys its network object, and a character's inventory
+    # lives in that object: nothing is dropped. Harmless until an ordered pick
+    # could put a stone into Gunnar. The decision is unit-tested; what a unit
+    # test cannot reach is the call site, because the runtime binds Unity, so the
+    # audit pins the guard above every removal and this plant moves it below.
+
+    def test_a_body_removal_may_not_sit_above_the_carried_material_guard(self):
+        self.swap_in(
+            HAULING,
+            "            int pointedHolds = ItemsHeldBy(pointed, out bool pointedReadable);\n"
+            "            RetireVerdict pointedVerdict = WorkerRetirement.Decide(forced, pointedHolds, pointedReadable);\n"
+            "            if (!WorkerRetirement.Allows(pointedVerdict))\n"
+            "            {\n"
+            "                return WorkerRetirement.Describe(pointedVerdict, pointedHolds);\n"
+            "            }\n"
+            "\n"
+            "            _persistedBodies.Remove(view.GetZDO().m_uid);\n"
+            "            view.Destroy();",
+            "            _persistedBodies.Remove(view.GetZDO().m_uid);\n"
+            "            view.Destroy();\n"
+            "            int pointedHolds = ItemsHeldBy(pointed, out bool pointedReadable);\n"
+            "            RetireVerdict pointedVerdict = WorkerRetirement.Decide(forced, pointedHolds, pointedReadable);\n"
+            "            if (!WorkerRetirement.Allows(pointedVerdict))\n"
+            "            {\n"
+            "                return WorkerRetirement.Describe(pointedVerdict, pointedHolds);\n"
+            "            }")
+        self.assert_refused(
+            "a body was destroyed before anything asked what it was carrying",
+            marker="#381")
+
+    def test_the_retire_verb_may_not_stop_asking_what_a_body_holds(self):
+        self.swap_in(
+            HAULING,
+            "            RetireVerdict pointedVerdict = WorkerRetirement.Decide(forced, pointedHolds, pointedReadable);\n"
+            "            if (!WorkerRetirement.Allows(pointedVerdict))",
+            "            RetireVerdict pointedVerdict = RetireVerdict.MayRetire;\n"
+            "            if (!WorkerRetirement.Allows(pointedVerdict))")
+        self.assert_refused(
+            "the retire verb stopped counting what a body holds on one of its paths",
             marker="#381")
 
     def test_the_world_verb_may_not_merely_forget_the_job(self):

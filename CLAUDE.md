@@ -29,9 +29,9 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   container or a door still fails there - and refuses the token everywhere else, inside
   `Adapters/Workers` and out. Every other forbidden token still fails inside the authorized file.
   Proved by `tools/tests/test_teamster_carveout.py`, which plants each escape an independent review
-  found and requires the validator to refuse; all six fail against the unfixed validator. Two further
-  plants cross the port's two lifecycle verbs and likewise fail against a validator without the `#381`
-  lifecycle audit.
+  found and requires the validator to refuse; all six fail against the unfixed validator. Four further
+  plants cross the port's two lifecycle verbs and move the retire verb's carried-material guard, and
+  each fails against a validator without the `#381` rule that catches it.
 
   **Reachable now, behind an off-by-default switch, and never observed in game.** The port has a call
   site: `Adapters/Workers/GunnarCollectionRuntime.cs`, gated by `TeamsterFeature.GunnarCollection` and
@@ -50,6 +50,13 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   authority-refused order goes to `Forget()`, which keeps it. That choice is made in the game-free
   `Domain/Collection/CollectionLifecycle.cs` so it is unit-tested rather than reasoned about, and
   `validate_repo.py`'s `#381 collection lifecycle audit` refuses the port if the two verbs are crossed.
+  Because a pick can now leave material in Gunnar and the deposit half is unwired, `ct_haul retire`
+  **refuses while a worker body carries anything** (`WorkerRetirement`) rather than destroying its
+  inventory with it — the shape Foreman's `SETTLEMENT_AUTHORITY.md` §5a already gives the deliberate
+  removal verb, since vanilla's own drop applies to *death* and a deliberate drop would need an
+  authorization nobody granted. An explicit `ct_haul retire force` always gets through, saying the
+  material is lost, so the refusal cannot trap a body nothing can empty; `#381 carried-material audit`
+  pins a guard above every removal in that verb.
   The port needs no RPC of its own - `Pickable.Interact` runs `RPC_Pick` and the
   ownership claim inside vanilla, on a pickable this process already owns - so felling a tree
   (`TreeBase.Damage`) and the cosmetic hammer animation (`ZSyncAnimation.SetTrigger`) were **not**

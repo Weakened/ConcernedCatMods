@@ -1549,6 +1549,100 @@ def check_teamster_collection_verbs(errors: list[str]) -> list[str]:
     ]
 
 
+# #381: retiring a worker body destroys its network object, and a character's
+# inventory lives in that object - nothing is dropped on the ground. That was
+# harmless until an ordered pick could put a stone into Gunnar; now `ct_haul
+# retire` is a way to delete gathered material silently, and material
+# conservation is this product's hard rule.
+#
+# The decision itself is game-free and unit-tested (`WorkerRetirement`,
+# `WorkerRetirementTests`). What a test here cannot reach is the *call site*:
+# `GunnarHaulingRuntime` binds Unity. So this pins the source order instead -
+# the guard has to be consulted above every removal in the retire verb.
+#
+# Deliberately a source-order proxy, not a proof of control flow: it is the
+# smallest check that cannot pass while a removal in that method runs with no
+# guard consulted above it, and it says so rather than claiming more.
+TEAMSTER_RETIRE_FILE = ("Adapters", "Workers", "GunnarHaulingRuntime.cs")
+TEAMSTER_RETIRE_BODY = re.compile(
+    r"private\s+string\s+Retire\s*\([^)]*\)\s*\{(.*?)\n    \}", re.DOTALL)
+TEAMSTER_RETIRE_DECIDES = "WorkerRetirement.Decide("
+TEAMSTER_RETIRE_ALLOWS = "WorkerRetirement.Allows("
+# Every way this method takes a body out of the world.
+TEAMSTER_BODY_REMOVALS = (".Destroy(", "RetireBody(")
+
+
+def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str]:
+    """Fails when the retire verb can remove a worker body without first asking
+    what that body is carrying (#381)."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    runtime = teamster_dir.joinpath(*TEAMSTER_RETIRE_FILE)
+    if not runtime.is_file():
+        fail(
+            "[interop] #381 carried-material audit: missing "
+            f"{runtime.relative_to(ROOT)} — the audit no longer covers the retire verb", errors)
+        return []
+
+    code = "\n".join(_strip_cs_line_comment(line) for line in
+                     runtime.read_text(encoding="utf-8").splitlines())
+    match = TEAMSTER_RETIRE_BODY.search(code)
+    if match is None:
+        fail(
+            "[interop] #381 carried-material audit: could not read the Retire verb in "
+            f"{runtime.relative_to(ROOT)} — removing a worker body destroys its inventory, so that "
+            "verb must stay a named method whose guard is reviewable", errors)
+        return []
+
+    body = match.group(1)
+
+    # Where every removal is, and where every guard is. One guard per removal:
+    # the verb has two paths that take a body out of the world (the pointed-at
+    # duplicate and the bound body), and one shared decision would leave the
+    # other path unguarded while the audit stayed green.
+    removals = sorted(offset for token in TEAMSTER_BODY_REMOVALS
+                      for offset in _offsets_of(body, token))
+    decisions = _offsets_of(body, TEAMSTER_RETIRE_DECIDES)
+    guards = _offsets_of(body, TEAMSTER_RETIRE_ALLOWS)
+
+    if len(decisions) < len(removals):
+        fail(
+            f"[interop] #381 carried-material audit: the retire verb takes a body out of the world "
+            f"{len(removals)} time(s) but calls {TEAMSTER_RETIRE_DECIDES} only {len(decisions)} "
+            "time(s) — a body's inventory is destroyed with the body and nothing is dropped, so every "
+            "path that removes one has to count what it holds first", errors)
+
+    if len(guards) < len(removals):
+        fail(
+            f"[interop] #381 carried-material audit: the retire verb removes a body "
+            f"{len(removals)} time(s) but asks {TEAMSTER_RETIRE_ALLOWS} only {len(guards)} time(s) — "
+            "deciding without consulting the verdict is not a guard", errors)
+
+    for index, removal in enumerate(removals):
+        above = [guard for guard in guards if guard < removal]
+        if len(above) <= index:
+            fail(
+                f"[interop] #381 carried-material audit: removal {index + 1} of {len(removals)} in the "
+                f"retire verb has no {TEAMSTER_RETIRE_ALLOWS} of its own above it — that removal can "
+                "destroy gathered material silently. Refuse unless the player spelled the forcing word",
+                errors)
+
+    return [
+        f"[interop] #381 carried-material audit: {len(removals)} body removal(s) in the retire verb of "
+        f"{'/'.join(TEAMSTER_RETIRE_FILE)}, each with its own carried-material guard consulted above it "
+        "(source order, not a control-flow proof)",
+    ]
+
+
+def _offsets_of(text: str, token: str) -> list[int]:
+    """Every offset a literal token appears at, in order."""
+    found: list[int] = []
+    at = text.find(token)
+    while at >= 0:
+        found.append(at)
+        at = text.find(token, at + 1)
+    return found
+
+
 def check_teamster_authority_policy(errors: list[str]) -> list[str]:
     """Fails if the policy doc omits a TeamsterFeature, or if any outbound
     network / ownership-takeover token appears in Teamster source."""
@@ -2577,6 +2671,7 @@ def main() -> int:
     report.extend(check_teamster_authority_policy(errors))
     report.extend(check_teamster_no_force_injection(errors))
     report.extend(check_teamster_collection_verbs(errors))
+    report.extend(check_teamster_retire_guards_carried_material(errors))
     report.extend(check_teamster_no_internet_egress(errors))
     report.extend(check_companion_body_fails_closed(errors))
     report.extend(check_companion_talk_is_not_a_reach(errors))

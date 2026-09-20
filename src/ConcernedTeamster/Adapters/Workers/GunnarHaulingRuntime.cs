@@ -6,6 +6,7 @@ using BepInEx.Logging;
 using TheConcernedCat.ConcernedNPC.Roles;
 using TheConcernedCat.ConcernedTeamster.Adapters.Navigation;
 using TheConcernedCat.ConcernedTeamster.Domain.Capabilities;
+using TheConcernedCat.ConcernedTeamster.Domain.Collection;
 using TheConcernedCat.ConcernedTeamster.Domain.Hauling;
 using TheConcernedCat.ConcernedTeamster.Domain.Hauling.Execution;
 using TheConcernedCat.ConcernedTeamster.Domain.Load;
@@ -501,7 +502,7 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
             case "status": return Status();
             case "seam": return Seam();
             case "spawn": return Spawn();
-            case "retire": return Retire();
+            case "retire": return Retire(args);
             case "assign": return Assign();
             case "confirm": return Confirm();
             case "release": return Release();
@@ -661,12 +662,22 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         return "Gunnar arrived at " + Format(position) + ". He stays in this world until you retire him.";
     }
 
-    private string Retire()
+    /// <summary><c>ct_haul retire [force]</c>. Removing a body destroys its
+    /// network object, and a character's inventory lives in that object: nothing
+    /// is dropped. So since #381 made it possible for Gunnar to be holding
+    /// something, this asks <see cref="WorkerRetirement"/> first, on whichever
+    /// body is actually about to go, and refuses rather than deleting material.
+    /// The forcing word always gets through, because a refusal with no way to
+    /// empty him would trap the body - and this is the only way to resolve a
+    /// duplicate.</summary>
+    private string Retire(string[]? args)
     {
         if (_executor == null)
         {
             return "No world is loaded.";
         }
+
+        bool forced = WorkerRetirement.IsForcing(args, 1);
 
         // Pointing at a worker body retires that body, whether or not the
         // runtime has it bound: that is the only way to remove an extra body
@@ -688,9 +699,19 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
                 return "Refused: a cart is hitched to that body. Detach it first ('ct_haul detach', or take the cart yourself).";
             }
 
+            int pointedHolds = ItemsHeldBy(pointed, out bool pointedReadable);
+            RetireVerdict pointedVerdict = WorkerRetirement.Decide(forced, pointedHolds, pointedReadable);
+            if (!WorkerRetirement.Allows(pointedVerdict))
+            {
+                return WorkerRetirement.Describe(pointedVerdict, pointedHolds);
+            }
+
             _persistedBodies.Remove(view.GetZDO().m_uid);
             view.Destroy();
-            return "That worker body was retired; Gunnar's own binding is unchanged.";
+            return "That worker body was retired; Gunnar's own binding is unchanged." +
+                (pointedVerdict == RetireVerdict.ForcedAndLost
+                    ? " " + WorkerRetirement.Describe(pointedVerdict, pointedHolds)
+                    : string.Empty);
         }
 
         if (_bodyStatus == WorkerBodyStatus.Duplicated)
@@ -703,14 +724,58 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
             return "Refused: a cart is hitched to Gunnar. Detach it first ('ct_haul detach', or take the cart yourself).";
         }
 
+        // Only when there is a body to lose something: with none bound, the
+        // outcomes below already say why nothing was retired, and answering with
+        // an inventory sentence would be answering a different question.
+        int holds = 0;
+        RetireVerdict verdict = RetireVerdict.MayRetire;
+        if (_body.Bound != null)
+        {
+            holds = ItemsHeldBy(_body.Bound, out bool readable);
+            verdict = WorkerRetirement.Decide(forced, holds, readable);
+            if (!WorkerRetirement.Allows(verdict))
+            {
+                return WorkerRetirement.Describe(verdict, holds);
+            }
+        }
+
+        string lost = verdict == RetireVerdict.ForcedAndLost
+            ? " " + WorkerRetirement.Describe(verdict, holds)
+            : string.Empty;
         switch (_executor.RetireBody())
         {
             case BodyRetirementOutcome.Retired:
-                return "Gunnar was retired; his body left the world.";
+                return "Gunnar was retired; his body left the world." + lost;
             case BodyRetirementOutcome.RefusedStillHitched:
                 return "Refused: a cart still holds Gunnar's joint and would not let go. Take the cart yourself, then retire him.";
             default:
                 return "Refused: Gunnar is busy with a haul. Stop or detach it and resolve any attention first.";
+        }
+    }
+
+    /// <summary>How many items a worker body holds. <paramref name="readable"/>
+    /// is false when that could not be established at all, which the decision
+    /// treats as "there might be something", never as zero.</summary>
+    private static int ItemsHeldBy(TeamsterWorkerAI? ai, out bool readable)
+    {
+        readable = false;
+        try
+        {
+            Humanoid? body = ai != null ? ai.GetComponent<Humanoid>() : null;
+            Inventory? inventory = body != null ? body.GetInventory() : null;
+            if (inventory == null)
+            {
+                return 0;
+            }
+
+            readable = true;
+            return inventory.NrOfItems();
+        }
+        catch
+        {
+            // Unreadable, which refuses. Never reported as empty.
+            readable = false;
+            return 0;
         }
     }
 

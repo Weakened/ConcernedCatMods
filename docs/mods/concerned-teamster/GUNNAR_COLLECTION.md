@@ -1,9 +1,10 @@
 # Gunnar collects and hauls, in planned batches, without portals (CNPC-R2, #381)
 
-Status: **planning, eligibility and accounting implemented and tested; the pickup port is written and the
-validator allowance that confines it has landed. The authoritative gate is green. Nothing has been observed in
-game.** Nothing here has been observed in game and
-nothing claims to have been. Concerned Teamster stays at **1.0.5**; nothing is published, tagged or released.
+Status: **planning, eligibility and accounting implemented and tested; the pickup port is written, the validator
+allowance that confines it has landed, and the port now has a call site behind an off-by-default switch (§6a) with
+the material-loss path that wiring opened closed behind it (§6b). The automatic survey-driven job is still unwired.
+The authoritative gate is green. Nothing has been observed in game** and nothing claims to have been. Concerned
+Teamster stays at **1.0.5**; nothing is published, tagged or released.
 
 ## 1. What this is
 
@@ -305,24 +306,54 @@ onto the accounting binds Unity and no test here can load it, `validate_repo.py`
 collection lifecycle audit` refuses the port if `Forget()` forgets the world or `ForgetWorld()` merely forgets the
 job, and `tools/tests/test_teamster_carveout.py` plants both crossings and requires the refusal.
 
-### What the wiring cannot do yet, stated because it is a way to lose material
+## 6b. Retiring a body no longer deletes what it is carrying
 
-**Material goes into Gunnar and there is no way to get it out.** `Humanoid.Pickup` puts what he picks into his own
+**The gap this closes, and that the wiring is what opened it.** `Humanoid.Pickup` puts what Gunnar picks into his own
 inventory, in his own network object — which is right, and is what the worker decisions say a worker body may keep.
-But the deposit half of §4 and §5 (`CollectionAccount`, `CargoLedger`, the container permissions) is **not wired**,
-and neither is anything that would let a player open him or hand him a chest. So a stone he picks up stays in him.
+The deposit half of §4 and §5 (`CollectionAccount`, `CargoLedger`, the container permissions) is **not wired**, so a
+stone he picks up stays in him. Meanwhile `ct_haul retire` destroys a body through `ZNetView.Destroy()`, and a
+destroyed body's inventory goes with it: **nothing is dropped on the ground.** That was harmless while nothing could
+put anything into him. Wiring the pick is what made it a way to delete gathered material silently, and material
+conservation (§5) is this product's hard rule, not a preference — so it is fixed here rather than noted.
 
-That matters because `ct_haul retire` destroys a worker body through `ZNetView.Destroy()`, and a destroyed body's
-inventory goes with it: **nothing is dropped on the ground.** Before this wiring that was harmless, because nothing
-could put anything into him. It is not harmless now, and it is the one way this slice can make material disappear.
+**Refusal, not a drop, and the precedent is what decides that.** Concerned Foreman's `SETTLEMENT_AUTHORITY.md` §5a
+settles this shape for a worker holding real material, and it settles it twice:
 
-It is deliberately not fixed here, because both available fixes are worse than naming it. Wiring the deposit path is
-its own slice with its own evidence. Refusing to retire a carrying body would replace a loss with a trap: there is
-no unload path, so the body could never be removed, and `ct_haul retire` is the only way to resolve a duplicate.
-**So: while the deposit path is unwired, do not order a pick with anything you mind losing, and empty a test world
-rather than a real one.** The switch being off by default is what keeps that confined to people who went looking.
+- **death** drops everything through *vanilla's own* drop and records the units `Lost`;
+- **despawn** — the deliberate removal, which is what retire is — is **refused while he carries anything**.
 
-**Still never observed in game.** Nothing in this section has been watched happening; §10 is the go-around.
+Death is vanilla acting on its own. A deliberate drop here would be this product spawning item instances, which is
+not one of the calls the 2026-09-19 carve-out granted and which no owner decision covers, so **the drop was not
+available to take** — reaching for it would have been inventing an authorization. The precedent for this verb is the
+refusal.
+
+**And an escape hatch that can never be blocked, because otherwise the refusal is a trap.** Foreman pairs its
+refusal with recovery commands that empty the worker; this slice has none. A bare refusal would strand a body
+forever — and retire is the only way to resolve a duplicate Gunnar. So:
+
+| `ct_haul retire` | What happens |
+|---|---|
+| he is holding nothing | retired, as before |
+| he is holding anything | **refused**, naming how many things and that removing him would destroy them, and naming the way out |
+| what he holds could not be read | **refused** — unknown is not empty |
+| `ct_haul retire force` | retired anyway, saying plainly that what he carried was destroyed and is **not** on the ground |
+
+`WorkerRetirement` decides it, game-free; `WorkerRetirementTests` pins every row, including the anti-trap property
+that **every** forced case is allowed over every combination of held count and readability. It counts **anything in
+his inventory**, not "collected material": nothing at this layer can tell a picked stone from anything else, and
+pretending otherwise would be a provenance claim, so it refuses more often instead.
+
+The call site is `GunnarHaulingRuntime.Retire`, which binds Unity and no test here can load — so the same technique
+as §6a closes it: `validate_repo.py`'s `#381 carried-material audit` extracts that method and requires **one**
+`WorkerRetirement.Decide` and **one** `WorkerRetirement.Allows` per path that removes a body, each guard above the
+removal it gates. Stated for what it is: a source-order pin, not a control-flow proof — the smallest check that
+cannot pass while a removal in that method runs with no guard consulted above it. Both crossings are planted in
+`tools/tests/test_teamster_carveout.py`, and both pass only with the rule registered.
+
+**Still not a way to get material out of him.** The deposit path remains unwired; this only stops the loss. Until it
+is wired, what he picks up stays in him, and that is the next slice.
+
+**Still never observed in game.** Nothing in §6a or §6b has been watched happening; §10 is the go-around.
 
 ## 7. No portals
 
@@ -358,17 +389,18 @@ owes.
 | `pwsh ./scripts/audit-teamster-navigation-api.ps1` | PASS |
 | Planted defects | **8 of 8 caught.** One survived the first round — a refused-deposit test that handed the refusal an empty list and would have passed with the guard deleted. Strengthened, re-planted, caught. |
 
-### The wiring of §6a
+### The wiring of §6a and the retirement guard of §6b
 
 | Check | Outcome |
 |---|---|
-| `pwsh ./scripts/verify.ps1 -Configuration Release`, through the build lock | **PASSED at `7277b20`**: Release, 14 assemblies, **4410 tests**, validator exit 0 |
-| `ConcernedTeamster.Tests` | **1106 passed, 0 failed** (1031 before this work) |
-| `python -m unittest discover -s tools/tests` | **10 passed** (8 before this work; the two new ones are the crossed lifecycle verbs) |
-| `pwsh ./scripts/audit-teamster-hauling-api.ps1`, through the build lock | **PASS** — every member the port and the runtime bind, including the newly probed `Pickable.m_amount`, is present in the installed game |
-| Planted defects, one per property | **7 of 7 caught** in the domain tests: world-down routed to the job verb; an order ending routed to the world verb; tear-down routed to the job verb; a world coming *up* also dropping the record; the off-by-default switch not consulted; reach not checked; identity not checked. Each went red, then was restored |
-| Planted defects in the validator's own new rule | **2 of 2 caught**, and both **fail against a validator with the `#381` rule unregistered** — so the rule, not something else, is what refuses them |
-| In game | **OWNER GO-AROUND PENDING.** Nothing has been run; §10 steps 12–19 are the rows |
+| `pwsh ./scripts/verify.ps1 -Configuration Release`, through the build lock | **PASSED at `VERIFY_COMMIT`**: Release, 14 assemblies, **VERIFY_TESTS tests**, validator exit 0 |
+| `ConcernedTeamster.Tests` | **1125 passed, 0 failed** (1031 before this work) |
+| `python -m unittest discover -s tools/tests` | **10 passed** (8 before this work) |
+| `pwsh ./scripts/audit-teamster-hauling-api.ps1`, through the build lock | **PASS** — every member the port and the runtime bind, including the newly probed `Pickable.m_amount`, `Humanoid.GetInventory` and `Inventory.NrOfItems`, is present in the installed game |
+| Planted defects in the §6a wiring, one per property | **7 of 7 caught**: world-down routed to the job verb; an order ending routed to the world verb; tear-down routed to the job verb; a world coming *up* also dropping the record; the off-by-default switch not consulted; reach not checked; identity not checked |
+| Planted defects in the §6b guard, one per property | **7 of 7 caught**: a carrying body retired anyway; an unreadable inventory read as empty; the forcing word made refusable (the trap); the forced message no longer stating the loss; the refusal no longer naming the way out; any trailing word accepted as forcing; an unknown verdict treated as a grant |
+| Planted defects in the validator's own new rules | **4 of 4 caught** — two crossing the port's lifecycle verbs, two moving and disabling the retire guard — and each **fails against a validator with the `#381` rule that catches it unregistered**, so the rule, not something else, is what refuses it |
+| In game | **OWNER GO-AROUND PENDING.** Nothing has been run; §10 steps 12–23 are the rows |
 
 **Zero migrations (the §6a wiring).** No durable key, prefab name, file path, row tag or schema number changed. The
 one new setting, `Workers/GunnarCollectionEnabled`, defaults to off, and a config file written by an older build
@@ -445,9 +477,17 @@ claim that nobody who has not opted in is affected, and step 17 is the one that 
 19. **A peer connects mid-pick.** Open the world to a second player while a pick is in flight: the order must end
     with the authority sentence, and nothing must be picked afterwards until they leave.
 20. **Where the stone ends up, and that it is stuck there.** After step 14, confirm the Stone is in Gunnar and not
-    anywhere else, and that there is no way to take it out — that is the unwired deposit path in §6a, not a defect
-    in the pick. **Do not `ct_haul retire` him while he is carrying anything in a world you care about:** the body's
-    inventory is destroyed with the body and nothing drops. Disposable world only.
+    anywhere else, and that there is no way to take it out — that is the unwired deposit path in §6b, not a defect
+    in the pick.
+21. **Retire refuses while he is carrying (§6b).** With one Stone in him, `ct_haul retire` must **refuse**, name that
+    he is carrying 1 thing, say removing him would destroy it, and name `ct_haul retire force`. His body must still
+    be there afterwards. A retire that succeeds here is a P0: the Stone is gone with no drop and no record.
+22. **The escape hatch works and tells the truth.** `ct_haul retire force` must remove him and say outright that what
+    he carried was destroyed and is not on the ground. Check the ground: nothing must have dropped — the message is
+    the whole warning, so it must not be softened.
+23. **Retire still works on an empty body, and on a duplicate.** With nothing in him, plain `ct_haul retire` must
+    behave exactly as it did before this work. Point at a second body and retire it: the anti-trap property is that
+    this path is never blocked, so a duplicate must always be removable.
 
 Evidence rows for `docs/settlement/cart-and-collection/EVIDENCE.md` stay **pending** until observed, with the
 build, profile and scenario recorded.

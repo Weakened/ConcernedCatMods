@@ -214,11 +214,24 @@ internal static class CollectionOrderGate
     /// suffix the host adds removed - the same reading the port already does for
     /// a dropped item.
     ///
-    /// <b>Deliberately not a general de-decorator.</b> A world location's
-    /// embedded copy carries a numbered suffix as well, and that name will not
-    /// match the allowlist, so such a source is refused. That is the direction
-    /// this gate wants: a temple's stone is not picked because nobody could
-    /// establish that it was an ordinary one.</summary>
+    /// <b>This is the WEAKER of the two readings in this product, and it is
+    /// weaker on purpose only here.</b> <see cref="CollectableFacts"/>
+    /// .<c>NetworkPrefabName</c> is the strong one: it is the name the game's own
+    /// prefab table gives the object's <i>network prefab hash</i>, which no
+    /// decoration, rename or re-parenting can shift. This reads the scene
+    /// object's name instead, which a world location's embedded copy decorates
+    /// with a numbered suffix.
+    ///
+    /// <b>Why that is acceptable here, and nowhere else.</b> A decorated name
+    /// simply is not on the allowlist, so the source is refused - the weakness
+    /// runs in the refusing direction, and on an order where the player is
+    /// pointing at the object, their pointing is the provenance. That argument
+    /// does <b>not</b> transfer. In a survey-driven path nothing is pointing at
+    /// anything, provenance is exactly what has to be established, and a refusal
+    /// that depends on a decoration is a refusal a renamed prefab removes.
+    /// <b>So: do not copy this into the automatic path.</b> That path already has
+    /// <see cref="GunnarTargetPredicate.Classify"/> and the network-prefab
+    /// reading it takes, and those are what it must use.</summary>
     public static string PrefabNameOf(string? sceneObjectName)
     {
         string name = sceneObjectName ?? string.Empty;

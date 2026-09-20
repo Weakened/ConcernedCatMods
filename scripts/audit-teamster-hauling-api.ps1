@@ -207,6 +207,11 @@ $requirements = @(
     @("Pickable", "game", "Pickable.m_itemPrefab / m_amount / m_tarPreventsPicking", 'public GameObject m_itemPrefab;.*public int m_amount = 1;'),
     @("Humanoid", "game", "Humanoid.Pickup(GameObject, bool, bool)", 'public bool Pickup\(GameObject go, bool autoequip = true, bool autoPickupDelay = true\)'),
     @("Humanoid", "game", "Pickup takes through the inventory, not by fiat", 'public bool Pickup\(GameObject go, bool autoequip = true, bool autoPickupDelay = true\).*m_inventory\.ContainsItem\(component\.m_itemData\)'),
+    # Read only, and only in order to refuse: retiring a worker body destroys its
+    # network object and the inventory stored in it, so the retire verb counts
+    # what the body holds before removing it (#381, WorkerRetirement).
+    @("Humanoid", "game", "Humanoid.GetInventory()", 'public Inventory GetInventory\(\)'),
+    @("Inventory", "game", "Inventory.NrOfItems()", 'public int NrOfItems\(\)'),
     @("ItemDrop", "game", "ItemDrop.m_itemData", 'public ItemData m_itemData = new ItemData\(\);'),
 
     # The two game facts the port's re-pick guard and its worker check exist

@@ -24,7 +24,7 @@ internal sealed class HaulConsoleCommand : ConsoleCommand
 
     public override string Help =>
         "Concerned Teamster: Gunnar hauls an assigned cart (development aid). Subcommands: status, seam, spawn, " +
-        "assign (the cart you point at), confirm, go <x> <z> [radius], stop, detach, release, retire, evidence on|off. " +
+        "assign (the cart you point at), confirm, go <x> <z> [radius], stop, detach, release, retire [force], evidence on|off. " +
         "Needs Workers/GunnarHaulingEnabled, single player or a host with nobody else connected.";
 
     public override void Run(string[] args, Terminal context)
