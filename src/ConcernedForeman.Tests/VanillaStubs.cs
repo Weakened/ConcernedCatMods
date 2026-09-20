@@ -183,6 +183,8 @@ public class EffectArea : MonoBehaviour
     private static readonly EffectArea Shared = new EffectArea();
 }
 
+public class TerrainModifier : MonoBehaviour { }
+
 public class TerrainOp : MonoBehaviour
 {
 }
