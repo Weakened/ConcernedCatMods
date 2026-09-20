@@ -33,9 +33,11 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   and leaving the one that actually moves the material unpinned. Every other forbidden token still
   fails inside the authorized file.
   Proved by `tools/tests/test_teamster_carveout.py`, which plants each escape an independent review
-  found and requires the validator to refuse. **Twenty plants**, each one an escape somebody actually
-  proposed rather than an imagined one, and each verified to pass against the validator that lacked the
-  rule catching it. They cover the two pinned calls (a changed receiver, the same call twice, the call in
+  found and requires the validator to refuse. Every plant is an escape somebody actually proposed rather
+  than an imagined one, and each is verified to pass against the validator that lacked the rule catching
+  it. **No count is given on purpose**: the number has been wrong here twice, once stale and once simply
+  miscounted from `def test_` when one of those tests is deliberately not a plant at all. What the harness
+  covers is the useful claim, and it is checkable against the file. They cover the two pinned calls (a changed receiver, the same call twice, the call in
   another worker file, the allowance following a basename to another directory), the tokenizer (a space
   before the paren, a newline between receiver and member, a comment marker inside a string), the port's
   two lifecycle verbs in both directions, and the retire verb's carried-material guard — moving it below a
@@ -43,11 +45,13 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   moving one to another file or a subdirectory, changing what a destruction is routed through, and using
   the second spelling of removal that the no-argument pattern cannot see.
 
-  Two limits of that harness are stated rather than left to be found. It is a **text** audit: a
-  destruction reached through an alias or a delegate spells no `Destroy…(` and is outside what it sees.
-  And the population pins establish that each destruction sits at a recorded site with a refusal written
-  above it — **not** that control flow obeys that refusal, which is `WorkerRetirementTests`' job and a
-  reviewer's.
+  Three limits of that harness are stated rather than left to be found. It is a **text** audit, so a
+  destruction reached through a delegate or a method group spells no `Destroy…(` and is invisible to it -
+  and the narrower claim is deliberate, because an earlier version of this sentence blamed only *aliases*
+  while a receiver split across two lines spelled `Destroy(` in full and escaped anyway. It scans only
+  `Adapters/Workers`, so a destruction in another Teamster folder is outside it as well (#401). And the
+  population pins establish that each destruction sits at a recorded site with a refusal written above it
+  — **not** that control flow obeys that refusal, which is `WorkerRetirementTests`' job and a reviewer's.
 
   **Reachable now, behind an off-by-default switch, and never observed in game.** The port has a call
   site: `Adapters/Workers/GunnarCollectionRuntime.cs`, gated by `TeamsterFeature.GunnarCollection` and
@@ -87,7 +91,9 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   mod does will clear that refusal, because the only inventory change it makes is a pick and the refusal is
   what stops the next one. A zone load re-creates the record from the last package that did get written.
   An explicit `ct_haul retire force` is a third way material goes, and it is excluded from the count for
-  a reason rather than overlooked: the ordinary refusal names what he is holding, the forcing word has to
+  a reason rather than overlooked: the ordinary refusal names what he is holding, or says it could not be
+  read - which is what it says in the very state above, where the record is unreadable - the forcing word
+  has to
   be typed, and the forced message states the loss. That is consent, not a door left open.
   The port needs no RPC of its own - `Pickable.Interact` runs `RPC_Pick` and the
   ownership claim inside vanilla, on a pickable this process already owns - so felling a tree
