@@ -131,16 +131,18 @@ public sealed class JournalGoldenFixtureTests : IDisposable
         Assert.Equal(100d, journal.Entries[0].WorldTime!.Value, 3);
     }
 
-    [Fact]
-    public void A_newer_build_appends_to_that_file_rather_than_rewriting_it()
+    [Theory]
+    [InlineData("\r\n")]
+    [InlineData("\n")]
+    public void A_newer_build_preserves_existing_rows_when_saving(string newline)
     {
         // Loading it is not enough if the next save writes a file an older
         // build could not read. Every line that was there before must still be
-        // there, unchanged, byte for byte - only a new row and a new closing
-        // line may appear.
+        // there with identical fields. The text writer uses native line endings;
+        // both Windows and Unix source files must retain their rows.
         var store = new JournalStore(_root);
         string path = store.ResolvePath(Scope);
-        File.WriteAllText(path, Text());
+        File.WriteAllText(path, string.Join(newline, Golden) + newline);
 
         JournalStore.LoadReport report = store.Load(Scope);
         Assert.Equal(JournalLoadOutcome.Loaded, report.Outcome);
@@ -149,7 +151,7 @@ public sealed class JournalGoldenFixtureTests : IDisposable
         Assert.True(store.Save(report.Journal).Saved);
 
         string written = File.ReadAllText(path);
-        string untouched = string.Join("\r\n", Golden.Take(Golden.Length - 1)) + "\r\n";
+        string untouched = string.Join(Environment.NewLine, Golden.Take(Golden.Length - 1)) + Environment.NewLine;
 
         Assert.StartsWith(untouched, written, StringComparison.Ordinal);
         Assert.Contains("generation=2", written, StringComparison.Ordinal);
