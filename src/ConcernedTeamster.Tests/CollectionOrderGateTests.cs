@@ -16,6 +16,7 @@ public sealed class CollectionOrderGateTests
 
     private static CollectionOrderRequest Ready(
         bool featureEnabled = true,
+        bool worldIsUp = true,
         WorkAuthorityVerdict authority = WorkAuthorityVerdict.Granted,
         bool seamAvailable = true,
         bool workerPresent = true,
@@ -28,6 +29,7 @@ public sealed class CollectionOrderGateTests
         float distanceMetres = 1f) =>
         new CollectionOrderRequest(
             featureEnabled,
+            worldIsUp,
             authority,
             seamAvailable,
             workerPresent,
@@ -72,6 +74,18 @@ public sealed class CollectionOrderGateTests
                     : CollectionOrderRefusal.WorkRefused,
                 refusal);
         }
+    }
+
+    [Fact]
+    public void WhileTheWorldIsGoingAway_NoOrderStarts()
+    {
+        // The narrow mint a review found: the game is shutting down, its
+        // singletons still answer so the authority rule still grants, but the
+        // lifecycle has already dropped the record of what was picked. An order
+        // accepted here would be an order with no record standing behind it.
+        Assert.Equal(
+            CollectionOrderRefusal.WorldIsGoingAway,
+            CollectionOrderGate.Evaluate(Ready(worldIsUp: false)));
     }
 
     [Fact]

@@ -2,9 +2,10 @@
 
 Status: **planning, eligibility and accounting implemented and tested; the pickup port is written, the validator
 allowance that confines it has landed, and the port now has a call site behind an off-by-default switch (§6a) with
-the material-loss path that wiring opened closed behind it (§6b). The automatic survey-driven job is still unwired.
-The authoritative gate is green. Nothing has been observed in game** and nothing claims to have been. Concerned
-Teamster stays at **1.0.5**; nothing is published, tagged or released.
+the two material-loss paths that wiring opened closed behind it — a deliberate retire (§6b) and every involuntary
+unload, logout and reload (§6c). **Death still loses what he carries and needs an owner decision** (§6c). The
+automatic survey-driven job is still unwired. The authoritative gate is green. Nothing has been observed in game**
+and nothing claims to have been. Concerned Teamster stays at **1.0.5**; nothing is published, tagged or released.
 
 ## 1. What this is
 
@@ -339,7 +340,17 @@ forever — and retire is the only way to resolve a duplicate Gunnar. So:
 | `ct_haul retire force` | retired anyway, saying plainly that what he carried was destroyed and is **not** on the ground |
 
 `WorkerRetirement` decides it, game-free; `WorkerRetirementTests` pins every row, including the anti-trap property
-that **every** forced case is allowed over every combination of held count and readability. It counts **anything in
+that **no state of the carried-material decision refuses a forced retire**, over every combination of held count and
+readability.
+
+**Said exactly.** That universality is the *carried-material* decision's, not the whole verb's. A forced retire can
+still be refused for reasons that have nothing to do with what he is holding: a cart's joint still holds the body
+(detach it), or the executor says he is busy with a haul (stop it). Both are things the player can resolve, and the
+case this property exists for — **the pointed-at duplicate body, which is the only way to resolve two Gunnars** —
+takes neither path, so it is never blocked. What is guaranteed is that *carrying something* can never be the thing
+that strands a body.
+
+It counts **anything in
 his inventory**, not "collected material": nothing at this layer can tell a picked stone from anything else, and
 pretending otherwise would be a provenance claim, so it refuses more often instead.
 
@@ -353,7 +364,51 @@ cannot pass while a removal in that method runs with no guard consulted above it
 **Still not a way to get material out of him.** The deposit path remains unwired; this only stops the loss. Until it
 is wired, what he picks up stays in him, and that is the next slice.
 
-**Still never observed in game.** Nothing in §6a or §6b has been watched happening; §10 is the go-around.
+## 6c. What he carries survives a load, because the game does not save it
+
+**The same failure through the other door, and a review found it.** §6b closed the *deliberate* removal. The
+*involuntary* one was wide open: **the game never saves a non-player character's inventory.** It is a plain readonly
+field with no save and no load anywhere in the character hierarchy, rebuilt every time the body is created. The body
+itself *is* saved — Gunnar stays in a world until he is retired, and the census reads saved bodies — so a stone he
+picked up was destroyed by a **zone unload, a logout or a world reload** while the body came back empty. No refusal,
+no record, no drop: exactly what `ct_haul retire` had just been taught to refuse, reached by a route no player has
+to opt into.
+
+Before this round, the only field Teamster wrote was `tcc.worker.key`. Foreman's §5a had to add the other two
+**precisely because vanilla does not do it**, and its third bullet — *"zone unload loses nothing: the body is
+re-bound by key and loads its stored inventory"* — was a clause Teamster had no implementation of.
+
+**Foreman's format, not a Teamster spelling.** `TeamsterWorkerRecord` writes the body's **own** network object:
+
+| Field | What |
+|---|---|
+| `tcc.worker.key` | the worker identity, as before |
+| `tcc.worker.inventory` | vanilla's own `Inventory.Save` package, as a byte array — the format a chest stores |
+| `tcc.worker.revision` | a count of writes; zero means it has never written |
+
+Byte-compatible with `ConcernedForeman/Runtime/Custody/WorkerBody.cs` on purpose: same names, same package, same
+companion field. Two products may share the `tcc.worker.` prefix because the prefab name is what separates their
+bodies before a key is ever read, and a second spelling for the same thing would be a second format to keep in step
+forever. `WorkerInventoryRecordTests` pins the literals.
+
+**Written the way a chest is written.** From vanilla's own `Inventory.m_onChanged` callback, inside the call that
+made the change. Nothing is written **before** a successful load, so an empty inventory can never be saved over a
+carried one — and a body that could not read what it carries goes **inert**: it never saves, and `BoundBody` does
+not offer it, so collection has nothing to act with.
+
+**Zero migration, and it is a decision rather than a null check.** A Gunnar saved before the field existed has no
+stored package. `WorkerInventoryRecord.Decide` answers `LoadEmpty` — never a refusal, never a fault — and
+`NoReadEverRefuses` pins that no input can produce anything but a load. An old body comes back exactly as it
+always did.
+
+**The door this does NOT close, named rather than left to be found.** *Death.* If Gunnar is killed, his body is
+destroyed and what he holds goes with it. Foreman closes that by dropping every carried item through vanilla's own
+drop as the body dies (§5a, first bullet) — and that precedent does cover this event, unlike the deliberate retire.
+But implementing it means this product **spawning item instances**, which is a capability the 2026-09-19 carve-out
+does not grant and no other owner decision covers. It is one call and a handful of lines behind an owner decision;
+it is not being taken quietly. **Until it is: Gunnar dying loses what he is carrying.**
+
+**Still never observed in game.** Nothing in §6a, §6b or §6c has been watched happening; §10 is the go-around.
 
 ## 7. No portals
 
@@ -389,18 +444,19 @@ owes.
 | `pwsh ./scripts/audit-teamster-navigation-api.ps1` | PASS |
 | Planted defects | **8 of 8 caught.** One survived the first round — a refused-deposit test that handed the refusal an empty list and would have passed with the guard deleted. Strengthened, re-planted, caught. |
 
-### The wiring of §6a and the retirement guard of §6b
+### The wiring of §6a, the retirement guard of §6b and the persistence of §6c
 
 | Check | Outcome |
 |---|---|
 | `pwsh ./scripts/verify.ps1 -Configuration Release`, through the build lock | **PASSED at `6e903e7`**: Release, 14 assemblies, **4429 tests**, validator exit 0 |
-| `ConcernedTeamster.Tests` | **1125 passed, 0 failed** (1031 before this work) |
-| `python -m unittest discover -s tools/tests` | **12 passed** (8 before this work; four new plants) |
+| `ConcernedTeamster.Tests` | **1133 passed, 0 failed** (1031 before this work) |
+| `python -m unittest discover -s tools/tests` | **14 passed** (8 before this work; six new plants) |
 | `pwsh ./scripts/audit-teamster-hauling-api.ps1`, through the build lock | **PASS** — every member the port and the runtime bind, including the newly probed `Pickable.m_amount`, `Humanoid.GetInventory` and `Inventory.NrOfItems`, is present in the installed game |
 | Planted defects in the §6a wiring, one per property | **7 of 7 caught**: world-down routed to the job verb; an order ending routed to the world verb; tear-down routed to the job verb; a world coming *up* also dropping the record; the off-by-default switch not consulted; reach not checked; identity not checked |
 | Planted defects in the §6b guard, one per property | **7 of 7 caught**: a carrying body retired anyway; an unreadable inventory read as empty; the forcing word made refusable (the trap); the forced message no longer stating the loss; the refusal no longer naming the way out; any trailing word accepted as forcing; an unknown verdict treated as a grant |
-| Planted defects in the validator's own new rules | **4 of 4 caught** — two crossing the port's lifecycle verbs, two moving and disabling the retire guard — and each **fails against a validator with the `#381` rule that catches it unregistered**, so the rule, not something else, is what refuses it |
-| In game | **OWNER GO-AROUND PENDING.** Nothing has been run; §10 steps 12–23 are the rows |
+| Planted defects in the validator's own new rules | **6 of 6 caught** — two crossing the port's lifecycle verbs, and four against the carried-material rule: the guard moved below the removal, the decision removed, the removal **lifted into a helper** (the escape a review walked through) and a removal **moved to another file**. Each fails against a validator with the `#381` rule that catches it unregistered, so the rule, not something else, is what refuses it |
+| Planted defects in the §6c persistence, one per property | **5 of 5 caught**, all as test failures rather than compile errors: an absent record faulting instead of loading empty; a stored package ignored; the revision starting at zero; the inventory field drifting from Foreman's spelling; an order accepted while the world is going away |
+| In game | **OWNER GO-AROUND PENDING.** Nothing has been run; §10 steps 12–27 are the rows |
 
 **Zero migrations (the §6a wiring).** No durable key, prefab name, file path, row tag or schema number changed. The
 one new setting, `Workers/GunnarCollectionEnabled`, defaults to off, and a config file written by an older build
@@ -486,8 +542,21 @@ claim that nobody who has not opted in is affected, and step 17 is the one that 
     he carried was destroyed and is not on the ground. Check the ground: nothing must have dropped — the message is
     the whole warning, so it must not be softened.
 23. **Retire still works on an empty body, and on a duplicate.** With nothing in him, plain `ct_haul retire` must
-    behave exactly as it did before this work. Point at a second body and retire it: the anti-trap property is that
-    this path is never blocked, so a duplicate must always be removable.
+    behave exactly as it did before this work. Point at a second body and retire it: carrying something must never
+    be what blocks that path, so a duplicate must always be removable.
+
+### What he carries surviving a load (§6c)
+
+24. **A zone unload.** Pick a stone, then walk far enough away that his zone unloads and come back. The Stone must
+    still be in him. This is the row the whole of §6c exists for: before it, the stone was simply gone.
+25. **A logout and a reload.** Pick a stone, save and quit, load the same world. The Stone must still be in him, and
+    the log must not say his body is inert.
+26. **An old Gunnar loads unchanged.** Load a world containing a Gunnar saved by a build from before this change.
+    His body must come back with his identity, an empty inventory, no fault line and no `Destroyed invalid prefab
+    ZDO`. This is the zero-migration row and it is the one that is irreversible if it is wrong.
+27. **Death, which is NOT closed.** Let something kill Gunnar while he carries a Stone. Expect the Stone to be
+    **lost** — nothing drops. That is the known gap in §6c awaiting an owner decision, not a defect to file; record
+    what actually happened so the decision is made on an observation.
 
 Evidence rows for `docs/settlement/cart-and-collection/EVIDENCE.md` stay **pending** until observed, with the
 build, profile and scenario recorded.

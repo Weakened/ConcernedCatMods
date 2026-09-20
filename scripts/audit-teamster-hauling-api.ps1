@@ -212,6 +212,20 @@ $requirements = @(
     # what the body holds before removing it (#381, WorkerRetirement).
     @("Humanoid", "game", "Humanoid.GetInventory()", 'public Inventory GetInventory\(\)'),
     @("Inventory", "game", "Inventory.NrOfItems()", 'public int NrOfItems\(\)'),
+
+    # The worker body's own inventory persistence (#381). The FACT this exists
+    # for, first: the game never saves a non-player character's inventory - it is
+    # a plain readonly field with no Save/Load anywhere in Humanoid or Character -
+    # so a body that came back from a world save came back empty. If a game update
+    # ever starts saving it, this line fails and the doubled storage is found here
+    # rather than as duplicated stone in somebody's world.
+    @("Humanoid", "game", "a non-player inventory is a plain field the game never saves", 'protected readonly Inventory m_inventory = new Inventory\('),
+    @("Inventory", "game", "Inventory.Save(ZPackage)", 'public void Save\(ZPackage pkg\)'),
+    @("Inventory", "game", "Inventory.Load(ZPackage)", 'public void Load\(ZPackage pkg\)'),
+    @("Inventory", "game", "Inventory.m_onChanged, the callback a chest persists from", 'public Action m_onChanged;'),
+    @("ZPackage", "game", "ZPackage() / ZPackage(byte[]) / GetArray()", 'public ZPackage\(\).*public ZPackage\(byte\[\] data\).*public byte\[\] GetArray\(\)'),
+    @("ZDO", "game", "ZDO.Set(string, byte[]) / GetByteArray(string, byte[])", 'public void Set\(string name, byte\[\] bytes\).*public byte\[\] GetByteArray\(string name, byte\[\] defaultValue = null\)'),
+    @("ZDO", "game", "ZDO.Set(string, int) / GetInt(string, int)", 'public void Set\(string name, int value\).*public int GetInt\(string name, int defaultValue = 0\)'),
     @("ItemDrop", "game", "ItemDrop.m_itemData", 'public ItemData m_itemData = new ItemData\(\);'),
 
     # The two game facts the port's re-pick guard and its worker check exist

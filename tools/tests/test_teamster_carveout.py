@@ -192,6 +192,41 @@ class CarveOutIsNarrow(unittest.TestCase):
             "a body was destroyed before anything asked what it was carrying",
             marker="#381")
 
+    def test_a_removal_may_not_escape_the_audit_by_moving_to_another_file(self):
+        # The other half of the same escape: scoping the sweep to one file would
+        # leave "put the helper next door" open. The population of removals
+        # across the worker folder is pinned per file, so a new one anywhere is a
+        # deliberate edit to the rule.
+        self.plant_file(os.path.join(WORKERS, "ZzRemover.cs"),
+                        "        ((dynamic)cart).Destroy();")
+        self.assert_refused(
+            "a body removal appeared in a file the rule does not account for",
+            marker="#381")
+
+    def test_a_removal_may_not_escape_the_audit_by_moving_into_a_helper(self):
+        # The escape an independent review walked through: the removal stays in
+        # the file but steps outside the text the rule reads, the count drops to
+        # one, and the success line asserts a guarantee that is false. The method
+        # boundary was where the first version stopped looking.
+        self.swap_in(
+            HAULING,
+            "            _persistedBodies.Remove(view.GetZDO().m_uid);\n"
+            "            view.Destroy();",
+            "            _persistedBodies.Remove(view.GetZDO().m_uid);\n"
+            "            RemoveBodyNow(view);")
+        with open(HAULING, encoding="utf-8-sig") as handle:
+            moved = handle.read()
+        anchor = "    private static int ItemsHeldBy(TeamsterWorkerAI? ai, out bool readable)"
+        self.assertEqual(1, moved.count(anchor), "the helper anchor moved")
+        with open(HAULING, "w", encoding="utf-8", newline="") as handle:
+            handle.write(moved.replace(
+                anchor,
+                "    private static void RemoveBodyNow(ZNetView view) { view.Destroy(); }\n\n" + anchor,
+                1))
+        self.assert_refused(
+            "a removal lifted one line into a helper left the retire verb unguarded",
+            marker="#381")
+
     def test_the_retire_verb_may_not_stop_asking_what_a_body_holds(self):
         self.swap_in(
             HAULING,

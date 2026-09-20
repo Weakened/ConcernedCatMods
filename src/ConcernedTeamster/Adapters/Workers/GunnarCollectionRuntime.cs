@@ -131,6 +131,17 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
     private void FrameTick()
     {
         bool worldUp = ZNetScene.instance != null && ZNet.instance != null && ZDOMan.instance != null;
+        if (worldUp && Game.instance != null && Game.instance.IsShuttingDown())
+        {
+            // The game is going away while its singletons are still up for a
+            // frame or two. Reported as the world going, so the down-edge fires
+            // exactly once - and, because the lifecycle then says no world is
+            // up, no order may start in that window either. Ending the order
+            // without closing the window was a way to reach the mint: forget the
+            // record, then order the same source again before the process died.
+            worldUp = false;
+        }
+
         if (_lifecycle.ObserveWorld(worldUp) == PickForget.World)
         {
             _ordered = false;
@@ -142,12 +153,6 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
 
         if (!worldUp || !_ordered)
         {
-            return;
-        }
-
-        if (Game.instance != null && Game.instance.IsShuttingDown())
-        {
-            TearDown("the game is shutting down");
             return;
         }
 
@@ -296,6 +301,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
 
         var request = new CollectionOrderRequest(
             featureEnabled: OptedIn(),
+            worldIsUp: _lifecycle.WorldIsUp,
             authority: Authority(),
             seamAvailable: _seamAvailable(),
             workerPresent: worker != null && !worker.IsDead(),

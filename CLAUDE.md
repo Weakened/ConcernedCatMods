@@ -29,9 +29,10 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   container or a door still fails there - and refuses the token everywhere else, inside
   `Adapters/Workers` and out. Every other forbidden token still fails inside the authorized file.
   Proved by `tools/tests/test_teamster_carveout.py`, which plants each escape an independent review
-  found and requires the validator to refuse; all six fail against the unfixed validator. Four further
-  plants cross the port's two lifecycle verbs and move the retire verb's carried-material guard, and
-  each fails against a validator without the `#381` rule that catches it.
+  found and requires the validator to refuse; all six fail against the unfixed validator. Six further
+  plants cross the port's two lifecycle verbs and attack the retire verb's carried-material guard — moving
+  it below a removal, deleting the decision, lifting a removal into a helper, and moving one to another
+  file — and each fails against a validator without the `#381` rule that catches it.
 
   **Reachable now, behind an off-by-default switch, and never observed in game.** The port has a call
   site: `Adapters/Workers/GunnarCollectionRuntime.cs`, gated by `TeamsterFeature.GunnarCollection` and
@@ -54,9 +55,16 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   **refuses while a worker body carries anything** (`WorkerRetirement`) rather than destroying its
   inventory with it — the shape Foreman's `SETTLEMENT_AUTHORITY.md` §5a already gives the deliberate
   removal verb, since vanilla's own drop applies to *death* and a deliberate drop would need an
-  authorization nobody granted. An explicit `ct_haul retire force` always gets through, saying the
-  material is lost, so the refusal cannot trap a body nothing can empty; `#381 carried-material audit`
-  pins a guard above every removal in that verb.
+  authorization nobody granted. An explicit `ct_haul retire force` is never refused for carrying
+  something, so the refusal cannot trap a body nothing can empty; `#381 carried-material audit` pins
+  every place a body can leave the world in `Adapters/Workers` to a recorded site, and every one of them
+  in the retire runtime to inside that verb with a guard above it. The **involuntary** loss is closed by
+  the body persisting its own inventory: the game never saves a non-player character's, so
+  `TeamsterWorkerRecord` writes `tcc.worker.inventory` (vanilla's own `Inventory.Save` package) and
+  `tcc.worker.revision` into the body's own network object from vanilla's own change callback —
+  byte-compatible with Foreman's worker, never before a successful load, and an absent field loads as an
+  empty inventory rather than a fault. **Death is still open and is the one remaining way this slice
+  loses material**: closing it means spawning item instances, which needs its own owner decision.
   The port needs no RPC of its own - `Pickable.Interact` runs `RPC_Pick` and the
   ownership claim inside vanilla, on a pickable this process already owns - so felling a tree
   (`TreeBase.Damage`) and the cosmetic hammer animation (`ZSyncAnimation.SetTrigger`) were **not**

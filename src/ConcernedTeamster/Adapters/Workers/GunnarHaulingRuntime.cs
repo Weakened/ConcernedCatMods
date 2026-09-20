@@ -84,15 +84,30 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
     /// (#381) acts through this rather than finding or building a body of its
     /// own: the census and the duplicate rule that decide which body <i>is</i>
     /// Gunnar live here, and a second answer to that question would be a second
-    /// Gunnar. A body this runtime has not bound is not offered, so an
-    /// ambiguous or faulted census gives collection nothing to act with - the
-    /// refusing direction.</summary>
+    /// Gunnar.
+    ///
+    /// <b>Bound is not enough, twice over.</b> The binding deliberately includes
+    /// a <see cref="WorkerBodyStatus.Faulted"/> body, so that the runtime can
+    /// still observe and tear down a body whose tick latched - but a faulted
+    /// body must not be handed something new to do, and the only check
+    /// downstream is alive-or-dead. And a body whose stored inventory could not
+    /// be read is inert by construction: picking into it would put a stone
+    /// somewhere that never saves, which is the loss
+    /// <see cref="TeamsterWorkerRecord"/> exists to stop. Both answer null, so
+    /// collection simply has nothing to act with - the refusing
+    /// direction.</summary>
     internal Humanoid? BoundBody
     {
         get
         {
             TeamsterWorkerAI? ai = _body != null ? _body.Bound : null;
-            return ai != null ? ai.GetComponent<Humanoid>() : null;
+            if (ai == null || ai.IsFaulted)
+            {
+                return null;
+            }
+
+            TeamsterWorkerRecord? record = TeamsterWorkerRecord.On(ai);
+            return record != null && record.IsLoaded ? ai.GetComponent<Humanoid>() : null;
         }
     }
 
@@ -143,6 +158,10 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         Service = new GunnarHaulService(_authority);
         TeamsterWorkerAI.TickHandler = OnWorkerTick;
         TeamsterWorkerAI.ErrorLog = message => _log.LogError(message);
+
+        // #381: a body that cannot read or write what it is holding is a thing a
+        // player needs told, whatever the diagnostics settings say.
+        TeamsterWorkerRecord.ErrorLog = message => _log.LogError(message);
 
         _log.LogInfo(
             "Gunnar's hauling is " + (settings.GunnarHaulingEnabled.Value ? "ENABLED" : "off (the default)") +
@@ -755,21 +774,27 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
 
     /// <summary>How many items a worker body holds. <paramref name="readable"/>
     /// is false when that could not be established at all, which the decision
-    /// treats as "there might be something", never as zero.</summary>
+    /// treats as "there might be something", never as zero.
+    ///
+    /// <b>Asked of the body's own record, not of its live inventory.</b> The live
+    /// one is <i>empty</i> on a body whose stored inventory has not been loaded -
+    /// the game rebuilds it on every instantiation - so reading it directly would
+    /// report a carrying body as empty and destroy what the record holds. A body
+    /// with no record, or one that is not loaded, is therefore unreadable.
+    /// </summary>
     private static int ItemsHeldBy(TeamsterWorkerAI? ai, out bool readable)
     {
         readable = false;
         try
         {
-            Humanoid? body = ai != null ? ai.GetComponent<Humanoid>() : null;
-            Inventory? inventory = body != null ? body.GetInventory() : null;
-            if (inventory == null)
+            TeamsterWorkerRecord? record = TeamsterWorkerRecord.On(ai);
+            if (record == null || !record.IsLoaded)
             {
                 return 0;
             }
 
             readable = true;
-            return inventory.NrOfItems();
+            return record.ItemCount;
         }
         catch
         {

@@ -69,7 +69,9 @@ cooperative haul diagnostics while you're actually playing with them.
 * Gunnar picking things up is being built, and is **not in a release yet**. It is off by default under its own
   `Workers/GunnarCollectionEnabled`, separate from hauling: with either setting off, nothing about picking up
   changes. When it arrives he will pick up loose stones and fallen branches you point him at, one at a time,
-  while standing next to them — nothing else, and nothing you have not asked for.
+  while standing next to them — nothing else, and nothing you have not asked for. What he is carrying is stored
+  with his own body, so it survives a reload; there is not yet a way to get it back out of him, and if he is
+  killed it is lost with him. Both are why it is not in a release.
 * Future work focuses on Valheim compatibility, reported bugs, reliability, and calibration informed by
   real hauling feedback.
 

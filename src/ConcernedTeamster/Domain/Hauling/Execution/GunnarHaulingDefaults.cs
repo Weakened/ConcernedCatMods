@@ -49,6 +49,24 @@ internal static class GunnarHaulingDefaults
     /// network-object field this product ever writes.</summary>
     public const string WorkerKeyField = "tcc.worker.key";
 
+    /// <summary>The field in the worker body's <b>own</b> network object that
+    /// carries what it is holding: vanilla's own <c>Inventory.Save</c> package,
+    /// as a byte array — the format a chest stores (#381).
+    ///
+    /// <b>Byte-compatible with Concerned Foreman's worker on purpose.</b> Same
+    /// field name, same package, same companion revision field
+    /// (<c>ConcernedForeman/Runtime/Custody/WorkerBody.cs</c>,
+    /// <c>SETTLEMENT_AUTHORITY.md</c> §5a). Two products may share a key prefix
+    /// because the prefab name is what separates their bodies before a key is
+    /// ever read, and a second spelling for the same thing would be a second
+    /// format to keep in step forever. Durable: changing it leaves a saved body
+    /// standing and empties it, so it never changes.</summary>
+    public const string WorkerInventoryField = "tcc.worker.inventory";
+
+    /// <summary>The field that counts writes of <see cref="WorkerInventoryField"/>.
+    /// Foreman's spelling, for the same reason.</summary>
+    public const string WorkerRevisionField = "tcc.worker.revision";
+
     /// <summary>The prefix of every key Gunnar's body stores itself beneath in
     /// its own network object, trailing dot included.
     ///

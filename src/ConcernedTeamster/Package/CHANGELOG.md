@@ -21,6 +21,12 @@
   and a cancelled order keeps that memory — only a world actually going away
   clears it.
 
+- **What he picks up survives a reload.** Valheim does not save what a non-player
+  character is carrying, so anything Gunnar held used to vanish when his ground
+  unloaded, when you logged out or when you reloaded the world — quietly, with
+  nothing dropped. His body now keeps its own inventory in its own record, in the
+  game's own save format, written the moment anything changes. A Gunnar saved by
+  an older build loads exactly as before, with an empty inventory.
 - **Retiring Gunnar will not quietly throw away what he is holding.** Removing a
   worker body destroys everything in it and drops nothing on the ground, so
   `ct_haul retire` now refuses while he is carrying anything, tells you how much
@@ -30,9 +36,11 @@
 
 **Not observed in game yet, and not finished.** Everything above is proved by
 test and by source audit; none of it has been watched happening, and it is not
-in a release. What he picks up goes into his own inventory and there is still
-**no way to get it out** — the part that puts it in a chest is not built. That
-is why this is not in a release and why the setting is off.
+in a release. Two things are deliberately still open: what he picks up goes into
+his own inventory and there is **no way to get it out** yet, because the part
+that puts it in a chest is not built; and if Gunnar is **killed**, what he is
+carrying is destroyed with his body rather than dropped. That is why this is not
+in a release and why the setting is off.
 
 ## 1.0.5 - Gunnar pulls the cart
 

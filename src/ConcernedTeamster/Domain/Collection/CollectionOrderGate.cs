@@ -48,6 +48,18 @@ internal enum CollectionOrderRefusal
     /// <summary>Something could not be read - an unusable reach, a distance that
     /// is not a number. Unknown refuses.</summary>
     Unreadable = 10,
+
+    /// <summary>No world is loaded as far as the runtime's own lifecycle is
+    /// concerned - including the window where the game is shutting down and its
+    /// singletons are still up.
+    ///
+    /// <b>Separate from the authority rule on purpose.</b> That rule reads the
+    /// game's singletons, which are still answering during a shutdown; the
+    /// lifecycle has already reported the world gone and dropped the record of
+    /// what was picked. An order accepted in that window would be an order with
+    /// no record standing behind it, which is where a second yield comes
+    /// from.</summary>
+    WorldIsGoingAway = 11,
 }
 
 /// <summary>What the runtime read at the moment a pick was ordered. Every field
@@ -61,6 +73,7 @@ internal readonly struct CollectionOrderRequest
 {
     public CollectionOrderRequest(
         bool featureEnabled,
+        bool worldIsUp,
         WorkAuthorityVerdict authority,
         bool seamAvailable,
         bool workerPresent,
@@ -73,6 +86,7 @@ internal readonly struct CollectionOrderRequest
         float distanceMetres)
     {
         FeatureEnabled = featureEnabled;
+        WorldIsUp = worldIsUp;
         Authority = authority;
         SeamAvailable = seamAvailable;
         WorkerPresent = workerPresent;
@@ -88,6 +102,11 @@ internal readonly struct CollectionOrderRequest
     /// <summary>Teamster's master switch and the collection switch, both on.
     /// </summary>
     public bool FeatureEnabled { get; }
+
+    /// <summary>Whether the runtime's own lifecycle currently has a world. False
+    /// during a shutdown even while the game's singletons still answer, which is
+    /// the window the authority rule cannot see.</summary>
+    public bool WorldIsUp { get; }
 
     /// <summary>What the shared work-authority rule said, asked now rather than
     /// when the runtime started.</summary>
@@ -147,6 +166,11 @@ internal static class CollectionOrderGate
         if (!request.FeatureEnabled)
         {
             return CollectionOrderRefusal.FeatureOff;
+        }
+
+        if (!request.WorldIsUp)
+        {
+            return CollectionOrderRefusal.WorldIsGoingAway;
         }
 
         if (request.Authority != WorkAuthorityVerdict.Granted)
@@ -272,6 +296,8 @@ internal static class CollectionOrderGate
                 return "He is not standing next to it, and nothing here walks him over.";
             case CollectionOrderRefusal.Unreadable:
                 return "Something about that could not be read, so he does nothing.";
+            case CollectionOrderRefusal.WorldIsGoingAway:
+                return "There is no world for him to work in right now.";
             default:
                 return "Refused for a reason nobody recorded; that is a bug.";
         }

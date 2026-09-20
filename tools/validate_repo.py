@@ -1560,16 +1560,51 @@ def check_teamster_collection_verbs(errors: list[str]) -> list[str]:
 # `GunnarHaulingRuntime` binds Unity. So this pins the source order instead -
 # the guard has to be consulted above every removal in the retire verb.
 #
-# Deliberately a source-order proxy, not a proof of control flow: it is the
-# smallest check that cannot pass while a removal in that method runs with no
+# Deliberately a source-order proxy, not a proof of control flow: within the
+# method it is the smallest check that cannot pass while a removal runs with no
 # guard consulted above it, and it says so rather than claiming more.
+#
+# THE METHOD BOUNDARY IS WHERE THE FIRST VERSION STOPPED LOOKING, and an
+# independent review walked through it: lifting `view.Destroy()` into a private
+# one-line helper in the same file took the removal out of the text the rule
+# reads, dropped the count to one, and left the success line asserting a
+# guarantee that was false. So removals are now counted over the WHOLE file and
+# every one of them has to be inside the retire verb; and the population of
+# removals across the whole worker folder is pinned per file, so one cannot
+# escape by moving to a different file either. A new way to take a body out of
+# the world is then a deliberate edit to this rule, which is the point.
 TEAMSTER_RETIRE_FILE = ("Adapters", "Workers", "GunnarHaulingRuntime.cs")
 TEAMSTER_RETIRE_BODY = re.compile(
     r"private\s+string\s+Retire\s*\([^)]*\)\s*\{(.*?)\n    \}", re.DOTALL)
 TEAMSTER_RETIRE_DECIDES = "WorkerRetirement.Decide("
 TEAMSTER_RETIRE_ALLOWS = "WorkerRetirement.Allows("
-# Every way this method takes a body out of the world.
-TEAMSTER_BODY_REMOVALS = (".Destroy(", "RetireBody(")
+
+# Every way a body leaves the world: the network object's own no-argument
+# `Destroy()`, and the executor's retirement. Matched by SHAPE rather than by
+# receiver name, because a text audit cannot know a receiver's type and renaming
+# a local would otherwise hide the call — `UnityEngine.Object.Destroy(x)` takes
+# an argument and is a different thing, which is why the empty parentheses are
+# part of the pattern.
+TEAMSTER_BODY_REMOVAL = re.compile(r"\.\s*Destroy\s*\(\s*\)|\bRetireBody\s*\(")
+
+# Where a body may leave the world at all, with how many sites each file holds.
+# A pinned population, like the one pinned pickup call: any other count anywhere
+# in Adapters/Workers fails, so a new removal cannot appear without a person
+# deciding what guards it.
+#
+# - GunnarHaulingRuntime.cs: the retire verb's two paths, the pointed-at
+#   duplicate and the bound body. Both guarded, checked below.
+# - TeamsterWorkerBody.cs: the bound body's actual destruction, reachable only
+#   through HaulExecutor.RetireBody(), which is reachable only from the guarded
+#   retire verb.
+# - TeamsterWorkerPrefab.cs: a body that has just been created and came up
+#   invalid. It has held nothing for any length of time, and refusing to clean it
+#   up would leave a broken object in the world.
+TEAMSTER_BODY_REMOVAL_SITES = {
+    "GunnarHaulingRuntime.cs": 2,
+    "TeamsterWorkerBody.cs": 1,
+    "TeamsterWorkerPrefab.cs": 1,
+}
 
 
 def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str]:
@@ -1583,6 +1618,24 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
             f"{runtime.relative_to(ROOT)} — the audit no longer covers the retire verb", errors)
         return []
 
+    # First: the population. Every place in the worker folder where a body can
+    # leave the world, counted, against what this rule has been told to expect.
+    workers_dir = teamster_dir.joinpath(*TEAMSTER_WORKERS_DIR)
+    total_sites = 0
+    for path in sorted(workers_dir.glob("*.cs")):
+        text = "\n".join(_strip_cs_line_comment(line) for line in
+                         path.read_text(encoding="utf-8").splitlines())
+        found = len(TEAMSTER_BODY_REMOVAL.findall(text))
+        total_sites += found
+        expected = TEAMSTER_BODY_REMOVAL_SITES.get(path.name, 0)
+        if found != expected:
+            fail(
+                f"[interop] #381 carried-material audit: {path.relative_to(ROOT)} takes a body out of "
+                f"the world {found} time(s); this rule expects {expected}. A body's inventory is "
+                "destroyed with the body and nothing is dropped, so a new removal has to say what "
+                "guards it and be recorded in TEAMSTER_BODY_REMOVAL_SITES — it must not appear by "
+                "moving one out of the retire verb", errors)
+
     code = "\n".join(_strip_cs_line_comment(line) for line in
                      runtime.read_text(encoding="utf-8").splitlines())
     match = TEAMSTER_RETIRE_BODY.search(code)
@@ -1595,12 +1648,23 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
 
     body = match.group(1)
 
-    # Where every removal is, and where every guard is. One guard per removal:
-    # the verb has two paths that take a body out of the world (the pointed-at
-    # duplicate and the bound body), and one shared decision would leave the
-    # other path unguarded while the audit stayed green.
-    removals = sorted(offset for token in TEAMSTER_BODY_REMOVALS
-                      for offset in _offsets_of(body, token))
+    # Second: every removal in this file has to be inside the retire verb. This
+    # is what the helper-method escape defeated — the removal stayed in the file
+    # and simply stepped outside the text the rule reads.
+    in_file = len(TEAMSTER_BODY_REMOVAL.findall(code))
+    in_verb = len(TEAMSTER_BODY_REMOVAL.findall(body))
+    if in_file != in_verb:
+        fail(
+            f"[interop] #381 carried-material audit: {runtime.relative_to(ROOT)} takes a body out of "
+            f"the world {in_file} time(s), but only {in_verb} of those are inside the retire verb. A "
+            "removal outside it is a removal the guard below never sees — lifting one into a helper "
+            "is exactly how this audit was got past", errors)
+
+    # Third: one guard per removal, above it. The verb has two paths that take a
+    # body out of the world (the pointed-at duplicate and the bound body), and
+    # one shared decision would leave the other path unguarded while the audit
+    # stayed green.
+    removals = _offsets_of_pattern(body, TEAMSTER_BODY_REMOVAL)
     decisions = _offsets_of(body, TEAMSTER_RETIRE_DECIDES)
     guards = _offsets_of(body, TEAMSTER_RETIRE_ALLOWS)
 
@@ -1627,10 +1691,17 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
                 errors)
 
     return [
-        f"[interop] #381 carried-material audit: {len(removals)} body removal(s) in the retire verb of "
-        f"{'/'.join(TEAMSTER_RETIRE_FILE)}, each with its own carried-material guard consulted above it "
-        "(source order, not a control-flow proof)",
+        f"[interop] #381 carried-material audit: {total_sites} place(s) in Adapters/Workers take a body "
+        f"out of the world, each at a pinned site; the {in_verb} in "
+        f"{'/'.join(TEAMSTER_RETIRE_FILE)} are all inside the retire verb, each with its own "
+        "carried-material guard above it (source order within the verb; the counts are what stop one "
+        "moving out of it)",
     ]
+
+
+def _offsets_of_pattern(text: str, pattern: re.Pattern) -> list[int]:
+    """Every offset a pattern matches at, in order."""
+    return [match.start() for match in pattern.finditer(text)]
 
 
 def _offsets_of(text: str, token: str) -> list[int]:
