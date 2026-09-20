@@ -419,6 +419,55 @@ public sealed class AtlasMaintenanceDefectTests : IDisposable
         Assert.Contains("IOException", reply);
     }
 
+    // ------------------------------------------------------------------
+    // (b) the arguments the guard made it necessary to have an answer for
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void NoArgumentsMeansStatus()
+    {
+        Assert.Equal("status", ConsoleArguments.Subcommand(null));
+        Assert.Equal("status", ConsoleArguments.Subcommand(Array.Empty<string>()));
+        Assert.Equal("", ConsoleArguments.Remainder(null));
+        Assert.Equal("", ConsoleArguments.Remainder(Array.Empty<string>()));
+    }
+
+    [Fact]
+    public void AnEmptyFirstArgumentIsNotStatusAndFallsToTheUsageReply()
+    {
+        // Deliberate, and the deliberateness is the point: `cc_atlas ""` gave
+        // the unknown-subcommand usage reply before the try/catch was added,
+        // and it still does. Mapping it to "status" would be a behaviour change
+        // smuggled in by a refactor, and would answer a typo with a status line
+        // rather than saying the argument was not understood. No switch in the
+        // handler has a case for "", so this reaches `default`.
+        Assert.Equal("", ConsoleArguments.Subcommand(new[] { "" }));
+        Assert.Equal("", ConsoleArguments.Subcommand(new string[] { null! }));
+        Assert.NotEqual(ConsoleArguments.DefaultSubcommand, ConsoleArguments.Subcommand(new[] { "" }));
+    }
+
+    [Fact]
+    public void TheSubcommandIsLowercasedAndTheRemainderIsNot()
+    {
+        // The subcommand is matched against literals; the remainder is the
+        // player's own text - a view name, a query, a pattern - and lowercasing
+        // it would quietly rename things.
+        var args = new[] { "VIEW", "Save", "My Favourite Spot" };
+
+        Assert.Equal("view", ConsoleArguments.Subcommand(args));
+        Assert.Equal("Save My Favourite Spot", ConsoleArguments.Remainder(args));
+    }
+
+    [Fact]
+    public void ArgumentHandlingNeverThrows()
+    {
+        // This runs before the guard that would catch it. A null array used to
+        // become "could not finish: NullReferenceException" - caught rather
+        // than crashing, and still a meaningless thing to tell somebody.
+        Assert.Equal("status", ConsoleArguments.Subcommand(null));
+        Assert.Equal("", ConsoleArguments.Remainder(new string[] { "backup", null! }));
+    }
+
     [Fact]
     public void AFailureReportNeverAddsASecondFailure()
     {

@@ -2234,7 +2234,10 @@ internal sealed class CartographerRuntime : IDisposable
     /// <c>ConsoleFailure</c> does the scrubbing.</summary>
     internal string ExecuteAtlasCommand(string[] args)
     {
-        string subcommand = ResolveSubcommand(args);
+        // Resolved outside the guard, so it is available to name the failure -
+        // which is why ConsoleArguments is total rather than relying on the
+        // catch to absorb a missing argument (#367).
+        string subcommand = ConsoleArguments.Subcommand(args);
         try
         {
             return ExecuteAtlasCommandCore(args, subcommand);
@@ -2244,19 +2247,6 @@ internal sealed class CartographerRuntime : IDisposable
             _log.LogError($"cc_atlas {subcommand} failed: {SafeLogText.Describe(exception)}");
             return ConsoleFailure.Describe("cc_atlas", subcommand, exception);
         }
-    }
-
-    /// <summary>The subcommand a `cc_atlas` invocation names, defaulting to
-    /// `status`. Deliberately total: this runs outside the guard below, so it
-    /// must not be the thing that throws.</summary>
-    private static string ResolveSubcommand(string[] args)
-    {
-        if (args is null || args.Length == 0 || string.IsNullOrEmpty(args[0]))
-        {
-            return "status";
-        }
-
-        return args[0].ToLowerInvariant();
     }
 
     private string ExecuteAtlasCommandCore(string[] args, string subcommand)
@@ -2271,7 +2261,7 @@ internal sealed class CartographerRuntime : IDisposable
             return "Concerned Cartographer: no world is loaded yet.";
         }
 
-        string remainder = args.Length > 1 ? string.Join(" ", args, 1, args.Length - 1) : "";
+        string remainder = ConsoleArguments.Remainder(args);
 
         switch (subcommand)
         {

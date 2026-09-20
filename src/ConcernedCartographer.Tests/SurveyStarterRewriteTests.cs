@@ -49,6 +49,14 @@ public sealed class SurveyStarterRewriteTests : IDisposable
 
     private readonly string _directory;
 
+    /// <summary>What the filesystem actually kept when a test aged a file.
+    ///
+    /// Read back rather than assumed: <c>SetLastWriteTimeUtc</c> is itself
+    /// rounded by the volume's granularity, so comparing later against the
+    /// value we asked for would make these tests fail on a FAT-class temp
+    /// volume for a reason the product is right about.</summary>
+    private readonly Dictionary<string, DateTime> _agedTo = new();
+
     private int _files;
 
     public SurveyStarterRewriteTests()
@@ -80,11 +88,39 @@ public sealed class SurveyStarterRewriteTests : IDisposable
         string path = NewPath();
         File.WriteAllLines(path, shipped.Serialize());
         File.SetLastWriteTimeUtc(path, LongBefore);
+        _agedTo[path] = File.GetLastWriteTimeUtc(path);
         return path;
     }
 
     private static bool LooksLikePriorUse(string path) =>
         PreexistingFile.ExistedBefore(path, SessionStart);
+
+    /// <summary>The file was rewritten, and its history survived it.
+    ///
+    /// Asserts exactly the contract <see cref="SurveyRuleFile"/> offers — the
+    /// restored time is no later than the original, within the granularity a
+    /// coarse filesystem may round by — and then the consequence that actually
+    /// matters, which is what the probe concludes.</summary>
+    private void AssertHistorySurvivedTheRewrite(string path)
+    {
+        DateTime original = _agedTo[path];
+        DateTime restored = File.GetLastWriteTimeUtc(path);
+
+        Assert.True(
+            restored <= original + SurveyRuleFile.TimestampTolerance,
+            $"the rewrite moved the file's last-write time forward from {original:O} to {restored:O}, " +
+            "which is what makes a returning player read as a new one");
+        Assert.True(LooksLikePriorUse(path), "the upgrade must not make a veteran look new");
+    }
+
+    /// <summary>Nothing was written, so the timestamp is exactly what the
+    /// filesystem stored when the test aged the file. Exact equality is right
+    /// here precisely because no rounding step happened in between.</summary>
+    private void AssertNotTouchedAtAll(string path)
+    {
+        Assert.Equal(_agedTo[path], File.GetLastWriteTimeUtc(path));
+        Assert.True(LooksLikePriorUse(path));
+    }
 
     /// <summary>What the unlock policy is actually told, for a profile whose only
     /// evidence is the rules file. This is the consequence the timestamp decides.
@@ -120,8 +156,7 @@ public sealed class SurveyStarterRewriteTests : IDisposable
         Assert.True(rules.TryMatch("BOM_CopperMine01(Clone)", out _));
 
         // #366's property, new: and the upgrade did not rewrite his history.
-        Assert.True(LooksLikePriorUse(path), "the upgrade must not make a veteran look new");
-        Assert.Equal(LongBefore, File.GetLastWriteTimeUtc(path));
+        AssertHistorySurvivedTheRewrite(path);
     }
 
     [Theory]
@@ -145,8 +180,7 @@ public sealed class SurveyStarterRewriteTests : IDisposable
             SurveyRuleFile.Outcome.Upgraded,
             SurveyRuleFile.LoadOrCreate(path, out _, out _));
         Assert.Equal(SurveyRuleSet.Default().Serialize().ToArray(), File.ReadAllLines(path));
-        Assert.Equal(LongBefore, File.GetLastWriteTimeUtc(path));
-        Assert.True(LooksLikePriorUse(path), release);
+        AssertHistorySurvivedTheRewrite(path);
     }
 
     // ------------------------------------------------------------------
@@ -253,9 +287,8 @@ public sealed class SurveyStarterRewriteTests : IDisposable
             SurveyRuleFile.Outcome.Kept,
             SurveyRuleFile.LoadOrCreate(path, out SurveyRuleSet rules, out _));
         Assert.Equal(before, File.ReadAllLines(path));
-        Assert.Equal(LongBefore, File.GetLastWriteTimeUtc(path));
         Assert.True(rules.TryMatch("mypattern_thing", out _));
-        Assert.True(LooksLikePriorUse(path));
+        AssertNotTouchedAtAll(path);
     }
 
     [Fact]
@@ -271,7 +304,7 @@ public sealed class SurveyStarterRewriteTests : IDisposable
             SurveyRuleFile.Outcome.Kept,
             SurveyRuleFile.LoadOrCreate(path, out _, out _));
         Assert.Equal(SurveyRuleSet.Default().Serialize().ToArray(), File.ReadAllLines(path));
-        Assert.Equal(LongBefore, File.GetLastWriteTimeUtc(path));
+        AssertNotTouchedAtAll(path);
     }
 
     [Fact]

@@ -46,8 +46,14 @@ internal static class SurveyRuleFile
     /// <summary>What the coarsest filesystem this could plausibly land on
     /// (FAT/exFAT, two-second last-write granularity) may round a restored
     /// timestamp by. Anything further forward than this is a real failure to
-    /// restore, not rounding.</summary>
-    private static readonly TimeSpan TimestampTolerance = TimeSpan.FromSeconds(2);
+    /// restore, not rounding.
+    ///
+    /// Public so the tests assert the contract this class actually offers
+    /// rather than a tighter one of their own. Asserting exact equality would
+    /// pass on NTFS and fail environmentally on a FAT-class volume — a test
+    /// that is red for a reason the product is right about is worse than no
+    /// test, because it trains people to ignore it.</summary>
+    public static readonly TimeSpan TimestampTolerance = TimeSpan.FromSeconds(2);
 
     /// <summary>What happened to the file on disk. The caller logs; this decides
     /// nothing about wording and knows nothing about log levels.</summary>

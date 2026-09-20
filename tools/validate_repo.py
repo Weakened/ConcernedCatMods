@@ -2174,6 +2174,127 @@ def check_cartographer_prior_names_stay_known_to_the_probe(errors: list[str]) ->
     ]
 
 
+def _cartographer_world_sidecars() -> list[str]:
+    """The per-world sidecar suffixes, read out of their one owner.
+
+    Parsed rather than restated, for the same reason `_cartographer_known_names`
+    is: a second copy in this file would be one more thing to drift.
+    """
+    source = ROOT / "src/ConcernedCartographer/Domain/Companions/LegacyEvidenceRule.cs"
+    if not source.exists():
+        return []
+
+    suffixes: list[str] = []
+    inside = False
+    for raw in source.read_text(encoding="utf-8-sig").splitlines():
+        code = _strip_cs_line_comment(raw).strip()
+        if "class CartographerWorldSidecars" in code:
+            inside = True
+            continue
+        if not inside:
+            continue
+        if code.startswith(QUOTE) and code.endswith(QUOTE + ","):
+            literal = code[1:-2]
+            if literal.startswith("."):
+                suffixes.append(literal)
+        elif code == "}" and suffixes:
+            # End of the class, after its one array. Stop before the next type
+            # in the file contributes its own suffixes.
+            break
+
+    return suffixes
+
+
+def check_cartographer_sidecar_family_has_one_owner(errors: list[str]) -> list[str]:
+    """Nothing keeps its own copy of the per-world sidecar list.
+
+    `AtlasBackupTools` kept a local array of three of the five (#367). Backup
+    silently left two of a player's files out, restore could not bring back what
+    was never copied, the stale journals of the missing kinds were not cleared,
+    and the support report described three fifths of the data while reading as
+    complete. Every one of those is silent: nothing fails, the player is simply
+    told a smaller truth.
+
+    The fix was to make one list the owner. This is what keeps it that way, and
+    it is a validator rule rather than a test **because no test can see it**:
+    `AtlasBackupTools.cs` needs BepInEx, so it is compiled into no test
+    assembly, and re-planting a local array there would be caught by nothing at
+    all. Pinning the list's contents in a unit test - which the tests do - says
+    what the list is, not who uses it.
+
+    Two rules:
+
+    1. every consumer names `CartographerWorldSidecars.Suffixes`;
+    2. no consumer contains one of those suffixes as a string literal of its
+       own, in any shape - a re-declared array, an inline `new[] { … }`, or a
+       single suffix concatenated by hand. Doc comments are stripped first, so
+       prose about `.pins.tsv` is free.
+
+    A consumer that legitimately handles exactly one kind of sidecar belongs on
+    neither list and is not audited here: `SurveyRejectedPersistence` naming its
+    own suffix is not a copy of the family.
+    """
+    owner_relative = Path("src/ConcernedCartographer/Domain/Companions/LegacyEvidenceRule.cs")
+    consumers = [
+        Path("src/ConcernedCartographer/Persistence/AtlasBackupTools.cs"),
+        Path("src/ConcernedCartographer/Runtime/Companions/CartographerLegacyProbe.cs"),
+    ]
+    reference = "CartographerWorldSidecars.Suffixes"
+
+    suffixes = _cartographer_world_sidecars()
+    if len(suffixes) < 2:
+        fail(
+            f"[cartographer-paths] could not read the per-world sidecar family from "
+            f"{owner_relative}, so the rule that keeps one owner for it cannot be checked",
+            errors,
+        )
+        return []
+
+    for relative in consumers:
+        path = ROOT / relative
+        if not path.exists():
+            fail(
+                f"[cartographer-paths] {relative} is missing; it is one of the files that "
+                "must take the per-world sidecar list from its owner rather than keep a copy",
+                errors,
+            )
+            continue
+
+        try:
+            text = path.read_text(encoding="utf-8-sig")
+        except (OSError, UnicodeDecodeError) as problem:
+            fail(f"[cartographer-paths] could not read {relative}: {problem}", errors)
+            continue
+
+        code = "\n".join(_strip_cs_line_comment(raw) for raw in text.splitlines())
+
+        if reference not in code:
+            fail(
+                f"[cartographer-paths] {relative} does not use {reference}. Every consumer of "
+                "the per-world sidecar family takes it from its one owner: a local copy is how "
+                "backup, restore and the support report each silently covered three of the five "
+                "sidecars (#367).",
+                errors,
+            )
+
+        for suffix in suffixes:
+            if QUOTE + suffix + QUOTE in code:
+                fail(
+                    f"[cartographer-paths] {relative} spells "
+                    + QUOTE + suffix + QUOTE
+                    + f" itself. That suffix belongs to the family in {owner_relative}; use "
+                    + reference + " so adding or removing a sidecar reaches backup, restore, "
+                    "the journal sweep, the support report and the fresh-install probe in one "
+                    "change instead of five (#367).",
+                    errors,
+                )
+
+    return [
+        f"[cartographer-paths] the {len(suffixes)} per-world sidecar(s) have one owner; "
+        f"{len(consumers)} consumer(s) reference it and none keeps a copy"
+    ]
+
+
 def check_cartographer_editor_extensions_agree(errors: list[str]) -> list[str]:
     """The two copies of the editor's extension list say the same thing.
 
@@ -2498,6 +2619,7 @@ def main() -> int:
     report.extend(check_cartographer_editor_extensions_agree(errors))
     report.extend(check_cartographer_root_holds_only_names_the_probe_knows(errors))
     report.extend(check_cartographer_prior_names_stay_known_to_the_probe(errors))
+    report.extend(check_cartographer_sidecar_family_has_one_owner(errors))
     check_teamster_adapter_isolation(errors)
     report.extend(check_cross_product_independence(errors))
     report.extend(check_every_product_pair_is_audited(errors))
