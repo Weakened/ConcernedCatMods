@@ -150,7 +150,7 @@ public sealed class ForemanNpcAdoptionTests
         var adoption = new ForemanNpcAdoption(registry, new ForemanNpcRole(DataRoot));
         IActorModeHold hold = adoption.Modes;
 
-        Assert.False(((ArbiterActorMode)hold).IsTracked);
+        Assert.False(hold.IsIdentityKnown);
 
         // No job may take him. Unspecified, not RefusedBusy: the reason is that
         // nothing can be established, which is a different fact from "busy".

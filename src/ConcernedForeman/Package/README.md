@@ -168,8 +168,9 @@ That is the interesting part, not the walking.
   failing later.
 - Independent of every other Concerned Cat **mod**. Foreman, Cartographer,
   Teamster and Steward share no gameplay, no data and no load order; install
-  any of them alone. Where two of them are installed, they share only Concerned
-  NPC, installed once.
+  any of them alone. Foreman, Teamster and Steward each ask for Concerned NPC,
+  and if you have more than one of them it is still installed only once.
+  Cartographer does not use it at all.
 
 ## Support
 

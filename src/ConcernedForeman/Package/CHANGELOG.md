@@ -23,9 +23,19 @@ moved: 0.1.0 has never shipped, so these are still its notes.
   of ours, not a second runtime in this one. Before this, each mod kept its
   own private answer to "is he busy?", and none of them could see the
   others.
-- **An order that cannot take hold of him is refused, and says so.** It used
-  to be possible to start an order that held nothing, which looked like
-  Thorstein standing in a field doing nothing for no stated reason.
+- **If the shared runtime ever refuses Thorstein, you are told which thing
+  went wrong.** This is a new failure mode rather than a fixed bug — there was
+  nothing to fix, because before this change the only answer available was
+  "yes" or "he is busy". Now that a shared runtime can decline him at startup,
+  every surface says so plainly: an order refused for that reason names
+  Concerned NPC and says waiting will not help, and a stopped order says his
+  identity was not accepted rather than blaming a body that is standing right
+  in front of you.
+- **While that is the case, he cannot be dismissed either.** `cf_worker
+  despawn`, and the uninstall step that asks you to retire his body, both
+  refuse — deliberately. A body nothing can account for is not destroyed on a
+  guess, because his tools and gathered materials are inside it. Install or
+  re-enable Concerned NPC and restart, and both work again.
 
 ### Unchanged on purpose
 
@@ -40,6 +50,10 @@ moved: 0.1.0 has never shipped, so these are still its notes.
   start, under its own name. A prefab registered late, or under a new name,
   would delete every saved worker on the next load, so that half is
   deliberately not handed over.
+- The settlement record gains one new pause reason name. A record written by
+  this build and read by an older one shows that pause as "no reason
+  recorded"; nothing else about it changes, and a record written by an older
+  build reads here exactly as it always did.
 
 ### Added — climbable ladders (#324)
 

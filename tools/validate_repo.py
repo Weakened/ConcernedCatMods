@@ -465,8 +465,18 @@ def check_library_consumers(errors: list[str]) -> list[str]:
        library's DLL is NOT copied into the product's output and cannot be
        smuggled into the product's ZIP. The player gets it from its own
        package, once.
-    3. A product that references it pins it in thunderstore.toml, so the
-       storefront installs it.
+    3. A product that references it pins it in thunderstore.toml, AT THE
+       VERSION THE LIBRARY ACTUALLY IS, so the storefront installs the build
+       this product was compiled against.
+
+       The version half is not decoration. Key presence alone was the original
+       check, and a stale pin - the product compiled against 0.2.0 while its
+       manifest still asks the storefront for 0.1.0 - would have passed it
+       silently. That is the exact shape of #369/#370, where a version floor and
+       a shipped version drifted apart and every cooperative order refused for a
+       reason nobody could see from the source. A consumer pinning a version that
+       does not exist is worse than one pinning none: the storefront resolves it
+       and the player gets a library whose surface the product was not built for.
     4. A product that references it declares BepInDependency on its plugin
        GUID, so a missing library is a clear dependency failure at load rather
        than an NRE somewhere later.
@@ -484,6 +494,19 @@ def check_library_consumers(errors: list[str]) -> list[str]:
         if not lib_dir.is_dir():
             fail(f"[{lib_key}] Library directory is missing: src/{lib_name}", errors)
             continue
+
+        # What the library actually IS, from its own csproj - the same value the
+        # build stamps into its DLL. validate_product already proves the library's
+        # csproj, thunderstore.toml and Plugin.cs agree, so this one number is the
+        # whole truth about its version. Read defensively: a library whose version
+        # cannot be read must not abort the rest of this rule, it must be reported
+        # and skipped, or one bad file silently exempts every consumer.
+        try:
+            lib_version = read_csproj_version(lib_dir / str(lib_spec["csproj"]))
+        except Exception as exc:
+            fail(f"[{lib_key}] Could not read the library's own version, so no consumer's pin "
+                 f"could be checked against it: {exc}", errors)
+            lib_version = ""
 
         # 1. The library must not reference any product, in either idiom.
         product_names = {str(spec["package_name"]) for spec in PRODUCTS.values()}
@@ -559,11 +582,14 @@ def check_library_consumers(errors: list[str]) -> list[str]:
                         f"output and can reach its ZIP: {csproj.relative_to(ROOT)}", errors)
 
             pinned = False
+            pinned_version = ""
             if toml_path.is_file():
                 try:
                     config = tomllib.loads(toml_path.read_text(encoding="utf-8"))
                     dependencies = config.get("package", {}).get("dependencies", {})
-                    pinned = f"{EXPECTED_NAMESPACE}-{lib_name}" in dependencies
+                    pin_key = f"{EXPECTED_NAMESPACE}-{lib_name}"
+                    pinned = pin_key in dependencies
+                    pinned_version = str(dependencies.get(pin_key, "")).strip()
                 except Exception as exc:
                     fail(f"[{product_key}] Invalid thunderstore.toml: {exc}", errors)
 
@@ -578,6 +604,14 @@ def check_library_consumers(errors: list[str]) -> list[str]:
                         f"[{product_key}] References {lib_name} but does not pin "
                         f"{EXPECTED_NAMESPACE}-{lib_name} in thunderstore.toml, so the "
                         "storefront would not install it", errors)
+                elif lib_version and pinned_version != lib_version:
+                    fail(
+                        f"[{product_key}] Pins {EXPECTED_NAMESPACE}-{lib_name} at "
+                        f"{pinned_version!r} but {lib_name} is {lib_version!r}. This product is "
+                        f"compiled against {lib_version} and would ask the storefront for "
+                        f"{pinned_version}: a player gets a library whose surface this build was "
+                        "not made for, and nothing else in this repository would notice. Bump the "
+                        "pin with the library", errors)
                 if not declared:
                     fail(
                         f"[{product_key}] References {lib_name} but declares no "
@@ -598,7 +632,8 @@ def check_library_consumers(errors: list[str]) -> list[str]:
         report.append(
             f"[{lib_key}] Library package: depends on no product; {consumers} of "
             f"{len(PRODUCTS)} products consume it, each by ProjectReference with Private false, "
-            "a Thunderstore pin and a BepInDependency")
+            f"a Thunderstore pin at the library's own version ({lib_version or 'unreadable'}) "
+            "and a BepInDependency")
     return report
 
 

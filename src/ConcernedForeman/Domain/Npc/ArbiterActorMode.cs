@@ -96,8 +96,9 @@ internal sealed class ArbiterActorMode : IActorModeHold
 
     /// <summary>True while the arbiter actually holds a mode owner for this
     /// identity. False means the registration was refused, and every reader below
-    /// gives its closed answer.</summary>
-    internal bool IsTracked => _registry.ModeOf(_identity) != null;
+    /// gives its closed answer - and the refusals a player sees say <i>that</i>
+    /// rather than blaming a busy job or a missing body.</summary>
+    public bool IsIdentityKnown => _registry.ModeOf(_identity) != null;
 
     /// <inheritdoc />
     public ActorMode Mode

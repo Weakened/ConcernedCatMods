@@ -288,18 +288,27 @@ internal sealed class SoloCollectionLoop
         string jobId = order.Order.Value;
 
         // Only a GRANT starts the order. This used to look for RefusedBusy
-        // alone, which was true of the one implementation that existed at the
-        // time and is a defect now that the mode can come from Concerned NPC's
-        // arbiter: that answers Unspecified for an identity it does not track -
-        // a registration refused at load, a library that failed to come up - and
-        // "not RefusedBusy" would have read that as permission. The order would
-        // then run with nothing holding the worker, so his body could be retired
-        // out from under it and every WalkTo would be silently refused by a
-        // motion port that obeys only the holder. Asking the positive question
-        // also survives the next outcome anybody adds.
+        // alone, which was equivalent while ActorModeOwner was the only
+        // implementation - its Enter returns Entered, AlreadyInMode or
+        // RefusedBusy and nothing else - and is a defect now that the mode can
+        // come from Concerned NPC's arbiter: that answers Unspecified for an
+        // identity it does not track, and "not RefusedBusy" would read that as
+        // permission. The order would then run with nothing holding the worker,
+        // so his body could be retired out from under it and every WalkTo would
+        // be silently refused by a motion port that obeys only the holder. Asking
+        // the positive question also survives the next outcome anybody adds.
+        //
+        // And the refusal is LABELLED by asking the hold why, not by assuming.
+        // The workerBusy fact above reads false for an identity nothing can
+        // establish - correctly, since nothing is busy - so a refusal that fell
+        // through to here would otherwise be reported as "Thorstein is busy with
+        // another job" while there is no job and no cure. The two causes have
+        // nothing in common but the outcome.
         if (!ActorModeGrants.IsGranted(_modes.Enter(ActorMode.Surveying, jobId)))
         {
-            return CollectionIntakeRefusal.WorkerBusy;
+            return _modes.IsIdentityKnown
+                ? CollectionIntakeRefusal.WorkerBusy
+                : CollectionIntakeRefusal.WorkerIdentityUnknown;
         }
 
         if (!_custody.RecordAccepted(order))
@@ -1692,6 +1701,29 @@ internal sealed class SoloCollectionLoop
     {
         if (_order == null || IsStopped)
         {
+            return;
+        }
+
+        // Asked FIRST, because it is the one cause of a refused command that has
+        // nothing to do with the body. The motion port obeys only the job holding
+        // the identity, so an identity nothing can establish refuses every walk
+        // while the body stands there in plain sight - and "his body is missing"
+        // would be flatly untrue, sending a player to look for a body that is not
+        // lost. Nothing about it improves until the game is restarted, so it is
+        // also the one reason here that resuming cannot clear.
+        // Asked FIRST, because it is the one cause of a refused command that has
+        // nothing to do with the body. The motion port obeys only the job holding
+        // the identity, so an identity nothing can establish refuses every walk
+        // while the body stands there in plain sight - and "his body is missing"
+        // would be flatly untrue, sending a player to look for a body that is not
+        // lost. Nothing about it improves until the game is restarted, so it is
+        // also the one reason here that resuming cannot clear.
+        if (!_modes.IsIdentityKnown)
+        {
+            Stop(
+                ReadProgress().AnyCarried ? CollectionOrderState.NeedsAttention : CollectionOrderState.Paused,
+                CollectionAttentionReason.WorkerIdentityUnknown,
+                now);
             return;
         }
 

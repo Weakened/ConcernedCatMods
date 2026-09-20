@@ -73,6 +73,20 @@ internal interface IActorModeHold
     /// worker walking on somebody else's hold.</summary>
     WorkerKey Worker { get; }
 
+    /// <summary>Whether this hold can establish whose mode it is holding at all.
+    ///
+    /// <b>This exists so that "nothing could take hold of him" is never reported
+    /// as "he is busy" or "his body is gone".</b> A pre-adoption
+    /// <see cref="ActorModeOwner"/> always knows: it IS the owner, so it answers
+    /// true forever. An arbiter-backed hold answers false when the shared runtime
+    /// never accepted this identity, and then every verb below refuses and every
+    /// permission below is denied - correctly, and for a reason a player cannot
+    /// guess from a refusal labelled "busy" while nothing is busy, or from an
+    /// order paused for a body that is standing right there. The one honest
+    /// diagnosis is at load time, in a log line most people never read, so the
+    /// surfaces a player does look at ask this and say so.</summary>
+    bool IsIdentityKnown { get; }
+
     ActorMode Mode { get; }
 
     /// <summary>The job holding the identity, or null when nothing does.</summary>
@@ -139,6 +153,10 @@ internal sealed class ActorModeOwner : IActorModeHold
     }
 
     public WorkerKey Worker { get; }
+
+    /// <summary>Always true. This object is the identity's mode owner, so there
+    /// is nothing for it to fail to establish.</summary>
+    public bool IsIdentityKnown => true;
 
     public ActorMode Mode { get; private set; } = ActorMode.Resting;
 

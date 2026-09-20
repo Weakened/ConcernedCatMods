@@ -38,6 +38,11 @@ public sealed class CollectionModeGateTests
     {
         public WorkerKey Worker => WorkerKey.Thorstein;
 
+        /// <summary>The point of the whole stand-in: nothing can establish whose
+        /// mode this is, which is a different fact from "he is busy" and from
+        /// "his body is gone".</summary>
+        public bool IsIdentityKnown => false;
+
         public ActorMode Mode => ActorMode.Unspecified;
 
         public string? JobId => null;
@@ -59,6 +64,41 @@ public sealed class CollectionModeGateTests
         public ActorModeOutcome Release(string jobId) => ActorModeOutcome.Unspecified;
     }
 
+    /// <summary>A hold that knows perfectly well whose mode it is and still
+    /// refuses with an outcome that is neither a grant nor <c>RefusedBusy</c>.
+    ///
+    /// <b>Not reachable today, and that is the point of it.</b> It isolates the
+    /// grant gate from the labelling: the gate must refuse on "not a grant" alone,
+    /// for reasons nobody has invented yet, independently of whether the identity
+    /// is known. A gate that only caught the unknown-identity case would be the
+    /// same defect one step along.</summary>
+    private sealed class RefusingKnownHold : IActorModeHold
+    {
+        public WorkerKey Worker => WorkerKey.Thorstein;
+
+        public bool IsIdentityKnown => true;
+
+        public ActorMode Mode => ActorMode.Resting;
+
+        public string? JobId => null;
+
+        public bool MayRelocateHome => true;
+
+        public bool MayRetireBody => true;
+
+        public int Entered { get; private set; }
+
+        public bool IsHeldBy(string? jobId) => false;
+
+        public ActorModeOutcome Enter(ActorMode mode, string jobId)
+        {
+            Entered++;
+            return ActorModeOutcome.Unspecified;
+        }
+
+        public ActorModeOutcome Release(string jobId) => ActorModeOutcome.NotHeld;
+    }
+
     private static void AddStones(CollectionRig rig, int count)
     {
         for (int index = 0; index < count; index++)
@@ -70,13 +110,17 @@ public sealed class CollectionModeGateTests
     [Fact]
     public void AnOrderIsRefusedWhenTheModeHoldAnswersAnythingButAGrant()
     {
-        var hold = new UntrackedHold();
+        var hold = new RefusingKnownHold();
         var rig = new CollectionRig(modes: hold);
         AddStones(rig, 10);
 
         // Everything else about this order is acceptable: the same order on the
         // default hold is accepted by ASoloOrderCollectsMixedResourcesAndDelivers.
         // The only thing wrong with it is that nothing would hold the worker.
+        //
+        // Refused as WorkerBusy here because the identity IS known - the hold just
+        // would not give it up, for a reason this build has no name for. The label
+        // is not what this test is about; that it refuses at all is.
         Assert.Equal(CollectionIntakeRefusal.WorkerBusy, rig.Accept(rig.Order(stone: 3, wood: 0)));
         Assert.Equal(1, hold.Entered);
 
@@ -89,16 +133,91 @@ public sealed class CollectionModeGateTests
     }
 
     [Fact]
-    public void ABusyWorkerIsStillRefused()
+    public void AnUnknownIdentityIsDiagnosedAsItselfAndNotAsABusyWorker()
     {
-        // The pre-adoption refusal, kept: hardening the gate must not have
-        // narrowed it to only the new case.
+        // The label, not just the refusal. "Thorstein is busy with another job"
+        // sends a player looking for a job that does not exist and waiting for it
+        // to end, which it never will: nothing is busy, and only restarting with
+        // Concerned NPC installed changes anything. The workerBusy intake fact is
+        // correctly false here, which is exactly why the label has to be decided
+        // by asking the hold rather than by assuming the refusal came from it.
+        var rig = new CollectionRig(modes: new UntrackedHold());
+        AddStones(rig, 10);
+
+        Assert.Equal(
+            CollectionIntakeRefusal.WorkerIdentityUnknown, rig.Accept(rig.Order(stone: 3, wood: 0)));
+
+        // And the sentence a player reads names the real cause and says waiting
+        // will not help.
+        string sentence = CollectionIntake.Describe(CollectionIntakeRefusal.WorkerIdentityUnknown);
+        Assert.Contains("Concerned NPC", sentence);
+        Assert.DoesNotContain("busy with another job", sentence);
+    }
+
+    [Fact]
+    public void AnAdoptedOrderThatCannotTakeHoldIsNotReportedAsAMissingBody()
+    {
+        // His body is present and fine. What is missing is the shared runtime's
+        // record of who he is, so every WalkTo is refused by a motion port that
+        // obeys only the holder - and the old path called that WorkerBodyLost,
+        // which would send a player hunting for a body standing in front of them.
+        var rig = new CollectionRig(modes: new UntrackedHold());
+        AddStones(rig, 10);
+
+        // A non-terminal order the record kept, whose area and chest belong to
+        // THIS world load, so nothing about a rebind is in the way and the only
+        // thing standing between him and a walk is the hold.
+        CollectionOrderDefinition recorded = rig.Order(stone: 3, wood: 0);
+        rig.Custody.RecoverableOrder = recorded;
+        rig.Custody.RecoveredState = CollectionOrderState.Paused;
+        rig.Custody.Accepted.Add(recorded);
+        rig.Pickup.Order = recorded;
+
+        Assert.True(rig.Loop.AdoptRecovered(rig.Now));
+        Assert.False(rig.Loop.NeedsRebind);
+        Assert.True(rig.Motion.IsPresent);
+
+        rig.Loop.Resume(rig.Now);
+        rig.Tick(200);
+
+        Assert.Equal(CollectionAttentionReason.WorkerIdentityUnknown, rig.Loop.Reason);
+        Assert.NotEqual(CollectionAttentionReason.WorkerBodyLost, rig.Loop.Reason);
+
+        string sentence = CollectionSentences.Describe(CollectionAttentionReason.WorkerIdentityUnknown);
+        Assert.Contains("Concerned NPC", sentence);
+        Assert.DoesNotContain("his body is missing", sentence);
+    }
+
+    [Fact]
+    public void ABusyWorkerIsStillRefusedAsBusy()
+    {
+        // The pre-adoption refusal, kept and still labelled as itself: adding the
+        // new diagnosis must not have relabelled the old one. An ActorModeOwner
+        // always knows whose mode it is, so IsIdentityKnown is true here and the
+        // refusal stays WorkerBusy.
         var rig = new CollectionRig();
         AddStones(rig, 3);
         rig.Modes.Enter(ActorMode.Working, "haul-9");
+        Assert.True(rig.Hold.IsIdentityKnown);
 
         Assert.Equal(CollectionIntakeRefusal.WorkerBusy, rig.Accept(rig.Order(stone: 3, wood: 0)));
         Assert.Equal("haul-9", rig.Modes.JobId);
+    }
+
+    [Fact]
+    public void AGenuinelyMissingBodyIsStillReportedAsAMissingBody()
+    {
+        // The other half of the same guard: the new reason must not have taken
+        // over the case it was carved out of. Identity known, body gone.
+        var rig = new CollectionRig();
+        AddStones(rig, 10);
+        Assert.Equal(CollectionIntakeRefusal.Unspecified, rig.Accept(rig.Order(stone: 3, wood: 0)));
+
+        rig.Motion.IsPresent = false;
+        rig.Tick(200);
+
+        Assert.True(rig.Hold.IsIdentityKnown);
+        Assert.Equal(CollectionAttentionReason.WorkerBodyLost, rig.Loop.Reason);
     }
 
     [Fact]

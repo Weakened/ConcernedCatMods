@@ -54,10 +54,28 @@ What changes is that a hold is now visible outside this assembly: while an order
 Before the adoption each product kept its own `ActorModeOwner` and none could see the others, so the never-coexist rule
 was three separate private truths.
 
-**It fails closed.** If registration is refused at load — a duplicate identity, a library that did not come up — the
-arbiter tracks nothing for him, so `Enter` answers `Unspecified`, every order is refused, and `MayRetireBody` is
-**false**: a body nothing can account for is not despawned. That is the worker-authority direction of the program's
-rule. Only feature access grants on ambiguous evidence, and this is not feature access.
+**It fails closed, and here is exactly what a player sees when it does.** If registration is refused at load — a
+duplicate identity, a library that did not come up — the arbiter tracks nothing for him. `IActorModeHold.IsIdentityKnown`
+is then false, and three things follow:
+
+1. `Enter` answers `Unspecified`, so **every order is refused** — as
+   `CollectionIntakeRefusal.WorkerIdentityUnknown`, never as `WorkerBusy`. Nothing is busy and waiting would never help,
+   so the refusal names Concerned NPC and points at the startup log.
+2. The motion port obeys only the holder, so **every walk is refused**, and an adopted order stops as
+   `CollectionAttentionReason.WorkerIdentityUnknown` — never as `WorkerBodyLost`. His body may be standing in front of
+   the player; what is missing is the record of who he is.
+3. `MayRetireBody` is **false**, which means `cf_worker despawn` refuses **and so does the retire-the-body step of the
+   documented uninstall route**, for as long as the session lasts. This is deliberate — a body nothing can account for is
+   not despawned on a guess, and his issued tools and gathered materials are inside it — but it is a real consequence and
+   it is stated here rather than discovered. The route out is to install or re-enable Concerned NPC and restart, not to
+   force the despawn.
+
+All three are the worker-authority direction of the program's rule. Only feature access grants on ambiguous evidence,
+and none of this is feature access.
+
+Two reasons exist for what used to be one because they have different causes and no shared fix, and because the only
+fully accurate diagnosis — the line the library logs once at startup — is in a file most players never open. A refusal
+that misnames its cause sends somebody looking for a busy job that does not exist, or hunting a body that is not lost.
 
 **Still Foreman's own, forever.** Registering the worker prefab, from this plugin's start, under this product's name.
 A prefab registered late or renamed deletes every saved worker on the next load, so that half is deliberately not
@@ -297,7 +315,8 @@ and the commit.
 | N17 console goals | `cf_worker goto x z` while he works | Refused with "pause or cancel the job first"; he keeps working |
 | N18 reload | Save and quit mid-order, reload, then `cf_collect status` | The order is listed again, stopped, saying it was taken up from the record and needs a rebind; `cf_settle status` shows the same order (the two surfaces agree) |
 | N19 rebind | After N18: `cf_collect resume` | Refused, naming the rebind. Then look at the chest and `cf_collect rebind` → accepted; `resume` → he surveys and carries on; his carried stone is unchanged throughout |
-| N20 the uninstall path | After N18, without rebinding: `cf_collect cancel`, then `cf_settle release`, then `cf_worker despawn` | Each is accepted in turn: the order ends, the stone and the tools come back, the body retires. This is §13 of the custody guide end to end |
+| N20 the uninstall path | After N18, without rebinding: `cf_collect cancel`, then `cf_settle release`, then `cf_worker despawn` | Each is accepted in turn: the order ends, the stone and the tools come back, the body retires. This is §13 of the custody guide end to end. **Requires Concerned NPC to have accepted Thorstein at startup** — without it the final `despawn` refuses by design (§2.1), so this row is run on a load whose log shows the registration succeeded |
+| N20b the uninstall path with the library missing | Remove or disable Concerned NPC, start, then `cf_collect start 10 0` and `cf_worker despawn` | The mod loads with one line naming the missing dependency (or BepInEx refuses it outright); the order is refused naming Concerned NPC and **not** "busy"; `despawn` refuses rather than destroying a body nothing can account for (§2.1) |
 | N21 a fresh zone | Walk into a zone you have never visited and immediately `cf_collect start 10 0` | While the zone is still filling, a survey that finds nothing says the look was cut short (`SurveyIncomplete`), never "no eligible sources"; once it settles, he collects |
 | N22 a location reloading | Stand with a 30 m circle overlapping the start temple and force its zone to reload (walk 200 m away and back) | No temple stone is ever picked, including in the seconds right after the zone comes back |
 

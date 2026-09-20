@@ -68,6 +68,17 @@ internal enum CollectionIntakeRefusal
     /// <summary>The order names a different worker than this loop drives.
     /// </summary>
     WrongWorker = 27,
+
+    /// <summary>Nothing could establish whose identity this is, so nothing could
+    /// take hold of him.
+    ///
+    /// <b>Distinct from <see cref="WorkerBusy"/> on purpose, and the distinction
+    /// is the whole reason this member exists.</b> Busy means another job holds
+    /// him and the fix is to wait or end that job. This means the shared NPC
+    /// runtime never accepted him at startup, nothing is busy, and waiting will
+    /// never help. Reporting it as busy sends a player looking for a job that
+    /// does not exist.</summary>
+    WorkerIdentityUnknown = 28,
 }
 
 /// <summary>Everything acceptance needs to know, gathered at the moment of
@@ -330,6 +341,11 @@ internal static class CollectionIntake
                 return "Thorstein already has a collection order. Finish or cancel it first.";
             case CollectionIntakeRefusal.WorkerBusy:
                 return "Thorstein is busy with another job.";
+            case CollectionIntakeRefusal.WorkerIdentityUnknown:
+                return "Thorstein's identity was not accepted by the shared Concerned NPC runtime when the game " +
+                    "started, so nothing can take hold of him and he will take no order this session. Nothing is " +
+                    "busy and waiting will not help: check the startup log for the line that says why, and check " +
+                    "that Concerned NPC is installed and enabled.";
             case CollectionIntakeRefusal.WorkerAbsent:
                 return "Thorstein is not here to take the order.";
             case CollectionIntakeRefusal.WorkerNotRecruited:
