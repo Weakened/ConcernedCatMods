@@ -1,5 +1,61 @@
 # Changelog
 
+## 1.3.0 - The mines another mod adds, and the report you send us
+
+Added
+
+- **The mines from blacks7ar's OreMines are surveyed and offered as pins**
+  (#385). They are ordinary places in the world, like a crypt or a troll cave,
+  so the survey already walked past them - there was simply no rule saying what
+  they were. There is now, for all eight: flint, copper, tin, coal, iron,
+  silver, black metal and flametal. They arrive as "Resources", and like other
+  fixed places they are only offered once within 80 m and stop being offered
+  after eight hours. Nothing here needs OreMines to be installed; without it
+  these lines match nothing and change nothing.
+- **Your survey rules file is brought up to date, unless you have touched it.**
+  If the file is still exactly the one the mod wrote for you, it is rewritten
+  with the new mine lines. If you have changed anything in it at all - disabled
+  one rule, reordered it, added your own - it is left alone, character for
+  character, and you can add the lines yourself from
+  `docs/mods/concerned-cartographer/SURVEY_LOCATION_COMPATIBILITY.md`.
+
+Fixed
+
+- **The support report stops being offered as a setting to edit** (#304). It
+  was `support-report.txt` and is now `support-report.log`. It is still written
+  in the same place, so a profile export still carries it and you can still find
+  it and send it to us; a configuration editor just no longer lists it as
+  something to fill in. The old `.txt` is removed once the new one has been
+  written - never before, and never if the write failed. Nothing in it is lost:
+  every line is regenerated from scratch each time.
+
+Corrected
+
+- **1.2.2 credited the wrong change, and this is what we now know.** That entry
+  said `author-id.txt` stopped being listed for editing because it moved into a
+  `state` folder. 1.2.2 made two changes at once - the move, and a rename to
+  `author-id.dat` - and we have since measured which one did the work. It was
+  the rename. A configuration editor is rooted at the whole profile and
+  descends into every folder inside it, so a subfolder hides nothing from it and
+  never did; what it goes by is the file's extension, and `.dat` is not on its
+  list. The `state` folder still earns its place - it keeps the mod's own
+  bookkeeping out of a listing the mod uses to tell a new player from a
+  returning one - but it is not what fixed #304. Nothing you see in game changed
+  between 1.2.2 and this note; only our account of why.
+
+Known
+
+- **This was measured in one mod manager, and not in Gale.** Everything above
+  about which files a configuration editor lists comes from reading the
+  installed Thunderstore Mod Manager / r2modman bundle (1.124.2, core 3.2.18),
+  which picks files by extension from a list that has `.cfg`, `.txt`, `.json`,
+  `.yml`, `.yaml` and `.ini` on it and neither `.dat` nor `.log`. Gale is a
+  separate program written by other people, it was not installed here, and we
+  have not looked at it at all - so we do not know what it lists. #304 was
+  reported from Gale. If Gale still offers you `author-id.dat` or
+  `support-report.log`, please say so on #304.
+
+
 ## 1.2.2 - Two files move out of your settings folder
 
 Fixed

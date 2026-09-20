@@ -1,6 +1,6 @@
-# Concerned Cartographer V1.2.2
+# Concerned Cartographer V1.3.0
 
-**V1.2.2 by The Concerned Cat brings Hulgi: a drowned cartographer who lives at your camp, introduces the atlas, and has some common sense about it — by the fire nearest your bed with a drink now and then, under a roof at night, asleep in a spare bed if you have one. He is local only: no other player can see him, he takes no part in your save, and he never blocks, fights or carries anything. Every atlas feature from 1.0.4 is unchanged. Audited against Valheim 1.0.12.**
+**V1.3.0 by The Concerned Cat surveys the mines blacks7ar's OreMines adds, and brings Hulgi: a drowned cartographer who lives at your camp, introduces the atlas, and has some common sense about it — by the fire nearest your bed with a drink now and then, under a roof at night, asleep in a spare bed if you have one. He is local only: no other player can see him, he takes no part in your save, and he never blocks, fights or carries anything. Every atlas feature from 1.0.4 is unchanged. Audited against Valheim 1.0.12.**
 
 ![Hulgi sitting on a log by the campfire beside the player, saying "The meadows are kind. That is how they talk you into wandering." over his head](https://raw.githubusercontent.com/Weakened/ConcernedCatMods/4b154a596ee4b762c5c9dc23cfad4b2e22846e67/docs/media/concerned-cartographer/hulgi-campfire.jpg)
 
@@ -108,9 +108,9 @@ placement` explains where he sits and why.
 
 *Settings with backups, a sanitized support bundle, road-repair tools — and opt-in crash reporting that spells out what is never sent.*
 
-## Version 1.2.2 and support
+## Version 1.3.0 and support
 
-Version 1.2.2 moves two files the mod writes for itself out of your settings folder and into a `state` subfolder beside them, so a mod manager's configuration editor stops offering them for editing. Your existing author identity is carried across on the first start. Version 1.2.1 fixed Hulgi walking into the same wall again and again. When a wall stops him on his way somewhere, he now remembers where and which way he was going, so he takes a way round, or settles somewhere else, instead of trying every spot behind it. If the same place stops him again, he waits longer before trying it again. Nothing else changed.
+Version 1.3.0 surveys the eight mines blacks7ar's OreMines adds, as fixed places like a crypt rather than as respawning ore, and brings an untouched survey rules file up to date while leaving an edited one exactly as you wrote it. It also renames the support report from `support-report.txt` to `support-report.log`, so a mod manager's configuration editor stops offering it as a setting to edit while a profile export still carries it. Version 1.2.2 moved two files the mod writes for itself into a `state` subfolder and renamed `author-id.txt` to `author-id.dat`; we have since measured that it was the rename, not the subfolder, that stopped the configuration editor listing it — that editor descends into every folder in your profile and chooses by extension. This was measured in the Thunderstore Mod Manager / r2modman bundle only; Gale is a separate program and has not been assessed. Your existing author identity is carried across on the first start. Version 1.2.1 fixed Hulgi walking into the same wall again and again. When a wall stops him on his way somewhere, he now remembers where and which way he was going, so he takes a way round, or settles somewhere else, instead of trying every spot behind it. If the same place stops him again, he waits longer before trying it again. Nothing else changed.
 
 Version 1.2.0 was the first Thunderstore release with Hulgi. Versions 1.1.0 and 1.1.1 were test builds of him that never reached Thunderstore; everything they changed is part of 1.2.0, and the changelog records them. Every atlas feature from 1.0.4 is unchanged.
 
