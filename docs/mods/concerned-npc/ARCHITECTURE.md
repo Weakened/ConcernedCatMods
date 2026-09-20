@@ -192,7 +192,62 @@ failure, a job reporting itself finished with targets untouched. Two validator r
 `check_npc_planning_never_defaults_a_claim`, and `check_npc_planning_decides_nothing_to_do_once`, which holds the
 finish verdict to a single decision site because it has had three separate ways in.
 
-## 8. The leaves
+## 8. An interruption never duplicates and never loses
+
+The full design is in [INTERRUPTION.md](INTERRUPTION.md); three things about it belong here, because they constrain
+everything the role leaves do next.
+
+**A caller may act only on the phase the record already says it is in.** `NpcPlanRun` writes each phase down and
+adopts it only if the write succeeded, so the record is always at or ahead of the world and the last written record
+is always a safe resume point. A caller that cannot record cannot act.
+
+**The two transitions that move a player's material are written twice** - an intent before the world is touched and
+what was measured after - **and the library refuses the transition otherwise.** `NpcPlanRun` will not move a plan
+into `Provisioned` or `Reconciling` unless this run wrote the pair, in the phase it is moving out of, with an outcome
+somebody could establish. A record found mid-movement is never replayed and never discarded: it becomes uncertain,
+and uncertain stops the plan for a person with the evidence. That is the whole of "no path duplicates a resource and
+no path silently loses one".
+
+That sentence used to describe the test fixture rather than the library: `MovesMaterialToReach` had no callers,
+replacing its body with `false` left every test green, and a run could reach `Reconciling` having written neither
+half of either pair. The enforcement is per run and deliberately not durable - a durable flag would be a field this
+library demanded inside a format the role owns - so a plan resumed from the disk intends and concludes again before
+claiming a material-moving phase. That costs two writes and moves nothing, because concluding measures.
+
+**The same rule binds the load and the endings.** `Carried` only ever changes as the recorded outcome of a movement
+that was announced first, because in-phase writes skip the transition rule and would otherwise have been able to
+rewrite what the NPC is holding in any phase with no intent at all. And a movement with no recorded outcome may not
+be written into an ending at all except `NeedsAttention`, nor have its pending custody dropped by a phase change: a
+plan reporting itself `Settled` or `Refunded` over an open question is a plan that silently lost or duplicated a
+player's material and then reported success. `NpcPlanRecovery.AlreadyOver` answers `NeedsAttention` for any terminal
+record whose custody is not `Clear`, as the second line of defence for a record written by something else.
+
+One deliberate exception to "an ending is an ending" comes with that: a terminal record whose custody is not `Clear`
+may be moved to `NeedsAttention`, and only there, and only on the decision that means it - so a record cannot go on
+claiming it finished when nothing it did finished. It withdraws a claim of success and grants nothing. A plan whose
+custody is `Clear` is untouched, and so is a plan already at `NeedsAttention`.
+
+**A record in no phase at all is unreadable, not a plan.** `NpcPlanJournal` refuses to hand one back, the recovery
+path answers `NeedsAttention` for one it is handed, and `NpcPlanRun` refuses everything over it except a stop for a
+person - which is available above every other rule, because a library that can hold a state and cannot hand it to a
+person has a failure nobody is ever told about.
+
+**One precondition the role leaves inherit.** A plan that stops for a person has nowhere to go: there is no
+resolution UI, the custody ledger's `CloseOpenIntents` is joined to no plan, and nothing creates the plan that
+follows. #380, #381 and #382 each have to bring a resolution path, hold no material through this library, or say
+plainly that a job can end in a state only deleting its file clears.
+[INTERRUPTION.md](INTERRUPTION.md) §9 states it as a precondition rather than an aside.
+
+**Durable plan state owns no format and no path.** The role hands in an absolute path and a codec; the library hands
+over lines and takes lines back, and stamps an unknown world epoch on anything read from disk so that every
+in-session key a reconstructed plan holds is stale rather than dangerous. No purpose token was added to
+`INpcDataPaths` - the journal takes the path directly - so that interface's "there are no purposes yet" is still
+true, and adopting this is a code move rather than a migration.
+
+Priority and arbitration live in the same area: seven rungs, strictly-higher-wins, and an interruption that changes
+the phase and the note and nothing else about the work.
+
+## 9. The leaves
 
 | Issue | Leaf |
 |---|---|
@@ -208,7 +263,7 @@ finish verdict to a single decision site because it has had three separate ways 
 | #381 | Gunnar collects and hauls, in planned batches, without portals |
 | #382 | Sunniva: the quest, the move-in, and one planned maintenance round |
 
-## 9. Status
+## 10. Status
 
 The package exists, builds and ships nothing yet, but it is **no longer consumed by nobody**: two of five products
 take it today - `ConcernedSteward` and `ConcernedTeamster` both carry the `ProjectReference` and the matching
@@ -218,6 +273,11 @@ to cross.
 
 One role has been moved onto it in part: the Steward drives `NpcJobDriver` for its maintenance round. Gunnar's
 collection job exists and is not yet constructed by anything.
+
+Interruption and recovery (#379) is the same shape: the mechanism exists and is proved, and **nothing constructs an
+`NpcPlanRun` yet**. No product persists a plan today, so "a plan survives a reload" is a statement about the library
+and its tests, not yet about a session. The plan journal and the custody ledger agree in shape and are not joined;
+joining them belongs with the first role that has both a plan and a transfer.
 
 Nothing in this document has been observed in game, and every gameplay row for this program is OWNER GO-AROUND
 PENDING. That includes the two adoptions above: the dependency wiring is proved by the validator, not by watching an
