@@ -134,6 +134,104 @@ public sealed class ShelterBuildLoopTests
         Assert.Equal(BuildStep.Finished, loop.Step);
     }
 
+    [Fact]
+    public void A_second_completion_after_a_repair_is_reported_and_tidied_up_of_its_own()
+    {
+        // Review MINOR 2. "Say it once" had been implemented as "do it once", so a
+        // SECOND completion - after somebody knocked a piece out and Thorstein
+        // rebuilt it - took Finish's early return: the leftover material from the
+        // repair trip was never put back, and the status line reported the last
+        // ROUND rather than either completion, because the early return hands back
+        // a Round that later rounds have overwritten.
+        var world = new BuildWorld();
+        ShelterBuildLoop loop = Drive(world, 80);
+        Assert.Equal(BuildStep.Finished, loop.Step);
+        Assert.Equal(0, world.Materials.PutBacks);
+
+        // Leftover of a kind the repair will not consume, as a short draw or an
+        // earlier cancellation leaves behind.
+        world.Carried["DeerHide"] = 10;
+        world.Chest["DeerHide"] -= 10;
+
+        CostedPiece bed = world.Plan.Pieces[world.Plan.Pieces.Count - 1];
+        world.Sight.Set(bed.Key, PieceSighting.Missing);
+        foreach (PieceCost cost in bed.Recipe.Costs)
+        {
+            world.Embodied[cost.Item] -= cost.Amount;
+            world.Chest[cost.Item] += cost.Amount;
+        }
+
+        Run(loop, world, 40, from: 1000f);
+
+        Assert.Equal(BuildStep.Finished, loop.Step);
+        Assert.Equal(PieceSighting.Standing, world.Sight.Look(bed.Placement));
+
+        // The repair's leftover went back, and the sentence is about THIS
+        // completion and says where it went.
+        Assert.Equal(1, world.Materials.PutBacks);
+        Assert.Equal(0, world.Carrying("DeerHide"));
+        Assert.Contains("The shelter is finished", loop.Reason);
+        Assert.Contains("6 DeerHide that was left over went back into the supply chest", loop.Reason);
+
+        // And still once per completion, not once per round.
+        Assert.Equal(2, Said(world, "The shelter is finished"));
+    }
+
+    [Fact]
+    public void A_site_nobody_could_read_still_looks_finished_and_a_missing_piece_does_not()
+    {
+        // The primitive behind review MINOR 1, at the level it is decided.
+        var world = new BuildWorld();
+        ShelterBuildLoop loop = Drive(world, 80);
+        Assert.Equal(BuildStep.Finished, loop.Step);
+        Assert.True(loop.LooksFinished());
+
+        // Out of view: nobody can tell, so nothing is established as work and a
+        // finished shelter is still finished.
+        world.Sight.Default = PieceSighting.Unknown;
+        foreach (CostedPiece piece in world.Plan.Pieces)
+        {
+            world.Sight.Set(piece.Key, PieceSighting.Unknown);
+        }
+
+        Assert.True(loop.LooksFinished(), "unloaded ground must not read as a piece coming down");
+
+        // Actually gone: that is work.
+        world.Sight.Set(world.Plan.Pieces[0].Key, PieceSighting.Missing);
+        Assert.False(loop.LooksFinished());
+
+        // Something else standing in its place is work too - it is seen, and it is
+        // not the piece. The loop reports it and never clears it.
+        world.Sight.Set(world.Plan.Pieces[0].Key, PieceSighting.Blocked);
+        Assert.False(loop.LooksFinished());
+    }
+
+    [Fact]
+    public void Looking_at_a_finished_site_takes_no_body_and_moves_nothing()
+    {
+        // Why LooksFinished exists at all: the runtime calls it while holding
+        // nothing, so it must not walk, pose, place, draw or spend.
+        var world = new BuildWorld();
+        ShelterBuildLoop loop = Drive(world, 80);
+        int goals = world.Walk.Goals.Count;
+        int draws = world.Materials.Draws;
+        int spends = world.Materials.Spends;
+        int placed = world.Placer.Placed.Count;
+        int poses = world.Pose.TimesStarted;
+
+        for (int look = 0; look < 40; look++)
+        {
+            Assert.True(loop.LooksFinished());
+        }
+
+        Assert.Equal(goals, world.Walk.Goals.Count);
+        Assert.Equal(draws, world.Materials.Draws);
+        Assert.Equal(spends, world.Materials.Spends);
+        Assert.Equal(placed, world.Placer.Placed.Count);
+        Assert.Equal(poses, world.Pose.TimesStarted);
+        Assert.Equal(BuildStep.Finished, loop.Step);
+    }
+
     // ---- provisioning ----------------------------------------------------
 
     [Fact]

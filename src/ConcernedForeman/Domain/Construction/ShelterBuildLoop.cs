@@ -224,7 +224,39 @@ internal sealed class ShelterBuildLoop
             }
 
             ShelterPlan plan = _plan();
-            return plan.IsPlanned && ConstructionProgress.Read(plan, _sight).IsComplete;
+            if (!plan.IsPlanned)
+            {
+                return false;
+            }
+
+            ConstructionProgress progress = ConstructionProgress.Read(plan, _sight);
+            if (progress.IsComplete)
+            {
+                return true;
+            }
+
+            // <b>Not IsComplete on its own, and the difference is a worker's body.</b>
+            // IsComplete counts an UNKNOWN sighting as not-standing, which is the
+            // right answer for deciding whether to BUILD and the wrong one for
+            // deciding whether a finished shelter has stopped being finished:
+            // unloaded ground reads Unknown, so a player simply walking away from a
+            // completed cottage looked exactly like somebody taking it apart, the
+            // exemption lapsed, and the order took Thorstein back to stand there
+            // waiting - with MayRetireBody and MayRelocateHome false for as long as
+            // they stayed away, and nothing telling them why. Only a piece that was
+            // actually looked at and is not there counts as work: Missing because it
+            // is gone, Blocked because something else is in its place, and Unknown
+            // because nobody could tell is neither.
+            foreach (CostedPiece piece in plan.Pieces)
+            {
+                PieceSighting sighting = progress.SightingOf(piece.Key);
+                if (sighting == PieceSighting.Missing || sighting == PieceSighting.Blocked)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
         catch (Exception)
         {
@@ -397,6 +429,18 @@ internal sealed class ShelterBuildLoop
         {
             return Finish(plan);
         }
+
+        // Not complete any more, so the NEXT completion is a different completion
+        // and gets its own report and its own tidy-up.
+        //
+        // <b>"Say it once" and "do the work once" are not the same thing</b>, and
+        // conflating them is what this line fixes. Without it a second completion -
+        // after a player knocked a wall out and Thorstein rebuilt it - took the
+        // early return in Finish, so the leftover material from the repair trip was
+        // never put back in the chest, and the status line reported whatever the
+        // last ROUND had said (in the observed case "put up bed.") because the
+        // early return hands back a Round that later rounds have overwritten.
+        _finishedSaid = false;
 
         if (_settled)
         {

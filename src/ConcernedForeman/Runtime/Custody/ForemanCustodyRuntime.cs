@@ -56,8 +56,6 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
 
     internal WorkerKey WorkerKey { get; }
 
-    /// <summary>The worker's custody location: stable across loads, so no
-    /// epoch.</summary>
     /// <summary>Where the record says the worker's own inventory is. Epoch-less
     /// on purpose, matching <c>SoloCollectionLoop.WorkerLocation</c>: a chest key
     /// is renumbered on every load and a worker body is not, so his place is the

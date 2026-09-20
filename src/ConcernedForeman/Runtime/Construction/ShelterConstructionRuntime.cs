@@ -76,6 +76,7 @@ internal sealed class ShelterConstructionRuntime
     private readonly BuildOrderRuntime _orders;
     private readonly IActorModeHold _modes;
     private readonly ICustodyRuntime _custody;
+    private readonly IWorkerMotion _motion;
     private readonly Func<bool> _mayWork;
     private readonly Func<float> _now;
     private readonly Action<string> _log;
@@ -87,6 +88,7 @@ internal sealed class ShelterConstructionRuntime
     private string? _job;
     private Guid _epoch;
     private bool _finished;
+    private bool _saidAbsent;
     private float _finishedAt = float.NegativeInfinity;
     private float _lastRound = float.NegativeInfinity;
     private bool _faulted;
@@ -135,6 +137,7 @@ internal sealed class ShelterConstructionRuntime
         }
 
         _custody = custody ?? throw new ArgumentNullException(nameof(custody));
+        _motion = motion;
         _mayWork = mayWork ?? throw new ArgumentNullException(nameof(mayWork));
         _now = now ?? throw new ArgumentNullException(nameof(now));
         _log = log ?? throw new ArgumentNullException(nameof(log));
@@ -263,6 +266,31 @@ internal sealed class ShelterConstructionRuntime
                 return;
             }
 
+            // No body, no hold. A job that cannot reach its worker has nothing to
+            // hold him FOR - every motion command is refused without the hold
+            // anyway - so keeping it only stops a person retiring him or moving him
+            // home while he is nowhere near the site. Checked BEFORE the hold is
+            // taken rather than after the round, because releasing afterwards would
+            // retake him on the very next round and put back the Enter/Release
+            // churn this runtime just stopped doing.
+            if (!Present())
+            {
+                if (_job != null)
+                {
+                    Release();
+                }
+
+                if (!_saidAbsent)
+                {
+                    _saidAbsent = true;
+                    _log("Build order: Thorstein is not in loaded ground, so nothing is being built and he " +
+                        "is nobody's worker until he is. The order stands.");
+                }
+
+                return;
+            }
+
+            _saidAbsent = false;
             if (_job == null && !TryHold())
             {
                 return;
@@ -348,6 +376,12 @@ internal sealed class ShelterConstructionRuntime
         if (!Refusal(out string why))
         {
             return "Nothing is being built: " + why;
+        }
+
+        if (!Present())
+        {
+            return "Nothing is being built: Thorstein is not in loaded ground. He is nobody's worker " +
+                "until he is, so he can be moved home or retired meanwhile, and the order stands.";
         }
 
         string carried = _materials.Carried.IsEmpty
@@ -449,6 +483,20 @@ internal sealed class ShelterConstructionRuntime
         catch (Exception)
         {
             return 0;
+        }
+    }
+
+    /// <summary>Whether there is a body to work with at all. A presence answer
+    /// that could not be established is not a presence.</summary>
+    private bool Present()
+    {
+        try
+        {
+            return _motion.IsPresent;
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 

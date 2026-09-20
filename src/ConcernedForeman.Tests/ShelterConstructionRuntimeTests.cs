@@ -332,6 +332,71 @@ public sealed class ShelterConstructionRuntimeTests : IDisposable
     }
 
     [Fact]
+    public void A_finished_cottage_the_player_walks_away_from_does_not_keep_his_body()
+    {
+        // Review MINOR 1. LooksFinished used IsComplete, which counts an UNKNOWN
+        // sighting as not-standing - and unloaded ground reads Unknown. So walking
+        // away from a completed cottage looked exactly like somebody taking it
+        // apart: the exemption lapsed, the order took his body back to stand there
+        // waiting, and MayRetireBody and MayRelocateHome stayed false for as long
+        // as the player stayed away, with nothing saying why.
+        Confirm();
+        Ticks(80);
+        Assert.Equal(BuildStep.Finished, _runtime.Loop.Step);
+        int entries = _modes.Entries;
+        int lines = _log.Count;
+
+        foreach (CostedPiece piece in _orders.Plan().Pieces)
+        {
+            ZoneSystem.instance!.Unloaded.Add(ZoneSystem.Key(
+                new Vector3(piece.Placement.At.X, piece.Placement.At.Y, piece.Placement.At.Z)));
+        }
+
+        _motion.IsPresent = false;
+        Ticks(200);
+
+        Assert.Null(_modes.JobId);
+        Assert.True(_modes.MayRetireBody, "a finished cottage out of view must not keep his body");
+        Assert.True(_modes.MayRelocateHome);
+        Assert.Equal(entries, _modes.Entries);
+        Assert.Equal(1, _modes.Releases);
+        Assert.Equal(lines, _log.Count);
+        Assert.Equal(17, Player.m_localPlayer!.Placed.Count);
+        Assert.Contains("The shelter is finished", _runtime.Loop.Reason);
+    }
+
+    [Fact]
+    public void A_worker_who_is_not_in_loaded_ground_is_nobodys_worker_and_says_so_once()
+    {
+        // The other half of the same harm, and the one that survives even when
+        // there IS work: no body means no hold, because every motion command is
+        // refused without the hold anyway and keeping it only stops a person
+        // retiring or relocating him.
+        Confirm();
+        Ticks(80);
+
+        // Seventeen pieces genuinely gone - real work, not merely out of view.
+        Piece.s_allPieces.Clear();
+        _motion.IsPresent = false;
+        int lines = _log.Count;
+        Ticks(200);
+
+        Assert.Null(_modes.JobId);
+        Assert.True(_modes.MayRetireBody);
+        Assert.Equal(1, _modes.Releases);
+
+        // Said once over four hundred seconds, not once a round.
+        Assert.Equal(lines + 1, _log.Count);
+        Assert.Contains("not in loaded ground", _runtime.Describe());
+        Assert.Contains("the order stands", _runtime.Describe());
+
+        // And he goes back to work when he is back.
+        _motion.IsPresent = true;
+        Ticks(80);
+        Assert.NotEqual(17, Player.m_localPlayer!.Placed.Count);
+    }
+
+    [Fact]
     public void A_piece_knocked_down_after_completion_is_noticed_and_built_again()
     {
         // The reason the finished state is re-read at all rather than simply
