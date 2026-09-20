@@ -360,6 +360,75 @@ public class PlanKillTests
         Assert.Equal(1, world.Holds.Count);
     }
 
+    /// <summary>One reconstruction test per outcome, because the issue asks for
+    /// them by name and because three of the four are reachable only through
+    /// evidence the kill suite deliberately holds healthy.
+    ///
+    /// <b>Continue is not reachable from a reconstruction, and that is the
+    /// design.</b> A plan off the disk carries an unknown world epoch, so it is
+    /// always stale, and a stale plan never continues. It is reachable for an
+    /// interruption that happened inside a session, which is the last case
+    /// below.</summary>
+    [Fact]
+    public void A_reconstruction_reaches_each_of_the_four_outcomes_from_its_own_evidence()
+    {
+        // Re-plan: nothing wrong but the reload itself.
+        Assert.Equal(InterruptionResponse.Replan, Reconstructed(13, Healthy).Outcome.Response);
+
+        // Refund: work may not run here now. What was set aside goes back and
+        // nothing that has moved is touched.
+        NpcPlanRecovered refunded = Reconstructed(13, world => With(world, mayWork: false));
+        Assert.Equal(InterruptionResponse.Refund, refunded.Outcome.Response);
+        Assert.Equal(NpcPlanPhase.Refunded, refunded.Next.Phase);
+        Assert.Equal(InterruptionCause.AuthorityLost, refunded.Outcome.Cause);
+
+        // Refund again, from the other cause that fails closed rather than
+        // widening to a default.
+        Assert.Equal(
+            InterruptionResponse.Refund,
+            Reconstructed(13, world => With(world, areaIsReadable: false)).Outcome.Response);
+
+        // Needs attention: he died holding something.
+        NpcPlanRecovered stopped = Reconstructed(8, world => With(world, bodyDied: true));
+        Assert.Equal(InterruptionResponse.NeedsAttention, stopped.Outcome.Response);
+        Assert.Equal(NpcPlanPhase.NeedsAttention, stopped.Next.Phase);
+        Assert.NotEqual(string.Empty, stopped.Outcome.Reason);
+
+        // Continue: the interruption happened in this session, so the plan's names
+        // still point at what they named, and a pause is not a fault.
+        using var live = new PlanRehearsal();
+        live.Start().RunUpTo(9);
+        NpcPlanState stillLive = live.Run.State;
+
+        NpcPlanRecovered paused = NpcPlanRecovery.Revalidate(
+            stillLive,
+            new NpcPlanEvidence(
+                live.World, 1, false, true, false, true, true, true, playerPaused: true, at: 50f),
+            null);
+
+        Assert.Equal(InterruptionResponse.Continue, paused.Outcome.Response);
+        Assert.Equal(stillLive.Phase, paused.Next.Phase);
+        Assert.True(paused.Next.CarriesTheSameWorkAs(stillLive));
+    }
+
+    private static NpcPlanRecovered Reconstructed(
+        int killedAfter, System.Func<PlanRehearsal, NpcPlanEvidence> evidence)
+    {
+        using var world = new PlanRehearsal();
+        world.Start().RunUpTo(killedAfter);
+        NpcPlanState plan = world.Reload().Plan!;
+        return NpcPlanRecovery.Reconstruct(
+            world.Registry, plan, NpcBodyKind.Worker, "recovery", evidence(world), null);
+    }
+
+    private static NpcPlanEvidence With(
+        PlanRehearsal world,
+        bool mayWork = true,
+        bool areaIsReadable = true,
+        bool bodyDied = false) =>
+        new NpcPlanEvidence(
+            world.World, 1, bodyDied, areaIsReadable, false, mayWork, true, true, false, 100f);
+
     private static NpcPlanEvidence Healthy(PlanRehearsal world) => Evidence(world, 1);
 
     private static NpcPlanEvidence Evidence(PlanRehearsal world, int bodiesAnswering) =>

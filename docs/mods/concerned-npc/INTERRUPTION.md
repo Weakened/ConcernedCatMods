@@ -163,6 +163,13 @@ Asserted over every kill:
 A separate test collects the phases the kills actually land in and compares them with the pipeline, so a shortened
 script fails rather than passing over four cases.
 
+Beside the sweep there is one reconstruction test per outcome, driven by the evidence that reaches it: re-plan from
+a plain reload, refund from lost authority and again from an unreadable area, needs attention from a death while
+holding something, and carry-on from a pause. **Carry-on is reachable only for an interruption inside a session**,
+because a plan off the disk is always stale and a stale plan never continues - which is the rule working, not a
+gap. And an interrupted job is shown resuming at the step it was at, still carrying what it was carrying, rather
+than gathering a second load.
+
 ## 9. What is not here
 
 - **No caller.** Nothing in any product constructs an `NpcPlanRun` yet. The mechanism is provable and inert; the

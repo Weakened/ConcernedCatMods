@@ -130,6 +130,38 @@ public class ActivityArbitrationTests
     }
 
     [Fact]
+    public void An_interrupted_job_resumes_where_it_was_rather_than_starting_again()
+    {
+        using var world = new PlanRehearsal();
+
+        // Loaded, routed and walking. If an interruption restarted this job it
+        // would gather a second load, and the units already on his back would be
+        // material nobody has a record of.
+        world.Start().RunUpTo(10);
+        NpcPlanState before = world.Run.State;
+        Assert.Equal(NpcPlanPhase.Executing, before.Phase);
+        Assert.Equal(PlanRehearsal.Units, before.CarriedUnits);
+        int gathers = world.Gathers;
+
+        NpcActivityHandover handover = NpcActivityArbiter.Interrupt(
+            NpcActivityPriority.RequiredRoleWork, NpcActivityPriority.PlayerOrder, world.Run, "come here");
+        Assert.True(handover.IsGranted);
+
+        // The player's order is done with, and the job picks the plan back up. It
+        // is at the step it was at, still carrying what it was carrying, and it
+        // does not go back to looking.
+        NpcPlanRun? resumed = NpcPlanRun.Resume(world.Journal(), world.Journal().Load().Plan);
+
+        Assert.NotNull(resumed);
+        Assert.Equal(NpcPlanPhase.Executing, resumed!.State.Phase);
+        Assert.NotEqual(NpcPlanPhase.Observing, resumed.State.Phase);
+        Assert.Equal(PlanRehearsal.Units, resumed.State.CarriedUnits);
+        Assert.Equal(before.Reservations, resumed.State.Reservations);
+        Assert.Equal(gathers, world.Gathers);
+        Assert.True(resumed.MayAct);
+    }
+
+    [Fact]
     public void A_refused_handover_changes_nothing_at_all()
     {
         using var world = new PlanRehearsal();
