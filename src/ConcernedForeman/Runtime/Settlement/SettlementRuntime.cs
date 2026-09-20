@@ -80,6 +80,41 @@ internal sealed class SettlementRuntime
     /// <summary>CF-SET-004's command surface.</summary>
     internal string ExecuteSettlement(string[]? args) => _designations.Execute(args);
 
+    /// <summary>What this settlement has marked, and whether the marked supply
+    /// chest's identity belongs to a previous world load.
+    ///
+    /// <b>Read, never resolved.</b> #380's build loop needs to know which chest
+    /// the player permitted material to come out of, and the answer is a
+    /// designation in this register - not a search of nearby containers. The
+    /// stale-identity flag comes back with it because a container key from a
+    /// previous load resolves to whatever object happens to hold that key now,
+    /// which is exactly the chest nobody agreed to.</summary>
+    /// <returns>False when there is no readable record, which is a refusal and
+    /// never an empty settlement.</returns>
+    internal bool TryReadDesignations(
+        out IReadOnlyList<Designation> designations, out bool staleSupplyIdentity)
+    {
+        designations = System.Array.Empty<Designation>();
+        staleSupplyIdentity = true;
+        try
+        {
+            if (!_records.TryOpen(out SettlementRegister register, out SettlementJournal _))
+            {
+                return false;
+            }
+
+            designations = register.Designations;
+            staleSupplyIdentity = register.HasStaleSupplyIdentity;
+            return true;
+        }
+        catch (System.Exception exception)
+        {
+            _log("Settlement: the register could not be read for a build order (" +
+                exception.GetType().Name + "), so no supply chest is offered.");
+            return false;
+        }
+    }
+
     /// <summary>Plugin start: the worker prefab is built as soon as vanilla
     /// prefabs exist, and the world-save hook is subscribed.</summary>
     internal void Install()

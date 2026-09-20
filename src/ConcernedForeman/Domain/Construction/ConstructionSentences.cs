@@ -103,6 +103,49 @@ internal static class ConstructionSentences
         return text;
     }
 
+    /// <summary>Pieces something is standing in the way of.
+    ///
+    /// <b>This sentence is a boundary, not a status line.</b> The
+    /// placement-clearance policy is a parked owner decision
+    /// (<c>docs/settlement/cart-and-collection/DECISIONS.md</c> D13), so an
+    /// obstructed site is something a person resolves and never something the
+    /// build loop resolves: nothing is cleared, levelled, terraformed or
+    /// destroyed to make a placement succeed. Saying so in the refusal is how a
+    /// player knows the order is waiting on them rather than stuck.</summary>
+    internal static string Obstructed(System.Collections.Generic.IReadOnlyList<CostedPiece>? blocked)
+    {
+        if (blocked == null || blocked.Count == 0)
+        {
+            return "Something is in the way, though nothing was named. That is a defect: it should have " +
+                "said which piece and where.";
+        }
+
+        var text = new System.Text.StringBuilder();
+        text.Append(blocked.Count == 1 ? "One piece cannot go up" : blocked.Count + " pieces cannot go up")
+            .Append(" because something is already there: ");
+        int named = 0;
+        foreach (CostedPiece piece in blocked)
+        {
+            if (named == 3)
+            {
+                text.Append(" and ").Append(blocked.Count - 3).Append(" more");
+                break;
+            }
+
+            if (named > 0)
+            {
+                text.Append(", ");
+            }
+
+            text.Append(piece.Placement.Piece.Prefab).Append(" at ").Append(piece.Placement.At);
+            named++;
+        }
+
+        return text.Append(
+            ". Nothing will be cleared, levelled or taken down to make room - move what is in the way, " +
+            "or cancel the order. Nothing has been taken out of a container for those pieces.").ToString();
+    }
+
     /// <summary>A placement the gate refused, naming the check that refused it.
     /// </summary>
     internal static string Refused(PiecePlacement placement, string check)

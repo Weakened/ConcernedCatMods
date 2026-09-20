@@ -62,6 +62,7 @@ public sealed class Plugin : BaseUnityPlugin
     private ClimbPose? _climbPose;
     private ClimbSounds? _climbSounds;
     private Runtime.Construction.BuildOrderRuntime? _buildOrders;
+    private Runtime.Construction.ShelterConstructionRuntime? _construction;
     private bool _worldWasUp;
 
     private void Awake()
@@ -138,6 +139,34 @@ public sealed class Plugin : BaseUnityPlugin
                 CollectionWorldFacts.ReadAuthorityFacts(settings.SettlementRuntimeEnabled.Value))),
             message => Logger.LogInfo(message));
         Runtime.Construction.BuildOrderRuntime buildOrders = _buildOrders;
+
+        // #380: and this is what DRIVES the order. Everything above decides; until
+        // this existed nothing executed, so WorldPiecePlacer - the gate followed by
+        // the host player's own PlacePiece - had no production caller at all and a
+        // confirmed shelter sat there priced and unbuilt. The runtime below holds
+        // Thorstein's actor mode while it works, opens only the container the
+        // player marked, and places only through that one gated call.
+        SettlementRuntime settlementRuntime = _settlement;
+        _construction = new Runtime.Construction.ShelterConstructionRuntime(
+            buildOrders,
+            npc.Modes,
+            custody,
+            collection.Motion,
+            () => WorkAuthorityPolicy.Evaluate(
+                CollectionWorldFacts.ReadAuthorityFacts(settings.SettlementRuntimeEnabled.Value)) ==
+                WorkAuthorityVerdict.Granted,
+            () => settlementRuntime.TryReadDesignations(
+                    out System.Collections.Generic.IReadOnlyList<TheConcernedCat.Settlement.Designations.Designation> marked,
+                    out bool stale)
+                ? Runtime.Construction.SupplyChests.From(marked, stale)
+                : default,
+            () => Time.time,
+            message => Logger.LogInfo(message));
+        Runtime.Construction.ShelterConstructionRuntime construction = _construction;
+
+        // So that "authorised" and "being built" are never the same sentence: the
+        // order's own status line carries what the loop is actually doing.
+        buildOrders.WorkLine = () => construction.Describe();
 
         gameObject.AddComponent<Ui.BuildOrderPanel>().Initialize(
             () => settings.SettlementRuntimeEnabled.Value, buildOrders, Logger);
@@ -330,7 +359,9 @@ public sealed class Plugin : BaseUnityPlugin
             _presenceProvider?.Forget();
             _surveyCompanions?.Forget();
 
-            // A build-order marker names a place in a world that is going away.
+            // A build-order marker names a place in a world that is going away,
+            // and the loop that was building it has to give his body back first.
+            _construction?.OnWorldUnloaded();
             _buildOrders?.Forget();
 
             // Before anything else drops the scene: a climber is holding a
@@ -359,6 +390,15 @@ public sealed class Plugin : BaseUnityPlugin
         }
 
         _collection?.Update();
+
+        // #380: one round of the shelter build, rate limited inside. It refuses
+        // unless a player confirmed an order and this runtime may work at all, and
+        // it is the only thing in this plugin that places a piece.
+        if (worldIsUp)
+        {
+            _construction?.Tick();
+        }
+
         _worldWasUp = worldIsUp;
 
         if (_ladders != null)
