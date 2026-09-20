@@ -212,16 +212,10 @@ internal sealed class HostPlayerPieceInstaller : IPieceInstaller
         // Void: the call reports nothing back. Whether the piece is standing is
         // answered by the next look at the site, not by this line.
         //
-        // AND ONE THING THIS CALL DOES THAT D13 FORBIDS, recorded because it is
-        // currently inert and will not stay that way by itself: vanilla wraps its
-        // own Instantiate here in TerrainModifier.SetTriggerOnPlaced(true), so a
-        // piece carrying a TerrainModifier WOULD level the ground under it. The
-        // placement-clearance policy is a parked owner decision
-        // (docs/settlement/cart-and-collection/DECISIONS.md D13), so that is a
-        // blocker the moment a blueprint piece has one. The four pieces this
-        // blueprint uses carry none - wood_floor, wood_wall, wood_door, bed - and
-        // nothing here PINS that, which is why it is written down rather than
-        // relied on. Its own issue.
+        // Vanilla instantiation can trigger terrain changes. PieceConstraints
+        // refuses TerrainModifier and TerrainOp prefabs before this call (#399),
+        // preserving the current no-clearance policy without relying on which
+        // four prefabs happen to be in the shelter blueprint.
         player.PlacePiece(piece, at, facing, doAttack: false, cheated: false);
 
         failure = string.Empty;
