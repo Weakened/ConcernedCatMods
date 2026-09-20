@@ -192,10 +192,31 @@ table above these names were not read out of an installed asset catalog and
   `bom_silvermine*` rules by hand and reported back that he had it working.
   That supports the `BOM_<Ore>Mine` shape for three of the eight; it is a
   user report, not an observation of ours.
-- **Consequence if a name is wrong:** a rule that matches nothing. A wrong
-  name is a silent no-op, never a misfire — but also never an error, which
-  is exactly why it must be checked in game rather than assumed. Live
-  verification with OreMines installed is still owed.
+- **Consequence if a name is wrong:** almost always a rule that matches
+  nothing — a silent no-op, and never an error, which is exactly why it
+  must be checked in game rather than assumed. Live verification with
+  OreMines installed is still owed.
+
+  An earlier draft of this section said "never a misfire". That was one
+  notch stronger than we can prove, and an independent review said so.
+  These rules are **prefix** wildcards, and the survey reads two surfaces:
+  loaded `Location`s and, through `ZNetSceneSightingSource`, every
+  non-`Character` `ZNetView` by `gameObject.name`. So an OreMines object
+  whose name merely *starts* with a mine name — something shaped like
+  `BOM_CopperMineCart` or `BOM_CoalMineEntrance` — would match. We have not
+  observed that any such object exists; it is a hypothesis, and the
+  negative tests cover `BOM_MineCart`, `BOM_Mine`, `BOM_Chest` and
+  `BOM_FlintPile` rather than this shape.
+
+  The blast radius is one spurious `cc:mine` **suggestion**, which the
+  player declines; nothing is pinned without acceptance, so it is bounded
+  and reversible. We deliberately did **not** narrow the prefixes to
+  `bom_<ore>mine0*` to exclude it: that would trade a bounded, reversible
+  wrong suggestion for the risk of matching nothing at all if OreMines
+  names an instance without a number, which is precisely the thing we have
+  not yet confirmed. A wrong suggestion is recoverable; a silent total
+  no-op is the failure this change exists to fix. Revisit once the live
+  verification below has established how instances are actually named.
 
 Rules are prefixes, so a later `03` variant is covered; they are per mine
 type rather than a blanket `bom_*`, which would pin every prop and piece
