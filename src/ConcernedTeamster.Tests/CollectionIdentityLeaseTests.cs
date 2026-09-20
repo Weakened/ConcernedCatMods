@@ -1,3 +1,4 @@
+using TheConcernedCat.ConcernedTeamster.Domain.Hauling.Execution;
 using TheConcernedCat.ConcernedTeamster.Domain.Collection;
 using TheConcernedCat.Workers;
 using TheConcernedCat.ConcernedTeamster.Domain.Hauling;
@@ -21,10 +22,12 @@ public class CollectionIdentityLeaseTests
     public void Collection_holds_identity_across_idle_haul_ticks_and_teardown()
     {
         var rig = new HaulingExecutionRig();
+        rig.Assign();
         var pick = new CollectionIdentityLease();
         Assert.True(pick.TryAcquire(rig.Executor.Modes));
         Assert.False(rig.Executor.Modes.MayRetireBody);
         Assert.Equal(HaulCommandOutcome.Rejected, rig.Go().Outcome);
+        Assert.Equal(HaulCommandDetail.HaulBusy, rig.Executor.LastCommandDetail);
         rig.AdvanceFramesOnly(1f);
         Assert.True(pick.IsHeld);
         rig.Executor.Teardown("haul stopped", TheConcernedCat.ConcernedTeamster.Domain.Hauling.LeaseInvalidation.WorldReloaded);
