@@ -21,6 +21,7 @@ public sealed class CollectionOrderGateTests
         bool seamAvailable = true,
         bool workerPresent = true,
         bool workerRecordUnwritable = false,
+        bool workerRecordUnreadable = false,
         bool pickInFlight = false,
         bool pointedAtASource = true,
         string sourceObjectName = Stone,
@@ -35,6 +36,7 @@ public sealed class CollectionOrderGateTests
             seamAvailable,
             workerPresent,
             workerRecordUnwritable,
+            workerRecordUnreadable,
             pickInFlight,
             pointedAtASource,
             sourceObjectName,
@@ -182,6 +184,66 @@ public sealed class CollectionOrderGateTests
             Assert.False(string.IsNullOrWhiteSpace(said));
             Assert.DoesNotContain("nobody recorded", said);
         }
+    }
+
+    [Fact]
+    public void AnInertBodyIsAlsoNotReportedAsAbsent()
+    {
+        // The third of Trust's refusing states, and the one that had no sentence
+        // for a round: a record whose Start faulted on a corrupt package, or the
+        // window before Start has run. It made BoundBody answer null too, so the
+        // player got "Gunnar is not here" about a Gunnar the log was describing
+        // as inert - while ct_haul status said he was here and ready, because the
+        // census is unaffected. The self-contradicting console again.
+        Assert.Equal(
+            CollectionOrderRefusal.WorkerRecordUnreadable,
+            CollectionOrderGate.Evaluate(
+                Ready(workerPresent: false, workerRecordUnreadable: true)));
+    }
+
+    [Fact]
+    public void AGenuinelyAbsentBodyStillReportsNoWorker()
+    {
+        // The other direction, which is what makes the two new clauses safe: with
+        // neither record flag set, an absent body is still absent.
+        Assert.Equal(
+            CollectionOrderRefusal.NoWorker,
+            CollectionOrderGate.Evaluate(Ready(workerPresent: false)));
+    }
+
+    [Fact]
+    public void NeitherRecordStateEverReportsHimAbsent()
+    {
+        // Stated as a property over both flags rather than two examples, because
+        // the defect was a state nobody thought to ask about. Whatever else is
+        // true, a body in either record state is not described as missing.
+        foreach (bool unwritable in new[] { false, true })
+        {
+            foreach (bool unreadable in new[] { false, true })
+            {
+                if (!unwritable && !unreadable)
+                {
+                    continue;
+                }
+
+                CollectionOrderRefusal refusal = CollectionOrderGate.Evaluate(
+                    Ready(workerPresent: false,
+                          workerRecordUnwritable: unwritable,
+                          workerRecordUnreadable: unreadable));
+                Assert.NotEqual(CollectionOrderRefusal.NoWorker, refusal);
+                Assert.DoesNotContain("not here", CollectionOrderGate.Describe(refusal));
+            }
+        }
+    }
+
+    [Fact]
+    public void TheInertSentenceSaysHeIsHereAndThatItCouldNotBeRead()
+    {
+        string said = CollectionOrderGate.Describe(CollectionOrderRefusal.WorkerRecordUnreadable);
+        Assert.Contains("is here", said);
+        Assert.Contains("read", said);
+        Assert.DoesNotContain("not here", said);
+        Assert.DoesNotContain("force", said);
     }
 
     [Fact]

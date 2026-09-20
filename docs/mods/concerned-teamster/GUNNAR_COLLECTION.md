@@ -178,9 +178,16 @@ receiver, its arguments or its spelling without re-authorization, while this doc
 pinned call". Picking an item up is plainly inside what the owner authorized in substance, and the call predates the
 persistence round, so this was never a widening — it was the *enforcement claim* being wider than the enforcement.
 Both are pinned verbatim now, `.Pickup(` is a forbidden token everywhere else in Teamster exactly as `.Interact(`
-is, and three plants prove it: the take re-pointed at the player inside the authorized file, a take in another
-worker file, and a second take in the port. Each passes the validator as it stood before this fix and is refused
-now.
+is, and five plants prove it: the take re-pointed at the player inside the authorized file, a take in another worker
+file, a second take in the port, and a take in `Adapters/` and in `Domain/`. Each passes the validator as it stood
+before the fix that catches it, and is refused now.
+
+**The last two of those were a second round, and the miss is worth recording.** `.Pickup(` first went into the
+worker-runtime token list **only** — `TEAMSTER_OUTSIDE_WORKERS_TOKENS` one line away was not touched — so a take in
+`Adapters/` or `Domain/` still passed while this paragraph, the validator's own comment and two other documents all
+said it could not. That is the same defect the fix was written to correct, an enforcement claim wider than the
+enforcement, reintroduced beside the correction. Both authorized tokens are now scanned inside the worker folder and
+out.
 
 **What the port refuses, and why each refusal is the safe direction:**
 
@@ -463,9 +470,29 @@ There is now a distinct `WorkerRecordUnwritable` refusal, asked **before** "no w
 that state *is* absent as far as `BoundBody` is concerned. It says he is here, that he is still holding what he
 picked up, that the game could not write it down, that he will be handed nothing more until a change does get
 written, and that a reload brings him back with what was last saved — and it says outright that whatever the failed
-write was carrying is gone. `ct_collect status` says the same thing in its own line. Five tests pin it, including one
-that requires the sentence **not** to contain "not here" and **not** to mention `force`, and one that requires every
-refusal in the enum to have a sentence of its own rather than falling through to "a reason nobody recorded".
+write was carrying is gone. `ct_collect status` says the same thing in its own line.
+
+**And the same falsehood survived next door for one more round, which is the part worth learning from.**
+`WorkerInventoryRecord.Trust` refuses on **three** states — no record, not loaded, not persisted — and the first fix
+gave a sentence to one of them. So an **inert** body (a record whose `Start` faulted on a corrupt package, which the
+log already describes as *"Gunnar's body is inert"*, or simply the window before `Start` has run) still printed
+*"Gunnar is not here. Bring him into the world first."* — while `ct_haul status` said he was here and ready, because
+the census is unaffected. Exactly the self-contradicting console this section cites as a defect already fixed once.
+Worse, the comment excusing the omission said the useful sentence there *"is a different one"* when **no different
+sentence existed**. There is now `WorkerRecordUnreadable`, which says he is here, that his body has not been able to
+read what it is carrying, that he will pick nothing up and will not write an empty inventory over what he holds, and
+that the log says what could not be read — with "try again in a moment" for the case where he has only just
+appeared, because a text audit of a frame cannot tell that case from the corrupt one.
+
+Nine tests pin the two sentences, including one that requires **neither** state to be describable as "not here" as a
+property over both flags rather than as two examples, one that requires each sentence not to mention `force`, one
+that keeps a genuinely absent body reporting `NoWorker`, and one that requires every refusal in the enum to have a
+sentence of its own rather than falling through to "a reason nobody recorded".
+
+**What is not tested, stated because the sentence above is only as good as the wiring.**
+`BoundBodyRecordUnwritable` and `BoundBodyRecordUnreadable` read Unity components, so **nothing exercises them**:
+the step from the real state to the right sentence rests on reading that code. Everything downstream of the two
+booleans is driven by tests. Neither has been seen in a running game.
 
 **A stated assumption of the containment, neither proved nor dismissed.** `TeamsterWorkerRecord.OnDisable` unhooks
 the change callback and `OnEnable` re-hooks it. An inventory change made while the component is disabled would
@@ -485,8 +512,12 @@ it is not being taken quietly. **Until it is: Gunnar dying loses what he is carr
 
 **A third way material is lost, excluded from "doors" for a reason worth stating.** `ct_haul retire force`
 destroys what a body is carrying. It is not counted among the doors above because **the player is told**: the
-refusal names what he is holding, `force` is a word they have to type, and the forced message states the loss. That
-is consent, not a gap — but "two doors" is only true with that clause attached, so here it is.
+refusal either names what he is holding (`RefusedCarrying`) **or says it could not be read** (`RefusedUnreadable`),
+`force` is a word they have to type, and the forced message states the loss. That second half matters and an earlier
+version of this clause left it out: in the state §6c is about, `ItemsHeldBy` returns `readable: false`, so the
+sentence says the opposite of naming a quantity — it says the quantity is unknown. Consent still holds, because
+"could not be read" is a warning and `force` is still typed, but the clause is only true with both halves. So: "two
+doors" is true with this paragraph attached, and not otherwise.
 
 **Still never observed in game.** Nothing in §6a, §6b or §6c has been watched happening; §10 is the go-around.
 

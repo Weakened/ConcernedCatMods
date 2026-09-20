@@ -76,6 +76,21 @@ internal enum CollectionOrderRefusal
     /// pointed at the destructive door. This one names the failure and points at
     /// the reload instead.</summary>
     WorkerRecordUnwritable = 12,
+
+    /// <summary>He is standing right there, and his body has not been able to
+    /// READ what it is carrying - a corrupt stored package, or simply the window
+    /// before the record's <c>Start</c> has run. Such a body is inert by
+    /// construction: it never saves, so picking into it would put a stone
+    /// somewhere that never persists.
+    ///
+    /// <b>The sibling of <see cref="WorkerRecordUnwritable"/>, and it was missing
+    /// for a round.</b> <c>WorkerInventoryRecord.Trust</c> refuses on three
+    /// states, the runtime only told the player about one of them, and the other
+    /// two fell through to <i>"Gunnar is not here"</i> - about a visible Gunnar,
+    /// while <c>ct_haul status</c> said he was here and ready, because the census
+    /// is unaffected. The comment excusing that said "the useful sentence there is
+    /// a different one"; no different sentence existed. This is it.</summary>
+    WorkerRecordUnreadable = 13,
 }
 
 /// <summary>What the runtime read at the moment a pick was ordered. Every field
@@ -94,6 +109,7 @@ internal readonly struct CollectionOrderRequest
         bool seamAvailable,
         bool workerPresent,
         bool workerRecordUnwritable,
+        bool workerRecordUnreadable,
         bool pickInFlight,
         bool pointedAtASource,
         string? sourceObjectName,
@@ -108,6 +124,7 @@ internal readonly struct CollectionOrderRequest
         SeamAvailable = seamAvailable;
         WorkerPresent = workerPresent;
         WorkerRecordUnwritable = workerRecordUnwritable;
+        WorkerRecordUnreadable = workerRecordUnreadable;
         PickInFlight = pickInFlight;
         PointedAtASource = pointedAtASource;
         SourceObjectName = sourceObjectName ?? string.Empty;
@@ -145,6 +162,12 @@ internal readonly struct CollectionOrderRequest
     /// <see cref="WorkerPresent"/> is concerned, so the order still refuses. What
     /// forgetting loses is the true sentence, not the refusal.</summary>
     public bool WorkerRecordUnwritable { get; }
+
+    /// <summary>Whether a bound, living body could not READ what it carries -
+    /// inert, the other state that makes <c>BoundBody</c> answer null. Same
+    /// reasoning as <see cref="WorkerRecordUnwritable"/>: it changes no decision,
+    /// only which true sentence the player gets.</summary>
+    public bool WorkerRecordUnreadable { get; }
 
     public bool PickInFlight { get; }
 
@@ -220,6 +243,11 @@ internal static class CollectionOrderGate
         if (request.WorkerRecordUnwritable)
         {
             return CollectionOrderRefusal.WorkerRecordUnwritable;
+        }
+
+        if (request.WorkerRecordUnreadable)
+        {
+            return CollectionOrderRefusal.WorkerRecordUnreadable;
         }
 
         if (!request.WorkerPresent)
@@ -328,6 +356,11 @@ internal static class CollectionOrderGate
                     + "does get written. Reload the world, or log out and back in, and he comes "
                     + "back with what was last saved; whatever the failed write was carrying is "
                     + "gone. The log says why the write failed.";
+            case CollectionOrderRefusal.WorkerRecordUnreadable:
+                return "Gunnar is here, but his body has not been able to read what it is "
+                    + "carrying, so he will not pick anything up and will not write an empty "
+                    + "inventory over what he holds. If he has only just appeared, try again in a "
+                    + "moment; otherwise the log says what could not be read.";
             case CollectionOrderRefusal.AlreadyWorking:
                 return "He is already picking something up.";
             case CollectionOrderRefusal.NothingPointedAt:

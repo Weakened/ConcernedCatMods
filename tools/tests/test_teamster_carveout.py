@@ -23,6 +23,8 @@ WORKERS = os.path.join(ROOT, "src", "ConcernedTeamster", "Adapters", "Workers")
 PORT = os.path.join(WORKERS, "GunnarCollectionPort.cs")
 HAULING = os.path.join(WORKERS, "GunnarHaulingRuntime.cs")
 COLLECTION_RUNTIME = os.path.join(WORKERS, "GunnarCollectionRuntime.cs")
+ADAPTERS = os.path.join(ROOT, "src", "ConcernedTeamster", "Adapters")
+DOMAIN = os.path.join(ROOT, "src", "ConcernedTeamster", "Domain")
 
 STUB = """namespace TheConcernedCat.ConcernedTeamster.Zz;
 
@@ -295,6 +297,56 @@ class CarveOutIsNarrow(unittest.TestCase):
             "a destruction re-routed from Unity's static to the vanilla scene left every count "
             "unchanged and the audit green",
             marker="#381")
+
+    def test_a_newline_between_the_receiver_and_the_destruction_does_not_hide_it(self):
+        # The same evasion `_audit_token` was rebuilt for, walking straight back
+        # in through the receiver parser: C# lets the break go between the
+        # receiver and the member, so a line ending in the dot read as a bare
+        # static call. Every pinned count unchanged, gate green, a body and its
+        # inventory out of the world from the file with no guard near it. This
+        # branch had already paid for that lesson once for tokens and the new
+        # rule did not inherit it.
+        self.swap_in(
+            COLLECTION_RUNTIME,
+            "            UnityEngine.Object.Destroy(runtime);",
+            "            ZNetScene.instance.\n"
+            "                Destroy(runtime._worker()!.gameObject);")
+        self.assert_refused(
+            "a line break between the receiver and Destroy hid a routed destruction",
+            marker="#381")
+
+    def test_a_local_named_Object_is_not_trusted_as_the_type(self):
+        # The other half: the receiver test is a name comparison, so a local
+        # called `Object` inherited the static allowance. Refused rather than
+        # documented - the unqualified spelling is not in the allowed set at all,
+        # and `UnityEngine.Object.Destroy(x)` is what a real static destroy says.
+        self.swap_in(
+            COLLECTION_RUNTIME,
+            "            UnityEngine.Object.Destroy(runtime);",
+            "            var Object = ZNetScene.instance;\n"
+            "            Object.Destroy(runtime._worker()!.gameObject);")
+        self.assert_refused(
+            "a local named Object was trusted as UnityEngine.Object",
+            marker="#381")
+
+    def test_the_take_is_not_allowed_outside_the_worker_folder_either(self):
+        # `.Pickup(` went into the worker token list and not the outside-workers
+        # one, so a take in Adapters/ or Domain/ passed while four sentences said
+        # it could not. The enforcement claim being wider than the enforcement is
+        # the defect that round existed to fix.
+        for where, label in ((ADAPTERS, "Adapters"), (DOMAIN, "Domain")):
+            with self.subTest(tree=label):
+                self.plant_file(
+                    os.path.join(where, "ZzOutside.cs"),
+                    "        ((dynamic)who).Pickup(cart, autoequip: false, autoPickupDelay: false);")
+                self.assert_refused(
+                    "a take outside Adapters/Workers passed in " + label, marker="#313")
+                # Each subtest plants its own file; clear it before the next so
+                # the tree is clean when the second plant is measured.
+                for path in self._planted:
+                    if os.path.isfile(path):
+                        os.remove(path)
+                self._planted = []
 
     def test_the_population_pin_descends_into_subdirectories(self):
         # `glob("*.cs")` does not descend, so the same planted removal one folder

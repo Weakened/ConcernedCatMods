@@ -143,8 +143,16 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
     ///
     /// Deliberately narrow: an <i>inert</i> body (no record, or a record that
     /// could not be read) is NOT this case and answers false, because the useful
-    /// sentence there is a different one and the log already carries
-    /// <see cref="TeamsterWorkerRecord.Fault"/>.</summary>
+    /// sentence there is a different one -
+    /// <see cref="BoundBodyRecordUnreadable"/>, which exists so that claim is
+    /// true. For one round it was not: that state fell through to "Gunnar is not
+    /// here" about a visible Gunnar.
+    ///
+    /// <b>Neither this nor its sibling is unit-tested, and cannot be.</b> Both
+    /// read Unity components, so the step from the real state to the sentence
+    /// rests on reading this code. What IS tested is everything downstream of the
+    /// booleans: <c>CollectionOrderGateTests</c> drives all three refusing states
+    /// and pins each sentence.</summary>
     internal bool BoundBodyRecordUnwritable
     {
         get
@@ -157,6 +165,33 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
 
             TeamsterWorkerRecord? record = TeamsterWorkerRecord.On(ai);
             return record != null && record.IsLoaded && !record.LastChangePersisted;
+        }
+    }
+
+    /// <summary>Whether there IS a bound body and it could not READ what it
+    /// carries: no record component yet, or a record whose <c>Start</c> faulted on
+    /// a corrupt package. The third of
+    /// <see cref="WorkerInventoryRecord.Trust"/>'s refusing states, and the one
+    /// that had no sentence of its own for a round - so a body the log was already
+    /// describing as inert produced <i>"Gunnar is not here. Bring him into the
+    /// world first."</i> while <c>ct_haul status</c> said he was here and ready.
+    ///
+    /// Answers false when the body's record is fine but its last write failed;
+    /// that is <see cref="BoundBodyRecordUnwritable"/>. Between them they cover
+    /// every state in which <see cref="BoundBody"/> answers null for a body that
+    /// is nevertheless standing there.</summary>
+    internal bool BoundBodyRecordUnreadable
+    {
+        get
+        {
+            TeamsterWorkerAI? ai = _body != null ? _body.Bound : null;
+            if (ai == null || ai.IsFaulted)
+            {
+                return false;
+            }
+
+            TeamsterWorkerRecord? record = TeamsterWorkerRecord.On(ai);
+            return record == null || !record.IsLoaded;
         }
     }
 

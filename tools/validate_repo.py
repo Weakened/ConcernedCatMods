@@ -1346,10 +1346,18 @@ TEAMSTER_WORKER_FACTORY_ONLY_TOKENS = (
     "Activator.CreateInstance",
 )
 
-# Never anywhere in Teamster outside the worker runtime: using a cart, applying
-# vanilla's extra pull mass, or writing a body's kinematic flag or joint link.
-# (The parking brake's own constraint write stays where CT-002 allows it.)
-TEAMSTER_OUTSIDE_WORKERS_TOKENS = (".Interact(", "SetExtraMass")
+# Never anywhere in Teamster outside the worker runtime: using a cart, taking an
+# item into a character's inventory, applying vanilla's extra pull mass, or
+# writing a body's kinematic flag or joint link. (The parking brake's own
+# constraint write stays where CT-002 allows it.)
+#
+# `.Pickup(` WAS MISSING FROM THIS TUPLE for one round, and four sentences said it
+# was here. Adding it to the worker list alone left `((dynamic)who).Pickup(...)`
+# passing in Adapters/ and in Domain/, which is the very defect that round was
+# written to correct - an enforcement claim wider than the enforcement - one line
+# away from where it was being corrected. Both authorized tokens are scanned in
+# both places now, and both are refused everywhere but the one pinned call each.
+TEAMSTER_OUTSIDE_WORKERS_TOKENS = (".Interact(", ".Pickup(", "SetExtraMass")
 
 # The one owner-authorized exception to the worker runtime's token list
 # (owner decision, 2026-09-19, for #381 Gunnar collection).
@@ -1387,7 +1395,8 @@ TEAMSTER_OUTSIDE_WORKERS_TOKENS = (".Interact(", "SetExtraMass")
 # this branch, so the defect was never a widening - it was the ENFORCEMENT CLAIM
 # being wider than the enforcement. Both calls are pinned verbatim now, and the
 # documents say two and say what each does.
-# The carve-out, pinned three ways after an independent review got a banned
+#
+# The carve-out is pinned three ways, after an independent review got a banned
 # cart interaction past the first version of it.
 #
 # By full path, not basename: a second file called GunnarCollectionPort.cs in
@@ -1693,11 +1702,22 @@ TEAMSTER_RETIRE_ALLOWS = "WorkerRetirement.Allows("
 # TEAMSTER_ROUTED_DESTRUCTION_SITES pins, per file, how many destructions are
 # called on something that is NOT Unity's own `Object` statics. Unity's static
 # `Object.Destroy(x)` destroys a component or a GameObject and nothing else can
-# be routed through it; every way to reach the vanilla scene's removal — a field,
-# a local, `ZNetScene.instance`, a renamed alias — has to name a receiver, and
-# naming one moves a file's routed count. It cannot know what a receiver's TYPE
-# is, and it does not claim to: what it guarantees is that swapping which thing a
-# destruction is routed through changes a pinned number.
+# be routed through it, so a destruction WRITTEN WITH A RECEIVER — a field, a
+# local, `ZNetScene.instance` — moves a file's routed count.
+#
+# That is the whole claim, and it is narrower than "every way to reach the vanilla
+# scene's removal", which an earlier version of this comment said. Two things this
+# does not catch, both proved by a review rather than imagined:
+#
+#   * a receiver hidden behind an indirection that spells no `Destroy…(` at all
+#     (`Action<GameObject> reap = UnityEngine.Object.Destroy; reap(go);`), which
+#     TEAMSTER_DESTRUCTION cannot see either;
+#   * a destruction outside Adapters/Workers entirely, since these pins only walk
+#     the worker folder. A helper in Adapters/ or Domain/ is not audited here.
+#
+# It also cannot know a receiver's TYPE and does not claim to. What it guarantees
+# is that swapping which thing a WRITTEN destruction is routed through changes a
+# pinned number, across a line break as well as inline.
 TEAMSTER_BODY_REMOVAL = re.compile(r"\.\s*Destroy\s*\(\s*\)|\bRetireBody\s*\(")
 
 # Every call shaped like a destruction, whatever it is called on: the vanilla
@@ -1706,24 +1726,50 @@ TEAMSTER_BODY_REMOVAL = re.compile(r"\.\s*Destroy\s*\(\s*\)|\bRetireBody\s*\(")
 # declaration and not a call, and the word boundary excludes it.
 TEAMSTER_DESTRUCTION = re.compile(r"\b(?:DestroyImmediate|DestroyPrefab|DestroyZDO|Destroy)\s*\(")
 
-# The dotted receiver written immediately before a destruction keyword, on the
-# same line. Anchored at the end because it is matched against the text that
-# precedes the keyword.
+# The dotted receiver written before a destruction keyword. Anchored at the end
+# because it is matched against the text that precedes the keyword, and `\s`
+# spans newlines because a receiver may be written on the line above.
 TEAMSTER_DESTRUCTION_RECEIVER = re.compile(r"[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*$")
 
 # The receivers that mean Unity's own static destroy: a bare call inside a
-# MonoBehaviour, and the qualified spellings of the same method. Everything else
-# is ROUTED through an instance, which is what taking a networked object out of
-# the world requires. A receiver this cannot parse at all (a call, an indexer, a
-# cast) is deliberately treated as routed: unknown counts as the stronger case.
-TEAMSTER_STATIC_DESTROY_RECEIVERS = frozenset({"", "Object", "UnityEngine.Object"})
+# MonoBehaviour, and the fully qualified spelling of the same method. Everything
+# else is ROUTED through an instance, which is what taking a networked object out
+# of the world requires. A receiver this cannot parse at all (a call, an indexer,
+# a cast) is deliberately treated as routed: unknown counts as the stronger case.
+#
+# A BARE `Object.` IS NOT IN THIS SET, and that is a decision rather than an
+# oversight. `var Object = ZNetScene.instance; Object.Destroy(go)` is legal C#,
+# and a name comparison cannot tell that local from the type - so the unqualified
+# spelling is refused and `UnityEngine.Object.Destroy(x)` is what a static
+# destroy has to say. Nothing in the tree lost anything to that: every existing
+# static destroy here is already fully qualified. The cost is that a legitimate
+# `Object.Destroy(x)` written later fails this audit until it is qualified, which
+# is one word, and the failure message says so.
+#
+# An aliased receiver (`using UObj = UnityEngine.Object`) is refused too, and its
+# message will name `UObj` as though it were an instance - correct verdict,
+# misleading wording. Spell it out rather than aliasing it.
+TEAMSTER_STATIC_DESTROY_RECEIVERS = frozenset({"", "UnityEngine.Object"})
 
 
 def _destruction_receiver(text: str, start: int) -> str:
     """The receiver a destruction at `start` is called on, "" for a bare call, or
-    "?" for one this cannot parse (which counts as routed)."""
-    line_start = text.rfind("\n", 0, start) + 1
-    prefix = text[line_start:start].rstrip()
+    "?" for one this cannot parse (which counts as routed).
+
+    SEARCHES THE WHOLE PRECEDING TEXT, NOT THE CURRENT LINE. Scoping this to the
+    line was the newline evasion coming straight back: C# lets the break go
+    between the receiver and the member, so
+
+        ZNetScene.instance.
+            Destroy(body);
+
+    left a line ending in the dot and read as a bare static call - a body and its
+    inventory out of the world with every pinned count unchanged. `_audit_token`
+    was rebuilt for exactly this and `TEAMSTER_BODY_REMOVAL` already saw across
+    the break; only this parser did not. If the text before the keyword ends in a
+    dot then that dot IS the member access, because no C# statement ends in one.
+    """
+    prefix = text[:start].rstrip()
     if not prefix.endswith("."):
         return ""
 
@@ -1785,6 +1831,15 @@ TEAMSTER_DESTRUCTION_SITES = {
 # GunnarCollectionRuntime.cs is absent on purpose: it destroys only its own plugin
 # component, through Unity's static. It is also the file the review's substitution
 # plant targeted, precisely because a zero here is what a swap has to break.
+#
+# SO ITS ABSENCE IS THE LOAD-BEARING VALUE, and the obvious way to silence this
+# rule is to add it with a 1. If this audit ever fails on
+# GunnarCollectionRuntime.cs, the question is not "what number makes it pass" - it
+# is which call grew a receiver, and whether that call now takes a BODY out of the
+# world from a file that has no retirement guard anywhere in it. A static destroy
+# written unqualified is the benign cause and the fix is to spell it
+# `UnityEngine.Object.Destroy(x)`; anything else wants a person's decision, not a
+# bumped count.
 TEAMSTER_ROUTED_DESTRUCTION_SITES = {
     "GunnarHaulingRuntime.cs": 1,
     "TeamsterWorkerBody.cs": 1,
@@ -1953,7 +2008,8 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
         "file's other destruction is its own plugin component in Uninstall, nowhere near the verb). "
         "What that establishes is that the refusal is written above each removal — NOT that control "
         "flow obeys it, which is WorkerRetirementTests' job and a reviewer's. A destruction reached "
-        "through an alias that spells no `Destroy…(` at all is outside what this text audit can see",
+        "through an indirection that spells no `Destroy…(` at all, and any destruction outside "
+        "Adapters/Workers, are both outside what this text audit sees",
     ]
 
 

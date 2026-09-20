@@ -42,6 +42,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
     private ManualLogSource? _log;
     private Func<Humanoid?> _worker = null!;
     private Func<bool> _recordUnwritable = null!;
+    private Func<bool> _recordUnreadable = null!;
     private Func<bool> _seamAvailable = null!;
 
     private bool _faulted;
@@ -57,11 +58,12 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
         TeamsterSettings settings,
         Func<Humanoid?> worker,
         Func<bool> recordUnwritable,
+        Func<bool> recordUnreadable,
         Func<bool> seamAvailable,
         ManualLogSource log)
     {
         GunnarCollectionRuntime runtime = host.AddComponent<GunnarCollectionRuntime>();
-        runtime.Initialize(settings, worker, recordUnwritable, seamAvailable, log);
+        runtime.Initialize(settings, worker, recordUnwritable, recordUnreadable, seamAvailable, log);
         var command = new CollectConsoleCommand(runtime);
         VanillaConsoleCommands.Register(command, log);
         log.LogInfo(VanillaConsoleCommands.Describe(new[] { command.Name }));
@@ -83,12 +85,14 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
         TeamsterSettings settings,
         Func<Humanoid?> worker,
         Func<bool> recordUnwritable,
+        Func<bool> recordUnreadable,
         Func<bool> seamAvailable,
         ManualLogSource log)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _worker = worker ?? throw new ArgumentNullException(nameof(worker));
         _recordUnwritable = recordUnwritable ?? throw new ArgumentNullException(nameof(recordUnwritable));
+        _recordUnreadable = recordUnreadable ?? throw new ArgumentNullException(nameof(recordUnreadable));
         _seamAvailable = seamAvailable ?? throw new ArgumentNullException(nameof(seamAvailable));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _lifecycle = new CollectionLifecycle(_port);
@@ -275,6 +279,9 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
             "; Gunnar " + (_recordUnwritable()
                 ? "is here but could not write down what he is carrying, so he is handed nothing "
                     + "more; a reload brings him back with what was last saved"
+                : _recordUnreadable()
+                ? "is here but has not been able to read what he is carrying, so he is inert; the "
+                    + "log says what could not be read"
                 : worker == null ? "is not here" : worker.IsDead() ? "is down" : "is here") +
             "; " + (_ordered ? "picking " + _orderedSource : "idle") +
             " (phase " + _port.Phase + ").";
@@ -313,6 +320,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
             seamAvailable: _seamAvailable(),
             workerPresent: worker != null && !worker.IsDead(),
             workerRecordUnwritable: _recordUnwritable(),
+            workerRecordUnreadable: _recordUnreadable(),
             pickInFlight: _ordered || _port.Phase == PickPhase.Gathering,
             pointedAtASource: source != null,
             sourceObjectName: sourceName,
