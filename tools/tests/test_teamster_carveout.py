@@ -51,11 +51,19 @@ class CarveOutIsNarrow(unittest.TestCase):
         self._planted = []
 
     def tearDown(self):
-        for path in self._planted:
+        # Files first, then the directories that held them: rmtree on a tree the
+        # validator subprocess has just walked can lose a race and, with
+        # ignore_errors, lose it silently - which is how an empty planted
+        # directory survived a green run. An empty directory is invisible to
+        # `git status`, so nothing downstream would have caught it either.
+        for path in reversed(self._planted):
+            if os.path.isfile(path):
+                os.remove(path)
+        for path in reversed(self._planted):
             if os.path.isdir(path):
                 shutil.rmtree(path, ignore_errors=True)
-            elif os.path.exists(path):
-                os.remove(path)
+                if os.path.isdir(path):
+                    os.rmdir(path)
         if self._restore is not None:
             with open(self._restore_path, "w", encoding="utf-8", newline="") as handle:
                 handle.write(self._restore)
