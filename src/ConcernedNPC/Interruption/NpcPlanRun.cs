@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using TheConcernedCat.ConcernedNPC.Custody;
+using TheConcernedCat.ConcernedNPC.Work;
 
 namespace TheConcernedCat.ConcernedNPC.Interruption;
 
@@ -19,7 +20,11 @@ namespace TheConcernedCat.ConcernedNPC.Interruption;
 /// pipeline's transitions move a player's material, and for those the record
 /// being ahead is not a safe resume point by itself: the move may have happened.
 /// So those two are written twice - <see cref="Intend"/> before the world is
-/// touched and <see cref="Conclude"/> after - and a record found in
+/// touched and <see cref="Conclude"/> after - and a move into either of those two
+/// phases is <b>refused</b> unless this run has done exactly that, which is
+/// <see cref="NpcPlanProgression.MovesMaterialToReach"/>'s rule and carries that
+/// function's own note about what a run can and cannot remember across a reload.
+/// A record found in
 /// <see cref="NpcPlanCustody.Pending"/> is one where the answer is genuinely
 /// unknown. It is never replayed, because replaying a move that may have
 /// happened duplicates a player's material, and never discarded, because
@@ -45,6 +50,14 @@ internal sealed class NpcPlanRun
 {
     private readonly NpcPlanJournal _journal;
     private NpcPlanState _state;
+
+    /// <summary>The phase in which this run last concluded an intent with an
+    /// established outcome, or <see cref="NpcPlanPhase.Unspecified"/> if it never
+    /// has. <b>The only state here that is not the plan</b>, and what makes the
+    /// write-ahead discipline a refusal rather than a convention - see
+    /// <see cref="NpcPlanProgression.MovesMaterialToReach"/>, which also says why
+    /// it is deliberately not durable.</summary>
+    private NpcPlanPhase _concludedIn = NpcPlanPhase.Unspecified;
 
     private NpcPlanRun(NpcPlanJournal journal, NpcPlanState state)
     {
@@ -110,6 +123,25 @@ internal sealed class NpcPlanRun
         NpcPlanSave written = _journal.Save(proposed);
         if (written.IsSaved)
         {
+            if (_state.Custody == NpcPlanCustody.Pending
+                && proposed!.Custody == NpcPlanCustody.Clear
+                && proposed.Phase == _state.Phase)
+            {
+                // An intent this run wrote has just been concluded with an
+                // established outcome, in the phase it was written in. That is the
+                // one thing that earns a move into a material-moving phase; the
+                // last rule in WhyNot is where it is spent.
+                //
+                // Requiring Clear rather than merely "no longer Pending" is
+                // defence-in-depth and nothing more: an outcome nobody could
+                // establish leaves the plan Uncertain, and the Uncertain rule above
+                // already refuses every move that could spend this flag, so
+                // relaxing this test to "not Pending" leaves the whole suite green.
+                // It is written as Clear so the field means what its name says
+                // rather than because a test would catch it.
+                _concludedIn = _state.Phase;
+            }
+
             _state = proposed!;
         }
 
@@ -173,11 +205,39 @@ internal sealed class NpcPlanRun
     /// recovery decision has been made about it.
     ///
     /// <b>The one write that may move a plan backwards</b> - a re-plan returns it
-    /// to <see cref="NpcPlanPhase.Planned"/> - and the only one, which is why it
-    /// is a separate verb with the decision that authorised it passed in rather
-    /// than a relaxation of <see cref="Record"/>. A decision that does not
-    /// authorise a move is refused here, so a caller cannot reach the backward
-    /// path by handing in a made-up outcome.</summary>
+    /// to <see cref="NpcPlanPhase.Observing"/>, because the plan it would
+    /// otherwise resume from was computed against a world that has moved - and the
+    /// only one, which is why it is a separate verb with the decision that
+    /// authorised it passed in rather than a relaxation of <see cref="Record"/>.
+    ///
+    /// <b>What it checks, and why every check is here rather than assumed.</b>
+    /// A review of the first version of this method found that it checked the
+    /// decision's <i>existence</i> and nothing else, so any invented
+    /// <see cref="InterruptionResponse.Replan"/> adopted any same-identity state:
+    /// it cleared an uncertain movement, reopened a plan that had stopped for a
+    /// person, skipped five phases at once, and wrote a plan whose custody field
+    /// nobody had set - all four of which <see cref="Record"/> refuses by name.
+    /// So the four rules <c>Record</c> enforces are enforced here too, in the one
+    /// form that suits a backward write:
+    ///
+    /// <list type="bullet">
+    /// <item>an ending is an ending, here as well - nothing is adopted over a
+    /// terminal phase, which is what makes
+    /// <see cref="NpcPlanPhase.NeedsAttention"/> one-way rather than
+    /// nearly one-way;</item>
+    /// <item>a movement with no established outcome may be followed only by a
+    /// decision that stops the plan for a person;</item>
+    /// <item>a state has to say whether anything is in flight;</item>
+    /// <item>the work itself has to come through unchanged - a recovery changes
+    /// the phase and the note, which is exactly what
+    /// <see cref="NpcPlanState.CarriesTheSameWorkAs"/> asks;</item>
+    /// <item>and the phase has to be the one this decision actually leaves a plan
+    /// in, which is <see cref="NpcPlanProgression.PhaseAfter"/> - the same
+    /// function the recovery path produced it with.</item>
+    /// </list>
+    ///
+    /// So a caller cannot reach the backward path, or any other path, by handing
+    /// in a made-up outcome.</summary>
     internal NpcPlanSave Adopt(NpcPlanState? revalidated, in InterruptionOutcome decision)
     {
         if (revalidated == null || !revalidated.IsNamed)
@@ -196,18 +256,80 @@ internal sealed class NpcPlanRun
             return NpcPlanSave.Refused("nothing decided this, so nothing is adopted");
         }
 
+        if (NpcPlanProgression.IsTerminal(_state.Phase))
+        {
+            return NpcPlanSave.Refused(
+                "this plan has ended, and an ending that the next write can undo is not an ending");
+        }
+
+        if (revalidated.Custody == NpcPlanCustody.Unspecified)
+        {
+            return NpcPlanSave.Refused(
+                "a plan has to say whether anything is in flight; not saying is not the same as no");
+        }
+
+        if (_state.Custody != NpcPlanCustody.Clear
+            && revalidated.Phase != NpcPlanPhase.NeedsAttention)
+        {
+            return NpcPlanSave.Refused(
+                "something this plan set in motion has no established outcome, and the only decision that may "
+                + "be adopted over that is one that stops it for a person");
+        }
+
         if (!decision.MayResume && !NpcPlanProgression.IsTerminal(revalidated.Phase))
         {
             return NpcPlanSave.Refused("a plan that may not go on has to end somewhere");
         }
 
+        if (!revalidated.CarriesTheSameWorkAs(_state))
+        {
+            return NpcPlanSave.Refused(
+                "a recovery changes the phase and the note and nothing else, and that state changes what the "
+                + "plan is about or what it is holding");
+        }
+
+        if (revalidated.Phase != NpcPlanProgression.PhaseAfter(decision.Response, _state.Phase))
+        {
+            return NpcPlanSave.Refused("that is not the phase this decision leaves a plan in");
+        }
+
         NpcPlanSave written = _journal.Save(revalidated);
         if (written.IsSaved)
         {
+            // A re-planned plan has concluded no intent, whatever the run it came
+            // from had done: the phases it is about to walk again are ahead of it.
+            _concludedIn = NpcPlanPhase.Unspecified;
             _state = revalidated;
         }
 
         return written;
+    }
+
+    /// <summary>Says that this plan's references have been found again in the
+    /// world that is loaded now.
+    ///
+    /// <b>The one exit from staleness, and the reason it is a verb here.</b> A
+    /// plan off the disk carries <see cref="NpcWorldEpoch.Unknown"/>, which matches
+    /// nothing, so it is stale and a stale plan never continues - it re-plans. That
+    /// is right at the moment of reconstruction and wrong for ever: without this,
+    /// a re-planned plan revalidates to "the world reloaded, so re-plan" on every
+    /// call, indefinitely, which a review of #379 observed five times in a row
+    /// against healthy evidence. Only the role can say when it has found its
+    /// chests and its piles again, so only the role can end it, and nothing here
+    /// checks the claim because nothing here can see the world.
+    ///
+    /// Written through <see cref="Record"/> like everything else, so the phase and
+    /// the load are unchanged and an unresolved movement stays unresolved: this
+    /// re-attaches a plan to a world, and resolves nothing about it.</summary>
+    internal NpcPlanSave Reattach(NpcWorldEpoch now, string? note)
+    {
+        if (now.IsUnknown)
+        {
+            return NpcPlanSave.Refused(
+                "a plan cannot be re-attached to no world at all, which is what it already says it is in");
+        }
+
+        return Record(_state.WithWorld(now).WithPhase(_state.Phase, note));
     }
 
     private static NpcPlanSave OpeningWrite(NpcPlanJournal journal, NpcPlanState? opening)
@@ -281,6 +403,19 @@ internal sealed class NpcPlanRun
                 // one.
                 return "this plan is waiting for a person, and nothing but a person changes that";
             }
+        }
+
+        if (proposed.Phase != _state.Phase
+            && NpcPlanProgression.MovesMaterialToReach(proposed.Phase)
+            && _concludedIn != _state.Phase)
+        {
+            // Getting to that phase means a player's material moved, and nothing
+            // this run wrote says the movement was announced first and accounted
+            // for afterwards. A record that reached it anyway is one a recovery
+            // reads as "nothing was in flight, carry on" - over a move that may
+            // have happened.
+            return "getting there moves a player's material, and this plan never said the movement was about "
+                + "to happen or what became of it, so the same load would be moved twice";
         }
 
         return string.Empty;

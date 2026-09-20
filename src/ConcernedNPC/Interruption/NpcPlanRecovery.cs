@@ -334,27 +334,18 @@ internal static class NpcPlanRecovery
     /// because a record that forgot it is how material on a body stops being
     /// anybody's. And no response sets the world: a re-planned plan is still
     /// holding keys minted in a world load that has ended, and it is the role that
-    /// says when it has found its things again.</summary>
-    private static NpcPlanState Apply(NpcPlanState plan, in InterruptionOutcome outcome)
-    {
-        switch (outcome.Response)
-        {
-            case InterruptionResponse.Continue:
-                return plan.WithPhase(plan.Phase, outcome.Reason);
-
-            case InterruptionResponse.Replan:
-                // Back to looking, not back to planning: the plan it would
-                // otherwise resume planning from was computed against a world
-                // that has moved.
-                return plan.WithPhase(NpcPlanPhase.Observing, outcome.Reason);
-
-            case InterruptionResponse.Refund:
-                return plan.WithPhase(NpcPlanPhase.Refunded, outcome.Reason);
-
-            default:
-                return plan.WithPhase(NpcPlanPhase.NeedsAttention, outcome.Reason);
-        }
-    }
+    /// says when it has found its things again, through
+    /// <see cref="NpcPlanRun.Reattach"/>.
+    ///
+    /// <b>Which phase, though, is <see cref="NpcPlanProgression.PhaseAfter"/>'s
+    /// answer rather than this method's.</b> The same function checks the state
+    /// handed to <see cref="NpcPlanRun.Adopt"/>, so the writer cannot be talked
+    /// into a phase the decision never produced - and the table cannot be edited
+    /// on one side only, which is how a comment here came to say a re-plan returns
+    /// a plan to <c>Planned</c> while this code returned <c>Observing</c>.
+    /// </summary>
+    private static NpcPlanState Apply(NpcPlanState plan, in InterruptionOutcome outcome) =>
+        plan.WithPhase(NpcPlanProgression.PhaseAfter(outcome.Response, plan.Phase), outcome.Reason);
 
     /// <summary>A plan that had already ended.
     ///

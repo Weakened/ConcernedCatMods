@@ -253,6 +253,13 @@ internal sealed class PlanRehearsal : IDisposable
 
     internal NpcMaterial Stone => NpcMaterial.Of("stone");
 
+    /// <summary>The cart this plan is assigned. <b>Not empty, deliberately.</b>
+    /// Every rehearsal plan used to carry <c>string.Empty</c> here, which meant
+    /// "the cart came through an interruption" was asserted over a plan that never
+    /// had one - a review of #379 found the claim resting on two empty strings
+    /// being equal.</summary>
+    internal string Cart => "the-cart";
+
     internal int AtSource { get; private set; } = Units;
 
     internal int OnBack { get; private set; }
@@ -261,16 +268,36 @@ internal sealed class PlanRehearsal : IDisposable
 
     /// <summary>How many times material actually left the source, and how many
     /// times it actually arrived. <b>The duplication counters.</b> A resumed plan
-    /// that fetched or delivered the same load twice shows up here and nowhere
-    /// else - a record can be perfectly consistent with itself while the world
-    /// has two of something.</summary>
+    /// that fetched or delivered the same load twice would show up here and
+    /// nowhere else - a record can be perfectly consistent with itself while the
+    /// world holds two of something.
+    ///
+    /// <b>What they can and cannot prove, stated honestly.</b> Each is incremented
+    /// by exactly one operation of the script, and no index runs twice, so
+    /// <c>Gathers &lt;= 1</c> and <c>Deliveries &lt;= 1</c> are arithmetic
+    /// properties of this fixture rather than discoveries about the library. They
+    /// are worth asserting for one reason: the recovery path has no inventory port
+    /// at all today, and the day something gives it one - a role's resume that
+    /// replays a step, a compensating write - these are what turn red. They are a
+    /// tripwire, not evidence.</summary>
     internal int Gathers { get; private set; }
 
     internal int Deliveries { get; private set; }
 
     /// <summary>The conservation sum. Never anything but <see cref="Units"/>.
-    /// </summary>
+    /// <b>Also an arithmetic property of this fixture</b> - every movement below is
+    /// one subtraction and one matching addition - and asserted for the same
+    /// tripwire reason as the counters above.</summary>
     internal int TotalInTheWorld => AtSource + OnBack + AtDestination;
+
+    /// <summary>How many of the three places are holding anything. <b>Two means
+    /// the load is genuinely torn</b>: a transfer the process died in the middle
+    /// of has part of it at each end, which is the one shape where both of a
+    /// plan's writes can land and the record can still be wrong. One means the
+    /// movement either did not start or ran to completion, and a test that meant
+    /// to truncate a transfer and did not would say one here.</summary>
+    internal int PlacesHoldingMaterial =>
+        (AtSource > 0 ? 1 : 0) + (OnBack > 0 ? 1 : 0) + (AtDestination > 0 ? 1 : 0);
 
     /// <summary>The operations, in order, by name - so a failure says which
     /// boundary it happened at rather than which index.</summary>
@@ -352,7 +379,7 @@ internal sealed class PlanRehearsal : IDisposable
         Add("record the reservations", () => Assert.True(
             Run.Record(Run.State
                     .WithHoldings(new[] { ReservationId.For(JobName, 0) }, Run.State.Carried)
-                    .WithRoute("the-pile", "the-depot", string.Empty)
+                    .WithRoute("the-pile", "the-depot", Cart)
                     .WithPhase(NpcPlanPhase.Reserved, "set aside"))
                 .IsSaved));
         Add("take the holds", () => Assert.Equal(

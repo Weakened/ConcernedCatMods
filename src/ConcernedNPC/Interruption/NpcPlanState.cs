@@ -274,7 +274,14 @@ internal sealed class NpcPlanState
 
     /// <summary>The same plan, re-attached to the world that is loaded now.
     /// Called only once a resumed plan's references have been established
-    /// again; nothing here checks that, because nothing here can.</summary>
+    /// again; nothing here checks that, because nothing here can.
+    ///
+    /// <b>Reached through <see cref="NpcPlanRun.Reattach"/>, which is the only
+    /// caller.</b> This had no caller and no test until the corrective round for
+    /// #379, which made the documented exit from staleness a thing that existed:
+    /// without it a re-planned plan revalidates to "the world reloaded, so
+    /// re-plan" for ever, because every plan off the disk is stale and nothing
+    /// could ever say otherwise.</summary>
     internal NpcPlanState WithWorld(NpcWorldEpoch world) =>
         new NpcPlanState(
             Identity, JobId, Phase, Custody, Reservations, Carried, TargetsDone, TargetsTotal,

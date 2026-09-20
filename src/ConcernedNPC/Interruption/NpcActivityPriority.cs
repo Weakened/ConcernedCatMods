@@ -73,9 +73,20 @@ internal enum NpcActivityPriority
 /// the alternative is that a caller which forgot to say what it wanted gets to
 /// preempt a player's own order. And a running activity with no stated priority
 /// might be any rung, including the top one, so displacing it could displace the
-/// very thing that is making the record safe again. Both directions fail closed,
-/// and an activity nobody named is a programmer's error that shows up as an NPC
-/// that will not change task rather than as a silently corrupted plan.
+/// very thing that is making the record safe again. An activity nobody named is a
+/// programmer's error that shows up as an NPC that will not change task rather
+/// than as a silently corrupted plan.
+///
+/// <b>Only one half of that guard does any work today, and saying so is the
+/// point.</b> An earlier version of this paragraph claimed symmetric protection; a
+/// review showed it exists on one side only. <c>Unspecified</c> is zero, which is
+/// below every rung, so <c>arriving &gt; running</c> already refuses an unnamed
+/// arrival on its own - deleting the arriving half of
+/// <see cref="NpcActivityArbiter.MayInterrupt"/>'s guard leaves every test green,
+/// while deleting the running half turns them red. The arriving half is kept as
+/// defence against a renumbering that moved <c>Unspecified</c> off the bottom, so
+/// the numbering it leans on is what a test pins:
+/// <c>Unspecified_is_numbered_below_every_rung_so_the_comparison_alone_refuses_it</c>.
 ///
 /// <b>What an interruption preserves, and how that is guaranteed rather than
 /// intended.</b> Everything: inventory, reservations, custody, the plan, the
@@ -98,6 +109,12 @@ internal static class NpcActivityArbiter
     /// <paramref name="running"/>.</summary>
     internal static bool MayInterrupt(NpcActivityPriority running, NpcActivityPriority arriving)
     {
+        // The running half of this guard is the one that does the work: without
+        // it, an activity nobody named would be displaced by anything at all,
+        // including while it was making the record safe again. The arriving half
+        // is already implied by the comparison below while Unspecified is the
+        // lowest value, and is kept as defence against a renumbering; see the
+        // type's own summary, which used to claim more than this.
         if (running == NpcActivityPriority.Unspecified || arriving == NpcActivityPriority.Unspecified)
         {
             return false;

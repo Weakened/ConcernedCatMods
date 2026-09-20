@@ -92,9 +92,12 @@ public class PlanKillTests
         Assert.Equal(atDestination, world.AtDestination);
         Assert.Equal(PlanRehearsal.Units, world.TotalInTheWorld);
 
-        // Three: nothing was fetched or delivered twice. The world's own counters,
-        // not the record's - a record can be perfectly consistent with itself
-        // while the world holds two of something.
+        // Three: nothing was fetched or delivered twice, counted in the world
+        // rather than in the record. These two are arithmetic properties of the
+        // rehearsal - one increment per script operation, no operation run twice -
+        // so today they are a tripwire rather than evidence: the recovery path has
+        // no inventory port at all, and the day it gets one they are what fails.
+        // See PlanRehearsal.Gathers, which says the same thing at more length.
         Assert.True(world.Gathers <= 1);
         Assert.True(world.Deliveries <= 1);
 
@@ -121,6 +124,18 @@ public class PlanKillTests
         // all came through; the phase and the note are the only things a recovery
         // is allowed to change.
         Assert.True(decision.Next.CarriesTheSameWorkAs(recovered));
+
+        // And the question has teeth, which a claim resting on it needs: a plan
+        // carrying a different load, or assigned a different cart, is not the same
+        // work. Asserted because "the plan came through" would be worth nothing if
+        // this answered true for everything - and because until the corrective
+        // round for #379 it was never asserted false anywhere, over a rehearsal
+        // whose cart was the empty string in every case.
+        Assert.False(decision.Next.CarriesTheSameWorkAs(
+            recovered.WithHoldings(
+                recovered.Reservations, new[] { new NpcMaterialStack(world.Stone, 99) })));
+        Assert.False(decision.Next.CarriesTheSameWorkAs(
+            recovered.WithRoute(recovered.SourceKey, recovered.DestinationKey, "somebody-elses-cart")));
 
         // Six: the body. One answered, so a plan that had not already ended
         // re-attached to it - and a decision that does not allow going on gives it
@@ -159,33 +174,70 @@ public class PlanKillTests
         }
 
         Assert.Contains(NpcPlanPhase.Settled, visited);
-        Assert.Equal(NpcPlanProgression.Pipeline.Length, NpcPlanProgression.Transitions().Length);
+
+        // There was a second assertion here comparing Pipeline.Length with
+        // NpcPlanProgression.Transitions().Length. It was a tautology of that
+        // helper's own construction - it built one pair per pipeline phase - and it
+        // was the helper's only consumer, so both are gone. See Pipeline's own
+        // summary.
     }
 
+    /// <summary>A process that died half way through moving a load, in both of
+    /// the two places a load moves, and in both of the two ways the writes can
+    /// fall.
+    ///
+    /// <b>Why the last parameter exists.</b> A review of #379 found the first
+    /// version of this theory testing nothing the main sweep did not: both of its
+    /// cases stopped between the intent and the outcome, so the record simply had
+    /// no measurement yet, and replacing the half-move parameter with -1 left them
+    /// green. The shape the comment claimed - <i>both</i> writes landed and the
+    /// record can still be wrong - was never exercised, and when it was added it
+    /// turned out the record is <i>right</i>: <c>Conclude</c> measures, so it
+    /// records the half load honestly and says nobody could establish the outcome.
+    /// So there are two shapes here, they disagree about exactly one thing, and
+    /// which one each case is is stated rather than assumed.</summary>
     [Theory]
-    [InlineData(6, 5)]
-    [InlineData(12, 11)]
+    // The intent is written and the outcome is not, so the record carries the
+    // measurement from before the movement and disagrees with the world.
+    [InlineData(6, 5, false)]
+    [InlineData(12, 11, false)]
+    // Both writes landed. The conclusion measured the half load honestly, so the
+    // record agrees with the world - and the plan still stops for a person,
+    // because what Conclude recorded is "nobody could establish this", and nothing
+    // but a person clears that.
+    [InlineData(7, 5, true)]
+    [InlineData(13, 11, true)]
     public void A_transfer_the_process_died_inside_stops_for_a_person_and_loses_nothing(
-        int killedAfter, int halfMoveAt)
+        int killedAfter, int halfMoveAt, bool recordAgreesWithTheWorld)
     {
         using var world = new PlanRehearsal();
         world.Start().RunUpTo(killedAfter, halfMoveAt);
 
-        // Half the load moved. This is the one shape where both of the plan's
-        // writes could have landed and the record would still be wrong, which is
-        // why the intent is written before the world is touched rather than after.
+        // The load really is in two places at once, which is what "died inside the
+        // transfer" means and what the half-move parameter is for. Without this the
+        // parameter is inert and both of the first two cases collapse into the
+        // ordinary "intent written, outcome not" shape the main sweep already
+        // covers sixteen times.
         Assert.Equal(PlanRehearsal.Units, world.TotalInTheWorld);
+        Assert.Equal(2, world.PlacesHoldingMaterial);
 
         NpcPlanLoad load = world.Reload();
         Assert.True(load.IsLoaded, load.Failure);
         NpcPlanState recovered = load.Plan!;
 
+        // Uncertain either way: from Pending through AsRecovered in the first
+        // shape, and written as Uncertain by a Conclude that could establish
+        // nothing in the second.
         Assert.Equal(NpcPlanCustody.Uncertain, recovered.Custody);
-        Assert.NotEqual(world.OnBack, recovered.CarriedUnits);
+        Assert.Equal(recordAgreesWithTheWorld, world.OnBack == recovered.CarriedUnits);
 
         NpcPlanRecovered decision = NpcPlanRecovery.Reconstruct(
             world.Registry, recovered, NpcBodyKind.Worker, "recovery", Healthy(world), null);
 
+        // The answer does not depend on which shape it was. An agreeing record is
+        // not permission to go on when the record itself says the outcome could not
+        // be established - which is the half of this the first version could not
+        // state, because its own assertion forbade the agreeing case.
         Assert.Equal(InterruptionResponse.NeedsAttention, decision.Outcome.Response);
         Assert.False(decision.Outcome.MayResume);
         Assert.Equal(NpcPlanPhase.NeedsAttention, decision.Next.Phase);
@@ -241,6 +293,16 @@ public class PlanKillTests
         Assert.Equal(NpcPlanPhase.Observing, decision.Next.Phase);
         Assert.Equal(PlanRehearsal.Targets, decision.Next.TargetsDone);
         Assert.True(decision.Next.CarriesTheSameWorkAs(recovered));
+
+        // And it came through holding the cart it was assigned. The first
+        // assertion is the one that matters and the reason both are here: every
+        // rehearsal plan used to carry the empty string, so "the cart came through
+        // an interruption" was two empty strings being equal - and an assertion
+        // that only compared the fixture with itself would have stayed green when
+        // the cart was taken away again.
+        Assert.NotEqual(string.Empty, recovered.VehicleKey);
+        Assert.Equal(world.Cart, recovered.VehicleKey);
+        Assert.Equal(world.Cart, decision.Next.VehicleKey);
     }
 
     [Fact]

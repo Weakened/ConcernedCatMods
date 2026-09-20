@@ -119,7 +119,18 @@ internal sealed class NpcPlanJournal
     /// <summary>Moves an unreadable plan file aside so a new one can be written,
     /// and says where it went. Null when it could not be moved - and a caller
     /// that gets null must not write, because the file it would overwrite is the
-    /// one it just promised to keep.</summary>
+    /// one it just promised to keep.
+    ///
+    /// <b>No caller, and disclosed rather than deleted.</b> A review of #379 found
+    /// this and <see cref="NpcPlanSave.CompleteCopyPath"/> unreferenced, which they
+    /// are: they are the two affordances a role needs to recover from a plan file
+    /// it cannot read, and no role reads a plan file yet. Both are one-line
+    /// pass-throughs to <c>NpcSidecarFile</c>, whose own behaviour
+    /// <c>SidecarPersistenceTests</c> covers directly, so what is untested here is
+    /// the forwarding and not the mechanism. The first of #380, #381 and #382 to
+    /// handle a corrupt plan file is where they stop being dead: if that role turns
+    /// out not to want them, they should go rather than stay as
+    /// surface.</summary>
     internal string? TryQuarantine() => _file.TryQuarantine();
 
     /// <summary>Writes the plan, whole or not at all.</summary>
@@ -227,6 +238,10 @@ internal readonly struct NpcPlanSave
 
     /// <summary>Where a complete copy of what should have been saved was left,
     /// when the commit was the part that failed. Null when there is none.
+    ///
+    /// <b>Set but never read, like <see cref="NpcPlanJournal.TryQuarantine"/> and
+    /// for the same reason</b>: it is evidence for a role that has to tell a player
+    /// where their plan went, and no role does that yet. See that method's summary.
     /// </summary>
     internal string? CompleteCopyPath { get; }
 

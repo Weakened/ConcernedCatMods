@@ -202,9 +202,23 @@ adopts it only if the write succeeded, so the record is always at or ahead of th
 is always a safe resume point. A caller that cannot record cannot act.
 
 **The two transitions that move a player's material are written twice** - an intent before the world is touched and
-what was measured after. A record found mid-movement is never replayed and never discarded: it becomes uncertain,
+what was measured after - **and the library refuses the transition otherwise.** `NpcPlanRun` will not move a plan
+into `Provisioned` or `Reconciling` unless this run wrote the pair, in the phase it is moving out of, with an outcome
+somebody could establish. A record found mid-movement is never replayed and never discarded: it becomes uncertain,
 and uncertain stops the plan for a person with the evidence. That is the whole of "no path duplicates a resource and
 no path silently loses one".
+
+That sentence used to describe the test fixture rather than the library: `MovesMaterialToReach` had no callers,
+replacing its body with `false` left every test green, and a run could reach `Reconciling` having written neither
+half of either pair. The enforcement is per run and deliberately not durable - a durable flag would be a field this
+library demanded inside a format the role owns - so a plan resumed from the disk intends and concludes again before
+claiming a material-moving phase. That costs two writes and moves nothing, because concluding measures.
+
+**One precondition the role leaves inherit.** A plan that stops for a person has nowhere to go: there is no
+resolution UI, the custody ledger's `CloseOpenIntents` is joined to no plan, and nothing creates the plan that
+follows. #380, #381 and #382 each have to bring a resolution path, hold no material through this library, or say
+plainly that a job can end in a state only deleting its file clears.
+[INTERRUPTION.md](INTERRUPTION.md) §9 states it as a precondition rather than an aside.
 
 **Durable plan state owns no format and no path.** The role hands in an absolute path and a codec; the library hands
 over lines and takes lines back, and stamps an unknown world epoch on anything read from disk so that every

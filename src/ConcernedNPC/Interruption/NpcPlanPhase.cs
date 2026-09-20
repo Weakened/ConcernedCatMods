@@ -73,7 +73,19 @@ internal enum NpcPlanPhase
     /// something about it that no automatic answer could settle, and the whole
     /// value of saying so is lost if the next world load quietly decides
     /// otherwise. Nothing in this library moves a plan out of this phase; only
-    /// a person does.</summary>
+    /// a person does.
+    ///
+    /// <b>The way out is not implemented anywhere, and that is a precondition on
+    /// #380, #381 and #382 rather than a future-work aside.</b> There is no
+    /// resolution UI; <c>NpcCustodyLedger.CloseOpenIntents</c> exists and is not
+    /// joined to a plan; nothing creates "the plan that follows"; and a re-planned
+    /// plan re-plans for ever until a role re-attaches it to the world that is
+    /// loaded now through <see cref="NpcPlanRun.Reattach"/>. So the first role
+    /// that holds a player's material through this library inherits a state that
+    /// nothing in this repository can clear, and it has to bring its own
+    /// resolution path or accept that. Stopping for a person is the right failure
+    /// direction - it leaves evidence rather than guessing - and it is still a
+    /// dead end until somebody builds the exit.</summary>
     NeedsAttention = 11,
 }
 
@@ -102,25 +114,20 @@ internal static class NpcPlanProgression
         NpcPlanPhase.Reconciling,
     };
 
-    /// <summary>The working phases, in pipeline order.</summary>
+    /// <summary>The working phases, in pipeline order. <b>What the kill suite
+    /// compares itself against</b>: the phases its kills actually land in are
+    /// collected and every one of these has to be among them, so a shortened
+    /// rehearsal script fails rather than passing quietly over fewer cases.
+    ///
+    /// There was a <c>Transitions()</c> helper beside this that returned the eight
+    /// forward pairs. It was deleted in the corrective round for #379, because its
+    /// own docstring was false: it claimed to be "the list the recovery suite
+    /// enumerates", and the recovery suite enumerates the rehearsal's
+    /// fifteen-operation script instead. Its only consumer compared its length
+    /// with this array's, which is a tautology of its own construction - making
+    /// every pair a self-pair left the whole suite green. Nothing needed the
+    /// pairs, so nothing has them.</summary>
     internal static NpcPlanPhase[] Pipeline => (NpcPlanPhase[])Line.Clone();
-
-    /// <summary>Every forward step of the pipeline, as the pairs a kill is
-    /// injected between. <c>Observing</c> to <c>Planned</c> through
-    /// <c>Reconciling</c> to <c>Settled</c>: eight transitions, which is the
-    /// list the recovery suite enumerates rather than one a test author chose.
-    /// </summary>
-    internal static NpcPlanPhase[][] Transitions()
-    {
-        var pairs = new NpcPlanPhase[Line.Length][];
-        for (int index = 0; index < Line.Length; index++)
-        {
-            NpcPlanPhase to = index + 1 < Line.Length ? Line[index + 1] : NpcPlanPhase.Settled;
-            pairs[index] = new[] { Line[index], to };
-        }
-
-        return pairs;
-    }
 
     /// <summary>Whether this phase is one of the three endings.</summary>
     internal static bool IsTerminal(NpcPlanPhase phase) =>
@@ -130,10 +137,62 @@ internal static class NpcPlanProgression
 
     /// <summary>Whether a plan in this phase has moved a player's material by
     /// getting there. The two transitions where an interruption can leave a
-    /// question rather than an answer, named once so that no caller has to
-    /// remember which they were.</summary>
+    /// question rather than an answer.
+    ///
+    /// <b>A rule, not a label.</b> <see cref="NpcPlanRun"/> refuses a move into
+    /// either of these phases unless this run has already written an intent and
+    /// concluded it with an established outcome, in the phase it is moving out of.
+    /// So a role that forgets the write-ahead discipline is refused, rather than
+    /// left holding a resumable record of a movement nothing described - which a
+    /// recovery reads as "carry on", which is how the same load moves twice.
+    /// Until the corrective round for #379 this function had no callers at all:
+    /// the discipline was a convention of the test fixture, replacing this body
+    /// with <c>false</c> left all 891 tests green, and the design documents
+    /// nevertheless asserted that the two transitions "are written twice".
+    ///
+    /// <b>The limit of the enforcement, stated rather than implied.</b> What a run
+    /// remembers about its own concluded intent is in memory and not on the disk.
+    /// There is no durable field saying "the intent for this transition was
+    /// concluded", and adding one would put a field this library demands into a
+    /// format the role owns, which is the one thing this area is built not to do.
+    /// So a plan resumed from the disk has to intend and conclude again before it
+    /// may claim a material-moving phase. That costs two writes and moves nothing:
+    /// <see cref="NpcPlanRun.Conclude"/> records what was measured, so a body that
+    /// is already loaded is recorded as already loaded.</summary>
     internal static bool MovesMaterialToReach(NpcPlanPhase phase) =>
         phase == NpcPlanPhase.Provisioned || phase == NpcPlanPhase.Reconciling;
+
+    /// <summary>The phase a recovery decision leaves a plan in.
+    ///
+    /// <b>One function, two callers, on purpose.</b>
+    /// <see cref="NpcPlanRecovery"/> uses it to produce the revalidated state, and
+    /// <see cref="NpcPlanRun.Adopt"/> uses it to check the state it is handed - so
+    /// "the only backward write is the one a decision actually authorised" is one
+    /// sentence in one place instead of two that can disagree. They did disagree:
+    /// <c>NpcPlanRun</c>'s own comment said a re-plan returns a plan to
+    /// <c>Planned</c> while the recovery path returned <c>Observing</c>, and
+    /// nothing checked either claim because <c>Adopt</c> checked no phase at
+    /// all.</summary>
+    internal static NpcPlanPhase PhaseAfter(InterruptionResponse response, NpcPlanPhase current)
+    {
+        switch (response)
+        {
+            case InterruptionResponse.Continue:
+                return current;
+
+            case InterruptionResponse.Replan:
+                // Back to looking, not back to planning: the plan it would
+                // otherwise resume planning from was computed against a world that
+                // has moved.
+                return NpcPlanPhase.Observing;
+
+            case InterruptionResponse.Refund:
+                return NpcPlanPhase.Refunded;
+
+            default:
+                return NpcPlanPhase.NeedsAttention;
+        }
+    }
 
     /// <summary>Whether <paramref name="to"/> may follow <paramref name="from"/>.
     ///

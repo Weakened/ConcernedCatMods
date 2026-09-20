@@ -50,6 +50,24 @@ public class ActivityArbitrationTests
     }
 
     [Fact]
+    public void Unspecified_is_numbered_below_every_rung_so_the_comparison_alone_refuses_it()
+    {
+        // The arriving half of the arbiter's guard is redundant while this holds -
+        // a review of #379 deleted it and all 891 tests stayed green - and it is
+        // kept as defence against a renumbering. That makes the numbering the
+        // load-bearing fact, so it is pinned here rather than assumed. Moving
+        // Unspecified off the bottom turns this red; the guard then does the work
+        // the docstring credits it with.
+        Assert.Equal(0, (int)NpcActivityPriority.Unspecified);
+        foreach (NpcActivityPriority rung in Ladder)
+        {
+            Assert.True(
+                (int)NpcActivityPriority.Unspecified < (int)rung,
+                "Unspecified has to stay below " + rung + " for the comparison alone to refuse it");
+        }
+    }
+
+    [Fact]
     public void An_equal_priority_never_takes_the_body_from_something_already_in_progress()
     {
         // The running activity has a plan and the arriving one does not. Swapping
@@ -177,7 +195,15 @@ public class ActivityArbitrationTests
         Assert.False(refused.IsNoteRecorded);
         Assert.Equal(writesBefore, world.Codec.Writes);
         Assert.Same(before, world.Run.State);
+
+        // PreservedThePlan compares Suspended with Before, and on a path where
+        // nothing was written those are the same object - so on its own the
+        // assertion is a reference-identity tautology, which a review of #379
+        // pointed out. It is kept, and what gives it content is the comparison
+        // below against a value this run did not produce.
         Assert.True(refused.PreservedThePlan);
+        Assert.True(refused.Suspended!.CarriesTheSameWorkAs(Independently(before)));
+        Assert.Equal(before.Phase, refused.Suspended!.Phase);
     }
 
     [Fact]
@@ -197,7 +223,14 @@ public class ActivityArbitrationTests
         // value of writing every phase down before acting on it.
         Assert.True(handover.IsGranted);
         Assert.False(handover.IsNoteRecorded);
+
+        // The same tautology as in the refused case: the write failed, so the run's
+        // state is the object the handover captured and PreservedThePlan compares it
+        // with itself. Kept, with a comparison against a value built here beside it
+        // - and the disk re-read below is what actually carries the claim.
         Assert.True(handover.PreservedThePlan);
+        Assert.True(handover.Suspended!.CarriesTheSameWorkAs(Independently(before)));
+        Assert.Equal(before.Phase, handover.Suspended!.Phase);
 
         world.Codec.Refuse = false;
         NpcPlanState fromTheDisk = world.Journal().Load().Plan!;
@@ -218,6 +251,29 @@ public class ActivityArbitrationTests
         Assert.True(NpcActivityArbiter.MayInterrupt(
             NpcActivityPriority.Danger, NpcActivityPriority.LifecycleSafety));
     }
+
+    /// <summary>The same work as a plan, as a value this file built rather than
+    /// one a run handed back. <b>Why it exists</b>: on the two paths where the note
+    /// is not written, a handover's <c>Suspended</c> and <c>Before</c> are the same
+    /// object, so comparing them proves nothing about what either of them holds.
+    /// Everything but the note is copied, because the note is the one thing an
+    /// interruption is allowed to change.</summary>
+    private static NpcPlanState Independently(NpcPlanState plan) =>
+        new NpcPlanState(
+            plan.Identity,
+            plan.JobId,
+            plan.Phase,
+            plan.Custody,
+            plan.Reservations,
+            plan.Carried,
+            plan.TargetsDone,
+            plan.TargetsTotal,
+            plan.SourceKey,
+            plan.DestinationKey,
+            plan.VehicleKey,
+            plan.World,
+            plan.Attempt,
+            "a note this plan never had");
 
     [Fact]
     public void An_activity_with_no_plan_to_preserve_has_preserved_it()

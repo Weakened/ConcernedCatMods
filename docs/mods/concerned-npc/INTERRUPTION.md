@@ -36,6 +36,26 @@ asymmetry raised one level: of the two possible failures, choose the one that le
 `Unspecified` custody is treated exactly like `Pending`. A field nobody wrote is not evidence that nothing was in
 flight.
 
+**The library refuses the transition, rather than trusting the role to write the pair.** `NpcPlanRun` will not move a
+plan into `Provisioned` or `Reconciling` unless this run has already written an intent and concluded it with an
+established outcome, in the phase it is moving out of. An outcome nobody could establish does not count: it stops the
+plan rather than buying the next step.
+
+This is the one thing in this document that changed as a result of an independent review, and the correction is worth
+recording. Until then `NpcPlanProgression.MovesMaterialToReach` - the only function naming the two material-moving
+transitions - had **no callers at all**. Replacing its body with `false` left all 891 tests green, and a run could
+walk `Reserved` to `Reconciling` with no `Intend` and no `Conclude` anywhere and reload to a resumable record. The
+double write was a convention of the test fixture and this paragraph was describing the fixture. It is now a rule,
+and `PlanRunTests.A_phase_reached_by_moving_material_is_refused_unless_the_movement_was_written_first` is where it is
+proved.
+
+**The limit of that enforcement, because it has one.** What a run remembers about its own concluded intent is in
+memory, not on the disk. There is no durable field saying "the intent for this transition was concluded", and adding
+one would put a field the library demands into a format the role owns - the one thing §3 exists to prevent. So a plan
+resumed from the disk has to intend and conclude again before it may claim a material-moving phase. That costs two
+writes and moves nothing, because `Conclude` records what was measured: a body that is already loaded is recorded as
+already loaded, and nothing is fetched twice.
+
 ## 3. Durable plan state without owning a format or a path
 
 The library owns the **mechanism** of persistence and never the **format** or the **path**. That is the
@@ -106,7 +126,18 @@ Whatever is decided, `NpcPlanRecovery` changes only the phase and the note.
 responses.
 
 `NeedsAttention` is a durable phase and is **one-way**. Nothing in this library takes a plan out of it; only a
-person does, through the role's own custody resolution, and the plan that follows is a new one.
+person does, through the role's own custody resolution, and the plan that follows is a new one. That is true of
+`Record` and, since the corrective round, of `Adopt` as well - see the precondition in §9, which is about the person
+half of that sentence not existing yet.
+
+`NpcPlanRun.Adopt` is the verb a recovery's decision is written through, and it is held to the same rules as
+`Record`: nothing is adopted over a terminal phase; a movement with no established outcome may be followed only by a
+decision that stops the plan for a person; a state has to say whether anything is in flight; the work itself has to
+come through unchanged; and the phase has to be the one the decision actually leaves a plan in, which is
+`NpcPlanProgression.PhaseAfter` - the same function the recovery path produced the state with, so the two cannot
+disagree. The first version checked only that a decision existed, and an independent review used an invented `Replan`
+to clear an uncertain movement, reopen a plan that had stopped for a person, skip five phases at once, and write a
+plan with an unset custody field to disk. One test per refusal is in `PlanRunTests`.
 
 ## 6. One logical NPC, one world entity
 
@@ -133,19 +164,44 @@ Seven rungs, in the brief's order, rising:
 Strictly higher wins; equal does not, because the running activity has a plan in progress and the arriving one does
 not. An activity nobody named neither interrupts nor is interrupted: an arrival with no stated priority has made no
 claim, and a running activity with no stated priority might be any rung, including the one making the record safe
-again. Both directions fail closed.
+again.
+
+**Only one half of the guard that says so does any work.** This section used to claim both directions fail closed.
+They do not, symmetrically: `Unspecified` is zero, which is below every rung, so `arriving > running` already refuses
+an unnamed arrival. Deleting the arriving half of the guard leaves every test green; deleting the running half turns
+them red. The arriving half is kept as defence against a renumbering that moved `Unspecified` off the bottom, and the
+numbering it leans on is pinned by
+`ActivityArbitrationTests.Unspecified_is_numbered_below_every_rung_so_the_comparison_alone_refuses_it` rather than
+assumed.
 
 An interruption preserves inventory, reservations, custody, the plan, the cart, progress, source, destination and
-identity - guaranteed by there being no path in the handover that edits a plan. A note saying why is attempted; its
-failure is reported and is not fatal, because the record was already at a safe resume point before the note was
-tried. Making a boar wait for a disk would be a rule that kills NPCs to keep a diary tidy.
+identity - guaranteed by there being no path in the handover that edits a plan. The cart is in that list honestly
+now: every rehearsal plan used to carry an empty vehicle key, so "the cart came through" was two empty strings being
+equal, and `PlanRehearsal` assigns one. `NpcPlanState.CarriesTheSameWorkAs` is also asserted **false** - over a
+different load and over a different cart - because a preservation claim resting on a predicate that answers true for
+everything is worth nothing.
+
+A note saying why is attempted; its failure is reported and is not fatal, because the record was already at a safe
+resume point before the note was tried. Making a boar wait for a disk would be a rule that kills NPCs to keep a diary
+tidy.
 
 ## 8. The kill suite
 
 `PlanKillTests` runs one plan over a world of three numbers - units in the source, units on the back, units in the
 destination - as a script of fifteen operations, and kills the process before each of them. Sixteen cases, generated
-from the script rather than listed, so adding a phase adds cases rather than quietly going untested. Two extra cases
-truncate a transfer half way, which is the one shape where both writes can land and the record still be wrong.
+from the script rather than listed, so adding a phase adds cases rather than quietly going untested.
+
+**Four extra cases truncate a transfer half way**, in both of the places a load moves and in both of the ways the two
+writes can fall. They assert that the load really is in two places at once, which is what the half-move parameter is
+for; without that assertion the parameter is inert, and an independent review showed it was - replacing it with -1
+left the original two cases green, because both of them stopped between the intent and the outcome and were therefore
+the same shape the main sweep already covers sixteen times.
+
+The shape this section used to claim - both writes landing and the record still being wrong - turns out not to exist:
+`Conclude` measures, so it records the half load honestly and says that nobody could establish the outcome. That is
+now two of the four cases, and what they prove is the sharper thing: **a record that agrees with the world is not
+permission to go on when the record itself says the outcome could not be established.** The original assertion
+forbade the agreeing case outright, so the shape its own comment described would have failed.
 
 Asserted over every kill:
 
@@ -153,15 +209,21 @@ Asserted over every kill:
 - a plan off the disk is in no world and never merely pending;
 - one of the four responses, with a sentence, never the value that means nobody decided;
 - deciding moved nothing;
-- nothing was gathered or delivered twice, counted in the world rather than in the record;
-- the three numbers still add up to what the player owned;
 - **when the record and the world disagree about the back, the answer is needs attention** - never resumed, never
   re-planned, never refunded;
-- the plan came through as the same work;
+- the plan came through as the same work, with the negative control that a different load or a different cart is not
+  the same work;
 - one body, re-attached rather than built, and given back if the plan stopped.
 
+Two more assertions are in the sweep and are **not** evidence about the library, which is why they are listed apart:
+that nothing was gathered or delivered twice, and that the three numbers still add up to what the player owned. Both
+are arithmetic properties of the rehearsal - each counter is incremented by exactly one script operation, no
+operation runs twice, and every movement is one subtraction and one matching addition - and `NpcPlanRecovery` has no
+inventory port to break them with. They are a tripwire for the day something gives it one, not a demonstration that
+recovery conserves material.
+
 A separate test collects the phases the kills actually land in and compares them with the pipeline, so a shortened
-script fails rather than passing over four cases.
+script fails rather than passing over four cases. It has teeth: shortening the script turns it red.
 
 Beside the sweep there is one reconstruction test per outcome, driven by the evidence that reaches it: re-plan from
 a plain reload, refund from lost authority and again from an unreadable area, needs attention from a death while
@@ -170,7 +232,7 @@ because a plan off the disk is always stale and a stale plan never continues - w
 gap. And an interrupted job is shown resuming at the step it was at, still carrying what it was carrying, rather
 than gathering a second load.
 
-## 9. What is not here
+## 9. What is not here, and one precondition on the role leaves
 
 - **No caller.** Nothing in any product constructs an `NpcPlanRun` yet. The mechanism is provable and inert; the
   three role leaves (#380, #381, #382) are where it gets a call site, and "a plan survives a reload" becomes a
@@ -181,3 +243,30 @@ than gathering a second load.
   transfer.
 - **No player-facing sentence.** The reasons are written in words rather than enum names, and no product renders
   them yet.
+
+### A named precondition on #380, #381 and #382: `NeedsAttention` has no exit
+
+This is a precondition rather than a future-work aside, because the first role to hold a player's material through
+this library inherits it on day one.
+
+`Uncertain` stops a plan for a person, and that is the right failure direction - it leaves evidence instead of
+guessing, and §2 is mostly about why. But **the person half of it is implemented nowhere.** There is no resolution
+UI. `NpcCustodyLedger.CloseOpenIntents` exists and is joined to no plan. Nothing creates "the plan that follows"
+that §5 promises. So a plan that reaches `NeedsAttention` stays there for the life of the save, and the only thing in
+this repository that clears it is deleting the plan file by hand.
+
+Whoever takes #380, #381 or #382 therefore has to do one of three things, and should say which in the issue:
+
+1. bring a resolution path of its own - a role-side way for a player to say what actually happened, which then starts
+   a new plan;
+2. hold no material through this library until such a path exists, which keeps the whole `Uncertain` class
+   unreachable;
+3. accept that a job can end in a state only a file deletion clears, and say so where a player can read it.
+
+One neighbouring dead end was closed rather than documented. `NpcPlanState.WithWorld` - §3's answer to staleness -
+had zero references and zero tests, so a re-planned plan re-planned for ever: it is in no world, a stale plan never
+continues, and nothing could ever say otherwise. A review observed five consecutive revalidations answering "the
+world reloaded, so re-plan" against entirely healthy evidence. `NpcPlanRun.Reattach` is now its caller and
+`PlanRunTests.A_re_planned_plan_re_attached_to_this_world_stops_being_stale` is its test. It changes nothing about
+the work and resolves nothing about custody: it says the role has found its chests and its piles again, which is the
+only claim the role is in a position to make and the library is not.
