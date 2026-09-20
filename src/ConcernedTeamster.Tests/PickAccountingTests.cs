@@ -119,6 +119,152 @@ public sealed class PickAccountingTests
     }
 
     // ------------------------------------------------------------------
+    // A job ending is not a world ending
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Cancelling_a_job_mid_flight_still_refuses_the_source_it_had_picked()
+    {
+        // The defect, in the shape review found it: the port answered a
+        // cancelled job - an ordinary caller event - with a world-scoped reset,
+        // wiping the only record standing between one source and two yields.
+        // Begin, interact, cancel, begin again, and the same stone gives a
+        // second full load out of nothing.
+        PickAccounting accounting = Started("stone-7", expected: 3);
+
+        accounting.ForgetJob();
+
+        Assert.False(accounting.InFlight);
+        Assert.Equal(1, accounting.AwaitingConfirmation);
+        Assert.Equal(PickGuard.AwaitingConfirmation, accounting.MayBegin("stone-7", 3));
+    }
+
+    [Fact]
+    public void A_finished_pick_survives_the_job_that_made_it_going_away()
+    {
+        // The same window, reached the other way round: the pick completed,
+        // the second routed message has still not landed, and then the job is
+        // cancelled.
+        PickAccounting accounting = Started("stone-7", expected: 1);
+        accounting.MayCredit(1);
+        accounting.Finish();
+
+        accounting.ForgetJob();
+
+        Assert.Equal(PickGuard.AwaitingConfirmation, accounting.MayBegin("stone-7", 1));
+    }
+
+    [Fact]
+    public void A_job_ending_releases_the_pick_it_held_so_the_next_one_can_start()
+    {
+        // Keeping the record must not leave the body busy for ever: another
+        // source is startable immediately.
+        PickAccounting accounting = Started("stone-7", expected: 3);
+        accounting.MayCredit(1);
+
+        accounting.ForgetJob();
+
+        Assert.False(accounting.InFlight);
+        Assert.Equal(0, accounting.Taken);
+        Assert.Equal(string.Empty, accounting.InFlightSource);
+        Assert.Equal(PickGuard.None, accounting.MayBegin("stone-8", 1));
+    }
+
+    // ------------------------------------------------------------------
+    // The record is bounded, and nothing is retired for ever
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void A_source_the_world_never_confirms_is_released_once_the_horizon_passes()
+    {
+        // Two ways confirmation never arrives: the second routed message lands
+        // after the pick has finished, and a source that respawns is pickable
+        // again while still carrying a record saying it is not. Without a
+        // horizon the first leaks a key for the life of the world load and the
+        // second retires a source permanently.
+        var accounting = new PickAccounting();
+        accounting.Began("stone-7", 1, nowSeconds: 10f);
+        accounting.Finish();
+
+        Assert.Equal(
+            PickGuard.AwaitingConfirmation,
+            accounting.MayBegin("stone-7", 1, 10f + PickAccounting.SettleHorizonSeconds - 1f));
+        Assert.Equal(
+            PickGuard.None,
+            accounting.MayBegin("stone-7", 1, 10f + PickAccounting.SettleHorizonSeconds));
+        Assert.Equal(0, accounting.AwaitingConfirmation);
+    }
+
+    [Fact]
+    public void The_horizon_never_opens_the_window_the_record_exists_to_close()
+    {
+        // The bound must not be bought with the conservation property. The
+        // window it has to outlast is one routed-RPC turn, and the port's whole
+        // gather window is two seconds; the horizon is a minute.
+        var accounting = new PickAccounting();
+        accounting.Began("stone-7", 2, nowSeconds: 100f);
+        accounting.MayCredit(1);
+        accounting.MayCredit(1);
+        accounting.Finish();
+
+        Assert.Equal(PickGuard.AwaitingConfirmation, accounting.MayBegin("stone-7", 2, 100f));
+        Assert.Equal(PickGuard.AwaitingConfirmation, accounting.MayBegin("stone-7", 2, 102f));
+        Assert.Equal(PickGuard.AwaitingConfirmation, accounting.MayBegin("stone-7", 2, 110f));
+        Assert.True(PickAccounting.SettleHorizonSeconds > 30f);
+    }
+
+    [Fact]
+    public void A_clock_that_went_backwards_is_a_world_that_reloaded_under_us()
+    {
+        var accounting = new PickAccounting();
+        accounting.Began("stone-7", 1, nowSeconds: 900f);
+        accounting.Finish();
+
+        Assert.Equal(PickGuard.None, accounting.MayBegin("stone-7", 1, 3f));
+    }
+
+    [Fact]
+    public void Five_thousand_picks_do_not_leave_five_thousand_records()
+    {
+        // The leak as review stated it: a pick whose second routed message
+        // lands after Finish never confirms, so every cycle adds a key that
+        // nothing removes.
+        var accounting = new PickAccounting();
+        for (int cycle = 0; cycle < 5000; cycle++)
+        {
+            accounting.Began("stone-" + cycle, 1, nowSeconds: cycle * 0.5f);
+            accounting.MayCredit(1);
+            accounting.Finish();
+        }
+
+        Assert.True(
+            accounting.AwaitingConfirmation <= PickAccounting.MostUnconfirmedSources,
+            "the unconfirmed record held " + accounting.AwaitingConfirmation);
+    }
+
+    [Fact]
+    public void The_ceiling_holds_even_for_a_caller_that_keeps_no_clock()
+    {
+        var accounting = new PickAccounting();
+        int last = PickAccounting.MostUnconfirmedSources + 40;
+        for (int cycle = 0; cycle <= last; cycle++)
+        {
+            accounting.Began("stone-" + cycle, 1);
+            accounting.Finish();
+        }
+
+        Assert.True(
+            accounting.AwaitingConfirmation <= PickAccounting.MostUnconfirmedSources,
+            "the unconfirmed record held " + accounting.AwaitingConfirmation);
+
+        // Oldest-recorded first, so what a bound gives up is always the source
+        // furthest from its settle window - never the one just picked.
+        Assert.Equal(PickGuard.AwaitingConfirmation, accounting.MayBegin("stone-" + last, 1));
+        Assert.Equal(PickGuard.AwaitingConfirmation, accounting.MayBegin("stone-" + (last - 1), 1));
+        Assert.Equal(PickGuard.None, accounting.MayBegin("stone-0", 1));
+    }
+
+    // ------------------------------------------------------------------
     // The count a refused start could read
     // ------------------------------------------------------------------
 

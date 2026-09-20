@@ -157,10 +157,34 @@ internal sealed class GunnarCollectionPort
 
     /// <summary>The most colliders one gather may look at. A bound, not a
     /// target: an overlap query with no ceiling is a frame a player feels.
-    /// </summary>
-    internal const int MostCollidersPerGather = 64;
+    ///
+    /// <b>Why this is not sixty-four any more.</b> Saturating the buffer is a
+    /// refusal, and the query it bounds used to run against <i>every</i> layer:
+    /// terrain, pieces, characters, triggers. Four metres of any built-up base
+    /// exceeds sixty-four of those, so the exceptional refusal was going to be
+    /// the ordinary outcome and the port would simply never work. The query is
+    /// now masked to the layers a dropped item can be on - see
+    /// <see cref="DropMask"/> - and the ceiling doubled on top of that, so
+    /// saturation means what it says: this many <i>items</i> lying within four
+    /// metres, which is a pile, not a base.</summary>
+    internal const int MostCollidersPerGather = 128;
+
+    /// <summary>The layers a dropped item can be on. <c>ItemDrop</c> prefabs
+    /// carry the game's <c>item</c> layer, which is in the installed game's own
+    /// layer table - the same table <c>audit-teamster-navigation-api.ps1</c>
+    /// already reads that name out of.
+    ///
+    /// <b>Inclusive within that layer, on purpose.</b> This query seeds "what
+    /// was already lying here", and a drop missing from that seed is a drop
+    /// this pick would later credit as its own - so triggers are queried too,
+    /// and a mask that resolves to nothing falls back to every layer rather
+    /// than to an empty seed. What it deliberately does <i>not</i> do is add
+    /// layers no drop is on: every collider admitted for nothing is one closer
+    /// to the ceiling, and the ceiling is a refusal.</summary>
+    private static readonly string[] DropLayers = { "item" };
 
     private readonly Collider[] _hits = new Collider[MostCollidersPerGather];
+    private int _dropMask;
     private readonly HashSet<int> _before = new HashSet<int>();
     private readonly List<GameObject> _found = new List<GameObject>();
 
@@ -271,7 +295,7 @@ internal sealed class GunnarCollectionPort
             return PickRefusal.Unreadable;
         }
 
-        switch (_accounting.MayBegin(key, expectedUnits))
+        switch (_accounting.MayBegin(key, expectedUnits, nowSeconds))
         {
             case PickGuard.None:
                 break;
@@ -317,7 +341,7 @@ internal sealed class GunnarCollectionPort
 
         // Recorded only now, after the interaction actually happened, so the
         // record and the world agree about what was done.
-        _accounting.Began(key, expectedUnits);
+        _accounting.Began(key, expectedUnits, nowSeconds);
         Phase = PickPhase.Gathering;
         return PickRefusal.None;
     }
@@ -417,9 +441,38 @@ internal sealed class GunnarCollectionPort
         return new PickProgress(PickPhase.Gathering, _accounting.Taken, string.Empty);
     }
 
-    /// <summary>Forgets a pick in flight, because the world or the job it
-    /// belonged to has gone. Takes nothing and asserts nothing.</summary>
+    /// <summary>Forgets a pick in flight, because <b>the job</b> it belonged to
+    /// has gone. Takes nothing and asserts nothing.
+    ///
+    /// <b>What it deliberately keeps.</b> The unconfirmed record. A cancelled
+    /// job is an ordinary caller event and says nothing about whether the
+    /// source has settled - it still exists, and inside the settle window
+    /// neither it nor the game's own guard refuses a second pick. An earlier
+    /// version answered a job ending with a world-scoped reset, and
+    /// <c>Begin - Interact - Forget - Begin</c> on the same source minted a
+    /// second full yield. A world going away is <see cref="ForgetWorld"/>, and
+    /// it is the only thing that may drop that record.</summary>
     public void Forget()
+    {
+        // Free, and it is what bounds the record: if the world has already said
+        // the source is picked, the entry goes now rather than sitting until
+        // the horizon retires it.
+        ConfirmIfThePickLanded();
+        Release();
+        _accounting.ForgetJob();
+    }
+
+    /// <summary>Forgets a pick in flight <b>and</b> every unconfirmed source,
+    /// because the world they named has gone. The sources do not exist in the
+    /// next world, and a record that outlived them would refuse picks of
+    /// whatever inherited their ids.</summary>
+    public void ForgetWorld()
+    {
+        Release();
+        _accounting.ForgetWorld();
+    }
+
+    private void Release()
     {
         Phase = PickPhase.Idle;
         _worker = null;
@@ -429,7 +482,6 @@ internal sealed class GunnarCollectionPort
         _found.Clear();
         _expectedUnits = 0;
         _expectedItem = string.Empty;
-        _accounting.ForgetWorld();
     }
 
     // THE IDLE GESTURE IS NOT HERE, AND THAT IS THE POINT.
@@ -510,7 +562,12 @@ internal sealed class GunnarCollectionPort
     private bool Scan(List<GameObject> into)
     {
         into.Clear();
-        int count = Physics.OverlapSphereNonAlloc(_at, GatherRadiusMetres, _hits);
+        int count = Physics.OverlapSphereNonAlloc(
+            _at,
+            GatherRadiusMetres,
+            _hits,
+            DropMask,
+            QueryTriggerInteraction.Collide);
         if (count >= _hits.Length)
         {
             return false;
@@ -532,6 +589,29 @@ internal sealed class GunnarCollectionPort
         }
 
         return true;
+    }
+
+    /// <summary>The mask the gather query runs against, resolved once.
+    ///
+    /// Falls back to every layer if the game names nothing this file knows -
+    /// a version that renamed its item layer must not quietly hand back an
+    /// empty seed, because an empty seed is what lets a pick credit something
+    /// that was already on the ground.</summary>
+    private int DropMask
+    {
+        get
+        {
+            if (_dropMask == 0)
+            {
+                _dropMask = LayerMask.GetMask(DropLayers);
+                if (_dropMask == 0)
+                {
+                    _dropMask = ~0;
+                }
+            }
+
+            return _dropMask;
+        }
     }
 
     /// <summary>The prefab name of what a dropped item is, with the clone suffix

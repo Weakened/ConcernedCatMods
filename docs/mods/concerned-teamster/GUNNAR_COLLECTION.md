@@ -197,6 +197,30 @@ source he is picking would still be counted, and nothing available to this layer
 guarantees is that the error can never exceed what the source was expected to give — a pick can be short, never
 generous.
 
+**Three more a second review found, in the fixes themselves.** Again none was ever live.
+
+| Defect | What closed it |
+|---|---|
+| **The mint window reopened through `Forget()`.** The port answered a cancelled job — an ordinary caller event — with `ForgetWorld()`, wiping the unconfirmed record. `Begin → Interact → Forget → Begin` on the same source gave a second full yield, because inside the settle window neither the source nor the game's own guard refuses | two verbs instead of one. `PickAccounting.ForgetJob()` releases the pick and **keeps** the record: a job ending says nothing about whether the source has settled. Only `ForgetWorld()` — a world actually going away — may drop it, and the port now has a method for each |
+| **The unconfirmed record was unbounded**, and could retire a source for ever. A pick whose second routed message lands after `Finish` never confirms, so five thousand cycles left five thousand keys; and a source that *respawns* is pickable again while still carrying a record saying it is not | a settle horizon of 60 s, stamped from the caller's clock, plus a ceiling of 128 records evicted oldest-recorded-first. The window either bound has to outlast is **one routed-RPC turn**; the port's whole gather window is two seconds. Eviction never takes the newest, which is the only record that could still be inside its window |
+| **The 64-collider ceiling queried every layer.** Four metres of any built-up base exceeds 64 colliders of terrain, pieces, characters and trigger volumes, so `PlaceTooCrowded` — the exceptional refusal — was going to be the ordinary outcome, and a port that always refuses never works | the gather query is masked to the layer a dropped item is on - the game’s own `item`, read out of the installed layer table the way the navigation audit already reads it - triggers included, and the ceiling doubled to 128 on top of that. Saturation now means 128 *items* within four metres |
+
+The horizon is the one of these that trades in judgement rather than in certainty, so it is stated plainly: if a
+host could stall its own routed-RPC queue for a full minute while still running frames, an expired record would be
+a source genuinely mid-settle. Nothing at this layer could tell that from a respawn. Expiry alone still picks
+nothing — the port re-reads `CanBePicked()` first, so a source whose confirmation *did* arrive is refused by the
+world itself whatever the record says.
+
+The mask is **inclusive within that layer**, for the same asymmetry: it seeds "what was already lying here", and a
+drop missing from that seed is a drop this pick would later credit as its own. So trigger colliders are queried
+too, and a mask that resolves to nothing — a game version that renamed its item layer — falls back to every layer
+rather than to an empty seed. What it deliberately does *not* do is name layers no drop is on: every collider
+admitted for nothing is one closer to the ceiling, and the ceiling is a refusal.
+
+**None of this is observed in game.** The accounting is proved by unit test, which is where it was moved to so that
+it could be; the port itself binds Unity and no test in this repository loads it. The layer names and the settle
+window are read off the installed assemblies, not watched happening.
+
 **Two calls, one window.** The game's pick hands nothing back, so `Begin` starts it and `Poll` gathers what it
 dropped over a bounded window, into Gunnar's own inventory, through vanilla's own `Humanoid.Pickup` — so weight,
 stacking and the pickup delay are the game's arithmetic and not ours. **What is reported is what was measured**,

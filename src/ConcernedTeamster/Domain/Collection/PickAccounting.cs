@@ -57,8 +57,61 @@ internal enum PickGuard
 /// expected to give, so a pick can be short but never generous.</summary>
 internal sealed class PickAccounting
 {
-    private readonly Dictionary<string, bool> _awaitingConfirmation =
-        new Dictionary<string, bool>(StringComparer.Ordinal);
+    /// <summary>How long an unconfirmed source stays refused when nothing ever
+    /// confirms it.
+    ///
+    /// <b>Why there has to be one.</b> Confirmation arrives from the world, and
+    /// there are two ways it never does: the second routed message lands after
+    /// the pick has already finished (its key then leaks for the life of the
+    /// world load), and a source that <i>respawns</i> is pickable again yet
+    /// still carries a record saying it is not - refused for ever. Without a
+    /// horizon the record grows without bound and retires sources permanently.
+    ///
+    /// <b>Why it cannot mint.</b> The window this record exists to close is
+    /// <i>one routed-RPC turn</i> - the following frame, in the only
+    /// configuration this runtime may run in (host, no peers) - and the port's
+    /// gather window is two seconds. A minute is that window with four orders
+    /// of magnitude of room. And expiry alone never picks anything: the port
+    /// re-reads <c>CanBePicked()</c> first, so a source whose confirmation did
+    /// arrive is refused by the world itself whatever this record says.
+    ///
+    /// <b>Stated honestly:</b> if a host could stall its own RPC queue for a
+    /// full minute while still running frames, an expired entry would be a
+    /// source that is genuinely mid-settle. Nothing available to this layer
+    /// could tell that apart from a respawn, and a game stalled that long is
+    /// not one anybody is playing.</summary>
+    internal const float SettleHorizonSeconds = 60f;
+
+    /// <summary>The most unconfirmed sources held at once. A ceiling under the
+    /// horizon above, for a caller that keeps no clock.
+    ///
+    /// Eviction is oldest-first, and one body picks one thing: the entry that
+    /// could still be inside its settle window is the newest, never the oldest.
+    /// At this size an evicted key was recorded more than a hundred picks ago,
+    /// against a window one frame wide.</summary>
+    internal const int MostUnconfirmedSources = 128;
+
+    /// <summary>When a pick was recorded: the caller's clock, for the horizon,
+    /// and the order it was recorded in, for the ceiling. The order is kept
+    /// separately because a caller that keeps no clock stamps every record with
+    /// the same time, and "oldest" has to mean something even then.</summary>
+    private readonly struct Recorded
+    {
+        public Recorded(float at, long order)
+        {
+            At = at;
+            Order = order;
+        }
+
+        public float At { get; }
+
+        public long Order { get; }
+    }
+
+    private readonly Dictionary<string, Recorded> _awaitingConfirmation =
+        new Dictionary<string, Recorded>(StringComparer.Ordinal);
+
+    private long _recordedSoFar;
 
     private string _source = string.Empty;
     private int _expected;
@@ -72,12 +125,16 @@ internal sealed class PickAccounting
     public int Taken => InFlight ? _taken : 0;
 
     /// <summary>How many sources are picked but unconfirmed. For a status line,
-    /// and for a test to see that the record is not growing without bound.
-    /// </summary>
+    /// and for a test to see that the record is not growing without bound -
+    /// which it now cannot: see <see cref="SettleHorizonSeconds"/> and
+    /// <see cref="MostUnconfirmedSources"/>.</summary>
     public int AwaitingConfirmation => _awaitingConfirmation.Count;
 
     /// <summary>May a pick of this source start now?</summary>
-    public PickGuard MayBegin(string? sourceKey, int expectedUnits)
+    /// <param name="nowSeconds">The caller's clock, for the settle horizon. A
+    /// caller that keeps none leaves it at zero and nothing ever expires, which
+    /// is the refusing direction rather than the minting one.</param>
+    public PickGuard MayBegin(string? sourceKey, int expectedUnits, float nowSeconds = 0f)
     {
         if (string.IsNullOrEmpty(sourceKey) || expectedUnits <= 0)
         {
@@ -89,6 +146,8 @@ internal sealed class PickAccounting
             return PickGuard.Busy;
         }
 
+        RetireSettled(nowSeconds);
+
         return _awaitingConfirmation.ContainsKey(sourceKey!)
             ? PickGuard.AwaitingConfirmation
             : PickGuard.None;
@@ -97,13 +156,16 @@ internal sealed class PickAccounting
     /// <summary>Records that a pick of this source has been made. Called only
     /// after the interaction actually happened, so the record and the world
     /// agree about what was done.</summary>
-    public void Began(string sourceKey, int expectedUnits)
+    /// <param name="nowSeconds">The caller's clock, stamped on the record so
+    /// the settle horizon can retire it.</param>
+    public void Began(string sourceKey, int expectedUnits, float nowSeconds = 0f)
     {
         _source = sourceKey ?? string.Empty;
         _expected = expectedUnits > 0 ? expectedUnits : 0;
         _taken = 0;
         InFlight = true;
-        _awaitingConfirmation[_source] = true;
+        _awaitingConfirmation[_source] = new Recorded(nowSeconds, ++_recordedSoFar);
+        EvictOldestPastTheCeiling();
     }
 
     /// <summary>Offers one gathered stack. Answers whether it counts.</summary>
@@ -160,10 +222,29 @@ internal sealed class PickAccounting
         }
     }
 
+    /// <summary>Releases the pick in flight, because the job it belonged to has
+    /// gone. <b>The unconfirmed record stays.</b>
+    ///
+    /// <b>The defect this verb exists to close.</b> A job being cancelled is an
+    /// ordinary caller event, and the port used to answer it by forgetting the
+    /// world - wiping the only record standing between one source and two
+    /// yields. Inside the settle window neither the source nor the game's own
+    /// guard refuses, so <c>Began - Interact - Forget - Began</c> on the same
+    /// source minted a second full yield out of nothing. The job ending says
+    /// nothing at all about whether that source has settled: it still exists,
+    /// and it is still mid-settle.</summary>
+    public void ForgetJob()
+    {
+        Finish();
+    }
+
     /// <summary>Forgets everything, because the world it described has gone. The
     /// unconfirmed record goes with it: the sources it named do not exist in the
     /// next world, and a record that outlived them would refuse picks of
-    /// whatever inherited their names.</summary>
+    /// whatever inherited their names.
+    ///
+    /// Only a world going away may do this. A job ending is
+    /// <see cref="ForgetJob"/>.</summary>
     public void ForgetWorld()
     {
         _awaitingConfirmation.Clear();
@@ -172,4 +253,77 @@ internal sealed class PickAccounting
 
     /// <summary>The source a pick is in flight for, or empty.</summary>
     public string InFlightSource => InFlight ? _source : string.Empty;
+
+    /// <summary>Drops every record older than the settle horizon.
+    ///
+    /// A clock that has gone backwards is a world that reloaded under us, and
+    /// the sources named by those records went with it.</summary>
+    private void RetireSettled(float nowSeconds)
+    {
+        if (_awaitingConfirmation.Count == 0)
+        {
+            return;
+        }
+
+        List<string>? settled = null;
+        foreach (KeyValuePair<string, Recorded> entry in _awaitingConfirmation)
+        {
+            float elapsed = nowSeconds - entry.Value.At;
+            if (elapsed >= SettleHorizonSeconds || elapsed < 0f)
+            {
+                (settled ??= new List<string>()).Add(entry.Key);
+            }
+        }
+
+        if (settled == null)
+        {
+            return;
+        }
+
+        for (int index = 0; index < settled.Count; index++)
+        {
+            _awaitingConfirmation.Remove(settled[index]);
+        }
+    }
+
+    /// <summary>Holds the record to <see cref="MostUnconfirmedSources"/>,
+    /// oldest-recorded first and never the pick in flight.
+    ///
+    /// <b>Why this cannot forget a source that is still mid-settle.</b> One
+    /// body picks one thing, so records are made one at a time and in order,
+    /// and the one that could still be inside its window is the one just made.
+    /// Eviction takes the <i>lowest</i> order there is, which at this ceiling
+    /// was recorded more than a hundred picks ago - against a window that
+    /// closes on the next routed-RPC turn.</summary>
+    private void EvictOldestPastTheCeiling()
+    {
+        while (_awaitingConfirmation.Count > MostUnconfirmedSources)
+        {
+            string oldest = string.Empty;
+            long oldestOrder = 0L;
+            bool found = false;
+
+            foreach (KeyValuePair<string, Recorded> entry in _awaitingConfirmation)
+            {
+                if (string.Equals(entry.Key, _source, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (!found || entry.Value.Order < oldestOrder)
+                {
+                    oldest = entry.Key;
+                    oldestOrder = entry.Value.Order;
+                    found = true;
+                }
+            }
+
+            if (!found)
+            {
+                return;
+            }
+
+            _awaitingConfirmation.Remove(oldest);
+        }
+    }
 }
