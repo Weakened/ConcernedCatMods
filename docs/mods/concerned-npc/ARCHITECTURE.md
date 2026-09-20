@@ -192,7 +192,30 @@ failure, a job reporting itself finished with targets untouched. Two validator r
 `check_npc_planning_never_defaults_a_claim`, and `check_npc_planning_decides_nothing_to_do_once`, which holds the
 finish verdict to a single decision site because it has had three separate ways in.
 
-## 8. The leaves
+## 8. An interruption never duplicates and never loses
+
+The full design is in [INTERRUPTION.md](INTERRUPTION.md); three things about it belong here, because they constrain
+everything the role leaves do next.
+
+**A caller may act only on the phase the record already says it is in.** `NpcPlanRun` writes each phase down and
+adopts it only if the write succeeded, so the record is always at or ahead of the world and the last written record
+is always a safe resume point. A caller that cannot record cannot act.
+
+**The two transitions that move a player's material are written twice** - an intent before the world is touched and
+what was measured after. A record found mid-movement is never replayed and never discarded: it becomes uncertain,
+and uncertain stops the plan for a person with the evidence. That is the whole of "no path duplicates a resource and
+no path silently loses one".
+
+**Durable plan state owns no format and no path.** The role hands in an absolute path and a codec; the library hands
+over lines and takes lines back, and stamps an unknown world epoch on anything read from disk so that every
+in-session key a reconstructed plan holds is stale rather than dangerous. No purpose token was added to
+`INpcDataPaths` - the journal takes the path directly - so that interface's "there are no purposes yet" is still
+true, and adopting this is a code move rather than a migration.
+
+Priority and arbitration live in the same area: seven rungs, strictly-higher-wins, and an interruption that changes
+the phase and the note and nothing else about the work.
+
+## 9. The leaves
 
 | Issue | Leaf |
 |---|---|
@@ -208,7 +231,7 @@ finish verdict to a single decision site because it has had three separate ways 
 | #381 | Gunnar collects and hauls, in planned batches, without portals |
 | #382 | Sunniva: the quest, the move-in, and one planned maintenance round |
 
-## 9. Status
+## 10. Status
 
 The package exists, builds and ships nothing yet, but it is **no longer consumed by nobody**: two of five products
 take it today - `ConcernedSteward` and `ConcernedTeamster` both carry the `ProjectReference` and the matching
@@ -218,6 +241,11 @@ to cross.
 
 One role has been moved onto it in part: the Steward drives `NpcJobDriver` for its maintenance round. Gunnar's
 collection job exists and is not yet constructed by anything.
+
+Interruption and recovery (#379) is the same shape: the mechanism exists and is proved, and **nothing constructs an
+`NpcPlanRun` yet**. No product persists a plan today, so "a plan survives a reload" is a statement about the library
+and its tests, not yet about a session. The plan journal and the custody ledger agree in shape and are not joined;
+joining them belongs with the first role that has both a plan and a transfer.
 
 Nothing in this document has been observed in game, and every gameplay row for this program is OWNER GO-AROUND
 PENDING. That includes the two adoptions above: the dependency wiring is proved by the validator, not by watching an
