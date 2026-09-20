@@ -29,6 +29,20 @@ QUOTE = chr(34)
 # suffix is this build's own bookkeeping and belongs under "state".
 MARKER_EXTENSION = ".dat"
 
+# What a mod manager's configuration editor offers a player for editing, read
+# verbatim from the installed Thunderstore Mod Manager bundle (1.124.2,
+# APP_NAME="r2modman", core 3.2.18) as SUPPORTED_CONFIG_FILE_EXTENSIONS.
+#
+# This, and not the folder, is what #304 turned out to be. The editor is rooted
+# at the WHOLE profile - it excludes only `dotnet`, `_state` and a plugin's
+# `manifest.json` - and then filters by this list. Quandru was offered
+# `author-id.txt` because `.txt` is on it; the atlas's `.tsv` sidecars have
+# never been listed, and moving files to another folder would not have changed
+# either fact. Mirrored here because a Python check cannot read
+# CartographerConfigFiles.ExtensionsAnEditorOpens, which carries the same list
+# for the same reason.
+CONFIG_EDITOR_EXTENSIONS = (".cfg", ".txt", ".json", ".yml", ".yaml", ".ini")
+
 PRODUCTS: dict[str, dict[str, object]] = {
     "cartographer": {
         "display": "Concerned Cartographer",
@@ -2054,6 +2068,173 @@ def _cartographer_known_names() -> tuple[set[str], set[str]]:
     return names, suffixes
 
 
+def _cartographer_editor_extensions() -> list[str]:
+    """The editor's extension list as the C# source carries it.
+
+    There are two copies of a measured constant - this check's
+    CONFIG_EDITOR_EXTENSIONS and CartographerConfigFiles.ExtensionsAnEditorOpens
+    - because a Python check cannot import C#. Two copies with nothing comparing
+    them is how a measurement rots, and the rot is silent in the unsafe
+    direction: drop ".txt" here alone and `InRoot("support-report.txt")` starts
+    passing with the whole suite still green. So they are compared.
+    """
+    source = ROOT / "src/ConcernedCartographer/Domain/Storage/CartographerConfigFiles.cs"
+    if not source.exists():
+        return []
+
+    found: list[str] = []
+    for raw in source.read_text(encoding="utf-8-sig").splitlines():
+        code = _strip_cs_line_comment(raw).strip()
+        if not code.endswith(","):
+            continue
+        for piece in code.split(","):
+            piece = piece.strip()
+            if len(piece) > 2 and piece.startswith(QUOTE + ".") and piece.endswith(QUOTE):
+                found.append(piece[1:-1])
+
+    return found
+
+
+def check_cartographer_prior_names_stay_known_to_the_probe(errors: list[str]) -> list[str]:
+    """A name this product used to write is still a name the probe recognises.
+
+    `Prior…Name`/`Prior…Names` declarations are the product's own record of what
+    older builds put in this directory: `author-id.txt` before the marker moved,
+    `support-report.txt` before the report became a `.log`. A profile that ran
+    one of those builds still has the file.
+
+    Dropping such a name from the probe's evidence lists is silent and it is the
+    expensive direction. `support-report.txt` is profile-wide evidence: a
+    veteran whose only trace was that file becomes a new player, `LegacyEvidence
+    .None` does not unlock, and their toolbar is gone. Nothing caught that -
+    removing the line left the validator and the whole suite green - which is
+    how a guard that exists only as a line nobody checks behaves.
+    """
+    project_dir = ROOT / str(PRODUCTS["cartographer"]["project_dir"])
+    if not project_dir.exists():
+        fail("[cartographer-paths] the cartographer project directory is missing", errors)
+        return []
+
+    known_names, known_suffixes = _cartographer_known_names()
+    if not known_names:
+        fail(
+            "[cartographer-paths] could not read the probe's known file names, so prior "
+            "names cannot be checked against them",
+            errors,
+        )
+        return []
+
+    # `Prior<anything>Name` or `Prior<anything>Names`, then everything up to the
+    # end of the initialiser. Across newlines, because the onboarding marker's
+    # list is declared on the line after its name.
+    declaration = re.compile(
+        r"Prior\w*Names?\s*=\s*(\{[^}]*\}|" + QUOTE + r"[^" + QUOTE + r"]*" + QUOTE + r")",
+        re.DOTALL,
+    )
+    literal = re.compile(QUOTE + r"([^" + QUOTE + r"]+)" + QUOTE)
+
+    checked = 0
+    for path in sorted(project_dir.rglob("*.cs")):
+        relative = path.relative_to(ROOT)
+        if any(part in ("obj", "bin") for part in relative.parts):
+            continue
+
+        try:
+            text = path.read_text(encoding="utf-8-sig")
+        except (OSError, UnicodeDecodeError) as problem:
+            fail(f"[cartographer-paths] could not read {relative}: {problem}", errors)
+            continue
+
+        for match in declaration.finditer(text):
+            for name in literal.findall(match.group(1)):
+                checked += 1
+                if not _probe_knows(name, known_names, known_suffixes):
+                    fail(
+                        f"[cartographer-paths] {relative} records "
+                        + QUOTE + name + QUOTE
+                        + " as a name an older build wrote, and the fresh-install probe no "
+                        "longer knows it. A profile that ran that build still has the file: "
+                        "if it was player evidence, dropping it takes a returning player's "
+                        "toolbar away (#343); if this build wrote it for itself, it has to be "
+                        "on CartographerFirstRunFiles or it reads as somebody else's doing.",
+                        errors,
+                    )
+
+    if checked == 0:
+        fail(
+            "[cartographer-paths] no prior-name declarations found, so the rule that keeps "
+            "an older build's file recognisable cannot be checked",
+            errors,
+        )
+        return []
+
+    return [
+        f"[cartographer-paths] {checked} name(s) older builds wrote are all still known to "
+        "the fresh-install probe"
+    ]
+
+
+def check_cartographer_editor_extensions_agree(errors: list[str]) -> list[str]:
+    """The two copies of the editor's extension list say the same thing.
+
+    Read from the installed Thunderstore Mod Manager bundle (1.124.2,
+    APP_NAME="r2modman", core 3.2.18) as SUPPORTED_CONFIG_FILE_EXTENSIONS. It is
+    what #304 turned out to be about: that editor is rooted at the whole profile
+    and picks what to offer a player by extension alone, so this list - not any
+    folder - is what decides whether a generated file is presented as a setting.
+    """
+    from_source = _cartographer_editor_extensions()
+    if not from_source:
+        fail(
+            "[cartographer-paths] could not read CartographerConfigFiles."
+            "ExtensionsAnEditorOpens, so the two copies of the editor's extension list "
+            "cannot be compared (#304)",
+            errors,
+        )
+        return []
+
+    if tuple(from_source) != CONFIG_EDITOR_EXTENSIONS:
+        fail(
+            "[cartographer-paths] the editor's extension list differs between "
+            f"validate_repo.py {CONFIG_EDITOR_EXTENSIONS} and CartographerConfigFiles."
+            f"ExtensionsAnEditorOpens {tuple(from_source)}. Both are copies of one measurement "
+            "taken from the mod manager's own bundle; whichever is wrong, a file this product "
+            "writes is either being hidden for no reason or offered to a player as a setting "
+            "(#304).",
+            errors,
+        )
+        return []
+
+    return [
+        "[cartographer-paths] the editor's extension list agrees between the validator and "
+        f"CartographerConfigFiles: {len(from_source)} extensions"
+    ]
+
+
+def _cartographer_config_file_names() -> set[str]:
+    """The files Cartographer says a player is meant to open and edit.
+
+    Read from the source rather than restated, so the rule below stays true as
+    that list changes instead of becoming a second copy of it. An unreadable or
+    missing list returns empty, and the caller refuses rather than passing.
+    """
+    source = ROOT / "src/ConcernedCartographer/Domain/Storage/CartographerConfigFiles.cs"
+    if not source.exists():
+        return set()
+
+    names: set[str] = set()
+    for raw in source.read_text(encoding="utf-8-sig").splitlines():
+        code = _strip_cs_line_comment(raw).strip()
+        if not code.startswith(QUOTE) or not code.endswith(QUOTE + ","):
+            continue
+        literal = code[1:-2]
+        # The same file also lists the editor's extensions; those are not names.
+        if literal and not literal.startswith("."):
+            names.add(literal)
+
+    return names
+
+
 def _literal_arguments(code: str, call: str) -> list[str]:
     """The string literals passed to `call` on this line.
 
@@ -2091,12 +2272,22 @@ def check_cartographer_root_holds_only_names_the_probe_knows(errors: list[str]) 
     twice: `survey-rules.tsv` made every fresh install look like a returning
     player, and `author-id.dat` (#343) did it again and reached main.
 
-    Two rules, both about the invariant rather than about a spelling:
+    Three rules, all about the invariant rather than about a spelling:
 
     1. Only `CartographerPaths` composes the directory, so there is one owner.
     2. Every name handed to `CartographerPaths.InRoot` is one the probe knows -
        a name this build writes for itself, or player evidence. A name in
        neither list is exactly #343.
+    3. No name handed to `CartographerPaths.InRoot` OR `.InState` has an
+       extension a mod manager's configuration editor opens unless it is on
+       `CartographerConfigFiles` - unless, that is, a player really is meant to
+       edit it. That editor walks the whole profile and filters by extension
+       alone (CONFIG_EDITOR_EXTENSIONS), so the folder a file sits in has never
+       been what decided whether it was offered, and `state/` least of all:
+       `author-id.txt` is the file that was reported and it is exactly what
+       `InState` composes today. A rule that skipped `InState` would miss the
+       report it was written for. This is #304 written down as a check instead
+       of as a lesson.
 
     Rule 2 is the one that matters, and the first version of this check did not
     have it: it forbade the token `Paths.ConfigPath` and nothing else, so moving
@@ -2105,8 +2296,16 @@ def check_cartographer_root_holds_only_names_the_probe_knows(errors: list[str]) 
     nothing.
 
     A marker is additionally required to be under `state/`. `Directory.GetFiles`
-    does not descend, which keeps it out of the probe's listing by construction,
-    and out of the config editor #304 reported.
+    does not descend, which keeps it out of the probe's listing by construction.
+    It does NOT keep it out of a configuration editor - that editor is rooted at
+    the whole profile and descends into `state/` like anywhere else, which is
+    why rule 3 covers `InState` as well as `InRoot` and why `.dat`, not the
+    subfolder, is what answered #304.
+
+    Rules 1 and 2 are literal-only by construction: a name composed from a
+    constant or an expression is invisible to them. That is pre-existing and is
+    not fixed here, but it means a green result is a statement about the
+    literals in these sources and not about every possible call.
     """
     def flag(message: str) -> None:
         fail(message, errors)
@@ -2115,6 +2314,7 @@ def check_cartographer_root_holds_only_names_the_probe_knows(errors: list[str]) 
     owner_relative = Path("src/ConcernedCartographer/CartographerPaths.cs")
     needle = "Paths.ConfigPath"
     in_root = "CartographerPaths.InRoot("
+    in_state = "CartographerPaths.InState("
 
     if not (ROOT / owner_relative).exists():
         flag(
@@ -2127,6 +2327,14 @@ def check_cartographer_root_holds_only_names_the_probe_knows(errors: list[str]) 
         flag(
             "[cartographer-paths] could not read the probe's known file names, so the "
             "root-contents rule cannot be checked"
+        )
+        return []
+
+    editable = _cartographer_config_file_names()
+    if not editable:
+        flag(
+            "[cartographer-paths] could not read CartographerConfigFiles, so the rule that "
+            "keeps a generated file out of a configuration editor (#304) cannot be checked"
         )
         return []
 
@@ -2173,8 +2381,9 @@ def check_cartographer_root_holds_only_names_the_probe_knows(errors: list[str]) 
                             + QUOTE + literal + QUOTE
                             + " into the probed root. A marker belongs under "
                             "CartographerPaths.InState: Directory.GetFiles does not descend, "
-                            "which keeps it out of the probe's listing and out of a config "
-                            "editor (#304, #343)."
+                            "which keeps it out of the probe's listing (#343). It does not "
+                            "keep it out of a configuration editor - only its extension does "
+                            "that (#304)."
                         )
                     elif not _probe_knows(literal, known_names, known_suffixes):
                         flag(
@@ -2187,9 +2396,34 @@ def check_cartographer_root_holds_only_names_the_probe_knows(errors: list[str]) 
                             "look like a returning player (#343)."
                         )
 
+                # Rule 3, and it is deliberately NOT inside the loop above.
+                # A configuration editor descends: `state/` is no more hidden
+                # from it than the folder above, so the name the report was
+                # actually about - `author-id.txt` - would pass this check if it
+                # only looked at InRoot. Every composer that lands anywhere
+                # inside the product's directory is audited.
+                for composer in (in_root, in_state):
+                    for literal in _literal_arguments(code, composer):
+                        if (literal.lower().endswith(CONFIG_EDITOR_EXTENSIONS)
+                                and literal not in editable):
+                            flag(
+                                f"[cartographer-paths] {relative}:{number} writes "
+                                + QUOTE + literal + QUOTE
+                                + ", and a mod manager's configuration editor opens that "
+                                "extension, so a player is offered it for editing - wherever it "
+                                "sits, because that editor is rooted at the whole profile and "
+                                "descends. Either it is genuinely theirs to edit - put it on "
+                                "CartographerConfigFiles and say so - or give it an extension "
+                                "that editor does not open (#304: author-id.txt was a generated "
+                                "GUID, support-report.txt was a generated report, and both were "
+                                "listed as settings)."
+                            )
+
     return [
         f"[cartographer-paths] one owner for the data directory; {checked} sources audited, "
-        "every name written into it is one the fresh-install probe knows"
+        "every name written into it is one the fresh-install probe knows, and nothing a "
+        f"configuration editor opens is written there but the {len(editable)} file(s) a player "
+        "edits"
     ]
 
 
@@ -2261,7 +2495,9 @@ def main() -> int:
 
     report.extend(check_solution_integrity(errors))
     report.extend(check_no_mojibake(errors))
+    report.extend(check_cartographer_editor_extensions_agree(errors))
     report.extend(check_cartographer_root_holds_only_names_the_probe_knows(errors))
+    report.extend(check_cartographer_prior_names_stay_known_to_the_probe(errors))
     check_teamster_adapter_isolation(errors)
     report.extend(check_cross_product_independence(errors))
     report.extend(check_every_product_pair_is_audited(errors))

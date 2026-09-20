@@ -314,6 +314,41 @@ public sealed class MarkerFileTests : IDisposable
     }
 
     [Fact]
+    public void AWriteThatDoesNotReadBackAsWrittenIsRefused()
+    {
+        // The sentence this whole type rests on — "reads THE MARKER back; only
+        // when that round trip agrees is any prior file removed" — had nothing
+        // holding it up. Replacing the comparison with `if (false)` left all
+        // 1217 tests green, which is the same hole a review found in the
+        // migration this branch started as.
+        //
+        // A byte-order mark is a real round trip that does not agree, with no
+        // mocking: WriteAllText encodes U+FEFF as EF BB BF and ReadAllText
+        // strips those three bytes back off as a BOM, so the destination holds
+        // something other than what was handed over.
+        Assert.False(MarkerFile.TryWrite(Marker("author-id.dat"), "﻿" + Identity, _log.Add));
+        Assert.NotEmpty(_log);
+    }
+
+    [Fact]
+    public void APriorFileIsNotRemovedWhenTheMarkerCouldNotBeWritten()
+    {
+        // The consequence that makes the check above load-bearing rather than
+        // decorative: the prior file is deleted on the strength of that write
+        // returning true. Delete it anyway and the profile's real identity is
+        // gone, with no later start able to find it.
+        File.WriteAllText(Legacy("author-id.txt"), Identity);
+        File.WriteAllText(Path.Combine(_directory, MarkerFile.FolderName), "in the way");
+
+        Assert.Equal(MarkerFile.MarkerSearch.Found, Resolve(out string? contents));
+        Assert.Equal(Identity, contents);
+
+        // Still there, so the next start tries again.
+        Assert.True(File.Exists(Legacy("author-id.txt")));
+        Assert.NotEmpty(_log);
+    }
+
+    [Fact]
     public void AWriteThatCannotHappenSaysSoAndReportsFalse()
     {
         File.WriteAllText(Path.Combine(_directory, MarkerFile.FolderName), "in the way");

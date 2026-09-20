@@ -17,6 +17,21 @@ namespace TheConcernedCat.ConcernedCartographer.Storage;
 /// than merely changing extension — which would have been a guess about which
 /// files that editor lists, and would have been wrong if it lists them all.
 ///
+/// <b>The guess was the wrong way round, and it is now measured.</b> Read from
+/// the installed Thunderstore Mod Manager bundle (1.124.2,
+/// <c>APP_NAME="r2modman"</c>, core 3.2.18): the editor is rooted at the whole
+/// profile, excluding only <c>dotnet</c>, <c>_state</c> and a plugin's
+/// <c>manifest.json</c>, and picks what to show by extension alone
+/// (<c>SUPPORTED_CONFIG_FILE_EXTENSIONS</c>: <c>.cfg .txt .json .yml .yaml
+/// .ini</c>). It descends into every subfolder, <see cref="FolderName"/>
+/// included — so the subfolder does <i>not</i> hide a marker from it, and never
+/// did. <see cref="Extension"/> is what does: <c>.dat</c> is on no list, so
+/// <c>author-id.dat</c> is not offered where <c>author-id.txt</c> was. Both
+/// changes shipped together in 1.2.2, which is why this file credited the wrong
+/// one. The subfolder still earns its place for the other reason below, which
+/// is about the probe and not about any editor. <b>Gale is an independent
+/// implementation and has not been assessed.</b>
+///
 /// The subfolder is also what makes this safe for something else entirely.
 /// <c>CartographerLegacyProbe</c> decides whether a player is new or returning
 /// by listing this directory with <c>Directory.GetFiles</c> and asking whether
@@ -35,8 +50,18 @@ internal static class MarkerFile
     public const string FolderName = "state";
 
     /// <summary>Deliberately not <c>.txt</c>, <c>.cfg</c>, <c>.json</c>,
-    /// <c>.ini</c> or <c>.yml</c>. The subfolder is what fixes #304; this is
-    /// so the file does not read as configuration if somebody does find it.
+    /// <c>.ini</c>, <c>.yml</c> or <c>.yaml</c>. <b>This is what fixes #304</b>
+    /// — a configuration editor chooses by extension and descends everywhere,
+    /// so the subfolder does not hide this file and this constant does.
+    ///
+    /// <c>validate_repo.py</c> enforces the rule against
+    /// <c>CartographerConfigFiles</c> for every <b>string literal</b> passed to
+    /// <c>CartographerPaths.InRoot</c> or <c>InState</c> — which is what caught
+    /// <c>support-report.txt</c>, and is not the same thing as every name in
+    /// the directory. A name composed from a constant or an expression is
+    /// invisible to it. That limit is pre-existing and shared with the rule
+    /// that keeps #343 from returning; it is written down here rather than
+    /// papered over, because a check is only worth what it actually sees.
     ///
     /// <b>Changing this is a migration, not a rename.</b> The prior-location
     /// lists callers pass are historical facts and must be written as literals,
