@@ -495,6 +495,23 @@ owes.
 | Planted defects in the §6c persistence, one per property | **5 of 5 caught**, all as test failures rather than compile errors: an absent record faulting instead of loading empty; a stored package ignored; the revision starting at zero; the inventory field drifting from Foreman's spelling; an order accepted while the world is going away |
 | In game | **OWNER GO-AROUND PENDING.** Nothing has been run; §10 steps 12–27 are the rows |
 
+### The four guard-rail findings an independent review made at `f59d4db`
+
+The persistence behaviour above was reviewed and found clean. The **guard rails around it** were not, in four
+places, and the review's own plants are what closed them. Every row was run, not reasoned about; the "before"
+column is f59d4db's own copy of the rule run against the same planted tree.
+
+| Finding | Closed by | Before | After |
+|---|---|---|---|
+| **BLOCKER.** `ZNetScene.Destroy(GameObject go)` (`ZNetScene:116`) resets the network object, destroys the ZDO if owned and destroys the object — the same outcome as `view.Destroy()` — but it takes an argument, so the no-argument `TEAMSTER_BODY_REMOVAL` shape cannot see it. The validator's comment claimed *"Every way a body leaves the world"*, which was **false as written** | `TEAMSTER_DESTRUCTION` pins the **population** of destruction-shaped calls per file, and the comment now says what it does and does not cover | Planting the review's own `Sweep` helper in `GunnarHaulingRuntime.cs`: **exit 0**, with the rule printing *"4 place(s)"* while a fifth sat in the file | **refuses**: *"GunnarHaulingRuntime.cs destroys something 3 time(s); this rule expects 2"*. The same call in a **new** file is a separate test, because the pin is per file: **exit 0** before, *"ZzSweeper.cs destroys something 1 time(s); this rule expects 0"* after |
+| **MINOR.** A guard *consulted and ignored* passed: a bare `WorkerRetirement.Allows(v)` in a log line sits above the removal just as well as a refusal does | The rule wants the refusing `if (!WorkerRetirement.Allows(...))` shape | Replacing the refusal with `_log.LogInfo("verdict: " + WorkerRetirement.Allows(pointedVerdict))`: **exit 0**, pointed body retired whatever the verdict said | **refuses three times**: once on the count, once per removal |
+| **MINOR.** The IL audit's 24-line window was longer than the distance between the two `ZDO::Set` calls in `TryPersist`, so the **second** write was vouched for by the **first** one's literal | The window stops at the previous `ZDO::Set` | `tcc.bogus.inventory` on the first write **FAIL**; `tcc.bogus.revision` on the second **PASS** — the escape | both **FAIL**, and so does the same plant on the *spawn's* adjacent pair. `ZDO::Set(` stayed at **4** in every run, so the pinned count alone would have seen none of it |
+| **MINOR.** `LastChangePersisted` was set and written and **never read** | `WorkerInventoryRecord.Trust(hasRecord, isLoaded, lastChangePersisted)` in `Domain/`, asked by both `BoundBody` and `ItemsHeldBy` | — | 5 new tests; dropping the third term from the decision turns **3 of them red**. See §6c for what this does **not** do: it stops the loss growing, it does not recover the change that failed |
+| `pwsh ./scripts/verify.ps1`, through the build lock, from this worktree's own copy | **PASSED at `9bc707d`** (`main` `49bb361` merged in first, so the gate ran on the tree that gets merged): Release, 14 assemblies, **4515 tests**, validator exit 0 |
+| `python -m unittest discover -s tools/tests` | **17 passed** (14 before this round) |
+| `pwsh ./scripts/audit-teamster-hauling-api.ps1`, through the build lock | **PASS** post-merge, 125 of 125 members and behaviours, `ZDO::Set(` = 4, 0 failures |
+| In game | **STILL NOTHING.** No build of any of this has been run; none of it has been watched happening |
+
 **Zero migrations (the §6a wiring).** No durable key, prefab name, file path, row tag or schema number changed. The
 one new setting, `Workers/GunnarCollectionEnabled`, defaults to off, and a config file written by an older build
 simply does not have it — BepInEx adds it at its default on the next load. The one new probed game member,
