@@ -41,11 +41,18 @@ internal sealed class FakeCustody : ICustodyRuntime
 
     internal CollectionOrderState RecoveredState { get; set; } = CollectionOrderState.Unspecified;
 
-    /// <summary>What the record says is at a place, for anybody. The build
-    /// order's refusal reads this and nothing else of the view.</summary>
-    internal FakeCustodyView Ledger { get; } = new FakeCustodyView();
+    /// <summary>What the record says is at the worker's place, per item - what a
+    /// CANCELLED collection order leaves behind. The build order's refusal reads
+    /// this and nothing else of custody's accounting.</summary>
+    internal Dictionary<string, int> AtWorker { get; } =
+        new Dictionary<string, int>(StringComparer.Ordinal);
 
-    public IMaterialCustodyView View => Ledger;
+    public IMaterialCustodyView View => throw new NotSupportedException("a build order reads no custody view");
+
+    public int RecordedAt(CustodyLocation location, MaterialItem item) =>
+        location.Place == CustodyPlace.Worker && AtWorker.TryGetValue(item.PrefabName, out int count)
+            ? count
+            : 0;
 
     public CustodyLocation WorkerLocation { get; set; } =
         new CustodyLocation(CustodyPlace.Worker, "foreman/thorstein", Guid.Empty);
@@ -105,32 +112,6 @@ internal sealed class FakeCustody : ICustodyRuntime
     public TransferOutcome BeginTransfer(TransferIntent intent) => TransferOutcome.Refused;
 
     public bool FinishTransfer(TransferReceipt receipt) => true;
-}
-
-/// <summary>The record's account of where gathered material is. Only
-/// <see cref="TotalAt"/> is answered, because that is the only thing a build order
-/// asks: everything else would be a claim about a collection order that nothing
-/// here is entitled to make.</summary>
-internal sealed class FakeCustodyView : IMaterialCustodyView
-{
-    private readonly Dictionary<string, int> _at = new Dictionary<string, int>(StringComparer.Ordinal);
-
-    public int Revision => 1;
-
-    /// <summary>Says the record holds <paramref name="count"/> of an item at the
-    /// worker's place - what a CANCELLED collection order leaves behind.</summary>
-    internal void AtWorker(string item, int count) => _at[item] = count;
-
-    public int CountAt(OrderId order, CustodyPlace place, CollectedResource resource) =>
-        throw new NotSupportedException("a build order never asks about one order");
-
-    public int TotalAt(CustodyLocation location, MaterialItem item) =>
-        location.Place == CustodyPlace.Worker && _at.TryGetValue(item.PrefabName, out int count) ? count : 0;
-
-    public ResourceProgress ProgressFor(CollectionOrderDefinition order, CollectedResource resource) =>
-        throw new NotSupportedException("a build order reads no collection progress");
-
-    public bool HasUncertainTransfer(OrderId order) => false;
 }
 
 /// <summary>Walking Thorstein, over the C1 seam, with no body: the position is

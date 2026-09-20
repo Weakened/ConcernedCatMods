@@ -342,22 +342,6 @@ internal interface IMaterialCustodyView
 
     int CountAt(OrderId order, CustodyPlace place, CollectedResource resource);
 
-    /// <summary>Every order's holding at one location, per item - what a physical
-    /// inventory should contain of gathered material, <b>whoever it belongs
-    /// to</b>.
-    ///
-    /// <b>Why this is on the view and not only on the ledger.</b>
-    /// <see cref="CountAt"/> answers for one order, which means a caller has to
-    /// know which orders exist - and the recovery seam only hands back
-    /// <i>non-terminal</i> ones. A CANCELLED collection order is terminal and its
-    /// carried material stays exactly where it physically is, recorded, until
-    /// somebody moves it (<c>CollectionOrderState.Cancelled</c> says so in as many
-    /// words). So "is there gathered material in this worker's inventory that is
-    /// not mine" has no answer through <see cref="CountAt"/>, and a second product
-    /// that reads his inventory - #380's build order - would spend somebody else's
-    /// wood on a wall and never tell custody. This is that answer.</summary>
-    int TotalAt(CustodyLocation location, MaterialItem item);
-
     ResourceProgress ProgressFor(CollectionOrderDefinition order, CollectedResource resource);
 
     bool HasUncertainTransfer(OrderId order);

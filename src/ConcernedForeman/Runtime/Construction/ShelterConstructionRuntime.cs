@@ -444,7 +444,7 @@ internal sealed class ShelterConstructionRuntime
     {
         try
         {
-            return Math.Max(0, _custody.View.TotalAt(_custody.WorkerLocation, new MaterialItem(kind, 1, 0)));
+            return Math.Max(0, _custody.RecordedAt(_custody.WorkerLocation, new MaterialItem(kind, 1, 0)));
         }
         catch (Exception)
         {

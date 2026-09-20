@@ -429,7 +429,7 @@ public sealed class ShelterConstructionRuntimeTests : IDisposable
         // is and keeps being recorded. So the ordinary outcome of a player
         // cancelling let a build order spend his gathered wood on a wall.
         Confirm();
-        _custody.Ledger.AtWorker("Wood", 12);
+        _custody.AtWorker["Wood"] = 12;
 
         Ticks(20);
 
@@ -449,7 +449,7 @@ public sealed class ShelterConstructionRuntimeTests : IDisposable
         // build still refuses.
         Confirm();
         Assert.Null(_custody.Recovered);
-        _custody.Ledger.AtWorker("DeerHide", 4);
+        _custody.AtWorker["DeerHide"] = 4;
 
         Ticks(20);
 

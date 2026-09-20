@@ -89,6 +89,14 @@ internal interface ICustodyRuntime
     /// changed how the place is named.</summary>
     CustodyLocation WorkerLocation { get; }
 
+    /// <summary>What the record says is at one place, per item, across every order
+    /// it knows - <b>including terminal ones</b>. A cancelled collection order
+    /// keeps its carried material exactly where it physically is and keeps being
+    /// recorded, so this is the only complete answer to "is there material in this
+    /// worker's inventory that is not mine", and #380's build order refuses rather
+    /// than spending it.</summary>
+    int RecordedAt(CustodyLocation location, MaterialItem item);
+
     /// <summary>The worker body's persisted inventory.</summary>
     bool TryResolveWorker(WorkerKey worker, out IInventoryPort? port, out CollectionAttentionReason refusal);
 
