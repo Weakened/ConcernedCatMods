@@ -256,8 +256,17 @@ internal sealed class PickAccounting
 
     /// <summary>Drops every record older than the settle horizon.
     ///
-    /// A clock that has gone backwards is a world that reloaded under us, and
-    /// the sources named by those records went with it.</summary>
+    /// <b>A clock that has gone backwards keeps its record.</b> This used to
+    /// drop it, on the reasoning that a clock going backwards is a world that
+    /// reloaded under us. That reasoning was wrong twice over. The house clock
+    /// here is <c>Time.time</c>, which counts from process start and does not
+    /// reset on a world load, so the branch would not have detected the thing
+    /// it named - and a world going away is <see cref="ForgetWorld"/>'s job,
+    /// which is the whole point of splitting that verb from
+    /// <see cref="ForgetJob"/>. Worse, dropping a record is the *minting*
+    /// direction: it is what lets a source be picked twice. An impossible
+    /// elapsed time means we cannot say whether the window has passed, and the
+    /// safe answer to that is to keep refusing.</summary>
     private void RetireSettled(float nowSeconds)
     {
         if (_awaitingConfirmation.Count == 0)
@@ -269,7 +278,7 @@ internal sealed class PickAccounting
         foreach (KeyValuePair<string, Recorded> entry in _awaitingConfirmation)
         {
             float elapsed = nowSeconds - entry.Value.At;
-            if (elapsed >= SettleHorizonSeconds || elapsed < 0f)
+            if (elapsed >= SettleHorizonSeconds)
             {
                 (settled ??= new List<string>()).Add(entry.Key);
             }

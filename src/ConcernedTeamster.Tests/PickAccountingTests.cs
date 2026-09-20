@@ -214,13 +214,22 @@ public sealed class PickAccountingTests
     }
 
     [Fact]
-    public void A_clock_that_went_backwards_is_a_world_that_reloaded_under_us()
+    public void A_clock_that_went_backwards_keeps_refusing_rather_than_forgetting()
     {
+        // This asserted the opposite until an independent review pointed out
+        // which way it fails. An impossible elapsed time means the window
+        // cannot be measured, and forgetting a record is what lets a source be
+        // picked twice - so the unmeasurable case refuses.
+        //
+        // It is also reachable without any clock going backwards: a caller that
+        // stamps Began with a real clock and lets MayBegin take its default
+        // asks about elapsed = 0 - At, which is negative.
         var accounting = new PickAccounting();
         accounting.Began("stone-7", 1, nowSeconds: 900f);
         accounting.Finish();
 
-        Assert.Equal(PickGuard.None, accounting.MayBegin("stone-7", 1, 3f));
+        Assert.Equal(PickGuard.AwaitingConfirmation, accounting.MayBegin("stone-7", 1, 3f));
+        Assert.Equal(PickGuard.AwaitingConfirmation, accounting.MayBegin("stone-7", 1));
     }
 
     [Fact]
