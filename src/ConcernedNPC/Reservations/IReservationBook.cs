@@ -11,7 +11,16 @@ namespace TheConcernedCat.ConcernedNPC.Reservations;
 /// not hold as an answer rather than an error.</summary>
 internal enum ReservationOutcome
 {
-    /// <summary>Nobody asked. Never a hold.</summary>
+    /// <summary>Nobody asked, and nothing is held.
+    ///
+    /// Two things land here, deliberately. A defaulted value, so a caller that
+    /// forgets to look at the answer has not accidentally been granted
+    /// anything. And a call that named nothing to reserve - a null subject, an
+    /// empty reservation name - which is a defect in the caller rather than a
+    /// fact about the world, and therefore has no reason worth reporting to a
+    /// player. The book answers rather than throwing because a reservation is
+    /// taken inside a job's tick, and a throw there costs the job its state to
+    /// tell a programmer something a test should have told them.</summary>
     Unspecified = 0,
 
     /// <summary>Taken. This holder has it until it releases it.</summary>

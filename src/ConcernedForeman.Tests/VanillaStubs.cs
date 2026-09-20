@@ -77,7 +77,7 @@ public class PieceTable : MonoBehaviour
     public List<GameObject> m_pieces = new List<GameObject>();
 }
 
-public class Piece : MonoBehaviour
+public partial class Piece : MonoBehaviour
 {
     /// <summary>Vanilla keeps every placed piece in a static list and filters it
     /// by distance; a test builds the list directly.</summary>
@@ -502,7 +502,7 @@ public class ZNetView : MonoBehaviour
     public void Destroy() => Destroyed = true;
 }
 
-public class Character : MonoBehaviour
+public partial class Character : MonoBehaviour
 {
     public Action? m_onDeath;
 
@@ -568,6 +568,30 @@ public class Humanoid : Character
 public class Player : Humanoid
 {
     public static Player? m_localPlayer;
+
+    /// <summary>#380: the real 1.0.x signature, read out of the installed
+    /// assembly's own metadata - <c>PlacePiece(piece, pos, rot, doAttack,
+    /// cheated)</c>, returning VOID. The position and rotation are PARAMETERS,
+    /// which is the fact the whole build order rests on: an NPC can aim a
+    /// placement, and nothing has to drive the local player's placement ghost.
+    /// There is no success to read back, which is why progress is read from the
+    /// world rather than from what was asked for.</summary>
+    public List<string> Placed { get; } = new List<string>();
+
+    public Exception? PlaceThrows { get; set; }
+
+    public void PlacePiece(Piece piece, Vector3 pos, Quaternion rot, bool doAttack, bool cheated)
+    {
+        if (PlaceThrows != null)
+        {
+            throw PlaceThrows;
+        }
+
+        Placed.Add(string.Format(
+            System.Globalization.CultureInfo.InvariantCulture,
+            "{0}@{1:0.##}/{2:0.##}/{3:0.##} yaw {4:0.##} attack={5} cheated={6}",
+            piece.gameObject.name, pos.x, pos.y, pos.z, rot.eulerAngles.y, doAttack, cheated));
+    }
 
     public GameObject? Hovering { get; set; }
 
@@ -657,5 +681,179 @@ public class ObjectDB
     public Dictionary<string, GameObject> Prefabs { get; } = new Dictionary<string, GameObject>(StringComparer.Ordinal);
 
     public GameObject? GetItemPrefab(string name) =>
+        Prefabs.TryGetValue(name, out GameObject? prefab) ? prefab : null;
+}
+
+/// <summary>#380: the three vanilla surfaces the construction adapters read,
+/// and nothing more of them than the adapters touch.
+///
+/// <c>Piece.Requirement</c> and <c>Piece.m_resources</c> are the <b>real build
+/// cost</b> - the one source #380 allows, and the reason this product carries no
+/// cost table of its own. <c>CraftingStation.HaveBuildStationInRange</c> and the
+/// two <c>ZoneSystem</c> queries are two of the gates CF-SET-003 names.</summary>
+public partial class Piece
+{
+    public class Requirement
+    {
+        public ItemDrop? m_resItem;
+
+        public int m_amount;
+
+        public int m_recover;
+    }
+
+    public Requirement[]? m_resources;
+
+    public CraftingStation? m_craftingStation;
+
+    // Every placement constraint the real Piece declares, with the real names
+    // and the real types, read out of the installed assembly's own metadata.
+    // The restrictive value is `true` for all but the two marked.
+    public bool m_enabled = true;                 // restrictive when FALSE
+
+    public bool m_allowedInDeepSnow = true;       // restrictive when FALSE
+
+    public bool m_isUpgrade;
+
+    public bool m_repairPiece;
+
+    public bool m_removePiece;
+
+    public bool m_groundPiece;
+
+    public bool m_groundOnly;
+
+    public bool m_cultivatedGroundOnly;
+
+    public bool m_vegetationGroundOnly;
+
+    public bool m_waterPiece;
+
+    public bool m_noInWater;
+
+    public bool m_notOnWood;
+
+    public bool m_notOnTiltingSurface;
+
+    public bool m_inCeilingOnly;
+
+    public bool m_notOnFloor;
+
+    public bool m_onlyInTeleportArea;
+
+    public bool m_requireDeepSnow;
+
+    public bool m_allowedInDungeons;
+
+    public float m_spaceRequirement;
+
+    public Piece? m_mustConnectTo;
+
+    public List<Piece>? m_blockingPieces;
+
+    public Heightmap.Biome m_onlyInBiome = Heightmap.Biome.None;
+}
+
+/// <summary>Only the biome enum and the point lookup the constraint reader
+/// uses. The real one is a flags enum, which is why a piece can say "meadows or
+/// plains" and why the mask test is a bitwise and.</summary>
+public static class Heightmap
+{
+    [Flags]
+    public enum Biome
+    {
+        None = 0,
+        Meadows = 1,
+        Swamp = 2,
+        Mountain = 4,
+        BlackForest = 8,
+        Plains = 16,
+    }
+
+    /// <summary>What a test says is where. Meadows unless it says otherwise.
+    /// </summary>
+    public static Biome Here { get; set; } = Biome.Meadows;
+
+    public static Biome FindBiome(Vector3 point) => Here;
+}
+
+/// <summary>`Character.InInterior(point)` is how the game asks whether a place
+/// is inside a dungeon, and it is one of the two constraints this runtime
+/// judges rather than refuses.</summary>
+public partial class Character
+{
+    public static HashSet<string> Interiors { get; } = new HashSet<string>(StringComparer.Ordinal);
+
+    public static bool InInterior(Vector3 position) => Interiors.Contains(ZoneSystem.Key(position));
+}
+
+/// <summary>`Location.IsInsideNoBuildLocation` is vanilla's own no-build zone,
+/// and a gate in its own right.</summary>
+public static class Location
+{
+    public static HashSet<string> NoBuild { get; } = new HashSet<string>(StringComparer.Ordinal);
+
+    public static bool IsInsideNoBuildLocation(Vector3 point) => NoBuild.Contains(ZoneSystem.Key(point));
+}
+
+public class CraftingStation : MonoBehaviour
+{
+    /// <summary>Which station names a test says are in range. Vanilla walks a
+    /// static list of live stations and measures; the adapter only ever reads
+    /// the boolean.</summary>
+    public static readonly HashSet<string> InRange = new HashSet<string>(StringComparer.Ordinal);
+
+    public string m_name = string.Empty;
+
+    public static bool HaveBuildStationInRange(string name, Vector3 point) => InRange.Contains(name);
+}
+
+public class ZoneSystem
+{
+    public static ZoneSystem? instance;
+
+    /// <summary>Points a test says are NOT on loaded ground. Empty means all of
+    /// it is loaded, because most tests are not about streaming.</summary>
+    public HashSet<string> Unloaded { get; } = new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>Points the ground height cannot be measured at.</summary>
+    public HashSet<string> NoGround { get; } = new HashSet<string>(StringComparer.Ordinal);
+
+    public Exception? Throws { get; set; }
+
+    public static string Key(Vector3 point) => string.Format(
+        System.Globalization.CultureInfo.InvariantCulture,
+        "{0:0.##}/{1:0.##}/{2:0.##}", point.x, point.y, point.z);
+
+    public bool IsZoneLoaded(Vector3 point)
+    {
+        if (Throws != null)
+        {
+            throw Throws;
+        }
+
+        return !Unloaded.Contains(Key(point));
+    }
+
+    public bool GetSolidHeight(Vector3 point, out float height)
+    {
+        if (Throws != null)
+        {
+            throw Throws;
+        }
+
+        height = 0f;
+        return !NoGround.Contains(Key(point));
+    }
+}
+
+public class ZNetScene
+{
+    public static ZNetScene? instance;
+
+    public Dictionary<string, GameObject> Prefabs { get; } =
+        new Dictionary<string, GameObject>(StringComparer.Ordinal);
+
+    public GameObject? GetPrefab(string name) =>
         Prefabs.TryGetValue(name, out GameObject? prefab) ? prefab : null;
 }

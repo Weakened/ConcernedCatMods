@@ -211,7 +211,8 @@ internal sealed class SurveyRuleSet
     }
 
     /// <summary>The starter rule file written when none exists (broadened
-    /// in RC10, feedback 10; dungeon identities corrected for issue #258):
+    /// in RC10, feedback 10; dungeon identities corrected for issue #258;
+    /// documented OreMines mine identities added for issue #385):
     /// a bounded, immediately useful set — common gatherables and wild
     /// seeds, ore deposits, dungeon entrances, lore runestones and boss
     /// vegvisirs — every one duplicate-radius and expiry bounded so a walk
@@ -262,6 +263,67 @@ internal sealed class SurveyRuleSet
         set.AddRule(new SurveyRule("runestone*", "cc:objective", "Points of interest", 80f, 480f));
         set.AddRule(new SurveyRule("vegvisir*", "cc:objective", "Points of interest", 80f, 480f));
 
+        // Issue #385 (community report, kyoknightly): the mines added by
+        // blacks7ar's OreMines are ordinary Valheim LOCATIONS, so they
+        // already ride the same loaded-location survey surface issue #258
+        // added — they simply matched no rule. These are the eight mine
+        // identities OreMines 1.2.1 documents (each placed as an "01" and
+        // an "02" variant, which the prefix covers); nothing here
+        // references OreMines code, so with the mod absent the rules are
+        // inert text that matches nothing. Location-scale bounds (80 m
+        // duplicate radius, 8 h expiry) like dungeon entrances, not the
+        // 40 m of a respawning ore deposit: a mine is a fixed place.
+        set.AddRule(new SurveyRule("bom_flintmine*", "cc:mine", "Resources", 80f, 480f));
+        set.AddRule(new SurveyRule("bom_coppermine*", "cc:mine", "Resources", 80f, 480f));
+        set.AddRule(new SurveyRule("bom_tinmine*", "cc:mine", "Resources", 80f, 480f));
+        set.AddRule(new SurveyRule("bom_coalmine*", "cc:mine", "Resources", 80f, 480f));
+        set.AddRule(new SurveyRule("bom_ironmine*", "cc:mine", "Resources", 80f, 480f));
+        set.AddRule(new SurveyRule("bom_silvermine*", "cc:mine", "Resources", 80f, 480f));
+        set.AddRule(new SurveyRule("bom_blackmetalmine*", "cc:mine", "Resources", 80f, 480f));
+        set.AddRule(new SurveyRule("bom_flametalmine*", "cc:mine", "Resources", 80f, 480f));
+
+        set.AddBlacklist("piece_*");
+        set.AddBlacklist("vfx_*");
+        set.AddBlacklist("sfx_*");
+        set.AddBlacklist("fx_*");
+        return set;
+    }
+
+    /// <summary>The exact starter set shipped from v1.0.3 (the issue #258
+    /// dungeon fix) through v1.2.2, used to recognize an untouched current
+    /// starter file and upgrade it in place to the issue #385 OreMines
+    /// identities. A file the player edited never matches and is never
+    /// touched.</summary>
+    public static SurveyRuleSet V103StarterSet()
+    {
+        var set = new SurveyRuleSet();
+        set.AddRule(new SurveyRule("raspberrybush*", "cc:resource", "Resources", 30f, 120f));
+        set.AddRule(new SurveyRule("blueberrybush*", "cc:resource", "Resources", 30f, 120f));
+        set.AddRule(new SurveyRule("cloudberrybush*", "cc:resource", "Resources", 30f, 120f));
+        set.AddRule(new SurveyRule("pickable_mushroom*", "cc:resource", "Resources", 30f, 120f));
+        set.AddRule(new SurveyRule("pickable_thistle*", "cc:resource", "Resources", 30f, 120f));
+        set.AddRule(new SurveyRule("pickable_dandelion*", "cc:resource", "Resources", 30f, 120f));
+        set.AddRule(new SurveyRule("pickable_flint*", "cc:resource", "Resources", 30f, 120f));
+        set.AddRule(new SurveyRule("pickable_seedcarrot*", "cc:resource", "Resources", 40f, 120f));
+        set.AddRule(new SurveyRule("pickable_seedturnip*", "cc:resource", "Resources", 40f, 120f));
+        set.AddRule(new SurveyRule("pickable_seedonion*", "cc:resource", "Resources", 40f, 120f));
+        set.AddRule(new SurveyRule("gucksack*", "cc:resource", "Resources", 40f, 120f));
+        set.AddRule(new SurveyRule("beehive*", "cc:resource", "Resources", 60f, 240f));
+        set.AddRule(new SurveyRule("rock4_copper*", "cc:mine", "Resources", 40f, 240f));
+        set.AddRule(new SurveyRule("minerock_tin*", "cc:mine", "Resources", 30f, 240f));
+        set.AddRule(new SurveyRule("silvervein*", "cc:mine", "Resources", 40f, 240f));
+        set.AddRule(new SurveyRule("minerock_obsidian*", "cc:mine", "Resources", 40f, 240f));
+        set.AddRule(new SurveyRule("mudpile*", "cc:mine", "Resources", 40f, 240f));
+        set.AddRule(new SurveyRule("crypt*", "cc:dungeon", "Dungeons", 80f, 480f));
+        set.AddRule(new SurveyRule("halfburried_forestcrypt*", "cc:dungeon", "Dungeons", 80f, 480f));
+        set.AddRule(new SurveyRule("hildir_crypt*", "cc:dungeon", "Dungeons", 80f, 480f));
+        set.AddRule(new SurveyRule("sunkencrypt*", "cc:dungeon", "Dungeons", 80f, 480f));
+        set.AddRule(new SurveyRule("trollcave*", "cc:dungeon", "Dungeons", 80f, 480f));
+        set.AddRule(new SurveyRule("bearcave*", "cc:dungeon", "Dungeons", 80f, 480f));
+        set.AddRule(new SurveyRule("mountaincave*", "cc:dungeon", "Dungeons", 80f, 480f));
+        set.AddRule(new SurveyRule("hildir_cave*", "cc:dungeon", "Dungeons", 80f, 480f));
+        set.AddRule(new SurveyRule("runestone*", "cc:objective", "Points of interest", 80f, 480f));
+        set.AddRule(new SurveyRule("vegvisir*", "cc:objective", "Points of interest", 80f, 480f));
         set.AddBlacklist("piece_*");
         set.AddBlacklist("vfx_*");
         set.AddBlacklist("sfx_*");

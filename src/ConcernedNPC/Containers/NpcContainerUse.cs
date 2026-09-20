@@ -31,7 +31,7 @@ namespace TheConcernedCat.ConcernedNPC.Containers;
 /// <see cref="NpcContainerRefusal"/>. This says what the player allows; that
 /// says what the world allows; an NPC needs both.</summary>
 [Flags]
-internal enum NpcContainerUse
+public enum NpcContainerUse
 {
     /// <summary>Not enabled for NPCs. The default, and what every unknown
     /// answer becomes.</summary>

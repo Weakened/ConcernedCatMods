@@ -142,7 +142,7 @@ internal static class StewardWorkerPrefab
             UnityEngine.Object.DestroyImmediate(clone);
             return Fail(
                 "'" + baseCreature + "' cannot be the Steward: " + missing +
-                ". He needs a networked humanoid body.",
+                ". She needs a networked humanoid body.",
                 log);
         }
 

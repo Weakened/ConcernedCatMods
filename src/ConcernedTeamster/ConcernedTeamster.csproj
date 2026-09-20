@@ -36,6 +36,19 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- CNPC-R2 (#381), adopting #371: the shared NPC runtime ships as its own
+         package and is referenced, never copied. <Private>false</Private> keeps
+         its DLL out of this product's output and therefore out of its ZIP, so a
+         player installs it once, from its own Thunderstore package, which is
+         pinned in Package/thunderstore.toml. The BepInDependency in Plugin.cs
+         turns a missing package into one clear line at load. All four together
+         or none: tools/validate_repo.py check_library_consumers. -->
+    <ProjectReference Include="..\ConcernedNPC\ConcernedNPC.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="JotunnLib" Version="2.29.2" />
   </ItemGroup>
 </Project>

@@ -36,7 +36,7 @@ namespace TheConcernedCat.ConcernedNPC.Work;
 /// <see cref="Revision"/> against the value it started with. A changed area
 /// pauses that job for a person to look at; it never silently widens or narrows
 /// work already under way.</summary>
-internal interface INpcWorkArea
+public interface INpcWorkArea
 {
     /// <summary>May an NPC work at this point? Height is part of the question
     /// only if this area says it is; the shipped areas ignore it.</summary>

@@ -106,11 +106,13 @@ internal readonly struct RoutePlan
         RouteVerdict verdict,
         IReadOnlyList<NpcPoint>? waypoints,
         float lengthMetres,
+        float arrivalToleranceMetres,
         int requestRevision,
         int planRevision)
     {
         Verdict = verdict;
         LengthMetres = lengthMetres;
+        ArrivalToleranceMetres = arrivalToleranceMetres;
         RequestRevision = requestRevision;
         PlanRevision = planRevision;
 
@@ -138,6 +140,17 @@ internal readonly struct RoutePlan
 
     /// <summary>How far the whole route is, in metres.</summary>
     internal float LengthMetres { get; }
+
+    /// <summary>How close counts as arrived, carried from the request that
+    /// asked for this route.
+    ///
+    /// It lives here because the final goal of a walk needs it and the plan
+    /// is the only thing that reaches that far. Without it a planner has to
+    /// remember which tolerance went with which revision, which is a cache
+    /// of something that was never lost - and a cache that misses invents a
+    /// number instead. A refused route carries zero, because nothing is
+    /// going to arrive.</summary>
+    internal float ArrivalToleranceMetres { get; }
 
     /// <summary>The revision of the <b>request</b> this answers - what was
     /// asked for, not which answer this is. Two different routes to the same
@@ -179,7 +192,7 @@ internal readonly struct RoutePlan
                 nameof(verdict), "A refused route needs a verdict that explains it.");
         }
 
-        return new RoutePlan(verdict, null, 0f, requestRevision, planRevision);
+        return new RoutePlan(verdict, null, 0f, 0f, requestRevision, planRevision);
     }
 }
 

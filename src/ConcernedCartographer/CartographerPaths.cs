@@ -40,23 +40,55 @@ namespace TheConcernedCat.ConcernedCartographer;
 /// caused. The probe's own evidence lists are the authority — five world
 /// sidecars (<c>.pins.tsv</c>, <c>.roads.tsv</c>, <c>.routes-atlas.tsv</c>,
 /// <c>.survey-rejected.tsv</c>, <c>.terrain-intent.tsv</c>), plus
-/// <c>views.tsv</c>, <c>cartographer-strings.tsv</c>, <c>support-report.txt</c>
-/// and the pre-existing <c>survey-rules.tsv</c>. Hiding any of them turns a
+/// <c>views.tsv</c>, <c>cartographer-strings.tsv</c>, <c>support-report.log</c>
+/// (and the <c>.txt</c> an older build wrote) and the pre-existing
+/// <c>survey-rules.tsv</c>. Hiding any of them turns a
 /// returning player into a new one, which takes their toolbar away, because
 /// <c>LegacyEvidence.None</c> does not unlock. The two directions are not
 /// symmetric and this one is worse.
 ///
 /// <c>doors-&lt;world&gt;.tsv</c> and the companion sidecars are also written
 /// into <see cref="Root"/>, by the shared companion sources, which cannot call
-/// this type — the shared layer stays BepInEx-free. They reach the probe through
-/// <c>CartographerFirstRunFiles</c> instead, which is why the validator audits
-/// those files for the name rule even though they cannot obey the owner rule.
+/// this type — the shared layer stays BepInEx-free. The companion sidecars
+/// reach the probe through <c>CartographerFirstRunFiles</c>'s
+/// <c>.companions.tsv</c> suffixes; <c>doors-&lt;world&gt;.tsv</c> reaches no
+/// list at all and lands in the probe's listing as an unrecognised name, which
+/// grants through the weak "somebody was here" signal. That is the harmless
+/// direction and it is pre-existing, so it is left alone here rather than
+/// changed in passing — but it is not what an earlier version of this comment
+/// said, which was that it reaches the probe.
 ///
-/// <b>What the validator actually enforces.</b> Two things: that this file is the
-/// only place composing <c>Paths.ConfigPath</c>, and — the one that matters —
-/// that every name handed to <see cref="InRoot"/> is one the probe knows. The
-/// first version of that check enforced only the token, so moving a marker back
-/// into the probed root passed green: one token, and #343's exact shape.
+/// <b>Why everything stays under <c>BepInEx/config</c>.</b> Not habit, and not
+/// because a data file belongs among settings. Read from the installed
+/// Thunderstore Mod Manager bundle (1.124.2, <c>APP_NAME="r2modman"</c>, core
+/// 3.2.18): a profile export archives <c>BepInEx/config</c> <b>wholesale and
+/// unfiltered</b> through its own <c>addFolder("config", …)</c> special case,
+/// and every other folder has to pass an extension whitelist
+/// (<c>SUPPORTED_CONFIG_FILE_EXTENSIONS</c>: <c>.cfg .txt .json .yml .yaml
+/// .ini</c>). <c>.tsv</c>, <c>.bak</c> and <c>.dat</c> are on neither list, so a
+/// sibling folder such as <c>BepInEx/data</c> would silently drop this
+/// product's entire atlas, its backups and its author identity from the
+/// player's own backup — outbound only, with no warning, and import is
+/// permissive enough that hand-testing a zip would not show it.
+/// <c>BepInEx/data</c> is not a BepInEx convention either: the installed
+/// 5.4.23.5 exposes no such path.
+///
+/// <b>And the config editor was never about the folder.</b> Same bundle: the
+/// editor is rooted at the <i>whole profile</i>, excluding only <c>dotnet</c>,
+/// <c>_state</c> and a plugin's <c>manifest.json</c>, and then filters by that
+/// same extension list. It descends into anything. It has never listed a
+/// <c>.tsv</c>. Quandru saw <c>author-id.txt</c> because <c>.txt</c> is on the
+/// list — which is why the fix is extensions, enforced by the validator rule
+/// below, and not geography. <b>Gale itself is an independent implementation
+/// and has not been assessed at all.</b>
+///
+/// <b>What the validator actually enforces.</b> Three things: that this file is
+/// the only place composing <c>Paths.ConfigPath</c>; that every name handed to
+/// <see cref="InRoot"/> is one the probe knows — the first version of that
+/// check enforced only the token, so moving a marker back into the probed root
+/// passed green: one token, and #343's exact shape; and that no name handed to
+/// <see cref="InRoot"/> has an extension a configuration editor opens unless
+/// <c>CartographerConfigFiles</c> says a player edits it.
 /// </summary>
 internal static class CartographerPaths
 {

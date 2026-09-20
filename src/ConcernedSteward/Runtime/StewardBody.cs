@@ -227,7 +227,7 @@ internal sealed class StewardBody : MonoBehaviour
         catch (Exception exception)
         {
             ErrorLog?.Invoke(
-                "The Steward could not write down what he is carrying: " +
+                "The Steward could not write down what she is carrying: " +
                 exception.GetType().Name + ": " + exception.Message);
             return false;
         }
@@ -277,7 +277,7 @@ internal sealed class StewardBody : MonoBehaviour
                 catch (Exception exception)
                 {
                     ErrorLog?.Invoke(
-                        "The Steward died and his " + named + " could not be dropped, so it is " +
+                        "The Steward died and her " + named + " could not be dropped, so it is " +
                         "lost with the body: " + exception);
                 }
             }

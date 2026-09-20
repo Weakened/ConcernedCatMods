@@ -29,6 +29,20 @@ QUOTE = chr(34)
 # suffix is this build's own bookkeeping and belongs under "state".
 MARKER_EXTENSION = ".dat"
 
+# What a mod manager's configuration editor offers a player for editing, read
+# verbatim from the installed Thunderstore Mod Manager bundle (1.124.2,
+# APP_NAME="r2modman", core 3.2.18) as SUPPORTED_CONFIG_FILE_EXTENSIONS.
+#
+# This, and not the folder, is what #304 turned out to be. The editor is rooted
+# at the WHOLE profile - it excludes only `dotnet`, `_state` and a plugin's
+# `manifest.json` - and then filters by this list. Quandru was offered
+# `author-id.txt` because `.txt` is on it; the atlas's `.tsv` sidecars have
+# never been listed, and moving files to another folder would not have changed
+# either fact. Mirrored here because a Python check cannot read
+# CartographerConfigFiles.ExtensionsAnEditorOpens, which carries the same list
+# for the same reason.
+CONFIG_EDITOR_EXTENSIONS = (".cfg", ".txt", ".json", ".yml", ".yaml", ".ini")
+
 PRODUCTS: dict[str, dict[str, object]] = {
     "cartographer": {
         "display": "Concerned Cartographer",
@@ -599,6 +613,315 @@ def check_library_consumers(errors: list[str]) -> list[str]:
 # this is a check.
 ARBITER_BYPASS = re.compile(r"\bnew\s+ActorModeOwner\s*\(")
 
+# CNPC-000 (#371): the NPC library may own the MECHANISM of writing a file, and
+# must never own the FORMAT or the PATH.
+#
+# That distinction is the program's acceptance criterion. A pre-refactor data
+# directory, dropped in unchanged, has to keep working with no migration code
+# having run, and that holds only while every durable name, row tag, schema
+# number and directory stays with the role that already writes it. An atomic
+# write helper handed a path is shared plumbing; a library that composes a path
+# or names a schema has become a second author of somebody else's save file,
+# and it would look perfectly reasonable in review.
+#
+# So the file primitives are confined to a named, pinned allow-list - the two
+# files that exist to be that plumbing - while composing a path and naming a
+# schema are refused everywhere, the allow-list included.
+#
+# Proposed by the agent that moved the custody ledger, which proved it for its
+# own two folders with a test. This is the mechanical backstop for the folders
+# nobody has written yet.
+# Every File and Directory member except the ones that only ask a question.
+#
+# The first version of this named the members it knew, and a review found six
+# ways past it in a single pass - WriteAllBytes, ReadAllBytes, CreateText,
+# OpenWrite, AppendText, AppendAllLines - because a word boundary after "Open"
+# does not match "OpenWrite". A deny-list over a namespace somebody else owns is
+# the wrong shape: it is only ever as complete as the last person to think about
+# it. Name what may be called instead.
+LIBRARY_FILE_APIS = re.compile(
+    r"\b(?:File|Directory)\.(?!Exists\b)\w+"
+    r"|\bnew\s+Stream(?:Writer|Reader)\b"
+    r"|\bnew\s+File(?:Stream|Info)\b")
+
+# Refused everywhere in the library, the allow-list included: a path the library
+# composes is a directory it has chosen, and a schema it names is a format it
+# has taken ownership of.
+# Choosing where data lives, and naming what shape it is in. Refused
+# everywhere, the plumbing included: a library that picks a directory or names a
+# schema has taken ownership of somebody else's save file.
+LIBRARY_FORMAT_OWNERSHIP = re.compile(
+    r"\bPath\.(?:Combine|Join|GetTempPath|GetTempFileName)\b|\bSchemaVersion\b")
+
+# Reading a component of a path somebody else chose. That is not ownership - the
+# plumbing has to check that the path it was handed is absolute and names a
+# directory before it writes there - but it is one string concatenation away
+# from composition, so it is confined to the same two pinned files as the file
+# primitives rather than allowed everywhere.
+LIBRARY_PATH_INSPECTION = re.compile(r"\bPath\.(?:GetDirectoryName|GetFullPath|GetFileName)\b")
+
+# The only two files that may call a file primitive, and what each is for. A
+# third entry is a deliberate edit with a reason, not a convenience.
+LIBRARY_PERSISTENCE_PLUMBING = {
+    "Persistence/NpcAtomicText.cs": "write to a temporary file then replace, on a path it is given",
+    "Persistence/NpcSidecarFile.cs": "read and write one sidecar whose path and format the role owns",
+}
+
+
+def check_the_npc_library_writes_no_file(errors: list[str]) -> list[str]:
+    """Fails on a file API or a schema constant inside the NPC library.
+
+    The library holds runtime behaviour, never a format. Roles keep their own
+    files, their own row tags and their own schema numbers, because those are
+    what an existing player's save is made of.
+    """
+    library = LIBRARIES.get("concernednpc")
+    if library is None:
+        return []
+    project_dir: Path = library["project_dir"]  # type: ignore[assignment]
+    if not project_dir.is_dir():
+        return []
+
+    scanned = 0
+    seen_plumbing = set()
+    for path in sorted(project_dir.rglob("*.cs")):
+        relative = path.relative_to(project_dir)
+        if relative.parts[0] in ("obj", "bin"):
+            continue
+        scanned += 1
+        key = "/".join(relative.parts)
+        is_plumbing = key in LIBRARY_PERSISTENCE_PLUMBING
+        if is_plumbing:
+            seen_plumbing.add(key)
+
+        for number, line in enumerate(path.read_text(encoding="utf-8-sig").splitlines(), start=1):
+            stripped = line.strip()
+            if stripped.startswith("///") or stripped.startswith("//"):
+                continue
+
+            owned = LIBRARY_FORMAT_OWNERSHIP.search(line)
+            if owned:
+                fail(
+                    f"[concernednpc] The NPC library may not compose a path or name a schema: "
+                    f"{owned.group(0)!r} at {path.relative_to(ROOT)}:{number}. A role owns where its "
+                    "data lives and what shape it is in.", errors)
+
+            inspected = LIBRARY_PATH_INSPECTION.search(line)
+            if inspected and not is_plumbing:
+                fail(
+                    f"[concernednpc] Only the named persistence plumbing may take a path apart: "
+                    f"{inspected.group(0)!r} at {path.relative_to(ROOT)}:{number}. Reading a path's "
+                    "pieces is one concatenation away from choosing where data lives.", errors)
+
+            match = LIBRARY_FILE_APIS.search(line)
+            if match and not is_plumbing:
+                fail(
+                    f"[concernednpc] Only the named persistence plumbing may touch a file: "
+                    f"{match.group(0)!r} at {path.relative_to(ROOT)}:{number}. Take a path and hand "
+                    "the writing to Persistence/NpcAtomicText.cs.", errors)
+
+    for key in sorted(set(LIBRARY_PERSISTENCE_PLUMBING) - seen_plumbing):
+        fail(
+            f"[concernednpc] The persistence allow-list names {key}, which does not exist. An "
+            "allow-list that outlives its file is an exemption nobody is watching.", errors)
+
+    return [
+        f"[concernednpc] Library persistence audit: {scanned} sources; no path composed, no schema "
+        f"named, file primitives confined to {len(LIBRARY_PERSISTENCE_PLUMBING)} pinned files",
+    ]
+
+
+# The finish verdict. The first version of this rule matched the literal
+# "JobPlanVerdict.NothingToDo" line by line, and an independent reviewer walked
+# past it four ways: an alias, a static import, a cast, and a line break after
+# the dot. Matching the bare identifier instead is worse, not better - a
+# different enum in this same folder has a member of the same name. So the
+# qualified spelling is matched across newlines, and every way of avoiding the
+# qualified spelling is banned outright.
+PLANNING_FINISH_VERDICT = re.compile(r"JobPlanVerdict\s*\.\s*NothingToDo", re.S)
+
+# Reading the verdict is not deciding it: a driver switching on the answer
+# consumes the decision rather than making one.
+PLANNING_VERDICT_READ = re.compile(
+    r"case\s+JobPlanVerdict\s*\.\s*NothingToDo"
+    r"|[=!]=\s*JobPlanVerdict\s*\.\s*NothingToDo"
+    r"|JobPlanVerdict\s*\.\s*NothingToDo\s*[=!]=", re.S)
+
+# Spellings that would let the verdict reach the compiler unqualified.
+PLANNING_VERDICT_INDIRECTION = re.compile(
+    r"using\s+\w+\s*=\s*[\w.]*\bJobPlanVerdict\b"
+    r"|using\s+static\s+[\w.]*\bJobPlanVerdict\b"
+    r"|\(\s*JobPlanVerdict\s*\)")
+
+# Parameters that state a claim rather than a quantity. Zero for
+# `leftForAnotherRound` says the plan covered the whole job; an empty `carrying`
+# says the NPC holds nothing this job may spend. Neither is checkable inside this
+# library, and both were silent once, and both times a job reported itself
+# finished with targets untouched. The neighbours are included because a rule
+# keyed to exactly two literals is one rename away from silence; this is a
+# backstop, and the compiler is the primary enforcement.
+PLANNING_CLAIM_PARAMETERS = re.compile(
+    r"^(?:left|carry|carrying|carried|remaining|outstanding|covered|leftover)"
+    r"|(?:LeftOver|ForAnotherRound|Carried|Carrying|Remaining|Outstanding)$",
+    re.I)
+
+
+def _npc_library_sources(folder=None) -> list[Path]:
+    """Sources of the NPC library, or of one folder of it. [] when absent."""
+    library = LIBRARIES.get("concernednpc")
+    if library is None:
+        return []
+    project_dir: Path = library["project_dir"]  # type: ignore[assignment]
+    root = project_dir if folder is None else project_dir / folder
+    if not root.is_dir():
+        return []
+    return [path for path in sorted(root.rglob("*.cs"))
+            if path.relative_to(project_dir).parts[0] not in ("obj", "bin")]
+
+
+def _npc_code(path: Path) -> str:
+    """The file with comments blanked and line count preserved.
+
+    The first version skipped only lines that *started* with a comment marker, so
+    a trailing `//` both hid a violation and counted a mention.
+    """
+    out = []
+    for raw in path.read_text(encoding="utf-8-sig").splitlines():
+        out.append(re.sub(r"/\*.*?\*/", "", _strip_cs_line_comment(raw)))
+    return "\n".join(out)
+
+
+def _line_of(code: str, index: int) -> int:
+    return code.count("\n", 0, index) + 1
+
+
+def _parameter_defaults(code: str):
+    """(line, parameter name) for each default value, found by scanning.
+
+    A default is an `=` inside parentheses. String and character literals are
+    skipped, `==`/`!=`/`<=`/`>=`/`=>` are not defaults, and attribute arguments
+    are stepped over because their named properties also use `=`. Because the
+    scan tracks parenthesis depth across the whole file, it cannot be evaded by
+    where the newlines fall - which is how a one-line expression-bodied member
+    and a split parameter list both got past the first version of this rule.
+    """
+    depth = 0
+    index = 0
+    length = len(code)
+    while index < length:
+        char = code[index]
+        if char in "\"'":
+            quote = char
+            index += 1
+            while index < length and code[index] != quote:
+                index += 2 if code[index] == "\\" else 1
+            index += 1
+            continue
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth = max(0, depth - 1)
+        elif char == "[":
+            while index < length and code[index] != "]":
+                index += 1
+        elif char == "=" and depth > 0:
+            before = code[index - 1] if index else " "
+            after = code[index + 1] if index + 1 < length else " "
+            if before not in "=!<>" and after not in "=>":
+                end = index
+                while end > 0 and code[end - 1].isspace():
+                    end -= 1
+                start = end
+                while start > 0 and (code[start - 1].isalnum() or code[start - 1] == "_"):
+                    start -= 1
+                yield _line_of(code, index), code[start:end]
+        index += 1
+
+
+def check_npc_planning_decides_nothing_to_do_once(errors: list[str]) -> list[str]:
+    """Fails unless exactly one place in the library decides a job is finished.
+
+    NothingToDo is the one verdict a job may be reported finished on without
+    doing anything, and it has had three separate ways in - a conclusive empty
+    snapshot, a trip whose stops were all dropped, and a first trip the chest cap
+    emptied. Every one was a blocker, because every one was another place that
+    could close a job with its targets untouched.
+
+    Scoped to the whole library rather than to Planning/, because the job driver
+    lives in Jobs/ and could otherwise answer the verdict freely.
+    """
+    sources = _npc_library_sources()
+    if not sources:
+        fail(
+            "[concernednpc] The NPC library is missing, so the verdict audit checked nothing. "
+            "Point this rule at its new home rather than leaving it green over an empty set.",
+            errors)
+        return []
+
+    sites = []
+    for path in sources:
+        code = _npc_code(path)
+        for indirect in PLANNING_VERDICT_INDIRECTION.finditer(code):
+            fail(
+                f"[concernednpc] The finish verdict may not be reached under another name: "
+                f"{indirect.group(0).strip()!r} at "
+                f"{path.relative_to(ROOT)}:{_line_of(code, indirect.start())}. An alias, a static "
+                "import or a cast puts a second decision site past this audit.", errors)
+        reads = {match.end() for match in PLANNING_VERDICT_READ.finditer(code)}
+        for match in PLANNING_FINISH_VERDICT.finditer(code):
+            if match.end() in reads:
+                continue
+            sites.append(f"{path.relative_to(ROOT)}:{_line_of(code, match.start())}")
+
+    if len(sites) != 1:
+        fail(
+            f"[concernednpc] A job may be reported finished on the NothingToDo verdict and on "
+            f"nothing else, so it is decided once: expected 1 site, found {len(sites)} "
+            f"({', '.join(sites) if sites else 'none'}). Each extra one is another way to close a "
+            "job with work still to do.", errors)
+
+    return [
+        f"[concernednpc] Planning verdict audit: {len(sources)} library sources; the finish verdict "
+        f"is decided at {len(sites)} site, reachable under no other name",
+    ]
+
+
+def check_npc_planning_never_defaults_a_claim(errors: list[str]) -> list[str]:
+    """Fails on a default value for a parameter that states a claim.
+
+    A call site that stays silent about what the plan left out, or about what the
+    NPC is already carrying, is not omitting a detail - it is asserting something
+    it was never asked. Both were silent once and both produced the same failure.
+
+    The sites are found by scanning parentheses rather than by line shape,
+    because a reviewer got a default past the first version of this rule on a
+    one-line expression-bodied member, whose line ends in a semicolon, and again
+    by splitting the default across two lines.
+    """
+    sources = _npc_library_sources("Planning")
+    if not sources:
+        fail(
+            "[concernednpc] The planning folder is missing, so the defaulted-claim audit checked "
+            "nothing. Point this rule at the pipeline's new home rather than leaving it green "
+            "over an empty set.", errors)
+        return []
+
+    checked = 0
+    for path in sources:
+        for number, name in _parameter_defaults(_npc_code(path)):
+            checked += 1
+            if name and PLANNING_CLAIM_PARAMETERS.search(name):
+                fail(
+                    f"[concernednpc] {name!r} states a claim, so it may not carry a default "
+                    f"({path.relative_to(ROOT)}:{number}). Nothing in this library can check it, "
+                    "and a caller that stays silent asserts it by accident.", errors)
+
+    return [
+        f"[concernednpc] Planning claim audit: {len(sources)} sources, {checked} parameter defaults "
+        f"scanned, none of them a claim",
+    ]
+
+
 
 def check_library_consumers_do_not_bypass_the_arbiter(errors: list[str]) -> list[str]:
     """Once a product consumes the NPC library, its modes come from the arbiter.
@@ -814,12 +1137,36 @@ TEAMSTER_INTERNET_EGRESS_TOKENS = (
 
 
 def _strip_cs_line_comment(line: str) -> str:
-    """Everything from the first // (covers // and ///) removed. Teamster's
-    only network/ownership token mentions are in doc comments stating their
-    absence, so comment-stripping keeps the audit true without flagging them.
-    No // appears inside a string literal in the audited files (checked)."""
-    index = line.find("//")
-    return line if index < 0 else line[:index]
+    """Everything from the first // outside a string literal removed.
+
+    This used to be `line.find("//")`, with a docstring asserting no audited
+    file contained a // inside a string. That is not a property anybody
+    enforces, and an independent review showed the cost: one URL in a string
+    truncates the line, and every audit token after it on that line becomes
+    invisible. A scanner that skips quoted text costs four lines and removes
+    the assumption."""
+    index = 0
+    length = len(line)
+    while index < length:
+        char = line[index]
+        if char == '"' or char == "'":
+            # A verbatim string (@"...") has no escapes and doubles its quotes;
+            # both are handled by simply looking for the next unescaped quote.
+            verbatim = index > 0 and line[index - 1] == "@"
+            index += 1
+            while index < length:
+                if line[index] == "\\" and not verbatim:
+                    index += 2
+                    continue
+                if line[index] == char:
+                    break
+                index += 1
+            index += 1
+            continue
+        if char == "/" and index + 1 < length and line[index + 1] == "/":
+            return line[:index]
+        index += 1
+    return line
 
 
 # CT-028: cooperative diagnostics help crews understand a cart without
@@ -967,6 +1314,72 @@ TEAMSTER_WORKER_FACTORY_ONLY_TOKENS = (
 # vanilla's extra pull mass, or writing a body's kinematic flag or joint link.
 # (The parking brake's own constraint write stays where CT-002 allows it.)
 TEAMSTER_OUTSIDE_WORKERS_TOKENS = (".Interact(", "SetExtraMass")
+
+# The one owner-authorized exception to the worker runtime's token list
+# (owner decision, 2026-09-19, for #381 Gunnar collection).
+#
+# Gunnar's collection role has to pick up loose branches and stones, and
+# vanilla's only route to that is `Pickable.Interact`, which Foreman already
+# calls legitimately from its own sanctioned port because Foreman carries no
+# such audit. Rather than let Teamster's source avoid spelling a banned token
+# while the behaviour changed anyway - which would have left this audit green
+# and meaningless - the allowance is explicit, named, and here.
+#
+# It is deliberately narrower than what was asked for. The agent requested three
+# APIs; `Pickable.Interact` is the only one loose pickup needs. Picking runs
+# `RPC_Pick` and the ownership claim *inside vanilla*, on a pickable this process
+# already owns, so the port spells no RPC of its own - verified against Foreman's
+# port, which makes exactly one game call and names no `InvokeRPC` anywhere.
+# Felling a tree (`TreeBase.Damage`) and the cosmetic hammer animation
+# (`ZSyncAnimation.SetTrigger`) are separate capabilities, were NOT authorized,
+# and would each need their own owner decision.
+#
+# So: one token, in one file. Every other forbidden token still fails in that
+# file, and this token still fails in every other file, inside Workers and out.
+# Ownership takeover, teleports, forces, cart interaction and arbitrary RPC are
+# untouched.
+# The carve-out, pinned three ways after an independent review got a banned
+# cart interaction past the first version of it.
+#
+# By full path, not basename: a second file called GunnarCollectionPort.cs in
+# any other directory inherited the allowance, and the only signal was a worker
+# count nobody pins.
+#
+# By the exact call, not the token: the allowance was for `.Interact(` on any
+# receiver, so `cart.Interact(...)` - the cart interaction the owner said not to
+# weaken - passed inside the authorized file. A text audit cannot know a
+# receiver's type, so the authorized call is pinned verbatim instead. That is
+# the right shape for an authority boundary: changing the call should require
+# re-authorization rather than being waved through by a token match.
+#
+# And once: more than one pick call in the port is a different program.
+TEAMSTER_COLLECTION_PORT_PATH = ("Adapters", "Workers", "GunnarCollectionPort.cs")
+TEAMSTER_COLLECTION_PORT_TOKEN = ".Interact("
+TEAMSTER_COLLECTION_PORT_CALL = re.compile(
+    r"\bsource\s*\.\s*Interact\s*\(\s*_worker\s*,\s*repeat\s*:\s*false\s*,\s*alt\s*:\s*false\s*\)")
+
+
+def _audit_token(token: str) -> re.Pattern:
+    """One literal audit token, tolerant of the whitespace C# allows.
+
+    Tokens were matched as literal substrings of a single stripped line. An
+    independent review defeated that with one space - `Interact (` never
+    contains `.Interact(` - and again by splitting a receiver from its member
+    across two lines. Both compiled against the real game assemblies, so both
+    would have shipped, and the audit stayed green. Every paren-bearing token
+    was affected, which is most of the dangerous ones.
+
+    Whitespace is permitted exactly where C# permits it, around the punctuation,
+    and the match runs over the whole comment-stripped file so a newline is just
+    more whitespace."""
+    out = []
+    for char in token:
+        if char in ".(":
+            out.append(r"\s*" + re.escape(char) + r"\s*")
+        else:
+            out.append(re.escape(char))
+    return re.compile("".join(out))
+
 TEAMSTER_OUTSIDE_WORKERS_ASSIGNMENT = re.compile(r"\.(isKinematic|connectedBody)\s*[-+*/&|^]?=(?!=)")
 
 
@@ -1011,19 +1424,8 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
                 assignment = TEAMSTER_WORKER_FORBIDDEN_ASSIGNMENT.search(code)
                 if assignment:
                     problems.append(f"a forbidden write '{assignment.group(0).strip()}'")
-                for token in TEAMSTER_WORKER_FORBIDDEN_TOKENS:
-                    if token in code:
-                        problems.append(f"the forbidden token {token!r}")
-                if path.name != TEAMSTER_WORKER_IDENTITY_FILE:
-                    for token in TEAMSTER_WORKER_FACTORY_ONLY_TOKENS:
-                        if token in code:
-                            problems.append(
-                                f"the token {token!r}, which belongs to the prefab factory "
-                                f"({TEAMSTER_WORKER_IDENTITY_FILE}) alone")
+                pass
             else:
-                for token in TEAMSTER_OUTSIDE_WORKERS_TOKENS:
-                    if token in code:
-                        problems.append(f"the forbidden token {token!r} outside Adapters/Workers")
                 outside = TEAMSTER_OUTSIDE_WORKERS_ASSIGNMENT.search(code)
                 if outside:
                     problems.append(f"a forbidden write '{outside.group(0).strip()}' outside Adapters/Workers")
@@ -1034,11 +1436,50 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
                     "only through the vanilla motor, attaches and detaches only through the cart's own "
                     "methods, calibrates only his own body and writes only his own identity", errors)
 
+        # Tokens are matched over the whole comment-stripped file rather than
+        # line by line, because a space or a newline defeated the substring
+        # match and the Release build was happy either way.
+        code_text = "\n".join(_strip_cs_line_comment(raw) for raw in
+                              path.read_text(encoding="utf-8").splitlines())
+        authorized = tuple(parts) == TEAMSTER_COLLECTION_PORT_PATH
+        allowed_calls = (len(TEAMSTER_COLLECTION_PORT_CALL.findall(code_text))
+                         if authorized else 0)
+        if authorized and allowed_calls > 1:
+            hits += 1
+            fail(
+                f"[interop] #313 worker-runtime scope audit: the authorized pickup appears "
+                f"{allowed_calls} times in {rel}; it is authorized once", errors)
+
+        scanned = (TEAMSTER_WORKER_FORBIDDEN_TOKENS if in_workers
+                   else TEAMSTER_OUTSIDE_WORKERS_TOKENS)
+        if in_workers and path.name != TEAMSTER_WORKER_IDENTITY_FILE:
+            scanned = scanned + TEAMSTER_WORKER_FACTORY_ONLY_TOKENS
+        where = "" if in_workers else " outside Adapters/Workers"
+        for token in scanned:
+            spent = 0
+            for match in _audit_token(token).finditer(code_text):
+                if (token == TEAMSTER_COLLECTION_PORT_TOKEN and authorized
+                        and spent < allowed_calls
+                        and TEAMSTER_COLLECTION_PORT_CALL.search(
+                            code_text, max(0, match.start() - 40), match.end() + 80)):
+                    # The owner-authorized pickup, pinned to its exact call so
+                    # that `.Interact(` on anything else - a cart, a container,
+                    # a door - still fails here.
+                    spent += 1
+                    continue
+                hits += 1
+                fail(
+                    f"[interop] #313 worker-runtime scope audit: the forbidden token {token!r}"
+                    f"{where} in {rel}:{code_text.count(chr(10), 0, match.start()) + 1} — Gunnar "
+                    "moves only through the vanilla motor, attaches and detaches only through the "
+                    "cart's own methods, calibrates only his own body and writes only his own "
+                    "identity", errors)
+
     return [
-        f"[interop] #313 worker-runtime scope audit: {worker_files} worker files; cart attach/detach/detach-all only "
+        f"[interop] #313 worker-runtime scope audit: {worker_files} worker files; {TEAMSTER_COLLECTION_PORT_TOKEN!r} owner-authorized as one pinned call in {'/'.join(TEAMSTER_COLLECTION_PORT_PATH)} alone; cart attach/detach/detach-all only "
         f"in Adapters/Workers, mass writes only in {TEAMSTER_WORKER_CALIBRATION_FILE}, network-object writes only "
         f"'tcc.worker.*' keys in {TEAMSTER_WORKER_IDENTITY_FILE}, no teleport/pose/velocity/constraint/joint/cart-"
-        f"tuning writes, no component surgery or reflection outside the prefab factory ({hits} violations)",
+        f"tuning writes, no component surgery or reflection outside the prefab factory (inside Adapters/Workers only; reflection elsewhere in Teamster is not audited by this rule) ({hits} violations)",
     ]
 
 
@@ -1627,6 +2068,173 @@ def _cartographer_known_names() -> tuple[set[str], set[str]]:
     return names, suffixes
 
 
+def _cartographer_editor_extensions() -> list[str]:
+    """The editor's extension list as the C# source carries it.
+
+    There are two copies of a measured constant - this check's
+    CONFIG_EDITOR_EXTENSIONS and CartographerConfigFiles.ExtensionsAnEditorOpens
+    - because a Python check cannot import C#. Two copies with nothing comparing
+    them is how a measurement rots, and the rot is silent in the unsafe
+    direction: drop ".txt" here alone and `InRoot("support-report.txt")` starts
+    passing with the whole suite still green. So they are compared.
+    """
+    source = ROOT / "src/ConcernedCartographer/Domain/Storage/CartographerConfigFiles.cs"
+    if not source.exists():
+        return []
+
+    found: list[str] = []
+    for raw in source.read_text(encoding="utf-8-sig").splitlines():
+        code = _strip_cs_line_comment(raw).strip()
+        if not code.endswith(","):
+            continue
+        for piece in code.split(","):
+            piece = piece.strip()
+            if len(piece) > 2 and piece.startswith(QUOTE + ".") and piece.endswith(QUOTE):
+                found.append(piece[1:-1])
+
+    return found
+
+
+def check_cartographer_prior_names_stay_known_to_the_probe(errors: list[str]) -> list[str]:
+    """A name this product used to write is still a name the probe recognises.
+
+    `Prior…Name`/`Prior…Names` declarations are the product's own record of what
+    older builds put in this directory: `author-id.txt` before the marker moved,
+    `support-report.txt` before the report became a `.log`. A profile that ran
+    one of those builds still has the file.
+
+    Dropping such a name from the probe's evidence lists is silent and it is the
+    expensive direction. `support-report.txt` is profile-wide evidence: a
+    veteran whose only trace was that file becomes a new player, `LegacyEvidence
+    .None` does not unlock, and their toolbar is gone. Nothing caught that -
+    removing the line left the validator and the whole suite green - which is
+    how a guard that exists only as a line nobody checks behaves.
+    """
+    project_dir = ROOT / str(PRODUCTS["cartographer"]["project_dir"])
+    if not project_dir.exists():
+        fail("[cartographer-paths] the cartographer project directory is missing", errors)
+        return []
+
+    known_names, known_suffixes = _cartographer_known_names()
+    if not known_names:
+        fail(
+            "[cartographer-paths] could not read the probe's known file names, so prior "
+            "names cannot be checked against them",
+            errors,
+        )
+        return []
+
+    # `Prior<anything>Name` or `Prior<anything>Names`, then everything up to the
+    # end of the initialiser. Across newlines, because the onboarding marker's
+    # list is declared on the line after its name.
+    declaration = re.compile(
+        r"Prior\w*Names?\s*=\s*(\{[^}]*\}|" + QUOTE + r"[^" + QUOTE + r"]*" + QUOTE + r")",
+        re.DOTALL,
+    )
+    literal = re.compile(QUOTE + r"([^" + QUOTE + r"]+)" + QUOTE)
+
+    checked = 0
+    for path in sorted(project_dir.rglob("*.cs")):
+        relative = path.relative_to(ROOT)
+        if any(part in ("obj", "bin") for part in relative.parts):
+            continue
+
+        try:
+            text = path.read_text(encoding="utf-8-sig")
+        except (OSError, UnicodeDecodeError) as problem:
+            fail(f"[cartographer-paths] could not read {relative}: {problem}", errors)
+            continue
+
+        for match in declaration.finditer(text):
+            for name in literal.findall(match.group(1)):
+                checked += 1
+                if not _probe_knows(name, known_names, known_suffixes):
+                    fail(
+                        f"[cartographer-paths] {relative} records "
+                        + QUOTE + name + QUOTE
+                        + " as a name an older build wrote, and the fresh-install probe no "
+                        "longer knows it. A profile that ran that build still has the file: "
+                        "if it was player evidence, dropping it takes a returning player's "
+                        "toolbar away (#343); if this build wrote it for itself, it has to be "
+                        "on CartographerFirstRunFiles or it reads as somebody else's doing.",
+                        errors,
+                    )
+
+    if checked == 0:
+        fail(
+            "[cartographer-paths] no prior-name declarations found, so the rule that keeps "
+            "an older build's file recognisable cannot be checked",
+            errors,
+        )
+        return []
+
+    return [
+        f"[cartographer-paths] {checked} name(s) older builds wrote are all still known to "
+        "the fresh-install probe"
+    ]
+
+
+def check_cartographer_editor_extensions_agree(errors: list[str]) -> list[str]:
+    """The two copies of the editor's extension list say the same thing.
+
+    Read from the installed Thunderstore Mod Manager bundle (1.124.2,
+    APP_NAME="r2modman", core 3.2.18) as SUPPORTED_CONFIG_FILE_EXTENSIONS. It is
+    what #304 turned out to be about: that editor is rooted at the whole profile
+    and picks what to offer a player by extension alone, so this list - not any
+    folder - is what decides whether a generated file is presented as a setting.
+    """
+    from_source = _cartographer_editor_extensions()
+    if not from_source:
+        fail(
+            "[cartographer-paths] could not read CartographerConfigFiles."
+            "ExtensionsAnEditorOpens, so the two copies of the editor's extension list "
+            "cannot be compared (#304)",
+            errors,
+        )
+        return []
+
+    if tuple(from_source) != CONFIG_EDITOR_EXTENSIONS:
+        fail(
+            "[cartographer-paths] the editor's extension list differs between "
+            f"validate_repo.py {CONFIG_EDITOR_EXTENSIONS} and CartographerConfigFiles."
+            f"ExtensionsAnEditorOpens {tuple(from_source)}. Both are copies of one measurement "
+            "taken from the mod manager's own bundle; whichever is wrong, a file this product "
+            "writes is either being hidden for no reason or offered to a player as a setting "
+            "(#304).",
+            errors,
+        )
+        return []
+
+    return [
+        "[cartographer-paths] the editor's extension list agrees between the validator and "
+        f"CartographerConfigFiles: {len(from_source)} extensions"
+    ]
+
+
+def _cartographer_config_file_names() -> set[str]:
+    """The files Cartographer says a player is meant to open and edit.
+
+    Read from the source rather than restated, so the rule below stays true as
+    that list changes instead of becoming a second copy of it. An unreadable or
+    missing list returns empty, and the caller refuses rather than passing.
+    """
+    source = ROOT / "src/ConcernedCartographer/Domain/Storage/CartographerConfigFiles.cs"
+    if not source.exists():
+        return set()
+
+    names: set[str] = set()
+    for raw in source.read_text(encoding="utf-8-sig").splitlines():
+        code = _strip_cs_line_comment(raw).strip()
+        if not code.startswith(QUOTE) or not code.endswith(QUOTE + ","):
+            continue
+        literal = code[1:-2]
+        # The same file also lists the editor's extensions; those are not names.
+        if literal and not literal.startswith("."):
+            names.add(literal)
+
+    return names
+
+
 def _literal_arguments(code: str, call: str) -> list[str]:
     """The string literals passed to `call` on this line.
 
@@ -1664,12 +2272,22 @@ def check_cartographer_root_holds_only_names_the_probe_knows(errors: list[str]) 
     twice: `survey-rules.tsv` made every fresh install look like a returning
     player, and `author-id.dat` (#343) did it again and reached main.
 
-    Two rules, both about the invariant rather than about a spelling:
+    Three rules, all about the invariant rather than about a spelling:
 
     1. Only `CartographerPaths` composes the directory, so there is one owner.
     2. Every name handed to `CartographerPaths.InRoot` is one the probe knows -
        a name this build writes for itself, or player evidence. A name in
        neither list is exactly #343.
+    3. No name handed to `CartographerPaths.InRoot` OR `.InState` has an
+       extension a mod manager's configuration editor opens unless it is on
+       `CartographerConfigFiles` - unless, that is, a player really is meant to
+       edit it. That editor walks the whole profile and filters by extension
+       alone (CONFIG_EDITOR_EXTENSIONS), so the folder a file sits in has never
+       been what decided whether it was offered, and `state/` least of all:
+       `author-id.txt` is the file that was reported and it is exactly what
+       `InState` composes today. A rule that skipped `InState` would miss the
+       report it was written for. This is #304 written down as a check instead
+       of as a lesson.
 
     Rule 2 is the one that matters, and the first version of this check did not
     have it: it forbade the token `Paths.ConfigPath` and nothing else, so moving
@@ -1678,8 +2296,16 @@ def check_cartographer_root_holds_only_names_the_probe_knows(errors: list[str]) 
     nothing.
 
     A marker is additionally required to be under `state/`. `Directory.GetFiles`
-    does not descend, which keeps it out of the probe's listing by construction,
-    and out of the config editor #304 reported.
+    does not descend, which keeps it out of the probe's listing by construction.
+    It does NOT keep it out of a configuration editor - that editor is rooted at
+    the whole profile and descends into `state/` like anywhere else, which is
+    why rule 3 covers `InState` as well as `InRoot` and why `.dat`, not the
+    subfolder, is what answered #304.
+
+    Rules 1 and 2 are literal-only by construction: a name composed from a
+    constant or an expression is invisible to them. That is pre-existing and is
+    not fixed here, but it means a green result is a statement about the
+    literals in these sources and not about every possible call.
     """
     def flag(message: str) -> None:
         fail(message, errors)
@@ -1688,6 +2314,7 @@ def check_cartographer_root_holds_only_names_the_probe_knows(errors: list[str]) 
     owner_relative = Path("src/ConcernedCartographer/CartographerPaths.cs")
     needle = "Paths.ConfigPath"
     in_root = "CartographerPaths.InRoot("
+    in_state = "CartographerPaths.InState("
 
     if not (ROOT / owner_relative).exists():
         flag(
@@ -1700,6 +2327,14 @@ def check_cartographer_root_holds_only_names_the_probe_knows(errors: list[str]) 
         flag(
             "[cartographer-paths] could not read the probe's known file names, so the "
             "root-contents rule cannot be checked"
+        )
+        return []
+
+    editable = _cartographer_config_file_names()
+    if not editable:
+        flag(
+            "[cartographer-paths] could not read CartographerConfigFiles, so the rule that "
+            "keeps a generated file out of a configuration editor (#304) cannot be checked"
         )
         return []
 
@@ -1746,8 +2381,9 @@ def check_cartographer_root_holds_only_names_the_probe_knows(errors: list[str]) 
                             + QUOTE + literal + QUOTE
                             + " into the probed root. A marker belongs under "
                             "CartographerPaths.InState: Directory.GetFiles does not descend, "
-                            "which keeps it out of the probe's listing and out of a config "
-                            "editor (#304, #343)."
+                            "which keeps it out of the probe's listing (#343). It does not "
+                            "keep it out of a configuration editor - only its extension does "
+                            "that (#304)."
                         )
                     elif not _probe_knows(literal, known_names, known_suffixes):
                         flag(
@@ -1760,9 +2396,34 @@ def check_cartographer_root_holds_only_names_the_probe_knows(errors: list[str]) 
                             "look like a returning player (#343)."
                         )
 
+                # Rule 3, and it is deliberately NOT inside the loop above.
+                # A configuration editor descends: `state/` is no more hidden
+                # from it than the folder above, so the name the report was
+                # actually about - `author-id.txt` - would pass this check if it
+                # only looked at InRoot. Every composer that lands anywhere
+                # inside the product's directory is audited.
+                for composer in (in_root, in_state):
+                    for literal in _literal_arguments(code, composer):
+                        if (literal.lower().endswith(CONFIG_EDITOR_EXTENSIONS)
+                                and literal not in editable):
+                            flag(
+                                f"[cartographer-paths] {relative}:{number} writes "
+                                + QUOTE + literal + QUOTE
+                                + ", and a mod manager's configuration editor opens that "
+                                "extension, so a player is offered it for editing - wherever it "
+                                "sits, because that editor is rooted at the whole profile and "
+                                "descends. Either it is genuinely theirs to edit - put it on "
+                                "CartographerConfigFiles and say so - or give it an extension "
+                                "that editor does not open (#304: author-id.txt was a generated "
+                                "GUID, support-report.txt was a generated report, and both were "
+                                "listed as settings)."
+                            )
+
     return [
         f"[cartographer-paths] one owner for the data directory; {checked} sources audited, "
-        "every name written into it is one the fresh-install probe knows"
+        "every name written into it is one the fresh-install probe knows, and nothing a "
+        f"configuration editor opens is written there but the {len(editable)} file(s) a player "
+        "edits"
     ]
 
 
@@ -1834,12 +2495,17 @@ def main() -> int:
 
     report.extend(check_solution_integrity(errors))
     report.extend(check_no_mojibake(errors))
+    report.extend(check_cartographer_editor_extensions_agree(errors))
     report.extend(check_cartographer_root_holds_only_names_the_probe_knows(errors))
+    report.extend(check_cartographer_prior_names_stay_known_to_the_probe(errors))
     check_teamster_adapter_isolation(errors)
     report.extend(check_cross_product_independence(errors))
     report.extend(check_every_product_pair_is_audited(errors))
     report.extend(check_library_consumers(errors))
     report.extend(check_library_consumers_do_not_bypass_the_arbiter(errors))
+    report.extend(check_the_npc_library_writes_no_file(errors))
+    report.extend(check_npc_planning_decides_nothing_to_do_once(errors))
+    report.extend(check_npc_planning_never_defaults_a_claim(errors))
     report.extend(check_teamster_cartographer_contract(errors))
     report.extend(check_teamster_integration_readonly(errors))
     report.extend(check_teamster_authority_policy(errors))

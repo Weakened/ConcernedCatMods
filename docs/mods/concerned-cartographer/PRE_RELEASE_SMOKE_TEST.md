@@ -92,7 +92,7 @@ owner's Sentry console open.
    machine username, coordinates, player/world/server names, or pin or
    route names ("Road atlas ready", persistence, sync, Quick Pin, and
    terrain lines are aggregate-only now). Then run `cc_atlas support`
-   and open support-report.txt: it has NO `world-uid` line, no paths,
+   and open support-report.log: it has NO `world-uid` line, no paths,
    no names, no coordinates — only versions, settings, row counts,
    sizes in KB, and the backup count. No CC Error line and no new
    Sentry event is produced by the whole sequence. **Then set

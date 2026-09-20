@@ -296,8 +296,7 @@ internal sealed class StewardFixture
     internal StewardFixture(UpkeepLimits? limits = null)
     {
         Journal = new MemoryUpkeepJournal();
-        Modes = new ActorModeOwner(StewardRole.Worker);
-        Loop = new UpkeepLoop(limits ?? UpkeepLimits.Default, Journal, Modes, message => Reported.Add(message));
+        Loop = new UpkeepLoop(limits ?? UpkeepLimits.Default, Journal, message => Reported.Add(message));
         Depot = new FakeStore("the supply chest", (Wood, 50));
         Pack = new FakeStore("the Steward's pack");
         Fires = new FakeFires();
@@ -313,8 +312,6 @@ internal sealed class StewardFixture
     }
 
     internal MemoryUpkeepJournal Journal { get; }
-
-    internal ActorModeOwner Modes { get; }
 
     internal UpkeepLoop Loop { get; }
 

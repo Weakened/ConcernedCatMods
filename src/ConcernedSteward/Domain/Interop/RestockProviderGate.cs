@@ -110,14 +110,14 @@ internal static class RestockProviderGate
             return new RestockDiscovery(
                 CapabilityStatus.ProbeFailed,
                 "looking for a hauler failed (" + exception.GetType().Name + "), so the Steward " +
-                "carries his own wood");
+                "carries her own wood");
         }
 
         if (!found.Found)
         {
             return new RestockDiscovery(
                 CapabilityStatus.Absent,
-                "no hauler is installed, so the Steward carries his own wood");
+                "no hauler is installed, so the Steward carries her own wood");
         }
 
         if (found.ProviderVersion == null || found.ProviderVersion < FloorVersion)
@@ -127,7 +127,7 @@ internal static class RestockProviderGate
                 "a hauler is installed but it is " +
                 (found.ProviderVersion == null ? "of an unknown version" : found.ProviderVersion.ToString()) +
                 ", older than the " + FloorVersion + " this build speaks to, so the Steward " +
-                "carries his own wood");
+                "carries her own wood");
         }
 
         if (found.Capabilities is not IReadOnlyDictionary<string, object> map)
@@ -136,7 +136,7 @@ internal static class RestockProviderGate
                 CapabilityStatus.ProbeFailed,
                 "a hauler is installed but publishes nothing this build understands" +
                 (found.ReadFailure.Length == 0 ? string.Empty : " (" + found.ReadFailure + ")") +
-                ", so the Steward carries his own wood");
+                ", so the Steward carries her own wood");
         }
 
         if (!CapabilityMap.TryGetEndpoint(map, HaulContract.Id, HaulContract.Major, out _))
@@ -145,13 +145,13 @@ internal static class RestockProviderGate
                 CapabilityStatus.MajorMismatch,
                 "a hauler is installed but speaks no " +
                 CapabilityMap.KeyFor(HaulContract.Id, HaulContract.Major) +
-                ", so the Steward carries his own wood");
+                ", so the Steward carries her own wood");
         }
 
         return new RestockDiscovery(
             CapabilityStatus.Available,
             "a hauler is available for " + CapabilityMap.KeyFor(HaulContract.Id, HaulContract.Major) +
-            ". The Steward still carries his own wood in this build; bulk restocking is not " +
+            ". The Steward still carries her own wood in this build; bulk restocking is not " +
             "built yet");
     }
 }

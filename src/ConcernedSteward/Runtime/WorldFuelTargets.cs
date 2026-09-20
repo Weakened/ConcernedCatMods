@@ -238,7 +238,7 @@ internal sealed class WorldFuelTargets : IFuelTargetPort
         if (reach > ReachMetres)
         {
             return Nothing(
-                "he is " + reach.ToString("0.#", CultureInfo.InvariantCulture) + " m from that " +
+                "she is " + reach.ToString("0.#", CultureInfo.InvariantCulture) + " m from that " +
                 "fire and only reaches " + ReachMetres.ToString("0.#", CultureInfo.InvariantCulture) +
                 " m, the same as a player");
         }
@@ -261,7 +261,7 @@ internal sealed class WorldFuelTargets : IFuelTargetPort
         {
             return new FeedMeasurement(
                 FeedOutcome.Uncertain, carriedBefore, carriedBefore, fuelBefore, fuelBefore,
-                "the Steward could not read what he was carrying or what the fire held, so he " +
+                "the Steward could not read what she was carrying or what the fire held, so she " +
                 "did not touch it");
         }
 
@@ -297,7 +297,7 @@ internal sealed class WorldFuelTargets : IFuelTargetPort
     {
         string numbers = string.Format(
             CultureInfo.InvariantCulture,
-            " (he held {0} {1} and now holds {2}; the fire was at {3} and is at {4})",
+            " (she held {0} {1} and now holds {2}; the fire was at {3} and is at {4})",
             carriedBefore, fuelName, Text(carriedAfter),
             FuelMath.Describe(fuelBefore, fireplace.m_maxFuel),
             float.IsNaN(fuelAfter) ? "?" : FuelMath.Describe(fuelAfter, fireplace.m_maxFuel));
@@ -383,7 +383,9 @@ internal sealed class WorldFuelTargets : IFuelTargetPort
             fireplace.m_canRefill,
             fireplace.m_infiniteFuel,
             view.IsOwner(),
-            SafeAccess(position));
+            SafeAccess(position),
+            fireplace.m_secPerFuel,
+            ReadIsLit(view));
         return true;
     }
 
@@ -402,6 +404,31 @@ internal sealed class WorldFuelTargets : IFuelTargetPort
         catch (Exception)
         {
             return float.NaN;
+        }
+    }
+
+    /// <summary>Whether the piece is switched on, straight out of its own data.
+    ///
+    /// <c>Fireplace.IsBurning</c> would be the obvious call and it is the wrong
+    /// one here: it also answers false for a fire that is blocked, wet or out of
+    /// fuel, and "out of fuel" is precisely the fire a round exists to serve. So
+    /// the one thing that is actually asked is vanilla's own on/off state —
+    /// <c>ZDOVars.s_state</c>, where 1 is on and 2 is off, defaulting to on for
+    /// the pieces that cannot be turned off at all.
+    ///
+    /// A read and only a read. Unreadable counts as on, which keeps a fire that
+    /// is genuinely burning in the round rather than dropping it for a reason
+    /// nobody could establish.</summary>
+    private static bool ReadIsLit(ZNetView view)
+    {
+        try
+        {
+            ZDO zdo = view.GetZDO();
+            return zdo == null || zdo.GetInt(ZDOVars.s_state, 1) == 1;
+        }
+        catch (Exception)
+        {
+            return true;
         }
     }
 

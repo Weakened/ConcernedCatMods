@@ -9,7 +9,7 @@ namespace TheConcernedCat.ConcernedNPC.Work;
 /// his settlement is out of wood when the truth is that he walked away from it,
 /// or that the scan ran out of budget, is how an NPC loses trust it does not get
 /// back.</summary>
-internal enum AreaScanOutcome
+public enum AreaScanOutcome
 {
     /// <summary>Nobody scanned. Never "there is nothing".</summary>
     Unspecified = 0,
@@ -48,10 +48,11 @@ internal enum AreaScanOutcome
 /// counts are not diagnostics: they are the evidence
 /// <see cref="AreaScanOutcome"/> is derived from, and a leaf that derives an
 /// outcome without them is guessing.</summary>
-internal readonly struct AreaScanReport
+public readonly struct AreaScanReport
 {
     internal AreaScanReport(
-        AreaScanOutcome outcome, int examined, int notLoaded, int rejected, int exhausted, bool truncatedByBudget)
+        AreaScanOutcome outcome, int examined, int notLoaded, int rejected, int exhausted,
+        bool truncatedByBudget, int unreadable = 0)
     {
         Outcome = outcome;
         Examined = examined;
@@ -59,40 +60,53 @@ internal readonly struct AreaScanReport
         Rejected = rejected;
         Exhausted = exhausted;
         TruncatedByBudget = truncatedByBudget;
+        Unreadable = unreadable;
     }
 
     /// <summary>The single answer, derived from everything below.</summary>
-    internal AreaScanOutcome Outcome { get; }
+    public AreaScanOutcome Outcome { get; }
 
     /// <summary>How many candidates were looked at at all.</summary>
-    internal int Examined { get; }
+    public int Examined { get; }
 
     /// <summary>How many were in ground that is not loaded - unknown, never
     /// empty.</summary>
-    internal int NotLoaded { get; }
+    public int NotLoaded { get; }
 
     /// <summary>How many were looked at and refused for a reason the probe
     /// could name.</summary>
-    internal int Rejected { get; }
+    public int Rejected { get; }
 
     /// <summary>How many were the right thing, already used up.</summary>
-    internal int Exhausted { get; }
+    public int Exhausted { get; }
+
+    /// <summary>How many the probe could not answer for at all - it failed,
+    /// or it said so.
+    ///
+    /// Separate from <see cref="NotLoaded"/> on purpose, because the two are
+    /// different problems wearing the same face: ground that is not streamed
+    /// in comes back when the player walks over, and a probe that cannot
+    /// answer does not. Both are unknown and neither may add up to empty, so
+    /// they count the same towards a conclusion and differently towards a
+    /// diagnosis.</summary>
+    public int Unreadable { get; }
 
     /// <summary>Whether the pass stopped because it ran out of budget rather
     /// than because it finished. The one flag that turns "nothing found" into
     /// "not finished looking".</summary>
-    internal bool TruncatedByBudget { get; }
+    public bool TruncatedByBudget { get; }
 
     /// <summary>Whether the counts are internally possible: every candidate
     /// accounted for was examined. If the counts are the evidence an outcome is
     /// derived from, a report whose counts cannot all be true is evidence of
     /// nothing, and the outcome resting on it certainly is not.</summary>
-    internal bool CountsAgree =>
+    public bool CountsAgree =>
         Examined >= 0
         && NotLoaded >= 0
         && Rejected >= 0
         && Exhausted >= 0
-        && Examined >= NotLoaded + Rejected + Exhausted;
+        && Unreadable >= 0
+        && Examined >= NotLoaded + Rejected + Exhausted + Unreadable;
 
     /// <summary>Whether this pass proves the area holds nothing more of what was
     /// asked for. True only for <see cref="AreaScanOutcome.Empty"/> and
@@ -101,9 +115,10 @@ internal readonly struct AreaScanReport
     /// outcome says. Belt and braces, because this is the property a finished
     /// job is claimed on, and "he says he is done" is the single most expensive
     /// thing an NPC can be wrong about.</summary>
-    internal bool IsConclusive =>
+    public bool IsConclusive =>
         (Outcome == AreaScanOutcome.Empty || Outcome == AreaScanOutcome.Exhausted)
         && NotLoaded == 0
+        && Unreadable == 0
         && !TruncatedByBudget
         && CountsAgree;
 }

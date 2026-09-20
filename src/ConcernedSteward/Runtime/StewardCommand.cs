@@ -30,7 +30,7 @@ internal sealed class StewardCommand : ConsoleCommand
     public override string Name => "cs_steward";
 
     public override string Help =>
-        "The Steward: area <radius> | depot | clear area|depot | recruit | dismiss | " +
+        "The Steward: area <radius> | depot | clear area|depot | runes | recruit | dismiss | " +
         "resolve | status";
 
     public override void Run(string[] args)
@@ -66,6 +66,10 @@ internal sealed class StewardCommand : ConsoleCommand
 
             case "clear":
                 return Clear(args);
+
+            case "runes":
+            case "flint":
+                return _runtime.ReadTheRunes();
 
             case "recruit":
             case "hire":
@@ -134,7 +138,7 @@ internal sealed class StewardCommand : ConsoleCommand
     public override System.Collections.Generic.List<string> CommandOptionList() =>
         new System.Collections.Generic.List<string>
         {
-            "area", "depot", "clear", "recruit", "dismiss", "resolve", "status",
+            "area", "depot", "clear", "runes", "recruit", "dismiss", "resolve", "status",
         };
 }
 
@@ -167,7 +171,7 @@ internal sealed class StewardFiresCommand : ConsoleCommand
             text.AppendLine("Fires the Steward last looked at: " +
                 scan.Examined.ToString(CultureInfo.InvariantCulture) + " of " +
                 scan.Offered.ToString(CultureInfo.InvariantCulture) +
-                (scan.Truncated ? " (more than he looks at in one go)" : string.Empty));
+                (scan.Truncated ? " (more than she looks at in one go)" : string.Empty));
 
             foreach (var verdict in scan.Considered)
             {
@@ -179,7 +183,7 @@ internal sealed class StewardFiresCommand : ConsoleCommand
 
             if (scan.Examined == 0)
             {
-                text.AppendLine("  (nothing — he may not have looked yet, or there is no scope)");
+                text.AppendLine("  (nothing — she may not have looked yet, or there is no scope)");
             }
 
             text.Append(StewardRole.DisplayNameFallbackCapitalised + ": " + _runtime.Loop.Explanation);

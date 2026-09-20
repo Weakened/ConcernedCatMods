@@ -114,7 +114,47 @@ So: before any placement, the runtime re-checks, explicitly and by name:
    `Player.ConsumeResources` against **reserved** custody — never from whatever
    happens to be in a nearby chest.
 
-Then it calls `Player.PlacePiece` on the host player instance.
+Then it calls `Player.PlacePiece` on the host player instance. Its signature,
+read out of the installed assembly's own metadata rather than inferred (#380):
+
+```csharp
+void Player.PlacePiece(Piece piece, Vector3 pos, Quaternion rot,
+                       bool doAttack, bool cheated)
+```
+
+Three facts about it, each of which was an open question and none of which
+should have to be rediscovered:
+
+- **The position and the rotation are parameters.** They are not read from
+  `m_placementGhost`. That was the real risk in choosing this method: the
+  shipped build flow is `UpdatePlacementGhost` then `TryPlacePiece`, the ghost
+  is the local player's own aiming object, and an NPC has no way to aim it — so
+  had the position come from there, a call would have built the wall wherever
+  the player happened to be looking. It does not. An NPC can aim a placement.
+- **Both booleans are false, and neither by default.** `doAttack` makes the
+  *player* swing, which is the human build animation and has no business firing
+  because an NPC put a wall up twenty metres away. `cheated` marks the piece as
+  conjured, and it is the one flag this runtime exists not to set: the material
+  came out of a player's container through custody, so the piece is not cheated
+  and must not say it is.
+- **It returns `void`.** There is no success to read back. Whether a piece is
+  standing is answered by looking at the site afterwards — the same way it is
+  answered for a piece the player built — which is why construction progress is
+  read from the world rather than remembered from what was asked for.
+
+**What the ghost also judges, and what this runtime does about it.** Vanilla's
+placement ghost weighs constraints the piece itself declares — biome, cultivated
+ground, tilting surfaces, ceiling- and floor-only pieces, dungeons, deep snow,
+teleport areas, connection requirements, space requirements. Two of them are
+reimplemented exactly, because the game asks them as a plain yes/no about a
+point: **dungeons**, through `Character.InInterior(point)`, and **biome**,
+through `Heightmap.FindBiome(point)` against the piece's own `m_onlyInBiome`
+mask. Vanilla's own no-build zone, `Location.IsInsideNoBuildLocation(point)`, is
+a gate in its own right. **Every other constraint a piece declares is a
+refusal**, naming the constraint, and a permission that is off (`m_enabled`,
+`m_allowedInDeepSnow`) counts as much as a prohibition that is on. So no piece
+this runtime cannot judge is ever placed, and the rule is a check rather than a
+property of whichever pieces a blueprint happens to use.
 
 **Every check that cannot be faithfully reimplemented becomes a refusal, not an
 assumption.** If the runtime cannot establish that a placement is legal, it does

@@ -115,7 +115,7 @@ internal readonly struct ScopeSnapshot
                 return "No world is loaded, so the marked chest cannot be identified.";
 
             default:
-                return "The Steward's working area could not be established, so he is not " +
+                return "The Steward's working area could not be established, so she is not " +
                     "acting. This is a bug — please report it.";
         }
     }

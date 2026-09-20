@@ -63,6 +63,33 @@
     <Compile Include="..\Shared\Settlement\Storage\**\*.cs" LinkBase="Settlement\Storage" />
   </ItemGroup>
 
+  <!-- CNPC-R3 (#382): Concerned Steward is the first consumer of the Concerned
+       NPC LIBRARY. A library is not a product and this is not a cross-product
+       reference: it ships no gameplay, it depends on no product, and the
+       validator proves both.
+
+       Four rules hold together or not at all (check_library_consumers):
+
+         1. this ProjectReference, with Private FALSE, so the library's DLL is
+            never copied into this product's output and can never reach this
+            product's ZIP - a player installs it once, from its own package;
+         2. a TheConcernedCat-ConcernedNPC pin in Package/thunderstore.toml, so
+            the storefront fetches it;
+         3. a BepInDependency on com.theconcernedcat.valheim.concernednpc in
+            Plugin.cs, so a missing package is one clear line at load rather
+            than a null reference later in somebody's evening;
+         4. no `new ActorModeOwner(` anywhere in this product, because one
+            identity with two mode owners makes the never-coexist rule advice
+            rather than enforcement.
+
+       Rule 4 is why this reference arrives with StewardNpcAdoption: the mode
+       comes from the arbiter now, through the body claim. -->
+  <ItemGroup>
+    <ProjectReference Include="..\ConcernedNPC\ConcernedNPC.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="JotunnLib" Version="2.29.2" />
   </ItemGroup>
