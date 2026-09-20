@@ -126,7 +126,12 @@ internal sealed class CompanionDirector : IDisposable
     /// world probe, and a companion who re-evaluates his seating every two
     /// seconds is the exact restlessness the deterministic planner exists to
     /// avoid. Half a minute is fast enough that building a bench and turning
-    /// round is enough to see it work.</summary>
+    /// round is enough to see it work, because a settled companion has
+    /// normally been waiting far longer than that by the time the bench
+    /// appears.
+    ///
+    /// It is a floor, and nothing the world does on its own waives it - see
+    /// <see cref="SeatSweepGate"/>, which owns it.</summary>
     private const float SeatUpgradeSeconds = 30f;
 
     /// <summary>How close a new spot must be for him to walk there instead of
@@ -136,8 +141,13 @@ internal sealed class CompanionDirector : IDisposable
 
     /// <summary>How often the camp is fingerprinted - fires and whether they
     /// burn, seats, doors and whether they are open - so a change is noticed in
-    /// about a second and acted on at once, without re-surveying every spot on
-    /// a timer. The full survey stays as a 30-second safety net.</summary>
+    /// about a second, without re-surveying every spot on a timer.
+    ///
+    /// Noticed, then acted on at the first look the half minute between two
+    /// looks allows: the same fingerprint that spots a new bench also ticks
+    /// over every time a fire is fed or somebody sits down, so letting it start
+    /// a survey of its own would be an oscillator with a one-second period
+    /// (#306).</summary>
     private const float CampCheckSeconds = 1f;
 
     /// <summary>Walking pace. A stroll, not a march: he is crossing a camp, not
@@ -224,7 +234,10 @@ internal sealed class CompanionDirector : IDisposable
     private float _anchorElapsed;
     private float _placementRetryElapsed;
     private float _residencyElapsed;
-    private float _seatUpgradeElapsed;
+
+    /// <summary>How often he may look around camp for somewhere better, and
+    /// who is allowed to shorten that wait (#306).</summary>
+    private readonly SeatSweepGate _sweep = new SeatSweepGate(SeatUpgradeSeconds);
 
     /// <summary>A walk to a new spot, when a nearby rehome or upgrade sent him on
     /// foot instead of rebuilding him there. Settled into on arrival.</summary>
@@ -311,9 +324,6 @@ internal sealed class CompanionDirector : IDisposable
     private float _campCheckElapsed;
     private int _campSignature;
 
-    /// <summary>Set when the camp fingerprint changed, until the survey it
-    /// asked for has run. Lets that one survey happen even mid-wander.</summary>
-    private bool _campChanged;
     private readonly List<Piece> _campPieces = new List<Piece>();
     private readonly List<Door> _campDoors = new List<Door>();
     private int _campChecks;
@@ -583,7 +593,7 @@ internal sealed class CompanionDirector : IDisposable
                 UpdateCollectiblePresence();
             }
 
-            _seatUpgradeElapsed += deltaTime;
+            _sweep.Tick(deltaTime);
 
             _campCheckElapsed += deltaTime;
             if (_campCheckElapsed >= CampCheckSeconds)
@@ -737,6 +747,17 @@ internal sealed class CompanionDirector : IDisposable
         // been posed at least once and can now be asked where it actually is.
         _actor.VerifyAppearance();
 
+        // A look is not free and it is not repeatable: taking one runs a full
+        // camp scan, spends the half minute between two looks, and clears the
+        // ask that a camp change left pending. On a pass that is about to throw
+        // its own answer away - he is already walking somewhere, and only
+        // Remove interrupts that (below) - taking one would turn "the ask is
+        // remembered until the wait allows it" into a lie, and a bench built
+        // while he is on his way would wait half a minute after he arrives
+        // instead of being noticed the next pass. So he does not look while he
+        // is walking; the ask keeps.
+        SeatUpgrade upgrade = _relocating ? SeatUpgrade.NotSurveyed : ReadSeatUpgrade();
+
         var inputs = new ResidencyInputs(
             _progress.HasCompanion,
             _settings.CompanionVisible.Value,
@@ -746,7 +767,7 @@ internal sealed class CompanionDirector : IDisposable
             _actor.PlacedAnchor,
             _anchorValidity,
             ReadSeatStatus(),
-            ReadSeatUpgrade());
+            upgrade);
 
         ResidencyAction action = ResidencyPlanner.Decide(inputs);
 
@@ -1006,8 +1027,9 @@ internal sealed class CompanionDirector : IDisposable
         }
     }
 
-    /// <summary>Looks around his camp for somewhere better to be - every half
-    /// minute, and at once when something in camp changed.
+    /// <summary>Looks around his camp for somewhere better to be - at most
+    /// every half minute, and at the first pass after that when something in
+    /// camp changed.
     ///
     /// "Better" is his common sense's word: the wish list for this camp at this
     /// hour (<see cref="CommonSense"/>), and the best place on it he can walk
@@ -1024,26 +1046,14 @@ internal sealed class CompanionDirector : IDisposable
             return SeatUpgrade.NotSurveyed;
         }
 
-        // Not while he is idly on his feet - unless the camp just changed.
-        if (_routine != RoutineState.Settled && !_campChanged)
+        // Not while he is idly on his feet, not in the middle of a drink -
+        // unless a look was asked for - and never before the interval is up,
+        // whoever asked. The wait is the whole of the anti-oscillation rule
+        // and it is kept in one place; see SeatSweepGate.
+        if (!_sweep.TryTakeLook(_routine == RoutineState.Settled, _actor.IsDrinking))
         {
             return SeatUpgrade.NotSurveyed;
         }
-
-        if (_seatUpgradeElapsed < SeatUpgradeSeconds)
-        {
-            return SeatUpgrade.NotSurveyed;
-        }
-
-        // Not in the middle of a drink either, unless the camp changed: the
-        // timer keeps, so the look comes the moment he has put the mug away.
-        if (_actor.IsDrinking && !_campChanged)
-        {
-            return SeatUpgrade.NotSurveyed;
-        }
-
-        _seatUpgradeElapsed = 0f;
-        _campChanged = false;
 
         CampView view = ScanCamp();
         IReadOnlyList<HangoutIntent> wishes = CommonSense.Preferences(view.Snapshot, CompanionTemperament.Hulgi);
@@ -1614,10 +1624,11 @@ internal sealed class CompanionDirector : IDisposable
     /// <summary>Fingerprints what his common sense reads: every fire near home
     /// and whether it burns, every bed and whether anybody claimed it, every
     /// seat, every door and whether it is open and open to him, and whether it
-    /// is night or wet. When the fingerprint changes he looks again on the very
-    /// next pass instead of waiting for the half-minute survey - which is what
-    /// makes him notice a campfire broken or built, a bed claimed, a door opened
-    /// to companions, or nightfall, within about a second.
+    /// is night or wet. A change asks for a look on the very next residency pass
+    /// - which is what makes him notice a campfire broken or built, a bed
+    /// claimed, a door opened to companions, or nightfall, within about a second
+    /// - and the ask waits its turn behind the half minute between two looks,
+    /// because every one of the things fingerprinted here also flickers (#306).
     ///
     /// Read from the game's own lists of loaded pieces rather than a physics
     /// query, so a big base cannot overflow a buffer and hide something.
@@ -1713,9 +1724,14 @@ internal sealed class CompanionDirector : IDisposable
         _campSignature = signature;
         if (!firstLook)
         {
-            LookAgainNow();
+            // Soon, not now: the fingerprint above counts seats, fires, beds
+            // and doors, every one of which flickers, and arming the wait from
+            // here is exactly how a fed fire or a chair somebody sat in for a
+            // moment could have him up and down all evening (#306).
+            LookAgainSoon();
             LogActivity(
-                "Something changed around Hulgi's camp - a fire, a bed, a seat, a door or the hour; he looks again.");
+                "Something changed around Hulgi's camp - a fire, a bed, a seat, a door or the hour; he looks " +
+                "again as soon as he may.");
         }
     }
 
@@ -1731,11 +1747,36 @@ internal sealed class CompanionDirector : IDisposable
     }
 
     /// <summary>Asks for a look around camp on the very next residency pass,
-    /// this frame rather than in two seconds.</summary>
+    /// this frame rather than in two seconds, and waives the wait between two
+    /// looks (#306).
+    ///
+    /// Only for a command the local player just gave, and there are four:
+    /// <see cref="Summon"/>, the door hotkey, and <c>cc_companion doors clear</c>
+    /// and <c>doors all</c>. A door-permission change cannot lower his current
+    /// rank at all - doors are not in the camp snapshot that rank is read from -
+    /// so the planner's strictly-better rule bounds repeating one on its own.
+    /// Summon can and does lower it, and is bounded instead by one walk-back per
+    /// typed command; see <see cref="SeatSweepGate"/>, which spells both out.
+    ///
+    /// Anything the world does by itself goes through
+    /// <see cref="LookAgainSoon"/> instead, and a fifth caller here fails the
+    /// audit in <c>SeatUpgradeOscillationTests</c> until somebody argues for
+    /// it.</summary>
     private void LookAgainNow()
     {
-        _campChanged = true;
-        _seatUpgradeElapsed = SeatUpgradeSeconds;
+        _sweep.PlayerAsked();
+        _residencyElapsed = ResidencyIntervalSeconds;
+    }
+
+    /// <summary>Asks for a look around camp on the very next residency pass,
+    /// but not before the half minute between two looks is up.
+    ///
+    /// For everything the world does by itself. The ask is remembered until it
+    /// can be taken, so nothing that changed is forgotten - it is only ever
+    /// waited out.</summary>
+    private void LookAgainSoon()
+    {
+        _sweep.CampChanged();
         _residencyElapsed = ResidencyIntervalSeconds;
     }
 
@@ -2037,7 +2078,21 @@ internal sealed class CompanionDirector : IDisposable
                 // sitting down wherever the stroll happened to end and getting up
                 // again a moment later.
                 EnterRoutine(RoutineState.Settled);
-                LookAgainNow();
+
+                // Soon, not now: a stroll is his own idea, not the player's,
+                // and it comes round on its own timer. Nearly always the wait
+                // is long over by the time one ends - 75 s settled, the stroll
+                // itself, then 9 s standing, so 84 s at the least and 98 at a
+                // stroll that runs out of patience - and when it is not, he sits
+                // where he stopped and walks back at the next look rather than
+                // turning the routine into a way round the wait.
+                //
+                // Who can be kept waiting by that is narrow, which is why it is
+                // the right trade: CampRoutine never gets a companion up off a
+                // seat or out of a bed, at night, in a storm, or with the player
+                // in earshot. Only a seatless companion, in daylight, with
+                // nobody about, can be sitting on grass for the rest of a wait.
+                LookAgainSoon();
                 SeatUpgrade upgrade = ReadSeatUpgrade();
                 if (upgrade.IsWorthMoving && TryBeginRelocation())
                 {

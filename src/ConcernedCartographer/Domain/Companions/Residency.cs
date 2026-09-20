@@ -245,8 +245,20 @@ internal static class ResidencyPlanner
         // the seat he is on - the ground - cannot be lost. Without this he
         // sits beside a new bench until a relog, which is the whole of #306.
         //
-        // Strictly better only, so this can fire at most twice in a
-        // companion's life: ground to fire, fire to seat.
+        // Strictly better only. That is a ratchet in a world that holds still,
+        // and it was once described here as one that can fire at most twice in
+        // a companion's life - ground to fire, fire to seat. That is false, and
+        // #306 is where it showed: the rank on the left is scored against the
+        // world as it stands NOW, not against the pose he was placed in, so
+        // anything that lowers it re-cocks the ratchet. The fire beside him
+        // goes out and he is no longer by a fire; a player sits in his chair
+        // and he is no longer on a seat; dusk rewrites the wish list outright,
+        // every day, for everybody.
+        //
+        // So the honest bound is: strictly better stops him pacing between two
+        // equally good spots, and nothing more. What stops a flickering camp
+        // walking him back and forth all evening is how often he is allowed to
+        // look at all - the adapter's business, and SeatSweepGate's floor.
         if (inputs.Upgrade.IsWorthMoving)
         {
             return ResidencyAction.Rehome;
