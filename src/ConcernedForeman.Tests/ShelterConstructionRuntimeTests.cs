@@ -179,6 +179,54 @@ public sealed class ShelterConstructionRuntimeTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Cancellation_after_absence_waits_for_safe_return_and_refunds_once(bool otherWork)
+    {
+        Confirm(); Ticks(6);
+        int carried = OnWorker("Wood");
+        int chest = InChest("Wood");
+        Assert.True(carried > 0);
+        _motion.IsPresent = false; Ticks(1);
+        Assert.Null(_modes.JobId);
+        _orders.Execute(new[] { "cancel" }); Ticks(1);
+        Assert.Contains("Material return is pending", _runtime.Describe());
+        Assert.Equal(carried, OnWorker("Wood"));
+        _motion.IsPresent = true;
+        _motion.Position = new Vector3(20f, 0f, 0f);
+        if (otherWork)
+        {
+            _custody.AtWorker["Wood"] = 1;
+            Ticks(2);
+            Assert.Equal(carried, OnWorker("Wood"));
+            Assert.Contains("other work", _runtime.Describe());
+            _custody.AtWorker.Clear();
+        }
+        Ticks(2);
+        Assert.Equal(0, OnWorker("Wood"));
+        Assert.Equal(chest + carried, InChest("Wood"));
+        Assert.Contains("went back where it came from", _runtime.Describe());
+        Assert.Null(_modes.JobId);
+        Ticks(3);
+        Assert.Equal(chest + carried, InChest("Wood"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Pending_cancellation_releases_existing_hold_on_absence_or_lost_authority(bool lostAuthority)
+    {
+        Confirm(); Ticks(6);
+        Assert.NotNull(_modes.JobId);
+        if (lostAuthority) _mayWork = false;
+        else _motion.IsPresent = false;
+        _orders.Execute(new[] { "cancel" });
+        Ticks(1);
+        Assert.Null(_modes.JobId);
+        Assert.Contains("Material return is pending", _runtime.Describe());
+    }
+
     // ---- the whole thing -------------------------------------------------
 
     [Fact]

@@ -86,6 +86,8 @@ internal sealed class ShelterConstructionRuntime
     private readonly ShelterBuildLoop _loop;
 
     private string? _job;
+    // Outstanding construction survives release of the loaded-body hold.
+    private string? _cleanupJob;
     private Guid _epoch;
     private bool _finished;
     private bool _saidAbsent;
@@ -207,6 +209,7 @@ internal sealed class ShelterConstructionRuntime
                 _epoch = _custody.WorldLoadEpoch;
                 Release();
                 _loop.Forget();
+                _cleanupJob = null;
                 _lastRound = float.NegativeInfinity;
                 _finished = false;
                 _finishedAt = float.NegativeInfinity;
@@ -214,11 +217,19 @@ internal sealed class ShelterConstructionRuntime
 
             if (!_orders.IsAuthorised)
             {
-                if (_job != null)
+                if (_cleanupJob != null)
                 {
-                    // Withdrawn while running. The loop puts back what he was
-                    // carrying and says where it went.
+                    // Absence releases the body, not the obligation to account
+                    // for its building materials. Never refund another job's load.
+                    if (!Present() || !Refusal(out _) ||
+                        !ActorModeGrants.IsGranted(_modes.Enter(ActorMode.Recovering, _cleanupJob)))
+                    {
+                        Release();
+                        return;
+                    }
+                    _job = _cleanupJob;
                     _loop.Cancel(now, "the build order was withdrawn.");
+                    _cleanupJob = null;
                     Release();
                 }
 
@@ -301,6 +312,7 @@ internal sealed class ShelterConstructionRuntime
             switch (_loop.Step)
             {
                 case BuildStep.Finished:
+                    _cleanupJob = null;
                     // Done. He is nobody's worker again, which is what lets his
                     // body rest, be moved home, or take another order - and the
                     // latch is what keeps it that way instead of retaking him
@@ -335,6 +347,7 @@ internal sealed class ShelterConstructionRuntime
         {
             Release();
             _loop.Forget();
+            _cleanupJob = null;
             _epoch = Guid.Empty;
             _lastRound = float.NegativeInfinity;
             _finished = false;
@@ -365,6 +378,11 @@ internal sealed class ShelterConstructionRuntime
             // the only sentence naming the four wood still in Thorstein's hands
             // went to the BepInEx log, where nobody reads it. A withdrawal is
             // exactly when a player needs to be told where their material went.
+            if (_cleanupJob != null)
+                return "No build order is authorised. Material return is pending until Thorstein is loaded " +
+                    "and free of other work; carried materials remain in his inventory. " +
+                    (Refusal(out string pendingReason) ? string.Empty : pendingReason);
+
             string last = _loop.Step == BuildStep.Stopped || _loop.Step == BuildStep.Finished
                 ? _loop.Reason
                 : string.Empty;
@@ -521,6 +539,7 @@ internal sealed class ShelterConstructionRuntime
         }
 
         _job = job;
+        _cleanupJob = job;
         return true;
     }
 
