@@ -52,11 +52,16 @@ internal static class MarkerFile
     /// <summary>Deliberately not <c>.txt</c>, <c>.cfg</c>, <c>.json</c>,
     /// <c>.ini</c>, <c>.yml</c> or <c>.yaml</c>. <b>This is what fixes #304</b>
     /// — a configuration editor chooses by extension and descends everywhere,
-    /// so the subfolder does not hide this file and this constant does. The
-    /// rule is enforced for every name in the product's directory by
-    /// <c>validate_repo.py</c> against <c>CartographerConfigFiles</c>, so it
-    /// cannot be forgotten for the next file the way it was for
-    /// <c>support-report.txt</c>.
+    /// so the subfolder does not hide this file and this constant does.
+    ///
+    /// <c>validate_repo.py</c> enforces the rule against
+    /// <c>CartographerConfigFiles</c> for every <b>string literal</b> passed to
+    /// <c>CartographerPaths.InRoot</c> or <c>InState</c> — which is what caught
+    /// <c>support-report.txt</c>, and is not the same thing as every name in
+    /// the directory. A name composed from a constant or an expression is
+    /// invisible to it. That limit is pre-existing and shared with the rule
+    /// that keeps #343 from returning; it is written down here rather than
+    /// papered over, because a check is only worth what it actually sees.
     ///
     /// <b>Changing this is a migration, not a rename.</b> The prior-location
     /// lists callers pass are historical facts and must be written as literals,

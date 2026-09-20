@@ -47,13 +47,22 @@ public sealed class ConfigEditorVisibilityTests
     }
 
     [Fact]
-    public void TheSupportReportStaysObviouslyReadable()
+    public void TheSupportReportIsNotHiddenTheWayAMarkerIs()
     {
-        // Not `.dat`. This is the one file we ask people to find and send us,
-        // so hiding it from a human to hide it from an editor would trade one
-        // problem for a worse one.
-        Assert.EndsWith(".log", "support-report.log");
-        Assert.NotEqual(MarkerFile.Extension, Path.GetExtension("support-report.log"));
+        // The report is `.log`, not `.dat`: it is the one file we ask people to
+        // find and send us, so hiding it from a human to hide it from an editor
+        // would trade one problem for a worse one. This says the two are not
+        // allowed to converge — setting MarkerFile.Extension to ".log" would
+        // make every marker look like something to open and send.
+        //
+        // An earlier version of this test asserted EndsWith(".log",
+        // "support-report.log"), which is a literal against a literal and could
+        // not fail. The product's own name stays a literal at its
+        // CartographerPaths.InRoot call site deliberately: that literal is what
+        // the validator's rule reads, and hoisting it into a shared constant
+        // would hide the call from the rule that keeps #304 from returning.
+        Assert.NotEqual(".log", MarkerFile.Extension);
+        Assert.False(CartographerConfigFiles.AnEditorWouldOfferThis("x" + MarkerFile.Extension));
     }
 
     [Fact]
