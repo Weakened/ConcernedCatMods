@@ -222,6 +222,10 @@ plan reporting itself `Settled` or `Refunded` over an open question is a plan th
 player's material and then reported success. `NpcPlanRecovery.AlreadyOver` answers `NeedsAttention` for any terminal
 record whose custody is not `Clear`, as the second line of defence for a record written by something else.
 
+One deliberate exception to "an ending is an ending" comes with that: a terminal record whose custody is not `Clear`
+may be moved to `NeedsAttention`, and only there, so the answer can be written down once instead of being re-decided
+on every load. It withdraws a claim of success and grants nothing, and a plan whose custody is `Clear` is untouched.
+
 **A record in no phase at all is unreadable, not a plan.** `NpcPlanJournal` refuses to hand one back, the recovery
 path answers `NeedsAttention` for one it is handed, and `NpcPlanRun` refuses everything over it except a stop for a
 person - which is available above every other rule, for any plan that has not ended, because a library that can hold

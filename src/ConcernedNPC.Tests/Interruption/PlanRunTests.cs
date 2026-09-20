@@ -1,6 +1,7 @@
 using TheConcernedCat.ConcernedNPC.Custody;
 using TheConcernedCat.ConcernedNPC.Interruption;
 using TheConcernedCat.ConcernedNPC.Reservations;
+using TheConcernedCat.ConcernedNPC.Roles;
 using TheConcernedCat.ConcernedNPC.Work;
 
 namespace TheConcernedCat.ConcernedNPC.Tests;
@@ -681,6 +682,21 @@ public class PlanRunTests
             InterruptionResponse.NeedsAttention,
             NpcPlanRecovery.Revalidate(wrong, Healthy(world), NpcWorkInterruptionPolicy.Instance)
                 .Outcome.Response);
+
+        // And through Reconstruct, which is the path with a body in it and was the
+        // one with no test: deleting its arm left all 913 green while Revalidate's
+        // arm carried the claim. Without it this claims a body and answers Replan.
+        NpcPlanRecovered reconstructed = NpcPlanRecovery.Reconstruct(
+            world.Registry, wrong, NpcBodyKind.Worker, "recovery", Healthy(world), null);
+
+        Assert.Equal(InterruptionResponse.NeedsAttention, reconstructed.Outcome.Response);
+        Assert.Equal(NpcPlanPhase.NeedsAttention, reconstructed.Next.Phase);
+        Assert.True(reconstructed.WasAlreadyOver);
+
+        // "Before it asks for a body" is the documented order, so it is asserted
+        // rather than read: nothing was claimed and nothing has to be released.
+        Assert.False(reconstructed.Claim.IsGranted);
+        Assert.Equal(NpcBodyKind.Unspecified, world.Registry.CurrentBodyKind(world.Identity));
     }
 
     [Fact]
@@ -775,6 +791,149 @@ public class PlanRunTests
         Assert.True(world.Run.Conclude(
             true, new[] { new NpcMaterialStack(world.Stone, 4) }, 1, "handed six over").IsSaved);
         Assert.Equal(4, world.Run.State.CarriedUnits);
+    }
+
+    /// <summary>The one guard on the always-available stop, pinned.
+    ///
+    /// <b>Why a single conjunct needs its own test.</b> The stop-for-a-person rule
+    /// sits above every other rule in <c>WhyNot</c>, so
+    /// <c>CarriesTheSameWorkAs</c> is the only thing between it and both pending
+    /// rules, the uncertain rule, the load rule and the refusal of an unset custody
+    /// field. A review of #379 deleted that one conjunct and found all 913 tests
+    /// green, then showed the escape was real: a stop could drop a load or launder
+    /// a pending custody on the way past, which is the erasure shape the rule
+    /// immediately below it exists to refuse.</summary>
+    [Fact]
+    public void A_stop_for_a_person_may_not_change_the_load_or_launder_the_custody_on_the_way_past()
+    {
+        using var world = new PlanRehearsal();
+        world.Start().RunUpTo(7);
+        Assert.Equal(PlanRehearsal.Units, world.Run.State.CarriedUnits);
+        Assert.Equal(NpcPlanCustody.Clear, world.Run.State.Custody);
+
+        // Stopping for a person while quietly putting down ten units of stone.
+        NpcPlanSave dropped = world.Run.Record(
+            world.Run.State
+                .WithHoldings(world.Run.State.Reservations, new NpcMaterialStack[0])
+                .WithPhase(NpcPlanPhase.NeedsAttention, "somebody look"));
+
+        Assert.False(dropped.IsSaved);
+        Assert.Contains("recorded outcome of a movement", dropped.Failure);
+        Assert.Equal(PlanRehearsal.Units, world.Run.State.CarriedUnits);
+
+        // And the same escape from a pending movement, which is worse: this is
+        // MAJOR C's erasure shape reached through the one path that is allowed to
+        // ignore the pending rules.
+        Assert.True(world.Run.Intend("about to hand over").IsSaved);
+        NpcPlanSave laundered = world.Run.Record(
+            world.Run.State
+                .WithCustody(NpcPlanCustody.Clear, "all fine after all")
+                .WithPhase(NpcPlanPhase.NeedsAttention, "somebody look"));
+
+        Assert.False(laundered.IsSaved);
+        Assert.Contains("erases the only evidence", laundered.Failure);
+
+        // The honest stop, which changes the phase and the note and nothing else,
+        // is still available - and keeps the evidence.
+        Assert.True(world.Run.Stop(NpcPlanPhase.NeedsAttention, "somebody please look").IsSaved);
+        Assert.Equal(NpcPlanCustody.Pending, world.Run.State.Custody);
+        Assert.Equal(PlanRehearsal.Units, world.Run.State.CarriedUnits);
+    }
+
+    [Fact]
+    public void A_continue_decision_does_not_carry_a_concluded_intent_across_the_interruption()
+    {
+        using var world = new PlanRehearsal();
+
+        // The gather was announced and accounted for before the interruption.
+        world.Start().RunUpTo(7);
+        Assert.Equal(NpcPlanPhase.Reserved, world.Run.State.Phase);
+
+        // A revalidation that says carry on. It keeps the phase, so nothing about
+        // the plan moves - which is exactly why the reset here is easy to miss:
+        // narrowing it to a re-plan alone left all 913 tests green, and then this
+        // Continue bought the move into Provisioned on an intent concluded before
+        // the interruption rather than after it.
+        var carryOn = new InterruptionOutcome(
+            InterruptionResponse.Continue, InterruptionCause.PausedByPlayer, 0f, "it was paused");
+        Assert.True(world.Run.Adopt(
+            world.Run.State.WithPhase(NpcPlanPhase.Reserved, "it was paused"), carryOn).IsSaved);
+
+        NpcPlanSave refused = world.Run.Advance(NpcPlanPhase.Provisioned, "still loaded from before");
+        Assert.False(refused.IsSaved);
+        Assert.Contains("moved twice", refused.Failure);
+
+        // Saying it again is all it takes, and it moves nothing.
+        Assert.True(world.Run.Intend("checking what he is holding").IsSaved);
+        Assert.True(world.Run.Conclude(true, world.Run.State.Carried, 0, "he has it").IsSaved);
+        Assert.True(world.Run.Advance(NpcPlanPhase.Provisioned, "on his back").IsSaved);
+        Assert.Equal(1, world.Gathers);
+    }
+
+    /// <summary>An ending written over an open question can be recorded as the
+    /// ending it should have had - once.
+    ///
+    /// <b>The decision this pins, and why it went this way.</b> The recovery path
+    /// answers <c>NeedsAttention</c> for a terminal record whose custody is not
+    /// <c>Clear</c>, and it hands back a state phased <c>NeedsAttention</c>. Until
+    /// this round no verb could write that state, because both refuse over a
+    /// terminal phase - so the corrupt row stayed on the disk and the same decision
+    /// re-issued on every world load, a fix that reported a problem for ever and
+    /// could never record that anybody had seen it. So exactly one move out of an
+    /// ending exists: to <c>NeedsAttention</c>, only while the custody is not
+    /// <c>Clear</c>. It resolves nothing - the custody is still uncertain - and a
+    /// plan that really did finish is never reopened, which is what keeps "this job
+    /// finished" distinguishable from "this job never existed".</summary>
+    [Fact]
+    public void An_ending_written_over_an_open_question_can_be_recorded_as_the_ending_it_should_have_had()
+    {
+        using var world = new PlanRehearsal();
+        world.Start().RunUpTo(5);
+
+        NpcPlanState corrupt = world.Run.State.WithPhase(NpcPlanPhase.Settled, "call it done").AsRecovered();
+        Assert.Equal(NpcPlanPhase.Settled, corrupt.Phase);
+        Assert.Equal(NpcPlanCustody.Uncertain, corrupt.Custody);
+
+        NpcPlanRecovered decision = NpcPlanRecovery.Revalidate(corrupt, Healthy(world), null);
+        Assert.Equal(InterruptionResponse.NeedsAttention, decision.Outcome.Response);
+        Assert.Equal(NpcPlanPhase.NeedsAttention, decision.Next.Phase);
+
+        // Through Adopt, which is the verb a role writing a decision down uses.
+        NpcPlanRun? adopting = NpcPlanRun.Resume(world.Journal(), corrupt);
+        Assert.True(adopting!.Adopt(decision.Next, decision.Outcome).IsSaved);
+        Assert.Equal(NpcPlanPhase.NeedsAttention, adopting.State.Phase);
+        Assert.Equal(NpcPlanCustody.Uncertain, adopting.State.Custody);
+        Assert.Equal(NpcPlanPhase.NeedsAttention, world.Journal().Load().Plan!.Phase);
+
+        // And through Stop, so a role that has no decision in hand is not stuck.
+        NpcPlanRun? stopping = NpcPlanRun.Resume(world.Journal(), corrupt);
+        Assert.True(stopping!.Stop(NpcPlanPhase.NeedsAttention, "an ending over an open question").IsSaved);
+
+        // Nothing was resolved by writing it down: the plan is in the state the
+        // NeedsAttention precondition describes, and a person is still the only way
+        // out. It is simply on the record now rather than re-decided every load.
+        Assert.False(stopping.MayAct);
+        Assert.False(
+            NpcPlanRecovery.Revalidate(stopping.State, Healthy(world), null).Outcome.MayResume);
+
+        // The allowance is this shape and no wider. A plan that really did finish
+        // is not reopened, by either verb.
+        using var finished = new PlanRehearsal();
+        finished.Start().RunUpTo(15);
+        Assert.Equal(NpcPlanPhase.Settled, finished.Run.State.Phase);
+        Assert.Equal(NpcPlanCustody.Clear, finished.Run.State.Custody);
+
+        NpcPlanSave refused = finished.Run.Stop(NpcPlanPhase.NeedsAttention, "look at this anyway");
+        Assert.False(refused.IsSaved);
+        Assert.Contains("has ended", refused.Failure);
+
+        var stop = new InterruptionOutcome(
+            InterruptionResponse.NeedsAttention, InterruptionCause.TransferUncertain, 0f, "look anyway");
+        NpcPlanSave alsoRefused = finished.Run.Adopt(
+            finished.Run.State.WithPhase(NpcPlanPhase.NeedsAttention, "look anyway"), stop);
+        Assert.False(alsoRefused.IsSaved);
+        Assert.Contains("has ended", alsoRefused.Failure);
+        Assert.Equal(NpcPlanPhase.Settled, finished.Run.State.Phase);
     }
 
     private static NpcPlanEvidence Healthy(PlanRehearsal world) =>

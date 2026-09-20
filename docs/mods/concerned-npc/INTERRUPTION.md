@@ -175,16 +175,39 @@ something to write. And `NpcPlanRun` refuses everything over it **except** a sto
 
 That last one is how the `MayFollow` asymmetry was decided, and it was decided deliberately. The table keeps refusing
 `Unspecified` on both sides, because the table is about the shape of the pipeline and a phase nobody set is not a
-position on the line; putting the exception there would make `Unspecified` look like one. Instead `NpcPlanRun.WhyNot`
-makes "stop this for a person" available above every other rule, for any plan that has not already ended, as long as
-the stop changes nothing but the phase and the note. The reason is the leaf's own thesis: a library that can hold a
+position on the line; putting the exception there would make `Unspecified → NeedsAttention` a legal pipeline edge and
+grant it to any future caller of the table with no same-work guard attached. Instead `NpcPlanRun.WhyNot` makes "stop
+this for a person" available above every other rule. The reason is the leaf's own thesis: a library that can hold a
 state and cannot hand it to a person has a failure nobody is ever told about.
+
+What that rule requires is `NpcPlanState.CarriesTheSameWorkAs`, and because it sits above every other rule that
+predicate is the only thing between it and both pending rules, the uncertain rule, the load rule and the refusal of an
+unset custody field. So the precise version of "changes nothing but the phase and the note" is: **it changes nothing
+about the work** - not the load, not the custody, not the reservations, the route or the progress. Two things it does
+leave loose, because `CarriesTheSameWorkAs` deliberately ignores them: the world epoch and the attempt count may be
+re-stamped by a stop, and a record whose custody nobody set can be stopped past the refusal that would otherwise
+catch it. Both are conservative, neither is depended on anywhere - adding either guard changes no test - and the
+epoch latitude is what `Reattach` rides on, so they are written down here rather than closed.
 
 **`AlreadyOver` is the second line of defence for an ending written over an open question.** It short-circuits before
 the policy, so the policy's first row - anything uncertain is needs attention, whatever else is true - never ran for a
 record that had already ended. It now answers `NeedsAttention` for any terminal record whose custody is not `Clear`.
 `NpcPlanRun` refuses to write one; this answers one that exists anyway, from an older build, a hand edit, or a role
 that found another way. A plan that really did finish is still reported as finished.
+
+**And that answer can be written down, which needed one deliberate exception.** The state `AlreadyOver` hands back is
+phased `NeedsAttention`, and both verbs refuse over a terminal phase - so at first the corrupt row stayed on the disk
+and the same decision re-issued on every world load, a fix that reported a problem for ever and could never record
+that anybody had seen it. So exactly one move out of an ending exists: to `NeedsAttention`, only while the custody is
+not `Clear`, through `Stop` or through `Adopt`.
+
+The alternative was to document the loop as permanent. This is better, and narrowly so rather than generally: a
+record that says it finished while something it set in motion had no recorded outcome is not a well-formed ending in
+the first place, and moving it to `NeedsAttention` is monotonic in the conservative direction - it withdraws a claim
+of success and grants nothing. A plan whose custody is `Clear` is untouched, so a job that really did finish is never
+reopened and "this job finished" stays distinguishable from "this job never existed". What the write does **not** do
+is resolve anything: the custody is still uncertain afterwards, so the plan lands squarely in the precondition below.
+It is on the record once instead of being re-decided every load.
 
 ## 6. One logical NPC, one world entity
 

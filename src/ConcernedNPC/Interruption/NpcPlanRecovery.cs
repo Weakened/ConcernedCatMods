@@ -180,9 +180,14 @@ internal readonly struct NpcPlanRecovered
     /// tears one down.</summary>
     internal BodyClaim Claim { get; }
 
-    /// <summary>Whether the plan had already ended before this was asked. A
-    /// finished plan is not resumed and a plan waiting for a person is not
-    /// quietly taken off that list.</summary>
+    /// <summary>Whether this was answered without asking the policy or the
+    /// registry anything. <b>True for a plan that had already ended</b> - a
+    /// finished plan is not resumed and a plan waiting for a person is not quietly
+    /// taken off that list - and also for the two records that are not plans at
+    /// all: one that names nothing, and one whose phase nobody set. The name is
+    /// about the plan; the value is about the answer, which is why it is true for a
+    /// record that never started either. No body is claimed on any of those
+    /// paths.</summary>
     internal bool WasAlreadyOver { get; }
 }
 
@@ -389,6 +394,18 @@ internal static class NpcPlanRecovery
             // record; this is the second line of defence for one that exists
             // anyway, from an older build, a hand edit, or a role that found
             // another way.
+            //
+            // <b>The re-phased state is writable, and that is deliberate.</b>
+            // Handing back a state nothing could write would mean this decision
+            // re-issued on every world load with no way to record that anybody had
+            // seen it - a fix that reports a problem for ever and never resolves
+            // it. So NpcPlanRun makes exactly this one move out of an ending
+            // available: to NeedsAttention, only while the custody is not Clear,
+            // through Stop or through Adopt. A plan that really did finish stays
+            // finished. What this does not do is resolve anything: the custody is
+            // still uncertain afterwards, so the plan is in the state the
+            // NeedsAttention precondition describes, and a person is still the
+            // only way out of it.
             return Over(
                 InterruptionResponse.NeedsAttention,
                 InterruptionCause.TransferUncertain,

@@ -256,7 +256,9 @@ internal sealed class NpcPlanRun
             return NpcPlanSave.Refused("nothing decided this, so nothing is adopted");
         }
 
-        if (NpcPlanProgression.IsTerminal(_state.Phase))
+        if (NpcPlanProgression.IsTerminal(_state.Phase)
+            && !(revalidated.Phase == NpcPlanPhase.NeedsAttention
+                && _state.Custody != NpcPlanCustody.Clear))
         {
             return NpcPlanSave.Refused(
                 "this plan has ended, and an ending that the next write can undo is not an ending");
@@ -310,15 +312,23 @@ internal sealed class NpcPlanRun
         NpcPlanSave written = _journal.Save(revalidated);
         if (written.IsSaved)
         {
-            // <b>Every response, not only a re-plan.</b> A re-plan is the case
-            // that makes it necessary - the phases it is about to walk again are
-            // ahead of it, and a concluded intent kept across the reset would be
-            // spent a second time on the way back up - but it is right for all
-            // four: after a refund or a stop for a person nothing is going to be
-            // spent at all, and after a Continue the plan has been revalidated
-            // against the world, which is exactly the moment a role should say
-            // again what it is about to move rather than lean on what it said
-            // before the interruption.
+            // <b>Every response, and two of them are checkable.</b> A re-plan
+            // is the case that makes the reset necessary: the phases it is about to
+            // walk again are ahead of it, and a concluded intent kept across it
+            // would be spent a second time on the way back up. A Continue is the
+            // second: the plan has just been revalidated against the world, which
+            // is exactly the moment a role should say again what it is about to
+            // move rather than lean on what it said before the interruption. Both
+            // are pinned by tests.
+            //
+            // For a refund and for a stop for a person the reset is not
+            // observable at all - those responses leave the plan terminal, so
+            // nothing can be spent afterwards - and narrowing the reset to exclude
+            // them would change no test. It is unconditional because the field
+            // should mean what its name says for every response, not because
+            // anything checks those two. This is the second time a comment on this
+            // field has claimed more than its tests, so the claim now stops where
+            // the evidence does.
             _concludedIn = NpcPlanPhase.Unspecified;
             _state = revalidated;
         }
@@ -384,13 +394,40 @@ internal sealed class NpcPlanRun
 
         if (proposed.Phase == NpcPlanPhase.NeedsAttention
             && proposed.CarriesTheSameWorkAs(_state)
-            && !NpcPlanProgression.IsTerminal(_state.Phase))
+            && (!NpcPlanProgression.IsTerminal(_state.Phase)
+                || _state.Custody != NpcPlanCustody.Clear))
         {
             // <b>Handing a plan to a person is always available.</b> Whatever is
             // wrong with this plan - a movement with no outcome, a phase nobody
             // set, a record somebody wrote wrong - it can be stopped and left for
-            // somebody to look at, as long as the stop changes nothing but the
-            // phase and the note and the plan has not already ended.
+            // somebody to look at.
+            //
+            // <b>What "nothing but the phase and the note" means here, exactly.</b>
+            // The same-work test is what holds this open path shut: it is the only
+            // thing standing between an unconditional write and every rule below -
+            // both pending rules, the uncertain rule, the load rule and the refusal
+            // of an unset custody field - so without it this exemption reopens the
+            // erasure shape it sits above, and a stop could drop a load or launder
+            // a pending custody on the way past. It is not quite "the phase and the
+            // note", though, and the difference is worth stating rather than
+            // rounding off: CarriesTheSameWorkAs deliberately ignores the world
+            // epoch and the attempt count, so a stop may also re-stamp those, and
+            // it <i>compares</i> the custody rather than requiring one, so a record
+            // whose custody nobody set can be stopped past the refusal below.
+            // Both are conservative and neither is depended on - adding either
+            // guard changes no test - which is why the latitude is documented
+            // rather than closed.
+            //
+            // <b>And one ending may become this one.</b> An ending is otherwise an
+            // ending, but a record that says it finished while something it set in
+            // motion had no recorded outcome is not a well-formed ending at all:
+            // NpcPlanRecovery answers NeedsAttention for it every time it is
+            // loaded, and until this allowance existed no verb could write that
+            // answer down, so the same decision re-issued for ever and nothing
+            // could record that anybody had seen it. A plan whose custody is Clear
+            // is untouched by this, so a job that really did finish is never
+            // reopened and "this job finished" stays distinguishable from "this job
+            // never existed".
             //
             // This is where the asymmetry in NpcPlanProgression.MayFollow is
             // answered rather than in the table. MayFollow refuses Unspecified on
