@@ -21,8 +21,12 @@
   and a cancelled order keeps that memory — only a world actually going away
   clears it.
 
-**Not observed in game yet.** Everything above is proved by test and by source
-audit; none of it has been watched happening, and it is not in a release.
+**Not observed in game yet, and not finished.** Everything above is proved by
+test and by source audit; none of it has been watched happening, and it is not
+in a release. What he picks up goes into his own inventory and there is **no way
+to get it out yet** — the part that puts it in a chest is not built — and
+retiring his body destroys what he is holding. That is why this is not in a
+release and why the setting is off.
 
 ## 1.0.5 - Gunnar pulls the cart
 

@@ -305,6 +305,23 @@ onto the accounting binds Unity and no test here can load it, `validate_repo.py`
 collection lifecycle audit` refuses the port if `Forget()` forgets the world or `ForgetWorld()` merely forgets the
 job, and `tools/tests/test_teamster_carveout.py` plants both crossings and requires the refusal.
 
+### What the wiring cannot do yet, stated because it is a way to lose material
+
+**Material goes into Gunnar and there is no way to get it out.** `Humanoid.Pickup` puts what he picks into his own
+inventory, in his own network object — which is right, and is what the worker decisions say a worker body may keep.
+But the deposit half of §4 and §5 (`CollectionAccount`, `CargoLedger`, the container permissions) is **not wired**,
+and neither is anything that would let a player open him or hand him a chest. So a stone he picks up stays in him.
+
+That matters because `ct_haul retire` destroys a worker body through `ZNetView.Destroy()`, and a destroyed body's
+inventory goes with it: **nothing is dropped on the ground.** Before this wiring that was harmless, because nothing
+could put anything into him. It is not harmless now, and it is the one way this slice can make material disappear.
+
+It is deliberately not fixed here, because both available fixes are worse than naming it. Wiring the deposit path is
+its own slice with its own evidence. Refusing to retire a carrying body would replace a loss with a trap: there is
+no unload path, so the body could never be removed, and `ct_haul retire` is the only way to resolve a duplicate.
+**So: while the deposit path is unwired, do not order a pick with anything you mind losing, and empty a test world
+rather than a real one.** The switch being off by default is what keeps that confined to people who went looking.
+
 **Still never observed in game.** Nothing in this section has been watched happening; §10 is the go-around.
 
 ## 7. No portals
@@ -427,6 +444,10 @@ claim that nobody who has not opted in is affected, and step 17 is the one that 
     world verb did not fire.
 19. **A peer connects mid-pick.** Open the world to a second player while a pick is in flight: the order must end
     with the authority sentence, and nothing must be picked afterwards until they leave.
+20. **Where the stone ends up, and that it is stuck there.** After step 14, confirm the Stone is in Gunnar and not
+    anywhere else, and that there is no way to take it out — that is the unwired deposit path in §6a, not a defect
+    in the pick. **Do not `ct_haul retire` him while he is carrying anything in a world you care about:** the body's
+    inventory is destroyed with the body and nothing drops. Disposable world only.
 
 Evidence rows for `docs/settlement/cart-and-collection/EVIDENCE.md` stay **pending** until observed, with the
 build, profile and scenario recorded.
