@@ -130,7 +130,44 @@ Check on both clients:
 
 - `cc_routes status` summarizes the route atlas; routes have their own sidecar (`<world-uid>.routes-atlas.tsv` + journal) with the same snapshot/journal recovery as pins.
 - `cc_atlas backups` lists snapshots; `cc_atlas restore <n>` takes a safety backup first. After a restore, relog so the restored snapshot is authoritative.
-- `cc_atlas support` writes a sanitized report (versions, settings, counts, sizes only — no world UIDs, paths, positions, names, or notes) safe to attach to a bug report.
+- `cc_atlas support` writes a sanitized report (versions, settings, counts, sizes only — no world UIDs, paths, positions, names, or notes) safe to attach to a bug report. The reply tells you where the file is; that location is on your own machine and is not inside the file. The report covers all five per-world sidecars.
+
+### A backup you took but `cc_atlas backups` does not list (fixed in #367)
+
+Two separate causes, both silent, both fixed:
+
+- **The folder name.** `cc_atlas backup` composed the folder name under your own
+  locale's number formatting while `cc_atlas backups` looked for the invariant
+  form. Where those differ, the backup was written successfully under a name the
+  lister could not find — so the backup is *still on disk* and reachable by hand.
+  Look in the product's `backups/` folder for a folder whose name starts with your
+  world's id and ends in `-backup`.
+
+  **Recovering one by hand takes two steps, not one.** With the game closed:
+
+  1. copy the backup folder's `.tsv` files into the product's data folder,
+     replacing the ones beside them;
+  2. **delete any `<world-id>.pins.tsv.journal` and
+     `<world-id>.routes-atlas.tsv.journal`** beside them. Pins and routes are the
+     two kinds that keep a journal; `restore` sweeps the whole family by name, so
+     if you ever see a `.journal` for another kind, delete that too.
+
+  Step 2 is not optional and is the whole reason to prefer `cc_atlas restore <n>`
+  where you can use it. A journal is a list of edits made since the last
+  snapshot, and it is replayed on top of whatever snapshot it finds. Copy the
+  files back without clearing the journals and the next world load replays your
+  post-backup edits over the snapshot you just restored — quietly undoing the
+  recovery you did by hand, which is exactly what `Restore` deletes them to
+  prevent. Note also that `cc_atlas restore` takes a safety backup of your
+  current state first; copying by hand does not, so take your own copy of the
+  data folder before you start.
+
+  Either way, relog afterwards so the restored snapshot is the authoritative one.
+- **Two missing sidecars.** A backup covered `.roads.tsv`, `.pins.tsv` and
+  `.routes-atlas.tsv` only. Your rejected-observation memory
+  (`.survey-rejected.tsv`) and terrain-intent mask (`.terrain-intent.tsv`) were
+  never copied, so a restore could not bring them back and never said so. Backups
+  taken before this fix still do not contain them; a backup taken after it does.
 
 ## Sidecar corruption
 

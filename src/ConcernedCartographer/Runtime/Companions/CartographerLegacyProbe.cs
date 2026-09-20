@@ -7,6 +7,7 @@ using BepInEx.Logging;
 using TheConcernedCat.Companions.Unlock;
 using TheConcernedCat.ConcernedCartographer.Companions;
 using TheConcernedCat.ConcernedCartographer.Reporting;
+using TheConcernedCat.ConcernedCartographer.Storage;
 
 namespace TheConcernedCat.ConcernedCartographer.Runtime.Companions;
 
@@ -25,15 +26,15 @@ namespace TheConcernedCat.ConcernedCartographer.Runtime.Companions;
 internal sealed class CartographerLegacyProbe
 {
     /// <summary>World-scoped sidecar suffixes this product has ever written.
-    /// Any one of them existing proves the mod did real work in some world.</summary>
-    private static readonly string[] WorldSuffixes =
-    {
-        ".roads.tsv",
-        ".pins.tsv",
-        ".routes-atlas.tsv",
-        ".survey-rejected.tsv",
-        ".terrain-intent.tsv",
-    };
+    /// Any one of them existing proves the mod did real work in some world.
+    ///
+    /// <b>The list itself is <see cref="CartographerWorldSidecars"/> (#367).</b>
+    /// A second copy of it in the backup tools listed three of these five, so
+    /// backup, restore and the support report each quietly covered three fifths
+    /// of a player's data. The literals moved to the domain, into a file
+    /// <c>validate_repo.py</c> already harvests them from, so nothing the
+    /// validator could see was lost in the move.</summary>
+    private static readonly string[] WorldSuffixes = CartographerWorldSidecars.Suffixes;
 
     /// <summary>Profile-scoped files that only appear after a deliberate
     /// action: saving a view, installing a translation. The translator's
@@ -108,18 +109,18 @@ internal sealed class CartographerLegacyProbe
 
     /// <summary>True when the file was on disk before this session started.
     /// A timestamp, not contents: this probe has never read a file's bytes and
-    /// still does not.</summary>
+    /// still does not.
+    ///
+    /// <b>The predicate itself is in the domain (#366).</b> Startup also
+    /// <i>rewrites</i> <c>survey-rules.tsv</c> when it is an untouched older
+    /// starter file, which resets the very timestamp this reads; the two pieces
+    /// of code disagreed, and because this class needs BepInEx no test could run
+    /// both. <see cref="PreexistingFile"/> is the shared predicate and
+    /// <c>SurveyRuleFile</c> the writer that keeps this answer true, both under
+    /// test against a real file, in both construction orders.</summary>
     private static bool ExistedBeforeThisSession(string path)
     {
-        try
-        {
-            return File.Exists(path) && File.GetLastWriteTimeUtc(path) < ProcessStartUtc;
-        }
-        catch
-        {
-            // An unreadable timestamp is not evidence of a new player.
-            return true;
-        }
+        return PreexistingFile.ExistedBefore(path, ProcessStartUtc);
     }
 
     /// <summary>Every file name directly in the data directory. Names only —

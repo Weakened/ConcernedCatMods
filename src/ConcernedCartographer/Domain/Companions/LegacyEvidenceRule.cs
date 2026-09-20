@@ -56,6 +56,42 @@ internal readonly struct LegacyEvidenceFacts
         new LegacyEvidenceFacts(false, false, false, false, probeFailed: true);
 }
 
+/// <summary>Every per-world sidecar this product writes, as one list.
+///
+/// <b>Why one list, and why it lives here (#367).</b> There were two. The
+/// fresh-install probe knew all five; <c>AtlasBackupTools</c> carried its own
+/// copy of three, so <c>cc_atlas backup</c> silently left the rejected-survey
+/// memory and the terrain-intent mask out of every backup, <c>restore</c> could
+/// not bring back what was never copied, and the support report described three
+/// fifths of a player's data while looking complete. A second copy of a list is
+/// not a duplication problem, it is a "which one is right" problem, and the
+/// answer was already written down: <c>CartographerPaths</c> names the probe's
+/// evidence lists as the authority on what a player's own files are. This is
+/// that list, in the domain, where a test can read it.
+///
+/// <b>Why in this file specifically.</b> <c>validate_repo.py</c> harvests the
+/// names and suffixes the probe knows out of this file and
+/// <c>CartographerLegacyProbe.cs</c>, by reading one-literal-per-line arrays.
+/// Putting these five literals in a third file would quietly shrink what that
+/// rule can see - the rule that keeps #343 from returning - so they stay in a
+/// file it already reads, spelled as literals rather than composed. Do not
+/// derive them from anything.</summary>
+internal static class CartographerWorldSidecars
+{
+    /// <summary>One suffix per file kind, appended to the invariant world uid.
+    /// Anything added here is immediately backed up, restored, journal-cleaned
+    /// and reported on, and immediately counts as proof a player used this mod.
+    /// </summary>
+    public static readonly string[] Suffixes =
+    {
+        ".roads.tsv",
+        ".pins.tsv",
+        ".routes-atlas.tsv",
+        ".survey-rejected.tsv",
+        ".terrain-intent.tsv",
+    };
+}
+
 /// <summary>The files this mod writes for itself, without anybody asking.
 ///
 /// This list exists because the first in-game run of the companion build
