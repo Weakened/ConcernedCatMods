@@ -393,9 +393,9 @@ owes.
 
 | Check | Outcome |
 |---|---|
-| `pwsh ./scripts/verify.ps1 -Configuration Release`, through the build lock | **PASSED at `VERIFY_COMMIT`**: Release, 14 assemblies, **VERIFY_TESTS tests**, validator exit 0 |
+| `pwsh ./scripts/verify.ps1 -Configuration Release`, through the build lock | **PASSED at `6e903e7`**: Release, 14 assemblies, **4429 tests**, validator exit 0 |
 | `ConcernedTeamster.Tests` | **1125 passed, 0 failed** (1031 before this work) |
-| `python -m unittest discover -s tools/tests` | **10 passed** (8 before this work) |
+| `python -m unittest discover -s tools/tests` | **12 passed** (8 before this work; four new plants) |
 | `pwsh ./scripts/audit-teamster-hauling-api.ps1`, through the build lock | **PASS** — every member the port and the runtime bind, including the newly probed `Pickable.m_amount`, `Humanoid.GetInventory` and `Inventory.NrOfItems`, is present in the installed game |
 | Planted defects in the §6a wiring, one per property | **7 of 7 caught**: world-down routed to the job verb; an order ending routed to the world verb; tear-down routed to the job verb; a world coming *up* also dropping the record; the off-by-default switch not consulted; reach not checked; identity not checked |
 | Planted defects in the §6b guard, one per property | **7 of 7 caught**: a carrying body retired anyway; an unreadable inventory read as empty; the forcing word made refusable (the trap); the forced message no longer stating the loss; the refusal no longer naming the way out; any trailing word accepted as forcing; an unknown verdict treated as a grant |
