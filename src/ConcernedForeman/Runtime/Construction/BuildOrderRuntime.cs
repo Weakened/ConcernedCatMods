@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using TheConcernedCat.ConcernedForeman.Domain.Construction;
 using TheConcernedCat.Settlement.Worker;
 using UnityEngine;
@@ -57,6 +58,55 @@ internal sealed class BuildOrderRuntime
     /// the site rather than from anything remembered.</summary>
     internal ConstructionProgress Progress() => ConstructionProgress.Read(Plan(), _catalogue);
 
+    /// <summary>What is standing where a piece was planned, as the seam the
+    /// execution loop reads the site through.
+    ///
+    /// <b>Exposed rather than duplicated.</b> The loop needs the completion
+    /// condition itself, not one reading of it: it asks again before every stop,
+    /// because a round is long enough for the player to build that wall
+    /// themselves and for the ground under it to unload. A second catalogue built
+    /// for the loop would be a second cache of the same prefab table, going stale
+    /// on its own schedule.</summary>
+    internal IPieceSight Sight => _catalogue;
+
+    /// <summary>Every item a shelter can be made of, read from the game's own
+    /// recipes for the blueprint's own pieces.
+    ///
+    /// <b>Read off the BLUEPRINT and not off the plan, and that is a defect
+    /// fix.</b> A withdrawn order has no plan - <c>ShelterPlan.For</c> refuses an
+    /// unconfirmed marker, which is the whole of #280's authority rule - but the
+    /// wood already in Thorstein's hands does not stop existing when a player
+    /// cancels. Taking the kinds from the plan made his material invisible to the
+    /// accounting at exactly the moment somebody needed to be told where it went,
+    /// so the cancel sentence said "the order was withdrawn" and nothing about the
+    /// four wood he was holding. The kinds are a property of the shelter, so they
+    /// come from the shelter.</summary>
+    internal IReadOnlyList<string> MaterialKinds
+    {
+        get
+        {
+            var kinds = new List<string>();
+            foreach (string prefab in ShelterBlueprint.Prefabs)
+            {
+                foreach (PieceCost cost in _catalogue.Read(prefab).Costs)
+                {
+                    if (!kinds.Contains(cost.Item))
+                    {
+                        kinds.Add(cost.Item);
+                    }
+                }
+            }
+
+            return kinds;
+        }
+    }
+
+    /// <summary>What the execution loop is doing, appended to the order's own
+    /// status line. Null where nothing drives the order, which is what the build
+    /// was before #380 - and a status line that could not tell those apart is how
+    /// a player reads "authorised" and waits forever.</summary>
+    internal Func<string>? WorkLine { get; set; }
+
     /// <summary>A world has gone away.</summary>
     internal void Forget()
     {
@@ -69,7 +119,15 @@ internal sealed class BuildOrderRuntime
     {
         try
         {
-            return _desk.Execute(args, Context());
+            string said = _desk.Execute(args, Context());
+            string word = args != null && args.Length > 0 ? args[0].ToLowerInvariant() : "status";
+            Func<string>? work = WorkLine;
+            if (work != null && (word == "status" || word == "confirm"))
+            {
+                said += Environment.NewLine + "  " + work();
+            }
+
+            return said;
         }
         catch (Exception exception)
         {

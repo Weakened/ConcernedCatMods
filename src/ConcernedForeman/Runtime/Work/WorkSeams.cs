@@ -83,6 +83,20 @@ internal interface ICustodyRuntime
     /// progress and custody are unchanged.</summary>
     bool RecordRebound(OrderId order, WorkScope scope, DeliveryTarget delivery);
 
+    /// <summary>Where the record says the worker's own inventory is, for asking
+    /// the view what it holds for anybody. One source of truth for that key: a
+    /// consumer that built it again would agree with the record until somebody
+    /// changed how the place is named.</summary>
+    CustodyLocation WorkerLocation { get; }
+
+    /// <summary>What the record says is at one place, per item, across every order
+    /// it knows - <b>including terminal ones</b>. A cancelled collection order
+    /// keeps its carried material exactly where it physically is and keeps being
+    /// recorded, so this is the only complete answer to "is there material in this
+    /// worker's inventory that is not mine", and #380's build order refuses rather
+    /// than spending it.</summary>
+    int RecordedAt(CustodyLocation location, MaterialItem item);
+
     /// <summary>The worker body's persisted inventory.</summary>
     bool TryResolveWorker(WorkerKey worker, out IInventoryPort? port, out CollectionAttentionReason refusal);
 

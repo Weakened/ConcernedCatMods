@@ -502,6 +502,27 @@ public class ZNetView : MonoBehaviour
     public void Destroy() => Destroyed = true;
 }
 
+/// <summary>#380: the networked animation component, with only the two members
+/// this product uses on a worker body - <c>GetHash</c> and <c>SetFloat</c>, the
+/// same two <c>ClimbPose</c> uses on the local player and the ones this
+/// repository has verified against the installed build.
+///
+/// <c>SetTrigger</c> is deliberately NOT here. It sends an RPC
+/// (docs/mods/concerned-cartographer/COMPANION_COMPATIBILITY.md section 3) and a
+/// cosmetic hammer trigger was explicitly not authorised, so a stub for it would
+/// make the forbidden call compile in the one project that could have caught
+/// it.</summary>
+public class ZSyncAnimation : MonoBehaviour
+{
+    /// <summary>Every float written, by parameter hash, so a test can read what
+    /// the pose actually set rather than that it did not throw.</summary>
+    public Dictionary<int, float> Floats { get; } = new Dictionary<int, float>();
+
+    public static int GetHash(string name) => name == null ? 0 : name.GetHashCode();
+
+    public void SetFloat(int hash, float value) => Floats[hash] = value;
+}
+
 public partial class Character : MonoBehaviour
 {
     public Action? m_onDeath;

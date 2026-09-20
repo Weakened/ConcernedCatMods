@@ -56,9 +56,11 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
 
     internal WorkerKey WorkerKey { get; }
 
-    /// <summary>The worker's custody location: stable across loads, so no
-    /// epoch.</summary>
-    internal CustodyLocation WorkerLocation => new CustodyLocation(CustodyPlace.Worker, WorkerKey.Value, Guid.Empty);
+    /// <summary>Where the record says the worker's own inventory is. Epoch-less
+    /// on purpose, matching <c>SoloCollectionLoop.WorkerLocation</c>: a chest key
+    /// is renumbered on every load and a worker body is not, so his place is the
+    /// same place across loads.</summary>
+    public CustodyLocation WorkerLocation => new CustodyLocation(CustodyPlace.Worker, WorkerKey.Value, Guid.Empty);
 
     internal WorkerId ToolWorker => new WorkerId(WorkerKey.Worker);
 
@@ -333,6 +335,32 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
         }
 
         return true;
+    }
+
+    /// <summary>What the record says is at one place, per item, for <b>every</b>
+    /// order it knows - terminal ones included.
+    ///
+    /// <b>Why this is here and not on <c>IMaterialCustodyView</c>.</b> The view's
+    /// <c>CountAt</c> answers for one order, so a caller has to know which orders
+    /// exist, and the recovery seam only hands back non-terminal ones - which
+    /// leaves a CANCELLED collection order's carried material unaccountable to
+    /// anybody but the ledger. The ledger has always been able to answer
+    /// (<c>MaterialCustodyLedger.TotalAt</c>); what was missing was a way to ask
+    /// it from a consumer. Adding the method to the shared view would have been
+    /// four test fakes in two projects for one question one product asks, so the
+    /// question lives on this product's own seam and forwards.</summary>
+    /// <returns>Zero when there is no record to read, which refuses to make a
+    /// claim about somebody else's material rather than denying one.</returns>
+    public int RecordedAt(CustodyLocation location, MaterialItem item)
+    {
+        try
+        {
+            return _core == null ? 0 : Math.Max(0, _core.Ledger.TotalAt(location, item));
+        }
+        catch (Exception)
+        {
+            return 0;
+        }
     }
 
     public bool TryResolveWorker(WorkerKey worker, out IInventoryPort? port, out CollectionAttentionReason refusal)

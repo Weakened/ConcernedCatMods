@@ -45,6 +45,16 @@
     <Compile Include="..\ConcernedForeman\Runtime\Construction\**\*.cs"
              Exclude="..\ConcernedForeman\Runtime\Construction\BuildCommand.cs"
              LinkBase="Product/Construction" />
+    <!-- #380: the C1 work seams the construction runtime is written against.
+         ONE FILE, not the folder: WorkSeams.cs is game-free apart from a Vector3
+         and declares the motion and custody interfaces the build loop's adapters
+         consume, so linking it lets the whole execution chain - the loop, the
+         walk adapter, the materials adapter and the composition root - compile and
+         be driven here. The rest of Runtime/Work and Runtime/Collection is not
+         linked: it names ForemanWorkerAI and the game's own scene, which is a
+         different stub surface from this project's. -->
+    <Compile Include="..\ConcernedForeman\Runtime\Work\WorkSeams.cs" Link="Product/WorkSeams.cs" />
+
     <!-- BuildCommand is a Jotunn ConsoleCommand and nothing else: it forwards
          its words to BuildOrderRuntime, which IS linked and IS tested. Stubbing
          Jotunn's entity base class to prove a forward is not evidence about
