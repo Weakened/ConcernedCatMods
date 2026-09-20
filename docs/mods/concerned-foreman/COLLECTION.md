@@ -29,9 +29,39 @@ ground, and only through agent D's custody runtime: without one every order is r
 | Tests | `src/Shared.Settlement.Tests/Collection*.cs` | 179 tests |
 | Audit | `scripts/audit-foreman-collection-api.ps1` | 80 game-member contracts + forbidden-call check on the built DLL |
 
-The loop never moves a body itself (it asks `IWorkerMotion`, which obeys only the job holding the `ActorModeOwner`),
+The loop never moves a body itself (it asks `IWorkerMotion`, which obeys only the job holding the worker's
+`IActorModeHold`),
 never writes an inventory (picks through `ISourcePickupPort`, deposits through custody's executor), and reads progress
 back from the custody view every time, so a unit is never counted twice or counted from an estimate.
+
+### 2.1 Where the actor mode lives (#380)
+
+Thorstein's actor mode is **not** this product's to own any more. It comes from Concerned NPC's one arbiter, which is
+one object for the whole game process, and Concerned Foreman reaches it through four files:
+
+| Piece | File | What it is |
+| --- | --- | --- |
+| Durable facts | `Domain/Npc/ForemanRole.cs` | the identity slug, prefab name and ZDO key prefix already on a player's disk, in one place |
+| Role declaration | `Domain/Npc/ForemanNpcRole.cs` | `INpcRole`: `NpcBodyContract.ForWorker(CF_SettlementWorker, tcc.worker.)` and a data root |
+| Registration and epochs | `Domain/Npc/ForemanNpcAdoption.cs` | registers once per process; `BeginWorldLoad`/`EndWorldLoad` per world |
+| The mode itself | `Domain/Npc/ArbiterActorMode.cs` | `IActorModeHold` over `NpcRoleRegistry.EnterMode`/`ReleaseMode`/`ModeOf` |
+
+**What this changes for a player, and what it does not.** Nothing on disk moved: the identity is still
+`foreman/thorstein`, the prefab is still `CF_SettlementWorker`, and the body's three keys are still `tcc.worker.key`,
+`tcc.worker.inventory` and `tcc.worker.revision`. There is no migration code, because there is nothing to migrate.
+What changes is that a hold is now visible outside this assembly: while an order holds Thorstein,
+`NpcBodyArbiter.TryClaim` refuses his body to every other holder in the process and names the order in the refusal.
+Before the adoption each product kept its own `ActorModeOwner` and none could see the others, so the never-coexist rule
+was three separate private truths.
+
+**It fails closed.** If registration is refused at load — a duplicate identity, a library that did not come up — the
+arbiter tracks nothing for him, so `Enter` answers `Unspecified`, every order is refused, and `MayRetireBody` is
+**false**: a body nothing can account for is not despawned. That is the worker-authority direction of the program's
+rule. Only feature access grants on ambiguous evidence, and this is not feature access.
+
+**Still Foreman's own, forever.** Registering the worker prefab, from this plugin's start, under this product's name.
+A prefab registered late or renamed deletes every saved worker on the next load, so that half is deliberately not
+handed to the library.
 
 ## 3. The order's life
 
@@ -41,8 +71,9 @@ every recorded transition against the table.
 1. **Accept** (`CollectionIntake`): shape, authority, custody writable, no other active order, the identity free, the
    body present, readiness (recruited, usable issued axe **and** hammer, D12), the scope valid, the default circle
    previewed, each quota a multiple of the world's yield per pick, the chest resolvable (or, holding, the whole order
-   within his carry budget), a hauler when asked. Then the identity is held (`ActorModeOwner.Enter(Surveying)`), then
-   `RecordAccepted` is journaled, and only then does work start.
+   within his carry budget), a hauler when asked. Then the identity is held (`IActorModeHold.Enter(Surveying)`, which
+   must return a **grant** — `Entered` or `AlreadyInMode`; every other outcome, `Unspecified` included, refuses the
+   order as `WorkerBusy`), then `RecordAccepted` is journaled, and only then does work start.
 2. **Survey** (solo, labelled "solo survey by Thorstein"): cells of 8 m checked loaded at centre and four corners;
    candidates found by prefab hash in the scene's instance table; each classified by the predicate.
 3. **Select** (`CollectionTargetSelector`): only Available, reachable, unexcluded sources of a resource still needed;
@@ -195,7 +226,7 @@ again this session.
    for the settlement runtime's live records if preferred.
 6. **Body.** Found in `BaseAI.BaseAIInstances`: the body with `tcc.worker.key = foreman/thorstein`, else the single
    unkeyed spike body; two of either is a duplicate and neither is used. `SettlementRuntime.Despawn` still destroys a
-   body a job holds; it should consult `ActorModeOwner.MayRetireBody`.
+   body a job holds; it should consult `IActorModeHold.MayRetireBody`, which the plugin already wires it to.
 7. **C2 answered both earlier gaps** and both are wired here: `TryRecoverOrder`/`RecordRebound` (§3.1) and
    `PausedByPlayer`. The third, a `HoldingForPlayer` order's handover (R2 M1), is wired in the custody runtime, not
    here: `CustodyTools.Release` counts `HoldingForPlayer` as releasable alongside the terminal states and calls

@@ -30,10 +30,22 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Collection;
 /// latched, logged once, and the worker is stopped. A latched runtime does no
 /// more work this session; the order keeps its last recorded state.
 ///
-/// <b>What it owns.</b> One <see cref="ActorModeOwner"/> for Thorstein's
-/// identity, for the life of the plugin, and per world load: the load's epoch,
-/// the source reservation book, the source directory, request ids and the loop.
-/// A reload drops all of those, as the contract says (CONTRACTS.md §8).</summary>
+/// <b>What it owns, and what it no longer owns.</b> Per world load: the load's
+/// epoch, the source reservation book, the source directory, request ids and the
+/// loop. A reload drops all of those, as the contract says (CONTRACTS.md §8).
+///
+/// It no longer owns Thorstein's actor mode. Until the Concerned NPC adoption
+/// this runtime constructed its own <c>ActorModeOwner</c> for
+/// <c>WorkerKey.Thorstein</c> from shared source compiled into this assembly,
+/// which was correct and invisible: Teamster and the Steward each compiled their
+/// own copy of that type, so "one mode owner per identity" was three separate
+/// truths in three assemblies and none could see the others. The mode is now
+/// taken from the library's one arbiter, through the
+/// <see cref="IActorModeHold"/> handed in at construction
+/// (<c>ForemanNpcAdoption.Modes</c>), so a hold this runtime takes is a hold the
+/// whole process can see: while an order holds him, <c>NpcBodyArbiter.TryClaim</c>
+/// refuses his body to every other holder and names the order in the
+/// refusal.</summary>
 internal sealed class CollectionRuntime
 {
     private const float BodyLookupSeconds = 0.5f;
@@ -77,15 +89,28 @@ internal sealed class CollectionRuntime
     /// <param name="sharedEpoch">The world-load epoch custody resolves
     /// containers against, when custody owns it. Collection must use the same
     /// one; without it this runtime mints its own per world open.</param>
+    /// <param name="modes">Thorstein's actor mode, over Concerned NPC's arbiter.
+    /// Required, and required to be his: a runtime handed somebody else's hold
+    /// would drive his body on another identity's authority. This is the
+    /// replacement for the mode owner this class used to construct, which the
+    /// validator now refuses for a library consumer.</param>
     internal CollectionRuntime(
         ForemanSettlementSettings settlement,
         CollectionSettings settings,
         Action<string> log,
+        IActorModeHold modes,
         ICustodyRuntime? custody = null,
         ICooperativeDelivery? cooperation = null,
         Func<Guid>? sharedEpoch = null)
     {
         _settlement = settlement ?? throw new ArgumentNullException(nameof(settlement));
+        Modes = modes ?? throw new ArgumentNullException(nameof(modes));
+        if (!Modes.Worker.Equals(WorkerKey.Thorstein))
+        {
+            throw new ArgumentException(
+                "Collection drives Thorstein; this mode hold belongs to " + Modes.Worker + ".", nameof(modes));
+        }
+
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _log = log ?? (_ => { });
         _custody = custody;
@@ -96,8 +121,9 @@ internal sealed class CollectionRuntime
         Motion = new ForemanWorkerMotion(Modes, () => _body);
     }
 
-    /// <summary>Thorstein's single actor-mode owner (ARCH-02).</summary>
-    internal ActorModeOwner Modes { get; } = new ActorModeOwner(WorkerKey.Thorstein);
+    /// <summary>Thorstein's single actor mode (ARCH-02), read and changed through
+    /// Concerned NPC's one arbiter. Never constructed here.</summary>
+    internal IActorModeHold Modes { get; }
 
     /// <summary>Walking Thorstein, for agent E's cooperative delivery.</summary>
     internal IWorkerMotion Motion { get; }

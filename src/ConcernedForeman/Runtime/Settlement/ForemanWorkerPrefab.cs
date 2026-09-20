@@ -46,8 +46,15 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 internal static class ForemanWorkerPrefab
 {
     /// <summary>The name the worker prefab is registered under. Saved bodies
-    /// are found by this name; it never changes.</summary>
-    internal const string PrefabName = "CF_SettlementWorker";
+    /// are found by this name; it never changes.
+    ///
+    /// It is <see cref="ForemanRole.BodyPrefabName"/> rather than a second copy
+    /// of the same literal, so the name registered with the game and the name
+    /// declared to Concerned NPC as <c>NpcBodyContract.PrefabName</c> cannot
+    /// drift apart - the compiler proves they are one string. A mismatch would
+    /// not be a cosmetic bug: the host destroys any saved object whose prefab is
+    /// not registered.</summary>
+    internal const string PrefabName = Domain.Npc.ForemanRole.BodyPrefabName;
 
     private static GameObject? _prefab;
     private static bool _installed;

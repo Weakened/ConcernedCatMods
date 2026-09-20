@@ -75,7 +75,7 @@ internal readonly struct ControlResult
 ///
 /// <b>Who owns what.</b> This loop moves nobody itself: it asks
 /// <see cref="ICollectionMotion"/>, which only obeys the job holding the
-/// worker's <see cref="ActorModeOwner"/>. It writes no inventory: picks go
+/// worker's <see cref="IActorModeHold"/>. It writes no inventory: picks go
 /// through <see cref="ISourcePickupPort"/>, deposits through the custody
 /// executor, records through custody, journal first. Progress is always read
 /// back from the custody view, never kept here, so a unit is never counted
@@ -102,7 +102,7 @@ internal sealed class SoloCollectionLoop
     private readonly CollectionParameters _parameters;
     private readonly WorkerKey _workerKey;
     private readonly WorkerId _workerId;
-    private readonly ActorModeOwner _modes;
+    private readonly IActorModeHold _modes;
     private readonly SourceReservationBook _reservations;
     private readonly ICollectionMotion _motion;
     private readonly ICollectionCustody _custody;
@@ -141,7 +141,7 @@ internal sealed class SoloCollectionLoop
         CollectionParameters parameters,
         WorkerKey workerKey,
         WorkerId workerId,
-        ActorModeOwner modes,
+        IActorModeHold modes,
         SourceReservationBook reservations,
         ICollectionMotion motion,
         ICollectionCustody custody,
@@ -286,7 +286,18 @@ internal sealed class SoloCollectionLoop
         }
 
         string jobId = order.Order.Value;
-        if (_modes.Enter(ActorMode.Surveying, jobId) == ActorModeOutcome.RefusedBusy)
+
+        // Only a GRANT starts the order. This used to look for RefusedBusy
+        // alone, which was true of the one implementation that existed at the
+        // time and is a defect now that the mode can come from Concerned NPC's
+        // arbiter: that answers Unspecified for an identity it does not track -
+        // a registration refused at load, a library that failed to come up - and
+        // "not RefusedBusy" would have read that as permission. The order would
+        // then run with nothing holding the worker, so his body could be retired
+        // out from under it and every WalkTo would be silently refused by a
+        // motion port that obeys only the holder. Asking the positive question
+        // also survives the next outcome anybody adds.
+        if (!ActorModeGrants.IsGranted(_modes.Enter(ActorMode.Surveying, jobId)))
         {
             return CollectionIntakeRefusal.WorkerBusy;
         }

@@ -160,9 +160,16 @@ That is the interesting part, not the walking.
 ## Compatibility
 
 - Valheim **1.0.12**, BepInEx 5.4.2333, Jötunn 2.29.2.
-- Independent of every other Concerned Cat mod. Foreman, Cartographer and
-  Teamster share no assembly, no data and no load order; install any of them
-  alone.
+- **Requires Concerned NPC**, which the storefront installs for you. It is a
+  shared runtime rather than a mod with features of its own: it ships no
+  gameplay, and it is what makes "one body per settlement worker" a rule the
+  whole game agrees on instead of a rule each of our mods keeps privately. If
+  it is missing, Concerned Foreman says so in one line at startup rather than
+  failing later.
+- Independent of every other Concerned Cat **mod**. Foreman, Cartographer,
+  Teamster and Steward share no gameplay, no data and no load order; install
+  any of them alone. Where two of them are installed, they share only Concerned
+  NPC, installed once.
 
 ## Support
 
