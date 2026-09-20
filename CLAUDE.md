@@ -29,13 +29,28 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   container or a door still fails there - and refuses the token everywhere else, inside
   `Adapters/Workers` and out. Every other forbidden token still fails inside the authorized file.
   Proved by `tools/tests/test_teamster_carveout.py`, which plants each escape an independent review
-  found and requires the validator to refuse; all six fail against the unfixed validator.
+  found and requires the validator to refuse; all six fail against the unfixed validator. Two further
+  plants cross the port's two lifecycle verbs and likewise fail against a validator without the `#381`
+  lifecycle audit.
 
-  **Not yet reachable, and the docs must not imply otherwise.** There is no collection
-  `TeamsterFeature`: the port and its job have no call site, and the `featureEnabled` argument is
-  supplied by a caller that does not exist. The slice is inert. When it is wired, it goes behind an
-  off-by-default feature like the first carve-out, and that is when "a player who has not opted in gets
-  none of it" becomes a statement about behaviour rather than about dead code. The port needs no RPC of its own - `Pickable.Interact` runs `RPC_Pick` and the
+  **Reachable now, behind an off-by-default switch, and never observed in game.** The port has a call
+  site: `Adapters/Workers/GunnarCollectionRuntime.cs`, gated by `TeamsterFeature.GunnarCollection` and
+  `Workers/GunnarCollectionEnabled` (**off** by default, a switch of its own rather than hauling's),
+  Teamster's `General/Enabled`, the start-up capability probe, and the shared work-authority rule
+  re-asked every frame while a pick is in flight. So "a player who has not opted in gets none of it" is
+  now a statement about behaviour rather than about dead code — but only about code paths, because
+  **nothing here has been watched happening**: no build of it has been run in game, and the in-game rows
+  are OWNER GO-AROUND PENDING. What is reachable is *one pick a player explicitly orders* through
+  `ct_collect pick`: a loose stone or a fallen branch, on the allowlist, yielding exactly what vanilla
+  yields, owned by this client, within `CollectionLimits.PickupReachMetres`, one at a time. Nothing
+  moves Gunnar. The survey-driven job (`GunnarCollectionJob`, `CollectionSurvey`,
+  `GunnarTargetPredicate`) still has no call site and wiring it is its own work. The **two lifecycle
+  verbs are routed**: a world unload, a game shutdown or a plugin teardown goes to `ForgetWorld()`,
+  which is the only verb that may drop the unconfirmed-source record; a cancelled, abandoned or
+  authority-refused order goes to `Forget()`, which keeps it. That choice is made in the game-free
+  `Domain/Collection/CollectionLifecycle.cs` so it is unit-tested rather than reasoned about, and
+  `validate_repo.py`'s `#381 collection lifecycle audit` refuses the port if the two verbs are crossed.
+  The port needs no RPC of its own - `Pickable.Interact` runs `RPC_Pick` and the
   ownership claim inside vanilla, on a pickable this process already owns - so felling a tree
   (`TreeBase.Damage`) and the cosmetic hammer animation (`ZSyncAnimation.SetTrigger`) were **not**
   authorized and each needs its own owner decision. Ownership takeover, teleports, forces, cart

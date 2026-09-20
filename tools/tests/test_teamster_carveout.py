@@ -77,10 +77,20 @@ class CarveOutIsNarrow(unittest.TestCase):
         with open(PORT, "w", encoding="utf-8", newline="") as handle:
             handle.write(original.replace(marker, marker + "\n" + extra))
 
-    def assert_refused(self, why):
+    def swap_in_port(self, old, new):
+        """Replaces one exact piece of the port. For the lifecycle verbs, whose
+        defect is not an extra call but the wrong one."""
+        with open(PORT, encoding="utf-8-sig") as handle:
+            original = handle.read()
+        self._restore = original
+        self.assertEqual(1, original.count(old), "the pinned text moved: " + old)
+        with open(PORT, "w", encoding="utf-8", newline="") as handle:
+            handle.write(original.replace(old, new, 1))
+
+    def assert_refused(self, why, marker="#313"):
         code, out = validate()
         self.assertNotEqual(0, code, why + "\n" + out[-2000:])
-        self.assertIn("#313", out, why)
+        self.assertIn(marker, out, why)
 
     def test_a_space_before_the_paren_does_not_hide_a_cart_interaction(self):
         # `.Interact(` never appears in `Interact (`, and the Release build is
@@ -124,6 +134,33 @@ class CarveOutIsNarrow(unittest.TestCase):
         code, out = validate()
         self.assertEqual(0, code)
         self.assertIn("reflection elsewhere in Teamster is not audited", out)
+
+    # -- the two lifecycle verbs, now that the port has callers (#381) --
+    #
+    # Not an escape a review found in the audit: a defect a review found in the
+    # port itself, and the one the merge commit for main says must not be got
+    # backwards. `Forget()` is a JOB ending and must KEEP the record of what was
+    # picked, because the source still exists and is still inside the window
+    # where vanilla has dropped its items but not yet marked it picked. Only
+    # `ForgetWorld()` may drop that record. Crossed, `begin - pick - forget -
+    # begin` on one source yields a second full load out of nothing.
+
+    def test_the_job_verb_may_not_forget_the_world(self):
+        self.swap_in_port(
+            "        Release();\n        _accounting.ForgetJob();",
+            "        Release();\n        _accounting.ForgetWorld();")
+        self.assert_refused(
+            "a cancelled job wiping the unconfirmed-source record re-opens the mint",
+            marker="#381")
+
+    def test_the_world_verb_may_not_merely_forget_the_job(self):
+        self.swap_in_port(
+            "        Release();\n        _accounting.ForgetWorld();",
+            "        Release();\n        _accounting.ForgetJob();")
+        self.assert_refused(
+            "a world going away must drop the record; keeping it refuses picks of whatever "
+            "inherits those ids in the next world",
+            marker="#381")
 
 
 if __name__ == "__main__":

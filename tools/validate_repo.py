@@ -1483,6 +1483,72 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
     ]
 
 
+# #381: the collection port's two lifecycle verbs, pinned so they cannot be
+# swapped. This is a source audit rather than a unit test because the port binds
+# Unity and no test in this repository can load it - and the thing being guarded
+# is the worst defect this product can have.
+#
+# `Forget()` means a JOB ended. It must release the pick and KEEP the record of
+# what was picked, because the source still exists and is still inside the window
+# where vanilla has dropped the items but not yet marked it picked. `ForgetWorld()`
+# means the WORLD went away, and is the only verb that may drop that record.
+# Answering a cancelled job with the world verb is what let `begin - pick -
+# forget - begin` on one source yield a second full load out of nothing; it was a
+# real defect in the port's first version, and the routing above it is now decided
+# in a game-free type for exactly this reason.
+TEAMSTER_COLLECTION_VERBS = (
+    # method,        must call,                 must NOT call
+    ("Forget", "_accounting.ForgetJob()", "_accounting.ForgetWorld()"),
+    ("ForgetWorld", "_accounting.ForgetWorld()", "_accounting.ForgetJob()"),
+)
+
+
+def check_teamster_collection_verbs(errors: list[str]) -> list[str]:
+    """Fails if the collection port's job verb and world verb are crossed."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    port = teamster_dir.joinpath(*TEAMSTER_COLLECTION_PORT_PATH)
+    if not port.is_file():
+        fail(
+            "[interop] #381 collection lifecycle audit: missing "
+            f"{port.relative_to(ROOT)} — the audit no longer covers the pick record", errors)
+        return []
+
+    code = "\n".join(_strip_cs_line_comment(line) for line in
+                     port.read_text(encoding="utf-8").splitlines())
+    checked = 0
+    for method, required, forbidden in TEAMSTER_COLLECTION_VERBS:
+        # The method body: from its signature to the first closing brace at
+        # method indentation. A nested brace sits deeper and cannot end it.
+        match = re.search(
+            r"public\s+void\s+" + re.escape(method) + r"\s*\(\s*\)\s*\{(.*?)\n    \}",
+            code, re.DOTALL)
+        if match is None:
+            fail(
+                f"[interop] #381 collection lifecycle audit: could not read {method}() in "
+                f"{port.relative_to(ROOT)} — the two verbs must stay separate, named methods so "
+                "which one an event routes to is reviewable", errors)
+            continue
+
+        body = match.group(1)
+        checked += 1
+        if required not in body:
+            fail(
+                f"[interop] #381 collection lifecycle audit: {method}() does not call "
+                f"{required} — a job ending must KEEP the unconfirmed-source record and only a "
+                "world going away may drop it; crossing them lets one source yield twice", errors)
+        if forbidden in body:
+            fail(
+                f"[interop] #381 collection lifecycle audit: {method}() calls {forbidden} — the two "
+                "verbs are crossed. A cancelled job says nothing about whether a source has "
+                "settled, so forgetting the world there re-opens the mint", errors)
+
+    return [
+        f"[interop] #381 collection lifecycle audit: {checked} verb(s) pinned in "
+        f"{'/'.join(TEAMSTER_COLLECTION_PORT_PATH)}; the job verb keeps the unconfirmed-source "
+        "record and only the world verb drops it",
+    ]
+
+
 def check_teamster_authority_policy(errors: list[str]) -> list[str]:
     """Fails if the policy doc omits a TeamsterFeature, or if any outbound
     network / ownership-takeover token appears in Teamster source."""
@@ -2510,6 +2576,7 @@ def main() -> int:
     report.extend(check_teamster_integration_readonly(errors))
     report.extend(check_teamster_authority_policy(errors))
     report.extend(check_teamster_no_force_injection(errors))
+    report.extend(check_teamster_collection_verbs(errors))
     report.extend(check_teamster_no_internet_egress(errors))
     report.extend(check_companion_body_fails_closed(errors))
     report.extend(check_companion_talk_is_not_a_reach(errors))

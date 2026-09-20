@@ -76,6 +76,25 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
     /// into the seam itself.</summary>
     internal bool SeamAvailable => _seam != null && _seam.IsAvailable;
 
+    /// <summary>Gunnar's bound body as a character, or null when no single
+    /// unambiguous body is loaded.
+    ///
+    /// <b>Read-only, and deliberately the same body.</b> Gunnar's collection
+    /// (#381) acts through this rather than finding or building a body of its
+    /// own: the census and the duplicate rule that decide which body <i>is</i>
+    /// Gunnar live here, and a second answer to that question would be a second
+    /// Gunnar. A body this runtime has not bound is not offered, so an
+    /// ambiguous or faulted census gives collection nothing to act with - the
+    /// refusing direction.</summary>
+    internal Humanoid? BoundBody
+    {
+        get
+        {
+            TeamsterWorkerAI? ai = _body != null ? _body.Bound : null;
+            return ai != null ? ai.GetComponent<Humanoid>() : null;
+        }
+    }
+
     public float Now => Time.time;
 
     /// <summary>The entry point: registers the worker prefab for every session,

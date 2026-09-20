@@ -140,8 +140,15 @@ internal readonly struct PickProgress
 /// and then gathered over a bounded window, and what is reported is what was
 /// <b>measured</b> into his inventory. A window that closes with nothing is
 /// <see cref="PickPhase.Lost"/> and asserts nothing about the source, because
-/// the pick may well have happened.</summary>
-internal sealed class GunnarCollectionPort
+/// the pick may well have happened.
+///
+/// <b>Who calls it.</b> <see cref="GunnarCollectionRuntime"/>, behind
+/// <c>Workers/GunnarCollectionEnabled</c> (off by default) and the shared
+/// work-authority rule. The two lifecycle verbs are not routed by that runtime
+/// directly: it reports what happened to <see cref="CollectionLifecycle"/>,
+/// which is game-free and decides which verb an event is, so the pairing that
+/// must never be swapped is decided somewhere a test can reach.</summary>
+internal sealed class GunnarCollectionPort : IPickLifecycle
 {
     /// <summary>How long to keep gathering after a pick. The drop arrives on the
     /// owner's next routed-RPC turn, which is the following frame in the only

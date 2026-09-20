@@ -156,8 +156,9 @@ branch and stone pickup*. That verification cut the allowance to one token, beca
 exactly one game call and names no RPC send at all: the pick routes `RPC_Pick` and claims ownership inside
 vanilla, not in our source. **Felling and the idle gesture each need their own owner decision**, and neither is
 implemented here.
-It stays behind the existing off-by-default `TeamsterFeature`; a player who has not opted in gets none of it. It is
-fail-closed throughout. Nothing else was authorized: no cart teleports, no mass writes, no stamina bypass, no
+It sits behind an off-by-default `TeamsterFeature` of its own — `GunnarCollection`, switched by
+`Workers/GunnarCollectionEnabled` — so a player who has not opted in gets none of it. It is fail-closed
+throughout. Nothing else was authorized: no cart teleports, no mass writes, no stamina bypass, no
 forces or velocities, no ownership takeover, no mod data in a vanilla object.
 
 **Why those calls need an allowance at all.** Picking is `Pickable.Interact`, which routes `RPC_Pick`; the handler
@@ -183,7 +184,8 @@ granted — a pick that did not persist would be a pick that undid itself on the
 world state this product's collection writes. Nothing mod-shaped is written into any vanilla object.
 
 **Four defects an independent review found, and what closed them.** All four were in the first version of the
-port; none was ever live, because the slice has no call site.
+port, and none was ever live: the port had no call site when they were found and fixed. It has one now — see
+§6a — so from here on a defect in it is a defect a player with the switch on could reach.
 
 | Defect | What closed it |
 |---|---|
@@ -197,7 +199,7 @@ source he is picking would still be counted, and nothing available to this layer
 guarantees is that the error can never exceed what the source was expected to give — a pick can be short, never
 generous.
 
-**Three more a second review found, in the fixes themselves.** Again none was ever live.
+**Three more a second review found, in the fixes themselves.** Again none was ever live, for the same reason.
 
 | Defect | What closed it |
 |---|---|
@@ -255,6 +257,56 @@ Still deliberately absent, and each for its own reason:
   library cannot see it, and he holds the only identity that could run a second job. The cost is stated in the
   code: the moment a second worker in this process plans against the same chests, two jobs plan the same material.
 
+## 6a. The call site, and the two verbs it routes
+
+**The port is reachable now. It was not before, and the difference is one file plus one switch.**
+
+`src/ConcernedTeamster/Adapters/Workers/GunnarCollectionRuntime.cs` is the only caller, installed from
+`Plugin.Awake` alongside the hauling runtime. Everything below has to be true at the moment of the order, and each
+one refuses on its own while every other Teamster feature keeps working:
+
+| Gate | Where it is decided |
+|---|---|
+| `Workers/GunnarCollectionEnabled` **and** Teamster's `General/Enabled` | `GunnarCollectionDefaults.CollectionEnabled` is `false`; the runtime reads both and an unreadable setting is not an opted-in one |
+| the work-authority rule — a loaded world, `ZNet.IsServer()`, not dedicated, **no** connected peers | `WorkAuthorityPolicy`, through `GunnarWorkAuthority.ReadWorldFacts`, **re-asked every frame** while a pick is in flight, not once at the order |
+| the start-up capability probe verified every member the pickup binds | `HaulingCapabilityProbe` (its collection block, plus `Pickable.m_amount`) |
+| a body the census bound as Gunnar, alive | `GunnarHaulingRuntime.BoundBody` — collection never finds or builds a body of its own, so an ambiguous or duplicated census gives it nothing |
+| the thing is on the allowlist, yields exactly what vanilla yields, and he is within reach | `CollectionOrderGate`, game-free and unit-tested |
+| this client already **owns** the source, it can be picked, it is not in tar, and it is not awaiting confirmation | the port's own `Begin`, re-read from its own frame |
+
+**What a player can actually do: order one pick.** `ct_collect pick` picks up the loose stone or fallen branch they
+are pointing at, if Gunnar is standing next to it. `ct_collect status` and `ct_collect cancel` are the other two
+subcommands. There is no survey, no route, no batching and **nothing that moves Gunnar** — an order he cannot reach
+from where he stands is refused rather than turned into movement nobody authorized. `GunnarCollectionJob`,
+`CollectionSurvey` and `GunnarTargetPredicate` are still unwired; that automatic path is its own work, and it is
+where wards, locations, creators and work areas start to matter, because they are the questions that only arise
+once something other than a person is choosing.
+
+**The two lifecycle verbs, and why the choice is not spelled at the call site.** `Forget()` means a *job* ended and
+**keeps** the unconfirmed-source record; `ForgetWorld()` means the *world* went away and is the only verb that may
+drop it. Crossed, `begin → pick → forget → begin` on one source yields a second full load out of nothing. So the
+runtime reports what happened and `Domain/Collection/CollectionLifecycle.cs` — game-free — decides which verb that
+is:
+
+| What happened | Verb | Why |
+|---|---|---|
+| the world went down (`ZNetScene`/`ZNet`/`ZDOMan` gone) | `ForgetWorld()` | those sources do not exist in the next world, and a record that outlived them would refuse picks of whatever inherited their ids |
+| the game is shutting down, or the plugin is being removed | `ForgetWorld()` | nothing can pick afterwards, so dropping the record cannot mint |
+| the player cancelled the order | `Forget()` | a cancelled job says nothing about whether the source has settled |
+| work authority was withdrawn mid-pick (a peer connected, the switch went off) | `Forget()` | same: the source is still there, still mid-settle |
+| the runtime faulted | `Forget()` | same again — a fault is not a world going away |
+| the pick finished on its own (`Done` or `Lost`) | **neither** | the port already released it and handed its count back; routing a verb here would be reporting an event that did not happen |
+| a world came **up** | **neither** | dropping the record is the minting direction, so it is never done on the strength of an edge a flicker in the game's singletons could also produce. Nothing is lost: a world that just came up has had nothing picked in it |
+
+`CollectionLifecycleTests` drives every row of that table against a recorder and against the real `PickAccounting`,
+including the one that matters — a cancelled order still refuses a second pick of the same source inside the settle
+window. Swapping the verbs in either direction turns those tests red. And because the port's own two-line mapping
+onto the accounting binds Unity and no test here can load it, `validate_repo.py` pins it as source: the `#381
+collection lifecycle audit` refuses the port if `Forget()` forgets the world or `ForgetWorld()` merely forgets the
+job, and `tools/tests/test_teamster_carveout.py` plants both crossings and requires the refusal.
+
+**Still never observed in game.** Nothing in this section has been watched happening; §10 is the go-around.
+
 ## 7. No portals
 
 He walks. There is no branch anywhere in this work that changes where he is standing other than by asking the
@@ -293,7 +345,7 @@ owes.
 `GunnarHaulingDefaults.WorkerKeyPrefix` is new and is pinned by test to be the prefix `WorkerKeyField` already had,
 so the contract handed to the shared runtime describes the body this product actually saves.
 
-## 10. In-game, when the blocker in §6 is resolved
+## 10. In-game — OWNER GO-AROUND PENDING
 
 **OWNER GO-AROUND PENDING.** Nothing below has been run. Disposable world, character and profile only. The two
 rows to run **first** are Gate B2 in `docs/settlement/cart-and-collection/EVIDENCE.md`, which are about whether the
@@ -329,6 +381,34 @@ Gunnar who already exists still works.
     One line to change, and nothing durable depends on it.
 11. **What he gets from one source.** Pick a single loose stone with Gunnar and with your own character in the same
     world. The counts must match: he is not a Player, so no skill, statistic or bonus-yield branch runs for him.
+
+### The ordered pick, now that it has a call site (§6a)
+
+These are the rows the wiring itself needs. **None has been run.** Steps 12–14 are the ones that would falsify the
+claim that nobody who has not opted in is affected, and step 17 is the one that would catch the mint.
+
+12. **With the switch off.** Fresh profile, `[Workers] GunnarCollectionEnabled` left at its default. Expect the
+    start-up line `Gunnar's collection is off (the default)`. Point at a loose stone with Gunnar beside it and run
+    `ct_collect pick`: it must refuse naming the setting, and the stone must still be there. `ct_collect status`
+    must say `OFF (the default)`.
+13. **The console command exists at all.** Expect `ct_collect` in the registration line from
+    `VanillaConsoleCommands.Describe`. If it is missing, the Jötunn constructor mismatch is back and every `ct_*`
+    and `cc_*` command is gone with it — that is a blocker, not a collection defect.
+14. **Turned on, one pick.** `GunnarCollectionEnabled = true`, `GunnarHaulingEnabled = true` (the body census lives
+    there), single player, disposable world. Bring Gunnar in with `ct_haul spawn`, walk him to a loose stone with
+    `ct_haul go`, point at the stone, `ct_collect pick`. Expect the stone to disappear, one Stone to be in **his**
+    inventory (not the player's, and not on the ground), and the log to say `he took 1 from Pickable_Stone`.
+15. **Out of reach.** Same stone from six metres: refused with the reach sentence, and he must not move a step.
+16. **What he refuses.** A raspberry bush, a mushroom, a thistle, a chest, a dropped stack of stone, a sapling and a
+    tree: every one refused, each naming a reason, nothing picked, nothing felled, no hammer animation.
+17. **The mint, the row that matters most.** `ct_collect pick` a stone, then `ct_collect cancel` **inside the same
+    second**, then `ct_collect pick` the same stone again immediately. The second pick must be refused as awaiting
+    confirmation, and the world must end up with exactly one Stone from that source. Two Stones is a P0.
+18. **A world reload with a cancelled pick outstanding.** Cancel a pick, log out, load a different world, and pick a
+    stone there: it must not be refused. That is `ForgetWorld()` having run on the unload; a refusal here means the
+    world verb did not fire.
+19. **A peer connects mid-pick.** Open the world to a second player while a pick is in flight: the order must end
+    with the authority sentence, and nothing must be picked afterwards until they leave.
 
 Evidence rows for `docs/settlement/cart-and-collection/EVIDENCE.md` stay **pending** until observed, with the
 build, profile and scenario recorded.

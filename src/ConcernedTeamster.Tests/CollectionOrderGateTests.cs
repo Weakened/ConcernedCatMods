@@ -1,0 +1,235 @@
+using TheConcernedCat.ConcernedTeamster.Domain.Collection;
+using TheConcernedCat.Workers;
+
+namespace ConcernedTeamster.Tests;
+
+/// <summary>The gate on an explicitly ordered pick (#381): what the call site
+/// asks before it reaches the game at all.
+///
+/// The runtime that asks binds Unity, so every one of these clauses would
+/// otherwise be unexercisable. The one that matters most is the first: with the
+/// switch off, nothing else is even consulted.</summary>
+public sealed class CollectionOrderGateTests
+{
+    private const string Stone = "Pickable_Stone(Clone)";
+    private const string Branch = "Pickable_Branch(Clone)";
+
+    private static CollectionOrderRequest Ready(
+        bool featureEnabled = true,
+        WorkAuthorityVerdict authority = WorkAuthorityVerdict.Granted,
+        bool seamAvailable = true,
+        bool workerPresent = true,
+        bool pickInFlight = false,
+        bool pointedAtASource = true,
+        string sourceObjectName = Stone,
+        string yieldItemPrefabName = "Stone",
+        int yieldUnits = 1,
+        float reachMetres = 2.2f,
+        float distanceMetres = 1f) =>
+        new CollectionOrderRequest(
+            featureEnabled,
+            authority,
+            seamAvailable,
+            workerPresent,
+            pickInFlight,
+            pointedAtASource,
+            sourceObjectName,
+            yieldItemPrefabName,
+            yieldUnits,
+            reachMetres,
+            distanceMetres);
+
+    [Fact]
+    public void ADefaultedRequest_IsRefusedBecauseNobodyOptedIn()
+    {
+        Assert.Equal(
+            CollectionOrderRefusal.FeatureOff,
+            CollectionOrderGate.Evaluate(default));
+    }
+
+    [Fact]
+    public void WithTheSwitchOff_NothingElseIsConsulted()
+    {
+        // Everything else is perfect. The answer is still that the player has
+        // not opted in, which is what "a player who has not opted in gets none
+        // of it" has to mean at the gate.
+        Assert.Equal(
+            CollectionOrderRefusal.FeatureOff,
+            CollectionOrderGate.Evaluate(Ready(featureEnabled: false)));
+    }
+
+    [Fact]
+    public void EveryWorkAuthorityAnswerButGranted_Refuses()
+    {
+        // Enumerated rather than listed, so a verdict added later is covered
+        // without anybody remembering to add a row here.
+        foreach (WorkAuthorityVerdict verdict in System.Enum.GetValues<WorkAuthorityVerdict>())
+        {
+            CollectionOrderRefusal refusal = CollectionOrderGate.Evaluate(Ready(authority: verdict));
+            Assert.Equal(
+                verdict == WorkAuthorityVerdict.Granted
+                    ? CollectionOrderRefusal.None
+                    : CollectionOrderRefusal.WorkRefused,
+                refusal);
+        }
+    }
+
+    [Fact]
+    public void AnUnverifiedGameBuild_Refuses()
+    {
+        Assert.Equal(
+            CollectionOrderRefusal.SeamUnavailable,
+            CollectionOrderGate.Evaluate(Ready(seamAvailable: false)));
+    }
+
+    [Fact]
+    public void NoWorkerBody_Refuses()
+    {
+        Assert.Equal(
+            CollectionOrderRefusal.NoWorker,
+            CollectionOrderGate.Evaluate(Ready(workerPresent: false)));
+    }
+
+    [Fact]
+    public void APickAlreadyInFlight_Refuses()
+    {
+        Assert.Equal(
+            CollectionOrderRefusal.AlreadyWorking,
+            CollectionOrderGate.Evaluate(Ready(pickInFlight: true)));
+    }
+
+    [Fact]
+    public void PointingAtNothing_Refuses()
+    {
+        Assert.Equal(
+            CollectionOrderRefusal.NothingPointedAt,
+            CollectionOrderGate.Evaluate(Ready(pointedAtASource: false)));
+    }
+
+    [Theory]
+    [InlineData(Stone, "Stone")]
+    [InlineData(Branch, "Wood")]
+    [InlineData("Pickable_Stone", "Stone")]
+    public void TheTwoKindsTheOwnerAuthorized_AreAccepted(string source, string yield)
+    {
+        Assert.Equal(
+            CollectionOrderRefusal.None,
+            CollectionOrderGate.Evaluate(Ready(sourceObjectName: source, yieldItemPrefabName: yield)));
+    }
+
+    [Theory]
+    // Food, a crop, a flower, a mineral vein, a player's dropped pile and a
+    // decorated copy embedded in a generated location: none is on the allowlist,
+    // and identity is asked before anything else about the thing.
+    [InlineData("Pickable_Mushroom(Clone)")]
+    [InlineData("Pickable_Thistle(Clone)")]
+    [InlineData("Pickable_Dandelion(Clone)")]
+    [InlineData("Pickable_SurtlingCoreStand(Clone)")]
+    [InlineData("Pickable_Stone_1(Clone)")]
+    [InlineData("pickable_stone(Clone)")]
+    [InlineData("")]
+    public void AnythingElse_IsNotOneHeCollects(string source)
+    {
+        Assert.Equal(
+            CollectionOrderRefusal.NotOneHeCollects,
+            CollectionOrderGate.Evaluate(Ready(sourceObjectName: source)));
+    }
+
+    [Theory]
+    // The right kind of source whose yield has been changed: a different item, a
+    // bigger amount, none at all. Fails closed rather than being picked and
+    // counted wrong.
+    [InlineData("Wood", 1)]
+    [InlineData("Stone", 2)]
+    [InlineData("Stone", 0)]
+    [InlineData("", 1)]
+    public void AYieldThatIsNotVanillas_Refuses(string yield, int units)
+    {
+        Assert.Equal(
+            CollectionOrderRefusal.YieldIsNotVanilla,
+            CollectionOrderGate.Evaluate(
+                Ready(sourceObjectName: Stone, yieldItemPrefabName: yield, yieldUnits: units)));
+    }
+
+    [Fact]
+    public void ABranchThatWouldGiveStone_Refuses()
+    {
+        Assert.Equal(
+            CollectionOrderRefusal.YieldIsNotVanilla,
+            CollectionOrderGate.Evaluate(
+                Ready(sourceObjectName: Branch, yieldItemPrefabName: "Stone")));
+    }
+
+    [Fact]
+    public void FurtherAwayThanHeCanReach_Refuses()
+    {
+        // Nothing in this slice walks him anywhere, so an order he cannot reach
+        // is refused rather than turned into movement nobody authorized.
+        Assert.Equal(
+            CollectionOrderRefusal.OutOfReach,
+            CollectionOrderGate.Evaluate(Ready(reachMetres: 2.2f, distanceMetres: 2.3f)));
+        Assert.Equal(
+            CollectionOrderRefusal.None,
+            CollectionOrderGate.Evaluate(Ready(reachMetres: 2.2f, distanceMetres: 2.2f)));
+    }
+
+    [Theory]
+    [InlineData(2.2f, float.NaN)]
+    [InlineData(2.2f, float.PositiveInfinity)]
+    [InlineData(float.NaN, 1f)]
+    [InlineData(0f, 1f)]
+    [InlineData(-1f, 1f)]
+    public void AnUnreadableDistanceOrReach_Refuses(float reach, float distance)
+    {
+        Assert.Equal(
+            CollectionOrderRefusal.Unreadable,
+            CollectionOrderGate.Evaluate(Ready(reachMetres: reach, distanceMetres: distance)));
+    }
+
+    [Fact]
+    public void ShippedReach_IsTheProductsOwnLimit()
+    {
+        Assert.Equal(
+            CollectionOrderRefusal.None,
+            CollectionOrderGate.Evaluate(
+                Ready(reachMetres: CollectionLimits.Default.PickupReachMetres, distanceMetres: 0f)));
+    }
+
+    [Fact]
+    public void CollectionIsOffByDefault()
+    {
+        Assert.False(
+            GunnarCollectionDefaults.CollectionEnabled,
+            "installing Teamster for its telemetry must never enrol anyone in picking things up");
+    }
+
+    [Fact]
+    public void EveryRefusal_HasASentenceThatIsNotTheBugFallback()
+    {
+        foreach (CollectionOrderRefusal refusal in System.Enum.GetValues<CollectionOrderRefusal>())
+        {
+            string sentence = CollectionOrderGate.Describe(refusal);
+            Assert.False(string.IsNullOrWhiteSpace(sentence));
+            Assert.DoesNotContain("that is a bug", sentence);
+        }
+    }
+
+    [Fact]
+    public void AWorkRefusal_IsReportedInTheAuthorityRulesOwnWords()
+    {
+        Assert.Equal(
+            WorkAuthorityPolicy.Describe(WorkAuthorityVerdict.OtherPeersConnected),
+            CollectionOrderGate.Describe(
+                CollectionOrderRefusal.WorkRefused, WorkAuthorityVerdict.OtherPeersConnected));
+    }
+
+    [Theory]
+    [InlineData("Pickable_Stone(Clone)", "Pickable_Stone")]
+    [InlineData("Pickable_Stone", "Pickable_Stone")]
+    [InlineData("", "")]
+    [InlineData(null, "")]
+    public void PrefabNameOf_StripsOnlyTheCloneSuffix(string? given, string expected)
+    {
+        Assert.Equal(expected, CollectionOrderGate.PrefabNameOf(given));
+    }
+}

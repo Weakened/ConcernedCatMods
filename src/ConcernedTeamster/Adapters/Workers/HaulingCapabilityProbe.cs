@@ -149,6 +149,7 @@ internal static class HaulingCapabilityProbe
                 new("Pickable", pickable, "CanBePicked", GameMemberKind.InstanceMethod, typeof(bool)),
                 new("Pickable", pickable, "m_nview", GameMemberKind.InstanceField, netView),
                 new("Pickable", pickable, "m_itemPrefab", GameMemberKind.InstanceField, gameObject),
+                new("Pickable", pickable, "m_amount", GameMemberKind.InstanceField, typeof(int)),
                 new("Pickable", pickable, "m_tarPreventsPicking", GameMemberKind.InstanceField, typeof(bool)),
                 new("Humanoid", humanoid, "Pickup", GameMemberKind.InstanceMethod, typeof(bool),
                     new[] { gameObject!, typeof(bool), typeof(bool) }),

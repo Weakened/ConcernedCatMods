@@ -43,6 +43,22 @@ public enum TeamsterFeature
     /// live local authority, additionally gated by the work authority rule
     /// (docs/settlement/cart-and-collection/DECISIONS.md D3, D4).</summary>
     GunnarHauling,
+
+    /// <summary>Gunnar's opt-in collection runtime (#381, owner decision
+    /// 2026-09-19): picks up a loose stone or a fallen branch the player points
+    /// at, through the source's own vanilla pickup, and gathers what it drops
+    /// into his own inventory. Off by default, under its own switch
+    /// (<c>Workers/GunnarCollectionEnabled</c>) rather than hauling's, because
+    /// it is a separate capability under a separate decision.
+    ///
+    /// <b>It is a Mutation that never touches a cart.</b> It changes world
+    /// state - a picked source - so classifying it as observation would be
+    /// false, and the matrix's <c>MayMutate</c> is about cart authority, which
+    /// this feature simply never asks. What actually gates it is the shared
+    /// work-authority rule (opted in, a loaded world, the host, not dedicated,
+    /// nobody else connected), re-asked every frame, plus the source being one
+    /// this client already owns - never one it claims.</summary>
+    GunnarCollection,
 }
 
 /// <summary>What a feature does to the cart. Only <see cref="Mutation"/>

@@ -26,6 +26,7 @@ public sealed class Plugin : BaseUnityPlugin
     private bool _haulWorldWasUp;
     private readonly Adapters.LogTailRecorder _logTail = new();
     private Adapters.Workers.GunnarHaulingRuntime? _hauling;
+    private Adapters.Workers.GunnarCollectionRuntime? _collection;
     private Adapters.Interop.HaulCapabilityPublisher? _haulCapability;
     private Adapters.Interop.HaulPanelBridge? _haulPanel;
 
@@ -81,6 +82,19 @@ public sealed class Plugin : BaseUnityPlugin
         // Workers/GunnarHaulingEnabled is on and a cart is explicitly assigned.
         _hauling = Adapters.Workers.GunnarHaulingRuntime.Install(gameObject, settings, Logger);
 
+        // #381: Gunnar's opt-in collection runtime — the call site of the owner's
+        // pickup carve-out. Always installed for the same reason the hauling
+        // runtime is, and it picks nothing up until Workers/GunnarCollectionEnabled
+        // is on, the work-authority rule grants, and a player points at a loose
+        // stone or a fallen branch he is standing next to. It acts through the
+        // body the hauling runtime's census bound, never one of its own.
+        _collection = Adapters.Workers.GunnarCollectionRuntime.Install(
+            gameObject,
+            settings,
+            () => _hauling?.BoundBody,
+            () => _hauling?.SeamAvailable ?? false,
+            Logger);
+
         // #317: publish Gunnar's real service through concernedcat.haul/1.
         _haulCapability = new Adapters.Interop.HaulCapabilityPublisher(
             () => _hauling?.Service, PluginVersion, Logger);
@@ -103,6 +117,9 @@ public sealed class Plugin : BaseUnityPlugin
     private void OnDestroy()
     {
         _haulCapability?.Shutdown();
+        // Collection first: it acts through the hauling runtime's bound body, so
+        // it stands down before the thing that owns that body does.
+        Adapters.Workers.GunnarCollectionRuntime.Uninstall(_collection);
         Adapters.Workers.GunnarHaulingRuntime.Uninstall(_hauling);
     }
 
