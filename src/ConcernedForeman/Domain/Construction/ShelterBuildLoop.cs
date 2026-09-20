@@ -86,11 +86,29 @@ internal enum BuildStep
 /// levelling ground, removing an obstacle or destroying anything to get a piece
 /// to go up is not a thing this loop is allowed to want.
 ///
+/// <b>What a round costs, recorded because nothing pins it.</b>
+/// <see cref="ConstructionProgress.Read"/> asks <see cref="IPieceSight"/> once per
+/// planned placement - seventeen times - and the game-side implementation of that
+/// is <c>Piece.GetAllPiecesInRadius</c>, a linear scan of the static piece list
+/// with a distance test per piece. At the runtime's round rate that is eighty-five
+/// scans a second in a built-up base, and there is no performance budget test in
+/// this product to notice it getting worse. It is a whole read on purpose: the
+/// completion condition, the phase order and the resume-after-reload behaviour all
+/// depend on every placement being looked at, so narrowing it to "the next
+/// buildable piece plus its phase" is a correctness change and wants its own
+/// issue rather than a quiet edit here. The one case that was free to fix has
+/// been: a FINISHED order used to run this forever, and now it is looked at every
+/// ten seconds through <see cref="LooksFinished"/> instead.
+///
 /// <b>The one window this loop cannot close, stated rather than hidden.</b>
 /// Placing and paying are two statements: the piece is created and then its cost
 /// leaves his inventory. There is no yield point between them - no await, no
 /// coroutine, no frame boundary - so within the running game they are as
-/// atomic as vanilla's own <c>ConsumeResources</c>-then-<c>PlacePiece</c> pair.
+/// atomic as vanilla's own pair - and that is now read off the installed binary
+/// rather than reasoned about: <c>Player.PlacePiece</c> is 667 IL bytes and 71
+/// calls with no <c>StartCoroutine</c>, no <c>Invoke</c>, no <c>ZRoutedRpc</c> and
+/// no async machinery, and vanilla's own <c>TryPlacePiece</c> does
+/// <c>PlacePiece</c> then <c>ConsumeResources</c> in the same frame.
 /// A process killed exactly between them leaves a piece standing that was not
 /// paid for; the material is still in his inventory and nothing of the player's
 /// is lost, and the next round reads the piece as standing and does not build it
@@ -140,6 +158,7 @@ internal sealed class ShelterBuildLoop
     private BuildPhase _drawnPhase = BuildPhase.Unspecified;
     private float _drawnAt = float.NegativeInfinity;
     private string _drawRefusal = string.Empty;
+    private bool _finishedSaid;
     private string? _workingKey;
     private float _workingSince;
     private bool _posed;
@@ -186,6 +205,34 @@ internal sealed class ShelterBuildLoop
     /// <summary>The progress read on the last round, or null before the first.
     /// </summary>
     internal ConstructionProgress? Progress { get; private set; }
+
+    /// <summary>Whether the shelter is standing, asked without working.
+    ///
+    /// <b>Looking at a site does not need a worker</b>, and that is the whole
+    /// point of this method: once the cottage is finished the runtime still has to
+    /// notice a player knocking a wall out, and doing that through
+    /// <see cref="Tick"/> would mean taking Thorstein's body out of the arbiter
+    /// several times a second forever to look at something. This reads the plan
+    /// and the site and touches nothing else.</summary>
+    internal bool LooksFinished()
+    {
+        try
+        {
+            if (!Safe(_authorised))
+            {
+                return false;
+            }
+
+            ShelterPlan plan = _plan();
+            return plan.IsPlanned && ConstructionProgress.Read(plan, _sight).IsComplete;
+        }
+        catch (Exception)
+        {
+            // A look that failed is not a finished shelter, and the fail-closed
+            // direction here is to go and check properly.
+            return false;
+        }
+    }
 
     /// <summary>One round of work. Called from the worker's own tick.</summary>
     internal ShelterRound Tick(float now)
@@ -287,6 +334,7 @@ internal sealed class ShelterBuildLoop
         _drawRefusal = string.Empty;
         _workingKey = null;
         _settled = false;
+        _finishedSaid = false;
     }
 
     private ShelterRound Run(float now)
@@ -336,6 +384,7 @@ internal sealed class ShelterBuildLoop
             _drawRefusal = string.Empty;
             _workingKey = null;
             _settled = false;
+            _finishedSaid = false;
         }
 
         // Read from the world, every round, before anything else. This is what
@@ -558,6 +607,14 @@ internal sealed class ShelterBuildLoop
             "put up " + piece.Placement.Piece.Prefab + ".");
     }
 
+    /// <summary>The shelter is standing.
+    ///
+    /// <b>It says so once.</b> A round is cheap and a finished shelter stays
+    /// finished, so without this guard every round after completion repeated the
+    /// sentence, asked the chest to take material it no longer holds, and handed
+    /// the runtime a fresh Finished step to release the body on - five identical
+    /// log lines a second, for as long as the world is open. Reported once, then
+    /// the same round is handed back unchanged.</summary>
     private ShelterRound Finish(ShelterPlan plan)
     {
         Pose(false);
@@ -565,6 +622,12 @@ internal sealed class ShelterBuildLoop
         Step = BuildStep.Finished;
         _drawnPhase = BuildPhase.Unspecified;
 
+        if (_finishedSaid)
+        {
+            return Round;
+        }
+
+        _finishedSaid = true;
         MaterialTally back = new MaterialTally();
         string failure = string.Empty;
         if (!_materials.Carried.IsEmpty)

@@ -156,6 +156,20 @@ public sealed class ShelterConstructionRuntimeTests : IDisposable
         Assert.Contains("Authorised", said);
     }
 
+    private int Said(string fragment)
+    {
+        int count = 0;
+        foreach (string line in _log)
+        {
+            if (line.Contains(fragment, StringComparison.Ordinal))
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
     private void Ticks(int count, float step = 2f)
     {
         for (int tick = 0; tick < count; tick++)
@@ -288,7 +302,53 @@ public sealed class ShelterConstructionRuntimeTests : IDisposable
 
         Assert.Equal(BuildStep.Finished, _runtime.Loop.Step);
         Assert.Null(_modes.JobId);
-        Assert.True(_modes.Releases >= 1);
+
+        // Exactly one, not "at least one". Review finding 4: `>= 1` was satisfied
+        // by 153 Enter/Release pairs over 200 ticks - five a second, forever,
+        // with MayRetireBody flickering false the whole time.
+        Assert.Equal(1, _modes.Releases);
+    }
+
+    [Fact]
+    public void A_finished_order_says_so_once_and_then_leaves_the_arbiter_alone()
+    {
+        Confirm();
+        Ticks(80);
+        Assert.Equal(BuildStep.Finished, _runtime.Loop.Step);
+        Assert.Equal(1, Said("The shelter is finished"));
+        int enters = _modes.Entries;
+
+        // Four hundred more seconds of ticking, which is forty of the finished
+        // recheck windows.
+        Ticks(200);
+
+        Assert.Equal(1, Said("The shelter is finished"));
+        Assert.Equal(enters, _modes.Entries);
+        Assert.Equal(1, _modes.Releases);
+        Assert.Null(_modes.JobId);
+        Assert.True(_modes.MayRetireBody, "a finished order must not keep his body busy");
+        Assert.True(_modes.MayRelocateHome);
+        Assert.Equal(17, Player.m_localPlayer!.Placed.Count);
+    }
+
+    [Fact]
+    public void A_piece_knocked_down_after_completion_is_noticed_and_built_again()
+    {
+        // The reason the finished state is re-read at all rather than simply
+        // stopped: the look is cheap and needs no body, so a player taking a wall
+        // out still gets it back.
+        Confirm();
+        Ticks(80);
+        Assert.Equal(17, Player.m_localPlayer!.Placed.Count);
+
+        Piece bed = Piece.s_allPieces.Find(piece => piece.gameObject.name == "bed")!;
+        Assert.NotNull(bed);
+        Piece.s_allPieces.Remove(bed);
+
+        Ticks(80);
+
+        Assert.Equal(18, Player.m_localPlayer!.Placed.Count);
+        Assert.Equal(BuildStep.Finished, _runtime.Loop.Step);
     }
 
     [Fact]
@@ -310,7 +370,13 @@ public sealed class ShelterConstructionRuntimeTests : IDisposable
         Assert.Null(_modes.JobId);
         Assert.Equal(0, OnWorker("Wood"));
         Assert.Equal(inChest + carried, InChest("Wood"));
-        Assert.Contains("went back where it came from", _runtime.Loop.Reason);
+
+        // Asserted on Describe(), not on Loop.Reason. Describe() IS
+        // BuildOrderRuntime.WorkLine and WorkLine is what the panel and
+        // cf_build status render; Loop.Reason is an internal property that
+        // nothing shows a player in this state.
+        Assert.Contains("went back where it came from", _runtime.Describe());
+        Assert.Contains("went back where it came from", _orders.Execute(new[] { "status" }));
     }
 
     [Fact]
@@ -332,8 +398,12 @@ public sealed class ShelterConstructionRuntimeTests : IDisposable
 
         Assert.Null(_modes.JobId);
         Assert.Equal(carried, OnWorker("Wood"));
-        Assert.Contains("still carrying", _runtime.Loop.Reason);
-        Assert.Contains("nothing has been lost", _runtime.Loop.Reason);
+
+        // The case that matters most: the material is in his inventory and both
+        // surfaces a player reads have to say so.
+        Assert.Contains("still carrying", _runtime.Describe());
+        Assert.Contains("nothing has been lost", _runtime.Describe());
+        Assert.Contains("still carrying", _orders.Execute(new[] { "status" }));
     }
 
     [Fact]
@@ -348,6 +418,43 @@ public sealed class ShelterConstructionRuntimeTests : IDisposable
         Assert.Empty(Player.m_localPlayer!.Placed);
         Assert.Equal(200, InChest("Wood"));
         Assert.Contains("collection order", _runtime.Describe());
+    }
+
+    [Fact]
+    public void Material_the_record_says_he_holds_for_other_work_holds_the_build()
+    {
+        // Review finding 3. The refusal used to ask only whether a collection
+        // order was NON-TERMINAL, and Cancelled is terminal - while its own
+        // definition says the carried material stays exactly where it physically
+        // is and keeps being recorded. So the ordinary outcome of a player
+        // cancelling let a build order spend his gathered wood on a wall.
+        Confirm();
+        _custody.Ledger.AtWorker("Wood", 12);
+
+        Ticks(20);
+
+        Assert.Empty(Player.m_localPlayer!.Placed);
+        Assert.Equal(200, InChest("Wood"));
+        Assert.Equal(0, OnWorker("Wood"));
+        Assert.Contains("already holding 12 Wood for other work", _runtime.Describe());
+        Assert.Contains("cf_settle reconcile", _runtime.Describe());
+    }
+
+    [Fact]
+    public void The_refusal_reads_the_record_and_not_the_live_order_list()
+    {
+        // The proof that the fix is the record and not a second state check: no
+        // collection order is recoverable at all here - `Recovered` is null, which
+        // is what a CANCELLED order looks like through the recovery seam - and the
+        // build still refuses.
+        Confirm();
+        Assert.Null(_custody.Recovered);
+        _custody.Ledger.AtWorker("DeerHide", 4);
+
+        Ticks(20);
+
+        Assert.Empty(Player.m_localPlayer!.Placed);
+        Assert.Contains("already holding 4 DeerHide", _runtime.Describe());
     }
 
     [Fact]

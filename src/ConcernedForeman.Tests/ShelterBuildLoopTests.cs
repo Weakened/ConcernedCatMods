@@ -23,6 +23,20 @@ public sealed class ShelterBuildLoopTests
     /// the draw-retry interval, so a happy path never reopens the chest.</summary>
     private const float Step = 2f;
 
+    private static int Said(BuildWorld world, string fragment)
+    {
+        int count = 0;
+        foreach (string line in world.Said)
+        {
+            if (line.Contains(fragment, System.StringComparison.Ordinal))
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
     private static ShelterBuildLoop Drive(BuildWorld world, int ticks, float from = 100f)
     {
         ShelterBuildLoop loop = world.Loop();
@@ -96,6 +110,28 @@ public sealed class ShelterBuildLoopTests
                 piece.Phase + " went up after " + last);
             last = piece.Phase;
         }
+    }
+
+    [Fact]
+    public void A_finished_loop_says_so_once_however_often_it_is_ticked()
+    {
+        // Review finding 4, at the LOOP's level rather than the runtime's. The
+        // runtime also latches the finished state and stops ticking - but this
+        // loop is the reusable half, and a caller that did not latch used to get
+        // the sentence, a pointless PutBack and a fresh Finished step on every
+        // single round. Both guards are wanted; this is the one that makes the
+        // loop safe on its own.
+        var world = new BuildWorld();
+        ShelterBuildLoop loop = Drive(world, 80);
+        Assert.Equal(BuildStep.Finished, loop.Step);
+        Assert.Equal(1, Said(world, "The shelter is finished"));
+        int putBacks = world.Materials.PutBacks;
+
+        Run(loop, world, 50, from: 1000f);
+
+        Assert.Equal(1, Said(world, "The shelter is finished"));
+        Assert.Equal(putBacks, world.Materials.PutBacks);
+        Assert.Equal(BuildStep.Finished, loop.Step);
     }
 
     // ---- provisioning ----------------------------------------------------

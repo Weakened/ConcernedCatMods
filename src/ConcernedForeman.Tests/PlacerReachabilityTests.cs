@@ -90,8 +90,34 @@ public sealed class PlacerReachabilityTests
         // the construction and the tick, both of which have to be there for a
         // confirmed order to do anything at all.
         Assert.Contains("new Runtime.Construction.ShelterConstructionRuntime(", plugin);
-        Assert.Contains("_construction?.Tick()", plugin);
         Assert.Contains("_construction?.OnWorldUnloaded()", plugin);
+
+        // The tick WITH ITS ENCLOSING CONDITION, whitespace removed. The named
+        // residual hole in this check was that `if (worldIsUp && _construction ==
+        // null)` leaves the literal `_construction?.Tick()` in place, can never
+        // execute, and passes - a deliberately dead guard rather than a deletion.
+        // Pinning the condition costs one line and closes that. What no text check
+        // can close is a tick that runs and then refuses at the top; that is
+        // caught behaviourally instead, by ShelterConstructionRuntimeTests, and
+        // the pair is what makes the chain safe rather than either alone.
+        Assert.Contains("if(worldIsUp){_construction?.Tick();}", Tight(plugin));
+    }
+
+    /// <summary>The same text with every whitespace character removed, so the
+    /// check is about the code and not about how it happens to be
+    /// formatted.</summary>
+    private static string Tight(string text)
+    {
+        var tight = new System.Text.StringBuilder(text.Length);
+        foreach (char letter in text)
+        {
+            if (!char.IsWhiteSpace(letter))
+            {
+                tight.Append(letter);
+            }
+        }
+
+        return tight.ToString();
     }
 
     // ---- the gate is never gone round ------------------------------------

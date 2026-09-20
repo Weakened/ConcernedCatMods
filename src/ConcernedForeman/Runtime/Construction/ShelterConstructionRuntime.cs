@@ -4,6 +4,7 @@ using TheConcernedCat.ConcernedForeman.Domain.Construction;
 using TheConcernedCat.ConcernedForeman.Runtime.Custody;
 using TheConcernedCat.ConcernedForeman.Runtime.Work;
 using TheConcernedCat.Settlement.Collection;
+using TheConcernedCat.Settlement.Custody;
 using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
@@ -59,6 +60,19 @@ internal sealed class ShelterConstructionRuntime
     /// needs a decision every frame.</summary>
     internal const float RoundSeconds = 0.2f;
 
+    /// <summary>How often a FINISHED shelter is looked at again.
+    ///
+    /// A finished shelter stays finished, and the only reason to look is that a
+    /// player can knock a wall out. Running the ordinary round for that cost five
+    /// arbiter Enter/Release pairs a second and five identical "the shelter is
+    /// finished" lines a second, for as long as the world stayed open - with
+    /// <c>MayRetireBody</c> and <c>MayRelocateHome</c> flickering false the whole
+    /// time, so a collection order asking for him inside one of those windows got
+    /// RefusedBusy. The look now goes through
+    /// <see cref="ShelterBuildLoop.LooksFinished"/>, which needs no body and takes
+    /// no hold.</summary>
+    internal const float FinishedRecheckSeconds = 10f;
+
     private readonly BuildOrderRuntime _orders;
     private readonly IActorModeHold _modes;
     private readonly ICustodyRuntime _custody;
@@ -72,6 +86,8 @@ internal sealed class ShelterConstructionRuntime
 
     private string? _job;
     private Guid _epoch;
+    private bool _finished;
+    private float _finishedAt = float.NegativeInfinity;
     private float _lastRound = float.NegativeInfinity;
     private bool _faulted;
     private string _fault = string.Empty;
@@ -147,6 +163,15 @@ internal sealed class ShelterConstructionRuntime
             _placer,
             pose ?? new BuildPose(() => WorkerBody.FindLive(worker.Value), _log),
             _log);
+
+        // The status line, wired HERE rather than by the plugin. Every surface a
+        // player reads the order's state on goes through BuildOrderRuntime, so
+        // "authorised" and "being built" must never be the same sentence - and a
+        // hookup that lives in Plugin.cs is a hookup that can be deleted without
+        // a single test noticing, which is the defect this whole change exists to
+        // fix. Setting it in the composition root means the surface cannot exist
+        // without the line.
+        _orders.WorkLine = Describe;
     }
 
     /// <summary>The loop, for the panel and the status line.</summary>
@@ -180,6 +205,8 @@ internal sealed class ShelterConstructionRuntime
                 Release();
                 _loop.Forget();
                 _lastRound = float.NegativeInfinity;
+                _finished = false;
+                _finishedAt = float.NegativeInfinity;
             }
 
             if (!_orders.IsAuthorised)
@@ -192,7 +219,30 @@ internal sealed class ShelterConstructionRuntime
                     Release();
                 }
 
+                _finished = false;
                 return;
+            }
+
+            if (_finished)
+            {
+                // Standing, and nobody's worker. Looked at every ten seconds
+                // rather than five times a second, and looked at WITHOUT taking
+                // his body: a completed order that keeps the arbiter busy is a
+                // completed order that stops him resting, being moved home, or
+                // taking a collection order.
+                if (now - _finishedAt < FinishedRecheckSeconds && now >= _finishedAt)
+                {
+                    return;
+                }
+
+                _finishedAt = now;
+                if (_loop.LooksFinished())
+                {
+                    return;
+                }
+
+                // Something came down. Back to work.
+                _finished = false;
             }
 
             if (now - _lastRound < RoundSeconds && now >= _lastRound)
@@ -224,8 +274,12 @@ internal sealed class ShelterConstructionRuntime
             {
                 case BuildStep.Finished:
                     // Done. He is nobody's worker again, which is what lets his
-                    // body rest, be moved home, or take another order.
+                    // body rest, be moved home, or take another order - and the
+                    // latch is what keeps it that way instead of retaking him
+                    // every round to be told the same thing.
                     Release();
+                    _finished = true;
+                    _finishedAt = now;
                     break;
                 case BuildStep.Waiting:
                 case BuildStep.Stopped:
@@ -255,6 +309,8 @@ internal sealed class ShelterConstructionRuntime
             _loop.Forget();
             _epoch = Guid.Empty;
             _lastRound = float.NegativeInfinity;
+            _finished = false;
+            _finishedAt = float.NegativeInfinity;
         }
         catch (Exception exception)
         {
@@ -273,7 +329,20 @@ internal sealed class ShelterConstructionRuntime
 
         if (!_orders.IsAuthorised)
         {
-            return "Nothing is being built: no build order is authorised.";
+            // AND WHAT THE LAST ROUND SAID, which is the point of this branch
+            // rather than an afterthought. This method IS
+            // BuildOrderRuntime.WorkLine, and WorkLine is what the panel's status
+            // line and cf_build status both render - so returning early here meant
+            // that cancelling an order showed "no build order is authorised" while
+            // the only sentence naming the four wood still in Thorstein's hands
+            // went to the BepInEx log, where nobody reads it. A withdrawal is
+            // exactly when a player needs to be told where their material went.
+            string last = _loop.Step == BuildStep.Stopped || _loop.Step == BuildStep.Finished
+                ? _loop.Reason
+                : string.Empty;
+            return last.Length == 0
+                ? "Nothing is being built: no build order is authorised."
+                : "No build order is authorised. " + last;
         }
 
         if (!Refusal(out string why))
@@ -296,14 +365,16 @@ internal sealed class ShelterConstructionRuntime
 
     /// <summary>Whether the loop may run at all right now, and why not.
     ///
-    /// <b>The collection check is the one worth reading.</b> This product counts
-    /// what Thorstein carries to decide what a build order still needs, and a
-    /// collection order that is also holding material in the same inventory would
-    /// make that number wrong in the direction that spends a player's chest. The
-    /// actor-mode arbiter already stops a NEW collection order starting while
-    /// this one holds him; an order recovered from the record predates the hold,
-    /// so it is checked by name and the build waits rather than guessing whose
-    /// wood is whose.</summary>
+    /// <b>The carried-material check is the one worth reading.</b> This product
+    /// counts what Thorstein physically carries to decide what a build order still
+    /// needs, so gathered material in the same inventory would make that number
+    /// wrong in the direction that spends somebody else's wood. The question is
+    /// asked of the RECORD, per place, across every order it knows - <b>not</b> of
+    /// the live-order list, which was the first version of this check and which
+    /// missed the ordinary case: a cancelled collection order is terminal and its
+    /// carried material is documented as staying exactly where it is. The
+    /// actor-mode arbiter separately stops a new collection order starting while
+    /// this one holds him.</summary>
     private bool Refusal(out string why)
     {
         if (!Safe(_mayWork))
@@ -319,13 +390,40 @@ internal sealed class ShelterConstructionRuntime
             return false;
         }
 
+        // The complete question, and the one that matters: does the RECORD say
+        // there is gathered material in his inventory that belongs to something
+        // else? Asked of every order the record knows, terminal ones included -
+        // which is the half the first version of this check got wrong. It only
+        // refused while a collection order was non-terminal, and CANCELLED is
+        // terminal; cancelling a collection order is documented as keeping the
+        // carried material exactly where it physically is and continuing to record
+        // it. So the ordinary outcome of a player cancelling was a build order
+        // that counted his gathered Wood as its own, burned it into a wall or put
+        // it into the SUPPLY chest instead of the collection order's delivery
+        // container, and never told custody - a discrepancy the player could not
+        // account for on the next reconcile.
+        var theirs = new MaterialTally();
+        foreach (string kind in _orders.MaterialKinds)
+        {
+            theirs.Add(kind, Held(kind));
+        }
+
+        if (!theirs.IsEmpty)
+        {
+            why = "the settlement's record says Thorstein is already holding " + theirs.Describe() +
+                " for other work. Nothing is taken out of a chest for the shelter and nothing of his is " +
+                "spent on it until that is settled - cf_settle status says which order, and " +
+                "cf_settle reconcile settles it.";
+            return false;
+        }
+
         if (_custody.TryRecoverOrder(
                 new WorkerId(_modes.Worker.Worker), out CollectionOrderDefinition? order, out CollectionOrderState state) &&
             order != null && !CollectionOrderStates.IsTerminal(state))
         {
             why = "Thorstein still has collection order " + order.Order.Value + " on the record (" + state +
-                "), and material for it may be in his own inventory. Finish or cancel that order first; " +
-                "nothing is taken out of a chest for the shelter meanwhile.";
+                "). Finish, cancel or rebind it first; nothing is taken out of a chest for the shelter " +
+                "meanwhile.";
             return false;
         }
 
@@ -337,6 +435,21 @@ internal sealed class ShelterConstructionRuntime
 
         why = string.Empty;
         return true;
+    }
+
+    /// <summary>What the record says is at his place for anybody, for one item.
+    /// Zero when it cannot say, which is the only reading that does not invent a
+    /// claim about somebody else's material.</summary>
+    private int Held(string kind)
+    {
+        try
+        {
+            return Math.Max(0, _custody.View.TotalAt(_custody.WorkerLocation, new MaterialItem(kind, 1, 0)));
+        }
+        catch (Exception)
+        {
+            return 0;
+        }
     }
 
     private bool TryHold()

@@ -148,9 +148,19 @@ internal sealed class WorldPiecePlacer
 /// the position and the rotation are parameters. The authority ADR's choice
 /// stands, and this is it.
 ///
-/// <b>Both booleans are false, and neither is a default.</b> <c>doAttack</c>
-/// makes the <i>player</i> swing, which is the human build animation and has no
-/// business firing because an NPC put a wall up twenty metres away.
+/// <b>Both booleans are false, and <c>doAttack</c> is an authority boundary
+/// rather than cosmetic hygiene.</b> Read out of the installed binary's IL:
+/// <c>PlacePiece</c> contains <c>callvirt ZSyncAnimation::SetTrigger</c>, guarded
+/// by a <c>brfalse.s</c> on that very argument. <c>ZSyncAnimation.SetTrigger</c>
+/// <b>sends an RPC</b> - this repository's own compatibility audit records that
+/// (<c>docs/mods/concerned-cartographer/COMPANION_COMPATIBILITY.md</c> section 3),
+/// and a cosmetic hammer trigger was explicitly refused when the neighbouring
+/// product asked for one. So <c>doAttack: false</c> is the thing that keeps a
+/// forbidden RPC out of the placement path altogether, and it happens to also
+/// stop the <i>player</i> swinging because an NPC put a wall up twenty metres
+/// away. <b>Flipping it would widen an authority boundary, not add an
+/// animation</b>, and it needs its own owner decision.
+///
 /// <c>cheated</c> marks the piece as having been conjured, and it is the one
 /// flag this whole product exists not to set: the material comes out of a
 /// player's chest through custody, so the piece is not cheated and must not say
@@ -201,6 +211,17 @@ internal sealed class HostPlayerPieceInstaller : IPieceInstaller
 
         // Void: the call reports nothing back. Whether the piece is standing is
         // answered by the next look at the site, not by this line.
+        //
+        // AND ONE THING THIS CALL DOES THAT D13 FORBIDS, recorded because it is
+        // currently inert and will not stay that way by itself: vanilla wraps its
+        // own Instantiate here in TerrainModifier.SetTriggerOnPlaced(true), so a
+        // piece carrying a TerrainModifier WOULD level the ground under it. The
+        // placement-clearance policy is a parked owner decision
+        // (docs/settlement/cart-and-collection/DECISIONS.md D13), so that is a
+        // blocker the moment a blueprint piece has one. The four pieces this
+        // blueprint uses carry none - wood_floor, wood_wall, wood_door, bed - and
+        // nothing here PINS that, which is why it is written down rather than
+        // relied on. Its own issue.
         player.PlacePiece(piece, at, facing, doAttack: false, cheated: false);
 
         failure = string.Empty;

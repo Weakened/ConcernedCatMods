@@ -58,7 +58,11 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
 
     /// <summary>The worker's custody location: stable across loads, so no
     /// epoch.</summary>
-    internal CustodyLocation WorkerLocation => new CustodyLocation(CustodyPlace.Worker, WorkerKey.Value, Guid.Empty);
+    /// <summary>Where the record says the worker's own inventory is. Epoch-less
+    /// on purpose, matching <c>SoloCollectionLoop.WorkerLocation</c>: a chest key
+    /// is renumbered on every load and a worker body is not, so his place is the
+    /// same place across loads.</summary>
+    public CustodyLocation WorkerLocation => new CustodyLocation(CustodyPlace.Worker, WorkerKey.Value, Guid.Empty);
 
     internal WorkerId ToolWorker => new WorkerId(WorkerKey.Worker);
 
@@ -868,6 +872,8 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
         public int Revision => 0;
 
         public int CountAt(OrderId order, CustodyPlace place, CollectedResource resource) => 0;
+
+        public int TotalAt(CustodyLocation location, MaterialItem item) => 0;
 
         public ResourceProgress ProgressFor(CollectionOrderDefinition order, CollectedResource resource) =>
             new ResourceProgress(resource, 0);

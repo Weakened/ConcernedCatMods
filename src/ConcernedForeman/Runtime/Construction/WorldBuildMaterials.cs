@@ -52,29 +52,60 @@ internal readonly struct SupplyChest
 /// class asks those two questions and moves between the answers; it never finds
 /// an inventory of its own.
 ///
-/// <b>Why the move is written here instead of going through the transfer
-/// executor - stated plainly, because it is a real gap and not a preference.</b>
-/// <c>TransferExecutor</c> is the product's vetted mover and this is not it. Its
-/// ledger check (<c>MaterialCustodyLedger.Check</c>) requires an accepted
-/// <c>CollectionOrderDefinition</c> and requires the ORDER to already hold the
-/// units at the source: the model is material an order gathered and is moving
-/// onward, and it refuses a chest the order never filled
-/// (<c>MayLeave</c> is false for a destination, and <c>HoldingAt</c> is zero for
-/// a player's own chest). A build order draws in the opposite direction, so the
-/// units cannot be journalled as a collection transfer without either lying
-/// about what they are or changing the ledger - which is a durable-format change
-/// and therefore its own issue.
+/// <b>These movements are not journalled, and the reason is a MISSING WRITER -
+/// not a missing format.</b> An earlier version of this comment said the durable
+/// format did not exist and that adding it would be its own issue. That was
+/// wrong, and getting it wrong is worse than the gap: it would have sent the next
+/// reader off to design rows this repository already has. The reservation lane is
+/// built, validated, replayed and tested:
 ///
-/// <b>What that costs, exactly.</b> Build-order material movements are gated on
-/// custody being writable, they are resolved through custody's own container and
-/// worker ports, and every one of them is logged with its measured amounts - but
-/// they are <b>not</b> rows in the custody journal, so they are not replayed or
-/// reconciled on the next world load the way collection transfers are. What
-/// makes them conserved instead is that both sides of every movement are real
+/// <list type="bullet">
+/// <item><c>Shared/Settlement/Journal/SettlementJournal.cs</c> -
+/// <c>JournalEntryKind.Reserved</c>, <c>CommitStarted</c>, <c>CommitFinished</c>,
+/// <c>Refunded</c>, whose own doc comment describes <i>exactly</i> this problem:
+/// "a commit does two things that cannot be made atomic against a game - consume
+/// the reserved material and place the piece - so the journal records the
+/// intention before and the outcome after".</item>
+/// <item><c>Shared/Settlement/Custody/CustodyLedger.cs</c> - <c>Reserve</c>,
+/// <c>Commit</c>, <c>Refund</c>, <c>MarkUncertain</c> over
+/// <c>Held|Committed|Refunded|Uncertain</c>, with <c>Reservation.Container</c>
+/// documented as the one container a refund goes back to - which is the
+/// discipline <see cref="PutBack"/> reimplements by hand.</item>
+/// <item><c>JournalReplay</c> already replays all four kinds and already turns a
+/// started-but-unfinished commit into <c>MarkUncertain</c>; <c>JournalStore</c>
+/// already parses and validates the rows at schema v3, with golden fixtures.
+/// </item>
+/// </list>
+///
+/// What is actually missing is a <b>production writer</b>: nothing in any product
+/// writes those four kinds, and <see cref="ICustodyRuntime"/> - the seam this
+/// product consumes - exposes no reserve/commit/refund operation to call. That is
+/// the same shape of defect #380 exists to fix, one layer down. Adding the writer
+/// means adding ops to a shared area that three products compile, so it is
+/// deliberately NOT ridden in on a behaviour change; it is filed as its own issue.
+///
+/// <b>The collection lane is a different lane, and it genuinely cannot carry
+/// this.</b> <c>TransferExecutor</c> is the product's vetted mover for GATHERED
+/// material. Its ledger check (<c>MaterialCustodyLedger.Check</c>) requires an
+/// accepted <c>CollectionOrderDefinition</c> and requires the ORDER to already
+/// hold the units at the source; <c>MayLeave</c> is true only for
+/// <c>SourceGround|Worker|Cart</c>, <c>HoldingAt</c> is per-order, and
+/// <c>CustodyPlace</c> has no vocabulary at all for "a player's own chest, as a
+/// source". A build draw runs the other way and is unrepresentable there. So the
+/// right home for it is the reservation lane above, not this one.
+///
+/// <b>The gap that leaves, concretely.</b> Movements here are gated on custody
+/// being writable, resolved through custody's own container and worker ports, and
+/// logged with their measured amounts - but there is no row, so nothing is
+/// replayed or reconciled. What makes them conserved is that both sides are real
 /// engine inventories, one of which (the worker body) persists itself inside the
-/// same call, and that the loop above only ever spends for a piece that is
-/// actually standing. A crash mid-movement therefore leaves real items in real
-/// inventories rather than a record that disagrees with them.
+/// same call, and that the loop only ever spends for a piece that is standing. A
+/// process killed after a <see cref="Draw"/> therefore loses no material - it is
+/// in his body, durably, and a player can take it out - but it records no
+/// provenance; and because <c>BuildOrderRuntime.Forget()</c> drops the order when
+/// the world unloads, the next load has no order, no refund and no record of it.
+/// The material is his and it is invisible to <c>cf_settle reconcile</c>. That is
+/// the price of the missing writer, stated so nobody has to discover it.
 ///
 /// <b>The movement discipline is <c>TransferExecutor</c>'s, deliberately
 /// repeated rather than reinvented.</b> Count both sides, move through vanilla's
@@ -115,10 +146,17 @@ internal sealed class WorldBuildMaterials : IBuildMaterials
         _log = log ?? throw new ArgumentNullException(nameof(log));
     }
 
-    /// <summary>Set when a movement's two measured deltas disagreed. <b>Latched
-    /// for the world load</b>: once this product cannot say where a unit went,
-    /// it does not move another one and the order stops with the evidence.
-    /// </summary>
+    /// <summary>Set when a movement's two measured deltas disagreed, or when a
+    /// removal could not be made durable.
+    ///
+    /// <b>Latched for the PROCESS, not for the world load.</b> This instance is
+    /// built once, in the construction runtime's constructor, and
+    /// <c>ShelterBuildLoop.Forget</c> does not clear it - so a world unload does
+    /// not lift it and a second world in the same session inherits it. That is
+    /// stricter than it needs to be and is stated rather than relaxed: once this
+    /// product cannot say where a unit of somebody's material went, the cheapest
+    /// correct behaviour is to stop moving material until a person has looked,
+    /// and a reload is not a person looking.</summary>
     internal string? Uncertain { get; private set; }
 
     /// <inheritdoc />
@@ -255,8 +293,18 @@ internal sealed class WorldBuildMaterials : IBuildMaterials
 
         foreach (PieceCost line in owed.Lines)
         {
-            int removed = Removed(worker!, line.Item, line.Amount);
+            int removed = Removed(worker!, line.Item, line.Amount, out string durability);
             spent.Add(line.Item, removed);
+            if (durability.Length != 0)
+            {
+                // Fails closed, exactly as a draw does. Reporting success here
+                // would be the one way this file can CREATE material: the piece
+                // is standing, the loop says it paid, and the units are back in
+                // his inventory on the next load.
+                failure = durability;
+                return false;
+            }
+
             if (removed != line.Amount)
             {
                 failure = "only " + removed + " of the " + line.Amount + " " + line.Item +
@@ -479,18 +527,40 @@ internal sealed class WorldBuildMaterials : IBuildMaterials
         }
     }
 
-    private static int Removed(IInventoryPort port, string kind, int count)
+    /// <summary>Takes units out of one inventory, measured, and says whether the
+    /// removal could be made durable.
+    ///
+    /// <b>A throw here is not nothing, and treating it as nothing mints
+    /// material.</b> <c>EngineInventoryPort.Remove</c> mutates the inventory and
+    /// <i>then</i> calls <c>VerifyPersisted</c>, and
+    /// <c>WorkerInventoryPort.VerifyPersisted</c> throws precisely when the body's
+    /// own ZDO write failed. So the items are gone from the in-memory inventory,
+    /// the measured delta looks like a clean payment, and the next world load
+    /// hands them straight back - with the piece already standing. This used to
+    /// swallow that exception and report success, which is the one movement in
+    /// this file that did not go through <see cref="Move"/> and therefore did not
+    /// fail closed like every other one.</summary>
+    /// <param name="failure">Empty when the removal is durable; otherwise the
+    /// latched reason, and nothing more is moved.</param>
+    private int Removed(IInventoryPort port, string kind, int count, out string failure)
     {
         int before = Counted(port, kind);
+        failure = string.Empty;
         try
         {
             port.Remove(new MaterialItem(kind, 1, 0), count);
         }
-        catch (Exception)
+        catch (Exception exception)
         {
-            // Measured either way: what the call returned is never trusted.
+            Uncertain = "taking " + count + " " + kind + " out of " + Describe(port) +
+                " could not be made durable (" + exception.GetType().Name + ": " + exception.Message +
+                "). The piece may be standing and the material may come back on the next load, so " +
+                "nothing more is moved until a person has looked at what he is carrying.";
+            _log("Build order: " + Uncertain);
+            failure = Uncertain;
         }
 
+        // Measured either way: what the call returned is never trusted.
         return Math.Max(0, before - Counted(port, kind));
     }
 

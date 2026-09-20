@@ -229,6 +229,76 @@ public sealed class WorldBuildMaterialsTests : IDisposable
         Assert.Equal(20, OnWorker("Wood"));
     }
 
+    [Fact]
+    public void A_spend_that_cannot_be_made_durable_fails_closed_and_latches()
+    {
+        // Review finding 2. WorkerInventoryPort.Remove mutates the inventory and
+        // THEN calls VerifyPersisted, which throws when the body's own ZDO write
+        // failed. Measuring the in-memory delta and calling that a payment is the
+        // one way this file can mint material: the wall is standing, the loop says
+        // it paid, and the next load hands the wood back.
+        PutInChest("Wood", 20);
+        WorldBuildMaterials materials = Materials("Wood");
+        materials.Draw(Want(("Wood", 20)));
+        _custody.WorkerPort = new UnpersistedPort(new WorkerInventoryPort(_body, () => 300f));
+
+        bool spent = materials.Spend(
+            PieceRecipe.Known("wood_wall", new[] { new PieceCost("Wood", 2) }),
+            out MaterialTally paid,
+            out string failure);
+
+        Assert.False(spent);
+        Assert.Contains("could not be made durable", failure);
+        Assert.NotNull(materials.Uncertain);
+
+        // The units really did leave the in-memory inventory - that is the whole
+        // problem - and it is reported rather than absorbed.
+        Assert.Equal(2, paid.UnitsOf("Wood"));
+
+        // Latched: nothing else moves until a person has looked.
+        _custody.WorkerPort = new WorkerInventoryPort(_body, () => 300f);
+        Assert.True(materials.Draw(Want(("Wood", 2))).IsRefused);
+        Assert.False(materials.Spend(
+            PieceRecipe.Known("wood_wall", new[] { new PieceCost("Wood", 2) }),
+            out MaterialTally _, out string _));
+        Assert.True(materials.PutBack(out string _).IsEmpty);
+    }
+
+    /// <summary>The worker's own port's behaviour when its body could not write
+    /// its inventory: the remove happens, and then it throws. Not contrived -
+    /// <c>EngineInventoryPort.Remove</c> calls <c>VerifyPersisted</c> after the
+    /// mutation and <c>WorkerInventoryPort</c> throws there.</summary>
+    private sealed class UnpersistedPort : IInventoryPort, IInventoryMoveTarget
+    {
+        private readonly WorkerInventoryPort _real;
+
+        internal UnpersistedPort(WorkerInventoryPort real)
+        {
+            _real = real;
+        }
+
+        public string Describe => _real.Describe;
+
+        public bool IsAvailable => _real.IsAvailable;
+
+        public int Count(MaterialItem item) => _real.Count(item);
+
+        public int CanAccept(MaterialItem item, int count) => _real.CanAccept(item, count);
+
+        public int Add(MaterialItem item, int count) => _real.Add(item, count);
+
+        public int Remove(MaterialItem item, int count)
+        {
+            _real.Remove(item, count);
+            throw new InvalidOperationException("the worker (foreman/thorstein) could not save what it carries");
+        }
+
+        public bool CanMoveFrom(IInventoryPort source) => _real.CanMoveFrom(source);
+
+        public void MoveFrom(IInventoryPort source, MaterialItem item, int count) =>
+            _real.MoveFrom(source, item, count);
+    }
+
     // ---- putting it back -------------------------------------------------
 
     [Fact]

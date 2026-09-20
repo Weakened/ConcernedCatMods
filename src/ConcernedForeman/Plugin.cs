@@ -162,11 +162,8 @@ public sealed class Plugin : BaseUnityPlugin
                 : default,
             () => Time.time,
             message => Logger.LogInfo(message));
-        Runtime.Construction.ShelterConstructionRuntime construction = _construction;
-
-        // So that "authorised" and "being built" are never the same sentence: the
-        // order's own status line carries what the loop is actually doing.
-        buildOrders.WorkLine = () => construction.Describe();
+        // The order's status line is wired by the runtime's own constructor, not
+        // here: a hookup in this file is a hookup nothing can test.
 
         gameObject.AddComponent<Ui.BuildOrderPanel>().Initialize(
             () => settings.SettlementRuntimeEnabled.Value, buildOrders, Logger);
