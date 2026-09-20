@@ -471,9 +471,39 @@ The director resolves each wish to a spot through the same placement probe as
 ever - a ring around the fire just past its hazard (seats first, facing the
 fire), a roof near home, the floor beside a spare bed, somewhere around home -
 and the planner asks "can he get there" lazily, best candidate first, so a
-question that costs a navmesh route is asked once in the ordinary case. Surveys
-run every half minute and at once when a one-second fingerprint of fires, beds,
-seats, doors, their permissions and the hour changes.
+question that costs a navmesh route is asked once in the ordinary case.
+
+### How often he looks around (#306)
+
+A one-second fingerprint of fires, beds, seats, doors, their permissions and the
+hour says *that* something in camp changed, and a change asks for a survey on the
+next residency pass. Whether the survey actually runs is `SeatSweepGate`'s to
+say, and its answer is no more often than once every thirty seconds.
+
+That floor is the third acceptance criterion of #306, and the fingerprint is
+exactly why it needs defending. The same tick that spots a new bench also turns
+over when a fire is fed, a bed is claimed, a door swings, or somebody sits down
+in a chair and gets out of it again - and the sweep scores the world as it stands
+now, so a flicker like that can offer a strictly better spot over and over. The
+first cut of this armed the clock from the fingerprint handler, which reset the
+floor about as fast as it could be read; a chair a player used for a moment could
+have had Hulgi up and down all evening. Now the world may only ask, and the
+asking is remembered until the floor allows it, so nothing that changed is
+dropped - a bench built two seconds after a sweep is taken half a minute later
+rather than never.
+
+The single waiver is a command the local player just gave: `cc_companion summon`,
+or a change to which doors companions may use. A command does not re-score the
+camp, so the strictly-better rule already bounds what repeating one can do - once
+he is in the best spot he can reach, another press has nothing better to offer -
+whereas a camp that changes on its own does re-score it. In practice the floor
+costs the headline case nothing: a settled companion has been waiting far longer
+than thirty seconds by the time anybody finishes building him a chair.
+
+`SeatUpgradeOscillationTests` pins this as a count over simulated time rather
+than as one decision, because "he does not keep getting up" is a property of a
+run of decisions - the same shape of defect as #310's walk retried spot after
+spot.
 
 ### A walk that does not work is remembered (#310)
 
