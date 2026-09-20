@@ -32,12 +32,21 @@ public sealed class Plugin : BaseUnityPlugin
     private void Awake()
     {
         CartographerSettings settings = CartographerSettings.Bind(Config);
+
+        // #304: everything of ours that is not a setting leaves the settings
+        // folder, before anything reads or writes any of it. A mod manager
+        // presents that folder as this mod's configuration, and an atlas, a
+        // saved view and a generated identity are not configuration. Nothing is
+        // deleted before its copy has been read back at the destination, and
+        // every failure leaves the player's file exactly where it is.
+        RelocateDataOutOfTheSettingsFolder();
+
         Persistence.LocalizationPersistence.Initialize(Logger);
 
-        // #304: move this mod's own bookkeeping out of the settings folder,
-        // both markers together, before anything reads or writes either. It
-        // never throws, and a failure leaves the older build's file where it
-        // is and says so.
+        // The two markers this build writes for itself, adopted from wherever
+        // an older build left them — including the settings folder, if the
+        // relocation above could not finish. It never throws, and a failure
+        // leaves the older build's file where it is and says so.
         Persistence.AuthorIdentity.AdoptMarkers(Logger);
 
         // Crash reporting (#97) attaches before the runtime exists so even
@@ -87,6 +96,41 @@ public sealed class Plugin : BaseUnityPlugin
         RegisterConsoleCommands();
         Logger.LogInfo($"{PluginName} {PluginVersion} loaded");
         LogEnvironment(settings);
+    }
+
+    /// <summary>#304. Runs before anything else touches a file, and never
+    /// throws: it happens before the crash hub attaches, so an exception here
+    /// would take the whole plugin down with nothing to report it, and a player
+    /// whose profile refuses the move must still get their mod.
+    ///
+    /// The relocation itself keeps every failure on the safe side — a file it
+    /// cannot copy and verify stays in the settings folder, and the marker
+    /// search reads that folder too, so an identity is never lost to one.
+    /// </summary>
+    private void RelocateDataOutOfTheSettingsFolder()
+    {
+        try
+        {
+            Storage.DataRelocation.Outcome outcome = Storage.DataRelocation.Run(
+                CartographerPaths.Config,
+                CartographerPaths.Data,
+                Storage.CartographerConfigFiles.IsConfiguration,
+                Logger.LogWarning);
+
+            if (!outcome.NothingToDo)
+            {
+                Logger.LogInfo(
+                    $"Moved {outcome.Moved + outcome.Finished} file(s) out of your settings " +
+                    "folder and into this mod's own data folder; your settings are still in " +
+                    $"the settings folder. Left in place: {outcome.Kept + outcome.Failed}.");
+            }
+        }
+        catch (System.Exception exception)
+        {
+            Logger.LogWarning(
+                "This mod's data could not be moved out of your settings folder, so it was left " +
+                $"there and everything still works from where it is: {SafeLogText.Brief(exception)}");
+        }
     }
 
     /// <summary>Adds every console command to the game's own command table.

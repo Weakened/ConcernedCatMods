@@ -25,6 +25,10 @@ public sealed class MarkerFileTests : IDisposable
     /// order and the same literals the product passes.</summary>
     private static readonly string[] PriorLocations = { "author-id.dat", "author-id.txt" };
 
+    /// <summary>No prior directory, for the cases that are about names alone.
+    /// The ones that are about the settings folder pass their own.</summary>
+    private static readonly string[] PriorDirectories = Array.Empty<string>();
+
     public MarkerFileTests() => Directory.CreateDirectory(_directory);
 
     public void Dispose()
@@ -46,7 +50,7 @@ public sealed class MarkerFileTests : IDisposable
 
     private MarkerFile.MarkerSearch Resolve(out string? contents, Func<string, bool>? usable = null) =>
         MarkerFile.Resolve(
-            _directory, "author-id.dat", PriorLocations, usable ?? IsGuid, _log.Add,
+            _directory, "author-id.dat", PriorLocations, PriorDirectories, usable ?? IsGuid, _log.Add,
             out _, out contents);
 
     private string? Resolved(Func<string, bool>? usable = null)
@@ -328,7 +332,7 @@ public sealed class MarkerFileTests : IDisposable
     public void AnEmptyDirectoryIsARefusalRatherThanAGuess()
     {
         Assert.Throws<ArgumentException>(() =>
-            MarkerFile.Resolve(string.Empty, "author-id.dat", PriorLocations, IsGuid, _log.Add,
+            MarkerFile.Resolve(string.Empty, "author-id.dat", PriorLocations, PriorDirectories, IsGuid, _log.Add,
                 out _, out _));
     }
 
@@ -336,14 +340,14 @@ public sealed class MarkerFileTests : IDisposable
     public void TheCheckIsRequiredRatherThanDefaultingToAnythingWillDo()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            MarkerFile.Resolve(_directory, "author-id.dat", PriorLocations, null!, _log.Add,
+            MarkerFile.Resolve(_directory, "author-id.dat", PriorLocations, PriorDirectories, null!, _log.Add,
                 out _, out _));
     }
 
     [Fact]
     public void APathIsAlwaysReturnedEvenWhenNothingIsFound()
     {
-        MarkerFile.Resolve(_directory, "author-id.dat", PriorLocations, IsGuid, _log.Add,
+        MarkerFile.Resolve(_directory, "author-id.dat", PriorLocations, PriorDirectories, IsGuid, _log.Add,
             out string path, out _);
 
         // Under "state", always. An earlier fallback handed back a product-root

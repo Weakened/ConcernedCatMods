@@ -383,12 +383,12 @@ internal sealed class CompanionDirector : IDisposable
             () => _settings.CompanionChestPreset.Value,
             () => _settings.CompanionLegsPreset.Value);
         _doors = new CompanionDoors(
-            log, CartographerPaths.Root, () => _settings.CompanionDoorAccess.Value);
+            log, CartographerPaths.Data, () => _settings.CompanionDoorAccess.Value);
         _camp = new CampSense(_doors);
         CompanionDoorHover.Install(log);
         CompanionDoorHover.Describe = DescribeDoorForHover;
         _biomes = new KnownBiomeReader(log);
-        _store = new CompanionSidecarStore(CartographerPaths.Root);
+        _store = new CompanionSidecarStore(CartographerPaths.Data);
         _rateLimited = new RateLimitedLog(log, 30f);
 
         _storyPanel.WelcomeChosen = WelcomeCompanion;

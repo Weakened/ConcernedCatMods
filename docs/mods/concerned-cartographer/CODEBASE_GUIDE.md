@@ -1143,7 +1143,7 @@ A truncated trailing journal row should lose at most that row, not the atlas.
 Per-world road sidecar IO at roughly:
 
 ```text
-BepInEx/config/ConcernedCatMods/ConcernedCartographer/<world-uid>.roads.tsv
+BepInEx/data/ConcernedCatMods/ConcernedCartographer/<world-uid>.roads.tsv
 ```
 
 Responsibilities:
@@ -1286,19 +1286,36 @@ Concerned Cartographer's core safety principle is:
 Current important files may include:
 
 ```text
-BepInEx/config/ConcernedCatMods/ConcernedCartographer/
+BepInEx/config/ConcernedCatMods/ConcernedCartographer/   (settings: what a player edits)
+├─ survey-rules.tsv                          (shareable survey rules)
+├─ cartographer-strings.tsv                  (optional localization overrides)
+└─ cartographer-strings-template.tsv         (what a translator copies)
+
+BepInEx/data/ConcernedCatMods/ConcernedCartographer/     (data: everything else)
 ├─ <world-uid>.roads.tsv                     (+ .v1.bak / .pre-reconcile.bak)
 ├─ <world-uid>.terrain-intent.tsv            (not-road exclusion mask, DEF-v1.0-005)
 ├─ <world-uid>.pins.tsv                      (+ .journal)
 ├─ <world-uid>.routes-atlas.tsv              (+ .journal)
+├─ <world-uid>.survey-rejected.tsv           (survey rejections)
 ├─ views.tsv                                 (profile-level saved views)
-├─ survey-rules.tsv                          (shareable survey rules)
-├─ cartographer-strings.tsv                  (optional localization overrides)
+├─ support-report.txt                        (cc_atlas support)
+├─ <character>.companions.tsv                (companion sidecars)
+├─ doors-<world-uid>.tsv                     (per-door companion permission)
 ├─ state/                                    (files the mod writes for itself, #304)
 │  ├─ author-id.dat                          (local author GUID for sync labels)
 │  └─ onboarding-shown.dat                   (one-time tip marker)
 └─ backups/<timestamp>/                      (cc_atlas backup snapshots)
 ```
+
+**Two directories, because a mod manager presents the first one as this mod's
+settings (#304).** `CartographerPaths` is the only place that composes either,
+`CartographerConfigFiles` is the whole list of what may live in the settings
+folder, and `validate_repo.py` holds those two to each other in both directions.
+`DataRelocation` moves an earlier build's profile data across on the first start —
+copy, verify at the destination, then remove, and every failure keeps the
+player's file where it is. `CartographerLegacyProbe` reads **both** directories,
+so a profile whose move has not run or could not finish is still a returning
+player rather than a new one.
 
 Never move private atlas persistence into Valheim `.db`/`.fwl` files without an explicit design/migration/safety decision.
 

@@ -26,7 +26,7 @@ internal sealed class SurveyRulePersistence
     }
 
     public static string RulePath =>
-        CartographerPaths.InRoot("survey-rules.tsv");
+        CartographerPaths.InConfig("survey-rules.tsv");
 
     public SurveyRuleSet LoadOrCreate()
     {

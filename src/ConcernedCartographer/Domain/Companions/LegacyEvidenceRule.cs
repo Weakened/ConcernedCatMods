@@ -108,6 +108,12 @@ internal static class CartographerFirstRunFiles
         // Matched by Contains rather than EndsWith below, because the numbered
         // variants put digits after it.
         ".companions.tsv.corrupt",
+
+        // A half-finished copy left in the data folder by an interrupted
+        // relocation out of the settings folder (#304). Only this build ever
+        // writes one, and it lands in the probed directory, so leaving it off
+        // this list is #343 through yet another file.
+        ".relocating.tmp",
     };
 
     /// <summary>True when <paramref name="fileName"/> is something this build

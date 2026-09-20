@@ -178,7 +178,7 @@ internal sealed class RoadPersistence
 
     private static string GetPath(long worldUid)
     {
-        return CartographerPaths.InRoot(worldUid.ToString(CultureInfo.InvariantCulture) + ".roads.tsv");
+        return CartographerPaths.InData(worldUid.ToString(CultureInfo.InvariantCulture) + ".roads.tsv");
     }
 
     private static void TryDelete(string path)

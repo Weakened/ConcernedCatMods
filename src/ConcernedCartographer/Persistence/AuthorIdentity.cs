@@ -7,16 +7,17 @@ using TheConcernedCat.ConcernedCartographer.Storage;
 namespace TheConcernedCat.ConcernedCartographer.Persistence;
 
 /// <summary>The profile's stable author identity: a GUID generated once and
-/// kept in the config folder. Used for audit labels and the
+/// kept in the product's data folder. Used for audit labels and the
 /// non-owner-delete policy; it is labeling, not authentication (see
 /// HUMAN_ATTENTION.md).
 ///
-/// It lives in the <c>state</c> subfolder rather than beside the sidecars,
-/// because a mod manager's configuration editor listed the old
-/// <c>author-id.txt</c> among the files a player may edit (#304) and this one
-/// is generated and read by the mod alone. Files earlier builds left elsewhere
-/// are adopted — read, checked, staged, copied, read back, and only then
-/// removed.
+/// It lives in the <c>state</c> subfolder of that folder, and not in the
+/// settings folder at all, because a mod manager's configuration editor listed
+/// the old <c>author-id.txt</c> among the files a player may edit (#304) and
+/// this one is generated and read by the mod alone. Files earlier builds left
+/// elsewhere are adopted — read, checked, staged, copied, read back, and only
+/// then removed — and "elsewhere" now includes the settings folder itself,
+/// which is where every profile in the beta has one right now.
 ///
 /// <b>A new identity is the last resort, never a consequence of a bad
 /// moment.</b> Minting one orphans everything the profile has ever shared: the
@@ -42,6 +43,18 @@ internal static class AuthorIdentity
     /// A fact about the past cannot be derived from a value that can change.
     /// </summary>
     private static readonly string[] PriorFileNames = { "author-id.dat", "author-id.txt" };
+
+    /// <summary>Product directories these markers have lived in before the
+    /// current one, <b>newest first</b>.
+    ///
+    /// The settings folder is the only one there has ever been, and #304 is why
+    /// it is no longer the current one. <c>DataRelocation</c> empties it on the
+    /// first start of this build — but a locked file or a read-only profile can
+    /// stop that, and looking only where the marker now belongs would then mint
+    /// a second identity while the real one sat a folder away. Reading a
+    /// directory is not the same act as writing to it: nothing is ever written
+    /// back here.</summary>
+    private static string[] PriorDirectories => new[] { CartographerPaths.Config };
 
     private static string? _cached;
 
@@ -109,8 +122,8 @@ internal static class AuthorIdentity
         try
         {
             MarkerFile.MarkerSearch search = MarkerFile.Resolve(
-                CartographerPaths.Root, FileName, PriorFileNames, IsIdentity, Warn(log),
-                out string path, out string? found);
+                CartographerPaths.Data, FileName, PriorFileNames, PriorDirectories,
+                IsIdentity, Warn(log), out string path, out string? found);
 
             if (search == MarkerFile.MarkerSearch.Found && found is not null)
             {
@@ -188,9 +201,10 @@ internal static class AuthorIdentity
     internal static OnboardingMarkerState FindOnboardingMarker(ManualLogSource log)
     {
         MarkerFile.MarkerSearch search = MarkerFile.Resolve(
-            CartographerPaths.Root,
+            CartographerPaths.Data,
             OnboardingMarker.FileName,
             OnboardingMarker.PriorFileNames,
+            PriorDirectories,
             OnboardingMarker.IsRecorded,
             Warn(log),
             out string path,
@@ -219,7 +233,7 @@ internal static class AuthorIdentity
         out string path)
     {
         MarkerFile.Resolve(
-            CartographerPaths.Root, name, priorNames, isUsable, Warn(log),
+            CartographerPaths.Data, name, priorNames, PriorDirectories, isUsable, Warn(log),
             out path, out string? contents);
         return contents;
     }
