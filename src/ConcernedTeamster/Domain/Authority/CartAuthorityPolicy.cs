@@ -18,7 +18,10 @@ namespace TheConcernedCat.ConcernedTeamster.Domain.Authority;
 ///   replicates when a cart is pulled (validator audited).
 /// - Exactly two features mutate cart state — the parking brake and the
 ///   opt-in Gunnar hauling runtime — and only under live local vanilla
-///   authority; every ambiguity fails closed.</summary>
+///   authority; every ambiguity fails closed. A third feature is classed as a
+///   Mutation without touching a cart at all: Gunnar's opt-in collection
+///   (#381) changes a picked source, never a cart, and is gated by the work-
+///   authority rule and the source's own ownership.</summary>
 public static class CartAuthorityPolicy
 {
     private sealed class Entry
@@ -40,9 +43,10 @@ public static class CartAuthorityPolicy
     // The matrix. Observation features never gate the right to READ (client
     // reading replicated/local state is always allowed); LabelWhenRemote
     // marks the ones whose numbers are owner-fresh and must be flagged when
-    // observed from another client. ParkingBrake and GunnarHauling are the
-    // Mutations; GunnarHauling is further gated by the work authority rule
-    // (opted in, host, not dedicated, no peers) before every mutation.
+    // observed from another client. ParkingBrake, GunnarHauling and
+    // GunnarCollection are the Mutations; the two Gunnar features are further
+    // gated by the work authority rule (opted in, host, not dedicated, no
+    // peers) before every mutation, each under its own off-by-default switch.
     private static readonly IReadOnlyDictionary<TeamsterFeature, Entry> Matrix =
         new Dictionary<TeamsterFeature, Entry>
         {
@@ -56,6 +60,11 @@ public static class CartAuthorityPolicy
             [TeamsterFeature.RouteProfiling] = new(FeatureClass.Observation, labelWhenRemote: false),
             [TeamsterFeature.ParkingBrake] = new(FeatureClass.Mutation, labelWhenRemote: false),
             [TeamsterFeature.GunnarHauling] = new(FeatureClass.Mutation, labelWhenRemote: false),
+            // #381: Gunnar's collection changes world state (a picked source),
+            // so it is a Mutation — but it never reads or writes a cart, so its
+            // real gate is the work-authority rule and the source's own
+            // ownership, not this table's cart authority.
+            [TeamsterFeature.GunnarCollection] = new(FeatureClass.Mutation, labelWhenRemote: false),
         };
 
     /// <summary>Every feature the matrix governs — used by the completeness

@@ -37,6 +37,20 @@ internal sealed class GunnarWorkAuthority : IHaulAuthority
             enabled = false;
         }
 
+        return ReadWorldFacts(enabled);
+    }
+
+    /// <summary>The world half of the facts - a loaded world, the host, not
+    /// dedicated, nobody else connected - with whether the caller's own feature
+    /// is opted in handed in.
+    ///
+    /// <b>Shared on purpose.</b> Gunnar's collection (#381) asks the same rule
+    /// about the same room under its own switch, and a second copy of this
+    /// reader would be a second place for "an unreadable peer list is somebody
+    /// might be connected" to drift.</summary>
+    internal static WorkAuthorityFacts ReadWorldFacts(bool optedIn)
+    {
+        bool enabled = optedIn;
         try
         {
             ZNet net = ZNet.instance;

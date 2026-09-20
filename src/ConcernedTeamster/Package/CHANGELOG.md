@@ -1,5 +1,47 @@
 # Changelog
 
+## Unreleased
+
+- **Gunnar can be told to pick something up, and he is off by default.** A new
+  `Workers/GunnarCollectionEnabled` setting — separate from
+  `Workers/GunnarHaulingEnabled`, and off like it — lets him pick up one loose
+  stone or one fallen branch you point at, while he is standing next to it,
+  through the source's own vanilla pickup, into his own inventory. Those two
+  things are the only ones he will touch: no plants, no food, no chests, no
+  piles somebody dropped, no trees, and nothing is felled or repaired. He works
+  only in single player or as the host with nobody else connected, only on
+  something this session already controls — he never takes control of anything —
+  and nothing here moves him. Ordered with `ct_collect pick`; `ct_collect
+  status` and `ct_collect cancel` are the rest of it. With either setting off,
+  this behaves exactly as 1.0.5 did.
+- **A cancelled order cannot turn one stone into two.** Vanilla's pick drops the
+  items first and marks the source picked in a second, separate message, so
+  there is a moment where picking again would hand over a second full load out
+  of nothing. Gunnar remembers what he just picked until the world confirms it,
+  and a cancelled order keeps that memory — only a world actually going away
+  clears it.
+
+- **What he picks up survives a reload.** Valheim does not save what a non-player
+  character is carrying, so anything Gunnar held used to vanish when his ground
+  unloaded, when you logged out or when you reloaded the world — quietly, with
+  nothing dropped. His body now keeps its own inventory in its own record, in the
+  game's own save format, written the moment anything changes. A Gunnar saved by
+  an older build loads exactly as before, with an empty inventory.
+- **Retiring Gunnar will not quietly throw away what he is holding.** Removing a
+  worker body destroys everything in it and drops nothing on the ground, so
+  `ct_haul retire` now refuses while he is carrying anything, tells you how much
+  and that it would be destroyed, and points at `ct_haul retire force` — which
+  removes him anyway and says plainly that what he carried is lost. Retiring an
+  empty body, and removing a duplicate body, behave exactly as before.
+
+**Not observed in game yet, and not finished.** Everything above is proved by
+test and by source audit; none of it has been watched happening, and it is not
+in a release. Two things are deliberately still open: what he picks up goes into
+his own inventory and there is **no way to get it out** yet, because the part
+that puts it in a chest is not built; and if Gunnar is **killed**, what he is
+carrying is destroyed with his body rather than dropped. That is why this is not
+in a release and why the setting is off.
+
 ## 1.0.5 - Gunnar pulls the cart
 
 **Gunnar, the Teamster's worker, hauls a cart you hand him.** He is off by

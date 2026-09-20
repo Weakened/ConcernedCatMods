@@ -1,5 +1,6 @@
 using BepInEx.Configuration;
 using TheConcernedCat.ConcernedTeamster.Domain.Carts;
+using TheConcernedCat.ConcernedTeamster.Domain.Collection;
 using TheConcernedCat.ConcernedTeamster.Domain.Config;
 using TheConcernedCat.ConcernedTeamster.Domain.Hauling.Execution;
 using TheConcernedCat.ConcernedTeamster.Domain.Profiles;
@@ -40,10 +41,12 @@ internal sealed class TeamsterSettings
         ConfigEntry<ConfigProfile> lastAppliedProfile,
         ConfigEntry<int> schemaVersion,
         ConfigEntry<bool> gunnarHaulingEnabled,
+        ConfigEntry<bool> gunnarCollectionEnabled,
         ConfigEntry<GunnarPullStrength> gunnarPullStrength,
         ConfigEntry<string> workerBaseCreature)
     {
         GunnarHaulingEnabled = gunnarHaulingEnabled;
+        GunnarCollectionEnabled = gunnarCollectionEnabled;
         GunnarPullStrength = gunnarPullStrength;
         WorkerBaseCreature = workerBaseCreature;
         Enabled = enabled;
@@ -124,6 +127,13 @@ internal sealed class TeamsterSettings
     /// moves a real cart (docs/settlement/cart-and-collection/DECISIONS.md D3).
     /// </summary>
     public ConfigEntry<bool> GunnarHaulingEnabled { get; }
+
+    /// <summary>Workers (#381): Gunnar's opt-in collection runtime. Off by
+    /// default, and a switch of its own rather than hauling's: picking things up
+    /// is a separate capability under a separate owner decision (2026-09-19), and
+    /// a player who wanted a cart pulled has not thereby asked for anything to be
+    /// picked up.</summary>
+    public ConfigEntry<bool> GunnarCollectionEnabled { get; }
 
     /// <summary>Workers (#313): Gunnar's pulling strength. MatchPlayer is the only
     /// supported value (D5); anything else refuses to haul.</summary>
@@ -244,6 +254,13 @@ internal sealed class TeamsterSettings
                 "through the game's own cart attach, walking like any creature. OFF by default. Works only in " +
                 "single player or as the host with nobody else connected; he never takes ownership, never " +
                 "touches the parking brake, never changes cart mass or physics and never teleports anything."),
+            config.Bind("Workers", "GunnarCollectionEnabled", GunnarCollectionDefaults.CollectionEnabled,
+                "Let Gunnar pick up a loose stone or a fallen branch you point at, through the source's own " +
+                "vanilla pickup, and carry what it gives in his own inventory. OFF by default, and separate " +
+                "from GunnarHaulingEnabled. Those two things are the only ones he will touch: no plants, no " +
+                "food, no chests, no piles somebody dropped, no trees. Works only in single player or as the " +
+                "host with nobody else connected, only on a source this session already controls - he never " +
+                "takes control of one - and only while he is standing next to it; nothing here moves him."),
             config.Bind("Workers", "GunnarPullStrength", GunnarHaulingDefaults.PullStrength,
                 "How strongly Gunnar pulls. MatchPlayer, the only supported value, gives his body your " +
                 "character's own base mass, so he pulls a cart exactly as hard as you do. Any other value " +

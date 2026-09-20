@@ -653,7 +653,7 @@ internal sealed class HaulExecutor
             _ports.Body.Stop();
             if (HaulId.Length > 0)
             {
-                Modes.Enter(ActorMode.Recovering, HaulId);
+                EnterIdentity(ActorMode.Recovering, HaulId);
             }
         }
         finally
@@ -1490,7 +1490,7 @@ internal sealed class HaulExecutor
         }
 
         // Recovering first: nothing may interrupt a detach in progress.
-        Modes.Enter(ActorMode.Recovering, HaulId.Length > 0 ? HaulId : lease != null ? lease.LeaseId : "detach-" + key.Value);
+        EnterIdentity(ActorMode.Recovering, HaulId.Length > 0 ? HaulId : lease != null ? lease.LeaseId : "detach-" + key.Value);
         ReleaseResult released = ReleaseAttached("detaching on suitable ground");
         _detachReleasedAt = now;
         _stillness.Reset();
@@ -1806,7 +1806,7 @@ internal sealed class HaulExecutor
             _ports.Body.Stop();
             if (HaulId.Length > 0)
             {
-                Modes.Enter(ActorMode.Recovering, HaulId);
+                EnterIdentity(ActorMode.Recovering, HaulId);
             }
         }
         finally
@@ -2005,6 +2005,16 @@ internal sealed class HaulExecutor
         }
     }
 
+    private string _heldIdentityJob = string.Empty;
+
+    private ActorModeOutcome EnterIdentity(ActorMode mode, string job)
+    {
+        ActorModeOutcome result = Modes.Enter(mode, job);
+        if (result == ActorModeOutcome.Entered || result == ActorModeOutcome.AlreadyInMode)
+            _heldIdentityJob = job;
+        return result;
+    }
+
     private void SyncActorMode()
     {
         if (HaulId.Length == 0)
@@ -2033,7 +2043,7 @@ internal sealed class HaulExecutor
                 break;
         }
 
-        if (Modes.Enter(desired, HaulId) == ActorModeOutcome.RefusedBusy)
+        if (EnterIdentity(desired, HaulId) == ActorModeOutcome.RefusedBusy)
         {
             _ports.Log.Bug("Another job holds Gunnar's identity while haul " + HaulId + " runs.");
         }
@@ -2041,9 +2051,10 @@ internal sealed class HaulExecutor
 
     private void ReleaseIdentityIfIdle()
     {
-        if (HaulId.Length == 0 && Modes.JobId != null)
+        if (HaulId.Length == 0 && _heldIdentityJob.Length > 0)
         {
-            Modes.Release(Modes.JobId);
+            Modes.Release(_heldIdentityJob);
+            _heldIdentityJob = string.Empty;
         }
     }
 

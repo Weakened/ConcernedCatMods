@@ -1,5 +1,6 @@
 using System;
 using Jotunn.Managers;
+using TheConcernedCat.ConcernedTeamster.Domain.Collection;
 using TheConcernedCat.ConcernedTeamster.Domain.Hauling.Execution;
 using TheConcernedCat.Workers;
 using UnityEngine;
@@ -160,6 +161,12 @@ internal static class TeamsterWorkerPrefab
 
         clone.AddComponent<TeamsterWorkerAI>();
 
+        // #381: the body's own inventory persistence. Added here, on the
+        // inactive clone, so it comes up with every saved body too - a body the
+        // game instantiates from a world save gets it without anybody
+        // remembering to attach it.
+        clone.AddComponent<TeamsterWorkerRecord>();
+
         Character character = clone.GetComponent<Character>();
         character.m_faction = Character.Faction.Players;
         character.m_boss = false;
@@ -211,9 +218,15 @@ internal static class TeamsterWorkerPrefab
             return null;
         }
 
-        // D9: the identity lives in the worker body's own network object, the
-        // only network-object field this product writes.
+        // D9: the identity lives in the worker body's own network object, and
+        // (since #381) so does what that body is carrying. Both are fields of a
+        // MOD-CREATED object; no vanilla object is written to. The keys are
+        // spelled as literals rather than through their constants because the
+        // validator's scoped allowance matches the literal - that is the
+        // boundary working as intended, and GunnarHaulingDefaults carries the
+        // same strings for everything else to read.
         view.GetZDO().Set("tcc.worker.key", WorkerKey.Gunnar.Value);
+        view.GetZDO().Set("tcc.worker.revision", 0);
         ai.RememberIdentity(WorkerKey.Gunnar.Value);
         return ai;
     }
@@ -267,5 +280,205 @@ internal static class TeamsterWorkerPrefab
         }
 
         return false;
+    }
+}
+
+/// <summary>A worker body's own inventory, stored in its own network object
+/// (#381, DECISIONS.md D9, mirroring Concerned Foreman's
+/// <c>SETTLEMENT_AUTHORITY.md</c> §5a).
+///
+/// <b>Why this exists.</b> Vanilla never saves a non-player humanoid's
+/// inventory: <c>Humanoid.m_inventory</c> is a plain readonly field with no save
+/// and no load, rebuilt on every instantiation. The body itself is persistent -
+/// Gunnar stays in a world until he is retired, and the census reads saved bodies
+/// - so before this, a stone he picked up was destroyed by a zone unload, a relog
+/// or a world reload while the body came back empty. Silently: no refusal, no
+/// record, no drop. That is the same loss <c>WorkerRetirement</c> refuses on a
+/// deliberate retire, through a door nobody has to open.
+///
+/// <b>Why it lives in this file.</b> The validator allows a network-object write
+/// only here, and only with a literal <c>"tcc.worker."</c> key. That rule is the
+/// reason the inventory is stored in a mod-created object and nowhere near a
+/// vanilla one, so the writer belongs inside the rule rather than beside it.
+///
+/// <b>The same synchronous call as a chest.</b> The inventory is written from
+/// vanilla's own <c>Inventory.m_onChanged</c> callback - the exact mechanism
+/// <c>Container</c> uses - so an add or a removal is persisted inside the call
+/// that made it.
+///
+/// <b>Nothing is written before a successful load.</b> A body that could not read
+/// what it carries is <b>inert</b>: it never saves, and the runtime never binds
+/// it, because saving an empty inventory over a carried one is the very loss this
+/// type exists to stop. An <i>absent</i> record is not that case - it is an
+/// ordinary empty inventory, which is how every body saved before this field
+/// existed loads (<see cref="WorkerInventoryRecord"/>).</summary>
+internal sealed class TeamsterWorkerRecord : MonoBehaviour
+{
+    private ZNetView? _view;
+    private Humanoid? _humanoid;
+    private Inventory? _inventory;
+    private Action? _onChanged;
+    private bool _loading;
+
+    /// <summary>Whether this body has read its stored inventory and may now both
+    /// work and save. False is inert.</summary>
+    internal bool IsLoaded { get; private set; }
+
+    /// <summary>Why this body is inert, or empty.</summary>
+    internal string Fault { get; private set; } = string.Empty;
+
+    /// <summary>False when the most recent change could not be written. What the
+    /// body holds is then uncertain, never assumed.</summary>
+    internal bool LastChangePersisted { get; private set; } = true;
+
+    /// <summary>How many writes this body has made. Zero means it never has.
+    /// </summary>
+    internal int Revision { get; private set; }
+
+    /// <summary>How many items it holds, tools included. Meaningful only while
+    /// <see cref="IsLoaded"/>.</summary>
+    internal int ItemCount => _inventory == null ? 0 : _inventory.NrOfItems();
+
+    internal static Action<string>? ErrorLog { get; set; }
+
+    /// <summary>The record on a body, or null when it has none - which is itself
+    /// a reason to treat the body as unreadable rather than empty.</summary>
+    internal static TeamsterWorkerRecord? On(Component? body) =>
+        body == null ? null : body.GetComponent<TeamsterWorkerRecord>();
+
+    private void Start()
+    {
+        try
+        {
+            _view = GetComponent<ZNetView>();
+            _humanoid = GetComponent<Humanoid>();
+            if (_view == null || !_view.IsValid() || _humanoid == null)
+            {
+                Fault = "it has no valid network object or no humanoid";
+                return;
+            }
+
+            ZDO record = _view.GetZDO();
+            Revision = record.GetInt("tcc.worker.revision", 0);
+            _inventory = _humanoid.GetInventory();
+            if (_inventory == null)
+            {
+                Fault = "its inventory could not be read";
+                return;
+            }
+
+            byte[] stored = record.GetByteArray("tcc.worker.inventory", null);
+            _loading = true;
+            try
+            {
+                if (WorkerInventoryRecord.Decide(stored) == WorkerRecordLoad.LoadStored)
+                {
+                    _inventory.Load(new ZPackage(stored));
+                }
+            }
+            finally
+            {
+                _loading = false;
+            }
+
+            _onChanged = OnInventoryChanged;
+            _inventory.m_onChanged = (Action)Delegate.Combine(_inventory.m_onChanged, _onChanged);
+            IsLoaded = true;
+        }
+        catch (Exception exception)
+        {
+            // Inert, never half-loaded. A throw here must not reach the game's
+            // own instantiation either.
+            IsLoaded = false;
+            Fault = "its stored inventory could not be loaded (" + exception.GetType().Name + ")";
+            try
+            {
+                ErrorLog?.Invoke("Gunnar's body is inert: " + Fault +
+                    ". He will not work and will not overwrite what he is holding. " + exception);
+            }
+            catch
+            {
+                // Already failing; nothing more may escape.
+            }
+        }
+    }
+
+    private void OnEnable()
+    {
+        if (IsLoaded && _inventory != null && _onChanged == null)
+        {
+            _onChanged = OnInventoryChanged;
+            _inventory.m_onChanged = (Action)Delegate.Combine(_inventory.m_onChanged, _onChanged);
+        }
+    }
+
+    private void OnDisable()
+    {
+        // Unhooked here rather than in OnDestroy, and re-hooked in OnEnable: a
+        // hook symmetric with this component's own enable and disable is simpler
+        // to reason about than Unity's message resolution against BaseAI, which
+        // declares a private OnDestroy of its own on the same object.
+        //
+        // A STATED ASSUMPTION OF THE CONTAINMENT, recorded rather than proved or
+        // dismissed. While this component is disabled the hook is gone, so a
+        // change made in that window is neither persisted NOR flagged:
+        // `LastChangePersisted` stays true and `WorkerInventoryRecord.Trust`
+        // keeps answering `Trusted`, because it is never asked whether the hook
+        // is live. Everything downstream therefore assumes the hook is attached
+        // whenever the inventory can change, and nothing here asserts it. The
+        // review that found this explicitly did NOT claim it is reachable -
+        // ZNetScene destroys distant objects rather than deactivating them - and
+        // neither does this comment. It is written down because an unasserted
+        // assumption a reader cannot see is worse than one they can.
+        if (_inventory != null && _onChanged != null)
+        {
+            _inventory.m_onChanged = (Action)Delegate.Remove(_inventory.m_onChanged, _onChanged);
+            _onChanged = null;
+        }
+    }
+
+    /// <summary>Writes what the body holds into its own network object now.
+    /// Answers whether it got there.</summary>
+    internal bool TryPersist()
+    {
+        try
+        {
+            if (!IsLoaded || _inventory == null || _view == null || !_view.IsValid() || !_view.IsOwner())
+            {
+                return false;
+            }
+
+            var package = new ZPackage();
+            _inventory.Save(package);
+            ZDO record = _view.GetZDO();
+            record.Set("tcc.worker.inventory", package.GetArray());
+            Revision = WorkerInventoryRecord.Next(Revision);
+            record.Set("tcc.worker.revision", Revision);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            try
+            {
+                ErrorLog?.Invoke("Gunnar's body could not write what it is holding, so what it holds is " +
+                    "uncertain until the next change: " + exception.GetType().Name + ": " + exception.Message);
+            }
+            catch
+            {
+                // Nothing may escape a change callback.
+            }
+
+            return false;
+        }
+    }
+
+    private void OnInventoryChanged()
+    {
+        if (_loading || !IsLoaded)
+        {
+            return;
+        }
+
+        LastChangePersisted = TryPersist();
     }
 }

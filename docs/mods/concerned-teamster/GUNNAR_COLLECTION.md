@@ -1,9 +1,12 @@
 # Gunnar collects and hauls, in planned batches, without portals (CNPC-R2, #381)
 
-Status: **planning, eligibility and accounting implemented and tested; the pickup port is written and the
-validator allowance that confines it has landed. The authoritative gate is green. Nothing has been observed in
-game.** Nothing here has been observed in game and
-nothing claims to have been. Concerned Teamster stays at **1.0.5**; nothing is published, tagged or released.
+Status: **planning, eligibility and accounting implemented and tested; the pickup port is written, the validator
+allowance that confines it has landed, and the port now has a call site behind an off-by-default switch (§6a) with
+the two material-loss paths that wiring opened closed behind it — a deliberate retire (§6b) and every involuntary
+unload, logout and reload (§6c). **Two doors still lose material and are named rather than left to be found: death,
+which needs an owner decision, and the one change whose write to the network object failed** (§6c). The
+automatic survey-driven job is still unwired. The authoritative gate is green. Nothing has been observed in game**
+and nothing claims to have been. Concerned Teamster stays at **1.0.5**; nothing is published, tagged or released.
 
 ## 1. What this is
 
@@ -156,14 +159,35 @@ branch and stone pickup*. That verification cut the allowance to one token, beca
 exactly one game call and names no RPC send at all: the pick routes `RPC_Pick` and claims ownership inside
 vanilla, not in our source. **Felling and the idle gesture each need their own owner decision**, and neither is
 implemented here.
-It stays behind the existing off-by-default `TeamsterFeature`; a player who has not opted in gets none of it. It is
-fail-closed throughout. Nothing else was authorized: no cart teleports, no mass writes, no stamina bypass, no
+It sits behind an off-by-default `TeamsterFeature` of its own — `GunnarCollection`, switched by
+`Workers/GunnarCollectionEnabled` — so a player who has not opted in gets none of it. It is fail-closed
+throughout. Nothing else was authorized: no cart teleports, no mass writes, no stamina bypass, no
 forces or velocities, no ownership takeover, no mod data in a vanilla object.
 
 **Why those calls need an allowance at all.** Picking is `Pickable.Interact`, which routes `RPC_Pick`; the handler
 drops the items on the ground on the *owner's* machine and needs a local player to place its effect. Teamster
 shipped as an observational mod and the audit is what makes that claim true rather than stated, so the interaction
 had to be authorized rather than assumed.
+
+**TWO pinned calls, not one, and the enforcement said one for longer than it should have.** A review decompiled
+`Humanoid.Pickup` against the installed assembly: it calls `m_inventory.AddItem(...)` and then
+**`ZNetScene.instance.Destroy(go)`** — the very second spelling of destruction the carried-material rule had just
+been widened for, reached through vanilla, on the dropped item's own network object. The validator pinned only
+`Pickable.Interact`, so **the call that actually moves the material was the unpinned one**, free to change its
+receiver, its arguments or its spelling without re-authorization, while this document and two others said "one
+pinned call". Picking an item up is plainly inside what the owner authorized in substance, and the call predates the
+persistence round, so this was never a widening — it was the *enforcement claim* being wider than the enforcement.
+Both are pinned verbatim now, `.Pickup(` is a forbidden token everywhere else in Teamster exactly as `.Interact(`
+is, and five plants prove it: the take re-pointed at the player inside the authorized file, a take in another worker
+file, a second take in the port, and a take in `Adapters/` and in `Domain/`. Each passes the validator as it stood
+before the fix that catches it, and is refused now.
+
+**The last two of those were a second round, and the miss is worth recording.** `.Pickup(` first went into the
+worker-runtime token list **only** — `TEAMSTER_OUTSIDE_WORKERS_TOKENS` one line away was not touched — so a take in
+`Adapters/` or `Domain/` still passed while this paragraph, the validator's own comment and two other documents all
+said it could not. That is the same defect the fix was written to correct, an enforcement claim wider than the
+enforcement, reintroduced beside the correction. Both authorized tokens are now scanned inside the worker folder and
+out.
 
 **What the port refuses, and why each refusal is the safe direction:**
 
@@ -183,7 +207,8 @@ granted — a pick that did not persist would be a pick that undid itself on the
 world state this product's collection writes. Nothing mod-shaped is written into any vanilla object.
 
 **Four defects an independent review found, and what closed them.** All four were in the first version of the
-port; none was ever live, because the slice has no call site.
+port, and none was ever live: the port had no call site when they were found and fixed. It has one now — see
+§6a — so from here on a defect in it is a defect a player with the switch on could reach.
 
 | Defect | What closed it |
 |---|---|
@@ -197,7 +222,7 @@ source he is picking would still be counted, and nothing available to this layer
 guarantees is that the error can never exceed what the source was expected to give — a pick can be short, never
 generous.
 
-**Three more a second review found, in the fixes themselves.** Again none was ever live.
+**Three more a second review found, in the fixes themselves.** Again none was ever live, for the same reason.
 
 | Defect | What closed it |
 |---|---|
@@ -255,6 +280,247 @@ Still deliberately absent, and each for its own reason:
   library cannot see it, and he holds the only identity that could run a second job. The cost is stated in the
   code: the moment a second worker in this process plans against the same chests, two jobs plan the same material.
 
+## 6a. The call site, and the two verbs it routes
+
+**The port is reachable now. It was not before, and the difference is one file plus one switch.**
+
+`src/ConcernedTeamster/Adapters/Workers/GunnarCollectionRuntime.cs` is the only caller, installed from
+`Plugin.Awake` alongside the hauling runtime. Everything below has to be true at the moment of the order, and each
+one refuses on its own while every other Teamster feature keeps working:
+
+| Gate | Where it is decided |
+|---|---|
+| `Workers/GunnarCollectionEnabled` **and** Teamster's `General/Enabled` | `GunnarCollectionDefaults.CollectionEnabled` is `false`; the runtime reads both and an unreadable setting is not an opted-in one |
+| the work-authority rule — a loaded world, `ZNet.IsServer()`, not dedicated, **no** connected peers | `WorkAuthorityPolicy`, through `GunnarWorkAuthority.ReadWorldFacts`, **re-asked every frame** while a pick is in flight, not once at the order |
+| the start-up capability probe verified every member the pickup binds | `HaulingCapabilityProbe` (its collection block, plus `Pickable.m_amount`) |
+| a body the census bound as Gunnar, alive | `GunnarHaulingRuntime.BoundBody` — collection never finds or builds a body of its own, so an ambiguous or duplicated census gives it nothing |
+| the thing is on the allowlist, yields exactly what vanilla yields, and he is within reach | `CollectionOrderGate`, game-free and unit-tested |
+| this client already **owns** the source, it can be picked, it is not in tar, and it is not awaiting confirmation | the port's own `Begin`, re-read from its own frame |
+
+**What a player can actually do: order one pick.** `ct_collect pick` picks up the loose stone or fallen branch they
+are pointing at, if Gunnar is standing next to it. `ct_collect status` and `ct_collect cancel` are the other two
+subcommands. There is no survey, no route, no batching and **nothing that moves Gunnar** — an order he cannot reach
+from where he stands is refused rather than turned into movement nobody authorized. `GunnarCollectionJob`,
+`CollectionSurvey` and `GunnarTargetPredicate` are still unwired; that automatic path is its own work, and it is
+where wards, locations, creators and work areas start to matter, because they are the questions that only arise
+once something other than a person is choosing.
+
+**The two lifecycle verbs, and why the choice is not spelled at the call site.** `Forget()` means a *job* ended and
+**keeps** the unconfirmed-source record; `ForgetWorld()` means the *world* went away and is the only verb that may
+drop it. Crossed, `begin → pick → forget → begin` on one source yields a second full load out of nothing. So the
+runtime reports what happened and `Domain/Collection/CollectionLifecycle.cs` — game-free — decides which verb that
+is:
+
+| What happened | Verb | Why |
+|---|---|---|
+| the world went down (`ZNetScene`/`ZNet`/`ZDOMan` gone) | `ForgetWorld()` | those sources do not exist in the next world, and a record that outlived them would refuse picks of whatever inherited their ids |
+| the game is shutting down, or the plugin is being removed | `ForgetWorld()` | nothing can pick afterwards, so dropping the record cannot mint |
+| the player cancelled the order | `Forget()` | a cancelled job says nothing about whether the source has settled |
+| work authority was withdrawn mid-pick (a peer connected, the switch went off) | `Forget()` | same: the source is still there, still mid-settle |
+| the runtime faulted | `Forget()` | same again — a fault is not a world going away |
+| the pick finished on its own (`Done` or `Lost`) | **neither** | the port already released it and handed its count back; routing a verb here would be reporting an event that did not happen |
+| a world came **up** | **neither** | dropping the record is the minting direction, so it is never done on the strength of an edge a flicker in the game's singletons could also produce. Nothing is lost: a world that just came up has had nothing picked in it |
+
+`CollectionLifecycleTests` drives every row of that table against a recorder and against the real `PickAccounting`,
+including the one that matters — a cancelled order still refuses a second pick of the same source inside the settle
+window. Swapping the verbs in either direction turns those tests red. And because the port's own two-line mapping
+onto the accounting binds Unity and no test here can load it, `validate_repo.py` pins it as source: the `#381
+collection lifecycle audit` refuses the port if `Forget()` forgets the world or `ForgetWorld()` merely forgets the
+job, and `tools/tests/test_teamster_carveout.py` plants both crossings and requires the refusal.
+
+## 6b. Retiring a body no longer deletes what it is carrying
+
+**The gap this closes, and that the wiring is what opened it.** `Humanoid.Pickup` puts what Gunnar picks into his own
+inventory, in his own network object — which is right, and is what the worker decisions say a worker body may keep.
+The deposit half of §4 and §5 (`CollectionAccount`, `CargoLedger`, the container permissions) is **not wired**, so a
+stone he picks up stays in him. Meanwhile `ct_haul retire` destroys a body through `ZNetView.Destroy()`, and a
+destroyed body's inventory goes with it: **nothing is dropped on the ground.** That was harmless while nothing could
+put anything into him. Wiring the pick is what made it a way to delete gathered material silently, and material
+conservation (§5) is this product's hard rule, not a preference — so it is fixed here rather than noted.
+
+**Refusal, not a drop, and the precedent is what decides that.** Concerned Foreman's `SETTLEMENT_AUTHORITY.md` §5a
+settles this shape for a worker holding real material, and it settles it twice:
+
+- **death** drops everything through *vanilla's own* drop and records the units `Lost`;
+- **despawn** — the deliberate removal, which is what retire is — is **refused while he carries anything**.
+
+Death is vanilla acting on its own. A deliberate drop here would be this product spawning item instances, which is
+not one of the calls the 2026-09-19 carve-out granted and which no owner decision covers, so **the drop was not
+available to take** — reaching for it would have been inventing an authorization. The precedent for this verb is the
+refusal.
+
+**And an escape hatch that can never be blocked, because otherwise the refusal is a trap.** Foreman pairs its
+refusal with recovery commands that empty the worker; this slice has none. A bare refusal would strand a body
+forever — and retire is the only way to resolve a duplicate Gunnar. So:
+
+| `ct_haul retire` | What happens |
+|---|---|
+| he is holding nothing | retired, as before |
+| he is holding anything | **refused**, naming how many things and that removing him would destroy them, and naming the way out |
+| what he holds could not be read | **refused** — unknown is not empty |
+| `ct_haul retire force` | retired anyway, saying plainly that what he carried was destroyed and is **not** on the ground |
+
+`WorkerRetirement` decides it, game-free; `WorkerRetirementTests` pins every row, including the anti-trap property
+that **no state of the carried-material decision refuses a forced retire**, over every combination of held count and
+readability.
+
+**Said exactly.** That universality is the *carried-material* decision's, not the whole verb's. A forced retire can
+still be refused for reasons that have nothing to do with what he is holding: a cart's joint still holds the body
+(detach it), or the executor says he is busy with a haul (stop it). Both are things the player can resolve, and the
+case this property exists for — **the pointed-at duplicate body, which is the only way to resolve two Gunnars** —
+takes neither path, so it is never blocked. What is guaranteed is that *carrying something* can never be the thing
+that strands a body.
+
+It counts **anything in
+his inventory**, not "collected material": nothing at this layer can tell a picked stone from anything else, and
+pretending otherwise would be a provenance claim, so it refuses more often instead.
+
+The call site is `GunnarHaulingRuntime.Retire`, which binds Unity and no test here can load — so the same technique
+as §6a closes it: `validate_repo.py`'s `#381 carried-material audit` extracts that method and requires **one**
+`WorkerRetirement.Decide` and **one** `WorkerRetirement.Allows` per path that removes a body, each guard above the
+removal it gates. Stated for what it is: a source-order pin, not a control-flow proof — the smallest check that
+cannot pass while a removal in that method runs with no guard consulted above it. Both crossings are planted in
+`tools/tests/test_teamster_carveout.py`, and both pass only with the rule registered.
+
+**Still not a way to get material out of him.** The deposit path remains unwired; this only stops the loss. Until it
+is wired, what he picks up stays in him, and that is the next slice.
+
+## 6c. What he carries survives a load, because the game does not save it
+
+**The same failure through the other door, and a review found it.** §6b closed the *deliberate* removal. The
+*involuntary* one was wide open: **the game never saves a non-player character's inventory.** It is a plain readonly
+field with no save and no load anywhere in the character hierarchy, rebuilt every time the body is created. The body
+itself *is* saved — Gunnar stays in a world until he is retired, and the census reads saved bodies — so a stone he
+picked up was destroyed by a **zone unload, a logout or a world reload** while the body came back empty. No refusal,
+no record, no drop: exactly what `ct_haul retire` had just been taught to refuse, reached by a route no player has
+to opt into.
+
+Before this round, the only field Teamster wrote was `tcc.worker.key`. Foreman's §5a had to add the other two
+**precisely because vanilla does not do it**, and its third bullet — *"zone unload loses nothing: the body is
+re-bound by key and loads its stored inventory"* — was a clause Teamster had no implementation of.
+
+**Foreman's format, not a Teamster spelling.** `TeamsterWorkerRecord` writes the body's **own** network object:
+
+| Field | What |
+|---|---|
+| `tcc.worker.key` | the worker identity, as before |
+| `tcc.worker.inventory` | vanilla's own `Inventory.Save` package, as a byte array — the format a chest stores |
+| `tcc.worker.revision` | a count of writes; zero means it has never written |
+
+Byte-compatible with `ConcernedForeman/Runtime/Custody/WorkerBody.cs` on purpose: same names, same package, same
+companion field. Two products may share the `tcc.worker.` prefix because the prefab name is what separates their
+bodies before a key is ever read, and a second spelling for the same thing would be a second format to keep in step
+forever. `WorkerInventoryRecordTests` pins the literals.
+
+**Written the way a chest is written.** From vanilla's own `Inventory.m_onChanged` callback, inside the call that
+made the change. Nothing is written **before** a successful load, so an empty inventory can never be saved over a
+carried one — and a body that could not read what it carries goes **inert**: it never saves, and `BoundBody` does
+not offer it, so collection has nothing to act with.
+
+**Zero migration, and it is a decision rather than a null check.** A Gunnar saved before the field existed has no
+stored package. `WorkerInventoryRecord.Decide` answers `LoadEmpty` — never a refusal, never a fault — and
+`NoReadEverRefuses` pins that no input can produce anything but a load. An old body comes back exactly as it
+always did.
+
+**And a third thing, which the audit got wrong before a review read it.** Widening that IL rule from one write to
+four needed a longer window between a key literal and its `ZDO::Set`, because the inventory write pushes a `ZPackage`
+and an `Inventory.Save` in between. At 24 IL lines the window reached back **past the previous `ZDO::Set`**, so the
+second write of an adjacent pair was vouched for by the *first* one's literal: planting `tcc.bogus.inventory` on the
+first write failed the audit, and planting `tcc.bogus.revision` on the second **passed it**. The window now stops at
+the previous `ZDO::Set`, so a write can only be vouched for by a literal that is its own. Proved against the
+installed assembly rather than reasoned about — first write FAIL/FAIL, second write PASS before and FAIL after, and
+the same plant on the *spawn's* adjacent pair FAIL, with `ZDO::Set(` staying at 4 throughout, so the pinned count
+alone would have seen none of it.
+
+**Two things the off-game audit is worth reading for, since it caught this work.** First, its IL rule pinned
+`ZDO::Set(` to *one* call in *one* type; this made it four in two types, and the audit refused the build until that
+expectation was updated on purpose — which is the rule doing its job, not an obstacle. Second, a
+process trap worth the line: the updated check first used a script-scope `@(...)` array of allowed type names inside
+the scriptblock the audit hands its matcher, and PowerShell resolved it to nothing, so the rule silently refused
+**everything**. That is the safe direction — it could never have produced a false green — but it looks identical to
+a real violation, so the allowed types are compared explicitly instead.
+
+**A write that fails, which is the narrower claim this section is entitled to.** A review pointed out that
+`LastChangePersisted` was set on every change and **never read**: the record knew a write had failed and nothing
+asked. So a pick whose write failed was followed by another, and another, each adding to a live inventory the stored
+package was no longer keeping up with, and all of them lost on the next load. `BoundBody` and `ItemsHeldBy` now both
+ask `WorkerInventoryRecord.Trust`, which refuses a body with no record, an unloaded one, **or one whose last change
+did not reach its object** — so nothing more is handed to a body that is not keeping up, and the retire verb treats
+its contents as unknown rather than as zero, which refuses a non-forced retire. `WorkerInventoryRecordTests` pins
+the decision and that it is memoryless.
+
+What that does **not** do, stated because the alternative is a reader believing otherwise: it does not recover the
+units in the change that failed. Those are in the live inventory and not in the stored package, and the next load
+rebuilds the live one from the stored one. So **a failed write still loses what that one change added**, and nothing
+this mod does will clear the flag afterwards, because the only inventory change it makes is a pick and this refusal
+is what stops the next one. A zone load re-creates the record clean from the last package that did get written. The
+decision being memoryless is what keeps that a *pause* rather than a body latched off for the session; it is not a
+claim that a running game will resume picking on its own.
+
+**And what the player is TOLD when that happens, which was a falsehood this round created.** A review followed the
+path: a failed write makes `BoundBody` answer null, the collection runtime read that as "no worker", and
+`ct_collect pick` printed **"Gunnar is not here. Bring him into the world first."** — about a Gunnar standing in
+front of the player. `ct_collect status` said the same. Nothing named the failed write, nothing said he was holding
+something, nothing hinted that a reload restores him; and the only other true sentence reachable was `ct_haul
+retire`'s unreadable refusal, whose only escape is `retire force`, **which destroys the stone**. So the false
+sentence pointed at the destructive door. This program has shipped one self-contradicting console before (the reload
+advice that told the player to cancel while the panel said rebind) and fixed it as a defect.
+
+There is now a distinct `WorkerRecordUnwritable` refusal, asked **before** "no worker" precisely because a body in
+that state *is* absent as far as `BoundBody` is concerned. It says he is here, that he is still holding what he
+picked up, that the game could not write it down, that he will be handed nothing more until a change does get
+written, and that a reload brings him back with what was last saved — and it says outright that whatever the failed
+write was carrying is gone. `ct_collect status` says the same thing in its own line.
+
+**And the same falsehood survived next door for one more round, which is the part worth learning from.**
+`WorkerInventoryRecord.Trust` refuses on **three** states — no record, not loaded, not persisted — and the first fix
+gave a sentence to one of them. So an **inert** body (a record whose `Start` faulted on a corrupt package, which the
+log already describes as *"Gunnar's body is inert"*, or simply the window before `Start` has run) still printed
+*"Gunnar is not here. Bring him into the world first."* — while `ct_haul status` said he was here and ready, because
+the census is unaffected. Exactly the self-contradicting console this section cites as a defect already fixed once.
+Worse, the comment excusing the omission said the useful sentence there *"is a different one"* when **no different
+sentence existed**. There is now `WorkerRecordUnreadable`, which says he is here, that his body has not been able to
+read what it is carrying, that he will pick nothing up and will not write an empty inventory over what he holds, and
+that the log says what could not be read — with "try again in a moment" for the case where he has only just
+appeared, because a text audit of a frame cannot tell that case from the corrupt one.
+
+Nine tests pin the two sentences, including one that requires **neither** state to be describable as "not here" as a
+property over both flags rather than as two examples, one that requires each sentence not to mention `force`, one
+that keeps a genuinely absent body reporting `NoWorker`, and one that requires every refusal in the enum to have a
+sentence of its own rather than falling through to "a reason nobody recorded".
+
+**What is not tested, stated because the sentence above is only as good as the wiring.**
+`BoundBodyRecordUnwritable` and `BoundBodyRecordUnreadable` read Unity components, so **nothing exercises them**:
+the step from the real state to the right sentence rests on reading that code. Everything downstream of the two
+booleans is driven by tests. Neither has been seen in a running game.
+
+**A stated assumption of the containment, neither proved nor dismissed.** `TeamsterWorkerRecord.OnDisable` unhooks
+the change callback and `OnEnable` re-hooks it. An inventory change made while the component is disabled would
+therefore be neither persisted **nor** flagged: `LastChangePersisted` stays true and `WorkerInventoryRecord.Trust`
+keeps answering `Trusted`, because it is never asked whether the hook is live. The containment above assumes the
+hook is always attached whenever the inventory can change, and **nothing in the code asserts that**. The reviewer who
+found it explicitly did not claim it is reachable — `ZNetScene` destroys distant objects rather than deactivating
+them — and neither does this document. It is recorded because an unasserted assumption a reader cannot see is worse
+than one they can.
+
+**The door this does NOT close, named rather than left to be found.** *Death.* If Gunnar is killed, his body is
+destroyed and what he holds goes with it. Foreman closes that by dropping every carried item through vanilla's own
+drop as the body dies (§5a, first bullet) — and that precedent does cover this event, unlike the deliberate retire.
+But implementing it means this product **spawning item instances**, which is a capability the 2026-09-19 carve-out
+does not grant and no other owner decision covers. It is one call and a handful of lines behind an owner decision;
+it is not being taken quietly. **Until it is: Gunnar dying loses what he is carrying.**
+
+**A third way material is lost, excluded from "doors" for a reason worth stating.** `ct_haul retire force`
+destroys what a body is carrying. It is not counted among the doors above because **the player is told**: the
+refusal either names what he is holding (`RefusedCarrying`) **or says it could not be read** (`RefusedUnreadable`),
+`force` is a word they have to type, and the forced message states the loss. That second half matters and an earlier
+version of this clause left it out: in the state §6c is about, `ItemsHeldBy` returns `readable: false`, so the
+sentence says the opposite of naming a quantity — it says the quantity is unknown. Consent still holds, because
+"could not be read" is a warning and `force` is still typed, but the clause is only true with both halves. So: "two
+doors" is true with this paragraph attached, and not otherwise.
+
+**Still never observed in game.** Nothing in §6a, §6b or §6c has been watched happening; §10 is the go-around.
+
 ## 7. No portals
 
 He walks. There is no branch anywhere in this work that changes where he is standing other than by asking the
@@ -289,11 +555,49 @@ owes.
 | `pwsh ./scripts/audit-teamster-navigation-api.ps1` | PASS |
 | Planted defects | **8 of 8 caught.** One survived the first round — a refused-deposit test that handed the refusal an empty list and would have passed with the guard deleted. Strengthened, re-planted, caught. |
 
-**Zero migrations.** No durable key, prefab name, file path, row tag or schema number changed.
+### The wiring of §6a, the retirement guard of §6b and the persistence of §6c
+
+| Check | Outcome |
+|---|---|
+| `pwsh ./scripts/verify.ps1 -Configuration Release`, through the build lock | **PASSED at `fe04bb2`**: Release, 14 assemblies, **4437 tests**, validator exit 0 (run from this worktree's own `scripts/verify.ps1`, under the machine-wide build lock, with every source touched first so MSBuild could not skip a rebuild) |
+| `ConcernedTeamster.Tests` | **1133 passed, 0 failed** (1031 before this work) |
+| `python -m unittest discover -s tools/tests` | **14 passed** (8 before this work; six new plants) |
+| `pwsh ./scripts/audit-teamster-hauling-api.ps1`, through the build lock | **PASS**, 125 of 125 members and behaviours, against the installed **Valheim 1.0.15** — including the newly probed `Pickable.m_amount`, `Humanoid.GetInventory`, `Inventory.NrOfItems`/`Save`/`Load`/`m_onChanged`, `ZPackage`, and `ZDO.Set`/`GetByteArray`/`GetInt`; plus the *fact* §6c depends on, that a non-player inventory is a plain field the game never saves — so a game update that starts saving it fails here rather than as duplicated stone in somebody's world |
+| The same audit's **IL** rule on `ZDO::Set(` | It caught this work: one write in one type became **four in two types**. Updated deliberately to the exact new count, both types named, both inside the one source file the validator allows, the `tcc.worker.*`-key window unchanged in kind (widened 12→24 IL lines because the inventory write pushes a `ZPackage` construction and an `Inventory::Save` between the key and the `Set`). **Planted:** writing `"gunnar.carried"` instead — the audit refuses it, so the key constraint is what passes the rule, not the type list |
+| Planted defects in the §6a wiring, one per property | **7 of 7 caught**: world-down routed to the job verb; an order ending routed to the world verb; tear-down routed to the job verb; a world coming *up* also dropping the record; the off-by-default switch not consulted; reach not checked; identity not checked |
+| Planted defects in the §6b guard, one per property | **7 of 7 caught**: a carrying body retired anyway; an unreadable inventory read as empty; the forcing word made refusable (the trap); the forced message no longer stating the loss; the refusal no longer naming the way out; any trailing word accepted as forcing; an unknown verdict treated as a grant |
+| Planted defects in the validator's own new rules | **6 of 6 caught** — two crossing the port's lifecycle verbs, and four against the carried-material rule: the guard moved below the removal, the decision removed, the removal **lifted into a helper** (the escape a review walked through) and a removal **moved to another file**. Each fails against a validator with the `#381` rule that catches it unregistered, so the rule, not something else, is what refuses it |
+| Planted defects in the §6c persistence, one per property | **5 of 5 caught**, all as test failures rather than compile errors: an absent record faulting instead of loading empty; a stored package ignored; the revision starting at zero; the inventory field drifting from Foreman's spelling; an order accepted while the world is going away |
+| In game | **OWNER GO-AROUND PENDING.** Nothing has been run; §10 steps 12–27 are the rows |
+
+### The four guard-rail findings an independent review made at `f59d4db`
+
+The persistence behaviour above was reviewed and found clean. The **guard rails around it** were not, in four
+places, and the review's own plants are what closed them. Every row was run, not reasoned about; the "before"
+column is f59d4db's own copy of the rule run against the same planted tree.
+
+| Finding | Closed by | Before | After |
+|---|---|---|---|
+| **BLOCKER.** `ZNetScene.Destroy(GameObject go)` (`ZNetScene:116`) resets the network object, destroys the ZDO if owned and destroys the object — the same outcome as `view.Destroy()` — but it takes an argument, so the no-argument `TEAMSTER_BODY_REMOVAL` shape cannot see it. The validator's comment claimed *"Every way a body leaves the world"*, which was **false as written** | `TEAMSTER_DESTRUCTION` pins the **population** of destruction-shaped calls per file, and the comment now says what it does and does not cover | Planting the review's own `Sweep` helper in `GunnarHaulingRuntime.cs`: **exit 0**, with the rule printing *"4 place(s)"* while a fifth sat in the file | **refuses**: *"GunnarHaulingRuntime.cs destroys something 3 time(s); this rule expects 2"*. The same call in a **new** file is a separate test, because the pin is per file: **exit 0** before, *"ZzSweeper.cs destroys something 1 time(s); this rule expects 0"* after |
+| **MINOR.** A guard *consulted and ignored* passed: a bare `WorkerRetirement.Allows(v)` in a log line sits above the removal just as well as a refusal does | The rule wants the refusing `if (!WorkerRetirement.Allows(...))` shape | Replacing the refusal with `_log.LogInfo("verdict: " + WorkerRetirement.Allows(pointedVerdict))`: **exit 0**, pointed body retired whatever the verdict said | **refuses three times**: once on the count, once per removal |
+| **MINOR.** The IL audit's 24-line window was longer than the distance between the two `ZDO::Set` calls in `TryPersist`, so the **second** write was vouched for by the **first** one's literal | The window stops at the previous `ZDO::Set` | `tcc.bogus.inventory` on the first write **FAIL**; `tcc.bogus.revision` on the second **PASS** — the escape | both **FAIL**, and so does the same plant on the *spawn's* adjacent pair. `ZDO::Set(` stayed at **4** in every run, so the pinned count alone would have seen none of it |
+| **MINOR.** `LastChangePersisted` was set and written and **never read** | `WorkerInventoryRecord.Trust(hasRecord, isLoaded, lastChangePersisted)` in `Domain/`, asked by both `BoundBody` and `ItemsHeldBy` | — | 4 new tests; dropping the third term from the decision turns **3 of them red**. See §6c for what this does **not** do: it stops the loss growing, it does not recover the change that failed |
+| `pwsh ./scripts/verify.ps1`, through the build lock, from this worktree's own copy | **PASSED at `9bc707d`** (`main` `49bb361` merged in first, so the gate ran on the tree that gets merged): Release, 14 assemblies, **4515 tests**, validator exit 0 |
+| `python -m unittest discover -s tools/tests` | **17 passed** (14 before this round) |
+| `pwsh ./scripts/audit-teamster-hauling-api.ps1`, through the build lock | **PASS** post-merge, 125 of 125 members and behaviours, `ZDO::Set(` = 4, 0 failures |
+| In game | **STILL NOTHING.** No build of any of this has been run; none of it has been watched happening |
+
+**Zero migrations (the §6a wiring).** No durable key, prefab name, file path, row tag or schema number changed. The
+one new setting, `Workers/GunnarCollectionEnabled`, defaults to off, and a config file written by an older build
+simply does not have it — BepInEx adds it at its default on the next load. The one new probed game member,
+`Pickable.m_amount`, was already pinned by `scripts/audit-teamster-hauling-api.ps1`; the runtime probe now names it
+too, so the two lists agree again.
+
+**Zero migrations (the 1.0.5 work).** No durable key, prefab name, file path, row tag or schema number changed.
 `GunnarHaulingDefaults.WorkerKeyPrefix` is new and is pinned by test to be the prefix `WorkerKeyField` already had,
 so the contract handed to the shared runtime describes the body this product actually saves.
 
-## 10. In-game, when the blocker in §6 is resolved
+## 10. In-game — OWNER GO-AROUND PENDING
 
 **OWNER GO-AROUND PENDING.** Nothing below has been run. Disposable world, character and profile only. The two
 rows to run **first** are Gate B2 in `docs/settlement/cart-and-collection/EVIDENCE.md`, which are about whether the
@@ -329,6 +633,59 @@ Gunnar who already exists still works.
     One line to change, and nothing durable depends on it.
 11. **What he gets from one source.** Pick a single loose stone with Gunnar and with your own character in the same
     world. The counts must match: he is not a Player, so no skill, statistic or bonus-yield branch runs for him.
+
+### The ordered pick, now that it has a call site (§6a)
+
+These are the rows the wiring itself needs. **None has been run.** Steps 12–14 are the ones that would falsify the
+claim that nobody who has not opted in is affected, and step 17 is the one that would catch the mint.
+
+12. **With the switch off.** Fresh profile, `[Workers] GunnarCollectionEnabled` left at its default. Expect the
+    start-up line `Gunnar's collection is off (the default)`. Point at a loose stone with Gunnar beside it and run
+    `ct_collect pick`: it must refuse naming the setting, and the stone must still be there. `ct_collect status`
+    must say `OFF (the default)`.
+13. **The console command exists at all.** Expect `ct_collect` in the registration line from
+    `VanillaConsoleCommands.Describe`. If it is missing, the Jötunn constructor mismatch is back and every `ct_*`
+    and `cc_*` command is gone with it — that is a blocker, not a collection defect.
+14. **Turned on, one pick.** `GunnarCollectionEnabled = true`, `GunnarHaulingEnabled = true` (the body census lives
+    there), single player, disposable world. Bring Gunnar in with `ct_haul spawn`, walk him to a loose stone with
+    `ct_haul go`, point at the stone, `ct_collect pick`. Expect the stone to disappear, one Stone to be in **his**
+    inventory (not the player's, and not on the ground), and the log to say `he took 1 from Pickable_Stone`.
+15. **Out of reach.** Same stone from six metres: refused with the reach sentence, and he must not move a step.
+16. **What he refuses.** A raspberry bush, a mushroom, a thistle, a chest, a dropped stack of stone, a sapling and a
+    tree: every one refused, each naming a reason, nothing picked, nothing felled, no hammer animation.
+17. **The mint, the row that matters most.** `ct_collect pick` a stone, then `ct_collect cancel` **inside the same
+    second**, then `ct_collect pick` the same stone again immediately. The second pick must be refused as awaiting
+    confirmation, and the world must end up with exactly one Stone from that source. Two Stones is a P0.
+18. **A world reload with a cancelled pick outstanding.** Cancel a pick, log out, load a different world, and pick a
+    stone there: it must not be refused. That is `ForgetWorld()` having run on the unload; a refusal here means the
+    world verb did not fire.
+19. **A peer connects mid-pick.** Open the world to a second player while a pick is in flight: the order must end
+    with the authority sentence, and nothing must be picked afterwards until they leave.
+20. **Where the stone ends up, and that it is stuck there.** After step 14, confirm the Stone is in Gunnar and not
+    anywhere else, and that there is no way to take it out — that is the unwired deposit path in §6b, not a defect
+    in the pick.
+21. **Retire refuses while he is carrying (§6b).** With one Stone in him, `ct_haul retire` must **refuse**, name that
+    he is carrying 1 thing, say removing him would destroy it, and name `ct_haul retire force`. His body must still
+    be there afterwards. A retire that succeeds here is a P0: the Stone is gone with no drop and no record.
+22. **The escape hatch works and tells the truth.** `ct_haul retire force` must remove him and say outright that what
+    he carried was destroyed and is not on the ground. Check the ground: nothing must have dropped — the message is
+    the whole warning, so it must not be softened.
+23. **Retire still works on an empty body, and on a duplicate.** With nothing in him, plain `ct_haul retire` must
+    behave exactly as it did before this work. Point at a second body and retire it: carrying something must never
+    be what blocks that path, so a duplicate must always be removable.
+
+### What he carries surviving a load (§6c)
+
+24. **A zone unload.** Pick a stone, then walk far enough away that his zone unloads and come back. The Stone must
+    still be in him. This is the row the whole of §6c exists for: before it, the stone was simply gone.
+25. **A logout and a reload.** Pick a stone, save and quit, load the same world. The Stone must still be in him, and
+    the log must not say his body is inert.
+26. **An old Gunnar loads unchanged.** Load a world containing a Gunnar saved by a build from before this change.
+    His body must come back with his identity, an empty inventory, no fault line and no `Destroyed invalid prefab
+    ZDO`. This is the zero-migration row and it is the one that is irreversible if it is wrong.
+27. **Death, which is NOT closed.** Let something kill Gunnar while he carries a Stone. Expect the Stone to be
+    **lost** — nothing drops. That is the known gap in §6c awaiting an owner decision, not a defect to file; record
+    what actually happened so the decision is made on an observation.
 
 Evidence rows for `docs/settlement/cart-and-collection/EVIDENCE.md` stay **pending** until observed, with the
 build, profile and scenario recorded.

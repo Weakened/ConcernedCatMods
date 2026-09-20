@@ -29,13 +29,18 @@ public class CartAuthorityPolicyTests
         Assert.Equal(Enum.GetValues<TeamsterFeature>().Length, governed.Count);
     }
 
-    // -- exactly two mutation features: the brake and Gunnar's hauling (#313) --
+    // -- exactly three mutation features: the brake, Gunnar's hauling (#313)
+    //    and Gunnar's collection (#381). Collection changes a picked source and
+    //    never a cart, so it is a Mutation that never asks this table's cart
+    //    authority; widening this list stays one visible edit. --
 
     private static bool IsExpectedMutation(TeamsterFeature feature) =>
-        feature == TeamsterFeature.ParkingBrake || feature == TeamsterFeature.GunnarHauling;
+        feature == TeamsterFeature.ParkingBrake ||
+        feature == TeamsterFeature.GunnarHauling ||
+        feature == TeamsterFeature.GunnarCollection;
 
     [Fact]
-    public void ParkingBrakeAndGunnarHauling_AreTheOnlyMutationFeatures()
+    public void ParkingBrakeAndBothGunnarRuntimes_AreTheOnlyMutationFeatures()
     {
         foreach (TeamsterFeature feature in CartAuthorityPolicy.AllFeatures)
         {
@@ -46,7 +51,7 @@ public class CartAuthorityPolicyTests
                 CartAuthorityPolicy.ClassOf(feature));
         }
 
-        Assert.Equal(2, CartAuthorityPolicy.AllFeatures.Count(CartAuthorityPolicy.IsMutation));
+        Assert.Equal(3, CartAuthorityPolicy.AllFeatures.Count(CartAuthorityPolicy.IsMutation));
     }
 
     // -- mutation truth table: only the mutation features + Local --

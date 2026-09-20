@@ -39,6 +39,7 @@ internal static class HaulingCapabilityProbe
             Type? pickable = Game("Pickable", missingTypes);
             Type? itemDrop = Game("ItemDrop", missingTypes);
             Type? itemData = Game("ItemDrop+ItemData", missingTypes);
+            Type? zpackage = Game("ZPackage", missingTypes);
             Type? liquidType = Game("LiquidType", missingTypes);
             Type? heightmap = Game("Heightmap", missingTypes);
             Type? game = Game("Game", missingTypes);
@@ -149,9 +150,34 @@ internal static class HaulingCapabilityProbe
                 new("Pickable", pickable, "CanBePicked", GameMemberKind.InstanceMethod, typeof(bool)),
                 new("Pickable", pickable, "m_nview", GameMemberKind.InstanceField, netView),
                 new("Pickable", pickable, "m_itemPrefab", GameMemberKind.InstanceField, gameObject),
+                new("Pickable", pickable, "m_amount", GameMemberKind.InstanceField, typeof(int)),
                 new("Pickable", pickable, "m_tarPreventsPicking", GameMemberKind.InstanceField, typeof(bool)),
                 new("Humanoid", humanoid, "Pickup", GameMemberKind.InstanceMethod, typeof(bool),
                     new[] { gameObject!, typeof(bool), typeof(bool) }),
+                // Read only, and only to refuse: retiring a body destroys its
+                // network object and its inventory with it, so the retire verb
+                // counts what it holds first (#381).
+                new("Humanoid", humanoid, "GetInventory", GameMemberKind.InstanceMethod, inventory),
+
+                // The worker body's own inventory persistence (#381). The game
+                // never saves a non-player character's inventory, so the body
+                // stores it in its OWN network object, in vanilla's own package
+                // format, written from vanilla's own change callback - the same
+                // mechanism a chest uses. Every member of that is verified here,
+                // so a changed game leaves Gunnar inert rather than quietly
+                // dropping what he carries.
+                new("Inventory", inventory, "Save", GameMemberKind.InstanceMethod, typeof(void), new[] { zpackage }),
+                new("Inventory", inventory, "Load", GameMemberKind.InstanceMethod, typeof(void), new[] { zpackage }),
+                new("Inventory", inventory, "m_onChanged", GameMemberKind.InstanceField, typeof(Action)),
+                new("ZPackage", zpackage, "GetArray", GameMemberKind.InstanceMethod, typeof(byte[])),
+                new("ZDO", zdo, "GetByteArray", GameMemberKind.InstanceMethod, typeof(byte[]),
+                    new[] { typeof(string), typeof(byte[]) }),
+                new("ZDO", zdo, "Set", GameMemberKind.InstanceMethod, typeof(void),
+                    new[] { typeof(string), typeof(byte[]) }),
+                new("ZDO", zdo, "GetInt", GameMemberKind.InstanceMethod, typeof(int),
+                    new[] { typeof(string), typeof(int) }),
+                new("ZDO", zdo, "Set", GameMemberKind.InstanceMethod, typeof(void),
+                    new[] { typeof(string), typeof(int) }),
                 new("Character", character, "m_nview", GameMemberKind.InstanceField, netView),
                 new("ItemDrop", itemDrop, "m_itemData", GameMemberKind.InstanceField, itemData),
                 new("ItemDrop+ItemData", itemData, "m_stack", GameMemberKind.InstanceField, typeof(int)),

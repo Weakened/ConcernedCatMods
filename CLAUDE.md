@@ -25,17 +25,77 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   A **second scoped carve-out** (owner decision 2026-09-19, #381): Gunnar's collection role may pick up
   loose branches and stones through vanilla's own `Pickable.Interact`, in the single file
   `Adapters/Workers/GunnarCollectionPort.cs` and nowhere else, failing closed. `validate_repo.py`
-  permits **one pinned call** in that one file - matched verbatim, so `.Interact(` on a cart, a
-  container or a door still fails there - and refuses the token everywhere else, inside
-  `Adapters/Workers` and out. Every other forbidden token still fails inside the authorized file.
+  permits **two pinned calls** in that one file - each matched verbatim, so `.Interact(` on a cart, a
+  container or a door still fails there - and refuses both tokens everywhere else, inside
+  `Adapters/Workers` and out. The second is `Humanoid.Pickup`, the take that moves the material into
+  Gunnar's own inventory and, inside vanilla, destroys the dropped `ItemDrop`'s network object. It was
+  always part of picking something up; what was wrong was calling the boundary one call when it is two,
+  and leaving the one that actually moves the material unpinned. Every other forbidden token still
+  fails inside the authorized file.
   Proved by `tools/tests/test_teamster_carveout.py`, which plants each escape an independent review
-  found and requires the validator to refuse; all six fail against the unfixed validator.
+  found and requires the validator to refuse. Every plant is an escape somebody actually proposed rather
+  than an imagined one, and each is verified to pass against the validator that lacked the rule catching
+  it. **No count is given on purpose**: the number has been wrong here twice, once stale and once simply
+  miscounted from `def test_` when one of those tests is deliberately not a plant at all. What the harness
+  covers is the useful claim, and it is checkable against the file. They cover the two pinned calls (a changed receiver, the same call twice, the call in
+  another worker file, the allowance following a basename to another directory), the tokenizer (a space
+  before the paren, a newline between receiver and member, a comment marker inside a string), the port's
+  two lifecycle verbs in both directions, and the retire verb's carried-material guard — moving it below a
+  removal, deleting the decision, consulting the verdict and ignoring it, lifting a removal into a helper,
+  moving one to another file or a subdirectory, changing what a destruction is routed through, and using
+  the second spelling of removal that the no-argument pattern cannot see.
 
-  **Not yet reachable, and the docs must not imply otherwise.** There is no collection
-  `TeamsterFeature`: the port and its job have no call site, and the `featureEnabled` argument is
-  supplied by a caller that does not exist. The slice is inert. When it is wired, it goes behind an
-  off-by-default feature like the first carve-out, and that is when "a player who has not opted in gets
-  none of it" becomes a statement about behaviour rather than about dead code. The port needs no RPC of its own - `Pickable.Interact` runs `RPC_Pick` and the
+  Three limits of that harness are stated rather than left to be found. It is a **text** audit, so a
+  destruction reached through a delegate or a method group spells no `Destroy…(` and is invisible to it -
+  and the narrower claim is deliberate, because an earlier version of this sentence blamed only *aliases*
+  while a receiver split across two lines spelled `Destroy(` in full and escaped anyway. It scans only
+  `Adapters/Workers`, so a destruction in another Teamster folder is outside it as well (#401). And the
+  population pins establish that each destruction sits at a recorded site with a refusal written above it
+  — **not** that control flow obeys that refusal, which is `WorkerRetirementTests`' job and a reviewer's.
+
+  **Reachable now, behind an off-by-default switch, and never observed in game.** The port has a call
+  site: `Adapters/Workers/GunnarCollectionRuntime.cs`, gated by `TeamsterFeature.GunnarCollection` and
+  `Workers/GunnarCollectionEnabled` (**off** by default, a switch of its own rather than hauling's),
+  Teamster's `General/Enabled`, the start-up capability probe, and the shared work-authority rule
+  re-asked every frame while a pick is in flight. So "a player who has not opted in gets none of it" is
+  now a statement about behaviour rather than about dead code — but only about code paths, because
+  **nothing here has been watched happening**: no build of it has been run in game, and the in-game rows
+  are OWNER GO-AROUND PENDING. What is reachable is *one pick a player explicitly orders* through
+  `ct_collect pick`: a loose stone or a fallen branch, on the allowlist, yielding exactly what vanilla
+  yields, owned by this client, within `CollectionLimits.PickupReachMetres`, one at a time. Nothing
+  moves Gunnar. The survey-driven job (`GunnarCollectionJob`, `CollectionSurvey`,
+  `GunnarTargetPredicate`) still has no call site and wiring it is its own work. The **two lifecycle
+  verbs are routed**: a world unload, a game shutdown or a plugin teardown goes to `ForgetWorld()`,
+  which is the only verb that may drop the unconfirmed-source record; a cancelled, abandoned or
+  authority-refused order goes to `Forget()`, which keeps it. That choice is made in the game-free
+  `Domain/Collection/CollectionLifecycle.cs` so it is unit-tested rather than reasoned about, and
+  `validate_repo.py`'s `#381 collection lifecycle audit` refuses the port if the two verbs are crossed.
+  Because a pick can now leave material in Gunnar and the deposit half is unwired, `ct_haul retire`
+  **refuses while a worker body carries anything** (`WorkerRetirement`) rather than destroying its
+  inventory with it — the shape Foreman's `SETTLEMENT_AUTHORITY.md` §5a already gives the deliberate
+  removal verb, since vanilla's own drop applies to *death* and a deliberate drop would need an
+  authorization nobody granted. An explicit `ct_haul retire force` is never refused for carrying
+  something, so the refusal cannot trap a body nothing can empty; `#381 carried-material audit` pins
+  every place a body can leave the world in `Adapters/Workers` to a recorded site, and every one of them
+  in the retire runtime to inside that verb with a guard above it. The **involuntary** loss is closed by
+  the body persisting its own inventory: the game never saves a non-player character's, so
+  `TeamsterWorkerRecord` writes `tcc.worker.inventory` (vanilla's own `Inventory.Save` package) and
+  `tcc.worker.revision` into the body's own network object from vanilla's own change callback —
+  byte-compatible with Foreman's worker, never before a successful load, and an absent field loads as an
+  empty inventory rather than a fault. **Two doors are still open, not one, and both are named rather than
+  closed.** Death is the first: the body is destroyed and what it holds goes with it, and closing that
+  means spawning item instances, which needs its own owner decision. A **ZDO write that fails** is the
+  second: the change that did not reach the network object is lost, because the live inventory has it and
+  the stored package does not. The second is contained rather than fixed - a body whose last change did not
+  persist is handed nothing more to hold - and the containment's limit is stated on purpose: nothing this
+  mod does will clear that refusal, because the only inventory change it makes is a pick and the refusal is
+  what stops the next one. A zone load re-creates the record from the last package that did get written.
+  An explicit `ct_haul retire force` is a third way material goes, and it is excluded from the count for
+  a reason rather than overlooked: the ordinary refusal names what he is holding, or says it could not be
+  read - which is what it says in the very state above, where the record is unreadable - the forcing word
+  has to
+  be typed, and the forced message states the loss. That is consent, not a door left open.
+  The port needs no RPC of its own - `Pickable.Interact` runs `RPC_Pick` and the
   ownership claim inside vanilla, on a pickable this process already owns - so felling a tree
   (`TreeBase.Damage`) and the cosmetic hammer animation (`ZSyncAnimation.SetTrigger`) were **not**
   authorized and each needs its own owner decision. Ownership takeover, teleports, forces, cart

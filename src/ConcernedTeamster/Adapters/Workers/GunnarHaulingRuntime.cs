@@ -6,6 +6,7 @@ using BepInEx.Logging;
 using TheConcernedCat.ConcernedNPC.Roles;
 using TheConcernedCat.ConcernedTeamster.Adapters.Navigation;
 using TheConcernedCat.ConcernedTeamster.Domain.Capabilities;
+using TheConcernedCat.ConcernedTeamster.Domain.Collection;
 using TheConcernedCat.ConcernedTeamster.Domain.Hauling;
 using TheConcernedCat.ConcernedTeamster.Domain.Hauling.Execution;
 using TheConcernedCat.ConcernedTeamster.Domain.Load;
@@ -69,12 +70,132 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
     private bool _evidence;
     private float _nextEvidenceAt;
 
+    internal WorkerIdentityHold? CollectionIdentity => _executor?.Modes;
+
     internal GunnarHaulService Service { get; private set; } = null!;
 
     /// <summary>Whether the verified vanilla cart attach/detach seam is usable
     /// on this game build. The player-facing panel reads this without reaching
     /// into the seam itself.</summary>
     internal bool SeamAvailable => _seam != null && _seam.IsAvailable;
+
+    /// <summary>Gunnar's bound body as a character, or null when no single
+    /// unambiguous body is loaded.
+    ///
+    /// <b>Read-only, and deliberately the same body.</b> Gunnar's collection
+    /// (#381) acts through this rather than finding or building a body of its
+    /// own: the census and the duplicate rule that decide which body <i>is</i>
+    /// Gunnar live here, and a second answer to that question would be a second
+    /// Gunnar.
+    ///
+    /// <b>Bound is not enough, three times over.</b> The binding deliberately includes
+    /// a <see cref="WorkerBodyStatus.Faulted"/> body, so that the runtime can
+    /// still observe and tear down a body whose tick latched - but a faulted
+    /// body must not be handed something new to do, and the only check
+    /// downstream is alive-or-dead. The other two are the record's, and
+    /// <see cref="WorkerInventoryRecord.Trust"/> decides them together because
+    /// they are one question: a body whose stored inventory could not be read is
+    /// inert by construction - picking into it would put a stone somewhere that
+    /// never saves - and a body whose last change could not be <i>written</i> is
+    /// in the same position from the other end, its live inventory and its stored
+    /// one already disagreeing. All three answer null, so collection simply has
+    /// nothing to act with: the refusing direction.
+    ///
+    /// <b>What the third one does not do.</b> It stops the loss growing; it does
+    /// not undo the change that failed to write, and it cannot make a body
+    /// recover on its own, because the only inventory change this mod makes is a
+    /// pick and this refusal is what stops the next one. A zone load re-creates
+    /// the record and starts it clean, from the last package that did get
+    /// written. <c>WorkerInventoryRecordTests</c> and <c>GUNNAR_COLLECTION.md</c>
+    /// §6c both say so in those words.</summary>
+    internal Humanoid? BoundBody
+    {
+        get
+        {
+            TeamsterWorkerAI? ai = _body != null ? _body.Bound : null;
+            if (ai == null || ai.IsFaulted)
+            {
+                return null;
+            }
+
+            TeamsterWorkerRecord? record = TeamsterWorkerRecord.On(ai);
+            if (WorkerInventoryRecord.Trust(
+                    record != null,
+                    record != null && record.IsLoaded,
+                    record != null && record.LastChangePersisted) != WorkerRecordTrust.Trusted)
+            {
+                return null;
+            }
+
+            return ai.GetComponent<Humanoid>();
+        }
+    }
+
+    /// <summary>Whether there IS a bound body and the only thing wrong with it is
+    /// that its last inventory change could not be written to its own network
+    /// object.
+    ///
+    /// <b>Why this is separate from <see cref="BoundBody"/> rather than folded
+    /// into it.</b> Both a missing body and an unwritable record make
+    /// <see cref="BoundBody"/> answer null, and a caller that can only see null
+    /// told the player <i>"Gunnar is not here. Bring him into the world
+    /// first."</i> about a Gunnar standing in front of them. This is what lets the
+    /// order gate say which of the two it is. It changes no decision - the pick
+    /// is refused either way - only the sentence.
+    ///
+    /// Deliberately narrow: an <i>inert</i> body (no record, or a record that
+    /// could not be read) is NOT this case and answers false, because the useful
+    /// sentence there is a different one -
+    /// <see cref="BoundBodyRecordUnreadable"/>, which exists so that claim is
+    /// true. For one round it was not: that state fell through to "Gunnar is not
+    /// here" about a visible Gunnar.
+    ///
+    /// <b>Neither this nor its sibling is unit-tested, and cannot be.</b> Both
+    /// read Unity components, so the step from the real state to the sentence
+    /// rests on reading this code. What IS tested is everything downstream of the
+    /// booleans: <c>CollectionOrderGateTests</c> drives all three refusing states
+    /// and pins each sentence.</summary>
+    internal bool BoundBodyRecordUnwritable
+    {
+        get
+        {
+            TeamsterWorkerAI? ai = _body != null ? _body.Bound : null;
+            if (ai == null || ai.IsFaulted)
+            {
+                return false;
+            }
+
+            TeamsterWorkerRecord? record = TeamsterWorkerRecord.On(ai);
+            return record != null && record.IsLoaded && !record.LastChangePersisted;
+        }
+    }
+
+    /// <summary>Whether there IS a bound body and it could not READ what it
+    /// carries: no record component yet, or a record whose <c>Start</c> faulted on
+    /// a corrupt package. The third of
+    /// <see cref="WorkerInventoryRecord.Trust"/>'s refusing states, and the one
+    /// that had no sentence of its own for a round - so a body the log was already
+    /// describing as inert produced <i>"Gunnar is not here. Bring him into the
+    /// world first."</i> while <c>ct_haul status</c> said he was here and ready.
+    ///
+    /// Answers false when the body's record is fine but its last write failed;
+    /// that is <see cref="BoundBodyRecordUnwritable"/>. Between them they cover
+    /// every state in which <see cref="BoundBody"/> answers null for a body that
+    /// is nevertheless standing there.</summary>
+    internal bool BoundBodyRecordUnreadable
+    {
+        get
+        {
+            TeamsterWorkerAI? ai = _body != null ? _body.Bound : null;
+            if (ai == null || ai.IsFaulted)
+            {
+                return false;
+            }
+
+            TeamsterWorkerRecord? record = TeamsterWorkerRecord.On(ai);
+            return record == null || !record.IsLoaded;
+        }
+    }
 
     public float Now => Time.time;
 
@@ -123,6 +244,10 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         Service = new GunnarHaulService(_authority);
         TeamsterWorkerAI.TickHandler = OnWorkerTick;
         TeamsterWorkerAI.ErrorLog = message => _log.LogError(message);
+
+        // #381: a body that cannot read or write what it is holding is a thing a
+        // player needs told, whatever the diagnostics settings say.
+        TeamsterWorkerRecord.ErrorLog = message => _log.LogError(message);
 
         _log.LogInfo(
             "Gunnar's hauling is " + (settings.GunnarHaulingEnabled.Value ? "ENABLED" : "off (the default)") +
@@ -482,7 +607,7 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
             case "status": return Status();
             case "seam": return Seam();
             case "spawn": return Spawn();
-            case "retire": return Retire();
+            case "retire": return Retire(args);
             case "assign": return Assign();
             case "confirm": return Confirm();
             case "release": return Release();
@@ -642,12 +767,22 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         return "Gunnar arrived at " + Format(position) + ". He stays in this world until you retire him.";
     }
 
-    private string Retire()
+    /// <summary><c>ct_haul retire [force]</c>. Removing a body destroys its
+    /// network object, and a character's inventory lives in that object: nothing
+    /// is dropped. So since #381 made it possible for Gunnar to be holding
+    /// something, this asks <see cref="WorkerRetirement"/> first, on whichever
+    /// body is actually about to go, and refuses rather than deleting material.
+    /// The forcing word always gets through, because a refusal with no way to
+    /// empty him would trap the body - and this is the only way to resolve a
+    /// duplicate.</summary>
+    private string Retire(string[]? args)
     {
         if (_executor == null)
         {
             return "No world is loaded.";
         }
+
+        bool forced = WorkerRetirement.IsForcing(args, 1);
 
         // Pointing at a worker body retires that body, whether or not the
         // runtime has it bound: that is the only way to remove an extra body
@@ -669,9 +804,19 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
                 return "Refused: a cart is hitched to that body. Detach it first ('ct_haul detach', or take the cart yourself).";
             }
 
+            int pointedHolds = ItemsHeldBy(pointed, out bool pointedReadable);
+            RetireVerdict pointedVerdict = WorkerRetirement.Decide(forced, pointedHolds, pointedReadable);
+            if (!WorkerRetirement.Allows(pointedVerdict))
+            {
+                return WorkerRetirement.Describe(pointedVerdict, pointedHolds);
+            }
+
             _persistedBodies.Remove(view.GetZDO().m_uid);
             view.Destroy();
-            return "That worker body was retired; Gunnar's own binding is unchanged.";
+            return "That worker body was retired; Gunnar's own binding is unchanged." +
+                (pointedVerdict == RetireVerdict.ForcedAndLost
+                    ? " " + WorkerRetirement.Describe(pointedVerdict, pointedHolds)
+                    : string.Empty);
         }
 
         if (_bodyStatus == WorkerBodyStatus.Duplicated)
@@ -684,14 +829,71 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
             return "Refused: a cart is hitched to Gunnar. Detach it first ('ct_haul detach', or take the cart yourself).";
         }
 
+        // Only when there is a body to lose something: with none bound, the
+        // outcomes below already say why nothing was retired, and answering with
+        // an inventory sentence would be answering a different question.
+        int holds = 0;
+        RetireVerdict verdict = RetireVerdict.MayRetire;
+        if (_body.Bound != null)
+        {
+            holds = ItemsHeldBy(_body.Bound, out bool readable);
+            verdict = WorkerRetirement.Decide(forced, holds, readable);
+            if (!WorkerRetirement.Allows(verdict))
+            {
+                return WorkerRetirement.Describe(verdict, holds);
+            }
+        }
+
+        string lost = verdict == RetireVerdict.ForcedAndLost
+            ? " " + WorkerRetirement.Describe(verdict, holds)
+            : string.Empty;
         switch (_executor.RetireBody())
         {
             case BodyRetirementOutcome.Retired:
-                return "Gunnar was retired; his body left the world.";
+                return "Gunnar was retired; his body left the world." + lost;
             case BodyRetirementOutcome.RefusedStillHitched:
                 return "Refused: a cart still holds Gunnar's joint and would not let go. Take the cart yourself, then retire him.";
             default:
                 return "Refused: Gunnar is busy with a haul. Stop or detach it and resolve any attention first.";
+        }
+    }
+
+    /// <summary>How many items a worker body holds. <paramref name="readable"/>
+    /// is false when that could not be established at all, which the decision
+    /// treats as "there might be something", never as zero.
+    ///
+    /// <b>Asked of the body's own record, not of its live inventory.</b> The live
+    /// one is <i>empty</i> on a body whose stored inventory has not been loaded -
+    /// the game rebuilds it on every instantiation - so reading it directly would
+    /// report a carrying body as empty and destroy what the record holds. A body
+    /// with no record, or one that is not loaded, is therefore unreadable.
+    /// </summary>
+    private static int ItemsHeldBy(TeamsterWorkerAI? ai, out bool readable)
+    {
+        readable = false;
+        try
+        {
+            TeamsterWorkerRecord? record = TeamsterWorkerRecord.On(ai);
+            if (WorkerInventoryRecord.Trust(
+                    record != null,
+                    record != null && record.IsLoaded,
+                    record != null && record.LastChangePersisted) != WorkerRecordTrust.Trusted)
+            {
+                // The same one question as BoundBody's, and deliberately the same
+                // decision: a change that could not be written leaves what he
+                // holds uncertain, and nothing here can say which the next load
+                // will see. Unreadable refuses, which is the point of the verb.
+                return 0;
+            }
+
+            readable = true;
+            return record.ItemCount;
+        }
+        catch
+        {
+            // Unreadable, which refuses. Never reported as empty.
+            readable = false;
+            return 0;
         }
     }
 

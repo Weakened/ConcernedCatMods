@@ -207,6 +207,25 @@ $requirements = @(
     @("Pickable", "game", "Pickable.m_itemPrefab / m_amount / m_tarPreventsPicking", 'public GameObject m_itemPrefab;.*public int m_amount = 1;'),
     @("Humanoid", "game", "Humanoid.Pickup(GameObject, bool, bool)", 'public bool Pickup\(GameObject go, bool autoequip = true, bool autoPickupDelay = true\)'),
     @("Humanoid", "game", "Pickup takes through the inventory, not by fiat", 'public bool Pickup\(GameObject go, bool autoequip = true, bool autoPickupDelay = true\).*m_inventory\.ContainsItem\(component\.m_itemData\)'),
+    # Read only, and only in order to refuse: retiring a worker body destroys its
+    # network object and the inventory stored in it, so the retire verb counts
+    # what the body holds before removing it (#381, WorkerRetirement).
+    @("Humanoid", "game", "Humanoid.GetInventory()", 'public Inventory GetInventory\(\)'),
+    @("Inventory", "game", "Inventory.NrOfItems()", 'public int NrOfItems\(\)'),
+
+    # The worker body's own inventory persistence (#381). The FACT this exists
+    # for, first: the game never saves a non-player character's inventory - it is
+    # a plain readonly field with no Save/Load anywhere in Humanoid or Character -
+    # so a body that came back from a world save came back empty. If a game update
+    # ever starts saving it, this line fails and the doubled storage is found here
+    # rather than as duplicated stone in somebody's world.
+    @("Humanoid", "game", "a non-player inventory is a plain field the game never saves", 'protected readonly Inventory m_inventory = new Inventory\('),
+    @("Inventory", "game", "Inventory.Save(ZPackage)", 'public void Save\(ZPackage pkg\)'),
+    @("Inventory", "game", "Inventory.Load(ZPackage)", 'public void Load\(ZPackage pkg\)'),
+    @("Inventory", "game", "Inventory.m_onChanged, the callback a chest persists from", 'public Action m_onChanged;'),
+    @("ZPackage", "game", "ZPackage() / ZPackage(byte[]) / GetArray()", 'public ZPackage\(\).*public ZPackage\(byte\[\] data\).*public byte\[\] GetArray\(\)'),
+    @("ZDO", "game", "ZDO.Set(string, byte[]) / GetByteArray(string, byte[])", 'public void Set\(string name, byte\[\] bytes\).*public byte\[\] GetByteArray\(string name, byte\[\] defaultValue = null\)'),
+    @("ZDO", "game", "ZDO.Set(string, int) / GetInt(string, int)", 'public void Set\(string name, int value\).*public int GetInt\(string name, int defaultValue = 0\)'),
     @("ItemDrop", "game", "ItemDrop.m_itemData", 'public ItemData m_itemData = new ItemData\(\);'),
 
     # The two game facts the port's re-pick guard and its worker check exist
@@ -303,12 +322,56 @@ Assert-OnlyIn 'Vagon::DetachAll' { param($h) $false } "no Teamster code detaches
 Assert-OnlyIn 'Rigidbody::set_mass' { param($h) $h.Type -eq ($workersNamespace + "TeamsterWorkerBody") } "a mass is written only by Gunnar's own calibration" 1
 Assert-OnlyIn 'stfld float32 [assembly_valheim]Character::m_originalMass' { param($h) $h.Type -eq ($workersNamespace + "TeamsterWorkerBody") } "the base mass is written only by Gunnar's own calibration" 1
 Assert-OnlyIn 'Rigidbody::set_constraints' { param($h) $h.Type -eq "TheConcernedCat.ConcernedTeamster.Adapters.CartBrakeAdapter" } "constraints are written only by the parking brake" 2
+# Four writes, two types, one source file, one key prefix (#381).
+#
+# It was one write in one type until Gunnar could carry something. The game never
+# saves a non-player character's inventory, so his body now stores it in its own
+# network object: `TeamsterWorkerRecord` writes tcc.worker.inventory and
+# tcc.worker.revision, and the spawn writes tcc.worker.key and the initial
+# revision. Both types live in TeamsterWorkerPrefab.cs, which is the one file the
+# source validator lets write a tcc.worker.* key, so this list is the IL twin of
+# that rule rather than a second, looser one.
+#
+# The count stays pinned to the exact number, and the key constraint holds for
+# EVERY write, which the first version of this widening did not manage: at 24 IL
+# lines the window reached back past the previous `ZDO::Set`, so the second write
+# in a pair was vouched for by the FIRST one's literal. So the window now stops at
+# the previous `ZDO::Set`: a write can only be vouched for by a literal that
+# appears AFTER the previous `ZDO::Set`. Widening the 24 further is safe for the
+# same reason, and the barrier is why.
+#
+# That is deliberately weaker than "a literal that is its own", which an earlier
+# version of this comment claimed. The barrier excludes the previous write's
+# literal; it does not prove the literal it finds belongs to THIS write. A
+# decorative `ldstr "tcc.worker.x"` placed in the gap between two `ZDO::Set`
+# calls would still vouch for the second. The escape a review found is closed;
+# the general statement is not, and a reviewer reading the two writes is what
+# covers the rest.
+#
+# Proved against the installed assembly by planting `tcc.bogus.*` on one write at
+# a time and running this audit for real, not by reading it:
+#
+#   plant                                     pre-barrier (f59d4db)   with barrier
+#   1st Set in TryPersist (inventory)         FAIL, 1 finding         FAIL, 1 finding
+#   2nd Set in TryPersist (revision)          PASS  <- the escape     FAIL, 1 finding
+#   2nd Set of the spawn pair (revision)      (not run)               FAIL, 1 finding
+#
+# The spawn's two writes are adjacent too, which is why the third row is here: the
+# barrier has to hold in both types, not just the one the review happened to read.
+# Each finding names the offending type, and `ZDO::Set(` stayed at 4 throughout -
+# the plants changed a key, never a count, so the count alone would have seen
+# nothing.
 Assert-OnlyIn 'ZDO::Set(' {
     param($h)
-    if ($h.Type -ne ($workersNamespace + "TeamsterWorkerPrefab")) { return $false }
-    $window = ($ilLines[[Math]::Max(0, $h.Index - 12)..$h.Index] -join "`n")
+    if ($h.Type -ne ($workersNamespace + "TeamsterWorkerPrefab") -and
+        $h.Type -ne ($workersNamespace + "TeamsterWorkerRecord")) { return $false }
+    $start = [Math]::Max(0, $h.Index - 24)
+    for ($back = $h.Index - 1; $back -ge $start; $back--) {
+        if ($ilLines[$back] -match 'ZDO::Set\(') { $start = $back + 1; break }
+    }
+    $window = ($ilLines[$start..$h.Index] -join "`n")
     return $window -match 'ldstr "tcc\.worker\.[a-z0-9.\-]+"'
-} "a network object is written only with Gunnar's own tcc.worker.* key, by his prefab spawn" 1
+} "a network object is written only with Gunnar's own tcc.worker.* key, by his prefab spawn or his body's own record" 4
 
 $versionSource = Get-TypeSource -TypeName "Version" -Assembly "game"
 $versionMatch = [regex]::Match($versionSource, 'CurrentVersion \{ get; \} = new GameVersion\((\d+), (\d+), (\d+)\)')
