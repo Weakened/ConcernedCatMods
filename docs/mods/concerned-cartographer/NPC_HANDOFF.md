@@ -83,6 +83,12 @@ HulgiSmokeWorld. No owner save was used and none was written.
   and unit-tested, but no chair fell inside his placement band during testing,
   and a seat built after he settles is not noticed until something else moves
   him.
+  - Since 1.1.1: the slow upgrade sweep that notices a later seat is
+    implemented and unit-tested, and its once-every-thirty-seconds floor is now
+    held against the camp fingerprint that used to reset it
+    (`SeatUpgradeOscillationTests`, `SeatSweepGate`). Still **not seen in
+    game** — neither a companion taking a chair, nor the sweep taking one built
+    beside him.
 - **The wardrobe has not been seen on him.** The owner's September 15 note asks
   for a rag tunic and leather pants; both are implemented, unit-tested and in
   this package, and the in-game pass for them was stopped when the owner
