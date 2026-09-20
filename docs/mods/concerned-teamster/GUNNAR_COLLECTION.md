@@ -341,7 +341,25 @@ owes.
 | `pwsh ./scripts/audit-teamster-navigation-api.ps1` | PASS |
 | Planted defects | **8 of 8 caught.** One survived the first round — a refused-deposit test that handed the refusal an empty list and would have passed with the guard deleted. Strengthened, re-planted, caught. |
 
-**Zero migrations.** No durable key, prefab name, file path, row tag or schema number changed.
+### The wiring of §6a
+
+| Check | Outcome |
+|---|---|
+| `pwsh ./scripts/verify.ps1 -Configuration Release`, through the build lock | **PASSED at `7277b20`**: Release, 14 assemblies, **4410 tests**, validator exit 0 |
+| `ConcernedTeamster.Tests` | **1106 passed, 0 failed** (1031 before this work) |
+| `python -m unittest discover -s tools/tests` | **10 passed** (8 before this work; the two new ones are the crossed lifecycle verbs) |
+| `pwsh ./scripts/audit-teamster-hauling-api.ps1`, through the build lock | **PASS** — every member the port and the runtime bind, including the newly probed `Pickable.m_amount`, is present in the installed game |
+| Planted defects, one per property | **7 of 7 caught** in the domain tests: world-down routed to the job verb; an order ending routed to the world verb; tear-down routed to the job verb; a world coming *up* also dropping the record; the off-by-default switch not consulted; reach not checked; identity not checked. Each went red, then was restored |
+| Planted defects in the validator's own new rule | **2 of 2 caught**, and both **fail against a validator with the `#381` rule unregistered** — so the rule, not something else, is what refuses them |
+| In game | **OWNER GO-AROUND PENDING.** Nothing has been run; §10 steps 12–19 are the rows |
+
+**Zero migrations (the §6a wiring).** No durable key, prefab name, file path, row tag or schema number changed. The
+one new setting, `Workers/GunnarCollectionEnabled`, defaults to off, and a config file written by an older build
+simply does not have it — BepInEx adds it at its default on the next load. The one new probed game member,
+`Pickable.m_amount`, was already pinned by `scripts/audit-teamster-hauling-api.ps1`; the runtime probe now names it
+too, so the two lists agree again.
+
+**Zero migrations (the 1.0.5 work).** No durable key, prefab name, file path, row tag or schema number changed.
 `GunnarHaulingDefaults.WorkerKeyPrefix` is new and is pinned by test to be the prefix `WorkerKeyField` already had,
 so the contract handed to the shared runtime describes the body this product actually saves.
 
