@@ -2,6 +2,7 @@ using System;
 using BepInEx.Logging;
 using TheConcernedCat.ConcernedTeamster.Domain.Collection;
 using TheConcernedCat.Workers;
+using TheConcernedCat.ConcernedTeamster.Domain.Workers;
 using UnityEngine;
 
 namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;
@@ -41,6 +42,8 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
     private TeamsterSettings _settings = null!;
     private ManualLogSource? _log;
     private Func<Humanoid?> _worker = null!;
+    private Func<WorkerIdentityHold?> _identity = null!;
+    private CollectionIdentityLease _lease = new CollectionIdentityLease();
     private Func<bool> _recordUnwritable = null!;
     private Func<bool> _recordUnreadable = null!;
     private Func<bool> _seamAvailable = null!;
@@ -57,13 +60,14 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
         GameObject host,
         TeamsterSettings settings,
         Func<Humanoid?> worker,
+        Func<WorkerIdentityHold?> identity,
         Func<bool> recordUnwritable,
         Func<bool> recordUnreadable,
         Func<bool> seamAvailable,
         ManualLogSource log)
     {
         GunnarCollectionRuntime runtime = host.AddComponent<GunnarCollectionRuntime>();
-        runtime.Initialize(settings, worker, recordUnwritable, recordUnreadable, seamAvailable, log);
+        runtime.Initialize(settings, worker, identity, recordUnwritable, recordUnreadable, seamAvailable, log);
         var command = new CollectConsoleCommand(runtime);
         VanillaConsoleCommands.Register(command, log);
         log.LogInfo(VanillaConsoleCommands.Describe(new[] { command.Name }));
@@ -84,6 +88,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
     private void Initialize(
         TeamsterSettings settings,
         Func<Humanoid?> worker,
+        Func<WorkerIdentityHold?> identity,
         Func<bool> recordUnwritable,
         Func<bool> recordUnreadable,
         Func<bool> seamAvailable,
@@ -91,6 +96,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _worker = worker ?? throw new ArgumentNullException(nameof(worker));
+        _identity = identity ?? throw new ArgumentNullException(nameof(identity));
         _recordUnwritable = recordUnwritable ?? throw new ArgumentNullException(nameof(recordUnwritable));
         _recordUnreadable = recordUnreadable ?? throw new ArgumentNullException(nameof(recordUnreadable));
         _seamAvailable = seamAvailable ?? throw new ArgumentNullException(nameof(seamAvailable));
@@ -152,6 +158,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
 
         if (_lifecycle.ObserveWorld(worldUp) == PickForget.World)
         {
+            _lease.Release();
             _ordered = false;
             _orderedSource = string.Empty;
             _log?.LogInfo(
@@ -173,6 +180,12 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
             return;
         }
 
+        if (!_lease.IsHeld)
+        {
+            EndOrder("Gunnar no longer holds this collection job");
+            return;
+        }
+
         PickProgress progress = _port.Poll(Time.time);
         switch (progress.Phase)
         {
@@ -183,6 +196,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
                 // handed its count back, so there is no verb to route here.
                 // Calling either one would be reporting an event that did not
                 // happen.
+                _lease.Release();
                 _ordered = false;
                 _log?.LogInfo(
                     "Gunnar's collection: he took " + progress.Taken + " from " + _orderedSource +
@@ -190,6 +204,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
                 _orderedSource = string.Empty;
                 return;
             default:
+                _lease.Release();
                 _ordered = false;
                 _log?.LogInfo(
                     "Gunnar's collection: nothing reached him from " + _orderedSource +
@@ -208,7 +223,8 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
         bool had = _ordered;
         _ordered = false;
         _orderedSource = string.Empty;
-        _lifecycle.OrderEnded();
+        try { _lifecycle.OrderEnded(); }
+        finally { _lease.Release(); }
         if (had)
         {
             _log?.LogInfo("Gunnar's collection: the order ended - " + why);
@@ -223,7 +239,8 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
         _orderedSource = string.Empty;
         if (_lifecycle != null)
         {
-            _lifecycle.Shutdown();
+            try { _lifecycle.Shutdown(); }
+            finally { _lease.Release(); }
             _log?.LogInfo("Gunnar's collection: stood down because " + why + ".");
         }
     }
@@ -338,7 +355,15 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
         // Everything above is a decision over values a test can drive. This is
         // the one line that reaches the game, and the port re-reads every
         // precondition from its own frame before it touches anything.
-        PickRefusal started = _port.Begin(
+        if (!_lease.TryAcquire(_identity()))
+        {
+            return "Gunnar is busy with another job, or his job authority is unavailable. Finish or cancel that job first.";
+        }
+
+        PickRefusal started;
+        try
+        {
+            started = _port.Begin(
             source,
             worker,
             featureEnabled: request.FeatureEnabled,
@@ -346,8 +371,15 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
             expectedItemPrefab: CollectionOrderGate.PrefabNameOf(yieldName),
             expectedUnits: units,
             nowSeconds: Time.time);
+        }
+        catch
+        {
+            EndOrder("the pickup could not start");
+            throw;
+        }
         if (started != PickRefusal.None)
         {
+            _lease.Release();
             return "He did not start: " + started + ".";
         }
 

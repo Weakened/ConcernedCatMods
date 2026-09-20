@@ -70,6 +70,8 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
     private bool _evidence;
     private float _nextEvidenceAt;
 
+    internal WorkerIdentityHold? CollectionIdentity => _executor?.Modes;
+
     internal GunnarHaulService Service { get; private set; } = null!;
 
     /// <summary>Whether the verified vanilla cart attach/detach seam is usable
