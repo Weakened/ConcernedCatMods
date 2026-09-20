@@ -199,6 +199,18 @@ internal sealed class NpcPlanState
         }
     }
 
+    /// <summary>Whether this state's carried load is the same as another's,
+    /// stack for stack and in order.
+    ///
+    /// <b>Asked on its own, separately from <see cref="CarriesTheSameWorkAs"/>,
+    /// because <see cref="NpcPlanRun"/> has a rule about this field alone</b>: what
+    /// an NPC is carrying only ever changes as the recorded outcome of a movement
+    /// that was written down first. Without that rule the write-ahead discipline
+    /// bound the two phase changes and not the field, so any same-phase write could
+    /// rewrite this in any phase with no intent at all.</summary>
+    internal bool CarriesTheSameLoadAs(NpcPlanState? other) =>
+        other != null && Same(Carried, other.Carried);
+
     /// <summary>Whether two states describe the same work in the same
     /// condition: identity, job, reservations, carried material, progress,
     /// source, destination, vehicle and custody.

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using TheConcernedCat.ConcernedNPC.Custody;
 using TheConcernedCat.ConcernedNPC.Interruption;
 
 namespace TheConcernedCat.ConcernedNPC.Tests;
@@ -250,6 +251,58 @@ public class ActivityArbitrationTests
 
         Assert.True(NpcActivityArbiter.MayInterrupt(
             NpcActivityPriority.Danger, NpcActivityPriority.LifecycleSafety));
+    }
+
+    /// <summary>The false cases of <c>PreservedThePlan</c>, built here because
+    /// nothing <c>Interrupt</c> produces can reach them.
+    ///
+    /// <b>Why the member needs this at all.</b> A review of #379 replaced its body
+    /// with <c>return true;</c> and found all 903 tests green - not only on the two
+    /// paths where the note is not written, but on every path, because
+    /// <c>Granted</c> seeds <c>Before</c> from <c>Suspended</c> and
+    /// <c>Against</c> re-seeds it from the same object. That the arbiter cannot
+    /// produce a false answer is the preservation property rather than a hole in it,
+    /// so the question is asked of handovers this test builds directly, and the real
+    /// handovers are checked against a value built beside them.</summary>
+    [Fact]
+    public void A_handover_whose_plan_did_change_is_not_one_that_preserved_it()
+    {
+        using var world = new PlanRehearsal();
+        world.Start().RunUpTo(9);
+
+        NpcPlanState before = world.Run.State;
+
+        // A different load.
+        Assert.False(NpcActivityHandover
+            .Granted(
+                NpcActivityPriority.RequiredRoleWork,
+                NpcActivityPriority.Danger,
+                true,
+                before.WithHoldings(before.Reservations, new[] { new NpcMaterialStack(world.Stone, 99) }))
+            .Against(before)
+            .PreservedThePlan);
+
+        // A different phase, which CarriesTheSameWorkAs deliberately does not look
+        // at and this property does.
+        Assert.False(NpcActivityHandover
+            .Granted(
+                NpcActivityPriority.RequiredRoleWork,
+                NpcActivityPriority.Danger,
+                true,
+                before.WithPhase(NpcPlanPhase.Reconciling, "somewhere it never went"))
+            .Against(before)
+            .PreservedThePlan);
+
+        // A plan that went missing across the handover, and - the true case beside
+        // it - an interruption that had no plan to preserve.
+        Assert.False(NpcActivityHandover
+            .Granted(NpcActivityPriority.RequiredRoleWork, NpcActivityPriority.Danger, true, null)
+            .Against(before)
+            .PreservedThePlan);
+        Assert.True(NpcActivityHandover
+            .Granted(NpcActivityPriority.CampBorderStroll, NpcActivityPriority.Danger, true, null)
+            .Against(null)
+            .PreservedThePlan);
     }
 
     /// <summary>The same work as a plan, as a value this file built rather than

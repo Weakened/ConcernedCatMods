@@ -113,6 +113,19 @@ internal sealed class NpcPlanJournal
             return NpcPlanLoad.Unreadable("the rows named no plan");
         }
 
+        if (decoded.Phase == NpcPlanPhase.Unspecified)
+        {
+            // <b>A phase nobody set is an unreadable record, not a plan.</b> A
+            // truncated row, an older schema, a codec bug: whatever wrote it, the
+            // phase enum's own summary says this is "a record somebody wrote
+            // wrong", and handing it back as a plan is how it reached a run that
+            // could not stop it and a recovery that re-planned it. Unreadable is
+            // the outcome that already means "there is something here and it is
+            // not something to act on", and a role that gets it can quarantine
+            // the file through TryQuarantine and tell the player.
+            return NpcPlanLoad.Unreadable("the plan row says the plan is in no phase at all");
+        }
+
         return NpcPlanLoad.Of(decoded.AsRecovered());
     }
 

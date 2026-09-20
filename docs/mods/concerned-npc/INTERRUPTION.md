@@ -41,6 +41,25 @@ plan into `Provisioned` or `Reconciling` unless this run has already written an 
 established outcome, in the phase it is moving out of. An outcome nobody could establish does not count: it stops the
 plan rather than buying the next step.
 
+**And it refuses the load, not only the transition.** A second rule beside it says `Carried` only ever changes as the
+recorded outcome of a movement that was announced first. Both are needed. In-phase writes skip the pending, the
+uncertain and the transition rules, so with only the first rule any same-phase write could rewrite what the NPC is
+carrying, in any phase, with no intent at all - and "the two transitions that move a player's material are written
+twice" would have bound which phase a plan was in rather than what it was holding. Deliberately *not* bound the same
+way: reservations, the route and the progress count. None of them is a player's material in transit, a reservation
+name is derived so re-taking it is satisfied rather than doubled, and binding them would refuse the write that
+records them.
+
+**A movement with no recorded outcome cannot be written into an ending, and cannot have its custody laundered by a
+phase change.** The pending rule used to exempt every terminal phase, so a plan could report itself `Settled` - or
+`Refunded` - over a movement nobody had accounted for, and the reload called it "already ended, nothing to resume". No
+document ever mentioned that exemption and three passages said the opposite, `InterruptionResponse.Refund`'s own
+summary among them. It was reachable by an ordinary role: `Refund` is the answer to lost authority, which can fire in
+the window between `Intend` and `Conclude`, and `Stop(Refunded)` is the obvious verb for it. Worse, one write could
+both end the plan and drop the pending custody, which erases the only evidence that anything was ever in flight -
+after that not even `AsRecovered` can get the question back. The one ending a pending movement may reach is
+`NeedsAttention`, with the pending custody kept.
+
 This is the one thing in this document that changed as a result of an independent review, and the correction is worth
 recording. Until then `NpcPlanProgression.MovesMaterialToReach` - the only function naming the two material-moving
 transitions - had **no callers at all**. Replacing its body with `false` left all 891 tests green, and a run could
@@ -130,14 +149,42 @@ person does, through the role's own custody resolution, and the plan that follow
 `Record` and, since the corrective round, of `Adopt` as well - see the precondition in §9, which is about the person
 half of that sentence not existing yet.
 
-`NpcPlanRun.Adopt` is the verb a recovery's decision is written through, and it is held to the same rules as
-`Record`: nothing is adopted over a terminal phase; a movement with no established outcome may be followed only by a
-decision that stops the plan for a person; a state has to say whether anything is in flight; the work itself has to
-come through unchanged; and the phase has to be the one the decision actually leaves a plan in, which is
-`NpcPlanProgression.PhaseAfter` - the same function the recovery path produced the state with, so the two cannot
-disagree. The first version checked only that a decision existed, and an independent review used an invented `Replan`
-to clear an uncertain movement, reopen a plan that had stopped for a person, skip five phases at once, and write a
-plan with an unset custody field to disk. One test per refusal is in `PlanRunTests`.
+`NpcPlanRun.Adopt` is the verb a recovery's decision is written through, and it enforces the rules `Record` enforces:
+nothing is adopted over a terminal phase; a movement with no established outcome may be followed only by a decision
+that stops the plan for a person; a state has to say whether anything is in flight; a record in no phase at all may
+only be stopped for a person; the work itself has to come through unchanged; and the phase has to be the one the
+decision actually leaves a plan in, which is `NpcPlanProgression.PhaseAfter` - the same function the recovery path
+produced the state with, so the two cannot disagree. The first version checked only that a decision existed, and an
+independent review used an invented `Replan` to clear an uncertain movement, reopen a plan that had stopped for a
+person, skip five phases at once, write a plan with an unset custody field to disk, and launder a record in no phase
+into a live plan. One test per refusal is in `PlanRunTests`.
+
+It is **not** exactly the same set as `Record`'s, and the difference is in `Adopt`'s favour in the one reachable case:
+a `Continue` decision over a `Pending` custody produces a same-phase note-only state that `Record` accepts and
+`Adopt` refuses. Nothing is stranded - the note can still be written through `Suspend` - so this is deliberate
+conservatism about the verb that exists to authorise a move, not a gap.
+
+**A record in no phase at all is not a plan.** `NpcPlanPhase.Unspecified` is documented as "a record somebody wrote
+wrong… never resumed, never continued, never counted as the start", and it used to be the one record that could not
+be stopped and could be laundered live: `MayFollow` refuses `Unspecified` on both sides, so `Stop(NeedsAttention)`
+was unavailable, while `CauseFor` reported it stale, the policy answered `Replan`, and `Adopt` saved it into a live
+plan at `Observing` still claiming its load, its reservations and its cart. Three things now hold. `NpcPlanJournal`
+answers **unreadable** rather than handing back such a plan, so a role quarantines the file and tells the player.
+`NpcPlanRecovery` answers `NeedsAttention` before it asks for a body, with the state already phased so a role has
+something to write. And `NpcPlanRun` refuses everything over it **except** a stop for a person.
+
+That last one is how the `MayFollow` asymmetry was decided, and it was decided deliberately. The table keeps refusing
+`Unspecified` on both sides, because the table is about the shape of the pipeline and a phase nobody set is not a
+position on the line; putting the exception there would make `Unspecified` look like one. Instead `NpcPlanRun.WhyNot`
+makes "stop this for a person" available above every other rule, for any plan that has not already ended, as long as
+the stop changes nothing but the phase and the note. The reason is the leaf's own thesis: a library that can hold a
+state and cannot hand it to a person has a failure nobody is ever told about.
+
+**`AlreadyOver` is the second line of defence for an ending written over an open question.** It short-circuits before
+the policy, so the policy's first row - anything uncertain is needs attention, whatever else is true - never ran for a
+record that had already ended. It now answers `NeedsAttention` for any terminal record whose custody is not `Clear`.
+`NpcPlanRun` refuses to write one; this answers one that exists anyway, from an older build, a hand edit, or a role
+that found another way. A plan that really did finish is still reported as finished.
 
 ## 6. One logical NPC, one world entity
 
@@ -250,7 +297,10 @@ This is a precondition rather than a future-work aside, because the first role t
 this library inherits it on day one.
 
 `Uncertain` stops a plan for a person, and that is the right failure direction - it leaves evidence instead of
-guessing, and §2 is mostly about why. But **the person half of it is implemented nowhere.** There is no resolution
+guessing, and §2 is mostly about why. Until this round it was not even reliably the direction: a plan could be
+written straight from a pending movement to `Settled` or `Refunded`, and the reload reported a refund with "nothing to
+resume" - so the alternative to a dead end was not a live plan, it was a silent one. That is closed in §2 and the
+precondition below is what remains. But **the person half of it is implemented nowhere.** There is no resolution
 UI. `NpcCustodyLedger.CloseOpenIntents` exists and is joined to no plan. Nothing creates "the plan that follows"
 that §5 promises. So a plan that reaches `NeedsAttention` stays there for the life of the save, and the only thing in
 this repository that clears it is deleting the plan file by hand.

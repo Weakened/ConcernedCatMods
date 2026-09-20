@@ -262,6 +262,20 @@ internal sealed class NpcPlanRun
                 "this plan has ended, and an ending that the next write can undo is not an ending");
         }
 
+        if (_state.Phase == NpcPlanPhase.Unspecified
+            && revalidated.Phase != NpcPlanPhase.NeedsAttention)
+        {
+            // A record somebody wrote wrong is not the beginning. A review found
+            // this the sixth way in: a decoded phase of zero reached Resume,
+            // could not be stopped, and a recovery answering Replan laundered it
+            // into a live plan at Observing still claiming a load, its
+            // reservations and its cart. The only decision that may be written
+            // over it is one that hands it to a person.
+            return NpcPlanSave.Refused(
+                "this plan's record is in no phase at all, which is not the beginning, so the only thing that "
+                + "may be written over it is a stop for a person");
+        }
+
         if (revalidated.Custody == NpcPlanCustody.Unspecified)
         {
             return NpcPlanSave.Refused(
@@ -296,8 +310,15 @@ internal sealed class NpcPlanRun
         NpcPlanSave written = _journal.Save(revalidated);
         if (written.IsSaved)
         {
-            // A re-planned plan has concluded no intent, whatever the run it came
-            // from had done: the phases it is about to walk again are ahead of it.
+            // <b>Every response, not only a re-plan.</b> A re-plan is the case
+            // that makes it necessary - the phases it is about to walk again are
+            // ahead of it, and a concluded intent kept across the reset would be
+            // spent a second time on the way back up - but it is right for all
+            // four: after a refund or a stop for a person nothing is going to be
+            // spent at all, and after a Continue the plan has been revalidated
+            // against the world, which is exactly the moment a role should say
+            // again what it is about to move rather than lean on what it said
+            // before the interruption.
             _concludedIn = NpcPlanPhase.Unspecified;
             _state = revalidated;
         }
@@ -361,6 +382,28 @@ internal sealed class NpcPlanRun
             return "that is a different plan";
         }
 
+        if (proposed.Phase == NpcPlanPhase.NeedsAttention
+            && proposed.CarriesTheSameWorkAs(_state)
+            && !NpcPlanProgression.IsTerminal(_state.Phase))
+        {
+            // <b>Handing a plan to a person is always available.</b> Whatever is
+            // wrong with this plan - a movement with no outcome, a phase nobody
+            // set, a record somebody wrote wrong - it can be stopped and left for
+            // somebody to look at, as long as the stop changes nothing but the
+            // phase and the note and the plan has not already ended.
+            //
+            // This is where the asymmetry in NpcPlanProgression.MayFollow is
+            // answered rather than in the table. MayFollow refuses Unspecified on
+            // both sides, which is right for a table about the pipeline's shape -
+            // a phase nobody set is not a position on the line - but it left one
+            // state the library could hold and could not hand to anybody: a
+            // resumed record whose phase is zero could not even be stopped, while
+            // a recovery would happily re-plan it. A library with such a state has
+            // a failure nobody is ever told about, which is the one outcome this
+            // whole area exists to avoid.
+            return string.Empty;
+        }
+
         if (!NpcPlanProgression.MayFollow(_state.Phase, proposed.Phase))
         {
             return NpcPlanProgression.IsTerminal(_state.Phase)
@@ -384,10 +427,26 @@ internal sealed class NpcPlanRun
         if (_state.Custody == NpcPlanCustody.Pending)
         {
             bool concluding = proposed.Phase == _state.Phase && proposed.Custody != NpcPlanCustody.Pending;
-            if (!concluding && !NpcPlanProgression.IsTerminal(proposed.Phase))
+            if (!concluding && proposed.Custody != NpcPlanCustody.Pending)
             {
-                return "something this plan set in motion has no recorded outcome yet, and walking past it is "
-                    + "how the same material gets moved twice";
+                // The write that erases the evidence. A phase change that also
+                // drops the pending custody leaves a record saying nothing was
+                // ever in flight, and not even AsRecovered can get it back -
+                // which is worse than walking past the question, because after
+                // this nobody knows there was one.
+                return "a movement with no recorded outcome cannot be written out of existence by a phase "
+                    + "change: that erases the only evidence anything was in flight";
+            }
+
+            if (!concluding)
+            {
+                // Including into an ending. A plan that says it finished while
+                // something it set in motion had no recorded outcome is a plan
+                // that silently lost or duplicated a player's material and then
+                // reported success - and a refund is documented as a release of
+                // what is still held, never a way to close an open question.
+                return "something this plan set in motion has no recorded outcome yet, and walking past it - "
+                    + "into the next phase or into an ending - is how the same material gets moved twice";
             }
         }
 
@@ -416,6 +475,24 @@ internal sealed class NpcPlanRun
             // have happened.
             return "getting there moves a player's material, and this plan never said the movement was about "
                 + "to happen or what became of it, so the same load would be moved twice";
+        }
+
+        if (!proposed.CarriesTheSameLoadAs(_state) && _state.Custody != NpcPlanCustody.Pending)
+        {
+            // <b>The load, not only the transition.</b> The rule above binds the
+            // two phase changes; this binds the field. Without it any same-phase
+            // write could rewrite Carried in any phase with no intent at all, so
+            // "the two transitions that move a player's material are written
+            // twice" would be a statement about which phase the plan is in rather
+            // than about what the NPC is holding. What he is carrying is now only
+            // ever the recorded outcome of a movement that was announced first.
+            //
+            // Deliberately only Carried. Reservations, the route and the progress
+            // count are not a player's material in transit - a reservation name is
+            // derived, so re-taking it is satisfied rather than doubled - and
+            // binding them here would refuse the write that records them.
+            return "what the NPC is carrying only ever changes as the recorded outcome of a movement this plan "
+                + "said was about to happen";
         }
 
         return string.Empty;

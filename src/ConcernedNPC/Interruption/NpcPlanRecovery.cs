@@ -229,6 +229,11 @@ internal static class NpcPlanRecovery
                 "there is no plan here to resume, and inventing one would be a plan for work nobody ordered");
         }
 
+        if (plan.Phase == NpcPlanPhase.Unspecified)
+        {
+            return InNoPhaseAtAll(plan);
+        }
+
         if (NpcPlanProgression.IsTerminal(plan.Phase))
         {
             return AlreadyOver(plan);
@@ -305,6 +310,11 @@ internal static class NpcPlanRecovery
                 "there is no plan here to revalidate");
         }
 
+        if (plan.Phase == NpcPlanPhase.Unspecified)
+        {
+            return InNoPhaseAtAll(plan);
+        }
+
         if (NpcPlanProgression.IsTerminal(plan.Phase))
         {
             return AlreadyOver(plan);
@@ -368,12 +378,49 @@ internal static class NpcPlanRecovery
                     : "this plan was already stopped for somebody to look at, and it stays stopped");
         }
 
+        if (plan.Custody != NpcPlanCustody.Clear)
+        {
+            // <b>An ending is not evidence that the movement completed.</b> This
+            // short-circuits before the policy, so without this the policy's first
+            // row - anything uncertain is needs attention, whatever else is true -
+            // never ran for a record that had ended, and a plan that finished over
+            // an unrecorded movement was reported as "already ended, nothing to
+            // resume" with a refund. NpcPlanRun now refuses to write such a
+            // record; this is the second line of defence for one that exists
+            // anyway, from an older build, a hand edit, or a role that found
+            // another way.
+            return Over(
+                InterruptionResponse.NeedsAttention,
+                InterruptionCause.TransferUncertain,
+                plan.WithPhase(NpcPlanPhase.NeedsAttention, "an ending over a movement nobody accounted for"),
+                "this plan's record says it ended while something it set in motion had no outcome anybody "
+                + "wrote down, so it is not treated as finished");
+        }
+
         return Over(
             InterruptionResponse.Refund,
             InterruptionCause.WorldReloaded,
             plan,
             "this plan had already ended, so there is nothing to resume");
     }
+
+    /// <summary>A record whose phase nobody set.
+    ///
+    /// <b>Not the beginning, and never guessed at.</b> Left to the ordinary path
+    /// this answered <c>Replan</c>, because a plan in no phase is not live in any
+    /// world and a stale plan re-plans - so the one record the phase enum says is
+    /// "never resumed, never continued, never counted as the start" became a live
+    /// plan at <c>Observing</c> still claiming a load it might not have. No body is
+    /// asked for and nothing is claimed; the state handed back is already phased
+    /// <see cref="NpcPlanPhase.NeedsAttention"/>, so the role has something
+    /// <see cref="NpcPlanRun.Adopt"/> will accept and a person gets told.</summary>
+    private static NpcPlanRecovered InNoPhaseAtAll(NpcPlanState plan) =>
+        Over(
+            InterruptionResponse.NeedsAttention,
+            InterruptionCause.Unspecified,
+            plan.WithPhase(NpcPlanPhase.NeedsAttention, "a record in no phase at all"),
+            "this plan's record is in no phase at all, which is neither a beginning nor an ending, so it is "
+            + "handed to somebody rather than guessed at");
 
     private static NpcPlanRecovered Over(
         InterruptionResponse response, InterruptionCause cause, NpcPlanState plan, string reason) =>

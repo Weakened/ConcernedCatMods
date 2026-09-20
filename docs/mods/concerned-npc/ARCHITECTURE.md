@@ -214,6 +214,19 @@ half of either pair. The enforcement is per run and deliberately not durable - a
 library demanded inside a format the role owns - so a plan resumed from the disk intends and concludes again before
 claiming a material-moving phase. That costs two writes and moves nothing, because concluding measures.
 
+**The same rule binds the load and the endings.** `Carried` only ever changes as the recorded outcome of a movement
+that was announced first, because in-phase writes skip the transition rule and would otherwise have been able to
+rewrite what the NPC is holding in any phase with no intent at all. And a movement with no recorded outcome may not
+be written into an ending at all except `NeedsAttention`, nor have its pending custody dropped by a phase change: a
+plan reporting itself `Settled` or `Refunded` over an open question is a plan that silently lost or duplicated a
+player's material and then reported success. `NpcPlanRecovery.AlreadyOver` answers `NeedsAttention` for any terminal
+record whose custody is not `Clear`, as the second line of defence for a record written by something else.
+
+**A record in no phase at all is unreadable, not a plan.** `NpcPlanJournal` refuses to hand one back, the recovery
+path answers `NeedsAttention` for one it is handed, and `NpcPlanRun` refuses everything over it except a stop for a
+person - which is available above every other rule, for any plan that has not ended, because a library that can hold
+a state and cannot hand it to a person has a failure nobody is ever told about.
+
 **One precondition the role leaves inherit.** A plan that stops for a person has nowhere to go: there is no
 resolution UI, the custody ledger's `CloseOpenIntents` is joined to no plan, and nothing creates the plan that
 follows. #380, #381 and #382 each have to bring a resolution path, hold no material through this library, or say

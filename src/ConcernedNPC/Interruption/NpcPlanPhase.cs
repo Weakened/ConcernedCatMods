@@ -150,6 +150,17 @@ internal static class NpcPlanProgression
     /// with <c>false</c> left all 891 tests green, and the design documents
     /// nevertheless asserted that the two transitions "are written twice".
     ///
+    /// <b>What it binds, exactly.</b> The transition <i>and</i> the load. This
+    /// rule is about the two phase changes; a second rule beside it says that
+    /// <see cref="NpcPlanState.Carried"/> only ever changes as the recorded outcome
+    /// of a movement that was announced first. Both are needed, and a review found
+    /// out why: with only the first, any same-phase write could rewrite what the
+    /// NPC is carrying in any phase with no intent at all, so the discipline bound
+    /// which phase the plan was in rather than what it was holding. What is
+    /// deliberately <i>not</i> bound is the rest of the state - reservations, the
+    /// route, the progress count - because none of them is a player's material in
+    /// transit and binding them would refuse the write that records them.
+    ///
     /// <b>The limit of the enforcement, stated rather than implied.</b> What a run
     /// remembers about its own concluded intent is in memory and not on the disk.
     /// There is no durable field saying "the intent for this transition was
@@ -205,6 +216,14 @@ internal static class NpcPlanProgression
     {
         if (from == NpcPlanPhase.Unspecified || to == NpcPlanPhase.Unspecified)
         {
+            // Refused on both sides, deliberately, and the asymmetry this creates
+            // is answered one level up rather than here. A plan in a phase nobody
+            // set could not be stopped for a person either, which meant the
+            // library had a state it could hold and could not hand to anybody -
+            // so NpcPlanRun.WhyNot makes "stop this for a person" available
+            // whatever phase a plan is in. It is not in this table because this
+            // table is about the shape of the pipeline, and putting it here would
+            // make Unspecified look like a position on the line.
             return false;
         }
 

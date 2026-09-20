@@ -18,22 +18,32 @@ namespace TheConcernedCat.ConcernedNPC.Tests;
 /// a parameter over the whole script, the script is the pipeline, and adding a
 /// phase adds cases rather than quietly going untested.
 ///
-/// <b>The three properties, asserted over every one of those kills rather than
-/// once each by hand.</b>
+/// <b>What the sweep actually establishes.</b> Three things, and the wording here
+/// is careful because an earlier version of this paragraph claimed two more.
 ///
 /// <i>A verdict, always.</i> Every kill reloads to one of the four responses with
 /// a sentence attached. Never nothing, never a default, never silence.
 ///
-/// <i>No duplicate.</i> Material is never fetched or delivered twice, and the NPC
-/// never ends up as two NPCs: a reconstructed plan re-attaches to the body that is
-/// there through the arbiter, and two bodies answering to one name is a refusal
-/// rather than a choice between them.
+/// <i>One body, never two.</i> A reconstructed plan re-attaches to the body that
+/// is there through the arbiter; two bodies answering to one name is a refusal
+/// rather than a choice between them; and a plan that stopped gives its claim
+/// back.
 ///
-/// <i>No loss, and no invented credit.</i> The three numbers that are the world
-/// always add up to what the player owned. And the record and the world agree
-/// about what is on the NPC's back exactly when the plan is allowed to go on -
-/// which is the whole of "never crediting what was not gathered, never discarding
-/// what was", as an implication a test can check.</summary>
+/// <i>No invented credit.</i> The record and the world agree about what is on the
+/// NPC's back exactly when the plan is allowed to go on. That is the whole of
+/// "never crediting what was not gathered, never discarding what was", as an
+/// implication a test can check, and it is the assertion in here with the most
+/// force.
+///
+/// <b>What it does not establish, listed because it reads as though it does.</b>
+/// The sweep also asserts that nothing was gathered or delivered twice and that
+/// the three numbers still add up to what the player owned. Both are arithmetic
+/// properties of <see cref="PlanRehearsal"/> - one increment per script operation,
+/// no operation run twice, every movement one subtraction and one matching
+/// addition - and <c>NpcPlanRecovery</c> has no inventory port to break them with.
+/// They are a tripwire for the day something gives it one, not evidence that
+/// recovery conserves material. <c>PlanRehearsal.Gathers</c> says the same thing
+/// beside the counters themselves.</summary>
 public class PlanKillTests
 {
     /// <summary>Every point the process can die at: after the opening record,
@@ -53,7 +63,7 @@ public class PlanKillTests
 
     [Theory]
     [MemberData(nameof(EveryKillPoint))]
-    public void A_kill_at_every_transition_reloads_to_one_verdict_and_conserves_every_unit(int killedAfter)
+    public void A_kill_at_every_transition_reloads_to_one_verdict_and_moves_nothing(int killedAfter)
     {
         using var world = new PlanRehearsal();
         world.Start().RunUpTo(killedAfter);
@@ -383,6 +393,56 @@ public class PlanKillTests
             Assert.Equal(BodyClaimStatus.Unspecified, still.Claim.Status);
             Assert.Equal(NpcBodyKind.Unspecified, world.Registry.CurrentBodyKind(world.Identity));
         }
+    }
+
+    /// <summary>An ending written over a movement nobody accounted for is not
+    /// reported as a finished plan.
+    ///
+    /// <b>The second line of defence for the hole this round closed in
+    /// <c>NpcPlanRun</c>.</b> <c>AlreadyOver</c> short-circuits before the policy
+    /// and used to special-case only <c>NeedsAttention</c>, so the policy's first
+    /// row - anything uncertain is needs attention, whatever else is true - never
+    /// ran for a record that had ended. A plan that said <c>Settled</c> over a
+    /// pending custody came back as <c>Refund</c> with "this plan had already
+    /// ended, so there is nothing to resume", and nobody was ever told. The run
+    /// now refuses to write such a record; this answers one that exists
+    /// anyway.</summary>
+    [Fact]
+    public void A_record_that_ended_over_an_unrecorded_movement_is_not_reported_as_finished()
+    {
+        using var world = new PlanRehearsal();
+        world.Start().RunUpTo(5);
+
+        NpcPlanState endedOverAQuestion = world.Run.State.WithPhase(NpcPlanPhase.Settled, "call it done");
+        Assert.Equal(NpcPlanCustody.Pending, endedOverAQuestion.Custody);
+
+        NpcPlanRecovered decision = NpcPlanRecovery.Reconstruct(
+            world.Registry, endedOverAQuestion, NpcBodyKind.Worker, "recovery", Healthy(world), null);
+
+        Assert.True(decision.WasAlreadyOver);
+        Assert.Equal(InterruptionResponse.NeedsAttention, decision.Outcome.Response);
+        Assert.Equal(InterruptionCause.TransferUncertain, decision.Outcome.Cause);
+        Assert.Equal(NpcPlanPhase.NeedsAttention, decision.Next.Phase);
+        Assert.False(decision.Outcome.MayResume);
+
+        // And for what the same record looks like after a reload, which is the
+        // form a role would actually meet.
+        Assert.Equal(
+            InterruptionResponse.NeedsAttention,
+            NpcPlanRecovery.Revalidate(endedOverAQuestion.AsRecovered(), Healthy(world), null)
+                .Outcome.Response);
+
+        // A plan that really did finish is still reported as finished, so this is
+        // not "every ending is suspicious".
+        NpcPlanRecovered finished = NpcPlanRecovery.Revalidate(
+            world.Run.State
+                .WithCustody(NpcPlanCustody.Clear, "nothing in flight")
+                .WithPhase(NpcPlanPhase.Settled, "done"),
+            Healthy(world),
+            null);
+
+        Assert.Equal(InterruptionResponse.Refund, finished.Outcome.Response);
+        Assert.Equal(NpcPlanPhase.Settled, finished.Next.Phase);
     }
 
     [Fact]

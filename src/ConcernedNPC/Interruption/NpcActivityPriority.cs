@@ -211,7 +211,18 @@ internal readonly struct NpcActivityHandover
     /// cart, source, destination and identity, and the phase it was in.
     ///
     /// <b>True when there was no plan</b>, because an interruption that had
-    /// nothing to preserve preserved it.</summary>
+    /// nothing to preserve preserved it.
+    ///
+    /// <b>Nothing <see cref="NpcActivityArbiter.Interrupt"/> produces can make this
+    /// false, and that is the property rather than a hole in it.</b> There is no
+    /// path in a handover that edits a plan, so <see cref="Before"/> and
+    /// <see cref="Suspended"/> are always the same value and often the same object
+    /// - which means a test that only asked this question of a real handover would
+    /// be asking a question that cannot fail. A review of #379 proved that by
+    /// replacing this body with <c>true</c> and finding the whole suite green. The
+    /// false cases are therefore asserted against handovers a test builds directly,
+    /// in <c>ActivityArbitrationTests</c>, and the real handovers are checked
+    /// against a value built beside them instead.</summary>
     internal bool PreservedThePlan
     {
         get

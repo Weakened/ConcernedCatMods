@@ -360,6 +360,30 @@ internal sealed class PlanRehearsal : IDisposable
         return Journal().Load();
     }
 
+    /// <summary>Rewrites the phase field of the plan row on the disk to zero, the
+    /// way a truncated row, an older schema or a bug in this codec would.
+    ///
+    /// <b>Done by hand rather than through the codec, deliberately.</b>
+    /// <c>NpcPlanJournal.Save</c> refuses to write a plan in no phase at all, which
+    /// is the point: this is a record the library would never have produced, and a
+    /// role still has to survive finding one. Which field holds the phase is the
+    /// role's own business, which is why this is in the role's file.</summary>
+    internal void RewriteThePhaseAsNobodySet()
+    {
+        string[] lines = File.ReadAllLines(PlanPath);
+        for (int index = 0; index < lines.Length; index++)
+        {
+            string[] fields = lines[index].Split('\t');
+            if (fields.Length >= 14 && fields[0] == "p")
+            {
+                fields[5] = "0";
+                lines[index] = string.Join("\t", fields);
+            }
+        }
+
+        File.WriteAllLines(PlanPath, lines);
+    }
+
     public void Dispose()
     {
         try
