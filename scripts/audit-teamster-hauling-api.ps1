@@ -322,12 +322,29 @@ Assert-OnlyIn 'Vagon::DetachAll' { param($h) $false } "no Teamster code detaches
 Assert-OnlyIn 'Rigidbody::set_mass' { param($h) $h.Type -eq ($workersNamespace + "TeamsterWorkerBody") } "a mass is written only by Gunnar's own calibration" 1
 Assert-OnlyIn 'stfld float32 [assembly_valheim]Character::m_originalMass' { param($h) $h.Type -eq ($workersNamespace + "TeamsterWorkerBody") } "the base mass is written only by Gunnar's own calibration" 1
 Assert-OnlyIn 'Rigidbody::set_constraints' { param($h) $h.Type -eq "TheConcernedCat.ConcernedTeamster.Adapters.CartBrakeAdapter" } "constraints are written only by the parking brake" 2
+# Four writes, two types, one source file, one key prefix (#381).
+#
+# It was one write in one type until Gunnar could carry something. The game never
+# saves a non-player character's inventory, so his body now stores it in its own
+# network object: `TeamsterWorkerRecord` writes tcc.worker.inventory and
+# tcc.worker.revision, and the spawn writes tcc.worker.key and the initial
+# revision. Both types live in TeamsterWorkerPrefab.cs, which is the one file the
+# source validator lets write a tcc.worker.* key, so this list is the IL twin of
+# that rule rather than a second, looser one.
+#
+# The count stays pinned to the exact number, and the key constraint is unchanged:
+# a fifth write, or any write without a tcc.worker.* literal in front of it, or a
+# write from any other type, still fails. The window is 24 IL lines rather than 12
+# because the inventory write pushes a ZPackage construction and an
+# Inventory::Save between the key and the Set; it is still a window, and a write
+# with no such key anywhere near it still fails.
 Assert-OnlyIn 'ZDO::Set(' {
     param($h)
-    if ($h.Type -ne ($workersNamespace + "TeamsterWorkerPrefab")) { return $false }
-    $window = ($ilLines[[Math]::Max(0, $h.Index - 12)..$h.Index] -join "`n")
+    if ($h.Type -ne ($workersNamespace + "TeamsterWorkerPrefab") -and
+        $h.Type -ne ($workersNamespace + "TeamsterWorkerRecord")) { return $false }
+    $window = ($ilLines[[Math]::Max(0, $h.Index - 24)..$h.Index] -join "`n")
     return $window -match 'ldstr "tcc\.worker\.[a-z0-9.\-]+"'
-} "a network object is written only with Gunnar's own tcc.worker.* key, by his prefab spawn" 1
+} "a network object is written only with Gunnar's own tcc.worker.* key, by his prefab spawn or his body's own record" 4
 
 $versionSource = Get-TypeSource -TypeName "Version" -Assembly "game"
 $versionMatch = [regex]::Match($versionSource, 'CurrentVersion \{ get; \} = new GameVersion\((\d+), (\d+), (\d+)\)')

@@ -401,6 +401,14 @@ stored package. `WorkerInventoryRecord.Decide` answers `LoadEmpty` — never a r
 `NoReadEverRefuses` pins that no input can produce anything but a load. An old body comes back exactly as it
 always did.
 
+**Two things the off-game audit is worth reading for, since it caught this work.** First, its IL rule pinned
+`ZDO::Set(` to *one* call in *one* type; this made it four in two types, and the audit refused the build until that
+expectation was updated on purpose — which is the rule doing its job, not an obstacle. Second, a
+process trap worth the line: the updated check first used a script-scope `@(...)` array of allowed type names inside
+the scriptblock the audit hands its matcher, and PowerShell resolved it to nothing, so the rule silently refused
+**everything**. That is the safe direction — it could never have produced a false green — but it looks identical to
+a real violation, so the allowed types are compared explicitly instead.
+
 **The door this does NOT close, named rather than left to be found.** *Death.* If Gunnar is killed, his body is
 destroyed and what he holds goes with it. Foreman closes that by dropping every carried item through vanilla's own
 drop as the body dies (§5a, first bullet) — and that precedent does cover this event, unlike the deliberate retire.
@@ -451,7 +459,8 @@ owes.
 | `pwsh ./scripts/verify.ps1 -Configuration Release`, through the build lock | **PASSED at `6e903e7`**: Release, 14 assemblies, **4429 tests**, validator exit 0 |
 | `ConcernedTeamster.Tests` | **1133 passed, 0 failed** (1031 before this work) |
 | `python -m unittest discover -s tools/tests` | **14 passed** (8 before this work; six new plants) |
-| `pwsh ./scripts/audit-teamster-hauling-api.ps1`, through the build lock | **PASS** — every member the port and the runtime bind, including the newly probed `Pickable.m_amount`, `Humanoid.GetInventory` and `Inventory.NrOfItems`, is present in the installed game |
+| `pwsh ./scripts/audit-teamster-hauling-api.ps1`, through the build lock | **PASS**, 125 of 125 members and behaviours, against the installed **Valheim 1.0.15** — including the newly probed `Pickable.m_amount`, `Humanoid.GetInventory`, `Inventory.NrOfItems`/`Save`/`Load`/`m_onChanged`, `ZPackage`, and `ZDO.Set`/`GetByteArray`/`GetInt`; plus the *fact* §6c depends on, that a non-player inventory is a plain field the game never saves — so a game update that starts saving it fails here rather than as duplicated stone in somebody's world |
+| The same audit's **IL** rule on `ZDO::Set(` | It caught this work: one write in one type became **four in two types**. Updated deliberately to the exact new count, both types named, both inside the one source file the validator allows, the `tcc.worker.*`-key window unchanged in kind (widened 12→24 IL lines because the inventory write pushes a `ZPackage` construction and an `Inventory::Save` between the key and the `Set`). **Planted:** writing `"gunnar.carried"` instead — the audit refuses it, so the key constraint is what passes the rule, not the type list |
 | Planted defects in the §6a wiring, one per property | **7 of 7 caught**: world-down routed to the job verb; an order ending routed to the world verb; tear-down routed to the job verb; a world coming *up* also dropping the record; the off-by-default switch not consulted; reach not checked; identity not checked |
 | Planted defects in the §6b guard, one per property | **7 of 7 caught**: a carrying body retired anyway; an unreadable inventory read as empty; the forcing word made refusable (the trap); the forced message no longer stating the loss; the refusal no longer naming the way out; any trailing word accepted as forcing; an unknown verdict treated as a grant |
 | Planted defects in the validator's own new rules | **6 of 6 caught** — two crossing the port's lifecycle verbs, and four against the carried-material rule: the guard moved below the removal, the decision removed, the removal **lifted into a helper** (the escape a review walked through) and a removal **moved to another file**. Each fails against a validator with the `#381` rule that catches it unregistered, so the rule, not something else, is what refuses it |
