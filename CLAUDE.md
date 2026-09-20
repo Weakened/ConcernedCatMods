@@ -25,14 +25,29 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   A **second scoped carve-out** (owner decision 2026-09-19, #381): Gunnar's collection role may pick up
   loose branches and stones through vanilla's own `Pickable.Interact`, in the single file
   `Adapters/Workers/GunnarCollectionPort.cs` and nowhere else, failing closed. `validate_repo.py`
-  permits **one pinned call** in that one file - matched verbatim, so `.Interact(` on a cart, a
-  container or a door still fails there - and refuses the token everywhere else, inside
-  `Adapters/Workers` and out. Every other forbidden token still fails inside the authorized file.
+  permits **two pinned calls** in that one file - each matched verbatim, so `.Interact(` on a cart, a
+  container or a door still fails there - and refuses both tokens everywhere else, inside
+  `Adapters/Workers` and out. The second is `Humanoid.Pickup`, the take that moves the material into
+  Gunnar's own inventory and, inside vanilla, destroys the dropped `ItemDrop`'s network object. It was
+  always part of picking something up; what was wrong was calling the boundary one call when it is two,
+  and leaving the one that actually moves the material unpinned. Every other forbidden token still
+  fails inside the authorized file.
   Proved by `tools/tests/test_teamster_carveout.py`, which plants each escape an independent review
-  found and requires the validator to refuse; all six fail against the unfixed validator. Six further
-  plants cross the port's two lifecycle verbs and attack the retire verb's carried-material guard — moving
-  it below a removal, deleting the decision, lifting a removal into a helper, and moving one to another
-  file — and each fails against a validator without the `#381` rule that catches it.
+  found and requires the validator to refuse. **Twenty plants**, each one an escape somebody actually
+  proposed rather than an imagined one, and each verified to pass against the validator that lacked the
+  rule catching it. They cover the two pinned calls (a changed receiver, the same call twice, the call in
+  another worker file, the allowance following a basename to another directory), the tokenizer (a space
+  before the paren, a newline between receiver and member, a comment marker inside a string), the port's
+  two lifecycle verbs in both directions, and the retire verb's carried-material guard — moving it below a
+  removal, deleting the decision, consulting the verdict and ignoring it, lifting a removal into a helper,
+  moving one to another file or a subdirectory, changing what a destruction is routed through, and using
+  the second spelling of removal that the no-argument pattern cannot see.
+
+  Two limits of that harness are stated rather than left to be found. It is a **text** audit: a
+  destruction reached through an alias or a delegate spells no `Destroy…(` and is outside what it sees.
+  And the population pins establish that each destruction sits at a recorded site with a refusal written
+  above it — **not** that control flow obeys that refusal, which is `WorkerRetirementTests`' job and a
+  reviewer's.
 
   **Reachable now, behind an off-by-default switch, and never observed in game.** The port has a call
   site: `Adapters/Workers/GunnarCollectionRuntime.cs`, gated by `TeamsterFeature.GunnarCollection` and
@@ -71,6 +86,9 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   persist is handed nothing more to hold - and the containment's limit is stated on purpose: nothing this
   mod does will clear that refusal, because the only inventory change it makes is a pick and the refusal is
   what stops the next one. A zone load re-creates the record from the last package that did get written.
+  An explicit `ct_haul retire force` is a third way material goes, and it is excluded from the count for
+  a reason rather than overlooked: the ordinary refusal names what he is holding, the forcing word has to
+  be typed, and the forced message states the loss. That is consent, not a door left open.
   The port needs no RPC of its own - `Pickable.Interact` runs `RPC_Pick` and the
   ownership claim inside vanilla, on a pickable this process already owns - so felling a tree
   (`TreeBase.Damage`) and the cosmetic hammer animation (`ZSyncAnimation.SetTrigger`) were **not**
