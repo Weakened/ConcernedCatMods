@@ -10,40 +10,23 @@ It must **not** use Valheim world-save files as its private database.
 
 ## Root
 
-Two roots, because a mod manager presents `BepInEx/config` as this mod's
-settings and most of what this mod writes is not a setting (#304):
+Typical BepInEx config root:
 
 ```text
-BepInEx/config/ConcernedCatMods/ConcernedCartographer/   settings a player edits
-BepInEx/data/ConcernedCatMods/ConcernedCartographer/     everything else
+BepInEx/config/ConcernedCatMods/ConcernedCartographer/
 ```
 
-Exact paths depend on the active mod-manager profile; both are under the same
-profile's BepInEx folder.
-
-The settings root holds exactly three files — `survey-rules.tsv`,
-`cartographer-strings.tsv`, and the `cartographer-strings-template.tsv` a
-translator copies. That list is `CartographerConfigFiles` in the source, and
-`validate_repo.py` fails the build if the list and the code that composes
-settings paths disagree in either direction.
-
-Everything else — every world sidecar, `views.tsv`, `support-report.txt`, the
-companion sidecars, `doors-<world-uid>.tsv`, `backups/` and `state/` — is in
-the data root. An earlier build's profile has all of it in the settings root;
-`DataRelocation` moves it on the first start (copy, verify at the destination,
-then remove), and anything it cannot move is left exactly where it is. The
-fresh-install probe reads both roots, so a move that has not run or could not
-finish never turns a returning player into a new one.
+Exact path depends on the active mod-manager profile.
 
 ### Markers the mod writes for itself
 
 Two files are not data a person edits: the profile's generated author identity,
-and the marker saying the first-run tip has been shown. They live in a `state`
-subfolder of the data root:
+and the marker saying the first-run tip has been shown. Since 1.2.2 they live in
+a `state` subfolder of the product's directory:
 
 ```text
-BepInEx/data/ConcernedCatMods/ConcernedCartographer/state/author-id.dat
-BepInEx/data/ConcernedCatMods/ConcernedCartographer/state/onboarding-shown.dat
+BepInEx/config/ConcernedCatMods/ConcernedCartographer/state/author-id.dat
+BepInEx/config/ConcernedCatMods/ConcernedCartographer/state/onboarding-shown.dat
 ```
 
 A mod manager's configuration editor offered `author-id.txt` for editing
@@ -51,9 +34,25 @@ A mod manager's configuration editor offered `author-id.txt` for editing
 the atlas believes wrote this profile's entries, which is what the
 non-owner-delete policy is keyed on.
 
-**A subfolder rather than a rename.** The reporter's diagnosis was the location,
-and a subfolder is correct whichever files that editor lists. It also matters for
-something else entirely: `CartographerLegacyProbe` decides new-player versus
+**What actually fixes this is the `.dat` extension, not the subfolder.** Read
+from the installed Thunderstore Mod Manager bundle (1.124.2,
+`APP_NAME="r2modman"`, core 3.2.18): the configuration editor is rooted at the
+**whole profile**, excluding only `dotnet`, `_state` and a plugin's
+`manifest.json`, and then filters by
+`SUPPORTED_CONFIG_FILE_EXTENSIONS = [".cfg", ".txt", ".json", ".yml", ".yaml", ".ini"]`.
+It descends into `state/` like any other folder. `author-id.txt` was listed
+because `.txt` is on that list; `.tsv` never has been, which is why no sidecar
+has ever appeared there. So 1.2.2 shipped two changes together and the
+subfolder got the credit that belonged to the rename.
+`validate_repo.py` now enforces the extension rule for every name written into
+the product's directory, checked against `CartographerConfigFiles`.
+
+**This has not been checked against Gale.** Gale is an independent Rust
+implementation, it is not installed here, and nothing above was measured from
+it. The reporter has not confirmed either.
+
+**The subfolder still earns its place, for a different reason.**
+`CartographerLegacyProbe` decides new-player versus
 returning-player by listing this directory with `Directory.GetFiles` and asking
 whether every name is one this build writes for itself. `GetFiles` does not
 return subdirectories, so a marker under `state` is invisible to it. A rename in
@@ -64,27 +63,12 @@ names, and the companion sidecar's `.corrupt` quarantine name, are now in
 `CartographerFirstRunFiles` as well, so a file left behind by a failed adoption
 is still not mistaken for a player's own doing.
 
-That subfolder was necessary and not sufficient: it was still inside the
-settings folder, so it still rested on a guess that a settings editor does not
-descend. The data root removes the guess — nothing of this mod's that is not a
-setting is under `BepInEx/config` at all — and the subfolder keeps doing its
-other job, which is staying out of the fresh-install probe's listing.
-
-**Upgrading.** Prior locations are honoured **newest first**, and a location is
-a directory as much as it is a name. In order: `state/author-id.dat` in the
-**settings** root (the layout before the data root existed), then
-`author-id.dat` and `author-id.txt` there (the build between, commit `6903a65`,
-and the original), then the same two names in the data root, and only then the
-marker itself. A file still sitting in any prior location is proof that adoption
-never finished, and it predates the marker — so it wins over the marker, which
-is either a partial copy of it or a value this build minted during a failure.
-Both markers are written once and never changed, so this ordering can never
-prefer a stale value to a live one.
-
-That directory list is what keeps an identity when the #304 relocation cannot
-finish. Looking only in the data root would find nothing, mint a second GUID,
-and silently make the player somebody else — their own pins would stop being
-theirs to delete.
+**Upgrading.** Two prior locations are honoured, **newest first**:
+`author-id.dat` in the product directory (the build between, commit `6903a65`)
+and then `author-id.txt` (the original). A file still sitting in either one is
+proof that adoption never finished, and it predates the marker — so it wins over
+the marker beside it, which is either a partial copy of it or a value this build
+minted during a failure.
 
 Adoption reads, checks (an author identity must parse as a GUID), stages to a
 temporary file, copies onto the marker, and reads **the marker** back; only then

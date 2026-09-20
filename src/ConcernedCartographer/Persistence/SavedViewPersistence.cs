@@ -69,6 +69,6 @@ internal sealed class SavedViewPersistence
 
     private static string GetPath()
     {
-        return CartographerPaths.InData("views.tsv");
+        return CartographerPaths.InRoot("views.tsv");
     }
 }

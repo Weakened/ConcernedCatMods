@@ -2,22 +2,36 @@ using System;
 
 namespace TheConcernedCat.ConcernedCartographer.Storage;
 
-/// <summary>The only files of this product's that belong in the settings
-/// folder: the ones a person is meant to open and change.
+/// <summary>The files this product writes that a player is meant to open and
+/// edit — and therefore the only ones it is <i>correct</i> for a mod manager's
+/// configuration editor to offer.
 ///
-/// <b>Why the list exists rather than the rule being kept in someone's head.</b>
-/// A mod manager presents everything under <c>BepInEx/config</c> as this mod's
-/// settings. #304 is what happens when something that is not a setting lands
-/// there: Quandru was offered <c>author-id.txt</c> — a generated GUID the atlas
-/// keys its ownership on — as though it were a thing to edit. The fix is not a
-/// note explaining why a data file is in the settings folder; it is that data
-/// files are not in the settings folder. This list is the whole of what is.
+/// <b>What this list is for (#304).</b> Quandru was offered
+/// <c>author-id.txt</c> for editing: a generated GUID the atlas keys ownership
+/// on. The cause was not the folder. A mod manager's configuration editor walks
+/// the whole profile and decides what to show by <b>file extension</b> —
+/// <c>.cfg .txt .json .yml .yaml .ini</c> in the Thunderstore Mod Manager /
+/// r2modman bundle read for this issue. <c>author-id.txt</c> matched; the
+/// atlas's <c>.tsv</c> sidecars never have. So the rule that keeps this from
+/// happening again is about extensions, not directories: anything this product
+/// writes whose extension that editor opens has to be a file a player edits,
+/// and that means it has to be on this list. <c>validate_repo.py</c> enforces
+/// exactly that, and it is the rule that would have caught both
+/// <c>author-id.txt</c> and <c>support-report.txt</c> before a user did.
 ///
-/// <see cref="DataRelocation"/> reads it to decide what stays put, and the
-/// validator holds it and <c>CartographerPaths.InConfig</c> to each other in
-/// both directions, so adding a file to one without the other fails the gate.
-/// Adding a name here is a decision that a player edits that file by hand.
-/// </summary>
+/// <b>An allowlist, not an inventory.</b> None of the names below currently has
+/// an extension that editor opens — they are all <c>.tsv</c> — so the list is
+/// empty of anything the rule fires on today, and that is the healthy state.
+/// It is written down anyway because it says what "a player edits this" means
+/// here: adding a name is a decision that somebody is expected to open the file
+/// by hand, and a future <c>.json</c> preset or <c>.ini</c> would need to be on
+/// it before it could be written at all.
+///
+/// <b>Not a statement about where files live.</b> Everything this product
+/// writes stays under <c>BepInEx/config/ConcernedCatMods/ConcernedCartographer</c>,
+/// because that folder is the one a profile export copies wholesale and
+/// unfiltered; anywhere else and a <c>.tsv</c> atlas would be dropped from the
+/// player's own backup. <c>CartographerPaths</c> has the measurements.</summary>
 internal static class CartographerConfigFiles
 {
     /// <summary>The names, as literals, because the validator reads them from
@@ -30,19 +44,18 @@ internal static class CartographerConfigFiles
         "survey-rules.tsv",
 
         // A translator's overrides, and the template they are copied from.
-        // The template is written by this build, but it is here for a person
-        // to take, so the settings folder is where it belongs.
+        // The template is written by this build, but it exists for a person to
+        // take, so a person finding it is the intended outcome.
         "cartographer-strings.tsv",
         "cartographer-strings-template.tsv",
     };
 
-    /// <summary>Whether a file directly in the settings folder is one of ours
-    /// that belongs there.
+    /// <summary>Whether a file this product writes is one a player is meant to
+    /// edit.
     ///
-    /// A name this cannot account for is <b>not</b> configuration, so it is
-    /// moved out. That is the direction that fixes #304; the opposite reading
-    /// would let any future file quietly reappear in the settings editor.
-    /// Files another mod owns are not in this product's folder at all.</summary>
+    /// A name this cannot account for is <b>not</b> something to edit. That is
+    /// the direction that fixes #304; the opposite reading would let any future
+    /// file quietly become editable.</summary>
     public static bool IsConfiguration(string? fileName)
     {
         if (string.IsNullOrEmpty(fileName))
@@ -53,6 +66,38 @@ internal static class CartographerConfigFiles
         foreach (string name in Names)
         {
             if (string.Equals(fileName, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>The extensions a mod-manager configuration editor opens, read
+    /// from the Thunderstore Mod Manager / r2modman bundle's own
+    /// <c>SUPPORTED_CONFIG_FILE_EXTENSIONS</c>.
+    ///
+    /// Here so a test can pin it and so the reasoning above is checkable rather
+    /// than remembered. The validator keeps its own copy, because a Python
+    /// check cannot import this.</summary>
+    public static readonly string[] ExtensionsAnEditorOpens =
+    {
+        ".cfg", ".txt", ".json", ".yml", ".yaml", ".ini",
+    };
+
+    /// <summary>Whether a configuration editor would offer this file, by
+    /// extension alone — which is the only thing it looks at.</summary>
+    public static bool AnEditorWouldOfferThis(string? fileName)
+    {
+        if (string.IsNullOrEmpty(fileName))
+        {
+            return false;
+        }
+
+        foreach (string extension in ExtensionsAnEditorOpens)
+        {
+            if (fileName!.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }

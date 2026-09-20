@@ -26,7 +26,7 @@ internal sealed class AtlasBackupTools
         _log = log;
     }
 
-    private static string DataDirectory => CartographerPaths.Data;
+    private static string DataDirectory => CartographerPaths.Root;
 
     private static string BackupRoot => CartographerPaths.Backups;
 
@@ -113,13 +113,29 @@ internal sealed class AtlasBackupTools
             "(a pre-restore safety backup was taken). Log out and back in to load the restored atlas.";
     }
 
+    /// <summary>What this report used to be called. A mod manager's
+    /// configuration editor decides what to offer by extension, and
+    /// <c>.txt</c> is on its list, so the report was listed among the files a
+    /// player may edit — the same defect as <c>author-id.txt</c> and the last
+    /// one left of #304. It is superseded, not adopted: the contents are
+    /// regenerated from scratch every time, so there is nothing in the old file
+    /// to carry across.</summary>
+    private const string PriorReportName = "support-report.txt";
+
     /// <summary>The sanitized support report: safe to paste in a bug
     /// report. This wrapper only locates files; every content line comes
     /// from the pure, unit-tested <see cref="SupportReportComposer"/>,
-    /// whose signature cannot receive the world UID or any path.</summary>
+    /// whose signature cannot receive the world UID or any path.
+    ///
+    /// <b><c>.log</c>, deliberately, and not <c>.dat</c>.</b> A configuration
+    /// editor does not open <c>.log</c>, so the report stops being offered as a
+    /// setting; a person does, which matters because this is the one file we
+    /// ask people to find and send us. It stays in the product's directory
+    /// under <c>BepInEx/config</c>, which is the folder a profile export copies
+    /// wholesale — see <see cref="CartographerPaths"/>.</summary>
     public string WriteSupportReport(long worldUid, string pluginVersion, string effectiveConfig)
     {
-        string path = CartographerPaths.InData("support-report.txt");
+        string path = CartographerPaths.InRoot("support-report.log");
         var sidecars = new List<(string Suffix, string Status)>();
         foreach (string suffix in SidecarSuffixes)
         {
@@ -143,6 +159,41 @@ internal sealed class AtlasBackupTools
 
         File.WriteAllLines(path, SupportReportComposer.Compose(
             DateTime.UtcNow, pluginVersion, effectiveConfig, sidecars, ListBackups(worldUid).Count));
+        RemoveSupersededReport(path);
         return path;
+    }
+
+    /// <summary>Removes the older build's <c>.txt</c> report, once the new one
+    /// is actually on disk.
+    ///
+    /// <b>Only after, and only if.</b> The new report is written first and its
+    /// presence is checked before anything is deleted, so a failed write never
+    /// costs somebody the report they were about to send us. The old one holds
+    /// nothing the new one does not — every line is regenerated — so there is
+    /// no adoption to do, only the tidy that stops a player having two reports
+    /// and sending the stale one.</summary>
+    private void RemoveSupersededReport(string writtenPath)
+    {
+        try
+        {
+            if (!File.Exists(writtenPath))
+            {
+                return;
+            }
+
+            string prior = CartographerPaths.InRoot(PriorReportName);
+            if (File.Exists(prior))
+            {
+                File.Delete(prior);
+            }
+        }
+        catch (Exception exception)
+        {
+            // A leftover report is untidy, never harmful, and never worth
+            // failing the command a player ran to ask us for help.
+            _log.LogWarning(
+                "The older support report could not be removed, so there are two of them; the " +
+                $"newer one is the .log: {SafeLogText.Brief(exception)}");
+        }
     }
 }

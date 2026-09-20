@@ -138,7 +138,7 @@ internal sealed class RoutePersistence
 
     private static string GetSnapshotPath(long worldUid)
     {
-        return CartographerPaths.InData(worldUid.ToString(CultureInfo.InvariantCulture) + ".routes-atlas.tsv");
+        return CartographerPaths.InRoot(worldUid.ToString(CultureInfo.InvariantCulture) + ".routes-atlas.tsv");
     }
 
     private static string GetJournalPath(long worldUid)

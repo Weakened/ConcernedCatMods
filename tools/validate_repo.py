@@ -29,6 +29,20 @@ QUOTE = chr(34)
 # suffix is this build's own bookkeeping and belongs under "state".
 MARKER_EXTENSION = ".dat"
 
+# What a mod manager's configuration editor offers a player for editing, read
+# verbatim from the installed Thunderstore Mod Manager bundle (1.124.2,
+# APP_NAME="r2modman", core 3.2.18) as SUPPORTED_CONFIG_FILE_EXTENSIONS.
+#
+# This, and not the folder, is what #304 turned out to be. The editor is rooted
+# at the WHOLE profile - it excludes only `dotnet`, `_state` and a plugin's
+# `manifest.json` - and then filters by this list. Quandru was offered
+# `author-id.txt` because `.txt` is on it; the atlas's `.tsv` sidecars have
+# never been listed, and moving files to another folder would not have changed
+# either fact. Mirrored here because a Python check cannot read
+# CartographerConfigFiles.ExtensionsAnEditorOpens, which carries the same list
+# for the same reason.
+CONFIG_EDITOR_EXTENSIONS = (".cfg", ".txt", ".json", ".yml", ".yaml", ".ini")
+
 PRODUCTS: dict[str, dict[str, object]] = {
     "cartographer": {
         "display": "Concerned Cartographer",
@@ -2034,7 +2048,6 @@ def _cartographer_known_names() -> tuple[set[str], set[str]]:
 
     sources = (
         ROOT / "src/ConcernedCartographer/Domain/Companions/LegacyEvidenceRule.cs",
-        ROOT / "src/ConcernedCartographer/Domain/Companions/CartographerEvidenceScan.cs",
         ROOT / "src/ConcernedCartographer/Runtime/Companions/CartographerLegacyProbe.cs",
     )
     for source in sources:
@@ -2056,12 +2069,11 @@ def _cartographer_known_names() -> tuple[set[str], set[str]]:
 
 
 def _cartographer_config_file_names() -> set[str]:
-    """The files Cartographer says a player edits, read from the source.
+    """The files Cartographer says a player is meant to open and edit.
 
-    #304 is a mod manager presenting `BepInEx/config` as this mod's settings and
-    finding a generated GUID there. The answer is a list of what genuinely is a
-    setting, and the check below holds that list and the code that composes
-    settings paths to each other, so neither can drift from the other.
+    Read from the source rather than restated, so the rule below stays true as
+    that list changes instead of becoming a second copy of it. An unreadable or
+    missing list returns empty, and the caller refuses rather than passing.
     """
     source = ROOT / "src/ConcernedCartographer/Domain/Storage/CartographerConfigFiles.cs"
     if not source.exists():
@@ -2073,7 +2085,8 @@ def _cartographer_config_file_names() -> set[str]:
         if not code.startswith(QUOTE) or not code.endswith(QUOTE + ","):
             continue
         literal = code[1:-2]
-        if literal:
+        # The same file also lists the editor's extensions; those are not names.
+        if literal and not literal.startswith("."):
             names.add(literal)
 
     return names
@@ -2118,19 +2131,18 @@ def check_cartographer_root_holds_only_names_the_probe_knows(errors: list[str]) 
 
     Three rules, all about the invariant rather than about a spelling:
 
-    1. Only `CartographerPaths` composes either BepInEx path token, so there is
-       one owner for both directories.
-    2. Every name handed to `CartographerPaths.InData` or `.InConfig` is one the
-       probe knows - a name this build writes for itself, or player evidence. A
-       name in neither list is exactly #343. Both, because the probe reads both
-       directories: a profile whose #304 relocation has not run, or could not
-       finish, still has its whole history in the settings folder.
-    3. `.InConfig` is used for exactly the names `CartographerConfigFiles` calls
-       configuration, in both directions. That list is what #304 is: a mod
-       manager shows the settings folder as this mod's settings, so anything
-       there has to be something a player edits. Without the reverse direction a
-       new data file could be added to the settings folder one `.InConfig` call
-       at a time, which is the report coming back.
+    1. Only `CartographerPaths` composes the directory, so there is one owner.
+    2. Every name handed to `CartographerPaths.InRoot` is one the probe knows -
+       a name this build writes for itself, or player evidence. A name in
+       neither list is exactly #343.
+    3. No name handed to `CartographerPaths.InRoot` has an extension a mod
+       manager's configuration editor opens unless it is on
+       `CartographerConfigFiles` - unless, that is, a player really is meant to
+       edit it. That editor walks the whole profile and filters by extension
+       alone (CONFIG_EDITOR_EXTENSIONS), so the folder a file sits in has never
+       been what decided whether it was offered. This is the rule that would
+       have caught `author-id.txt` and `support-report.txt` before a user did,
+       and it is #304 written down as a check instead of as a lesson.
 
     Rule 2 is the one that matters, and the first version of this check did not
     have it: it forbade the token `Paths.ConfigPath` and nothing else, so moving
@@ -2147,9 +2159,8 @@ def check_cartographer_root_holds_only_names_the_probe_knows(errors: list[str]) 
 
     project_dir = PRODUCTS["cartographer"]["project_dir"]
     owner_relative = Path("src/ConcernedCartographer/CartographerPaths.cs")
-    needles = ("Paths.ConfigPath", "Paths.BepInExRootPath")
-    in_data = "CartographerPaths.InData("
-    in_config = "CartographerPaths.InConfig("
+    needle = "Paths.ConfigPath"
+    in_root = "CartographerPaths.InRoot("
 
     if not (ROOT / owner_relative).exists():
         flag(
@@ -2157,20 +2168,19 @@ def check_cartographer_root_holds_only_names_the_probe_knows(errors: list[str]) 
             "to compose the product's data directory"
         )
 
-    config_names = _cartographer_config_file_names()
-    if not config_names:
-        flag(
-            "[cartographer-paths] could not read CartographerConfigFiles, so the "
-            "settings-folder rule cannot be checked"
-        )
-        return []
-
-    config_names_used: set[str] = set()
     known_names, known_suffixes = _cartographer_known_names()
     if not known_names:
         flag(
             "[cartographer-paths] could not read the probe's known file names, so the "
             "root-contents rule cannot be checked"
+        )
+        return []
+
+    editable = _cartographer_config_file_names()
+    if not editable:
+        flag(
+            "[cartographer-paths] could not read CartographerConfigFiles, so the rule that "
+            "keeps a generated file out of a configuration editor (#304) cannot be checked"
         )
         return []
 
@@ -2201,39 +2211,21 @@ def check_cartographer_root_holds_only_names_the_probe_knows(errors: list[str]) 
             for number, raw in enumerate(text.splitlines(), start=1):
                 code = _strip_cs_line_comment(raw)
 
-                for needle in needles:
-                    if needle in code:
-                        flag(
-                            f"[cartographer-paths] {relative}:{number} composes {needle} "
-                            "directly. Use CartographerPaths.InData(name) for a file a player "
-                            "caused, CartographerPaths.InConfig(name) for one of the few files "
-                            "a player edits, or CartographerPaths.InState(name) for this "
-                            "build's own bookkeeping - which directory a file lands in decides "
-                            "who the fresh-install probe calls a returning player, and whether "
-                            "a mod manager offers it as a setting (#304, #343, #363)."
-                        )
+                if needle in code:
+                    flag(
+                        f"[cartographer-paths] {relative}:{number} composes {needle} directly. "
+                        "Use CartographerPaths.InRoot(name) for a file a player edited or "
+                        "caused, or CartographerPaths.InState(name) for this build's own "
+                        "bookkeeping - a file in the root decides who the fresh-install probe "
+                        "calls a returning player (#343, #363)."
+                    )
 
-                for literal in _literal_arguments(code, in_config):
-                    config_names_used.add(literal)
-                    if literal not in config_names:
-                        flag(
-                            f"[cartographer-paths] {relative}:{number} puts "
-                            + QUOTE + literal + QUOTE
-                            + " in the settings folder, and CartographerConfigFiles does not "
-                            "call it configuration. A mod manager presents that folder as this "
-                            "mod's settings, so only a file a player opens and edits belongs "
-                            "there; everything else goes through CartographerPaths.InData "
-                            "(#304)."
-                        )
-
-                for literal in sorted(
-                        set(_literal_arguments(code, in_data)) |
-                        set(_literal_arguments(code, in_config))):
+                for literal in _literal_arguments(code, in_root):
                     if literal.endswith(MARKER_EXTENSION):
                         flag(
                             f"[cartographer-paths] {relative}:{number} writes "
                             + QUOTE + literal + QUOTE
-                            + " into a probed directory. A marker belongs under "
+                            + " into the probed root. A marker belongs under "
                             "CartographerPaths.InState: Directory.GetFiles does not descend, "
                             "which keeps it out of the probe's listing and out of a config "
                             "editor (#304, #343)."
@@ -2242,26 +2234,31 @@ def check_cartographer_root_holds_only_names_the_probe_knows(errors: list[str]) 
                         flag(
                             f"[cartographer-paths] {relative}:{number} writes "
                             + QUOTE + literal + QUOTE
-                            + " into a probed directory, and the probe does not know that "
-                            "name. Add it to CartographerFirstRunFiles (if this build writes "
-                            "it for itself) or to the probe's evidence lists (if a player "
-                            "action creates it) - an unknown name there makes every fresh "
-                            "install look like a returning player (#343)."
+                            + " into the probed root, and the probe does not know that name. "
+                            "Add it to CartographerFirstRunFiles (if this build writes it for "
+                            "itself) or to the probe's evidence lists (if a player action "
+                            "creates it) - an unknown name there makes every fresh install "
+                            "look like a returning player (#343)."
                         )
 
-    for name in sorted(config_names - config_names_used):
-        flag(
-            "[cartographer-paths] CartographerConfigFiles calls "
-            + QUOTE + name + QUOTE
-            + " configuration, but nothing composes it with CartographerPaths.InConfig. The "
-            "list is what stays in the settings folder when data is relocated out of it, so a "
-            "name on it that no longer lives there would strand a player's file (#304)."
-        )
+                    if (literal.lower().endswith(CONFIG_EDITOR_EXTENSIONS)
+                            and literal not in editable):
+                        flag(
+                            f"[cartographer-paths] {relative}:{number} writes "
+                            + QUOTE + literal + QUOTE
+                            + ", and a mod manager's configuration editor opens that extension, "
+                            "so a player is offered it for editing. Either it is genuinely "
+                            "theirs to edit - put it on CartographerConfigFiles and say so - or "
+                            "give it an extension that editor does not open (#304: "
+                            "author-id.txt was a generated GUID, support-report.txt was a "
+                            "generated report, and both were listed as settings)."
+                        )
 
     return [
-        f"[cartographer-paths] one owner for both directories; {checked} sources audited, "
-        "every name written into either is one the fresh-install probe knows, and the settings "
-        f"folder holds exactly the {len(config_names)} file(s) a player edits"
+        f"[cartographer-paths] one owner for the data directory; {checked} sources audited, "
+        "every name written into it is one the fresh-install probe knows, and nothing a "
+        f"configuration editor opens is written there but the {len(editable)} file(s) a player "
+        "edits"
     ]
 
 

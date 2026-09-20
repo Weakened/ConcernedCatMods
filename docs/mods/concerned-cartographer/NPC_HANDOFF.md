@@ -253,7 +253,7 @@ answer rows 6, 8, 9, 12 and 13 by observation rather than assumption.
   Nothing in the companion sidecar is needed by any other file.
 - **Uninstall:** removing the plugin removes every companion object with it.
   Nothing was written to your world save, so a vanilla world opens clean.
-- **What is left behind:** `<BepInEx>/data/ConcernedCatMods/ConcernedCartographer/`
+- **What is left behind:** `<BepInEx>/config/ConcernedCatMods/ConcernedCartographer/`
   keeps the `*.companions.tsv` sidecars and your ordinary atlas data. Delete the
   `*.companions.tsv` files to reset the introduction; leave them to keep it.
 - **Known limitation of rollback:** running 1.0.4 after 1.1.0 and then returning

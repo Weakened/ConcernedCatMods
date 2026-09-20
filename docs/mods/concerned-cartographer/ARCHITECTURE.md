@@ -245,7 +245,7 @@ logging, the atomic-write dance, and the one-time v1 backup.
 Writes a tab-separated, versioned sidecar file to:
 
 ```text
-BepInEx/data/ConcernedCatMods/ConcernedCartographer/<world-uid>.roads.tsv
+BepInEx/config/ConcernedCatMods/ConcernedCartographer/<world-uid>.roads.tsv
 ```
 
 The write uses an intermediate temporary file and replacement. A malformed line is skipped with a warning instead of preventing world load.

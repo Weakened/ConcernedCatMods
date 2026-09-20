@@ -84,7 +84,7 @@ internal sealed class TerrainIntentPersistence
 
     private static string GetPath(long worldUid)
     {
-        return CartographerPaths.InData(worldUid.ToString(CultureInfo.InvariantCulture) + ".terrain-intent.tsv");
+        return CartographerPaths.InRoot(worldUid.ToString(CultureInfo.InvariantCulture) + ".terrain-intent.tsv");
     }
 
     private static void TryDelete(string path)

@@ -14,10 +14,10 @@ namespace TheConcernedCat.ConcernedCartographer.Persistence;
 internal static class LocalizationPersistence
 {
     public static string OverridePath =>
-        CartographerPaths.InConfig("cartographer-strings.tsv");
+        CartographerPaths.InRoot("cartographer-strings.tsv");
 
     public static string TemplatePath =>
-        CartographerPaths.InConfig("cartographer-strings-template.tsv");
+        CartographerPaths.InRoot("cartographer-strings-template.tsv");
 
     public static void Initialize(ManualLogSource log)
     {

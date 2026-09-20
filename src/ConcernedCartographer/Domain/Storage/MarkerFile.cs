@@ -17,12 +17,20 @@ namespace TheConcernedCat.ConcernedCartographer.Storage;
 /// than merely changing extension — which would have been a guess about which
 /// files that editor lists, and would have been wrong if it lists them all.
 ///
-/// That subfolder was the first half of the answer and not the whole of it: it
-/// was still inside the settings folder, so it was still a guess that an editor
-/// does not descend. The product's data directory is now a sibling of the
-/// settings folder rather than a child of it (<c>CartographerPaths</c>), which
-/// is the same reasoning carried to the end — a settings editor has nothing of
-/// ours to list because nothing of ours that is not a setting is there.
+/// <b>The guess was the wrong way round, and it is now measured.</b> Read from
+/// the installed Thunderstore Mod Manager bundle (1.124.2,
+/// <c>APP_NAME="r2modman"</c>, core 3.2.18): the editor is rooted at the whole
+/// profile, excluding only <c>dotnet</c>, <c>_state</c> and a plugin's
+/// <c>manifest.json</c>, and picks what to show by extension alone
+/// (<c>SUPPORTED_CONFIG_FILE_EXTENSIONS</c>: <c>.cfg .txt .json .yml .yaml
+/// .ini</c>). It descends into every subfolder, <see cref="FolderName"/>
+/// included — so the subfolder does <i>not</i> hide a marker from it, and never
+/// did. <see cref="Extension"/> is what does: <c>.dat</c> is on no list, so
+/// <c>author-id.dat</c> is not offered where <c>author-id.txt</c> was. Both
+/// changes shipped together in 1.2.2, which is why this file credited the wrong
+/// one. The subfolder still earns its place for the other reason below, which
+/// is about the probe and not about any editor. <b>Gale is an independent
+/// implementation and has not been assessed.</b>
 ///
 /// The subfolder is also what makes this safe for something else entirely.
 /// <c>CartographerLegacyProbe</c> decides whether a player is new or returning
@@ -42,8 +50,13 @@ internal static class MarkerFile
     public const string FolderName = "state";
 
     /// <summary>Deliberately not <c>.txt</c>, <c>.cfg</c>, <c>.json</c>,
-    /// <c>.ini</c> or <c>.yml</c>. The subfolder is what fixes #304; this is
-    /// so the file does not read as configuration if somebody does find it.
+    /// <c>.ini</c>, <c>.yml</c> or <c>.yaml</c>. <b>This is what fixes #304</b>
+    /// — a configuration editor chooses by extension and descends everywhere,
+    /// so the subfolder does not hide this file and this constant does. The
+    /// rule is enforced for every name in the product's directory by
+    /// <c>validate_repo.py</c> against <c>CartographerConfigFiles</c>, so it
+    /// cannot be forgotten for the next file the way it was for
+    /// <c>support-report.txt</c>.
     ///
     /// <b>Changing this is a migration, not a rename.</b> The prior-location
     /// lists callers pass are historical facts and must be written as literals,
@@ -97,20 +110,6 @@ internal static class MarkerFile
     /// <param name="priorNames">Where this marker has lived before, relative to
     /// <paramref name="directory"/>, <b>newest first</b>. Literals, not derived
     /// from <see cref="Extension"/>.</param>
-    /// <param name="priorDirectories">Product directories this marker set has
-    /// lived in before <paramref name="directory"/>, <b>newest first</b>, and
-    /// never <paramref name="directory"/> itself. Each is searched for
-    /// <see cref="FolderName"/>/<paramref name="name"/> and then for each
-    /// <paramref name="priorNames"/> entry.
-    ///
-    /// <b>This is what keeps an identity across #304.</b> The settings folder
-    /// held every marker until the data folder existed, and
-    /// <see cref="DataRelocation"/> moves them on the first start of a build
-    /// that has one. If that move cannot finish — a locked file, a read-only
-    /// profile — a search of the new directory alone finds nothing, the caller
-    /// mints a fresh GUID, and the player is silently somebody else while their
-    /// real identity sits unread a folder away. A directory a marker has lived
-    /// in is a prior location in exactly the sense a name is.</param>
     /// <param name="isUsable">Whether contents are worth keeping. Required:
     /// defaulting it to "anything will do" made the unsafe behaviour the one you
     /// get by leaving an argument out.</param>
@@ -123,7 +122,6 @@ internal static class MarkerFile
         string directory,
         string name,
         IReadOnlyList<string> priorNames,
-        IReadOnlyList<string> priorDirectories,
         Func<string, bool> isUsable,
         Action<string> log,
         out string path,
@@ -147,9 +145,15 @@ internal static class MarkerFile
         {
             // 1. Prior locations, newest first. A file still sitting in one of
             //    them means adoption never finished, and it predates the marker.
-            foreach (string prior in PriorLocations(directory, name, priorNames, priorDirectories))
+            foreach (string priorName in priorNames ?? Array.Empty<string>())
             {
-                if (PathsMatch(prior, path) || !Exists(prior))
+                if (string.IsNullOrEmpty(priorName))
+                {
+                    continue;
+                }
+
+                string prior = Path.Combine(directory, priorName);
+                if (!Exists(prior))
                 {
                     continue;
                 }
@@ -165,7 +169,7 @@ internal static class MarkerFile
                     // Every prior copy, not only the one adopted from. Leaving
                     // the others behind keeps a raw GUID visible in the config
                     // editor for the life of the profile.
-                    RemoveAll(directory, name, priorNames, priorDirectories, path, log);
+                    RemoveAll(directory, priorNames, log);
                 }
 
                 contents = found;
@@ -276,79 +280,14 @@ internal static class MarkerFile
         }
     }
 
-    /// <summary>Every place this marker could be sitting, newest first.
-    ///
-    /// <b>A directory that has not been relocated beats one that has.</b> A
-    /// marker still in the settings folder proves the move out of it never
-    /// finished, so the copy in the data folder is at most a partial one; and
-    /// within a directory, the <see cref="FolderName"/> layout is newer than a
-    /// bare name beside it. Both markers this product keeps are written once
-    /// and never changed afterwards, so no version of this ordering can prefer
-    /// a stale value to a live one.</summary>
-    private static IEnumerable<string> PriorLocations(
-        string directory,
-        string name,
-        IReadOnlyList<string>? priorNames,
-        IReadOnlyList<string>? priorDirectories)
+    private static void RemoveAll(
+        string directory, IReadOnlyList<string> priorNames, Action<string> log)
     {
-        foreach (string priorDirectory in priorDirectories ?? Array.Empty<string>())
-        {
-            if (string.IsNullOrEmpty(priorDirectory))
-            {
-                continue;
-            }
-
-            yield return Path.Combine(priorDirectory, FolderName, name);
-
-            foreach (string priorName in priorNames ?? Array.Empty<string>())
-            {
-                if (!string.IsNullOrEmpty(priorName))
-                {
-                    yield return Path.Combine(priorDirectory, priorName);
-                }
-            }
-        }
-
         foreach (string priorName in priorNames ?? Array.Empty<string>())
         {
             if (!string.IsNullOrEmpty(priorName))
             {
-                yield return Path.Combine(directory, priorName);
-            }
-        }
-    }
-
-    /// <summary>Guards the marker itself against the removal sweep. A caller
-    /// that named the current directory among the prior ones would otherwise
-    /// delete the file it has just written and verified.</summary>
-    private static bool PathsMatch(string left, string right)
-    {
-        try
-        {
-            return string.Equals(
-                Path.GetFullPath(left),
-                Path.GetFullPath(right),
-                StringComparison.OrdinalIgnoreCase);
-        }
-        catch (Exception)
-        {
-            return false;
-        }
-    }
-
-    private static void RemoveAll(
-        string directory,
-        string name,
-        IReadOnlyList<string> priorNames,
-        IReadOnlyList<string> priorDirectories,
-        string marker,
-        Action<string> log)
-    {
-        foreach (string prior in PriorLocations(directory, name, priorNames, priorDirectories))
-        {
-            if (!PathsMatch(prior, marker))
-            {
-                Delete(prior, log);
+                Delete(Path.Combine(directory, priorName), log);
             }
         }
     }

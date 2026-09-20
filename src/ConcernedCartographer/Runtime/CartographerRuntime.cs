@@ -3239,7 +3239,7 @@ internal sealed class CartographerRuntime : IDisposable
                     args.Length > 1 ? args[1].ToLowerInvariant() : "?");
 
             case "path":
-                return "Companion data: " + CartographerPaths.Data;
+                return "Companion data: " + CartographerPaths.Root;
 
             case "reset":
                 return _companions.Reset(args.Length > 1 ? args[1] : null);
