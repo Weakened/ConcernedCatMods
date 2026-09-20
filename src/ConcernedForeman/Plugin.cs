@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using BepInEx;
+using TheConcernedCat.ConcernedNPC.Roles;
+using TheConcernedCat.ConcernedForeman.Domain.Npc;
 using TheConcernedCat.ConcernedForeman.Domain.Settlement;
 using TheConcernedCat.ConcernedForeman.Runtime;
 using TheConcernedCat.ConcernedForeman.Runtime.Collection;
@@ -33,6 +35,15 @@ namespace TheConcernedCat.ConcernedForeman;
 /// climbing it.</summary>
 [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
 [BepInDependency(Jotunn.Main.ModGuid)]
+// Thorstein's actor mode comes from the Concerned NPC library, which ships as its
+// own package. Hard rather than soft: without it there is no arbiter, so there is
+// nothing to stop one identity having two bodies, and the honest failure is one
+// line at load instead of a null reference in the middle of somebody's evening.
+//
+// Spelled out rather than referred to by constant on purpose: the validator reads
+// this file as text (check_library_consumers), and a constant would leave the rule
+// looking satisfied to a reader and unsatisfied to the gate.
+[BepInDependency("com.theconcernedcat.valheim.concernednpc")]
 public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernedforeman";
@@ -40,6 +51,7 @@ public sealed class Plugin : BaseUnityPlugin
     public const string PluginVersion = "0.1.0";
 
     private SettlementRuntime? _settlement;
+    private ForemanNpcAdoption? _npc;
     private CollectionRuntime? _collection;
     private HaulProviderDiscovery? _haulProvider;
     private PresenceProviderDiscovery? _presenceProvider;
@@ -56,6 +68,20 @@ public sealed class Plugin : BaseUnityPlugin
     {
         ForemanSettlementSettings settings = ForemanSettlementSettings.Bind(Config);
         _settlement = new SettlementRuntime(settings, message => Logger.LogInfo(message));
+
+        // Thorstein is offered to Concerned NPC before anything else, because
+        // every question below about what he is doing is answered by the arbiter
+        // this registers him with. Registration is per process, not per world, and
+        // it never throws: four products register into one load and one of them
+        // getting it wrong must not take the others down. A refusal is logged and
+        // leaves this product unable to take a collection order - which is the
+        // fail-closed direction: worker authority never grants on ambiguity.
+        _npc = new ForemanNpcAdoption(
+            NpcRoleRegistry.Shared,
+            new ForemanNpcRole(SettlementRecords.DefaultRoot()),
+            message => Logger.LogInfo(message));
+        _npc.Register();
+        ForemanNpcAdoption npc = _npc;
 
         // The worker prefab must be registered before any world's objects are
         // created, or a saved worker body is destroyed as an unknown prefab (D9).
@@ -90,6 +116,7 @@ public sealed class Plugin : BaseUnityPlugin
             settings,
             collectionSettings,
             message => Logger.LogInfo(message),
+            npc.Modes,
             custody,
             cooperation: _cooperativeDelivery,
             sharedEpoch: () => custody.Epoch);
@@ -309,12 +336,23 @@ public sealed class Plugin : BaseUnityPlugin
             // Before anything else drops the scene: a climber is holding a
             // ladder that is about to stop existing.
             _ladders?.OnWorldUnloaded();
+
+            // Last, so the collection loop has already released Thorstein's mode
+            // by name. This only has to catch what a fault or a crash left
+            // behind: a job id nothing still holds a copy of, which no ordinary
+            // release could ever give back.
+            _npc?.NoteWorldUnloaded();
         }
         else if (!_worldWasUp && worldIsUp)
         {
             // Teamster's capability map is complete by the first world tick.
             _haulProvider?.EnsureProbed();
             _presenceProvider?.EnsureProbed();
+
+            // The library mints this world load's epoch, or adopts the one
+            // another product's runtime minted a frame earlier. A mode hold or a
+            // body hold from the previous world ends here.
+            _npc?.NoteWorldLoaded();
 
             // Before net time advances, custody reads the loaded world time.
             _settlement?.OnWorldLoaded();

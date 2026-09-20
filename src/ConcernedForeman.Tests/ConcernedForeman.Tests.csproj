@@ -50,6 +50,40 @@
          Jotunn's entity base class to prove a forward is not evidence about
          anything, and it is why CollectCommand is not linked here either. -->
 
+    <!-- The Concerned NPC adoption: Thorstein's durable facts, his role
+         declaration, and the mode hold that reads and writes the library's one
+         arbiter instead of an owner this product builds for itself. Game-free on
+         purpose, which is what lets the whole adoption - including the
+         fail-closed answers for an identity the library never accepted - be
+         proved with no game installed. -->
+    <Compile Include="..\ConcernedForeman\Domain\Npc\**\*.cs" LinkBase="Npc" />
+
+    <!-- The game-free half of the Concerned NPC library, LINKED and not
+         referenced.
+
+         The product REFERENCES the library as an assembly, which is the whole
+         point of it being a package. A net10 test host cannot load that net48
+         output, so the sources are linked here instead, exactly as
+         ConcernedSteward.Tests links them and for the same reason this project's
+         own adapters are linked: a test that passed against a copy would prove
+         nothing about what ships.
+
+         One consequence worth knowing: linking makes the library's INTERNAL
+         members visible here, including NpcRoleRegistry's own constructor. That
+         is what lets these tests build a private registry per test instead of
+         reaching for the process-wide Shared one, which every other test running
+         in parallel would share. The product cannot do that and does not: it uses
+         Shared, which is the one the arbiter's guarantee is about.
+
+         Everything EXCEPT Body/ and Plugin.cs. Body/ names BaseAI, Humanoid,
+         ZNetView and Jotunn's prefab manager, and this project's VanillaStubs.cs
+         is a DIFFERENT set of stand-ins from the library suite's; linking both
+         would be two games in one assembly. Plugin.cs is the BepInEx entry
+         point. -->
+    <Compile Include="..\ConcernedNPC\**\*.cs"
+             Exclude="..\ConcernedNPC\Plugin.cs;..\ConcernedNPC\Body\**\*.cs;..\ConcernedNPC\bin\**\*.cs;..\ConcernedNPC\obj\**\*.cs"
+             LinkBase="ConcernedNPC" />
+
     <!-- The game-free layers those sources sit on, the same way
          Shared.Settlement.Tests links them. -->
     <Compile Include="..\Shared\Settlement\**\*.cs" LinkBase="Settlement" />

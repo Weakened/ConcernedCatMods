@@ -75,7 +75,7 @@ internal readonly struct ControlResult
 ///
 /// <b>Who owns what.</b> This loop moves nobody itself: it asks
 /// <see cref="ICollectionMotion"/>, which only obeys the job holding the
-/// worker's <see cref="ActorModeOwner"/>. It writes no inventory: picks go
+/// worker's <see cref="IActorModeHold"/>. It writes no inventory: picks go
 /// through <see cref="ISourcePickupPort"/>, deposits through the custody
 /// executor, records through custody, journal first. Progress is always read
 /// back from the custody view, never kept here, so a unit is never counted
@@ -102,7 +102,7 @@ internal sealed class SoloCollectionLoop
     private readonly CollectionParameters _parameters;
     private readonly WorkerKey _workerKey;
     private readonly WorkerId _workerId;
-    private readonly ActorModeOwner _modes;
+    private readonly IActorModeHold _modes;
     private readonly SourceReservationBook _reservations;
     private readonly ICollectionMotion _motion;
     private readonly ICollectionCustody _custody;
@@ -141,7 +141,7 @@ internal sealed class SoloCollectionLoop
         CollectionParameters parameters,
         WorkerKey workerKey,
         WorkerId workerId,
-        ActorModeOwner modes,
+        IActorModeHold modes,
         SourceReservationBook reservations,
         ICollectionMotion motion,
         ICollectionCustody custody,
@@ -286,9 +286,29 @@ internal sealed class SoloCollectionLoop
         }
 
         string jobId = order.Order.Value;
-        if (_modes.Enter(ActorMode.Surveying, jobId) == ActorModeOutcome.RefusedBusy)
+
+        // Only a GRANT starts the order. This used to look for RefusedBusy
+        // alone, which was equivalent while ActorModeOwner was the only
+        // implementation - its Enter returns Entered, AlreadyInMode or
+        // RefusedBusy and nothing else - and is a defect now that the mode can
+        // come from Concerned NPC's arbiter: that answers Unspecified for an
+        // identity it does not track, and "not RefusedBusy" would read that as
+        // permission. The order would then run with nothing holding the worker,
+        // so his body could be retired out from under it and every WalkTo would
+        // be silently refused by a motion port that obeys only the holder. Asking
+        // the positive question also survives the next outcome anybody adds.
+        //
+        // And the refusal is LABELLED by asking the hold why, not by assuming.
+        // The workerBusy fact above reads false for an identity nothing can
+        // establish - correctly, since nothing is busy - so a refusal that fell
+        // through to here would otherwise be reported as "Thorstein is busy with
+        // another job" while there is no job and no cure. The two causes have
+        // nothing in common but the outcome.
+        if (!ActorModeGrants.IsGranted(_modes.Enter(ActorMode.Surveying, jobId)))
         {
-            return CollectionIntakeRefusal.WorkerBusy;
+            return _modes.IsIdentityKnown
+                ? CollectionIntakeRefusal.WorkerBusy
+                : CollectionIntakeRefusal.WorkerIdentityUnknown;
         }
 
         if (!_custody.RecordAccepted(order))
@@ -1681,6 +1701,29 @@ internal sealed class SoloCollectionLoop
     {
         if (_order == null || IsStopped)
         {
+            return;
+        }
+
+        // Asked FIRST, because it is the one cause of a refused command that has
+        // nothing to do with the body. The motion port obeys only the job holding
+        // the identity, so an identity nothing can establish refuses every walk
+        // while the body stands there in plain sight - and "his body is missing"
+        // would be flatly untrue, sending a player to look for a body that is not
+        // lost. Nothing about it improves until the game is restarted, so it is
+        // also the one reason here that resuming cannot clear.
+        // Asked FIRST, because it is the one cause of a refused command that has
+        // nothing to do with the body. The motion port obeys only the job holding
+        // the identity, so an identity nothing can establish refuses every walk
+        // while the body stands there in plain sight - and "his body is missing"
+        // would be flatly untrue, sending a player to look for a body that is not
+        // lost. Nothing about it improves until the game is restarted, so it is
+        // also the one reason here that resuming cannot clear.
+        if (!_modes.IsIdentityKnown)
+        {
+            Stop(
+                ReadProgress().AnyCarried ? CollectionOrderState.NeedsAttention : CollectionOrderState.Paused,
+                CollectionAttentionReason.WorkerIdentityUnknown,
+                now);
             return;
         }
 

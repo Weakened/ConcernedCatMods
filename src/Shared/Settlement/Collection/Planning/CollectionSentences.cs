@@ -31,6 +31,11 @@ internal static class CollectionSentences
                 return "One of Thorstein's tools is broken. Repair or replace it, then resume. He stays hired.";
             case CollectionAttentionReason.ToolHandoverUncertain:
                 return "A tool handover was interrupted and nobody knows whose hands the tool is in. Resolve it first.";
+            case CollectionAttentionReason.WorkerIdentityUnknown:
+                return "Thorstein's identity was not accepted by the shared Concerned NPC runtime when the game " +
+                    "started, so nothing may take hold of him - even if his body is standing in front of you. " +
+                    "Resuming will not help this session. Check that Concerned NPC is installed and enabled, then " +
+                    "look in the startup log for the line that says why he was refused.";
             case CollectionAttentionReason.JournalReadOnly:
                 return "The settlement record cannot be written, so nothing is moved. Check the log for why.";
 
