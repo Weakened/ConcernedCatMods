@@ -243,6 +243,36 @@ set, and a file the player touched at all — a rule added, removed,
 disabled, a bound retuned, a blacklist row or even a comment of his own —
 is left exactly as it is.
 
+### The rewrite does not move the file's modification time (#366)
+
+`CartographerLegacyProbe` decides whether a player is new or returning, in
+part, by asking whether `survey-rules.tsv` predates the session — existence
+alone proves nothing, because this build writes a starter copy during
+startup. So the migration above was also, silently, an answer to "has this
+player been here before": rewriting the file reset its modification time and
+a veteran read as a brand-new player, was re-onboarded, and could be told a
+story written for somebody who had never used the mod.
+
+This widened with #385 rather than staying still. Before it, the rewrite only
+fired for pre-v1.0.3 starter files; adding the v1.0.3-v1.2.2 snapshot pointed
+it at essentially the whole installed base.
+
+The upgrade therefore restores the file's original modification time after
+rewriting it. The timestamp is read as "when did the *player* last touch this
+document", and a migration this build performs on its own is not the player
+touching it. Two consequences worth stating:
+
+- the answer no longer depends on construction order — it does not matter
+  whether the probe runs before or after startup rewrites the file, and
+  `SurveyStarterRewriteTests` asserts both orders give the same answer;
+- when the restore genuinely fails (a filesystem that accepts the write and
+  refuses the metadata), the log says so in plain language instead of leaving
+  a silent false negative. Feature access grants on *ambiguous* evidence; a
+  wrongly-fresh probe is not ambiguity, so it is named rather than absorbed.
+
+`Save` — the player editing rules through the Survey panel or `cc_survey` —
+still moves the timestamp, because that is exactly what the timestamp means.
+
 ## Fail-closed behaviour
 
 - Field missing or reshaped → surface unavailable, survey continues, panel says so.
