@@ -34,9 +34,25 @@ A mod manager's configuration editor offered `author-id.txt` for editing
 the atlas believes wrote this profile's entries, which is what the
 non-owner-delete policy is keyed on.
 
-**A subfolder rather than a rename.** The reporter's diagnosis was the location,
-and a subfolder is correct whichever files that editor lists. It also matters for
-something else entirely: `CartographerLegacyProbe` decides new-player versus
+**What actually fixes this is the `.dat` extension, not the subfolder.** Read
+from the installed Thunderstore Mod Manager bundle (1.124.2,
+`APP_NAME="r2modman"`, core 3.2.18): the configuration editor is rooted at the
+**whole profile**, excluding only `dotnet`, `_state` and a plugin's
+`manifest.json`, and then filters by
+`SUPPORTED_CONFIG_FILE_EXTENSIONS = [".cfg", ".txt", ".json", ".yml", ".yaml", ".ini"]`.
+It descends into `state/` like any other folder. `author-id.txt` was listed
+because `.txt` is on that list; `.tsv` never has been, which is why no sidecar
+has ever appeared there. So 1.2.2 shipped two changes together and the
+subfolder got the credit that belonged to the rename.
+`validate_repo.py` now enforces the extension rule for every name written into
+the product's directory, checked against `CartographerConfigFiles`.
+
+**This has not been checked against Gale.** Gale is an independent Rust
+implementation, it is not installed here, and nothing above was measured from
+it. The reporter has not confirmed either.
+
+**The subfolder still earns its place, for a different reason.**
+`CartographerLegacyProbe` decides new-player versus
 returning-player by listing this directory with `Directory.GetFiles` and asking
 whether every name is one this build writes for itself. `GetFiles` does not
 return subdirectories, so a marker under `state` is invisible to it. A rename in

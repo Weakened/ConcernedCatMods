@@ -12,7 +12,7 @@ namespace TheConcernedCat.ConcernedNPC.Planning;
 /// stopped at and rebuilds the sequence after an interruption; it never branches
 /// on what a step means. A <c>switch</c> over these strings anywhere in this
 /// package is the defect the whole package is defined against.</summary>
-internal readonly struct JobStep
+public readonly struct JobStep
 {
     internal JobStep(int index, string action, string subject, NpcPoint at, bool hasPlace, int units)
     {
@@ -27,29 +27,29 @@ internal readonly struct JobStep
     /// <summary>Position in the plan, from zero. Stable for the life of the
     /// plan: it is half of every reservation id the step takes out, so
     /// renumbering steps renumbers reservations.</summary>
-    internal int Index { get; }
+    public int Index { get; }
 
     /// <summary>The role's token for what is done.</summary>
-    internal string Action { get; }
+    public string Action { get; }
 
     /// <summary>The role's token for what it is done to.</summary>
-    internal string Subject { get; }
+    public string Subject { get; }
 
     /// <summary>Where, if anywhere. Meaningless unless <see cref="HasPlace"/>.
     /// </summary>
-    internal NpcPoint At { get; }
+    public NpcPoint At { get; }
 
     /// <summary>Whether this step happens somewhere in particular. A step
     /// without a place is not a step at the origin.</summary>
-    internal bool HasPlace { get; }
+    public bool HasPlace { get; }
 
     /// <summary>How many units this step handles, or zero where the step is not
     /// about a quantity.</summary>
-    internal int Units { get; }
+    public int Units { get; }
 }
 
 /// <summary>Why a plan is what it is.</summary>
-internal enum JobPlanVerdict
+public enum JobPlanVerdict
 {
     /// <summary>Nobody planned. Never a plan.</summary>
     Unspecified = 0,
@@ -66,7 +66,25 @@ internal enum JobPlanVerdict
     /// asks for more than is reachable. Refused before anything starts, which is
     /// the entire benefit of planning the whole job first - a player is told
     /// what is missing instead of watching an NPC do a third of a wall.
-    /// </summary>
+    ///
+    /// <b>Reachable means reachable in one round.</b> Material sitting in the
+    /// ninth chest, when a round opens eight, is exactly as unreachable as
+    /// material nobody has. The two are different <i>sentences</i> and the same
+    /// verdict, and which one it is reads off the shortfall:
+    ///
+    /// <list type="bullet">
+    /// <item><description>a <b>non-empty</b> shortfall - it is not there. The
+    /// fix is to bring more.</description></item>
+    /// <item><description>an <b>empty</b> shortfall - it is there, and not
+    /// within one round. The fix is to bring it together.</description></item>
+    /// </list>
+    ///
+    /// Not a new verdict, because no caller branches on the difference: both are
+    /// terminal until a person acts, both produce a player sentence out of
+    /// <see cref="JobPlan.Reason"/>, and a driver does the identical thing with
+    /// each. The day a role actually responds to scattered material differently
+    /// - consolidating rather than refusing - the member is additive and gets
+    /// added then, with a caller to justify it.</summary>
     ShortOfMaterial = 3,
 
     /// <summary>The work area could not be read or does not exist. Fail closed;
@@ -156,8 +174,15 @@ internal readonly struct JobPlan
     /// the steps belongs to it and to no other.</summary>
     internal NpcWorldEpoch Epoch { get; }
 
-    /// <summary>Why it was refused, for a player sentence. Empty when
-    /// planned.</summary>
+    /// <summary>Why it was refused, for a player sentence. Empty when planned.
+    ///
+    /// <b>The verdict is the control-flow answer; this is the sentence.</b> A
+    /// role branches on <see cref="Verdict"/> - retry, walk, finish, or stop and
+    /// tell somebody - and shows <i>this</i>. One verdict deliberately covers
+    /// more than one situation (see
+    /// <see cref="JobPlanVerdict.ShortOfMaterial"/>), so a role that renders the
+    /// verdict's own name will tell a player they are out of wood while they are
+    /// standing on it.</summary>
     internal string Reason { get; }
 
     /// <summary>Whether this plan may still be acted on. True only for a

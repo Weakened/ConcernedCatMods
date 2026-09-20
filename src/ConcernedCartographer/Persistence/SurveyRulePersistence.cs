@@ -10,10 +10,12 @@ namespace TheConcernedCat.ConcernedCartographer.Persistence;
 /// <summary>Loads the shareable survey-rules file, writing the starter set
 /// on first use. The file is the import/export format: plain patterns and
 /// suggestions, no machine paths or secrets. An UNTOUCHED starter file
-/// from an earlier release (the sparse pre-RC8 set, the RC8/RC9 set, or
-/// the v1.0/v1.1.0 set that predates the issue #258 dungeon identities) is
+/// from an earlier release (the sparse pre-RC8 set, the RC8/RC9 set, the
+/// v1.0/v1.1.0 set that predates the issue #258 dungeon identities, or the
+/// v1.0.3-v1.2.2 set that predates the issue #385 OreMines identities) is
 /// upgraded in place to the current starter set; any file the player
-/// edited never matches and is never modified.</summary>
+/// edited never matches and is never modified. The recognition itself is
+/// <see cref="SurveyStarterUpgrade"/>, in the domain, under test.</summary>
 internal sealed class SurveyRulePersistence
 {
     private readonly ManualLogSource _log;
@@ -38,10 +40,7 @@ internal sealed class SurveyRulePersistence
             }
             else
             {
-                string current = Normalize(File.ReadAllLines(RulePath));
-                if (current == Normalize(SurveyRuleSet.LegacyStarterSet().Serialize()) ||
-                    current == Normalize(SurveyRuleSet.Rc8StarterSet().Serialize()) ||
-                    current == Normalize(SurveyRuleSet.V1StarterSet().Serialize()))
+                if (SurveyStarterUpgrade.ShouldUpgrade(File.ReadAllLines(RulePath)))
                 {
                     File.WriteAllLines(RulePath, SurveyRuleSet.Default().Serialize());
                     _log.LogInfo(
@@ -81,16 +80,5 @@ internal sealed class SurveyRulePersistence
             _log.LogError($"Could not save the survey rules to disk: {SafeLogText.Describe(exception)}");
             return false;
         }
-    }
-
-    private static string Normalize(System.Collections.Generic.IEnumerable<string> lines)
-    {
-        var builder = new System.Text.StringBuilder();
-        foreach (string line in lines)
-        {
-            builder.Append(line.TrimEnd()).Append('\n');
-        }
-
-        return builder.ToString();
     }
 }

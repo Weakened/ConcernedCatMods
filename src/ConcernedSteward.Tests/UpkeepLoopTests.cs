@@ -334,20 +334,26 @@ public sealed class UpkeepLoopTests
         Assert.False(f.Loop.Reservation.IsHeld);
     }
 
+    /// <summary>The trip, not the mode. Until #382 this asserted on an
+    /// <c>ActorModeOwner</c> this assembly built for itself; the identity is now
+    /// held through Concerned NPC's arbiter for the life of the body, which is
+    /// a stronger statement made in a different place
+    /// (<c>StewardNpcAdoptionTests</c>). What belongs here is what this loop
+    /// itself decides: a fire nobody can help is not a trip, and a fire that
+    /// needs wood is.</summary>
     [Fact]
-    public void The_actor_mode_is_held_while_he_works_and_released_when_he_is_done()
+    public void A_trip_runs_only_when_there_is_a_fire_worth_walking_to()
     {
         var f = new StewardFixture();
         f.AddFire("fire-1", fuel: 9.5f);
 
-        Assert.Equal(ActorMode.Resting, f.Modes.Mode);
+        Assert.False(f.Loop.IsWorking);
         f.Run();
-        Assert.Equal(ActorMode.Resting, f.Modes.Mode);
+        Assert.False(f.Loop.IsWorking);
 
         f.Fires.Replace(FakeFires.Fuelled(f.AddFire("fire-2", 0f), 0f));
         f.Run();
-        Assert.Equal(ActorMode.Working, f.Modes.Mode);
-        Assert.False(f.Modes.MayRetireBody);
+        Assert.True(f.Loop.IsWorking);
     }
 
     // ------------------------------------------------------------------

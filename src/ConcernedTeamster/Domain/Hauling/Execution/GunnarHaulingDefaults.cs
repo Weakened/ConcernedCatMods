@@ -49,6 +49,18 @@ internal static class GunnarHaulingDefaults
     /// network-object field this product ever writes.</summary>
     public const string WorkerKeyField = "tcc.worker.key";
 
+    /// <summary>The prefix of every key Gunnar's body stores itself beneath in
+    /// its own network object, trailing dot included.
+    ///
+    /// <b>Durable, and shared with Concerned Foreman by design.</b> Two products
+    /// may use one key prefix - they already do - because the prefab name is
+    /// what separates their bodies before a key is ever read. Changing this
+    /// leaves a saved body standing and empties it, with no evidence anywhere,
+    /// so it never changes. <c>WorkerKeyPrefixIsTheFieldsOwnPrefix</c> pins that
+    /// it and <see cref="WorkerKeyField"/> cannot drift apart.</summary>
+    public const string WorkerKeyPrefix = "tcc.worker.";
+
     /// <summary>The name shown over his body.</summary>
     public const string WorkerDisplayName = "Gunnar";
+
 }

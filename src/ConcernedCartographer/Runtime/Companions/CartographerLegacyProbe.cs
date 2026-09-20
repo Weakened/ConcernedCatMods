@@ -47,6 +47,13 @@ internal sealed class CartographerLegacyProbe
         // Only exists because somebody ran `cc_atlas support`. It was reaching
         // the probe as an unrecognised name, which grants through the weak
         // "somebody was here" signal rather than saying what it is.
+        //
+        // Both names. The report is `.log` now, because a configuration editor
+        // opens `.txt` and was offering it for editing (#304) - but a profile
+        // that ran the command under an older build still has the `.txt`, and
+        // that is still somebody having deliberately asked for a report.
+        // Dropping the old name would take a returning player's evidence away.
+        "support-report.log",
         "support-report.txt",
     };
 

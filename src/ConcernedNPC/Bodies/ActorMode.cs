@@ -17,7 +17,7 @@ namespace TheConcernedCat.ConcernedNPC.Bodies;
 /// that lets one identity end up with two bodies. Closing that is the role
 /// leaves' work; keeping the vocabulary identical is what makes it a namespace
 /// change rather than a semantic one when they do.</summary>
-internal enum ActorMode
+public enum ActorMode
 {
     Unspecified = 0,
 
@@ -39,7 +39,7 @@ internal enum ActorMode
 }
 
 /// <summary>What an attempt to take or release an identity's mode did.</summary>
-internal enum ActorModeOutcome
+public enum ActorModeOutcome
 {
     Unspecified = 0,
     Entered = 1,
@@ -65,8 +65,26 @@ internal enum ActorModeOutcome
 /// Constructed only by <see cref="NpcBodyArbiter"/>, which holds one per
 /// registered identity. That is deliberate and is the difference between this
 /// and the three shipped copies it mirrors: a second owner for one identity is
-/// not something a caller can reach for.</summary>
-internal sealed class ActorModeOwner
+/// not something a caller can reach for.
+///
+/// <b>Public to read, internal to change, and the split is the whole design.</b>
+/// A role reaches one through <c>NpcRoleRegistry.ModeOf</c> and can ask what an
+/// identity is doing - <see cref="Mode"/>, <see cref="JobId"/>,
+/// <see cref="Revision"/>, <see cref="MayRelocateHome"/>,
+/// <see cref="MayRetireBody"/>, <see cref="IsHeldBy"/>. It cannot call
+/// <see cref="Enter"/>, <see cref="Release"/> or
+/// <see cref="AbandonForWorldUnload"/>, and it cannot construct one: modes are
+/// changed through <c>NpcRoleRegistry.EnterMode</c> and <c>ReleaseMode</c>, so
+/// the one arbiter sees every change. <c>NpcJobDriver</c> is what calls them -
+/// a job takes <see cref="ActorMode.Working"/> when it starts and gives it back
+/// when it finishes, stops or is abandoned - and until it existed nothing in
+/// this library called <see cref="Enter"/> at all, which left
+/// <see cref="Mode"/> permanently <see cref="ActorMode.Resting"/> and
+/// <see cref="MayRetireBody"/> permanently true. Widening the class without narrowing those three would have been
+/// worse than the bypass it replaces - today a product runs a private mode
+/// system the arbiter cannot see, and that would have let every product reach
+/// into the shared one.</summary>
+public sealed class ActorModeOwner
 {
     internal ActorModeOwner(Roles.NpcIdentity identity)
     {
@@ -78,22 +96,22 @@ internal sealed class ActorModeOwner
         Identity = identity;
     }
 
-    internal Roles.NpcIdentity Identity { get; }
+    public Roles.NpcIdentity Identity { get; }
 
-    internal ActorMode Mode { get; private set; } = ActorMode.Resting;
+    public ActorMode Mode { get; private set; } = ActorMode.Resting;
 
     /// <summary>The job holding the identity, or null while resting.</summary>
-    internal string? JobId { get; private set; }
+    public string? JobId { get; private set; }
 
     /// <summary>Increments on every change, so an observer can tell a mode it
     /// read is stale.</summary>
-    internal int Revision { get; private set; }
+    public int Revision { get; private set; }
 
-    internal bool MayRelocateHome => Mode == ActorMode.Resting;
+    public bool MayRelocateHome => Mode == ActorMode.Resting;
 
-    internal bool MayRetireBody => Mode == ActorMode.Resting;
+    public bool MayRetireBody => Mode == ActorMode.Resting;
 
-    internal bool IsHeldBy(string? jobId) =>
+    public bool IsHeldBy(string? jobId) =>
         JobId != null && jobId != null && string.Equals(JobId, jobId, StringComparison.Ordinal);
 
     internal ActorModeOutcome Enter(ActorMode mode, string jobId)

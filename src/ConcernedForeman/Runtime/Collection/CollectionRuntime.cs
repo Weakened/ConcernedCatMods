@@ -384,7 +384,17 @@ internal sealed class CollectionRuntime
                 case "preview":
                     return Preview(args);
                 case "start":
-                    return Start(args);
+                    // #380: Thorstein builds now, and Gunnar collects. The
+                    // capability is still here and still works; it just stops
+                    // being something he does unasked. Only STARTING is gated -
+                    // an order already in flight holds real material out of a
+                    // player's chest, so status, pause, resume, rebind and
+                    // cancel all stay available with the setting off.
+                    return _settings.ThorsteinCollects.Value
+                        ? Start(args)
+                        : "Thorstein's work is building. Collecting is turned off for him " +
+                          "(Collection/ThorsteinCollects); Gunnar does the collecting and hauling. " +
+                          "Turn it back on in the settings if you want Thorstein to gather again.";
                 case "pause":
                     return Control(loop => loop.Pause(Time.time));
                 case "resume":

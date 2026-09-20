@@ -1,4 +1,5 @@
 using System;
+using TheConcernedCat.ConcernedTeamster.Domain.Workers;
 using TheConcernedCat.Workers;
 
 namespace TheConcernedCat.ConcernedTeamster.Domain.Hauling.Execution;
@@ -184,7 +185,8 @@ internal sealed class HaulExecutor
         Guid worldLoadEpoch,
         int startingRevision,
         HaulLimits limits,
-        HaulExecutionLimits execution)
+        HaulExecutionLimits execution,
+        IWorkerIdentityAuthority identityAuthority)
     {
         _ports = ports ?? throw new ArgumentNullException(nameof(ports));
         if (worker.IsEmpty)
@@ -196,7 +198,7 @@ internal sealed class HaulExecutor
         _limits = (limits ?? throw new ArgumentNullException(nameof(limits))).Validate();
         _execution = (execution ?? throw new ArgumentNullException(nameof(execution))).Validate();
         Leases = new CartLeaseBook(worldLoadEpoch);
-        Modes = new ActorModeOwner(worker);
+        Modes = new WorkerIdentityHold(worker, identityAuthority);
         Revision = Math.Max(0, startingRevision);
         _stillness = new CartStillnessTracker(_limits);
         _approachRetry = NewRecoveryRetry();
@@ -207,9 +209,11 @@ internal sealed class HaulExecutor
     /// <summary>One lease book per world load (DECISIONS.md D6).</summary>
     public CartLeaseBook Leases { get; }
 
-    /// <summary>The single actor-mode owner of Gunnar's identity for this world
-    /// load (ARCH-02).</summary>
-    public ActorModeOwner Modes { get; }
+    /// <summary>Gunnar's identity, and what it is doing. The hold behind it
+    /// belongs to the shared runtime's arbiter, not to this product
+    /// (<see cref="WorkerIdentityHold"/>), so a haul and a collection round
+    /// cannot both have him.</summary>
+    public WorkerIdentityHold Modes { get; }
 
     public WorkerKey Worker => _worker;
 

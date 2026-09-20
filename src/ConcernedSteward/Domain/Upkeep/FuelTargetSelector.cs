@@ -190,11 +190,23 @@ internal static class FuelTargetSelector
     /// adapter was asked for fires inside the settlement, because a layer that
     /// trusts its adapter's filtering has no filtering a test can prove.
     /// </summary>
+    /// <param name="requireStock">Whether a fire that burns something the
+    /// supply does not hold is refused here.
+    ///
+    /// <b>True for the one-fire-at-a-time loop and false for a planned round,
+    /// and the difference is the point.</b> A loop that fetches for one fire has
+    /// nothing useful to say about a fire it cannot supply, so refusing it early
+    /// is right. A round totals the whole settlement first, and the honest
+    /// answer to ten torches and no resin is "she needs forty resin" — which can
+    /// only be said by a layer that counted the torches. Refusing them here
+    /// would turn that into "nothing to tend", which is both wrong and the exact
+    /// sentence a player would not know what to do with.</param>
     public static FuelTargetStatus Classify(
         in FuelTargetObservation target,
         Designation? settlement,
         IReadOnlyCollection<string>? stockedFuelNames,
-        string? epoch)
+        string? epoch,
+        bool requireStock = true)
     {
         if (!target.Key.IsFrom(epoch))
         {
@@ -237,7 +249,7 @@ internal static class FuelTargetSelector
             return FuelTargetStatus.Unavailable;
         }
 
-        if (stockedFuelNames == null || !Contains(stockedFuelNames, target.FuelItemName))
+        if (requireStock && (stockedFuelNames == null || !Contains(stockedFuelNames, target.FuelItemName)))
         {
             return FuelTargetStatus.WrongFuel;
         }

@@ -326,3 +326,71 @@ Recorded here so the prohibition has a citation rather than a memory:
   from the one vanilla mutates with.
 - Inferring success from `UseItem`'s `bool` — it is `true` for a refusal.
 - Naming any fireplace prefab — prefab names are asset-bundle data.
+
+---
+
+## 9. Which pieces are serviced by a maintenance round, and which are excluded
+
+**Added for #382**, which asks for "every supported fuel-consuming light" and,
+explicitly, for no blind patching of decorative ones. Re-read against the same
+decompiled 1.0.14 build.
+
+### 9.1 Four component types carry a fuel API. One of them is a light.
+
+Searched by the two facts a fuel API cannot be written without: a `m_fuelItem`
+field, and a read or write of `ZDOVars.s_fuel`. Both searches return the same
+four types and nothing else.
+
+| Type | Fuel API | Serviced? | Why |
+|---|---|---|---|
+| `Fireplace` | `m_fuelItem`, `m_maxFuel`, `m_secPerFuel`, `s_fuel`, `UseItem` | **Yes** | The component behind every player-built fire: campfire, hearth, bonfire, standing torches, braziers. It is the only one of the four whose purpose is light. |
+| `Smelter` | `m_fuelItem`, `m_maxFuel` (`int`), `s_fuel`, `RPC_AddOre`, `m_conversion` | No | A production station, not a light. Its fuel is an input to a recipe a player chose, and `m_maxFuel` is legitimately **zero** on some of its prefabs, so "fuel" is not even universal within the type. Topping one up changes what somebody is smelting. |
+| `CookingStation` | `m_useFuel`, `m_useFueldWhileEmpty`, `m_fuelItem`, `m_maxFuel`, `s_fuel` | No | Not a light. Worse, `m_useFueldWhileEmpty` is `true` by default, so fuelling one with nothing on it burns a player's coal for nothing. |
+| `ShieldGenerator` | `m_fuelItems` (a **list**), `m_maxFuel`, `s_fuel`, `GetFuel`/`SetFuel` | No | Not a light. It accepts several different items, so which one to feed it is a decision a player makes and a worker should not. |
+
+**Nothing else in the assembly has a fuel level at all.** `Beacon`, `Demister`,
+`LightFlicker` and `LightLod` are the light-ish components, and none of them has
+a `m_fuelItem`, a `s_fuel`, an `Interactable` surface or any state. They are
+renderers. That is the structural reason a decorative light can never be patched
+by this product: **it produces no observation**, because the adapter builds one
+from a `Fireplace` component and there is nothing else to build one from. It is
+not a filter that could be got wrong.
+
+`Fire` — the spreading cinder fire — is a different type again, has no fuel of
+its own, and is never touched.
+
+### 9.2 Three `Fireplace` pieces are found and still not serviced
+
+Each is a decision about need rather than permission, and each has its own
+verdict so a player can be told which.
+
+| Verdict | Read from | Why it is not a stop |
+|---|---|---|
+| `NeverConsumes` | `m_secPerFuel <= 0` | `UpdateFireplace` only decays fuel when `m_secPerFuel > 0`. A piece that burns nothing reads the same in an hour, so it is never the one closest to going out. |
+| `NotLit` | `ZDOVars.s_state == 2` | A fire a player switched off burns nothing and has no deadline. Without this read, an unlit brazier sitting at zero fuel would out-rank every real fire in the settlement, permanently. `UseItem` does **not** check the state, so this is the round's judgement and not vanilla's refusal. |
+| `NotDue` | `fuel * m_secPerFuel >= threshold` | It has burning time left. This is what "prioritise what is closest to going out rather than topping everything to full" looks like as a verdict. |
+
+Plus the two vanilla already refuses, kept as verdicts of their own:
+`m_infiniteFuel` (the fuel branch of `UseItem` is gated on `!m_infiniteFuel`) and
+`m_canRefill == false` (`UseItem` returns `false` immediately).
+
+### 9.3 Why urgency is measured in seconds and not in fuel
+
+`m_secPerFuel` is per-prefab. A hearth at 4 of 10 and a torch at 4 of 10 are the
+same number and not the same situation, and a queue ordered by fuel level sends
+a worker to the wrong one. The round therefore ranks by `fuel * m_secPerFuel` —
+how long this piece has left at its own rate — and tops a piece up to a stated
+number of minutes of light rather than to `m_maxFuel`.
+
+Topping up uses `FuelMath.UnitsToReach`, which keeps both vanilla facts that
+make the arithmetic correct: acceptance is `Mathf.CeilToInt(fuel) >= m_maxFuel`
+(a **ceiling**, so a fire at 9.5 of 10 refuses), and one accepted unit is worth
+`Clamp(Clamp(fuel, 0, max) + 1, 0, max)`, which is less than one at the top of
+the range. Dividing the gap by one is wrong in both directions.
+
+### 9.4 What #382 adds to the forbidden list
+
+Nothing. Every mutation is still exactly one `Fireplace.UseItem` per unit,
+through the same adapter, with the same ownership and reach preconditions and
+the same measured deltas. The round decides *which* pieces and *how many units*;
+it does not add a way to change one.

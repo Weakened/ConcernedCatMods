@@ -76,6 +76,14 @@ public class HaulingExecutionPartsTests
         Assert.Equal("CT_TeamsterWorker", GunnarHaulingDefaults.WorkerPrefabName);
         Assert.Equal("tcc.worker.key", GunnarHaulingDefaults.WorkerKeyField);
         Assert.Equal("teamster/gunnar", WorkerKey.Gunnar.Value);
+
+        // #381: the shared NPC runtime is told these two facts and is handed no
+        // others. The prefix has to be the field's own or the contract would
+        // describe a body that is not the one this product saves - which reads
+        // as nothing at all going wrong until somebody asks where Gunnar went.
+        Assert.Equal("tcc.worker.", GunnarHaulingDefaults.WorkerKeyPrefix);
+        Assert.StartsWith(GunnarHaulingDefaults.WorkerKeyPrefix, GunnarHaulingDefaults.WorkerKeyField);
+        Assert.EndsWith(".", GunnarHaulingDefaults.WorkerKeyPrefix);
         Assert.Equal(0, (int)GunnarPullStrength.Unspecified);
         Assert.Equal(new[] { "Unspecified", "MatchPlayer" }, Enum.GetNames<GunnarPullStrength>());
     }

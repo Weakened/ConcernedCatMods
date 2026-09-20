@@ -97,10 +97,6 @@ public readonly struct NpcBodyContract
         new NpcBodyContract(kind, prefabName ?? string.Empty, zdoKeyPrefix ?? string.Empty);
 
     /// <summary>Whether this contract is internally consistent, and if not,
-    /// exactly which fact is wrong. Checked before anything is registered, so a
-    /// role with a malformed contract is refused whole rather than half
-    /// installed.</summary>
-    /// <summary>Whether this contract is internally consistent, and if not,
     /// exactly which fact is wrong - the same check registration runs, exposed
     /// so a role can ask before it offers itself rather than having to register
     /// and read the refusal back out of the outcome.</summary>
