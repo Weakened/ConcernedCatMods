@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Collections.Generic;
 using TheConcernedCat.ConcernedForeman.Domain.Npc;
 using TheConcernedCat.ConcernedForeman.Runtime.Custody;
@@ -35,7 +36,8 @@ public sealed class ForemanNpcAdoptionTests
     /// <summary>An absolute path, because the library refuses to register a role
     /// whose data root is not one. Nothing is read or written under it by anything
     /// in this test: Foreman's data paths refuse every purpose token.</summary>
-    private const string DataRoot = @"C:\config\ConcernedCatMods\ConcernedForeman\settlements";
+    private static readonly string DataRoot = Path.Combine(Path.GetTempPath(),
+        "ConcernedCatMods", "ConcernedForeman", "settlements");
 
     private static ForemanNpcAdoption Adopted(out NpcRoleRegistry registry)
     {
