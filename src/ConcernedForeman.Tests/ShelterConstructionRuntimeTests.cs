@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using TheConcernedCat.ConcernedForeman.Domain.Construction;
 using TheConcernedCat.ConcernedForeman.Runtime.Construction;
 using TheConcernedCat.ConcernedForeman.Runtime.Custody;
 using TheConcernedCat.Settlement.Collection;
 using TheConcernedCat.Settlement.Custody;
+using TheConcernedCat.Settlement.Journal;
 using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
 using UnityEngine;
@@ -240,6 +242,24 @@ public sealed class ShelterConstructionRuntimeTests : IDisposable
         Assert.Equal(BuildStep.Finished, _runtime.Loop.Step);
         Assert.Equal(17, _runtime.Placed);
         Assert.Equal(17, Player.m_localPlayer!.Placed.Count);
+        Assert.Equal(17, _custody.Journal.Entries.Count(e => e.Kind == JournalEntryKind.Reserved));
+        Assert.Equal(17, _custody.Journal.Entries.Count(e => e.Kind == JournalEntryKind.CommitStarted));
+        Assert.Equal(17, _custody.Journal.Entries.Count(e => e.Kind == JournalEntryKind.CommitFinished));
+        Assert.All(_custody.Journal.Replay().Ledger.Reservations, r => Assert.Equal(ReservationState.Committed, r.State));
+    }
+
+    [Fact]
+    public void An_installer_that_returns_success_without_a_standing_piece_cannot_finish_a_commit()
+    {
+        Confirm();
+        _installer.Stand = false;
+        Ticks(80);
+        Assert.Single(Player.m_localPlayer!.Placed);
+        Assert.Single(_custody.Journal.Entries, e => e.Kind == JournalEntryKind.CommitStarted);
+        Assert.DoesNotContain(_custody.Journal.Entries, e => e.Kind == JournalEntryKind.CommitFinished);
+        Assert.True(_custody.Journal.Replay().Ledger.HasUncertainCustody);
+        Assert.True(OnWorker("Wood") > 0);
+        Assert.Equal(200, InChest("Wood") + OnWorker("Wood"));
     }
 
     [Fact]
@@ -596,6 +616,7 @@ public sealed class ShelterConstructionRuntimeTests : IDisposable
         Assert.Empty(Player.m_localPlayer!.Placed);
         Assert.Equal(200, InChest("Wood") + OnWorker("Wood"));
         Assert.Contains("ward", _runtime.Loop.Reason);
+        Assert.DoesNotContain(_custody.Journal.Entries, e => e.Kind == JournalEntryKind.CommitStarted);
     }
 
     [Fact]
@@ -672,12 +693,16 @@ public sealed class ShelterConstructionRuntimeTests : IDisposable
     {
         private readonly HostPlayerPieceInstaller _real = new HostPlayerPieceInstaller();
 
+        internal bool Stand { get; set; } = true;
+
         public bool Install(in PiecePlacement placement, out string failure)
         {
             if (!_real.Install(in placement, out failure))
             {
                 return false;
             }
+
+            if (!Stand) return true;
 
             var standing = new GameObject(placement.Piece.Prefab);
             standing.transform.position =

@@ -57,6 +57,8 @@ internal sealed class CustodyCore
         LoadReplay = loadReplay;
         Load = load;
         Ledger = loadReplay.Custody;
+        BuildMaterials = new BuildMaterialCustody(journal, loadReplay.Ledger,
+            () => IsWritable, HasAuthority, loadReplay.MaterialRepairs);
         TopGeneration = loadReplay.Timeline?.TopGeneration ?? 0;
         Executor = new TransferExecutor(Ledger, journal, authority, () => WriteBlock == CustodyWriteBlock.None);
     }
@@ -94,6 +96,8 @@ internal sealed class CustodyCore
     public ReplayResult LoadReplay { get; }
 
     public MaterialCustodyLedger Ledger { get; }
+
+    public BuildMaterialCustody BuildMaterials { get; }
 
     public TransferExecutor Executor { get; }
 

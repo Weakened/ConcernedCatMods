@@ -88,6 +88,9 @@ internal enum DesignationRefusal
     /// (#294). That needs the settlement's record, and this request came
     /// without it, so nothing was replaced.</summary>
     StaleContainerNeedsTheRecord = 12,
+
+    /// <summary>A real build holding requires an inventory refund or repair.</summary>
+    BuildMaterialHeld = 13,
 }
 
 /// <summary>The answer to one marking request, and why.</summary>
@@ -195,6 +198,10 @@ internal readonly struct DesignationResult
                 return "the chest marked before this world was loaded can only be replaced together with " +
                     "the settlement's record, so anything taken from it is returned or accounted for first. " +
                     "Nothing was replaced; mark the chest again with cf_settle supply";
+
+            case DesignationRefusal.BuildMaterialHeld:
+                return "building material still belongs to this source. Cancel the build and return its " +
+                    "reservations first, or run cf_settle reconcile for the named repair. Clearing a marker cannot refund inventory";
 
             default:
                 return "no reason was recorded, which is a bug — please report it";

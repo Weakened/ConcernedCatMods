@@ -74,7 +74,7 @@ internal enum BuildStep
 /// <b>Material is conserved because there are only four movements.</b> It comes
 /// out of the container (<see cref="IBuildMaterials.Draw"/>), sits in his own
 /// persisted inventory, leaves when a piece has actually gone up
-/// (<see cref="IBuildMaterials.Spend"/>), or goes back
+/// (<see cref="IBuildMaterials.Commit"/>), or goes back
 /// (<see cref="IBuildMaterials.PutBack"/>). The loop never spends for a piece
 /// that was refused or that failed to appear, never spends twice for one piece,
 /// and never draws for a piece that is already standing.
@@ -100,20 +100,11 @@ internal enum BuildStep
 /// been: a FINISHED order used to run this forever, and now it is looked at every
 /// ten seconds through <see cref="LooksFinished"/> instead.
 ///
-/// <b>The one window this loop cannot close, stated rather than hidden.</b>
-/// Placing and paying are two statements: the piece is created and then its cost
-/// leaves his inventory. There is no yield point between them - no await, no
-/// coroutine, no frame boundary - so within the running game they are as
-/// atomic as vanilla's own pair - and that is now read off the installed binary
-/// rather than reasoned about: <c>Player.PlacePiece</c> is 667 IL bytes and 71
-/// calls with no <c>StartCoroutine</c>, no <c>Invoke</c>, no <c>ZRoutedRpc</c> and
-/// no async machinery, and vanilla's own <c>TryPlacePiece</c> does
-/// <c>PlacePiece</c> then <c>ConsumeResources</c> in the same frame.
-/// A process killed exactly between them leaves a piece standing that was not
-/// paid for; the material is still in his inventory and nothing of the player's
-/// is lost, and the next round reads the piece as standing and does not build it
-/// again. Closing that window properly needs a durable per-piece commit record,
-/// which is a new durable format and therefore its own issue.</summary>
+/// <b>Placement and payment share a journalled commit (#398).</b> The placement
+/// gate runs first. Custody persists CommitStarted before installation, verifies
+/// the standing piece and its measured cost, then persists CommitFinished. A
+/// missing outcome is a named repair; no inventory compensation is guessed.
+/// These are the existing schema-v3 rows, not a separate construction format.</summary>
 internal sealed class ShelterBuildLoop
 {
     /// <summary>How close he has to be to a placement to work on it. A wood
@@ -304,9 +295,9 @@ internal sealed class ShelterBuildLoop
     /// still carrying X; it is in his own inventory and nothing has been lost"
     /// rather than implying a refund. A return trip would be a new phase that
     /// keeps his mode held after the player asked for it back, which is a
-    /// behaviour change and its own issue. Meanwhile nothing has to be handed back
-    /// for it to be useful: the next round of the next order plans against what he
-    /// is already carrying and opens the chest only for the difference.</summary>
+    /// behaviour change and its own issue. Unreturned reservations keep their
+    /// original order and source. A later order cannot silently spend them;
+    /// cf_settle reconcile names the holdings.</summary>
     internal ShelterRound Cancel(float now, string why)
     {
         Pose(false);
@@ -408,6 +399,7 @@ internal sealed class ShelterBuildLoop
         {
             // A different order: a marker somewhere else, or the first one. Its
             // counters are its own, and nothing is carried over from the last.
+            _materials.BeginOrder(tag);
             _orderTag = tag;
             Built = 0;
             Draws = 0;
@@ -473,11 +465,11 @@ internal sealed class ShelterBuildLoop
         // permitted and nothing else.
         MaterialTally batch = RemainingCostOf(progress, phase);
         MaterialTally shortOfBatch = batch.Missing(_materials.Carried);
-        bool canAffordNext = Covers(_materials.Carried, piece.Recipe);
+        bool canAffordNext = _materials.IsReserved(piece) && Covers(_materials.Carried, piece.Recipe);
         bool firstDrawForPhase = phase != _drawnPhase;
         bool mayRetryDraw = canAffordNext == false && now - _drawnAt >= DrawRetrySeconds;
 
-        if (!shortOfBatch.IsEmpty && (firstDrawForPhase || mayRetryDraw))
+        if ((!shortOfBatch.IsEmpty || !canAffordNext) && (firstDrawForPhase || mayRetryDraw))
         {
             if (!_materials.TrySupply(out SitePoint supply, out string refusal))
             {
@@ -499,7 +491,10 @@ internal sealed class ShelterBuildLoop
             Step = BuildStep.Provisioning;
             _drawnPhase = phase;
             _drawnAt = now;
-            BuildDraw draw = _materials.Draw(shortOfBatch);
+            var pieces = new List<CostedPiece>();
+            foreach (CostedPiece remaining in progress.Remaining)
+                if (remaining.Phase == phase) pieces.Add(remaining);
+            BuildDraw draw = _materials.Draw(pieces);
             if (draw.IsRefused)
             {
                 // Kept, because the next round would otherwise report the
@@ -520,7 +515,7 @@ internal sealed class ShelterBuildLoop
                     BuildPhases.Describe(phase) + ".");
             }
 
-            canAffordNext = Covers(_materials.Carried, piece.Recipe);
+            canAffordNext = _materials.IsReserved(piece) && Covers(_materials.Carried, piece.Recipe);
             if (!canAffordNext)
             {
                 return new ShelterRound(
@@ -597,7 +592,14 @@ internal sealed class ShelterBuildLoop
     private ShelterRound PlaceAndPay(CostedPiece piece, ConstructionProgress progress)
     {
         MaterialTally carried = _materials.Carried;
-        PiecePlaced placed = _placer.Place(piece, carried, authorised: true, out string reason);
+        MaterialTally spent = new MaterialTally();
+        bool Commit(Func<bool> install, out string failure) => _materials.Commit(piece, () =>
+        {
+            if (!install()) return false;
+            PiecePlacement placement = piece.Placement;
+            return _sight.Look(in placement) == PieceSighting.Standing;
+        }, out spent, out failure);
+        PiecePlaced placed = _placer.Place(piece, carried, authorised: true, out string reason, Commit);
         Pose(false);
         _workingKey = null;
 
@@ -621,27 +623,14 @@ internal sealed class ShelterBuildLoop
                 _settled = true;
                 Step = BuildStep.Stopped;
                 Reason = piece.Placement.Piece.Prefab + " at " + piece.Placement.At +
-                    " passed every check and was not created (" + reason +
-                    "). Nothing was taken out of a container for it.";
+                    " could not complete its placement and payment (" + reason +
+                    "). Nothing else is built; run cf_settle reconcile before moving its material.";
                 return new ShelterRound(
                     RoundOutcome.Stopped, Built, progress.Remaining.Count, Carried(), null, Reason);
         }
 
-        // Placed. The material for it leaves his inventory now, in the same call
-        // stack, with no yield point in between.
-        if (!_materials.Spend(piece.Recipe, out MaterialTally spent, out string failure))
-        {
-            _settled = true;
-            Step = BuildStep.Stopped;
-            Reason = piece.Placement.Piece.Prefab + " at " + piece.Placement.At + " went up and the " +
-                new MaterialTally().Add(piece.Recipe).Describe() + " it cost could not be taken out of what " +
-                "Thorstein carries (" + failure + "). Nothing else is built until that is sorted out, and he " +
-                "is still holding " + Carried().Describe() + ".";
-            _say(Reason);
-            return new ShelterRound(
-                RoundOutcome.Stopped, Built, progress.Remaining.Count, Carried(), null, Reason);
-        }
-
+        // The standing piece and its payment were both confirmed inside the
+        // commit callback, with no yield point between them.
         Built++;
         Step = BuildStep.Working;
         _say("Thorstein put up " + piece.Placement.Piece.Prefab + " at " + piece.Placement.At + " for " +

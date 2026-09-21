@@ -731,4 +731,88 @@ public sealed class DesignationGuardTests : IDisposable
         // The register on disk is exactly what it was.
         Assert.Equal(registerBefore, File.ReadAllText(_registers.ResolvePath(Scope)));
     }
+    [Theory]
+    [InlineData("supply")]
+    [InlineData("settlement")]
+    [InlineData("replace-stale")]
+    public void Legacy_designation_refunds_refresh_live_custody_after_persistence(string action)
+    {
+        SettlementRegister register = SetUp();
+        SettlementJournal journal = Reserved();
+        Assert.True(_journals.Save(journal).Saved);
+        Guid epoch = Guid.NewGuid();
+        var core = CustodyCore.Open(journal, () => _journals.Save(journal).Saved, () => 10,
+            new WorldLoad(0, epoch), () => true);
+        CustodyLedger live = core.BuildMaterials.Ledger;
+        Assert.True(core.BuildMaterials.NeedsRepair); // Legacy source binding is not recovered.
+
+        if (action == "replace-stale")
+        {
+            register.UseIdentityEpoch(epoch.ToString("N"));
+            DesignationResult result = register.Designate(
+                DesignationRequest.Container(new SitePoint(4f, 10f, 4f), "chest-b"), Site, true, journal,
+                out UndesignationPlan? replaced);
+            Assert.Equal(DesignationOutcome.Designated, result.Outcome);
+            Assert.NotNull(replaced);
+        }
+        else
+        {
+            DesignationKind kind = action == "supply" ? DesignationKind.SupplyContainer : DesignationKind.SettlementArea;
+            UndesignationPlan plan = register.PlanUndesignation(kind, journal.Replay(), true);
+            Assert.Equal(UndesignationOutcome.Removed, register.ApplyUndesignation(plan, journal, true));
+        }
+
+        // An unpersisted refund is not credited to live custody.
+        Assert.True(core.BuildMaterials.NeedsRepair);
+        Assert.Equal(ReservationState.Held, Assert.Single(live.Reservations).State);
+        RecordSaveOutcome save = new SettlementRecordWriter(_journals, _registers).Save(journal, register);
+        Assert.True(save.JournalSaved);
+        Assert.True(save.RegisterSaved);
+        Assert.False(core.BuildMaterials.NeedsRepair);
+        Assert.Empty(core.BuildMaterials.Reconcile());
+        Reservation refunded = Assert.Single(live.Reservations);
+        Assert.Equal(ReservationState.Refunded, refunded.State);
+        Assert.Equal(CustodyOutcome.AlreadySatisfied, core.BuildMaterials.Refund(refunded,
+            () => throw new Exception("legacy double-refund plant"), out _));
+        ReplayResult disk = _journals.Load(Scope).Journal.Replay();
+        Assert.False(disk.NeedsRepair);
+        Assert.Equal(disk.Ledger.Totals(ReservationState.Refunded), live.Totals(ReservationState.Refunded));
+        Assert.Empty(live.Totals(ReservationState.Held));
+        Assert.Single(journal.Entries, row => row.Kind == JournalEntryKind.Refunded);
+
+        // Refresh clears the false gate and never repeats the old refund effect.
+        var next = new Reservation(new RequestId("new-build-0"), new OrderId("new-build"), "chest-b",
+            new[] { new MaterialStack("Wood", 2) }, epoch.ToString("N"));
+        Assert.Equal(CustodyOutcome.Applied, core.BuildMaterials.Reserve(next, () => true, out _));
+        Assert.Single(journal.Entries, row => row.Kind == JournalEntryKind.Refunded);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Production_build_holding_cannot_be_refunded_by_clearing_a_marker(bool settlement, bool interrupted)
+    {
+        DesignationKind kind = settlement ? DesignationKind.SettlementArea : DesignationKind.SupplyContainer;
+        SettlementRegister register = SetUp();
+        var journal = new SettlementJournal(Scope);
+        RequestId request = RequestId.For(Cottage, 0);
+        var stacks = new[] { new MaterialStack("Wood", 20) };
+        journal.Append(JournalEntryKind.OrderTransition, Cottage, request, OrderTransition.Reserve,
+            "chest-a", stacks, containerEpoch: ThisRun);
+        journal.Append(JournalEntryKind.Reserved, Cottage, request, container: "chest-a", stacks: stacks,
+            containerEpoch: ThisRun);
+        if (interrupted) journal.Append(JournalEntryKind.CommitStarted, Cottage, request);
+        Assert.True(_journals.Save(journal).Saved);
+        journal = _journals.Load(Scope).Journal;
+
+        UndesignationPlan plan = register.PlanUndesignation(kind, journal.Replay(), authorised: true);
+        Assert.True(plan.IsRefused);
+        Assert.Equal(DesignationRefusal.BuildMaterialHeld, plan.Refusal);
+        Assert.Equal(UndesignationOutcome.Refused, register.ApplyUndesignation(plan, journal, authorised: true));
+        Assert.DoesNotContain(journal.Entries, e => e.Kind == JournalEntryKind.Refunded);
+        Assert.Contains("cf_settle reconcile", DesignationResult.Refused(plan.Refusal).Describe());
+    }
+
 }

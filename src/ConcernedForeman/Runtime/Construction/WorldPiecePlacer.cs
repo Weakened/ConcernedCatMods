@@ -95,7 +95,7 @@ internal sealed class WorldPiecePlacer
     /// <param name="reserved">What is in hand for it, out of custody. The cost
     /// is checked against this and never against a nearby chest.</param>
     /// <param name="authorised">Whether a player confirmed the order.</param>
-    internal PlacementReport Place(CostedPiece piece, MaterialTally? reserved, bool authorised)
+    internal PlacementReport Place(CostedPiece piece, MaterialTally? reserved, bool authorised, BuildCommit? commit = null)
     {
         PlacementVerdict verdict =
             PlacementGate.May(piece.Placement, piece.Recipe, _probe, reserved, authorised);
@@ -108,10 +108,18 @@ internal sealed class WorldPiecePlacer
 
         PiecePlacement placement = piece.Placement;
         bool installed;
+        bool installedNow = false;
         string failure;
         try
         {
-            installed = _installer.Install(in placement, out failure);
+            string installFailure = string.Empty;
+            bool PlacePiece()
+            {
+                installedNow = Install(in placement, out installFailure);
+                return installedNow;
+            }
+            installed = commit == null ? PlacePiece() : commit(PlacePiece, out installFailure);
+            failure = installFailure;
         }
         catch (Exception exception)
         {
@@ -130,9 +138,12 @@ internal sealed class WorldPiecePlacer
                 string.IsNullOrEmpty(failure) ? "the piece was not created" : failure);
         }
 
-        Placed++;
+        if (installedNow) Placed++;
         return new PlacementReport(PlacementResult.Placed, PlacementRefusal.None, string.Empty);
     }
+
+    private bool Install(in PiecePlacement placement, out string failure) =>
+        _installer.Install(in placement, out failure);
 }
 
 /// <summary>The one call that changes the world: the host player places a real

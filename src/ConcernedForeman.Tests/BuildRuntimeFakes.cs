@@ -4,6 +4,7 @@ using TheConcernedCat.ConcernedForeman.Runtime.Work;
 using TheConcernedCat.Settlement.Collection;
 using TheConcernedCat.Settlement.Custody;
 using TheConcernedCat.Settlement.Identity;
+using TheConcernedCat.Settlement.Journal;
 using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
 using UnityEngine;
@@ -26,11 +27,23 @@ internal sealed class FakeCustody : ICustodyRuntime
     {
         WorkerPort = worker;
         ChestPort = chest;
+        Journal = new SettlementJournal(new SettlementScope(4242, new SettlementId("build-test")));
+        Core = CustodyCore.Open(Journal, () =>
+        {
+            if (!CanPersist()) return false;
+            Journal.MarkClean();
+            return true;
+        }, () => 10,
+            new WorldLoad(0, WorldLoadEpoch), () => _writable);
     }
 
     internal IInventoryPort? WorkerPort { get; set; }
 
     internal IInventoryPort? ChestPort { get; set; }
+
+    internal Func<DeliveryTarget, IInventoryPort?>? ResolveChest { get; set; }
+
+    internal Func<bool> CanPersist { get; set; } = () => true;
 
     internal CollectionAttentionReason WorkerRefusal { get; set; } = CollectionAttentionReason.WorkerBodyLost;
 
@@ -60,7 +73,19 @@ internal sealed class FakeCustody : ICustodyRuntime
     public ITransferExecutor Executor =>
         throw new NotSupportedException("a build order does not move collection material");
 
-    public bool IsWritable { get; set; } = true;
+    private bool _writable = true;
+    public bool IsWritable { get => _writable && !Core.BuildMaterials.NeedsRepair; set => _writable = value; }
+
+    internal SettlementJournal Journal { get; }
+    internal CustodyCore Core { get; }
+    internal DeliveryTarget LastContainer { get; private set; }
+
+    public CustodyOutcome ReserveBuild(Reservation reservation, Func<bool> draw, out string failure) =>
+        Core.BuildMaterials.Reserve(reservation, draw, out failure);
+    public CustodyOutcome CommitBuild(Reservation reservation, Func<bool> placeAndPay, out string failure) =>
+        Core.BuildMaterials.Commit(reservation, placeAndPay, out failure);
+    public CustodyOutcome RefundBuild(Reservation reservation, Func<bool> putBack, out string failure) =>
+        Core.BuildMaterials.Refund(reservation, putBack, out failure);
 
     public Guid WorldLoadEpoch { get; set; } = ForemanFixtures.Epoch;
 
@@ -85,7 +110,8 @@ internal sealed class FakeCustody : ICustodyRuntime
     public bool TryResolveContainer(
         DeliveryTarget target, out IInventoryPort? port, out CollectionAttentionReason refusal)
     {
-        port = ChestPort;
+        LastContainer = target;
+        port = ResolveChest == null ? ChestPort : ResolveChest(target);
         refusal = port == null ? ChestRefusal : CollectionAttentionReason.Unspecified;
         return port != null;
     }

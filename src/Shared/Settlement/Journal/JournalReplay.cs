@@ -30,7 +30,9 @@ internal static class JournalReplay
 
         var orders = new Dictionary<string, OrderState>(StringComparer.Ordinal);
         var ledger = new CustodyLedger();
-        ReplayMaterial(entries, orders, ledger, repairs);
+        var materialRepairs = new List<string>();
+        ReplayMaterial(entries, timeline.Standings, orders, ledger, materialRepairs);
+        repairs.AddRange(materialRepairs);
 
         ToolLedger tools = ToolReplay.Run(entries, timeline.Standings, repairs);
 
@@ -46,19 +48,33 @@ internal static class JournalReplay
         }
 
         return new ReplayResult(
-            orders, ledger, tools, custody, timeline, journal.NextSequence, journal.Instance, repairs);
+            orders, ledger, tools, custody, timeline, journal.NextSequence, journal.Instance, repairs, materialRepairs);
     }
 
-    /// <summary>The placement proof's reservations and commits (schema v1).
-    /// Unchanged in what it concludes; what changed is that a row it cannot
-    /// apply now says so.</summary>
+    /// <summary>The reservation lane, including production draw/refund intents
+    /// in schema-v3 order transitions. Replaying never calls an inventory. A
+    /// world rollback or an incomplete operation retains its request as uncertain
+    /// so a retry cannot move it twice, even when the world lost its effect.</summary>
     private static void ReplayMaterial(
-        IReadOnlyList<JournalEntry> entries, Dictionary<string, OrderState> orders, CustodyLedger ledger,
+        IReadOnlyList<JournalEntry> entries, RowStanding[] standings,
+        Dictionary<string, OrderState> orders, CustodyLedger ledger,
         List<string> repairs)
     {
         var startedCommits = new Dictionary<string, JournalEntry>(StringComparer.Ordinal);
         var startedOrder = new List<string>();
         var finishedCommits = new HashSet<string>(StringComparer.Ordinal);
+        var draws = new Dictionary<string, JournalEntry>(StringComparer.Ordinal);
+        var refunds = new Dictionary<string, JournalEntry>(StringComparer.Ordinal);
+        var reserved = new HashSet<string>(StringComparer.Ordinal);
+        var unsafeRows = new Dictionary<string, JournalEntry>(StringComparer.Ordinal);
+
+        for (int index = 0; index < entries.Count; index++)
+        {
+            JournalEntry row = entries[index];
+            if (JournalEntryKinds.IsLegacyMaterial(row.Kind) && !row.Request.IsEmpty &&
+                (standings[index] == RowStanding.Voided || standings[index] == RowStanding.Ambiguous))
+                unsafeRows[row.Request.Value] = row;
+        }
 
         foreach (JournalEntry entry in entries)
         {
@@ -81,6 +97,32 @@ internal static class JournalReplay
             {
                 case JournalEntryKind.OrderTransition:
                 {
+                    if (JournalEntryKinds.IsMaterialIntent(entry))
+                    {
+                        if (entry.Transition == OrderTransition.Reserve)
+                        {
+                            if (ledger.Reserve(Payload(entry)) == CustodyOutcome.Rejected)
+                            {
+                                repairs.Add(Unmatched(entry, "a draw intention with different contents"));
+                                break;
+                            }
+
+                            ledger.RequireInventoryReceipt(entry.Request);
+
+                            if (!reserved.Contains(entry.Request.Value)) draws[entry.Request.Value] = entry;
+                        }
+                        else if (Matches(ledger, entry) && ledger.TryGet(entry.Request, out Reservation held) &&
+                            held.State == ReservationState.Held && !startedCommits.ContainsKey(entry.Request.Value))
+                        {
+                            refunds[entry.Request.Value] = entry;
+                        }
+                        else if (!ledger.TryGet(entry.Request, out Reservation returned) ||
+                            returned.State != ReservationState.Refunded || !Matches(ledger, entry))
+                        {
+                            repairs.Add(Unmatched(entry, "a refund intention"));
+                        }
+                    }
+
                     OrderState current = orders.TryGetValue(entry.Order.Value, out OrderState existing)
                         ? existing
                         : OrderState.Draft;
@@ -91,28 +133,47 @@ internal static class JournalReplay
 
                 case JournalEntryKind.Reserved:
                 {
-                    CustodyOutcome reserved = ledger.Reserve(new Reservation(
-                        entry.Request, entry.Order, entry.Container!, entry.Stacks, entry.ContainerEpoch));
-                    if (reserved == CustodyOutcome.Rejected)
+                    CustodyOutcome outcome = ledger.Reserve(Payload(entry));
+                    if (outcome == CustodyOutcome.Rejected)
                     {
                         repairs.Add(
                             "The record reserves material twice under request \"" + entry.Request.Value +
                             "\" (order \"" + entry.Order.Value + "\") with different contents. The first " +
                             "reservation is kept and the second is not applied; check which one is real.");
                     }
+                    else
+                    {
+                        reserved.Add(entry.Request.Value);
+                        draws.Remove(entry.Request.Value);
+                    }
 
                     break;
                 }
 
                 case JournalEntryKind.Refunded:
-                    if (ledger.Refund(entry.Request) == CustodyOutcome.Rejected)
+                    if (!Matches(ledger, entry) || startedCommits.ContainsKey(entry.Request.Value) ||
+                        draws.ContainsKey(entry.Request.Value) ||
+                        (ledger.RequiresInventoryReceipt(entry.Request) && !refunds.ContainsKey(entry.Request.Value) &&
+                         ledger.TryGet(entry.Request, out Reservation refund) && refund.State != ReservationState.Refunded))
                     {
                         repairs.Add(Unmatched(entry, "a refund"));
+                        break;
                     }
+
+                    if (!unsafeRows.ContainsKey(entry.Request.Value) && ledger.Refund(entry.Request) == CustodyOutcome.Rejected)
+                        repairs.Add(Unmatched(entry, "a refund"));
+                    refunds.Remove(entry.Request.Value);
 
                     break;
 
                 case JournalEntryKind.CommitStarted:
+                    if (!Matches(ledger, entry) || draws.ContainsKey(entry.Request.Value) ||
+                        refunds.ContainsKey(entry.Request.Value))
+                    {
+                        repairs.Add(Unmatched(entry, "a commit intention"));
+                        break;
+                    }
+                    if (finishedCommits.Contains(entry.Request.Value)) break;
                     if (!startedCommits.ContainsKey(entry.Request.Value))
                     {
                         startedOrder.Add(entry.Request.Value);
@@ -122,8 +183,17 @@ internal static class JournalReplay
                     break;
 
                 case JournalEntryKind.CommitFinished:
+                    if (!Matches(ledger, entry) || draws.ContainsKey(entry.Request.Value) ||
+                        refunds.ContainsKey(entry.Request.Value) ||
+                        (ledger.RequiresInventoryReceipt(entry.Request) && !startedCommits.ContainsKey(entry.Request.Value) &&
+                         !finishedCommits.Contains(entry.Request.Value)))
+                    {
+                        repairs.Add(Unmatched(entry, "a finished commit"));
+                        break;
+                    }
                     finishedCommits.Add(entry.Request.Value);
-                    if (ledger.Commit(entry.Request) == CustodyOutcome.Rejected)
+                    startedCommits.Remove(entry.Request.Value);
+                    if (!unsafeRows.ContainsKey(entry.Request.Value) && ledger.Commit(entry.Request) == CustodyOutcome.Rejected)
                     {
                         repairs.Add(Unmatched(entry, "a finished commit"));
                     }
@@ -143,7 +213,7 @@ internal static class JournalReplay
                 continue;
             }
 
-            JournalEntry entry = startedCommits[key];
+            if (!startedCommits.TryGetValue(key, out JournalEntry? entry)) continue;
             ledger.MarkUncertain(entry.Request);
 
             OrderState current = orders.TryGetValue(entry.Order.Value, out OrderState existing)
@@ -159,6 +229,29 @@ internal static class JournalReplay
                 "consumed or returned. Check whether that piece is standing, then resolve the " +
                 "request one way or the other.");
         }
+
+        foreach (JournalEntry entry in draws.Values) Repair(entry, "drawing from the recorded source", orders, ledger, repairs);
+        foreach (JournalEntry entry in refunds.Values) Repair(entry, "refunding to the recorded source", orders, ledger, repairs);
+        foreach (JournalEntry entry in unsafeRows.Values) Repair(entry, "a change the loaded world save does not confirm", orders, ledger, repairs);
+    }
+
+    private static Reservation Payload(JournalEntry entry) => new Reservation(
+        entry.Request, entry.Order, entry.Container!, entry.Stacks, entry.ContainerEpoch);
+
+    private static bool Matches(CustodyLedger ledger, JournalEntry entry) =>
+        ledger.TryGet(entry.Request, out Reservation reservation) && reservation.Order.Equals(entry.Order) &&
+        ((!ledger.RequiresInventoryReceipt(entry.Request) &&
+          entry.Container == null && entry.Stacks.Count == 0 && entry.ContainerEpoch == null) ||
+         (!string.IsNullOrEmpty(entry.Container) && entry.Stacks.Count > 0 && reservation.SamePayloadAs(Payload(entry))));
+
+    private static void Repair(JournalEntry entry, string action, Dictionary<string, OrderState> orders,
+        CustodyLedger ledger, List<string> repairs)
+    {
+        ledger.MarkUncertain(entry.Request);
+        orders[entry.Order.Value] = OrderState.NeedsRepair;
+        repairs.Add("Build order \"" + entry.Order.Value + "\", request \"" + entry.Request.Value +
+            "\" needs repair after " + action + ". Its outcome is uncertain; nothing is moved, consumed or returned. " +
+            "Run cf_settle reconcile and compare the recorded source, Thorstein's inventory and the piece.");
     }
 
     private static string Unmatched(JournalEntry entry, string what)

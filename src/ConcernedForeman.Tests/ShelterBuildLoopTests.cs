@@ -463,8 +463,8 @@ public sealed class ShelterBuildLoopTests
         ShelterBuildLoop loop = Drive(world, 20);
 
         Assert.Equal(BuildStep.Stopped, loop.Step);
-        Assert.Contains("passed every check and was not created", loop.Reason);
-        Assert.Contains("Nothing was taken out of a container for it", loop.Reason);
+        Assert.Contains("could not complete its placement and payment", loop.Reason);
+        Assert.Contains("cf_settle reconcile", loop.Reason);
         Assert.Empty(world.Placer.Placed);
     }
 
@@ -489,9 +489,10 @@ public sealed class ShelterBuildLoopTests
         Assert.Equal(wood + world.Plan.Pieces[0].Recipe.Costs[0].Amount, world.Total("Wood"));
 
         Assert.Equal(BuildStep.Stopped, loop.Step);
-        Assert.Contains("went up and the", loop.Reason);
+        Assert.Contains("could not complete its placement and payment", loop.Reason);
+        Assert.Contains("cf_settle reconcile", loop.Reason);
         Assert.Contains("his inventory could not be written", loop.Reason);
-        Assert.Contains("Nothing else is built until that is sorted out", loop.Reason);
+        Assert.Contains("Nothing else is built", loop.Reason);
 
         // One piece, one failure, and it did not keep going.
         Assert.Single(world.Placer.Placed);

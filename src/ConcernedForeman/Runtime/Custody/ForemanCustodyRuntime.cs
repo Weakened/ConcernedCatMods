@@ -287,7 +287,7 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
     {
         get
         {
-            if (_core == null || !_core.IsWritable || _census == null || _census.IsDuplicated)
+            if (_core == null || !_core.IsWritable || _core.BuildMaterials.NeedsRepair || _census == null || _census.IsDuplicated)
             {
                 return false;
             }
@@ -308,6 +308,27 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
     /// identity epoch, which every custody row of the load also carries.
     /// </summary>
     public Guid WorldLoadEpoch => _epoch;
+
+    public CustodyOutcome ReserveBuild(Reservation reservation, Func<bool> draw, out string failure)
+    {
+        failure = "build custody is unavailable; run cf_settle reconcile";
+        return _core == null ? CustodyOutcome.Rejected :
+            _core.BuildMaterials.Reserve(reservation, () => IsWritable && draw(), out failure);
+    }
+
+    public CustodyOutcome CommitBuild(Reservation reservation, Func<bool> placeAndPay, out string failure)
+    {
+        failure = "build custody is unavailable; run cf_settle reconcile";
+        return _core == null ? CustodyOutcome.Rejected :
+            _core.BuildMaterials.Commit(reservation, () => IsWritable && placeAndPay(), out failure);
+    }
+
+    public CustodyOutcome RefundBuild(Reservation reservation, Func<bool> putBack, out string failure)
+    {
+        failure = "build custody is unavailable; run cf_settle reconcile";
+        return _core == null ? CustodyOutcome.Rejected :
+            _core.BuildMaterials.Refund(reservation, () => IsWritable && putBack(), out failure);
+    }
 
     public bool TryRecoverOrder(WorkerId worker, out CollectionOrderDefinition? order, out CollectionOrderState state)
     {

@@ -177,6 +177,17 @@ internal static class JournalEntryKinds
                 return false;
         }
     }
+
+    /// <summary>Schema-v3 already stores a request, source and stacks on order
+    /// transitions. The production reservation writer uses Reserve/Cancel with
+    /// that payload as draw/refund intent. Legacy transitions may carry a
+    /// request without any material payload or timestamp; those keep their
+    /// original meaning, including after being saved as schema v3. Any partial
+    /// payload or timestamp instead requires full intent validation.</summary>
+    public static bool IsMaterialIntent(JournalEntry entry) =>
+        entry.Kind == JournalEntryKind.OrderTransition && !entry.Request.IsEmpty &&
+        (entry.Transition == OrderTransition.Reserve || entry.Transition == OrderTransition.Cancel) &&
+        (entry.Container != null || entry.Stacks.Count > 0 || entry.ContainerEpoch != null || entry.WorldTime.HasValue);
 }
 
 /// <summary>One immutable line of the journal.</summary>
@@ -312,7 +323,8 @@ internal sealed class JournalEntry
             }
         }
 
-        if (kind == JournalEntryKind.Reserved && (string.IsNullOrEmpty(container) || _stacks.Count == 0))
+        if ((kind == JournalEntryKind.Reserved || JournalEntryKinds.IsMaterialIntent(this)) &&
+            (string.IsNullOrEmpty(container) || _stacks.Count == 0))
         {
             // A reservation with no container or nothing in it cannot be
             // replayed, and the replay used to skip it without a word — the
@@ -442,7 +454,8 @@ internal sealed class ReplayResult
         SaveTimelineReport? timeline,
         long nextSequence,
         Guid journalInstance,
-        IEnumerable<string> repairs)
+        IEnumerable<string> repairs,
+        IEnumerable<string>? materialRepairs = null)
     {
         Orders = orders;
         Ledger = ledger;
@@ -451,6 +464,7 @@ internal sealed class ReplayResult
         Timeline = timeline;
         NextSequence = nextSequence;
         JournalInstance = journalInstance;
+        MaterialRepairs = new List<string>(materialRepairs ?? Array.Empty<string>());
         foreach (string repair in repairs)
         {
             _repairs.Add(repair);
@@ -460,6 +474,8 @@ internal sealed class ReplayResult
     public IReadOnlyDictionary<string, OrderState> Orders { get; }
 
     public CustodyLedger Ledger { get; }
+
+    public IReadOnlyList<string> MaterialRepairs { get; }
 
     /// <summary>Which real tools each worker is holding, rebuilt from the
     /// record. This is what makes the tool ledger's idempotence claim true

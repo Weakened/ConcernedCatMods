@@ -149,7 +149,6 @@ internal sealed class ShelterConstructionRuntime
             _custody,
             worker,
             supply ?? throw new ArgumentNullException(nameof(supply)),
-            () => _orders.MaterialKinds,
             _log);
 
         // The single authority-gated placement call in the product: the gate,

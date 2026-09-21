@@ -356,6 +356,10 @@ internal sealed class CustodyTools
         }
 
         var lines = new List<string>();
+        if (_custody.Core != null)
+        {
+            lines.AddRange(_custody.Core.BuildMaterials.Reconcile());
+        }
         foreach (ReconciliationFinding finding in report.Findings)
         {
             if (finding.NeedsAttention)

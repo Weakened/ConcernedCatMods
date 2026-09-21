@@ -193,6 +193,15 @@ internal static class SaveTimeline
 
         switch (entry.Kind)
         {
+            case JournalEntryKind.Reserved:
+            case JournalEntryKind.Refunded:
+            case JournalEntryKind.CommitStarted:
+            case JournalEntryKind.CommitFinished:
+                return true;
+
+            case JournalEntryKind.OrderTransition:
+                return JournalEntryKinds.IsMaterialIntent(entry);
+
             case JournalEntryKind.PickupStarted:
             case JournalEntryKind.PickupFinished:
             case JournalEntryKind.TransferStarted:

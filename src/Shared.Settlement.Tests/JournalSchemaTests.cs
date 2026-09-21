@@ -2,6 +2,7 @@ using TheConcernedCat.Settlement.Collection;
 using TheConcernedCat.Settlement.Custody;
 using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Journal;
+using TheConcernedCat.Settlement.Orders;
 using TheConcernedCat.Settlement.Register;
 using TheConcernedCat.Settlement.Storage;
 using TheConcernedCat.Settlement.Tools;
@@ -256,6 +257,84 @@ public sealed class JournalSchemaTests : IDisposable
         Assert.Equal(TrailerVerdict.Intact, again.Trailer);
         Assert.Equal(5, again.Journal.Entries.Count);
         Assert.True(again.Journal.Replay().Tools.TryGetHeld(new WorkerId("thorstein"), ToolKind.Axe, out _));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void Legacy_request_bearing_transitions_without_material_payload_survive_v3_migration(int version)
+    {
+        string path = _store.ResolvePath(Scope);
+        File.WriteAllLines(path, new[]
+        {
+            "#\tsettlement journal v" + version,
+            "v\t" + version + "\t" + Scope.ToStorageKey(),
+            "e\t0\t0\tcottage-1\t\t0\t",
+            "e\t1\t0\tcottage-1\tcottage-1-0\t1\t",
+            "e\t2\t1\tcottage-1\tcottage-1-0\t0\tchest-a\tWood*20",
+            "e\t3\t0\tcottage-1\tcottage-1-0\t5\t",
+            "e\t4\t2\tcottage-1\tcottage-1-0\t0\t",
+        });
+
+        JournalStore.LoadReport report = _store.Load(Scope);
+        for (int pass = 0; pass < 2; pass++)
+        {
+            Assert.Equal(JournalLoadOutcome.Loaded, report.Outcome);
+            Assert.Equal(0, report.SkippedLines);
+            Assert.False(report.ReadOnly);
+            Assert.Equal(5 + pass, report.Journal.Entries.Count);
+            Assert.Equal(new RequestId("cottage-1-0"), report.Journal.Entries[1].Request);
+            Assert.Equal(new RequestId("cottage-1-0"), report.Journal.Entries[3].Request);
+            Assert.False(JournalEntryKinds.IsMaterialIntent(report.Journal.Entries[1]));
+            Assert.False(JournalEntryKinds.IsMaterialIntent(report.Journal.Entries[3]));
+            ReplayResult replay = report.Journal.Replay();
+            Assert.False(replay.NeedsRepair);
+            Assert.Equal(OrderState.Cancelled, replay.StateOf(new OrderId("cottage-1")));
+            Assert.Equal(20, replay.Ledger.Totals(ReservationState.Refunded)["Wood"]);
+            Assert.Empty(replay.Ledger.Totals(ReservationState.Held));
+
+            if (pass == 0)
+            {
+                report.Journal.Append(JournalEntryKind.OrderTransition, new OrderId("cottage-1"),
+                    new RequestId("cottage-1-0"), OrderTransition.Cancel);
+                Assert.True(_store.Save(report.Journal).Saved);
+                report = _store.Load(Scope);
+                Assert.Equal(3, report.SchemaVersion);
+                Assert.Equal(TrailerVerdict.Intact, report.Trailer);
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(5)]
+    public void Production_transition_intents_reject_empty_or_partial_material_payloads(int transition)
+    {
+        string path = _store.ResolvePath(Scope);
+        foreach (string payload in new[]
+        {
+            "\t\t100\t" + Load.ToString("N"),
+            "chest-a\t\t\t", // A partial payload is not a legacy empty transition.
+            "\t" + Load.ToString("N") + "\t\t",
+            "\t\t\t\tWood*20",
+        })
+        {
+            WriteSealed(path, new List<string>
+            {
+                "#\tsettlement journal v3",
+                "v\t3\t" + Scope.ToStorageKey(),
+                "e\t0\t0\tcottage-1\tcottage-1-0\t" + transition + "\t" + payload,
+            });
+            JournalStore.LoadReport report = _store.Load(Scope);
+            Assert.Equal(JournalLoadOutcome.LoadedWithSkippedLines, report.Outcome);
+            Assert.True(report.ReadOnly);
+            Assert.Equal(1, report.SkippedLines);
+            Assert.Empty(report.Journal.Entries);
+        }
+
+        Assert.Throws<ArgumentException>(() => new JournalEntry(0, JournalEntryKind.OrderTransition,
+            new OrderId("cottage-1"), new RequestId("cottage-1-0"), (OrderTransition)transition,
+            worldTime: 100, loadEpoch: Load));
     }
 
     [Theory]
