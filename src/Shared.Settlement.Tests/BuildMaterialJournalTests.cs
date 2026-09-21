@@ -332,4 +332,67 @@ public sealed class BuildMaterialJournalTests : IDisposable
         Assert.True(replay.NeedsRepair);
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Payload_free_receipts_settle_only_legacy_reservations(bool production, bool refund)
+    {
+        if (production) Run("reserve");
+        else _journal.Append(JournalEntryKind.Reserved, _reservation.Order, _reservation.Request,
+            container: _reservation.Container, stacks: _reservation.Stacks);
+        if (refund && production)
+            Assert.True(_core.Journal.TryRecordMaterial(JournalEntryKind.OrderTransition, _reservation, OrderTransition.Cancel));
+        if (!refund)
+        {
+            if (production) Assert.True(_core.Journal.TryRecordMaterial(JournalEntryKind.CommitStarted, _reservation));
+            else _journal.Append(JournalEntryKind.CommitStarted, _reservation.Order, _reservation.Request);
+        }
+        _journal.Append(refund ? JournalEntryKind.Refunded : JournalEntryKind.CommitFinished,
+            _reservation.Order, _reservation.Request);
+        Assert.True(Persist());
+
+        ReplayResult replay = _store.Load(_scope).Journal.Replay();
+        Assert.True(replay.Ledger.TryGet(_reservation.Request, out Reservation recorded));
+        Assert.Equal(production ? ReservationState.Uncertain :
+            refund ? ReservationState.Refunded : ReservationState.Committed, recorded.State);
+        Assert.Equal(production, replay.NeedsRepair);
+        if (!production) return;
+
+        Assert.Contains(replay.MaterialRepairs, line => line.Contains(_reservation.Request.Value));
+        Reload(snapshot: true);
+        Assert.True(_core.BuildMaterials.NeedsRepair);
+        Assert.Equal(CustodyOutcome.Rejected, Run(refund ? "refund" : "commit",
+            () => throw new Exception("payload-free receipt retry plant")));
+        Conserved();
+    }
+
+    [Fact]
+    public void Refreshing_a_legacy_refund_preserves_a_live_production_repair()
+    {
+        var legacy = new Reservation(new RequestId("old-proof"), new OrderId("old-order"), "old-source",
+            new[] { new MaterialStack("Wood", 3) }, _reservation.ContainerEpoch);
+        _journal.Append(JournalEntryKind.Reserved, legacy.Order, legacy.Request,
+            container: legacy.Container, stacks: legacy.Stacks, containerEpoch: legacy.ContainerEpoch);
+        Assert.True(Persist());
+        _core = Open(_core.Load.LoadEpoch, 0);
+        Assert.Equal(CustodyOutcome.Applied, Run("reserve"));
+        Assert.Equal(CustodyOutcome.Rejected, Run("commit", () => false));
+        _journal.Append(JournalEntryKind.Refunded, legacy.Order, legacy.Request);
+        // This second receipt is invalid for the production request.
+        _journal.Append(JournalEntryKind.Refunded, _reservation.Order, _reservation.Request);
+        Assert.True(Persist());
+
+        Assert.True(_core.BuildMaterials.Ledger.TryGet(legacy.Request, out Reservation returned));
+        Assert.Equal(ReservationState.Refunded, returned.State);
+        Assert.True(_core.BuildMaterials.Ledger.TryGet(_reservation.Request, out Reservation uncertain));
+        Assert.Equal(ReservationState.Uncertain, uncertain.State);
+        Assert.True(_core.BuildMaterials.NeedsRepair);
+        Assert.Contains(_core.BuildMaterials.Reconcile(), line => line.Contains(_reservation.Request.Value));
+        Assert.Equal(CustodyOutcome.Rejected, Run("refund", () => throw new Exception("guessed refund")));
+        Assert.True(_journal.Replay().Ledger.HasUncertainCustody);
+        Conserved();
+    }
+
 }

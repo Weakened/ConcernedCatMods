@@ -150,9 +150,6 @@ internal sealed class WorldBuildMaterials : IBuildMaterials
         if (!TryWorker(out IInventoryPort? worker, out string failure)) return BuildDraw.Refused(failure);
         SupplyChest supply = _supply();
         if (!supply.IsNamed) return BuildDraw.Refused("no supply chest is marked; run cf_settle supply");
-        DeliveryTarget source = DeliveryTarget.ToContainer(supply.ContainerKey, _epoch, supply.At);
-        if (!TryChest(source, out IInventoryPort? chest, out failure)) return BuildDraw.Refused(failure);
-        if (!Ready(worker!) || !Ready(chest!)) return BuildDraw.Refused("one of the inventories is not available now");
 
         var drawn = new MaterialTally();
         var shortBy = new MaterialTally();
@@ -165,6 +162,14 @@ internal sealed class WorldBuildMaterials : IBuildMaterials
             if (holding != null && !SamePiece(holding.Piece, piece))
                 return BuildDraw.Refused("that piece request already names a different placement or cost");
             if (holding != null && holding.Drawn && !holding.Settled) continue;
+
+            // A failed intent retains its request AND its source. Validate the
+            // inventory this attempt will actually withdraw from, even if the
+            // player has since designated a different, reachable chest.
+            DeliveryTarget source = holding != null && !holding.Settled ? holding.Source :
+                DeliveryTarget.ToContainer(supply.ContainerKey, _epoch, supply.At);
+            if (!TryChest(source, out IInventoryPort? chest, out failure)) return BuildDraw.Refused(failure);
+            if (!Ready(worker!) || !Ready(chest!)) return BuildDraw.Refused("one of the inventories is not available now");
             if (!Fits(chest!, worker!, cost))
             {
                 foreach (PieceCost line in cost.Lines) shortBy.Add(line.Item, line.Amount);
@@ -181,13 +186,15 @@ internal sealed class WorldBuildMaterials : IBuildMaterials
                 _holdings.Add(holding);
             }
 
-            // An unsaved intent can be retried, but with its original source.
-            if (!TryChest(holding.Source, out chest, out failure)) return BuildDraw.Refused(failure);
             Holding current = holding;
             CustodyOutcome outcome = _custody.ReserveBuild(current.Reservation, () =>
             {
+                // Persistence precedes the effect, so recheck the retained
+                // source's availability/reach and whole cost after the write.
+                if (!Fits(chest!, worker!, cost)) return false;
                 foreach (MaterialStack stack in current.Reservation.Stacks)
                 {
+                    if (!Ready(chest!) || !Ready(worker!)) return false;
                     int moved = Move(chest!, worker!, stack.Item, stack.Count);
                     if (moved != stack.Count) return false;
                 }

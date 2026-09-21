@@ -16,19 +16,46 @@ internal sealed class BuildMaterialCustody
     private readonly Func<bool> _mayWrite;
     private readonly Func<bool> _authority;
     private readonly List<string> _faults = new List<string>();
+    private readonly CustodyLedger _ledger;
+    private int _checkedLegacyCount;
     private bool _busy;
 
     public BuildMaterialCustody(SettlementCustodyJournal journal, CustodyLedger ledger,
         Func<bool> mayWrite, Func<bool> authority, IEnumerable<string> repairs)
     {
         _journal = journal ?? throw new ArgumentNullException(nameof(journal));
-        Ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
+        _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
+        _checkedLegacyCount = journal.Journal.Entries.Count;
         _mayWrite = mayWrite ?? throw new ArgumentNullException(nameof(mayWrite));
         _authority = authority ?? throw new ArgumentNullException(nameof(authority));
         _faults.AddRange(repairs);
     }
 
-    public CustodyLedger Ledger { get; }
+    public CustodyLedger Ledger
+    {
+        get { RefreshLegacyRefunds(); return _ledger; }
+    }
+
+    /// <summary>The legacy designation cascade writes refunds outside this
+    /// writer. Refresh those holdings after persistence so the live gate and
+    /// reconcile view agree with replay without a reload. Production holdings
+    /// and uncertainty are never settled by this record-only path.</summary>
+    private void RefreshLegacyRefunds()
+    {
+        SettlementJournal journal = _journal.Journal;
+        if (_busy || journal.IsDirty || journal.Entries.Count == _checkedLegacyCount) return;
+        _checkedLegacyCount = journal.Entries.Count;
+        ReplayResult? replay = null;
+        foreach (Reservation held in _ledger.Reservations)
+        {
+            if (held.State != ReservationState.Held || _ledger.RequiresInventoryReceipt(held.Request)) continue;
+            replay ??= journal.Replay();
+            if (!replay.Ledger.RequiresInventoryReceipt(held.Request) &&
+                replay.Ledger.TryGet(held.Request, out Reservation recorded) &&
+                held.SamePayloadAs(recorded) && recorded.State == ReservationState.Refunded)
+                _ledger.Refund(held.Request);
+        }
+    }
 
     public bool NeedsRepair
     {

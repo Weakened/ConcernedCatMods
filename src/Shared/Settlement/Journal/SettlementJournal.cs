@@ -180,11 +180,14 @@ internal static class JournalEntryKinds
 
     /// <summary>Schema-v3 already stores a request, source and stacks on order
     /// transitions. The production reservation writer uses Reserve/Cancel with
-    /// that payload as draw/refund intent. Ordinary order transitions have no
-    /// request and retain their original meaning.</summary>
+    /// that payload as draw/refund intent. Legacy transitions may carry a
+    /// request without any material payload or timestamp; those keep their
+    /// original meaning, including after being saved as schema v3. Any partial
+    /// payload or timestamp instead requires full intent validation.</summary>
     public static bool IsMaterialIntent(JournalEntry entry) =>
         entry.Kind == JournalEntryKind.OrderTransition && !entry.Request.IsEmpty &&
-        (entry.Transition == OrderTransition.Reserve || entry.Transition == OrderTransition.Cancel);
+        (entry.Transition == OrderTransition.Reserve || entry.Transition == OrderTransition.Cancel) &&
+        (entry.Container != null || entry.Stacks.Count > 0 || entry.ContainerEpoch != null || entry.WorldTime.HasValue);
 }
 
 /// <summary>One immutable line of the journal.</summary>

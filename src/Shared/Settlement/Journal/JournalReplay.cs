@@ -240,7 +240,8 @@ internal static class JournalReplay
 
     private static bool Matches(CustodyLedger ledger, JournalEntry entry) =>
         ledger.TryGet(entry.Request, out Reservation reservation) && reservation.Order.Equals(entry.Order) &&
-        ((entry.Container == null && entry.Stacks.Count == 0 && entry.ContainerEpoch == null) ||
+        ((!ledger.RequiresInventoryReceipt(entry.Request) &&
+          entry.Container == null && entry.Stacks.Count == 0 && entry.ContainerEpoch == null) ||
          (!string.IsNullOrEmpty(entry.Container) && entry.Stacks.Count > 0 && reservation.SamePayloadAs(Payload(entry))));
 
     private static void Repair(JournalEntry entry, string action, Dictionary<string, OrderState> orders,

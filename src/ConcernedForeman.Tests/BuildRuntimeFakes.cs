@@ -28,13 +28,22 @@ internal sealed class FakeCustody : ICustodyRuntime
         WorkerPort = worker;
         ChestPort = chest;
         Journal = new SettlementJournal(new SettlementScope(4242, new SettlementId("build-test")));
-        Core = CustodyCore.Open(Journal, () => { Journal.MarkClean(); return true; }, () => 10,
+        Core = CustodyCore.Open(Journal, () =>
+        {
+            if (!CanPersist()) return false;
+            Journal.MarkClean();
+            return true;
+        }, () => 10,
             new WorldLoad(0, WorldLoadEpoch), () => _writable);
     }
 
     internal IInventoryPort? WorkerPort { get; set; }
 
     internal IInventoryPort? ChestPort { get; set; }
+
+    internal Func<DeliveryTarget, IInventoryPort?>? ResolveChest { get; set; }
+
+    internal Func<bool> CanPersist { get; set; } = () => true;
 
     internal CollectionAttentionReason WorkerRefusal { get; set; } = CollectionAttentionReason.WorkerBodyLost;
 
@@ -102,7 +111,7 @@ internal sealed class FakeCustody : ICustodyRuntime
         DeliveryTarget target, out IInventoryPort? port, out CollectionAttentionReason refusal)
     {
         LastContainer = target;
-        port = ChestPort;
+        port = ResolveChest == null ? ChestPort : ResolveChest(target);
         refusal = port == null ? ChestRefusal : CollectionAttentionReason.Unspecified;
         return port != null;
     }

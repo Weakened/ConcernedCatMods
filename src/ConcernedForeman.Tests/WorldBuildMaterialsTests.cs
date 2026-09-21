@@ -5,6 +5,7 @@ using TheConcernedCat.ConcernedForeman.Domain.Construction;
 using TheConcernedCat.ConcernedForeman.Runtime.Construction;
 using TheConcernedCat.ConcernedForeman.Runtime.Custody;
 using TheConcernedCat.Settlement.Custody;
+using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Journal;
 using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
@@ -113,6 +114,75 @@ public sealed class WorldBuildMaterialsTests : IDisposable
         else _custody.ChestPort = null;
         Assert.True(Materials().Draw(new[] { Piece() }).IsRefused);
         Assert.Empty(_custody.Journal.Entries);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Failed_intent_retry_revalidates_the_retained_source_after_redesignation(bool afterIntent)
+    {
+        PutInChest("Wood", 20);
+        Container other = ForemanFixtures.Chest(key: "0000000000000002:00000001");
+        other.transform.position = new Vector3(20f, 0f, 0f);
+        other.GetInventory()!.AddItem(ForemanFixtures.Stack(new MaterialItem("Wood", 1, 0), 30));
+        Vector3 workerAt = _chest.transform.position;
+        var originalPort = new ContainerInventoryPort(_chest, _supply.ContainerKey, () => workerAt, 3f);
+        var otherPort = new ContainerInventoryPort(other, ForemanFixtures.KeyOf(other), () => workerAt, 3f);
+        var sources = new Dictionary<string, IInventoryPort>
+        {
+            [_supply.ContainerKey] = originalPort,
+            [ForemanFixtures.KeyOf(other)] = otherPort,
+        };
+        _custody.ResolveChest = target => target.WorldLoadEpoch == _custody.WorldLoadEpoch &&
+            sources.TryGetValue(target.ContainerKey, out IInventoryPort? port) ? port : null;
+        var materials = Materials();
+        RequestId retained = default;
+        _custody.CanPersist = () =>
+        {
+            retained = _custody.Journal.Entries.Last().Request;
+            return false;
+        };
+        Assert.True(materials.Draw(new[] { Piece() }).IsRefused);
+        Assert.False(retained.IsEmpty);
+        Assert.Empty(_custody.Journal.Entries);
+        Assert.Equal(20, InChest());
+        Assert.Equal(0, OnWorker());
+
+        _supply = new SupplyChest(ForemanFixtures.KeyOf(other), new SitePoint(20f, 0f, 0f));
+        if (!afterIntent) workerAt = other.transform.position;
+        _custody.CanPersist = () =>
+        {
+            if (afterIntent) workerAt = other.transform.position;
+            return true;
+        };
+        Assert.True(materials.Draw(new[] { Piece() }).IsRefused);
+        Assert.False(originalPort.IsAvailable);
+        Assert.True(otherPort.IsAvailable);
+        Assert.Equal(20, InChest());
+        Assert.Equal(30, EngineInventoryPort.CountIn(other.GetInventory()!, new MaterialItem("Wood", 1, 0)));
+        Assert.Equal(0, OnWorker());
+        Assert.DoesNotContain(_custody.Journal.Entries, row => row.Kind == JournalEntryKind.Reserved);
+
+        if (afterIntent)
+        {
+            Assert.True(_custody.Core.BuildMaterials.NeedsRepair);
+            Assert.True(_custody.Journal.Replay().Ledger.HasUncertainCustody);
+            return;
+        }
+
+        Assert.Empty(_custody.Journal.Entries);
+        Assert.False(_custody.Core.BuildMaterials.NeedsRepair);
+        workerAt = _chest.transform.position; // Newly designated chest is now out of reach.
+        Assert.Equal(2, materials.Draw(new[] { Piece() }).Drawn.UnitsOf("Wood"));
+        JournalEntry receipt = Assert.Single(_custody.Journal.Entries, row => row.Kind == JournalEntryKind.Reserved);
+        Assert.Equal(retained, receipt.Request);
+        Assert.Equal(ForemanFixtures.KeyOf(_chest), receipt.Container);
+        Assert.Equal(18, InChest());
+        Assert.Equal(2, OnWorker());
+        Assert.True(materials.Draw(new[] { Piece() }).Drawn.IsEmpty);
+        Assert.Equal(2, materials.PutBack(out _).UnitsOf("Wood"));
+        Assert.Equal(20, InChest());
+        Assert.Equal(30, EngineInventoryPort.CountIn(other.GetInventory()!, new MaterialItem("Wood", 1, 0)));
     }
 
     [Fact]

@@ -10,6 +10,11 @@ undrawn. Unrecorded inventory is not build credit, and another piece's
 reservation cannot pay for a rebuild. The runtime retains a request through
 retries; an explicit later rebuild gets a new request.
 
+A failed intent also retains its original source. Every retry resolves and
+checks that source's availability, reach and whole cost before recording intent,
+then checks again before withdrawal. Redesignating a reachable chest cannot
+authorize a withdrawal from an inaccessible original source.
+
 | Operation | Persist before mutation | Persist after measured completion |
 |---|---|---|
 | Draw | `OrderTransition/Reserve`, with request, source, epoch and stacks | `Reserved` |
@@ -17,13 +22,21 @@ retries; an explicit later rebuild gets a new request.
 | Return | `OrderTransition/Cancel`, with the same payload | `Refunded` |
 
 The existing v3 material-row fields already support request-bearing order
-transitions. Ordinary transitions without a request keep their old meaning.
+transitions. Legacy transitions with a request but no material payload or
+timestamp keep their order-only meaning, including after migration from v1/v2
+to v3. Any material field or timestamp requires full intent validation.
 The two intent rows close the interruption windows around draws and refunds;
 writing only their receipts would permit a repeated inventory mutation after a
 crash. Legacy proof records still replay. A production reservation requires its
 matching intent, so the old designation cascade cannot manufacture a refund
 receipt by clearing a marker. Such a clear refuses until the real holding has
 been returned or repaired.
+
+Payload-free legacy receipts remain readable, but cannot settle a production
+request established by a full draw intent. A persisted legacy designation refund
+refreshes the live ledger before it is read, so reconciliation and the repair
+gate agree with replay immediately. This refresh cannot settle production
+holdings or uncertainty, and never credits an unsaved refund.
 
 `ICustodyRuntime.ReserveBuild`, `CommitBuild` and `RefundBuild` delegate to the
 game-free writer. A completed retry with the same request and payload returns
