@@ -245,6 +245,14 @@ internal sealed class CustodyLedger
     private readonly Dictionary<string, Reservation> _reservations =
         new Dictionary<string, Reservation>(StringComparer.Ordinal);
     private readonly List<string> _order = new List<string>();
+    private readonly HashSet<string> _inventoryRequests = new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>Inferred from a production draw intent, never a second persisted
+    /// flag. Such a reservation may only be refunded by a measured inventory
+    /// operation, not the old designation cascade's record-only settlement.</summary>
+    public bool RequiresInventoryReceipt(RequestId request) => _inventoryRequests.Contains(request.Value);
+
+    internal void RequireInventoryReceipt(RequestId request) => _inventoryRequests.Add(request.Value);
 
     public IReadOnlyList<Reservation> Reservations
     {

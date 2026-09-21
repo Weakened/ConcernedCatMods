@@ -36,9 +36,10 @@ internal sealed class GatedPiecePlacer : IPiecePlacer
     internal int Refused => _placer.Refused;
 
     /// <inheritdoc />
-    public PiecePlaced Place(CostedPiece piece, MaterialTally carried, bool authorised, out string reason)
+    public PiecePlaced Place(CostedPiece piece, MaterialTally carried, bool authorised, out string reason,
+        BuildCommit? commit = null)
     {
-        PlacementReport report = _placer.Place(piece, carried, authorised);
+        PlacementReport report = _placer.Place(piece, carried, authorised, commit);
         reason = report.Reason;
         switch (report.Result)
         {

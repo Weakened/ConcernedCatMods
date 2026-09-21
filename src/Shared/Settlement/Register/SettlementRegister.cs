@@ -305,6 +305,18 @@ internal sealed class SettlementRegister
 
         IReadOnlyList<Reservation> allReservations = state.Ledger.Reservations;
 
+        foreach (Reservation reservation in allReservations)
+        {
+            if (state.Ledger.RequiresInventoryReceipt(reservation.Request) &&
+                (reservation.State == ReservationState.Held || reservation.State == ReservationState.Uncertain) &&
+                (clearsSettlement || (clearedContainer != null && reservation.CameFrom(clearedContainer, clearedEpoch))))
+            {
+                // #398: the historical cascade below only changes the record.
+                // Real carried material must use custody's measured refund.
+                return UndesignationPlan.Refused(DesignationRefusal.BuildMaterialHeld);
+            }
+        }
+
         // An order can be known ONLY by its reservation: replay records a state
         // for a transition entry, but a Reserved entry adds nothing to the
         // order table. Iterating that table alone would leave such an order
@@ -462,6 +474,11 @@ internal sealed class SettlementRegister
             || journal.Instance != plan.JournalInstance)
         {
             return UndesignationOutcome.Stale;
+        }
+
+        if (PlanUndesignation(plan.Kind, journal.Replay(), authorised).IsRefused)
+        {
+            return UndesignationOutcome.Refused;
         }
 
         // The book is re-checked by re-deriving the whole cascade rather than

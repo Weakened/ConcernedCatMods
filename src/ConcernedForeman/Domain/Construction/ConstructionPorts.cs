@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using TheConcernedCat.Settlement.Worker;
 
 namespace TheConcernedCat.ConcernedForeman.Domain.Construction;
@@ -109,7 +111,7 @@ internal readonly struct BuildDraw
 ///
 /// <b>Four operations, and the conservation argument is exactly these four.</b>
 /// Material enters through <see cref="Draw"/>, sits in <see cref="Carried"/>,
-/// leaves through <see cref="Spend"/> when a piece has actually gone up, or goes
+/// leaves through <see cref="Commit"/> when a piece has actually gone up, or goes
 /// back through <see cref="PutBack"/>. There is no fifth way, which is what lets
 /// a test add up the container, what he carries and what is standing and demand
 /// the same number after any sequence of ticks, interruptions and reloads.
@@ -120,6 +122,8 @@ internal readonly struct BuildDraw
 /// above a statement about arithmetic rather than about a player's chest.</summary>
 internal interface IBuildMaterials
 {
+    void BeginOrder(string tag);
+
     /// <summary>Where the permitted supply container is, so he can walk to it.
     /// </summary>
     /// <returns>False with a named refusal when there is no permitted container
@@ -131,16 +135,21 @@ internal interface IBuildMaterials
     /// his own inventory rather than remembered.</summary>
     MaterialTally Carried { get; }
 
-    /// <summary>Moves up to <paramref name="wanted"/> out of the permitted
-    /// container and into his own inventory, once.</summary>
-    BuildDraw Draw(MaterialTally wanted);
+    /// <summary>This piece, rather than another piece with the same material,
+    /// owns a held reservation.</summary>
+    bool IsReserved(CostedPiece piece);
 
-    /// <summary>Takes one piece's real cost out of what he carries, at the
-    /// moment that piece has gone up.</summary>
+    /// <summary>Reserves whole piece costs from this phase in one visit. A
+    /// reservation is never partly spent or silently assigned to another piece.</summary>
+    BuildDraw Draw(IReadOnlyList<CostedPiece> pieces);
+
+    /// <summary>Persists intent, invokes placement and its standing-piece check,
+    /// pays the exact reservation, then persists completion. A retry never
+    /// invokes <paramref name="place"/> twice.</summary>
     /// <param name="spent">What actually left his inventory.</param>
     /// <param name="failure">Why it could not be taken. Empty on success.
     /// </param>
-    bool Spend(PieceRecipe recipe, out MaterialTally spent, out string failure);
+    bool Commit(CostedPiece piece, Func<bool> place, out MaterialTally spent, out string failure);
 
     /// <summary>Puts everything he still carries for this order back into the
     /// container it came out of.</summary>
@@ -209,5 +218,10 @@ internal interface IPiecePlacer
     /// <param name="authorised">Whether a player confirmed the order.</param>
     /// <param name="reason">The named refusal or failure, for the player. Empty
     /// when the piece went up.</param>
-    PiecePlaced Place(CostedPiece piece, MaterialTally carried, bool authorised, out string reason);
+    PiecePlaced Place(CostedPiece piece, MaterialTally carried, bool authorised, out string reason,
+        BuildCommit? commit = null);
 }
+
+/// <summary>Runs after the placement gate, wrapping the actual installation and
+/// payment in custody's durable commit. A rejected gate never starts a commit.</summary>
+internal delegate bool BuildCommit(Func<bool> install, out string failure);

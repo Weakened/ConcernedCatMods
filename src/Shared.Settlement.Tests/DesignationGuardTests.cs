@@ -731,4 +731,32 @@ public sealed class DesignationGuardTests : IDisposable
         // The register on disk is exactly what it was.
         Assert.Equal(registerBefore, File.ReadAllText(_registers.ResolvePath(Scope)));
     }
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Production_build_holding_cannot_be_refunded_by_clearing_a_marker(bool settlement, bool interrupted)
+    {
+        DesignationKind kind = settlement ? DesignationKind.SettlementArea : DesignationKind.SupplyContainer;
+        SettlementRegister register = SetUp();
+        var journal = new SettlementJournal(Scope);
+        RequestId request = RequestId.For(Cottage, 0);
+        var stacks = new[] { new MaterialStack("Wood", 20) };
+        journal.Append(JournalEntryKind.OrderTransition, Cottage, request, OrderTransition.Reserve,
+            "chest-a", stacks, containerEpoch: ThisRun);
+        journal.Append(JournalEntryKind.Reserved, Cottage, request, container: "chest-a", stacks: stacks,
+            containerEpoch: ThisRun);
+        if (interrupted) journal.Append(JournalEntryKind.CommitStarted, Cottage, request);
+        Assert.True(_journals.Save(journal).Saved);
+        journal = _journals.Load(Scope).Journal;
+
+        UndesignationPlan plan = register.PlanUndesignation(kind, journal.Replay(), authorised: true);
+        Assert.True(plan.IsRefused);
+        Assert.Equal(DesignationRefusal.BuildMaterialHeld, plan.Refusal);
+        Assert.Equal(UndesignationOutcome.Refused, register.ApplyUndesignation(plan, journal, authorised: true));
+        Assert.DoesNotContain(journal.Entries, e => e.Kind == JournalEntryKind.Refunded);
+        Assert.Contains("cf_settle reconcile", DesignationResult.Refused(plan.Refusal).Describe());
+    }
+
 }

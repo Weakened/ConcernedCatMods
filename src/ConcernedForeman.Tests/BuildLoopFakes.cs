@@ -114,7 +114,8 @@ internal sealed class FakePlacer : IPiecePlacer
 
     internal string Reason { get; set; } = "something is already there";
 
-    public PiecePlaced Place(CostedPiece piece, MaterialTally carried, bool authorised, out string reason)
+    public PiecePlaced Place(CostedPiece piece, MaterialTally carried, bool authorised, out string reason,
+        BuildCommit? commit = null)
     {
         Authority.Add(authorised);
         Offered.Add(carried.Copy());
@@ -136,8 +137,14 @@ internal sealed class FakePlacer : IPiecePlacer
             return verdict;
         }
 
-        Placed.Add(piece.Key);
-        _world.Stand(piece);
+        bool Install()
+        {
+            Placed.Add(piece.Key);
+            _world.Stand(piece);
+            return true;
+        }
+        if (commit != null && !commit(Install, out reason)) return PiecePlaced.Failed;
+        if (commit == null) Install();
         reason = string.Empty;
         return PiecePlaced.Placed;
     }
@@ -146,6 +153,9 @@ internal sealed class FakePlacer : IPiecePlacer
 /// <summary>The chest, his hands, and the two movements between them.</summary>
 internal sealed class FakeMaterials : IBuildMaterials
 {
+    public void BeginOrder(string tag) { }
+
+    public bool IsReserved(CostedPiece piece) => new MaterialTally().Add(piece.Recipe).Missing(Carried).IsEmpty;
     private readonly BuildWorld _world;
 
     internal FakeMaterials(BuildWorld world)
@@ -194,8 +204,11 @@ internal sealed class FakeMaterials : IBuildMaterials
         }
     }
 
-    public BuildDraw Draw(MaterialTally wanted)
+    public BuildDraw Draw(IReadOnlyList<CostedPiece> pieces)
     {
+        var total = new MaterialTally();
+        foreach (CostedPiece piece in pieces) total.Add(piece.Recipe);
+        MaterialTally wanted = total.Missing(Carried);
         Draws++;
         if (RefuseDraw != null)
         {
@@ -222,10 +235,12 @@ internal sealed class FakeMaterials : IBuildMaterials
         return BuildDraw.Moved(drawn, shortBy);
     }
 
-    public bool Spend(PieceRecipe recipe, out MaterialTally spent, out string failure)
+    public bool Commit(CostedPiece piece, Func<bool> place, out MaterialTally spent, out string failure)
     {
         Spends++;
         spent = new MaterialTally();
+        if (!place()) { failure = "the piece is not confirmed standing"; return false; }
+        PieceRecipe recipe = piece.Recipe;
         if (RefuseSpend != null)
         {
             failure = RefuseSpend;

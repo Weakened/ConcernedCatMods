@@ -5,6 +5,7 @@ using TheConcernedCat.ConcernedForeman.Runtime.Work;
 using TheConcernedCat.Settlement.Collection;
 using TheConcernedCat.Settlement.Collection.Planning;
 using TheConcernedCat.Settlement.Custody;
+using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
 
@@ -40,335 +41,269 @@ internal readonly struct SupplyChest
     internal bool IsNamed => !string.IsNullOrEmpty(ContainerKey);
 }
 
-/// <summary>Building material against the running game: out of the permitted
-/// supply chest, into Thorstein's own persisted inventory, and out again when a
-/// piece has gone up.
-///
-/// <b>Both inventories are resolved through custody and nothing else.</b>
-/// <see cref="ICustodyRuntime.TryResolveContainer"/> is what applies the ward,
-/// the privacy setting, the guard stone, the reach and the world-load epoch to
-/// the chest, and <see cref="ICustodyRuntime.TryResolveWorker"/> is what applies
-/// the duplicate-body census and the body's own persistence to the worker. This
-/// class asks those two questions and moves between the answers; it never finds
-/// an inventory of its own.
-///
-/// <b>These movements are not journalled, and the reason is a MISSING WRITER -
-/// not a missing format.</b> An earlier version of this comment said the durable
-/// format did not exist and that adding it would be its own issue. That was
-/// wrong, and getting it wrong is worse than the gap: it would have sent the next
-/// reader off to design rows this repository already has. The reservation lane is
-/// built, validated, replayed and tested:
-///
-/// <list type="bullet">
-/// <item><c>Shared/Settlement/Journal/SettlementJournal.cs</c> -
-/// <c>JournalEntryKind.Reserved</c>, <c>CommitStarted</c>, <c>CommitFinished</c>,
-/// <c>Refunded</c>, whose own doc comment describes <i>exactly</i> this problem:
-/// "a commit does two things that cannot be made atomic against a game - consume
-/// the reserved material and place the piece - so the journal records the
-/// intention before and the outcome after".</item>
-/// <item><c>Shared/Settlement/Custody/CustodyLedger.cs</c> - <c>Reserve</c>,
-/// <c>Commit</c>, <c>Refund</c>, <c>MarkUncertain</c> over
-/// <c>Held|Committed|Refunded|Uncertain</c>, with <c>Reservation.Container</c>
-/// documented as the one container a refund goes back to - which is the
-/// discipline <see cref="PutBack"/> reimplements by hand.</item>
-/// <item><c>JournalReplay</c> already replays all four kinds and already turns a
-/// started-but-unfinished commit into <c>MarkUncertain</c>; <c>JournalStore</c>
-/// already parses and validates the rows at schema v3, with golden fixtures.
-/// </item>
-/// </list>
-///
-/// What is actually missing is a <b>production writer</b>: nothing in any product
-/// writes those four kinds, and <see cref="ICustodyRuntime"/> - the seam this
-/// product consumes - exposes no reserve/commit/refund operation to call. That is
-/// the same shape of defect #380 exists to fix, one layer down. Adding the writer
-/// means adding ops to a shared area that three products compile, so it is
-/// deliberately NOT ridden in on a behaviour change; it is filed as its own issue.
-///
-/// <b>The collection lane is a different lane, and it genuinely cannot carry
-/// this.</b> <c>TransferExecutor</c> is the product's vetted mover for GATHERED
-/// material. Its ledger check (<c>MaterialCustodyLedger.Check</c>) requires an
-/// accepted <c>CollectionOrderDefinition</c> and requires the ORDER to already
-/// hold the units at the source; <c>MayLeave</c> is true only for
-/// <c>SourceGround|Worker|Cart</c>, <c>HoldingAt</c> is per-order, and
-/// <c>CustodyPlace</c> has no vocabulary at all for "a player's own chest, as a
-/// source". A build draw runs the other way and is unrepresentable there. So the
-/// right home for it is the reservation lane above, not this one.
-///
-/// <b>The gap that leaves, concretely.</b> Movements here are gated on custody
-/// being writable, resolved through custody's own container and worker ports, and
-/// logged with their measured amounts - but there is no row, so nothing is
-/// replayed or reconciled. What makes them conserved is that both sides are real
-/// engine inventories, one of which (the worker body) persists itself inside the
-/// same call, and that the loop only ever spends for a piece that is standing. A
-/// process killed after a <see cref="Draw"/> therefore loses no material - it is
-/// in his body, durably, and a player can take it out - but it records no
-/// provenance; and because <c>BuildOrderRuntime.Forget()</c> drops the order when
-/// the world unloads, the next load has no order, no refund and no record of it.
-/// The material is his and it is invisible to <c>cf_settle reconcile</c>. That is
-/// the price of the missing writer, stated so nobody has to discover it.
-///
-/// <b>The movement discipline is <c>TransferExecutor</c>'s, deliberately
-/// repeated rather than reinvented.</b> Count both sides, move through vanilla's
-/// own instance-preserving move, count both sides again, and classify from the
-/// measured deltas - never from what an add or a remove returned, and never from
-/// what was asked for. A delta pair that does not agree is reported as uncertain
-/// and nothing is compensated, which is the only reading that cannot invent
-/// material.</summary>
+/// <summary>One whole reservation per piece cost, fetched in the loop's phase
+/// batches. Custody owns durable intent, receipts and retry decisions. This
+/// adapter owns only measured inventory effects, through custody's vetted ports.
+/// A refund always resolves the original source and epoch, never the currently
+/// designated chest. Pre-existing, unrecorded items are not building credit.</summary>
 internal sealed class WorldBuildMaterials : IBuildMaterials
 {
+    private sealed class Holding
+    {
+        internal Holding(Reservation reservation, CostedPiece piece, DeliveryTarget source)
+        {
+            Reservation = reservation;
+            Piece = piece;
+            Source = source;
+        }
+
+        internal Reservation Reservation { get; }
+        internal CostedPiece Piece { get; }
+        internal DeliveryTarget Source { get; }
+        internal bool Drawn { get; set; }
+        internal bool Settled { get; set; }
+    }
+
     private readonly ICustodyRuntime _custody;
     private readonly WorkerKey _worker;
     private readonly Func<SupplyChest> _supply;
-    private readonly Func<IReadOnlyList<string>> _kinds;
     private readonly Action<string> _log;
+    private readonly List<Holding> _holdings = new List<Holding>();
+    private Guid _epoch;
+    private OrderId _order;
+    private string _tag = string.Empty;
 
-    /// <param name="custody">Agent D's runtime: the only thing that resolves a
-    /// container or the worker's inventory, and the writable-record gate.</param>
-    /// <param name="worker">Whose inventory carries the material.</param>
-    /// <param name="supply">The permitted container, read live. A designation
-    /// replaced while an order runs is a different chest, and the next draw uses
-    /// the one that is marked now.</param>
-    /// <param name="kinds">The item prefab names this order can involve - the
-    /// plan's own manifest. Used to decide what to count as carried and what to
-    /// put back, so a tool in his hands or somebody else's stone is never
-    /// counted as this order's wood.</param>
-    internal WorldBuildMaterials(
-        ICustodyRuntime custody,
-        WorkerKey worker,
-        Func<SupplyChest> supply,
-        Func<IReadOnlyList<string>> kinds,
-        Action<string> log)
+    internal WorldBuildMaterials(ICustodyRuntime custody, WorkerKey worker,
+        Func<SupplyChest> supply, Action<string> log)
     {
         _custody = custody ?? throw new ArgumentNullException(nameof(custody));
         _worker = worker;
         _supply = supply ?? throw new ArgumentNullException(nameof(supply));
-        _kinds = kinds ?? throw new ArgumentNullException(nameof(kinds));
         _log = log ?? throw new ArgumentNullException(nameof(log));
     }
 
-    /// <summary>Set when a movement's two measured deltas disagreed, or when a
-    /// removal could not be made durable.
-    ///
-    /// <b>Latched for the PROCESS, not for the world load.</b> This instance is
-    /// built once, in the construction runtime's constructor, and
-    /// <c>ShelterBuildLoop.Forget</c> does not clear it - so a world unload does
-    /// not lift it and a second world in the same session inherits it. That is
-    /// stricter than it needs to be and is stated rather than relaxed: once this
-    /// product cannot say where a unit of somebody's material went, the cheapest
-    /// correct behaviour is to stop moving material until a person has looked,
-    /// and a reload is not a person looking.</summary>
-    internal string? Uncertain { get; private set; }
-
-    /// <inheritdoc />
-    public bool TrySupply(out SitePoint at, out string refusal)
+    private string? _uncertain;
+    internal string? Uncertain
     {
-        at = default;
-        SupplyChest chest = _supply();
-        if (!chest.IsNamed)
-        {
-            refusal = "no supply chest is marked for this settlement. Look at the chest the material " +
-                "should come out of and run: cf_settle supply";
-            return false;
-        }
-
-        at = chest.At;
-        refusal = string.Empty;
-        return true;
+        get { World(); return _uncertain; }
+        private set => _uncertain = value;
     }
 
-    /// <inheritdoc />
+    public void BeginOrder(string tag)
+    {
+        World();
+        if (string.Equals(_tag, tag, StringComparison.Ordinal)) return;
+        foreach (Holding holding in _holdings)
+        {
+            if (holding.Drawn && !holding.Settled)
+                throw new InvalidOperationException("the previous build still holds a reservation; run cf_settle reconcile");
+        }
+
+        _tag = tag;
+        _order = new OrderId("build-" + Guid.NewGuid().ToString("N"));
+        _holdings.Clear();
+    }
+
+    private void World()
+    {
+        if (_epoch == _custody.WorldLoadEpoch && !_order.IsEmpty) return;
+        _epoch = _custody.WorldLoadEpoch;
+        _order = new OrderId("build-" + Guid.NewGuid().ToString("N"));
+        _holdings.Clear();
+        _tag = string.Empty;
+        Uncertain = null;
+    }
+
+    public bool TrySupply(out SitePoint at, out string refusal)
+    {
+        SupplyChest chest = _supply();
+        at = chest.At;
+        refusal = chest.IsNamed ? string.Empty : "no supply chest is marked; look at it and run: cf_settle supply";
+        return chest.IsNamed;
+    }
+
     public MaterialTally Carried
     {
         get
         {
-            var tally = new MaterialTally();
-            if (!TryWorker(out IInventoryPort? worker, out string _))
+            World();
+            var held = new MaterialTally();
+            if (!TryWorker(out IInventoryPort? worker, out _)) return held;
+            foreach (Holding holding in _holdings)
             {
-                return tally;
+                if (!holding.Drawn || holding.Settled) continue;
+                foreach (MaterialStack stack in holding.Reservation.Stacks) held.Add(stack.Item, stack.Count);
             }
 
-            foreach (string kind in _kinds())
-            {
-                tally.Add(kind, Counted(worker!, kind));
-            }
-
-            return tally;
+            var measured = new MaterialTally();
+            foreach (PieceCost line in held.Lines)
+                measured.Add(line.Item, Math.Min(line.Amount, Counted(worker!, line.Item)));
+            return measured;
         }
     }
 
-    /// <inheritdoc />
-    public BuildDraw Draw(MaterialTally wanted)
+    public BuildDraw Draw(IReadOnlyList<CostedPiece> pieces)
     {
-        if (Uncertain != null)
-        {
-            return BuildDraw.Refused(Uncertain);
-        }
-
-        if (!_custody.IsWritable)
-        {
-            return BuildDraw.Refused(
-                "the settlement's record cannot be written now, so nothing is taken out of a chest");
-        }
-
-        if (!TryWorker(out IInventoryPort? worker, out string workerRefusal))
-        {
-            return BuildDraw.Refused(workerRefusal);
-        }
-
-        if (!TryChest(out IInventoryPort? chest, out string chestRefusal))
-        {
-            return BuildDraw.Refused(chestRefusal);
-        }
-
-        if (!Ready(worker!) || !Ready(chest!))
-        {
-            return BuildDraw.Refused(
-                "one of the two inventories is not available now, so nothing is taken out of a chest");
-        }
+        World();
+        if (Uncertain != null) return BuildDraw.Refused(Uncertain);
+        if (!_custody.IsWritable) return BuildDraw.Refused("the settlement record cannot be written; run cf_settle reconcile");
+        if (!TryWorker(out IInventoryPort? worker, out string failure)) return BuildDraw.Refused(failure);
+        SupplyChest supply = _supply();
+        if (!supply.IsNamed) return BuildDraw.Refused("no supply chest is marked; run cf_settle supply");
+        DeliveryTarget source = DeliveryTarget.ToContainer(supply.ContainerKey, _epoch, supply.At);
+        if (!TryChest(source, out IInventoryPort? chest, out failure)) return BuildDraw.Refused(failure);
+        if (!Ready(worker!) || !Ready(chest!)) return BuildDraw.Refused("one of the inventories is not available now");
 
         var drawn = new MaterialTally();
         var shortBy = new MaterialTally();
-        foreach (PieceCost line in wanted.Lines)
+        foreach (CostedPiece piece in pieces)
         {
-            int moved = Move(chest!, worker!, line.Item, line.Amount);
-            if (moved < 0)
+            if (!piece.Recipe.IsKnown) return BuildDraw.Refused("what that piece costs was never established");
+            MaterialTally cost = new MaterialTally().Add(piece.Recipe);
+            if (cost.IsEmpty) return BuildDraw.Refused("that piece has no reservable material cost");
+            Holding? holding = Find(piece);
+            if (holding != null && !SamePiece(holding.Piece, piece))
+                return BuildDraw.Refused("that piece request already names a different placement or cost");
+            if (holding != null && holding.Drawn && !holding.Settled) continue;
+            if (!Fits(chest!, worker!, cost))
             {
-                return BuildDraw.Refused(Uncertain ?? "a movement could not be accounted for");
+                foreach (PieceCost line in cost.Lines) shortBy.Add(line.Item, line.Amount);
+                continue;
             }
 
-            drawn.Add(line.Item, moved);
-            shortBy.Add(line.Item, line.Amount - moved);
-        }
+            if (holding == null || holding.Settled)
+            {
+                var stacks = new List<MaterialStack>();
+                foreach (PieceCost line in cost.Lines) stacks.Add(new MaterialStack(line.Item, line.Amount));
+                var reservation = new Reservation(new RequestId("piece-" + piece.Key + "-" + Guid.NewGuid().ToString("N")),
+                    _order, supply.ContainerKey, stacks, _epoch.ToString("N"));
+                holding = new Holding(reservation, piece, source);
+                _holdings.Add(holding);
+            }
 
-        if (!drawn.IsEmpty)
-        {
-            _log("Build order: took " + drawn.Describe() + " out of " + chest!.Describe + " into " +
-                worker!.Describe + ".");
+            // An unsaved intent can be retried, but with its original source.
+            if (!TryChest(holding.Source, out chest, out failure)) return BuildDraw.Refused(failure);
+            Holding current = holding;
+            CustodyOutcome outcome = _custody.ReserveBuild(current.Reservation, () =>
+            {
+                foreach (MaterialStack stack in current.Reservation.Stacks)
+                {
+                    int moved = Move(chest!, worker!, stack.Item, stack.Count);
+                    if (moved != stack.Count) return false;
+                }
+                return true;
+            }, out failure);
+            if (outcome == CustodyOutcome.Rejected) return BuildDraw.Refused(Uncertain ?? failure);
+            current.Drawn = true;
+            if (outcome == CustodyOutcome.Applied)
+                foreach (MaterialStack stack in current.Reservation.Stacks) drawn.Add(stack.Item, stack.Count);
         }
 
         return BuildDraw.Moved(drawn, shortBy);
     }
 
-    /// <inheritdoc />
-    public bool Spend(PieceRecipe recipe, out MaterialTally spent, out string failure)
+    public bool IsReserved(CostedPiece piece)
     {
-        spent = new MaterialTally();
-        if (Uncertain != null)
+        World();
+        Holding? holding = Find(piece);
+        return holding != null && holding.Drawn && !holding.Settled && SamePiece(holding.Piece, piece);
+    }
+
+    public bool Commit(CostedPiece piece, Func<bool> place, out MaterialTally spent, out string failure)
+    {
+        World();
+        var paid = new MaterialTally();
+        spent = paid;
+        if (Uncertain != null) { failure = Uncertain; return false; }
+        Holding? holding = Find(piece);
+        if (holding == null || !holding.Drawn || !SamePiece(holding.Piece, piece))
         {
-            failure = Uncertain;
+            failure = "that piece has no matching reserved cost";
             return false;
         }
 
-        if (!recipe.IsKnown)
+        if (!TryWorker(out IInventoryPort? worker, out failure)) return false;
+        string detail = string.Empty;
+        CustodyOutcome outcome = _custody.CommitBuild(holding.Reservation, () =>
         {
-            failure = "what that piece costs was never established, so nothing is spent on it";
+            if (!Ready(worker!)) return false;
+            foreach (MaterialStack stack in holding.Reservation.Stacks)
+                if (Counted(worker!, stack.Item) < stack.Count) return false;
+            // The caller verifies the standing piece inside this callback. Both
+            // halves are inside CommitStarted/CommitFinished, without yielding.
+            if (!place()) return false;
+            foreach (MaterialStack stack in holding.Reservation.Stacks)
+            {
+                int removed = Removed(worker!, stack.Item, stack.Count, out detail);
+                paid.Add(stack.Item, removed);
+                if (removed != stack.Count || detail.Length != 0) return false;
+            }
+            return true;
+        }, out failure);
+        if (outcome == CustodyOutcome.Rejected)
+        {
+            if (detail.Length != 0) failure += " " + detail;
             return false;
         }
-
-        if (!TryWorker(out IInventoryPort? worker, out failure))
-        {
-            return false;
-        }
-
-        // Checked in full before anything is removed, so an affordable piece is
-        // paid for in one go and an unaffordable one costs nothing. The placement
-        // gate has already asked the same question of the same inventory; asking
-        // it again here is what makes a partial spend impossible rather than
-        // unlikely.
-        var owed = new MaterialTally();
-        foreach (PieceCost cost in recipe.Costs)
-        {
-            owed.Add(cost.Item, cost.Amount);
-        }
-
-        foreach (PieceCost line in owed.Lines)
-        {
-            if (Counted(worker!, line.Item) < line.Amount)
-            {
-                failure = "he is carrying only " + Counted(worker!, line.Item) + " " + line.Item + " of the " +
-                    line.Amount + " it costs";
-                return false;
-            }
-        }
-
-        foreach (PieceCost line in owed.Lines)
-        {
-            int removed = Removed(worker!, line.Item, line.Amount, out string durability);
-            spent.Add(line.Item, removed);
-            if (durability.Length != 0)
-            {
-                // Fails closed, exactly as a draw does. Reporting success here
-                // would be the one way this file can CREATE material: the piece
-                // is standing, the loop says it paid, and the units are back in
-                // his inventory on the next load.
-                failure = durability;
-                return false;
-            }
-
-            if (removed != line.Amount)
-            {
-                failure = "only " + removed + " of the " + line.Amount + " " + line.Item +
-                    " it costs could be taken out of " + worker!.Describe +
-                    ", so the record of what that piece cost is incomplete";
-                return false;
-            }
-        }
-
-        failure = string.Empty;
+        holding.Settled = true;
         return true;
     }
 
-    /// <inheritdoc />
     public MaterialTally PutBack(out string failure)
     {
+        World();
         var back = new MaterialTally();
-        if (Uncertain != null)
+        failure = Uncertain ?? string.Empty;
+        if (Uncertain != null || !TryWorker(out IInventoryPort? worker, out failure)) return back;
+        foreach (Holding holding in _holdings)
         {
-            failure = Uncertain;
-            return back;
-        }
-
-        if (!TryWorker(out IInventoryPort? worker, out failure))
-        {
-            return back;
-        }
-
-        if (!TryChest(out IInventoryPort? chest, out failure))
-        {
-            return back;
-        }
-
-        if (!Ready(worker!) || !Ready(chest!))
-        {
-            failure = "one of the two inventories is not available now, so nothing was moved and what he " +
-                "carries is still his";
-            return back;
-        }
-
-        foreach (string kind in _kinds())
-        {
-            int held = Counted(worker!, kind);
-            if (held < 1)
+            if (!holding.Drawn || holding.Settled) continue;
+            if (!TryChest(holding.Source, out IInventoryPort? chest, out failure)) return back;
+            var cost = new MaterialTally();
+            foreach (MaterialStack stack in holding.Reservation.Stacks) cost.Add(stack.Item, stack.Count);
+            if (!Fits(worker!, chest!, cost))
             {
-                continue;
-            }
-
-            int moved = Move(worker!, chest!, kind, held);
-            if (moved < 0)
-            {
-                failure = Uncertain ?? "a movement could not be accounted for";
+                failure = "the recorded source cannot take the whole reservation now; it is still in his own inventory";
                 return back;
             }
-
-            back.Add(kind, moved);
-            if (moved < held)
+            CustodyOutcome outcome = _custody.RefundBuild(holding.Reservation, () =>
             {
-                failure = "only " + moved + " of the " + held + " " + kind + " he carries would fit in " +
-                    chest!.Describe + "; the rest is still in his own inventory";
-            }
+                foreach (MaterialStack stack in holding.Reservation.Stacks)
+                    if (Move(worker!, chest!, stack.Item, stack.Count) != stack.Count) return false;
+                return true;
+            }, out failure);
+            if (outcome == CustodyOutcome.Rejected) return back;
+            holding.Settled = true;
+            if (outcome == CustodyOutcome.Applied)
+                foreach (MaterialStack stack in holding.Reservation.Stacks) back.Add(stack.Item, stack.Count);
         }
-
         return back;
+    }
+
+    private Holding? Find(CostedPiece piece)
+    {
+        for (int index = _holdings.Count - 1; index >= 0; index--)
+            if (_holdings[index].Piece.Key == piece.Key) return _holdings[index];
+        return null;
+    }
+
+    private static bool SamePiece(CostedPiece left, CostedPiece right)
+    {
+        if (left.Placement.At.X != right.Placement.At.X || left.Placement.At.Y != right.Placement.At.Y ||
+            left.Placement.At.Z != right.Placement.At.Z || left.Placement.Yaw != right.Placement.Yaw ||
+            left.Placement.Piece.Prefab != right.Placement.Piece.Prefab) return false;
+        MaterialTally a = new MaterialTally().Add(left.Recipe);
+        MaterialTally b = new MaterialTally().Add(right.Recipe);
+        return a.Missing(b).IsEmpty && b.Missing(a).IsEmpty;
+    }
+
+    private static bool Fits(IInventoryPort from, IInventoryPort to, MaterialTally cost)
+    {
+        if (!Ready(from) || !Ready(to)) return false;
+        foreach (PieceCost line in cost.Lines)
+            if (Counted(from, line.Item) < line.Amount || Room(to, new MaterialItem(line.Item, 1, 0), line.Amount) < line.Amount)
+                return false;
+        return true;
     }
 
     /// <summary>One measured movement between two engine inventories.
@@ -451,35 +386,20 @@ internal sealed class WorldBuildMaterials : IBuildMaterials
         return true;
     }
 
-    private bool TryChest(out IInventoryPort? port, out string refusal)
+    private bool TryChest(DeliveryTarget target, out IInventoryPort? port, out string refusal)
     {
         port = null;
-        SupplyChest chest = _supply();
-        if (!chest.IsNamed)
+        if (target.WorldLoadEpoch != _custody.WorldLoadEpoch)
         {
-            refusal = "no supply chest is marked for this settlement";
+            refusal = "the recorded supply chest could not be opened in this world load";
+            return false;
+        }
+        if (!_custody.TryResolveContainer(target, out port, out CollectionAttentionReason reason) || port == null)
+        {
+            refusal = "the recorded supply chest could not be opened (" + CollectionSentences.Describe(reason) + ")";
             return false;
         }
 
-        DeliveryTarget target;
-        try
-        {
-            target = DeliveryTarget.ToContainer(chest.ContainerKey, _custody.WorldLoadEpoch, chest.At);
-        }
-        catch (ArgumentException exception)
-        {
-            refusal = "the marked supply chest does not belong to this world load (" + exception.Message + ")";
-            return false;
-        }
-
-        if (!_custody.TryResolveContainer(target, out IInventoryPort? found, out CollectionAttentionReason reason) ||
-            found == null)
-        {
-            refusal = "the marked supply chest could not be opened (" + CollectionSentences.Describe(reason) + ")";
-            return false;
-        }
-
-        port = found;
         refusal = string.Empty;
         return true;
     }
@@ -503,16 +423,11 @@ internal sealed class WorldBuildMaterials : IBuildMaterials
 
     private static int Counted(IInventoryPort port, string kind)
     {
-        try
-        {
-            return Math.Max(0, port.Count(new MaterialItem(kind, 1, 0)));
-        }
-        catch (Exception)
-        {
-            // An inventory that cannot be counted holds nothing as far as this
-            // runtime may claim, which refuses work rather than inventing it.
-            return 0;
-        }
+        // Zero is evidence, not a substitute for a failed read. In particular,
+        // a failed post-removal count must never look like successful payment.
+        int count = port.Count(new MaterialItem(kind, 1, 0));
+        if (count < 0) throw new InvalidOperationException("an inventory returned a negative material count");
+        return count;
     }
 
     private static int Room(IInventoryPort port, MaterialItem item, int count)

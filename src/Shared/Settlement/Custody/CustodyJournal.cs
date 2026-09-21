@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Journal;
+using TheConcernedCat.Settlement.Orders;
 
 namespace TheConcernedCat.Settlement.Custody;
 
@@ -77,6 +78,25 @@ internal sealed class SettlementCustodyJournal : ICustodyJournal
     {
         double? time = Now();
         return time.HasValue && TryRecordAt(row, time.Value);
+    }
+
+    /// <summary>The existing schema-v3 reservation lane. Request-bearing
+    /// Reserve/Cancel transitions record intent; Reserved/Refunded record the
+    /// measured outcome. No inventory may change before its intent is saved.</summary>
+    public bool TryRecordMaterial(JournalEntryKind kind, Reservation reservation,
+        OrderTransition transition = OrderTransition.Approve)
+    {
+        double? time = Now();
+        if (!time.HasValue || Journal.IsReadOnly)
+        {
+            return false;
+        }
+
+        int before = Journal.Entries.Count;
+        Journal.Append(kind, reservation.Order, reservation.Request, transition,
+            reservation.Container, reservation.Stacks, containerEpoch: reservation.ContainerEpoch,
+            worldTime: time.Value, loadEpoch: LoadEpoch);
+        return TryPersist(_persist) || !Journal.TryDiscardUnsaved(before);
     }
 
     public bool TryRecordAt(CustodyRow row, double worldTime)

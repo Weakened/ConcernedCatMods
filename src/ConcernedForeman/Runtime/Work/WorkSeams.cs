@@ -72,6 +72,15 @@ internal interface ICustodyRuntime
     /// </summary>
     Guid WorldLoadEpoch { get; }
 
+    /// <summary>The schema-v3 build reservation lane. Callbacks run once, only
+    /// after durable intent and authority checks; receipts follow measured
+    /// completion. Reusing an id with another payload is rejected.</summary>
+    CustodyOutcome ReserveBuild(Reservation reservation, Func<bool> draw, out string failure);
+
+    CustodyOutcome CommitBuild(Reservation reservation, Func<bool> placeAndPay, out string failure);
+
+    CustodyOutcome RefundBuild(Reservation reservation, Func<bool> putBack, out string failure);
+
     /// <summary>C2: after replay, the non-terminal collection order recorded for
     /// <paramref name="worker"/>, so it can be adopted (Paused) after a reload.
     /// Its scope and delivery target still carry the previous load's epoch until
