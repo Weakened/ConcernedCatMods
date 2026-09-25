@@ -30,8 +30,8 @@ internal static class CrashReportSanitizer
         RegexOptions.Compiled);
 
     // A path segment's own characters: everything a Windows path segment
-    // may not contain, plus whitespace, which SpaceRun below puts back in
-    // the one place it belongs.
+    // may not contain, plus whitespace, which the space runs below put back
+    // in the two places it belongs.
     private const string WindowsSegmentChar = @"[^\\/\r\n:*?""<>|\s]";
     private const string UnixSegmentChar = @"[^/\s]";
 
@@ -44,39 +44,88 @@ internal static class CrashReportSanitizer
     // called (#388). The user name sits before that point and was scrubbed,
     // which is why this was a leak rather than a disaster.
     //
-    // A space inside a segment is admitted only when the token after it
-    // starts like a folder name rather than like prose: upper case, a
-    // digit, `_`, `-`, `(` or `[`. That is a heuristic and it is the whole
-    // defence against the opposite failure — swallowing the sentence that
-    // follows an unquoted path, which would destroy the diagnostic instead
-    // of the privacy. English prose continues in lower case (`... b.txt was
-    // not found, see the log/file for details.`), so it is left alone; a
-    // folder whose name starts lower case AND contains a space (`steam
-    // games`) is the stated limit, and the user name before it is still
-    // scrubbed.
-    private const string WindowsSpaceRun =
-        @"(?: [A-Z0-9_\-(\[]" + WindowsSegmentChar + @"*)*";
+    // A space is admitted inside a segment only when the token after it
+    // starts like a folder name rather than like prose. The signal is
+    // negative on purpose: anything BUT a lower-case letter. Folders are
+    // `Mod Manager`, `Application Support`, `Program Files (x86)`,
+    // `!Mods`, `Мои Моды`; English and German sentences continue in lower
+    // case. `\p{Ll}` rather than `[a-z]` because an earlier ASCII-only
+    // version of this rule silently excluded every non-Latin folder name,
+    // which is exactly the non-English-locale player it was supposed to
+    // protect.
+    private const string NotLowerCase = @"[^\p{Ll}";
 
-    private const string UnixSpaceRun =
-        @"(?: [A-Z0-9_\-(\[]" + UnixSegmentChar + @"*)*";
+    // `<` and `>` are excluded from every run, on the Unix side as well as
+    // the Windows side where a path segment could never hold them anyway.
+    // Sanitize replaces in sequence, so by the time UnixPath runs the text
+    // already contains this scrubber's own `<path>/` markers — and a run
+    // that may hold `<` and `>` will happily cross one, swallow the file
+    // name the Windows pass had just kept, and leave `<path><path>/x.cfg`.
+    private const string WindowsRunStart =
+        NotLowerCase + @"\\/\r\n:*?""<>|\s.]";
 
-    // Inside the directory chain a space run needs no further guard: the
+    private const string UnixRunStart = NotLowerCase + @"/<>\s.]";
+
+    // The same hazard from the other side: a `/` that directly follows `>`
+    // is this scrubber's own marker, never a path separator in the original
+    // text, so UnixPath must not start there.
+    private const string NotAfterAMarker = @"(?<![\w.<>])";
+
+    private const string UnixRunChar = @"[^/<>\s]";
+
+    // Inside the directory chain the run needs no further guard: the
     // segment it extends must still end at a separator, so a run that has
-    // wandered into prose simply fails to match. The FINAL component has no
-    // separator to be anchored by, so a space run there is taken only when
-    // the path visibly ends — end of text, a quote, or a character no path
-    // may contain. That is what keeps `<path>/b.cfg Cannot be read.` intact
-    // while `'...\Thunderstore Mod Manager'` is replaced whole.
-    private const string PathEnd = @"(?=$|['""`:*?<>|])";
+    // wandered into prose simply fails to match. Dots and commas are
+    // therefore safe here — `My Mods V1.2\Valheim\x.cfg` is one path.
+    private const string WindowsChainRun =
+        "(?: " + WindowsRunStart + WindowsSegmentChar + @"*)*";
+
+    private const string UnixChainRun =
+        "(?: " + UnixRunStart + UnixRunChar + @"*)*";
+
+    // The FINAL component has no separator to be anchored by, and that is
+    // where an unguarded run did real damage. Three guards, each closing a
+    // failure an independent review demonstrated against the first version:
+    //
+    // 1. NoFileExtension. A path that ends in a FILE name takes no run at
+    //    all. `wrote C:\a\b.cfg OK` kept `OK`; a run swallowed it, and so
+    //    did it swallow a version (`plugin.dll 0.9.0`), a reason
+    //    (`b.cfg Cannot Be Read`, `b.cfg Zugriffsverweigerung` — .NET
+    //    localizes its messages and German capitalizes nouns) and the
+    //    `.db` marker SaveFileNames needs (`Erens New World.db`). A path
+    //    ending in a folder is the only one that can still run on, which
+    //    is also the only shape where a run buys any privacy.
+    // 2. No dot, comma or semicolon in a run token, so a run cannot reach
+    //    across `, retrying` or into `World.db`.
+    // 3. PathEnd. The run is taken only where the path visibly ends: end
+    //    of text, end of LINE (exception.ToString() is multi-line the
+    //    moment there is a stack trace), a quote, a comma or a semicolon.
+    //    `:` is deliberately NOT an end marker: a run that reached the
+    //    next path's drive letter stopped at its colon and consumed the
+    //    `D` of `D:\...`, which left that whole second path unscrubbed —
+    //    strictly worse than the pattern being replaced.
+    private const string WindowsFinalRunChar = @"[^\\/\r\n:*?""<>|\s.,;]";
+
+    private const string UnixFinalRunChar = @"[^/<>\r\n\s.,;]";
+
+    private const string WindowsFinalRun =
+        "(?: " + WindowsRunStart + WindowsFinalRunChar + @"*)*";
+
+    private const string UnixFinalRun =
+        "(?: " + UnixRunStart + UnixFinalRunChar + @"*)*";
+
+    private const string NoFileExtension = @"(?<!\.[A-Za-z0-9]{1,8})";
+
+    private const string PathEnd = @"(?=$|[\r\n'""`,;])";
 
     private static readonly Regex WindowsPath = new(
-        @"[A-Za-z]:[\\/](?:" + WindowsSegmentChar + "+" + WindowsSpaceRun + @"[\\/])*("
-            + WindowsSegmentChar + "*)(?:" + WindowsSpaceRun + PathEnd + ")?",
+        @"[A-Za-z]:[\\/](?:" + WindowsSegmentChar + "+" + WindowsChainRun + @"[\\/])*("
+            + WindowsSegmentChar + "*)(?:" + NoFileExtension + WindowsFinalRun + PathEnd + ")?",
         RegexOptions.Compiled);
 
     private static readonly Regex UnixPath = new(
-        @"(?<![\w.<])/(?:" + UnixSegmentChar + "+" + UnixSpaceRun + "/)+("
-            + UnixSegmentChar + "*)(?:" + UnixSpaceRun + PathEnd + ")?",
+        NotAfterAMarker + "/(?:" + UnixSegmentChar + "+" + UnixChainRun + "/)+("
+            + UnixSegmentChar + "*)(?:" + NoFileExtension + UnixFinalRun + PathEnd + ")?",
         RegexOptions.Compiled);
 
     private static readonly Regex UsersFragment = new(

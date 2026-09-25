@@ -231,16 +231,130 @@ public class SupportReportPrivacyTests
     }
 
     [Fact]
-    public void Sanitize_PathEndingInAFolderWithSpaces_KeepsNoneOfTheFolderName()
+    public void Sanitize_PathEndingInAFolderWithSpaces_KeepsOnlyItsFirstWord()
     {
         // No file name to keep: the path ends at the profile root, which is
-        // where the pattern used to hand back "Mod Manager" on its own.
+        // where the pattern used to hand back "Mod Manager" on its own. The
+        // first word survives because it is the component the replacement
+        // keeps for diagnostics — the name is precise about that rather
+        // than claiming none of the folder name is left.
         string scrubbed = Scrub(
             "0.9.0+e9615b00 from C:\\Users\\erenc\\AppData\\Roaming\\Thunderstore Mod Manager");
 
         Assert.DoesNotContain("Mod Manager", scrubbed);
         Assert.DoesNotContain("AppData", scrubbed);
         Assert.Equal("0.9.0+e9615b00 from <path>/Thunderstore", scrubbed);
+    }
+
+    // ------------------------------------------------------------------
+    // What the FINAL component's space run must not do (#388 review)
+    //
+    // The first version of this fix let the last component run on across
+    // spaces wherever the path ended. An independent review demonstrated
+    // five ways that was wrong, one of them a NEW leak strictly worse than
+    // the pattern being replaced. Each row below is one of those, pinned to
+    // the exact output so it cannot come back quietly.
+    // ------------------------------------------------------------------
+
+    [Theory]
+    // A run that reached the next path's drive letter stopped at its colon,
+    // consumed the `D`, and left the whole second path unscrubbed — user
+    // name included. `:` is no longer an end marker, and a path ending in a
+    // file name takes no run at all.
+    [InlineData(
+        "Failed to copy C:\\a\\b.cfg Destination D:\\home\\erenc\\valheim-mods\\x.cfg",
+        "Failed to copy <path>/b.cfg Destination <path>/x.cfg")]
+    [InlineData(
+        "Failed to copy C:\\a\\atlas.tsv Destination D:\\Thunderstore Mod Manager\\DataFolder" +
+        "\\Valheim\\profiles\\secret-profile\\BepInEx\\config\\x.cfg",
+        "Failed to copy <path>/atlas.tsv Destination <path>/x.cfg")]
+    // A version, an "OK", a title-case reason, and a German capitalized
+    // noun after a file path are all diagnostics, and all were swallowed.
+    [InlineData("plugin loaded from C:\\a\\plugin.dll 0.9.0", "plugin loaded from <path>/plugin.dll 0.9.0")]
+    [InlineData("wrote C:\\a\\b.cfg OK", "wrote <path>/b.cfg OK")]
+    [InlineData("C:\\a\\b.cfg Cannot Be Read", "<path>/b.cfg Cannot Be Read")]
+    [InlineData("C:\\a\\b.cfg Reason: disk full", "<path>/b.cfg Reason: disk full")]
+    [InlineData("C:\\a\\b.cfg Zugriffsverweigerung", "<path>/b.cfg Zugriffsverweigerung")]
+    // A world name with spaces: the `.db` marker must reach SaveFileNames
+    // rather than being eaten before it gets there.
+    [InlineData(
+        "Failed to load C:\\Users\\erenc\\AppData\\LocalLow\\IronGate\\Valheim\\worlds_local" +
+        "\\Erens New World.db",
+        "Failed to load <path>/Erens New <save>.db")]
+    // Mixed separators: the Windows pass must not hand the Unix pass a
+    // boundary that erases the kept file name. (`D:/...` is a Windows path
+    // written with forward slashes, so WindowsPath takes it whole.)
+    [InlineData(
+        "Failed to copy C:\\a\\b.cfg Destination D:/home/erenc/valheim-mods/x.cfg",
+        "Failed to copy <path>/b.cfg Destination <path>/x.cfg")]
+    public void Sanitize_FinalComponentRun_DoesNotEatWhatFollowsAFileName(
+        string message, string expected)
+    {
+        Assert.Equal(expected, Scrub(message));
+    }
+
+    [Theory]
+    // The run-start signal is "not a lower-case letter", not "ASCII upper
+    // case": an ASCII-only version of it silently excluded every non-Latin
+    // folder name, which is the non-English-locale player it was meant to
+    // protect. `!Mods`, `+Mods` and `Rock & Roll` are ordinary folder names
+    // too.
+    [InlineData("C:\\Users\\erenc\\Mein \u00c4rger\\Valheim\\profiles\\geheim\\x.cfg")]
+    [InlineData("C:\\Users\\erenc\\\u041c\u043e\u0438 \u041c\u043e\u0434\u044b\\Valheim\\profiles\\secret\\x.cfg")]
+    [InlineData("C:\\Games\\Valheim !Mods\\profiles\\erens-run\\x.cfg")]
+    [InlineData("C:\\Users\\erenc\\Rock & Roll\\Valheim\\profiles\\p\\x.cfg")]
+    [InlineData("C:\\Users\\erenc\\My Mods V1.2\\Valheim\\x.cfg")]
+    public void Sanitize_FolderNamesThatAreNotAsciiTitleCase_AreStillReplaced(string message)
+    {
+        string scrubbed = Scrub(message);
+
+        Assert.DoesNotContain("erenc", scrubbed);
+        Assert.DoesNotContain("profiles", scrubbed);
+        Assert.DoesNotContain("Valheim", scrubbed);
+        Assert.DoesNotContain("\\", scrubbed);
+        Assert.StartsWith("<path>/", scrubbed);
+    }
+
+    [Fact]
+    public void Sanitize_TrailingFolderBeforeALineBreak_IsReplaced()
+    {
+        // SafeLogText.Describe feeds exception.ToString(), which is
+        // multi-line the moment there is a stack trace, so end-of-text is
+        // not the only place a path ends. `$` is not line-aware here (no
+        // Multiline option), which is why the end marker names \r and \n.
+        string scrubbed = Scrub(
+            "Profile root C:\\Users\\erenc\\AppData\\Roaming\\Thunderstore Mod Manager" +
+            "\\DataFolder\\Valheim\\profiles\\My Secret Base\n   at Atlas.Save()");
+
+        Assert.DoesNotContain("Secret Base", scrubbed);
+        Assert.DoesNotContain("erenc", scrubbed);
+        Assert.Equal("Profile root <path>/My\n   at Atlas.Save()", scrubbed);
+    }
+
+    [Fact]
+    public void Sanitize_TrailingFolderBeforeAComma_IsReplaced()
+    {
+        string scrubbed = Scrub(
+            "Profile root C:\\Users\\erenc\\AppData\\Roaming\\TMM\\profiles\\My Secret Base, retrying");
+
+        Assert.DoesNotContain("Secret Base", scrubbed);
+        Assert.Equal("Profile root <path>/My, retrying", scrubbed);
+    }
+
+    [Fact]
+    public void Sanitize_TrailingFolderFollowedByProse_IsTheStatedLimit()
+    {
+        // Written down rather than left to be discovered: a path that ends
+        // at a folder and is followed by prose cannot be told from a folder
+        // name with more words in it, so the run is refused and the rest of
+        // the folder name survives. Refusing is the right way round — the
+        // alternative deletes the sentence — and the user name still goes.
+        string scrubbed = Scrub(
+            "Profile root C:\\Users\\erenc\\AppData\\Roaming\\TMM\\profiles\\My Secret Base is missing");
+
+        Assert.DoesNotContain("erenc", scrubbed);
+        Assert.DoesNotContain("AppData", scrubbed);
+        Assert.Equal("Profile root <path>/My Secret Base is missing", scrubbed);
     }
 
     [Fact]
@@ -257,8 +371,10 @@ public class SupportReportPrivacyTests
 
     [Theory]
     // The space run is admitted only where a path can actually continue, so
-    // the sentence after an unquoted path is left alone even when a slash
-    // appears later in it.
+    // the sentence after an unquoted path is left alone. (The `log/file` in
+    // the first row is held by the pre-existing `(?<![\w.<])` lookbehind on
+    // UnixPath, not by anything #388 added — it is here because it is a
+    // realistic message, not as evidence for the new anchoring.)
     [InlineData(
         "Could not open C:\\a\\b.txt was not found, see the log/file for details.",
         "Could not open <path>/b.txt was not found, see the log/file for details.")]
