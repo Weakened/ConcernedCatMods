@@ -88,24 +88,50 @@ mod-manager path — `...\Thunderstore Mod Manager\DataFolder\...` — and
 everything from `Mod` onwards travelled verbatim: the profile name, the folder
 layout, and whatever the player's own folders are called. The user name sits
 before that point and always went, which is why this was a leak rather than a
-breach, and why the suite passed over it. A space is now admitted inside a
-segment when the token after it does not begin with a lower-case letter
-(`\p{Ll}`, so non-Latin and punctuation-led folder names are covered too), and
-in the final component only where the path visibly ends.
+breach, and why the suite passed over it.
 
-**Stated limits**, so they are written down rather than found:
+A space is now admitted inside a segment, and the discriminator between "this
+folder name has more words in it" and "the path ended and a sentence began" is
+**count, not case**: at most two space-joined tokens per segment. Two covers
+every real multi-word folder in the paths this sanitizer sees —
+`Thunderstore Mod Manager`, `Documents and Settings`, `Program Files (x86)`,
+`Application Support`, `Eren cansunar` — and refuses the longer runs prose
+produces. In the final component three further guards apply: no run at all
+after a recognised file extension, no dot/comma/semicolon inside a run token,
+and the run taken only where the path visibly ends.
 
-1. A path ending at a **folder** followed by prose cannot be told from a
-   folder name with more words in it, so the run is refused and the rest of
-   that folder name survives. Refusing is the right way round — the
-   alternative deletes the sentence the bundle exists for.
-2. A folder name whose post-space token **begins lower case** (`steam games`)
-   stops the chain there, and the remainder of the path survives. The user
-   name is before that point and still does not.
-3. UNC (`\\server\share\...`), relative and `~`-rooted paths are matched by
-   neither pattern: `WindowsPath` needs a drive letter and `UnixPath` needs a
-   `/`. Pre-existing and unchanged by #410, and tracked as **#408**, which
-   covers this sanitizer as well as the sibling product's.
+An earlier version of this rule tested case instead, and it was wrong in both
+directions: a lower-case second word refused the run, so a **user name with a
+space in it** (`C:\Users\Eren cansunar\...`) kept the surname, the folder
+layout and the profile name; and a capitalised run was admitted without limit,
+so `wrote C:\a\b OK See BepInEx/LogOutput.log` collapsed to `wrote <path>` and
+took the pointer to the log file with it.
+
+**Stated limits**, written down rather than found, and each asserted in
+`SupportBundleTests.Sanitizer_TheseAreTheStatedLimits`:
+
+1. A path ending at a **folder** followed by at most two capitalised words and
+   then a line end: the run fires and those words go.
+   `...\Thunderstore Mod Manager\config Access Denied` becomes `<path>`. Erring
+   this way keeps the folder name from surviving; the cost is a short reason.
+2. A folder name of **four or more words** (`My Very Long Folder`) exceeds the
+   cap, so the run is refused and the rest of the path survives. This is what
+   buying limit 1's direction and the user-name fix cost.
+3. An **extension of more than eight characters**, or one ending in a
+   non-alphanumeric (`notes.configuration`, `b.cfg~`), is not recognised as an
+   extension, so a run may still follow it and take the sentence.
+4. A **world or character name containing spaces** loses only its last word to
+   `<save>`: that pattern forbids spaces, so `Erens New World.db` becomes
+   `<path> New <save>.db` and a middle word survives.
+5. **UNC (`\\server\share\...`) and relative paths** are matched by neither
+   pattern: `WindowsPath` needs a drive letter and `UnixPath` needs a `/`. A
+   `~`-rooted path **is** matched once it has two separators
+   (`~/Library/Application Support/...` → `~<path>`); only a single-separator
+   `~/x.cfg` escapes. Pre-existing and unchanged by #410, and tracked as
+   **#408**, which covers this sanitizer as well as the sibling product's.
+
+Because of limits 1 and 5, `SupportBundleComposer.Header`'s "no full paths" is
+a statement about the ordinary case, not a guarantee. The header says so.
 
 ## Data flow summary
 

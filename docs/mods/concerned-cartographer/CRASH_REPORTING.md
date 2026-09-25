@@ -36,26 +36,49 @@ that point and was always scrubbed, which is why this was a leak rather
 than a breach, and why `SupportReportPrivacyTests` passed over it: its
 Thunderstore-shaped plant asserted only as far as the user name.
 
-A space is now admitted inside a segment. The signal for "this is still a
-folder name, not the sentence after the path" is **negative on purpose**:
-the token after the space must not start with a lower-case letter.
-`\p{Ll}`, not `[a-z]` — an ASCII-only first version of this rule silently
-excluded every non-Latin folder name (`Mein Ärger`, `Мои Моды`), which is
-exactly the non-English-locale player it was meant to protect, and it also
-excluded ordinary punctuation-led mod folders (`!Mods`, `+Mods`,
-`Rock & Roll`).
+A space is now admitted inside a segment, and the discriminator between
+"this folder name has more words in it" and "the path ended and a sentence
+began" is **count, not case**: at most two space-joined tokens per segment.
+Two covers every real multi-word folder in the paths this scrubber sees —
+`Thunderstore Mod Manager`, `Documents and Settings`, `Program Files (x86)`,
+`Application Support`, `Eren cansunar` — and refuses the longer runs prose
+produces.
+
+**This rule tested case first, and #410's review took that apart in both
+directions at once.** Against privacy: a token beginning lower case refused
+the run, so a **user name with a space in it**
+(`C:\Users\Eren cansunar\AppData\…`) kept the surname, the folder layout and
+the profile name, and so did `Documents and Settings` and lower-case
+non-Latin folders (`Meine änderungen`, `Мои моды`). Against diagnostics:
+a capitalised run was admitted without limit, so
+`wrote C:\a\b OK See BepInEx/LogOutput.log` collapsed to `wrote <path>/b`
+and took the pointer to the log file with it.
+
+The stated reason for preferring `\p{Ll}` to `[a-z]` was also simply wrong,
+and is recorded here because it is the kind of error that survives review by
+sounding careful: a **negated** ASCII class is *broader*, not narrower —
+`[^a-z…]` admits `ä` and `моды`'s first letter where `[^\p{Ll}…]` refuses
+them. What had excluded non-Latin names was the **positive**
+`[A-Z0-9_\-(\[]` of the version before that. Counting tokens fixes both
+directions and needs no case class at all, so the question does not arise.
 
 Where the run is allowed to reach is guarded differently in the two halves
 of a path, and each guard closes a failure an independent review
 demonstrated against the first version of this change:
 
-- **Directory chain:** no further guard needed. The segment a run extends
-  must still end at a separator, so a run that has wandered into prose
-  simply fails to match. Dots and commas are safe here — `My Mods
-  V1.2\Valheim\x.cfg` is one path.
+- **Directory chain:** the cap has a second guard for free — the segment a
+  run extends must still end at a separator. Dots and commas are safe here
+  — `My Mods V1.2\Valheim\x.cfg` is one path. That separator is not
+  sufficient on its own, which is what the unbounded version got wrong: any
+  later separator in the prose anchored the run, and the chain ate the
+  sentence.
 - **Final component:** three guards.
   1. A path ending in a **file name** takes no run at all (a
-     variable-length negative lookbehind for `.ext`). Without this,
+     variable-length negative lookbehind for `.ext`, which .NET supports
+     and most engines do not). What it recognises is a dot plus one to
+     eight **alphanumerics**, which is less than "a file name":
+     `notes.configuration` and `b.cfg~` are not seen as extensions, so a
+     run may still follow them. Without it at all,
      `wrote ...\b.cfg OK` lost the `OK`, `plugin.dll 0.9.0` lost the
      version, `b.cfg Cannot Be Read` and the German-locale
      `b.cfg Zugriffsverweigerung` lost the reason (.NET localizes its
@@ -83,21 +106,22 @@ demonstrated against the first version of this change:
 
 **Stated limits**, written down rather than left to be found:
 
-1. A path that ends at a **folder** and is followed by prose cannot be told
-   from a folder name with more words in it, so the run is refused and the
-   rest of that folder name survives (`...\profiles\My Secret Base is
-   missing` keeps `Secret Base`). Refusing is the right way round — the
-   alternative deletes the sentence — and the user name still goes.
-2. A folder name whose post-space token **starts lower case** (`steam
-   games`) stops the chain there, and then the **entire remainder** of the
-   path survives, not merely a tail. The user name is before that point and
-   is still scrubbed.
-3. UNC paths (`\\server\share\...`) are matched by neither pattern: no
+1. A path ending at a **folder** followed by at most two capitalised words
+   and then a line end: the run fires and those words go. Erring this way
+   keeps the folder name from surviving; the cost is a short reason.
+2. A folder name of **four or more words** exceeds the cap, so the run is
+   refused and the rest of the path survives. That is what buying limit 1's
+   direction and the user-name fix cost.
+3. An **extension of more than eight characters**, or one ending in a
+   non-alphanumeric, is not recognised as an extension, so a run may still
+   follow it and take the sentence.
+4. UNC paths (`\\server\share\...`) are matched by neither pattern: no
    drive letter for `WindowsPath`, no `/` for `UnixPath`, and no `Users`
    segment for `UsersFragment` unless one happens to be there. Relative
-   paths (`..\..\Users\me\x.cfg`) and `~/Library/...` are likewise
-   unmatched. All three are **pre-existing and unchanged by #388**, tracked
-   separately.
+   paths (`..\..\Users\me\x.cfg`) are likewise unmatched; a `~`-rooted path
+   **is** matched once it has two separators. **Pre-existing and unchanged
+   by #388 or #410**, tracked as #408 — which covers this scrubber and
+   Teamster's independently-written one together.
 
 This reaches `LogOutput.log` through `SafeLogText` and the support report
 through `SupportReportComposer`, not the crash report alone.

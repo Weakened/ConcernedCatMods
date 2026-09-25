@@ -57,44 +57,63 @@ public static class SupportBundleSanitizer
     // embed full paths; a support bundle is then a file whose whole purpose is
     // to be handed to somebody else.
     //
-    // A space is admitted inside a segment only when the token after it does
-    // not start with a lower-case letter. `\p{Ll}` rather than `[a-z]`, because
-    // the sibling product's first attempt at this rule was ASCII-only and so
-    // silently excluded every non-Latin folder name - `Mein Ärger`, `Мои Моды` -
-    // which is exactly the non-English-locale player it was meant to protect,
-    // and excluded punctuation-led mod folders (`!Mods`, `Rock & Roll`) too.
-    // Folders are named that way; English and German sentences are not.
-    private const string NotLowerCase = @"[^\p{Ll}";
+    // A space is admitted inside a segment, and the discriminator between "this
+    // folder name has more words in it" and "the path ended and a sentence
+    // began" is COUNT, not case: at most TWO space-joined tokens per segment.
+    //
+    // Two is not arbitrary. It covers every real multi-word folder in the paths
+    // this sanitizer sees - `Thunderstore Mod Manager`, `Documents and
+    // Settings`, `Program Files (x86)`, `Application Support`, `My Test`,
+    // `Eren cansunar` - and refuses the longer runs prose produces.
+    //
+    // <b>Why not case.</b> The first version of this rule tested case, and an
+    // independent review took it apart in two directions at once. Against
+    // privacy: a token that begins lower case refused the run, so
+    // `C:\Users\Eren cansunar\AppData\...` scrubbed to `<path> cansunar\AppData\...`
+    // and handed over a surname, a folder layout and a profile name -
+    // `Documents and Settings` and lower-case non-Latin folders (`Meine
+    // änderungen`, `Мои моды`) went the same way. Against diagnostics: a
+    // capitalised run was admitted without limit, so `wrote C:\a\b OK See
+    // BepInEx/LogOutput.log` became `wrote <path>` and took the log pointer with
+    // it. The stated reason for `\p{Ll}` over `[a-z]` was also simply wrong: a
+    // NEGATED ASCII class is BROADER, not narrower - what excluded non-Latin
+    // names was the POSITIVE `[A-Z0-9_\-(\[]` of the version before that.
+    // Counting tokens fixes both directions and needs no case class at all, so
+    // the question does not arise.
+    private const string TokenCap = "{0,2}";
 
-    private const string WindowsRunStart = NotLowerCase + @"\\/\r\n:*?""<>|\s.]";
-
-    private const string UnixRunStart = NotLowerCase + @"/<>\s.]";
-
-    // Inside the directory chain the run needs no further guard: the segment it
-    // extends must still end at a separator, so a run that has wandered into
-    // prose simply fails to match. Dots and commas are safe here.
+    // Inside the directory chain the run has a second guard for free: the
+    // segment it extends must still end at a separator. Dots and commas are
+    // safe here, so `My Mods V1.2\Valheim\x.cfg` is one path.
     private const string WindowsChainRun =
-        "(?: " + WindowsRunStart + WindowsSegmentChar + @"*)*";
+        "(?: " + WindowsSegmentChar + "+)" + TokenCap;
 
-    // `<` and `>` are excluded from the Unix run because Sanitize replaces in
-    // sequence: by the time UnixPath runs, this scrubber's own `<path>` markers
-    // are already in the text, and a run that may hold them crosses one.
+    // `<` and `>` are excluded from the Unix run for parity with the Windows
+    // side, where a path segment could never hold them: Sanitize replaces in
+    // sequence, so by the time UnixPath runs this scrubber's own `<path>`
+    // markers are in the text, and a run that may hold them can cross one.
     private const string UnixRunChar = @"[^/<>\s]";
 
-    private const string UnixChainRun = "(?: " + UnixRunStart + UnixRunChar + @"*)*";
+    private const string UnixChainRun = "(?: " + UnixRunChar + "+)" + TokenCap;
 
-    // The FINAL component has no separator to anchor it, and it is where an
-    // unguarded run does damage. The guards are the sibling product's, and
-    // each closes a failure an independent review demonstrated there:
+    // The FINAL component has no separator to anchor it, so the token cap is
+    // joined by three more guards. Each closes a failure an independent review
+    // demonstrated:
     //
     // 1. NoFileExtension - a path ending in a FILE name takes no run at all.
-    //    Its purpose differs here, and that is worth being exact about: there
-    //    is no kept terminal segment to protect (see the note above), so what
-    //    it protects is the SENTENCE after the path. `wrote ...\b.cfg OK` lost
-    //    the `OK`; `plugin.dll 0.9.0` lost the version; `b.cfg Cannot Be Read`
-    //    and the German-locale `b.cfg Zugriffsverweigerung` lost the reason,
-    //    .NET localizing its messages and German capitalizing nouns. A path
-    //    ending in a folder is the only shape where a run buys any privacy.
+    //    Its purpose differs from the sibling product's, and that is worth
+    //    being exact about: there is no kept terminal segment to protect (see
+    //    the note above), so what it protects is the SENTENCE after the path.
+    //    `wrote ...\b.cfg OK` lost the `OK`; `plugin.dll 0.9.0` lost the
+    //    version; `b.cfg Cannot Be Read` and the German-locale
+    //    `b.cfg Zugriffsverweigerung` lost the reason, .NET localizing its
+    //    messages and German capitalizing nouns. A path ending in a folder is
+    //    the only shape where a run buys any privacy.
+    //
+    //    What it recognises is a dot plus one to eight ALPHANUMERICS, which is
+    //    less than "a file name": `notes.configuration` (thirteen) and `b.cfg~`
+    //    (ending in a tilde) are not seen as extensions, so a run may still
+    //    follow them. Stated rather than left to be found.
     // 2. No dot, comma or semicolon in a run token, so a run cannot reach
     //    across `, retrying` or into `World.db` - which SaveFileNames below
     //    still has to see.
@@ -109,9 +128,9 @@ public static class SupportBundleSanitizer
     private const string UnixFinalRunChar = @"[^/<>\r\n\s.,;]";
 
     private const string WindowsFinalRun =
-        "(?: " + WindowsRunStart + WindowsFinalRunChar + @"*)*";
+        "(?: " + WindowsFinalRunChar + "+)" + TokenCap;
 
-    private const string UnixFinalRun = "(?: " + UnixRunStart + UnixFinalRunChar + @"*)*";
+    private const string UnixFinalRun = "(?: " + UnixFinalRunChar + "+)" + TokenCap;
 
     private const string NoFileExtension = @"(?<!\.[A-Za-z0-9]{1,8})";
 

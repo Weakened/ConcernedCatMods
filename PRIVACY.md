@@ -60,11 +60,11 @@ policy revision explicitly allowlists it (nothing is allowlisted today).
 - save files, screenshots, or your `LogOutput.log`
 - machine usernames or filesystem paths (drive-rooted absolute paths and
   Valheim save-file names are scrubbed out of exception text before
-  sending, folder names with spaces included; the known gaps
-  are listed in `docs/mods/concerned-cartographer/CRASH_REPORTING.md` and
-  are a folder name beginning with a lower-case letter and containing a
-  space, a path ending at a folder mid-sentence, and network (`\\server\`)
-  or relative paths — each of which can leave folder names behind)
+  sending, folder names with spaces included; the known gaps are listed in
+  `docs/mods/concerned-cartographer/CRASH_REPORTING.md` and are a folder
+  name of four or more words, an unusually long file extension, and network
+  (`\\server\`) or relative paths — each of which can leave folder names
+  behind)
 - credentials or tokens of any kind
 
 Automated tests assert, for every category above, that data planted into

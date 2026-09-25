@@ -14,9 +14,17 @@ namespace TheConcernedCat.ConcernedTeamster.Domain.Support;
 /// Cartographer's own support-report composer's shape.</summary>
 public static class SupportBundleComposer
 {
+    // "Paths are masked" rather than "no full paths" (#410). Every line is
+    // scrubbed, and the ordinary case leaves nothing of a path behind - but the
+    // stated limits in PRIVACY_INVENTORY.md are real (a UNC or relative path is
+    // matched by neither pattern, and a folder name of four or more words
+    // exceeds the space-run cap), so a flat "no full paths" promises more than
+    // the scrubber delivers. A player deciding whether to share this should
+    // read a claim that is true.
     public const string Header =
         "# Concerned Teamster support bundle " +
-        "(sanitized: no world identifiers beyond a masked number, no player names, no full paths)";
+        "(sanitized: no world identifiers beyond a masked number, no player names; " +
+        "filesystem paths are masked - read it before sharing)";
 
     public sealed class SidecarSummary
     {
