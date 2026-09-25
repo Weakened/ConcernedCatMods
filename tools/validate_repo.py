@@ -2428,6 +2428,152 @@ def check_companion_talk_is_not_a_reach(errors: list[str]) -> list[str]:
     ]
 
 
+RAW_EXCEPTION_MESSAGE = re.compile(r"\.Message\b")
+
+CONSOLE_NAME = re.compile(r'string Name\s*=>\s*"(?P<name>cc_[A-Za-z0-9_]+)"')
+
+CONSOLE_DELEGATION = re.compile(r"_runtime\.(?P<method>Execute[A-Za-z0-9]*Command)\s*\(")
+
+CONSOLE_FAILURE_CALL = re.compile(r'ConsoleFailure\.Describe\(\s*"(?P<name>[^"]*)"')
+
+CONSOLE_FAILURE_ANY = re.compile(r"ConsoleFailure\.Describe\(")
+
+# The guard reports the command it was given, not a literal: that is the whole
+# reason there is one guard instead of seven.
+CONSOLE_FAILURE_FORWARDED = re.compile(
+    r"ConsoleFailure\.Describe\(\s*command\s*,\s*subcommand\s*,\s*exception\s*\)")
+
+CONSOLE_GUARD_ENTRY = re.compile(
+    r"internal string (?P<method>Execute[A-Za-z0-9]*Command)\(string\[\] args\)\s*\{\s*"
+    r'return GuardConsoleCommand\(\s*"(?P<name>cc_[A-Za-z0-9_]+)"\s*,\s*args\s*,\s*'
+    r"(?P=method)Core\s*\)\s*;\s*\}")
+
+
+def _cs_code(path: Path) -> str:
+    """A C# file with line and single-line block comments removed, joined back
+    up. Comment-stripping first is what stops a doc comment that QUOTES a banned
+    token (#367's does, verbatim) from failing the audit that banned it."""
+    return "\n".join(
+        re.sub(r"/\*.*?\*/", "", _strip_cs_line_comment(line))
+        for line in path.read_text(encoding="utf-8").splitlines())
+
+
+def check_cartographer_console_failures_are_scrubbed(errors: list[str]) -> list[str]:
+    """#389 console failure audit: no `cc_*` command reports a raw exception
+    message, and every one of them reaches its work through the single guard.
+
+    The defect was six copies of one line. `cc_atlas` was fixed in #367 and the
+    other six kept replying `"<X> tool failed: " + exception.Message`, which
+    names none of the subcommands — so a bug report says only that something
+    failed — and prints a filesystem exception's full path, which is the
+    machine's user name and the profile's location, into the text a player
+    pastes into an issue. It fires in exactly the situation where the player is
+    already asking for help.
+
+    A seventh copy is the obvious next defect, so this is enforced rather than
+    reviewed. Two halves:
+
+    - every `*ToolsCommand.cs` wrapper: no `.Message` anywhere in its code, one
+      `ConsoleFailure.Describe` naming ITS OWN command, and one delegation into
+      the runtime;
+    - the runtime: each delegated entry point is exactly
+      `return GuardConsoleCommand("cc_x", args, Execute…CommandCore);`, and
+      `ConsoleFailure.Describe` appears there exactly once — inside the guard —
+      so a second, divergent guard cannot grow beside it.
+
+    Wrappers are DISCOVERED by glob rather than listed, so an eighth command is
+    covered the day it is written. No count is asserted: what the rule covers is
+    every file matching the pattern, which is checkable against the directory."""
+    runtime_dir = ROOT / "src" / "ConcernedCartographer" / "Runtime"
+    runtime_file = runtime_dir / "CartographerRuntime.cs"
+    label = "[cartographer] #389 console failure audit"
+
+    if not runtime_file.is_file():
+        fail(f"{label}: CartographerRuntime.cs is missing — the audit no longer covers it", errors)
+        return []
+
+    wrappers = sorted(runtime_dir.glob("*ToolsCommand.cs"))
+    if not wrappers:
+        fail(f"{label}: no *ToolsCommand.cs found under Runtime — the audit no longer "
+             "covers anything, which is worse than a failure", errors)
+        return []
+
+    runtime_code = _cs_code(runtime_file)
+    guarded = {match.group("name"): match.group("method")
+               for match in CONSOLE_GUARD_ENTRY.finditer(re.sub(r"\s+", " ", runtime_code))}
+
+    if "private string GuardConsoleCommand(" not in runtime_code:
+        fail(f"{label}: CartographerRuntime has no GuardConsoleCommand — the one place every "
+             "console failure is worded and scrubbed", errors)
+        return []
+
+    runtime_failures = CONSOLE_FAILURE_ANY.findall(runtime_code)
+    if len(runtime_failures) != 1:
+        fail(f"{label}: ConsoleFailure.Describe appears {len(runtime_failures)} time(s) in "
+             "CartographerRuntime.cs, expected exactly 1 (inside GuardConsoleCommand) — a second "
+             "one is a second guard, which is how the wording drifted the first time", errors)
+        return []
+    if not CONSOLE_FAILURE_FORWARDED.search(re.sub(r"\s+", " ", runtime_code)):
+        fail(f"{label}: GuardConsoleCommand does not report "
+             "`ConsoleFailure.Describe(command, subcommand, exception)` — a guard that names a "
+             "literal command is a guard for one command, which is the shape #389 removed", errors)
+        return []
+    if "SafeLogText.Describe" not in runtime_code:
+        fail(f"{label}: GuardConsoleCommand no longer logs through SafeLogText — the log gets the "
+             "same message the player does, and it is the log a player uploads", errors)
+        return []
+
+    audited: list[str] = []
+    for wrapper in wrappers:
+        relative = wrapper.relative_to(ROOT).as_posix()
+        code = _cs_code(wrapper)
+
+        named = CONSOLE_NAME.search(code)
+        if named is None:
+            fail(f"{label}: {relative} declares no `cc_*` Name — the audit cannot tell which "
+                 "command it is, so it cannot check that its failure reply names the right one",
+                 errors)
+            return []
+        name = named.group("name")
+
+        raw = [line.strip() for line in code.splitlines() if RAW_EXCEPTION_MESSAGE.search(line)]
+        if raw:
+            fail(f"{label}: {relative} reaches an exception's `.Message` directly: {raw} — that is "
+                 "the raw text #389 removed; report through ConsoleFailure.Describe, which scrubs",
+                 errors)
+            return []
+
+        replies = CONSOLE_FAILURE_CALL.findall(code)
+        if replies != [name]:
+            fail(f"{label}: {relative} ({name}) reports failures as {replies or 'nothing'}, "
+                 f"expected exactly ['{name}'] — a reply that names another command sends the "
+                 "player's bug report to the wrong place", errors)
+            return []
+
+        delegations = {match.group("method") for match in CONSOLE_DELEGATION.finditer(code)}
+        if len(delegations) != 1:
+            fail(f"{label}: {relative} calls {sorted(delegations) or 'no'} runtime "
+                 "Execute…Command method(s), expected exactly 1 — the audit follows that call to "
+                 "the guard", errors)
+            return []
+        method = delegations.pop()
+
+        if guarded.get(name) != method:
+            fail(f"{label}: CartographerRuntime.{method} is not "
+                 f'`return GuardConsoleCommand("{name}", args, {method}Core);` — it is the entry '
+                 "point the wrapper calls, so work reached any other way is unguarded and an "
+                 "exception's raw message is what the player sees", errors)
+            return []
+
+        audited.append(f"{name} -> {method}")
+
+    return [
+        f"{label}: {len(audited)} console command(s) — {', '.join(audited)} — each report failures "
+        "through the single scrubbing guard, naming their own subcommand, and none reaches an "
+        "exception's `.Message`",
+    ]
+
+
 SOLUTION_FOLDER_TYPE = "{2150E333-8FDC-42A3-9474-1A3956D46DE8}"
 
 SOLUTION_ENTRY = re.compile(
@@ -3165,6 +3311,7 @@ def main() -> int:
     report.extend(check_cartographer_root_holds_only_names_the_probe_knows(errors))
     report.extend(check_cartographer_prior_names_stay_known_to_the_probe(errors))
     report.extend(check_cartographer_sidecar_family_has_one_owner(errors))
+    report.extend(check_cartographer_console_failures_are_scrubbed(errors))
     check_teamster_adapter_isolation(errors)
     report.extend(check_cross_product_independence(errors))
     report.extend(check_every_product_pair_is_audited(errors))

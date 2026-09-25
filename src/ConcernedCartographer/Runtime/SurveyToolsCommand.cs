@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Jotunn.Entities;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 
 namespace TheConcernedCat.ConcernedCartographer.Runtime;
 
@@ -31,7 +32,11 @@ internal sealed class SurveyToolsCommand : ConsoleCommand
         }
         catch (Exception exception)
         {
-            output = "Survey tool failed: " + exception.Message;
+            // A backstop behind the guard inside CartographerRuntime, which
+            // knows the subcommand. Scrubbed either way (#389): a filesystem
+            // exception's raw message carries the path it failed on, and with it
+            // this machine's user name, into text a player screenshots.
+            output = ConsoleFailure.Describe("cc_survey", subcommand: "", exception);
         }
 
         context?.AddString(output);

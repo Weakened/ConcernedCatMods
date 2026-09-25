@@ -1189,6 +1189,22 @@ Loads `cartographer-strings.tsv` overrides into `AtlasStrings` and can write a t
 
 ## 11. Runtime commands and scanning
 
+**Every `cc_*` command fails the same way (#367, #389).** The wrapper's
+`catch` is only a backstop; the real guard is
+`CartographerRuntime.GuardConsoleCommand`, which resolves the subcommand
+*outside* the try so the reply can name it, logs through `SafeLogText`, and
+answers through `ConsoleFailure.Describe`. Before #389 six of the seven
+wrappers replied `"<X> tool failed: " + exception.Message` — no subcommand,
+and a filesystem exception's full path (so the machine's user name and the
+profile's location) printed into the text a player pastes into a bug
+report. There is one guard rather than seven copies, and
+`validate_repo.py`'s `#389 console failure audit` refuses a wrapper that
+touches `.Message`, one whose reply names another command, an entry point
+that reaches its work around the guard, and a second guard grown beside it.
+Wrappers are discovered by glob, so an eighth command is covered the day it
+is written; `tools/tests/test_console_failure_audit.py` plants each of those
+escapes and requires the refusal.
+
 ### `Runtime/RoadToolsCommand.cs`
 
 Jötunn command shell for `cc_roads`. Delegates road mutations to runtime/editor.
