@@ -12,7 +12,7 @@ containsNsfwContent = false
 [package.dependencies]
 denikson-BepInExPack_Valheim = "5.4.2333"
 ValheimModding-Jotunn = "2.29.2"
-TheConcernedCat-ConcernedNPC = "0.1.0"
+TheConcernedCat-ConcernedNPC = "0.2.0"
 
 [build]
 icon = "./icon.png"

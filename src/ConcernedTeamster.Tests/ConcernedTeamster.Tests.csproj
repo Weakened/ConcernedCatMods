@@ -22,6 +22,29 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- #374: the library's game-free sources, because Teamster's Domain layer
+         now speaks NpcContainerDecision and these tests compile that layer as
+         source.
+
+         This deliberately does NOT establish that the facade is reachable from
+         outside the package - `internal` is visible to a source include, so
+         these tests would compile either way. That property is proven by the
+         PRODUCT build instead: ConcernedTeamster is net48 and references
+         ConcernedNPC as an assembly, so `Domain/Workers/ContainerPermissionRows`
+         compiling at all in scripts/verify.ps1 is the proof, and a ProjectReference
+         from here could not be (net10.0 cannot reference net48). The validator's
+         #374 rule pins it so it stays true rather than being true by accident.
+
+         Three folders, not the whole library: Containers, Storage and Work hold
+         no Unity or Jotunn type at all, so they compile here without dragging
+         the game into a test project that is otherwise provable on a machine
+         with no game installed. Body/ and the rest do, and are not needed. -->
+    <Compile Include="..\ConcernedNPC\Containers\**\*.cs" LinkBase="Library\Containers" />
+    <Compile Include="..\ConcernedNPC\Storage\**\*.cs" LinkBase="Library\Storage" />
+    <Compile Include="..\ConcernedNPC\Work\**\*.cs" LinkBase="Library\Work" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
