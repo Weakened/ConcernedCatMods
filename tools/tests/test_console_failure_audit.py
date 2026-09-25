@@ -15,10 +15,17 @@ not do: most of these are wiring, not matching.
 The plants are the ways a reviewer or a later change actually gets here:
 restoring the raw message; spelling it something other than `.Message`
 (`ToString()`, an inner exception, an interpolation) so a rule that banned one
-token would miss it; keeping ConsoleFailure but naming another command; keeping
-the guard but reaching the work around it; growing a second guard beside the one
-that exists; and adding a brand-new wrapper the audit has never heard of, which
-is the case a hand-written list of commands would have missed.
+token would miss it; putting it in a runtime CORE or in an ordinary product file
+rather than in a wrapper, which is where three copies of it actually were;
+keeping ConsoleFailure but naming another command; keeping the guard but reaching
+the work around it; growing a second guard beside the one that exists; moving the
+guard's scrubbed log line out of the guard while leaving the call elsewhere in the
+file; and adding a brand-new console command the audit has never heard of, under a
+name the old file-name glob would not have matched.
+
+Two plants require the validator to PASS rather than refuse, because a rule that
+cannot tell `Character.Message` from an exception's property, or that refuses the
+scrubber's own read, is a rule nobody could turn on.
 
 No count is given here on purpose: what the harness covers is the list above,
 and that is checkable against the file.
@@ -34,8 +41,13 @@ RUNTIME_DIR = os.path.join(ROOT, "src", "ConcernedCartographer", "Runtime")
 RUNTIME = os.path.join(RUNTIME_DIR, "CartographerRuntime.cs")
 PIN = os.path.join(RUNTIME_DIR, "PinToolsCommand.cs")
 SURVEY = os.path.join(RUNTIME_DIR, "SurveyToolsCommand.cs")
+RENDERER = os.path.join(
+    ROOT, "src", "ConcernedCartographer", "Map", "RoadOverlayRenderer.cs")
 
-NEW_WRAPPER = os.path.join(RUNTIME_DIR, "ZzProbeToolsCommand.cs")
+# Deliberately NOT named *ToolsCommand.cs: wrappers are discovered by base
+# class, because globbing the file name made "an eighth command is covered the
+# day it is written" a claim about a convention nothing enforces.
+NEW_WRAPPER = os.path.join(RUNTIME_DIR, "ZzProbeCommand.cs")
 
 NEW_WRAPPER_BODY = """using System;
 using System.Collections.Generic;
@@ -43,11 +55,11 @@ using Jotunn.Entities;
 
 namespace TheConcernedCat.ConcernedCartographer.Runtime;
 
-internal sealed class ZzProbeToolsCommand : ConsoleCommand
+internal sealed class ZzProbeCommand : ConsoleCommand
 {
     private readonly CartographerRuntime _runtime;
 
-    public ZzProbeToolsCommand(CartographerRuntime runtime)
+    public ZzProbeCommand(CartographerRuntime runtime)
     {
         _runtime = runtime;
     }
@@ -233,14 +245,71 @@ class ConsoleFailuresStayScrubbed(unittest.TestCase):
             "    private string GuardConsoleCommand(")
         self.assert_refused("a second console guard grew beside the only one")
 
-    def test_dropping_the_scrubbed_log_line_is_refused(self):
-        # The guard's reply is what the player sees; SafeLogText is what
-        # reaches LogOutput.log, which is the file a player uploads.
+    # -- outside the wrappers, where the copies actually were ----------
+
+    def test_a_raw_message_in_the_runtime_core_is_refused(self):
+        # An independent review's finding, and the most important one here: the
+        # wrappers are the LEAST likely place for the next copy. The work is in
+        # the cores, and a catch there was not scanned at all.
         self.swap_in(
             RUNTIME,
-            '_log.LogError($"{command} {subcommand} failed: {SafeLogText.Describe(exception)}");',
-            '_log.LogError($"{command} {subcommand} failed.");')
-        self.assert_refused("the guard stopped logging through SafeLogText")
+            "    private string ExecuteSurveyCommandCore(string[] args, string subcommand)\n    {",
+            "    private string ExecuteSurveyCommandCore(string[] args, string subcommand)\n    {\n"
+            "        if (subcommand == \"zzprobe\")\n"
+            "        {\n"
+            "            try { throw new System.IO.IOException(); }\n"
+            "            catch (Exception ex) { return \"cc_survey reload failed: \" + ex.Message; }\n"
+            "        }\n")
+        self.assert_refused("a runtime core reported a raw exception message")
+
+    def test_a_raw_message_anywhere_in_the_product_is_refused(self):
+        # Three of these already existed when #389 was written, the worst of
+        # them returning the raw message as the `cc_roads align` console reply
+        # on the line AFTER scrubbing the same exception for the log. The rule
+        # is the product, not the console.
+        self.swap_in(
+            RENDERER,
+            'return "Alignment probe failed: " + SafeLogText.Brief(exception);',
+            'return "Alignment probe failed: " + exception.Message;')
+        self.assert_refused("a non-wrapper file returned a raw exception message")
+
+    def test_the_scrubber_itself_stays_allowed(self):
+        # The one exemption has to be a real one: SafeLogText is where the
+        # message is read, and a rule that refused it would be a rule nobody
+        # could satisfy. Removing the read is what must fail - and it fails as
+        # a compile error rather than here, so this asserts the shape instead:
+        # the exemption is keyed to that one path, so the same call in a
+        # different file is refused.
+        self.swap_in(
+            RENDERER,
+            'return "Alignment probe failed: " + SafeLogText.Brief(exception);',
+            "return CrashReportSanitizer.Sanitize(exception.Message, 2000);")
+        self.assert_refused("the scrubber's own call was allowed outside the scrubber")
+
+    def test_vanillas_own_message_method_is_not_mistaken_for_an_exception(self):
+        # The rule has to tell `Character.Message` - vanilla's HUD method, named
+        # by reflection in VanillaMessage and quoted in a log line - from an
+        # exception's property, or it is a rule that cannot be turned on. This
+        # plants the vanilla spelling and requires the validator to PASS.
+        self.swap_in(
+            RENDERER,
+            'return "Alignment probe failed: " + SafeLogText.Brief(exception);',
+            'string zz = nameof(Character.Message);\n'
+            '            return "Alignment probe failed: " + zz + SafeLogText.Brief(exception);')
+        code, out = validate()
+        self.assertEqual(0, code, "Character.Message was mistaken for an exception:\n" + out[-2000:])
+
+    def test_the_guards_own_log_line_is_what_is_pinned(self):
+        # The presence of SafeLogText.Describe anywhere in a 3,000-line file is
+        # not the claim; the claim is that the GUARD logs through it. A
+        # file-wide check passes the moment a second use appears elsewhere,
+        # taking this test's meaning with it.
+        self.swap_in(
+            RUNTIME,
+            '_log.LogError($"{command} {typed} failed: {SafeLogText.Describe(exception)}");',
+            '_log.LogError($"{command} {typed} failed.");\n'
+            "        _ = SafeLogText.Describe(new Exception());")
+        self.assert_refused("the guard stopped logging through SafeLogText while the file still used it")
 
     # -- a command the audit has never heard of ------------------------
 
@@ -251,7 +320,7 @@ class ConsoleFailuresStayScrubbed(unittest.TestCase):
         self.plant_file(
             NEW_WRAPPER,
             NEW_WRAPPER_BODY % '            output = "Probe failed: " + exception.Message;')
-        self.assert_refused("a newly added wrapper reached an exception's .Message")
+        self.assert_refused("a newly added wrapper (not named *ToolsCommand.cs) reached an exception's .Message")
 
     def test_a_new_wrapper_that_is_scrubbed_but_unguarded_is_refused(self):
         # Scrubbed reply, right command name, and still wrong: cc_zzprobe has

@@ -501,10 +501,15 @@ public sealed class AtlasMaintenanceDefectTests : IDisposable
     // ------------------------------------------------------------------
 
     [Theory]
+    // Every subcommand below is a real one, from its command's own
+    // CommandOptionList. The first cut of this theory used `cc_roads paint`
+    // and `cc_survey commit`, which do not exist — harmless for a pure
+    // formatter, and exactly the kind of detail that makes a test look like
+    // it establishes more than it does.
     [InlineData("cc_pins", "merge")]
-    [InlineData("cc_roads", "paint")]
-    [InlineData("cc_routes", "save")]
-    [InlineData("cc_survey", "commit")]
+    [InlineData("cc_roads", "align")]
+    [InlineData("cc_routes", "measure")]
+    [InlineData("cc_survey", "reload")]
     [InlineData("cc_sync", "apply")]
     [InlineData("cc_companion", "toolsonly")]
     public void EveryConsoleCommandNamesItsSubcommandAndScrubsTheFailure(
@@ -535,6 +540,35 @@ public sealed class AtlasMaintenanceDefectTests : IDisposable
 
         // The file name survives, which is what makes the failure diagnosable.
         Assert.Contains("x.tsv", reply);
+    }
+
+    [Fact]
+    public void AFailureNamesWhatThePlayerTypedRatherThanTheResolvedDefault()
+    {
+        // The review finding that changed the guard. Subcommand() defaults a
+        // bare command to "status", which is right for dispatch in six of the
+        // seven - but cc_routes' handler answers a bare invocation with "list".
+        // Reporting the resolved value named `cc_routes status`, and `status`
+        // is a real, different cc_routes subcommand: the reply pointed the
+        // player's bug report at an operation they had not asked for.
+        Assert.Equal("status", ConsoleArguments.Subcommand(Array.Empty<string>()));
+        Assert.Equal("", ConsoleArguments.Typed(Array.Empty<string>()));
+        Assert.Equal("", ConsoleArguments.Typed(null));
+        Assert.Equal("", ConsoleArguments.Typed(new string[] { null! }));
+
+        // What the player typed, lowercased for the reply exactly as for
+        // dispatch, so `cc_routes MEASURE` is reported as `measure`.
+        Assert.Equal("measure", ConsoleArguments.Typed(new[] { "MEASURE", "x" }));
+
+        // And the reply for a bare command names the command alone. It does
+        // NOT name a subcommand the player did not type - which is the whole
+        // point, and is why this is asserted rather than left implied.
+        var exception = new IOException("nope");
+        Assert.Equal(
+            "cc_routes could not finish: IOException: nope",
+            ConsoleFailure.Describe("cc_routes", ConsoleArguments.Typed(Array.Empty<string>()), exception));
+        Assert.DoesNotContain("status", ConsoleFailure.Describe(
+            "cc_routes", ConsoleArguments.Typed(Array.Empty<string>()), exception));
     }
 
     [Fact]

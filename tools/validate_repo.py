@@ -2439,9 +2439,14 @@ CONSOLE_FAILURE_CALL = re.compile(r'ConsoleFailure\.Describe\(\s*"(?P<name>[^"]*
 CONSOLE_FAILURE_ANY = re.compile(r"ConsoleFailure\.Describe\(")
 
 # The guard reports the command it was given, not a literal: that is the whole
-# reason there is one guard instead of seven.
+# reason there is one guard instead of seven. The second argument is the
+# subcommand the player TYPED rather than the one dispatch resolved: a bare
+# `cc_routes` dispatches to `list` and resolved to `status`, so reporting the
+# resolved value named a real, different subcommand (review of 17ec1ca).
 CONSOLE_FAILURE_FORWARDED = re.compile(
-    r"ConsoleFailure\.Describe\(\s*command\s*,\s*subcommand\s*,\s*exception\s*\)")
+    r"ConsoleFailure\.Describe\(\s*command\s*,\s*typed\s*,\s*exception\s*\)")
+
+CONSOLE_GUARD_LOG = re.compile(r"SafeLogText\.Describe\(\s*exception\s*\)")
 
 CONSOLE_GUARD_ENTRY = re.compile(
     r"internal string (?P<method>Execute[A-Za-z0-9]*Command)\(string\[\] args\)\s*\{\s*"
@@ -2449,6 +2454,23 @@ CONSOLE_GUARD_ENTRY = re.compile(
     r"(?P=method)Core\s*\)\s*;\s*\}")
 
 CONSOLE_CATCH = re.compile(r"catch\s*\(\s*Exception\s+(?P<caught>[A-Za-z_][A-Za-z0-9_]*)\s*\)")
+
+CONSOLE_COMMAND_CLASS = re.compile(r"class\s+[A-Za-z0-9_]+\s*:\s*ConsoleCommand\b")
+
+# `.Message` is refused across the product. Two receivers are not exceptions and
+# each is exempt by name rather than by pattern: `Character.Message` is vanilla's
+# own HUD method (reached by name through reflection in VanillaMessage, and named
+# in a log line), and SafeLogText is the scrubber, whose whole job is to be the
+# one place that reads an exception's message.
+MESSAGE_RECEIVER = re.compile(r"(?P<receiver>[A-Za-z_][A-Za-z0-9_]*)?\s*\.Message\b")
+
+MESSAGE_EXEMPT_RECEIVERS = ("Character",)
+
+MESSAGE_EXEMPT_FILE = ("Domain", "Reporting", "SafeLogText.cs")
+
+# A string literal, verbatim or not, so a banned token inside one is not a use of
+# it. `"...Character.Message not recognised..."` is a real line in this product.
+CS_STRING = re.compile(r'@"(?:[^"]|"")*"' + r"|" + r'"(?:\\.|[^"\\])*"' + r"|'(?:\\.|[^'\\])'")
 
 
 def _cs_code(path: Path) -> str:
@@ -2458,6 +2480,16 @@ def _cs_code(path: Path) -> str:
     return "\n".join(
         re.sub(r"/\*.*?\*/", "", _strip_cs_line_comment(line))
         for line in path.read_text(encoding="utf-8").splitlines())
+
+
+def _cs_code_without_strings(path: Path) -> str:
+    """As <see cref="_cs_code"/>, with string literals blanked as well.
+
+    A banned token inside a string is not a use of it, and this product has a
+    real line reading `"... Character.Message not recognised on this game build
+    ..."`. Blanking rather than deleting keeps every line number."""
+    return CS_STRING.sub(lambda match: '"' + " " * max(0, len(match.group(0)) - 2) + '"',
+                         _cs_code(path))
 
 
 def check_cartographer_console_failures_are_scrubbed(errors: list[str]) -> list[str]:
@@ -2473,20 +2505,33 @@ def check_cartographer_console_failures_are_scrubbed(errors: list[str]) -> list[
     already asking for help.
 
     A seventh copy is the obvious next defect, so this is enforced rather than
-    reviewed. Two halves:
+    reviewed. Three halves, the third of which an independent review added:
 
-    - every `*ToolsCommand.cs` wrapper: no `.Message` anywhere in its code, one
-      `ConsoleFailure.Describe` naming ITS OWN command, and one delegation into
-      the runtime;
+    - every console wrapper: no `.Message`, the caught exception spelled only
+      inside `ConsoleFailure.Describe`, one `Describe` naming ITS OWN command,
+      and one delegation into the runtime;
     - the runtime: each delegated entry point is exactly
       `return GuardConsoleCommand("cc_x", args, Execute…CommandCore);`, and
       `ConsoleFailure.Describe` appears there exactly once — inside the guard —
-      so a second, divergent guard cannot grow beside it.
+      so a second, divergent guard cannot grow beside it, with the scrubbed log
+      line required INSIDE that guard rather than anywhere in the file;
+    - **the whole product**: `.Message` is refused everywhere under
+      `src/ConcernedCartographer/`. A review demonstrated why the first two are
+      not enough: the wrappers are the least likely place for the next copy, and
+      three already existed elsewhere — `RoadOverlayRenderer` returned
+      `"Alignment probe failed: " + exception.Message` as the `cc_roads align`
+      console reply on the line AFTER scrubbing the same exception for the log.
+      Two spellings are exempt and each is named: `Character.Message` is
+      vanilla's own HUD method, and `SafeLogText` is the scrubber itself.
 
-    Wrappers are DISCOVERED by glob rather than listed, so an eighth command is
-    covered the day it is written. No count is asserted: what the rule covers is
-    every file matching the pattern, which is checkable against the directory."""
-    runtime_dir = ROOT / "src" / "ConcernedCartographer" / "Runtime"
+    Wrappers are discovered by BASE CLASS, not by file name. Globbing
+    `*ToolsCommand.cs` made "an eighth command is covered the day it is written"
+    a claim about a naming convention nothing enforces; a `CompassCommand.cs`
+    would have been invisible. No count is asserted: what the rule covers is
+    every `ConsoleCommand` under Runtime, which is checkable against the
+    directory."""
+    product_dir = ROOT / "src" / "ConcernedCartographer"
+    runtime_dir = product_dir / "Runtime"
     runtime_file = runtime_dir / "CartographerRuntime.cs"
     label = "[cartographer] #389 console failure audit"
 
@@ -2494,9 +2539,10 @@ def check_cartographer_console_failures_are_scrubbed(errors: list[str]) -> list[
         fail(f"{label}: CartographerRuntime.cs is missing — the audit no longer covers it", errors)
         return []
 
-    wrappers = sorted(runtime_dir.glob("*ToolsCommand.cs"))
+    wrappers = sorted(path for path in runtime_dir.rglob("*.cs")
+                      if CONSOLE_COMMAND_CLASS.search(_cs_code(path)))
     if not wrappers:
-        fail(f"{label}: no *ToolsCommand.cs found under Runtime — the audit no longer "
+        fail(f"{label}: no ConsoleCommand subclass found under Runtime — the audit no longer "
              "covers anything, which is worse than a failure", errors)
         return []
 
@@ -2517,13 +2563,48 @@ def check_cartographer_console_failures_are_scrubbed(errors: list[str]) -> list[
         return []
     if not CONSOLE_FAILURE_FORWARDED.search(re.sub(r"\s+", " ", runtime_code)):
         fail(f"{label}: GuardConsoleCommand does not report "
-             "`ConsoleFailure.Describe(command, subcommand, exception)` — a guard that names a "
-             "literal command is a guard for one command, which is the shape #389 removed", errors)
+             "`ConsoleFailure.Describe(command, typed, exception)` — a guard that names a literal "
+             "command is a guard for one command, which is the shape #389 removed, and a guard that "
+             "reports the RESOLVED subcommand names `status` for a bare `cc_routes` that dispatched "
+             "to `list`", errors)
         return []
-    if "SafeLogText.Describe" not in runtime_code:
-        fail(f"{label}: GuardConsoleCommand no longer logs through SafeLogText — the log gets the "
-             "same message the player does, and it is the log a player uploads", errors)
+
+    # Inside the guard's own body, not merely somewhere in a 3,000-line file: a
+    # file-wide presence check goes vacuous the day a second SafeLogText.Describe
+    # appears anywhere in it, and its negative test goes vacuous with it.
+    guard_body = runtime_code.split("private string GuardConsoleCommand(", 1)[1]
+    guard_body = re.split(r"\n    (?:private|internal|public|protected)\s", guard_body)[0]
+    if not CONSOLE_GUARD_LOG.search(guard_body):
+        fail(f"{label}: GuardConsoleCommand's own body no longer logs through "
+             "`SafeLogText.Describe(exception)` — the log gets the same scrubbing the player's "
+             "reply does, and it is the log a player uploads", errors)
         return []
+
+    # The product, not the wrappers. A review demonstrated that the wrappers are
+    # the LEAST likely place for the next copy of this defect: three already
+    # existed elsewhere, and the worst of them returned the raw message as the
+    # `cc_roads align` console reply on the line after scrubbing the same
+    # exception for the log.
+    scanned = 0
+    for path in sorted(product_dir.rglob("*.cs")):
+        if path.relative_to(product_dir).parts[0] in ("obj", "bin"):
+            continue
+        scanned += 1
+        exempt_file = path.relative_to(product_dir).parts == MESSAGE_EXEMPT_FILE
+        code = _cs_code_without_strings(path)
+        for match in MESSAGE_RECEIVER.finditer(code):
+            if match.group("receiver") in MESSAGE_EXEMPT_RECEIVERS:
+                continue
+            if exempt_file:
+                continue
+            line = code.count("\n", 0, match.start()) + 1
+            fail(f"{label}: {path.relative_to(ROOT).as_posix()}:{line} reads an exception's "
+                 "`.Message` — that is the raw text #389 removed, and a filesystem exception's "
+                 "message is a path and this machine's user name. Go through SafeLogText (for a log "
+                 "line or a reply built by hand) or ConsoleFailure.Describe (for a console failure); "
+                 f"only {'/'.join(MESSAGE_EXEMPT_FILE)} and `Character.Message` may spell it",
+                 errors)
+            return []
 
     audited: list[str] = []
     for wrapper in wrappers:
@@ -2537,13 +2618,6 @@ def check_cartographer_console_failures_are_scrubbed(errors: list[str]) -> list[
                  errors)
             return []
         name = named.group("name")
-
-        raw = [line.strip() for line in code.splitlines() if RAW_EXCEPTION_MESSAGE.search(line)]
-        if raw:
-            fail(f"{label}: {relative} reaches an exception's `.Message` directly: {raw} — that is "
-                 "the raw text #389 removed; report through ConsoleFailure.Describe, which scrubs",
-                 errors)
-            return []
 
         # `.Message` is the shape #389 had, and naming it gives a clear
         # failure — but it is not the only unscrubbed thing an exception can
@@ -2588,9 +2662,11 @@ def check_cartographer_console_failures_are_scrubbed(errors: list[str]) -> list[
         audited.append(f"{name} -> {method}")
 
     return [
-        f"{label}: {len(audited)} console command(s) — {', '.join(audited)} — each report failures "
-        "through the single scrubbing guard, naming their own subcommand, and none spells the "
-        "exception it caught anywhere but in ConsoleFailure.Describe",
+        f"{label}: {len(audited)} ConsoleCommand(s) found by base class — {', '.join(audited)} — each "
+        "report failures through the single scrubbing guard, naming the subcommand the player typed, "
+        "and none spells the exception it caught anywhere but in ConsoleFailure.Describe; "
+        f"{scanned} product source(s) scanned and none reads an exception's `.Message` outside "
+        f"{'/'.join(MESSAGE_EXEMPT_FILE)}",
     ]
 
 

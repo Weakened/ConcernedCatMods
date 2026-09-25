@@ -2267,15 +2267,37 @@ internal sealed class CartographerRuntime : IDisposable
     /// one. <c>validate_repo.py</c>'s <c>#389 console failure audit</c> refuses
     /// a command that reaches its work any other way.
     ///
-    /// The subcommand is resolved OUTSIDE the try, so it is available to name
+    /// Both values are resolved OUTSIDE the try, so they are available to name
     /// the failure — which is why <see cref="ConsoleArguments"/> is total
-    /// rather than relying on the catch to absorb a missing argument. The core
-    /// receives it so it does not recompute it, and the two cores that hand
-    /// their arguments to a command handler simply ignore it.</summary>
+    /// rather than relying on the catch to absorb a missing argument.
+    ///
+    /// <b>Two values, because dispatch and reporting are different questions.
+    /// </b> The core is handed <see cref="ConsoleArguments.Subcommand"/>, whose
+    /// bare-command default is <c>status</c>, exactly as each core computed for
+    /// itself before. The REPORT names <see cref="ConsoleArguments.Typed"/> —
+    /// what the player typed, or nothing. An independent review found why that
+    /// distinction has to exist: <c>cc_routes</c>' handler answers a bare
+    /// invocation with <c>list</c>, not <c>status</c>, so one shared default
+    /// reported a bare failing <c>cc_routes</c> as <c>cc_routes status</c> —
+    /// and <c>status</c> is a real, different <c>cc_routes</c> subcommand, so
+    /// the reply misdirected the bug report rather than merely being vague.
+    ///
+    /// The two cores that hand their arguments to a command handler ignore the
+    /// value they are given; it is passed for the five that switch on it.
+    ///
+    /// <b>This guards more than the console.</b> Five of these entry points are
+    /// also handed to <c>SurveyPanel</c>, <c>SharePanel</c> and
+    /// <c>SettingsPanel</c> as <c>Func&lt;string[], string&gt;</c>. An exception
+    /// that used to propagate out of a Unity UI callback now comes back as a
+    /// reply string those panels display. That is an improvement and it is named
+    /// here rather than discovered: the panels only display the string and
+    /// always pass explicit arguments, so the reported subcommand is right
+    /// there too.</summary>
     private string GuardConsoleCommand(
         string command, string[] args, Func<string[], string, string> core)
     {
         string subcommand = ConsoleArguments.Subcommand(args);
+        string typed = ConsoleArguments.Typed(args);
         try
         {
             return core(args, subcommand);
@@ -2284,8 +2306,8 @@ internal sealed class CartographerRuntime : IDisposable
         {
             // The log gets the full scrubbed description; the player gets the
             // brief. Both go through CrashReportSanitizer.
-            _log.LogError($"{command} {subcommand} failed: {SafeLogText.Describe(exception)}");
-            return ConsoleFailure.Describe(command, subcommand, exception);
+            _log.LogError($"{command} {typed} failed: {SafeLogText.Describe(exception)}");
+            return ConsoleFailure.Describe(command, typed, exception);
         }
     }
 

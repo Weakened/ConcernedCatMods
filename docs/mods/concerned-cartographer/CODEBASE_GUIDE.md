@@ -1189,24 +1189,54 @@ Loads `cartographer-strings.tsv` overrides into `AtlasStrings` and can write a t
 
 ## 11. Runtime commands and scanning
 
-**Every `cc_*` command fails the same way (#367, #389).** The wrapper's
-`catch` is only a backstop; the real guard is
-`CartographerRuntime.GuardConsoleCommand`, which resolves the subcommand
+**Every `cc_*` command fails the same way (#367, #389).** The real guard is
+`CartographerRuntime.GuardConsoleCommand`: it resolves the subcommand
 *outside* the try so the reply can name it, logs through `SafeLogText`, and
 answers through `ConsoleFailure.Describe`. Before #389 six of the seven
 wrappers replied `"<X> tool failed: " + exception.Message` — no subcommand,
 and a filesystem exception's full path (so the machine's user name and the
-profile's location) printed into the text a player pastes into a bug
-report. There is one guard rather than seven copies, and
-`validate_repo.py`'s `#389 console failure audit` refuses a wrapper that
-spells the exception it caught anywhere but inside
-`ConsoleFailure.Describe` — `.Message` is the shape #389 had, but
-`ToString()` carries the path *and* the stack — one whose reply names
-another command, an entry point that reaches its work around the guard, and
-a second guard grown beside it.
-Wrappers are discovered by glob, so an eighth command is covered the day it
-is written; `tools/tests/test_console_failure_audit.py` plants each of those
-escapes and requires the refusal.
+profile's location) printed into the text a player pastes into a bug report.
+
+Three things about it are easy to state too strongly, so they are stated
+exactly:
+
+- **"One guard" means one place that decides the wording.**
+  `ConsoleFailure.Describe` is called eight times — once in the guard and
+  once in each wrapper's `catch`. Each wrapper's literal is pinned by the
+  audit to that file's own `Name`, so the wording cannot drift silently; but
+  the "no second guard" rule only looks inside `CartographerRuntime.cs`.
+- **The wrappers' catches are now unreachable for anything a core throws**,
+  because the guard catches `Exception` first. They are reachable only if
+  `_log.LogError` or `Describe` itself fails inside the guard's own catch.
+  "Backstop" is the accurate word; "the wrapper reports the failure" is not.
+- **The guard covers more than the console.** Five of the entry points are
+  also handed to `SurveyPanel`, `SharePanel` and `SettingsPanel` as
+  `Func<string[], string>`, so an exception that used to propagate out of a
+  Unity UI callback now returns as a reply string those panels display.
+- **The reply names the subcommand the player TYPED**, not the one dispatch
+  resolved. `cc_routes` defaults a bare invocation to `list` while the shared
+  default is `status`, so reporting the resolved value named a real,
+  different subcommand and pointed the bug report at it.
+
+`validate_repo.py`'s `#389 console failure audit` refuses: a wrapper that
+spells the exception it caught anywhere but inside `ConsoleFailure.Describe`
+(`.Message` is the shape #389 had, but `ToString()` carries the path *and*
+the stack); **any** file under `src/ConcernedCartographer/` that reads an
+exception's `.Message`, with `SafeLogText` and vanilla's own
+`Character.Message` the only exemptions; a reply naming another command; an
+entry point that reaches its work around the guard; a second guard grown
+beside it; and a guard whose own body stops logging through `SafeLogText`.
+Console commands are discovered by **base class**, not by file name, so an
+eighth is covered the day it is written whatever it is called.
+`tools/tests/test_console_failure_audit.py` plants each escape and requires
+the refusal — and plants two things the rule must *allow*, because a rule
+that cannot tell `Character.Message` from an exception's property is a rule
+nobody could turn on.
+
+The product-wide half is not belt-and-braces: it is where three copies of
+the defect actually were. `RoadOverlayRenderer` returned
+`"Alignment probe failed: " + exception.Message` as the `cc_roads align`
+console reply on the line *after* scrubbing the same exception for the log.
 
 ### `Runtime/RoadToolsCommand.cs`
 
