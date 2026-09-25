@@ -1293,8 +1293,20 @@ internal sealed class CartographerRuntime : IDisposable
 
     internal PinCommandHandler? PinCommands => _pinCommands;
 
-    /// <summary>Backs the `cc_pins` console command.</summary>
+    /// <summary>Backs the `cc_pins` console command.
+    ///
+    /// <b>The guard is here rather than in the wrapper (#367, #389).</b> See
+    /// <see cref="ExecuteAtlasCommand"/>: catching where the subcommand is
+    /// known is what lets the reply say which of thirty-odd operations failed,
+    /// and <see cref="ConsoleFailure"/> is what stops a filesystem exception's
+    /// raw message printing the path it failed on — and with it this machine's
+    /// user name — into text a player screenshots.</summary>
     internal string ExecutePinCommand(string[] args)
+    {
+        return GuardConsoleCommand("cc_pins", args, ExecutePinCommandCore);
+    }
+
+    private string ExecutePinCommandCore(string[] args, string subcommand)
     {
         if (!AtlasAccessAllowed(out string atlasDenial))
         {
@@ -2234,18 +2246,68 @@ internal sealed class CartographerRuntime : IDisposable
     /// <c>ConsoleFailure</c> does the scrubbing.</summary>
     internal string ExecuteAtlasCommand(string[] args)
     {
-        // Resolved outside the guard, so it is available to name the failure -
-        // which is why ConsoleArguments is total rather than relying on the
-        // catch to absorb a missing argument (#367).
+        return GuardConsoleCommand("cc_atlas", args, ExecuteAtlasCommandCore);
+    }
+
+    /// <summary>The one guard every `cc_*` console command goes through.
+    ///
+    /// <b>Why one, and why here (#367, #389).</b> #367 gave <c>cc_atlas</c> a
+    /// guard that names the subcommand and scrubs the exception, and left the
+    /// other six — Pin, Road, Route, Survey, Sync, Companion — still replying
+    /// <c>"&lt;X&gt; tool failed: " + exception.Message</c>. That reply names
+    /// none of the subcommands, so a bug report says only that something
+    /// failed; and a filesystem exception's message routinely carries the full
+    /// path it failed on, which is this machine's user name and the profile's
+    /// location, printed into the text a player pastes into an issue or a
+    /// Discord thread. It fires in exactly the situation where the player is
+    /// already asking for help.
+    ///
+    /// Copying the guard six times would have made six places for the wording
+    /// to drift and six places for the next one to be forgotten, so there is
+    /// one. <c>validate_repo.py</c>'s <c>#389 console failure audit</c> refuses
+    /// a command that reaches its work any other way.
+    ///
+    /// Both values are resolved OUTSIDE the try, so they are available to name
+    /// the failure — which is why <see cref="ConsoleArguments"/> is total
+    /// rather than relying on the catch to absorb a missing argument.
+    ///
+    /// <b>Two values, because dispatch and reporting are different questions.
+    /// </b> The core is handed <see cref="ConsoleArguments.Subcommand"/>, whose
+    /// bare-command default is <c>status</c>, exactly as each core computed for
+    /// itself before. The REPORT names <see cref="ConsoleArguments.Typed"/> —
+    /// what the player typed, or nothing. An independent review found why that
+    /// distinction has to exist: <c>cc_routes</c>' handler answers a bare
+    /// invocation with <c>list</c>, not <c>status</c>, so one shared default
+    /// reported a bare failing <c>cc_routes</c> as <c>cc_routes status</c> —
+    /// and <c>status</c> is a real, different <c>cc_routes</c> subcommand, so
+    /// the reply misdirected the bug report rather than merely being vague.
+    ///
+    /// The two cores that hand their arguments to a command handler ignore the
+    /// value they are given; it is passed for the five that switch on it.
+    ///
+    /// <b>This guards more than the console.</b> Five of these entry points are
+    /// also handed to <c>SurveyPanel</c>, <c>SharePanel</c> and
+    /// <c>SettingsPanel</c> as <c>Func&lt;string[], string&gt;</c>. An exception
+    /// that used to propagate out of a Unity UI callback now comes back as a
+    /// reply string those panels display. That is an improvement and it is named
+    /// here rather than discovered: the panels only display the string and
+    /// always pass explicit arguments, so the reported subcommand is right
+    /// there too.</summary>
+    private string GuardConsoleCommand(
+        string command, string[] args, Func<string[], string, string> core)
+    {
         string subcommand = ConsoleArguments.Subcommand(args);
+        string typed = ConsoleArguments.Typed(args);
         try
         {
-            return ExecuteAtlasCommandCore(args, subcommand);
+            return core(args, subcommand);
         }
         catch (Exception exception)
         {
-            _log.LogError($"cc_atlas {subcommand} failed: {SafeLogText.Describe(exception)}");
-            return ConsoleFailure.Describe("cc_atlas", subcommand, exception);
+            // The log gets the full scrubbed description; the player gets the
+            // brief. Both go through CrashReportSanitizer.
+            _log.LogError($"{command} {typed} failed: {SafeLogText.Describe(exception)}");
+            return ConsoleFailure.Describe(command, typed, exception);
         }
     }
 
@@ -2370,8 +2432,14 @@ internal sealed class CartographerRuntime : IDisposable
     }
 
     /// <summary>Backs the `cc_survey` console command: review-before-commit
-    /// for survey observations.</summary>
+    /// for survey observations. Guarded by
+    /// <see cref="GuardConsoleCommand"/> (#389).</summary>
     internal string ExecuteSurveyCommand(string[] args)
+    {
+        return GuardConsoleCommand("cc_survey", args, ExecuteSurveyCommandCore);
+    }
+
+    private string ExecuteSurveyCommandCore(string[] args, string subcommand)
     {
         if (!AtlasAccessAllowed(out string atlasDenial))
         {
@@ -2383,7 +2451,6 @@ internal sealed class CartographerRuntime : IDisposable
             return "Concerned Cartographer: no world is loaded yet.";
         }
 
-        string subcommand = args.Length == 0 ? "status" : args[0].ToLowerInvariant();
         string remainder = args.Length > 1 ? args[1].ToLowerInvariant() : "";
         // RC12 blocker 6: the Survey panel addresses rows by stable id
         // ("id:<guid>") or identity ("key:<identity>") instead of a
@@ -2717,8 +2784,14 @@ internal sealed class CartographerRuntime : IDisposable
     }
 
     /// <summary>Backs the `cc_sync` console command: explicit share and
-    /// review-before-apply for the collaborative atlas.</summary>
+    /// review-before-apply for the collaborative atlas. Guarded by
+    /// <see cref="GuardConsoleCommand"/> (#389).</summary>
     internal string ExecuteSyncCommand(string[] args)
+    {
+        return GuardConsoleCommand("cc_sync", args, ExecuteSyncCommandCore);
+    }
+
+    private string ExecuteSyncCommandCore(string[] args, string subcommand)
     {
         if (!AtlasAccessAllowed(out string atlasDenial))
         {
@@ -2730,7 +2803,6 @@ internal sealed class CartographerRuntime : IDisposable
             return "Concerned Cartographer: no world is loaded yet.";
         }
 
-        string subcommand = args.Length == 0 ? "status" : args[0].ToLowerInvariant();
         string remainder = args.Length > 1 ? string.Join(" ", args, 1, args.Length - 1).Trim() : "";
 
         switch (subcommand)
@@ -2814,8 +2886,14 @@ internal sealed class CartographerRuntime : IDisposable
         }
     }
 
-    /// <summary>Backs the `cc_routes` console command.</summary>
+    /// <summary>Backs the `cc_routes` console command. Guarded by
+    /// <see cref="GuardConsoleCommand"/> (#389).</summary>
     internal string ExecuteRouteCommand(string[] args)
+    {
+        return GuardConsoleCommand("cc_routes", args, ExecuteRouteCommandCore);
+    }
+
+    private string ExecuteRouteCommandCore(string[] args, string subcommand)
     {
         if (!AtlasAccessAllowed(out string atlasDenial))
         {
@@ -2971,8 +3049,14 @@ internal sealed class CartographerRuntime : IDisposable
 
     /// <summary>Backs the `cc_roads` console command. Returns the message to
     /// print in the terminal; every mutation is journaled, saved, and
-    /// scheduled for redraw.</summary>
+    /// scheduled for redraw. Guarded by
+    /// <see cref="GuardConsoleCommand"/> (#389).</summary>
     internal string ExecuteRoadCommand(string[] args)
+    {
+        return GuardConsoleCommand("cc_roads", args, ExecuteRoadCommandCore);
+    }
+
+    private string ExecuteRoadCommandCore(string[] args, string subcommand)
     {
         if (!AtlasAccessAllowed(out string atlasDenial))
         {
@@ -2992,7 +3076,6 @@ internal sealed class CartographerRuntime : IDisposable
 
         UnityEngine.Vector3 playerPosition = player.transform.position;
         var position = new RoadPoint(playerPosition.x, playerPosition.y, playerPosition.z);
-        string subcommand = args.Length == 0 ? "status" : args[0].ToLowerInvariant();
         float radius = RoadAtlasEditor.DefaultSelectRadiusMeters;
         if (args.Length > 1 &&
             float.TryParse(args[1], System.Globalization.NumberStyles.Float,
@@ -3195,8 +3278,11 @@ internal sealed class CartographerRuntime : IDisposable
     /// policy would not have granted anyway.</summary>
     internal string ExecuteCompanionCommand(string[] args)
     {
-        string verb = args is { Length: > 0 } ? args[0].ToLowerInvariant() : "status";
+        return GuardConsoleCommand("cc_companion", args, ExecuteCompanionCommandCore);
+    }
 
+    private string ExecuteCompanionCommandCore(string[] args, string verb)
+    {
         switch (verb)
         {
             case "status":

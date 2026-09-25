@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using HarmonyLib;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using UnityEngine;
 
 namespace TheConcernedCat.ConcernedCartographer.Map;
@@ -407,7 +408,8 @@ internal static class MinimapReflection
         }
         catch (Exception exception)
         {
-            diagnostics = exception.Message;
+            // #389: diagnostics reaches the log and the console.
+            diagnostics = SafeLogText.Brief(exception);
             return false;
         }
     }

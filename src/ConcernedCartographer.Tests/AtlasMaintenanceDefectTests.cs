@@ -483,4 +483,110 @@ public sealed class AtlasMaintenanceDefectTests : IDisposable
         Assert.Equal("cc_atlas could not finish.", ConsoleFailure.Describe("cc_atlas", "   ", null!));
         Assert.Contains("cc_atlas backup", ConsoleFailure.Describe("cc_atlas", "backup", null!));
     }
+
+    // ------------------------------------------------------------------
+    // The other six commands (#389)
+    //
+    // #367 fixed cc_atlas and left Pin, Road, Route, Survey, Sync and
+    // Companion replying `"<X> tool failed: " + exception.Message`. One row
+    // per command, because the defect WAS six copies of one line and the
+    // fix is that each of them now names itself and scrubs.
+    //
+    // These prove the reply. That each wrapper actually produces it is a
+    // different claim and a different check: the wrappers need BepInEx and
+    // compile into no test assembly, so validate_repo.py's `#389 console
+    // failure audit` is what holds the wiring — it refuses a `.Message` in
+    // any `*ToolsCommand.cs`, a reply naming another command, and an entry
+    // point that reaches its work around the single guard.
+    // ------------------------------------------------------------------
+
+    [Theory]
+    // Every subcommand below is a real one, from its command's own
+    // CommandOptionList. The first cut of this theory used `cc_roads paint`
+    // and `cc_survey commit`, which do not exist — harmless for a pure
+    // formatter, and exactly the kind of detail that makes a test look like
+    // it establishes more than it does.
+    [InlineData("cc_pins", "merge")]
+    [InlineData("cc_roads", "align")]
+    [InlineData("cc_routes", "measure")]
+    [InlineData("cc_survey", "reload")]
+    [InlineData("cc_sync", "apply")]
+    [InlineData("cc_companion", "toolsonly")]
+    public void EveryConsoleCommandNamesItsSubcommandAndScrubsTheFailure(
+        string command, string subcommand)
+    {
+        // The realistic message: what the runtime throws when the product's
+        // own data directory has gone, on a real mod-manager profile.
+        var exception = new IOException(
+            @"Could not find a part of the path 'C:\Users\erenc\AppData\Roaming\Thunderstore Mod " +
+            @"Manager\DataFolder\Valheim\profiles\TCC\BepInEx\config\ConcernedCatMods\ConcernedCartographer\x.tsv'.");
+
+        string reply = ConsoleFailure.Describe(command, subcommand, exception);
+
+        // Which command and which of its subcommands, so the reply is worth
+        // pasting into a bug report at all.
+        Assert.Contains(command + " " + subcommand, reply);
+        Assert.Contains("IOException", reply);
+
+        // And nothing about this machine: not the account name, not the
+        // profile, not the folder layout. The tail is asserted because #388
+        // closed it; before that, only the head of the path went.
+        Assert.DoesNotContain("erenc", reply);
+        Assert.DoesNotContain("AppData", reply);
+        Assert.DoesNotContain("Mod Manager", reply);
+        Assert.DoesNotContain("profiles", reply);
+        Assert.DoesNotContain("BepInEx", reply);
+        Assert.DoesNotContain(@"\", reply);
+
+        // The file name survives, which is what makes the failure diagnosable.
+        Assert.Contains("x.tsv", reply);
+    }
+
+    [Fact]
+    public void AFailureNamesWhatThePlayerTypedRatherThanTheResolvedDefault()
+    {
+        // The review finding that changed the guard. Subcommand() defaults a
+        // bare command to "status", which is right for dispatch in six of the
+        // seven - but cc_routes' handler answers a bare invocation with "list".
+        // Reporting the resolved value named `cc_routes status`, and `status`
+        // is a real, different cc_routes subcommand: the reply pointed the
+        // player's bug report at an operation they had not asked for.
+        Assert.Equal("status", ConsoleArguments.Subcommand(Array.Empty<string>()));
+        Assert.Equal("", ConsoleArguments.Typed(Array.Empty<string>()));
+        Assert.Equal("", ConsoleArguments.Typed(null));
+        Assert.Equal("", ConsoleArguments.Typed(new string[] { null! }));
+
+        // What the player typed, lowercased for the reply exactly as for
+        // dispatch, so `cc_routes MEASURE` is reported as `measure`.
+        Assert.Equal("measure", ConsoleArguments.Typed(new[] { "MEASURE", "x" }));
+
+        // And the reply for a bare command names the command alone. It does
+        // NOT name a subcommand the player did not type - which is the whole
+        // point, and is why this is asserted rather than left implied.
+        var exception = new IOException("nope");
+        Assert.Equal(
+            "cc_routes could not finish: IOException: nope",
+            ConsoleFailure.Describe("cc_routes", ConsoleArguments.Typed(Array.Empty<string>()), exception));
+        Assert.DoesNotContain("status", ConsoleFailure.Describe(
+            "cc_routes", ConsoleArguments.Typed(Array.Empty<string>()), exception));
+    }
+
+    [Fact]
+    public void TheOldRawReplyIsWhatTheseTestsRuleOut()
+    {
+        // Written as an explicit contrast because "it is scrubbed now" is
+        // only meaningful against what it replaced. This is the exact string
+        // six wrappers produced, and every assertion above fails against it.
+        var exception = new IOException(
+            @"Could not find a part of the path 'C:\Users\erenc\AppData\Roaming\Thunderstore Mod Manager\x.tsv'.");
+        string raw = "Pin tool failed: " + exception.Message;
+
+        Assert.Contains("erenc", raw);
+        Assert.DoesNotContain("merge", raw);
+
+        string scrubbed = ConsoleFailure.Describe("cc_pins", "merge", exception);
+
+        Assert.DoesNotContain("erenc", scrubbed);
+        Assert.Contains("cc_pins merge", scrubbed);
+    }
 }
