@@ -387,17 +387,23 @@ public sealed class AtlasMaintenanceDefectTests : IDisposable
         Assert.DoesNotContain("AppData", reply);
         Assert.DoesNotContain("Roaming", reply);
 
-        // NOT asserted, and said here rather than left to be discovered:
-        // CrashReportSanitizer's Windows-path pattern forbids whitespace inside
-        // a path segment, so a path through "Thunderstore Mod Manager" is
-        // scrubbed only as far as the first space and the tail after it
-        // survives. The user name is before that point, so the privacy-critical
-        // part does go. The tail is a pre-existing gap in the scrubber - the
-        // same message already reaches LogOutput.log through SafeLogText, and
-        // SupportReportPrivacyTests does not assert it either - and closing it
-        // is a change to a CC-098 audit surface that belongs to its own issue,
-        // not a drive-by edit here. Asserting the gap would pin the defect in
-        // place, so it is written down instead.
+        // This is where the gap used to be written down instead of asserted:
+        // CrashReportSanitizer's path pattern forbade whitespace inside a
+        // segment, so the match stopped at the space in "Thunderstore Mod
+        // Manager" and everything after it survived. The user name was before
+        // that point, so the privacy-critical part always went; the tail did
+        // not, and asserting it here would have pinned the defect in place
+        // while closing it was a change to a CC-098 audit surface owned by its
+        // own issue. #388 closed it, so the tail is asserted now.
+        Assert.DoesNotContain("Mod Manager", reply);
+        Assert.DoesNotContain("DataFolder", reply);
+        Assert.DoesNotContain("profiles", reply);
+        Assert.DoesNotContain("BepInEx", reply);
+        Assert.DoesNotContain(@"\", reply);
+
+        // And the file name still survives, which is the whole point of
+        // keeping the last component: the failure stays diagnosable.
+        Assert.Contains("support-report.log", reply);
     }
 
     [Fact]
