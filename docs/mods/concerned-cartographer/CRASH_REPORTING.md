@@ -25,6 +25,82 @@ implementation contract and the Sentry-side setup the maintainer must do.
   is dropped unless allowlisted (`CrashReportEvent.AllowedDataKeys` is
   empty — additions require a PRIVACY.md revision AND a
   `ConsentPolicyVersion` bump so players are re-asked).
+### Paths containing spaces (#388, a deliberate change to this audit surface)
+
+The path patterns originally forbade whitespace inside a segment, so a
+mod-manager path stopped matching at its first space:
+`...\Thunderstore Mod Manager\DataFolder\Valheim\profiles\<profile>\BepInEx\...`
+had its head replaced and everything from `Mod` onwards — the profile name
+and the whole folder layout — travelled verbatim. The user name sits before
+that point and was always scrubbed, which is why this was a leak rather
+than a breach, and why `SupportReportPrivacyTests` passed over it: its
+Thunderstore-shaped plant asserted only as far as the user name.
+
+A space is now admitted inside a segment. The signal for "this is still a
+folder name, not the sentence after the path" is **negative on purpose**:
+the token after the space must not start with a lower-case letter.
+`\p{Ll}`, not `[a-z]` — an ASCII-only first version of this rule silently
+excluded every non-Latin folder name (`Mein Ärger`, `Мои Моды`), which is
+exactly the non-English-locale player it was meant to protect, and it also
+excluded ordinary punctuation-led mod folders (`!Mods`, `+Mods`,
+`Rock & Roll`).
+
+Where the run is allowed to reach is guarded differently in the two halves
+of a path, and each guard closes a failure an independent review
+demonstrated against the first version of this change:
+
+- **Directory chain:** no further guard needed. The segment a run extends
+  must still end at a separator, so a run that has wandered into prose
+  simply fails to match. Dots and commas are safe here — `My Mods
+  V1.2\Valheim\x.cfg` is one path.
+- **Final component:** three guards.
+  1. A path ending in a **file name** takes no run at all (a
+     variable-length negative lookbehind for `.ext`). Without this,
+     `wrote ...\b.cfg OK` lost the `OK`, `plugin.dll 0.9.0` lost the
+     version, `b.cfg Cannot Be Read` and the German-locale
+     `b.cfg Zugriffsverweigerung` lost the reason (.NET localizes its
+     exception messages and German capitalizes nouns), and
+     `Erens New World.db` lost the `.db` marker that `SaveFileNames`
+     needs. A path ending in a folder is the only shape where a run buys
+     any privacy, and now the only shape that gets one.
+  2. No dot, comma or semicolon inside a final-run token, so it cannot
+     reach across `, retrying` or into `World.db`.
+  3. The run is taken only where the path visibly ends: end of text, end
+     of **line** (`exception.ToString()` is multi-line the moment there is
+     a stack trace, and `$` is not line-aware here), a quote, a comma or a
+     semicolon. `:` is deliberately **not** an end marker — a run that
+     reached the next path's drive letter stopped at its colon, consumed
+     the `D` of `D:\...`, and left that entire second path unscrubbed,
+     user name included. That was a new leak strictly worse than the
+     pattern being replaced.
+- **Neither run may hold `<` or `>`.** `Sanitize` replaces in sequence, so
+  by the time `UnixPath` runs the text already contains this scrubber's own
+  `<path>/` markers; a run that could hold them crossed one, swallowed the
+  file name the Windows pass had just kept, and produced
+  `<path><path>/x.cfg`. `UnixPath` additionally refuses to start at a `/`
+  that directly follows `>`, which is that marker and never a separator in
+  the original text.
+
+**Stated limits**, written down rather than left to be found:
+
+1. A path that ends at a **folder** and is followed by prose cannot be told
+   from a folder name with more words in it, so the run is refused and the
+   rest of that folder name survives (`...\profiles\My Secret Base is
+   missing` keeps `Secret Base`). Refusing is the right way round — the
+   alternative deletes the sentence — and the user name still goes.
+2. A folder name whose post-space token **starts lower case** (`steam
+   games`) stops the chain there, and then the **entire remainder** of the
+   path survives, not merely a tail. The user name is before that point and
+   is still scrubbed.
+3. UNC paths (`\\server\share\...`) are matched by neither pattern: no
+   drive letter for `WindowsPath`, no `/` for `UnixPath`, and no `Users`
+   segment for `UsersFragment` unless one happens to be there. Relative
+   paths (`..\..\Users\me\x.cfg`) and `~/Library/...` are likewise
+   unmatched. All three are **pre-existing and unchanged by #388**, tracked
+   separately.
+
+This reaches `LogOutput.log` through `SafeLogText` and the support report
+through `SupportReportComposer`, not the crash report alone.
 - Reliability: consent gate before any queueing, bounded queue (8),
   one delivery attempt per event, session dedupe + cap (10), background
   sender thread, bounded flush at shutdown.
