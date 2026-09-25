@@ -204,6 +204,112 @@ public class SupportBundleTests
         Assert.DoesNotContain("someone", sanitized);
     }
 
+    // ------------------------------------------------------------------
+    // Paths containing spaces (#410)
+    //
+    // Both path patterns forbade whitespace inside a segment, so the match
+    // stopped at the first space in a mod-manager path and everything after
+    // it travelled verbatim. The user name is before that point and always
+    // went, which is why this was invisible to the two tests above.
+    //
+    // It matters more here than in the sibling product for a reason the
+    // class comment already records: LogTailRecorder hands this sanitizer
+    // raw BepInEx log lines, and this mod's own warning lines embed full
+    // paths. A support bundle is then a file whose purpose is to be handed
+    // to somebody else.
+    // ------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(
+        "Could not open C:\\Users\\erenc\\AppData\\Roaming\\Thunderstore Mod Manager\\DataFolder" +
+        "\\Valheim\\profiles\\tcc-dev\\BepInEx\\config\\teamster.cfg",
+        new[] { "erenc", "Mod Manager", "DataFolder", "profiles", "tcc-dev", "BepInEx", "\\" })]
+    [InlineData(
+        "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Valheim\\valheim_Data\\Managed\\a.dll",
+        new[] { "Program Files", "steamapps", "valheim_Data" })]
+    // The path ends at a folder whose name has spaces: nothing of it survives,
+    // because this sanitizer keeps no terminal segment at all.
+    [InlineData(
+        "profile root C:\\Users\\erenc\\AppData\\Roaming\\Thunderstore Mod Manager",
+        new[] { "erenc", "Mod Manager", "AppData" })]
+    // The run-start signal is "not a lower-case letter", not "ASCII upper
+    // case": an ASCII-only rule silently excludes every non-Latin folder name,
+    // which is the non-English-locale player it is meant to protect.
+    [InlineData(
+        "C:\\Users\\erenc\\Mein \u00c4rger\\Valheim\\profiles\\geheim\\x.cfg",
+        new[] { "erenc", "Arger", "geheim", "profiles" })]
+    [InlineData(
+        "C:\\Users\\erenc\\\u041c\u043e\u0438 \u041c\u043e\u0434\u044b\\Valheim\\profiles\\secret\\x.cfg",
+        new[] { "erenc", "secret", "profiles" })]
+    [InlineData(
+        "C:\\Games\\Valheim !Mods\\profiles\\erens-run\\x.cfg",
+        new[] { "!Mods", "erens-run", "profiles" })]
+    public void Sanitizer_PathWithSpaces_IsScrubbedPastTheFirstSpace(string line, string[] forbidden)
+    {
+        string sanitized = SupportBundleSanitizer.Sanitize(line);
+
+        foreach (string fragment in forbidden)
+        {
+            Assert.DoesNotContain(fragment, sanitized);
+        }
+
+        Assert.Contains("<path>", sanitized);
+    }
+
+    [Theory]
+    // A line that is nothing but a path becomes the marker and nothing else.
+    // These two are asserted as exact output rather than as absent fragments
+    // on purpose: against the old pattern their leftover tail happened to be
+    // 40-odd characters of `[A-Za-z0-9+/=_-]`, so `TokenBlob` masked it and an
+    // absence assertion would have passed for a reason that has nothing to do
+    // with path scrubbing. A dot in the wrong place, and it would not have.
+    [InlineData("/Users/erenc/Library/Application Support/Steam/steamapps/common/Valheim/plugin.dll")]
+    [InlineData("/home/erenc/.config/r2modmanPlus-local/Valheim/profiles/My Test/BepInEx/config/a.cfg")]
+    [InlineData("C:\\Users\\erenc\\AppData\\Roaming\\Thunderstore Mod Manager\\DataFolder\\Valheim" +
+                "\\profiles\\My Secret Base\\BepInEx\\config\\teamster.cfg")]
+    public void Sanitizer_APathOnItsOwn_BecomesTheMarkerAlone(string line)
+    {
+        Assert.Equal("<path>", SupportBundleSanitizer.Sanitize(line));
+    }
+
+    [Theory]
+    // The other half: a sanitizer that admits spaces too freely deletes the
+    // sentence around an unquoted path, which would buy privacy with the
+    // diagnostic the bundle exists for. Each row is a shape the sibling
+    // product's review demonstrated being swallowed.
+    [InlineData("wrote C:\\a\\b.cfg OK", "wrote <path> OK")]
+    [InlineData("plugin loaded from C:\\a\\plugin.dll 0.9.0", "plugin loaded from <path> 0.9.0")]
+    [InlineData("C:\\a\\b.cfg Cannot Be Read", "<path> Cannot Be Read")]
+    [InlineData("C:\\a\\b.cfg Zugriffsverweigerung", "<path> Zugriffsverweigerung")]
+    [InlineData("C:\\a\\b.cfg Reason: disk full", "<path> Reason: disk full")]
+    [InlineData(
+        "Could not open C:\\a\\b.txt was not found, see the log/file for details.",
+        "Could not open <path> was not found, see the log/file for details.")]
+    // Two paths in one line: a run must not consume the second one's drive
+    // letter and leave that whole path behind.
+    [InlineData(
+        "copy C:\\a\\b.cfg to D:\\home\\erenc\\valheim-mods\\x.cfg",
+        "copy <path> to <path>")]
+    public void Sanitizer_KeepsTheSentenceAroundAPath(string line, string expected)
+    {
+        Assert.Equal(expected, SupportBundleSanitizer.Sanitize(line));
+    }
+
+    [Fact]
+    public void Sanitizer_AWorldNameWithSpaces_StillReachesTheSaveFileRule()
+    {
+        // SaveFileNames runs after the path pass, so a run that ate the
+        // extension would take the `.db` marker with it and the world name
+        // would stop being recognised as one.
+        string sanitized = SupportBundleSanitizer.Sanitize(
+            "failed to load C:\\Users\\erenc\\AppData\\LocalLow\\IronGate\\Valheim\\worlds_local" +
+            "\\Erens New World.db");
+
+        Assert.DoesNotContain("erenc", sanitized);
+        Assert.DoesNotContain("Erens", sanitized);
+        Assert.Contains("<save>.db", sanitized);
+    }
+
     [Fact]
     public void Sanitizer_NullOrEmpty_ReturnsEmptyString()
     {

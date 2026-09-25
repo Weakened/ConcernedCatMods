@@ -65,6 +65,48 @@ diagnostics), it is length-capped and control-character-stripped first
 (`NetworkInputGuard.Label`, wired in `CooperativeEffortClassifier`), so a
 crafted name cannot inject newlines or bloat a panel line either.
 
+## What a support bundle carries, and what is scrubbed out of it
+
+A support bundle is the one file here whose purpose is to be handed to
+somebody else, and the one input this product cannot review line by line in
+advance: `LogTailRecorder` gathers Teamster's own recent log lines, and the
+lines above are written for a developer reading BepInEx's log, not for a file
+a player shares. Several of them embed a full path. Every line therefore goes
+through `SupportBundleSanitizer`, which masks URLs, coordinate pairs, paths,
+Valheim save-file names, IPs, secret-shaped blobs and long digit runs, and
+caps each line's length.
+
+Unlike Concerned Cartographer's sanitizer, a matched path is replaced by
+`<path>` with **no terminal segment kept**. Keeping a file name is safe there
+because that composer only ever builds strings from fixed components; here the
+input is arbitrary free text, and a leaf file name can itself be the
+identifying content.
+
+**Paths containing spaces (#410).** Until #410 both path patterns forbade
+whitespace inside a segment, so the match stopped at the first space in a
+mod-manager path — `...\Thunderstore Mod Manager\DataFolder\...` — and
+everything from `Mod` onwards travelled verbatim: the profile name, the folder
+layout, and whatever the player's own folders are called. The user name sits
+before that point and always went, which is why this was a leak rather than a
+breach, and why the suite passed over it. A space is now admitted inside a
+segment when the token after it does not begin with a lower-case letter
+(`\p{Ll}`, so non-Latin and punctuation-led folder names are covered too), and
+in the final component only where the path visibly ends.
+
+**Stated limits**, so they are written down rather than found:
+
+1. A path ending at a **folder** followed by prose cannot be told from a
+   folder name with more words in it, so the run is refused and the rest of
+   that folder name survives. Refusing is the right way round — the
+   alternative deletes the sentence the bundle exists for.
+2. A folder name whose post-space token **begins lower case** (`steam games`)
+   stops the chain there, and the remainder of the path survives. The user
+   name is before that point and still does not.
+3. UNC (`\\server\share\...`), relative and `~`-rooted paths are matched by
+   neither pattern: `WindowsPath` needs a drive letter and `UnixPath` needs a
+   `/`. Pre-existing and unchanged by #410, and tracked as **#408**, which
+   covers this sanitizer as well as the sibling product's.
+
 ## Data flow summary
 
 - **In:** local game state (read-only), the local sidecar file, Cartographer's
