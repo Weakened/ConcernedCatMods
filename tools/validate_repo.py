@@ -873,6 +873,104 @@ def _parameter_defaults(code: str):
         index += 1
 
 
+# #374: the two facade types a product may see, and the Storage types it may not.
+CONTAINER_FACADE = ("NpcContainerDesk", "NpcContainerDecision")
+
+CONTAINER_INTERNALS = (
+    "NpcContainerPermissionBook",
+    "NpcContainerPermission",
+    "NpcContainerPlace",
+    "NpcContainerPermit",
+    "NpcContainerGate",
+    "NpcContainerAuthorization",
+    "NpcContainerSighting",
+    "NpcContainerAssignment",
+    "NpcTransferPlan",
+    "NpcTransfer",
+)
+
+
+def check_container_permissions_stay_reachable(errors: list[str]) -> list[str]:
+    """#374 container permission audit: the facade is public, the mechanism is
+    not, and a product actually uses it.
+
+    Three properties, each of which was false or fragile before #374:
+
+    1. `NpcContainerDesk` and `NpcContainerDecision` are `public`. They were
+       internal, along with everything else under `Storage/`, so the permission
+       model was complete, tested and reachable by nothing - "off by default" was
+       a statement about dead code.
+    2. No product names one of the types the facade deliberately withholds. The
+       permit is unforgeable from outside the library (`ContainerTests`'
+       `NothingOutsideThisPackageCanForgeAPermit`), and the place carries a
+       matching rule that must not become an API - publishing it would invite a
+       role to build one for a container that MOVES, which that type's own
+       documentation forbids and cannot enforce. A later leaf reaching for
+       `public` to fix a compile error is exactly how that would go.
+    3. At least one product consumes the desk. Without this the rule above would
+       be satisfied perfectly by a facade nobody calls, which is the shape #374
+       existed to end.
+
+    `PublicSurfaceTests` pins the library's whole surface and costs a version bump
+    to edit; this is the other half - the consumer side, which that test cannot
+    see."""
+    library = LIBRARIES.get("concernednpc")
+    label = "[concernednpc] #374 container permission audit"
+    if library is None:
+        return []
+
+    project_dir: Path = library["project_dir"]  # type: ignore[assignment]
+    facade = project_dir / "Storage" / "NpcContainerDesk.cs"
+    if not facade.is_file():
+        fail(f"{label}: Storage/NpcContainerDesk.cs is missing — the facade #374 added is what "
+             "makes a player's container permissions reachable at all", errors)
+        return []
+
+    facade_code = _cs_code(facade)
+    for name in CONTAINER_FACADE:
+        if not re.search(r"public (?:sealed class|readonly struct|class|struct) " + name + r"\b",
+                         facade_code):
+            fail(f"{label}: {name} is not public in Storage/NpcContainerDesk.cs — the permission "
+                 "model goes back to being reachable by nothing, which is what #374 fixed", errors)
+            return []
+
+    consumers: list[str] = []
+    for key, spec in PRODUCTS.items():
+        product_dir: Path = spec["project_dir"]  # type: ignore[assignment]
+        if not product_dir.is_dir():
+            continue
+        uses_facade = False
+        for path in sorted(product_dir.rglob("*.cs")):
+            if path.relative_to(product_dir).parts[0] in ("obj", "bin"):
+                continue
+            code = _cs_code(path)
+            for name in CONTAINER_INTERNALS:
+                # Word-boundary, so NpcContainerPermissionBook does not match on
+                # the facade's own NpcContainerDecision and vice versa.
+                if re.search(r"\b" + name + r"\b", code):
+                    fail(f"{label}: {path.relative_to(ROOT).as_posix()} names "
+                         f"`{name}`, which the facade withholds on purpose — a product needs to "
+                         "know what the player allowed, to change it and to write it down, not to "
+                         "mint a permit or build a place for a container that moves", errors)
+                    return []
+            if any(re.search(r"\b" + name + r"\b", code) for name in CONTAINER_FACADE):
+                uses_facade = True
+        if uses_facade:
+            consumers.append(key)
+
+    if not consumers:
+        fail(f"{label}: no product uses NpcContainerDesk — a public facade nobody calls is the "
+             "shape #374 existed to end, and 'off by default' goes back to being a statement "
+             "about dead code", errors)
+        return []
+
+    return [
+        f"{label}: the desk and its record are public, {len(CONTAINER_INTERNALS)} withheld "
+        f"Storage type(s) are named by no product, and {', '.join(sorted(consumers))} "
+        f"consume{'s' if len(consumers) == 1 else ''} the facade",
+    ]
+
+
 def check_npc_planning_decides_nothing_to_do_once(errors: list[str]) -> list[str]:
     """Fails unless exactly one place in the library decides a job is finished.
 
@@ -3414,6 +3512,7 @@ def main() -> int:
     report.extend(check_library_consumers(errors))
     report.extend(check_library_consumers_do_not_bypass_the_arbiter(errors))
     report.extend(check_the_npc_library_writes_no_file(errors))
+    report.extend(check_container_permissions_stay_reachable(errors))
     report.extend(check_npc_planning_decides_nothing_to_do_once(errors))
     report.extend(check_npc_planning_never_defaults_a_claim(errors))
     report.extend(check_teamster_cartographer_contract(errors))
