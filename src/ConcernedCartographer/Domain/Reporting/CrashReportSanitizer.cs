@@ -44,16 +44,31 @@ internal static class CrashReportSanitizer
     // called (#388). The user name sits before that point and was scrubbed,
     // which is why this was a leak rather than a disaster.
     //
-    // A space is admitted inside a segment only when the token after it
-    // starts like a folder name rather than like prose. The signal is
-    // negative on purpose: anything BUT a lower-case letter. Folders are
-    // `Mod Manager`, `Application Support`, `Program Files (x86)`,
-    // `!Mods`, `Мои Моды`; English and German sentences continue in lower
-    // case. `\p{Ll}` rather than `[a-z]` because an earlier ASCII-only
-    // version of this rule silently excluded every non-Latin folder name,
-    // which is exactly the non-English-locale player it was supposed to
-    // protect.
-    private const string NotLowerCase = @"[^\p{Ll}";
+    // A space is admitted inside a segment, and the discriminator between
+    // "this folder name has more words in it" and "the path ended and a
+    // sentence began" is COUNT, not case: at most TWO space-joined tokens
+    // per segment.
+    //
+    // Two is not arbitrary. It covers every real multi-word folder in the
+    // paths this scrubber sees — `Thunderstore Mod Manager`, `Documents and
+    // Settings`, `Program Files (x86)`, `Application Support`, `My Test`,
+    // `Eren cansunar` — and refuses the longer runs prose produces.
+    //
+    // <b>Why not case (#410's review).</b> This rule tested case first, and
+    // an independent review took that apart in two directions at once.
+    // Against privacy: a token beginning lower case refused the run, so
+    // `C:\Users\Eren cansunar\AppData\…` scrubbed to
+    // `<path>/Users cansunar\AppData\…` and handed over a surname, a folder
+    // layout and a profile name — `Documents and Settings` and lower-case
+    // non-Latin folders (`Meine änderungen`, `Мои моды`) went the same way.
+    // Against diagnostics: a capitalised run was admitted without limit, so
+    // `wrote C:\a\b OK See BepInEx/LogOutput.log` became `wrote <path>/b`
+    // and took the log pointer with it. The stated reason for `\p{Ll}` over
+    // `[a-z]` was also simply wrong: a NEGATED ASCII class is BROADER, not
+    // narrower — what excluded non-Latin names was the POSITIVE
+    // `[A-Z0-9_\-(\[]` of the version before it. Counting tokens fixes both
+    // directions and needs no case class, so the question does not arise.
+    private const string TokenCap = "{0,2}";
 
     // `<` and `>` are excluded from every run, on the Unix side as well as
     // the Windows side where a path segment could never hold them anyway.
@@ -61,11 +76,7 @@ internal static class CrashReportSanitizer
     // already contains this scrubber's own `<path>/` markers — and a run
     // that may hold `<` and `>` will happily cross one, swallow the file
     // name the Windows pass had just kept, and leave `<path><path>/x.cfg`.
-    private const string WindowsRunStart =
-        NotLowerCase + @"\\/\r\n:*?""<>|\s.]";
-
-    private const string UnixRunStart = NotLowerCase + @"/<>\s.]";
-
+    //
     // The same hazard from the other side: a `/` that directly follows `>`
     // is this scrubber's own marker, never a path separator in the original
     // text, so UnixPath must not start there.
@@ -73,15 +84,13 @@ internal static class CrashReportSanitizer
 
     private const string UnixRunChar = @"[^/<>\s]";
 
-    // Inside the directory chain the run needs no further guard: the
-    // segment it extends must still end at a separator, so a run that has
-    // wandered into prose simply fails to match. Dots and commas are
+    // Inside the directory chain the run has a second guard for free: the
+    // segment it extends must still end at a separator. Dots and commas are
     // therefore safe here — `My Mods V1.2\Valheim\x.cfg` is one path.
     private const string WindowsChainRun =
-        "(?: " + WindowsRunStart + WindowsSegmentChar + @"*)*";
+        "(?: " + WindowsSegmentChar + "+)" + TokenCap;
 
-    private const string UnixChainRun =
-        "(?: " + UnixRunStart + UnixRunChar + @"*)*";
+    private const string UnixChainRun = "(?: " + UnixRunChar + "+)" + TokenCap;
 
     // The FINAL component has no separator to be anchored by, and that is
     // where an unguarded run did real damage. Three guards, each closing a
@@ -95,6 +104,11 @@ internal static class CrashReportSanitizer
     //    `.db` marker SaveFileNames needs (`Erens New World.db`). A path
     //    ending in a folder is the only one that can still run on, which
     //    is also the only shape where a run buys any privacy.
+    //
+    //    What it recognises is a dot plus one to eight ALPHANUMERICS, which
+    //    is less than "a file name": `notes.configuration` (thirteen) and
+    //    `b.cfg~` (ending in a tilde) are not seen as extensions, so a run
+    //    may still follow them. Stated rather than left to be found.
     // 2. No dot, comma or semicolon in a run token, so a run cannot reach
     //    across `, retrying` or into `World.db`.
     // 3. PathEnd. The run is taken only where the path visibly ends: end
@@ -109,10 +123,9 @@ internal static class CrashReportSanitizer
     private const string UnixFinalRunChar = @"[^/<>\r\n\s.,;]";
 
     private const string WindowsFinalRun =
-        "(?: " + WindowsRunStart + WindowsFinalRunChar + @"*)*";
+        "(?: " + WindowsFinalRunChar + "+)" + TokenCap;
 
-    private const string UnixFinalRun =
-        "(?: " + UnixRunStart + UnixFinalRunChar + @"*)*";
+    private const string UnixFinalRun = "(?: " + UnixFinalRunChar + "+)" + TokenCap;
 
     private const string NoFileExtension = @"(?<!\.[A-Za-z0-9]{1,8})";
 
