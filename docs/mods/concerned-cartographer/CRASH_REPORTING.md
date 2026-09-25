@@ -25,6 +25,24 @@ implementation contract and the Sentry-side setup the maintainer must do.
   is dropped unless allowlisted (`CrashReportEvent.AllowedDataKeys` is
   empty — additions require a PRIVACY.md revision AND a
   `ConsentPolicyVersion` bump so players are re-asked).
+- **Paths containing spaces (#388, a deliberate change to this audit
+  surface).** The path patterns originally forbade whitespace inside a
+  segment, so a mod-manager path stopped matching at its first space:
+  `...\Thunderstore Mod Manager\DataFolder\...` had its head replaced and
+  everything from `Mod` onwards — the profile name and the folder layout —
+  travelled verbatim. The user name sits before that point and was always
+  scrubbed, which is why this was a leak rather than a breach. A space is
+  now admitted inside a segment, and in the final component only where the
+  path visibly ends (end of text, a quote, a character no path may
+  contain), so the sentence around an unquoted path is not swallowed in
+  exchange. The admission is guarded by a heuristic: the token after the
+  space must start upper case, with a digit, or with `_ - ( [` — which is
+  how folders are named and is not how English prose continues. The
+  **stated limit** is a folder whose name both starts lower case and
+  contains a space (`steam games`): its tail can still survive, and the
+  user name before it is still scrubbed. This reaches `LogOutput.log`
+  through `SafeLogText` and the support report through
+  `SupportReportComposer`, not the crash report alone.
 - Reliability: consent gate before any queueing, bounded queue (8),
   one delivery attempt per event, session dedupe + cap (10), background
   sender thread, bounded flush at shutdown.

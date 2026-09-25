@@ -170,6 +170,111 @@ public class SupportReportPrivacyTests
     }
 
     // ------------------------------------------------------------------
+    // Paths containing spaces (#388)
+    //
+    // The sanitizer's path patterns forbade whitespace inside a segment, so
+    // the match stopped at the first space in a mod-manager path and
+    // everything after it travelled verbatim. The user name sits before
+    // that point and was already scrubbed; the profile name, the folder
+    // layout and the player's own folder names were not. These are the
+    // cases that fail against that pattern, followed by the prose the fix
+    // must not swallow in exchange.
+    // ------------------------------------------------------------------
+
+    private static string Scrub(string text)
+    {
+        return CrashReportSanitizer.Sanitize(text, CrashReportSanitizer.MaxMessageLength);
+    }
+
+    [Fact]
+    public void Sanitize_ThunderstoreProfilePath_IsReplacedPastTheFirstSpace()
+    {
+        string scrubbed = Scrub(
+            "Could not find file 'C:\\Users\\erenc\\AppData\\Roaming\\Thunderstore Mod Manager" +
+            "\\DataFolder\\Valheim\\profiles\\tcc-cartographer-test\\BepInEx\\config" +
+            "\\theconcernedcat.cartographer.cfg'.");
+
+        Assert.DoesNotContain("erenc", scrubbed);
+        Assert.DoesNotContain("Mod Manager", scrubbed);
+        Assert.DoesNotContain("DataFolder", scrubbed);
+        Assert.DoesNotContain("profiles", scrubbed);
+        Assert.DoesNotContain("tcc-cartographer-test", scrubbed);
+        Assert.DoesNotContain("BepInEx", scrubbed);
+        Assert.DoesNotContain("\\", scrubbed);
+        // The file name is still the diagnostic, and the sentence survives.
+        Assert.Contains("<path>/theconcernedcat.cartographer.cfg", scrubbed);
+        Assert.StartsWith("Could not find file '", scrubbed);
+    }
+
+    [Fact]
+    public void Sanitize_MacOsApplicationSupportPath_IsReplacedPastTheFirstSpace()
+    {
+        string scrubbed = Scrub(
+            "/Users/erenc/Library/Application Support/Steam/steamapps/common/Valheim/plugin.dll");
+
+        Assert.DoesNotContain("erenc", scrubbed);
+        Assert.DoesNotContain("Application Support", scrubbed);
+        Assert.DoesNotContain("steamapps", scrubbed);
+        Assert.Equal("<path>/plugin.dll", scrubbed);
+    }
+
+    [Fact]
+    public void Sanitize_R2ModManProfileWithASpace_IsReplacedPastTheFirstSpace()
+    {
+        string scrubbed = Scrub(
+            "/home/erenc/.config/r2modmanPlus-local/Valheim/profiles/My Test/BepInEx/config/a.cfg");
+
+        Assert.DoesNotContain("erenc", scrubbed);
+        Assert.DoesNotContain("My Test", scrubbed);
+        Assert.DoesNotContain("r2modmanPlus-local", scrubbed);
+        Assert.Equal("<path>/a.cfg", scrubbed);
+    }
+
+    [Fact]
+    public void Sanitize_PathEndingInAFolderWithSpaces_KeepsNoneOfTheFolderName()
+    {
+        // No file name to keep: the path ends at the profile root, which is
+        // where the pattern used to hand back "Mod Manager" on its own.
+        string scrubbed = Scrub(
+            "0.9.0+e9615b00 from C:\\Users\\erenc\\AppData\\Roaming\\Thunderstore Mod Manager");
+
+        Assert.DoesNotContain("Mod Manager", scrubbed);
+        Assert.DoesNotContain("AppData", scrubbed);
+        Assert.Equal("0.9.0+e9615b00 from <path>/Thunderstore", scrubbed);
+    }
+
+    [Fact]
+    public void Sanitize_ProgramFilesPath_IsReplacedWhole()
+    {
+        string scrubbed = Scrub(
+            "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Valheim\\valheim_Data\\Managed\\a.dll" +
+            " could not be loaded");
+
+        Assert.DoesNotContain("Program Files", scrubbed);
+        Assert.DoesNotContain("steamapps", scrubbed);
+        Assert.Equal("<path>/a.dll could not be loaded", scrubbed);
+    }
+
+    [Theory]
+    // The space run is admitted only where a path can actually continue, so
+    // the sentence after an unquoted path is left alone even when a slash
+    // appears later in it.
+    [InlineData(
+        "Could not open C:\\a\\b.txt was not found, see the log/file for details.",
+        "Could not open <path>/b.txt was not found, see the log/file for details.")]
+    [InlineData("C:\\a\\b.cfg Cannot be read.", "<path>/b.cfg Cannot be read.")]
+    [InlineData(
+        "Access to the path 'C:\\Users\\erenc\\AppData\\Roaming\\TMM\\p\\x.cfg' is denied.",
+        "Access to the path '<path>/x.cfg' is denied.")]
+    [InlineData(
+        "   at Atlas.Save() in C:\\src\\repo\\AtlasStore.cs:line 42",
+        "   at Atlas.Save() in <path>/AtlasStore.cs:line 42")]
+    public void Sanitize_KeepsTheSentenceAroundAPath(string message, string expected)
+    {
+        Assert.Equal(expected, Scrub(message));
+    }
+
+    // ------------------------------------------------------------------
     // SafeLogText: exception text bound for LogOutput.log
     // ------------------------------------------------------------------
 
@@ -186,6 +291,12 @@ public class SupportReportPrivacyTests
         Assert.DoesNotContain("erenc", described);
         Assert.DoesNotContain("Users\\", described);
         Assert.DoesNotContain(WorldUid.ToString(CultureInfo.InvariantCulture), described);
+        // #388: this assertion set used to stop at the user name, so it
+        // passed while everything from the space in "Thunderstore Mod
+        // Manager" onwards went to the log verbatim.
+        Assert.DoesNotContain("Mod Manager", described);
+        Assert.DoesNotContain("DataFolder", described);
+        Assert.DoesNotContain("BepInEx", described);
         // The sidecar kind survives for diagnostics.
         Assert.Contains(".pins.tsv", described);
     }

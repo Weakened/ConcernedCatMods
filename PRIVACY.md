@@ -59,7 +59,9 @@ policy revision explicitly allowlists it (nothing is allowlisted today).
 - pin names, notes, or tags; route names; chat
 - save files, screenshots, or your `LogOutput.log`
 - machine usernames or filesystem paths (absolute paths and Valheim
-  save-file names are scrubbed out of exception text before sending)
+  save-file names are scrubbed out of exception text before sending; the
+  one known gap is a folder name that both begins with a lower-case letter
+  and contains a space, whose tail can survive — the user name never does)
 - credentials or tokens of any kind
 
 Automated tests assert, for every category above, that data planted into

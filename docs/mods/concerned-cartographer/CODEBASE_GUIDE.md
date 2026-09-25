@@ -871,7 +871,9 @@ with `NullCrashReporter` and `SentryCrashReporter` — the latter built
 directly against Sentry's envelope HTTP endpoint (no SDK bundled) with an
 injectable transport seam. `CrashReportEvent` is allowlist-only;
 `CrashReportSanitizer` scrubs URLs/coordinates/paths+usernames/save-file
-names/IPs/secret shapes/long IDs with length caps; `CrashReportThrottle`
+names/IPs/secret shapes/long IDs with length caps — paths with spaces
+included since #388, whose heuristic and stated limit are in
+CRASH_REPORTING.md; `CrashReportThrottle`
 enforces session dedupe + caps + once-per-subsystem notices;
 `CrashSubsystems` infers subsystem names from the mod's own error
 messages; `SentryDsn`/`SentryEnvelopeCodec` parse the public ingestion

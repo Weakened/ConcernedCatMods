@@ -29,12 +29,55 @@ internal static class CrashReportSanitizer
         @"\(\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?(?:\s*,\s*-?\d+(?:\.\d+)?)?\s*\)",
         RegexOptions.Compiled);
 
+    // A path segment's own characters: everything a Windows path segment
+    // may not contain, plus whitespace, which SpaceRun below puts back in
+    // the one place it belongs.
+    private const string WindowsSegmentChar = @"[^\\/\r\n:*?""<>|\s]";
+    private const string UnixSegmentChar = @"[^/\s]";
+
+    // Mod-manager profile paths contain spaces — `...\Thunderstore Mod
+    // Manager\DataFolder\...`, `/Library/Application Support/...`,
+    // `.../profiles/My Test/...` — and forbidding whitespace outright
+    // stopped the match at the first one, so the head of the path was
+    // replaced and everything from `Mod` onwards travelled verbatim: the
+    // profile name, the folder layout, and whatever a player's folders are
+    // called (#388). The user name sits before that point and was scrubbed,
+    // which is why this was a leak rather than a disaster.
+    //
+    // A space inside a segment is admitted only when the token after it
+    // starts like a folder name rather than like prose: upper case, a
+    // digit, `_`, `-`, `(` or `[`. That is a heuristic and it is the whole
+    // defence against the opposite failure — swallowing the sentence that
+    // follows an unquoted path, which would destroy the diagnostic instead
+    // of the privacy. English prose continues in lower case (`... b.txt was
+    // not found, see the log/file for details.`), so it is left alone; a
+    // folder whose name starts lower case AND contains a space (`steam
+    // games`) is the stated limit, and the user name before it is still
+    // scrubbed.
+    private const string WindowsSpaceRun =
+        @"(?: [A-Z0-9_\-(\[]" + WindowsSegmentChar + @"*)*";
+
+    private const string UnixSpaceRun =
+        @"(?: [A-Z0-9_\-(\[]" + UnixSegmentChar + @"*)*";
+
+    // Inside the directory chain a space run needs no further guard: the
+    // segment it extends must still end at a separator, so a run that has
+    // wandered into prose simply fails to match. The FINAL component has no
+    // separator to be anchored by, so a space run there is taken only when
+    // the path visibly ends — end of text, a quote, or a character no path
+    // may contain. That is what keeps `<path>/b.cfg Cannot be read.` intact
+    // while `'...\Thunderstore Mod Manager'` is replaced whole.
+    private const string PathEnd = @"(?=$|['""`:*?<>|])";
+
     private static readonly Regex WindowsPath = new(
-        @"[A-Za-z]:[\\/](?:[^\\/\r\n:*?""<>|\s]+[\\/])*([^\\/\r\n:*?""<>|\s]*)",
+        @"[A-Za-z]:[\\/](?:" + WindowsSegmentChar + "+" + WindowsSpaceRun + @"[\\/])*("
+            + WindowsSegmentChar + "*)(?:" + WindowsSpaceRun + PathEnd + ")?",
         RegexOptions.Compiled);
 
     private static readonly Regex UnixPath = new(
-        @"(?<![\w.<])/(?:[^/\s]+/)+([^/\s]*)", RegexOptions.Compiled);
+        @"(?<![\w.<])/(?:" + UnixSegmentChar + "+" + UnixSpaceRun + "/)+("
+            + UnixSegmentChar + "*)(?:" + UnixSpaceRun + PathEnd + ")?",
+        RegexOptions.Compiled);
 
     private static readonly Regex UsersFragment = new(
         @"\bUsers[\\/][^\\/\s]+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
