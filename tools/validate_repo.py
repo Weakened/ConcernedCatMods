@@ -2448,6 +2448,8 @@ CONSOLE_GUARD_ENTRY = re.compile(
     r'return GuardConsoleCommand\(\s*"(?P<name>cc_[A-Za-z0-9_]+)"\s*,\s*args\s*,\s*'
     r"(?P=method)Core\s*\)\s*;\s*\}")
 
+CONSOLE_CATCH = re.compile(r"catch\s*\(\s*Exception\s+(?P<caught>[A-Za-z_][A-Za-z0-9_]*)\s*\)")
+
 
 def _cs_code(path: Path) -> str:
     """A C# file with line and single-line block comments removed, joined back
@@ -2543,6 +2545,24 @@ def check_cartographer_console_failures_are_scrubbed(errors: list[str]) -> list[
                  errors)
             return []
 
+        # `.Message` is the shape #389 had, and naming it gives a clear
+        # failure — but it is not the only unscrubbed thing an exception can
+        # hand over. `ToString()` carries the path AND the stack, and
+        # `InnerException` carries another whole exception. So the caught
+        # exception may be spelled exactly twice: in its own catch clause and
+        # as the argument to ConsoleFailure.Describe. Anything else a wrapper
+        # wants to say about a failure belongs in Describe, where it can be
+        # scrubbed and tested.
+        for caught in {match.group("caught") for match in CONSOLE_CATCH.finditer(code)}:
+            uses = re.findall(r"\b" + re.escape(caught) + r"\b", code)
+            if len(uses) != 2:
+                fail(f"{label}: {relative} spells the caught exception `{caught}` "
+                     f"{len(uses)} time(s), expected exactly 2 (the catch clause, and the "
+                     "argument to ConsoleFailure.Describe) — every other use is text this "
+                     "product has not scrubbed, and `ToString()` carries the path and the "
+                     "stack just as `.Message` carries the path", errors)
+                return []
+
         replies = CONSOLE_FAILURE_CALL.findall(code)
         if replies != [name]:
             fail(f"{label}: {relative} ({name}) reports failures as {replies or 'nothing'}, "
@@ -2569,8 +2589,8 @@ def check_cartographer_console_failures_are_scrubbed(errors: list[str]) -> list[
 
     return [
         f"{label}: {len(audited)} console command(s) — {', '.join(audited)} — each report failures "
-        "through the single scrubbing guard, naming their own subcommand, and none reaches an "
-        "exception's `.Message`",
+        "through the single scrubbing guard, naming their own subcommand, and none spells the "
+        "exception it caught anywhere but in ConsoleFailure.Describe",
     ]
 
 

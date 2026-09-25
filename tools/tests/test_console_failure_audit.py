@@ -13,10 +13,15 @@ requires it to refuse - then restores. Testing the matching helpers alone would
 not do: most of these are wiring, not matching.
 
 The plants are the ways a reviewer or a later change actually gets here:
-restoring the raw message; keeping ConsoleFailure but naming another command;
-keeping the guard but reaching the work around it; growing a second guard beside
-the one that exists; and adding a brand-new wrapper the audit has never heard
-of, which is the case a hand-written list of commands would have missed.
+restoring the raw message; spelling it something other than `.Message`
+(`ToString()`, an inner exception, an interpolation) so a rule that banned one
+token would miss it; keeping ConsoleFailure but naming another command; keeping
+the guard but reaching the work around it; growing a second guard beside the one
+that exists; and adding a brand-new wrapper the audit has never heard of, which
+is the case a hand-written list of commands would have missed.
+
+No count is given here on purpose: what the harness covers is the list above,
+and that is checkable against the file.
 """
 import os
 import subprocess
@@ -148,6 +153,33 @@ class ConsoleFailuresStayScrubbed(unittest.TestCase):
             "        catch (Exception failure)\n        {\n"
             "            _ = failure.Message;")
         self.assert_refused("renaming the caught exception hid a raw .Message")
+
+    def test_tostring_is_refused_even_though_it_is_not_message(self):
+        # `.Message` is the shape #389 had; it is not the only unscrubbed
+        # thing an exception hands over. ToString() carries the path AND the
+        # stack, so a rule that banned only `.Message` would have let the
+        # bigger leak in under a different spelling.
+        self.swap_in(
+            SURVEY,
+            'output = ConsoleFailure.Describe("cc_survey", subcommand: "", exception);',
+            'output = "cc_survey failed: " + exception.ToString();')
+        self.assert_refused("a wrapper reported exception.ToString() raw")
+
+    def test_an_inner_exception_is_refused(self):
+        self.swap_in(
+            SURVEY,
+            'output = ConsoleFailure.Describe("cc_survey", subcommand: "", exception);',
+            'output = ConsoleFailure.Describe("cc_survey", subcommand: "", exception)\n'
+            '                + (exception.InnerException?.Message ?? "");')
+        self.assert_refused("a wrapper appended an inner exception's message")
+
+    def test_an_interpolated_exception_is_refused(self):
+        # String interpolation leaves no `+ exception.Message` to grep for.
+        self.swap_in(
+            SURVEY,
+            'output = ConsoleFailure.Describe("cc_survey", subcommand: "", exception);',
+            'output = $"cc_survey failed: {exception}";')
+        self.assert_refused("a wrapper interpolated the exception into its reply")
 
     # -- keeping ConsoleFailure but breaking what it says ---------------
 
