@@ -1,4 +1,5 @@
 using BepInEx.Configuration;
+using UnityEngine;
 using TheConcernedCat.ConcernedTeamster.Domain.Carts;
 using TheConcernedCat.ConcernedTeamster.Domain.Collection;
 using TheConcernedCat.ConcernedTeamster.Domain.Config;
@@ -42,11 +43,13 @@ internal sealed class TeamsterSettings
         ConfigEntry<int> schemaVersion,
         ConfigEntry<bool> gunnarHaulingEnabled,
         ConfigEntry<bool> gunnarCollectionEnabled,
+        ConfigEntry<KeyboardShortcut> containerPermissionShortcut,
         ConfigEntry<GunnarPullStrength> gunnarPullStrength,
         ConfigEntry<string> workerBaseCreature)
     {
         GunnarHaulingEnabled = gunnarHaulingEnabled;
         GunnarCollectionEnabled = gunnarCollectionEnabled;
+        ContainerPermissionShortcut = containerPermissionShortcut;
         GunnarPullStrength = gunnarPullStrength;
         WorkerBaseCreature = workerBaseCreature;
         Enabled = enabled;
@@ -134,6 +137,13 @@ internal sealed class TeamsterSettings
     /// a player who wanted a cart pulled has not thereby asked for anything to be
     /// picked up.</summary>
     public ConfigEntry<bool> GunnarCollectionEnabled { get; }
+
+    /// <summary>#374: while looking at a container, press this to change what
+    /// Gunnar may do with it. The four states are cycled in one order - off,
+    /// take, deposit, both, off - and OFF is where every container starts.
+    /// Vanilla's own Use is untouched: this adds a key, it does not replace an
+    /// interaction.</summary>
+    public ConfigEntry<KeyboardShortcut> ContainerPermissionShortcut { get; }
 
     /// <summary>Workers (#313): Gunnar's pulling strength. MatchPlayer is the only
     /// supported value (D5); anything else refuses to haul.</summary>
@@ -261,6 +271,14 @@ internal sealed class TeamsterSettings
                 "food, no chests, no piles somebody dropped, no trees. Works only in single player or as the " +
                 "host with nobody else connected, only on a source this session already controls - he never " +
                 "takes control of one - and only while he is standing next to it; nothing here moves him."),
+            config.Bind("Workers", "ContainerPermissionShortcut",
+                new KeyboardShortcut(KeyCode.F9),
+                "While looking at a chest, press this to choose what Gunnar may do with it: nothing, take " +
+                "from it, deposit into it, or both, cycled in that order. EVERY container starts at nothing - " +
+                "a chest is yours until you say otherwise, once, per chest - and your choices are kept per " +
+                "world beside Teamster's other files, never in the world itself, so nobody else who loads " +
+                "that world inherits them. Leave empty for no key, in which case no container can be " +
+                "enabled at all."),
             config.Bind("Workers", "GunnarPullStrength", GunnarHaulingDefaults.PullStrength,
                 "How strongly Gunnar pulls. MatchPlayer, the only supported value, gives his body your " +
                 "character's own base mass, so he pulls a cart exactly as hard as you do. Any other value " +

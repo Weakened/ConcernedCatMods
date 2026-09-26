@@ -5,8 +5,10 @@ allowance that confines it has landed, and the port now has a call site behind a
 the two material-loss paths that wiring opened closed behind it — a deliberate retire (§6b) and every involuntary
 unload, logout and reload (§6c). **Two doors still lose material and are named rather than left to be found: death,
 which needs an owner decision, and the one change whose write to the network object failed** (§6c). The
-automatic survey-driven job is still unwired. The authoritative gate is green. Nothing has been observed in game**
-and nothing claims to have been. Concerned Teamster stays at **1.0.5**; nothing is published, tagged or released.
+automatic survey-driven job is still unwired. A player can now mark which chests Gunnar may use, and those marks
+persist per world (§6d, #374), but **nothing consumes a permission yet**, so the deposit half of §5 remains unwired.
+The authoritative gate is green. Nothing has been observed in game** and nothing claims to have been. Concerned
+Teamster stays at **1.0.5** and ConcernedNPC moves to **0.2.0**; nothing is published, tagged or released.
 
 ## 1. What this is
 
@@ -520,6 +522,88 @@ sentence says the opposite of naming a quantity — it says the quantity is unkn
 doors" is true with this paragraph attached, and not otherwise.
 
 **Still never observed in game.** Nothing in §6a, §6b or §6c has been watched happening; §10 is the go-around.
+
+## 6d. The chests a player has opened to him (#374, first half)
+
+**The deposit half of §5 is still unwired, and this is the first piece of it that a player can touch.**
+
+Gunnar picking something up puts it in his own inventory and leaves it there: the only ways it comes back out today
+are a reload (§6c, which preserves it) and `ct_haul retire force` (§6b, which destroys it and says so). A deposit
+needs somewhere to deposit *into*, and "somewhere" cannot be "the nearest chest" — that is one of #374's named
+forbidden acts, and `StorageAndWorkAuditTests` refuses a container chosen by distance. It has to be a chest the
+player said yes to.
+
+### What was there, and why it was reachable by nothing
+
+`ConcernedNPC` has carried a complete container-permission model since 0.1.0: four states (OFF, TAKE, DEPOSIT, BOTH)
+with OFF the default, refusal paths tested from both directions, conservation proven across an interrupted transfer,
+and a permit that cannot be forged from outside the package. Every type of it was `internal`, there is no
+`InternalsVisibleTo` and `SourceAuditTests` forbids adding one, **no product imported the namespace**, nothing
+serialised a permission, and no player could set one by any means. So "OFF by default" was a statement about dead
+code — the same distinction this document already draws for the pick before §6a gave it a call site.
+
+### What a player can do now
+
+Look at a chest and press the key (`Workers/ContainerPermissionShortcut`, **F9** by default). The four states cycle
+in one order — nothing, take, deposit, both, nothing — and a centre message says which it now is. That is the whole
+player-facing surface, and it is deliberately the shape of the shipped companion door permission: it **adds a key
+and replaces no interaction**. Vanilla's own Use on the chest is untouched, there is no Harmony patch, and the
+object read is the one the player is already hovering.
+
+`ct_collect chest [status|list|clear]` reads them back. It is a diagnostic, not the surface: setting a permission
+should require looking at the chest it is about, so `clear` is the only thing it changes.
+
+| Rule | Where |
+|---|---|
+| Four states, OFF the default, and OFF is the **absence of a record** | `NpcContainerDesk`, so an empty or unreadable file means "nothing is enabled" rather than "nothing is known" |
+| One file per world, under the BepInEx config path, never in the world save | `ContainerPermissionStore`. What one player lets their own NPC do is not a fact about the world, and writing it into one would push it at everybody who loads that world |
+| A file that cannot be read loads as nothing enabled **and is never written over** | same. The worst a damaged or locked file can do is keep him out of a chest; it can never open one, and it can never destroy a file somebody might still recover |
+| An unreadable row is dropped and counted, never guessed at | `ContainerPermissionRows`. A dropped row is a forgotten permission, which only ever keeps him out; half-reading one puts him inside |
+| Positions are written with `R` | the repository's convention for every codec. On net48, which is what ships, `R` on a `float` is **not** documented as reliably round-trippable, so the bound is one ULP — about a millimetre against a 0.35 m match tolerance — and the book's keep-the-original-place rule stops it accumulating. The test that covers this runs on net10.0 and is named for that rather than claiming exactness |
+| Found again by **place**, not by id | `NpcContainerPlace`, inside the library. A world load renumbers every saved object, so a number written last night names a different chest this morning — and because the new numbers are dense from one, very likely some other chest |
+| A container that **moves** is refused | `ContainerPermissionRuntime.Fixed`, and the test is structural rather than a list of types: a built piece has a `Piece` and nothing carried above it, so a container with a non-kinematic `Rigidbody` in its parents is refused along with `Vagon` and `Ship`. A first version named those two types only, which made "a container that moves is refused" a claim about exactly them — any modded wagon or raft was accepted. A permission is matched by position, so one attached to the ground a cart was parked on would be handed to whatever parks there tomorrow |
+| A change that could not be saved says so | the reply names it rather than letting a player believe a mark survived that will not; the one write path with no reply to use — a key pressed as the world closes — logs it |
+| The key does nothing while the keyboard belongs to something else | `KeyboardIsElsewhere`: the map, a map text field, the inventory (which is the state a player is in with the chest **open**), chat, the console, a sign or rename box. Without it, typing anything containing the bound key at a chest GRANTS a permission, which is the one direction this must never go. The shipped door hotkey guards the same six |
+| World UID **0** is not a world | `CurrentWorld`. `GetWorldUID` answers 0 before the world resolves, and every other place in this product already treats 0 as "no world". Accepting it would give every unresolved frame in every save one shared file, so a mark set in one world's first frames would be in force in the next |
+| Prefab **0** is refused, not recorded | prefab 0 is a WILDCARD in the library's place rule (it matches any prefab on that spot), and the book keeps the place a permission was FIRST recorded at — so a wildcard written once would stay one for the life of the file, and a different container built there later would inherit the permission |
+| Identity comes from the **ZDO** where there is one | the saved position and the saved prefab hash, which are what will be there after the reload this permission has to outlive. Never `container.name`: an instantiated object is called `piece_chest_wood(Clone)`, which hashes to something no later lookup matches |
+| A faulted runtime refuses | `Allowance` answers OFF once the tick has faulted, because the world it last saw is frozen and a later world would otherwise be told about that world's chests |
+
+### The facade, and what it withholds
+
+The library gained exactly two public types, `NpcContainerDesk` and `NpcContainerDecision`. What they do **not**
+bring with them is the point: `NpcContainerPermit` stays unforgeable from outside the package, and so do the gate,
+the assignment and the transfer recorder. A role does not need to mint a permit; it needs to know what the player
+allowed, to change it, and to write it down. `NpcContainerPlace` is held back too, because a place is a tolerance
+with a matching rule, and publishing it would publish the rule as an API and invite a role to build one for a
+container that moves.
+
+That surface is pinned twice, from both sides. `PublicSurfaceTests` enumerates the library's whole public surface
+and costs a version bump to edit — which is why ConcernedNPC is **0.2.0** here and all three consumers' storefront
+pins moved with it, in the same change. And `validate_repo.py`'s `#374 container permission audit` holds the
+consumer side that test cannot see: the two facade types are public, no product names any of the eleven types declared internal under `Storage/` — and the audit
+checks that list against the declarations rather than remembering it, because the first
+version of it banned a name that was a file rather than a type and missed the transfer
+recorder it claimed to protect, and **at least one product uses the desk** — because a public facade nobody calls is the shape this
+work existed to end.
+
+### Where "reachable from outside the library" is actually proven
+
+Not by the new tests. `ConcernedTeamster.Tests` compiles the library's game-free sources, so `internal` is visible
+to it and those tests would pass either way. It is proven by the **product build**: `ConcernedTeamster` is net48 and
+references the library as an assembly, so `Domain/Workers/ContainerPermissionRows` compiling at all inside
+`scripts/verify.ps1` is the evidence. A `ProjectReference` from the test project could not be — net10.0 cannot
+reference net48 — and that is written in the csproj rather than left for a reader to work out.
+
+### Not claimed
+
+- **Nothing consumes a permission yet.** No transfer reads it, so marking a chest changes no behaviour beyond what
+  `ct_collect chest` reports. Saying so is the difference between this being the first half of a loop and being
+  another isolated abstraction.
+- **Nothing here has been seen in game.** The key press, the centre message, the per-world file and the reload are
+  all OWNER GO-AROUND PENDING, like the rest of this document's live rows.
+- The **TAKE** half is stored and will be honoured when a transfer exists; only DEPOSIT is on the path to closing
+  §6b's material-loss door.
 
 ## 7. No portals
 

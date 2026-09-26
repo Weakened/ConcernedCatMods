@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+* **Say which chests Gunnar may use (#374).** Look at a chest and press the key (`Workers/ContainerPermissionShortcut`,
+  F9 by default) to cycle what he may do with it: nothing, take from it, deposit into it, or both. **Every container
+  starts at nothing** — a chest is yours until you say otherwise, once, per chest. Your choices are kept in one small
+  file per world beside Teamster's other files, never in the world itself, so nobody else who loads that world inherits
+  them. `ct_collect chest [status|list|clear]` reads them back. Empty key means no key, and therefore no way to enable a
+  container at all.
+* **Nothing uses these permissions yet.** Marking a chest changes no behaviour today: the transfer that reads a
+  permission is the next part of #374. It is here first because Gunnar can already pick things up and has nowhere to put
+  them, and "the nearest chest" is not an answer.
+* A chest that moves — one on a cart or a ship, or anything carried — cannot be enabled, and says so. A permission is
+  found again by where the chest stands, so one attached to a patch of ground would be handed to whatever is parked there
+  tomorrow.
+* Requires **ConcernedNPC 0.2.0**, which is what the storefront now pins.
+
 - **Gunnar can be told to pick something up, and he is off by default.** A new
   `Workers/GunnarCollectionEnabled` setting — separate from
   `Workers/GunnarHaulingEnabled`, and off like it — lets him pick up one loose

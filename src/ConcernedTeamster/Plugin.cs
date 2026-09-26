@@ -27,6 +27,7 @@ public sealed class Plugin : BaseUnityPlugin
     private readonly Adapters.LogTailRecorder _logTail = new();
     private Adapters.Workers.GunnarHaulingRuntime? _hauling;
     private Adapters.Workers.GunnarCollectionRuntime? _collection;
+    private Adapters.Workers.ContainerPermissionRuntime? _containers;
     private Adapters.Interop.HaulCapabilityPublisher? _haulCapability;
     private Adapters.Interop.HaulPanelBridge? _haulPanel;
 
@@ -88,6 +89,14 @@ public sealed class Plugin : BaseUnityPlugin
         // is on, the work-authority rule grants, and a player points at a loose
         // stone or a fallen branch he is standing next to. It acts through the
         // body the hauling runtime's census bound, never one of its own.
+        // #374: the player's way to say what Gunnar may do with a chest. Always
+        // installed, like the runtimes above: the key decides what a player can
+        // do, not what exists. Nothing consumes a permission yet - the transfer
+        // that does is the next part of #374 - so this stores choices and shows
+        // them, and says as much when asked.
+        _containers = Adapters.Workers.ContainerPermissionRuntime.Install(
+            gameObject, settings, Logger);
+
         _collection = Adapters.Workers.GunnarCollectionRuntime.Install(
             gameObject,
             settings,
@@ -99,6 +108,7 @@ public sealed class Plugin : BaseUnityPlugin
             () => _hauling?.BoundBodyRecordUnwritable ?? false,
             () => _hauling?.BoundBodyRecordUnreadable ?? false,
             () => _hauling?.SeamAvailable ?? false,
+            _containers,
             Logger);
 
         // #317: publish Gunnar's real service through concernedcat.haul/1.
@@ -127,6 +137,14 @@ public sealed class Plugin : BaseUnityPlugin
         // it stands down before the thing that owns that body does.
         Adapters.Workers.GunnarCollectionRuntime.Uninstall(_collection);
         Adapters.Workers.GunnarHaulingRuntime.Uninstall(_hauling);
+        // #374: last, and its own OnDestroy flushes an unsaved permission. A
+        // permission is only ever lost in the direction of off, so a teardown
+        // that cannot write is a chest that goes quiet rather than one that
+        // opens.
+        if (_containers != null)
+        {
+            UnityEngine.Object.Destroy(_containers);
+        }
     }
 
     private void Update()
