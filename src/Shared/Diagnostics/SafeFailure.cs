@@ -22,7 +22,15 @@ namespace TheConcernedCat.Diagnostics;
 /// <see cref="PathScrubber"/> does. Wording being identical across products is a
 /// feature: a player who has learned what one of these replies means has learned
 /// all of them.</summary>
-public static class SafeFailure
+/// <b>Internal, like every other shared-source type here.</b> This is compiled
+/// into each consumer rather than referenced, so each assembly gets its own copy
+/// and none of them publishes it. That is not a style choice: ConcernedNPC is a
+/// LIBRARY whose public surface is pinned by `PublicSurfaceTests` and costs a
+/// version bump to change, and a `public` type here would have silently become
+/// part of that package's API the moment the library compiled this folder. The
+/// test caught it; `internal` is the fix, and it matches `src/Shared/Workers`
+/// and `src/Shared/Interop`.
+internal static class SafeFailure
 {
     /// <summary>The reply for a subcommand that threw: what was being attempted,
     /// the exception's type, its scrubbed message, and nothing else.</summary>

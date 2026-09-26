@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedSteward.Runtime;
 
@@ -168,7 +169,7 @@ internal sealed class StewardBody : MonoBehaviour
             // carries must not work, and must not save over what it carries.
             IsLoaded = false;
             Fault = "its stored inventory could not be loaded (" + exception.GetType().Name + ")";
-            ErrorLog?.Invoke("The Steward's body is inert: " + Fault + ". " + exception);
+            ErrorLog?.Invoke("The Steward's body is inert: " + Fault + ". " + SafeFailure.Describe(exception));
         }
     }
 
@@ -228,7 +229,7 @@ internal sealed class StewardBody : MonoBehaviour
         {
             ErrorLog?.Invoke(
                 "The Steward could not write down what she is carrying: " +
-                exception.GetType().Name + ": " + exception.Message);
+                SafeFailure.Brief(exception));
             return false;
         }
     }
@@ -278,7 +279,7 @@ internal sealed class StewardBody : MonoBehaviour
                 {
                     ErrorLog?.Invoke(
                         "The Steward died and her " + named + " could not be dropped, so it is " +
-                        "lost with the body: " + exception);
+                        "lost with the body: " + SafeFailure.Describe(exception));
                 }
             }
         }
@@ -290,7 +291,7 @@ internal sealed class StewardBody : MonoBehaviour
             }
             catch (Exception exception)
             {
-                ErrorLog?.Invoke("The Steward died and the loss could not all be recorded: " + exception);
+                ErrorLog?.Invoke("The Steward died and the loss could not all be recorded: " + SafeFailure.Describe(exception));
             }
         }
     }

@@ -2,6 +2,7 @@ using System;
 using TheConcernedCat.ConcernedForeman.Domain.Construction;
 using TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Construction;
 
@@ -217,7 +218,7 @@ internal sealed class WorldPlacementProbe : IPlacementProbe
         }
         catch (Exception exception)
         {
-            constraint = "its constraints could not be read (" + exception.Message + ")";
+            constraint = "its constraints could not be read (" + SafeFailure.Brief(exception) + ")";
             return ProbeAnswer.CouldNotTell;
         }
     }

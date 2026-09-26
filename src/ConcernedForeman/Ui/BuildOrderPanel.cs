@@ -5,6 +5,7 @@ using TheConcernedCat.ConcernedForeman.Domain.Construction;
 using TheConcernedCat.ConcernedForeman.Runtime.Construction;
 using UnityEngine;
 using UnityEngine.UI;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Ui;
 
@@ -323,6 +324,6 @@ internal sealed class BuildOrderPanel : MonoBehaviour
 
         _log?.LogError(
             "The build order panel failed and was disabled for this session (build orders still work " +
-            "from the console with cf_build): " + exception.GetType().Name + ": " + exception.Message);
+            "from the console with cf_build): " + SafeFailure.Brief(exception));
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedNPC.Work;
 
@@ -130,7 +131,7 @@ internal sealed class NpcWorkAreaRegistry
         {
             return NpcWorkAreaResult.Refused(
                 "the provider for " + descriptor.Id.ProviderId + " failed while rebuilding the area: " +
-                failure.Message);
+                SafeFailure.Brief(failure));
         }
 
         if (result.Resolution == WorkAreaResolution.Resolved && result.Area == null)

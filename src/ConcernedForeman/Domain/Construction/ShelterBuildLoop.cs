@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using TheConcernedCat.Settlement.Worker;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Domain.Construction;
 
@@ -279,7 +280,7 @@ internal sealed class ShelterBuildLoop
                 leftForAnotherRound: 0,
                 carrying: Carried(),
                 missing: null,
-                reason: "the build round failed (" + exception.GetType().Name + ": " + exception.Message +
+                reason: "the build round failed (" + SafeFailure.Brief(exception) +
                     "). Nothing more is placed and nothing has been taken out of a container since."));
         }
     }
@@ -315,7 +316,7 @@ internal sealed class ShelterBuildLoop
         catch (Exception exception)
         {
             refunded = new MaterialTally();
-            failure = exception.GetType().Name + ": " + exception.Message;
+            failure = SafeFailure.Brief(exception);
         }
 
         string reason = string.IsNullOrEmpty(why) ? "it was stopped" : why;

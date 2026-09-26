@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using TheConcernedCat.ConcernedForeman.Domain.Ladders;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Ladders;
 
@@ -81,7 +82,7 @@ internal sealed class LadderPieces
             {
                 _saidItFailed = true;
                 _log(
-                    "Ladders: a piece could not be judged (" + exception.Message +
+                    "Ladders: a piece could not be judged (" + SafeFailure.Brief(exception) +
                     "), so it keeps vanilla behaviour. This is said once.");
             }
 

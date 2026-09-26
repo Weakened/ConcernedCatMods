@@ -9,6 +9,7 @@ using TheConcernedCat.ConcernedTeamster.Domain.Trips;
 using TheConcernedCat.ConcernedTeamster.Domain.Ui;
 using UnityEngine;
 using UnityEngine.UI;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedTeamster.Ui;
 
@@ -520,6 +521,6 @@ internal sealed class TripHistoryPanel
 
         _log.LogError(
             "Trip History UI failed and was disabled for this session " +
-            $"(recording keeps running): {exception.GetType().Name}: {exception.Message}");
+            $"(recording keeps running): {SafeFailure.Brief(exception)}");
     }
 }

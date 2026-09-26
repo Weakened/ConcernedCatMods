@@ -21,6 +21,9 @@
     <Compile Include="..\..\Shared\Settlement\**\*.cs" LinkBase="Settlement" />
     <Compile Include="..\..\Shared\Workers\**\*.cs" LinkBase="Workers" />
     <Compile Include="..\..\Shared\Interop\**\*.cs" LinkBase="Interop" />
+    <!-- #416: Shared/Settlement/Custody now reports its failures through the
+         one shared scrubber, so the source it needs comes with it. -->
+    <Compile Include="..\..\Shared\Diagnostics\**\*.cs" LinkBase="Diagnostics" />
   </ItemGroup>
 
 </Project>

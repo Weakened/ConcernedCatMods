@@ -6,6 +6,7 @@ using TheConcernedCat.ConcernedTeamster.Domain.Ui;
 using TheConcernedCat.ConcernedTeamster.Domain.Ui.Hauling;
 using UnityEngine;
 using UnityEngine.UI;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedTeamster.Ui.Hauling;
 
@@ -71,8 +72,7 @@ internal sealed class GunnarHaulPanelHost : MonoBehaviour
             }
 
             _log?.LogError(
-                "Gunnar's panel button failed and was disabled for this session: " + exception.GetType().Name + ": " +
-                exception.Message);
+                "Gunnar's panel button failed and was disabled for this session: " + SafeFailure.Brief(exception));
         }
     }
 

@@ -901,23 +901,30 @@ CONTAINER_INTERNALS = (
 # `.InnerException` are the three ways an exception hands over text this product
 # has not scrubbed; a receiver is exempt only by name, and each exemption is a
 # type whose `Message` is a string somebody composed rather than an exception's.
-MESSAGE_READ = re.compile(
-    r"(?P<receiver>[A-Za-z_][A-Za-z0-9_]*)?" + r"\s*" + r"\.(?:Message|StackTrace|InnerException)" + r"\b")
+SPACE = r"\s*"
+SPACES = r"\s+"
+WORD = r"\b"
 
+MESSAGE_READ = re.compile(
+    r"(?P<receiver>[A-Za-z_][A-Za-z0-9_]*)?" + r"\s*" + r"\.(?:Message|StackTrace|InnerException)" + WORD)
+
+# Not exceptions. Each is one of this repository's own result, view or event
+# types, whose `Message` is a string somebody composed or a field already scrubbed
+# on the way in, and each is live - a name that matches nothing was removed rather
+# than left, because every entry here is a free pass.
+#
+# <b>The cost, stated.</b> `catch (Exception report)` in any scanned file would
+# pass this rule. Nothing does that today, and the names are chosen so that doing
+# it would read as obviously wrong; but the exemption is by NAME, so it is a
+# shadowing hole and not a type check.
 MESSAGE_OK_RECEIVERS = (
-    # Not exceptions. Each of these is one of this repository's own result, view
-    # or event types, whose `Message`/`StackTrace` is a string somebody composed
-    # or a field already scrubbed on the way in.
     "report",
     "viewModel",
+    "history",
     "comparison",
     "recoveryEvent",
     "reading",
-    "loop",
-    "act",
-    "failureMessage",
     "Character",
-    "MessageHud",
 )
 
 # The one place in the repository that may read an exception's message, and each
@@ -928,55 +935,62 @@ MESSAGE_SCRUBBERS = (
     "src/ConcernedCartographer/Domain/Reporting/SafeLogText.cs",
 )
 
-# Files that still compose their own exception text, every one of them a LOG
-# line rather than a console reply, tracked as #416.
+# Files that still compose their own exception text. **Empty, and it stays
+# empty** (#416): every log line in every product now goes through the shared
+# scrubber, so this list has nothing to hold.
 #
-# <b>This list may only ever shrink.</b> It is not a scope claim - the rule
-# covers every product source, and a file that is not on this list and reads an
-# exception member fails the gate. That is the difference between a tracked
-# remainder and an untested boundary: when #416 lands, entries come out; nothing
-# ever goes in without saying so here.
-MESSAGE_SWEEP_PENDING = (
-    "src/ConcernedForeman/Domain/Construction/PlacementGate.cs",
-    "src/ConcernedForeman/Domain/Construction/ShelterBuildLoop.cs",
-    "src/ConcernedForeman/Runtime/Collection/CollectionRuntime.cs",
-    "src/ConcernedForeman/Runtime/Construction/BuildPose.cs",
-    "src/ConcernedForeman/Runtime/Construction/ShelterConstructionRuntime.cs",
-    "src/ConcernedForeman/Runtime/Construction/WorldBuildMaterials.cs",
-    "src/ConcernedForeman/Runtime/Construction/WorldPieceCatalogue.cs",
-    "src/ConcernedForeman/Runtime/Construction/WorldPiecePlacer.cs",
-    "src/ConcernedForeman/Runtime/Construction/WorldPlacementAuthority.cs",
-    "src/ConcernedForeman/Runtime/Cooperation/ForemanCooperativeDelivery.cs",
-    "src/ConcernedForeman/Runtime/Custody/WorkerBody.cs",
-    "src/ConcernedForeman/Runtime/Ladders/ClimbController.cs",
-    "src/ConcernedForeman/Runtime/Ladders/ClimbMotor.cs",
-    "src/ConcernedForeman/Runtime/Ladders/ClimbPose.cs",
-    "src/ConcernedForeman/Runtime/Ladders/ClimbSounds.cs",
-    "src/ConcernedForeman/Runtime/Ladders/LadderInteraction.cs",
-    "src/ConcernedForeman/Runtime/Ladders/LadderPieces.cs",
-    "src/ConcernedForeman/Runtime/Settlement/SettlementRuntime.cs",
-    "src/ConcernedForeman/Runtime/VanillaConsoleCommands.cs",
-    "src/ConcernedForeman/Ui/BuildOrderPanel.cs",
-    "src/ConcernedForeman/Ui/CollectionOrderPanel.cs",
-    "src/ConcernedSteward/Domain/Upkeep/UpkeepLoop.cs",
-    "src/ConcernedSteward/Runtime/StewardBody.cs",
-    "src/ConcernedSteward/Runtime/VanillaConsoleCommands.cs",
-    "src/ConcernedSteward/Runtime/WorldFuelTargets.cs",
-    "src/ConcernedTeamster/Adapters/CartTelemetryPump.cs",
-    "src/ConcernedTeamster/Adapters/Workers/ContainerPermissionRuntime.cs",
-    "src/ConcernedTeamster/Adapters/Workers/GunnarHaulingRuntime.cs",
-    "src/ConcernedTeamster/Adapters/Workers/TeamsterWorkerPrefab.cs",
-    "src/ConcernedTeamster/Adapters/Workers/VagonHitchSeam.cs",
-    "src/ConcernedTeamster/Domain/Trips/SidecarFileStore.cs",
-    "src/ConcernedTeamster/Ui/CargoManifestPanel.cs",
-    "src/ConcernedTeamster/Ui/CartStatusHudController.cs",
-    "src/ConcernedTeamster/Ui/CompatibilityPanel.cs",
-    "src/ConcernedTeamster/Ui/Hauling/GunnarHaulPanel.cs",
-    "src/ConcernedTeamster/Ui/Hauling/GunnarHaulPanelHost.cs",
-    "src/ConcernedTeamster/Ui/RecoveryGuidancePanel.cs",
-    "src/ConcernedTeamster/Ui/SupportBundlePanel.cs",
-    "src/ConcernedTeamster/Ui/TripHistoryPanel.cs",
-)
+# It is kept rather than deleted because it is the honest way to reintroduce a
+# temporary exception if one is ever genuinely needed - an entry here is a
+# deliberate, reviewable admission with an issue behind it, where deleting the
+# mechanism would make the next exception a silent one. A file that is not on it
+# and reads an exception member fails the gate; a STALE entry fails too, so the
+# list can only shrink.
+MESSAGE_SWEEP_PENDING: tuple[str, ...] = ()
+
+
+
+CAUGHT_EXCEPTION = re.compile(
+    r"catch" + SPACE + r"\(" + SPACE + r"(?:System\.)?[A-Za-z]*Exception" + SPACES
+    + r"(?P<name>[A-Za-z_]\w*)" + SPACE + r"\)")
+
+
+def _renders_a_caught_exception(code: str) -> list:
+    """Every place a caught exception is turned into text without scrubbing.
+
+    <b>Why `.Message` was never the whole story.</b> `"…: " + exception` calls
+    `Exception.ToString()`, which carries the message AND the stack AND every
+    inner exception - strictly more than the property the first version of this
+    rule banned. A review counted 18 such sites in the products plus 6 more in
+    the library, all of them logging to `LogOutput.log`, which is the file a
+    player uploads. The rule certified them away while they were live.
+
+    Three forms and only three: concatenation either side, an interpolation hole,
+    and an explicit `ToString()`. Passing the exception to a helper that scrubs -
+    `Fail(exception)`, `Disable(exception)` - is correct code and is not a hit,
+    which is why this looks for the RENDERING rather than for every mention."""
+    found = []
+    for caught in {match.group("name") for match in CAUGHT_EXCEPTION.finditer(code)}:
+        name = re.escape(caught)
+        for pattern in (
+                r"\+\s*" + name + WORD + r"(?!\s*[.(\[])",
+                WORD + name + r"\s*\+(?!\+)",
+                r"\{\s*" + name + r"\s*\}",
+                name + r"\s*\.\s*ToString\s*\(\s*\)"):
+            found.extend(re.finditer(pattern, code))
+    return found
+
+
+def _reads_a_call_result(code: str, match: "re.Match[str]") -> bool:
+    """Whether this `.Message` is read off the result of a CALL rather than off a
+    variable.
+
+    An exception is always held in a variable a `catch` clause bound, so
+    `act(loop).Message` and `loop.Rebind(scope, delivery, now).Message` are this
+    repository's own result types and not exceptions. Narrow on purpose: only a
+    closing parenthesis counts, so `errors[0].Message` on a list of exceptions
+    would still be refused."""
+    dot = code.rfind(".", match.start(), match.end())
+    return dot > 0 and code[dot - 1] == ")"
 
 
 def check_console_failures_go_through_one_scrubber(errors: list[str]) -> list[str]:
@@ -1022,8 +1036,17 @@ def check_console_failures_go_through_one_scrubber(errors: list[str]) -> list[st
     scanned = 0
     still_pending: set[str] = set()
 
-    for key, spec in PRODUCTS.items():
-        product_dir = spec["project_dir"]  # type: ignore[assignment]
+    # Every product, the shared LIBRARY, and the shared SOURCE area. A review
+    # found the first version scanned only PRODUCTS, which left ConcernedNPC -
+    # a package that ships on its own and logs its own failures - and
+    # src/Shared/Settlement/Custody, whose refusal text is composed one layer
+    # below a Foreman line this very sweep had "finished".
+    trees = [spec["project_dir"] for spec in PRODUCTS.values()]  # type: ignore[index]
+    trees += [spec["project_dir"] for spec in LIBRARIES.values()]  # type: ignore[index]
+    trees.append(ROOT / "src" / "Shared")
+
+    for tree in trees:
+        product_dir: Path = tree  # type: ignore[assignment]
         if not product_dir.is_dir():
             continue
         for path in sorted(product_dir.rglob("*.cs")):
@@ -1035,7 +1058,9 @@ def check_console_failures_go_through_one_scrubber(errors: list[str]) -> list[st
             scanned += 1
             code = _cs_code_keeping_interpolations(path)
             hits = [match for match in MESSAGE_READ.finditer(code)
-                    if match.group("receiver") not in MESSAGE_OK_RECEIVERS]
+                    if match.group("receiver") not in MESSAGE_OK_RECEIVERS
+                    and not _reads_a_call_result(code, match)]
+            hits += _renders_a_caught_exception(code)
             if not hits:
                 continue
             if relative in pending:
@@ -1061,11 +1086,13 @@ def check_console_failures_go_through_one_scrubber(errors: list[str]) -> list[st
         return []
 
     return [
-        f"{label}: {scanned} product source(s) scanned across {len(PRODUCTS)} products; the path "
-        f"patterns exist once, in src/Shared/Diagnostics/PathScrubber.cs; "
-        f"{len(MESSAGE_SCRUBBERS)} file(s) may read an exception's text, and "
-        f"{len(still_pending)} log-only file(s) are tracked as #416 - a file that is neither fails "
-        "here",
+        f"{label}: {scanned} source(s) scanned across {len(PRODUCTS)} products, "
+        f"{len(LIBRARIES)} library(ies) and src/Shared; the path patterns exist once, in "
+        f"src/Shared/Diagnostics/PathScrubber.cs; no file outside "
+        f"{len(MESSAGE_SCRUBBERS)} pinned scrubber(s) reads an exception's message, stack or inner "
+        f"exception, or renders one into text by concatenation, interpolation or ToString(); "
+        f"{len(MESSAGE_OK_RECEIVERS)} receiver name(s) are exempt as this repository's own result "
+        f"types, and {len(MESSAGE_SWEEP_PENDING)} file(s) are tracked as a temporary exception",
     ]
 
 

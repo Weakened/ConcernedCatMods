@@ -4,6 +4,7 @@ using TheConcernedCat.ConcernedTeamster.Domain.Collection;
 using TheConcernedCat.Workers;
 using TheConcernedCat.ConcernedTeamster.Domain.Workers;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;
 
@@ -127,7 +128,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
         catch (Exception exception)
         {
             _faulted = true;
-            _log?.LogError("Gunnar's collection runtime faulted and is now off for this session: " + exception);
+            _log?.LogError("Gunnar's collection runtime faulted and is now off for this session: " + SafeFailure.Describe(exception));
             try
             {
                 // A faulted runtime is an order that has ended, not a world that

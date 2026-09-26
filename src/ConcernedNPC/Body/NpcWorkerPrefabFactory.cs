@@ -4,6 +4,7 @@ using Jotunn.Managers;
 using TheConcernedCat.ConcernedNPC.Bodies;
 using TheConcernedCat.ConcernedNPC.Roles;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedNPC.Body;
 
@@ -161,7 +162,7 @@ public sealed class NpcWorkerPrefabFactory
             // The subscription is deliberately kept: the next time vanilla
             // prefabs become available is another chance, and staying
             // unregistered is the outcome with the permanent cost.
-            Fail("building it threw " + exception.GetType().Name + ": " + exception.Message);
+            Fail("building it threw " + SafeFailure.Brief(exception));
         }
     }
 

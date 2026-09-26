@@ -3,6 +3,7 @@ using Jotunn.Entities;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedSteward.Domain;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedSteward.Runtime;
 
@@ -88,7 +89,7 @@ internal static class StewardWorkerPrefab
         catch (Exception exception)
         {
             LastFailure = "building the Steward's prefab threw " + exception.GetType().Name;
-            _log?.Invoke("The Steward's prefab was not created: " + exception);
+            _log?.Invoke("The Steward's prefab was not created: " + SafeFailure.Describe(exception));
         }
     }
 

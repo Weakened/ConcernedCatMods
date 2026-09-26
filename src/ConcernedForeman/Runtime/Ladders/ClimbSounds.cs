@@ -1,6 +1,7 @@
 ﻿using System;
 using TheConcernedCat.Ladders;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Ladders;
 
@@ -90,7 +91,7 @@ internal sealed class ClimbSounds
             if (!_saidFailure)
             {
                 _saidFailure = true;
-                _log("Ladder contact sound failed soft: " + exception.Message + ". Traversal continues.");
+                _log("Ladder contact sound failed soft: " + SafeFailure.Brief(exception) + ". Traversal continues.");
             }
 
             Reset();

@@ -8,6 +8,7 @@ using TheConcernedCat.Settlement.Custody;
 using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Construction;
 
@@ -575,8 +576,8 @@ internal sealed class ShelterConstructionRuntime
         }
 
         _faulted = true;
-        _fault = exception.GetType().Name + ": " + exception.Message;
-        _log("Build order FAULTED and does no more work this session. " + exception);
+        _fault = SafeFailure.Brief(exception);
+        _log("Build order FAULTED and does no more work this session. " + SafeFailure.Describe(exception));
         try
         {
             Release();

@@ -3,6 +3,7 @@ using System.Reflection;
 using HarmonyLib;
 using TheConcernedCat.Ladders;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Ladders;
 
@@ -91,7 +92,7 @@ internal static class ClimbMotor
         }
         catch (Exception exception)
         {
-            Unavailable = "the character motor could not be patched (" + exception.Message + ")";
+            Unavailable = "the character motor could not be patched (" + SafeFailure.Brief(exception) + ")";
             log("Ladder climbing unavailable: " + Unavailable + ".");
             Remove();
             return false;
