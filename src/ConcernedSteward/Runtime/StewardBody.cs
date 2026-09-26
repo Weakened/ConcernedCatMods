@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedSteward.Runtime;
 
@@ -228,7 +229,7 @@ internal sealed class StewardBody : MonoBehaviour
         {
             ErrorLog?.Invoke(
                 "The Steward could not write down what she is carrying: " +
-                exception.GetType().Name + ": " + exception.Message);
+                SafeFailure.Brief(exception));
             return false;
         }
     }

@@ -11,6 +11,7 @@ using TheConcernedCat.Settlement.Tools;
 using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 
@@ -389,7 +390,7 @@ internal sealed class SettlementRuntime
         }
         catch (Exception e)
         {
-            _log("[Settlement] The retire guard failed, so the worker was not retired: " + e.Message);
+            _log("[Settlement] The retire guard failed, so the worker was not retired: " + SafeFailure.Brief(e));
             return false;
         }
     }

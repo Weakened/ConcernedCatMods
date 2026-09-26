@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using BepInEx.Logging;
 using Jotunn.Managers;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime;
 
@@ -225,5 +226,5 @@ internal static class VanillaConsoleCommands
     }
 
     private static string Brief(Exception exception) =>
-        exception.GetType().Name + ": " + exception.Message;
+        SafeFailure.Brief(exception);
 }

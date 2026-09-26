@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Custody;
 
@@ -232,8 +233,7 @@ internal sealed class WorkerBody : MonoBehaviour
         }
         catch (Exception exception)
         {
-            ErrorLog?.Invoke("Worker body \"" + Key + "\" could not write its inventory: " + exception.GetType().Name +
-                ": " + exception.Message);
+            ErrorLog?.Invoke("Worker body \"" + Key + "\" could not write its inventory: " + SafeFailure.Brief(exception));
             return false;
         }
     }

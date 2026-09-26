@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using TheConcernedCat.ConcernedForeman.Domain.Construction;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Construction;
 
@@ -133,7 +134,7 @@ internal sealed class WorldPieceCatalogue : IPieceRecipes, IPieceSight
         }
         catch (Exception exception)
         {
-            Complain("Build order: a planned spot could not be read (" + exception.Message +
+            Complain("Build order: a planned spot could not be read (" + SafeFailure.Brief(exception) +
                 "), so it is left for the next round.");
             return PieceSighting.Unknown;
         }
@@ -209,7 +210,7 @@ internal sealed class WorldPieceCatalogue : IPieceRecipes, IPieceSight
         catch (Exception exception)
         {
             return PieceRecipe.Unknown(prefab, "the game threw while it was asked (" +
-                exception.Message + ")");
+                SafeFailure.Brief(exception) + ")");
         }
     }
 

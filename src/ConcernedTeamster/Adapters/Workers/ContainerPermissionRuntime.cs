@@ -9,6 +9,7 @@ using TheConcernedCat.ConcernedNPC.Work;
 using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using TheConcernedCat.ConcernedTeamster.Domain.Workers;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;
 
@@ -546,7 +547,7 @@ internal sealed class ContainerPermissionRuntime : MonoBehaviour
 
     private static string Brief(Exception exception) =>
         Domain.Support.SupportBundleSanitizer.Sanitize(
-            exception.GetType().Name + ": " + exception.Message);
+            SafeFailure.Brief(exception));
 
     private static void Notify(string text)
     {

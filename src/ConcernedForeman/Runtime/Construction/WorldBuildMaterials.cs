@@ -8,6 +8,7 @@ using TheConcernedCat.Settlement.Custody;
 using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Construction;
 
@@ -358,7 +359,7 @@ internal sealed class WorldBuildMaterials : IBuildMaterials
         catch (Exception exception)
         {
             Uncertain = "moving " + want + " " + kind + " between " + Describe(from) + " and " + Describe(to) +
-                " failed part way (" + exception.GetType().Name + ": " + exception.Message +
+                " failed part way (" + SafeFailure.Brief(exception) +
                 "), so nothing more is moved until a person has looked at both";
             _log("Build order: " + Uncertain);
             return -1;
@@ -475,7 +476,7 @@ internal sealed class WorldBuildMaterials : IBuildMaterials
         catch (Exception exception)
         {
             Uncertain = "taking " + count + " " + kind + " out of " + Describe(port) +
-                " could not be made durable (" + exception.GetType().Name + ": " + exception.Message +
+                " could not be made durable (" + SafeFailure.Brief(exception) +
                 "). The piece may be standing and the material may come back on the next load, so " +
                 "nothing more is moved until a person has looked at what he is carrying.";
             _log("Build order: " + Uncertain);

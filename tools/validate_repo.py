@@ -910,6 +910,7 @@ MESSAGE_OK_RECEIVERS = (
     # or a field already scrubbed on the way in.
     "report",
     "viewModel",
+    "history",
     "comparison",
     "recoveryEvent",
     "reading",
@@ -928,55 +929,30 @@ MESSAGE_SCRUBBERS = (
     "src/ConcernedCartographer/Domain/Reporting/SafeLogText.cs",
 )
 
-# Files that still compose their own exception text, every one of them a LOG
-# line rather than a console reply, tracked as #416.
+# Files that still compose their own exception text. **Empty, and it stays
+# empty** (#416): every log line in every product now goes through the shared
+# scrubber, so this list has nothing to hold.
 #
-# <b>This list may only ever shrink.</b> It is not a scope claim - the rule
-# covers every product source, and a file that is not on this list and reads an
-# exception member fails the gate. That is the difference between a tracked
-# remainder and an untested boundary: when #416 lands, entries come out; nothing
-# ever goes in without saying so here.
-MESSAGE_SWEEP_PENDING = (
-    "src/ConcernedForeman/Domain/Construction/PlacementGate.cs",
-    "src/ConcernedForeman/Domain/Construction/ShelterBuildLoop.cs",
-    "src/ConcernedForeman/Runtime/Collection/CollectionRuntime.cs",
-    "src/ConcernedForeman/Runtime/Construction/BuildPose.cs",
-    "src/ConcernedForeman/Runtime/Construction/ShelterConstructionRuntime.cs",
-    "src/ConcernedForeman/Runtime/Construction/WorldBuildMaterials.cs",
-    "src/ConcernedForeman/Runtime/Construction/WorldPieceCatalogue.cs",
-    "src/ConcernedForeman/Runtime/Construction/WorldPiecePlacer.cs",
-    "src/ConcernedForeman/Runtime/Construction/WorldPlacementAuthority.cs",
-    "src/ConcernedForeman/Runtime/Cooperation/ForemanCooperativeDelivery.cs",
-    "src/ConcernedForeman/Runtime/Custody/WorkerBody.cs",
-    "src/ConcernedForeman/Runtime/Ladders/ClimbController.cs",
-    "src/ConcernedForeman/Runtime/Ladders/ClimbMotor.cs",
-    "src/ConcernedForeman/Runtime/Ladders/ClimbPose.cs",
-    "src/ConcernedForeman/Runtime/Ladders/ClimbSounds.cs",
-    "src/ConcernedForeman/Runtime/Ladders/LadderInteraction.cs",
-    "src/ConcernedForeman/Runtime/Ladders/LadderPieces.cs",
-    "src/ConcernedForeman/Runtime/Settlement/SettlementRuntime.cs",
-    "src/ConcernedForeman/Runtime/VanillaConsoleCommands.cs",
-    "src/ConcernedForeman/Ui/BuildOrderPanel.cs",
-    "src/ConcernedForeman/Ui/CollectionOrderPanel.cs",
-    "src/ConcernedSteward/Domain/Upkeep/UpkeepLoop.cs",
-    "src/ConcernedSteward/Runtime/StewardBody.cs",
-    "src/ConcernedSteward/Runtime/VanillaConsoleCommands.cs",
-    "src/ConcernedSteward/Runtime/WorldFuelTargets.cs",
-    "src/ConcernedTeamster/Adapters/CartTelemetryPump.cs",
-    "src/ConcernedTeamster/Adapters/Workers/ContainerPermissionRuntime.cs",
-    "src/ConcernedTeamster/Adapters/Workers/GunnarHaulingRuntime.cs",
-    "src/ConcernedTeamster/Adapters/Workers/TeamsterWorkerPrefab.cs",
-    "src/ConcernedTeamster/Adapters/Workers/VagonHitchSeam.cs",
-    "src/ConcernedTeamster/Domain/Trips/SidecarFileStore.cs",
-    "src/ConcernedTeamster/Ui/CargoManifestPanel.cs",
-    "src/ConcernedTeamster/Ui/CartStatusHudController.cs",
-    "src/ConcernedTeamster/Ui/CompatibilityPanel.cs",
-    "src/ConcernedTeamster/Ui/Hauling/GunnarHaulPanel.cs",
-    "src/ConcernedTeamster/Ui/Hauling/GunnarHaulPanelHost.cs",
-    "src/ConcernedTeamster/Ui/RecoveryGuidancePanel.cs",
-    "src/ConcernedTeamster/Ui/SupportBundlePanel.cs",
-    "src/ConcernedTeamster/Ui/TripHistoryPanel.cs",
-)
+# It is kept rather than deleted because it is the honest way to reintroduce a
+# temporary exception if one is ever genuinely needed - an entry here is a
+# deliberate, reviewable admission with an issue behind it, where deleting the
+# mechanism would make the next exception a silent one. A file that is not on it
+# and reads an exception member fails the gate; a STALE entry fails too, so the
+# list can only shrink.
+MESSAGE_SWEEP_PENDING: tuple[str, ...] = ()
+
+
+def _reads_a_call_result(code: str, match: "re.Match[str]") -> bool:
+    """Whether this `.Message` is read off the result of a CALL rather than off a
+    variable.
+
+    An exception is always held in a variable a `catch` clause bound, so
+    `act(loop).Message` and `loop.Rebind(scope, delivery, now).Message` are this
+    repository's own result types and not exceptions. Narrow on purpose: only a
+    closing parenthesis counts, so `errors[0].Message` on a list of exceptions
+    would still be refused."""
+    dot = code.rfind(".", match.start(), match.end())
+    return dot > 0 and code[dot - 1] == ")"
 
 
 def check_console_failures_go_through_one_scrubber(errors: list[str]) -> list[str]:
@@ -1035,7 +1011,8 @@ def check_console_failures_go_through_one_scrubber(errors: list[str]) -> list[st
             scanned += 1
             code = _cs_code_keeping_interpolations(path)
             hits = [match for match in MESSAGE_READ.finditer(code)
-                    if match.group("receiver") not in MESSAGE_OK_RECEIVERS]
+                    if match.group("receiver") not in MESSAGE_OK_RECEIVERS
+                    and not _reads_a_call_result(code, match)]
             if not hits:
                 continue
             if relative in pending:
@@ -1062,10 +1039,10 @@ def check_console_failures_go_through_one_scrubber(errors: list[str]) -> list[st
 
     return [
         f"{label}: {scanned} product source(s) scanned across {len(PRODUCTS)} products; the path "
-        f"patterns exist once, in src/Shared/Diagnostics/PathScrubber.cs; "
-        f"{len(MESSAGE_SCRUBBERS)} file(s) may read an exception's text, and "
-        f"{len(still_pending)} log-only file(s) are tracked as #416 - a file that is neither fails "
-        "here",
+        f"patterns exist once, in src/Shared/Diagnostics/PathScrubber.cs; exactly "
+        f"{len(MESSAGE_SCRUBBERS)} file(s) may read an exception's text and every other console "
+        f"reply and log line goes through it (#416 swept the last "
+        f"{len(MESSAGE_SWEEP_PENDING) if MESSAGE_SWEEP_PENDING else 0} tracked exception(s) away)",
     ]
 
 

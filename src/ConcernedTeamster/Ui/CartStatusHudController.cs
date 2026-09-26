@@ -8,6 +8,7 @@ using TheConcernedCat.ConcernedTeamster.Domain.Ui;
 using TheConcernedCat.ConcernedTeamster.Domain.Warnings;
 using UnityEngine;
 using UnityEngine.UI;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedTeamster.Ui;
 
@@ -599,6 +600,6 @@ internal sealed class CartStatusHudController : MonoBehaviour
 
         _log?.LogError(
             "Cart Status UI failed and was disabled for this session " +
-            $"(telemetry keeps running): {exception.GetType().Name}: {exception.Message}");
+            $"(telemetry keeps running): {SafeFailure.Brief(exception)}");
     }
 }

@@ -4,6 +4,7 @@ using System.Globalization;
 using TheConcernedCat.ConcernedSteward.Domain.Upkeep;
 using TheConcernedCat.Settlement.Worker;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedSteward.Runtime;
 
@@ -306,7 +307,7 @@ internal sealed class WorldFuelTargets : IFuelTargetPort
         {
             return new FeedMeasurement(
                 FeedOutcome.Uncertain, carriedBefore, carriedAfter, fuelBefore, fuelAfter,
-                "adding fuel threw " + fault.GetType().Name + ": " + fault.Message + numbers);
+                "adding fuel threw " + SafeFailure.Brief(fault) + numbers);
         }
 
         if (carriedAfter < 0 || float.IsNaN(fuelAfter))

@@ -7,6 +7,7 @@ using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using TheConcernedCat.ConcernedTeamster.Domain.Risk;
 using TheConcernedCat.ConcernedTeamster.Domain.Warnings;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedTeamster.Adapters;
 
@@ -147,7 +148,7 @@ internal sealed class CartTelemetryPump : MonoBehaviour
             _failed = true;
             _log?.LogError(
                 "Cart telemetry pump failed and was disabled for this session: " +
-                $"{exception.GetType().Name}: {exception.Message}");
+                $"{SafeFailure.Brief(exception)}");
         }
     }
 

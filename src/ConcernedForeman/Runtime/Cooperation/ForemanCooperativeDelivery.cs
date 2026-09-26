@@ -8,6 +8,7 @@ using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Cooperation;
 
@@ -257,7 +258,7 @@ internal sealed class ForemanCooperativeDelivery : ICooperativeDelivery
         {
             _log(
                 "Cooperative delivery failed while " + what + " and is off for this session; collection orders " +
-                "can still run solo. " + exception.GetType().Name + ": " + exception.Message);
+                "can still run solo. " + SafeFailure.Brief(exception));
         }
         catch (Exception)
         {

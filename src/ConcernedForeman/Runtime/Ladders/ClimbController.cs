@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using TheConcernedCat.Ladders;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Ladders;
 
@@ -136,7 +137,7 @@ internal sealed class ClimbController
         }
         catch (Exception exception)
         {
-            _log("Ladder climbing failed and let go: " + exception.Message);
+            _log("Ladder climbing failed and let go: " + SafeFailure.Brief(exception));
             Fault();
         }
     }
@@ -166,7 +167,7 @@ internal sealed class ClimbController
         }
         catch (Exception exception)
         {
-            _log("Ladder climbing failed and let go: " + exception.Message);
+            _log("Ladder climbing failed and let go: " + SafeFailure.Brief(exception));
             Fault();
             return false;
         }
@@ -332,7 +333,7 @@ internal sealed class ClimbController
         }
         catch (Exception exception)
         {
-            _log("Ladder climbing failed and let go: " + exception.Message);
+            _log("Ladder climbing failed and let go: " + SafeFailure.Brief(exception));
             Fault();
             return false;
         }
@@ -488,7 +489,7 @@ internal sealed class ClimbController
         }
         catch (Exception exception)
         {
-            _log("Ladder climbing could not end cleanly: " + exception.Message);
+            _log("Ladder climbing could not end cleanly: " + SafeFailure.Brief(exception));
         }
 
         Release(ClimbSafety.Restoration, ClimbExitKind.LetGo);

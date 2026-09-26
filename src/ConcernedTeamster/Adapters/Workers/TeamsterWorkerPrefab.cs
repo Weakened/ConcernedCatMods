@@ -4,6 +4,7 @@ using TheConcernedCat.ConcernedTeamster.Domain.Collection;
 using TheConcernedCat.ConcernedTeamster.Domain.Hauling.Execution;
 using TheConcernedCat.Workers;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;
 
@@ -101,7 +102,7 @@ internal static class TeamsterWorkerPrefab
         }
         catch (Exception exception)
         {
-            Fail("building it threw " + exception.GetType().Name + ": " + exception.Message);
+            Fail("building it threw " + SafeFailure.Brief(exception));
         }
     }
 
@@ -461,7 +462,7 @@ internal sealed class TeamsterWorkerRecord : MonoBehaviour
             try
             {
                 ErrorLog?.Invoke("Gunnar's body could not write what it is holding, so what it holds is " +
-                    "uncertain until the next change: " + exception.GetType().Name + ": " + exception.Message);
+                    "uncertain until the next change: " + SafeFailure.Brief(exception));
             }
             catch
             {
