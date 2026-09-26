@@ -1,4 +1,5 @@
 using System;
+using TheConcernedCat.Diagnostics;
 using System.Collections.Generic;
 using Jotunn.Entities;
 
@@ -41,7 +42,11 @@ internal sealed class BuildCommand : ConsoleCommand
         }
         catch (Exception exception)
         {
-            output = "Build order command failed: " + exception.Message;
+            // #411: a filesystem exception's raw message is a path and this
+            // machine's user name, in the text a player pastes into a bug
+            // report. SafeFailure keeps the type, which is the useful half.
+            output = SafeFailure.Describe(
+                Name, args != null && args.Length > 0 ? args[0] : "", exception);
         }
 
         context?.AddString(output);

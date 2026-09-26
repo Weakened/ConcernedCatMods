@@ -897,6 +897,111 @@ CONTAINER_INTERNALS = (
 )
 
 
+# #411: every product's console reply and log text goes through one scrubber.
+# `.Message` is the shape the defect had in all three products; a receiver is
+# exempt only by name, and each exemption is a real one.
+MESSAGE_READ = re.compile(r"(?P<receiver>[A-Za-z_][A-Za-z0-9_]*)?\b.Message\b")
+
+# Receivers that are not exceptions. `Character.Message` is vanilla's own HUD
+# method; the rest are this repository's own view models and records, whose
+# `Message` is a string somebody composed rather than an exception's.
+MESSAGE_OK_RECEIVERS = (
+    "Character",
+    "viewModel",
+    "comparison",
+    "recoveryEvent",
+    "_message",
+    "MessageHud",
+)
+
+# The one place in the repository that may read an exception's message: the
+# shared scrubber's own wording helper.
+MESSAGE_SCRUBBER = ("src", "Shared", "Diagnostics", "SafeFailure.cs")
+
+
+def check_console_failures_go_through_one_scrubber(errors: list[str]) -> list[str]:
+    """#411 scrubber adoption audit: one path scrubber, and no product reads an
+    exception's message itself.
+
+    The defect was the same line in every product: `"<X> failed: " +
+    exception.Message`, which names no subcommand and prints a filesystem
+    exception's full path - the machine's user name and the profile's location -
+    into the text a player pastes into a bug report. #367 removed it from one
+    command, #389 from six more in that product, and #411 from the remaining four
+    across the other two.
+
+    Three products wrote the patterns independently, because products never
+    reference each other at compile time, and that is exactly how #388's defect
+    had to be found and fixed twice (#410). So there is now one scrubber under
+    `src/Shared/Diagnostics/`, compiled into each consumer as source.
+
+    <b>What this rule covers, and what it deliberately does not yet.</b> It scans
+    the files that declare a console command in any product - the reply a player
+    reads and pastes into a bug report, which is the half of #411 this change
+    closes - and requires that none of them reads an exception's message itself.
+    It does NOT yet cover the ~45 log-line call sites across four products that
+    still compose their own text; those are enumerated in the follow-up issue and
+    several of them sit in separately-gated ladder scope (#334), so sweeping them
+    here would have dragged that in. A rule that claimed the wider property while
+    checking the narrower one would be worse than this one saying which it is.
+
+    Receivers that are not exceptions are exempt BY NAME rather than by pattern,
+    because a rule that guessed would either miss the leak or fail the gate on a
+    view model. String literals are blanked before the scan, so a quoted token is
+    not a use of one."""
+    label = "[interop] #411 scrubber adoption audit"
+
+    scrubber = ROOT.joinpath(*MESSAGE_SCRUBBER)
+    if not scrubber.is_file():
+        fail(f"{label}: {'/'.join(MESSAGE_SCRUBBER)} is missing — the one place an exception's "
+             "message may be read, and the reason three products no longer each have their own "
+             "scrubber", errors)
+        return []
+
+    commands = 0
+    offenders: list[str] = []
+    named: list[str] = []
+    for key, spec in PRODUCTS.items():
+        product_dir = spec["project_dir"]  # type: ignore[assignment]
+        if not product_dir.is_dir():
+            continue
+        for path in sorted(product_dir.rglob("*.cs")):
+            if path.relative_to(product_dir).parts[0] in ("obj", "bin"):
+                continue
+            code = _cs_code_without_strings(path)
+            # Discovered by BASE CLASS, not by file name: #389's review showed
+            # that globbing `*ToolsCommand.cs` made "a new command is covered the
+            # day it is written" a claim about a convention nothing enforces.
+            if not CONSOLE_COMMAND_CLASS.search(code):
+                continue
+            commands += 1
+            named.append(f"{key}/{path.name}")
+            for match in MESSAGE_READ.finditer(code):
+                if match.group("receiver") in MESSAGE_OK_RECEIVERS:
+                    continue
+                line = code.count(chr(10), 0, match.start()) + 1
+                offenders.append(f"{path.relative_to(ROOT).as_posix()}:{line}")
+
+    if commands == 0:
+        fail(f"{label}: no ConsoleCommand subclass found in any product — the audit covers "
+             "nothing, which is worse than a failure", errors)
+        return []
+
+    if offenders:
+        fail(f"{label}: {offenders[:6]}{' and more' if len(offenders) > 6 else ''} read an "
+             "exception's `.Message` directly. A filesystem exception's message is a path and this "
+             f"machine's user name. Go through {'/'.join(MESSAGE_SCRUBBER)} — SafeFailure.Describe "
+             "for a console reply, SafeFailure.Brief for a log line", errors)
+        return []
+
+    return [
+        f"{label}: {commands} console command(s) across {len(PRODUCTS)} products, found by base "
+        f"class — none reads an exception's `.Message`; the path patterns exist once, in "
+        f"{'/'.join(MESSAGE_SCRUBBER[:-1])}/PathScrubber.cs. The log-line call sites are NOT covered "
+        "by this rule and are tracked separately",
+    ]
+
+
 def check_container_permissions_stay_reachable(errors: list[str]) -> list[str]:
     """#374 container permission audit: the facade is public, the mechanism is
     not, and a product actually uses it.
@@ -2734,7 +2839,7 @@ def check_cartographer_console_failures_are_scrubbed(errors: list[str]) -> list[
                 continue
             if exempt_file:
                 continue
-            line = code.count("\n", 0, match.start()) + 1
+            line = code.count(chr(10), 0, match.start()) + 1
             fail(f"{label}: {path.relative_to(ROOT).as_posix()}:{line} reads an exception's "
                  "`.Message` — that is the raw text #389 removed, and a filesystem exception's "
                  "message is a path and this machine's user name. Go through SafeLogText (for a log "
@@ -2956,7 +3061,7 @@ def check_solution_integrity(errors: list[str]) -> list[str]:
 MOJIBAKE_LEAD = "\u00c2\u00c3\u00e2"
 MOJIBAKE_TAIL = (
     "\u0080-\u00bf\u20ac\u201a\u0192\u201e\u2026\u2020\u2021\u02c6\u2030"
-    "\u0160\u2039\u0152\u017d\u2018\u2019\u201c\u201d\u2022\u2013\u2014"
+    "\u0160\u2039\u0152\u017d\u2018\u2019\u201c\u201d\u2022\u2013—"
     "\u02dc\u2122\u0161\u203a\u0153\u017e\u0178")
 MOJIBAKE = re.compile("[" + MOJIBAKE_LEAD + "][" + MOJIBAKE_TAIL + "]")
 
@@ -3552,6 +3657,7 @@ def main() -> int:
     report.extend(check_library_consumers_do_not_bypass_the_arbiter(errors))
     report.extend(check_the_npc_library_writes_no_file(errors))
     report.extend(check_container_permissions_stay_reachable(errors))
+    report.extend(check_console_failures_go_through_one_scrubber(errors))
     report.extend(check_npc_planning_decides_nothing_to_do_once(errors))
     report.extend(check_npc_planning_never_defaults_a_claim(errors))
     report.extend(check_teamster_cartographer_contract(errors))
