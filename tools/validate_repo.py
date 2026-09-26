@@ -876,6 +876,12 @@ def _parameter_defaults(code: str):
 # #374: the two facade types a product may see, and the Storage types it may not.
 CONTAINER_FACADE = ("NpcContainerDesk", "NpcContainerDecision")
 
+# Every `internal` type actually DECLARED under Storage/, checked against the
+# declarations rather than remembered - the first version of this list carried
+# `NpcTransfer`, which is a FILE name and no type at all, and omitted
+# ContainerMoveOutcome and ContainerMoveResult, which are the transfer recorder
+# the facade documentation says is withheld. A list that bans a name nothing
+# declares, while missing the thing it claims to protect, is worse than no list.
 CONTAINER_INTERNALS = (
     "NpcContainerPermissionBook",
     "NpcContainerPermission",
@@ -886,7 +892,8 @@ CONTAINER_INTERNALS = (
     "NpcContainerSighting",
     "NpcContainerAssignment",
     "NpcTransferPlan",
-    "NpcTransfer",
+    "ContainerMoveOutcome",
+    "ContainerMoveResult",
 )
 
 
@@ -926,13 +933,43 @@ def check_container_permissions_stay_reachable(errors: list[str]) -> list[str]:
              "makes a player's container permissions reachable at all", errors)
         return []
 
-    facade_code = _cs_code(facade)
+    # Strings blanked as well as comments: a product line that merely NAMES a
+    # withheld type in a message is not a use of it, and a comment or a
+    # message mentioning NpcContainerDesk must not satisfy 'a product uses
+    # the facade' either. Every sibling rule that scans for a token uses this.
+    facade_code = _cs_code_without_strings(facade)
     for name in CONTAINER_FACADE:
         if not re.search(r"public (?:sealed class|readonly struct|class|struct) " + name + r"\b",
                          facade_code):
             fail(f"{label}: {name} is not public in Storage/NpcContainerDesk.cs — the permission "
                  "model goes back to being reachable by nothing, which is what #374 fixed", errors)
             return []
+
+    # The list above is checked against the library rather than trusted: a
+    # `internal` Storage type missing from it is a type a product could name
+    # tomorrow with the gate green.
+    storage_dir = project_dir / "Storage"
+    declared = set()
+    for path in sorted(storage_dir.glob("*.cs")):
+        for match in re.finditer(
+                r"internal (?:sealed class|readonly struct|static class|class|struct|enum) "
+                r"(?P<name>[A-Za-z0-9_]+)",
+                _cs_code_without_strings(path)):
+            declared.add(match.group("name"))
+
+    missing = sorted(declared - set(CONTAINER_INTERNALS))
+    if missing:
+        fail(f"{label}: {missing} are declared `internal` under Storage/ and are not in the "
+             "audit's withheld list, so a product could name one with this gate green — add them, "
+             "or make the deliberate decision to publish them through PublicSurfaceTests", errors)
+        return []
+
+    unknown = sorted(set(CONTAINER_INTERNALS) - declared)
+    if unknown:
+        fail(f"{label}: {unknown} are in the withheld list but no longer declared `internal` under "
+             "Storage/ — a list that bans names nothing declares reads like protection and is not",
+             errors)
+        return []
 
     consumers: list[str] = []
     for key, spec in PRODUCTS.items():
@@ -943,7 +980,7 @@ def check_container_permissions_stay_reachable(errors: list[str]) -> list[str]:
         for path in sorted(product_dir.rglob("*.cs")):
             if path.relative_to(product_dir).parts[0] in ("obj", "bin"):
                 continue
-            code = _cs_code(path)
+            code = _cs_code_without_strings(path)
             for name in CONTAINER_INTERNALS:
                 # Word-boundary, so NpcContainerPermissionBook does not match on
                 # the facade's own NpcContainerDecision and vice versa.
@@ -965,9 +1002,11 @@ def check_container_permissions_stay_reachable(errors: list[str]) -> list[str]:
         return []
 
     return [
-        f"{label}: the desk and its record are public, {len(CONTAINER_INTERNALS)} withheld "
-        f"Storage type(s) are named by no product, and {', '.join(sorted(consumers))} "
-        f"consume{'s' if len(consumers) == 1 else ''} the facade",
+        f"{label}: the desk and its record are public; every one of the "
+        f"{len(CONTAINER_INTERNALS)} type(s) declared internal under Storage/ is named by no "
+        f"product (the list is checked against the declarations, not remembered); and "
+        f"{', '.join(sorted(consumers))} "
+        f"consume{'s' if len(consumers) == 1 else ''} the facade outside a string or a comment",
     ]
 
 

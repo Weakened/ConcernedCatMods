@@ -559,11 +559,17 @@ should require looking at the chest it is about, so `clear` is the only thing it
 | One file per world, under the BepInEx config path, never in the world save | `ContainerPermissionStore`. What one player lets their own NPC do is not a fact about the world, and writing it into one would push it at everybody who loads that world |
 | A file that cannot be read loads as nothing enabled **and is never written over** | same. The worst a damaged or locked file can do is keep him out of a chest; it can never open one, and it can never destroy a file somebody might still recover |
 | An unreadable row is dropped and counted, never guessed at | `ContainerPermissionRows`. A dropped row is a forgotten permission, which only ever keeps him out; half-reading one puts him inside |
+| Positions are written with `R` | the repository's convention for every codec. On net48, which is what ships, `R` on a `float` is **not** documented as reliably round-trippable, so the bound is one ULP — about a millimetre against a 0.35 m match tolerance — and the book's keep-the-original-place rule stops it accumulating. The test that covers this runs on net10.0 and is named for that rather than claiming exactness |
 | Found again by **place**, not by id | `NpcContainerPlace`, inside the library. A world load renumbers every saved object, so a number written last night names a different chest this morning — and because the new numbers are dense from one, very likely some other chest |
-| A container that **moves** is refused | `ContainerPermissionRuntime.Fixed`. A permission is matched by position, so one attached to the ground a cart was parked on would be handed to whatever parks there tomorrow. The library cannot see that a container rides a cart; the adapter can, so the adapter refuses |
-| A change that could not be saved says so | the reply names it rather than letting a player believe a mark survived that will not |
+| A container that **moves** is refused | `ContainerPermissionRuntime.Fixed`, and the test is structural rather than a list of types: a built piece has a `Piece` and nothing carried above it, so a container with a non-kinematic `Rigidbody` in its parents is refused along with `Vagon` and `Ship`. A first version named those two types only, which made "a container that moves is refused" a claim about exactly them — any modded wagon or raft was accepted. A permission is matched by position, so one attached to the ground a cart was parked on would be handed to whatever parks there tomorrow |
+| A change that could not be saved says so | the reply names it rather than letting a player believe a mark survived that will not; the one write path with no reply to use — a key pressed as the world closes — logs it |
+| The key does nothing while the keyboard belongs to something else | `KeyboardIsElsewhere`: the map, a map text field, the inventory (which is the state a player is in with the chest **open**), chat, the console, a sign or rename box. Without it, typing anything containing the bound key at a chest GRANTS a permission, which is the one direction this must never go. The shipped door hotkey guards the same six |
+| World UID **0** is not a world | `CurrentWorld`. `GetWorldUID` answers 0 before the world resolves, and every other place in this product already treats 0 as "no world". Accepting it would give every unresolved frame in every save one shared file, so a mark set in one world's first frames would be in force in the next |
+| Prefab **0** is refused, not recorded | prefab 0 is a WILDCARD in the library's place rule (it matches any prefab on that spot), and the book keeps the place a permission was FIRST recorded at — so a wildcard written once would stay one for the life of the file, and a different container built there later would inherit the permission |
+| Identity comes from the **ZDO** where there is one | the saved position and the saved prefab hash, which are what will be there after the reload this permission has to outlive. Never `container.name`: an instantiated object is called `piece_chest_wood(Clone)`, which hashes to something no later lookup matches |
+| A faulted runtime refuses | `Allowance` answers OFF once the tick has faulted, because the world it last saw is frozen and a later world would otherwise be told about that world's chests |
 
-### The facade, and the four types it withholds
+### The facade, and what it withholds
 
 The library gained exactly two public types, `NpcContainerDesk` and `NpcContainerDecision`. What they do **not**
 bring with them is the point: `NpcContainerPermit` stays unforgeable from outside the package, and so do the gate,
@@ -575,8 +581,10 @@ container that moves.
 That surface is pinned twice, from both sides. `PublicSurfaceTests` enumerates the library's whole public surface
 and costs a version bump to edit — which is why ConcernedNPC is **0.2.0** here and all three consumers' storefront
 pins moved with it, in the same change. And `validate_repo.py`'s `#374 container permission audit` holds the
-consumer side that test cannot see: the two facade types are public, no product names one of the ten withheld
-Storage types, and **at least one product uses the desk** — because a public facade nobody calls is the shape this
+consumer side that test cannot see: the two facade types are public, no product names any of the eleven types declared internal under `Storage/` — and the audit
+checks that list against the declarations rather than remembering it, because the first
+version of it banned a name that was a file rather than a type and missed the transfer
+recorder it claimed to protect, and **at least one product uses the desk** — because a public facade nobody calls is the shape this
 work existed to end.
 
 ### Where "reachable from outside the library" is actually proven

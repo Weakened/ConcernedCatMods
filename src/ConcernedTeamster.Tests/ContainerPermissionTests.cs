@@ -18,10 +18,20 @@ namespace ConcernedTeamster.Tests;
 /// repository imported the namespace. "Off by default" was therefore a statement
 /// about dead code.
 ///
-/// This file is in a test project that references ConcernedNPC as an
-/// <b>assembly</b>, not as source. Everything below is written against what a
-/// product can actually see, so if the facade stopped being public these tests
-/// would not compile.</summary>
+/// <b>These tests do NOT prove accessibility either, and saying so is the
+/// point.</b> This project compiles the library's game-free sources (see the
+/// csproj), so `internal` is visible here and every case below would compile
+/// whether or not the facade is public. What proves it is the PRODUCT build:
+/// ConcernedTeamster is net48 and references the library as an assembly, so
+/// `Domain/Workers/ContainerPermissionRows` compiling inside
+/// `scripts/verify.ps1` is the evidence, and `validate_repo.py`'s `#374
+/// container permission audit` is what keeps it true. An earlier version of this
+/// docstring claimed the opposite, twenty lines from a csproj comment saying so
+/// correctly - which is exactly the false confidence the rest of this change was
+/// written to avoid.
+///
+/// What these DO prove is the behaviour: the four states, off by default, the
+/// cycle, and a permission surviving the product's own save and load.</summary>
 public class ContainerPermissionTests
 {
     private static readonly NpcPoint Chest = new NpcPoint(120.5f, 31.25f, -840.75f);
@@ -133,11 +143,22 @@ public class ContainerPermissionTests
     }
 
     [Fact]
-    public void PositionsRoundTripExactly()
+    public void PositionsRoundTripOnThisRuntime()
     {
         // `R` rather than a fixed number of decimals, because a permission is
         // matched within a tolerance and a value that loses its last digit every
         // save can walk out of that tolerance one save at a time.
+        //
+        // NOT named "exactly", and the reason is worth keeping: `float.ToString("R")`
+        // is documented as not reliably shortest-round-trippable on .NET
+        // Framework, which is what the PRODUCT ships on (net48) - this test runs
+        // on net10.0, where it is. So this pins the format and the parse, and it
+        // does not establish bit-exactness on the shipping runtime. The bound
+        // there is one ULP, about a millimetre at Valheim's coordinates against a
+        // 0.35 m match tolerance, and the book keeps the place a permission was
+        // first recorded at, so nothing accumulates. `R` is also the convention
+        // every other codec in this repository uses, so moving to `G9` is a
+        // repo-wide question rather than this leaf's.
         var awkward = new NpcPoint(1234.5679f, -0.000123f, 98765.43f);
         var desk = new NpcContainerDesk();
         desk.SetAllowance(awkward, ChestPrefab, NpcContainerUse.Take);

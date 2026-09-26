@@ -6,6 +6,7 @@ using BepInEx.Logging;
 using TheConcernedCat.ConcernedNPC.Containers;
 using TheConcernedCat.ConcernedNPC.Storage;
 using TheConcernedCat.ConcernedNPC.Work;
+using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using TheConcernedCat.ConcernedTeamster.Domain.Workers;
 using UnityEngine;
 
@@ -49,6 +50,7 @@ internal sealed class ContainerPermissionRuntime : MonoBehaviour
     private NpcContainerDesk _desk = new NpcContainerDesk();
     private long? _world;
     private bool _announcedNotice;
+    private bool _faulted;
 
     /// <summary>Installs the runtime. Always installed, like the other worker
     /// runtimes: the key decides what a player can do, not what exists, so an
@@ -64,16 +66,45 @@ internal sealed class ContainerPermissionRuntime : MonoBehaviour
     }
 
     /// <summary>What the player has allowed, for a transfer to consult once one
-    /// exists. Off while no world is loaded: an answer that cannot be trusted is
-    /// a refusal, never a grant.</summary>
-    internal NpcContainerUse Allowance(Vector3 position, string prefabName)
+    /// exists.
+    ///
+    /// <b>It takes the container, not a position and a name.</b> The identity a
+    /// permission is recorded under comes from the ZDO where there is one, and a
+    /// caller that assembled its own position and prefab could easily assemble a
+    /// different one - and then read OFF for a chest the player had enabled,
+    /// which looks exactly like the permission not working. One derivation, in
+    /// here, used by both the write and the read.</summary>
+    internal NpcContainerUse Allowance(Container? container)
     {
-        if (_world == null)
+        // Three ways this refuses rather than answers, and the third is the one
+        // a review had to point out. A faulted runtime has stopped its Update,
+        // so `_world` and `_desk` are frozen at whatever world it last saw - and
+        // a later world would then be told about that world's chests. An answer
+        // that cannot be trusted is a refusal, and this is what makes that
+        // sentence true rather than merely written down.
+        if (_faulted || _world == null || container == null)
         {
             return NpcContainerUse.Off;
         }
 
-        return _desk.Allowance(PointOf(position), PrefabKey(prefabName));
+        if (!Fixed(container))
+        {
+            // A container that moves was never recorded, so it can never be
+            // allowed - and saying so here means a caller cannot get a grant for
+            // one by looking it up instead of marking it.
+            return NpcContainerUse.Off;
+        }
+
+        int prefab = PrefabKeyOf(container);
+        if (prefab == 0)
+        {
+            // Prefab 0 matches ANY prefab inside the library's place rule, so
+            // answering from it would be answering about a different kind of
+            // container standing where this one stands.
+            return NpcContainerUse.Off;
+        }
+
+        return _desk.Allowance(PointOf(PositionOf(container)), prefab);
     }
 
     private void Update()
@@ -92,7 +123,7 @@ internal sealed class ContainerPermissionRuntime : MonoBehaviour
             }
 
             KeyboardShortcut shortcut = _settings.ContainerPermissionShortcut.Value;
-            if (shortcut.MainKey != KeyCode.None && shortcut.IsDown())
+            if (shortcut.MainKey != KeyCode.None && shortcut.IsDown() && !KeyboardIsElsewhere())
             {
                 ToggleHovered();
             }
@@ -101,10 +132,50 @@ internal sealed class ContainerPermissionRuntime : MonoBehaviour
         {
             // A failure here must not take the rest of Teamster down with it, and
             // it must not leave a permission half-set: the desk is only changed
-            // by ToggleHovered, which saves or says why.
+            // by ToggleHovered, which saves or says why. Faulted also means
+            // Allowance refuses from here on, because this runtime has stopped
+            // following which world it is in.
+            _faulted = true;
             _log?.LogWarning(
-                "The container permission key could not be handled: " + Brief(exception));
+                "The container permission key could not be handled, and container permissions are " +
+                "off for this session: " + Brief(exception));
             enabled = false;
+        }
+    }
+
+    /// <summary>Whether the keyboard belongs to something other than the world.
+    ///
+    /// <b>Why this is not optional, and why it is the first thing a review found.
+    /// </b> Without it, typing anything containing the bound key into the chat,
+    /// the console, a sign or a rename box advances the chest the player happens
+    /// to be looking at - which GRANTS a permission by accident, and "a
+    /// permission is only ever lost in the direction of off" stops being true of
+    /// the most ordinary action there is. The inventory check matters most of
+    /// all: having the chest open is exactly the state a player is in when they
+    /// are typing about it.
+    ///
+    /// These are the same six the shipped companion door hotkey uses, minus
+    /// Cartographer's own text-focus helper, which is that product's. Every one
+    /// is wrapped, because a build that does not have one of them must not turn
+    /// a missing method into a permission change.</summary>
+    private static bool KeyboardIsElsewhere()
+    {
+        try
+        {
+            return Minimap.IsOpen()
+                || Minimap.InTextInput()
+                || InventoryGui.IsVisible()
+                || (Chat.instance != null && Chat.instance.HasFocus())
+                || global::Console.IsVisible()
+                || (TextInput.instance != null && TextInput.instance.m_panel != null
+                    && TextInput.instance.m_panel.activeSelf);
+        }
+        catch
+        {
+            // Cannot tell whose keyboard it is, so assume it is not the world's:
+            // a missed key press costs a second press, and the alternative is a
+            // permission the player did not ask for.
+            return true;
         }
     }
 
@@ -116,7 +187,14 @@ internal sealed class ContainerPermissionRuntime : MonoBehaviour
         if (_world != null && _desk.IsDirty)
         {
             // Last chance: a key pressed in the same frame the world went down.
-            _store.Save(_world.Value, _desk);
+            // The player is past being told on screen, so the log gets it - this
+            // is the one write path that cannot report into a reply.
+            if (!_store.Save(_world.Value, _desk))
+            {
+                _log?.LogWarning(
+                    "A container permission set as the world closed could not be saved: " +
+                    (_store.Notice ?? "unknown reason"));
+            }
         }
 
         _world = world;
@@ -143,27 +221,38 @@ internal sealed class ContainerPermissionRuntime : MonoBehaviour
 
         if (!Fixed(container))
         {
-            Notify("That container moves, so a permission for it could not be found again. " +
-                "Only a chest that stays put can be enabled.");
+            Notify(TeamsterStrings.Get("containers.moves"));
             return;
         }
 
-        Vector3 position = container.transform.position;
-        NpcPoint point = PointOf(position);
+        NpcPoint point = PointOf(PositionOf(container));
         if (!NpcContainerDesk.CanBeRemembered(point))
         {
-            Notify("That container has no position this build can read, so it cannot be enabled.");
+            Notify(TeamsterStrings.Get("containers.noPlace"));
             return;
         }
 
-        string name = PrefabName(container);
-        NpcContainerUse now = _desk.Cycle(point, PrefabKey(name));
+        int prefab = PrefabKeyOf(container);
+        if (prefab == 0)
+        {
+            // Prefab 0 is a WILDCARD inside the library's place rule: it matches
+            // any prefab at that spot. Recording one would mean a different kind
+            // of container built there later inherits this permission - a gain,
+            // and it would falsify "a different piece rebuilt on the same spot is
+            // a different decision". The book keeps the place a permission was
+            // FIRST recorded at, so a wildcard written once stays a wildcard for
+            // the life of the file even after the name becomes readable. Refuse.
+            Notify(TeamsterStrings.Get("containers.noKind"));
+            return;
+        }
+
+        NpcContainerUse now = _desk.Cycle(point, prefab);
 
         if (_world != null && !_store.Save(_world.Value, _desk))
         {
             // The change is in memory and not on disk. Say so rather than let a
             // player believe a mark survived that will not.
-            Notify(Describe(now) + " - but it could NOT be saved, so it will be gone next session.");
+            Notify(TeamsterStrings.Format("containers.notSaved", Describe(now)));
             AnnounceNotice();
             return;
         }
@@ -272,29 +361,58 @@ internal sealed class ContainerPermissionRuntime : MonoBehaviour
         return shortcut.MainKey == KeyCode.None ? "(unbound)" : shortcut.ToString();
     }
 
+    /// <summary>What the player is told, through the catalog. This product's
+    /// README promises that every user-facing string resolves through it, and a
+    /// raw literal here would have been the only on-screen text in Teamster that
+    /// did not.</summary>
     private static string Describe(NpcContainerUse use)
     {
         switch (use)
         {
             case NpcContainerUse.Take:
-                return "Gunnar may take from this container.";
+                return TeamsterStrings.Get("containers.now.take");
             case NpcContainerUse.Deposit:
-                return "Gunnar may put things into this container.";
+                return TeamsterStrings.Get("containers.now.deposit");
             case NpcContainerUse.Both:
-                return "Gunnar may take from and put into this container.";
+                return TeamsterStrings.Get("containers.now.both");
             default:
-                return "Gunnar may not use this container.";
+                return TeamsterStrings.Get("containers.now.off");
         }
     }
 
-    /// <summary>Whether the container stays put. A container parented under a
-    /// cart moves with it, and the library cannot see that.</summary>
+    /// <summary>Whether the container stays put, decided structurally rather
+    /// than by naming the things that move.
+    ///
+    /// <b>A first version of this named two types</b> - <c>Vagon</c> and
+    /// <c>Ship</c> - and a review pointed out that "a container that moves is
+    /// refused" is then a claim about exactly those two: any other container with
+    /// a body, a modded wagon or raft or moving platform included, was accepted
+    /// and had its permission attached to the ground it happened to be on.
+    ///
+    /// So the test is now what a chest that stays put actually HAS: a
+    /// <c>Piece</c>, which is what the game gives a built thing, and no
+    /// non-kinematic <c>Rigidbody</c> above it, which is what the game gives a
+    /// thing that is carried. The two named types are kept as well, because they
+    /// are the cases this was written for and a belt is cheap.</summary>
     private static bool Fixed(Container container)
     {
         try
         {
-            return container.GetComponentInParent<Vagon>() == null
-                && container.GetComponentInParent<Ship>() == null;
+            if (container.GetComponentInParent<Vagon>() != null
+                || container.GetComponentInParent<Ship>() != null)
+            {
+                return false;
+            }
+
+            Rigidbody body = container.GetComponentInParent<Rigidbody>();
+            if (body != null && !body.isKinematic)
+            {
+                return false;
+            }
+
+            // A built piece has a Piece. Something with none is not a chest
+            // somebody placed, and this refuses rather than guessing.
+            return container.GetComponentInParent<Piece>() != null;
         }
         catch
         {
@@ -304,18 +422,76 @@ internal sealed class ContainerPermissionRuntime : MonoBehaviour
         }
     }
 
+    /// <summary>Where the game says this container is. The ZDO's position
+    /// first, because that is the SAVED position and it is what will be there
+    /// after a reload; the transform only when there is no ZDO to ask. The
+    /// shipped door permission reads it the same way round, for the same reason.
+    /// </summary>
+    private static Vector3 PositionOf(Container container)
+    {
+        try
+        {
+            ZNetView view = container.GetComponent<ZNetView>();
+            ZDO? zdo = view == null || !view.IsValid() ? null : view.GetZDO();
+            if (zdo != null)
+            {
+                Vector3 saved = zdo.GetPosition();
+                if (!float.IsNaN(saved.x) && !float.IsNaN(saved.y) && !float.IsNaN(saved.z))
+                {
+                    return saved;
+                }
+            }
+        }
+        catch
+        {
+            // Fall through to the transform.
+        }
+
+        return container.transform.position;
+    }
+
+    /// <summary>The container's kind, or empty. <b>Never `container.name`.</b>
+    /// An instantiated object is called `piece_chest_wood(Clone)`, which hashes
+    /// to something different from `piece_chest_wood` - so one frame where the
+    /// prefab name could not be read would record the permission under a name
+    /// nothing looks up again, and the mark would vanish silently on the next
+    /// reload. Empty is refused by the caller instead.</summary>
     private static string PrefabName(Container container)
     {
         try
         {
             ZNetView view = container.GetComponent<ZNetView>();
             string? name = view == null ? null : view.GetPrefabName();
-            return string.IsNullOrEmpty(name) ? container.name : name!;
+            return string.IsNullOrEmpty(name) ? string.Empty : name!;
         }
         catch
         {
-            return container.name;
+            return string.Empty;
         }
+    }
+
+    /// <summary>The container's kind as one stable number: the ZDO's own saved
+    /// prefab hash when there is one, else the hash of the prefab name. 0 means
+    /// "could not tell", and the callers refuse on it rather than recording a
+    /// wildcard.</summary>
+    private static int PrefabKeyOf(Container container)
+    {
+        try
+        {
+            ZNetView view = container.GetComponent<ZNetView>();
+            ZDO? zdo = view == null || !view.IsValid() ? null : view.GetZDO();
+            int saved = zdo == null ? 0 : zdo.GetPrefab();
+            if (saved != 0)
+            {
+                return saved;
+            }
+        }
+        catch
+        {
+            // Fall through to the name.
+        }
+
+        return PrefabKey(PrefabName(container));
     }
 
     /// <summary>The prefab as one stable number. A name hash rather than the name
@@ -343,11 +519,24 @@ internal sealed class ContainerPermissionRuntime : MonoBehaviour
         }
     }
 
+    /// <summary>The world, or null. <b>Zero is null.</b> `GetWorldUID` answers 0
+    /// while the world is not resolved yet, and this product already treats 0 as
+    /// "no world" everywhere else it asks. Accepting it would give every
+    /// unresolved frame in every save the same permission file
+    /// (`teamster_containers_0.tsv`), so a chest marked in one world's first
+    /// frames would be in force in the next world - a permission GAINED across
+    /// saves, which is the one direction this must never go.</summary>
     private static long? CurrentWorld()
     {
         try
         {
-            return ZNet.instance == null ? (long?)null : ZNet.instance.GetWorldUID();
+            if (ZNet.instance == null)
+            {
+                return null;
+            }
+
+            long uid = ZNet.instance.GetWorldUID();
+            return uid == 0L ? (long?)null : uid;
         }
         catch
         {
