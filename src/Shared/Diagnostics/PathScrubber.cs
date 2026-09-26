@@ -59,7 +59,15 @@ namespace TheConcernedCat.Diagnostics;
 ///    sentence's full stop: <c>…path 'C:\a\x.tsv'.</c> becomes
 ///    <c>…path '&lt;path&gt;</c>. Cosmetic, and pre-existing in both products.
 /// </summary>
-public static class PathScrubber
+/// <b>Internal, like every other shared-source type here.</b> This is compiled
+/// into each consumer rather than referenced, so each assembly gets its own copy
+/// and none of them publishes it. That is not a style choice: ConcernedNPC is a
+/// LIBRARY whose public surface is pinned by `PublicSurfaceTests` and costs a
+/// version bump to change, and a `public` type here would have silently become
+/// part of that package's API the moment the library compiled this folder. The
+/// test caught it; `internal` is the fix, and it matches `src/Shared/Workers`
+/// and `src/Shared/Interop`.
+internal static class PathScrubber
 {
     /// <summary>The longest line any caller keeps. Past this it is truncated
     /// rather than sent, because an unbounded line in a report is its own

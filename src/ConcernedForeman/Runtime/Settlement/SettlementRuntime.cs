@@ -469,7 +469,7 @@ internal sealed class SettlementRuntime
         }
         catch (Exception exception)
         {
-            _log("Settlement custody could not be opened for this world; no custody work will start: " + exception);
+            _log("Settlement custody could not be opened for this world; no custody work will start: " + SafeFailure.Describe(exception));
         }
     }
 

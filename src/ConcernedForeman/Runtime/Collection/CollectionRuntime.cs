@@ -384,7 +384,7 @@ internal sealed class CollectionRuntime
         // unscrubbed path came back in EVERY subsequent `cf_collect status`
         // for the rest of the session.
         _fault = where + ": " + SafeFailure.Brief(exception);
-        _log("Collection FAULTED in " + where + " and does no more work this session. " + exception);
+        _log("Collection FAULTED in " + where + " and does no more work this session. " + SafeFailure.Describe(exception));
         try
         {
             string? job = Modes.JobId;

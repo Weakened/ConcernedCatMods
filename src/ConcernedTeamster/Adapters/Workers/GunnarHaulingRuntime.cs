@@ -291,7 +291,7 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         catch (Exception exception)
         {
             _faulted = true;
-            _log.LogError("Gunnar's hauling runtime faulted and is now off for this session: " + exception);
+            _log.LogError("Gunnar's hauling runtime faulted and is now off for this session: " + SafeFailure.Describe(exception));
             EmergencyRelease();
         }
     }

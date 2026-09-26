@@ -147,7 +147,7 @@ internal sealed class WorldFuelTargets : IFuelTargetPort
         }
         catch (Exception exception)
         {
-            _log?.Invoke("The Steward could not list the settlement's pieces: " + exception);
+            _log?.Invoke("The Steward could not list the settlement's pieces: " + SafeFailure.Describe(exception));
             return found;
         }
 

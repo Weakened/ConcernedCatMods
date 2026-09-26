@@ -395,7 +395,7 @@ internal sealed class TeamsterWorkerRecord : MonoBehaviour
             try
             {
                 ErrorLog?.Invoke("Gunnar's body is inert: " + Fault +
-                    ". He will not work and will not overwrite what he is holding. " + exception);
+                    ". He will not work and will not overwrite what he is holding. " + SafeFailure.Describe(exception));
             }
             catch
             {

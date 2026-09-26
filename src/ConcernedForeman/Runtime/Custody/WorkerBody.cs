@@ -174,7 +174,7 @@ internal sealed class WorkerBody : MonoBehaviour
             // carries must not work, and must not save over what it carries.
             IsLoaded = false;
             Fault = "its stored inventory could not be loaded (" + exception.GetType().Name + ")";
-            ErrorLog?.Invoke("Worker body \"" + Key + "\" is inert: " + Fault + ". " + exception);
+            ErrorLog?.Invoke("Worker body \"" + Key + "\" is inert: " + Fault + ". " + SafeFailure.Describe(exception));
         }
     }
 
@@ -311,7 +311,7 @@ internal sealed class WorkerBody : MonoBehaviour
                 catch (Exception exception)
                 {
                     ErrorLog?.Invoke("Worker body \"" + Key + "\" died and its " + prefab +
-                        " could not be dropped, so it is lost with the body: " + exception);
+                        " could not be dropped, so it is lost with the body: " + SafeFailure.Describe(exception));
                 }
             }
         }
@@ -323,7 +323,7 @@ internal sealed class WorkerBody : MonoBehaviour
             }
             catch (Exception exception)
             {
-                ErrorLog?.Invoke("Worker body \"" + Key + "\" died and the loss could not all be recorded: " + exception);
+                ErrorLog?.Invoke("Worker body \"" + Key + "\" died and the loss could not all be recorded: " + SafeFailure.Describe(exception));
             }
         }
     }

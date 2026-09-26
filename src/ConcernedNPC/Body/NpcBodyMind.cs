@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using TheConcernedCat.ConcernedNPC.Bodies;
 using TheConcernedCat.ConcernedNPC.Roles;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedNPC.Body;
 
@@ -327,7 +328,7 @@ public sealed class NpcBodyMind : BaseAI
                 try
                 {
                     RaiseErrorLog(
-                        "An NPC body faulted and is now inert; it will not act again this session. " + exception);
+                        "An NPC body faulted and is now inert; it will not act again this session. " + SafeFailure.Describe(exception));
                 }
                 catch
                 {

@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using TheConcernedCat.ConcernedNPC.Bodies;
 using TheConcernedCat.ConcernedNPC.Work;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedNPC.Roles;
 
@@ -194,7 +195,7 @@ public sealed class NpcRoleRegistry
             // broken process. Three other products are registering into this
             // same load.
             return new RoleRegistration(RoleRegistrationStatus.NoRole, default,
-                "reading the role threw " + exception.GetType().Name + ": " + exception.Message);
+                "reading the role threw " + SafeFailure.Brief(exception));
         }
 
         if (identity.IsEmpty)
@@ -374,7 +375,7 @@ public sealed class NpcRoleRegistry
         }
         catch (Exception exception)
         {
-            reason = "reading the role's data root threw " + exception.GetType().Name + ": " + exception.Message;
+            reason = "reading the role's data root threw " + SafeFailure.Brief(exception);
             return false;
         }
 
@@ -403,7 +404,7 @@ public sealed class NpcRoleRegistry
             // is called out here because a branch no test can reach is one a
             // reader should be told about rather than left to assume is
             // covered.
-            reason = "a role's data root is not a usable path: " + exception.Message;
+            reason = "a role's data root is not a usable path: " + SafeFailure.Brief(exception);
             return false;
         }
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;
 
@@ -100,7 +101,7 @@ internal sealed class TeamsterWorkerAI : BaseAI
                 _loggedFault = true;
                 try
                 {
-                    ErrorLog?.Invoke("Gunnar's worker faulted and is now inert; he will not act again this session. " + exception);
+                    ErrorLog?.Invoke("Gunnar's worker faulted and is now inert; he will not act again this session. " + SafeFailure.Describe(exception));
                 }
                 catch
                 {

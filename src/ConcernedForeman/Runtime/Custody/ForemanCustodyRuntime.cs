@@ -11,6 +11,7 @@ using TheConcernedCat.Settlement.Register;
 using TheConcernedCat.Settlement.Tools;
 using TheConcernedCat.Workers;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Custody;
 
@@ -114,7 +115,7 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
         }
         catch (Exception exception)
         {
-            s_active?._log("Settlement world-save marker failed: " + exception);
+            s_active?._log("Settlement world-save marker failed: " + SafeFailure.Describe(exception));
         }
     }
 

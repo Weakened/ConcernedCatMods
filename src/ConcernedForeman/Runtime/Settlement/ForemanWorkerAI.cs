@@ -2,6 +2,7 @@ using System;
 using TheConcernedCat.ConcernedForeman.Runtime.Work;
 using TheConcernedCat.Settlement.Worker;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 
@@ -266,7 +267,7 @@ internal sealed class ForemanWorkerAI : BaseAI
             {
                 _loggedFault = true;
                 ErrorLog?.Invoke(
-                    "Worker faulted and is now inert; it will not act again this session. " + ex);
+                    "Worker faulted and is now inert; it will not act again this session. " + SafeFailure.Describe(ex));
             }
 
             return false;

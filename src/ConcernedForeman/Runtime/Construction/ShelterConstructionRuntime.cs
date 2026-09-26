@@ -577,7 +577,7 @@ internal sealed class ShelterConstructionRuntime
 
         _faulted = true;
         _fault = SafeFailure.Brief(exception);
-        _log("Build order FAULTED and does no more work this session. " + exception);
+        _log("Build order FAULTED and does no more work this session. " + SafeFailure.Describe(exception));
         try
         {
             Release();

@@ -901,24 +901,30 @@ CONTAINER_INTERNALS = (
 # `.InnerException` are the three ways an exception hands over text this product
 # has not scrubbed; a receiver is exempt only by name, and each exemption is a
 # type whose `Message` is a string somebody composed rather than an exception's.
-MESSAGE_READ = re.compile(
-    r"(?P<receiver>[A-Za-z_][A-Za-z0-9_]*)?" + r"\s*" + r"\.(?:Message|StackTrace|InnerException)" + r"\b")
+SPACE = r"\s*"
+SPACES = r"\s+"
+WORD = r"\b"
 
+MESSAGE_READ = re.compile(
+    r"(?P<receiver>[A-Za-z_][A-Za-z0-9_]*)?" + r"\s*" + r"\.(?:Message|StackTrace|InnerException)" + WORD)
+
+# Not exceptions. Each is one of this repository's own result, view or event
+# types, whose `Message` is a string somebody composed or a field already scrubbed
+# on the way in, and each is live - a name that matches nothing was removed rather
+# than left, because every entry here is a free pass.
+#
+# <b>The cost, stated.</b> `catch (Exception report)` in any scanned file would
+# pass this rule. Nothing does that today, and the names are chosen so that doing
+# it would read as obviously wrong; but the exemption is by NAME, so it is a
+# shadowing hole and not a type check.
 MESSAGE_OK_RECEIVERS = (
-    # Not exceptions. Each of these is one of this repository's own result, view
-    # or event types, whose `Message`/`StackTrace` is a string somebody composed
-    # or a field already scrubbed on the way in.
     "report",
     "viewModel",
     "history",
     "comparison",
     "recoveryEvent",
     "reading",
-    "loop",
-    "act",
-    "failureMessage",
     "Character",
-    "MessageHud",
 )
 
 # The one place in the repository that may read an exception's message, and each
@@ -940,6 +946,38 @@ MESSAGE_SCRUBBERS = (
 # and reads an exception member fails the gate; a STALE entry fails too, so the
 # list can only shrink.
 MESSAGE_SWEEP_PENDING: tuple[str, ...] = ()
+
+
+
+CAUGHT_EXCEPTION = re.compile(
+    r"catch" + SPACE + r"\(" + SPACE + r"(?:System\.)?[A-Za-z]*Exception" + SPACES
+    + r"(?P<name>[A-Za-z_]\w*)" + SPACE + r"\)")
+
+
+def _renders_a_caught_exception(code: str) -> list:
+    """Every place a caught exception is turned into text without scrubbing.
+
+    <b>Why `.Message` was never the whole story.</b> `"…: " + exception` calls
+    `Exception.ToString()`, which carries the message AND the stack AND every
+    inner exception - strictly more than the property the first version of this
+    rule banned. A review counted 18 such sites in the products plus 6 more in
+    the library, all of them logging to `LogOutput.log`, which is the file a
+    player uploads. The rule certified them away while they were live.
+
+    Three forms and only three: concatenation either side, an interpolation hole,
+    and an explicit `ToString()`. Passing the exception to a helper that scrubs -
+    `Fail(exception)`, `Disable(exception)` - is correct code and is not a hit,
+    which is why this looks for the RENDERING rather than for every mention."""
+    found = []
+    for caught in {match.group("name") for match in CAUGHT_EXCEPTION.finditer(code)}:
+        name = re.escape(caught)
+        for pattern in (
+                r"\+\s*" + name + WORD + r"(?!\s*[.(\[])",
+                WORD + name + r"\s*\+(?!\+)",
+                r"\{\s*" + name + r"\s*\}",
+                name + r"\s*\.\s*ToString\s*\(\s*\)"):
+            found.extend(re.finditer(pattern, code))
+    return found
 
 
 def _reads_a_call_result(code: str, match: "re.Match[str]") -> bool:
@@ -998,8 +1036,17 @@ def check_console_failures_go_through_one_scrubber(errors: list[str]) -> list[st
     scanned = 0
     still_pending: set[str] = set()
 
-    for key, spec in PRODUCTS.items():
-        product_dir = spec["project_dir"]  # type: ignore[assignment]
+    # Every product, the shared LIBRARY, and the shared SOURCE area. A review
+    # found the first version scanned only PRODUCTS, which left ConcernedNPC -
+    # a package that ships on its own and logs its own failures - and
+    # src/Shared/Settlement/Custody, whose refusal text is composed one layer
+    # below a Foreman line this very sweep had "finished".
+    trees = [spec["project_dir"] for spec in PRODUCTS.values()]  # type: ignore[index]
+    trees += [spec["project_dir"] for spec in LIBRARIES.values()]  # type: ignore[index]
+    trees.append(ROOT / "src" / "Shared")
+
+    for tree in trees:
+        product_dir: Path = tree  # type: ignore[assignment]
         if not product_dir.is_dir():
             continue
         for path in sorted(product_dir.rglob("*.cs")):
@@ -1013,6 +1060,7 @@ def check_console_failures_go_through_one_scrubber(errors: list[str]) -> list[st
             hits = [match for match in MESSAGE_READ.finditer(code)
                     if match.group("receiver") not in MESSAGE_OK_RECEIVERS
                     and not _reads_a_call_result(code, match)]
+            hits += _renders_a_caught_exception(code)
             if not hits:
                 continue
             if relative in pending:
@@ -1038,11 +1086,13 @@ def check_console_failures_go_through_one_scrubber(errors: list[str]) -> list[st
         return []
 
     return [
-        f"{label}: {scanned} product source(s) scanned across {len(PRODUCTS)} products; the path "
-        f"patterns exist once, in src/Shared/Diagnostics/PathScrubber.cs; exactly "
-        f"{len(MESSAGE_SCRUBBERS)} file(s) may read an exception's text and every other console "
-        f"reply and log line goes through it (#416 swept the last "
-        f"{len(MESSAGE_SWEEP_PENDING) if MESSAGE_SWEEP_PENDING else 0} tracked exception(s) away)",
+        f"{label}: {scanned} source(s) scanned across {len(PRODUCTS)} products, "
+        f"{len(LIBRARIES)} library(ies) and src/Shared; the path patterns exist once, in "
+        f"src/Shared/Diagnostics/PathScrubber.cs; no file outside "
+        f"{len(MESSAGE_SCRUBBERS)} pinned scrubber(s) reads an exception's message, stack or inner "
+        f"exception, or renders one into text by concatenation, interpolation or ToString(); "
+        f"{len(MESSAGE_OK_RECEIVERS)} receiver name(s) are exempt as this repository's own result "
+        f"types, and {len(MESSAGE_SWEEP_PENDING)} file(s) are tracked as a temporary exception",
     ]
 
 
