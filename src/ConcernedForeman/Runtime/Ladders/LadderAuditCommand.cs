@@ -1,4 +1,5 @@
 using System;
+using TheConcernedCat.Diagnostics;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
@@ -45,7 +46,11 @@ internal sealed class LadderAuditCommand : ConsoleCommand
         }
         catch (Exception exception)
         {
-            output = "Ladder audit failed: " + exception.Message;
+            // #411: a filesystem exception's raw message is a path and this
+            // machine's user name, in the text a player pastes into a bug
+            // report. SafeFailure keeps the type, which is the useful half.
+            output = SafeFailure.Describe(
+                Name, args != null && args.Length > 0 ? args[0] : "", exception);
         }
 
         // Into the log as well as the console: the lead reads the log

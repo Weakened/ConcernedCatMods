@@ -32,6 +32,8 @@
     <!-- The cross-product capability map, for the optional restock provider
          probe. Adopted whole. -->
     <Compile Include="..\Shared\Interop\**\*.cs" LinkBase="Interop" />
+    <!-- #411: the one path scrubber and failure wording. -->
+    <Compile Include="..\Shared\Diagnostics\**\*.cs" LinkBase="Diagnostics" />
 
     <!-- The settlement area is adopted as a NAMED CLOSED SUBSET, not whole,
          and that is deliberate.

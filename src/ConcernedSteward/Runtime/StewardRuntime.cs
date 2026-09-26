@@ -1,4 +1,5 @@
 using System;
+using TheConcernedCat.Diagnostics;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -831,8 +832,10 @@ internal sealed class StewardRuntime
             return true;
         }
 
-        _log("The Steward's record could not be written: " + failure.GetType().Name + ": " +
-            failure.Message + ". Nothing was agreed or moved on the strength of it.");
+        // #411: a record-write failure is a filesystem failure, so this line
+        // carried the path it failed on and the machine's user name.
+        _log("The Steward's record could not be written: " + SafeFailure.Brief(failure) +
+            ". Nothing was agreed or moved on the strength of it.");
         return false;
     }
 

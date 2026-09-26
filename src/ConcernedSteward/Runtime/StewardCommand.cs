@@ -1,4 +1,5 @@
 using System;
+using TheConcernedCat.Diagnostics;
 using System.Globalization;
 using Jotunn.Entities;
 using TheConcernedCat.ConcernedSteward.Domain;
@@ -47,9 +48,10 @@ internal sealed class StewardCommand : ConsoleCommand
             // A console command must never be the thing that takes the game
             // down, and a caught failure the player can read is worth more than
             // a stack trace they cannot.
+            // #411: the type stays, the raw message goes. A filesystem
+            // exception's message is a path and this machine's user name.
             Console.instance?.Print(
-                "The Steward could not answer that: " + exception.GetType().Name + ": " +
-                exception.Message);
+                "The Steward could not answer that: " + SafeFailure.Brief(exception));
         }
     }
 
@@ -191,9 +193,10 @@ internal sealed class StewardFiresCommand : ConsoleCommand
         }
         catch (Exception exception)
         {
+            // #411: the type stays, the raw message goes. A filesystem
+            // exception's message is a path and this machine's user name.
             Console.instance?.Print(
-                "The Steward could not answer that: " + exception.GetType().Name + ": " +
-                exception.Message);
+                "The Steward could not answer that: " + SafeFailure.Brief(exception));
         }
     }
 }

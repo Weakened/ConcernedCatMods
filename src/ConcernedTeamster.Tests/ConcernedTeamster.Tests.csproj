@@ -14,6 +14,10 @@
     <Compile Include="..\ConcernedTeamster\Domain\**\*.cs" LinkBase="Domain" />
     <Compile Include="..\Shared\Workers\**\*.cs" LinkBase="Workers" />
     <Compile Include="..\Shared\Interop\**\*.cs" LinkBase="Interop" />
+    <!-- #411: the one path scrubber and the one failure wording, shared as
+         source because products never reference each other and three
+         independent copies is how #388 had to be fixed twice. -->
+    <Compile Include="..\Shared\Diagnostics\**\*.cs" LinkBase="Diagnostics" />
     <!-- CT-008: the exact calibration file the plugin ships, embedded under
          the same logical name so LoadCalibrationSource resolves it in both
          assemblies and tests prove the shipped bytes. -->

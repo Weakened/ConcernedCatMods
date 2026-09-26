@@ -72,6 +72,8 @@
          subset stays closed. -->
     <Compile Include="..\Shared\Workers\**\*.cs" LinkBase="Workers" />
     <Compile Include="..\Shared\Interop\**\*.cs" LinkBase="Interop" />
+    <!-- #411: the one path scrubber and failure wording. -->
+    <Compile Include="..\Shared\Diagnostics\**\*.cs" LinkBase="Diagnostics" />
     <Compile Include="..\Shared\Settlement\Identity\**\*.cs" LinkBase="Settlement\Identity" />
     <Compile Include="..\Shared\Settlement\Worker\**\*.cs" LinkBase="Settlement\Worker" />
     <Compile Include="..\Shared\Settlement\Designations\**\*.cs" LinkBase="Settlement\Designations" />

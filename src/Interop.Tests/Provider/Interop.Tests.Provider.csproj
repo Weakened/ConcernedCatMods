@@ -24,6 +24,9 @@
     <Compile Include="..\..\ConcernedTeamster.Tests\HaulingInteropFakeService.cs" LinkBase="Fakes" />
     <Compile Include="..\..\Shared\Workers\**\*.cs" LinkBase="Workers" />
     <Compile Include="..\..\Shared\Interop\**\*.cs" LinkBase="Interop" />
+    <!-- #411: HaulProvider now reports its fault through the one shared
+         scrubber, so the source it needs comes with it. -->
+    <Compile Include="..\..\Shared\Diagnostics\**\*.cs" LinkBase="Diagnostics" />
   </ItemGroup>
 
 </Project>
