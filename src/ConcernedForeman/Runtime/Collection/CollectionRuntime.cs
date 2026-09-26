@@ -1,4 +1,5 @@
 using System;
+using TheConcernedCat.Diagnostics;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
@@ -379,7 +380,10 @@ internal sealed class CollectionRuntime
         }
 
         _faulted = true;
-        _fault = where + ": " + exception.GetType().Name + ": " + exception.Message;
+        // #411: worse than a one-off reply - Status() prints this, so an
+        // unscrubbed path came back in EVERY subsequent `cf_collect status`
+        // for the rest of the session.
+        _fault = where + ": " + SafeFailure.Brief(exception);
         _log("Collection FAULTED in " + where + " and does no more work this session. " + exception);
         try
         {
@@ -436,7 +440,9 @@ internal sealed class CollectionRuntime
         }
         catch (Exception exception)
         {
-            return "cf_collect failed: " + exception.GetType().Name + ": " + exception.Message;
+            // #411: the reply a player reads, for the same reason as
+            // BuildOrderRuntime above.
+            return "cf_collect failed: " + SafeFailure.Brief(exception);
         }
     }
 

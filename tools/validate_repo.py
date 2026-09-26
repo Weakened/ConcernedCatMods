@@ -897,70 +897,131 @@ CONTAINER_INTERNALS = (
 )
 
 
-# #411: every product's console reply and log text goes through one scrubber.
-# `.Message` is the shape the defect had in all three products; a receiver is
-# exempt only by name, and each exemption is a real one.
-MESSAGE_READ = re.compile(r"(?P<receiver>[A-Za-z_][A-Za-z0-9_]*)?\b.Message\b")
+# #411: one scrubber for the whole repository. `.Message`, `.StackTrace` and
+# `.InnerException` are the three ways an exception hands over text this product
+# has not scrubbed; a receiver is exempt only by name, and each exemption is a
+# type whose `Message` is a string somebody composed rather than an exception's.
+MESSAGE_READ = re.compile(
+    r"(?P<receiver>[A-Za-z_][A-Za-z0-9_]*)?" + r"\s*" + r"\.(?:Message|StackTrace|InnerException)" + r"\b")
 
-# Receivers that are not exceptions. `Character.Message` is vanilla's own HUD
-# method; the rest are this repository's own view models and records, whose
-# `Message` is a string somebody composed rather than an exception's.
 MESSAGE_OK_RECEIVERS = (
-    "Character",
+    # Not exceptions. Each of these is one of this repository's own result, view
+    # or event types, whose `Message`/`StackTrace` is a string somebody composed
+    # or a field already scrubbed on the way in.
+    "report",
     "viewModel",
     "comparison",
     "recoveryEvent",
-    "_message",
+    "reading",
+    "loop",
+    "act",
+    "failureMessage",
+    "Character",
     "MessageHud",
 )
 
-# The one place in the repository that may read an exception's message: the
-# shared scrubber's own wording helper.
-MESSAGE_SCRUBBER = ("src", "Shared", "Diagnostics", "SafeFailure.cs")
+# The one place in the repository that may read an exception's message, and each
+# product's own scrubber entry point. Cartographer still keeps its own copy of
+# the patterns; whether that should become a delegation too is #408's question.
+MESSAGE_SCRUBBERS = (
+    "src/Shared/Diagnostics/SafeFailure.cs",
+    "src/ConcernedCartographer/Domain/Reporting/SafeLogText.cs",
+)
+
+# Files that still compose their own exception text, every one of them a LOG
+# line rather than a console reply, tracked as #416.
+#
+# <b>This list may only ever shrink.</b> It is not a scope claim - the rule
+# covers every product source, and a file that is not on this list and reads an
+# exception member fails the gate. That is the difference between a tracked
+# remainder and an untested boundary: when #416 lands, entries come out; nothing
+# ever goes in without saying so here.
+MESSAGE_SWEEP_PENDING = (
+    "src/ConcernedForeman/Domain/Construction/PlacementGate.cs",
+    "src/ConcernedForeman/Domain/Construction/ShelterBuildLoop.cs",
+    "src/ConcernedForeman/Runtime/Collection/CollectionRuntime.cs",
+    "src/ConcernedForeman/Runtime/Construction/BuildPose.cs",
+    "src/ConcernedForeman/Runtime/Construction/ShelterConstructionRuntime.cs",
+    "src/ConcernedForeman/Runtime/Construction/WorldBuildMaterials.cs",
+    "src/ConcernedForeman/Runtime/Construction/WorldPieceCatalogue.cs",
+    "src/ConcernedForeman/Runtime/Construction/WorldPiecePlacer.cs",
+    "src/ConcernedForeman/Runtime/Construction/WorldPlacementAuthority.cs",
+    "src/ConcernedForeman/Runtime/Cooperation/ForemanCooperativeDelivery.cs",
+    "src/ConcernedForeman/Runtime/Custody/WorkerBody.cs",
+    "src/ConcernedForeman/Runtime/Ladders/ClimbController.cs",
+    "src/ConcernedForeman/Runtime/Ladders/ClimbMotor.cs",
+    "src/ConcernedForeman/Runtime/Ladders/ClimbPose.cs",
+    "src/ConcernedForeman/Runtime/Ladders/ClimbSounds.cs",
+    "src/ConcernedForeman/Runtime/Ladders/LadderInteraction.cs",
+    "src/ConcernedForeman/Runtime/Ladders/LadderPieces.cs",
+    "src/ConcernedForeman/Runtime/Settlement/SettlementRuntime.cs",
+    "src/ConcernedForeman/Runtime/VanillaConsoleCommands.cs",
+    "src/ConcernedForeman/Ui/BuildOrderPanel.cs",
+    "src/ConcernedForeman/Ui/CollectionOrderPanel.cs",
+    "src/ConcernedSteward/Domain/Upkeep/UpkeepLoop.cs",
+    "src/ConcernedSteward/Runtime/StewardBody.cs",
+    "src/ConcernedSteward/Runtime/VanillaConsoleCommands.cs",
+    "src/ConcernedSteward/Runtime/WorldFuelTargets.cs",
+    "src/ConcernedTeamster/Adapters/CartTelemetryPump.cs",
+    "src/ConcernedTeamster/Adapters/Workers/ContainerPermissionRuntime.cs",
+    "src/ConcernedTeamster/Adapters/Workers/GunnarHaulingRuntime.cs",
+    "src/ConcernedTeamster/Adapters/Workers/TeamsterWorkerPrefab.cs",
+    "src/ConcernedTeamster/Adapters/Workers/VagonHitchSeam.cs",
+    "src/ConcernedTeamster/Domain/Trips/SidecarFileStore.cs",
+    "src/ConcernedTeamster/Ui/CargoManifestPanel.cs",
+    "src/ConcernedTeamster/Ui/CartStatusHudController.cs",
+    "src/ConcernedTeamster/Ui/CompatibilityPanel.cs",
+    "src/ConcernedTeamster/Ui/Hauling/GunnarHaulPanel.cs",
+    "src/ConcernedTeamster/Ui/Hauling/GunnarHaulPanelHost.cs",
+    "src/ConcernedTeamster/Ui/RecoveryGuidancePanel.cs",
+    "src/ConcernedTeamster/Ui/SupportBundlePanel.cs",
+    "src/ConcernedTeamster/Ui/TripHistoryPanel.cs",
+)
 
 
 def check_console_failures_go_through_one_scrubber(errors: list[str]) -> list[str]:
-    """#411 scrubber adoption audit: one path scrubber, and no product reads an
-    exception's message itself.
+    """#411 scrubber adoption audit: one path scrubber, and no product composes
+    its own exception text outside a named, shrinking list.
 
     The defect was the same line in every product: `"<X> failed: " +
     exception.Message`, which names no subcommand and prints a filesystem
     exception's full path - the machine's user name and the profile's location -
     into the text a player pastes into a bug report. #367 removed it from one
-    command, #389 from six more in that product, and #411 from the remaining four
-    across the other two.
+    command, #389 from six more in that product, and #411 from the remaining nine
+    across the other three.
 
-    Three products wrote the patterns independently, because products never
-    reference each other at compile time, and that is exactly how #388's defect
-    had to be found and fixed twice (#410). So there is now one scrubber under
+    Three products had written the path patterns independently, because products
+    never reference each other at compile time, and that is exactly how #388's
+    defect had to be found and fixed twice (#410). There is now one scrubber under
     `src/Shared/Diagnostics/`, compiled into each consumer as source.
 
-    <b>What this rule covers, and what it deliberately does not yet.</b> It scans
-    the files that declare a console command in any product - the reply a player
-    reads and pastes into a bug report, which is the half of #411 this change
-    closes - and requires that none of them reads an exception's message itself.
-    It does NOT yet cover the ~45 log-line call sites across four products that
-    still compose their own text; those are enumerated in the follow-up issue and
-    several of them sit in separately-gated ladder scope (#334), so sweeping them
-    here would have dragged that in. A rule that claimed the wider property while
-    checking the narrower one would be worse than this one saying which it is.
+    <b>Why this scans everything rather than the console files.</b> The first
+    version scanned only files declaring a `ConsoleCommand`, and a review showed
+    why that was not enough: the RUNTIMES' own catches wrap the whole command
+    body, so the wrapper's catch never runs for the exceptions this issue is
+    about. `cf_build` and `cf_collect` still printed the raw path, and
+    `CollectionRuntime` remembered one in a fault string that `status` reprinted
+    for the rest of the session - with the console wrappers all correctly
+    scrubbed. It is the same lesson #389's review taught about scanning wrappers
+    instead of cores, in a different product.
 
-    Receivers that are not exceptions are exempt BY NAME rather than by pattern,
-    because a rule that guessed would either miss the leak or fail the gate on a
-    view model. String literals are blanked before the scan, so a quoted token is
-    not a use of one."""
+    `.StackTrace` and `.InnerException` are banned alongside `.Message` because
+    they are the other two ways the same text arrives, and string interiors are
+    blanked EXCEPT interpolation holes, so `$"{exception.Message}"` is visible."""
     label = "[interop] #411 scrubber adoption audit"
 
-    scrubber = ROOT.joinpath(*MESSAGE_SCRUBBER)
-    if not scrubber.is_file():
-        fail(f"{label}: {'/'.join(MESSAGE_SCRUBBER)} is missing — the one place an exception's "
-             "message may be read, and the reason three products no longer each have their own "
-             "scrubber", errors)
-        return []
+    for relative in MESSAGE_SCRUBBERS:
+        if not ROOT.joinpath(*relative.split("/")).is_file():
+            fail(f"{label}: {relative} is missing - it is one of the only places an exception's "
+                 "message may be read", errors)
+            return []
 
-    commands = 0
+    pending = set(MESSAGE_SWEEP_PENDING)
+    exempt = set(MESSAGE_SCRUBBERS)
     offenders: list[str] = []
-    named: list[str] = []
+    scanned = 0
+    still_pending: set[str] = set()
+
     for key, spec in PRODUCTS.items():
         product_dir = spec["project_dir"]  # type: ignore[assignment]
         if not product_dir.is_dir():
@@ -968,37 +1029,43 @@ def check_console_failures_go_through_one_scrubber(errors: list[str]) -> list[st
         for path in sorted(product_dir.rglob("*.cs")):
             if path.relative_to(product_dir).parts[0] in ("obj", "bin"):
                 continue
-            code = _cs_code_without_strings(path)
-            # Discovered by BASE CLASS, not by file name: #389's review showed
-            # that globbing `*ToolsCommand.cs` made "a new command is covered the
-            # day it is written" a claim about a convention nothing enforces.
-            if not CONSOLE_COMMAND_CLASS.search(code):
+            relative = path.relative_to(ROOT).as_posix()
+            if relative in exempt:
                 continue
-            commands += 1
-            named.append(f"{key}/{path.name}")
-            for match in MESSAGE_READ.finditer(code):
-                if match.group("receiver") in MESSAGE_OK_RECEIVERS:
-                    continue
-                line = code.count(chr(10), 0, match.start()) + 1
-                offenders.append(f"{path.relative_to(ROOT).as_posix()}:{line}")
-
-    if commands == 0:
-        fail(f"{label}: no ConsoleCommand subclass found in any product — the audit covers "
-             "nothing, which is worse than a failure", errors)
-        return []
+            scanned += 1
+            code = _cs_code_keeping_interpolations(path)
+            hits = [match for match in MESSAGE_READ.finditer(code)
+                    if match.group("receiver") not in MESSAGE_OK_RECEIVERS]
+            if not hits:
+                continue
+            if relative in pending:
+                still_pending.add(relative)
+                continue
+            line = code.count(chr(10), 0, hits[0].start()) + 1
+            offenders.append(f"{relative}:{line}")
 
     if offenders:
-        fail(f"{label}: {offenders[:6]}{' and more' if len(offenders) > 6 else ''} read an "
-             "exception's `.Message` directly. A filesystem exception's message is a path and this "
-             f"machine's user name. Go through {'/'.join(MESSAGE_SCRUBBER)} — SafeFailure.Describe "
-             "for a console reply, SafeFailure.Brief for a log line", errors)
+        fail(f"{label}: {offenders[:6]}{' and more' if len(offenders) > 6 else ''} compose their own "
+             "exception text and are not on the tracked #416 list. A filesystem exception's message "
+             "is a path and this machine's user name. Go through "
+             "src/Shared/Diagnostics/SafeFailure.cs - Describe for a console reply, Brief for a log "
+             "line - or, if it genuinely belongs on the pending list, add it there and say why",
+             errors)
+        return []
+
+    swept = sorted(pending - still_pending)
+    if swept:
+        fail(f"{label}: {swept} no longer read an exception member, so they must come OFF "
+             "MESSAGE_SWEEP_PENDING. That list may only shrink, and a stale entry is a hole nobody "
+             "would notice reopening", errors)
         return []
 
     return [
-        f"{label}: {commands} console command(s) across {len(PRODUCTS)} products, found by base "
-        f"class — none reads an exception's `.Message`; the path patterns exist once, in "
-        f"{'/'.join(MESSAGE_SCRUBBER[:-1])}/PathScrubber.cs. The log-line call sites are NOT covered "
-        "by this rule and are tracked separately",
+        f"{label}: {scanned} product source(s) scanned across {len(PRODUCTS)} products; the path "
+        f"patterns exist once, in src/Shared/Diagnostics/PathScrubber.cs; "
+        f"{len(MESSAGE_SCRUBBERS)} file(s) may read an exception's text, and "
+        f"{len(still_pending)} log-only file(s) are tracked as #416 - a file that is neither fails "
+        "here",
     ]
 
 
@@ -2734,6 +2801,22 @@ def _cs_code_without_strings(path: Path) -> str:
                          _cs_code(path))
 
 
+def _cs_code_keeping_interpolations(path: Path) -> str:
+    """As <see cref="_cs_code_without_strings"/>, but an interpolated string keeps
+    its holes.
+
+    `$"failed: {exception.Message}"` is a use of `.Message`, and blanking the
+    whole literal made it invisible - which a review demonstrated as a clean way
+    to reintroduce the leak with the gate green."""
+    def blank(match: "re.Match[str]") -> str:
+        literal = match.group(0)
+        if "{" in literal:
+            return literal
+        return '"' + " " * max(0, len(literal) - 2) + '"'
+
+    return CS_STRING.sub(blank, _cs_code(path))
+
+
 def check_cartographer_console_failures_are_scrubbed(errors: list[str]) -> list[str]:
     """#389 console failure audit: no `cc_*` command reports a raw exception
     message, and every one of them reaches its work through the single guard.
@@ -2839,7 +2922,7 @@ def check_cartographer_console_failures_are_scrubbed(errors: list[str]) -> list[
                 continue
             if exempt_file:
                 continue
-            line = code.count(chr(10), 0, match.start()) + 1
+            line = code.count("\n", 0, match.start()) + 1
             fail(f"{label}: {path.relative_to(ROOT).as_posix()}:{line} reads an exception's "
                  "`.Message` — that is the raw text #389 removed, and a filesystem exception's "
                  "message is a path and this machine's user name. Go through SafeLogText (for a log "

@@ -1,4 +1,5 @@
 using System;
+using TheConcernedCat.Diagnostics;
 using System.Collections.Generic;
 using TheConcernedCat.ConcernedForeman.Domain.Construction;
 using TheConcernedCat.Settlement.Worker;
@@ -131,7 +132,11 @@ internal sealed class BuildOrderRuntime
         }
         catch (Exception exception)
         {
-            return "The build order command failed: " + exception.Message;
+            // #411: this catch wraps the whole command body, so it - not the
+            // wrapper in BuildCommand - is what a player actually reads when
+            // a filesystem call throws. Scrubbing only the wrapper left this
+            // printing the path and the machine's user name.
+            return "The build order command failed: " + SafeFailure.Brief(exception);
         }
     }
 

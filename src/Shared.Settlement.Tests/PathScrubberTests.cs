@@ -88,6 +88,31 @@ public class PathScrubberTests
     }
 
     [Fact]
+    public void AFourWordAccountFolderIsTheStatedLimit_AndItLeaksTheName()
+    {
+        // Written as a test rather than only as a doc line, because a review found
+        // it and because it is the #388/#410 leak shape at a different arity: the
+        // cap admits at most two space-joined tokens per segment, so a
+        // three-word account name is covered and a four-word one is not.
+        //
+        // Asserted as exact output, so the day the cap changes this fails and is
+        // reconsidered rather than silently improving or silently worsening.
+        Assert.Equal(
+            "<path> Can Sunar Jr\\AppData\\Roaming\\TMM\\profiles\\secret\\x.cfg",
+            PathScrubber.Scrub(
+                "C:\\Users\\Eren Can Sunar Jr\\AppData\\Roaming\\TMM\\profiles\\secret\\x.cfg",
+                keepFileName: false));
+
+        // The control: three words is covered, so this is a cap boundary and not
+        // a general failure to handle spaces.
+        Assert.Equal(
+            "<path>",
+            PathScrubber.Scrub(
+                "C:\\Users\\Eren Can Sunar\\AppData\\Roaming\\TMM\\profiles\\secret\\x.cfg",
+                keepFileName: false));
+    }
+
+    [Fact]
     public void AnOrdinaryLineIsUnchanged()
     {
         const string ordinary = "Cart telemetry sampler armed: interval 0.5 s, radius 25 m.";

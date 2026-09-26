@@ -39,12 +39,26 @@ namespace TheConcernedCat.Diagnostics;
 /// the log file with it. Counting tokens fixes both and needs no case class.
 ///
 /// <b>Stated limits</b>, because they are real and a caller's own documentation
-/// has to name them: a path ending at a FOLDER followed by at most two
-/// capitalised words loses those words; a folder name of four or more words
-/// exceeds the cap and the rest of the path survives; an extension of more than
-/// eight characters, or one ending in a non-alphanumeric, is not recognised as an
-/// extension; and UNC (<c>\\server\share</c>) and relative paths are matched by
-/// neither pattern (#408).</summary>
+/// has to name them:
+///
+/// 1. A path ending at a FOLDER followed by at most two capitalised words loses
+///    those words. A diagnostics loss, and the direction this errs on purpose.
+/// 2. <b>A segment of four or more words is not covered, and when that segment is
+///    the account folder this is a USER-NAME leak rather than a diagnostics
+///    loss.</b> `C:\Users\Eren Can Sunar Jr\AppData\…` keeps `Can Sunar Jr` and
+///    everything after it, including the profile name. A three-word name is
+///    covered; a four-word one is not. Raising the cap would buy that back and
+///    spend it on prose, which is the trade the cap exists to make, so it is
+///    named here rather than quietly widened.
+/// 3. An extension of more than eight characters, or one ending in a
+///    non-alphanumeric, is not recognised as an extension.
+/// 4. UNC (<c>\\server\share</c>) and relative paths are matched by neither
+///    pattern (#408).
+/// 5. A single quote is not excluded from a segment, so with
+///    <c>keepFileName: false</c> a quoted path swallows its closing quote and the
+///    sentence's full stop: <c>…path 'C:\a\x.tsv'.</c> becomes
+///    <c>…path '&lt;path&gt;</c>. Cosmetic, and pre-existing in both products.
+/// </summary>
 public static class PathScrubber
 {
     /// <summary>The longest line any caller keeps. Past this it is truncated
