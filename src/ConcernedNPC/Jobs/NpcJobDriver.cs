@@ -190,6 +190,11 @@ public sealed class NpcJobDriver
     /// <see cref="NpcJobProgress.Waiting"/> costs nothing.</summary>
     public int Rounds { get; private set; }
 
+    /// <summary>How many started rounds have produced a reconciled result.
+    /// Unlike <see cref="Rounds"/>, this advances only after
+    /// <see cref="LastRound"/> has been replaced with that result.</summary>
+    public int CompletedRounds { get; private set; }
+
     /// <summary>What the current round's plan was provisioned for.</summary>
     public JobManifest Manifest => _plan.Plan.Manifest;
 
@@ -466,6 +471,7 @@ public sealed class NpcJobDriver
         }
 
         LastRound = JobReconciler.Reconcile(_plan, _results);
+        CompletedRounds++;
         Carrying = LastRound.LeftOver;
         Release();
         _route = null;

@@ -220,6 +220,39 @@ public sealed class StewardMaintenancePlanTests
     }
 
     [Fact]
+    public void Shared_driver_final_round_predispatch_skip_is_reconciled_after_later_service()
+    {
+        using var folder = new TemporaryFolder();
+        PlanContext context = Open(folder.Path);
+        var fixture = new StewardFixture(
+            limits: new UpkeepLimits(32, 50, 1, 15f, 90f, 3),
+            plan: context.Plan,
+            sharedDriver: true,
+            adoption: context.Adoption);
+        context.Plan.OnWorldLoaded(context.Scope, Evidence(context.World), fixture.Pack, Wood);
+        FuelTargetObservation refilled =
+            fixture.AddFire("a-refilled", fuel: 1f, x: 4f, z: 0f);
+        fixture.AddFire("b-second", fuel: 1f, x: 8f, z: 0f);
+
+        fixture.Run(1);
+        Assert.Equal(UpkeepPhase.ToDepot, fixture.Loop.Phase);
+        fixture.Fires.Replace(FakeFires.Fuelled(refilled, 10f));
+        fixture.RunUntilTripEnds(cap: 40);
+
+        Assert.DoesNotContain("a-refilled", fixture.Fires.Fed);
+        Assert.Contains("b-second", fixture.Fires.Fed);
+        NpcPlanState saved = Load(folder.Path, context.Scope);
+        Assert.Equal(NpcPlanPhase.Settled, saved.Phase);
+        Assert.Equal(2, saved.TargetsTotal);
+        Assert.Equal(2, saved.TargetsDone);
+        Assert.Equal(18, fixture.Loop.Custody.Withdrawn);
+        Assert.Equal(9, fixture.Loop.Custody.Burned);
+        Assert.Equal(9, fixture.Loop.Custody.Returned);
+        Assert.Equal(41, fixture.Depot.Count(Wood));
+        fixture.AssertConserved(startingStock: 50);
+    }
+
+    [Fact]
     public void Shared_driver_unreadable_stop_remains_owed_instead_of_becoming_a_durable_skip()
     {
         using var folder = new TemporaryFolder();

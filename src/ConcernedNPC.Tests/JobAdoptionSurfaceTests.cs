@@ -258,6 +258,8 @@ public sealed class JobAdoptionSurfaceTests : IDisposable
         // Between planning and walking, the player builds post1 himself.
         NpcJobAdvance first = driver.Next(Point(0f, 0f));
         Assert.Equal(NpcJobProgress.Do, first.Progress);
+        Assert.Equal(1, driver.Rounds);
+        Assert.Equal(0, driver.CompletedRounds);
         role.Complete("post1");
 
         var collected = new List<PlannedStep>();
@@ -272,6 +274,7 @@ public sealed class JobAdoptionSurfaceTests : IDisposable
         // why the job is finished rather than planning a round for it.
         Assert.Single(serviced);
         Assert.Equal(1, driver.Rounds);
+        Assert.Equal(1, driver.CompletedRounds);
         Assert.Equal(1, driver.LastRound.Skipped);
         Assert.True(driver.LastRound.Outstanding.IsEmpty);
         Assert.True(driver.LastRound.IsComplete);

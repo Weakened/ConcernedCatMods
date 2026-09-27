@@ -699,7 +699,7 @@ internal sealed class UpkeepLoop
         _liveScope = tick.Scope;
         SitePoint at = tick.Motion.Position;
         NpcJobAdvance advance = _driver.Next(new NpcPoint(at.X, at.Y, at.Z));
-        if (_driver.Rounds > _driverRoundResultObserved)
+        if (_driver.CompletedRounds > _driverRoundResultObserved)
         {
             if (_driver.LastRound.Skipped > 0)
             {
@@ -712,13 +712,13 @@ internal sealed class UpkeepLoop
                     return;
                 }
 
-                _driverRoundResultObserved = _driver.Rounds;
+                _driverRoundResultObserved = _driver.CompletedRounds;
                 _driverSkipsDurablyResolved = 0;
                 StopDrivenJob(tick, reason);
                 return;
             }
 
-            _driverRoundResultObserved = _driver.Rounds;
+            _driverRoundResultObserved = _driver.CompletedRounds;
             _driverSkipsDurablyResolved = 0;
         }
 
