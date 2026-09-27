@@ -271,13 +271,22 @@ take it today - `ConcernedSteward` and `ConcernedTeamster` both carry the `Proje
 call. `ConcernedForeman` has not adopted it yet, and that adoption is the seam the arbiter-mediates-mode work exists
 to cross.
 
-One role has been moved onto it in part: the Steward drives `NpcJobDriver` for its maintenance round. Gunnar's
-collection job exists and is not yet constructed by anything.
+One role has been moved onto it in part. The Steward's maintenance-round model can drive `NpcJobDriver`, but that
+batch driver remains a tested model rather than the shipped executor. The shipped runtime still drives the older,
+measured `UpkeepLoop`, because replacing it in the recovery leaf would create a second live executor or discard its
+intent/receipt and authority gates. Gunnar's collection job exists and is not yet constructed by anything.
 
-Interruption and recovery (#379) is the same shape: the mechanism exists and is proved, and **nothing constructs an
-`NpcPlanRun` yet**. No product persists a plan today, so "a plan survives a reload" is a statement about the library
-and its tests, not yet about a session. The plan journal and the custody ledger agree in shape and are not joined;
-joining them belongs with the first role that has both a plan and a transfer.
+Interruption and recovery (#379) now has its first production caller. Concerned Steward constructs an `NpcPlanRun`
+through a role-owned `<scope>.steward-plan.tsv` path and codec, and its real `UpkeepLoop` writes shared plan intents
+before the loop's existing intents and records the same measured outcomes afterwards. The plan never surveys, walks,
+feeds, deposits, or constructs an item; `UpkeepLoop` remains the only executor. Reloaded destinations are evidence,
+never commands: a clean carried load is given a newly validated return-only route, while a pending movement, a pack
+mismatch, an unreadable plan, a death, or a failed post-mutation save stops in `NeedsAttention` without replay or
+compensation. `cs_steward resolve` is the explicit human exit and quarantines an unreadable plan before replacing it.
+
+The remaining Steward gap is the larger driver cut-over: the shipped maintenance round does not yet use the
+`MaintenanceJobRole`/`NpcJobDriver` batch model. This leaf adopts durable interruption around the safe executor that
+already mutates the world; it does not claim the test-only batch driver became production.
 
 Nothing in this document has been observed in game, and every gameplay row for this program is OWNER GO-AROUND
 PENDING. That includes the two adoptions above: the dependency wiring is proved by the validator, not by watching an

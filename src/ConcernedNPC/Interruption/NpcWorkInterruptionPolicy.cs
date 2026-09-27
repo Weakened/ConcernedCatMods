@@ -64,7 +64,7 @@ namespace TheConcernedCat.ConcernedNPC.Interruption;
 /// policy that threw while deciding how to recover would be a failure inside
 /// failure handling, and the tests enumerate the whole cross product rather than
 /// trusting this paragraph.</summary>
-internal sealed class NpcWorkInterruptionPolicy : IInterruptionPolicy
+public sealed class NpcWorkInterruptionPolicy : IInterruptionPolicy
 {
     /// <summary>How long to wait before acting on something that may simply be
     /// busy: a chest somebody has open, a route blocked by a cart, a player who
@@ -76,7 +76,11 @@ internal sealed class NpcWorkInterruptionPolicy : IInterruptionPolicy
     /// in a policy.</summary>
     private const float Wait = 10f;
 
-    internal static NpcWorkInterruptionPolicy Instance { get; } = new NpcWorkInterruptionPolicy();
+    public static NpcWorkInterruptionPolicy Instance { get; } = new NpcWorkInterruptionPolicy();
+
+    private NpcWorkInterruptionPolicy()
+    {
+    }
 
     public InterruptionOutcome Decide(in Interruption interruption)
     {

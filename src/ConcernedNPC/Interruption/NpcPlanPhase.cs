@@ -18,7 +18,7 @@ namespace TheConcernedCat.ConcernedNPC.Interruption;
 /// <b>Zero is not a phase.</b> A plan whose phase nobody set has not started,
 /// has not finished and is not resumable; it is a record somebody wrote wrong,
 /// and every path treats it as such rather than as the beginning.</summary>
-internal enum NpcPlanPhase
+public enum NpcPlanPhase
 {
     /// <summary>Nobody said. Never resumed, never continued, never counted as
     /// the start.</summary>

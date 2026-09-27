@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0
+
+The durable interruption machinery becomes an actual consumer API and Concerned Steward adopts it around its shipped
+maintenance loop (#379).
+
+* A role can now provide its own plan codec and absolute path, open an atomic plan journal, write a plan through
+  `NpcPlanRun`, and reconstruct it through the shared conservative interruption policy.
+* The immutable reservation and material values carried by a plan cross the package boundary. Reservation books,
+  custody ledgers, transfer executors, paths, row tags, and schemas remain private to their owners.
+* This additive minor version deliberately widens the public surface. Every in-repository consumer pin moves with it
+  so no product can compile against one contract and install another.
+* The library still registers no role, names no file, patches nothing, and mutates no world object on its own.
+
 ## 0.2.0
 
 The public surface gains two types, so that a player's container permissions can be reached at all (#374).

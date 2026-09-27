@@ -10,19 +10,19 @@ namespace TheConcernedCat.ConcernedNPC.Custody;
 /// entry and as a zero - is how a total comes to be counted twice, so a stack
 /// with no units in it is not a stack and <see cref="IsValid"/> says so.
 /// </summary>
-internal readonly struct NpcMaterialStack : IEquatable<NpcMaterialStack>
+public readonly struct NpcMaterialStack : IEquatable<NpcMaterialStack>
 {
-    internal NpcMaterialStack(NpcMaterial material, int count)
+    public NpcMaterialStack(NpcMaterial material, int count)
     {
         Material = material;
         Count = count;
     }
 
-    internal NpcMaterial Material { get; }
+    public NpcMaterial Material { get; }
 
-    internal int Count { get; }
+    public int Count { get; }
 
-    internal bool IsValid => Material.IsNamed && Count > 0;
+    public bool IsValid => Material.IsNamed && Count > 0;
 
     public bool Equals(NpcMaterialStack other) => Material.Equals(other.Material) && Count == other.Count;
 

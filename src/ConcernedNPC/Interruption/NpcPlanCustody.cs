@@ -18,7 +18,7 @@ namespace TheConcernedCat.ConcernedNPC.Interruption;
 /// made twice, in the ledger and in the executor: a person looking at a stopped
 /// NPC is cheap, and a quietly duplicated or quietly deleted stack of a player's
 /// material is not.</summary>
-internal enum NpcPlanCustody
+public enum NpcPlanCustody
 {
     /// <summary>Nobody said. <b>Never treated as clear.</b> A record written
     /// without this field set is a record whose author did not think about the

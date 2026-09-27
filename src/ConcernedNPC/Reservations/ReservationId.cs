@@ -33,7 +33,7 @@ namespace TheConcernedCat.ConcernedNPC.Reservations;
 /// reserved. What is reserved is the book's subject, keyed however that subject
 /// is keyed - and a world object's own id is never durable, because a world load
 /// renumbers every one of them.</summary>
-internal readonly struct ReservationId : IEquatable<ReservationId>
+public readonly struct ReservationId : IEquatable<ReservationId>
 {
     private const char Separator = '#';
 
@@ -48,26 +48,26 @@ internal readonly struct ReservationId : IEquatable<ReservationId>
     /// <summary>The job this reservation belongs to, and <b>the unit of
     /// conflict</b>: two reservations with the same job id never conflict with
     /// one another, whatever their steps. Empty for <c>default</c>.</summary>
-    internal string JobId => _jobId ?? string.Empty;
+    public string JobId => _jobId ?? string.Empty;
 
     /// <summary>Which step of that job's plan took it out, from zero. Carried so
     /// an evidence line can say which step, never compared when deciding
     /// whether two reservations conflict.</summary>
-    internal int Step { get; }
+    public int Step { get; }
 
     /// <summary><c>job#step</c>. Empty for <c>default</c>, which is never a
     /// valid name and never matches one.</summary>
-    internal string Value =>
+    public string Value =>
         _jobId == null ? string.Empty : _jobId + Separator + Step.ToString(CultureInfo.InvariantCulture);
 
-    internal bool IsEmpty => _jobId == null;
+    public bool IsEmpty => _jobId == null;
 
     /// <summary>The name for one step of one job. The same arguments always give
     /// the same name, in this session and in every later one.</summary>
     /// <param name="jobId">The job's own stable name. Must contain no
     /// <c>#</c>, so the two halves can always be told apart again.</param>
     /// <param name="step">The step's index in its plan, from zero.</param>
-    internal static ReservationId For(string? jobId, int step)
+    public static ReservationId For(string? jobId, int step)
     {
         if (string.IsNullOrEmpty(jobId) || jobId!.IndexOf(Separator) >= 0 || step < 0)
         {
@@ -82,7 +82,7 @@ internal readonly struct ReservationId : IEquatable<ReservationId>
     /// zero</b>: <c>job#007</c> would otherwise parse to a name whose
     /// <see cref="Value"/> is <c>job#7</c>, so text and name would disagree for
     /// anything keyed by text.</summary>
-    internal static bool TryParse(string? text, out ReservationId id)
+    public static bool TryParse(string? text, out ReservationId id)
     {
         id = default;
         if (string.IsNullOrEmpty(text))

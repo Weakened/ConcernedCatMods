@@ -37,12 +37,12 @@ namespace TheConcernedCat.ConcernedNPC.Interruption;
 /// and at which version is the role's, through
 /// <see cref="INpcPlanCodec"/> - which is why moving a role onto this needs no
 /// migration.</summary>
-internal sealed class NpcPlanState
+public sealed class NpcPlanState
 {
     private static readonly ReservationId[] NoReservations = new ReservationId[0];
     private static readonly NpcMaterialStack[] NoMaterial = new NpcMaterialStack[0];
 
-    internal NpcPlanState(
+    public NpcPlanState(
         NpcIdentity identity,
         string? jobId,
         NpcPlanPhase phase,
@@ -81,7 +81,7 @@ internal sealed class NpcPlanState
     /// required, because a total of zero says the plan covers no work and a plan
     /// that reported itself finished on a silent zero is the failure the planning
     /// leaf already paid for once.</summary>
-    internal static NpcPlanState Opening(
+    public static NpcPlanState Opening(
         NpcIdentity identity, string? jobId, NpcWorldEpoch world, int targetsTotal) =>
         new NpcPlanState(
             identity,
@@ -102,86 +102,86 @@ internal sealed class NpcPlanState
     /// <summary>Which NPC this plan belongs to. <b>Half of the plan's identity</b>
     /// - the half that makes a resumed plan re-attach to a body rather than
     /// build one.</summary>
-    internal NpcIdentity Identity { get; }
+    public NpcIdentity Identity { get; }
 
     /// <summary>The job's own stable name. The other half of the plan's
     /// identity, and the half every reservation name is derived from.</summary>
-    internal string JobId { get; }
+    public string JobId { get; }
 
     /// <summary>How far it got.</summary>
-    internal NpcPlanPhase Phase { get; }
+    public NpcPlanPhase Phase { get; }
 
     /// <summary>Whether a movement of material is in flight.</summary>
-    internal NpcPlanCustody Custody { get; }
+    public NpcPlanCustody Custody { get; }
 
     /// <summary>What this plan has set aside, by name. Derived names, so
     /// re-taking one after a reload is satisfied rather than doubled.</summary>
-    internal IReadOnlyList<ReservationId> Reservations { get; }
+    public IReadOnlyList<ReservationId> Reservations { get; }
 
     /// <summary>What the NPC is carrying on this plan's behalf. <b>Evidence,
     /// not truth</b>: the custody ledger is the truth and an inventory can
     /// vanish with a body. Carried here so that a resumed plan knows what it
     /// should find, and can say so when it does not.</summary>
-    internal IReadOnlyList<NpcMaterialStack> Carried { get; }
+    public IReadOnlyList<NpcMaterialStack> Carried { get; }
 
     /// <summary>How many of the plan's targets are done.</summary>
-    internal int TargetsDone { get; }
+    public int TargetsDone { get; }
 
     /// <summary>How many the plan covers. Zero means the plan covers nothing,
     /// which is a fact a resumed plan needs and never a default.</summary>
-    internal int TargetsTotal { get; }
+    public int TargetsTotal { get; }
 
     /// <summary>Where material is coming from, named by the role.</summary>
-    internal string SourceKey { get; }
+    public string SourceKey { get; }
 
     /// <summary>Where it is going, named by the role.</summary>
-    internal string DestinationKey { get; }
+    public string DestinationKey { get; }
 
     /// <summary>The vehicle or cart assigned to this plan, named by the role.
     /// Empty when there is none - which is most roles, and is why this library
     /// knows the word "vehicle" and not the word for any particular one.
     /// </summary>
-    internal string VehicleKey { get; }
+    public string VehicleKey { get; }
 
     /// <summary>The world load this state's keys were minted in. Unknown for a
     /// state read back from disk, which is what makes every key in it stale
     /// rather than dangerous.</summary>
-    internal NpcWorldEpoch World { get; }
+    public NpcWorldEpoch World { get; }
 
     /// <summary>How many times this plan has been reconstructed. Carried as
     /// evidence for a person: a plan on its fifth reconstruction is telling
     /// somebody something a single attempt does not.</summary>
-    internal int Attempt { get; }
+    public int Attempt { get; }
 
     /// <summary>What happened, in words, for whoever reads this later. Never a
     /// format and never parsed back.</summary>
-    internal string Note { get; }
+    public string Note { get; }
 
     /// <summary>Whether this state names a plan at all. A state without both
     /// halves of its identity is not resumable and is not written.</summary>
-    internal bool IsNamed => !Identity.IsEmpty && JobId.Length != 0;
+    public bool IsNamed => !Identity.IsEmpty && JobId.Length != 0;
 
     /// <summary>Whether this state's keys may be acted on: named, in a phase
     /// somebody set, and minted in the world that is loaded now.</summary>
-    internal bool IsLiveIn(NpcWorldEpoch now) =>
+    public bool IsLiveIn(NpcWorldEpoch now) =>
         IsNamed && Phase != NpcPlanPhase.Unspecified && World.Matches(now);
 
     /// <summary>Whether this plan is holding anything at all - a reservation,
     /// material on the body, or a vehicle. A plan holding nothing can be
     /// abandoned where it stands; one that is not, cannot.</summary>
-    internal bool HoldsAnything =>
+    public bool HoldsAnything =>
         Reservations.Count > 0 || Carried.Count > 0 || VehicleKey.Length != 0;
 
     /// <summary>Whether anything about this plan's record cannot be resolved
     /// from it. Both the unset value and the uncertain one, because a custody
     /// field nobody wrote is not evidence that nothing was in flight.</summary>
-    internal bool IsUncertain =>
+    public bool IsUncertain =>
         Custody == NpcPlanCustody.Uncertain || Custody == NpcPlanCustody.Unspecified;
 
     /// <summary>How many units of material this plan says are on the body. The
     /// conservation sum's carried term, totalled in one place so no caller adds
     /// it up differently.</summary>
-    internal int CarriedUnits
+    public int CarriedUnits
     {
         get
         {
@@ -208,7 +208,7 @@ internal sealed class NpcPlanState
     /// that was written down first. Without that rule the write-ahead discipline
     /// bound the two phase changes and not the field, so any same-phase write could
     /// rewrite this in any phase with no intent at all.</summary>
-    internal bool CarriesTheSameLoadAs(NpcPlanState? other) =>
+    public bool CarriesTheSameLoadAs(NpcPlanState? other) =>
         other != null && Same(Carried, other.Carried);
 
     /// <summary>Whether two states describe the same work in the same
@@ -220,7 +220,7 @@ internal sealed class NpcPlanState
     /// deliberately excluded: an interruption is allowed to change where a plan
     /// is and to say why, and is not allowed to change what the plan is about or
     /// what it is holding.</summary>
-    internal bool CarriesTheSameWorkAs(NpcPlanState? other)
+    public bool CarriesTheSameWorkAs(NpcPlanState? other)
     {
         if (other == null)
         {
@@ -273,13 +273,13 @@ internal sealed class NpcPlanState
 
     /// <summary>The same plan, in another phase, with a note saying why.
     /// </summary>
-    internal NpcPlanState WithPhase(NpcPlanPhase phase, string? note) =>
+    public NpcPlanState WithPhase(NpcPlanPhase phase, string? note) =>
         new NpcPlanState(
             Identity, JobId, phase, Custody, Reservations, Carried, TargetsDone, TargetsTotal,
             SourceKey, DestinationKey, VehicleKey, World, Attempt, note ?? Note);
 
     /// <summary>The same plan with a different custody standing.</summary>
-    internal NpcPlanState WithCustody(NpcPlanCustody custody, string? note) =>
+    public NpcPlanState WithCustody(NpcPlanCustody custody, string? note) =>
         new NpcPlanState(
             Identity, JobId, Phase, custody, Reservations, Carried, TargetsDone, TargetsTotal,
             SourceKey, DestinationKey, VehicleKey, World, Attempt, note ?? Note);
@@ -294,26 +294,26 @@ internal sealed class NpcPlanState
     /// without it a re-planned plan revalidates to "the world reloaded, so
     /// re-plan" for ever, because every plan off the disk is stale and nothing
     /// could ever say otherwise.</summary>
-    internal NpcPlanState WithWorld(NpcWorldEpoch world) =>
+    public NpcPlanState WithWorld(NpcWorldEpoch world) =>
         new NpcPlanState(
             Identity, JobId, Phase, Custody, Reservations, Carried, TargetsDone, TargetsTotal,
             SourceKey, DestinationKey, VehicleKey, world, Attempt, Note);
 
     /// <summary>The same plan holding what it now holds.</summary>
-    internal NpcPlanState WithHoldings(
+    public NpcPlanState WithHoldings(
         IReadOnlyList<ReservationId>? reservations, IReadOnlyList<NpcMaterialStack>? carried) =>
         new NpcPlanState(
             Identity, JobId, Phase, Custody, reservations, carried, TargetsDone, TargetsTotal,
             SourceKey, DestinationKey, VehicleKey, World, Attempt, Note);
 
     /// <summary>The same plan with its ends named.</summary>
-    internal NpcPlanState WithRoute(string? sourceKey, string? destinationKey, string? vehicleKey) =>
+    public NpcPlanState WithRoute(string? sourceKey, string? destinationKey, string? vehicleKey) =>
         new NpcPlanState(
             Identity, JobId, Phase, Custody, Reservations, Carried, TargetsDone, TargetsTotal,
             sourceKey, destinationKey, vehicleKey, World, Attempt, Note);
 
     /// <summary>The same plan, further on.</summary>
-    internal NpcPlanState WithProgress(int targetsDone) =>
+    public NpcPlanState WithProgress(int targetsDone) =>
         new NpcPlanState(
             Identity, JobId, Phase, Custody, Reservations, Carried, targetsDone, TargetsTotal,
             SourceKey, DestinationKey, VehicleKey, World, Attempt, Note);

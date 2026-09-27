@@ -17,9 +17,9 @@ namespace TheConcernedCat.ConcernedNPC.Custody;
 /// This library never parses it, never composes one, and owns none: the audit
 /// over these sources refuses a string constant precisely so that no name a
 /// player's save depends on can be born here.</summary>
-internal readonly struct NpcMaterial : IEquatable<NpcMaterial>
+public readonly struct NpcMaterial : IEquatable<NpcMaterial>
 {
-    internal NpcMaterial(string? itemName, int quality, int variant)
+    public NpcMaterial(string? itemName, int quality, int variant)
     {
         ItemName = itemName ?? string.Empty;
         Quality = quality < 1 ? 1 : quality;
@@ -27,17 +27,17 @@ internal readonly struct NpcMaterial : IEquatable<NpcMaterial>
     }
 
     /// <summary>One kind of ordinary item: quality one, no variant.</summary>
-    internal static NpcMaterial Of(string? itemName) => new NpcMaterial(itemName, 1, 0);
+    public static NpcMaterial Of(string? itemName) => new NpcMaterial(itemName, 1, 0);
 
-    internal string ItemName { get; }
+    public string ItemName { get; }
 
-    internal int Quality { get; }
+    public int Quality { get; }
 
-    internal int Variant { get; }
+    public int Variant { get; }
 
     /// <summary>False for a material nobody named. A ledger refuses to hold one
     /// rather than keeping a pile of nothing.</summary>
-    internal bool IsNamed => !string.IsNullOrEmpty(ItemName);
+    public bool IsNamed => !string.IsNullOrEmpty(ItemName);
 
     public bool Equals(NpcMaterial other) =>
         string.Equals(ItemName, other.ItemName, StringComparison.Ordinal)

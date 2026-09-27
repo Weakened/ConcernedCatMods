@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using TheConcernedCat.ConcernedNPC.Work;
 using TheConcernedCat.ConcernedSteward.Domain.Scope;
 using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Worker;
@@ -59,7 +60,8 @@ internal readonly struct UpkeepTick
         IFuelTargetPort fires,
         IItemStorePort depot,
         IItemStorePort carrier,
-        IStewardMotionPort motion)
+        IStewardMotionPort motion,
+        NpcWorldEpoch planWorld = default)
     {
         Now = now;
         TendingEnabled = tendingEnabled;
@@ -69,6 +71,7 @@ internal readonly struct UpkeepTick
         Depot = depot;
         Carrier = carrier;
         Motion = motion;
+        PlanWorld = planWorld;
     }
 
     public float Now { get; }
@@ -89,6 +92,11 @@ internal readonly struct UpkeepTick
     public IItemStorePort Carrier { get; }
 
     public IStewardMotionPort Motion { get; }
+
+    /// <summary>The shared runtime's epoch for durable plan references. It is
+    /// separate from the Steward's string epoch, which guards game object keys.
+    /// </summary>
+    public NpcWorldEpoch PlanWorld { get; }
 }
 
 /// <summary>The Steward's one job: keep the settlement's fires alight.
@@ -131,6 +139,7 @@ internal sealed class UpkeepLoop
 
     private readonly UpkeepLimits _limits;
     private readonly IUpkeepJournal _journal;
+    private readonly StewardMaintenancePlan? _plan;
     private readonly FuelCustody _custody = new FuelCustody();
     private readonly UpkeepReservation _reservation = new UpkeepReservation();
     private readonly AttentionThrottle _throttle;
@@ -168,11 +177,15 @@ internal sealed class UpkeepLoop
     /// answer, and <see cref="IsWorking"/>, <see cref="Reservation"/> and the
     /// trip's <c>OrderId</c> are where it always actually lived.</summary>
     public UpkeepLoop(
-        UpkeepLimits limits, IUpkeepJournal journal, Action<string>? report = null)
+        UpkeepLimits limits,
+        IUpkeepJournal journal,
+        Action<string>? report = null,
+        StewardMaintenancePlan? plan = null)
     {
         _limits = limits;
         _journal = journal ?? throw new ArgumentNullException(nameof(journal));
         _report = report;
+        _plan = plan;
         _throttle = new AttentionThrottle(limits.ScanIntervalSeconds * 2f);
         _retry = new BoundedRetry(limits.MaxFailuresPerPhase, limits.ScanIntervalSeconds, limits.ScanIntervalSeconds * 4f);
     }
@@ -207,6 +220,12 @@ internal sealed class UpkeepLoop
     {
         if (_phase == UpkeepPhase.NeedsAttention)
         {
+            return;
+        }
+
+        if (_plan != null && _plan.IsBlocked)
+        {
+            Halt(_plan.BlockedReason);
             return;
         }
 
@@ -305,6 +324,22 @@ internal sealed class UpkeepLoop
             }
 
             _nextScanAt = tick.Now + _limits.ScanIntervalSeconds;
+            if (_plan != null && !_plan.TryPrepareReturn(
+                    tick.PlanWorld,
+                    tick.Scope.DepotKey,
+                    _fuelItemName,
+                    _custody.Carried,
+                    out string planFailure))
+            {
+                Halt(planFailure);
+                return;
+            }
+
+            // This is a newly validated return route, not the old trip's
+            // scope. Without restamping it, the next walking tick compares a
+            // recovered/default revision with the live scope and abandons the
+            // return forever while still carrying the player's material.
+            _scopeRevision = tick.Scope.Revision;
             BeginJobIfNeeded();
             Enter(UpkeepPhase.Returning, tick.Now,
                 "Carrying " + _custody.Carried.ToString(CultureInfo.InvariantCulture) +
@@ -413,6 +448,19 @@ internal sealed class UpkeepLoop
             return;
         }
 
+        if (_plan != null && !_plan.TryBegin(
+                tick.PlanWorld,
+                tick.Scope.DepotKey,
+                target.Key,
+                target.FuelItemName,
+                planned,
+                out string beginFailure))
+        {
+            _reservation.Release(StewardRole.UpkeepJobId);
+            Halt(beginFailure);
+            return;
+        }
+
         BeginJobIfNeeded();
         _fuelItemName = target.FuelItemName;
         _targetPoint = target.Position;
@@ -491,6 +539,14 @@ internal sealed class UpkeepLoop
         {
             case WorkerWalkStatus.Arrived:
                 tick.Motion.Stop();
+                if (onArrival == UpkeepPhase.Feeding
+                    && _plan != null
+                    && !_plan.TryEnterExecuting(out string planFailure))
+                {
+                    Halt(planFailure);
+                    return;
+                }
+
                 Enter(onArrival, tick.Now, _explanation);
                 break;
 
@@ -530,7 +586,7 @@ internal sealed class UpkeepLoop
 
         if (_custody.Carried > 0 && _phase != UpkeepPhase.Returning)
         {
-            Enter(UpkeepPhase.Returning, tick.Now,
+            BeginReturn(tick,
                 "The Steward stopped because " + because + ", so she is taking the " +
                 _custody.Carried.ToString(CultureInfo.InvariantCulture) +
                 " she is carrying back to the chest.");
@@ -588,6 +644,12 @@ internal sealed class UpkeepLoop
             case UpkeepOutcome.Completed:
             case UpkeepOutcome.Partial:
                 _custody.RecordWithdrawn(measurement.Moved);
+                if (_plan != null && !_plan.TryRouteToTarget(out string routeFailure))
+                {
+                    Halt(routeFailure);
+                    return;
+                }
+
                 _retry.Reset();
                 Enter(UpkeepPhase.ToTarget, tick.Now,
                     "Carrying " + measurement.Moved.ToString(CultureInfo.InvariantCulture) + " " +
@@ -596,6 +658,13 @@ internal sealed class UpkeepLoop
 
             case UpkeepOutcome.Declined:
                 _reservation.Release(StewardRole.UpkeepJobId);
+                if (_plan != null
+                    && !_plan.RefundEmpty("The supply chest moved no material, so the round was released."))
+                {
+                    Halt(_plan.BlockedReason);
+                    return;
+                }
+
                 StopAndIdle(tick,
                     "The Steward could not take any " + _fuelItemName + " from the chest. " +
                     measurement.Evidence);
@@ -637,7 +706,7 @@ internal sealed class UpkeepLoop
         }
         catch (Exception exception)
         {
-            Enter(UpkeepPhase.Returning, tick.Now,
+            BeginReturn(tick,
                 "The fire could not be looked at (" + Brief(exception) + "), so the Steward is " +
                 "taking the wood back.");
             return;
@@ -645,7 +714,7 @@ internal sealed class UpkeepLoop
 
         if (!seen)
         {
-            Enter(UpkeepPhase.Returning, tick.Now,
+            BeginReturn(tick,
                 "That fire is gone, so the Steward is taking the wood back to the chest.");
             return;
         }
@@ -655,16 +724,35 @@ internal sealed class UpkeepLoop
             target, tick.Scope.Settlement, stocked, tick.Scope.Epoch);
         if (status != FuelTargetStatus.Eligible)
         {
-            Enter(UpkeepPhase.Returning, tick.Now,
+            BeginReturn(tick,
                 "The Steward left that fire alone (" + DescribeStatus(status) +
                 ") and is taking the wood back.");
             return;
         }
 
         var intent = new UpkeepIntent(NextRequest(), UpkeepStep.Feed, key.Value, 1);
+        if (_plan != null && !_plan.TryIntend(
+                "about to feed one measured unit to " + key.Value, out string planIntentFailure))
+        {
+            Halt(planIntentFailure);
+            return;
+        }
+
         if (!_journal.TryRecordIntent(intent))
         {
-            Enter(UpkeepPhase.Returning, tick.Now,
+            if (_plan != null && !_plan.TryConclude(
+                    true,
+                    _fuelItemName,
+                    Math.Max(0, SafeCount(tick.Carrier, _fuelItemName)),
+                    false,
+                    "the legacy intent was refused, so the world was not touched",
+                    out string concludeFailure))
+            {
+                Halt(concludeFailure);
+                return;
+            }
+
+            BeginReturn(tick,
                 "The Steward could not write down what she was about to do, so she did nothing " +
                 "and is taking the wood back.");
             return;
@@ -704,6 +792,22 @@ internal sealed class UpkeepLoop
 
         bool receipted = _journal.TryRecordReceipt(
             new UpkeepReceipt(intent.Request, UpkeepStep.Feed, outcome, moved, measurement.Evidence));
+        bool targetDone = measurement.Outcome == FeedOutcome.Declined
+            || (measurement.Outcome == FeedOutcome.Accepted
+                && measurement.CarriedAfter == 0);
+        bool established = receipted
+            && measurement.CarriedAfter >= 0
+            && (measurement.Outcome == FeedOutcome.Accepted
+                || measurement.Outcome == FeedOutcome.Declined
+                || measurement.Outcome == FeedOutcome.Lost);
+        string planReceiptFailure = string.Empty;
+        bool planReceipted = _plan == null || _plan.TryConclude(
+            established,
+            _fuelItemName,
+            Math.Max(0, measurement.CarriedAfter),
+            targetDone,
+            measurement.Evidence,
+            out planReceiptFailure);
 
         switch (measurement.Outcome)
         {
@@ -713,11 +817,12 @@ internal sealed class UpkeepLoop
                 _explanation = "Feeding the fire: " +
                     FuelMath.Describe(measurement.FuelAfter, target.MaxFuel) + ", " +
                     _custody.Carried.ToString(CultureInfo.InvariantCulture) + " left to carry.";
-                if (!receipted)
+                if (!receipted || !planReceipted)
                 {
                     Halt("The Steward put wood on the fire but could not write down that she " +
                         "had, so she stopped rather than risk doing it twice. " +
-                        measurement.Evidence);
+                        measurement.Evidence +
+                        (planReceipted ? string.Empty : " " + planReceiptFailure));
                 }
 
                 break;
@@ -728,6 +833,12 @@ internal sealed class UpkeepLoop
                 // being one he may touch between the revalidation and the call.
                 // The adapter's evidence says which; repeating it here in our
                 // own words would sometimes contradict it.
+                if (!planReceipted)
+                {
+                    Halt(planReceiptFailure);
+                    return;
+                }
+
                 FinishTrip(tick, measurement.Evidence);
                 break;
 
@@ -895,8 +1006,29 @@ internal sealed class UpkeepLoop
                 "there was no room in " + Describe(to), null);
         }
 
+        if (_plan != null && !_plan.TryIntend(
+                "about to " + intent.Step + " " + asked.ToString(CultureInfo.InvariantCulture)
+                + " " + _fuelItemName,
+                out string planIntentFailure))
+        {
+            return new TransferMeasurement(
+                UpkeepOutcome.Refused, 0, string.Empty, planIntentFailure);
+        }
+
         if (!_journal.TryRecordIntent(intent))
         {
+            if (_plan != null && !_plan.TryConclude(
+                    true,
+                    _fuelItemName,
+                    PlanCarried(intent.Step, fromBefore, toBefore),
+                    false,
+                    "the legacy intent was refused, so the world was not touched",
+                    out string concludeFailure))
+            {
+                return new TransferMeasurement(
+                    UpkeepOutcome.Refused, 0, string.Empty, concludeFailure);
+            }
+
             return new TransferMeasurement(
                 UpkeepOutcome.Refused, 0, string.Empty,
                 "The Steward could not write down what she was about to do, so she did nothing.");
@@ -946,16 +1078,31 @@ internal sealed class UpkeepLoop
             outcome = UpkeepOutcome.Uncertain;
         }
 
-        if (!_journal.TryRecordReceipt(
-            new UpkeepReceipt(intent.Request, intent.Step, outcome, moved, evidence)))
+        bool receiptSaved = _journal.TryRecordReceipt(
+            new UpkeepReceipt(intent.Request, intent.Step, outcome, moved, evidence));
+        bool established = receiptSaved && outcome != UpkeepOutcome.Uncertain;
+        string planFailure = string.Empty;
+        bool planSaved = _plan == null || _plan.TryConclude(
+            established,
+            _fuelItemName,
+            PlanCarried(intent.Step, fromAfter, toAfter),
+            false,
+            evidence,
+            out planFailure);
+
+        if (!receiptSaved || !planSaved)
         {
             return new TransferMeasurement(
                 UpkeepOutcome.Uncertain, 0,
-                evidence + "; and the result could not be written down", null);
+                evidence + "; and the result could not be written down"
+                + (planSaved ? string.Empty : "; " + planFailure), null);
         }
 
         return new TransferMeasurement(outcome, moved, evidence, null);
     }
+
+    private static int PlanCarried(UpkeepStep step, int fromCount, int toCount) =>
+        Math.Max(0, step == UpkeepStep.Withdraw ? toCount : fromCount);
 
     // ------------------------------------------------------------------
     // Reload recovery
@@ -997,6 +1144,7 @@ internal sealed class UpkeepLoop
             if (unresolved.Count == 0 && _custody.Carried == 0)
             {
                 Enter(UpkeepPhase.Idle, 0f, "Waiting.");
+                HonorPlanBlock();
                 return;
             }
 
@@ -1046,15 +1194,39 @@ internal sealed class UpkeepLoop
 
         _phase = UpkeepPhase.Idle;
         _journal.Compact();
+        HonorPlanBlock();
     }
 
     /// <summary>A person has looked at a recorded loss. Lets him work again;
     /// recreates nothing.</summary>
-    public string Acknowledge()
+    public string Acknowledge(IItemStorePort? carrier = null, string? fuelItemName = null)
     {
         if (_phase != UpkeepPhase.NeedsAttention && !_custody.HasLoss)
         {
             return "Nothing needed acknowledging.";
+        }
+
+        string material = string.IsNullOrEmpty(fuelItemName)
+            ? (_plan?.FuelItemName ?? _fuelItemName)
+            : fuelItemName!;
+        int measured = SafeCount(carrier!, material);
+        if (measured >= 0)
+        {
+            _custody.RestateCarried(measured);
+        }
+        else
+        {
+            // A blocked or unreadable plan may legitimately have no saved
+            // carried count even though its pending move is uncertain. The
+            // legacy loss total cannot prove the whole pack was dropped: it
+            // also records partial feed failures and does not preserve their
+            // cause across reload. Only a live count may clear custody.
+            return "The Steward's pack could not be counted, so the durable custody evidence was not cleared.";
+        }
+
+        if (_plan != null && !_plan.Resolve(material, _custody.Carried, out string planFailure))
+        {
+            return planFailure + " Nothing was acknowledged or recreated.";
         }
 
         string had = _custody.Describe();
@@ -1072,6 +1244,22 @@ internal sealed class UpkeepLoop
     public void Stop(string reason)
     {
         _reservation.Release(StewardRole.UpkeepJobId);
+        if (_plan != null)
+        {
+            if (_custody.Carried == 0)
+            {
+                if (!_plan.RefundEmpty(reason))
+                {
+                    Halt(_plan.BlockedReason);
+                    return;
+                }
+            }
+            else
+            {
+                _plan.Suspend(reason);
+            }
+        }
+
         if (_phase != UpkeepPhase.NeedsAttention)
         {
             _phase = UpkeepPhase.Idle;
@@ -1122,10 +1310,26 @@ internal sealed class UpkeepLoop
 
         if (_custody.Carried > 0)
         {
-            Enter(UpkeepPhase.Returning, tick.Now,
+            BeginReturn(tick,
                 what + " Taking " + _custody.Carried.ToString(CultureInfo.InvariantCulture) +
                 " back to the chest.");
             return;
+        }
+
+        if (_plan != null)
+        {
+            if (!_plan.TryBeginReconciliation(
+                    _fuelItemName, 0, what, out string reconcileFailure))
+            {
+                Halt(reconcileFailure);
+                return;
+            }
+
+            if (!_plan.TryFinish(_fuelItemName, 0, what, out string finishFailure))
+            {
+                Halt(finishFailure);
+                return;
+            }
         }
 
         CloseJob();
@@ -1157,6 +1361,27 @@ internal sealed class UpkeepLoop
 
         _phase = UpkeepPhase.Idle;
         _explanation = reason;
+        if (_plan != null)
+        {
+            if (_custody.Carried == 0)
+            {
+                // A gate may close after a fire was reserved but before any
+                // material moved. End that empty plan now; otherwise the next
+                // permitted scan would collide with an apparently live plan.
+                if (!_plan.RefundEmpty(reason))
+                {
+                    Halt(_plan.BlockedReason);
+                    return;
+                }
+
+                _reservation.Release(StewardRole.UpkeepJobId);
+            }
+            else
+            {
+                _plan.Suspend(reason);
+            }
+        }
+
         Say(tick, "idle:" + reason, reason);
     }
 
@@ -1165,9 +1390,38 @@ internal sealed class UpkeepLoop
     private void Halt(string reason)
     {
         _reservation.Release(StewardRole.UpkeepJobId);
+        _plan?.NeedsAttention(reason);
         _phase = UpkeepPhase.NeedsAttention;
         _explanation = reason;
         _report?.Invoke(reason);
+    }
+
+    /// <summary>Stops immediately for an external custody event such as the
+    /// body dying. Public to the runtime; it does not resolve or recreate the
+    /// material.</summary>
+    public void RequireAttention(string reason) => Halt(reason);
+
+    private void BeginReturn(in UpkeepTick tick, string explanation)
+    {
+        if (_plan != null && !_plan.TryBeginReconciliation(
+                _fuelItemName,
+                _custody.Carried,
+                explanation,
+                out string planFailure))
+        {
+            Halt(planFailure);
+            return;
+        }
+
+        Enter(UpkeepPhase.Returning, tick.Now, explanation);
+    }
+
+    private void HonorPlanBlock()
+    {
+        if (_plan != null && _plan.IsBlocked)
+        {
+            Halt(_plan.BlockedReason);
+        }
     }
 
     /// <summary>At most one of any given message per cooldown, so a state that
