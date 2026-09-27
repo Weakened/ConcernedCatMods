@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using TheConcernedCat.ConcernedSteward.Domain;
 using TheConcernedCat.ConcernedSteward.Domain.Scope;
 using TheConcernedCat.ConcernedSteward.Domain.Upkeep;
+using TheConcernedCat.ConcernedNPC.Work;
 using TheConcernedCat.Settlement.Designations;
 using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
@@ -293,10 +294,15 @@ internal sealed class StewardFixture
     internal const string Wood = "$item_wood";
     internal const string Epoch = "epoch-1";
 
-    internal StewardFixture(UpkeepLimits? limits = null)
+    internal StewardFixture(
+        UpkeepLimits? limits = null,
+        StewardMaintenancePlan? plan = null,
+        NpcWorldEpoch planWorld = default)
     {
         Journal = new MemoryUpkeepJournal();
-        Loop = new UpkeepLoop(limits ?? UpkeepLimits.Default, Journal, message => Reported.Add(message));
+        Loop = new UpkeepLoop(
+            limits ?? UpkeepLimits.Default, Journal, message => Reported.Add(message), plan);
+        PlanWorld = planWorld;
         Depot = new FakeStore("the supply chest", (Wood, 50));
         Pack = new FakeStore("the Steward's pack");
         Fires = new FakeFires();
@@ -333,6 +339,8 @@ internal sealed class StewardFixture
 
     internal float Now { get; set; }
 
+    internal NpcWorldEpoch PlanWorld { get; set; }
+
     /// <summary>A fire in the settlement, owned here, burning wood.</summary>
     internal FuelTargetObservation AddFire(
         string key, float fuel, float maxFuel = 10f, float x = 5f, float z = 5f,
@@ -354,7 +362,7 @@ internal sealed class StewardFixture
     }
 
     internal UpkeepTick Tick() => new UpkeepTick(
-        Now, TendingEnabled, Authority, Scope.Resolve(), Fires, Depot, Pack, Motion);
+        Now, TendingEnabled, Authority, Scope.Resolve(), Fires, Depot, Pack, Motion, PlanWorld);
 
     /// <summary>Advances the loop, moving the clock past the scan interval each
     /// time so an idle tick is never blocked on it.</summary>

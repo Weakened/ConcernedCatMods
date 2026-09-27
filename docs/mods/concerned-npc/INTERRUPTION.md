@@ -319,39 +319,31 @@ because a plan off the disk is always stale and a stale plan never continues - w
 gap. And an interrupted job is shown resuming at the step it was at, still carrying what it was carrying, rather
 than gathering a second load.
 
-## 9. What is not here, and one precondition on the role leaves
+## 9. The first production adoption, and what is still not here
 
-- **No caller.** Nothing in any product constructs an `NpcPlanRun` yet. The mechanism is provable and inert; the
-  three role leaves (#380, #381, #382) are where it gets a call site, and "a plan survives a reload" becomes a
-  statement about behaviour rather than about a test's own script on that day.
-- **No custody-ledger wiring.** `NpcCustodyLedger` already reasons about transfers with the same write-ahead
-  discipline and already has `CloseOpenIntents` for "a record replayed from disk". The plan journal and the ledger
-  agree in shape and are not yet joined; joining them belongs with the first role that has both a plan and a
-  transfer.
-- **No player-facing sentence.** The reasons are written in words rather than enum names, and no product renders
-  them yet.
+Concerned Steward is the first caller. It owns the `<scope>.steward-plan.tsv` name, format-one rows, escaping and
+completeness trailer; the library still invents none of them. Its shipped `UpkeepLoop` remains the only executor and
+keeps its existing `RecordBackedJournal`, inventory-delta measurements, authority checks, vanilla death drop and
+loss accounting. A role-side `StewardMaintenancePlan` constructs `NpcPlanRun` and surrounds those real transitions:
+shared intent first, existing intent next, one world mutation, existing receipt, then the shared measured conclusion.
+It has no inventory or fire mutation port of its own.
 
-### A named precondition on #380, #381 and #382: `NeedsAttention` has no exit
+Reload does not continue the saved fire route. Reconstruction first compares the plan's carried count with the real
+pack and runs the shared interruption policy. A clean carried load waits for the player to re-mark the now-stale depot,
+then receives a return-only route and is deposited by `UpkeepLoop`; the old destination is never fed. Pending custody,
+a count mismatch, an unreadable file, death, or a failed receipt stops durably in `NeedsAttention`, with no replay,
+compensation, or item construction.
 
-This is a precondition rather than a future-work aside, because the first role to hold a player's material through
-this library inherits it on day one.
+The person half now exists for this role. Before the old custody loss is acknowledged, `cs_steward resolve` writes a
+fresh measured return-only plan when the pack still holds material, or a new terminal tombstone when it is empty. If
+the plan is unreadable, the explicit command first quarantines it as a `.corrupt` copy and refuses to proceed if that
+move fails. Nothing is recreated. Other roles still inherit the same precondition: before they carry player material
+through this API, they need their own role-side resolution path or must keep uncertainty unreachable.
 
-`Uncertain` stops a plan for a person, and that is the right failure direction - it leaves evidence instead of
-guessing, and §2 is mostly about why. Until this round it was not even reliably the direction: a plan could be
-written straight from a pending movement to `Settled` or `Refunded`, and the reload reported a refund with "nothing to
-resume" - so the alternative to a dead end was not a live plan, it was a silent one. That is closed in §2 and the
-precondition below is what remains. But **the person half of it is implemented nowhere.** There is no resolution
-UI. `NpcCustodyLedger.CloseOpenIntents` exists and is joined to no plan. Nothing creates "the plan that follows"
-that §5 promises. So a plan that reaches `NeedsAttention` stays there for the life of the save, and the only thing in
-this repository that clears it is deleting the plan file by hand.
-
-Whoever takes #380, #381 or #382 therefore has to do one of three things, and should say which in the issue:
-
-1. bring a resolution path of its own - a role-side way for a player to say what actually happened, which then starts
-   a new plan;
-2. hold no material through this library until such a path exists, which keeps the whole `Uncertain` class
-   unreachable;
-3. accept that a job can end in a state only a file deletion clears, and say so where a player can read it.
+What is still not here is the larger Steward executor migration. `MaintenanceJobRole` and `NpcJobDriver` have a
+tested maintenance-round model, but the shipped runtime does not construct it; adopting that batch driver without a
+second live executor is a separate, broader cut-over. Gunnar and the other role leaves are unchanged by this first
+caller.
 
 One neighbouring dead end was closed rather than documented. `NpcPlanState.WithWorld` - §3's answer to staleness -
 had zero references and zero tests, so a re-planned plan re-planned for ever: it is in no world, a stale plan never

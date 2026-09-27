@@ -8,6 +8,7 @@ using BepInEx;
 using BepInEx.Bootstrap;
 using TheConcernedCat.ConcernedSteward.Domain;
 using TheConcernedCat.ConcernedNPC.Roles;
+using TheConcernedCat.ConcernedNPC.Interruption;
 using TheConcernedCat.ConcernedSteward.Domain.Appearance;
 using TheConcernedCat.ConcernedSteward.Domain.Interop;
 using TheConcernedCat.ConcernedSteward.Domain.Npc;
@@ -51,6 +52,7 @@ internal sealed class StewardRuntime
     private readonly StewardRecordStore _records;
     private readonly RecordBackedJournal _journal;
     private readonly StewardNpcAdoption _npc;
+    private readonly StewardMaintenancePlan _plan;
     private readonly UpkeepLoop _loop;
     private readonly StewardMotion _motion;
     private readonly StewardPackStore _pack;
@@ -86,6 +88,7 @@ internal sealed class StewardRuntime
         _journal = new RecordBackedJournal(open => SaveRecord(open));
         _npc = new StewardNpcAdoption(
             NpcRoleRegistry.Shared, new StewardNpcRole(recordRoot), message => _log(message));
+        _plan = new StewardMaintenancePlan(recordRoot, _npc.Registry, _npc.Identity);
         _quest = new StewardQuest(new RuntimeQuestRecorder(this));
         _sightings = new ResinSightings(
             () => _settings.QuestPickupItem.Value, message => _log(message));
@@ -98,7 +101,7 @@ internal sealed class StewardRuntime
                 hairColour: _settings.HairColour.Value,
                 skinColour: string.Empty),
             message => _log(message));
-        _loop = new UpkeepLoop(UpkeepLimits.Default, _journal, Report);
+        _loop = new UpkeepLoop(UpkeepLimits.Default, _journal, Report, _plan);
         _motion = new StewardMotion(() => _body);
         _pack = new StewardPackStore(() => _census.Live);
         _depot = new DepotStore(() => _scope.Resolve().DepotKey);
@@ -228,6 +231,26 @@ internal sealed class StewardRuntime
             _loop.Custody.RestoreLoss(_recordedLoss);
         }
 
+        ScopeSnapshot recoveredScope = _scope.Resolve();
+        WorkAuthorityVerdict recoveryAuthority =
+            StewardWorldFacts.EvaluateAuthority(_settings.RuntimeEnabled.Value);
+        var planEvidence = new NpcPlanEvidence(
+            _npc.World,
+            _census.Saved,
+            bodyDied: false,
+            areaIsReadable: recoveredScope.Settlement != null,
+            areaMoved: false,
+            mayWork: recoveryAuthority == WorkAuthorityVerdict.Granted && !_recordReadOnly,
+            containersAvailable: recoveredScope.IsReady && _depot.IsAvailable && _pack.IsAvailable,
+            routeAvailable: _motion.IsPresent,
+            playerPaused: !_settings.TendFiresEnabled.Value,
+            at: Time.time);
+        _plan.OnWorldLoaded(scope.Value, planEvidence, _pack, _carryingName);
+        if (!string.IsNullOrEmpty(_plan.FuelItemName))
+        {
+            _carryingName = _plan.FuelItemName;
+        }
+
         // Reconciles against what he is ACTUALLY carrying and abandons whatever
         // was in flight. Nothing is replayed.
         _loop.OnWorldLoaded(_pack, _carryingName);
@@ -283,7 +306,8 @@ internal sealed class StewardRuntime
             _fires,
             _depot,
             _pack,
-            _motion));
+            _motion,
+            _npc.World));
     }
 
     private void RefreshCensus()
@@ -371,10 +395,21 @@ internal sealed class StewardRuntime
             SaveRecord(_journal.UnresolvedIntents);
         }
 
-        _loop.Stop(
-            StewardRole.DisplayNameFallbackCapitalised + " died at " +
+        string death = StewardRole.DisplayNameFallbackCapitalised + " died at " +
             where.ToString() + ". Everything she carried is on the ground there — " +
-            Describe(dropped) + ". Nothing was recreated.");
+            Describe(dropped) + ". Nothing was recreated.";
+        if (carried > 0 || _loop.Custody.HasLoss)
+        {
+            _loop.RequireAttention(death);
+        }
+        else
+        {
+            // No material ever left a named place. End any empty reservation
+            // instead of turning an ordinary empty-handed death into a custody
+            // incident that needs a human resolution.
+            _loop.Stop(death);
+        }
+
         _log(_loop.Explanation);
     }
 
@@ -692,7 +727,7 @@ internal sealed class StewardRuntime
 
     internal string Acknowledge()
     {
-        string answer = _loop.Acknowledge();
+        string answer = _loop.Acknowledge(_pack, _carryingName);
         _recordedLoss = _loop.Custody.Unaccounted;
         Persist();
         return answer;

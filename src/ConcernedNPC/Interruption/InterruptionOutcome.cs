@@ -2,7 +2,7 @@ namespace TheConcernedCat.ConcernedNPC.Interruption;
 
 /// <summary>What stopped the job. One value, and it is the thing a player is
 /// eventually told.</summary>
-internal enum InterruptionCause
+public enum InterruptionCause
 {
     /// <summary>Nobody said. Never treated as harmless.</summary>
     Unspecified = 0,
@@ -55,7 +55,7 @@ internal enum InterruptionCause
 /// <b>Four answers, ordered by how much they presume.</b> Each does strictly
 /// less than the one before it on the job's behalf, and the last does nothing at
 /// all except tell somebody.</summary>
-internal enum InterruptionResponse
+public enum InterruptionResponse
 {
     /// <summary>Nobody decided. Never carry on.</summary>
     Unspecified = 0,
@@ -100,9 +100,9 @@ internal enum InterruptionResponse
 /// from stated facts rather than from ambient state. Everything the policy may
 /// consider is in here, so the same interruption decides the same way in a test
 /// as in a session.</summary>
-internal readonly struct Interruption
+public readonly struct Interruption
 {
-    internal Interruption(
+    public Interruption(
         InterruptionCause cause,
         string jobId,
         int planStepIndex,
@@ -121,39 +121,39 @@ internal readonly struct Interruption
     }
 
     /// <summary>What stopped it.</summary>
-    internal InterruptionCause Cause { get; }
+    public InterruptionCause Cause { get; }
 
     /// <summary>The job that was running.</summary>
-    internal string JobId { get; }
+    public string JobId { get; }
 
     /// <summary>The step it had reached, or -1 if it had not started one.
     /// </summary>
-    internal int PlanStepIndex { get; }
+    public int PlanStepIndex { get; }
 
     /// <summary>Whether the plan was computed against a world that has since
     /// moved - a different area revision, a different world load.</summary>
-    internal bool PlanIsStale { get; }
+    public bool PlanIsStale { get; }
 
     /// <summary>Whether the job is holding anything: reservations taken,
     /// material carried, a tool issued. A job holding nothing can be abandoned
     /// far more cheaply than one that is not.</summary>
-    internal bool AnythingHeld { get; }
+    public bool AnythingHeld { get; }
 
     /// <summary>Whether anything about the job's record cannot be resolved from
     /// evidence. <b>When this is true the answer is always
     /// <see cref="InterruptionResponse.NeedsAttention"/></b>, whatever else is
     /// true, because every other response acts on a belief about what happened
     /// and there is not one.</summary>
-    internal bool AnythingUncertain { get; }
+    public bool AnythingUncertain { get; }
 
     /// <summary>The caller's clock, in seconds.</summary>
-    internal float At { get; }
+    public float At { get; }
 }
 
 /// <summary>What to do about an interruption, and when.</summary>
-internal readonly struct InterruptionOutcome
+public readonly struct InterruptionOutcome
 {
-    internal InterruptionOutcome(
+    public InterruptionOutcome(
         InterruptionResponse response, InterruptionCause cause, float notBefore, string reason)
     {
         Response = response;
@@ -163,26 +163,26 @@ internal readonly struct InterruptionOutcome
     }
 
     /// <summary>What the job should do.</summary>
-    internal InterruptionResponse Response { get; }
+    public InterruptionResponse Response { get; }
 
     /// <summary>The cause this answers, carried through so the sentence a player
     /// reads names what happened rather than what was decided.</summary>
-    internal InterruptionCause Cause { get; }
+    public InterruptionCause Cause { get; }
 
     /// <summary>The earliest time, on the caller's clock, to act on this -
     /// backing off before trying again rather than retrying into the same
     /// failure. Zero means now.</summary>
-    internal float NotBefore { get; }
+    public float NotBefore { get; }
 
     /// <summary>Evidence: what was observed, in words. Kept with a
     /// <see cref="InterruptionResponse.NeedsAttention"/> outcome so the person
     /// who looks at it later has what the NPC had.</summary>
-    internal string Reason { get; }
+    public string Reason { get; }
 
     /// <summary>Whether the job may go on at all, now or after
     /// <see cref="NotBefore"/>. False for refund and for needs-attention.
     /// </summary>
-    internal bool MayResume =>
+    public bool MayResume =>
         Response == InterruptionResponse.Continue || Response == InterruptionResponse.Replan;
 }
 
@@ -204,7 +204,7 @@ internal readonly struct InterruptionOutcome
 ///
 /// <b>Never throws.</b> A policy that threw while deciding how to recover would
 /// be a failure inside failure handling.</summary>
-internal interface IInterruptionPolicy
+public interface IInterruptionPolicy
 {
     /// <summary>Decides. Never throws.</summary>
     InterruptionOutcome Decide(in Interruption interruption);

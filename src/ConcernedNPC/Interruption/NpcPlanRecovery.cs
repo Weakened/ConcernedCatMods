@@ -11,9 +11,9 @@ namespace TheConcernedCat.ConcernedNPC.Interruption;
 /// that reached for ambient state would decide differently in a session than in a
 /// test, and this is the one decision where being unable to reproduce it is
 /// worst. Nothing here reads the world; a role observes and answers.</summary>
-internal readonly struct NpcPlanEvidence
+public readonly struct NpcPlanEvidence
 {
-    internal NpcPlanEvidence(
+    public NpcPlanEvidence(
         NpcWorldEpoch world,
         int bodiesAnswering,
         bool bodyDied,
@@ -38,42 +38,42 @@ internal readonly struct NpcPlanEvidence
     }
 
     /// <summary>The world load that is on now.</summary>
-    internal NpcWorldEpoch World { get; }
+    public NpcWorldEpoch World { get; }
 
     /// <summary>How many bodies answer to this identity, from the role's own
     /// census. <b>Two is a refusal and zero is a refusal</b>; only one is a body
     /// to re-attach to.</summary>
-    internal int BodiesAnswering { get; }
+    public int BodiesAnswering { get; }
 
     /// <summary>Whether the NPC died. Separate from the body being absent,
     /// because a death has a place a player can go and look and an unloaded zone
     /// does not.</summary>
-    internal bool BodyDied { get; }
+    public bool BodyDied { get; }
 
     /// <summary>Whether the work area could be read at all.</summary>
-    internal bool AreaIsReadable { get; }
+    public bool AreaIsReadable { get; }
 
     /// <summary>Whether it moved under the plan.</summary>
-    internal bool AreaMoved { get; }
+    public bool AreaMoved { get; }
 
     /// <summary>Whether this process may run work here now: opted in, the host,
     /// not dedicated, nobody else connected. <b>Fails closed</b> - a role that
     /// cannot tell says no.</summary>
-    internal bool MayWork { get; }
+    public bool MayWork { get; }
 
     /// <summary>Whether the containers the plan depended on can be used.
     /// </summary>
-    internal bool ContainersAvailable { get; }
+    public bool ContainersAvailable { get; }
 
     /// <summary>Whether he can get where the plan wanted him.</summary>
-    internal bool RouteAvailable { get; }
+    public bool RouteAvailable { get; }
 
     /// <summary>Whether the player paused it. Not a fault, and the one cause
     /// whose sentence must not read like one.</summary>
-    internal bool PlayerPaused { get; }
+    public bool PlayerPaused { get; }
 
     /// <summary>The caller's clock, in seconds.</summary>
-    internal float At { get; }
+    public float At { get; }
 
     /// <summary>The single cause this situation is reported under.
     ///
@@ -151,7 +151,7 @@ internal readonly struct NpcPlanEvidence
 
 /// <summary>What one revalidation decided, and the plan as it stands
 /// afterwards.</summary>
-internal readonly struct NpcPlanRecovered
+public readonly struct NpcPlanRecovered
 {
     internal NpcPlanRecovered(
         InterruptionOutcome outcome, NpcPlanState next, BodyClaim claim, bool wasAlreadyOver)
@@ -163,7 +163,7 @@ internal readonly struct NpcPlanRecovered
     }
 
     /// <summary>What to do, why, and the sentence for a player.</summary>
-    internal InterruptionOutcome Outcome { get; }
+    public InterruptionOutcome Outcome { get; }
 
     /// <summary>The plan after the decision. <b>The same work, in a new
     /// position</b>: identity, job, reservations, carried material, progress,
@@ -171,14 +171,14 @@ internal readonly struct NpcPlanRecovered
     /// the four responses, and the phase and the note are the only things a
     /// recovery changes. That is the "an interrupted job resumes rather than
     /// restarts" property, as a value rather than a paragraph.</summary>
-    internal NpcPlanState Next { get; }
+    public NpcPlanState Next { get; }
 
     /// <summary>The body claim this recovery made, if it made one.
     /// <b>Re-attachment, never construction</b>:
     /// <see cref="BodyClaimStatus.AlreadyHeld"/> is the ordinary answer for a
     /// runtime that re-asks after a reload, and nothing here builds a body or
     /// tears one down.</summary>
-    internal BodyClaim Claim { get; }
+    public BodyClaim Claim { get; }
 
     /// <summary>Whether this was answered without asking the policy or the
     /// registry anything. <b>True for a plan that had already ended</b> - a
@@ -188,7 +188,7 @@ internal readonly struct NpcPlanRecovered
     /// about the plan; the value is about the answer, which is why it is true for a
     /// record that never started either. No body is claimed on any of those
     /// paths.</summary>
-    internal bool WasAlreadyOver { get; }
+    public bool WasAlreadyOver { get; }
 }
 
 /// <summary>Turning a reconstructed plan into a decision, through the arbiter and
@@ -208,7 +208,7 @@ internal readonly struct NpcPlanRecovered
 /// <see cref="NpcPlanRun"/>'s. It is the wiring between them, in one place,
 /// because four roles wiring it four times is four chances to leave out the
 /// release.</summary>
-internal static class NpcPlanRecovery
+public static class NpcPlanRecovery
 {
     /// <summary>Revalidates a reconstructed plan and re-attaches it to its body.
     /// </summary>
@@ -217,7 +217,7 @@ internal static class NpcPlanRecovery
     /// closed: no claim is attempted and the plan stops for a person.</param>
     /// <param name="holder">Who is asking, so the claim can be released by the
     /// same name later.</param>
-    internal static NpcPlanRecovered Reconstruct(
+    public static NpcPlanRecovered Reconstruct(
         NpcRoleRegistry? registry,
         NpcPlanState? plan,
         NpcBodyKind kind,
@@ -303,7 +303,7 @@ internal static class NpcPlanRecovery
     /// <summary>Revalidates a plan that is still live in this session - a pause,
     /// a chest that refuses, an area that moved - with no body question asked,
     /// because the body has not been anywhere.</summary>
-    internal static NpcPlanRecovered Revalidate(
+    public static NpcPlanRecovered Revalidate(
         NpcPlanState? plan, in NpcPlanEvidence evidence, IInterruptionPolicy? policy)
     {
         if (plan == null || !plan.IsNamed)

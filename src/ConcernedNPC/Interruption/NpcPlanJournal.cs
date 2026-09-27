@@ -35,7 +35,7 @@ namespace TheConcernedCat.ConcernedNPC.Interruption;
 /// its attempt count has risen and a pending movement has become an uncertain
 /// one. A codec cannot forget to do that, because a codec is not what does it.
 /// </summary>
-internal sealed class NpcPlanJournal
+public sealed class NpcPlanJournal
 {
     private readonly NpcSidecarFile _file;
     private readonly INpcPlanCodec _codec;
@@ -48,7 +48,7 @@ internal sealed class NpcPlanJournal
 
     /// <summary>Opens the journal for a plan file whose path and format the role
     /// owns, or says why it cannot.</summary>
-    internal static bool TryOpen(
+    public static bool TryOpen(
         string? absolutePath, INpcPlanCodec? codec, out NpcPlanJournal? journal, out string reason)
     {
         journal = null;
@@ -74,10 +74,10 @@ internal sealed class NpcPlanJournal
     /// the directory it is in: counting files in a role's data root answers a
     /// different question and has already shipped twice as a permanent wrong
     /// grant.</summary>
-    internal bool Exists => _file.Exists;
+    public bool Exists => _file.Exists;
 
     /// <summary>Reads the plan back, already stale.</summary>
-    internal NpcPlanLoad Load()
+    public NpcPlanLoad Load()
     {
         NpcSidecarRead read = _file.Read();
         switch (read.Outcome)
@@ -144,7 +144,7 @@ internal sealed class NpcPlanJournal
     /// handle a corrupt plan file is where they stop being dead: if that role turns
     /// out not to want them, they should go rather than stay as
     /// surface.</summary>
-    internal string? TryQuarantine() => _file.TryQuarantine();
+    public string? TryQuarantine() => _file.TryQuarantine();
 
     /// <summary>Writes the plan, whole or not at all.</summary>
     internal NpcPlanSave Save(NpcPlanState? state)
@@ -189,7 +189,7 @@ internal sealed class NpcPlanJournal
 /// because "no plan" and "a plan this build could not read" lead to opposite
 /// actions: the first may be written over freely and the second may never be.
 /// </summary>
-internal readonly struct NpcPlanLoad
+public readonly struct NpcPlanLoad
 {
     private NpcPlanLoad(NpcSidecarOutcome outcome, NpcPlanState? plan, string failure)
     {
@@ -203,22 +203,22 @@ internal readonly struct NpcPlanLoad
     /// <summary>The plan, already put through
     /// <see cref="NpcPlanState.AsRecovered"/>. Null unless
     /// <see cref="IsLoaded"/>.</summary>
-    internal NpcPlanState? Plan { get; }
+    public NpcPlanState? Plan { get; }
 
     /// <summary>Why it could not be read. Never a path and never a stack trace:
     /// this ends up in a sentence somebody reads.</summary>
-    internal string Failure { get; }
+    public string Failure { get; }
 
     /// <summary>There was a plan and it was read.</summary>
-    internal bool IsLoaded => Outcome == NpcSidecarOutcome.Read && Plan != null;
+    public bool IsLoaded => Outcome == NpcSidecarOutcome.Read && Plan != null;
 
     /// <summary>There was no plan. A first run, or a job that has never been
     /// interrupted.</summary>
-    internal bool IsAbsent => Outcome == NpcSidecarOutcome.Missing;
+    public bool IsAbsent => Outcome == NpcSidecarOutcome.Missing;
 
     /// <summary>There is a plan file and this build could not read it. Nothing
     /// may be written over it.</summary>
-    internal bool IsUnreadable => Outcome == NpcSidecarOutcome.Unreadable;
+    public bool IsUnreadable => Outcome == NpcSidecarOutcome.Unreadable;
 
     internal static NpcPlanLoad None() => new NpcPlanLoad(NpcSidecarOutcome.Missing, null, string.Empty);
 
@@ -233,7 +233,7 @@ internal readonly struct NpcPlanLoad
 }
 
 /// <summary>What one write produced.</summary>
-internal readonly struct NpcPlanSave
+public readonly struct NpcPlanSave
 {
     private NpcPlanSave(bool saved, string failure, string? completeCopy)
     {
@@ -245,9 +245,9 @@ internal readonly struct NpcPlanSave
     /// <summary>Whether the plan is on the disk. <b>The question a caller must
     /// ask before it acts</b>: a plan that could not be written down is a plan
     /// whose next action nothing would remember.</summary>
-    internal bool IsSaved { get; }
+    public bool IsSaved { get; }
 
-    internal string Failure { get; }
+    public string Failure { get; }
 
     /// <summary>Where a complete copy of what should have been saved was left,
     /// when the commit was the part that failed. Null when there is none.
@@ -256,7 +256,7 @@ internal readonly struct NpcPlanSave
     /// for the same reason</b>: it is evidence for a role that has to tell a player
     /// where their plan went, and no role does that yet. See that method's summary.
     /// </summary>
-    internal string? CompleteCopyPath { get; }
+    public string? CompleteCopyPath { get; }
 
     internal static NpcPlanSave Saved() => new NpcPlanSave(true, string.Empty, null);
 

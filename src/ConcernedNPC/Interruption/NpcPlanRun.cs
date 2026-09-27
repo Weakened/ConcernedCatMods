@@ -46,7 +46,7 @@ namespace TheConcernedCat.ConcernedNPC.Interruption;
 /// no targets, walks no steps and knows nothing about the world. What a phase
 /// means is the role's and <c>NpcJobDriver</c>'s; this says when it is safe to be
 /// in one.</summary>
-internal sealed class NpcPlanRun
+public sealed class NpcPlanRun
 {
     private readonly NpcPlanJournal _journal;
     private NpcPlanState _state;
@@ -70,7 +70,7 @@ internal sealed class NpcPlanRun
     /// <b>Before anything, deliberately.</b> A plan whose opening record could
     /// not be written is a plan nothing will remember, and the cheapest moment to
     /// refuse it is the one where it is holding nothing.</summary>
-    internal static NpcPlanRun? Begin(NpcPlanJournal? journal, NpcPlanState? opening, out NpcPlanSave written)
+    public static NpcPlanRun? Begin(NpcPlanJournal? journal, NpcPlanState? opening, out NpcPlanSave written)
     {
         if (journal == null)
         {
@@ -86,7 +86,7 @@ internal sealed class NpcPlanRun
     /// the disk is what this run is resuming from, and rewriting it before
     /// anything has been revalidated would raise the attempt count for a plan
     /// nobody has decided about yet.</summary>
-    internal static NpcPlanRun? Resume(NpcPlanJournal? journal, NpcPlanState? recovered)
+    public static NpcPlanRun? Resume(NpcPlanJournal? journal, NpcPlanState? recovered)
     {
         if (journal == null || recovered == null || !recovered.IsNamed)
         {
@@ -97,7 +97,7 @@ internal sealed class NpcPlanRun
     }
 
     /// <summary>Where the plan is, as the record says.</summary>
-    internal NpcPlanState State => _state;
+    public NpcPlanState State => _state;
 
     /// <summary>Whether the caller may touch the world right now: the plan has
     /// not ended, and nothing is in flight or unresolved.
@@ -105,14 +105,14 @@ internal sealed class NpcPlanRun
     /// <b>The one question before acting.</b> It is false while a movement is
     /// pending, because a second action taken on top of an unanswered one is how
     /// two of the same delivery happen.</summary>
-    internal bool MayAct =>
+    public bool MayAct =>
         !NpcPlanProgression.IsTerminal(_state.Phase)
         && _state.Phase != NpcPlanPhase.Unspecified
         && _state.Custody == NpcPlanCustody.Clear;
 
     /// <summary>Writes a proposed state down and adopts it if the write
     /// succeeded. <b>The only way this run's state changes.</b></summary>
-    internal NpcPlanSave Record(NpcPlanState? proposed)
+    public NpcPlanSave Record(NpcPlanState? proposed)
     {
         string refusal = WhyNot(proposed);
         if (refusal.Length != 0)
@@ -149,13 +149,13 @@ internal sealed class NpcPlanRun
     }
 
     /// <summary>Moves the plan on one phase.</summary>
-    internal NpcPlanSave Advance(NpcPlanPhase to, string? note) =>
+    public NpcPlanSave Advance(NpcPlanPhase to, string? note) =>
         Record(_state.WithPhase(to, note));
 
     /// <summary>Says a movement of material is about to happen, before the world
     /// is touched. <b>Written first, always</b>: an intent with no outcome is
     /// recoverable and an outcome with no intent is not.</summary>
-    internal NpcPlanSave Intend(string? note) =>
+    public NpcPlanSave Intend(string? note) =>
         Record(_state.WithCustody(NpcPlanCustody.Pending, note));
 
     /// <summary>Says what became of it, after the world was touched.
@@ -169,7 +169,7 @@ internal sealed class NpcPlanRun
     /// nothing this plan may spend, which is a claim.</param>
     /// <param name="targetsDone">How many of the plan's targets are done now.
     /// Also a claim, also never defaulted.</param>
-    internal NpcPlanSave Conclude(
+    public NpcPlanSave Conclude(
         bool established, IReadOnlyList<NpcMaterialStack>? carried, int targetsDone, string? note)
     {
         NpcPlanState proposed = _state
@@ -181,7 +181,7 @@ internal sealed class NpcPlanRun
     }
 
     /// <summary>Ends the plan.</summary>
-    internal NpcPlanSave Stop(NpcPlanPhase ending, string? note)
+    public NpcPlanSave Stop(NpcPlanPhase ending, string? note)
     {
         if (!NpcPlanProgression.IsTerminal(ending))
         {
@@ -199,7 +199,7 @@ internal sealed class NpcPlanRun
     /// safe resume point it was a moment ago - which is the property the ordering
     /// rule at the top of this file buys, and the reason an urgent interruption
     /// does not have to wait on a disk.</summary>
-    internal NpcPlanSave Suspend(string? note) => Record(_state.WithPhase(_state.Phase, note));
+    public NpcPlanSave Suspend(string? note) => Record(_state.WithPhase(_state.Phase, note));
 
     /// <summary>Adopts a revalidated state after a reconstruction, once a
     /// recovery decision has been made about it.
@@ -244,7 +244,7 @@ internal sealed class NpcPlanRun
     ///
     /// So a caller cannot reach the backward path, or any other path, by handing
     /// in a made-up outcome.</summary>
-    internal NpcPlanSave Adopt(NpcPlanState? revalidated, in InterruptionOutcome decision)
+    public NpcPlanSave Adopt(NpcPlanState? revalidated, in InterruptionOutcome decision)
     {
         if (revalidated == null || !revalidated.IsNamed)
         {
@@ -381,7 +381,7 @@ internal sealed class NpcPlanRun
     /// Written through <see cref="Record"/> like everything else, so the phase and
     /// the load are unchanged and an unresolved movement stays unresolved: this
     /// re-attaches a plan to a world, and resolves nothing about it.</summary>
-    internal NpcPlanSave Reattach(NpcWorldEpoch now, string? note)
+    public NpcPlanSave Reattach(NpcWorldEpoch now, string? note)
     {
         if (now.IsUnknown)
         {

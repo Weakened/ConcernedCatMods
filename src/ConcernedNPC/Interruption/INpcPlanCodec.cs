@@ -25,7 +25,7 @@ namespace TheConcernedCat.ConcernedNPC.Interruption;
 /// because a role's codec throwing during recovery would be a failure inside
 /// failure handling - and because the caller at that moment is a world load.
 /// </summary>
-internal interface INpcPlanCodec
+public interface INpcPlanCodec
 {
     /// <summary>Turns a plan into the lines this role's own format writes.
     /// Returns null to refuse, which stops the write rather than producing an

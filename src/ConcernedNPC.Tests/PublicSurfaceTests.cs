@@ -90,14 +90,22 @@ public class PublicSurfaceTests
     /// as an API and invite a role to build one for a container that moves -
     /// which that type's own documentation forbids and cannot enforce.
     ///
+    /// <b>Durable interruption (#379).</b> The plan value, codec seam, journal,
+    /// run and recovery decision are public because Concerned Steward is a
+    /// separately compiled consumer and now surrounds its real maintenance
+    /// executor with them. Material and reservation values cross with the plan;
+    /// their books and executors remain private. The consuming role still owns
+    /// every path, row tag and schema number.
+    ///
     /// <b>What is still internal, and why that is not an oversight.</b> The
     /// arbiter, the mode owner, the slug rules, the build gate, the key
     /// composition, the prefab-to-contract table, the sidecar and the atomic
     /// write. Members too: the built prefab, the eager build, the identity
     /// stamp, the network view and the tally's own constructors, each because
     /// handing it over would let a caller reach past a rule the type exists to
-    /// keep. The whole of <c>Custody/</c>, which the job pipeline never touches,
-    /// and all of <c>Storage/</c> bar the desk above - the permit, the place,
+    /// keep. The custody ledger and transfer executor remain internal; only the
+    /// immutable material values carried by a durable plan cross the boundary.
+    /// All of <c>Storage/</c> bar the desk above - the permit, the place,
     /// the gate, the sighting, the assignment, the book and the transfer. And the sequencing itself - the snapshot
     /// builder, the tour planner, the tour plan, the partitioner, the source
     /// selector, the manifest arithmetic, the budget, the commitments, the
@@ -132,6 +140,25 @@ public class PublicSurfaceTests
         "TheConcernedCat.ConcernedNPC.Containers.NpcContainerAccess",
         "TheConcernedCat.ConcernedNPC.Containers.NpcContainerRefusal",
         "TheConcernedCat.ConcernedNPC.Containers.NpcContainerUse",
+        "TheConcernedCat.ConcernedNPC.Custody.NpcMaterial",
+        "TheConcernedCat.ConcernedNPC.Custody.NpcMaterialStack",
+        "TheConcernedCat.ConcernedNPC.Interruption.IInterruptionPolicy",
+        "TheConcernedCat.ConcernedNPC.Interruption.INpcPlanCodec",
+        "TheConcernedCat.ConcernedNPC.Interruption.Interruption",
+        "TheConcernedCat.ConcernedNPC.Interruption.InterruptionCause",
+        "TheConcernedCat.ConcernedNPC.Interruption.InterruptionOutcome",
+        "TheConcernedCat.ConcernedNPC.Interruption.InterruptionResponse",
+        "TheConcernedCat.ConcernedNPC.Interruption.NpcPlanCustody",
+        "TheConcernedCat.ConcernedNPC.Interruption.NpcPlanEvidence",
+        "TheConcernedCat.ConcernedNPC.Interruption.NpcPlanJournal",
+        "TheConcernedCat.ConcernedNPC.Interruption.NpcPlanLoad",
+        "TheConcernedCat.ConcernedNPC.Interruption.NpcPlanPhase",
+        "TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRecovered",
+        "TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRecovery",
+        "TheConcernedCat.ConcernedNPC.Interruption.NpcPlanRun",
+        "TheConcernedCat.ConcernedNPC.Interruption.NpcPlanSave",
+        "TheConcernedCat.ConcernedNPC.Interruption.NpcPlanState",
+        "TheConcernedCat.ConcernedNPC.Interruption.NpcWorkInterruptionPolicy",
         "TheConcernedCat.ConcernedNPC.Jobs.INpcJobRole",
         "TheConcernedCat.ConcernedNPC.Jobs.NpcJobAdvance",
         "TheConcernedCat.ConcernedNPC.Jobs.NpcJobDriver",
@@ -149,6 +176,7 @@ public class PublicSurfaceTests
         "TheConcernedCat.ConcernedNPC.Planning.PlannedStep",
         "TheConcernedCat.ConcernedNPC.Planning.SourceStock",
         "TheConcernedCat.ConcernedNPC.Planning.StockLine",
+        "TheConcernedCat.ConcernedNPC.Reservations.ReservationId",
         "TheConcernedCat.ConcernedNPC.Roles.INpcDataPaths",
         "TheConcernedCat.ConcernedNPC.Roles.INpcRole",
         "TheConcernedCat.ConcernedNPC.Roles.NpcBodyContract",
