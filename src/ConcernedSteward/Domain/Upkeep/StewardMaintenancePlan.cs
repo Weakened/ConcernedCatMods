@@ -303,6 +303,19 @@ internal sealed class StewardMaintenancePlan
     /// <summary>Closes targets that a fresh live observation proved no longer
     /// need service. No material moves; the intent/conclusion pair records the
     /// measured no-op so the durable target count cannot lag the driver's books.</summary>
+    internal bool TryResolveRemainingTargets(
+        string fuelItemName,
+        int carried,
+        string note,
+        out string failure)
+    {
+        int unresolved = _run == null
+            ? 0
+            : Math.Max(0, _run.State.TargetsTotal - _run.State.TargetsDone);
+        return TryResolveSkippedTargets(
+            fuelItemName, carried, unresolved, note, out failure);
+    }
+
     internal bool TryResolveSkippedTargets(
         string fuelItemName,
         int carried,

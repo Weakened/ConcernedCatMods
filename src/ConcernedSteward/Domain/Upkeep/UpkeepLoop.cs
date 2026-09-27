@@ -774,6 +774,17 @@ internal sealed class UpkeepLoop
 
     private void StartDrivenCollect(in UpkeepTick tick, in PlannedStep step)
     {
+        if (_plan != null && _plan.HasActivePlan
+            && !_plan.TryResolveRemainingTargets(
+                _fuelItemName,
+                _custody.Carried,
+                "the shared driver revalidated the previous tour before dispatch",
+                out string skippedFailure))
+        {
+            Halt(skippedFailure);
+            return;
+        }
+
         if (_custody.Carried > 0)
         {
             StopDrivenJob(tick,
