@@ -37,6 +37,9 @@ internal static class JournalReplay
         ToolLedger tools = ToolReplay.Run(entries, timeline.Standings, repairs);
 
         MaterialCustodyLedger custody = CustodyReplay.Run(entries, timeline.Standings, repairs);
+        var buildOrders = new List<OrderId>();
+        foreach (JournalEntry entry in entries)
+            if (entry.Custody is BuildOrderRecordedRow build) buildOrders.Add(build.Order);
 
         if (timeline.AmbiguousCount > 0)
         {
@@ -48,7 +51,7 @@ internal static class JournalReplay
         }
 
         return new ReplayResult(
-            orders, ledger, tools, custody, timeline, journal.NextSequence, journal.Instance, repairs, materialRepairs);
+            orders, ledger, tools, custody, timeline, journal.NextSequence, journal.Instance, repairs, materialRepairs, buildOrders);
     }
 
     /// <summary>The reservation lane, including production draw/refund intents
@@ -67,6 +70,7 @@ internal static class JournalReplay
         var refunds = new Dictionary<string, JournalEntry>(StringComparer.Ordinal);
         var reserved = new HashSet<string>(StringComparer.Ordinal);
         var unsafeRows = new Dictionary<string, JournalEntry>(StringComparer.Ordinal);
+        var durableBuildOrders = new HashSet<string>(StringComparer.Ordinal);
 
         for (int index = 0; index < entries.Count; index++)
         {
@@ -78,6 +82,16 @@ internal static class JournalReplay
 
         foreach (JournalEntry entry in entries)
         {
+            if (entry.Custody is BuildOrderRecordedRow build)
+            {
+                durableBuildOrders.Add(build.Order.Value);
+                OrderState current = orders.TryGetValue(build.Order.Value, out OrderState existing)
+                    ? existing : OrderState.Draft;
+                OrderStateMachine.TryApply(current, build.Transition, out OrderState next);
+                orders[build.Order.Value] = next;
+                continue;
+            }
+
             if (!JournalEntryKinds.IsLegacyMaterial(entry.Kind))
             {
                 continue;
@@ -122,6 +136,12 @@ internal static class JournalReplay
                             repairs.Add(Unmatched(entry, "a refund intention"));
                         }
                     }
+
+                    // A production refund intent settles one piece's custody;
+                    // it is not withdrawal of the durable blueprint approval.
+                    // Keep the pre-existing legacy order interpretation intact.
+                    if (JournalEntryKinds.IsMaterialIntent(entry) && entry.Transition == OrderTransition.Cancel &&
+                        durableBuildOrders.Contains(entry.Order.Value)) break;
 
                     OrderState current = orders.TryGetValue(entry.Order.Value, out OrderState existing)
                         ? existing

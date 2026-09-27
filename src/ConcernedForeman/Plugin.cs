@@ -137,7 +137,8 @@ public sealed class Plugin : BaseUnityPlugin
                 WorkAuthorityVerdict.Granted,
             () => WorkAuthorityPolicy.Describe(WorkAuthorityPolicy.Evaluate(
                 CollectionWorldFacts.ReadAuthorityFacts(settings.SettlementRuntimeEnabled.Value))),
-            message => Logger.LogInfo(message));
+            message => Logger.LogInfo(message),
+            () => custody.BuildOrders);
         Runtime.Construction.BuildOrderRuntime buildOrders = _buildOrders;
 
         // #380: and this is what DRIVES the order. Everything above decides; until

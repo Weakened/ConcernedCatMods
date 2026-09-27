@@ -707,6 +707,7 @@ public sealed class ShelterConstructionRuntimeTests : IDisposable
             var standing = new GameObject(placement.Piece.Prefab);
             standing.transform.position =
                 new Vector3(placement.At.X, placement.At.Y, placement.At.Z);
+            standing.transform.rotation = Quaternion.Euler(0f, placement.Yaw, 0f);
             Piece.s_allPieces.Add(standing.Add(new Piece()));
             return true;
         }

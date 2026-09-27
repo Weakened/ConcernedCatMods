@@ -382,6 +382,14 @@ internal sealed class SettlementRegister
                 || (clearsHarvest && state.StateOf(order) == OrderState.Gathering)
                 || drewFromClearedContainer;
 
+            // #285: an approved build owns its footprint, while each material
+            // request owns its exact source. Once all requests are settled, a
+            // newly designated source may supply FUTURE pieces without changing
+            // that approval. The production-held/uncertain guard above remains
+            // mandatory; no old holding is rebound or synthetically refunded.
+            if (!clearsSettlement && !clearsHarvest && state.IsBuildOrder(order) && held.Count == 0)
+                affected = false;
+
             if (!affected)
             {
                 continue;

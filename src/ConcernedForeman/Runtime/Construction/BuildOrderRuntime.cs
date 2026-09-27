@@ -16,26 +16,27 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Construction;
 /// is standing, which way they are facing, and whether this runtime may work at
 /// all - and the wiring that hands them over.
 ///
-/// <b>The order does not survive a world load, deliberately.</b>
-/// <see cref="Forget"/> is called when a world goes away: a marker names a place
-/// in a world that no longer exists, and an order carried into the next one
-/// would authorise building somewhere nobody agreed to. The cost is real and is
-/// on the owner go-around list rather than buried here - <b>mark an order,
-/// confirm it, reload, and the order is gone</b>. Making it survive is a durable
-/// format this leaf deliberately does not add; what it would take is its own
-/// issue.</summary>
+/// <b>Only durable approval survives a world load.</b> <see cref="Forget"/>
+/// drops the live marker when the world goes away. The next world's scoped
+/// settlement journal restores its own approval, never the previous world's
+/// marker or an unapproved proposal. The runtime revalidates the recorded
+/// payload, material custody and standing pieces before resuming.</summary>
 internal sealed class BuildOrderRuntime
 {
     private readonly BuildOrderDesk _desk = new BuildOrderDesk();
     private readonly WorldPieceCatalogue _catalogue;
     private readonly Func<bool> _mayWork;
     private readonly Func<string> _whyNot;
+    private readonly Func<BuildOrderJournal?>? _openJournal;
+    private BuildOrderJournal? _journal;
 
-    internal BuildOrderRuntime(Func<bool> mayWork, Func<string> whyNot, Action<string> log)
+    internal BuildOrderRuntime(Func<bool> mayWork, Func<string> whyNot, Action<string> log,
+        Func<BuildOrderJournal?>? openJournal = null)
     {
         _mayWork = mayWork ?? throw new ArgumentNullException(nameof(mayWork));
         _whyNot = whyNot ?? throw new ArgumentNullException(nameof(whyNot));
         _catalogue = new WorldPieceCatalogue(log ?? throw new ArgumentNullException(nameof(log)));
+        _openJournal = openJournal;
     }
 
     /// <summary>The order, confirmed or not.</summary>
@@ -48,11 +49,44 @@ internal sealed class BuildOrderRuntime
     /// <summary>Where the order stands.</summary>
     internal BuildOrderStatus Status => _desk.Status;
 
+    internal BuildOrderJournal? Journal => _journal;
+    internal bool IsDurable => _openJournal != null;
+    internal string RecoveryRefusal => IsDurable
+        ? _journal?.Refusal ?? "RecordUnavailable: the settlement is not open; nothing is authorised."
+        : string.Empty;
+
+    internal void Refresh()
+    {
+        if (_openJournal == null) return;
+        BuildOrderJournal? journal = _openJournal();
+        journal?.RefreshTransitions();
+        if (ReferenceEquals(journal, _journal))
+        {
+            if (journal?.IsCancelled == true && _desk.IsAuthorised) _desk.Restore(_desk.Marker.Withdraw());
+            return;
+        }
+        _desk.Forget();
+        _catalogue.Forget();
+        _journal = journal;
+        if (journal?.Current != null && BuildOrderJournal.TryMarker(journal.Current.Payload, out BuildOrderMarker marker))
+            _desk.Restore(journal.IsCancelled ? marker.Withdraw() : marker);
+    }
+
     /// <summary>What a player is reading in the panel's status line.</summary>
     internal string Status_() => _desk.Execute(new[] { "status" }, Context());
 
     /// <summary>The order priced against the world as it is now.</summary>
     internal ShelterPlan Plan() => _desk.PlanNow(Context());
+
+    internal ShelterPlan ApprovedPlan()
+    {
+        // The desk may already hold a new, unapproved proposal while a withdrawn
+        // order finishes cleanup. Its marker must not replace that order's payload.
+        BuildOrderMarker marker = _desk.Marker.Confirm();
+        if (_journal?.Current != null)
+            BuildOrderJournal.TryMarker(_journal.Current.Payload, out marker);
+        return ShelterPlan.For(marker, Context().Recipes);
+    }
 
     /// <summary>How far along the shelter is, read from the pieces standing at
     /// the site rather than from anything remembered.</summary>
@@ -112,6 +146,7 @@ internal sealed class BuildOrderRuntime
     {
         _desk.Forget();
         _catalogue.Forget();
+        _journal = null;
     }
 
     /// <summary>One command from the console or the panel.</summary>
@@ -119,13 +154,38 @@ internal sealed class BuildOrderRuntime
     {
         try
         {
-            string said = _desk.Execute(args, Context());
+            Refresh();
             string word = args != null && args.Length > 0 ? args[0].ToLowerInvariant() : "status";
+            BuildOrderContext context = Context();
+            if (IsDurable && word != "status" && word != "preview")
+            {
+                if (_journal == null) return RecoveryRefusal;
+                if (word == "cancel")
+                {
+                    if (!_journal.TryCancel(out string refusal)) return refusal;
+                }
+                else
+                {
+                    if (RecoveryRefusal.Length != 0) return RecoveryRefusal;
+                    if (word == "confirm" && !_desk.IsAuthorised && _desk.Status != BuildOrderStatus.None)
+                    {
+                        ShelterPlan plan = ShelterPlan.For(_desk.Marker.Confirm(), context.Recipes);
+                        if (!_journal.TryApprove(plan, out string refusal)) return refusal;
+                    }
+                    else if (_journal.HasHeld && !_desk.IsAuthorised)
+                        return "PreviousOrderUnsettled: retained custody must be returned or reconciled before replacing this marker.";
+                }
+            }
+            string said = _desk.Execute(args, context);
             Func<string>? work = WorkLine;
-            if (work != null && (word == "status" || word == "confirm"))
+            if (work != null && (word == "status" || word == "confirm" || word == "cancel"))
             {
                 said += Environment.NewLine + "  " + work();
             }
+            else if (RecoveryRefusal.Length != 0) said += Environment.NewLine + RecoveryRefusal;
+
+            if (_journal?.Current != null && (word == "status" || word == "confirm" || word == "cancel"))
+                said += Environment.NewLine + "  " + _journal.DescribeCustody();
 
             return said;
         }

@@ -210,6 +210,28 @@ public sealed class WorldConstructionAdapterTests : IDisposable
         Assert.Equal(PieceSighting.Standing, Catalogue().Look(Placement()));
     }
 
+    [Theory]
+    [InlineData(0f, 90f, 0f)]
+    [InlineData(20f, 0f, 0f)]
+    [InlineData(0f, 0f, 20f)]
+    public void A_differently_facing_or_tilted_piece_is_not_the_approved_piece(float pitch, float yaw, float roll)
+    {
+        Stand("wood_wall", 0f, 0f, 0f);
+        Piece.s_allPieces[0].transform.rotation = Quaternion.Euler(pitch, yaw, roll);
+        Assert.Equal(PieceSighting.Blocked, Catalogue().Look(Placement()));
+    }
+
+    [Fact]
+    public void Duplicate_matching_objects_and_conflicting_objects_are_ambiguous()
+    {
+        Stand("wood_wall", 0f, 0f, 0f);
+        Stand("wood_wall", 0f, 0f, 0f);
+        Assert.Equal(PieceSighting.Blocked, Catalogue().Look(Placement()));
+        Piece.s_allPieces.RemoveAt(1);
+        Stand("stone_wall", 0f, 0f, 0f);
+        Assert.Equal(PieceSighting.Blocked, Catalogue().Look(Placement()));
+    }
+
     [Fact]
     public void Somebody_elses_piece_on_the_spot_is_in_the_way_rather_than_built()
     {
