@@ -235,7 +235,7 @@ public sealed class ConservationTests
         f.Run(30);
         Assert.Equal(UpkeepPhase.NeedsAttention, f.Loop.Phase);
 
-        string answer = f.Loop.Acknowledge();
+        string answer = f.Loop.Acknowledge(f.Pack, StewardFixture.Wood);
 
         Assert.Contains("Nothing was recreated", answer);
         Assert.Equal(UpkeepPhase.Idle, f.Loop.Phase);

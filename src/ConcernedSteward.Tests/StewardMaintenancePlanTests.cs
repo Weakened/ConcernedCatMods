@@ -253,6 +253,61 @@ public sealed class StewardMaintenancePlanTests
         Assert.Equal(10, saved.CarriedUnits);
         Assert.Equal(10, fixture.Loop.Custody.Unaccounted);
         Assert.Empty(fixture.Fires.Fed);
+
+        string path = new StewardPlanFiles(folder.Path).ResolvePath(context.Scope);
+        string before = File.ReadAllText(path);
+        string refused = fixture.Loop.Acknowledge(new UnavailableStore(), Wood);
+
+        Assert.Contains("could not be counted", refused);
+        Assert.True(context.Plan.IsBlocked);
+        Assert.Equal(before, File.ReadAllText(path));
+
+        string resolved = fixture.Loop.Acknowledge(fixture.Pack, Wood);
+        Assert.Contains("Nothing was recreated", resolved);
+        Assert.False(context.Plan.IsBlocked);
+        Assert.False(fixture.Loop.Custody.HasLoss);
+        Assert.Equal(NpcPlanPhase.Refunded, Load(folder.Path, context.Scope).Phase);
+    }
+
+    [Fact]
+    public void A_partial_loss_restored_after_reload_cannot_bypass_an_unavailable_pack()
+    {
+        using var folder = new TemporaryFolder();
+        PlanContext first = Open(folder.Path);
+        var fixture = new StewardFixture(plan: first.Plan, planWorld: first.World);
+        first.Plan.OnWorldLoaded(first.Scope, Evidence(first.World), fixture.Pack, Wood);
+        fixture.AddFire("fire-1", fuel: 0f);
+        fixture.Run(3);
+        Assert.Equal(10, fixture.Pack.Count(Wood));
+
+        fixture.Loop.Custody.RecordLost(1);
+        fixture.Pack.Put(Wood, 9);
+        fixture.Loop.RequireAttention(
+            "One unit was lost while the remaining carried load still needs accounting.");
+        Assert.Equal(9, fixture.Loop.Custody.Carried);
+        Assert.Equal(1, fixture.Loop.Custody.Unaccounted);
+
+        NpcWorldEpoch reloadedWorld = first.Registry.BeginWorldLoad(out _);
+        var recovered = new StewardMaintenancePlan(
+            folder.Path, first.Registry, StewardNpcRole.Id);
+        var recoveredLoop = new UpkeepLoop(
+            UpkeepLimits.Default, new MemoryUpkeepJournal(), plan: recovered);
+        recoveredLoop.Custody.RestoreLoss(1);
+        var unavailable = new UnavailableStore();
+        recovered.OnWorldLoaded(first.Scope, Evidence(reloadedWorld), unavailable, Wood);
+        recoveredLoop.OnWorldLoaded(unavailable, Wood);
+
+        string path = new StewardPlanFiles(folder.Path).ResolvePath(first.Scope);
+        string before = File.ReadAllText(path);
+        string answer = recoveredLoop.Acknowledge(unavailable, Wood);
+
+        Assert.Contains("could not be counted", answer);
+        Assert.True(recovered.IsBlocked);
+        Assert.True(recoveredLoop.Custody.HasLoss);
+        Assert.Equal(UpkeepPhase.NeedsAttention, recoveredLoop.Phase);
+        Assert.Equal(before, File.ReadAllText(path));
+        Assert.False(Directory.GetFiles(folder.Path, "*.corrupt*").Any());
+        Assert.Equal(9, fixture.Pack.Count(Wood));
     }
 
     [Fact]
