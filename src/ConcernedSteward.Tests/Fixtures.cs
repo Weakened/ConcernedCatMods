@@ -301,21 +301,29 @@ internal sealed class StewardFixture
         UpkeepLimits? limits = null,
         StewardMaintenancePlan? plan = null,
         NpcWorldEpoch planWorld = default,
-        bool sharedDriver = false)
+        bool sharedDriver = false,
+        StewardNpcAdoption? adoption = null)
     {
         Journal = new MemoryUpkeepJournal();
         if (sharedDriver)
         {
-            Adoption = new StewardNpcAdoption(
+            Adoption = adoption ?? new StewardNpcAdoption(
                 new NpcRoleRegistry(),
                 new StewardNpcRole(System.IO.Path.Combine(
                     System.IO.Path.GetTempPath(), "cs-steward-driver-fixture")));
-            if (!Adoption.Register().IsRegistered)
+            if (adoption == null)
             {
-                throw new InvalidOperationException("the Steward fixture could not register");
-            }
+                if (!Adoption.Register().IsRegistered)
+                {
+                    throw new InvalidOperationException("the Steward fixture could not register");
+                }
 
-            planWorld = Adoption.NoteWorldLoaded();
+                planWorld = Adoption.NoteWorldLoaded();
+            }
+            else
+            {
+                planWorld = Adoption.World;
+            }
         }
 
         Loop = new UpkeepLoop(

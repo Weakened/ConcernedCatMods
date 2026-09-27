@@ -133,6 +133,93 @@ public sealed class StewardMaintenancePlanTests
     }
 
     [Fact]
+    public void An_incomplete_tour_cannot_be_written_as_settled_after_its_remainder_returns()
+    {
+        using var folder = new TemporaryFolder();
+        PlanContext context = Open(folder.Path);
+        var pack = new FakeStore("the Steward's pack");
+        context.Plan.OnWorldLoaded(context.Scope, Evidence(context.World), pack, Wood);
+
+        Assert.True(context.Plan.TryBegin(
+            context.World,
+            "depot-key",
+            new FuelTargetKey("fire-0", StewardFixture.Epoch),
+            Wood,
+            plannedUnits: 2,
+            targetCount: 2,
+            out string beginFailure), beginFailure);
+        Assert.True(context.Plan.TryIntend("withdraw two", out string withdrawalIntentFailure),
+            withdrawalIntentFailure);
+        Assert.True(context.Plan.TryConclude(
+            true, Wood, 2, false, "two are measured in the pack",
+            out string withdrawalConclusionFailure), withdrawalConclusionFailure);
+        Assert.True(context.Plan.TryRouteToTarget(out string routeFailure), routeFailure);
+        Assert.True(context.Plan.TryEnterExecuting(out string executingFailure), executingFailure);
+        Assert.True(context.Plan.TryIntend("feed one", out string feedIntentFailure),
+            feedIntentFailure);
+        Assert.True(context.Plan.TryConclude(
+            true, Wood, 1, true, "only the first target was serviced",
+            out string feedConclusionFailure), feedConclusionFailure);
+        Assert.True(context.Plan.TryBeginReconciliation(
+            Wood, 0, "the unused unit returned", out string reconciliationFailure),
+            reconciliationFailure);
+
+        Assert.False(context.Plan.TryFinish(
+            Wood, 0, "the incomplete tour must not settle", out string finishFailure));
+        Assert.Contains("remain unresolved", finishFailure);
+
+        NpcPlanState saved = Load(folder.Path, context.Scope);
+        Assert.Equal(NpcPlanPhase.Reconciling, saved.Phase);
+        Assert.Equal(2, saved.TargetsTotal);
+        Assert.Equal(1, saved.TargetsDone);
+        Assert.Empty(saved.Carried);
+        Assert.Empty(saved.Reservations);
+    }
+
+    [Fact]
+    public void Shared_driver_skip_settles_the_durable_target_and_returns_the_exact_remainder()
+    {
+        using var folder = new TemporaryFolder();
+        PlanContext context = Open(folder.Path);
+        var fixture = new StewardFixture(
+            limits: new UpkeepLimits(32, 50, 1, 15f, 90f, 3),
+            plan: context.Plan,
+            sharedDriver: true,
+            adoption: context.Adoption);
+        context.Plan.OnWorldLoaded(context.Scope, Evidence(context.World), fixture.Pack, Wood);
+        fixture.AddFire("first", fuel: 1f, x: 4f, z: 0f);
+        FuelTargetObservation refilled =
+            fixture.AddFire("refilled", fuel: 1f, x: 8f, z: 0f);
+
+        for (int step = 0; step < 40; step++)
+        {
+            if (fixture.Loop.Phase == UpkeepPhase.ToTarget
+                && fixture.Loop.CurrentTarget.Value == "refilled")
+            {
+                break;
+            }
+
+            fixture.Run();
+        }
+
+        Assert.Equal("refilled", fixture.Loop.CurrentTarget.Value);
+        fixture.Fires.Replace(FakeFires.Fuelled(refilled, 10f));
+        fixture.RunUntilTripEnds(cap: 40);
+
+        NpcPlanState saved = Load(folder.Path, context.Scope);
+        Assert.Equal(NpcPlanPhase.Settled, saved.Phase);
+        Assert.Equal(2, saved.TargetsTotal);
+        Assert.Equal(2, saved.TargetsDone);
+        Assert.Empty(saved.Carried);
+        Assert.Empty(saved.Reservations);
+        Assert.Equal(18, fixture.Loop.Custody.Withdrawn);
+        Assert.Equal(9, fixture.Loop.Custody.Burned);
+        Assert.Equal(9, fixture.Loop.Custody.Returned);
+        Assert.Equal(41, fixture.Depot.Count(Wood));
+        fixture.AssertConserved(startingStock: 50);
+    }
+
+    [Fact]
     public void An_authority_stop_before_withdrawal_refunds_the_empty_plan_and_later_work_can_restart()
     {
         using var folder = new TemporaryFolder();
@@ -473,14 +560,16 @@ public sealed class StewardMaintenancePlanTests
     {
         var registry = new NpcRoleRegistry();
         var role = new StewardNpcRole(root);
-        Assert.True(registry.Register(role).IsRegistered);
-        NpcWorldEpoch world = registry.BeginWorldLoad(out _);
+        var adoption = new StewardNpcAdoption(registry, role);
+        Assert.True(adoption.Register().IsRegistered);
+        NpcWorldEpoch world = adoption.NoteWorldLoaded();
         var plan = new StewardMaintenancePlan(root, registry, role.Identity, codec);
         return new PlanContext(
             registry,
             world,
             plan,
-            new SettlementScope(379L, new SettlementId("home")));
+            new SettlementScope(379L, new SettlementId("home")),
+            adoption);
     }
 
     private static NpcPlanEvidence Evidence(NpcWorldEpoch world) =>
@@ -527,18 +616,21 @@ public sealed class StewardMaintenancePlanTests
             NpcRoleRegistry registry,
             NpcWorldEpoch world,
             StewardMaintenancePlan plan,
-            SettlementScope scope)
+            SettlementScope scope,
+            StewardNpcAdoption adoption)
         {
             Registry = registry;
             World = world;
             Plan = plan;
             Scope = scope;
+            Adoption = adoption;
         }
 
         internal NpcRoleRegistry Registry { get; }
         internal NpcWorldEpoch World { get; }
         internal StewardMaintenancePlan Plan { get; }
         internal SettlementScope Scope { get; }
+        internal StewardNpcAdoption Adoption { get; }
     }
 
     private sealed class UnavailableStore : IItemStorePort

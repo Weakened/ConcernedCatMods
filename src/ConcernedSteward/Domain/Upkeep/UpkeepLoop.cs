@@ -176,6 +176,8 @@ internal sealed class UpkeepLoop
     private IItemStorePort? _liveDepot;
     private ScopeSnapshot _liveScope;
     private bool _roundNeedsRefresh;
+    private string _roundFuelItemName = string.Empty;
+    private int _driverRoundResultObserved;
 
     /// <summary>Builds the loop.
     ///
@@ -567,6 +569,15 @@ internal sealed class UpkeepLoop
             tick.Scope.DepotPoint,
             SupplyAccess.Both,
             lines);
+        FuelTargetObservation? chosen = LastScan.Next;
+        if (chosen == null)
+        {
+            _explanation = DescribeNothingToDo(LastScan);
+            return;
+        }
+
+        _roundFuelItemName = chosen.Value.FuelItemName;
+        offered = OnlyFuel(offered, _roundFuelItemName);
         _round = MaintenanceRound.Prepare(
             offered,
             tick.Scope.Settlement,
@@ -580,6 +591,7 @@ internal sealed class UpkeepLoop
             return;
         }
 
+        _driverRoundResultObserved = 0;
         _driver = MaintenanceJobRole.DriverFor(
             _npc,
             _round,
@@ -592,6 +604,22 @@ internal sealed class UpkeepLoop
             () => _liveScope.Epoch,
             MaintenanceThresholds.Default);
         AdvanceDriver(tick);
+    }
+
+    private static IReadOnlyList<FuelTargetObservation> OnlyFuel(
+        IReadOnlyList<FuelTargetObservation> offered,
+        string fuelItemName)
+    {
+        var matching = new List<FuelTargetObservation>();
+        foreach (FuelTargetObservation target in offered)
+        {
+            if (string.Equals(target.FuelItemName, fuelItemName, StringComparison.Ordinal))
+            {
+                matching.Add(target);
+            }
+        }
+
+        return matching;
     }
 
     private FuelTargetObservation? LookDriven(FuelTargetKey key)
@@ -618,6 +646,7 @@ internal sealed class UpkeepLoop
             IReadOnlyList<FuelTargetObservation> offered = _liveFires.Survey(
                 _liveScope.SettlementCentre, _liveScope.SettlementRadius)
                 ?? (IReadOnlyList<FuelTargetObservation>)Array.Empty<FuelTargetObservation>();
+            offered = OnlyFuel(offered, _roundFuelItemName);
             IReadOnlyCollection<string> stocked = _liveDepot.ItemNames
                 ?? (IReadOnlyCollection<string>)Array.Empty<string>();
             var lines = new List<SupplyLine>();
@@ -668,6 +697,20 @@ internal sealed class UpkeepLoop
         _liveScope = tick.Scope;
         SitePoint at = tick.Motion.Position;
         NpcJobAdvance advance = _driver.Next(new NpcPoint(at.X, at.Y, at.Z));
+        if (_driver.Rounds > _driverRoundResultObserved && _driver.LastRound.Skipped > 0)
+        {
+            _driverRoundResultObserved = _driver.Rounds;
+            const string reason =
+                "A revalidated fire no longer needed service; the measured remainder will return before replanning.";
+            if (!ResolveDrivenSkips(_driver.LastRound.Skipped, reason))
+            {
+                return;
+            }
+
+            StopDrivenJob(tick, reason);
+            return;
+        }
+
         switch (advance.Progress)
         {
             case NpcJobProgress.Do:
@@ -701,6 +744,22 @@ internal sealed class UpkeepLoop
                         : advance.Reason);
                 break;
         }
+    }
+
+    private bool ResolveDrivenSkips(int count, string reason)
+    {
+        if (_plan == null || _plan.TryResolveSkippedTargets(
+                _fuelItemName,
+                _custody.Carried,
+                count,
+                reason,
+                out string failure))
+        {
+            return true;
+        }
+
+        Halt(failure);
+        return false;
     }
 
     private void StartDrivenCollect(in UpkeepTick tick, in PlannedStep step)
@@ -859,6 +918,8 @@ internal sealed class UpkeepLoop
         _driver = null;
         _hasActiveStep = false;
         _stepUnitsRemaining = 0;
+        _roundFuelItemName = string.Empty;
+        _driverRoundResultObserved = 0;
         FinishTrip(tick, reason);
         if (left > 0 && _phase == UpkeepPhase.Idle)
         {
@@ -874,6 +935,8 @@ internal sealed class UpkeepLoop
         _driver = null;
         _hasActiveStep = false;
         _stepUnitsRemaining = 0;
+        _roundFuelItemName = string.Empty;
+        _driverRoundResultObserved = 0;
         _reservation.Release(StewardRole.UpkeepJobId);
         if (_custody.Carried > 0)
         {
@@ -1178,12 +1241,16 @@ internal sealed class UpkeepLoop
         {
             if (_driver != null && _hasActiveStep)
             {
+                const string reason =
+                    "That planned fire is gone, so the measured remainder will return before replanning.";
+                if (!ResolveDrivenSkips(1, reason))
+                {
+                    return;
+                }
+
                 _roundNeedsRefresh = true;
                 _driver.Skipped();
-                _reservation.Release(StewardRole.UpkeepJobId);
-                _hasActiveStep = false;
-                _stepUnitsRemaining = 0;
-                AdvanceDriver(tick);
+                StopDrivenJob(tick, reason);
                 return;
             }
 
@@ -1199,12 +1266,17 @@ internal sealed class UpkeepLoop
         {
             if (_driver != null && _hasActiveStep)
             {
+                string reason =
+                    "The planned fire no longer needs service (" + DescribeStatus(status)
+                    + "), so the measured remainder will return before replanning.";
+                if (!ResolveDrivenSkips(1, reason))
+                {
+                    return;
+                }
+
                 _roundNeedsRefresh = true;
                 _driver.Skipped();
-                _reservation.Release(StewardRole.UpkeepJobId);
-                _hasActiveStep = false;
-                _stepUnitsRemaining = 0;
-                AdvanceDriver(tick);
+                StopDrivenJob(tick, reason);
                 return;
             }
 
@@ -1352,10 +1424,10 @@ internal sealed class UpkeepLoop
                 {
                     _roundNeedsRefresh = true;
                     _driver.Skipped();
-                    _reservation.Release(StewardRole.UpkeepJobId);
-                    _hasActiveStep = false;
-                    _stepUnitsRemaining = 0;
-                    AdvanceDriver(tick);
+                    StopDrivenJob(
+                        tick,
+                        measurement.Evidence
+                            + " The measured remainder will return before replanning.");
                     return;
                 }
 
@@ -1651,6 +1723,8 @@ internal sealed class UpkeepLoop
         _hasActiveStep = false;
         _stepUnitsRemaining = 0;
         _roundNeedsRefresh = false;
+        _roundFuelItemName = string.Empty;
+        _driverRoundResultObserved = 0;
         _liveFires = null;
         _liveDepot = null;
         _reservation.Release(StewardRole.UpkeepJobId);
@@ -1886,6 +1960,9 @@ internal sealed class UpkeepLoop
         _driver = null;
         _hasActiveStep = false;
         _stepUnitsRemaining = 0;
+        _roundFuelItemName = string.Empty;
+        _driverRoundResultObserved = 0;
+        _reservation.Release(StewardRole.UpkeepJobId);
         if (_phase != UpkeepPhase.Idle)
         {
             try
@@ -1913,7 +1990,6 @@ internal sealed class UpkeepLoop
                     return;
                 }
 
-                _reservation.Release(StewardRole.UpkeepJobId);
             }
             else
             {

@@ -300,6 +300,46 @@ internal sealed class StewardMaintenancePlan
             out failure);
     }
 
+    /// <summary>Closes targets that a fresh live observation proved no longer
+    /// need service. No material moves; the intent/conclusion pair records the
+    /// measured no-op so the durable target count cannot lag the driver's books.</summary>
+    internal bool TryResolveSkippedTargets(
+        string fuelItemName,
+        int carried,
+        int count,
+        string note,
+        out string failure)
+    {
+        failure = string.Empty;
+        if (_run == null || count < 1)
+        {
+            return true;
+        }
+
+        if (_run.State.Phase == NpcPlanPhase.Routed && !TryEnterExecuting(out failure))
+        {
+            return false;
+        }
+
+        if (_run.State.Phase != NpcPlanPhase.Executing)
+        {
+            failure = "The maintenance plan could not record a skipped fire from its current phase.";
+            Block(failure);
+            return false;
+        }
+
+        for (int index = 0; index < count && _run.State.TargetsDone < _run.State.TargetsTotal; index++)
+        {
+            if (!TryIntend("about to record a revalidated fire as already resolved", out failure)
+                || !TryConclude(true, fuelItemName, carried, true, note, out failure))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     internal bool TryRouteToTarget(out string failure)
     {
         failure = string.Empty;
@@ -493,7 +533,16 @@ internal sealed class StewardMaintenancePlan
             return false;
         }
 
-        NpcPlanPhase ending = _run.State.TargetsDone > 0
+        if (_run.State.TargetsDone > 0
+            && _run.State.TargetsDone < _run.State.TargetsTotal)
+        {
+            failure = "The maintenance plan cannot settle while planned fire stops remain unresolved.";
+            Block(failure);
+            return false;
+        }
+
+        NpcPlanPhase ending = _run.State.TargetsTotal > 0
+            && _run.State.TargetsDone == _run.State.TargetsTotal
             ? NpcPlanPhase.Settled
             : NpcPlanPhase.Refunded;
         return RunWrite(run => run.Stop(ending, note), "finish the maintenance plan", out failure);

@@ -116,6 +116,53 @@ public sealed class UpkeepLoopTests
     }
 
     [Fact]
+    public void Production_driver_scopes_each_job_to_one_fuel_and_services_mixed_fires()
+    {
+        const string resin = "$item_resin";
+        var f = new StewardFixture(sharedDriver: true);
+        f.Depot.Put(resin, 50);
+        f.AddFire("wood-fire", fuel: 1f, x: 4f, z: 0f);
+        f.AddFire("resin-torch", fuel: 1f, x: 8f, z: 0f, fuelName: resin);
+
+        f.RunUntilTripEnds(cap: 40);
+        f.RunUntilTripEnds(cap: 40);
+
+        Assert.Contains("wood-fire", f.Fires.Fed);
+        Assert.Contains("resin-torch", f.Fires.Fed);
+        Assert.Equal(41, f.Depot.Count(StewardFixture.Wood));
+        Assert.Equal(41, f.Depot.Count(resin));
+        Assert.Equal(0, f.Pack.Count(StewardFixture.Wood));
+        Assert.Equal(0, f.Pack.Count(resin));
+    }
+
+    [Fact]
+    public void Authority_stop_while_driver_carries_releases_the_live_reservation_before_return()
+    {
+        var f = new StewardFixture(sharedDriver: true);
+        f.AddFire("fire-1", fuel: 1f);
+
+        f.Run(3);
+        Assert.Equal(UpkeepPhase.ToTarget, f.Loop.Phase);
+        Assert.Equal(9, f.Loop.Custody.Carried);
+        Assert.True(f.Loop.Reservation.IsHeld);
+
+        f.Authority = WorkAuthorityVerdict.NotHost;
+        f.Run();
+
+        Assert.Equal(UpkeepPhase.Idle, f.Loop.Phase);
+        Assert.Equal(9, f.Loop.Custody.Carried);
+        Assert.False(f.Loop.Reservation.IsHeld);
+        Assert.Empty(f.Fires.Fed);
+
+        f.Authority = WorkAuthorityVerdict.Granted;
+        f.RunUntilTripEnds(cap: 20);
+        Assert.Equal(9, f.Loop.Custody.Returned);
+        Assert.Equal(0, f.Loop.Custody.Carried);
+        Assert.Equal(50, f.Depot.Count(StewardFixture.Wood));
+        f.AssertConserved(startingStock: 50);
+    }
+
+    [Fact]
     public void A_fire_that_needs_wood_is_fetched_for_walked_to_and_fed()
     {
         var f = new StewardFixture();
