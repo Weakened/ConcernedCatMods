@@ -177,7 +177,7 @@ public sealed class StewardMaintenancePlanTests
     }
 
     [Fact]
-    public void Shared_driver_skip_settles_the_durable_target_and_returns_the_exact_remainder()
+    public void Shared_driver_nonfinal_skip_completes_later_work_then_settles_the_durable_tour()
     {
         using var folder = new TemporaryFolder();
         PlanContext context = Open(folder.Path);
@@ -187,9 +187,9 @@ public sealed class StewardMaintenancePlanTests
             sharedDriver: true,
             adoption: context.Adoption);
         context.Plan.OnWorldLoaded(context.Scope, Evidence(context.World), fixture.Pack, Wood);
-        fixture.AddFire("first", fuel: 1f, x: 4f, z: 0f);
         FuelTargetObservation refilled =
-            fixture.AddFire("refilled", fuel: 1f, x: 8f, z: 0f);
+            fixture.AddFire("refilled", fuel: 1f, x: 4f, z: 0f);
+        fixture.AddFire("second", fuel: 1f, x: 8f, z: 0f);
 
         for (int step = 0; step < 40; step++)
         {

@@ -762,6 +762,16 @@ internal sealed class UpkeepLoop
         return false;
     }
 
+    private void ContinueDrivenAfterSkip(in UpkeepTick tick)
+    {
+        _roundNeedsRefresh = true;
+        _driver!.Skipped();
+        _reservation.Release(StewardRole.UpkeepJobId);
+        _hasActiveStep = false;
+        _stepUnitsRemaining = 0;
+        AdvanceDriver(tick);
+    }
+
     private void StartDrivenCollect(in UpkeepTick tick, in PlannedStep step)
     {
         if (_custody.Carried > 0)
@@ -1248,9 +1258,7 @@ internal sealed class UpkeepLoop
                     return;
                 }
 
-                _roundNeedsRefresh = true;
-                _driver.Skipped();
-                StopDrivenJob(tick, reason);
+                ContinueDrivenAfterSkip(tick);
                 return;
             }
 
@@ -1274,9 +1282,7 @@ internal sealed class UpkeepLoop
                     return;
                 }
 
-                _roundNeedsRefresh = true;
-                _driver.Skipped();
-                StopDrivenJob(tick, reason);
+                ContinueDrivenAfterSkip(tick);
                 return;
             }
 
@@ -1422,12 +1428,7 @@ internal sealed class UpkeepLoop
 
                 if (_driver != null && _hasActiveStep)
                 {
-                    _roundNeedsRefresh = true;
-                    _driver.Skipped();
-                    StopDrivenJob(
-                        tick,
-                        measurement.Evidence
-                            + " The measured remainder will return before replanning.");
+                    ContinueDrivenAfterSkip(tick);
                     return;
                 }
 
