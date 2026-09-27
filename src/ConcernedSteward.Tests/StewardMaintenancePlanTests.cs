@@ -256,6 +256,71 @@ public sealed class StewardMaintenancePlanTests
     }
 
     [Fact]
+    public void A_pending_plan_cannot_be_resolved_while_the_live_pack_is_unavailable()
+    {
+        using var folder = new TemporaryFolder();
+        PlanContext first = Open(folder.Path);
+        var fixture = new StewardFixture(plan: first.Plan, planWorld: first.World);
+        first.Plan.OnWorldLoaded(first.Scope, Evidence(first.World), fixture.Pack, Wood);
+        fixture.AddFire("fire-1", fuel: 0f);
+        fixture.Run(2); // at the depot, immediately before the withdrawal
+        Assert.True(first.Plan.TryIntend("crash after the durable intent", out string failure), failure);
+
+        NpcWorldEpoch reloadedWorld = first.Registry.BeginWorldLoad(out _);
+        var recovered = new StewardMaintenancePlan(
+            folder.Path, first.Registry, StewardNpcRole.Id);
+        var unavailable = new UnavailableStore();
+        recovered.OnWorldLoaded(first.Scope, Evidence(reloadedWorld), unavailable, Wood);
+        var recoveredLoop = new UpkeepLoop(
+            UpkeepLimits.Default, new MemoryUpkeepJournal(), plan: recovered);
+        recoveredLoop.OnWorldLoaded(unavailable, Wood);
+
+        string path = new StewardPlanFiles(folder.Path).ResolvePath(first.Scope);
+        string before = File.ReadAllText(path);
+        string answer = recoveredLoop.Acknowledge(unavailable, Wood);
+
+        Assert.Contains("could not be counted", answer);
+        Assert.True(recovered.IsBlocked);
+        Assert.Equal(UpkeepPhase.NeedsAttention, recoveredLoop.Phase);
+        Assert.Equal(before, File.ReadAllText(path));
+        Assert.False(Directory.GetFiles(folder.Path, "*.corrupt*").Any());
+    }
+
+    [Fact]
+    public void An_unreadable_plan_cannot_be_quarantined_while_the_live_pack_is_unavailable()
+    {
+        using var folder = new TemporaryFolder();
+        PlanContext context = Open(folder.Path);
+        var fixture = new StewardFixture(plan: context.Plan, planWorld: context.World);
+        context.Plan.OnWorldLoaded(context.Scope, Evidence(context.World), fixture.Pack, Wood);
+        fixture.AddFire("fire-1", fuel: 0f);
+        fixture.Run(1);
+
+        string path = new StewardPlanFiles(folder.Path).ResolvePath(context.Scope);
+        string[] lines = File.ReadAllLines(path);
+        File.WriteAllLines(path, lines.Take(lines.Length - 1));
+
+        NpcWorldEpoch reloadedWorld = context.Registry.BeginWorldLoad(out _);
+        var recovered = new StewardMaintenancePlan(
+            folder.Path, context.Registry, StewardNpcRole.Id);
+        var unavailable = new UnavailableStore();
+        recovered.OnWorldLoaded(context.Scope, Evidence(reloadedWorld), unavailable, Wood);
+        var recoveredLoop = new UpkeepLoop(
+            UpkeepLimits.Default, new MemoryUpkeepJournal(), plan: recovered);
+        recoveredLoop.OnWorldLoaded(unavailable, Wood);
+
+        string before = File.ReadAllText(path);
+        string answer = recoveredLoop.Acknowledge(unavailable, Wood);
+
+        Assert.Contains("could not be counted", answer);
+        Assert.True(recovered.IsBlocked);
+        Assert.Equal(UpkeepPhase.NeedsAttention, recoveredLoop.Phase);
+        Assert.True(File.Exists(path));
+        Assert.Equal(before, File.ReadAllText(path));
+        Assert.False(Directory.GetFiles(folder.Path, "*.corrupt*").Any());
+    }
+
+    [Fact]
     public void An_unreadable_plan_is_quarantined_only_by_explicit_resolution()
     {
         using var folder = new TemporaryFolder();
@@ -354,6 +419,22 @@ public sealed class StewardMaintenancePlanTests
         internal NpcWorldEpoch World { get; }
         internal StewardMaintenancePlan Plan { get; }
         internal SettlementScope Scope { get; }
+    }
+
+    private sealed class UnavailableStore : IItemStorePort
+    {
+        public string Describe => "an unavailable Steward pack";
+
+        public bool IsAvailable => false;
+
+        public IReadOnlyCollection<string> ItemNames => Array.Empty<string>();
+
+        public int Count(string fuelItemName) => -1;
+
+        public int RoomFor(string fuelItemName, int count) => 0;
+
+        public void MoveTo(IItemStorePort destination, string fuelItemName, int count) =>
+            throw new InvalidOperationException("An unavailable pack cannot move material.");
     }
 
     private sealed class OneWriteFailureCodec : INpcPlanCodec

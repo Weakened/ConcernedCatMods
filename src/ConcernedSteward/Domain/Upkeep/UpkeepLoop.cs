@@ -1214,8 +1214,13 @@ internal sealed class UpkeepLoop
         {
             _custody.RestateCarried(measured);
         }
-        else if (_plan != null && _plan.ExpectedCarried > 0 && !_custody.HasLoss)
+        else if (!_custody.HasLoss)
         {
+            // A blocked or unreadable plan may legitimately have no saved
+            // carried count even though its pending move is uncertain. Zero
+            // durable units is not evidence of an empty live pack. The sole
+            // exception is an independently persisted loss (for example the
+            // death callback already observed vanilla dropping the load).
             return "The Steward's pack could not be counted, so the durable custody evidence was not cleared.";
         }
 
