@@ -853,8 +853,9 @@ public sealed class DesignationTests : IDisposable
         Assert.Single(plan.Removed);
         Assert.Single(plan.OrdersToCancel);
         Assert.Single(plan.ToRefund);
+        Assert.Empty(plan.PendingMeasuredReturns);
         Assert.Equal(20, plan.Totals()["Wood"]);
-        Assert.Contains("20 Wood", plan.Describe());
+        Assert.Contains("and returns 20 Wood", plan.Describe());
 
         Assert.Equal(UndesignationOutcome.Removed, register.ApplyUndesignation(plan, journal, authorised: true));
 

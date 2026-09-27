@@ -120,6 +120,18 @@ public sealed class BuildRecoveryTests : IDisposable
     private int CarriedWood => EngineInventoryPort.CountIn(_body.Inventory!, ForemanFixtures.Wood);
     private Reservation[] Held => _journal.Reservations.Where(r => r.State == ReservationState.Held).ToArray();
 
+    private SettlementRegister ActiveRegister()
+    {
+        var register = new SettlementRegister(_scope);
+        register.UseIdentityEpoch(_epoch.ToString("N"));
+        Assert.True(register.Restore(
+            new Designation(DesignationKind.SettlementArea, default, 30, null)));
+        Assert.True(register.Restore(new Designation(
+            DesignationKind.SupplyContainer, _designation.At, 0,
+            _designation.ContainerKey, _epoch.ToString("N"))));
+        return register;
+    }
+
     [Fact]
     public void Approved_marker_is_durable_before_the_first_tick_and_keeps_order_and_worker_identity()
     {
@@ -501,6 +513,117 @@ public sealed class BuildRecoveryTests : IDisposable
         int placed = _installer.Keys.Count;
         SaveWorld(); Reopen(); _supply = true; Tick(10);
         Assert.False(_orders.IsAuthorised); Assert.Equal(placed, _installer.Keys.Count);
+    }
+
+    [Fact]
+    public void Clearing_supply_cancels_held_build_material_then_measured_cleanup_returns_it_exactly_once()
+    {
+        Confirm(); Until(() => CarriedWood > 0);
+        Reservation[] held = Held;
+        int heldWood = held.Sum(r => r.Stacks.Sum(stack => stack.Count));
+        int chestBefore = ChestWood;
+        Assert.Equal(heldWood, CarriedWood);
+
+        SettlementRegister register = ActiveRegister();
+        UndesignationPlan clear = register.PlanUndesignation(
+            DesignationKind.SupplyContainer, _custody.Journal.Replay(), authorised: true);
+        Assert.Contains(_journal.Current!.Order, clear.OrdersToCancel);
+        Assert.Equal(held.Select(r => r.Request), clear.ToRefund.Select(r => r.Request));
+        Assert.Equal(held.Select(r => r.Request),
+            clear.PendingMeasuredReturns.Select(r => r.Request));
+        Assert.Contains("production custody pending measured return", clear.Describe());
+        Assert.Equal(UndesignationOutcome.Removed,
+            register.ApplyUndesignation(clear, _custody.Journal, authorised: true));
+
+        ReplayResult cancelled = _custody.Journal.Replay();
+        Assert.Equal(OrderState.Cancelled, cancelled.StateOf(_journal.Current.Order));
+        Assert.Empty(cancelled.MaterialRepairs);
+        Assert.Equal(held.Select(r => r.Request), cancelled.Ledger.Reservations
+            .Where(r => r.State == ReservationState.Held).Select(r => r.Request));
+        Assert.DoesNotContain(_custody.Journal.Entries, e => e.Kind == JournalEntryKind.Refunded);
+        Assert.True(_store.Save(_custody.Journal).Saved);
+
+        _supply = false;
+        _motion.Position = _chest.transform.position;
+        Tick(6);
+        Assert.False(_orders.IsAuthorised);
+        Assert.Empty(Held);
+        Assert.Equal(chestBefore + heldWood, ChestWood);
+        Assert.Equal(0, CarriedWood);
+        Assert.Empty(_installer.Keys);
+        JournalEntry[] receipts = _custody.Journal.Entries
+            .Where(e => e.Kind == JournalEntryKind.Refunded).ToArray();
+        Assert.Equal(held.Length, receipts.Length);
+        Assert.All(receipts, receipt => Assert.Contains(_custody.Journal.Entries, intent =>
+            intent.Sequence < receipt.Sequence &&
+            intent.Kind == JournalEntryKind.OrderTransition &&
+            intent.Transition == OrderTransition.Cancel &&
+            intent.Request.Equals(receipt.Request)));
+        Assert.Empty(_custody.Journal.Replay().MaterialRepairs);
+        Assert.Contains("went back where it came from", _orders.Execute(new[] { "status" }));
+
+        SaveWorld(); Reopen(newWorldLoad: false); Tick(8);
+        ReplayResult reopened = _custody.Journal.Replay();
+        Assert.False(_orders.IsAuthorised);
+        Assert.Equal(OrderState.Cancelled, reopened.StateOf(_journal.Current!.Order));
+        Assert.Empty(reopened.MaterialRepairs);
+        Assert.Empty(reopened.Ledger.Totals(ReservationState.Held));
+        Assert.Equal(heldWood, reopened.Ledger.Totals(ReservationState.Refunded)["Wood"]);
+        Assert.Equal(chestBefore + heldWood, ChestWood);
+        Assert.Equal(0, CarriedWood);
+        Assert.Empty(_installer.Keys);
+        Assert.Equal(held.Length,
+            _custody.Journal.Entries.Count(e => e.Kind == JournalEntryKind.Refunded));
+    }
+
+    [Fact]
+    public void Clearing_settlement_cancels_but_retains_production_custody_when_binding_cannot_be_restored()
+    {
+        Confirm(); Until(() => CarriedWood > 0);
+        Reservation[] held = Held;
+        int totalWood = ChestWood + CarriedWood;
+        int chestBefore = ChestWood;
+        int carriedBefore = CarriedWood;
+
+        SettlementRegister register = ActiveRegister();
+        UndesignationPlan clear = register.PlanUndesignation(
+            DesignationKind.SettlementArea, _custody.Journal.Replay(), authorised: true);
+        Assert.Contains(_journal.Current!.Order, clear.OrdersToCancel);
+        Assert.Contains("production custody pending measured return", clear.Describe());
+        Assert.Equal(UndesignationOutcome.Removed,
+            register.ApplyUndesignation(clear, _custody.Journal, authorised: true));
+
+        ReplayResult cancelled = _custody.Journal.Replay();
+        Assert.Equal(OrderState.Cancelled, cancelled.StateOf(_journal.Current.Order));
+        Assert.Empty(cancelled.MaterialRepairs);
+        Assert.DoesNotContain(_custody.Journal.Entries, e => e.Kind == JournalEntryKind.Refunded);
+        Assert.True(_store.Save(_custody.Journal).Saved);
+
+        // Production binds BuildOrderJournal to the standing settlement area.
+        // Once that parent designation is gone, the lifecycle has no honest
+        // restoration path, so cleanup must retain proven custody fail-closed.
+        _recruited = false;
+        _motion.Position = _chest.transform.position;
+        Tick(6);
+        Assert.False(_orders.IsAuthorised);
+        Assert.Contains("WorkerOrSettlementUnavailable", _runtime.Describe());
+        Assert.Equal(chestBefore, ChestWood);
+        Assert.Equal(carriedBefore, CarriedWood);
+        Assert.Equal(totalWood, ChestWood + CarriedWood);
+        Assert.Equal(held.Select(r => r.Request), Held.Select(r => r.Request));
+        Assert.DoesNotContain(_custody.Journal.Entries, e => e.Kind == JournalEntryKind.Refunded);
+        Assert.Empty(_custody.Journal.Replay().MaterialRepairs);
+
+        SaveWorld(); Reopen(newWorldLoad: false); Tick(8);
+        ReplayResult reopened = _custody.Journal.Replay();
+        Assert.False(_orders.IsAuthorised);
+        Assert.Equal(OrderState.Cancelled, reopened.StateOf(_journal.Current!.Order));
+        Assert.Empty(reopened.MaterialRepairs);
+        Assert.Equal(chestBefore, ChestWood);
+        Assert.Equal(carriedBefore, CarriedWood);
+        Assert.Equal(totalWood, ChestWood + CarriedWood);
+        Assert.Equal(held.Select(r => r.Request), Held.Select(r => r.Request));
+        Assert.DoesNotContain(_custody.Journal.Entries, e => e.Kind == JournalEntryKind.Refunded);
     }
 
     [Fact]

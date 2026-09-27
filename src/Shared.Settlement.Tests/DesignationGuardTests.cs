@@ -793,7 +793,8 @@ public sealed class DesignationGuardTests : IDisposable
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void Production_build_holding_cannot_be_refunded_by_clearing_a_marker(bool settlement, bool interrupted)
+    public void Production_build_holding_waits_for_measured_cleanup_and_uncertainty_is_refused(
+        bool settlement, bool interrupted)
     {
         DesignationKind kind = settlement ? DesignationKind.SettlementArea : DesignationKind.SupplyContainer;
         SettlementRegister register = SetUp();
@@ -804,16 +805,36 @@ public sealed class DesignationGuardTests : IDisposable
             "chest-a", stacks, containerEpoch: ThisRun);
         journal.Append(JournalEntryKind.Reserved, Cottage, request, container: "chest-a", stacks: stacks,
             containerEpoch: ThisRun);
-        if (interrupted) journal.Append(JournalEntryKind.CommitStarted, Cottage, request);
+        if (interrupted) journal.Append(
+            JournalEntryKind.CommitStarted, Cottage, request,
+            container: "chest-a", stacks: stacks, containerEpoch: ThisRun);
         Assert.True(_journals.Save(journal).Saved);
         journal = _journals.Load(Scope).Journal;
 
         UndesignationPlan plan = register.PlanUndesignation(kind, journal.Replay(), authorised: true);
-        Assert.True(plan.IsRefused);
-        Assert.Equal(DesignationRefusal.BuildMaterialHeld, plan.Refusal);
-        Assert.Equal(UndesignationOutcome.Refused, register.ApplyUndesignation(plan, journal, authorised: true));
+        if (interrupted)
+        {
+            Assert.True(plan.IsRefused);
+            Assert.Equal(DesignationRefusal.BuildMaterialHeld, plan.Refusal);
+            Assert.Equal(UndesignationOutcome.Refused,
+                register.ApplyUndesignation(plan, journal, authorised: true));
+            Assert.Contains("cf_settle reconcile", DesignationResult.Refused(plan.Refusal).Describe());
+        }
+        else
+        {
+            Assert.False(plan.IsRefused);
+            Assert.Single(plan.ToRefund);
+            Assert.Single(plan.PendingMeasuredReturns);
+            Assert.Contains("production custody pending measured return", plan.Describe());
+            Assert.Equal(UndesignationOutcome.Removed,
+                register.ApplyUndesignation(plan, journal, authorised: true));
+            ReplayResult replay = journal.Replay();
+            Assert.Equal(OrderState.Cancelled, replay.StateOf(Cottage));
+            Assert.Equal(ReservationState.Held, Assert.Single(replay.Ledger.Reservations).State);
+            Assert.Empty(replay.MaterialRepairs);
+        }
+
         Assert.DoesNotContain(journal.Entries, e => e.Kind == JournalEntryKind.Refunded);
-        Assert.Contains("cf_settle reconcile", DesignationResult.Refused(plan.Refusal).Describe());
     }
 
 }
