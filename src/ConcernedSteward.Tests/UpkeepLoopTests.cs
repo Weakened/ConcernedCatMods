@@ -15,6 +15,107 @@ namespace TheConcernedCat.ConcernedSteward.Tests;
 public sealed class UpkeepLoopTests
 {
     [Fact]
+    public void Production_driver_fetches_once_then_tends_five_low_fires()
+    {
+        var f = new StewardFixture(
+            limits: new UpkeepLimits(32, 50, 1, 15f, 90f, 3),
+            sharedDriver: true);
+        for (int index = 0; index < 5; index++)
+        {
+            f.AddFire("fire-" + index, fuel: 1f, x: 4f + (index * 4f), z: 0f);
+        }
+
+        f.RunUntilTripEnds(cap: 100);
+
+        Assert.Equal(45, f.Loop.Custody.Withdrawn);
+        Assert.Equal(45, f.Loop.Custody.Burned);
+        Assert.Equal(0, f.Loop.Custody.Carried);
+        Assert.Equal(5, f.Depot.Count(StewardFixture.Wood));
+        Assert.Equal(45, f.Fires.Fed.Count);
+        Assert.Equal(5, f.Fires.Fed.Distinct(StringComparer.Ordinal).Count());
+        Assert.Single(
+            f.Motion.WalkedTo,
+            point => point.Equals(new SitePoint(1f, 0f, 1f)));
+        f.AssertConserved(startingStock: 50);
+    }
+
+    [Fact]
+    public void Production_driver_acts_on_capacity_deferred_work_until_every_fire_is_done()
+    {
+        var f = new StewardFixture(sharedDriver: true);
+        for (int index = 0; index < 5; index++)
+        {
+            f.AddFire("fire-" + index, fuel: 1f, x: 4f + (index * 4f), z: 0f);
+        }
+
+        f.RunUntilTripEnds(cap: 120);
+
+        Assert.Equal(45, f.Loop.UnitsBurnedTotal);
+        Assert.Equal(5, f.Depot.Count(StewardFixture.Wood));
+        Assert.Equal(45, f.Fires.Fed.Count);
+        Assert.Equal(
+            5,
+            f.Motion.WalkedTo.Count(point => point.Equals(new SitePoint(1f, 0f, 1f))));
+        Assert.Equal(
+            50,
+            f.Depot.Count(StewardFixture.Wood)
+                + f.Pack.Count(StewardFixture.Wood)
+                + f.Loop.UnitsBurnedTotal);
+    }
+
+    [Fact]
+    public void Production_driver_skips_a_refilled_stop_and_returns_the_exact_remainder()
+    {
+        var f = new StewardFixture(
+            limits: new UpkeepLimits(32, 50, 1, 15f, 90f, 3),
+            sharedDriver: true);
+        f.AddFire("first", fuel: 1f, x: 4f, z: 0f);
+        FuelTargetObservation refilled = f.AddFire("refilled", fuel: 1f, x: 8f, z: 0f);
+
+        for (int step = 0; step < 40; step++)
+        {
+            if (f.Loop.Phase == UpkeepPhase.ToTarget
+                && f.Loop.CurrentTarget.Value == "refilled")
+            {
+                break;
+            }
+
+            f.Run();
+        }
+
+        Assert.Equal("refilled", f.Loop.CurrentTarget.Value);
+        f.Fires.Replace(FakeFires.Fuelled(refilled, 10f));
+        f.RunUntilTripEnds(cap: 40);
+
+        Assert.Equal(18, f.Loop.Custody.Withdrawn);
+        Assert.Equal(9, f.Loop.Custody.Burned);
+        Assert.Equal(9, f.Loop.Custody.Returned);
+        Assert.Equal(0, f.Loop.Custody.Carried);
+        Assert.Equal(41, f.Depot.Count(StewardFixture.Wood));
+        f.AssertConserved(startingStock: 50);
+    }
+
+    [Fact]
+    public void A_direct_reload_abandons_the_old_driver_and_only_returns_its_measured_load()
+    {
+        var f = new StewardFixture(sharedDriver: true);
+        f.AddFire("fire-1", fuel: 1f);
+
+        f.Run(3);
+        Assert.Equal(UpkeepPhase.ToTarget, f.Loop.Phase);
+        Assert.Equal(9, f.Loop.Custody.Carried);
+
+        f.Loop.OnWorldLoaded(f.Pack, StewardFixture.Wood);
+        f.RunUntilTripEnds(cap: 20);
+
+        Assert.Empty(f.Fires.Fed);
+        Assert.Equal(9, f.Loop.Custody.Returned);
+        Assert.Equal(0, f.Loop.Custody.Carried);
+        Assert.Equal(50, f.Depot.Count(StewardFixture.Wood));
+        f.AssertConserved(startingStock: 50);
+    }
+
+    [Fact]
     public void A_fire_that_needs_wood_is_fetched_for_walked_to_and_fed()
     {
         var f = new StewardFixture();

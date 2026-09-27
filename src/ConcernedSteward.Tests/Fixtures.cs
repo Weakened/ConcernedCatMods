@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using TheConcernedCat.ConcernedSteward.Domain;
+using TheConcernedCat.ConcernedSteward.Domain.Npc;
 using TheConcernedCat.ConcernedSteward.Domain.Scope;
+using TheConcernedCat.ConcernedNPC.Roles;
 using TheConcernedCat.ConcernedSteward.Domain.Upkeep;
 using TheConcernedCat.ConcernedNPC.Work;
 using TheConcernedCat.Settlement.Designations;
@@ -263,7 +265,8 @@ internal sealed class FakeFires : IFuelTargetPort
     internal static FuelTargetObservation Fuelled(in FuelTargetObservation target, float fuel) =>
         new FuelTargetObservation(
             target.Key, target.Position, target.FuelItemName, fuel, target.MaxFuel,
-            target.CanRefill, target.InfiniteFuel, target.OwnedHere, target.AccessGranted);
+            target.CanRefill, target.InfiniteFuel, target.OwnedHere, target.AccessGranted,
+            target.SecondsPerUnit, target.IsLit);
 }
 
 /// <summary>Legs, without a body. Arrives by default, because a test about
@@ -297,11 +300,30 @@ internal sealed class StewardFixture
     internal StewardFixture(
         UpkeepLimits? limits = null,
         StewardMaintenancePlan? plan = null,
-        NpcWorldEpoch planWorld = default)
+        NpcWorldEpoch planWorld = default,
+        bool sharedDriver = false)
     {
         Journal = new MemoryUpkeepJournal();
+        if (sharedDriver)
+        {
+            Adoption = new StewardNpcAdoption(
+                new NpcRoleRegistry(),
+                new StewardNpcRole(System.IO.Path.Combine(
+                    System.IO.Path.GetTempPath(), "cs-steward-driver-fixture")));
+            if (!Adoption.Register().IsRegistered)
+            {
+                throw new InvalidOperationException("the Steward fixture could not register");
+            }
+
+            planWorld = Adoption.NoteWorldLoaded();
+        }
+
         Loop = new UpkeepLoop(
-            limits ?? UpkeepLimits.Default, Journal, message => Reported.Add(message), plan);
+            limits ?? UpkeepLimits.Default,
+            Journal,
+            message => Reported.Add(message),
+            plan,
+            Adoption);
         PlanWorld = planWorld;
         Depot = new FakeStore("the supply chest", (Wood, 50));
         Pack = new FakeStore("the Steward's pack");
@@ -318,6 +340,8 @@ internal sealed class StewardFixture
     }
 
     internal MemoryUpkeepJournal Journal { get; }
+
+    internal StewardNpcAdoption? Adoption { get; }
 
     internal UpkeepLoop Loop { get; }
 
@@ -345,7 +369,8 @@ internal sealed class StewardFixture
     internal FuelTargetObservation AddFire(
         string key, float fuel, float maxFuel = 10f, float x = 5f, float z = 5f,
         bool ownedHere = true, bool accessGranted = true, string? fuelName = null,
-        bool canRefill = true, bool infiniteFuel = false, string? epoch = null)
+        bool canRefill = true, bool infiniteFuel = false, string? epoch = null,
+        float secondsPerUnit = 60f, bool isLit = true)
     {
         var target = new FuelTargetObservation(
             new FuelTargetKey(key, epoch ?? Epoch),
@@ -356,7 +381,9 @@ internal sealed class StewardFixture
             canRefill,
             infiniteFuel,
             ownedHere,
-            accessGranted);
+            accessGranted,
+            secondsPerUnit,
+            isLit);
         Fires.Add(target);
         return target;
     }

@@ -1,8 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using TheConcernedCat.ConcernedNPC.Jobs;
+using TheConcernedCat.ConcernedNPC.Planning;
 using TheConcernedCat.ConcernedNPC.Work;
+using TheConcernedCat.ConcernedSteward.Domain.Npc;
 using TheConcernedCat.ConcernedSteward.Domain.Scope;
+using TheConcernedCat.ConcernedSteward.Domain.Upkeep.Round;
+using TheConcernedCat.Settlement.Designations;
 using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
@@ -140,6 +145,7 @@ internal sealed class UpkeepLoop
     private readonly UpkeepLimits _limits;
     private readonly IUpkeepJournal _journal;
     private readonly StewardMaintenancePlan? _plan;
+    private readonly StewardNpcAdoption? _npc;
     private readonly FuelCustody _custody = new FuelCustody();
     private readonly UpkeepReservation _reservation = new UpkeepReservation();
     private readonly AttentionThrottle _throttle;
@@ -157,6 +163,19 @@ internal sealed class UpkeepLoop
     private PhaseDeadline _deadline;
     private int _tripsCompleted;
     private int _unitsBurnedTotal;
+
+    // The shared driver owns ordering, reservations and round reconciliation.
+    // These fields are only its production cursor; every material mutation still
+    // happens in this class through Transfer or FeedOneUnit.
+    private NpcJobDriver? _driver;
+    private PlannedStep _activeStep;
+    private bool _hasActiveStep;
+    private int _stepUnitsRemaining;
+    private RoundPlan _round;
+    private IFuelTargetPort? _liveFires;
+    private IItemStorePort? _liveDepot;
+    private ScopeSnapshot _liveScope;
+    private bool _roundNeedsRefresh;
 
     /// <summary>Builds the loop.
     ///
@@ -180,12 +199,14 @@ internal sealed class UpkeepLoop
         UpkeepLimits limits,
         IUpkeepJournal journal,
         Action<string>? report = null,
-        StewardMaintenancePlan? plan = null)
+        StewardMaintenancePlan? plan = null,
+        StewardNpcAdoption? npc = null)
     {
         _limits = limits;
         _journal = journal ?? throw new ArgumentNullException(nameof(journal));
         _report = report;
         _plan = plan;
+        _npc = npc;
         _throttle = new AttentionThrottle(limits.ScanIntervalSeconds * 2f);
         _retry = new BoundedRetry(limits.MaxFailuresPerPhase, limits.ScanIntervalSeconds, limits.ScanIntervalSeconds * 4f);
     }
@@ -357,6 +378,12 @@ internal sealed class UpkeepLoop
 
         CloseJob();
 
+        if (_npc != null)
+        {
+            TickDrivenIdle(tick);
+            return;
+        }
+
         if (tick.Now < _nextScanAt)
         {
             return;
@@ -469,6 +496,392 @@ internal sealed class UpkeepLoop
         Enter(UpkeepPhase.ToDepot, tick.Now,
             "Fetching " + planned.ToString(CultureInfo.InvariantCulture) + " " + _fuelItemName +
             " for a fire at " + FuelMath.Describe(target.Fuel, target.MaxFuel) + ".");
+    }
+
+    /// <summary>Production adoption of the shared job driver. The driver decides
+    /// the ordered steps; this loop remains the only place that moves material.</summary>
+    private void TickDrivenIdle(in UpkeepTick tick)
+    {
+        _liveFires = tick.Fires;
+        _liveDepot = tick.Depot;
+        _liveScope = tick.Scope;
+
+        if (_driver != null)
+        {
+            AdvanceDriver(tick);
+            return;
+        }
+
+        if (tick.Now < _nextScanAt)
+        {
+            return;
+        }
+
+        _nextScanAt = tick.Now + _limits.ScanIntervalSeconds;
+        if (!_npc!.IsRegistered || _npc.World.IsUnknown)
+        {
+            Say(tick, "driver-unavailable",
+                "The Steward is not registered in this world, so she cannot start maintenance.");
+            return;
+        }
+
+        if (!tick.Depot.IsAvailable)
+        {
+            Say(tick, "depot-unavailable",
+                "The marked supply chest is not reachable right now, so the Steward is waiting.");
+            return;
+        }
+
+        IReadOnlyList<FuelTargetObservation> offered;
+        IReadOnlyCollection<string> stocked;
+        try
+        {
+            offered = tick.Fires.Survey(tick.Scope.SettlementCentre, tick.Scope.SettlementRadius)
+                ?? (IReadOnlyList<FuelTargetObservation>)Array.Empty<FuelTargetObservation>();
+            stocked = tick.Depot.ItemNames
+                ?? (IReadOnlyCollection<string>)Array.Empty<string>();
+        }
+        catch (Exception exception)
+        {
+            Say(tick, "scan-failed",
+                "The Steward could not look at the settlement's fires (" + Brief(exception) + ").");
+            return;
+        }
+
+        LastScan = FuelTargetSelector.Scan(
+            offered, tick.Scope.Settlement, tick.Scope.DepotPoint, stocked, tick.Scope.Epoch, _limits);
+
+        var lines = new List<SupplyLine>();
+        foreach (string item in stocked)
+        {
+            int count = SafeCount(tick.Depot, item);
+            if (count > 0)
+            {
+                lines.Add(new SupplyLine(item, count));
+            }
+        }
+
+        var source = new SupplySighting(
+            tick.Scope.DepotKey,
+            tick.Depot.Describe,
+            tick.Scope.DepotPoint,
+            SupplyAccess.Both,
+            lines);
+        _round = MaintenanceRound.Prepare(
+            offered,
+            tick.Scope.Settlement,
+            new[] { source },
+            tick.Scope.Epoch,
+            MaintenanceThresholds.Default);
+        _roundNeedsRefresh = false;
+        if (!_round.IsActionable)
+        {
+            _explanation = _round.Describe();
+            return;
+        }
+
+        _driver = MaintenanceJobRole.DriverFor(
+            _npc,
+            _round,
+            StewardRole.UpkeepJobId,
+            new SettlementWorkArea(tick.Scope.Settlement!),
+            _limits.MaxUnitsPerTrip,
+            CurrentDrivenRound,
+            LookDriven,
+            () => _liveScope.Settlement,
+            () => _liveScope.Epoch,
+            MaintenanceThresholds.Default);
+        AdvanceDriver(tick);
+    }
+
+    private FuelTargetObservation? LookDriven(FuelTargetKey key)
+    {
+        if (_liveFires == null)
+        {
+            return null;
+        }
+
+        return _liveFires.TryObserve(key, out FuelTargetObservation target)
+            ? target
+            : (FuelTargetObservation?)null;
+    }
+
+    private RoundPlan CurrentDrivenRound()
+    {
+        if (!_roundNeedsRefresh || _liveFires == null || _liveDepot == null)
+        {
+            return _round;
+        }
+
+        try
+        {
+            IReadOnlyList<FuelTargetObservation> offered = _liveFires.Survey(
+                _liveScope.SettlementCentre, _liveScope.SettlementRadius)
+                ?? (IReadOnlyList<FuelTargetObservation>)Array.Empty<FuelTargetObservation>();
+            IReadOnlyCollection<string> stocked = _liveDepot.ItemNames
+                ?? (IReadOnlyCollection<string>)Array.Empty<string>();
+            var lines = new List<SupplyLine>();
+            foreach (string item in stocked)
+            {
+                int count = SafeCount(_liveDepot, item);
+                if (count > 0)
+                {
+                    lines.Add(new SupplyLine(item, count));
+                }
+            }
+
+            _round = MaintenanceRound.Prepare(
+                offered,
+                _liveScope.Settlement,
+                new[]
+                {
+                    new SupplySighting(
+                        _liveScope.DepotKey,
+                        _liveDepot.Describe,
+                        _liveScope.DepotPoint,
+                        SupplyAccess.Both,
+                        lines),
+                },
+                _liveScope.Epoch,
+                MaintenanceThresholds.Default);
+            _roundNeedsRefresh = false;
+        }
+        catch (Exception)
+        {
+            // The driver will revalidate each already-planned stop. Keeping the
+            // last immutable snapshot here is safer than turning an unreadable
+            // live world into a claim that there is no work.
+        }
+
+        return _round;
+    }
+
+    private void AdvanceDriver(in UpkeepTick tick)
+    {
+        if (_driver == null)
+        {
+            return;
+        }
+
+        _liveFires = tick.Fires;
+        _liveDepot = tick.Depot;
+        _liveScope = tick.Scope;
+        SitePoint at = tick.Motion.Position;
+        NpcJobAdvance advance = _driver.Next(new NpcPoint(at.X, at.Y, at.Z));
+        switch (advance.Progress)
+        {
+            case NpcJobProgress.Do:
+                _activeStep = advance.Step;
+                _hasActiveStep = true;
+                if (advance.Step.IsCollect)
+                {
+                    StartDrivenCollect(tick, advance.Step);
+                }
+                else
+                {
+                    StartDrivenService(tick, advance.Step);
+                }
+
+                break;
+
+            case NpcJobProgress.Finished:
+                FinishDrivenJob(tick, "The maintenance round is complete.");
+                break;
+
+            case NpcJobProgress.Waiting:
+                _explanation = advance.Reason.Length == 0
+                    ? "The Steward is waiting for the maintenance plan to become readable."
+                    : advance.Reason;
+                break;
+
+            default:
+                StopDrivenJob(tick,
+                    advance.Reason.Length == 0
+                        ? "The shared maintenance plan stopped."
+                        : advance.Reason);
+                break;
+        }
+    }
+
+    private void StartDrivenCollect(in UpkeepTick tick, in PlannedStep step)
+    {
+        if (_custody.Carried > 0)
+        {
+            StopDrivenJob(tick,
+                "The maintenance plan asked for another chest visit while the Steward still carried material.");
+            return;
+        }
+
+        JobManifestLine material = default;
+        int lineCount = 0;
+        foreach (JobManifestLine line in step.Moves.Lines)
+        {
+            material = line;
+            lineCount++;
+        }
+
+        if (lineCount != 1 || !material.IsValid || material.Required != step.Step.Units)
+        {
+            StopDrivenJob(tick, "The maintenance plan did not name one exact fuel load.");
+            return;
+        }
+
+        FuelTargetKey first = default;
+        int targets = 0;
+        foreach (PlannedStep planned in _driver!.Steps)
+        {
+            if (!planned.IsCollect && planned.Tour == step.Tour)
+            {
+                targets++;
+                if (first.IsEmpty)
+                {
+                    first = KeyFor(planned.Step.Subject);
+                }
+            }
+        }
+
+        if (targets < 1 || first.IsEmpty)
+        {
+            StopDrivenJob(tick, "The maintenance plan provisioned a trip with no live fire.");
+            return;
+        }
+
+        if (_plan != null && _plan.HasActivePlan)
+        {
+            string reconcileFailure;
+            string finishFailure = string.Empty;
+            if (!_plan.TryBeginReconciliation(
+                    _fuelItemName, 0, "the previous planned tour used its measured load",
+                    out reconcileFailure)
+                || !_plan.TryFinish(
+                    _fuelItemName, 0, "the previous planned tour is complete",
+                    out finishFailure))
+            {
+                Halt(reconcileFailure.Length != 0 ? reconcileFailure : finishFailure);
+                return;
+            }
+        }
+
+        _reservation.Release(StewardRole.UpkeepJobId);
+        if (_reservation.Take(first, StewardRole.UpkeepJobId, material.Required)
+            != ReservationOutcome.Taken)
+        {
+            StopDrivenJob(tick, "The Steward could not record the planned maintenance tour.");
+            return;
+        }
+
+        if (!_custody.TryReset())
+        {
+            StopDrivenJob(tick, "The previous fuel custody record is not settled.");
+            return;
+        }
+
+        if (_plan != null && !_plan.TryBegin(
+                tick.PlanWorld,
+                tick.Scope.DepotKey,
+                first,
+                material.Item,
+                material.Required,
+                targets,
+                out string beginFailure))
+        {
+            Halt(beginFailure);
+            return;
+        }
+
+        BeginJobIfNeeded();
+        _fuelItemName = material.Item;
+        _scopeRevision = tick.Scope.Revision;
+        _retry.Reset();
+        Enter(
+            UpkeepPhase.ToDepot,
+            tick.Now,
+            "Fetching " + material.Required.ToString(CultureInfo.InvariantCulture) + " "
+                + material.Item + " for " + targets.ToString(CultureInfo.InvariantCulture)
+                + " planned fire stop(s).");
+    }
+
+    private void StartDrivenService(in UpkeepTick tick, in PlannedStep step)
+    {
+        FuelTargetKey key = KeyFor(step.Step.Subject);
+        if (key.IsEmpty || step.Step.Units < 1)
+        {
+            StopDrivenJob(tick, "The maintenance plan named no live fire or fuel amount.");
+            return;
+        }
+
+        if (_custody.Carried < step.Step.Units)
+        {
+            _driver!.Failed();
+            StopDrivenJob(tick,
+                "The Steward carried less fuel than the planned fire stop requires.");
+            return;
+        }
+
+        _reservation.Release(StewardRole.UpkeepJobId);
+        if (_reservation.Take(key, StewardRole.UpkeepJobId, step.Step.Units)
+            != ReservationOutcome.Taken)
+        {
+            _driver!.Failed();
+            StopDrivenJob(tick, "The Steward could not record the next planned fire.");
+            return;
+        }
+
+        _targetPoint = SettlementWorkArea.Site(step.Step.At);
+        _stepUnitsRemaining = step.Step.Units;
+        _scopeRevision = tick.Scope.Revision;
+        _retry.Reset();
+        Enter(
+            UpkeepPhase.ToTarget,
+            tick.Now,
+            "Carrying fuel to planned fire " + step.Step.Subject + ".");
+    }
+
+    private FuelTargetKey KeyFor(string subject)
+    {
+        foreach (LightNeed stop in _round.Stops)
+        {
+            if (string.Equals(stop.Light.Key.Value, subject, StringComparison.Ordinal))
+            {
+                return stop.Light.Key;
+            }
+        }
+
+        return default;
+    }
+
+    private void FinishDrivenJob(in UpkeepTick tick, string reason)
+    {
+        int left = _driver == null
+            ? 0
+            : _driver.LeftForAnotherRound + _driver.LastRound.LeftForAnotherRound
+                + _round.DeferredForMaterial;
+        _driver = null;
+        _hasActiveStep = false;
+        _stepUnitsRemaining = 0;
+        FinishTrip(tick, reason);
+        if (left > 0 && _phase == UpkeepPhase.Idle)
+        {
+            _nextScanAt = tick.Now;
+            _explanation = left.ToString(CultureInfo.InvariantCulture)
+                + " fire(s) remain for another capacity-aware round.";
+        }
+    }
+
+    private void StopDrivenJob(in UpkeepTick tick, string reason)
+    {
+        _driver?.Abandon();
+        _driver = null;
+        _hasActiveStep = false;
+        _stepUnitsRemaining = 0;
+        _reservation.Release(StewardRole.UpkeepJobId);
+        if (_custody.Carried > 0)
+        {
+            BeginReturn(tick, reason + " The measured remainder is going back to the chest.");
+            return;
+        }
+
+        StopAndIdle(tick, reason);
     }
 
     private string DescribeNothingToDo(FuelTargetScan scan)
@@ -586,10 +999,18 @@ internal sealed class UpkeepLoop
 
         if (_custody.Carried > 0 && _phase != UpkeepPhase.Returning)
         {
-            BeginReturn(tick,
-                "The Steward stopped because " + because + ", so she is taking the " +
-                _custody.Carried.ToString(CultureInfo.InvariantCulture) +
-                " she is carrying back to the chest.");
+            string explanation =
+                "The Steward stopped because " + because + ", so she is taking the "
+                + _custody.Carried.ToString(CultureInfo.InvariantCulture)
+                + " she is carrying back to the chest.";
+            if (_driver != null)
+            {
+                _driver.Failed();
+                StopDrivenJob(tick, explanation);
+                return;
+            }
+
+            BeginReturn(tick, explanation);
             return;
         }
 
@@ -606,7 +1027,9 @@ internal sealed class UpkeepLoop
 
     private void TickWithdraw(in UpkeepTick tick)
     {
-        int planned = _reservation.PlannedUnits;
+        int planned = _driver != null && _hasActiveStep && _activeStep.IsCollect
+            ? _activeStep.Step.Units
+            : _reservation.PlannedUnits;
         if (planned < 1 || !_reservation.IsHeldBy(StewardRole.UpkeepJobId))
         {
             StopAndIdle(tick, "The Steward lost track of which fire she was fetching for.");
@@ -650,6 +1073,28 @@ internal sealed class UpkeepLoop
                     return;
                 }
 
+                if (_driver != null)
+                {
+                    if (measurement.Moved != planned)
+                    {
+                        _driver.Failed();
+                        StopDrivenJob(
+                            tick,
+                            "The supply chest provided only "
+                                + measurement.Moved.ToString(CultureInfo.InvariantCulture)
+                                + " of " + planned.ToString(CultureInfo.InvariantCulture)
+                                + " planned unit(s).");
+                        return;
+                    }
+
+                    _roundNeedsRefresh = true;
+                    _driver.Done();
+                    _reservation.Release(StewardRole.UpkeepJobId);
+                    _hasActiveStep = false;
+                    AdvanceDriver(tick);
+                    return;
+                }
+
                 _retry.Reset();
                 Enter(UpkeepPhase.ToTarget, tick.Now,
                     "Carrying " + measurement.Moved.ToString(CultureInfo.InvariantCulture) + " " +
@@ -690,6 +1135,15 @@ internal sealed class UpkeepLoop
     {
         if (_custody.Carried < 1)
         {
+            if (_driver != null)
+            {
+                _driver.Failed();
+                StopDrivenJob(
+                    tick,
+                    "The planned fire stop had no measured fuel left to carry.");
+                return;
+            }
+
             FinishTrip(tick, "The fire is as full as the Steward could make it.");
             return;
         }
@@ -706,14 +1160,33 @@ internal sealed class UpkeepLoop
         }
         catch (Exception exception)
         {
-            BeginReturn(tick,
-                "The fire could not be looked at (" + Brief(exception) + "), so the Steward is " +
-                "taking the wood back.");
+            string reason =
+                "The fire could not be looked at (" + Brief(exception)
+                + "), so the Steward is taking the wood back.";
+            if (_driver != null)
+            {
+                _driver.Failed();
+                StopDrivenJob(tick, reason);
+                return;
+            }
+
+            BeginReturn(tick, reason);
             return;
         }
 
         if (!seen)
         {
+            if (_driver != null && _hasActiveStep)
+            {
+                _roundNeedsRefresh = true;
+                _driver.Skipped();
+                _reservation.Release(StewardRole.UpkeepJobId);
+                _hasActiveStep = false;
+                _stepUnitsRemaining = 0;
+                AdvanceDriver(tick);
+                return;
+            }
+
             BeginReturn(tick,
                 "That fire is gone, so the Steward is taking the wood back to the chest.");
             return;
@@ -724,6 +1197,17 @@ internal sealed class UpkeepLoop
             target, tick.Scope.Settlement, stocked, tick.Scope.Epoch);
         if (status != FuelTargetStatus.Eligible)
         {
+            if (_driver != null && _hasActiveStep)
+            {
+                _roundNeedsRefresh = true;
+                _driver.Skipped();
+                _reservation.Release(StewardRole.UpkeepJobId);
+                _hasActiveStep = false;
+                _stepUnitsRemaining = 0;
+                AdvanceDriver(tick);
+                return;
+            }
+
             BeginReturn(tick,
                 "The Steward left that fire alone (" + DescribeStatus(status) +
                 ") and is taking the wood back.");
@@ -752,9 +1236,17 @@ internal sealed class UpkeepLoop
                 return;
             }
 
-            BeginReturn(tick,
-                "The Steward could not write down what she was about to do, so she did nothing " +
-                "and is taking the wood back.");
+            const string reason =
+                "The Steward could not write down what she was about to do, so she did nothing "
+                + "and is taking the wood back.";
+            if (_driver != null)
+            {
+                _driver.Failed();
+                StopDrivenJob(tick, reason);
+                return;
+            }
+
+            BeginReturn(tick, reason);
             return;
         }
 
@@ -792,9 +1284,12 @@ internal sealed class UpkeepLoop
 
         bool receipted = _journal.TryRecordReceipt(
             new UpkeepReceipt(intent.Request, UpkeepStep.Feed, outcome, moved, measurement.Evidence));
-        bool targetDone = measurement.Outcome == FeedOutcome.Declined
-            || (measurement.Outcome == FeedOutcome.Accepted
-                && measurement.CarriedAfter == 0);
+        bool targetDone = _driver != null && _hasActiveStep
+            ? measurement.Outcome == FeedOutcome.Declined
+                || (measurement.Outcome == FeedOutcome.Accepted && _stepUnitsRemaining == 1)
+            : measurement.Outcome == FeedOutcome.Declined
+                || (measurement.Outcome == FeedOutcome.Accepted
+                    && measurement.CarriedAfter == 0);
         bool established = receipted
             && measurement.CarriedAfter >= 0
             && (measurement.Outcome == FeedOutcome.Accepted
@@ -823,6 +1318,20 @@ internal sealed class UpkeepLoop
                         "had, so she stopped rather than risk doing it twice. " +
                         measurement.Evidence +
                         (planReceipted ? string.Empty : " " + planReceiptFailure));
+                    return;
+                }
+
+                if (_driver != null && _hasActiveStep)
+                {
+                    _stepUnitsRemaining--;
+                    if (_stepUnitsRemaining == 0)
+                    {
+                        _roundNeedsRefresh = true;
+                        _driver.Done();
+                        _reservation.Release(StewardRole.UpkeepJobId);
+                        _hasActiveStep = false;
+                        AdvanceDriver(tick);
+                    }
                 }
 
                 break;
@@ -836,6 +1345,17 @@ internal sealed class UpkeepLoop
                 if (!planReceipted)
                 {
                     Halt(planReceiptFailure);
+                    return;
+                }
+
+                if (_driver != null && _hasActiveStep)
+                {
+                    _roundNeedsRefresh = true;
+                    _driver.Skipped();
+                    _reservation.Release(StewardRole.UpkeepJobId);
+                    _hasActiveStep = false;
+                    _stepUnitsRemaining = 0;
+                    AdvanceDriver(tick);
                     return;
                 }
 
@@ -1122,6 +1642,17 @@ internal sealed class UpkeepLoop
     /// — costs one walk back to the chest and nothing else.</summary>
     public void OnWorldLoaded(IItemStorePort? carrier, string? fuelItemName)
     {
+        // A direct reload callback must not retain an in-memory driver cursor.
+        // The durable plan and measured pack are the only restart authorities;
+        // replaying a pre-reload step after the remainder is returned would
+        // duplicate the old route against a newly loaded world.
+        _driver?.Abandon();
+        _driver = null;
+        _hasActiveStep = false;
+        _stepUnitsRemaining = 0;
+        _roundNeedsRefresh = false;
+        _liveFires = null;
+        _liveDepot = null;
         _reservation.Release(StewardRole.UpkeepJobId);
         _nextScanAt = 0f;
         _retry.Reset();
@@ -1243,6 +1774,10 @@ internal sealed class UpkeepLoop
     /// ledger keeps saying so.</summary>
     public void Stop(string reason)
     {
+        _driver?.Abandon();
+        _driver = null;
+        _hasActiveStep = false;
+        _stepUnitsRemaining = 0;
         _reservation.Release(StewardRole.UpkeepJobId);
         if (_plan != null)
         {
@@ -1347,6 +1882,10 @@ internal sealed class UpkeepLoop
 
     private void StopAndIdle(in UpkeepTick tick, string reason)
     {
+        _driver?.Abandon();
+        _driver = null;
+        _hasActiveStep = false;
+        _stepUnitsRemaining = 0;
         if (_phase != UpkeepPhase.Idle)
         {
             try
@@ -1389,6 +1928,10 @@ internal sealed class UpkeepLoop
     /// out is <see cref="Acknowledge"/>.</summary>
     private void Halt(string reason)
     {
+        _driver?.Abandon();
+        _driver = null;
+        _hasActiveStep = false;
+        _stepUnitsRemaining = 0;
         _reservation.Release(StewardRole.UpkeepJobId);
         _plan?.NeedsAttention(reason);
         _phase = UpkeepPhase.NeedsAttention;

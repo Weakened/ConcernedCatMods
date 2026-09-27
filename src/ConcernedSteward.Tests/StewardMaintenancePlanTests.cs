@@ -30,7 +30,7 @@ public sealed class StewardMaintenancePlanTests
             ProductSources.Product, "Domain", "Upkeep", "UpkeepLoop.cs"));
 
         Assert.Contains("new StewardMaintenancePlan(recordRoot, _npc.Registry, _npc.Identity)", runtime);
-        Assert.Contains("new UpkeepLoop(UpkeepLimits.Default, _journal, Report, _plan)", runtime);
+        Assert.Contains("new UpkeepLoop(UpkeepLimits.Default, _journal, Report, _plan, _npc)", runtime);
         Assert.Contains("_plan.OnWorldLoaded(scope.Value, planEvidence, _pack, _carryingName)", runtime);
         Assert.Contains("_npc.World));", runtime);
         Assert.Contains("_loop.RequireAttention(", runtime);
@@ -65,6 +65,71 @@ public sealed class StewardMaintenancePlanTests
         Assert.Single(fixture.Fires.Fed);
         Assert.Equal(49, fixture.Depot.Count(Wood));
         fixture.AssertConserved(startingStock: 50);
+    }
+
+    [Fact]
+    public void A_batched_tour_records_every_target_and_settles_each_exactly_once()
+    {
+        using var folder = new TemporaryFolder();
+        PlanContext context = Open(folder.Path);
+        var pack = new FakeStore("the Steward's pack");
+        context.Plan.OnWorldLoaded(context.Scope, Evidence(context.World), pack, Wood);
+
+        Assert.True(
+            context.Plan.TryBegin(
+                context.World,
+                "depot-key",
+                new FuelTargetKey("fire-0", StewardFixture.Epoch),
+                Wood,
+                plannedUnits: 5,
+                targetCount: 5,
+                out string beginFailure),
+            beginFailure);
+        Assert.True(
+            context.Plan.TryIntend("withdraw the measured batch", out string withdrawalIntentFailure),
+            withdrawalIntentFailure);
+        Assert.True(
+            context.Plan.TryConclude(
+                true,
+                Wood,
+                carried: 5,
+                targetDone: false,
+                note: "the measured batch is in the pack",
+                out string withdrawalConclusionFailure),
+            withdrawalConclusionFailure);
+        Assert.True(context.Plan.TryRouteToTarget(out string routeFailure), routeFailure);
+        Assert.True(context.Plan.TryEnterExecuting(out string executingFailure), executingFailure);
+
+        for (int target = 0; target < 5; target++)
+        {
+            Assert.True(
+                context.Plan.TryIntend("feed target " + target, out string intentFailure),
+                intentFailure);
+            Assert.True(
+                context.Plan.TryConclude(
+                    true,
+                    Wood,
+                    carried: 4 - target,
+                    targetDone: true,
+                    note: "target settled",
+                    out string concludeFailure),
+                concludeFailure);
+        }
+
+        Assert.True(
+            context.Plan.TryBeginReconciliation(
+                Wood, 0, "the batch is measured", out string reconcileFailure),
+            reconcileFailure);
+        Assert.True(
+            context.Plan.TryFinish(Wood, 0, "the batch is complete", out string finishFailure),
+            finishFailure);
+
+        NpcPlanState saved = Load(folder.Path, context.Scope);
+        Assert.Equal(5, saved.TargetsTotal);
+        Assert.Equal(5, saved.TargetsDone);
+        Assert.Equal(NpcPlanPhase.Settled, saved.Phase);
+        Assert.Empty(saved.Reservations);
+        Assert.Empty(saved.Carried);
     }
 
     [Fact]
