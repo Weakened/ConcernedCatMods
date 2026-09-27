@@ -24,6 +24,23 @@ public static class TeamsterStrings
     // values may carry {0},{1}... placeholders resolved by Format.
     private static readonly Dictionary<string, string> English = new(StringComparer.Ordinal)
     {
+        // Container permissions (#374). Shown on screen when a player changes
+        // what Gunnar may do with a chest, so they belong in the catalog like
+        // every other user-facing string in this product.
+        ["containers.now.off"] = "Gunnar may not use this container.",
+        ["containers.now.take"] = "Gunnar may take from this container.",
+        ["containers.now.deposit"] = "Gunnar may put things into this container.",
+        ["containers.now.both"] = "Gunnar may take from and put into this container.",
+        ["containers.notSaved"] = "{0} \u2014 but it could NOT be saved, so it will be gone next session.",
+        ["containers.moves"] =
+            "That container moves, so a permission for it could not be found again. Only a chest "
+            + "that stays put can be enabled.",
+        ["containers.noPlace"] =
+            "That container has no position this build can read, so it cannot be enabled.",
+        ["containers.noKind"] =
+            "That container's kind could not be read on this build, so it cannot be enabled \u2014 a "
+            + "permission that matched any container on that spot would be wrong.",
+
         // Route picker (CT-022)
         ["routes.pick"] = "Pick a route to profile.",
         ["routes.selected"] = "Selected: {0}",

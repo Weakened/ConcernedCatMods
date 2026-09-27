@@ -7,6 +7,7 @@ using TheConcernedCat.ConcernedTeamster.Domain.Hauling;
 using TheConcernedCat.ConcernedTeamster.Domain.Hauling.Execution;
 using TheConcernedCat.Workers;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;
 
@@ -675,7 +676,7 @@ internal sealed class VagonHitchSeam : ICartHitchSeam
     {
         if (_faultDetail.Length == 0)
         {
-            _faultDetail = "the cart seam faulted (" + exception.GetType().Name + ": " + exception.Message + ")";
+            _faultDetail = "the cart seam faulted (" + SafeFailure.Brief(exception) + ")";
         }
     }
 

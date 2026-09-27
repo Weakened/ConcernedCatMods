@@ -25,6 +25,46 @@ only for non-blocking uncertainty.
 
 ## Open items
 
+### 2026-09-25 — Support-bundle path scrubbing has limits a player should know about
+
+- Version / issue: v1.0.5 / CT-410 (#410)
+- Question: a support bundle exists to be handed to somebody else, and its
+  riskiest input is the raw BepInEx log tail, whose lines this mod writes for a
+  developer and which embed full filesystem paths. #410 fixed the defect that
+  stopped the scrubber at the first space in a mod-manager path, but a
+  space-separated token after a path is fundamentally ambiguous — it cannot be
+  told from another word of a folder name — so every possible rule trades
+  privacy against the diagnostic the bundle exists for. Which way should it err,
+  and does the player need telling?
+- Safe reversible default selected: err toward privacy, cap the ambiguity, and
+  say so on the bundle itself. At most two space-joined tokens per path segment,
+  which covers every real multi-word folder (`Thunderstore Mod Manager`,
+  `Documents and Settings`, `Program Files (x86)`, a user name with a space in
+  it) and refuses the longer runs prose produces. Four limits remain and each is
+  asserted in `SupportBundleTests.Sanitizer_TheseAreTheStatedLimits` rather than
+  only described: a folder-terminated path followed by up to two capitalised
+  words loses those words; a folder name of four or more words is not covered; an
+  extension longer than eight characters is not recognised as one; and a world
+  name with spaces loses a middle word. `SupportBundleComposer.Header` no longer
+  claims "no full paths" — it says paths are masked and asks the player to read
+  the file before sharing.
+- Why work continued: the fix is a strict improvement in both directions over
+  what shipped (it closes a user-name leak *and* stops the chain eating log
+  pointers), every limit is pinned by a test, and the bundle's own header now
+  tells the player to look. Nothing is transmitted anywhere; a bundle is written
+  locally and shared only by the player's own action.
+- Risk / alternative: the owner may want the opposite trade on limit 1 (keep the
+  reason, accept the folder name), or a hard refusal to compose a bundle at all
+  when a line still contains a separator after scrubbing. Both are a
+  configuration or a one-line change. The broader alternative is #408's
+  suggestion: move one scrubber into the shared library instead of maintaining
+  two independently written ones with two sets of limits — that is a real
+  architecture decision and is deliberately not taken here.
+- Must resolve before public release: No — v1.0.5 is already public and this is
+  an improvement to it, not a new exposure. Worth an owner read of the limits
+  list before the next release note mentions support bundles.
+- Status: Open
+
 ### 2026-09-04 — Generated placeholder package icon
 
 - Version / issue: v0.1 / CT-001 (#109)

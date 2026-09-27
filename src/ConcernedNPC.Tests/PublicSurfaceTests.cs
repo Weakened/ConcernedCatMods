@@ -70,14 +70,35 @@ public class PublicSurfaceTests
     /// <c>INpcEpochScoped</c>); and what other jobs have set aside
     /// (<c>INpcSourceAvailability</c>).
     ///
+    /// <b>Container permissions (#374).</b> <c>NpcContainerDesk</c> and
+    /// <c>NpcContainerDecision</c>: which containers a player has opened to
+    /// NPCs, the cycle a key press walks through, and the records to persist.
+    /// The role that needs them is Concerned Teamster, and the reason they are
+    /// here is that the model was complete, tested, and reachable by nothing -
+    /// every type under <c>Storage/</c> was internal, no product imported the
+    /// namespace, no player could set a permission, and "off by default" was a
+    /// statement about dead code rather than about behaviour.
+    ///
+    /// It is a facade on purpose, and the two types it does NOT bring with it
+    /// are the point: <c>NpcContainerPermit</c> stays unforgeable from outside
+    /// this package (<c>ContainerTests.NothingOutsideThisPackageCanForgeAPermit</c>
+    /// asserts it), and the gate, the assignment and the transfer recorder stay
+    /// in here with it. A role does not need to mint a permit; it needs to know
+    /// what the player allowed, to change it, and to write it down.
+    /// <c>NpcContainerPlace</c> is also held back, because a place is a
+    /// tolerance with a matching rule, and publishing it would publish the rule
+    /// as an API and invite a role to build one for a container that moves -
+    /// which that type's own documentation forbids and cannot enforce.
+    ///
     /// <b>What is still internal, and why that is not an oversight.</b> The
     /// arbiter, the mode owner, the slug rules, the build gate, the key
     /// composition, the prefab-to-contract table, the sidecar and the atomic
     /// write. Members too: the built prefab, the eager build, the identity
     /// stamp, the network view and the tally's own constructors, each because
     /// handing it over would let a caller reach past a rule the type exists to
-    /// keep. The whole of <c>Custody/</c> and <c>Storage/</c>, which the job
-    /// pipeline never touches. And the sequencing itself - the snapshot
+    /// keep. The whole of <c>Custody/</c>, which the job pipeline never touches,
+    /// and all of <c>Storage/</c> bar the desk above - the permit, the place,
+    /// the gate, the sighting, the assignment, the book and the transfer. And the sequencing itself - the snapshot
     /// builder, the tour planner, the tour plan, the partitioner, the source
     /// selector, the manifest arithmetic, the budget, the commitments, the
     /// reservation books, the stop sequencer and the route execution - because
@@ -139,6 +160,8 @@ public class PublicSurfaceTests
         "TheConcernedCat.ConcernedNPC.Routing.IStopObserver",
         "TheConcernedCat.ConcernedNPC.Routing.RouteStop",
         "TheConcernedCat.ConcernedNPC.Routing.StopStatus",
+        "TheConcernedCat.ConcernedNPC.Storage.NpcContainerDecision",
+        "TheConcernedCat.ConcernedNPC.Storage.NpcContainerDesk",
         "TheConcernedCat.ConcernedNPC.Work.AreaRejection",
         "TheConcernedCat.ConcernedNPC.Work.AreaSample",
         "TheConcernedCat.ConcernedNPC.Work.AreaSampleVerdict",

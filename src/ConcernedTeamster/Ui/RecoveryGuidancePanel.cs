@@ -6,6 +6,7 @@ using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using TheConcernedCat.ConcernedTeamster.Domain.Ui;
 using UnityEngine;
 using UnityEngine.UI;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedTeamster.Ui;
 
@@ -213,6 +214,6 @@ internal sealed class RecoveryGuidancePanel
 
         _log.LogError(
             "Recovery Guidance UI failed and was disabled for this session " +
-            $"(telemetry keeps running): {exception.GetType().Name}: {exception.Message}");
+            $"(telemetry keeps running): {SafeFailure.Brief(exception)}");
     }
 }

@@ -3,6 +3,7 @@ using Jotunn.Entities;
 using Jotunn.Managers;
 using TheConcernedCat.ConcernedForeman.Runtime.Custody;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 
@@ -94,7 +95,7 @@ internal static class ForemanWorkerPrefab
         catch (Exception exception)
         {
             LastFailure = "building the worker prefab threw " + exception.GetType().Name;
-            _log?.Invoke("Worker prefab not created: " + exception);
+            _log?.Invoke("Worker prefab not created: " + SafeFailure.Describe(exception));
         }
     }
 

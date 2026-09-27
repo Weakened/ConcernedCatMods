@@ -4,7 +4,7 @@
     <OutputType>Library</OutputType>
     <RootNamespace>TheConcernedCat.ConcernedNPC</RootNamespace>
     <AssemblyName>TheConcernedCat.ConcernedNPC</AssemblyName>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <FileAlignment>512</FileAlignment>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
@@ -27,4 +27,10 @@
   <ItemGroup>
     <PackageReference Include="JotunnLib" Version="2.29.2" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- #416: the one path scrubber and failure wording, shared as source.
+         This library logs its own failures, so it needs them too. -->
+    <Compile Include="..\Shared\Diagnostics\**\*.cs" LinkBase="Diagnostics" />
+  </ItemGroup>
+
 </Project>

@@ -2,6 +2,7 @@
 using HarmonyLib;
 using TheConcernedCat.Ladders;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Ladders;
 
@@ -128,7 +129,7 @@ internal sealed class ClimbPose
             if (!_saidFailure)
             {
                 _saidFailure = true;
-                _log("Ladder pose failed soft: " + exception.Message + ". Traversal continues.");
+                _log("Ladder pose failed soft: " + SafeFailure.Brief(exception) + ". Traversal continues.");
             }
 
             Clear();

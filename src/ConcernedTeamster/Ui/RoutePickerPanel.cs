@@ -10,6 +10,7 @@ using TheConcernedCat.ConcernedTeamster.Domain.Routes;
 using TheConcernedCat.ConcernedTeamster.Domain.Ui;
 using UnityEngine;
 using UnityEngine.UI;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedTeamster.Ui;
 
@@ -489,6 +490,6 @@ internal sealed class RoutePickerPanel
 
         _log.LogError(
             "Route picker disabled for this session after a UI exception; everything else keeps working: " +
-            exception);
+            SafeFailure.Describe(exception));
     }
 }

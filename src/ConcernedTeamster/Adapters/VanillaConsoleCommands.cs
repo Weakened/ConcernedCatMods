@@ -224,6 +224,8 @@ internal static class VanillaConsoleCommands
         return false;
     }
 
+    /// <summary>#411: through the shared scrubber. This is the registration
+    /// path's own failure text, and it reaches the log.</summary>
     private static string Brief(Exception exception) =>
-        exception.GetType().Name + ": " + exception.Message;
+        Diagnostics.SafeFailure.Brief(exception);
 }

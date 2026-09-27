@@ -2,6 +2,7 @@ using System;
 using System.Reflection;
 using BepInEx.Logging;
 using TheConcernedCat.ConcernedCartographer.Companions;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using UnityEngine;
 
 namespace TheConcernedCat.ConcernedCartographer.Runtime.Companions;
@@ -62,7 +63,7 @@ internal static class CustomizationPaletteReader
             _watcher = null;
             log.LogInfo(
                 "The companion's reference hair colour could not be looked up on this build, so his " +
-                "documented fallback colour is used: " + exception.Message);
+                "documented fallback colour is used: " + SafeLogText.Brief(exception));
         }
     }
 
@@ -108,7 +109,7 @@ internal static class CustomizationPaletteReader
                 // second for the rest of the session.
                 Log?.LogInfo(
                     "The companion's reference hair colour cannot be looked up on this build, so his " +
-                    "documented fallback colour is used: " + exception.Message);
+                    "documented fallback colour is used: " + SafeLogText.Brief(exception));
                 done = true;
             }
 

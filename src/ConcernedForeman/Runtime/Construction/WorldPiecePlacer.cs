@@ -1,6 +1,7 @@
 using System;
 using TheConcernedCat.ConcernedForeman.Domain.Construction;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Construction;
 
@@ -124,7 +125,7 @@ internal sealed class WorldPiecePlacer
         catch (Exception exception)
         {
             installed = false;
-            failure = exception.Message;
+            failure = SafeFailure.Brief(exception);
         }
 
         if (!installed)

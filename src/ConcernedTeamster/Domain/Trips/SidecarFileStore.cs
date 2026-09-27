@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedTeamster.Domain.Trips;
 
@@ -22,7 +23,7 @@ public static class SidecarFileStore
         }
         catch (Exception exception)
         {
-            error = exception.GetType().Name + ": " + exception.Message;
+            error = SafeFailure.Brief(exception);
             return null;
         }
     }
@@ -57,7 +58,7 @@ public static class SidecarFileStore
         }
         catch (Exception exception)
         {
-            error = exception.GetType().Name + ": " + exception.Message;
+            error = SafeFailure.Brief(exception);
             try
             {
                 if (File.Exists(tempPath))
@@ -117,7 +118,7 @@ public static class SidecarFileStore
         }
         catch (Exception exception)
         {
-            error = exception.GetType().Name + ": " + exception.Message;
+            error = SafeFailure.Brief(exception);
             return false;
         }
     }

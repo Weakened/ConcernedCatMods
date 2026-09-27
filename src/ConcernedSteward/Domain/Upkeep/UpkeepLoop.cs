@@ -5,6 +5,7 @@ using TheConcernedCat.ConcernedSteward.Domain.Scope;
 using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Worker;
 using TheConcernedCat.Workers;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedSteward.Domain.Upkeep;
 
@@ -1208,5 +1209,5 @@ internal sealed class UpkeepLoop
         count < 0 ? "?" : count.ToString(CultureInfo.InvariantCulture);
 
     private static string Brief(Exception exception) =>
-        exception.GetType().Name + ": " + exception.Message;
+        SafeFailure.Brief(exception);
 }

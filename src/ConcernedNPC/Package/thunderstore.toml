@@ -4,7 +4,7 @@ schemaVersion = "0.0.1"
 [package]
 namespace = "TheConcernedCat"
 name = "ConcernedNPC"
-versionNumber = "0.1.0"
+versionNumber = "0.2.0"
 description = "The shared runtime behind Concerned Cat companions: identity, camp awareness, allowed containers, work areas, job planning and recovery. On its own it does nothing; install a Concerned Cat NPC mod."
 websiteUrl = "https://github.com/Weakened/ConcernedCatMods"
 containsNsfwContent = false

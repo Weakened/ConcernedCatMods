@@ -1,4 +1,5 @@
 using System;
+using TheConcernedCat.Diagnostics;
 using System.Collections.Generic;
 using Jotunn.Entities;
 
@@ -36,7 +37,9 @@ internal sealed class CollectConsoleCommand : ConsoleCommand
         }
         catch (Exception exception)
         {
-            output = "ct_collect failed: " + exception.GetType().Name + ": " + exception.Message;
+            // #411: see HaulConsoleCommand. Same line, same leak.
+            output = SafeFailure.Describe(
+                CommandName, args != null && args.Length > 0 ? args[0] : "", exception);
         }
 
         context?.AddString(output);

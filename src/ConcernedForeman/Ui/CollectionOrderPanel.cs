@@ -7,6 +7,7 @@ using TheConcernedCat.Settlement.Collection.Cooperation;
 using TheConcernedCat.Workers;
 using UnityEngine;
 using UnityEngine.UI;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Ui;
 
@@ -439,6 +440,6 @@ internal sealed class CollectionOrderPanel : MonoBehaviour
 
         _log?.LogError(
             "The collection order panel failed and was disabled for this session (orders still work from the " +
-            "console): " + exception.GetType().Name + ": " + exception.Message);
+            "console): " + SafeFailure.Brief(exception));
     }
 }

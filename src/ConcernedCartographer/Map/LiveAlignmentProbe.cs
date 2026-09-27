@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+using TheConcernedCat.ConcernedCartographer.Reporting;
 using TheConcernedCat.ConcernedCartographer.Roads;
 using UnityEngine;
 
@@ -147,7 +148,9 @@ internal static class LiveAlignmentProbe
         }
         catch (Exception exception)
         {
-            markerLine = "live marker: n/a (" + exception.Message + ")";
+            // #389: this line prints to the console. A raw message here is a
+            // filesystem path and a user name in text a player screenshots.
+            markerLine = "live marker: n/a (" + SafeLogText.Brief(exception) + ")";
         }
 
         string textureSizeText = hasTextureSize

@@ -4,6 +4,7 @@ using TheConcernedCat.ConcernedTeamster.Domain.Collection;
 using TheConcernedCat.Workers;
 using TheConcernedCat.ConcernedTeamster.Domain.Workers;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;
 
@@ -48,6 +49,8 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
     private Func<bool> _recordUnreadable = null!;
     private Func<bool> _seamAvailable = null!;
 
+    private ContainerPermissionRuntime? _containers;
+
     private bool _faulted;
     private bool _ordered;
     private string _orderedSource = string.Empty;
@@ -64,10 +67,12 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
         Func<bool> recordUnwritable,
         Func<bool> recordUnreadable,
         Func<bool> seamAvailable,
+        ContainerPermissionRuntime? containers,
         ManualLogSource log)
     {
         GunnarCollectionRuntime runtime = host.AddComponent<GunnarCollectionRuntime>();
         runtime.Initialize(settings, worker, identity, recordUnwritable, recordUnreadable, seamAvailable, log);
+        runtime._containers = containers;
         var command = new CollectConsoleCommand(runtime);
         VanillaConsoleCommands.Register(command, log);
         log.LogInfo(VanillaConsoleCommands.Describe(new[] { command.Name }));
@@ -123,7 +128,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
         catch (Exception exception)
         {
             _faulted = true;
-            _log?.LogError("Gunnar's collection runtime faulted and is now off for this session: " + exception);
+            _log?.LogError("Gunnar's collection runtime faulted and is now off for this session: " + SafeFailure.Describe(exception));
             try
             {
                 // A faulted runtime is an order that has ended, not a world that
@@ -276,8 +281,15 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
                 return OrderOnePick();
             case "cancel":
                 return Cancel();
+            case "chest":
+                // #374: the containers a player has opened to him. A diagnostic;
+                // the key while looking at a chest is the player-facing surface.
+                return _containers == null
+                    ? "Container permissions are unavailable this session."
+                    : _containers.Console(args != null && args.Length > 1 ? args[1] : "");
             default:
-                return "ct_collect: status, pick (the thing you are pointing at), cancel.";
+                return "ct_collect: status, pick (the thing you are pointing at), cancel, "
+                    + "chest [status|list|clear].";
         }
     }
 

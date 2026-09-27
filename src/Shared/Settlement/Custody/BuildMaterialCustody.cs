@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Journal;
 using TheConcernedCat.Settlement.Orders;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.Settlement.Custody;
 
@@ -153,7 +154,7 @@ internal sealed class BuildMaterialCustody
             }
             catch (Exception exception)
             {
-                return Uncertain(reservation, exception.GetType().Name + ": " + exception.Message, out failure);
+                return Uncertain(reservation, SafeFailure.Brief(exception), out failure);
             }
 
             if (!_journal.TryRecordMaterial(receipt, reservation))

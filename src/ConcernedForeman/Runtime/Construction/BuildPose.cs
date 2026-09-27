@@ -4,6 +4,7 @@ using TheConcernedCat.ConcernedForeman.Domain.Construction;
 using TheConcernedCat.ConcernedForeman.Runtime.Custody;
 using TheConcernedCat.ConcernedForeman.Runtime.Settlement;
 using TheConcernedCat.Settlement.Tools;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Construction;
 
@@ -101,8 +102,7 @@ internal sealed class BuildPose : IBuildPose
             if (!_saidFailure)
             {
                 _saidFailure = true;
-                _log("Build order: the working pose failed soft (" + exception.GetType().Name + ": " +
-                    exception.Message + "). The building itself is unaffected.");
+                _log("Build order: the working pose failed soft (" + SafeFailure.Brief(exception) + "). The building itself is unaffected.");
             }
 
             _equipped = null;

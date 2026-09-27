@@ -1,4 +1,5 @@
 using System;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Domain.Construction;
 
@@ -340,7 +341,7 @@ internal static class PlacementGate
         {
             return PlacementVerdict.Refused(
                 PlacementRefusal.Unchecked,
-                "the piece's own constraints could not be read (" + exception.Message +
+                "the piece's own constraints could not be read (" + SafeFailure.Brief(exception) +
                 "), so nothing is placed");
         }
 
@@ -374,7 +375,7 @@ internal static class PlacementGate
             // reading is the only one #280 permits.
             return PlacementVerdict.Refused(
                 PlacementRefusal.Unchecked,
-                "a check could not be made (" + exception.Message + "), so nothing is placed");
+                "a check could not be made (" + SafeFailure.Brief(exception) + "), so nothing is placed");
         }
 
         switch (answer)

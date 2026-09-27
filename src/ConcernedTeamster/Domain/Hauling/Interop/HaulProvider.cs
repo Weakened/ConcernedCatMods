@@ -1,4 +1,5 @@
 using System;
+using TheConcernedCat.Diagnostics;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using TheConcernedCat.Interop;
@@ -81,7 +82,9 @@ internal sealed class HaulProvider
         catch (Exception exception)
         {
             FaultCount++;
-            LastFault = exception.GetType().Name + ": " + exception.Message;
+            // #411: HaulCapabilityPublisher logs this, so it leaves the process
+            // in a line a player can upload.
+            LastFault = SafeFailure.Brief(exception);
             return Fault(exception.GetType().Name);
         }
     }

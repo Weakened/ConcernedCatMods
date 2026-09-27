@@ -7,6 +7,7 @@ using TheConcernedCat.ConcernedTeamster.Domain.Ui;
 using TheConcernedCat.ConcernedTeamster.Domain.Ui.Hauling;
 using UnityEngine;
 using UnityEngine.UI;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedTeamster.Ui.Hauling;
 
@@ -333,6 +334,6 @@ internal sealed class GunnarHaulPanel
 
         _log.LogError(
             "Gunnar's panel failed and was disabled for this session (hauling keeps working, and the console " +
-            "commands remain): " + exception.GetType().Name + ": " + exception.Message);
+            "commands remain): " + SafeFailure.Brief(exception));
     }
 }

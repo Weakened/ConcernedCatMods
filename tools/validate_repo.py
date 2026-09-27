@@ -873,6 +873,342 @@ def _parameter_defaults(code: str):
         index += 1
 
 
+# #374: the two facade types a product may see, and the Storage types it may not.
+CONTAINER_FACADE = ("NpcContainerDesk", "NpcContainerDecision")
+
+# Every `internal` type actually DECLARED under Storage/, checked against the
+# declarations rather than remembered - the first version of this list carried
+# `NpcTransfer`, which is a FILE name and no type at all, and omitted
+# ContainerMoveOutcome and ContainerMoveResult, which are the transfer recorder
+# the facade documentation says is withheld. A list that bans a name nothing
+# declares, while missing the thing it claims to protect, is worse than no list.
+CONTAINER_INTERNALS = (
+    "NpcContainerPermissionBook",
+    "NpcContainerPermission",
+    "NpcContainerPlace",
+    "NpcContainerPermit",
+    "NpcContainerGate",
+    "NpcContainerAuthorization",
+    "NpcContainerSighting",
+    "NpcContainerAssignment",
+    "NpcTransferPlan",
+    "ContainerMoveOutcome",
+    "ContainerMoveResult",
+)
+
+
+# #411: one scrubber for the whole repository. `.Message`, `.StackTrace` and
+# `.InnerException` are the three ways an exception hands over text this product
+# has not scrubbed; a receiver is exempt only by name, and each exemption is a
+# type whose `Message` is a string somebody composed rather than an exception's.
+SPACE = r"\s*"
+SPACES = r"\s+"
+WORD = r"\b"
+
+MESSAGE_READ = re.compile(
+    r"(?P<receiver>[A-Za-z_][A-Za-z0-9_]*)?" + r"\s*" + r"\.(?:Message|StackTrace|InnerException)" + WORD)
+
+# Not exceptions. Each is one of this repository's own result, view or event
+# types, whose `Message` is a string somebody composed or a field already scrubbed
+# on the way in, and each is live - a name that matches nothing was removed rather
+# than left, because every entry here is a free pass.
+#
+# <b>The cost, stated.</b> `catch (Exception report)` in any scanned file would
+# pass this rule. Nothing does that today, and the names are chosen so that doing
+# it would read as obviously wrong; but the exemption is by NAME, so it is a
+# shadowing hole and not a type check.
+MESSAGE_OK_RECEIVERS = (
+    "report",
+    "viewModel",
+    "history",
+    "comparison",
+    "recoveryEvent",
+    "reading",
+    "Character",
+)
+
+# The one place in the repository that may read an exception's message, and each
+# product's own scrubber entry point. Cartographer still keeps its own copy of
+# the patterns; whether that should become a delegation too is #408's question.
+MESSAGE_SCRUBBERS = (
+    "src/Shared/Diagnostics/SafeFailure.cs",
+    "src/ConcernedCartographer/Domain/Reporting/SafeLogText.cs",
+)
+
+# Files that still compose their own exception text. **Empty, and it stays
+# empty** (#416): every log line in every product now goes through the shared
+# scrubber, so this list has nothing to hold.
+#
+# It is kept rather than deleted because it is the honest way to reintroduce a
+# temporary exception if one is ever genuinely needed - an entry here is a
+# deliberate, reviewable admission with an issue behind it, where deleting the
+# mechanism would make the next exception a silent one. A file that is not on it
+# and reads an exception member fails the gate; a STALE entry fails too, so the
+# list can only shrink.
+MESSAGE_SWEEP_PENDING: tuple[str, ...] = ()
+
+
+
+CAUGHT_EXCEPTION = re.compile(
+    r"catch" + SPACE + r"\(" + SPACE + r"(?:System\.)?[A-Za-z]*Exception" + SPACES
+    + r"(?P<name>[A-Za-z_]\w*)" + SPACE + r"\)")
+
+
+def _renders_a_caught_exception(code: str) -> list:
+    """Every place a caught exception is turned into text without scrubbing.
+
+    <b>Why `.Message` was never the whole story.</b> `"…: " + exception` calls
+    `Exception.ToString()`, which carries the message AND the stack AND every
+    inner exception - strictly more than the property the first version of this
+    rule banned. A review counted 18 such sites in the products plus 6 more in
+    the library, all of them logging to `LogOutput.log`, which is the file a
+    player uploads. The rule certified them away while they were live.
+
+    Three forms and only three: concatenation either side, an interpolation hole,
+    and an explicit `ToString()`. Passing the exception to a helper that scrubs -
+    `Fail(exception)`, `Disable(exception)` - is correct code and is not a hit,
+    which is why this looks for the RENDERING rather than for every mention."""
+    found = []
+    for caught in {match.group("name") for match in CAUGHT_EXCEPTION.finditer(code)}:
+        name = re.escape(caught)
+        for pattern in (
+                r"\+\s*" + name + WORD + r"(?!\s*[.(\[])",
+                WORD + name + r"\s*\+(?!\+)",
+                r"\{\s*" + name + r"\s*\}",
+                name + r"\s*\.\s*ToString\s*\(\s*\)"):
+            found.extend(re.finditer(pattern, code))
+    return found
+
+
+def _reads_a_call_result(code: str, match: "re.Match[str]") -> bool:
+    """Whether this `.Message` is read off the result of a CALL rather than off a
+    variable.
+
+    An exception is always held in a variable a `catch` clause bound, so
+    `act(loop).Message` and `loop.Rebind(scope, delivery, now).Message` are this
+    repository's own result types and not exceptions. Narrow on purpose: only a
+    closing parenthesis counts, so `errors[0].Message` on a list of exceptions
+    would still be refused."""
+    dot = code.rfind(".", match.start(), match.end())
+    return dot > 0 and code[dot - 1] == ")"
+
+
+def check_console_failures_go_through_one_scrubber(errors: list[str]) -> list[str]:
+    """#411 scrubber adoption audit: one path scrubber, and no product composes
+    its own exception text outside a named, shrinking list.
+
+    The defect was the same line in every product: `"<X> failed: " +
+    exception.Message`, which names no subcommand and prints a filesystem
+    exception's full path - the machine's user name and the profile's location -
+    into the text a player pastes into a bug report. #367 removed it from one
+    command, #389 from six more in that product, and #411 from the remaining nine
+    across the other three.
+
+    Three products had written the path patterns independently, because products
+    never reference each other at compile time, and that is exactly how #388's
+    defect had to be found and fixed twice (#410). There is now one scrubber under
+    `src/Shared/Diagnostics/`, compiled into each consumer as source.
+
+    <b>Why this scans everything rather than the console files.</b> The first
+    version scanned only files declaring a `ConsoleCommand`, and a review showed
+    why that was not enough: the RUNTIMES' own catches wrap the whole command
+    body, so the wrapper's catch never runs for the exceptions this issue is
+    about. `cf_build` and `cf_collect` still printed the raw path, and
+    `CollectionRuntime` remembered one in a fault string that `status` reprinted
+    for the rest of the session - with the console wrappers all correctly
+    scrubbed. It is the same lesson #389's review taught about scanning wrappers
+    instead of cores, in a different product.
+
+    `.StackTrace` and `.InnerException` are banned alongside `.Message` because
+    they are the other two ways the same text arrives, and string interiors are
+    blanked EXCEPT interpolation holes, so `$"{exception.Message}"` is visible."""
+    label = "[interop] #411 scrubber adoption audit"
+
+    for relative in MESSAGE_SCRUBBERS:
+        if not ROOT.joinpath(*relative.split("/")).is_file():
+            fail(f"{label}: {relative} is missing - it is one of the only places an exception's "
+                 "message may be read", errors)
+            return []
+
+    pending = set(MESSAGE_SWEEP_PENDING)
+    exempt = set(MESSAGE_SCRUBBERS)
+    offenders: list[str] = []
+    scanned = 0
+    still_pending: set[str] = set()
+
+    # Every product, the shared LIBRARY, and the shared SOURCE area. A review
+    # found the first version scanned only PRODUCTS, which left ConcernedNPC -
+    # a package that ships on its own and logs its own failures - and
+    # src/Shared/Settlement/Custody, whose refusal text is composed one layer
+    # below a Foreman line this very sweep had "finished".
+    trees = [spec["project_dir"] for spec in PRODUCTS.values()]  # type: ignore[index]
+    trees += [spec["project_dir"] for spec in LIBRARIES.values()]  # type: ignore[index]
+    trees.append(ROOT / "src" / "Shared")
+
+    for tree in trees:
+        product_dir: Path = tree  # type: ignore[assignment]
+        if not product_dir.is_dir():
+            continue
+        for path in sorted(product_dir.rglob("*.cs")):
+            if path.relative_to(product_dir).parts[0] in ("obj", "bin"):
+                continue
+            relative = path.relative_to(ROOT).as_posix()
+            if relative in exempt:
+                continue
+            scanned += 1
+            code = _cs_code_keeping_interpolations(path)
+            hits = [match for match in MESSAGE_READ.finditer(code)
+                    if match.group("receiver") not in MESSAGE_OK_RECEIVERS
+                    and not _reads_a_call_result(code, match)]
+            hits += _renders_a_caught_exception(code)
+            if not hits:
+                continue
+            if relative in pending:
+                still_pending.add(relative)
+                continue
+            line = code.count(chr(10), 0, hits[0].start()) + 1
+            offenders.append(f"{relative}:{line}")
+
+    if offenders:
+        fail(f"{label}: {offenders[:6]}{' and more' if len(offenders) > 6 else ''} compose their own "
+             "exception text and are not on the tracked #416 list. A filesystem exception's message "
+             "is a path and this machine's user name. Go through "
+             "src/Shared/Diagnostics/SafeFailure.cs - Describe for a console reply, Brief for a log "
+             "line - or, if it genuinely belongs on the pending list, add it there and say why",
+             errors)
+        return []
+
+    swept = sorted(pending - still_pending)
+    if swept:
+        fail(f"{label}: {swept} no longer read an exception member, so they must come OFF "
+             "MESSAGE_SWEEP_PENDING. That list may only shrink, and a stale entry is a hole nobody "
+             "would notice reopening", errors)
+        return []
+
+    return [
+        f"{label}: {scanned} source(s) scanned across {len(PRODUCTS)} products, "
+        f"{len(LIBRARIES)} library(ies) and src/Shared; the path patterns exist once, in "
+        f"src/Shared/Diagnostics/PathScrubber.cs; no file outside "
+        f"{len(MESSAGE_SCRUBBERS)} pinned scrubber(s) reads an exception's message, stack or inner "
+        f"exception, or renders one into text by concatenation, interpolation or ToString(); "
+        f"{len(MESSAGE_OK_RECEIVERS)} receiver name(s) are exempt as this repository's own result "
+        f"types, and {len(MESSAGE_SWEEP_PENDING)} file(s) are tracked as a temporary exception",
+    ]
+
+
+def check_container_permissions_stay_reachable(errors: list[str]) -> list[str]:
+    """#374 container permission audit: the facade is public, the mechanism is
+    not, and a product actually uses it.
+
+    Three properties, each of which was false or fragile before #374:
+
+    1. `NpcContainerDesk` and `NpcContainerDecision` are `public`. They were
+       internal, along with everything else under `Storage/`, so the permission
+       model was complete, tested and reachable by nothing - "off by default" was
+       a statement about dead code.
+    2. No product names one of the types the facade deliberately withholds. The
+       permit is unforgeable from outside the library (`ContainerTests`'
+       `NothingOutsideThisPackageCanForgeAPermit`), and the place carries a
+       matching rule that must not become an API - publishing it would invite a
+       role to build one for a container that MOVES, which that type's own
+       documentation forbids and cannot enforce. A later leaf reaching for
+       `public` to fix a compile error is exactly how that would go.
+    3. At least one product consumes the desk. Without this the rule above would
+       be satisfied perfectly by a facade nobody calls, which is the shape #374
+       existed to end.
+
+    `PublicSurfaceTests` pins the library's whole surface and costs a version bump
+    to edit; this is the other half - the consumer side, which that test cannot
+    see."""
+    library = LIBRARIES.get("concernednpc")
+    label = "[concernednpc] #374 container permission audit"
+    if library is None:
+        return []
+
+    project_dir: Path = library["project_dir"]  # type: ignore[assignment]
+    facade = project_dir / "Storage" / "NpcContainerDesk.cs"
+    if not facade.is_file():
+        fail(f"{label}: Storage/NpcContainerDesk.cs is missing — the facade #374 added is what "
+             "makes a player's container permissions reachable at all", errors)
+        return []
+
+    # Strings blanked as well as comments: a product line that merely NAMES a
+    # withheld type in a message is not a use of it, and a comment or a
+    # message mentioning NpcContainerDesk must not satisfy 'a product uses
+    # the facade' either. Every sibling rule that scans for a token uses this.
+    facade_code = _cs_code_without_strings(facade)
+    for name in CONTAINER_FACADE:
+        if not re.search(r"public (?:sealed class|readonly struct|class|struct) " + name + r"\b",
+                         facade_code):
+            fail(f"{label}: {name} is not public in Storage/NpcContainerDesk.cs — the permission "
+                 "model goes back to being reachable by nothing, which is what #374 fixed", errors)
+            return []
+
+    # The list above is checked against the library rather than trusted: a
+    # `internal` Storage type missing from it is a type a product could name
+    # tomorrow with the gate green.
+    storage_dir = project_dir / "Storage"
+    declared = set()
+    for path in sorted(storage_dir.glob("*.cs")):
+        for match in re.finditer(
+                r"internal (?:sealed class|readonly struct|static class|class|struct|enum) "
+                r"(?P<name>[A-Za-z0-9_]+)",
+                _cs_code_without_strings(path)):
+            declared.add(match.group("name"))
+
+    missing = sorted(declared - set(CONTAINER_INTERNALS))
+    if missing:
+        fail(f"{label}: {missing} are declared `internal` under Storage/ and are not in the "
+             "audit's withheld list, so a product could name one with this gate green — add them, "
+             "or make the deliberate decision to publish them through PublicSurfaceTests", errors)
+        return []
+
+    unknown = sorted(set(CONTAINER_INTERNALS) - declared)
+    if unknown:
+        fail(f"{label}: {unknown} are in the withheld list but no longer declared `internal` under "
+             "Storage/ — a list that bans names nothing declares reads like protection and is not",
+             errors)
+        return []
+
+    consumers: list[str] = []
+    for key, spec in PRODUCTS.items():
+        product_dir: Path = spec["project_dir"]  # type: ignore[assignment]
+        if not product_dir.is_dir():
+            continue
+        uses_facade = False
+        for path in sorted(product_dir.rglob("*.cs")):
+            if path.relative_to(product_dir).parts[0] in ("obj", "bin"):
+                continue
+            code = _cs_code_without_strings(path)
+            for name in CONTAINER_INTERNALS:
+                # Word-boundary, so NpcContainerPermissionBook does not match on
+                # the facade's own NpcContainerDecision and vice versa.
+                if re.search(r"\b" + name + r"\b", code):
+                    fail(f"{label}: {path.relative_to(ROOT).as_posix()} names "
+                         f"`{name}`, which the facade withholds on purpose — a product needs to "
+                         "know what the player allowed, to change it and to write it down, not to "
+                         "mint a permit or build a place for a container that moves", errors)
+                    return []
+            if any(re.search(r"\b" + name + r"\b", code) for name in CONTAINER_FACADE):
+                uses_facade = True
+        if uses_facade:
+            consumers.append(key)
+
+    if not consumers:
+        fail(f"{label}: no product uses NpcContainerDesk — a public facade nobody calls is the "
+             "shape #374 existed to end, and 'off by default' goes back to being a statement "
+             "about dead code", errors)
+        return []
+
+    return [
+        f"{label}: the desk and its record are public; every one of the "
+        f"{len(CONTAINER_INTERNALS)} type(s) declared internal under Storage/ is named by no "
+        f"product (the list is checked against the declarations, not remembered); and "
+        f"{', '.join(sorted(consumers))} "
+        f"consume{'s' if len(consumers) == 1 else ''} the facade outside a string or a comment",
+    ]
+
+
 def check_npc_planning_decides_nothing_to_do_once(errors: list[str]) -> list[str]:
     """Fails unless exactly one place in the library decides a job is finished.
 
@@ -2428,6 +2764,264 @@ def check_companion_talk_is_not_a_reach(errors: list[str]) -> list[str]:
     ]
 
 
+RAW_EXCEPTION_MESSAGE = re.compile(r"\.Message\b")
+
+CONSOLE_NAME = re.compile(r'string Name\s*=>\s*"(?P<name>cc_[A-Za-z0-9_]+)"')
+
+CONSOLE_DELEGATION = re.compile(r"_runtime\.(?P<method>Execute[A-Za-z0-9]*Command)\s*\(")
+
+CONSOLE_FAILURE_CALL = re.compile(r'ConsoleFailure\.Describe\(\s*"(?P<name>[^"]*)"')
+
+CONSOLE_FAILURE_ANY = re.compile(r"ConsoleFailure\.Describe\(")
+
+# The guard reports the command it was given, not a literal: that is the whole
+# reason there is one guard instead of seven. The second argument is the
+# subcommand the player TYPED rather than the one dispatch resolved: a bare
+# `cc_routes` dispatches to `list` and resolved to `status`, so reporting the
+# resolved value named a real, different subcommand (review of 17ec1ca).
+CONSOLE_FAILURE_FORWARDED = re.compile(
+    r"ConsoleFailure\.Describe\(\s*command\s*,\s*typed\s*,\s*exception\s*\)")
+
+CONSOLE_GUARD_LOG = re.compile(r"SafeLogText\.Describe\(\s*exception\s*\)")
+
+CONSOLE_GUARD_ENTRY = re.compile(
+    r"internal string (?P<method>Execute[A-Za-z0-9]*Command)\(string\[\] args\)\s*\{\s*"
+    r'return GuardConsoleCommand\(\s*"(?P<name>cc_[A-Za-z0-9_]+)"\s*,\s*args\s*,\s*'
+    r"(?P=method)Core\s*\)\s*;\s*\}")
+
+CONSOLE_CATCH = re.compile(r"catch\s*\(\s*Exception\s+(?P<caught>[A-Za-z_][A-Za-z0-9_]*)\s*\)")
+
+CONSOLE_COMMAND_CLASS = re.compile(r"class\s+[A-Za-z0-9_]+\s*:\s*ConsoleCommand\b")
+
+# `.Message` is refused across the product. Two receivers are not exceptions and
+# each is exempt by name rather than by pattern: `Character.Message` is vanilla's
+# own HUD method (reached by name through reflection in VanillaMessage, and named
+# in a log line), and SafeLogText is the scrubber, whose whole job is to be the
+# one place that reads an exception's message.
+MESSAGE_RECEIVER = re.compile(r"(?P<receiver>[A-Za-z_][A-Za-z0-9_]*)?\s*\.Message\b")
+
+MESSAGE_EXEMPT_RECEIVERS = ("Character",)
+
+MESSAGE_EXEMPT_FILE = ("Domain", "Reporting", "SafeLogText.cs")
+
+# A string literal, verbatim or not, so a banned token inside one is not a use of
+# it. `"...Character.Message not recognised..."` is a real line in this product.
+CS_STRING = re.compile(r'@"(?:[^"]|"")*"' + r"|" + r'"(?:\\.|[^"\\])*"' + r"|'(?:\\.|[^'\\])'")
+
+
+def _cs_code(path: Path) -> str:
+    """A C# file with line and single-line block comments removed, joined back
+    up. Comment-stripping first is what stops a doc comment that QUOTES a banned
+    token (#367's does, verbatim) from failing the audit that banned it."""
+    return "\n".join(
+        re.sub(r"/\*.*?\*/", "", _strip_cs_line_comment(line))
+        for line in path.read_text(encoding="utf-8").splitlines())
+
+
+def _cs_code_without_strings(path: Path) -> str:
+    """As <see cref="_cs_code"/>, with string literals blanked as well.
+
+    A banned token inside a string is not a use of it, and this product has a
+    real line reading `"... Character.Message not recognised on this game build
+    ..."`. Blanking rather than deleting keeps every line number."""
+    return CS_STRING.sub(lambda match: '"' + " " * max(0, len(match.group(0)) - 2) + '"',
+                         _cs_code(path))
+
+
+def _cs_code_keeping_interpolations(path: Path) -> str:
+    """As <see cref="_cs_code_without_strings"/>, but an interpolated string keeps
+    its holes.
+
+    `$"failed: {exception.Message}"` is a use of `.Message`, and blanking the
+    whole literal made it invisible - which a review demonstrated as a clean way
+    to reintroduce the leak with the gate green."""
+    def blank(match: "re.Match[str]") -> str:
+        literal = match.group(0)
+        if "{" in literal:
+            return literal
+        return '"' + " " * max(0, len(literal) - 2) + '"'
+
+    return CS_STRING.sub(blank, _cs_code(path))
+
+
+def check_cartographer_console_failures_are_scrubbed(errors: list[str]) -> list[str]:
+    """#389 console failure audit: no `cc_*` command reports a raw exception
+    message, and every one of them reaches its work through the single guard.
+
+    The defect was six copies of one line. `cc_atlas` was fixed in #367 and the
+    other six kept replying `"<X> tool failed: " + exception.Message`, which
+    names none of the subcommands — so a bug report says only that something
+    failed — and prints a filesystem exception's full path, which is the
+    machine's user name and the profile's location, into the text a player
+    pastes into an issue. It fires in exactly the situation where the player is
+    already asking for help.
+
+    A seventh copy is the obvious next defect, so this is enforced rather than
+    reviewed. Three halves, the third of which an independent review added:
+
+    - every console wrapper: no `.Message`, the caught exception spelled only
+      inside `ConsoleFailure.Describe`, one `Describe` naming ITS OWN command,
+      and one delegation into the runtime;
+    - the runtime: each delegated entry point is exactly
+      `return GuardConsoleCommand("cc_x", args, Execute…CommandCore);`, and
+      `ConsoleFailure.Describe` appears there exactly once — inside the guard —
+      so a second, divergent guard cannot grow beside it, with the scrubbed log
+      line required INSIDE that guard rather than anywhere in the file;
+    - **the whole product**: `.Message` is refused everywhere under
+      `src/ConcernedCartographer/`. A review demonstrated why the first two are
+      not enough: the wrappers are the least likely place for the next copy, and
+      three already existed elsewhere — `RoadOverlayRenderer` returned
+      `"Alignment probe failed: " + exception.Message` as the `cc_roads align`
+      console reply on the line AFTER scrubbing the same exception for the log.
+      Two spellings are exempt and each is named: `Character.Message` is
+      vanilla's own HUD method, and `SafeLogText` is the scrubber itself.
+
+    Wrappers are discovered by BASE CLASS, not by file name. Globbing
+    `*ToolsCommand.cs` made "an eighth command is covered the day it is written"
+    a claim about a naming convention nothing enforces; a `CompassCommand.cs`
+    would have been invisible. No count is asserted: what the rule covers is
+    every `ConsoleCommand` under Runtime, which is checkable against the
+    directory."""
+    product_dir = ROOT / "src" / "ConcernedCartographer"
+    runtime_dir = product_dir / "Runtime"
+    runtime_file = runtime_dir / "CartographerRuntime.cs"
+    label = "[cartographer] #389 console failure audit"
+
+    if not runtime_file.is_file():
+        fail(f"{label}: CartographerRuntime.cs is missing — the audit no longer covers it", errors)
+        return []
+
+    wrappers = sorted(path for path in runtime_dir.rglob("*.cs")
+                      if CONSOLE_COMMAND_CLASS.search(_cs_code(path)))
+    if not wrappers:
+        fail(f"{label}: no ConsoleCommand subclass found under Runtime — the audit no longer "
+             "covers anything, which is worse than a failure", errors)
+        return []
+
+    runtime_code = _cs_code(runtime_file)
+    guarded = {match.group("name"): match.group("method")
+               for match in CONSOLE_GUARD_ENTRY.finditer(re.sub(r"\s+", " ", runtime_code))}
+
+    if "private string GuardConsoleCommand(" not in runtime_code:
+        fail(f"{label}: CartographerRuntime has no GuardConsoleCommand — the one place every "
+             "console failure is worded and scrubbed", errors)
+        return []
+
+    runtime_failures = CONSOLE_FAILURE_ANY.findall(runtime_code)
+    if len(runtime_failures) != 1:
+        fail(f"{label}: ConsoleFailure.Describe appears {len(runtime_failures)} time(s) in "
+             "CartographerRuntime.cs, expected exactly 1 (inside GuardConsoleCommand) — a second "
+             "one is a second guard, which is how the wording drifted the first time", errors)
+        return []
+    if not CONSOLE_FAILURE_FORWARDED.search(re.sub(r"\s+", " ", runtime_code)):
+        fail(f"{label}: GuardConsoleCommand does not report "
+             "`ConsoleFailure.Describe(command, typed, exception)` — a guard that names a literal "
+             "command is a guard for one command, which is the shape #389 removed, and a guard that "
+             "reports the RESOLVED subcommand names `status` for a bare `cc_routes` that dispatched "
+             "to `list`", errors)
+        return []
+
+    # Inside the guard's own body, not merely somewhere in a 3,000-line file: a
+    # file-wide presence check goes vacuous the day a second SafeLogText.Describe
+    # appears anywhere in it, and its negative test goes vacuous with it.
+    guard_body = runtime_code.split("private string GuardConsoleCommand(", 1)[1]
+    guard_body = re.split(r"\n    (?:private|internal|public|protected)\s", guard_body)[0]
+    if not CONSOLE_GUARD_LOG.search(guard_body):
+        fail(f"{label}: GuardConsoleCommand's own body no longer logs through "
+             "`SafeLogText.Describe(exception)` — the log gets the same scrubbing the player's "
+             "reply does, and it is the log a player uploads", errors)
+        return []
+
+    # The product, not the wrappers. A review demonstrated that the wrappers are
+    # the LEAST likely place for the next copy of this defect: three already
+    # existed elsewhere, and the worst of them returned the raw message as the
+    # `cc_roads align` console reply on the line after scrubbing the same
+    # exception for the log.
+    scanned = 0
+    for path in sorted(product_dir.rglob("*.cs")):
+        if path.relative_to(product_dir).parts[0] in ("obj", "bin"):
+            continue
+        scanned += 1
+        exempt_file = path.relative_to(product_dir).parts == MESSAGE_EXEMPT_FILE
+        code = _cs_code_without_strings(path)
+        for match in MESSAGE_RECEIVER.finditer(code):
+            if match.group("receiver") in MESSAGE_EXEMPT_RECEIVERS:
+                continue
+            if exempt_file:
+                continue
+            line = code.count("\n", 0, match.start()) + 1
+            fail(f"{label}: {path.relative_to(ROOT).as_posix()}:{line} reads an exception's "
+                 "`.Message` — that is the raw text #389 removed, and a filesystem exception's "
+                 "message is a path and this machine's user name. Go through SafeLogText (for a log "
+                 "line or a reply built by hand) or ConsoleFailure.Describe (for a console failure); "
+                 f"only {'/'.join(MESSAGE_EXEMPT_FILE)} and `Character.Message` may spell it",
+                 errors)
+            return []
+
+    audited: list[str] = []
+    for wrapper in wrappers:
+        relative = wrapper.relative_to(ROOT).as_posix()
+        code = _cs_code(wrapper)
+
+        named = CONSOLE_NAME.search(code)
+        if named is None:
+            fail(f"{label}: {relative} declares no `cc_*` Name — the audit cannot tell which "
+                 "command it is, so it cannot check that its failure reply names the right one",
+                 errors)
+            return []
+        name = named.group("name")
+
+        # `.Message` is the shape #389 had, and naming it gives a clear
+        # failure — but it is not the only unscrubbed thing an exception can
+        # hand over. `ToString()` carries the path AND the stack, and
+        # `InnerException` carries another whole exception. So the caught
+        # exception may be spelled exactly twice: in its own catch clause and
+        # as the argument to ConsoleFailure.Describe. Anything else a wrapper
+        # wants to say about a failure belongs in Describe, where it can be
+        # scrubbed and tested.
+        for caught in {match.group("caught") for match in CONSOLE_CATCH.finditer(code)}:
+            uses = re.findall(r"\b" + re.escape(caught) + r"\b", code)
+            if len(uses) != 2:
+                fail(f"{label}: {relative} spells the caught exception `{caught}` "
+                     f"{len(uses)} time(s), expected exactly 2 (the catch clause, and the "
+                     "argument to ConsoleFailure.Describe) — every other use is text this "
+                     "product has not scrubbed, and `ToString()` carries the path and the "
+                     "stack just as `.Message` carries the path", errors)
+                return []
+
+        replies = CONSOLE_FAILURE_CALL.findall(code)
+        if replies != [name]:
+            fail(f"{label}: {relative} ({name}) reports failures as {replies or 'nothing'}, "
+                 f"expected exactly ['{name}'] — a reply that names another command sends the "
+                 "player's bug report to the wrong place", errors)
+            return []
+
+        delegations = {match.group("method") for match in CONSOLE_DELEGATION.finditer(code)}
+        if len(delegations) != 1:
+            fail(f"{label}: {relative} calls {sorted(delegations) or 'no'} runtime "
+                 "Execute…Command method(s), expected exactly 1 — the audit follows that call to "
+                 "the guard", errors)
+            return []
+        method = delegations.pop()
+
+        if guarded.get(name) != method:
+            fail(f"{label}: CartographerRuntime.{method} is not "
+                 f'`return GuardConsoleCommand("{name}", args, {method}Core);` — it is the entry '
+                 "point the wrapper calls, so work reached any other way is unguarded and an "
+                 "exception's raw message is what the player sees", errors)
+            return []
+
+        audited.append(f"{name} -> {method}")
+
+    return [
+        f"{label}: {len(audited)} ConsoleCommand(s) found by base class — {', '.join(audited)} — each "
+        "report failures through the single scrubbing guard, naming the subcommand the player typed, "
+        "and none spells the exception it caught anywhere but in ConsoleFailure.Describe; "
+        f"{scanned} product source(s) scanned and none reads an exception's `.Message` outside "
+        f"{'/'.join(MESSAGE_EXEMPT_FILE)}",
+    ]
+
+
 SOLUTION_FOLDER_TYPE = "{2150E333-8FDC-42A3-9474-1A3956D46DE8}"
 
 SOLUTION_ENTRY = re.compile(
@@ -2577,7 +3171,7 @@ def check_solution_integrity(errors: list[str]) -> list[str]:
 MOJIBAKE_LEAD = "\u00c2\u00c3\u00e2"
 MOJIBAKE_TAIL = (
     "\u0080-\u00bf\u20ac\u201a\u0192\u201e\u2026\u2020\u2021\u02c6\u2030"
-    "\u0160\u2039\u0152\u017d\u2018\u2019\u201c\u201d\u2022\u2013\u2014"
+    "\u0160\u2039\u0152\u017d\u2018\u2019\u201c\u201d\u2022\u2013—"
     "\u02dc\u2122\u0161\u203a\u0153\u017e\u0178")
 MOJIBAKE = re.compile("[" + MOJIBAKE_LEAD + "][" + MOJIBAKE_TAIL + "]")
 
@@ -3165,12 +3759,15 @@ def main() -> int:
     report.extend(check_cartographer_root_holds_only_names_the_probe_knows(errors))
     report.extend(check_cartographer_prior_names_stay_known_to_the_probe(errors))
     report.extend(check_cartographer_sidecar_family_has_one_owner(errors))
+    report.extend(check_cartographer_console_failures_are_scrubbed(errors))
     check_teamster_adapter_isolation(errors)
     report.extend(check_cross_product_independence(errors))
     report.extend(check_every_product_pair_is_audited(errors))
     report.extend(check_library_consumers(errors))
     report.extend(check_library_consumers_do_not_bypass_the_arbiter(errors))
     report.extend(check_the_npc_library_writes_no_file(errors))
+    report.extend(check_container_permissions_stay_reachable(errors))
+    report.extend(check_console_failures_go_through_one_scrubber(errors))
     report.extend(check_npc_planning_decides_nothing_to_do_once(errors))
     report.extend(check_npc_planning_never_defaults_a_claim(errors))
     report.extend(check_teamster_cartographer_contract(errors))

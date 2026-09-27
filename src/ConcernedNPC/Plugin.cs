@@ -30,7 +30,7 @@ public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernednpc";
     public const string PluginName = "Concerned NPC";
-    public const string PluginVersion = "0.1.0";
+    public const string PluginVersion = "0.2.0";
 
     private void Awake()
     {
@@ -45,7 +45,7 @@ public sealed class Plugin : BaseUnityPlugin
     }
 
     /// <summary>The release identity including the build commit (the SDK stamps
-    /// InformationalVersion as "0.1.0+&lt;sha&gt;"), so the load line names the
+    /// InformationalVersion as "0.2.0+&lt;sha&gt;"), so the load line names the
     /// exact binary and nothing about the player.</summary>
     private static string ResolveInformationalVersion()
     {

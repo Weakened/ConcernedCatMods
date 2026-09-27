@@ -14,6 +14,7 @@ using TheConcernedCat.ConcernedTeamster.Domain.Risk;
 using TheConcernedCat.ConcernedTeamster.Domain.Workers;
 using TheConcernedCat.Workers;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;
 
@@ -290,7 +291,7 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
         catch (Exception exception)
         {
             _faulted = true;
-            _log.LogError("Gunnar's hauling runtime faulted and is now off for this session: " + exception);
+            _log.LogError("Gunnar's hauling runtime faulted and is now off for this session: " + SafeFailure.Describe(exception));
             EmergencyRelease();
         }
     }
@@ -438,7 +439,7 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
             }
             catch (Exception exception)
             {
-                _log.LogWarning("Gunnar's teardown could not complete cleanly (" + why + "): " + exception.Message);
+                _log.LogWarning("Gunnar's teardown could not complete cleanly (" + why + "): " + SafeFailure.Brief(exception));
             }
 
             Service.Unbind();

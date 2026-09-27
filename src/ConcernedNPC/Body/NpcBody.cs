@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using TheConcernedCat.ConcernedNPC.Roles;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedNPC.Body;
 
@@ -260,7 +261,7 @@ public sealed class NpcBody : MonoBehaviour
             catch (Exception exception)
             {
                 RaiseErrorLog("NPC body \"" + body.StoredKey + "\" finished loading and a subscriber threw, "
-                    + "so that subscriber has not bound it: " + exception);
+                    + "so that subscriber has not bound it: " + SafeFailure.Describe(exception));
             }
         }
     }
@@ -285,7 +286,7 @@ public sealed class NpcBody : MonoBehaviour
             catch (Exception exception)
             {
                 RaiseErrorLog("NPC body \"" + body.StoredKey
-                    + "\" died and a subscriber could not record the loss: " + exception);
+                    + "\" died and a subscriber could not record the loss: " + SafeFailure.Describe(exception));
             }
         }
     }
@@ -365,7 +366,7 @@ public sealed class NpcBody : MonoBehaviour
             // carries must not work, and must not save over what it carries.
             IsLoaded = false;
             Fault = "its stored inventory could not be loaded (" + exception.GetType().Name + ")";
-            RaiseErrorLog("NPC body \"" + StoredKey + "\" is inert: " + Fault + ". " + exception);
+            RaiseErrorLog("NPC body \"" + StoredKey + "\" is inert: " + Fault + ". " + SafeFailure.Describe(exception));
         }
     }
 
@@ -423,7 +424,7 @@ public sealed class NpcBody : MonoBehaviour
         catch (Exception exception)
         {
             RaiseErrorLog("NPC body \"" + StoredKey + "\" could not write its inventory: "
-                + exception.GetType().Name + ": " + exception.Message);
+                + SafeFailure.Brief(exception));
             return false;
         }
     }
@@ -502,7 +503,7 @@ public sealed class NpcBody : MonoBehaviour
                 catch (Exception exception)
                 {
                     RaiseErrorLog("NPC body \"" + StoredKey + "\" died and its " + prefab
-                        + " could not be dropped, so it is lost with the body: " + exception);
+                        + " could not be dropped, so it is lost with the body: " + SafeFailure.Describe(exception));
                 }
             }
         }
@@ -515,7 +516,7 @@ public sealed class NpcBody : MonoBehaviour
             catch (Exception exception)
             {
                 ErrorLog?.Invoke("NPC body \"" + StoredKey
-                    + "\" died and the loss could not all be recorded: " + exception);
+                    + "\" died and the loss could not all be recorded: " + SafeFailure.Describe(exception));
             }
         }
     }

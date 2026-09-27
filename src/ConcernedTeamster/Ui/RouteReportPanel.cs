@@ -5,6 +5,7 @@ using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using TheConcernedCat.ConcernedTeamster.Domain.Ui;
 using UnityEngine;
 using UnityEngine.UI;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedTeamster.Ui;
 
@@ -152,6 +153,6 @@ internal sealed class RouteReportPanel
 
         _log.LogError(
             "Route report disabled for this session after a UI exception; everything else keeps working: " +
-            exception);
+            SafeFailure.Describe(exception));
     }
 }

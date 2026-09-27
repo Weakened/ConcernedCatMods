@@ -99,6 +99,10 @@
     <Compile Include="..\Shared\Settlement\**\*.cs" LinkBase="Settlement" />
     <Compile Include="..\Shared\Workers\**\*.cs" LinkBase="Workers" />
     <Compile Include="..\Shared\Interop\**\*.cs" LinkBase="Interop" />
+    <!-- #411: the one path scrubber and the one failure wording, shared as
+         source because products never reference each other and three
+         independent copies is how #388 had to be fixed twice. -->
+    <Compile Include="..\Shared\Diagnostics\**\*.cs" LinkBase="Diagnostics" />
   </ItemGroup>
 
   <ItemGroup>

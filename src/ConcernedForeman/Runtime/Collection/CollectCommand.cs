@@ -1,4 +1,5 @@
 using System;
+using TheConcernedCat.Diagnostics;
 using System.Collections.Generic;
 using Jotunn.Entities;
 
@@ -36,7 +37,12 @@ internal sealed class CollectCommand : ConsoleCommand
         }
         catch (Exception exception)
         {
-            output = "Collection command failed: " + exception.Message;
+            // #411: Foreman had no scrubber at all, so this printed a
+            // filesystem exception's full path - and the machine's user
+            // name with it - into a console reply. The shared one is now
+            // compiled into this product as source.
+            output = SafeFailure.Describe(
+                Name, args != null && args.Length > 0 ? args[0] : "", exception);
         }
 
         context?.AddString(output);

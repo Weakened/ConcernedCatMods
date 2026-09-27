@@ -505,7 +505,9 @@ internal sealed class RoadOverlayRenderer
         catch (Exception exception)
         {
             _log.LogWarning($"Alignment probe failed: {SafeLogText.Describe(exception)}");
-            return "Alignment probe failed: " + exception.Message;
+            // #389: the line above already scrubs for the log; this one is
+            // the console reply, and it was the one that did not.
+            return "Alignment probe failed: " + SafeLogText.Brief(exception);
         }
     }
 

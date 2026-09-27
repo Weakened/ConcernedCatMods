@@ -2,6 +2,7 @@ using System;
 using System.Reflection;
 using HarmonyLib;
 using TheConcernedCat.ConcernedForeman.Domain.Ladders;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedForeman.Runtime.Ladders;
 
@@ -84,7 +85,7 @@ internal static class LadderInteraction
         }
         catch (Exception exception)
         {
-            Unavailable = "the ladder interaction could not be patched (" + exception.Message + ")";
+            Unavailable = "the ladder interaction could not be patched (" + SafeFailure.Brief(exception) + ")";
             log("Ladder climbing: " + Unavailable + ". Ladders keep vanilla behaviour.");
             Remove();
             return false;
@@ -205,7 +206,7 @@ internal static class LadderInteraction
             {
                 _saidItFailed = true;
                 _log?.Invoke(
-                    "Ladder climbing could not take the Use press (" + exception.Message +
+                    "Ladder climbing could not take the Use press (" + SafeFailure.Brief(exception) +
                     "), so vanilla handled it. This is said once.");
             }
 

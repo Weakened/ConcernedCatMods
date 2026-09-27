@@ -2,6 +2,7 @@ using System;
 using TheConcernedCat.ConcernedSteward.Domain.Upkeep;
 using TheConcernedCat.Settlement.Worker;
 using UnityEngine;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedSteward.Runtime;
 
@@ -186,7 +187,7 @@ internal sealed class StewardWorkerAI : BaseAI
                 _loggedFault = true;
                 ErrorLog?.Invoke(
                     "The Steward faulted and is now inert; she will not act again this session. " +
-                    exception);
+                    SafeFailure.Describe(exception));
             }
 
             return false;

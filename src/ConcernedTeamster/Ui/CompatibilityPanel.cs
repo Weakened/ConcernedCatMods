@@ -7,6 +7,7 @@ using TheConcernedCat.ConcernedTeamster.Domain.Compatibility;
 using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 using UnityEngine;
 using UnityEngine.UI;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.ConcernedTeamster.Ui;
 
@@ -226,6 +227,6 @@ internal sealed class CompatibilityPanel
 
         _log.LogError(
             "Compatibility panel UI failed and was disabled for this session: " +
-            $"{exception.GetType().Name}: {exception.Message}");
+            $"{SafeFailure.Brief(exception)}");
     }
 }

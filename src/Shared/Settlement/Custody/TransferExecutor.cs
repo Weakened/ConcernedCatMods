@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Text;
 using TheConcernedCat.Settlement.Journal;
+using TheConcernedCat.Diagnostics;
 
 namespace TheConcernedCat.Settlement.Custody;
 
@@ -343,5 +344,9 @@ internal sealed class TransferExecutor : ITransferExecutor
         }
     }
 
-    private static string Brief(Exception exception) => exception.GetType().Name + ": " + exception.Message;
+    /// <summary>#416: the one scrubber. This used to compose
+    /// `GetType().Name + ": " + Message` itself, which put the path a
+    /// filesystem exception failed on - and the machine's user name - into a
+    /// refusal a player reads and a status line they can upload.</summary>
+    private static string Brief(Exception exception) => SafeFailure.Brief(exception);
 }
