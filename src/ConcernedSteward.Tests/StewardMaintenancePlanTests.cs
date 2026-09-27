@@ -188,13 +188,21 @@ public sealed class StewardMaintenancePlanTests
             adoption: context.Adoption);
         context.Plan.OnWorldLoaded(context.Scope, Evidence(context.World), fixture.Pack, Wood);
         FuelTargetObservation refilled =
-            fixture.AddFire("refilled", fuel: 9f, x: 4f, z: 0f);
+            fixture.AddFire("refilled", fuel: 1f, x: 4f, z: 0f);
         fixture.AddFire("second", fuel: 1f, x: 8f, z: 0f);
         fixture.AddFire("third", fuel: 1f, x: 12f, z: 0f);
 
         fixture.Run(1);
         Assert.Equal(UpkeepPhase.ToDepot, fixture.Loop.Phase);
         fixture.Fires.Replace(FakeFires.Fuelled(refilled, 10f));
+        fixture.RunUntilTripEnds(cap: 40);
+
+        Assert.Empty(fixture.Fires.Fed);
+        Assert.Equal(50, fixture.Depot.Count(Wood));
+        NpcPlanState skippedTour = Load(folder.Path, context.Scope);
+        Assert.Equal(NpcPlanPhase.Settled, skippedTour.Phase);
+        Assert.Equal(skippedTour.TargetsTotal, skippedTour.TargetsDone);
+
         fixture.RunUntilTripEnds(cap: 40);
 
         Assert.DoesNotContain("refilled", fixture.Fires.Fed);
@@ -209,6 +217,33 @@ public sealed class StewardMaintenancePlanTests
             fixture.Depot.Count(Wood)
                 + fixture.Pack.Count(Wood)
                 + fixture.Fires.Fed.Count);
+    }
+
+    [Fact]
+    public void Shared_driver_unreadable_stop_remains_owed_instead_of_becoming_a_durable_skip()
+    {
+        using var folder = new TemporaryFolder();
+        PlanContext context = Open(folder.Path);
+        var fixture = new StewardFixture(
+            limits: new UpkeepLimits(32, 10, 1, 15f, 90f, 3),
+            plan: context.Plan,
+            sharedDriver: true,
+            adoption: context.Adoption);
+        context.Plan.OnWorldLoaded(context.Scope, Evidence(context.World), fixture.Pack, Wood);
+        fixture.AddFire("unreadable", fuel: 1f, x: 4f, z: 0f);
+        fixture.AddFire("second", fuel: 1f, x: 8f, z: 0f);
+        fixture.AddFire("third", fuel: 1f, x: 12f, z: 0f);
+
+        fixture.Run(1);
+        Assert.Equal(UpkeepPhase.ToDepot, fixture.Loop.Phase);
+        fixture.Fires.ObserveThrows = true;
+        fixture.RunUntilTripEnds(cap: 40);
+
+        NpcPlanState saved = Load(folder.Path, context.Scope);
+        Assert.NotEqual(NpcPlanPhase.Settled, saved.Phase);
+        Assert.True(saved.TargetsDone < saved.TargetsTotal);
+        Assert.DoesNotContain("unreadable", fixture.Fires.Fed);
+        fixture.AssertConserved(startingStock: 50);
     }
 
     [Fact]

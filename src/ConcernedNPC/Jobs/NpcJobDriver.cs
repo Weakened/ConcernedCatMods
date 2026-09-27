@@ -197,6 +197,11 @@ public sealed class NpcJobDriver
     /// unprovisionable. Empty otherwise.</summary>
     public JobManifest Shortfall => _plan.Shortfall;
 
+    /// <summary>How many stops the driver itself or its role reported skipped
+    /// in the current round. Deferred/unreadable stops are deliberately absent:
+    /// they remain owed and must never be journaled as completed.</summary>
+    public int SkippedThisRound { get; private set; }
+
     /// <summary>What the last round fetched and did not use up, and what the
     /// next round may therefore spend without fetching it again.
     ///
@@ -344,6 +349,7 @@ public sealed class NpcJobDriver
         _results.Clear();
         _stepOf.Clear();
         _deferred = 0;
+        SkippedThisRound = 0;
 
         var budget = new PlanningBudget(_order.Allowance);
         JobSnapshot snapshot = JobSnapshotBuilder.Take(
@@ -593,6 +599,10 @@ public sealed class NpcJobDriver
         }
 
         _results.Add(new StepResult(_plan.Steps[index].Step.Index, outcome));
+        if (outcome == StepOutcome.Skipped)
+        {
+            SkippedThisRound++;
+        }
     }
 
     /// <summary>Gives the identity's mode back, exactly as unconditionally as
