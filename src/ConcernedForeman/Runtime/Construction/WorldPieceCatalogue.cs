@@ -80,7 +80,7 @@ internal sealed class WorldPieceCatalogue : IPieceRecipes, IPieceSight
         }
 
         PieceRecipe recipe = Price(prefab);
-        _priced[prefab] = recipe;
+        if (recipe.IsKnown) _priced[prefab] = recipe;
         return recipe;
     }
 
@@ -108,9 +108,11 @@ internal sealed class WorldPieceCatalogue : IPieceRecipes, IPieceSight
             Piece.GetAllPiecesInRadius(at, SweepMetres, found);
 
             bool somethingElse = false;
+            int matching = 0;
+            var distinct = new HashSet<Piece>();
             foreach (Piece piece in found)
             {
-                if (piece == null)
+                if (piece == null || !distinct.Add(piece))
                 {
                     continue;
                 }
@@ -122,15 +124,19 @@ internal sealed class WorldPieceCatalogue : IPieceRecipes, IPieceSight
                     continue;
                 }
 
-                if (string.Equals(NameOf(piece), placement.Piece.Prefab, StringComparison.Ordinal))
+                Vector3 facing = piece.transform.rotation.eulerAngles;
+                if (string.Equals(NameOf(piece), placement.Piece.Prefab, StringComparison.Ordinal) &&
+                    SameAngle(facing.y, placement.Yaw) && SameAngle(facing.x, 0f) && SameAngle(facing.z, 0f))
                 {
-                    return PieceSighting.Standing;
+                    matching++;
+                    continue;
                 }
 
                 somethingElse = true;
             }
 
-            return somethingElse ? PieceSighting.Blocked : PieceSighting.Missing;
+            return somethingElse || matching > 1 ? PieceSighting.Blocked :
+                matching == 1 ? PieceSighting.Standing : PieceSighting.Missing;
         }
         catch (Exception exception)
         {
@@ -138,6 +144,12 @@ internal sealed class WorldPieceCatalogue : IPieceRecipes, IPieceSight
                 "), so it is left for the next round.");
             return PieceSighting.Unknown;
         }
+    }
+
+    private static bool SameAngle(float actual, float expected)
+    {
+        float delta = Math.Abs(ShelterBlueprint.Wrap(actual) - ShelterBlueprint.Wrap(expected));
+        return Math.Min(delta, 360f - delta) <= 2f;
     }
 
     /// <summary>A piece's prefab name, with the engine's clone suffix taken off.

@@ -73,6 +73,82 @@ internal sealed class WorldBuildMaterials : IBuildMaterials
     private Guid _epoch;
     private OrderId _order;
     private string _tag = string.Empty;
+    private BuildOrderJournal? _journal;
+
+    internal bool IsBoundTo(BuildOrderJournal journal) => _epoch == _custody.WorldLoadEpoch &&
+        _journal == journal && journal.Current != null && _order.Equals(journal.Current.Order);
+
+    internal bool HasUnspent
+    {
+        get
+        {
+            foreach (Holding holding in _holdings)
+                if (holding.Drawn && !holding.Settled) return true;
+            return false;
+        }
+    }
+
+    internal void Restore(BuildOrderJournal journal, ShelterPlan plan)
+    {
+        World();
+        if (journal.Current == null || !plan.IsPlanned || (_journal == journal && _order.Equals(journal.Current.Order))) return;
+        _journal = journal;
+        _order = journal.Current.Order;
+        _holdings.Clear();
+        foreach (Reservation reservation in journal.Reservations)
+        {
+            if (!reservation.Order.Equals(_order)) continue;
+            CostedPiece? match = null;
+            foreach (CostedPiece piece in plan.Pieces)
+                if (journal.RequestFor(piece).Equals(reservation.Request)) { match = piece; break; }
+            if (!match.HasValue || !BuildOrderJournal.SameCost(reservation, match.Value) ||
+                !Guid.TryParseExact(reservation.ContainerEpoch, "N", out Guid sourceEpoch))
+            {
+                Uncertain = "ReservationPayloadChanged: material cannot be bound to an approved piece; run cf_settle reconcile.";
+                continue;
+            }
+            // Never change the original epoch or key to the current designation.
+            // Target position is not an identity and the inventory port checks
+            // actual source reach. A previous-load source refuses in TryChest.
+            var source = DeliveryTarget.ToContainer(reservation.Container, sourceEpoch, default);
+            _holdings.Add(new Holding(reservation, match.Value, source)
+            {
+                Drawn = true,
+                Settled = reservation.State == ReservationState.Committed || reservation.State == ReservationState.Refunded,
+            });
+        }
+    }
+
+    internal bool CheckHeld(out string refusal)
+    {
+        refusal = string.Empty;
+        if (!HasUnspent) return true;
+        if (!TryWorker(out IInventoryPort? worker, out string reason))
+        {
+            refusal = "WorkerInventoryUnavailable: " + reason + ". Recorded build custody is retained.";
+            return false;
+        }
+        var owed = new MaterialTally();
+        foreach (Holding holding in _holdings)
+            if (holding.Drawn && !holding.Settled)
+                foreach (MaterialStack stack in holding.Reservation.Stacks) owed.Add(stack.Item, stack.Count);
+        try
+        {
+            foreach (PieceCost line in owed.Lines)
+            {
+                if (Counted(worker!, line.Item) >= line.Amount) continue;
+                refusal = "HeldInventoryMismatch: Thorstein carries less " + line.Item +
+                    " than the build record holds. Nothing is placed or refunded; run cf_settle reconcile.";
+                return false;
+            }
+        }
+        catch (Exception)
+        {
+            refusal = "WorkerInventoryUnavailable: the held material could not be measured; custody is retained.";
+            return false;
+        }
+        return true;
+    }
 
     internal WorldBuildMaterials(ICustodyRuntime custody, WorkerKey worker,
         Func<SupplyChest> supply, Action<string> log)
@@ -93,6 +169,11 @@ internal sealed class WorldBuildMaterials : IBuildMaterials
     public void BeginOrder(string tag)
     {
         World();
+        if (_journal != null)
+        {
+            _tag = tag;
+            return; // Restore already selected the durable order and its exact requests.
+        }
         if (string.Equals(_tag, tag, StringComparison.Ordinal)) return;
         foreach (Holding holding in _holdings)
         {
@@ -112,6 +193,7 @@ internal sealed class WorldBuildMaterials : IBuildMaterials
         _order = new OrderId("build-" + Guid.NewGuid().ToString("N"));
         _holdings.Clear();
         _tag = string.Empty;
+        _journal = null;
         Uncertain = null;
     }
 
@@ -181,7 +263,9 @@ internal sealed class WorldBuildMaterials : IBuildMaterials
             {
                 var stacks = new List<MaterialStack>();
                 foreach (PieceCost line in cost.Lines) stacks.Add(new MaterialStack(line.Item, line.Amount));
-                var reservation = new Reservation(new RequestId("piece-" + piece.Key + "-" + Guid.NewGuid().ToString("N")),
+                var reservation = new Reservation(_journal == null
+                    ? new RequestId("piece-" + piece.Key + "-" + Guid.NewGuid().ToString("N"))
+                    : _journal.RequestFor(piece),
                     _order, supply.ContainerKey, stacks, _epoch.ToString("N"));
                 holding = new Holding(reservation, piece, source);
                 _holdings.Add(holding);

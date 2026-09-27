@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using TheConcernedCat.ConcernedForeman.Runtime.Settlement;
+using TheConcernedCat.ConcernedForeman.Domain.Construction;
 using TheConcernedCat.ConcernedForeman.Runtime.Work;
 using TheConcernedCat.Settlement.Collection;
 using TheConcernedCat.Settlement.Custody;
@@ -46,6 +47,7 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
     private Guid _epoch;
     private WorkerBodyCensus? _census;
     private ReconciliationReport? _loadReport;
+    internal BuildOrderJournal? BuildOrders { get; private set; }
 
     internal ForemanCustodyRuntime(SettlementRecords records, Func<WorkAuthorityVerdict> authority, Action<string> log)
     {
@@ -127,6 +129,7 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
     /// opens custody for this load and reconciles.</summary>
     internal void OnWorldLoaded()
     {
+        BuildOrders = null;
         _core = null;
         _census = null;
         _loadReport = null;
@@ -158,6 +161,10 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
         }
 
         _census = WorldCustodyObjects.Census(WorkerKey.Value);
+        CustodyCore core = _core;
+        BuildOrders = new BuildOrderJournal(_core, ToolWorker, () =>
+            _records.TryOpen(out SettlementRegister register, out _) && !register.IsReadOnly &&
+            register.Scope.Equals(core.Journal.Journal.Scope) && register.HasSettlementArea && register.Employs(ToolWorker));
         if (_census.Unidentified > 0)
         {
             _log(
@@ -179,6 +186,7 @@ internal sealed class ForemanCustodyRuntime : ICustodyRuntime
 
     internal void OnWorldUnloaded()
     {
+        BuildOrders = null;
         _core = null;
         _census = null;
         _loadReport = null;

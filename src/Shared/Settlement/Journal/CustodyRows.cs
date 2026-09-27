@@ -4,6 +4,7 @@ using System.Globalization;
 using TheConcernedCat.Settlement.Collection;
 using TheConcernedCat.Settlement.Custody;
 using TheConcernedCat.Settlement.Identity;
+using TheConcernedCat.Settlement.Orders;
 using TheConcernedCat.Settlement.Worker;
 
 namespace TheConcernedCat.Settlement.Journal;
@@ -440,6 +441,10 @@ internal static class CustodyRowCodec
         var fields = new JournalFields();
         switch (row)
         {
+            case BuildOrderRecordedRow build:
+                fields.Add("order", build.Order.Value).Add("worker", build.Worker.Value)
+                    .AddName("transition", build.Transition).Add("payload", build.Payload);
+                break;
             case CollectionAcceptedRow accepted:
                 WriteDefinition(fields, accepted.Definition);
                 break;
@@ -573,6 +578,9 @@ internal static class CustodyRowCodec
                     unknown.Add(pair.Key, pair.Value);
                 }
             }
+
+            if (unknown.Count > 0 && decoded is BuildOrderRecordedRow)
+                return false; // An approval with unknown authority fields is not this approval.
 
             if (unknown.Count > 0)
             {
@@ -723,6 +731,14 @@ internal static class CustodyRowCodec
                     && reader.Item("item", out MaterialItem handoverItem)
                     && reader.Int("count", out int handoverCount)
                         ? new HandoverFinishedRow(handoverRequest, handoverOrder, handoverItem, handoverCount)
+                        : null;
+
+            case JournalEntryKind.BuildOrderRecorded:
+                return reader.Order("order", out OrderId buildOrder)
+                    && reader.Required("worker", out string buildWorker)
+                    && reader.NameOrUnspecified("transition", out OrderTransition buildTransition)
+                    && reader.Required("payload", out string buildPayload)
+                        ? new BuildOrderRecordedRow(buildOrder, new WorkerId(buildWorker), buildTransition, buildPayload)
                         : null;
 
             case JournalEntryKind.WorldSaveMarker:

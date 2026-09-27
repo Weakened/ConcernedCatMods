@@ -167,7 +167,8 @@ internal sealed class ShelterConstructionRuntime
             _materials,
             _placer,
             pose ?? new BuildPose(() => WorkerBody.FindLive(worker.Value), _log),
-            _log);
+            _log,
+            () => _orders.Journal?.Current?.Order.Value);
 
         // The status line, wired HERE rather than by the plugin. Every surface a
         // player reads the order's state on goes through BuildOrderRuntime, so
@@ -202,6 +203,7 @@ internal sealed class ShelterConstructionRuntime
         try
         {
             float now = _now();
+            _orders.Refresh();
             if (_custody.WorldLoadEpoch != _epoch)
             {
                 // A new world load: the marker, the chest key and the body all
@@ -215,10 +217,32 @@ internal sealed class ShelterConstructionRuntime
                 _finishedAt = float.NegativeInfinity;
             }
 
+            BuildOrderJournal? journal = _orders.Journal;
+            if (journal?.Current != null)
+            {
+                if (!_materials.IsBoundTo(journal))
+                {
+                    // Cancellation and a fresh approval can happen between two
+                    // ticks, even at the same marker. A new durable order must
+                    // release the old job before taking this identity again.
+                    _loop.Suspend();
+                    Release();
+                    _loop.Forget();
+                    _cleanupJob = null;
+                    _finished = false;
+                    _finishedAt = float.NegativeInfinity;
+                    _lastRound = float.NegativeInfinity;
+                    _materials.Restore(journal, _orders.ApprovedPlan());
+                }
+                if (journal.HasHeld) _cleanupJob = journal.Current.Order.Value;
+            }
+
             if (!_orders.IsAuthorised)
             {
                 if (_cleanupJob != null)
                 {
+                    if (now - _lastRound < RoundSeconds && now >= _lastRound) return;
+                    _lastRound = now;
                     // Absence releases the body, not the obligation to account
                     // for its building materials. Never refund another job's load.
                     if (!Present() || !Refusal(out _) ||
@@ -229,7 +253,7 @@ internal sealed class ShelterConstructionRuntime
                     }
                     _job = _cleanupJob;
                     _loop.Cancel(now, "the build order was withdrawn.");
-                    _cleanupJob = null;
+                    if (!_materials.HasUnspent) _cleanupJob = null;
                     Release();
                 }
 
@@ -252,6 +276,23 @@ internal sealed class ShelterConstructionRuntime
                 _finishedAt = now;
                 if (_loop.LooksFinished())
                 {
+                    // Completion does not extinguish unspent custody. Retry its
+                    // measured return at the slow recheck cadence, only while
+                    // this order can hold the body. Never walk or place here.
+                    if (_cleanupJob != null && _materials.HasUnspent && Present() && Refusal(out _) &&
+                        ActorModeGrants.IsGranted(_modes.Enter(ActorMode.Recovering, _cleanupJob)))
+                    {
+                        _job = _cleanupJob;
+                        try
+                        {
+                            _loop.RetryFinishedReturn();
+                            if (!_materials.HasUnspent) _cleanupJob = null;
+                        }
+                        finally
+                        {
+                            Release();
+                        }
+                    }
                     return;
                 }
 
@@ -270,7 +311,7 @@ internal sealed class ShelterConstructionRuntime
             {
                 if (_job != null)
                 {
-                    _loop.Cancel(now, why);
+                    _loop.Suspend();
                     Release();
                 }
 
@@ -312,7 +353,7 @@ internal sealed class ShelterConstructionRuntime
             switch (_loop.Step)
             {
                 case BuildStep.Finished:
-                    _cleanupJob = null;
+                    if (!_materials.HasUnspent) _cleanupJob = null;
                     // Done. He is nobody's worker again, which is what lets his
                     // body rest, be moved home, or take another order - and the
                     // latch is what keeps it that way instead of retaking him
@@ -368,6 +409,9 @@ internal sealed class ShelterConstructionRuntime
             return "The build loop FAULTED (" + _fault + ") and does no more work this session; see the log.";
         }
 
+        if (_orders.RecoveryRefusal.Length != 0)
+            return "Build recovery refused: " + _orders.RecoveryRefusal + " Recorded custody is retained; no automatic refund.";
+
         if (!_orders.IsAuthorised)
         {
             // AND WHAT THE LAST ROUND SAID, which is the point of this branch
@@ -381,7 +425,7 @@ internal sealed class ShelterConstructionRuntime
             if (_cleanupJob != null)
                 return "No build order is authorised. Material return is pending until Thorstein is loaded " +
                     "and free of other work; carried materials remain in his inventory. " +
-                    (Refusal(out string pendingReason) ? string.Empty : pendingReason);
+                    (Refusal(out string pendingReason) ? string.Empty : pendingReason) + " " + _loop.Reason;
 
             string last = _loop.Step == BuildStep.Stopped || _loop.Step == BuildStep.Finished
                 ? _loop.Reason
@@ -435,6 +479,17 @@ internal sealed class ShelterConstructionRuntime
                 "with the settlement runtime turned on.";
             return false;
         }
+
+        if (_orders.RecoveryRefusal.Length != 0)
+        {
+            why = _orders.RecoveryRefusal;
+            return false;
+        }
+
+        if (_orders.Journal != null && !_orders.Journal.Validate(_orders.ApprovedPlan(),
+            new WorkerId(_modes.Worker.Worker), _orders.Sight, out why)) return false;
+
+        if (!_materials.CheckHeld(out why)) return false;
 
         if (!_custody.IsWritable)
         {
@@ -526,7 +581,7 @@ internal sealed class ShelterConstructionRuntime
             return false;
         }
 
-        string job = JobFor(plan.Marker);
+        string job = _orders.Journal?.Current?.Order.Value ?? JobFor(plan.Marker);
         ActorModeOutcome outcome = _modes.Enter(ActorMode.Working, job);
         if (!ActorModeGrants.IsGranted(outcome))
         {

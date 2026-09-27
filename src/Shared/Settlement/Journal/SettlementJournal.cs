@@ -110,6 +110,10 @@ internal enum JournalEntryKind
     /// delivery target after a reload. Quotas, progress and custody unchanged.
     /// </summary>
     CollectionRebound = 21,
+
+    /// <summary>A product's immutable approved build payload and its explicit
+    /// order transition, in the existing named-field journal lane.</summary>
+    BuildOrderRecorded = 22,
 }
 
 /// <summary>Which half of the record an entry belongs to.
@@ -154,6 +158,7 @@ internal static class JournalEntryKinds
             case JournalEntryKind.HandoverFinished:
             case JournalEntryKind.WorldSaveMarker:
             case JournalEntryKind.CollectionRebound:
+            case JournalEntryKind.BuildOrderRecorded:
                 return true;
 
             default:
@@ -434,6 +439,7 @@ internal sealed class JournalEntry
 internal sealed class ReplayResult
 {
     private readonly List<string> _repairs = new List<string>();
+    private readonly HashSet<OrderId> _buildOrders;
 
     internal ReplayResult(
         IReadOnlyDictionary<string, OrderState> orders,
@@ -455,7 +461,8 @@ internal sealed class ReplayResult
         long nextSequence,
         Guid journalInstance,
         IEnumerable<string> repairs,
-        IEnumerable<string>? materialRepairs = null)
+        IEnumerable<string>? materialRepairs = null,
+        IEnumerable<OrderId>? buildOrders = null)
     {
         Orders = orders;
         Ledger = ledger;
@@ -465,6 +472,7 @@ internal sealed class ReplayResult
         NextSequence = nextSequence;
         JournalInstance = journalInstance;
         MaterialRepairs = new List<string>(materialRepairs ?? Array.Empty<string>());
+        _buildOrders = new HashSet<OrderId>(buildOrders ?? Array.Empty<OrderId>());
         foreach (string repair in repairs)
         {
             _repairs.Add(repair);
@@ -501,6 +509,8 @@ internal sealed class ReplayResult
     public IReadOnlyList<string> Repairs => _repairs;
 
     public bool NeedsRepair => _repairs.Count > 0;
+
+    public bool IsBuildOrder(OrderId order) => _buildOrders.Contains(order);
 
     public OrderState StateOf(OrderId order)
     {
@@ -744,6 +754,7 @@ internal sealed class SettlementJournal
             case JournalEntryKind.CartBaselineRecorded:
             case JournalEntryKind.WorldSaveMarker:
             case JournalEntryKind.CollectionRebound:
+            case JournalEntryKind.BuildOrderRecorded:
                 return false;
         }
 

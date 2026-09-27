@@ -145,6 +145,7 @@ internal sealed class ShelterBuildLoop
     private readonly IPiecePlacer _placer;
     private readonly IBuildPose _pose;
     private readonly Action<string> _say;
+    private readonly Func<string?>? _orderIdentity;
 
     private string _orderTag = string.Empty;
     private BuildPhase _drawnPhase = BuildPhase.Unspecified;
@@ -164,7 +165,8 @@ internal sealed class ShelterBuildLoop
         IBuildMaterials materials,
         IPiecePlacer placer,
         IBuildPose pose,
-        Action<string> say)
+        Action<string> say,
+        Func<string?>? orderIdentity = null)
     {
         _plan = plan ?? throw new ArgumentNullException(nameof(plan));
         _authorised = authorised ?? throw new ArgumentNullException(nameof(authorised));
@@ -174,6 +176,7 @@ internal sealed class ShelterBuildLoop
         _placer = placer ?? throw new ArgumentNullException(nameof(placer));
         _pose = pose ?? throw new ArgumentNullException(nameof(pose));
         _say = say ?? throw new ArgumentNullException(nameof(say));
+        _orderIdentity = orderIdentity;
     }
 
     /// <summary>What he is doing.</summary>
@@ -361,6 +364,16 @@ internal sealed class ShelterBuildLoop
         _finishedSaid = false;
     }
 
+    /// <summary>Authority loss pauses presentation and movement, never refunds
+    /// or ends the approved order. Work restarts its swing after revalidation.</summary>
+    internal void Suspend()
+    {
+        Pose(false);
+        Quiet();
+        _workingKey = null;
+        Step = BuildStep.Waiting;
+    }
+
     private ShelterRound Run(float now)
     {
         if (!Safe(_authorised))
@@ -395,7 +408,7 @@ internal sealed class ShelterBuildLoop
             return new ShelterRound(RoundOutcome.Waiting, Built, 0, Carried(), null, plan.Refusal + ".");
         }
 
-        string tag = TagOf(plan.Marker);
+        string tag = _orderIdentity?.Invoke() ?? TagOf(plan.Marker);
         if (!string.Equals(tag, _orderTag, StringComparison.Ordinal))
         {
             // A different order: a marker somewhere else, or the first one. Its
@@ -639,6 +652,18 @@ internal sealed class ShelterBuildLoop
         return new ShelterRound(
             RoundOutcome.Working, Built, Math.Max(0, progress.Remaining.Count - 1), Carried(), null,
             "put up " + piece.Placement.Piece.Prefab + ".");
+    }
+
+    /// <summary>Retries only a finished order's unspent return. The runtime
+    /// takes a recovery hold and checks custody first. A missing or unloaded
+    /// piece never turns this cleanup call into another construction round.</summary>
+    internal void RetryFinishedReturn()
+    {
+        if (Step != BuildStep.Finished || !Safe(_authorised)) return;
+        ShelterPlan plan = _plan();
+        if (!plan.IsPlanned || !ConstructionProgress.Read(plan, _sight).IsComplete) return;
+        _finishedSaid = false;
+        Report(Finish(plan));
     }
 
     /// <summary>The shelter is standing.

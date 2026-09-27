@@ -101,6 +101,9 @@ internal sealed class BuildOrderDesk
     /// one would authorise building somewhere nobody agreed to.</summary>
     internal void Forget() => _marker = default;
 
+    // Only the journal adapter calls this after reading a durable approval.
+    internal void Restore(BuildOrderMarker marker) => _marker = marker;
+
     /// <summary>Runs one command and says what to tell the player.</summary>
     internal string Execute(string[]? words, in BuildOrderContext context)
     {

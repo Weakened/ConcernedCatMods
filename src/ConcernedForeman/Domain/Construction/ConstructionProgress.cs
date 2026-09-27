@@ -47,10 +47,10 @@ internal interface IPieceSight
 /// <b>Nothing about progress is written to disk, deliberately.</b> The pieces
 /// are real vanilla pieces in the world save, so the world already knows which
 /// of them are standing; a second record of it in a Foreman file could only ever
-/// be a copy that goes stale, and it would be a new durable format in a
-/// programme whose acceptance criterion is that no durable format changes.
-/// Reading it back means a reload resumes for free and a player who builds three
-/// walls by hand is simply three walls further on.
+/// be a copy that goes stale. The approved marker and ordered recipe payload
+/// are durable in the settlement journal; recovery revalidates that approval
+/// and custody before this observation may drive work. A player who builds
+/// three walls by hand is three walls further on, without another payment.
 ///
 /// <b>Phase order is a constraint, not a preference.</b> A roof panel with no
 /// walls under it is refused by the game, so a piece whose earlier phases are

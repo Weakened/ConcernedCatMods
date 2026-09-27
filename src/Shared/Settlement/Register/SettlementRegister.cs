@@ -280,6 +280,7 @@ internal sealed class SettlementRegister
 
         var ordersToCancel = new List<OrderId>();
         var toRefund = new List<Reservation>();
+        var pendingMeasuredReturns = new List<Reservation>();
 
         // Every flag below comes from what is ACTUALLY being removed, never
         // from the kind that was asked for. Clearing a settlement area that is
@@ -308,11 +309,14 @@ internal sealed class SettlementRegister
         foreach (Reservation reservation in allReservations)
         {
             if (state.Ledger.RequiresInventoryReceipt(reservation.Request) &&
-                (reservation.State == ReservationState.Held || reservation.State == ReservationState.Uncertain) &&
+                reservation.State == ReservationState.Uncertain &&
                 (clearsSettlement || (clearedContainer != null && reservation.CameFrom(clearedContainer, clearedEpoch))))
             {
-                // #398: the historical cascade below only changes the record.
-                // Real carried material must use custody's measured refund.
+                // An interrupted production commit may already be standing in
+                // the world, so neither the register nor custody may guess that
+                // it is still carried. A proven Held reservation is different:
+                // the order may be cancelled now while custody retains the
+                // holding for its measured, exact-source return.
                 return UndesignationPlan.Refused(DesignationRefusal.BuildMaterialHeld);
             }
         }
@@ -382,6 +386,15 @@ internal sealed class SettlementRegister
                 || (clearsHarvest && state.StateOf(order) == OrderState.Gathering)
                 || drewFromClearedContainer;
 
+            // #285: an approved build owns its footprint, while each material
+            // request owns its exact source. Once all requests are settled, a
+            // newly designated source may supply FUTURE pieces without changing
+            // that approval. Production custody is never rebound; a proven
+            // holding is cancelled and left for measured cleanup, while an
+            // uncertain commit is refused by the guard above.
+            if (!clearsSettlement && !clearsHarvest && state.IsBuildOrder(order) && held.Count == 0)
+                affected = false;
+
             if (!affected)
             {
                 continue;
@@ -389,10 +402,18 @@ internal sealed class SettlementRegister
 
             ordersToCancel.Add(order);
             toRefund.AddRange(held);
+            foreach (Reservation reservation in held)
+            {
+                if (state.Ledger.RequiresInventoryReceipt(reservation.Request))
+                {
+                    pendingMeasuredReturns.Add(reservation);
+                }
+            }
         }
 
         return UndesignationPlan.For(
-            kind, removed, ordersToCancel, toRefund, state.NextSequence, state.JournalInstance);
+            kind, removed, ordersToCancel, toRefund, pendingMeasuredReturns,
+            state.NextSequence, state.JournalInstance);
     }
 
     /// <summary>Carries out a plan.
@@ -403,11 +424,11 @@ internal sealed class SettlementRegister
     /// longer the one designated. Refusing a stale plan is cheaper than being
     /// subtly wrong about whose wood went where.
     ///
-    /// The journal is written <b>before</b> the book changes, and refunds are
-    /// written before cancellations, so that a crash at any point leaves a
-    /// record which replays to a coherent state: material back in the container
-    /// it came from, then the order that will not be finishing marked as
-    /// cancelled.</summary>
+    /// The journal is written <b>before</b> the book changes. Legacy reservations
+    /// receive their record-only refunds before cancellation. Production
+    /// reservations that require inventory receipts remain held after the order
+    /// is cancelled; their custody adapter later records refund intent, performs
+    /// the measured inventory move, and records the matching receipt.</summary>
     /// <summary><paramref name="authorised"/> is re-asked here and not taken
     /// from the plan. Authority is deliberately re-read on every act elsewhere
     /// in this runtime, and a plan can sit unconfirmed for as long as a player
@@ -476,7 +497,8 @@ internal sealed class SettlementRegister
             return UndesignationOutcome.Stale;
         }
 
-        if (PlanUndesignation(plan.Kind, journal.Replay(), authorised).IsRefused)
+        ReplayResult currentState = journal.Replay();
+        if (PlanUndesignation(plan.Kind, currentState, authorised).IsRefused)
         {
             return UndesignationOutcome.Refused;
         }
@@ -503,6 +525,15 @@ internal sealed class SettlementRegister
 
         foreach (Reservation reservation in plan.ToRefund)
         {
+            if (currentState.Ledger.RequiresInventoryReceipt(reservation.Request))
+            {
+                // Cancelling the owning order is durable, but a production
+                // refund is true only after custody has measured and moved the
+                // worker's inventory back to this exact source. Leaving the
+                // reservation Held lets that recovery path finish honestly.
+                continue;
+            }
+
             journal.Append(
                 JournalEntryKind.Refunded, reservation.Order, reservation.Request,
                 container: reservation.Container, stacks: reservation.Stacks,
@@ -568,7 +599,8 @@ internal enum UndesignationOutcome
     Stale = 3,
 }
 
-/// <summary>What clearing a designation would remove, cancel and return.
+/// <summary>What clearing a designation would remove, cancel, return or retain
+/// for measured cleanup.
 ///
 /// A value, on purpose: it can be shown to a player, asserted on in a test, and
 /// handed back to <see cref="SettlementRegister.ApplyUndesignation"/>
@@ -586,6 +618,7 @@ internal sealed class UndesignationPlan
         IReadOnlyList<Designation> removed,
         IReadOnlyList<OrderId> ordersToCancel,
         IReadOnlyList<Reservation> toRefund,
+        IReadOnlyList<Reservation> pendingMeasuredReturns,
         long journalSequence,
         Guid journalInstance)
     {
@@ -595,6 +628,7 @@ internal sealed class UndesignationPlan
         Removed = removed;
         OrdersToCancel = ordersToCancel;
         ToRefund = toRefund;
+        PendingMeasuredReturns = pendingMeasuredReturns;
         JournalSequence = journalSequence;
         JournalInstance = journalInstance;
     }
@@ -627,8 +661,14 @@ internal sealed class UndesignationPlan
     public IReadOnlyList<OrderId> OrdersToCancel { get; }
 
     /// <summary>Only reservations still <see cref="ReservationState.Held"/>.
-    /// Spent, returned and unknown ones are never in here.</summary>
+    /// Spent, returned and unknown ones are never in here. Entries also listed
+    /// in <see cref="PendingMeasuredReturns"/> are retained rather than receiving
+    /// a record-only refund.</summary>
     public IReadOnlyList<Reservation> ToRefund { get; }
+
+    /// <summary>Production holdings whose return requires a custody intent,
+    /// measured inventory movement and matching receipt.</summary>
+    public IReadOnlyList<Reservation> PendingMeasuredReturns { get; }
 
     public bool ChangesNothing => !IsRefused && Removed.Count == 0;
 
@@ -636,14 +676,14 @@ internal sealed class UndesignationPlan
     {
         return new UndesignationPlan(
             DesignationKind.None, true, refusal,
-            NoDesignations, NoOrders, NoReservations, -1L, Guid.Empty);
+            NoDesignations, NoOrders, NoReservations, NoReservations, -1L, Guid.Empty);
     }
 
     internal static UndesignationPlan Nothing(DesignationKind kind)
     {
         return new UndesignationPlan(
             kind, false, DesignationRefusal.Unspecified,
-            NoDesignations, NoOrders, NoReservations, -1L, Guid.Empty);
+            NoDesignations, NoOrders, NoReservations, NoReservations, -1L, Guid.Empty);
     }
 
     internal static UndesignationPlan For(
@@ -651,12 +691,14 @@ internal sealed class UndesignationPlan
         IReadOnlyList<Designation> removed,
         IReadOnlyList<OrderId> ordersToCancel,
         IReadOnlyList<Reservation> toRefund,
+        IReadOnlyList<Reservation> pendingMeasuredReturns,
         long journalSequence,
         Guid journalInstance)
     {
         return new UndesignationPlan(
             kind, false, DesignationRefusal.Unspecified,
-            removed, ordersToCancel, toRefund, journalSequence, journalInstance);
+            removed, ordersToCancel, toRefund, pendingMeasuredReturns,
+            journalSequence, journalInstance);
     }
 
     /// <summary>One sentence a player can read before deciding.</summary>
@@ -687,26 +729,61 @@ internal sealed class UndesignationPlan
                 ". This cancels {0} unfinished order(s)", OrdersToCancel.Count);
 
             IReadOnlyDictionary<string, int> returned = Totals();
+            IReadOnlyDictionary<string, int> pending = Totals(PendingMeasuredReturns);
             if (returned.Count > 0)
             {
-                var stacks = new List<string>();
+                var adjusted = new Dictionary<string, int>(StringComparer.Ordinal);
                 foreach (KeyValuePair<string, int> stack in returned)
+                {
+                    adjusted.Add(stack.Key, stack.Value);
+                }
+
+                foreach (KeyValuePair<string, int> stack in pending)
+                {
+                    adjusted[stack.Key] -= stack.Value;
+                    if (adjusted[stack.Key] == 0) adjusted.Remove(stack.Key);
+                }
+
+                var stacks = new List<string>();
+                foreach (KeyValuePair<string, int> stack in adjusted)
                 {
                     stacks.Add(stack.Value.ToString(CultureInfo.InvariantCulture) + " " + stack.Key);
                 }
 
-                text += " and returns " + string.Join(", ", stacks.ToArray());
+                if (stacks.Count > 0)
+                {
+                    text += " and returns " + string.Join(", ", stacks.ToArray());
+                }
+            }
+
+            if (pending.Count > 0)
+            {
+                var stacks = new List<string>();
+                foreach (KeyValuePair<string, int> stack in pending)
+                {
+                    stacks.Add(stack.Value.ToString(CultureInfo.InvariantCulture) + " " + stack.Key);
+                }
+
+                text += " and retains " + string.Join(", ", stacks.ToArray()) +
+                    " in production custody pending measured return";
             }
         }
 
         return text + ".";
     }
 
-    /// <summary>Everything the refunds add up to, per item.</summary>
+    /// <summary>Everything the held legacy and production reservations add up
+    /// to, per item. See <see cref="PendingMeasuredReturns"/> for the portion
+    /// that remains in custody until measured cleanup.</summary>
     public IReadOnlyDictionary<string, int> Totals()
     {
+        return Totals(ToRefund);
+    }
+
+    private static IReadOnlyDictionary<string, int> Totals(IEnumerable<Reservation> reservations)
+    {
         var totals = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (Reservation reservation in ToRefund)
+        foreach (Reservation reservation in reservations)
         {
             foreach (MaterialStack stack in reservation.Stacks)
             {

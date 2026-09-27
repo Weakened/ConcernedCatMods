@@ -23,18 +23,22 @@ namespace ConcernedForeman.Tests;
 /// arithmetic.</summary>
 internal sealed class FakeCustody : ICustodyRuntime
 {
-    internal FakeCustody(IInventoryPort? worker, IInventoryPort? chest)
+    internal FakeCustody(IInventoryPort? worker, IInventoryPort? chest,
+        SettlementJournal? journal = null, Func<SettlementJournal, bool>? persist = null,
+        Guid? epoch = null, double loadedTime = 0, Func<double>? worldTime = null)
     {
         WorkerPort = worker;
         ChestPort = chest;
-        Journal = new SettlementJournal(new SettlementScope(4242, new SettlementId("build-test")));
+        WorldLoadEpoch = epoch ?? ForemanFixtures.Epoch;
+        Journal = journal ?? new SettlementJournal(new SettlementScope(4242, new SettlementId("build-test")));
         Core = CustodyCore.Open(Journal, () =>
         {
             if (!CanPersist()) return false;
+            if (persist != null) return persist(Journal);
             Journal.MarkClean();
             return true;
-        }, () => 10,
-            new WorldLoad(0, WorldLoadEpoch), () => _writable);
+        }, worldTime ?? (() => 10),
+            new WorldLoad(loadedTime, WorldLoadEpoch), () => _writable);
     }
 
     internal IInventoryPort? WorkerPort { get; set; }
