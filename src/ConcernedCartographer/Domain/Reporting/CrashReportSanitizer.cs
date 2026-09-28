@@ -136,6 +136,26 @@ internal static class CrashReportSanitizer
             + WindowsSegmentChar + "*)(?:" + NoFileExtension + WindowsFinalRun + PathEnd + ")?",
         RegexOptions.Compiled);
 
+    private static readonly Regex WindowsUncPath = new(
+        @"\\\\(?:" + WindowsSegmentChar + "+" + WindowsChainRun + @"\\){1,}("
+            + WindowsSegmentChar + "*)(?:" + NoFileExtension + WindowsFinalRun + PathEnd + ")?",
+        RegexOptions.Compiled);
+
+    // Relative Windows paths are intentionally backslash-only and need at
+    // least two directory separators. A strict first segment starts beside
+    // the first slash rather than swallowing prose; the boundary keeps regex
+    // text such as `\d+\.\d+` untouched.
+    private static readonly Regex WindowsRelativePath = new(
+        @"(?<![\\/\w.<>])" + WindowsSegmentChar + @"+\\(?:"
+            + WindowsSegmentChar + "+" + WindowsChainRun + @"\\){1,}("
+            + WindowsSegmentChar + "*)(?:" + NoFileExtension
+            + WindowsFinalRun + PathEnd + ")?",
+        RegexOptions.Compiled);
+
+    private static readonly Regex FileThenProseBeforeRelative = new(
+        @"\.[A-Za-z0-9]{1,8}(?: " + WindowsSegmentChar + @"+)+ $",
+        RegexOptions.Compiled);
+
     private static readonly Regex UnixPath = new(
         NotAfterAMarker + "/(?:" + UnixSegmentChar + "+" + UnixChainRun + "/)+("
             + UnixSegmentChar + "*)(?:" + NoFileExtension + UnixFinalRun + PathEnd + ")?",
@@ -163,6 +183,174 @@ internal static class CrashReportSanitizer
         @"[^\\/\s""']+\.(db|fwl|fch)(\.old|\.bak)?\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    // Relative paths run first so a rooted-path match cannot absorb prose
+    // and a later relative path into one span. Private markers protect actual
+    // rooted spans and the documented four-word-segment residual during that pass.
+    // Markers are per-input string tokens, not fixed characters. A prefix made
+    // from an already-invalid Windows path character grows until absent, so
+    // input cannot impersonate scrubber state or be removed as internal data.
+    private static void CreateMarkerTokens(
+        string text,
+        out string cappedContinuation,
+        out string rootedPathStart,
+        out string rootedPathEnd)
+    {
+        string prefix = "<";
+        while (text.IndexOf(prefix, System.StringComparison.Ordinal) >= 0)
+        {
+            prefix += "<";
+        }
+
+        cappedContinuation = prefix + "|";
+        rootedPathStart = prefix + ":";
+        rootedPathEnd = prefix + "?";
+    }
+
+    private static bool IsWindowsSegmentCharacter(char value) =>
+        !char.IsWhiteSpace(value)
+        && "\\/\r\n:*?\"<>|".IndexOf(value) < 0;
+
+    private static bool HasCappedContinuation(string text, int index)
+    {
+        int tokens = 0;
+        while (index < text.Length && text[index] == ' ')
+        {
+            index++;
+            int tokenStart = index;
+            while (index < text.Length && IsWindowsSegmentCharacter(text[index]))
+            {
+                index++;
+            }
+
+            if (index == tokenStart)
+            {
+                return false;
+            }
+
+            tokens++;
+            if (index < text.Length && text[index] == '\\')
+            {
+                return tokens >= 3;
+            }
+        }
+
+        return false;
+    }
+
+    private static string MarkRootedWindowsPaths(
+        Regex pattern,
+        string text,
+        string cappedContinuation,
+        string rootedPathStart,
+        string rootedPathEnd) =>
+        pattern.Replace(text, match =>
+        {
+            foreach (Match relative in WindowsRelativePath.Matches(match.Value))
+            {
+                if (relative.Index > 0
+                    && FileThenProseBeforeRelative.IsMatch(
+                        match.Value.Substring(0, relative.Index)))
+                {
+                    return rootedPathStart
+                        + match.Value.Substring(0, relative.Index)
+                        + rootedPathEnd
+                        + match.Value.Substring(relative.Index);
+                }
+            }
+
+            return rootedPathStart
+                + match.Value
+                + rootedPathEnd
+                + (HasCappedContinuation(text, match.Index + match.Length)
+                    ? cappedContinuation
+                    : "");
+        });
+
+    private static bool IsCappedContinuationGap(
+        string text,
+        int marker,
+        int markerLength,
+        int matchIndex)
+    {
+        for (int index = marker + markerLength; index < matchIndex; index++)
+        {
+            char value = text[index];
+            if (value != ' ' && !IsWindowsSegmentCharacter(value))
+            {
+                return false;
+            }
+        }
+
+        return matchIndex > marker + markerLength;
+    }
+
+    private static string ReplaceRelativeWindowsPaths(
+        string text,
+        string replacement,
+        string cappedContinuation,
+        string rootedPathStart,
+        string rootedPathEnd)
+    {
+        int usedMarker = -1;
+        string scrubbed = WindowsRelativePath.Replace(text, match =>
+        {
+            int lineStart = match.Index;
+            while (lineStart > 0
+                && text[lineStart - 1] != '\r'
+                && text[lineStart - 1] != '\n')
+            {
+                lineStart--;
+            }
+
+            int rootedStart = match.Index > lineStart
+                ? text.LastIndexOf(
+                    rootedPathStart,
+                    match.Index - 1,
+                    match.Index - lineStart,
+                    System.StringComparison.Ordinal)
+                : -1;
+            int rootedEnd = match.Index > lineStart
+                ? text.LastIndexOf(
+                    rootedPathEnd,
+                    match.Index - 1,
+                    match.Index - lineStart,
+                    System.StringComparison.Ordinal)
+                : -1;
+
+            if (rootedStart > rootedEnd)
+            {
+                return match.Value;
+            }
+
+            int marker = match.Index > lineStart
+                ? text.LastIndexOf(
+                    cappedContinuation,
+                    match.Index - 1,
+                    match.Index - lineStart,
+                    System.StringComparison.Ordinal)
+                : -1;
+
+            if (marker >= lineStart
+                && marker != usedMarker
+                && IsCappedContinuationGap(
+                    text,
+                    marker,
+                    cappedContinuation.Length,
+                    match.Index))
+            {
+                usedMarker = marker;
+                return match.Value;
+            }
+
+            return match.Result(replacement);
+        });
+
+        return scrubbed
+            .Replace(cappedContinuation, "")
+            .Replace(rootedPathStart, "")
+            .Replace(rootedPathEnd, "");
+    }
+
     public static string Sanitize(string? text, int maxLength)
     {
         if (string.IsNullOrEmpty(text))
@@ -173,7 +361,31 @@ internal static class CrashReportSanitizer
         string result = text!;
         result = Urls.Replace(result, "<url>");
         result = CoordinatePairs.Replace(result, "(<pos>)");
+        CreateMarkerTokens(
+            result,
+            out string cappedContinuation,
+            out string rootedPathStart,
+            out string rootedPathEnd);
+        result = MarkRootedWindowsPaths(
+            WindowsPath,
+            result,
+            cappedContinuation,
+            rootedPathStart,
+            rootedPathEnd);
+        result = MarkRootedWindowsPaths(
+            WindowsUncPath,
+            result,
+            cappedContinuation,
+            rootedPathStart,
+            rootedPathEnd);
+        result = ReplaceRelativeWindowsPaths(
+            result,
+            "<path>/$1",
+            cappedContinuation,
+            rootedPathStart,
+            rootedPathEnd);
         result = WindowsPath.Replace(result, "<path>/$1");
+        result = WindowsUncPath.Replace(result, "<path>/$1");
         result = UnixPath.Replace(result, "<path>/$1");
         result = UsersFragment.Replace(result, "Users/<user>");
         result = SaveFileNames.Replace(result, "<save>.$1");

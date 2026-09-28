@@ -49,6 +49,87 @@ public class PathScrubberTests
     }
 
     // ------------------------------------------------------------------
+    // UNC and relative Windows paths (#408)
+    // ------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(@"\\NAS\private-share", "private-share")]
+    [InlineData(@"\\NAS\players\erenc\Valheim\profiles\p\x.cfg", "x.cfg")]
+    [InlineData(@"\\storage-01\mapped profiles\Valheim\BepInEx\config\secret.cfg", "secret.cfg")]
+    [InlineData(@"..\..\Users\erenc\Valheim\profiles\p\x.cfg", "x.cfg")]
+    [InlineData(@"plugins\ConcernedCatMods\config\private.cfg", "private.cfg")]
+    public void UncAndRelativeWindowsPathsAreScrubbedForBothCallers(
+        string line, string fileName)
+    {
+        string kept = PathScrubber.Scrub(line, keepFileName: true);
+        string hidden = PathScrubber.Scrub(line, keepFileName: false);
+
+        Assert.Equal("<path>/" + fileName, kept);
+        Assert.Equal("<path>", hidden);
+    }
+
+    [Theory]
+    [InlineData(
+        true,
+        @"copy C:\a\b.cfg then plugins\ConcernedCatMods\profiles\secret\x.cfg",
+        "copy <path>/b.cfg then <path>/x.cfg")]
+    [InlineData(
+        false,
+        @"copy C:\a\b.cfg then plugins\ConcernedCatMods\profiles\secret\x.cfg",
+        "copy <path> then <path>")]
+    public void ARelativePathAfterARootedPathOnTheSameLineIsAlsoScrubbed(
+        bool keepFileName, string line, string expected)
+    {
+        Assert.Equal(expected, PathScrubber.Scrub(line, keepFileName));
+    }
+
+    [Theory]
+    [InlineData(true, "<path>/x.cfg")]
+    [InlineData(false, "<path>")]
+    public void RawMarkerLikeTextCannotImpersonateInternalMarkers(
+        bool keepFileName, string expectedPath)
+    {
+        const string rawMarkers = "<| <: <? <<| <<: <<? <<<| <<<: <<<?";
+        string scrubbed = PathScrubber.Scrub(
+            rawMarkers + @" plugins\ConcernedCatMods\profiles\secret\x.cfg",
+            keepFileName);
+
+        Assert.Equal(rawMarkers + " " + expectedPath, scrubbed);
+    }
+
+    [Theory]
+    [InlineData(true, "<path>/x.cfg")]
+    [InlineData(false, "<path>")]
+    public void PrivateUseCharactersInsideAWindowsPathAreScrubbed(
+        bool keepFileName, string expected)
+    {
+        const string privateUse = "\uE000\uE001\uE002\uE003";
+        string line =
+            @"plugins\private\" + privateUse + @"folder\profiles\secret\x.cfg";
+
+        Assert.Equal(expected, PathScrubber.Scrub(line, keepFileName));
+    }
+
+    [Theory]
+    [InlineData(@"\d+\.\d+")]
+    [InlineData(@"regex (?<drive>[A-Z]):\\(?<folder>[^\\]+)")]
+    [InlineData(@"escape \w+\s+\b")]
+    public void RegexLookingBackslashTextIsNotMistakenForARelativePath(string line)
+    {
+        Assert.Equal(line, PathScrubber.Scrub(line, keepFileName: false));
+        Assert.Equal(line, PathScrubber.Scrub(line, keepFileName: true));
+    }
+
+    [Fact]
+    public void TildeRootedUnixPathKeepsOnlyTheExplicitTildeAndOptionalFileName()
+    {
+        const string line = "~/Library/Application Support/Steam/config/private.cfg";
+
+        Assert.Equal("~<path>/private.cfg", PathScrubber.Scrub(line, keepFileName: true));
+        Assert.Equal("~<path>", PathScrubber.Scrub(line, keepFileName: false));
+    }
+
+    // ------------------------------------------------------------------
     // The space rule, in both directions it has to be right in
     // ------------------------------------------------------------------
 

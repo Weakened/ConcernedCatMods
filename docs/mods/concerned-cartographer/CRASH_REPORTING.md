@@ -115,13 +115,13 @@ demonstrated against the first version of this change:
 3. An **extension of more than eight characters**, or one ending in a
    non-alphanumeric, is not recognised as an extension, so a run may still
    follow it and take the sentence.
-4. UNC paths (`\\server\share\...`) are matched by neither pattern: no
-   drive letter for `WindowsPath`, no `/` for `UnixPath`, and no `Users`
-   segment for `UsersFragment` unless one happens to be there. Relative
-   paths (`..\..\Users\me\x.cfg`) are likewise unmatched; a `~`-rooted path
-   **is** matched once it has two separators. **Pre-existing and unchanged
-   by #388 or #410**, tracked as #408 — which covers this scrubber and
-   Teamster's independently-written one together.
+4. UNC paths (`\\server\share\...`) and backslash-relative paths with
+   at least two separators are scrubbed (#408). For relative paths, the first
+   segment cannot contain a space: admitting a free-text run before the first
+   separator consumed sentence text in review. A `~`-rooted Unix path is
+   matched once it has two separators (`~/Library/Application Support/x.cfg`
+   becomes `~<path>/x.cfg`); the one-separator form `~/x.cfg` remains outside
+   the rule.
 
 This reaches `LogOutput.log` through `SafeLogText` and the support report
 through `SupportReportComposer`, not the crash report alone.

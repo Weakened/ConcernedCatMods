@@ -58,13 +58,11 @@ policy revision explicitly allowlists it (nothing is allowlisted today).
 - map coordinates or any positions
 - pin names, notes, or tags; route names; chat
 - save files, screenshots, or your `LogOutput.log`
-- machine usernames or filesystem paths (drive-rooted absolute paths and
-  Valheim save-file names are scrubbed out of exception text before
-  sending, folder names with spaces included; the known gaps are listed in
-  `docs/mods/concerned-cartographer/CRASH_REPORTING.md` and are a folder
-  name of four or more words, an unusually long file extension, and network
-  (`\\server\`) or relative paths — each of which can leave folder names
-  behind)
+- machine usernames or filesystem paths (drive-rooted, UNC, Unix, and
+  backslash-relative paths with at least two separators are scrubbed out of
+  exception text before sending, with the final component kept only for
+  diagnostics; the remaining path-shape limits are listed explicitly in
+  `docs/mods/concerned-cartographer/CRASH_REPORTING.md`)
 - credentials or tokens of any kind
 
 Automated tests assert, for every category above, that data planted into
