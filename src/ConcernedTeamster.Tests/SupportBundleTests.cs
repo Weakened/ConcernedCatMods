@@ -164,9 +164,9 @@ public class SupportBundleTests
             SupportBundleComposer.Header);
 
         // #410: the header used to promise "no full paths" flatly. The stated
-        // limits in PRIVACY_INVENTORY.md are real - a UNC or relative path is
-        // matched by neither pattern, and a four-word folder name exceeds the
-        // space-run cap - so that claim promised more than the scrubber
+        // limits in PRIVACY_INVENTORY.md are real - for example, a four-word
+        // folder name exceeds the space-run cap - so that claim promised more
+        // than the scrubber
         // delivers. It says "masked" now, and this asserts the retreat so a
         // future edit cannot quietly restore the stronger word.
         Assert.DoesNotContain("no full paths", SupportBundleComposer.Header);
@@ -206,6 +206,22 @@ public class SupportBundleTests
         Assert.DoesNotContain("12.5", sanitized);
         Assert.DoesNotContain("123456789", sanitized);
         Assert.DoesNotContain("x.example", sanitized);
+    }
+
+    [Theory]
+    [InlineData(
+        @"Could not open \\NAS\players\erenc\Valheim\profiles\p\x.cfg not found",
+        "Could not open <path> not found")]
+    [InlineData(
+        @"Mapped profile \\storage-01\mapped profiles\Valheim\BepInEx\config\secret.cfg failed",
+        "Mapped profile <path> failed")]
+    [InlineData(
+        @"Could not load ..\..\BepInEx\plugins\ConcernedTeamster\private.cfg from the plugin",
+        "Could not load <path> from the plugin")]
+    public void Sanitizer_UncAndRelativeWindowsPathsAreScrubbed(
+        string line, string expected)
+    {
+        Assert.Equal(expected, SupportBundleSanitizer.Sanitize(line));
     }
 
     [Fact]

@@ -136,6 +136,22 @@ internal static class CrashReportSanitizer
             + WindowsSegmentChar + "*)(?:" + NoFileExtension + WindowsFinalRun + PathEnd + ")?",
         RegexOptions.Compiled);
 
+    private static readonly Regex WindowsUncPath = new(
+        @"\\\\(?:" + WindowsSegmentChar + "+" + WindowsChainRun + @"\\){2,}("
+            + WindowsSegmentChar + "*)(?:" + NoFileExtension + WindowsFinalRun + PathEnd + ")?",
+        RegexOptions.Compiled);
+
+    // Relative Windows paths are intentionally backslash-only and need at
+    // least two directory separators. A strict first segment starts beside
+    // the first slash rather than swallowing prose; the boundary keeps regex
+    // text such as `\d+\.\d+` untouched.
+    private static readonly Regex WindowsRelativePath = new(
+        @"(?<![\\/\w.<>])" + WindowsSegmentChar + @"+\\(?:"
+            + WindowsSegmentChar + "+" + WindowsChainRun + @"\\){1,}("
+            + WindowsSegmentChar + "*)(?:" + NoFileExtension
+            + WindowsFinalRun + PathEnd + ")?",
+        RegexOptions.Compiled);
+
     private static readonly Regex UnixPath = new(
         NotAfterAMarker + "/(?:" + UnixSegmentChar + "+" + UnixChainRun + "/)+("
             + UnixSegmentChar + "*)(?:" + NoFileExtension + UnixFinalRun + PathEnd + ")?",
@@ -163,6 +179,24 @@ internal static class CrashReportSanitizer
         @"[^\\/\s""']+\.(db|fwl|fch)(\.old|\.bak)?\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    private static string ReplaceRelativeWindowsPaths(string text, string replacement) =>
+        WindowsRelativePath.Replace(text, match =>
+        {
+            int lineStart = match.Index;
+            while (lineStart > 0
+                && text[lineStart - 1] != '\r'
+                && text[lineStart - 1] != '\n')
+            {
+                lineStart--;
+            }
+
+            int before = match.Index - lineStart;
+            return before > 0
+                && text.IndexOf("<path>", lineStart, before, System.StringComparison.Ordinal) >= 0
+                    ? match.Value
+                    : match.Result(replacement);
+        });
+
     public static string Sanitize(string? text, int maxLength)
     {
         if (string.IsNullOrEmpty(text))
@@ -174,6 +208,8 @@ internal static class CrashReportSanitizer
         result = Urls.Replace(result, "<url>");
         result = CoordinatePairs.Replace(result, "(<pos>)");
         result = WindowsPath.Replace(result, "<path>/$1");
+        result = WindowsUncPath.Replace(result, "<path>/$1");
+        result = ReplaceRelativeWindowsPaths(result, "<path>/$1");
         result = UnixPath.Replace(result, "<path>/$1");
         result = UsersFragment.Replace(result, "Users/<user>");
         result = SaveFileNames.Replace(result, "<save>.$1");

@@ -52,8 +52,10 @@ namespace TheConcernedCat.Diagnostics;
 ///    named here rather than quietly widened.
 /// 3. An extension of more than eight characters, or one ending in a
 ///    non-alphanumeric, is not recognised as an extension.
-/// 4. UNC (<c>\\server\share</c>) and relative paths are matched by neither
-///    pattern (#408).
+/// 4. UNC paths are scrubbed from their unambiguous double-backslash root.
+///    Relative Windows paths are scrubbed when they have at least two
+///    separators; their first segment cannot contain a space, because allowing
+///    a free-text run there would consume the prose before a path.
 /// 5. A single quote is not excluded from a segment, so with
 ///    <c>keepFileName: false</c> a quoted path swallows its closing quote and the
 ///    sentence's full stop: <c>…path 'C:\a\x.tsv'.</c> becomes
@@ -109,6 +111,27 @@ internal static class PathScrubber
             + WindowsSegmentChar + "*)(?:" + NoFileExtension + WindowsFinalRun + PathEnd + ")?",
         RegexOptions.Compiled);
 
+    // A UNC path has no drive-letter anchor. Require both the server and share
+    // segments before the kept final component; a leading double backslash is
+    // unambiguous and does not need the relative-path prose guard below.
+    private static readonly Regex WindowsUncPath = new(
+        @"\\\\(?:" + WindowsSegmentChar + "+" + WindowsChainRun + @"\\){2,}("
+            + WindowsSegmentChar + "*)(?:" + NoFileExtension + WindowsFinalRun + PathEnd + ")?",
+        RegexOptions.Compiled);
+
+    // A relative Windows path has no root anchor. The first segment is the
+    // token immediately next to its first backslash (no space-run there), then
+    // at least one more directory segment is required. That chooses `plugins`
+    // rather than the prose before `plugins\\ConcernedCatMods\\...`, while the
+    // start guard keeps regex text such as `\d+\.\d+` out because every
+    // apparent segment there starts after `\`.
+    private static readonly Regex WindowsRelativePath = new(
+        @"(?<![\\/\w.<>])" + WindowsSegmentChar + @"+\\(?:"
+            + WindowsSegmentChar + "+" + WindowsChainRun + @"\\){1,}("
+            + WindowsSegmentChar + "*)(?:" + NoFileExtension
+            + WindowsFinalRun + PathEnd + ")?",
+        RegexOptions.Compiled);
+
     // Refuses to start at a `/` that directly follows `>`: that is this
     // scrubber's own marker, never a separator in the original text.
     private static readonly Regex UnixPath = new(
@@ -137,6 +160,29 @@ internal static class PathScrubber
 
     private static readonly Regex LongDigits = new(@"\d{7,}", RegexOptions.Compiled);
 
+    // Absolute/UNC replacement happens first. If one of those deliberately
+    // stops at the documented multi-word-segment cap, the leftover suffix can
+    // itself look relative. Do not re-enter our own marker on the same line:
+    // that would turn one known limit into two markers and change unrelated
+    // #388/#410 behavior. Original relative paths have no preceding marker.
+    private static string ReplaceRelativeWindowsPaths(string text, string replacement) =>
+        WindowsRelativePath.Replace(text, match =>
+        {
+            int lineStart = match.Index;
+            while (lineStart > 0
+                && text[lineStart - 1] != '\r'
+                && text[lineStart - 1] != '\n')
+            {
+                lineStart--;
+            }
+
+            int before = match.Index - lineStart;
+            return before > 0
+                && text.IndexOf("<path>", lineStart, before, System.StringComparison.Ordinal) >= 0
+                    ? match.Value
+                    : match.Result(replacement);
+        });
+
     /// <summary>Scrubs one line.</summary>
     /// <param name="text">Anything. Null and empty answer with the empty
     /// string, so no caller needs a null check of its own.</param>
@@ -160,6 +206,8 @@ internal static class PathScrubber
         result = Urls.Replace(result, "<url>");
         result = CoordinatePairs.Replace(result, "(<pos>)");
         result = WindowsPath.Replace(result, windows);
+        result = WindowsUncPath.Replace(result, windows);
+        result = ReplaceRelativeWindowsPaths(result, windows);
         result = UnixPath.Replace(result, unix);
         result = UsersFragment.Replace(result, "Users/<user>");
         result = SaveFileNames.Replace(result, "<save>.$1");

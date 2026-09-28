@@ -123,15 +123,16 @@ took the pointer to the log file with it.
 4. A **world or character name containing spaces** loses only its last word to
    `<save>`: that pattern forbids spaces, so `Erens New World.db` becomes
    `<path> New <save>.db` and a middle word survives.
-5. **UNC (`\\server\share\...`) and relative paths** are matched by neither
-   pattern: `WindowsPath` needs a drive letter and `UnixPath` needs a `/`. A
-   `~`-rooted path **is** matched once it has two separators
-   (`~/Library/Application Support/...` → `~<path>`); only a single-separator
-   `~/x.cfg` escapes. Pre-existing and unchanged by #410, and tracked as
-   **#408**, which covers this sanitizer as well as the sibling product's.
+5. **UNC paths and relative Windows paths are scrubbed** (#408). A relative
+   path needs at least two backslash separators, and its first segment cannot
+   contain a space; this keeps surrounding prose from being consumed. A
+   `~`-rooted path is matched once it has two separators
+   (`~/Library/Application Support/...` → `~<path>`); only the
+   single-separator `~/x.cfg` form remains outside the rule.
 
-Because of limits 1 and 5, `SupportBundleComposer.Header`'s "no full paths" is
-a statement about the ordinary case, not a guarantee. The header says so.
+Because limits 2 through 5 still describe shapes outside the complete
+guarantee, `SupportBundleComposer.Header` says paths are masked rather than
+promising that no path-shaped text can ever survive.
 
 ## Data flow summary
 

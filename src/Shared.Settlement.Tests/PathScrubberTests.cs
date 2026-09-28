@@ -49,6 +49,44 @@ public class PathScrubberTests
     }
 
     // ------------------------------------------------------------------
+    // UNC and relative Windows paths (#408)
+    // ------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(@"\\NAS\players\erenc\Valheim\profiles\p\x.cfg", "x.cfg")]
+    [InlineData(@"\\storage-01\mapped profiles\Valheim\BepInEx\config\secret.cfg", "secret.cfg")]
+    [InlineData(@"..\..\Users\erenc\Valheim\profiles\p\x.cfg", "x.cfg")]
+    [InlineData(@"plugins\ConcernedCatMods\config\private.cfg", "private.cfg")]
+    public void UncAndRelativeWindowsPathsAreScrubbedForBothCallers(
+        string line, string fileName)
+    {
+        string kept = PathScrubber.Scrub(line, keepFileName: true);
+        string hidden = PathScrubber.Scrub(line, keepFileName: false);
+
+        Assert.Equal("<path>/" + fileName, kept);
+        Assert.Equal("<path>", hidden);
+    }
+
+    [Theory]
+    [InlineData(@"\d+\.\d+")]
+    [InlineData(@"regex (?<drive>[A-Z]):\\(?<folder>[^\\]+)")]
+    [InlineData(@"escape \w+\s+\b")]
+    public void RegexLookingBackslashTextIsNotMistakenForARelativePath(string line)
+    {
+        Assert.Equal(line, PathScrubber.Scrub(line, keepFileName: false));
+        Assert.Equal(line, PathScrubber.Scrub(line, keepFileName: true));
+    }
+
+    [Fact]
+    public void TildeRootedUnixPathKeepsOnlyTheExplicitTildeAndOptionalFileName()
+    {
+        const string line = "~/Library/Application Support/Steam/config/private.cfg";
+
+        Assert.Equal("~<path>/private.cfg", PathScrubber.Scrub(line, keepFileName: true));
+        Assert.Equal("~<path>", PathScrubber.Scrub(line, keepFileName: false));
+    }
+
+    // ------------------------------------------------------------------
     // The space rule, in both directions it has to be right in
     // ------------------------------------------------------------------
 

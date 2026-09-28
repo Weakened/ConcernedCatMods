@@ -247,6 +247,46 @@ public class SupportReportPrivacyTests
     }
 
     // ------------------------------------------------------------------
+    // UNC and relative Windows paths (#408)
+    // ------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(
+        @"Could not open \\NAS\players\erenc\Valheim\profiles\p\x.cfg not found",
+        "Could not open <path>/x.cfg not found")]
+    [InlineData(
+        @"Mapped profile \\storage-01\mapped profiles\Valheim\BepInEx\config\secret.cfg failed",
+        "Mapped profile <path>/secret.cfg failed")]
+    [InlineData(
+        @"Could not load ..\..\Users\erenc\Valheim\profiles\p\x.cfg from the plugin",
+        "Could not load <path>/x.cfg from the plugin")]
+    [InlineData(
+        @"Could not load plugins\ConcernedCatMods\config\private.cfg from the plugin",
+        "Could not load <path>/private.cfg from the plugin")]
+    public void Sanitize_UncAndRelativeWindowsPathsAreScrubbed(
+        string message, string expected)
+    {
+        Assert.Equal(expected, Scrub(message));
+    }
+
+    [Theory]
+    [InlineData(@"\d+\.\d+")]
+    [InlineData(@"regex (?<drive>[A-Z]):\\(?<folder>[^\\]+)")]
+    [InlineData(@"escape \w+\s+\b")]
+    public void Sanitize_RegexLookingBackslashTextIsNotAPath(string message)
+    {
+        Assert.Equal(message, Scrub(message));
+    }
+
+    [Fact]
+    public void Sanitize_TildeRootedPathRetainsOnlyTheTildeAndFileName()
+    {
+        Assert.Equal(
+            "~<path>/private.cfg",
+            Scrub("~/Library/Application Support/Steam/config/private.cfg"));
+    }
+
+    // ------------------------------------------------------------------
     // What the FINAL component's space run must not do (#388 review)
     //
     // The first version of this fix let the last component run on across
