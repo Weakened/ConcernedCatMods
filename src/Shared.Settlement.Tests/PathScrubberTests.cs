@@ -86,10 +86,10 @@ public class PathScrubberTests
     [Theory]
     [InlineData(true, "<path>/x.cfg")]
     [InlineData(false, "<path>")]
-    public void RawPrivateUseCharactersCannotImpersonateInternalMarkers(
+    public void RawMarkerLikeTextCannotImpersonateInternalMarkers(
         bool keepFileName, string expectedPath)
     {
-        const string rawMarkers = "\uE000\uE000\uE000\uE001\uE002\uE003";
+        const string rawMarkers = "<| <: <? <<| <<: <<? <<<| <<<: <<<?";
         string scrubbed = PathScrubber.Scrub(
             rawMarkers + @" plugins\ConcernedCatMods\profiles\secret\x.cfg",
             keepFileName);

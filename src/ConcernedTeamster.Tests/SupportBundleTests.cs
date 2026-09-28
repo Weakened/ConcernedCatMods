@@ -237,9 +237,9 @@ public class SupportBundleTests
     }
 
     [Fact]
-    public void Sanitizer_RawPrivateUseCharactersCannotImpersonateInternalMarkers()
+    public void Sanitizer_RawMarkerLikeTextCannotImpersonateInternalMarkers()
     {
-        const string rawMarkers = "\uE000\uE000\uE000\uE001\uE002\uE003";
+        const string rawMarkers = "<| <: <? <<| <<: <<? <<<| <<<: <<<?";
 
         Assert.Equal(
             rawMarkers + " <path>",

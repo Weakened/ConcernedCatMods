@@ -281,9 +281,9 @@ public class SupportReportPrivacyTests
     }
 
     [Fact]
-    public void Sanitize_RawPrivateUseCharactersCannotImpersonateInternalMarkers()
+    public void Sanitize_RawMarkerLikeTextCannotImpersonateInternalMarkers()
     {
-        const string rawMarkers = "\uE000\uE000\uE000\uE001\uE002\uE003";
+        const string rawMarkers = "<| <: <? <<| <<: <<? <<<| <<<: <<<?";
 
         Assert.Equal(
             rawMarkers + " <path>/x.cfg",
