@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
+using BepInEx;
 using BepInEx.Bootstrap;
 using TheConcernedCat.ConcernedSteward;
 using TheConcernedCat.ConcernedSteward.Domain;
