@@ -1,6 +1,6 @@
 using System;
 using System.IO;
-using BepInEx;
+using TheConcernedCat.ConcernedForeman;
 using TheConcernedCat.Settlement.Identity;
 using TheConcernedCat.Settlement.Journal;
 using TheConcernedCat.Settlement.Register;
@@ -68,11 +68,7 @@ internal sealed class SettlementRecords
     /// instead of a third place in this product composing the same path. The
     /// library reads and writes nothing under it; it refuses to register a role
     /// that cannot say where its data is.</summary>
-    internal static string DefaultRoot()
-    {
-        return Path.Combine(
-            Paths.ConfigPath, "ConcernedCatMods", "ConcernedForeman", "settlements");
-    }
+    internal static string DefaultRoot() => ForemanPaths.Settlements;
 
     /// <summary>This world load's identity epoch; empty until a world's records
     /// are open.</summary>

@@ -3522,6 +3522,76 @@ def _probe_knows(literal: str, names: set[str], suffixes: set[str]) -> bool:
     return any(literal.endswith(suffix) for suffix in suffixes)
 
 
+def check_product_data_roots_have_one_owner(errors: list[str]) -> list[str]:
+    """Each product composes its BepInEx data root in one named source file.
+
+    #368 found Foreman's reader and writer independently spelling the same
+    root, plus three Teamster consumers doing the same. A rename in only one
+    site silently splits durable state. This check is driven by PRODUCTS so a
+    new product cannot inherit the defect merely because nobody added it to a
+    hand-written audit list.
+    """
+    reports: list[str] = []
+    needle = "Paths.ConfigPath"
+
+    for product_key, spec in PRODUCTS.items():
+        project_dir: Path = spec["project_dir"]  # type: ignore[assignment]
+        owner = project_dir / f"{product_key.capitalize()}Paths.cs"
+        owner_relative = owner.relative_to(ROOT)
+
+        if not owner.is_file():
+            fail(
+                f"[product-paths] {owner_relative} is missing; it is the one "
+                f"place allowed to compose {spec['display']}'s data root",
+                errors,
+            )
+            continue
+
+        checked = 0
+        owner_uses = 0
+        for path in sorted(project_dir.rglob("*.cs")):
+            relative = path.relative_to(ROOT)
+            if any(part in ("obj", "bin") for part in relative.parts):
+                continue
+
+            try:
+                text = path.read_text(encoding="utf-8-sig")
+            except (OSError, UnicodeDecodeError) as problem:
+                fail(f"[product-paths] could not read {relative}: {problem}", errors)
+                continue
+
+            checked += 1
+            for number, raw in enumerate(text.splitlines(), start=1):
+                code = _strip_cs_line_comment(raw)
+                uses = code.count(needle)
+                if uses == 0:
+                    continue
+                if path == owner:
+                    owner_uses += uses
+                    continue
+                fail(
+                    f"[product-paths] {relative}:{number} composes {needle} "
+                    f"directly. Use {owner.stem}; one reader and one writer "
+                    "spelling the root independently can silently split durable "
+                    "state after a rename (#368).",
+                    errors,
+                )
+
+        if owner_uses != 1:
+            fail(
+                f"[product-paths] {owner_relative} must compose {needle} exactly "
+                f"once in code; found {owner_uses}",
+                errors,
+            )
+
+        reports.append(
+            f"[product-paths] {spec['display']}: one data-root owner; "
+            f"{checked} source(s) audited"
+        )
+
+    return reports
+
+
 def check_cartographer_root_holds_only_names_the_probe_knows(errors: list[str]) -> list[str]:
     """Nothing lands in the probed directory that the probe cannot account for.
 
@@ -3755,6 +3825,7 @@ def main() -> int:
 
     report.extend(check_solution_integrity(errors))
     report.extend(check_no_mojibake(errors))
+    report.extend(check_product_data_roots_have_one_owner(errors))
     report.extend(check_cartographer_editor_extensions_agree(errors))
     report.extend(check_cartographer_root_holds_only_names_the_probe_knows(errors))
     report.extend(check_cartographer_prior_names_stay_known_to_the_probe(errors))
