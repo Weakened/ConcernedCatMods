@@ -206,11 +206,22 @@ internal sealed class StewardMaintenancePlan
         FuelTargetKey target,
         string fuelItemName,
         int plannedUnits,
+        out string failure) =>
+        TryBegin(world, sourceKey, target, fuelItemName, plannedUnits, 1, out failure);
+
+    internal bool TryBegin(
+        NpcWorldEpoch world,
+        string sourceKey,
+        FuelTargetKey target,
+        string fuelItemName,
+        int plannedUnits,
+        int targetCount,
         out string failure)
     {
         failure = string.Empty;
         if (!CanWrite(out failure) || world.IsUnknown || target.IsEmpty
-            || string.IsNullOrEmpty(sourceKey) || string.IsNullOrEmpty(fuelItemName) || plannedUnits < 1)
+            || string.IsNullOrEmpty(sourceKey) || string.IsNullOrEmpty(fuelItemName)
+            || plannedUnits < 1 || targetCount < 1)
         {
             if (failure.Length == 0)
             {
@@ -232,7 +243,7 @@ internal sealed class StewardMaintenancePlan
         _fuelItemName = fuelItemName;
         _run = NpcPlanRun.Begin(
             _journal,
-            NpcPlanState.Opening(_identity, StewardRole.UpkeepJobId, world, 1),
+            NpcPlanState.Opening(_identity, StewardRole.UpkeepJobId, world, targetCount),
             out NpcPlanSave opening);
         if (_run == null)
         {
@@ -241,14 +252,25 @@ internal sealed class StewardMaintenancePlan
             return false;
         }
 
-        if (!Write(_run.Advance(NpcPlanPhase.Planned, "one fire was selected"), "record the selected fire", out failure)
+        if (!Write(
+                _run.Advance(
+                    NpcPlanPhase.Planned,
+                    targetCount == 1 ? "one fire was selected" : targetCount + " fires were selected"),
+                "record the selected fire(s)",
+                out failure)
             || !Write(_run.Advance(NpcPlanPhase.Manifested, "the trip was totalled"), "record the trip total", out failure))
         {
             return false;
         }
 
+        var reservations = new ReservationId[targetCount];
+        for (int index = 0; index < reservations.Length; index++)
+        {
+            reservations[index] = ReservationId.For(StewardRole.UpkeepJobId, index);
+        }
+
         NpcPlanState reserved = _run.State
-            .WithHoldings(new[] { ReservationId.For(StewardRole.UpkeepJobId, 0) }, NoMaterial)
+            .WithHoldings(reservations, NoMaterial)
             .WithRoute(sourceKey, target.Value, string.Empty)
             .WithPhase(NpcPlanPhase.Reserved, "the fire and depot were recorded before walking");
         return Write(_run.Record(reserved), "record the reservation", out failure);
@@ -267,9 +289,55 @@ internal sealed class StewardMaintenancePlan
     {
         IReadOnlyList<NpcMaterialStack> load = Load(fuelItemName, carried);
         return RunWrite(
-            run => run.Conclude(established, load, targetDone ? 1 : run.State.TargetsDone, note),
+            run => run.Conclude(
+                established,
+                load,
+                targetDone
+                    ? Math.Min(run.State.TargetsTotal, run.State.TargetsDone + 1)
+                    : run.State.TargetsDone,
+                note),
             "record what the movement did",
             out failure);
+    }
+
+    /// <summary>Closes targets that a fresh live observation proved no longer
+    /// need service. No material moves; the intent/conclusion pair records the
+    /// measured no-op so the durable target count cannot lag the driver's books.</summary>
+    internal bool TryResolveSkippedTargets(
+        string fuelItemName,
+        int carried,
+        int count,
+        string note,
+        out string failure)
+    {
+        failure = string.Empty;
+        if (_run == null || count < 1)
+        {
+            return true;
+        }
+
+        if (_run.State.Phase == NpcPlanPhase.Routed && !TryEnterExecuting(out failure))
+        {
+            return false;
+        }
+
+        if (_run.State.Phase != NpcPlanPhase.Executing)
+        {
+            failure = "The maintenance plan could not record a skipped fire from its current phase.";
+            Block(failure);
+            return false;
+        }
+
+        for (int index = 0; index < count && _run.State.TargetsDone < _run.State.TargetsTotal; index++)
+        {
+            if (!TryIntend("about to record a revalidated fire as already resolved", out failure)
+                || !TryConclude(true, fuelItemName, carried, true, note, out failure))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     internal bool TryRouteToTarget(out string failure)
@@ -465,7 +533,16 @@ internal sealed class StewardMaintenancePlan
             return false;
         }
 
-        NpcPlanPhase ending = _run.State.TargetsDone > 0
+        if (_run.State.TargetsDone > 0
+            && _run.State.TargetsDone < _run.State.TargetsTotal)
+        {
+            failure = "The maintenance plan cannot settle while planned fire stops remain unresolved.";
+            Block(failure);
+            return false;
+        }
+
+        NpcPlanPhase ending = _run.State.TargetsTotal > 0
+            && _run.State.TargetsDone == _run.State.TargetsTotal
             ? NpcPlanPhase.Settled
             : NpcPlanPhase.Refunded;
         return RunWrite(run => run.Stop(ending, note), "finish the maintenance plan", out failure);

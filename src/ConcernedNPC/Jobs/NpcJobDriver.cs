@@ -190,12 +190,22 @@ public sealed class NpcJobDriver
     /// <see cref="NpcJobProgress.Waiting"/> costs nothing.</summary>
     public int Rounds { get; private set; }
 
+    /// <summary>How many started rounds have produced a reconciled result.
+    /// Unlike <see cref="Rounds"/>, this advances only after
+    /// <see cref="LastRound"/> has been replaced with that result.</summary>
+    public int CompletedRounds { get; private set; }
+
     /// <summary>What the current round's plan was provisioned for.</summary>
     public JobManifest Manifest => _plan.Plan.Manifest;
 
     /// <summary>What the job is short of, if it was refused for being
     /// unprovisionable. Empty otherwise.</summary>
     public JobManifest Shortfall => _plan.Shortfall;
+
+    /// <summary>How many stops the driver itself or its role reported skipped
+    /// in the current round. Deferred/unreadable stops are deliberately absent:
+    /// they remain owed and must never be journaled as completed.</summary>
+    public int SkippedThisRound { get; private set; }
 
     /// <summary>What the last round fetched and did not use up, and what the
     /// next round may therefore spend without fetching it again.
@@ -344,6 +354,7 @@ public sealed class NpcJobDriver
         _results.Clear();
         _stepOf.Clear();
         _deferred = 0;
+        SkippedThisRound = 0;
 
         var budget = new PlanningBudget(_order.Allowance);
         JobSnapshot snapshot = JobSnapshotBuilder.Take(
@@ -460,6 +471,7 @@ public sealed class NpcJobDriver
         }
 
         LastRound = JobReconciler.Reconcile(_plan, _results);
+        CompletedRounds++;
         Carrying = LastRound.LeftOver;
         Release();
         _route = null;
@@ -593,6 +605,10 @@ public sealed class NpcJobDriver
         }
 
         _results.Add(new StepResult(_plan.Steps[index].Step.Index, outcome));
+        if (outcome == StepOutcome.Skipped)
+        {
+            SkippedThisRound++;
+        }
     }
 
     /// <summary>Gives the identity's mode back, exactly as unconditionally as

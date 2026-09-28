@@ -178,6 +178,8 @@ internal sealed class MaintenanceJobRole : INpcJobRole
     private readonly Func<string> _epoch;
     private readonly MaintenanceThresholds _thresholds;
     private readonly NpcWorldEpoch _world;
+    private RoundPlan _plannedRound;
+    private bool _hasPlannedRound;
 
     /// <param name="world">The world load, as the registry minted it. A role
     /// must never mint its own.</param>
@@ -226,6 +228,8 @@ internal sealed class MaintenanceJobRole : INpcJobRole
         }
 
         RoundPlan round = _round();
+        _plannedRound = round;
+        _hasPlannedRound = true;
         foreach (LightNeed stop in round.Stops)
         {
             targets.Add(new JobTarget(
@@ -249,7 +253,7 @@ internal sealed class MaintenanceJobRole : INpcJobRole
             return sources;
         }
 
-        RoundPlan round = _round();
+        RoundPlan round = _hasPlannedRound ? _plannedRound : _round();
         for (int index = 0; index < round.Sources.Count; index++)
         {
             SupplySighting sighting = round.Sources[index];
@@ -284,7 +288,7 @@ internal sealed class MaintenanceJobRole : INpcJobRole
     /// a wasted trip.</summary>
     public StopStatus Observe(in RouteStop stop)
     {
-        RoundPlan round = _round();
+        RoundPlan round = _hasPlannedRound ? _plannedRound : _round();
         foreach (LightNeed planned in round.Stops)
         {
             if (!string.Equals(planned.Light.Key.Value, stop.Key, StringComparison.Ordinal))

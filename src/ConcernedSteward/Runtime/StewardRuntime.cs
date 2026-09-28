@@ -101,7 +101,7 @@ internal sealed class StewardRuntime
                 hairColour: _settings.HairColour.Value,
                 skinColour: string.Empty),
             message => _log(message));
-        _loop = new UpkeepLoop(UpkeepLimits.Default, _journal, Report, _plan);
+        _loop = new UpkeepLoop(UpkeepLimits.Default, _journal, Report, _plan, _npc);
         _motion = new StewardMotion(() => _body);
         _pack = new StewardPackStore(() => _census.Live);
         _depot = new DepotStore(() => _scope.Resolve().DepotKey);
