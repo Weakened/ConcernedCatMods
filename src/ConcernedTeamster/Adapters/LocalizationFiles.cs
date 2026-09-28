@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
-using BepInEx;
 using BepInEx.Logging;
+using TheConcernedCat.ConcernedTeamster;
 using TheConcernedCat.ConcernedTeamster.Domain.Localization;
 
 namespace TheConcernedCat.ConcernedTeamster.Adapters;
@@ -15,11 +15,9 @@ namespace TheConcernedCat.ConcernedTeamster.Adapters;
 /// stop the plugin loading.</summary>
 public static class LocalizationFiles
 {
-    public static string OverridePath =>
-        Path.Combine(Paths.ConfigPath, "ConcernedCatMods", "ConcernedTeamster", "teamster-strings.tsv");
+    public static string OverridePath => TeamsterPaths.InRoot("teamster-strings.tsv");
 
-    public static string TemplatePath =>
-        Path.Combine(Paths.ConfigPath, "ConcernedCatMods", "ConcernedTeamster", "teamster-strings-template.tsv");
+    public static string TemplatePath => TeamsterPaths.InRoot("teamster-strings-template.tsv");
 
     public static void Initialize(ManualLogSource log)
     {

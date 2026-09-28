@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
-using BepInEx;
 using BepInEx.Logging;
+using TheConcernedCat.ConcernedTeamster;
 using TheConcernedCat.ConcernedTeamster.Domain.Carts;
 using TheConcernedCat.ConcernedTeamster.Domain.Trips;
 
@@ -44,8 +44,7 @@ internal sealed class TripRecordingService
     /// problems than a long list would help with.</summary>
     public IReadOnlyList<RecoveryEvent> RecoveryEvents => _recoveryEvents;
 
-    public static string SidecarDirectory =>
-        Path.Combine(Paths.ConfigPath, "ConcernedCatMods", "ConcernedTeamster");
+    public static string SidecarDirectory => TeamsterPaths.Root;
 
     public static string SidecarPathFor(long worldUid) =>
         Path.Combine(SidecarDirectory, "teamster_trips_" +

@@ -6,6 +6,7 @@ using System.IO;
 using System.Reflection;
 using BepInEx;
 using BepInEx.Bootstrap;
+using TheConcernedCat.ConcernedSteward;
 using TheConcernedCat.ConcernedSteward.Domain;
 using TheConcernedCat.ConcernedNPC.Roles;
 using TheConcernedCat.ConcernedNPC.Interruption;
@@ -72,8 +73,7 @@ internal sealed class StewardRuntime
     private string? _recordNotice;
 
     internal StewardRuntime(StewardSettings settings, Action<string> log)
-        : this(settings, log, Path.Combine(
-            Paths.ConfigPath, "ConcernedCatMods", "ConcernedSteward", "settlements"))
+        : this(settings, log, StewardPaths.Settlements)
     {
     }
 

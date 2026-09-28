@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using BepInEx;
+using TheConcernedCat.ConcernedTeamster;
 using TheConcernedCat.ConcernedTeamster.Domain.Compatibility;
 using TheConcernedCat.ConcernedTeamster.Domain.Support;
 using TheConcernedCat.ConcernedTeamster.Domain.Trips;
@@ -21,8 +21,7 @@ internal static class SupportBundleExporter
     private const string SidecarFilePrefix = "teamster_trips_";
     private const string SidecarFileSuffix = ".txt";
 
-    public static string BundleDirectory =>
-        Path.Combine(Paths.ConfigPath, "ConcernedCatMods", "ConcernedTeamster", "SupportBundles");
+    public static string BundleDirectory => TeamsterPaths.SupportBundles;
 
     /// <summary>Composes and atomically writes a new bundle file, returning
     /// its path on success. Every <c>SidecarFileStore</c> operation reports

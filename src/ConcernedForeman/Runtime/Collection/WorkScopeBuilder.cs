@@ -1,6 +1,6 @@
 using System;
 using System.IO;
-using BepInEx;
+using TheConcernedCat.ConcernedForeman;
 using TheConcernedCat.Settlement.Collection;
 using TheConcernedCat.Settlement.Collection.Planning;
 using TheConcernedCat.Settlement.Designations;
@@ -40,7 +40,7 @@ internal sealed class SettlementDiskReader
     private string _failure = string.Empty;
 
     public SettlementDiskReader()
-        : this(Path.Combine(Paths.ConfigPath, "ConcernedCatMods", "ConcernedForeman", "settlements"))
+        : this(ForemanPaths.Settlements)
     {
     }
 
