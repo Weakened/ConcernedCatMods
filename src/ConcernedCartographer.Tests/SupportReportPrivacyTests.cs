@@ -280,6 +280,16 @@ public class SupportReportPrivacyTests
             Scrub(@"copy C:\a\b.cfg then plugins\ConcernedCatMods\profiles\secret\x.cfg"));
     }
 
+    [Fact]
+    public void Sanitize_RawPrivateUseCharactersCannotImpersonateInternalMarkers()
+    {
+        const string rawMarkers = "\uE000\uE000\uE000\uE001\uE002\uE003";
+
+        Assert.Equal(
+            rawMarkers + "<path>/x.cfg",
+            Scrub(rawMarkers + @"plugins\ConcernedCatMods\profiles\secret\x.cfg"));
+    }
+
     [Theory]
     [InlineData(@"\d+\.\d+")]
     [InlineData(@"regex (?<drive>[A-Z]):\\(?<folder>[^\\]+)")]

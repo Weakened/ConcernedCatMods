@@ -237,6 +237,17 @@ public class SupportBundleTests
     }
 
     [Fact]
+    public void Sanitizer_RawPrivateUseCharactersCannotImpersonateInternalMarkers()
+    {
+        const string rawMarkers = "\uE000\uE000\uE000\uE001\uE002\uE003";
+
+        Assert.Equal(
+            rawMarkers + "<path>",
+            SupportBundleSanitizer.Sanitize(
+                rawMarkers + @"plugins\ConcernedCatMods\profiles\secret\x.cfg"));
+    }
+
+    [Fact]
     public void Sanitizer_PathsTerminalSegment_DoesNotSurviveEvenWhenItIsTheSensitivePart()
     {
         // CT-039 review finding: the first cut of this sanitizer kept a

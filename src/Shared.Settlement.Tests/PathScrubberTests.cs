@@ -84,6 +84,20 @@ public class PathScrubberTests
     }
 
     [Theory]
+    [InlineData(true, "<path>/x.cfg")]
+    [InlineData(false, "<path>")]
+    public void RawPrivateUseCharactersCannotImpersonateInternalMarkers(
+        bool keepFileName, string expectedPath)
+    {
+        const string rawMarkers = "\uE000\uE000\uE000\uE001\uE002\uE003";
+        string scrubbed = PathScrubber.Scrub(
+            rawMarkers + @"plugins\ConcernedCatMods\profiles\secret\x.cfg",
+            keepFileName);
+
+        Assert.Equal(rawMarkers + expectedPath, scrubbed);
+    }
+
+    [Theory]
     [InlineData(@"\d+\.\d+")]
     [InlineData(@"regex (?<drive>[A-Z]):\\(?<folder>[^\\]+)")]
     [InlineData(@"escape \w+\s+\b")]
