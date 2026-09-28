@@ -91,10 +91,23 @@ public class PathScrubberTests
     {
         const string rawMarkers = "\uE000\uE000\uE000\uE001\uE002\uE003";
         string scrubbed = PathScrubber.Scrub(
-            rawMarkers + @"plugins\ConcernedCatMods\profiles\secret\x.cfg",
+            rawMarkers + @" plugins\ConcernedCatMods\profiles\secret\x.cfg",
             keepFileName);
 
-        Assert.Equal(rawMarkers + expectedPath, scrubbed);
+        Assert.Equal(rawMarkers + " " + expectedPath, scrubbed);
+    }
+
+    [Theory]
+    [InlineData(true, "<path>/x.cfg")]
+    [InlineData(false, "<path>")]
+    public void PrivateUseCharactersInsideAWindowsPathAreScrubbed(
+        bool keepFileName, string expected)
+    {
+        const string privateUse = "\uE000\uE001\uE002\uE003";
+        string line =
+            @"plugins\private\" + privateUse + @"folder\profiles\secret\x.cfg";
+
+        Assert.Equal(expected, PathScrubber.Scrub(line, keepFileName));
     }
 
     [Theory]

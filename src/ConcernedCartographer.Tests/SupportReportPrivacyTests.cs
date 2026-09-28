@@ -286,8 +286,18 @@ public class SupportReportPrivacyTests
         const string rawMarkers = "\uE000\uE000\uE000\uE001\uE002\uE003";
 
         Assert.Equal(
-            rawMarkers + "<path>/x.cfg",
-            Scrub(rawMarkers + @"plugins\ConcernedCatMods\profiles\secret\x.cfg"));
+            rawMarkers + " <path>/x.cfg",
+            Scrub(rawMarkers + @" plugins\ConcernedCatMods\profiles\secret\x.cfg"));
+    }
+
+    [Fact]
+    public void Sanitize_PrivateUseCharactersInsideAWindowsPathAreScrubbed()
+    {
+        const string privateUse = "\uE000\uE001\uE002\uE003";
+        string line =
+            @"plugins\private\" + privateUse + @"folder\profiles\secret\x.cfg";
+
+        Assert.Equal("<path>/x.cfg", Scrub(line));
     }
 
     [Theory]

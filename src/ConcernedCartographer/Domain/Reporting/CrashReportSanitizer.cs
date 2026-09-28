@@ -32,7 +32,7 @@ internal static class CrashReportSanitizer
     // A path segment's own characters: everything a Windows path segment
     // may not contain, plus whitespace, which the space runs below put back
     // in the two places it belongs.
-    private const string WindowsSegmentChar = @"[^\\/\r\n:*?""<>|\s\uE000-\uE003]";
+    private const string WindowsSegmentChar = @"[^\\/\r\n:*?""<>|\s]";
     private const string UnixSegmentChar = @"[^/\s]";
 
     // Mod-manager profile paths contain spaces — `...\Thunderstore Mod
@@ -118,7 +118,7 @@ internal static class CrashReportSanitizer
     //    next path's drive letter stopped at its colon and consumed the
     //    `D` of `D:\...`, which left that whole second path unscrubbed —
     //    strictly worse than the pattern being replaced.
-    private const string WindowsFinalRunChar = @"[^\\/\r\n:*?""<>|\s.,;\uE000-\uE003]";
+    private const string WindowsFinalRunChar = @"[^\\/\r\n:*?""<>|\s.,;]";
 
     private const string UnixFinalRunChar = @"[^/<>\r\n\s.,;]";
 
@@ -186,30 +186,29 @@ internal static class CrashReportSanitizer
     // Relative paths run first so a rooted-path match cannot absorb prose
     // and a later relative path into one span. Private markers protect actual
     // rooted spans and the documented four-word-segment residual during that pass.
-    // Markers are per-input string tokens, not fixed characters. The private-use
-    // prefix grows until it is absent from the input, so raw user text cannot
-    // impersonate scrubber state or be removed as if it were internal data.
+    // Markers are per-input string tokens, not fixed characters. A prefix made
+    // from an already-invalid Windows path character grows until absent, so
+    // input cannot impersonate scrubber state or be removed as internal data.
     private static void CreateMarkerTokens(
         string text,
         out string cappedContinuation,
         out string rootedPathStart,
         out string rootedPathEnd)
     {
-        string prefix = "\uE000";
+        string prefix = "<";
         while (text.IndexOf(prefix, System.StringComparison.Ordinal) >= 0)
         {
-            prefix += "\uE000";
+            prefix += "<";
         }
 
-        cappedContinuation = prefix + "\uE001";
-        rootedPathStart = prefix + "\uE002";
-        rootedPathEnd = prefix + "\uE003";
+        cappedContinuation = prefix + "|";
+        rootedPathStart = prefix + ":";
+        rootedPathEnd = prefix + "?";
     }
 
     private static bool IsWindowsSegmentCharacter(char value) =>
         !char.IsWhiteSpace(value)
-        && "\\/\r\n:*?\"<>|".IndexOf(value) < 0
-        && (value < '\uE000' || value > '\uE003');
+        && "\\/\r\n:*?\"<>|".IndexOf(value) < 0;
 
     private static bool HasCappedContinuation(string text, int index)
     {

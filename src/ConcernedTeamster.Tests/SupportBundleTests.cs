@@ -242,9 +242,19 @@ public class SupportBundleTests
         const string rawMarkers = "\uE000\uE000\uE000\uE001\uE002\uE003";
 
         Assert.Equal(
-            rawMarkers + "<path>",
+            rawMarkers + " <path>",
             SupportBundleSanitizer.Sanitize(
-                rawMarkers + @"plugins\ConcernedCatMods\profiles\secret\x.cfg"));
+                rawMarkers + @" plugins\ConcernedCatMods\profiles\secret\x.cfg"));
+    }
+
+    [Fact]
+    public void Sanitizer_PrivateUseCharactersInsideAWindowsPathAreScrubbed()
+    {
+        const string privateUse = "\uE000\uE001\uE002\uE003";
+        string line =
+            @"plugins\private\" + privateUse + @"folder\profiles\secret\x.cfg";
+
+        Assert.Equal("<path>", SupportBundleSanitizer.Sanitize(line));
     }
 
     [Fact]

@@ -76,10 +76,10 @@ internal static class PathScrubber
     /// problem.</summary>
     public const int DefaultMaxLength = 2000;
 
-    private const string WindowsSegmentChar = @"[^\\/\r\n:*?""<>|\s\uE000-\uE003]";
+    private const string WindowsSegmentChar = @"[^\\/\r\n:*?""<>|\s]";
     private const string UnixSegmentChar = @"[^/\s]";
     private const string UnixRunChar = @"[^/<>\s]";
-    private const string WindowsFinalRunChar = @"[^\\/\r\n:*?""<>|\s.,;\uE000-\uE003]";
+    private const string WindowsFinalRunChar = @"[^\\/\r\n:*?""<>|\s.,;]";
     private const string UnixFinalRunChar = @"[^/<>\r\n\s.,;]";
 
     private const string TokenCap = "{0,2}";
@@ -168,30 +168,29 @@ internal static class PathScrubber
     // and a later relative path into one span. Private markers protect actual
     // rooted spans from that pass. A separate continuation marker preserves the
     // documented four-word-segment limit when its residual tail looks relative.
-    // Markers are per-input string tokens, not fixed characters. The private-use
-    // prefix grows until it is absent from the input, so raw user text cannot
-    // impersonate scrubber state or be removed as if it were internal data.
+    // Markers are per-input string tokens, not fixed characters. A prefix made
+    // from an already-invalid Windows path character grows until absent, so
+    // input cannot impersonate scrubber state or be removed as internal data.
     private static void CreateMarkerTokens(
         string text,
         out string cappedContinuation,
         out string rootedPathStart,
         out string rootedPathEnd)
     {
-        string prefix = "\uE000";
+        string prefix = "<";
         while (text.IndexOf(prefix, System.StringComparison.Ordinal) >= 0)
         {
-            prefix += "\uE000";
+            prefix += "<";
         }
 
-        cappedContinuation = prefix + "\uE001";
-        rootedPathStart = prefix + "\uE002";
-        rootedPathEnd = prefix + "\uE003";
+        cappedContinuation = prefix + "|";
+        rootedPathStart = prefix + ":";
+        rootedPathEnd = prefix + "?";
     }
 
     private static bool IsWindowsSegmentCharacter(char value) =>
         !char.IsWhiteSpace(value)
-        && "\\/\r\n:*?\"<>|".IndexOf(value) < 0
-        && (value < '\uE000' || value > '\uE003');
+        && "\\/\r\n:*?\"<>|".IndexOf(value) < 0;
 
     private static bool HasCappedContinuation(string text, int index)
     {
