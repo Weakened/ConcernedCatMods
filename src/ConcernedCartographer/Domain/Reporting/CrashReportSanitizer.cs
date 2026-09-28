@@ -196,7 +196,7 @@ internal static class CrashReportSanitizer
         out string rootedPathEnd)
     {
         string prefix = "\uE000";
-        while (text.IndexOf(prefix, StringComparison.Ordinal) >= 0)
+        while (text.IndexOf(prefix, System.StringComparison.Ordinal) >= 0)
         {
             prefix += "\uE000";
         }
@@ -308,14 +308,14 @@ internal static class CrashReportSanitizer
                     rootedPathStart,
                     match.Index - 1,
                     match.Index - lineStart,
-                    StringComparison.Ordinal)
+                    System.StringComparison.Ordinal)
                 : -1;
             int rootedEnd = match.Index > lineStart
                 ? text.LastIndexOf(
                     rootedPathEnd,
                     match.Index - 1,
                     match.Index - lineStart,
-                    StringComparison.Ordinal)
+                    System.StringComparison.Ordinal)
                 : -1;
 
             if (rootedStart > rootedEnd)
@@ -328,7 +328,7 @@ internal static class CrashReportSanitizer
                     cappedContinuation,
                     match.Index - 1,
                     match.Index - lineStart,
-                    StringComparison.Ordinal)
+                    System.StringComparison.Ordinal)
                 : -1;
 
             if (marker >= lineStart
