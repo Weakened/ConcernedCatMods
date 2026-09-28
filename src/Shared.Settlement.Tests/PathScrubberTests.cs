@@ -53,6 +53,7 @@ public class PathScrubberTests
     // ------------------------------------------------------------------
 
     [Theory]
+    [InlineData(@"\\NAS\private-share", "private-share")]
     [InlineData(@"\\NAS\players\erenc\Valheim\profiles\p\x.cfg", "x.cfg")]
     [InlineData(@"\\storage-01\mapped profiles\Valheim\BepInEx\config\secret.cfg", "secret.cfg")]
     [InlineData(@"..\..\Users\erenc\Valheim\profiles\p\x.cfg", "x.cfg")]
@@ -65,6 +66,21 @@ public class PathScrubberTests
 
         Assert.Equal("<path>/" + fileName, kept);
         Assert.Equal("<path>", hidden);
+    }
+
+    [Theory]
+    [InlineData(
+        true,
+        @"copy C:\a\b.cfg then plugins\ConcernedCatMods\profiles\secret\x.cfg",
+        "copy <path>/b.cfg then <path>/x.cfg")]
+    [InlineData(
+        false,
+        @"copy C:\a\b.cfg then plugins\ConcernedCatMods\profiles\secret\x.cfg",
+        "copy <path> then <path>")]
+    public void ARelativePathAfterARootedPathOnTheSameLineIsAlsoScrubbed(
+        bool keepFileName, string line, string expected)
+    {
+        Assert.Equal(expected, PathScrubber.Scrub(line, keepFileName));
     }
 
     [Theory]

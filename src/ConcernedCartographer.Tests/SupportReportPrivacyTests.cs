@@ -252,6 +252,9 @@ public class SupportReportPrivacyTests
 
     [Theory]
     [InlineData(
+        @"Could not open \\NAS\private-share",
+        "Could not open <path>/private-share")]
+    [InlineData(
         @"Could not open \\NAS\players\erenc\Valheim\profiles\p\x.cfg not found",
         "Could not open <path>/x.cfg not found")]
     [InlineData(
@@ -267,6 +270,14 @@ public class SupportReportPrivacyTests
         string message, string expected)
     {
         Assert.Equal(expected, Scrub(message));
+    }
+
+    [Fact]
+    public void Sanitize_RelativePathAfterRootedPathOnSameLineIsAlsoScrubbed()
+    {
+        Assert.Equal(
+            "copy <path>/b.cfg then <path>/x.cfg",
+            Scrub(@"copy C:\a\b.cfg then plugins\ConcernedCatMods\profiles\secret\x.cfg"));
     }
 
     [Theory]

@@ -210,6 +210,9 @@ public class SupportBundleTests
 
     [Theory]
     [InlineData(
+        @"Could not open \\NAS\private-share",
+        "Could not open <path>")]
+    [InlineData(
         @"Could not open \\NAS\players\erenc\Valheim\profiles\p\x.cfg not found",
         "Could not open <path> not found")]
     [InlineData(
@@ -222,6 +225,15 @@ public class SupportBundleTests
         string line, string expected)
     {
         Assert.Equal(expected, SupportBundleSanitizer.Sanitize(line));
+    }
+
+    [Fact]
+    public void Sanitizer_RelativePathAfterRootedPathOnSameLineIsAlsoScrubbed()
+    {
+        Assert.Equal(
+            "copy <path> then <path>",
+            SupportBundleSanitizer.Sanitize(
+                @"copy C:\a\b.cfg then plugins\ConcernedCatMods\profiles\secret\x.cfg"));
     }
 
     [Fact]
