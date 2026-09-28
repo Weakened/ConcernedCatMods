@@ -1540,6 +1540,210 @@ def _strip_cs_line_comment(line: str) -> str:
     return line
 
 
+def _strip_cs_comments(text: str) -> str:
+    """Mask C# comments while preserving literal text and interpolation code.
+
+    Whole-file token audits must see legal comment trivia between a member name
+    and its parenthesis. Literal string contents stay byte-for-byte unchanged,
+    while executable expressions inside interpolated strings are scanned as
+    code. Newlines in comments are retained for diagnostic line numbers.
+    """
+    out: list[str] = []
+    length = len(text)
+
+    def prefix_at(quote_at: int) -> tuple[bool, bool, int]:
+        start = quote_at
+        while start > 0 and text[start - 1] in "$@":
+            start -= 1
+        prefix = text[start:quote_at]
+        return "$" in prefix, "@" in prefix, prefix.count("$")
+
+    def mask_comment(index: int, block: bool) -> int:
+        out.extend((" ", " "))
+        index += 2
+        if block:
+            while index < length:
+                if text[index] == "*" and index + 1 < length and text[index + 1] == "/":
+                    out.extend((" ", " "))
+                    return index + 2
+                out.append(text[index] if text[index] in "\r\n" else " ")
+                index += 1
+            return index
+        while index < length and text[index] not in "\r\n":
+            out.append(" ")
+            index += 1
+        return index
+
+    def next_non_trivia(index: int) -> str:
+        """Return the next C# token character without changing output."""
+        while index < length:
+            if text[index].isspace():
+                index += 1
+                continue
+            if text.startswith("/*", index):
+                end = text.find("*/", index + 2)
+                return "" if end < 0 else next_non_trivia(end + 2)
+            if text.startswith("//", index):
+                newline = text.find("\n", index + 2)
+                return "" if newline < 0 else next_non_trivia(newline + 1)
+            return text[index]
+        return ""
+
+    def scan_string(index: int) -> int:
+        quote = text[index]
+        interpolated, verbatim, dollar_count = prefix_at(index)
+        run = 1
+        if quote == '"':
+            while index + run < length and text[index + run] == '"':
+                run += 1
+
+        if quote == '"' and run >= 3:
+            delimiter = '"' * run
+            out.append(delimiter)
+            index += run
+            opening = "{" * dollar_count if interpolated else ""
+            while index < length:
+                if text.startswith(delimiter, index):
+                    out.append(delimiter)
+                    return index + run
+                if opening and text.startswith(opening, index):
+                    out.append(opening)
+                    index = scan_interpolation(index + dollar_count, dollar_count)
+                    continue
+                out.append(text[index])
+                index += 1
+            return index
+
+        out.append(quote)
+        index += 1
+        while index < length:
+            char = text[index]
+            if char == "\\" and not verbatim:
+                out.append(char)
+                index += 1
+                if index < length:
+                    out.append(text[index])
+                    index += 1
+                continue
+            if char == quote:
+                out.append(char)
+                index += 1
+                if verbatim and index < length and text[index] == quote:
+                    out.append(text[index])
+                    index += 1
+                    continue
+                return index
+            if interpolated and quote == '"' and char == "{":
+                if index + 1 < length and text[index + 1] == "{":
+                    out.append("{{")
+                    index += 2
+                    continue
+                out.append("{")
+                index = scan_interpolation(index + 1, 1)
+                continue
+            out.append(char)
+            index += 1
+        return index
+
+    def scan_format(index: int, close_braces: int) -> int:
+        """Copy interpolation format text literally through its closing brace."""
+        closing = "}" * close_braces
+        while index < length:
+            if text.startswith(closing, index):
+                out.append(closing)
+                return index + close_braces
+            out.append(text[index])
+            index += 1
+        return index
+
+    def scan_interpolation(index: int, close_braces: int) -> int:
+        """Scan an interpolation expression, then preserve its format component."""
+        closing = "}" * close_braces
+        paren_depth = 0
+        bracket_depth = 0
+        conditional_depth = 0
+        while index < length:
+            if (paren_depth == 0 and bracket_depth == 0
+                    and text.startswith(closing, index)):
+                out.append(closing)
+                return index + close_braces
+
+            char = text[index]
+            if char == "/" and index + 1 < length:
+                if text[index + 1] == "/":
+                    index = mask_comment(index, block=False)
+                    continue
+                if text[index + 1] == "*":
+                    index = mask_comment(index, block=True)
+                    continue
+
+            if char == '"' or char == "'":
+                index = scan_string(index)
+                continue
+
+            if char == "(":
+                paren_depth += 1
+            elif char == ")" and paren_depth:
+                paren_depth -= 1
+            elif char == "[":
+                bracket_depth += 1
+            elif char == "]" and bracket_depth:
+                bracket_depth -= 1
+            elif char == "{":
+                out.append(char)
+                index = scan_code(index + 1, 1)
+                continue
+            elif char == "?" and paren_depth == 0 and bracket_depth == 0:
+                next_char = text[index + 1] if index + 1 < length else ""
+                previous = text[index - 1] if index else ""
+                if (next_char not in {"?", ".", "["}
+                        and previous != "?"
+                        and next_non_trivia(index + 1) != ":"):
+                    conditional_depth += 1
+            elif char == ":" and paren_depth == 0 and bracket_depth == 0:
+                if conditional_depth:
+                    conditional_depth -= 1
+                else:
+                    out.append(char)
+                    return scan_format(index + 1, close_braces)
+
+            out.append(char)
+            index += 1
+        return index
+
+    def scan_code(index: int, close_braces: int = 0) -> int:
+        closing = "}" * close_braces
+        while index < length:
+            if closing and text.startswith(closing, index):
+                out.append(closing)
+                return index + close_braces
+
+            char = text[index]
+            if char == "/" and index + 1 < length:
+                if text[index + 1] == "/":
+                    index = mask_comment(index, block=False)
+                    continue
+                if text[index + 1] == "*":
+                    index = mask_comment(index, block=True)
+                    continue
+
+            if char == '"' or char == "'":
+                index = scan_string(index)
+                continue
+
+            if close_braces and char == "{":
+                out.append("{")
+                index = scan_code(index + 1, 1)
+                continue
+
+            out.append(char)
+            index += 1
+        return index
+
+    scan_code(0)
+    return "".join(out)
+
+
 # CT-028: cooperative diagnostics help crews understand a cart without
 # adding "a newton of modded force". Teamster applies no physics force,
 # impulse, or velocity write anywhere — the only rigidbody touch is the
@@ -1658,6 +1862,7 @@ TEAMSTER_WORKER_FORBIDDEN_TOKENS = (
     "RPC_RequestOwn",
     ".Interact(",
     ".Pickup(",
+    ".AddItem(",
     "SetExtraMass",
     "SetMass",
     "UpdateMass",
@@ -1683,9 +1888,14 @@ TEAMSTER_WORKER_FACTORY_ONLY_TOKENS = (
 )
 
 # Never anywhere in Teamster outside the worker runtime: using a cart, taking an
-# item into a character's inventory, applying vanilla's extra pull mass, or
-# writing a body's kinematic flag or joint link. (The parking brake's own
-# constraint write stays where CT-002 allows it.)
+# item into a character's inventory, reaching the vanilla network scene, applying
+# vanilla's extra pull mass, or writing a body's kinematic flag or joint link.
+# ZNetScene is intentionally broad here: outside the audited worker runtime there
+# is no authorized reason to destroy or otherwise mutate a network object. Direct
+# Inventory.AddItem is forbidden everywhere in Teamster source. Gunnar's only
+# authorized take is the exact pinned Humanoid.Pickup call below, whose internal
+# inventory mutation and dropped-item destruction remain vanilla-owned. (The
+# parking brake's own constraint write stays where CT-002 allows it.)
 #
 # `.Pickup(` WAS MISSING FROM THIS TUPLE for one round, and four sentences said it
 # was here. Adding it to the worker list alone left `((dynamic)who).Pickup(...)`
@@ -1693,7 +1903,7 @@ TEAMSTER_WORKER_FACTORY_ONLY_TOKENS = (
 # written to correct - an enforcement claim wider than the enforcement - one line
 # away from where it was being corrected. Both authorized tokens are scanned in
 # both places now, and both are refused everywhere but the one pinned call each.
-TEAMSTER_OUTSIDE_WORKERS_TOKENS = (".Interact(", ".Pickup(", "SetExtraMass")
+TEAMSTER_OUTSIDE_WORKERS_TOKENS = (".Interact(", ".Pickup(", ".AddItem(", "ZNetScene", "SetExtraMass")
 
 # The one owner-authorized exception to the worker runtime's token list
 # (owner decision, 2026-09-19, for #381 Gunnar collection).
@@ -1855,8 +2065,7 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
         # Tokens are matched over the whole comment-stripped file rather than
         # line by line, because a space or a newline defeated the substring
         # match and the Release build was happy either way.
-        code_text = "\n".join(_strip_cs_line_comment(raw) for raw in
-                              path.read_text(encoding="utf-8").splitlines())
+        code_text = _strip_cs_comments(path.read_text(encoding="utf-8"))
         authorized = tuple(parts) == TEAMSTER_COLLECTION_PORT_PATH
         allowed_calls = {}
         for token, pattern, what in TEAMSTER_COLLECTION_PORT_CALLS:
@@ -1903,7 +2112,10 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
         "dropped item's network object inside vanilla); cart attach/detach/detach-all only "
         f"in Adapters/Workers, mass writes only in {TEAMSTER_WORKER_CALIBRATION_FILE}, network-object writes only "
         f"'tcc.worker.*' keys in {TEAMSTER_WORKER_IDENTITY_FILE}, no teleport/pose/velocity/constraint/joint/cart-"
-        f"tuning writes, no component surgery or reflection outside the prefab factory (inside Adapters/Workers only; reflection elsewhere in Teamster is not audited by this rule) ({hits} violations)",
+        f"tuning writes, no direct Inventory.AddItem anywhere, and no ZNetScene reference outside "
+        f"Adapters/Workers; no component surgery or reflection outside the prefab factory (inside "
+        f"Adapters/Workers only; reflection elsewhere in Teamster is not audited by this rule) "
+        f"({hits} violations)",
     ]
 
 
@@ -2231,8 +2443,7 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
         # Relative to the worker folder, so a subdirectory is a different key
         # rather than the same allowance seen twice.
         key = path.relative_to(workers_dir).as_posix()
-        text = "\n".join(_strip_cs_line_comment(line) for line in
-                         path.read_text(encoding="utf-8").splitlines())
+        text = _strip_cs_comments(path.read_text(encoding="utf-8"))
         found = len(TEAMSTER_BODY_REMOVAL.findall(text))
         total_sites += found
         expected = TEAMSTER_BODY_REMOVAL_SITES.get(key, 0)
@@ -2279,8 +2490,7 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
                 "unchanged, which is why this one exists — say what it destroys and what guards it, "
                 "and record it in TEAMSTER_ROUTED_DESTRUCTION_SITES", errors)
 
-    code = "\n".join(_strip_cs_line_comment(line) for line in
-                     runtime.read_text(encoding="utf-8").splitlines())
+    code = _strip_cs_comments(runtime.read_text(encoding="utf-8"))
     match = TEAMSTER_RETIRE_BODY.search(code)
     if match is None:
         fail(

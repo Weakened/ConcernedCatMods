@@ -348,6 +348,89 @@ class CarveOutIsNarrow(unittest.TestCase):
                         os.remove(path)
                 self._planted = []
 
+    def test_znet_scene_is_forbidden_outside_the_worker_folder(self):
+        self.plant_file(os.path.join(DOMAIN, "ZzOutsideDestroy.cs"),
+                        "        ZNetScene.instance.Destroy((UnityEngine.GameObject)cart);")
+        self.assert_refused(
+            "ZNetScene outside Adapters/Workers could remove a body and its inventory",
+            marker="#313")
+
+    def test_inventory_add_item_is_forbidden_in_the_worker_folder(self):
+        self.plant_file(os.path.join(WORKERS, "ZzInventoryMover.cs"),
+                        "        ((dynamic)who.GetInventory()).AddItem(cart);")
+        self.assert_refused(
+            "Inventory.AddItem in Adapters/Workers moved material without a pinned authority",
+            marker="#313")
+
+    def test_inventory_add_item_is_forbidden_outside_the_worker_folder(self):
+        self.plant_file(os.path.join(ADAPTERS, "ZzInventoryMover.cs"),
+                        "        ((dynamic)who.GetInventory()).AddItem(cart);")
+        self.assert_refused(
+            "Inventory.AddItem outside Adapters/Workers moved material without a pinned authority",
+            marker="#313")
+
+    def test_block_comment_trivia_does_not_hide_inventory_add_item(self):
+        self.plant_file(os.path.join(WORKERS, "ZzCommentedInventoryMover.cs"),
+                        "        ((dynamic)who.GetInventory()).AddItem /* rationale */ (cart);")
+        self.assert_refused(
+            "block-comment trivia hid Inventory.AddItem from the audit",
+            marker="#313")
+
+    def test_interpolation_expression_comment_does_not_hide_inventory_add_item(self):
+        self.plant_file(
+            os.path.join(WORKERS, "ZzInterpolatedInventoryMover.cs"),
+            '        var moved = $"{((dynamic)who.GetInventory()).AddItem /* rationale */ (cart)}";')
+        self.assert_refused(
+            "an interpolated expression hid Inventory.AddItem from the audit",
+            marker="#313")
+
+    def test_interpolation_format_text_does_not_hide_later_inventory_add_item(self):
+        self.plant_file(
+            os.path.join(WORKERS, "ZzFormattedInventoryMover.cs"),
+            '        var label = $"{0://}"; ((dynamic)who.GetInventory()).AddItem(cart);')
+        self.assert_refused(
+            "interpolation format text hid a later Inventory.AddItem from the audit",
+            marker="#313")
+
+    def test_nullable_interpolation_format_does_not_hide_later_inventory_add_item(self):
+        self.plant_file(
+            os.path.join(WORKERS, "ZzNullableFormattedInventoryMover.cs"),
+            '        var label = $"{value as int?://}"; ((dynamic)who.GetInventory()).AddItem(cart);')
+        self.assert_refused(
+            "a nullable interpolation format hid a later Inventory.AddItem",
+            marker="#313")
+
+    def test_inventory_add_item_inside_a_block_comment_is_not_code(self):
+        self.plant_file(os.path.join(WORKERS, "ZzCommentOnly.cs"),
+                        "        /* ((dynamic)who.GetInventory()).AddItem(cart); */")
+        code, out = validate()
+        self.assertEqual(
+            0, code,
+            "a block-comment-only AddItem spelling was treated as executable code\n" + out[-2000:])
+
+    def test_block_comment_trivia_does_not_hide_worker_destruction(self):
+        self.plant_file(os.path.join(WORKERS, "ZzCommentedDestroy.cs"),
+                        "        view.Destroy /* rationale */ ();")
+        self.assert_refused(
+            "block-comment trivia hid a worker destruction from the pinned population",
+            marker="#381")
+
+    def test_interpolation_format_text_does_not_hide_later_worker_destruction(self):
+        self.plant_file(
+            os.path.join(WORKERS, "ZzFormattedDestroy.cs"),
+            '        var label = $"{0://}"; view.Destroy();')
+        self.assert_refused(
+            "interpolation format text hid a later worker destruction",
+            marker="#381")
+
+    def test_nullable_interpolation_format_does_not_hide_later_worker_destruction(self):
+        self.plant_file(
+            os.path.join(WORKERS, "ZzNullableFormattedDestroy.cs"),
+            '        var label = $"{value as int?://}"; view.Destroy();')
+        self.assert_refused(
+            "a nullable interpolation format hid a later worker destruction",
+            marker="#381")
+
     def test_the_population_pin_descends_into_subdirectories(self):
         # `glob("*.cs")` does not descend, so the same planted removal one folder
         # down was invisible while the success sentence said "anywhere in
