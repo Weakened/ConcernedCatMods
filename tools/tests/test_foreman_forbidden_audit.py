@@ -93,6 +93,14 @@ class ForemanRuntimeCapabilitiesArePinned(unittest.TestCase):
                    "        ((dynamic)body).\n            Teleport(UnityEngine.Vector3.zero);")
         self.assert_refused("whitespace hid a worker teleport")
 
+    def test_valheim_teleport_to_is_refused(self):
+        marker = "        animation.SetFloat(ForwardSpeed, 0f);"
+        self.after(
+            BUILD_POSE,
+            marker,
+            "        Player.m_localPlayer.TeleportTo(UnityEngine.Vector3.zero, UnityEngine.Quaternion.identity, true);")
+        self.assert_refused("Valheim's TeleportTo API bypassed the teleport guard")
+
     def test_force_write_is_refused(self):
         marker = "        animation.SetFloat(ForwardSpeed, 0f);"
         self.after(BUILD_POSE, marker,

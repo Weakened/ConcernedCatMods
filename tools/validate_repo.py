@@ -2022,7 +2022,7 @@ FOREMAN_AUDITED_CAPABILITIES = (
 FOREMAN_ALWAYS_FORBIDDEN = (
     ("ZSyncAnimation.SetTrigger", re.compile(r"\.\s*SetTrigger\s*\(")),
     ("ownership takeover", re.compile(r"(?:\.\s*(?:SetOwner|ClaimOwnership|RequestOwn)\s*\(|\bRPC_RequestOwn\b)")),
-    ("teleport/direct movement", re.compile(r"\.\s*(?:Teleport|MovePosition|MoveRotation|SetPosition|SetRotation|SetPositionAndRotation|Translate|Rotate|RotateAround)\s*\(")),
+    ("teleport/direct movement", re.compile(r"\.\s*(?:Teleport[A-Za-z0-9_]*|MovePosition|MoveRotation|SetPosition|SetRotation|SetPositionAndRotation|Translate|Rotate|RotateAround)\s*\(")),
     ("force injection", re.compile(r"\.\s*(?:AddForce|AddTorque|AddExplosionForce|AddRelativeForce|AddRelativeTorque|AddForceAtPosition|AddImpulse)\s*\(")),
     ("arbitrary RPC", re.compile(r"(?:\.\s*(?:InvokeRPC|InvokeRoutedRPC|RegisterRPC)\s*\(|\bZRoutedRpc\b)")),
 )
