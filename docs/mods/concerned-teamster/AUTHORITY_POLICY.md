@@ -61,7 +61,27 @@ without local authority.
 | `RouteProfiling` | Observation | — (read-only) | no (route geometry + terrain, not owner-fresh cart state) |
 | `ParkingBrake` | **Mutation** | **Local authority only** | no |
 | `GunnarHauling` | **Mutation** | **Local authority only, and work authority granted** (`Workers/GunnarHaulingEnabled` on, a loaded world, `ZNet.IsServer()`, not dedicated, no connected peers), re-checked before every attach, motor step and lease; detach is the one mutation authority never blocks, because it releases control. Refuses to attach a braked, in-use, unowned, tipped or out-of-reach cart, or while any cart on this client holds a joint (`docs/settlement/cart-and-collection/DECISIONS.md` D3, D4; `GUNNAR_HAULING.md`) | no |
-| `GunnarCollection` | **Mutation** (of a picked source, never of a cart) | **Work authority granted** (`Workers/GunnarCollectionEnabled` on, Teamster's `General/Enabled` on, a loaded world, `ZNet.IsServer()`, not dedicated, no connected peers), re-asked every frame while a pick is in flight, plus the start-up capability probe and **a source this client already owns** — ownership is required, never taken. Picks only a loose stone or a fallen branch the player points at, only one at a time, only within `CollectionLimits.PickupReachMetres`, and only through the source's own vanilla pickup; it reads no cart, writes no mass, force, velocity, position or ownership, and moves nobody. **Two vanilla calls, each pinned verbatim** in `Adapters/Workers/GunnarCollectionPort.cs` and nowhere else: `Pickable.Interact`, which drops the yield, and `Humanoid.Pickup`, which takes one dropped item into Gunnar's own inventory — and which, **inside vanilla**, destroys that `ItemDrop`'s network object through `ZNetScene.instance.Destroy(go)`. That destruction is vanilla's, of an object this mod never created, and is named here rather than folded into "picks things up" because a destruction of a networked object is exactly the kind of thing this table exists to disclose (owner decision 2026-09-19, #381; `GUNNAR_COLLECTION.md`) | no |
+| `GunnarCollection` | **Mutation** (of a picked source, never of a cart) | **Work authority granted** (`Workers/GunnarCollectionEnabled` on, Teamster's `General/Enabled` on, a loaded world, `ZNet.IsServer()`, not dedicated, no connected peers), re-asked every frame while a pick is in flight, plus the start-up capability probe and **a source this client already owns** — ownership is required, never taken. Picks only a loose stone or a fallen branch the player points at, only one at a time, only within `CollectionLimits.PickupReachMetres`, and only through the source's own vanilla pickup; it reads no cart, writes no mass, force, velocity, position or ownership, and moves nobody. **Two vanilla calls, each pinned verbatim** in `Adapters/Workers/GunnarCollectionPort.cs` and nowhere else: `Pickable.Interact`, which drops the yield, and `Humanoid.Pickup`, which takes one dropped item into Gunnar's own inventory — and which, **inside vanilla**, destroys that `ItemDrop`'s network object through `ZNetScene.instance.Destroy(go)`. That destruction is vanilla's, of an object this mod never created, and is named here rather than folded into "picks things up" because a destruction of a networked object is exactly the kind of thing this table exists to disclose (owner decision 2026-09-19, #381; `GUNNAR_COLLECTION.md`). **A third pinned call, `Inventory.MoveItemToThis`**, moves what he carries **out of his own inventory** into a vanilla `Container` the player explicitly marked `Deposit` or `Both` - in `Adapters/Workers/GunnarDepositPort.cs` and nowhere else, with every gate re-asked in the frame of the move and both sides measured (owner decision 2026-09-29, #415; `DECISIONS.md` D15) | no |
+
+### The two 2026-09-29 grants (`DECISIONS.md` D15, D16)
+
+**D15, the deposit.** The only way material leaves Gunnar other than a reload or an explicitly forced retirement.
+It is a write into a **vanilla object's inventory**, so it is disclosed here rather than folded into "collection":
+`Inventory.MoveItemToThis` (and, for part of a stack, `Inventory.AddItem` of a clone of that stack's data followed
+by `Inventory.RemoveItem` of exactly what arrived) on a `Container` the player marked. Nine gates, every one
+re-asked in the frame of the move: both switches, the capability probe, the work-authority rule, a trusted body
+record, the player's mark on **that exact container** resolved by `ContainerPermissionRuntime.Allowance`, this
+client owning it, `!IsInUse()`, ward and privacy, and reach. The destination is counted before and after and only
+what arrived is removed from him; a full chest leaves the remainder in him; a fault halfway is `Uncertain` and is
+never retried blind, compensated or minted; the permit is spent by the transfer that records it. No nearest-chest
+inference exists in the path at all.
+
+**D16, the death drop.** A write of item instances into the world, and therefore the widest thing on this page. It
+runs on **one** event: a worker body's own death, observed from the body. Every other lifecycle path - retire,
+`retire force`, cancel, despawn, zone unload, logout, world change, plugin teardown - is unchanged and is refused
+this call by the validator, which pins the death-drop call verbatim to one file and audits which verb may reach it.
+The cart detaches first under D4's teardown ordering. Exactly what the body holds, once; nothing is recreated from
+a name; a drop that failed is durable reconciliation evidence rather than a silent deletion.
 
 ## Per-actor summary
 

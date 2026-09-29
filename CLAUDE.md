@@ -101,6 +101,33 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   authorized and each needs its own owner decision. Ownership takeover, teleports, forces, cart
   interaction and arbitrary RPC are untouched.
 
+  A **third and fourth scoped carve-out** (owner decision 2026-09-29, #415 and the death door of
+  `GUNNAR_COLLECTION.md` §6c; recorded as `docs/settlement/cart-and-collection/DECISIONS.md` **D15** and
+  **D16**, contract revision C5).
+
+  **D15 - deposit.** Gunnar's opted-in collection runtime may move items **out of his own inventory** into a
+  vanilla `Container`'s inventory, through vanilla's own inventory move, when the player has explicitly marked
+  **that exact container** `Deposit` or `Both`. One file, `Adapters/Workers/GunnarDepositPort.cs`, pinned
+  verbatim by `validate_repo.py` the way the collection port is, and refused everywhere else. Every gate is
+  re-asked in the frame of the move: both switches, the capability probe, the work-authority rule, a body whose
+  inventory record is trusted, the player's mark on that container resolved the way it was recorded, this client
+  owning it, nobody having it open, the ward and privacy setting allowing it, and reach. The destination is
+  counted before and after; only what **actually arrived** is removed from Gunnar; a full or unavailable
+  container leaves the remainder **in him**; a fault halfway is recorded uncertain and never retried blind,
+  compensated or minted; a spent permission cannot record a second transfer. It grants **no** nearest-chest
+  inference, no write into an unmarked container, no ownership takeover, no synthetic or replacement resources,
+  no extra copies, no teleporting of cargo, no mod data in a vanilla object, and no bypass of ward, privacy,
+  ownership or in-use checks.
+
+  **D16 - death.** When a worker body **genuinely dies** - its own death, observed from the body, never a
+  retirement, cancellation, despawn, unload, logout, world change or teardown - its runtime may use vanilla's own
+  item-drop behaviour to return what it carries to the world instead of letting the destruction take it. The cart
+  detaches first under D4's teardown ordering. Exactly what the body holds, once; nothing recreated from a name;
+  a drop that failed is recorded as durable reconciliation evidence rather than silently deleted. **Voluntary
+  cancellation and retirement must never reach this path**, and the validator refuses a death-drop call from any
+  other verb. `ct_haul retire` still refuses while a body carries anything, and `retire force` still destroys and
+  still says so.
+
 ## Local commands
 
 ```powershell

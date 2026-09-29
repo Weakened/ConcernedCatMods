@@ -1,6 +1,8 @@
 # Cart pulling and resource collection: decision record
 
-Status: **accepted for the first cart and collection proof** (contract revision **C1**, 2026-09-17).
+Status: **accepted for the first cart and collection proof** (contract revision **C1**, 2026-09-17), amended
+by **C4** (2026-09-17, D4) and **C5** (2026-09-29, D15 and D16 - the two owner grants that close #415 and the
+death door named in `GUNNAR_COLLECTION.md` §6c).
 Authority: the owner's brief *"Concerned Cat — Gunnar cart pulling and Thorstein resource collection"*, given to the
 lead on 2026-09-17. It is kept outside the repo in `concernedcat-handoffs/2026-09-17-gunnar-thorstein-work/OWNER_BRIEF.md`,
 SHA-256 `7fe97874…7aad2e3`. It builds on #273, #297, #295, #296 and `docs/mods/concerned-foreman/SETTLEMENT_AUTHORITY.md`.
@@ -251,3 +253,93 @@ suspended, and #282's broader harvesting stays open as deferred scope.
    or operates the game.
 5. **Live criteria.** A PR whose issue carries live gameplay criteria uses `Refs #`, not `Closes #`. Such an issue
    closes only on observed evidence.
+
+---
+
+## D15. Gunnar may deposit into a container the player marked DEPOSIT or BOTH
+
+Status: **accepted** (contract revision **C5**, owner decision 2026-09-29, closing #415).
+Authority: the owner's answer to #415, given to the lead on 2026-09-29 in the BLD release-readiness brief. #415 asked
+one question - *may Gunnar's opted-in collection runtime move items from his own inventory into a vanilla
+`Container`'s inventory, when the player has explicitly marked that container DEPOSIT or BOTH?* - and the answer is
+yes, scoped to exactly that.
+
+**What is granted.** Gunnar's opted-in worker runtime may move items **out of his own inventory** and into a vanilla
+`Container`'s inventory, through vanilla's own inventory move, when **that exact destination container** carries the
+player's explicit `Deposit` or `Both` mark in `NpcContainerDesk` and every gate below holds at the moment of the
+move.
+
+**What is not granted**, each named because #415 named it:
+- no chest chosen by proximity, and no "nearest chest" inference anywhere in the path;
+- no write into a container the player has not marked, or has marked `Take` only, or has marked and then unmarked;
+- no ownership takeover of a container, an item or an inventory;
+- no synthetic or replacement resources, and no spawning of item instances;
+- no extra copies of cargo, and no teleporting of cargo;
+- no mod data written into a vanilla object;
+- no bypass of a ward, a privacy setting, container ownership, or vanilla's own in-use check;
+- no use of the death-drop behaviour of D16 for a voluntary retirement or cancellation;
+- no widening of any other Teamster mutation capability.
+
+**The gates, all re-asked in the frame of the move**, not cached from the tick that planned it:
+1. Teamster's master switch (`General/Enabled`) and the collection switch (`Workers/GunnarCollectionEnabled`, off by
+   default);
+2. the start-up capability probe;
+3. the shared work-authority rule of D3 - opted in, a world loaded, `ZNet.IsServer()`, not dedicated, **no peers
+   connected**;
+4. a body the census bound, whose inventory record `WorkerInventoryRecord.Trust` believes;
+5. the player's `Deposit` or `Both` mark on **that exact container**, resolved the way the mark was recorded
+   (`ContainerPermissionRuntime.Allowance`), never by a caller's own reconstruction of the identity;
+6. this client owning the container's network object;
+7. nobody having the container open (`Container.IsInUse()`), and no cart it rides being in use;
+8. the ward and the container's own privacy setting allowing it;
+9. the container within Gunnar's reach from where he is standing.
+
+**Measurement and conservation.** The destination is counted before and after. Only what **actually arrived** is
+removed from Gunnar. A full or unavailable container leaves the remainder **in him** and says why. A fault halfway
+is recorded **uncertain**: never retried blind, never compensated, never minted. The permission is spent by the
+transfer that records it, so a replay cannot duplicate cargo; an interrupted transfer asks the container again,
+which re-reads it. An edited permission, a replaced container, or a container that moved fails closed.
+
+**Where it is enforced.** One file, `Adapters/Workers/GunnarDepositPort.cs`, pinned by `tools/validate_repo.py` the
+way `GunnarCollectionPort.cs` is: each authorized vanilla call matched **verbatim**, refused everywhere else in the
+product, and every other forbidden token still refused inside it. `AUTHORITY_POLICY.md` carries the row.
+
+**Why this does not cross D8.** D8 says Thorstein owns the collection order and *Gunnar never writes custody* -
+meaning Foreman's settlement journal. This records into Teamster's own `CargoLedger`/`CollectionAccount`, which is
+this product's accounting and not Foreman's. A haul with no Foreman order still records no custody in Foreman's
+journal.
+
+## D16. A worker body that dies returns what it carries through vanilla's own drop
+
+Status: **accepted** (contract revision **C5**, owner decision 2026-09-29).
+Authority: the same owner brief of 2026-09-29. It closes the door `GUNNAR_COLLECTION.md` §6c named and refused to
+open quietly.
+
+**What is granted.** When a Teamster worker body **genuinely dies**, its runtime may use vanilla's own item-drop
+behaviour to return the body's carried inventory to the world, rather than letting the destruction take it.
+
+**What "genuinely dies" means, and why the definition is load-bearing.** The body's own death, observed from the
+body - `Character.IsDead()` on a body that was alive in a previous observation, or vanilla's own death path running
+on it. It is **not** a retirement, a cancellation, a despawn, a zone unload, a logout, a world change or a plugin
+teardown. Those are the lifecycle paths of D9, §6b and §6c and they stay exactly as they are: a retire still refuses
+while a body carries anything, `retire force` still destroys and still says so, and an unload still relies on the
+body's own persisted inventory. **Voluntary cancellation and retirement must never reach the death path**, and the
+validator refuses a death-drop call from any other verb.
+
+**What is not granted:**
+- no drop on any lifecycle event that is not the body's own death;
+- no minting: exactly what the body holds, once, and nothing recreated from a name;
+- no silent deletion of a drop that failed - a failure is recorded and left as durable reconciliation evidence, and
+  the material stays where the last successful measurement put it;
+- no change to the cart, the world, or anything the body was attached to beyond the detach D4 already requires;
+- no drop of items the body never held.
+
+**Ordering, because a cart is attached to the body.** The cart is detached **first**, through D4's own teardown
+ordering, and the cart and everything in it are left exactly as the game left them. Only then does the drop run.
+
+**Accounting.** Every carried unit becomes either a real world drop or stays accounted for as held-and-unresolved.
+The ledger records the transition; nothing is re-credited and nothing is re-acquired. An interrupted death-drop
+fails closed and keeps its evidence.
+
+**Where it is enforced.** `Adapters/Workers/GunnarDeathDropPort.cs`, pinned verbatim like D15's, with the death
+predicate and the verb it may be called from both audited.
