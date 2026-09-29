@@ -632,7 +632,7 @@ class DepositCarveOutIsNarrow(CarveOutFixture):
             original = handle.read()
         self._restore = original
         self._restore_path = DEPOSIT
-        marker = "                to.MoveItemToThis(from, stack);"
+        marker = "to.MoveItemToThis(from, stack);"
         self.assertEqual(1, original.count(marker), "the authorized move call moved")
         with open(DEPOSIT, "w", encoding="utf-8", newline="") as handle:
             handle.write(original.replace(marker, marker + "\n" + extra))
@@ -660,7 +660,7 @@ class DepositCarveOutIsNarrow(CarveOutFixture):
         self.assert_refused("a second file of the deposit port's name inherited the allowance")
 
     def test_the_move_is_authorized_once_and_not_twice(self):
-        self.edit_deposit("                to.MoveItemToThis(from, stack);")
+        self.edit_deposit("        to.MoveItemToThis(from, stack);")
         self.assert_refused("a second whole-stack move passed inside the authorized file")
 
     def test_the_move_may_not_be_reversed_into_a_withdrawal(self):
@@ -669,8 +669,8 @@ class DepositCarveOutIsNarrow(CarveOutFixture):
         # argument empties the chest into Gunnar - a capability D15 does not
         # grant, spelled with the same token and the same argument names.
         self.swap_in_deposit(
-            "                to.MoveItemToThis(from, stack);",
-            "                from.MoveItemToThis(to, stack);")
+            "to.MoveItemToThis(from, stack);",
+            "from.MoveItemToThis(to, stack);")
         self.assert_refused("the move was reversed into a withdrawal and passed")
 
     def test_a_space_before_the_paren_does_not_hide_a_move(self):
@@ -692,14 +692,14 @@ class DepositCarveOutIsNarrow(CarveOutFixture):
         # product putting an item it got from somewhere else into a player's
         # chest, which is not what D15 granted and is how cargo would be minted.
         self.swap_in_deposit(
-            "                to.AddItem(part);",
-            "                to.AddItem(SomethingElse());")
+            "to.AddItem(part);",
+            "to.AddItem(SomethingElse());")
         self.assert_refused("an arbitrary add passed inside the authorized file")
 
     def test_the_add_may_not_target_another_inventory(self):
         self.swap_in_deposit(
-            "                to.AddItem(part);",
-            "                Player.m_localPlayer.GetInventory().AddItem(part);")
+            "to.AddItem(part);",
+            "Player.m_localPlayer.GetInventory().AddItem(part);")
         self.assert_refused("an add into the player's own inventory passed inside the authorized file")
 
     def test_an_add_is_not_allowed_in_another_worker_file(self):
@@ -721,14 +721,14 @@ class DepositCarveOutIsNarrow(CarveOutFixture):
         # exact failure the measured-delta discipline exists to prevent - and it
         # is a one-word edit that compiles.
         self.swap_in_deposit(
-            "                    from.RemoveItem(stack, moved);",
-            "                    from.RemoveItem(stack, remaining);")
+            "from.RemoveItem(stack, moved);",
+            "from.RemoveItem(stack, remaining);")
         self.assert_refused("a remove of the asked-for count passed inside the authorized file")
 
     def test_the_remove_may_not_target_the_destination(self):
         self.swap_in_deposit(
-            "                    from.RemoveItem(stack, moved);",
-            "                    to.RemoveItem(stack, moved);")
+            "from.RemoveItem(stack, moved);",
+            "to.RemoveItem(stack, moved);")
         self.assert_refused("a remove from the destination passed inside the authorized file")
 
     def test_a_remove_is_not_allowed_in_another_worker_file(self):
@@ -787,7 +787,7 @@ class DepositCarveOutIsNarrow(CarveOutFixture):
         # - what D15 lists under "no synthetic or replacement resources" - while
         # the pinned call stays byte-identical.
         self.swap_in_deposit(
-            "                    ItemDrop.ItemData part = stack.Clone();",
+            "ItemDrop.ItemData part = stack.Clone();",
             "                    ItemDrop.ItemData part = ObjectDB.instance"
             ".GetItemPrefab(itemPrefab).GetComponent<ItemDrop>().m_itemData.Clone();")
         self.assert_refused(

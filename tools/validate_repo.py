@@ -2540,56 +2540,6 @@ FOREMAN_ALWAYS_FORBIDDEN = (
 )
 
 
-def _strip_cs_comments(text: str) -> str:
-    """Remove C# line and block comments while preserving strings and lines."""
-    out: list[str] = []
-    index = 0
-    length = len(text)
-    while index < length:
-        char = text[index]
-        next_char = text[index + 1] if index + 1 < length else ""
-        if char == "/" and next_char == "/":
-            out.extend((" ", " "))
-            index += 2
-            while index < length and text[index] not in "\r\n":
-                out.append(" ")
-                index += 1
-            continue
-        if char == "/" and next_char == "*":
-            out.extend((" ", " "))
-            index += 2
-            while index < length:
-                if text[index] == "*" and index + 1 < length and text[index + 1] == "/":
-                    out.extend((" ", " "))
-                    index += 2
-                    break
-                out.append(text[index] if text[index] in "\r\n" else " ")
-                index += 1
-            continue
-        if char in ('"', "'"):
-            quote = char
-            verbatim = quote == '"' and index > 0 and text[index - 1] == "@"
-            out.append(char)
-            index += 1
-            while index < length:
-                out.append(text[index])
-                if not verbatim and text[index] == "\\" and index + 1 < length:
-                    index += 1
-                    out.append(text[index])
-                elif text[index] == quote:
-                    if verbatim and index + 1 < length and text[index + 1] == quote:
-                        index += 1
-                        out.append(text[index])
-                    else:
-                        index += 1
-                        break
-                index += 1
-            continue
-        out.append(char)
-        index += 1
-    return "".join(out)
-
-
 def check_foreman_runtime_capabilities(errors: list[str]) -> list[str]:
     """Pins Foreman's direct engine mutations and refuses every unlisted one."""
     foreman_dir: Path = PRODUCTS["foreman"]["project_dir"]  # type: ignore[assignment]
