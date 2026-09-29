@@ -40,6 +40,11 @@ namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;
 /// </summary>
 internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExecutionLog
 {
+    // Keep the vanilla network-scene probe inside the worker boundary. Outside
+    // that boundary ZNetScene is forbidden because it can also remove network
+    // objects, including a carrying worker and its inventory.
+    internal static bool WorldIsUp => ZNetScene.instance != null;
+
     private readonly HaulLimits _limits = HaulLimits.Default.Validate();
     private readonly HaulExecutionLimits _execution = HaulExecutionLimits.Default.Validate();
     private readonly CartSelectionBook _selections = new CartSelectionBook();

@@ -98,10 +98,47 @@ without local authority.
   `Adapters/Workers/`, and fails there on any other network-object key, any
   teleport, position or rotation write, force or velocity write, kinematic,
   gravity, collision or constraint change, ownership request or interaction
-  call, and on a mass write anywhere but Gunnar's own calibration file.
+  call, and on a mass write anywhere but Gunnar's own calibration file;
+  (d) the carried-material audit (#381) pins, per file, every
+  destruction-shaped call, every one of those routed through an instance
+  rather than Unity's own `Object` statics, and every unambiguous body
+  removal — **across the whole of `src/ConcernedTeamster` less `obj/` and
+  `bin/`, keyed by path relative to the product** (#401). It used to walk
+  `Adapters/Workers` alone, so `ZNetScene.instance.Destroy(body)` in a helper
+  under `Adapters/` or `Domain/` passed with every pinned count unchanged. The
+  shared source Teamster compiles in from `src/Shared` is outside that walk and
+  needs no pin: the same files compile into `ConcernedTeamster.Tests`, a
+  `net10.0` project with no game assemblies, so a game type there is a compile
+  error. A destruction reached through an indirection that spells no
+  `Destroy…(` at all is still outside a text audit, and the pins establish that
+  a refusal is *written above* each removal, not that control flow obeys it —
+  `WorkerRetirementTests` and a reviewer own that.
+
 - `ConcernedTeamster.Tests` proves matrix completeness, the mutation truth
   table, fail-closed resolution, and that the brake's authority gate equals
   the policy's.
+
+### Inventory-mutating vanilla calls are forbidden, not pinned (#401)
+
+The owner's 2026-09-19 grant is a list of pinned calls, and #401 asked whether
+`Inventory.AddItem` belongs on it. **It does not, and it is refused everywhere
+in Teamster source — inside `Adapters/Workers/GunnarCollectionPort.cs` as well
+as out.**
+
+The two pinned calls are the whole of the grant: `Pickable.Interact` drops the
+yield, and `Humanoid.Pickup` takes one dropped item. `Humanoid.Pickup` performs
+vanilla's own inventory add *inside vanilla*, which is why it is the call that
+was authorized. A direct `AddItem` is the same material movement reached one
+layer lower, with none of vanilla's own checks around it, and pinning it would
+widen the grant rather than describe it — a pinned call is an allowance. On its
+own an `AddItem` into the worker's own inventory is not a world mutation and
+cannot mint, because something has to have produced the item; the objection is
+that a list which stops at `Interact` and `Pickup` while `AddItem` is free has a
+boundary narrower than its rationale. Refusing it makes the two match.
+
+Nothing in Teamster calls it today, so this costs the product nothing. A future
+need for it — the container deposit of #415, say — is a separate owner decision
+and arrives with its own issue, not by relaxing this line.
 
 ## Changing this policy
 

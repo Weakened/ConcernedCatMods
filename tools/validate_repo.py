@@ -1540,6 +1540,210 @@ def _strip_cs_line_comment(line: str) -> str:
     return line
 
 
+def _strip_cs_comments(text: str) -> str:
+    """Mask C# comments while preserving literal text and interpolation code.
+
+    Whole-file token audits must see legal comment trivia between a member name
+    and its parenthesis. Literal string contents stay byte-for-byte unchanged,
+    while executable expressions inside interpolated strings are scanned as
+    code. Newlines in comments are retained for diagnostic line numbers.
+    """
+    out: list[str] = []
+    length = len(text)
+
+    def prefix_at(quote_at: int) -> tuple[bool, bool, int]:
+        start = quote_at
+        while start > 0 and text[start - 1] in "$@":
+            start -= 1
+        prefix = text[start:quote_at]
+        return "$" in prefix, "@" in prefix, prefix.count("$")
+
+    def mask_comment(index: int, block: bool) -> int:
+        out.extend((" ", " "))
+        index += 2
+        if block:
+            while index < length:
+                if text[index] == "*" and index + 1 < length and text[index + 1] == "/":
+                    out.extend((" ", " "))
+                    return index + 2
+                out.append(text[index] if text[index] in "\r\n" else " ")
+                index += 1
+            return index
+        while index < length and text[index] not in "\r\n":
+            out.append(" ")
+            index += 1
+        return index
+
+    def next_non_trivia(index: int) -> str:
+        """Return the next C# token character without changing output."""
+        while index < length:
+            if text[index].isspace():
+                index += 1
+                continue
+            if text.startswith("/*", index):
+                end = text.find("*/", index + 2)
+                return "" if end < 0 else next_non_trivia(end + 2)
+            if text.startswith("//", index):
+                newline = text.find("\n", index + 2)
+                return "" if newline < 0 else next_non_trivia(newline + 1)
+            return text[index]
+        return ""
+
+    def scan_string(index: int) -> int:
+        quote = text[index]
+        interpolated, verbatim, dollar_count = prefix_at(index)
+        run = 1
+        if quote == '"':
+            while index + run < length and text[index + run] == '"':
+                run += 1
+
+        if quote == '"' and run >= 3:
+            delimiter = '"' * run
+            out.append(delimiter)
+            index += run
+            opening = "{" * dollar_count if interpolated else ""
+            while index < length:
+                if text.startswith(delimiter, index):
+                    out.append(delimiter)
+                    return index + run
+                if opening and text.startswith(opening, index):
+                    out.append(opening)
+                    index = scan_interpolation(index + dollar_count, dollar_count)
+                    continue
+                out.append(text[index])
+                index += 1
+            return index
+
+        out.append(quote)
+        index += 1
+        while index < length:
+            char = text[index]
+            if char == "\\" and not verbatim:
+                out.append(char)
+                index += 1
+                if index < length:
+                    out.append(text[index])
+                    index += 1
+                continue
+            if char == quote:
+                out.append(char)
+                index += 1
+                if verbatim and index < length and text[index] == quote:
+                    out.append(text[index])
+                    index += 1
+                    continue
+                return index
+            if interpolated and quote == '"' and char == "{":
+                if index + 1 < length and text[index + 1] == "{":
+                    out.append("{{")
+                    index += 2
+                    continue
+                out.append("{")
+                index = scan_interpolation(index + 1, 1)
+                continue
+            out.append(char)
+            index += 1
+        return index
+
+    def scan_format(index: int, close_braces: int) -> int:
+        """Copy interpolation format text literally through its closing brace."""
+        closing = "}" * close_braces
+        while index < length:
+            if text.startswith(closing, index):
+                out.append(closing)
+                return index + close_braces
+            out.append(text[index])
+            index += 1
+        return index
+
+    def scan_interpolation(index: int, close_braces: int) -> int:
+        """Scan an interpolation expression, then preserve its format component."""
+        closing = "}" * close_braces
+        paren_depth = 0
+        bracket_depth = 0
+        conditional_depth = 0
+        while index < length:
+            if (paren_depth == 0 and bracket_depth == 0
+                    and text.startswith(closing, index)):
+                out.append(closing)
+                return index + close_braces
+
+            char = text[index]
+            if char == "/" and index + 1 < length:
+                if text[index + 1] == "/":
+                    index = mask_comment(index, block=False)
+                    continue
+                if text[index + 1] == "*":
+                    index = mask_comment(index, block=True)
+                    continue
+
+            if char == '"' or char == "'":
+                index = scan_string(index)
+                continue
+
+            if char == "(":
+                paren_depth += 1
+            elif char == ")" and paren_depth:
+                paren_depth -= 1
+            elif char == "[":
+                bracket_depth += 1
+            elif char == "]" and bracket_depth:
+                bracket_depth -= 1
+            elif char == "{":
+                out.append(char)
+                index = scan_code(index + 1, 1)
+                continue
+            elif char == "?" and paren_depth == 0 and bracket_depth == 0:
+                next_char = text[index + 1] if index + 1 < length else ""
+                previous = text[index - 1] if index else ""
+                if (next_char not in {"?", ".", "["}
+                        and previous != "?"
+                        and next_non_trivia(index + 1) not in {":", ","}):
+                    conditional_depth += 1
+            elif char == ":" and paren_depth == 0 and bracket_depth == 0:
+                if conditional_depth:
+                    conditional_depth -= 1
+                else:
+                    out.append(char)
+                    return scan_format(index + 1, close_braces)
+
+            out.append(char)
+            index += 1
+        return index
+
+    def scan_code(index: int, close_braces: int = 0) -> int:
+        closing = "}" * close_braces
+        while index < length:
+            if closing and text.startswith(closing, index):
+                out.append(closing)
+                return index + close_braces
+
+            char = text[index]
+            if char == "/" and index + 1 < length:
+                if text[index + 1] == "/":
+                    index = mask_comment(index, block=False)
+                    continue
+                if text[index + 1] == "*":
+                    index = mask_comment(index, block=True)
+                    continue
+
+            if char == '"' or char == "'":
+                index = scan_string(index)
+                continue
+
+            if close_braces and char == "{":
+                out.append("{")
+                index = scan_code(index + 1, 1)
+                continue
+
+            out.append(char)
+            index += 1
+        return index
+
+    scan_code(0)
+    return "".join(out)
+
+
 # CT-028: cooperative diagnostics help crews understand a cart without
 # adding "a newton of modded force". Teamster applies no physics force,
 # impulse, or velocity write anywhere — the only rigidbody touch is the
@@ -1658,6 +1862,7 @@ TEAMSTER_WORKER_FORBIDDEN_TOKENS = (
     "RPC_RequestOwn",
     ".Interact(",
     ".Pickup(",
+    ".AddItem(",
     "SetExtraMass",
     "SetMass",
     "UpdateMass",
@@ -1683,9 +1888,14 @@ TEAMSTER_WORKER_FACTORY_ONLY_TOKENS = (
 )
 
 # Never anywhere in Teamster outside the worker runtime: using a cart, taking an
-# item into a character's inventory, applying vanilla's extra pull mass, or
-# writing a body's kinematic flag or joint link. (The parking brake's own
-# constraint write stays where CT-002 allows it.)
+# item into a character's inventory, reaching the vanilla network scene, applying
+# vanilla's extra pull mass, or writing a body's kinematic flag or joint link.
+# ZNetScene is intentionally broad here: outside the audited worker runtime there
+# is no authorized reason to destroy or otherwise mutate a network object. Direct
+# Inventory.AddItem is forbidden everywhere in Teamster source. Gunnar's only
+# authorized take is the exact pinned Humanoid.Pickup call below, whose internal
+# inventory mutation and dropped-item destruction remain vanilla-owned. (The
+# parking brake's own constraint write stays where CT-002 allows it.)
 #
 # `.Pickup(` WAS MISSING FROM THIS TUPLE for one round, and four sentences said it
 # was here. Adding it to the worker list alone left `((dynamic)who).Pickup(...)`
@@ -1693,7 +1903,7 @@ TEAMSTER_WORKER_FACTORY_ONLY_TOKENS = (
 # written to correct - an enforcement claim wider than the enforcement - one line
 # away from where it was being corrected. Both authorized tokens are scanned in
 # both places now, and both are refused everywhere but the one pinned call each.
-TEAMSTER_OUTSIDE_WORKERS_TOKENS = (".Interact(", ".Pickup(", "SetExtraMass")
+TEAMSTER_OUTSIDE_WORKERS_TOKENS = (".Interact(", ".Pickup(", ".AddItem(", "ZNetScene", "SetExtraMass")
 
 # The one owner-authorized exception to the worker runtime's token list
 # (owner decision, 2026-09-19, for #381 Gunnar collection).
@@ -1855,8 +2065,7 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
         # Tokens are matched over the whole comment-stripped file rather than
         # line by line, because a space or a newline defeated the substring
         # match and the Release build was happy either way.
-        code_text = "\n".join(_strip_cs_line_comment(raw) for raw in
-                              path.read_text(encoding="utf-8").splitlines())
+        code_text = _strip_cs_comments(path.read_text(encoding="utf-8"))
         authorized = tuple(parts) == TEAMSTER_COLLECTION_PORT_PATH
         allowed_calls = {}
         for token, pattern, what in TEAMSTER_COLLECTION_PORT_CALLS:
@@ -1903,7 +2112,10 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
         "dropped item's network object inside vanilla); cart attach/detach/detach-all only "
         f"in Adapters/Workers, mass writes only in {TEAMSTER_WORKER_CALIBRATION_FILE}, network-object writes only "
         f"'tcc.worker.*' keys in {TEAMSTER_WORKER_IDENTITY_FILE}, no teleport/pose/velocity/constraint/joint/cart-"
-        f"tuning writes, no component surgery or reflection outside the prefab factory (inside Adapters/Workers only; reflection elsewhere in Teamster is not audited by this rule) ({hits} violations)",
+        f"tuning writes, no direct Inventory.AddItem anywhere, and no ZNetScene reference outside "
+        f"Adapters/Workers; no component surgery or reflection outside the prefab factory (inside "
+        f"Adapters/Workers only; reflection elsewhere in Teamster is not audited by this rule) "
+        f"({hits} violations)",
     ]
 
 
@@ -2283,14 +2495,35 @@ TEAMSTER_RETIRE_ALLOWS = "WorkerRetirement.Allows("
 # local, `ZNetScene.instance` — moves a file's routed count.
 #
 # That is the whole claim, and it is narrower than "every way to reach the vanilla
-# scene's removal", which an earlier version of this comment said. Two things this
-# does not catch, both proved by a review rather than imagined:
+# scene's removal", which an earlier version of this comment said. One thing this
+# does not catch, proved by a review rather than imagined:
 #
 #   * a receiver hidden behind an indirection that spells no `Destroy…(` at all
 #     (`Action<GameObject> reap = UnityEngine.Object.Destroy; reap(go);`), which
-#     TEAMSTER_DESTRUCTION cannot see either;
-#   * a destruction outside Adapters/Workers entirely, since these pins only walk
-#     the worker folder. A helper in Adapters/ or Domain/ is not audited here.
+#     TEAMSTER_DESTRUCTION cannot see either.
+#
+# A SECOND LIMIT USED TO BE LISTED HERE and is now closed rather than described:
+# these pins walked only Adapters/Workers, so a helper in Adapters/ or Domain/
+# calling `ZNetScene.instance.Destroy(body)` passed at exit 0 with every pinned
+# count unchanged (#401). The folder was a convenient scope that got mistaken for
+# a boundary — the same shape as the two earlier corrections, which both stayed
+# inside the folder. The walk below is now the whole product source tree,
+# `src/ConcernedTeamster/**/*.cs` less `obj/` and `bin/`, keyed by path relative
+# to the product rather than to the worker folder.
+#
+# TWO THINGS THE PRODUCT TREE DOES NOT COVER, said here rather than left as the
+# next convenient scope for someone to mistake for a boundary:
+#
+#   * `obj/` and `bin/`, which hold generated and built output. Neither is in the
+#     project's Compile items (the SDK's own default excludes them), so a helper
+#     dropped there is not in the shipped assembly at all.
+#   * the shared source Teamster compiles in from `src/Shared/Workers`,
+#     `src/Shared/Interop` and `src/Shared/Diagnostics`, which IS in the shipped
+#     assembly. It cannot spell a destruction: the same files compile into
+#     ConcernedTeamster.Tests, a net10.0 project with no game assemblies at all,
+#     so `UnityEngine`, `ZNetScene` and every other game type are compile errors
+#     there. That is a stronger guarantee than this text audit, and it is the
+#     compiler's rather than this file's.
 #
 # It also cannot know a receiver's TYPE and does not claim to. What it guarantees
 # is that swapping which thing a WRITTEN destruction is routed through changes a
@@ -2353,17 +2586,17 @@ def _destruction_receiver(text: str, start: int) -> str:
     match = TEAMSTER_DESTRUCTION_RECEIVER.search(prefix[:-1].rstrip())
     return re.sub(r"\s+", "", match.group(0)) if match else "?"
 
-# Where anything may be destroyed at all in the worker folder, with how many
+# Where anything may be destroyed at all in Teamster's source, with how many
 # sites each file holds. A pinned population, like the pinned port calls. Most of
 # these are not bodies — a plugin component being removed, the prefab factory's
 # own component surgery — and the rule does not pretend to know which is which.
 # What it guarantees is narrower and still worth having: **a new call spelled
-# `Destroy…(`, anywhere under Adapters/Workers, fails this audit until a person
+# `Destroy…(`, anywhere in src/ConcernedTeamster, fails this audit until a person
 # records it here and says what guards it.**
 #
-# KEYED BY PATH RELATIVE TO THE WORKER FOLDER, NOT BY BASENAME, and by rglob
-# rather than glob. Both were defects a review proved. `glob("*.cs")` does not
-# descend, so the same planted `ZNetScene.instance.Destroy(body)` in a new
+# KEYED BY PATH RELATIVE TO THE PRODUCT, NOT BY BASENAME, and by rglob rather
+# than glob. Both were defects a review proved. `glob("*.cs")` does not descend,
+# so the same planted `ZNetScene.instance.Destroy(body)` in a new
 # `Workers/Sweep/ZzSweeper.cs` was invisible while the sentence still said
 # "anywhere in Adapters/Workers" — and the #313 scope audit over the very same
 # directory uses rglob and did count that file. Basename keying is the other half:
@@ -2371,20 +2604,27 @@ def _destruction_receiver(text: str, start: int) -> str:
 # allowance, which is the exact defect already fixed once in this carve-out for
 # GunnarCollectionPort.cs.
 #
-# - GunnarCollectionRuntime.cs: the plugin component in Uninstall.
-# - GunnarHaulingRuntime.cs: the plugin component in Uninstall, and the
-#   pointed-at body in the guarded retire verb.
-# - TeamsterWorkerBody.cs: the bound body, reachable only through
+# THE KEYS GAINED THEIR FOLDER in #401. They used to be bare basenames relative
+# to Adapters/Workers, which is what let a destruction in any other Teamster
+# folder be counted by nobody at all.
+#
+# - Adapters/Workers/GunnarCollectionRuntime.cs: the plugin component in Uninstall.
+# - Adapters/Workers/GunnarHaulingRuntime.cs: the plugin component in Uninstall,
+#   and the pointed-at body in the guarded retire verb.
+# - Adapters/Workers/TeamsterWorkerBody.cs: the bound body, reachable only through
 #   HaulExecutor.RetireBody() and so only from the guarded retire verb.
-# - TeamsterWorkerPrefab.cs: the prefab's own teardown, the factory's component
-#   surgery on the inactive clone (three sites), and the two ways a body that has
-#   JUST been created and came up invalid is cleaned up. That body has held
-#   nothing for any length of time.
+# - Adapters/Workers/TeamsterWorkerPrefab.cs: the prefab's own teardown, the
+#   factory's component surgery on the inactive clone (three sites), and the two
+#   ways a body that has JUST been created and came up invalid is cleaned up. That
+#   body has held nothing for any length of time.
+# - Plugin.cs: the plugin's own container facade component in OnDestroy. Unity's
+#   static, on a component this plugin created; no body and no network object.
 TEAMSTER_DESTRUCTION_SITES = {
-    "GunnarCollectionRuntime.cs": 1,
-    "GunnarHaulingRuntime.cs": 2,
-    "TeamsterWorkerBody.cs": 1,
-    "TeamsterWorkerPrefab.cs": 6,
+    "Adapters/Workers/GunnarCollectionRuntime.cs": 1,
+    "Adapters/Workers/GunnarHaulingRuntime.cs": 2,
+    "Adapters/Workers/TeamsterWorkerBody.cs": 1,
+    "Adapters/Workers/TeamsterWorkerPrefab.cs": 6,
+    "Plugin.cs": 1,
 }
 
 # How many of those destructions are routed through an INSTANCE rather than
@@ -2397,30 +2637,37 @@ TEAMSTER_DESTRUCTION_SITES = {
 # shape would mean writing an exception into the one rule whose job is to notice a
 # shape changing, and two counts over the same call cost nothing.
 #
-# - GunnarHaulingRuntime.cs: `view.Destroy()`, the pointed-at body in the guarded
-#   retire verb.
-# - TeamsterWorkerBody.cs: `view.Destroy()`, the bound body, reachable only
-#   through the guarded retire verb.
-# - TeamsterWorkerPrefab.cs: `view.Destroy()` on a body that came up invalid, and
-#   Jotunn's `PrefabManager.Instance.DestroyPrefab`, which unregisters the mod's
-#   own prefab and touches no body in a world.
+# - Adapters/Workers/GunnarHaulingRuntime.cs: `view.Destroy()`, the pointed-at
+#   body in the guarded retire verb.
+# - Adapters/Workers/TeamsterWorkerBody.cs: `view.Destroy()`, the bound body,
+#   reachable only through the guarded retire verb.
+# - Adapters/Workers/TeamsterWorkerPrefab.cs: `view.Destroy()` on a body that came
+#   up invalid, and Jotunn's `PrefabManager.Instance.DestroyPrefab`, which
+#   unregisters the mod's own prefab and touches no body in a world.
 #
-# GunnarCollectionRuntime.cs is absent on purpose: it destroys only its own plugin
-# component, through Unity's static. It is also the file the review's substitution
-# plant targeted, precisely because a zero here is what a swap has to break.
+# Adapters/Workers/GunnarCollectionRuntime.cs is absent on purpose: it destroys
+# only its own plugin component, through Unity's static. It is also the file the
+# review's substitution plant targeted, precisely because a zero here is what a
+# swap has to break.
 #
 # SO ITS ABSENCE IS THE LOAD-BEARING VALUE, and the obvious way to silence this
 # rule is to add it with a 1. If this audit ever fails on
-# GunnarCollectionRuntime.cs, the question is not "what number makes it pass" - it
-# is which call grew a receiver, and whether that call now takes a BODY out of the
-# world from a file that has no retirement guard anywhere in it. A static destroy
-# written unqualified is the benign cause and the fix is to spell it
-# `UnityEngine.Object.Destroy(x)`; anything else wants a person's decision, not a
-# bumped count.
+# Adapters/Workers/GunnarCollectionRuntime.cs, the question is not "what number
+# makes it pass" - it is which call grew a receiver, and whether that call now
+# takes a BODY out of the world from a file that has no retirement guard anywhere
+# in it. A static destroy written unqualified is the benign cause and the fix is to
+# spell it `UnityEngine.Object.Destroy(x)`; anything else wants a person's
+# decision, not a bumped count.
+#
+# EVERY FILE OUTSIDE Adapters/Workers IS ABSENT HERE FOR THE SAME REASON, and
+# that is what #401 bought. Plugin.cs's one destruction is Unity's own qualified
+# static, so it is pinned above and expects zero here; any Teamster file that
+# starts routing a destruction through an instance now fails until a person says
+# what it destroys.
 TEAMSTER_ROUTED_DESTRUCTION_SITES = {
-    "GunnarHaulingRuntime.cs": 1,
-    "TeamsterWorkerBody.cs": 1,
-    "TeamsterWorkerPrefab.cs": 2,
+    "Adapters/Workers/GunnarHaulingRuntime.cs": 1,
+    "Adapters/Workers/TeamsterWorkerBody.cs": 1,
+    "Adapters/Workers/TeamsterWorkerPrefab.cs": 2,
 }
 
 # A guard that is CONSULTED AND IGNORED passes a source-order check: a bare
@@ -2433,21 +2680,27 @@ TEAMSTER_RETIRE_ALLOWS_GUARD = re.compile(
 
 # Where a body may leave the world at all, with how many sites each file holds.
 # A pinned population, like the one pinned pickup call: any other count anywhere
-# in Adapters/Workers fails, so a new removal cannot appear without a person
+# in src/ConcernedTeamster fails, so a new removal cannot appear without a person
 # deciding what guards it.
 #
-# - GunnarHaulingRuntime.cs: the retire verb's two paths, the pointed-at
-#   duplicate and the bound body. Both guarded, checked below.
-# - TeamsterWorkerBody.cs: the bound body's actual destruction, reachable only
-#   through HaulExecutor.RetireBody(), which is reachable only from the guarded
-#   retire verb.
-# - TeamsterWorkerPrefab.cs: a body that has just been created and came up
-#   invalid. It has held nothing for any length of time, and refusing to clean it
-#   up would leave a broken object in the world.
+# - Adapters/Workers/GunnarHaulingRuntime.cs: the retire verb's two paths, the
+#   pointed-at duplicate and the bound body. Both guarded, checked below.
+# - Adapters/Workers/TeamsterWorkerBody.cs: the bound body's actual destruction,
+#   reachable only through HaulExecutor.RetireBody(), which is reachable only from
+#   the guarded retire verb.
+# - Adapters/Workers/TeamsterWorkerPrefab.cs: a body that has just been created
+#   and came up invalid. It has held nothing for any length of time, and refusing
+#   to clean it up would leave a broken object in the world.
+# - Domain/Hauling/Execution/HaulExecutor.cs: the DECLARATION of the game-free
+#   `RetireBody()` decision, which `\bRetireBody\s*\(` cannot tell from a call and
+#   is pinned rather than excepted. It removes nothing itself — it returns an
+#   outcome the adapter acts on — but a second `RetireBody(` appearing in this
+#   game-free layer means a new caller, which is a person's decision.
 TEAMSTER_BODY_REMOVAL_SITES = {
-    "GunnarHaulingRuntime.cs": 2,
-    "TeamsterWorkerBody.cs": 1,
-    "TeamsterWorkerPrefab.cs": 1,
+    "Adapters/Workers/GunnarHaulingRuntime.cs": 2,
+    "Adapters/Workers/TeamsterWorkerBody.cs": 1,
+    "Adapters/Workers/TeamsterWorkerPrefab.cs": 1,
+    "Domain/Hauling/Execution/HaulExecutor.cs": 1,
 }
 
 
@@ -2462,18 +2715,34 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
             f"{runtime.relative_to(ROOT)} — the audit no longer covers the retire verb", errors)
         return []
 
-    # First: the population. Every place in the worker folder where a body can
+    # First: the population. Every place in Teamster's source where a body can
     # leave the world, counted, against what this rule has been told to expect.
+    #
+    # THE WALK IS THE WHOLE PRODUCT (#401), not Adapters/Workers. The worker
+    # folder was never the boundary being defended; it was a convenient scope
+    # that the audit's own success sentence came to describe as one, which is how
+    # a reader comes to trust a guarantee that does not exist.
     workers_dir = teamster_dir.joinpath(*TEAMSTER_WORKERS_DIR)
+    if not workers_dir.is_dir() or not any(workers_dir.rglob("*.cs")):
+        fail(
+            "[interop] #381 carried-material audit: "
+            f"{'/'.join(TEAMSTER_WORKERS_DIR)} has no sources under "
+            f"{teamster_dir.relative_to(ROOT)} — the worker runtime this audit pins moved, and the "
+            "pinned populations below are keyed to where it was", errors)
     total_sites = 0
     total_destructions = 0
     total_routed = 0
-    for path in sorted(workers_dir.rglob("*.cs")):
-        # Relative to the worker folder, so a subdirectory is a different key
-        # rather than the same allowance seen twice.
-        key = path.relative_to(workers_dir).as_posix()
-        text = "\n".join(_strip_cs_line_comment(line) for line in
-                         path.read_text(encoding="utf-8").splitlines())
+    scanned_files = 0
+    for path in sorted(teamster_dir.rglob("*.cs")):
+        # Relative to the PRODUCT, so a subdirectory — and a folder outside
+        # Adapters/Workers — is a different key rather than the same allowance
+        # seen twice, or no key at all.
+        relative = path.relative_to(teamster_dir)
+        if relative.parts[0] in ("obj", "bin"):
+            continue
+        key = relative.as_posix()
+        scanned_files += 1
+        text = _strip_cs_comments(path.read_text(encoding="utf-8"))
         found = len(TEAMSTER_BODY_REMOVAL.findall(text))
         total_sites += found
         expected = TEAMSTER_BODY_REMOVAL_SITES.get(key, 0)
@@ -2520,8 +2789,7 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
                 "unchanged, which is why this one exists — say what it destroys and what guards it, "
                 "and record it in TEAMSTER_ROUTED_DESTRUCTION_SITES", errors)
 
-    code = "\n".join(_strip_cs_line_comment(line) for line in
-                     runtime.read_text(encoding="utf-8").splitlines())
+    code = _strip_cs_comments(runtime.read_text(encoding="utf-8"))
     match = TEAMSTER_RETIRE_BODY.search(code)
     if match is None:
         fail(
@@ -2576,17 +2844,21 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
                 "spelled the forcing word", errors)
 
     return [
-        f"[interop] #381 carried-material audit: {total_destructions} destruction(s), {total_routed} of "
-        f"them routed through an instance, and {total_sites} unambiguous body removal(s) under "
-        "Adapters/Workers and its subdirectories, every one at a pinned site keyed by relative path — "
-        "so a new call spelled `Destroy…(` fails here, and so does re-routing an existing one through a "
-        f"different receiver. The {in_verb} REMOVALS in {'/'.join(TEAMSTER_RETIRE_FILE)} are inside the "
+        f"[interop] #381 carried-material audit: {scanned_files} Teamster source(s) scanned — the whole "
+        f"of {teamster_dir.relative_to(ROOT).as_posix()} and its subdirectories, less obj/ and bin/ "
+        "(neither is compiled) and less the shared source compiled in from src/Shared, which the "
+        "net10.0 test project proves cannot name a game type at all, not "
+        f"Adapters/Workers alone (#401) — holding {total_destructions} destruction(s), {total_routed} of "
+        f"them routed through an instance, and {total_sites} unambiguous body removal(s), every one at a "
+        "pinned site keyed by path relative to the product — so a new call spelled `Destroy…(`, in any "
+        "Teamster folder, fails here, and so does re-routing an existing one through a different "
+        f"receiver. The {in_verb} REMOVALS in {'/'.join(TEAMSTER_RETIRE_FILE)} are inside the "
         "retire verb with a refusing `if (!WorkerRetirement.Allows(...))` written above each (that "
         "file's other destruction is its own plugin component in Uninstall, nowhere near the verb). "
         "What that establishes is that the refusal is written above each removal — NOT that control "
         "flow obeys it, which is WorkerRetirementTests' job and a reviewer's. A destruction reached "
-        "through an indirection that spells no `Destroy…(` at all, and any destruction outside "
-        "Adapters/Workers, are both outside what this text audit sees",
+        "through an indirection that spells no `Destroy…(` at all is still outside what this text "
+        "audit sees",
     ]
 
 
