@@ -82,9 +82,11 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   `TeamsterWorkerRecord` writes `tcc.worker.inventory` (vanilla's own `Inventory.Save` package) and
   `tcc.worker.revision` into the body's own network object from vanilla's own change callback —
   byte-compatible with Foreman's worker, never before a successful load, and an absent field loads as an
-  empty inventory rather than a fault. **Two doors are still open, not one, and both are named rather than
-  closed.** Death is the first: the body is destroyed and what it holds goes with it, and closing that
-  means spawning item instances, which needs its own owner decision. A **ZDO write that fails** is the
+  empty inventory rather than a fault. **Two doors were open when this paragraph was written; one is now decided, and neither is closed
+  in code.** Death is the first: the body is destroyed and what it holds goes with it. Closing it was
+  said here to need its own owner decision, and **that decision was given on 2026-09-29 (D16 below)** -
+  so death is authorized and still unimplemented, which means the behaviour in a running game is
+  unchanged and material is still lost on death today. A **ZDO write that fails** is the
   second: the change that did not reach the network object is lost, because the live inventory has it and
   the stored package does not. The second is contained rather than fixed - a body whose last change did not
   persist is handed nothing more to hold - and the containment's limit is stated on purpose: nothing this
@@ -106,9 +108,14 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   **D16**, contract revision C5).
 
   **D15 - deposit.** Gunnar's opted-in collection runtime may move items **out of his own inventory** into a
-  vanilla `Container`'s inventory, through vanilla's own inventory move, when the player has explicitly marked
-  **that exact container** `Deposit` or `Both`. One file, `Adapters/Workers/GunnarDepositPort.cs`, pinned
-  verbatim by `validate_repo.py` the way the collection port is, and refused everywhere else. Every gate is
+  vanilla `Container`'s inventory when the player has explicitly marked **that exact container** `Deposit` or
+  `Both` - through `Inventory.MoveItemToThis`, and for part of a stack an `Inventory.AddItem` of a clone of that
+  stack's own data followed by an `Inventory.RemoveItem` of exactly what arrived. One file,
+  `Adapters/Workers/GunnarDepositPort.cs`, pinned verbatim by `validate_repo.py` the way the collection port is,
+  each call once, and refused everywhere else in the product - inside `Adapters/Workers` and out, which is the
+  scope gap #401 named. Proved by planted violations rather than asserted, including the two that matter most:
+  the move **reversed into a withdrawal**, and a remove of the count that was **asked for** instead of the count
+  that **arrived**. Every gate is
   re-asked in the frame of the move: both switches, the capability probe, the work-authority rule, a body whose
   inventory record is trusted, the player's mark on that container resolved the way it was recorded, this client
   owning it, nobody having it open, the ward and privacy setting allowing it, and reach. The destination is
@@ -119,14 +126,16 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   no extra copies, no teleporting of cargo, no mod data in a vanilla object, and no bypass of ward, privacy,
   ownership or in-use checks.
 
-  **D16 - death.** When a worker body **genuinely dies** - its own death, observed from the body, never a
+  **D16 - death.** When a **Teamster** worker body (Gunnar) **genuinely dies** - its own death, observed from the body, never a
   retirement, cancellation, despawn, unload, logout, world change or teardown - its runtime may use vanilla's own
   item-drop behaviour to return what it carries to the world instead of letting the destruction take it. The cart
   detaches first under D4's teardown ordering. Exactly what the body holds, once; nothing recreated from a name;
   a drop that failed is recorded as durable reconciliation evidence rather than silently deleted. **Voluntary
-  cancellation and retirement must never reach this path**, and the validator refuses a death-drop call from any
-  other verb. `ct_haul retire` still refuses while a body carries anything, and `retire force` still destroys and
-  still says so.
+  cancellation and retirement must never reach this path**, and the validator will refuse a death-drop call from
+  any other verb once that pin is authored with the implementation. `ct_haul retire` still refuses while a body
+  carries anything, and `retire force` still destroys and still says so. **D16 is decided and unimplemented**:
+  `GunnarDeathDropPort.cs` does not exist, no rule pins its call, and a Gunnar who dies today still loses what he
+  is carrying.
 
 ## Local commands
 

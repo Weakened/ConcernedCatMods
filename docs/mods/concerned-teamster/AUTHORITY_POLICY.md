@@ -11,7 +11,10 @@ to act *through* `CartAuthorityPolicy.MayMutate` (test-asserted).
 
 1. **Teamster sends no network messages and takes no ownership.** It reads
    the game's own replicated/local state and writes only its own per-world
-   sidecar files. There is no RPC and no `SetOwner`/ownership claim anywhere
+   sidecar files. Two further exceptions to the second half of this sentence:
+   D15's deposit writes a vanilla container's inventory - **built, pinned to one file** - and D16's death drop puts
+   item instances into the world, which is **decided and not built**
+   (`docs/settlement/cart-and-collection/DECISIONS.md`). There is no RPC and no `SetOwner`/ownership claim anywhere
    in the source, and no `ZDO.Set` except one scoped exception — validator-audited
    (comments that state this absence are the only other occurrences). The
    exception (#313): the opt-in Gunnar worker runtime writes his identity,
@@ -61,14 +64,21 @@ without local authority.
 | `RouteProfiling` | Observation | — (read-only) | no (route geometry + terrain, not owner-fresh cart state) |
 | `ParkingBrake` | **Mutation** | **Local authority only** | no |
 | `GunnarHauling` | **Mutation** | **Local authority only, and work authority granted** (`Workers/GunnarHaulingEnabled` on, a loaded world, `ZNet.IsServer()`, not dedicated, no connected peers), re-checked before every attach, motor step and lease; detach is the one mutation authority never blocks, because it releases control. Refuses to attach a braked, in-use, unowned, tipped or out-of-reach cart, or while any cart on this client holds a joint (`docs/settlement/cart-and-collection/DECISIONS.md` D3, D4; `GUNNAR_HAULING.md`) | no |
-| `GunnarCollection` | **Mutation** (of a picked source, never of a cart) | **Work authority granted** (`Workers/GunnarCollectionEnabled` on, Teamster's `General/Enabled` on, a loaded world, `ZNet.IsServer()`, not dedicated, no connected peers), re-asked every frame while a pick is in flight, plus the start-up capability probe and **a source this client already owns** — ownership is required, never taken. Picks only a loose stone or a fallen branch the player points at, only one at a time, only within `CollectionLimits.PickupReachMetres`, and only through the source's own vanilla pickup; it reads no cart, writes no mass, force, velocity, position or ownership, and moves nobody. **Two vanilla calls, each pinned verbatim** in `Adapters/Workers/GunnarCollectionPort.cs` and nowhere else: `Pickable.Interact`, which drops the yield, and `Humanoid.Pickup`, which takes one dropped item into Gunnar's own inventory — and which, **inside vanilla**, destroys that `ItemDrop`'s network object through `ZNetScene.instance.Destroy(go)`. That destruction is vanilla's, of an object this mod never created, and is named here rather than folded into "picks things up" because a destruction of a networked object is exactly the kind of thing this table exists to disclose (owner decision 2026-09-19, #381; `GUNNAR_COLLECTION.md`). **A third pinned call, `Inventory.MoveItemToThis`**, moves what he carries **out of his own inventory** into a vanilla `Container` the player explicitly marked `Deposit` or `Both` - in `Adapters/Workers/GunnarDepositPort.cs` and nowhere else, with every gate re-asked in the frame of the move and both sides measured (owner decision 2026-09-29, #415; `DECISIONS.md` D15) | no |
+| `GunnarCollection` | **Mutation** (of a picked source, never of a cart) | **Work authority granted** (`Workers/GunnarCollectionEnabled` on, Teamster's `General/Enabled` on, a loaded world, `ZNet.IsServer()`, not dedicated, no connected peers), re-asked every frame while a pick is in flight, plus the start-up capability probe and **a source this client already owns** — ownership is required, never taken. Picks only a loose stone or a fallen branch the player points at, only one at a time, only within `CollectionLimits.PickupReachMetres`, and only through the source's own vanilla pickup; it reads no cart, writes no mass, force, velocity, position or ownership, and moves nobody. **Two vanilla calls, each pinned verbatim** in `Adapters/Workers/GunnarCollectionPort.cs` and nowhere else: `Pickable.Interact`, which drops the yield, and `Humanoid.Pickup`, which takes one dropped item into Gunnar's own inventory — and which, **inside vanilla**, destroys that `ItemDrop`'s network object through `ZNetScene.instance.Destroy(go)`. That destruction is vanilla's, of an object this mod never created, and is named here rather than folded into "picks things up" because a destruction of a networked object is exactly the kind of thing this table exists to disclose (owner decision 2026-09-19, #381; `GUNNAR_COLLECTION.md`). `DECISIONS.md` D15 (owner decision 2026-09-29, #415) additionally authorizes three inventory calls - `Inventory.MoveItemToThis`, and for part of a stack `Inventory.AddItem` of a clone of that stack's own data followed by `Inventory.RemoveItem` of exactly what arrived - to move what he carries **out of his own inventory** into a vanilla `Container` the player explicitly marked `Deposit` or `Both`, in `Adapters/Workers/GunnarDepositPort.cs` and nowhere else, with every gate re-asked in the frame of the move and both sides measured. All three are pinned verbatim and once in that file and refused everywhere else in the product, and the pin is proved by planted violations | no |
 
 ### The two 2026-09-29 grants (`DECISIONS.md` D15, D16)
 
-**D15, the deposit.** The only way material leaves Gunnar other than a reload or an explicitly forced retirement.
+**D15 is implemented and pinned. D16 is decided and NOT implemented** - `GunnarDeathDropPort.cs` does not exist, no
+rule in `tools/validate_repo.py` pins or refuses its call, and a Gunnar who dies loses what he is carrying. Read D16's
+paragraph as a description of what is authorized, not of what runs.
+
+**D15, the deposit.** The only way material leaves Gunnar other than a reload, an explicitly forced retirement, or
+D16's death drop once that is built.
 It is a write into a **vanilla object's inventory**, so it is disclosed here rather than folded into "collection":
-`Inventory.MoveItemToThis` (and, for part of a stack, `Inventory.AddItem` of a clone of that stack's data followed
-by `Inventory.RemoveItem` of exactly what arrived) on a `Container` the player marked. Nine gates, every one
+`Inventory.MoveItemToThis` for a whole stack and, for part of one, `Inventory.AddItem` of a clone of that stack's
+own data followed by `Inventory.RemoveItem` of exactly what arrived - on a `Container` the player marked. Three
+calls, named in `DECISIONS.md` D15 as well, which also records why a clone of a stack being simultaneously removed
+from is not the "spawning of item instances" that same decision forbids. Nine gates, every one
 re-asked in the frame of the move: both switches, the capability probe, the work-authority rule, a trusted body
 record, the player's mark on **that exact container** resolved by `ContainerPermissionRuntime.Allowance`, this
 client owning it, `!IsInUse()`, ward and privacy, and reach. The destination is counted before and after and only
@@ -78,8 +88,9 @@ inference exists in the path at all.
 
 **D16, the death drop.** A write of item instances into the world, and therefore the widest thing on this page. It
 runs on **one** event: a worker body's own death, observed from the body. Every other lifecycle path - retire,
-`retire force`, cancel, despawn, zone unload, logout, world change, plugin teardown - is unchanged and is refused
-this call by the validator, which pins the death-drop call verbatim to one file and audits which verb may reach it.
+`retire force`, cancel, despawn, zone unload, logout, world change, plugin teardown - is unchanged and will be
+refused this call by the validator, which is to pin the death-drop call verbatim to one file and audit which verb
+may reach it. Until that lands, a Gunnar who dies loses what he is carrying.
 The cart detaches first under D4's teardown ordering. Exactly what the body holds, once; nothing is recreated from
 a name; a drop that failed is durable reconciliation evidence rather than a silent deletion.
 

@@ -31,11 +31,15 @@ namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;
 /// also the reason there is no Harmony patch here: Teamster has never needed one
 /// and this did not change that.
 ///
-/// <b>Nothing here consumes a permission yet.</b> Reading it in a transfer is the
-/// next slice of #374, and saying so is the difference between this being honest
-/// and this being the sixth isolated abstraction. What a player can do today is
-/// mark a chest, see the mark survive a reload, and read the marks back with
-/// <c>ct_collect chest</c>.
+/// <b>A transfer now consumes what this records.</b> When this was written nothing
+/// did, and saying so was the difference between it being honest and it being
+/// the sixth isolated abstraction. Gunnar's deposit
+/// (<see cref="GunnarDepositPort"/>, owner decision 2026-09-29,
+/// <c>DECISIONS.md</c> D15) reads <see cref="Allowance"/> for the exact chest at
+/// the moment it moves anything, and a chest the player has not marked
+/// <c>Deposit</c> yields no permit and therefore no transfer. So a player can
+/// mark a chest, see the mark survive a reload, read the marks back with
+/// <c>ct_collect chest</c>, and have the mark actually decide something.
 ///
 /// <b>What it will not mark.</b> A container that moves - one riding a cart - has
 /// no place, because a permission is found again by position and attaching one to
@@ -318,7 +322,8 @@ internal sealed class ContainerPermissionRuntime : MonoBehaviour
                     (_store.Dropped > 0
                         ? ", " + _store.Dropped.ToString(CultureInfo.InvariantCulture) + " unreadable record(s) dropped"
                         : "") +
-                    ". Nothing consumes these yet - the transfer that does is the next part of #374. " +
+                    ". A deposit consults the mark on the exact chest at the moment it moves anything " +
+                    "(ct_collect destination, then ct_collect deposit). " +
                     "Subcommands: status, list, clear.";
         }
     }

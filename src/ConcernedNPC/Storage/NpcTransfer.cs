@@ -18,7 +18,7 @@ namespace TheConcernedCat.ConcernedNPC.Storage;
 /// There is no path from this type to deletion, because this type does not move
 /// anything. It arithmetic only, on counts a caller measured, and a caller that
 /// cannot fit everything is told so before it starts rather than after.</summary>
-internal readonly struct NpcTransferPlan
+public readonly struct NpcTransferPlan
 {
     private NpcTransferPlan(int wanted, int units)
     {
@@ -27,23 +27,23 @@ internal readonly struct NpcTransferPlan
     }
 
     /// <summary>How many units the job asked to move.</summary>
-    internal int Wanted { get; }
+    public int Wanted { get; }
 
     /// <summary>How many may move: never more than are there, never more than
     /// will fit, never fewer than none.</summary>
-    internal int Units { get; }
+    public int Units { get; }
 
     /// <summary>How many stay where they are. <see cref="Units"/> plus this is
     /// always <see cref="Wanted"/> - the conservation law of a plan, before any
     /// item has moved.</summary>
-    internal int Shortfall => Wanted - Units;
+    public int Shortfall => Wanted - Units;
 
     /// <summary>Nothing can move. Not a failure: a chest that is full is an
     /// ordinary Tuesday, and the caller keeps what it is carrying.</summary>
-    internal bool IsEmpty => Units <= 0;
+    public bool IsEmpty => Units <= 0;
 
     /// <summary>Whether everything asked for can move.</summary>
-    internal bool IsWhole => Wanted > 0 && Units == Wanted;
+    public bool IsWhole => Wanted > 0 && Units == Wanted;
 
     /// <summary>Plans one leg of a transfer from three measured counts.
     ///
@@ -51,7 +51,7 @@ internal readonly struct NpcTransferPlan
     /// <paramref name="roomAtDestination"/> are what a caller measured just now,
     /// on both sides. Negative or nonsensical counts plan nothing rather than
     /// being repaired into something plausible.</summary>
-    internal static NpcTransferPlan For(int wanted, int availableAtSource, int roomAtDestination)
+    public static NpcTransferPlan For(int wanted, int availableAtSource, int roomAtDestination)
     {
         if (wanted < 1 || availableAtSource < 1 || roomAtDestination < 1)
         {
@@ -64,7 +64,7 @@ internal readonly struct NpcTransferPlan
 }
 
 /// <summary>What one leg of a transfer turned out to have done.</summary>
-internal enum ContainerMoveOutcome
+public enum ContainerMoveOutcome
 {
     /// <summary>Nobody moved anything and nobody said so. Never a success.
     /// </summary>
@@ -118,8 +118,18 @@ internal enum ContainerMoveOutcome
 /// <b>What this is not.</b> Not a ledger. It does not remember, reconcile,
 /// compensate or carry custody from one leg to the next; it is the receipt one
 /// leg hands to whatever does. That belongs to the custody leaf, and half a
-/// custody contract is worse than none.</summary>
-internal readonly struct ContainerMoveResult
+/// custody contract is worse than none.
+///
+/// <b>Why this is public, as of 0.4.0.</b> Concerned Teamster's Gunnar deposit
+/// (`DECISIONS.md` D15) is the first thing in this repository that moves a
+/// player's material into a vanilla container from a role, and it needs exactly
+/// this: the permit spent, the epoch checked, the two measured deltas compared,
+/// and any disagreement landing on <see cref="ContainerMoveOutcome.Uncertain"/>
+/// rather than on a retry. The alternative was a second copy of this arithmetic
+/// in a product, which is how the two sides stop agreeing about what
+/// "uncertain" means. The role still keeps its own ledger; this classifies one
+/// leg and remembers nothing.</summary>
+public readonly struct ContainerMoveResult
 {
     private ContainerMoveResult(ContainerMoveOutcome outcome, int moved, int discrepancy, string evidence)
     {
@@ -129,25 +139,25 @@ internal readonly struct ContainerMoveResult
         Evidence = evidence;
     }
 
-    internal ContainerMoveOutcome Outcome { get; }
+    public ContainerMoveOutcome Outcome { get; }
 
     /// <summary>How many units are known to have moved. Zero for
     /// <see cref="ContainerMoveOutcome.Uncertain"/> and
     /// <see cref="ContainerMoveOutcome.Refused"/>: an amount nobody can prove is
     /// not an amount, and crediting one is how a job reports work it did not
     /// do.</summary>
-    internal int Moved { get; }
+    public int Moved { get; }
 
     /// <summary>How far the two sides disagree - what left, minus what arrived.
     /// Zero whenever they agree. Positive means material left and did not
     /// arrive; negative means material arrived that did not leave.</summary>
-    internal int Discrepancy { get; }
+    public int Discrepancy { get; }
 
     /// <summary>What was observed, for a person and for a reviewer.</summary>
-    internal string Evidence { get; }
+    public string Evidence { get; }
 
     /// <summary>Whether this leg is finished and accounted for.</summary>
-    internal bool IsSettled => Outcome == ContainerMoveOutcome.Completed
+    public bool IsSettled => Outcome == ContainerMoveOutcome.Completed
         || Outcome == ContainerMoveOutcome.Partial
         || Outcome == ContainerMoveOutcome.Nothing;
 
@@ -158,7 +168,7 @@ internal readonly struct ContainerMoveResult
     /// player's chest depends on the direction the permit authorises; the
     /// arithmetic does not, because conservation reads the same either way.
     /// </summary>
-    internal static ContainerMoveResult Record(
+    public static ContainerMoveResult Record(
         NpcContainerPermit? permit,
         NpcWorldEpoch world,
         NpcTransferPlan plan,

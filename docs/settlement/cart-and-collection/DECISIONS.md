@@ -174,8 +174,11 @@ inventories on load:
 This also closes the tool-loss path the Foreman audit found beyond #299: a tool given to a non-persisted body was
 destroyed on despawn, unload or relog.
 
-The Teamster worker body is persistent and re-bound the same way, so a reload does not teleport it. It carries no
-inventory.
+The Teamster worker body is persistent and re-bound the same way, so a reload does not teleport it.
+
+**Amended by C5 (2026-09-29).** This paragraph used to end "It carries no inventory". That stopped being true when
+#381 gave Gunnar a pick: his body stores its own inventory in its own network object, in Foreman's format,
+byte-compatible and for the same reason (`GUNNAR_COLLECTION.md` §6c). D15's gates depend on it.
 
 **Uninstall rule:** removing Foreman while a worker body holds items would let the host delete that body as an unknown
 prefab. The player guide therefore requires "Release everything" (return carried items and tools to a chest or the
@@ -264,10 +267,24 @@ one question - *may Gunnar's opted-in collection runtime move items from his own
 `Container`'s inventory, when the player has explicitly marked that container DEPOSIT or BOTH?* - and the answer is
 yes, scoped to exactly that.
 
-**What is granted.** Gunnar's opted-in worker runtime may move items **out of his own inventory** and into a vanilla
-`Container`'s inventory, through vanilla's own inventory move, when **that exact destination container** carries the
-player's explicit `Deposit` or `Both` mark in `NpcContainerDesk` and every gate below holds at the moment of the
-move.
+**What is granted.** Gunnar's opted-in **collection** runtime may move items **out of his own inventory** and into a
+vanilla `Container`'s inventory, when **that exact destination container** carries the player's explicit `Deposit` or
+`Both` mark in `NpcContainerDesk` and every gate below holds at the moment of the move.
+
+**Three vanilla calls, named here because the repository's convention is that each one is named.** A whole stack moves
+through `Inventory.MoveItemToThis`, which adds to the destination and removes from the source inside one vanilla call
+and keeps the moved instance, so a tool's wear, a crafter's name and a world level survive. A **part** of a stack has
+no such call in vanilla, so its own `ItemData` is cloned for exactly the units moving, `Inventory.AddItem` puts that
+clone in the destination, and `Inventory.RemoveItem` then takes exactly what **arrived** off the original stack. This
+is Concerned Foreman's audited precedent, not a new pattern.
+
+**This is not "spawning item instances", and the distinction is load-bearing rather than a nicety.** The clone is of a
+stack that is already in Gunnar's hands, and the units it carries are removed from that same stack in the same
+operation; total units are conserved across the pair, and the measurement below is what proves it rather than this
+paragraph. What the negative list forbids is creating material **from a name** - an `ObjectDB` lookup, an
+`Instantiate`, a recipe, a count invented to make a number balance - none of which appears in this path. An
+implementation that reached `AddItem` with anything other than a clone of a stack it is simultaneously removing from
+would be outside this grant.
 
 **What is not granted**, each named because #415 named it:
 - no chest chosen by proximity, and no "nearest chest" inference anywhere in the path;
@@ -301,15 +318,39 @@ transfer that records it, so a replay cannot duplicate cargo; an interrupted tra
 which re-reads it. An edited permission, a replaced container, or a container that moved fails closed.
 
 **Where it is enforced.** One file, `Adapters/Workers/GunnarDepositPort.cs`, pinned by `tools/validate_repo.py` the
-way `GunnarCollectionPort.cs` is: each authorized vanilla call matched **verbatim**, refused everywhere else in the
-product, and every other forbidden token still refused inside it. `AUTHORITY_POLICY.md` carries the row.
+way `GunnarCollectionPort.cs` is: each of the three authorized calls matched **verbatim** and once, refused everywhere
+else in the product (inside `Adapters/Workers` and out), and every other forbidden token still refused inside it. The
+three tokens were not audited at all before this change, which is the gap #401 named.
 
-**Why this does not cross D8.** D8 says Thorstein owns the collection order and *Gunnar never writes custody* -
-meaning Foreman's settlement journal. This records into Teamster's own `CargoLedger`/`CollectionAccount`, which is
-this product's accounting and not Foreman's. A haul with no Foreman order still records no custody in Foreman's
-journal.
+The pin is proved by planted violations in `tools/tests/test_teamster_carveout.py` rather than asserted: a move in
+another worker file, a move in `Domain/`, a second file of the port's name elsewhere, a second move in the port, a
+space before the paren, a newline between receiver and member, **the move reversed into a withdrawal**, an add of
+anything but the clone, an add into another inventory, **a remove of the count that was asked for instead of the count
+that arrived**, a remove from the destination, and each port failing to inherit the other's allowance.
 
-## D16. A worker body that dies returns what it carries through vanilla's own drop
+**How this stands beside D8, including the case the first draft of this paragraph skipped.** D8 says Foreman's
+settlement journal is the only material-custody truth, that Thorstein performs cart loads and unloads, and that
+*Gunnar never writes custody*. There are two cases and they need different answers:
+
+- **A deposit outside any Foreman order** - which is every deposit this grant reaches today, because Gunnar's
+  collection runtime takes no Foreman order. D8's own standalone-hauling rule already covers it: the cargo is
+  physical, it is reported rather than credited, and no custody row is owed to anybody. Teamster's
+  `CargoLedger`/`CollectionAccount` records where the material physically is, which is this product's accounting and
+  not a custody claim.
+- **A deposit while Gunnar holds a lease keyed by a Foreman order.** D8 is unchanged and wins: Foreman's journal
+  would remain the custody truth for those units, and Teamster's ledger a physical record beneath it, never an
+  authority over it. This grant does **not** authorize Gunnar to write a custody row, to close one, or to be the
+  record a reconciliation believes.
+
+  **That case is unreachable today, and by structure rather than by intention.** Teamster contains no Foreman order
+  plumbing at all: no lease, gate or collection type in this product carries a Foreman order id, D8's "keyed by
+  Foreman's opaque ids" describes a slice nobody has built, and the deposit is reachable only from the collection
+  runtime, which takes no order from anywhere. The shared arbiter additionally means a haul and a collection round
+  cannot both hold Gunnar. So there is no code path from a Foreman order to this grant, and the leaf that builds one
+  is the leaf that must decide the hand-off - at which point this bullet becomes a requirement on it rather than a
+  description of the present.
+
+## D16. A **Teamster** worker body (Gunnar) that dies returns what it carries through vanilla's own drop
 
 Status: **accepted** (contract revision **C5**, owner decision 2026-09-29).
 Authority: the same owner brief of 2026-09-29. It closes the door `GUNNAR_COLLECTION.md` §6c named and refused to
@@ -331,15 +372,24 @@ validator refuses a death-drop call from any other verb.
 - no minting: exactly what the body holds, once, and nothing recreated from a name;
 - no silent deletion of a drop that failed - a failure is recorded and left as durable reconciliation evidence, and
   the material stays where the last successful measurement put it;
-- no change to the cart, the world, or anything the body was attached to beyond the detach D4 already requires;
+- no change to the cart, or to anything else the body was attached to, beyond the detach D4 already requires (the
+  drop of course changes the world - that is the thing being authorized);
 - no drop of items the body never held.
 
 **Ordering, because a cart is attached to the body.** The cart is detached **first**, through D4's own teardown
 ordering, and the cart and everything in it are left exactly as the game left them. Only then does the drop run.
 
+**Ward, ownership and privacy.** A death drop is vanilla's own, at the body's own position, of items the body
+already holds; it reads no container, so no container check applies to it. The owner's refusal of "bypassing
+ward/container ownership/use checks" is not limited to D15 all the same, and this grant does not authorize the drop
+to reach into, past or around any of them. Placing items anywhere but where the body fell would be a different
+decision.
+
 **Accounting.** Every carried unit becomes either a real world drop or stays accounted for as held-and-unresolved.
 The ledger records the transition; nothing is re-credited and nothing is re-acquired. An interrupted death-drop
 fails closed and keeps its evidence.
 
-**Where it is enforced.** `Adapters/Workers/GunnarDeathDropPort.cs`, pinned verbatim like D15's, with the death
-predicate and the verb it may be called from both audited.
+**Where it will be enforced, and it is not yet.** `Adapters/Workers/GunnarDeathDropPort.cs`, to be pinned verbatim
+like D15's, with the death predicate and the verb it may be called from both audited. The pin is authored with the
+implementation, in the same change. Until then the behaviour is simply absent: **a Gunnar who dies today still loses
+what he is carrying**, exactly as `GUNNAR_COLLECTION.md` §6c says.

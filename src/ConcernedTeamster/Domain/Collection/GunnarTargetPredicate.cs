@@ -73,6 +73,17 @@ internal static class GunnarCollectionAllowlist
         }
     }
 
+    /// <summary>Whether an item prefab is one of the two things collecting
+    /// actually yields.
+    ///
+    /// <b>Used as the default cargo filter for a deposit</b>, so that "he
+    /// deposits what he collected" is enforced rather than true by accident. It
+    /// is the same allowlist read backwards, so widening what he may pick up and
+    /// widening what he may put down are one edit and cannot drift apart.</summary>
+    public static bool IsCollectedYield(string? itemPrefabName) =>
+        string.Equals(itemPrefabName, StoneItemPrefab, System.StringComparison.Ordinal)
+        || string.Equals(itemPrefabName, WoodItemPrefab, System.StringComparison.Ordinal);
+
     /// <summary>The item prefab a kind is expected to give.</summary>
     public static string ExpectedYieldOf(CollectableKind kind)
     {

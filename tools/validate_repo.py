@@ -876,6 +876,36 @@ def _parameter_defaults(code: str):
 # #374: the two facade types a product may see, and the Storage types it may not.
 CONTAINER_FACADE = ("NpcContainerDesk", "NpcContainerDecision")
 
+# Published for the first consumer that needed them, and the reason each is here
+# rather than in the withheld list below (owner decision 2026-09-29,
+# `DECISIONS.md` D15; ConcernedNPC 0.4.0).
+#
+# Gunnar's deposit is the first thing in this repository that moves a player's
+# material into a vanilla container from a role. It needs the mint, so that a
+# refused container yields no token and there is no path from a product to a
+# recorded transfer without one; and it needs the recorder, so that "measured on
+# both sides, and any disagreement is Uncertain" has ONE implementation rather
+# than a second copy in a product, which is how two sides stop agreeing about
+# what uncertain means.
+#
+# `internal` was never the guarantee - it was a proxy for one. The actual
+# guarantee is that a permit cannot be FORGED, and that survives publication
+# because the constructor is private and `Issue` is the only mint. That is no
+# longer left to visibility: `check_container_permit_stays_unforgeable` asserts
+# it directly, which is a stronger rule than the one it replaces, and
+# `ContainerTests.NothingOutsideThisPackageCanForgeAPermit` asserts the same
+# thing from the other side against the built assembly.
+#
+# `NpcContainerPlace` and `NpcContainerGate` stay withheld. A place is a
+# tolerance with a matching rule, and publishing it would publish the rule as an
+# API and invite a role to build one for a container that MOVES.
+CONTAINER_PUBLISHED = (
+    "NpcContainerPermit",
+    "NpcTransferPlan",
+    "ContainerMoveOutcome",
+    "ContainerMoveResult",
+)
+
 # Every `internal` type actually DECLARED under Storage/, checked against the
 # declarations rather than remembered - the first version of this list carried
 # `NpcTransfer`, which is a FILE name and no type at all, and omitted
@@ -886,14 +916,10 @@ CONTAINER_INTERNALS = (
     "NpcContainerPermissionBook",
     "NpcContainerPermission",
     "NpcContainerPlace",
-    "NpcContainerPermit",
     "NpcContainerGate",
     "NpcContainerAuthorization",
     "NpcContainerSighting",
     "NpcContainerAssignment",
-    "NpcTransferPlan",
-    "ContainerMoveOutcome",
-    "ContainerMoveResult",
 )
 
 
@@ -1144,6 +1170,21 @@ def check_container_permissions_stay_reachable(errors: list[str]) -> list[str]:
                  "model goes back to being reachable by nothing, which is what #374 fixed", errors)
             return []
 
+    # The deliberately published mint and recorder (D15). Asserted public for
+    # the same reason the facade is: a type this list says a product may name,
+    # that a product cannot name, describes a library nobody has.
+    storage_code = "\n".join(
+        _cs_code_without_strings(path) for path in sorted((project_dir / "Storage").glob("*.cs")))
+    for name in CONTAINER_PUBLISHED:
+        if not re.search(
+                r"public (?:sealed class|readonly struct|static class|class|struct|enum) "
+                + name + r"\b", storage_code):
+            fail(f"{label}: {name} is in the published set but is not declared public under "
+                 "Storage/ — Gunnar's deposit (DECISIONS.md D15) cannot reach the one mint and "
+                 "the one transfer recorder, and a product that cannot reach them writes its "
+                 "own", errors)
+            return []
+
     # The list above is checked against the library rather than trusted: a
     # `internal` Storage type missing from it is a type a product could name
     # tomorrow with the gate green.
@@ -1156,7 +1197,7 @@ def check_container_permissions_stay_reachable(errors: list[str]) -> list[str]:
                 _cs_code_without_strings(path)):
             declared.add(match.group("name"))
 
-    missing = sorted(declared - set(CONTAINER_INTERNALS))
+    missing = sorted(declared - set(CONTAINER_INTERNALS) - set(CONTAINER_PUBLISHED))
     if missing:
         fail(f"{label}: {missing} are declared `internal` under Storage/ and are not in the "
              "audit's withheld list, so a product could name one with this gate green — add them, "
@@ -1201,11 +1242,91 @@ def check_container_permissions_stay_reachable(errors: list[str]) -> list[str]:
         return []
 
     return [
-        f"{label}: the desk and its record are public; every one of the "
+        f"{label}: the desk and its record are public, and so are the "
+        f"{len(CONTAINER_PUBLISHED)} type(s) deliberately published for Gunnar's deposit "
+        f"(DECISIONS.md D15), whose mint stays unforgeable by its own rule; every one of the "
         f"{len(CONTAINER_INTERNALS)} type(s) declared internal under Storage/ is named by no "
         f"product (the list is checked against the declarations, not remembered); and "
         f"{', '.join(sorted(consumers))} "
         f"consume{'s' if len(consumers) == 1 else ''} the facade outside a string or a comment",
+    ]
+
+
+def check_container_permit_stays_unforgeable(errors: list[str]) -> list[str]:
+    """The permit's only mint is `Issue`, which re-asks the container (D15).
+
+    <b>This rule exists because publication removed the one that used to do this
+    job.</b> `NpcContainerPermit` was `internal`, and the property everybody
+    relied on - a role cannot hold a permit for a container that refused - was a
+    side effect of that: nothing outside the assembly could name the type at all,
+    let alone construct one. Gunnar's deposit needed the mint, so the type is
+    public as of 0.4.0, and the side effect is gone.
+
+    What replaces it is the actual property, asserted directly and in the
+    strengthening direction: the constructor is private, so the only way to get
+    one is `Issue`, and `Issue` re-reads `INpcContainer.Access` itself rather
+    than trusting anything a caller passed. A `public` or `internal` constructor
+    appearing here later - which is the one edit that would quietly restore
+    forgeability - fails this.
+
+    `ContainerTests.NothingOutsideThisPackageCanForgeAPermit` asserts the same
+    thing from the other side, by reflection over the built assembly. Two
+    independent checks on one property, because it is the property the whole
+    permission model rests on."""
+    library = LIBRARIES.get("concernednpc")
+    label = "[concernednpc] D15 permit-mint audit"
+    if library is None:
+        return []
+
+    project_dir: Path = library["project_dir"]  # type: ignore[assignment]
+    path = project_dir / "Storage" / "NpcContainerPermit.cs"
+    if not path.is_file():
+        fail(f"{label}: Storage/NpcContainerPermit.cs is missing — the mint Gunnar's deposit "
+             "depends on is gone, and with it the rule that a refused container yields no token",
+             errors)
+        return []
+
+    code = _cs_code_without_strings(path)
+
+    forgeable = re.search(
+        r"(?:public|internal|protected)" + SPACES + r"NpcContainerPermit" + SPACE + r"\(", code)
+    if forgeable:
+        fail(f"{label}: NpcContainerPermit has a `{forgeable.group(0).strip()}` constructor. The "
+             "type is public, so that is a permit a role can build for a container that refused — "
+             "which is the whole thing the permission model rests on not being possible. The only "
+             "mint is Issue(), and its constructor stays private", errors)
+        return []
+
+    if not re.search(r"private" + SPACES + r"NpcContainerPermit" + SPACE + r"\(", code):
+        fail(f"{label}: NpcContainerPermit has no private constructor, so this audit cannot tell "
+             "that Issue() is the only mint", errors)
+        return []
+
+    mints = re.findall(
+        r"public" + SPACES + r"static" + SPACES + r"NpcContainerPermit" + r"\??" + SPACE
+        + r"(?P<name>[A-Za-z0-9_]+)" + SPACE + r"\(", code)
+    if sorted(set(mints)) != ["Issue"]:
+        fail(f"{label}: the public static factories on NpcContainerPermit are {sorted(set(mints))}, "
+             "not exactly ['Issue']. A second mint is a second place the container's own access "
+             "could fail to be re-asked", errors)
+        return []
+
+    # Issue must read the container's access itself. A version that took the
+    # access as a parameter would be a mint that trusts its caller, which is
+    # exactly what the type's documentation says it does not do.
+    issue = re.search(
+        r"public" + SPACES + r"static" + SPACES + r"NpcContainerPermit" + r"\??" + SPACE
+        + r"Issue" + SPACE + r"\((?P<args>[^)]*)\)", code)
+    if issue is None or "NpcContainerAccess" in (issue.group("args") or ""):
+        fail(f"{label}: Issue() either could not be read or takes an NpcContainerAccess. The mint "
+             "must read the container's own access at the moment of minting; taking it as an "
+             "argument lets a caller mint a permit for a chest that said no", errors)
+        return []
+
+    return [
+        f"{label}: NpcContainerPermit is public with a private constructor, Issue() is its only "
+        f"mint, and Issue() reads the container's own access rather than taking it — so a refused "
+        f"container still yields no token now that a product can name the type",
     ]
 
 
@@ -1642,6 +1763,14 @@ TEAMSTER_WORKER_FORBIDDEN_ASSIGNMENT = re.compile(
     r"\s*[-+*/&|^]?=(?!=)")
 TEAMSTER_WORKER_FORBIDDEN_TOKENS = (
     "Teleport",
+    # The three inventory calls D15 authorizes, forbidden here so that the
+    # allowance below is the only way any of them reaches the source tree. They
+    # were not audited at all before D15 - which #401 found and said plainly:
+    # "a list that stops at Interact and Pickup while AddItem is free is a list
+    # whose boundary is narrower than its rationale".
+    ".MoveItemToThis(",
+    ".AddItem(",
+    ".RemoveItem(",
     "MovePosition",
     "MoveRotation",
     "AddForce",
@@ -1693,7 +1822,14 @@ TEAMSTER_WORKER_FACTORY_ONLY_TOKENS = (
 # written to correct - an enforcement claim wider than the enforcement - one line
 # away from where it was being corrected. Both authorized tokens are scanned in
 # both places now, and both are refused everywhere but the one pinned call each.
-TEAMSTER_OUTSIDE_WORKERS_TOKENS = (".Interact(", ".Pickup(", "SetExtraMass")
+TEAMSTER_OUTSIDE_WORKERS_TOKENS = (
+    ".Interact(", ".Pickup(", "SetExtraMass",
+    # Scanned in both places for the reason the comment above gives about
+    # `.Pickup(`: a token refused only inside Adapters/Workers is a token a
+    # helper in Adapters/ or Domain/ may spell, which is an enforcement claim
+    # wider than the enforcement.
+    ".MoveItemToThis(", ".AddItem(", ".RemoveItem(",
+)
 
 # The one owner-authorized exception to the worker runtime's token list
 # (owner decision, 2026-09-19, for #381 Gunnar collection).
@@ -1750,6 +1886,13 @@ TEAMSTER_OUTSIDE_WORKERS_TOKENS = (".Interact(", ".Pickup(", "SetExtraMass")
 # program.
 TEAMSTER_COLLECTION_PORT_PATH = ("Adapters", "Workers", "GunnarCollectionPort.cs")
 
+# The deposit port (owner decision 2026-09-29, #415; `DECISIONS.md` D15). Same
+# shape as the collection port's allowance and for the same reasons: by full
+# path so a second file of the name elsewhere inherits nothing, by the exact
+# call so the token on a different receiver still fails, and once each so a
+# second move in the port is a different program.
+TEAMSTER_DEPOSIT_PORT_PATH = ("Adapters", "Workers", "GunnarDepositPort.cs")
+
 # Each authorized call: the token that is otherwise forbidden everywhere, the
 # exact call that token is allowed to be, and what it does. Anything else the
 # token could spell still fails inside this file.
@@ -1773,6 +1916,42 @@ TEAMSTER_COLLECTION_PORT_CALLS = (
                 r"\s*autoPickupDelay\s*:\s*false\s*\)"),
      "vanilla's take of one dropped item, which destroys that item's network object inside vanilla"),
 )
+
+# The deposit's three calls. Every one moves a player's material, so every one is
+# pinned verbatim - which is the correction #401 asked for, applied to the
+# allowance that needed it rather than only to the one that already existed.
+#
+# - `.MoveItemToThis(` is vanilla's whole-stack move: it adds to the destination
+#   and removes from the source inside one call, keeping the moved instance, so a
+#   tool's wear, a crafter's name and a world level survive.
+# - `.AddItem(` and `.RemoveItem(` are the two halves of the partial-stack case,
+#   which vanilla has no single call for. The clone added is of a stack the same
+#   operation then removes from, and the count removed is what ARRIVED, measured -
+#   never the count asked for. `DECISIONS.md` D15 records why that pair is not
+#   the "spawning of item instances" the same decision forbids: nothing here is
+#   built from a name.
+#
+# The argument names are part of the pin on purpose. `to.AddItem(part)` is the
+# clone of a stack being removed from; `to.AddItem(anything else)` is a product
+# putting an item it found somewhere into a chest, which is not what was granted.
+TEAMSTER_DEPOSIT_PORT_CALLS = (
+    (".MoveItemToThis(",
+     re.compile(r"\bto\s*\.\s*MoveItemToThis\s*\(\s*from\s*,\s*stack\s*\)"),
+     "vanilla's whole-stack move into the designated container"),
+    (".AddItem(",
+     re.compile(r"\bto\s*\.\s*AddItem\s*\(\s*part\s*\)"),
+     "the clone of a partial stack, added before anything is removed"),
+    (".RemoveItem(",
+     re.compile(r"\bfrom\s*\.\s*RemoveItem\s*\(\s*stack\s*,\s*moved\s*\)"),
+     "exactly what arrived, taken off the original stack after the add"),
+)
+
+# Which file may spell which authorized calls. A path absent from this table has
+# no allowance at all, which is every file in the product bar these two.
+TEAMSTER_AUTHORIZED_PORTS = {
+    TEAMSTER_COLLECTION_PORT_PATH: TEAMSTER_COLLECTION_PORT_CALLS,
+    TEAMSTER_DEPOSIT_PORT_PATH: TEAMSTER_DEPOSIT_PORT_CALLS,
+}
 
 
 def _audit_token(token: str) -> re.Pattern:
@@ -1857,10 +2036,11 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
         # match and the Release build was happy either way.
         code_text = "\n".join(_strip_cs_line_comment(raw) for raw in
                               path.read_text(encoding="utf-8").splitlines())
-        authorized = tuple(parts) == TEAMSTER_COLLECTION_PORT_PATH
+        port_calls = TEAMSTER_AUTHORIZED_PORTS.get(tuple(parts), ())
+        authorized = bool(port_calls)
         allowed_calls = {}
-        for token, pattern, what in TEAMSTER_COLLECTION_PORT_CALLS:
-            found = len(pattern.findall(code_text)) if authorized else 0
+        for token, pattern, what in port_calls:
+            found = len(pattern.findall(code_text))
             allowed_calls[token] = found
             if found > 1:
                 hits += 1
@@ -1875,7 +2055,7 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
         where = "" if in_workers else " outside Adapters/Workers"
         for token in scanned:
             spent = 0
-            exact = next((pattern for allowed, pattern, _what in TEAMSTER_COLLECTION_PORT_CALLS
+            exact = next((pattern for allowed, pattern, _what in port_calls
                           if allowed == token), None)
             for match in _audit_token(token).finditer(code_text):
                 if (exact is not None and authorized
@@ -1900,7 +2080,12 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
         f"{' and '.join(repr(token) for token, _p, _w in TEAMSTER_COLLECTION_PORT_CALLS)} "
         f"owner-authorized as two pinned calls, each verbatim and each once, in "
         f"{'/'.join(TEAMSTER_COLLECTION_PORT_PATH)} alone (the pick, and the take that destroys the "
-        "dropped item's network object inside vanilla); cart attach/detach/detach-all only "
+        f"dropped item's network object inside vanilla); "
+        f"{' and '.join(repr(token) for token, _p, _w in TEAMSTER_DEPOSIT_PORT_CALLS)} "
+        f"owner-authorized as three pinned calls, each verbatim and each once, in "
+        f"{'/'.join(TEAMSTER_DEPOSIT_PORT_PATH)} alone (D15's deposit: the whole-stack move, and the "
+        f"add-then-remove pair that moves part of one); all five refused everywhere else in the "
+        f"product, inside Adapters/Workers and out; cart attach/detach/detach-all only "
         f"in Adapters/Workers, mass writes only in {TEAMSTER_WORKER_CALIBRATION_FILE}, network-object writes only "
         f"'tcc.worker.*' keys in {TEAMSTER_WORKER_IDENTITY_FILE}, no teleport/pose/velocity/constraint/joint/cart-"
         f"tuning writes, no component surgery or reflection outside the prefab factory (inside Adapters/Workers only; reflection elsewhere in Teamster is not audited by this rule) ({hits} violations)",
@@ -3838,6 +4023,7 @@ def main() -> int:
     report.extend(check_library_consumers_do_not_bypass_the_arbiter(errors))
     report.extend(check_the_npc_library_writes_no_file(errors))
     report.extend(check_container_permissions_stay_reachable(errors))
+    report.extend(check_container_permit_stays_unforgeable(errors))
     report.extend(check_console_failures_go_through_one_scrubber(errors))
     report.extend(check_npc_planning_decides_nothing_to_do_once(errors))
     report.extend(check_npc_planning_never_defaults_a_claim(errors))
