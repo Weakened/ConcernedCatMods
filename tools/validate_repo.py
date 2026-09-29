@@ -2254,14 +2254,35 @@ TEAMSTER_RETIRE_ALLOWS = "WorkerRetirement.Allows("
 # local, `ZNetScene.instance` — moves a file's routed count.
 #
 # That is the whole claim, and it is narrower than "every way to reach the vanilla
-# scene's removal", which an earlier version of this comment said. Two things this
-# does not catch, both proved by a review rather than imagined:
+# scene's removal", which an earlier version of this comment said. One thing this
+# does not catch, proved by a review rather than imagined:
 #
 #   * a receiver hidden behind an indirection that spells no `Destroy…(` at all
 #     (`Action<GameObject> reap = UnityEngine.Object.Destroy; reap(go);`), which
-#     TEAMSTER_DESTRUCTION cannot see either;
-#   * a destruction outside Adapters/Workers entirely, since these pins only walk
-#     the worker folder. A helper in Adapters/ or Domain/ is not audited here.
+#     TEAMSTER_DESTRUCTION cannot see either.
+#
+# A SECOND LIMIT USED TO BE LISTED HERE and is now closed rather than described:
+# these pins walked only Adapters/Workers, so a helper in Adapters/ or Domain/
+# calling `ZNetScene.instance.Destroy(body)` passed at exit 0 with every pinned
+# count unchanged (#401). The folder was a convenient scope that got mistaken for
+# a boundary — the same shape as the two earlier corrections, which both stayed
+# inside the folder. The walk below is now the whole product source tree,
+# `src/ConcernedTeamster/**/*.cs` less `obj/` and `bin/`, keyed by path relative
+# to the product rather than to the worker folder.
+#
+# TWO THINGS THE PRODUCT TREE DOES NOT COVER, said here rather than left as the
+# next convenient scope for someone to mistake for a boundary:
+#
+#   * `obj/` and `bin/`, which hold generated and built output. Neither is in the
+#     project's Compile items (the SDK's own default excludes them), so a helper
+#     dropped there is not in the shipped assembly at all.
+#   * the shared source Teamster compiles in from `src/Shared/Workers`,
+#     `src/Shared/Interop` and `src/Shared/Diagnostics`, which IS in the shipped
+#     assembly. It cannot spell a destruction: the same files compile into
+#     ConcernedTeamster.Tests, a net10.0 project with no game assemblies at all,
+#     so `UnityEngine`, `ZNetScene` and every other game type are compile errors
+#     there. That is a stronger guarantee than this text audit, and it is the
+#     compiler's rather than this file's.
 #
 # It also cannot know a receiver's TYPE and does not claim to. What it guarantees
 # is that swapping which thing a WRITTEN destruction is routed through changes a
@@ -2324,17 +2345,17 @@ def _destruction_receiver(text: str, start: int) -> str:
     match = TEAMSTER_DESTRUCTION_RECEIVER.search(prefix[:-1].rstrip())
     return re.sub(r"\s+", "", match.group(0)) if match else "?"
 
-# Where anything may be destroyed at all in the worker folder, with how many
+# Where anything may be destroyed at all in Teamster's source, with how many
 # sites each file holds. A pinned population, like the pinned port calls. Most of
 # these are not bodies — a plugin component being removed, the prefab factory's
 # own component surgery — and the rule does not pretend to know which is which.
 # What it guarantees is narrower and still worth having: **a new call spelled
-# `Destroy…(`, anywhere under Adapters/Workers, fails this audit until a person
+# `Destroy…(`, anywhere in src/ConcernedTeamster, fails this audit until a person
 # records it here and says what guards it.**
 #
-# KEYED BY PATH RELATIVE TO THE WORKER FOLDER, NOT BY BASENAME, and by rglob
-# rather than glob. Both were defects a review proved. `glob("*.cs")` does not
-# descend, so the same planted `ZNetScene.instance.Destroy(body)` in a new
+# KEYED BY PATH RELATIVE TO THE PRODUCT, NOT BY BASENAME, and by rglob rather
+# than glob. Both were defects a review proved. `glob("*.cs")` does not descend,
+# so the same planted `ZNetScene.instance.Destroy(body)` in a new
 # `Workers/Sweep/ZzSweeper.cs` was invisible while the sentence still said
 # "anywhere in Adapters/Workers" — and the #313 scope audit over the very same
 # directory uses rglob and did count that file. Basename keying is the other half:
@@ -2342,20 +2363,27 @@ def _destruction_receiver(text: str, start: int) -> str:
 # allowance, which is the exact defect already fixed once in this carve-out for
 # GunnarCollectionPort.cs.
 #
-# - GunnarCollectionRuntime.cs: the plugin component in Uninstall.
-# - GunnarHaulingRuntime.cs: the plugin component in Uninstall, and the
-#   pointed-at body in the guarded retire verb.
-# - TeamsterWorkerBody.cs: the bound body, reachable only through
+# THE KEYS GAINED THEIR FOLDER in #401. They used to be bare basenames relative
+# to Adapters/Workers, which is what let a destruction in any other Teamster
+# folder be counted by nobody at all.
+#
+# - Adapters/Workers/GunnarCollectionRuntime.cs: the plugin component in Uninstall.
+# - Adapters/Workers/GunnarHaulingRuntime.cs: the plugin component in Uninstall,
+#   and the pointed-at body in the guarded retire verb.
+# - Adapters/Workers/TeamsterWorkerBody.cs: the bound body, reachable only through
 #   HaulExecutor.RetireBody() and so only from the guarded retire verb.
-# - TeamsterWorkerPrefab.cs: the prefab's own teardown, the factory's component
-#   surgery on the inactive clone (three sites), and the two ways a body that has
-#   JUST been created and came up invalid is cleaned up. That body has held
-#   nothing for any length of time.
+# - Adapters/Workers/TeamsterWorkerPrefab.cs: the prefab's own teardown, the
+#   factory's component surgery on the inactive clone (three sites), and the two
+#   ways a body that has JUST been created and came up invalid is cleaned up. That
+#   body has held nothing for any length of time.
+# - Plugin.cs: the plugin's own container facade component in OnDestroy. Unity's
+#   static, on a component this plugin created; no body and no network object.
 TEAMSTER_DESTRUCTION_SITES = {
-    "GunnarCollectionRuntime.cs": 1,
-    "GunnarHaulingRuntime.cs": 2,
-    "TeamsterWorkerBody.cs": 1,
-    "TeamsterWorkerPrefab.cs": 6,
+    "Adapters/Workers/GunnarCollectionRuntime.cs": 1,
+    "Adapters/Workers/GunnarHaulingRuntime.cs": 2,
+    "Adapters/Workers/TeamsterWorkerBody.cs": 1,
+    "Adapters/Workers/TeamsterWorkerPrefab.cs": 6,
+    "Plugin.cs": 1,
 }
 
 # How many of those destructions are routed through an INSTANCE rather than
@@ -2368,30 +2396,37 @@ TEAMSTER_DESTRUCTION_SITES = {
 # shape would mean writing an exception into the one rule whose job is to notice a
 # shape changing, and two counts over the same call cost nothing.
 #
-# - GunnarHaulingRuntime.cs: `view.Destroy()`, the pointed-at body in the guarded
-#   retire verb.
-# - TeamsterWorkerBody.cs: `view.Destroy()`, the bound body, reachable only
-#   through the guarded retire verb.
-# - TeamsterWorkerPrefab.cs: `view.Destroy()` on a body that came up invalid, and
-#   Jotunn's `PrefabManager.Instance.DestroyPrefab`, which unregisters the mod's
-#   own prefab and touches no body in a world.
+# - Adapters/Workers/GunnarHaulingRuntime.cs: `view.Destroy()`, the pointed-at
+#   body in the guarded retire verb.
+# - Adapters/Workers/TeamsterWorkerBody.cs: `view.Destroy()`, the bound body,
+#   reachable only through the guarded retire verb.
+# - Adapters/Workers/TeamsterWorkerPrefab.cs: `view.Destroy()` on a body that came
+#   up invalid, and Jotunn's `PrefabManager.Instance.DestroyPrefab`, which
+#   unregisters the mod's own prefab and touches no body in a world.
 #
-# GunnarCollectionRuntime.cs is absent on purpose: it destroys only its own plugin
-# component, through Unity's static. It is also the file the review's substitution
-# plant targeted, precisely because a zero here is what a swap has to break.
+# Adapters/Workers/GunnarCollectionRuntime.cs is absent on purpose: it destroys
+# only its own plugin component, through Unity's static. It is also the file the
+# review's substitution plant targeted, precisely because a zero here is what a
+# swap has to break.
 #
 # SO ITS ABSENCE IS THE LOAD-BEARING VALUE, and the obvious way to silence this
 # rule is to add it with a 1. If this audit ever fails on
-# GunnarCollectionRuntime.cs, the question is not "what number makes it pass" - it
-# is which call grew a receiver, and whether that call now takes a BODY out of the
-# world from a file that has no retirement guard anywhere in it. A static destroy
-# written unqualified is the benign cause and the fix is to spell it
-# `UnityEngine.Object.Destroy(x)`; anything else wants a person's decision, not a
-# bumped count.
+# Adapters/Workers/GunnarCollectionRuntime.cs, the question is not "what number
+# makes it pass" - it is which call grew a receiver, and whether that call now
+# takes a BODY out of the world from a file that has no retirement guard anywhere
+# in it. A static destroy written unqualified is the benign cause and the fix is to
+# spell it `UnityEngine.Object.Destroy(x)`; anything else wants a person's
+# decision, not a bumped count.
+#
+# EVERY FILE OUTSIDE Adapters/Workers IS ABSENT HERE FOR THE SAME REASON, and
+# that is what #401 bought. Plugin.cs's one destruction is Unity's own qualified
+# static, so it is pinned above and expects zero here; any Teamster file that
+# starts routing a destruction through an instance now fails until a person says
+# what it destroys.
 TEAMSTER_ROUTED_DESTRUCTION_SITES = {
-    "GunnarHaulingRuntime.cs": 1,
-    "TeamsterWorkerBody.cs": 1,
-    "TeamsterWorkerPrefab.cs": 2,
+    "Adapters/Workers/GunnarHaulingRuntime.cs": 1,
+    "Adapters/Workers/TeamsterWorkerBody.cs": 1,
+    "Adapters/Workers/TeamsterWorkerPrefab.cs": 2,
 }
 
 # A guard that is CONSULTED AND IGNORED passes a source-order check: a bare
@@ -2404,21 +2439,27 @@ TEAMSTER_RETIRE_ALLOWS_GUARD = re.compile(
 
 # Where a body may leave the world at all, with how many sites each file holds.
 # A pinned population, like the one pinned pickup call: any other count anywhere
-# in Adapters/Workers fails, so a new removal cannot appear without a person
+# in src/ConcernedTeamster fails, so a new removal cannot appear without a person
 # deciding what guards it.
 #
-# - GunnarHaulingRuntime.cs: the retire verb's two paths, the pointed-at
-#   duplicate and the bound body. Both guarded, checked below.
-# - TeamsterWorkerBody.cs: the bound body's actual destruction, reachable only
-#   through HaulExecutor.RetireBody(), which is reachable only from the guarded
-#   retire verb.
-# - TeamsterWorkerPrefab.cs: a body that has just been created and came up
-#   invalid. It has held nothing for any length of time, and refusing to clean it
-#   up would leave a broken object in the world.
+# - Adapters/Workers/GunnarHaulingRuntime.cs: the retire verb's two paths, the
+#   pointed-at duplicate and the bound body. Both guarded, checked below.
+# - Adapters/Workers/TeamsterWorkerBody.cs: the bound body's actual destruction,
+#   reachable only through HaulExecutor.RetireBody(), which is reachable only from
+#   the guarded retire verb.
+# - Adapters/Workers/TeamsterWorkerPrefab.cs: a body that has just been created
+#   and came up invalid. It has held nothing for any length of time, and refusing
+#   to clean it up would leave a broken object in the world.
+# - Domain/Hauling/Execution/HaulExecutor.cs: the DECLARATION of the game-free
+#   `RetireBody()` decision, which `\bRetireBody\s*\(` cannot tell from a call and
+#   is pinned rather than excepted. It removes nothing itself — it returns an
+#   outcome the adapter acts on — but a second `RetireBody(` appearing in this
+#   game-free layer means a new caller, which is a person's decision.
 TEAMSTER_BODY_REMOVAL_SITES = {
-    "GunnarHaulingRuntime.cs": 2,
-    "TeamsterWorkerBody.cs": 1,
-    "TeamsterWorkerPrefab.cs": 1,
+    "Adapters/Workers/GunnarHaulingRuntime.cs": 2,
+    "Adapters/Workers/TeamsterWorkerBody.cs": 1,
+    "Adapters/Workers/TeamsterWorkerPrefab.cs": 1,
+    "Domain/Hauling/Execution/HaulExecutor.cs": 1,
 }
 
 
@@ -2433,16 +2474,33 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
             f"{runtime.relative_to(ROOT)} — the audit no longer covers the retire verb", errors)
         return []
 
-    # First: the population. Every place in the worker folder where a body can
+    # First: the population. Every place in Teamster's source where a body can
     # leave the world, counted, against what this rule has been told to expect.
+    #
+    # THE WALK IS THE WHOLE PRODUCT (#401), not Adapters/Workers. The worker
+    # folder was never the boundary being defended; it was a convenient scope
+    # that the audit's own success sentence came to describe as one, which is how
+    # a reader comes to trust a guarantee that does not exist.
     workers_dir = teamster_dir.joinpath(*TEAMSTER_WORKERS_DIR)
+    if not workers_dir.is_dir() or not any(workers_dir.rglob("*.cs")):
+        fail(
+            "[interop] #381 carried-material audit: "
+            f"{'/'.join(TEAMSTER_WORKERS_DIR)} has no sources under "
+            f"{teamster_dir.relative_to(ROOT)} — the worker runtime this audit pins moved, and the "
+            "pinned populations below are keyed to where it was", errors)
     total_sites = 0
     total_destructions = 0
     total_routed = 0
-    for path in sorted(workers_dir.rglob("*.cs")):
-        # Relative to the worker folder, so a subdirectory is a different key
-        # rather than the same allowance seen twice.
-        key = path.relative_to(workers_dir).as_posix()
+    scanned_files = 0
+    for path in sorted(teamster_dir.rglob("*.cs")):
+        # Relative to the PRODUCT, so a subdirectory — and a folder outside
+        # Adapters/Workers — is a different key rather than the same allowance
+        # seen twice, or no key at all.
+        relative = path.relative_to(teamster_dir)
+        if relative.parts[0] in ("obj", "bin"):
+            continue
+        key = relative.as_posix()
+        scanned_files += 1
         text = _strip_cs_comments(path.read_text(encoding="utf-8"))
         found = len(TEAMSTER_BODY_REMOVAL.findall(text))
         total_sites += found
@@ -2545,17 +2603,21 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
                 "spelled the forcing word", errors)
 
     return [
-        f"[interop] #381 carried-material audit: {total_destructions} destruction(s), {total_routed} of "
-        f"them routed through an instance, and {total_sites} unambiguous body removal(s) under "
-        "Adapters/Workers and its subdirectories, every one at a pinned site keyed by relative path — "
-        "so a new call spelled `Destroy…(` fails here, and so does re-routing an existing one through a "
-        f"different receiver. The {in_verb} REMOVALS in {'/'.join(TEAMSTER_RETIRE_FILE)} are inside the "
+        f"[interop] #381 carried-material audit: {scanned_files} Teamster source(s) scanned — the whole "
+        f"of {teamster_dir.relative_to(ROOT).as_posix()} and its subdirectories, less obj/ and bin/ "
+        "(neither is compiled) and less the shared source compiled in from src/Shared, which the "
+        "net10.0 test project proves cannot name a game type at all, not "
+        f"Adapters/Workers alone (#401) — holding {total_destructions} destruction(s), {total_routed} of "
+        f"them routed through an instance, and {total_sites} unambiguous body removal(s), every one at a "
+        "pinned site keyed by path relative to the product — so a new call spelled `Destroy…(`, in any "
+        "Teamster folder, fails here, and so does re-routing an existing one through a different "
+        f"receiver. The {in_verb} REMOVALS in {'/'.join(TEAMSTER_RETIRE_FILE)} are inside the "
         "retire verb with a refusing `if (!WorkerRetirement.Allows(...))` written above each (that "
         "file's other destruction is its own plugin component in Uninstall, nowhere near the verb). "
         "What that establishes is that the refusal is written above each removal — NOT that control "
         "flow obeys it, which is WorkerRetirementTests' job and a reviewer's. A destruction reached "
-        "through an indirection that spells no `Destroy…(` at all, and any destruction outside "
-        "Adapters/Workers, are both outside what this text audit sees",
+        "through an indirection that spells no `Destroy…(` at all is still outside what this text "
+        "audit sees",
     ]
 
 

@@ -23,8 +23,10 @@ WORKERS = os.path.join(ROOT, "src", "ConcernedTeamster", "Adapters", "Workers")
 PORT = os.path.join(WORKERS, "GunnarCollectionPort.cs")
 HAULING = os.path.join(WORKERS, "GunnarHaulingRuntime.cs")
 COLLECTION_RUNTIME = os.path.join(WORKERS, "GunnarCollectionRuntime.cs")
-ADAPTERS = os.path.join(ROOT, "src", "ConcernedTeamster", "Adapters")
-DOMAIN = os.path.join(ROOT, "src", "ConcernedTeamster", "Domain")
+TEAMSTER = os.path.join(ROOT, "src", "ConcernedTeamster")
+ADAPTERS = os.path.join(TEAMSTER, "Adapters")
+DOMAIN = os.path.join(TEAMSTER, "Domain")
+UI = os.path.join(TEAMSTER, "Ui")
 
 STUB = """namespace TheConcernedCat.ConcernedTeamster.Zz;
 
@@ -111,8 +113,14 @@ class CarveOutIsNarrow(unittest.TestCase):
     def swap_in_port(self, old, new):
         self.swap_in(PORT, old, new)
 
-    def assert_refused(self, why, marker="#313"):
+    def assert_refused(self, why, marker="#313", contains=None):
+        # `marker` alone is a weak claim for the #381 audits: their SUCCESS line
+        # carries the marker too, so a refusal by some unrelated rule would
+        # satisfy it. `contains` names a phrase only the intended failure
+        # message can produce.
         code, out = validate()
+        if contains is not None:
+            self.assertIn(contains, out, why + "\n" + out[-2000:])
         self.assertNotEqual(0, code, why + "\n" + out[-2000:])
         self.assertIn(marker, out, why)
 
@@ -347,6 +355,55 @@ class CarveOutIsNarrow(unittest.TestCase):
                     if os.path.isfile(path):
                         os.remove(path)
                 self._planted = []
+
+    # --- #401: the population pins walk the whole product, not one folder. ---
+    #
+    # Each of the five below passed at exit 0 before this issue, with every
+    # pinned count unchanged, because the walk stopped at Adapters/Workers.
+
+    def test_a_destruction_outside_the_worker_folder_is_counted(self):
+        self.plant_file(os.path.join(ADAPTERS, "ZzReaper.cs"),
+                        "        UnityEngine.Object.Destroy(cart);")
+        self.assert_refused(
+            "a destruction outside Adapters/Workers was counted by nobody",
+            marker="#381",
+            contains="destroys something 1 time(s); this rule expects 0")
+
+    def test_a_routed_destruction_outside_the_worker_folder_is_counted(self):
+        # The substitution shape, one folder over: a destruction routed through
+        # an instance is how a NETWORKED body leaves the world, inventory and all.
+        self.plant_file(os.path.join(ADAPTERS, "ZzRoutedReaper.cs"),
+                        "        _scene.Destroy(cart);")
+        self.assert_refused(
+            "a destruction routed through an instance outside Adapters/Workers was unpinned",
+            marker="#381",
+            contains="routes a destruction through something other than Unity's Object statics")
+
+    def test_a_body_removal_outside_the_worker_folder_is_counted(self):
+        self.plant_file(os.path.join(UI, "ZzRemover.cs"), "        view.Destroy();")
+        self.assert_refused(
+            "a body removal outside Adapters/Workers was counted by nobody",
+            marker="#381",
+            contains="takes a body out of the world 1 time(s); this rule expects 0")
+
+    def test_the_population_pin_keys_on_the_path_outside_the_worker_folder_too(self):
+        # Basename keying is the escape this carve-out has already been corrected
+        # for twice. A second `TeamsterWorkerBody.cs`, now that the walk leaves
+        # the worker folder, would inherit that file's allowance of one removal.
+        self.plant_file(os.path.join(DOMAIN, "TeamsterWorkerBody.cs"),
+                        "        view.Destroy();")
+        self.assert_refused(
+            "a file outside Adapters/Workers inherited an allowance by basename",
+            marker="#381",
+            contains="takes a body out of the world 1 time(s); this rule expects 0")
+
+    def test_the_population_pin_descends_outside_the_worker_folder(self):
+        self.plant_file(os.path.join(DOMAIN, "Hauling", "Zz", "ZzDeepReaper.cs"),
+                        "        UnityEngine.Object.Destroy(cart);")
+        self.assert_refused(
+            "a destruction in a subdirectory outside Adapters/Workers was invisible",
+            marker="#381",
+            contains="destroys something 1 time(s); this rule expects 0")
 
     def test_znet_scene_is_forbidden_outside_the_worker_folder(self):
         self.plant_file(os.path.join(DOMAIN, "ZzOutsideDestroy.cs"),
