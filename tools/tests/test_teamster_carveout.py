@@ -400,6 +400,14 @@ class CarveOutIsNarrow(unittest.TestCase):
             "a nullable interpolation format hid a later Inventory.AddItem",
             marker="#313")
 
+    def test_nullable_alignment_format_does_not_hide_later_inventory_add_item(self):
+        self.plant_file(
+            os.path.join(WORKERS, "ZzAlignedNullableInventoryMover.cs"),
+            '        var label = $"{value as int?,10://}"; ((dynamic)who.GetInventory()).AddItem(cart);')
+        self.assert_refused(
+            "nullable interpolation alignment hid a later Inventory.AddItem",
+            marker="#313")
+
     def test_inventory_add_item_inside_a_block_comment_is_not_code(self):
         self.plant_file(os.path.join(WORKERS, "ZzCommentOnly.cs"),
                         "        /* ((dynamic)who.GetInventory()).AddItem(cart); */")
@@ -429,6 +437,14 @@ class CarveOutIsNarrow(unittest.TestCase):
             '        var label = $"{value as int?://}"; view.Destroy();')
         self.assert_refused(
             "a nullable interpolation format hid a later worker destruction",
+            marker="#381")
+
+    def test_nullable_alignment_format_does_not_hide_later_worker_destruction(self):
+        self.plant_file(
+            os.path.join(WORKERS, "ZzAlignedNullableDestroy.cs"),
+            '        var label = $"{value as int?,10://}"; view.Destroy();')
+        self.assert_refused(
+            "nullable interpolation alignment hid a later worker destruction",
             marker="#381")
 
     def test_the_population_pin_descends_into_subdirectories(self):

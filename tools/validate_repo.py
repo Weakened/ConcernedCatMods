@@ -1698,7 +1698,7 @@ def _strip_cs_comments(text: str) -> str:
                 previous = text[index - 1] if index else ""
                 if (next_char not in {"?", ".", "["}
                         and previous != "?"
-                        and next_non_trivia(index + 1) != ":"):
+                        and next_non_trivia(index + 1) not in {":", ","}):
                     conditional_depth += 1
             elif char == ":" and paren_depth == 0 and bracket_depth == 0:
                 if conditional_depth:
