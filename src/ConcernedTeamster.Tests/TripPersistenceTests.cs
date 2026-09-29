@@ -424,7 +424,7 @@ public class TripPersistenceTests
     // -- CT-040: scale at the worst-case configured retention -------------
 
     [Fact]
-    public void Scale_MaxTripsRetainedRoundTrip_StaysCorrectAndReasonablyFast()
+    public void Scale_MaxTripsRetainedRoundTrip_StaysCorrectAndAllocationBounded()
     {
         // The worst case a player could actually configure:
         // TripRecorderOptions.MaxMaxTripsRetained (500) trips in one
@@ -446,18 +446,18 @@ public class TripPersistenceTests
                 trips.Add(MakeTrip(20, cartId: "1:1", startTime: index * 100.0));
             }
 
-            var composeStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            long composeBefore = GC.GetAllocatedBytesForCurrentThread();
             string composed = TripSidecar.Compose(trips, worldUid: 42L, "0.8.0");
             Assert.True(SidecarFileStore.TryWriteAtomic(path, composed, out string? writeError));
-            composeStopwatch.Stop();
+            long composeAllocated = GC.GetAllocatedBytesForCurrentThread() - composeBefore;
             Assert.Null(writeError);
 
             long fileSizeBytes = new FileInfo(path).Length;
 
-            var parseStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            long parseBefore = GC.GetAllocatedBytesForCurrentThread();
             string? text = SidecarFileStore.TryRead(path, out string? readError);
             TripSidecar.ParseResult parsed = TripSidecar.Parse(text, 42L);
-            parseStopwatch.Stop();
+            long parseAllocated = GC.GetAllocatedBytesForCurrentThread() - parseBefore;
 
             Assert.Null(readError);
             Assert.False(parsed.Refused);
@@ -465,17 +465,22 @@ public class TripPersistenceTests
             Assert.Equal(maxTrips, parsed.Trips.Count);
             Assert.Equal(20, parsed.Trips[0].Samples.Count);
 
-            // CT-048's formal sidecar-IO-latency budget (docs/mods/concerned-
-            // teamster/PERFORMANCE_BUDGETS.md): generous multiples of the
-            // one-machine measured value (CT-040 scale evidence in
-            // RELEASE_DOSSIER.md: ~23 ms / ~27 ms / ~465 KiB) so machine-to-
-            // machine or JIT/GC noise doesn't cause a false failure, while
-            // still catching an actual quadratic-blowup or unbounded-growth
-            // regression.
-            Assert.True(composeStopwatch.ElapsedMilliseconds < 500,
-                $"Composing+writing {maxTrips} trips took {composeStopwatch.ElapsedMilliseconds} ms — budget is 500 ms.");
-            Assert.True(parseStopwatch.ElapsedMilliseconds < 500,
-                $"Reading+parsing {maxTrips} trips took {parseStopwatch.ElapsedMilliseconds} ms — budget is 500 ms.");
+            // #393: an absolute stopwatch budget measures the build host, not
+            // this code. The old 500 ms assertion failed at 531 ms under load
+            // and then ran in 83 ms without a source change. Managed allocation
+            // is independent of CPU/disk contention and still catches the
+            // unbounded-growth shape this scale test is meant to guard. These
+            // ceilings are roughly twice the measured 3.8 MiB / 10.5 MiB, so
+            // ordinary runtime/JIT drift has room while a second full copy per
+            // trip or quadratic intermediate representation does not.
+            const long composeAllocationBudget = 8L * 1024 * 1024;
+            const long parseAllocationBudget = 24L * 1024 * 1024;
+            Assert.True(composeAllocated < composeAllocationBudget,
+                $"Composing+writing {maxTrips} trips allocated {composeAllocated:N0} bytes — " +
+                $"budget is {composeAllocationBudget:N0} bytes.");
+            Assert.True(parseAllocated < parseAllocationBudget,
+                $"Reading+parsing {maxTrips} trips allocated {parseAllocated:N0} bytes — " +
+                $"budget is {parseAllocationBudget:N0} bytes.");
             Assert.True(fileSizeBytes < 1024 * 1024,
                 $"Sidecar at max retention was {fileSizeBytes} bytes — budget is 1 MiB; investigate " +
                 "before treating this as a loose sanity bound rather than a real regression.");

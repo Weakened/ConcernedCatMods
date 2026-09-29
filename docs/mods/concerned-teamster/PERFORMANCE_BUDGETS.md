@@ -6,12 +6,13 @@ machine. This is the single source of truth for these numbers — other
 docs (`TEST_PLAN.md`, `V1_DEFINITION_OF_DONE.md`) point here rather than
 repeating the figures.
 
-Wall-clock budgets are generous multiples of the one-machine measured
-value (the convention CT-040's scale tests already established), so a
-different machine's JIT/GC noise does not cause a false failure while an
-actual quadratic-blowup or unbounded-growth regression still fails loudly.
-Allocation budgets that assert exact zero are exact zero on every machine
-— allocation count does not vary with clock speed the way wall-clock does.
+Wall-clock budgets remain only for short in-memory work whose test does not
+touch the filesystem. They are generous multiples of a one-machine measured
+value. #393 removed the sidecar I/O stopwatch assertions after the same parse
+took 531 ms under host load and 83 ms on the immediate unchanged rerun: that
+assertion measured the machine. The max-retention sidecar is guarded by managed
+allocation and file-size ceilings instead. Allocation count does not vary with
+clock speed or disk contention the way wall-clock does.
 
 ## How to read "long-run"
 
@@ -46,8 +47,8 @@ not an adjective.
 | 9 | Trip comparison presenter, two worst-case trips | on row select | < 100 ms | **10 ms** | Met | `PerformanceBudgetTests.TripComparisonPresenter_Present_WorstCaseTripSizes_CompletesWithinBudget` (new) |
 | 10 | Cargo manifest, many distinct items (200 synthetic, stress input) | on cargo change | < 500 ms | < 1 ms | Met | `CargoManifestTests.Create_ManyDistinctEntries_StaysCorrectAndFast` (pre-existing) |
 | 11 | Network input guard (`Mass`/`MassFactor`/`Speed`/`Grade`), every sanitize branch | rides sampler due-tick cadence → 50k×4 calls ≈ 6.9 h | 0 B/call | 0 B / 200,000 calls | Met | `PerformanceBudgetTests.NetworkInputGuard_AllGuards_LongRun_AllocateNothing` (new) |
-| 12 | Sidecar compose+write at max retention (500 trips × 20 samples) | once per finished trip (early-return otherwise) | < 500 ms | 23 ms (CT-040, `RELEASE_DOSSIER.md`) | Met | `TripPersistenceTests.Scale_MaxTripsRetainedRoundTrip_StaysCorrectAndReasonablyFast` (tightened this leaf) |
-| 13 | Sidecar read+parse at max retention | once per Trip History panel open/reload | < 500 ms | 27 ms (CT-040, `RELEASE_DOSSIER.md`) | Met | same test |
+| 12 | Sidecar compose+write at max retention (500 trips × 20 samples) | once per finished trip (early-return otherwise) | < 8 MiB managed allocation | ~3.8 MiB on the #393 correction run; historical CT-040 timing 23 ms remains measurement, not a CI gate | Met | `TripPersistenceTests.Scale_MaxTripsRetainedRoundTrip_StaysCorrectAndAllocationBounded` |
+| 13 | Sidecar read+parse at max retention | once per Trip History panel open/reload | < 24 MiB managed allocation | ~10.5 MiB on the #393 correction run; historical CT-040 timing 27 ms remains measurement, not a CI gate | Met | same test |
 | 14 | Sidecar file size at max retention | — | < 1 MiB | 474,750 B (~464 KiB) (CT-040, `RELEASE_DOSSIER.md`) | Met | same test |
 
 All 14 rows are Met. No budget miss occurred; nothing needed fixing or
