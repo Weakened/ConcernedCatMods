@@ -65,6 +65,29 @@ namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;
 /// this file does not second-guess it.</summary>
 internal sealed class GunnarDepositPort
 {
+    /// <summary>Whether the engine and the measurement agreed about the move.
+    ///
+    /// <b>It exists because "measured on both sides" has a blind spot.</b> If the
+    /// destination already holds a stack of the same material that the count does
+    /// not recognise as the same thing, an add can succeed while both measured
+    /// deltas read zero - and the classification from the deltas alone is then
+    /// "nothing moved, and nothing was lost", which is the one wrong answer
+    /// available. The engine's own yes is kept so the disagreement can be
+    /// reported instead of measured away.</summary>
+    private readonly struct MoveTally
+    {
+        private MoveTally(bool inconsistent)
+        {
+            IsInconsistent = inconsistent;
+        }
+
+        public bool IsInconsistent { get; }
+
+        public static MoveTally Consistent => new MoveTally(false);
+
+        public static MoveTally Inconsistent => new MoveTally(true);
+    }
+
     private readonly List<ItemDrop.ItemData> _matching = new List<ItemDrop.ItemData>();
 
     /// <summary>What Gunnar is carrying that the caller asked about, by item
@@ -90,8 +113,9 @@ internal sealed class GunnarDepositPort
     /// nothing - a filter nobody filled is not permission to move
     /// everything.</param>
     public IReadOnlyList<KeyValuePair<string, int>> Carrying(
-        Humanoid? worker, Func<string, bool> wanted)
+        Humanoid? worker, Func<string, bool> wanted, out bool readable)
     {
+        readable = true;
         if (wanted == null)
         {
             return Array.Empty<KeyValuePair<string, int>>();
@@ -101,6 +125,8 @@ internal sealed class GunnarDepositPort
         Inventory? inventory = InventoryOf(worker);
         if (inventory == null)
         {
+            // No body, or a dead one. Genuinely nothing to offer, and the gate
+            // has its own clause for an absent Gunnar.
             return Array.Empty<KeyValuePair<string, int>>();
         }
 
@@ -121,9 +147,11 @@ internal sealed class GunnarDepositPort
         catch (Exception)
         {
             // A body whose inventory could not be enumerated is carrying an
-            // unknown amount, which is not the same as nothing. Refusing here
-            // makes the gate's NothingToDeposit clause fire, which stops the
-            // deposit rather than moving an amount nobody could read.
+            // UNKNOWN amount, which is not the same as nothing - and saying
+            // "he is not carrying anything" about it is a falsehood of exactly
+            // the kind the record-state refusals exist to stop. The caller is
+            // told it could not be read, and the gate answers Unreadable.
+            readable = false;
             return Array.Empty<KeyValuePair<string, int>>();
         }
 
@@ -200,7 +228,9 @@ internal sealed class GunnarDepositPort
         }
 
         int? availableBefore = SafeCount(from, itemPrefab);
-        int? roomFor = SafeRoom(to, itemPrefab, wanted);
+        // The stack that will actually move decides what vanilla would merge
+        // into; there is no such thing as the room for an abstract item.
+        int? roomFor = SafeRoom(to, itemPrefab, wanted, FirstMatching(from, itemPrefab));
         int? arrivedBefore = SafeCount(to, itemPrefab);
         if (!availableBefore.HasValue || !roomFor.HasValue || !arrivedBefore.HasValue)
         {
@@ -221,10 +251,29 @@ internal sealed class GunnarDepositPort
                     : "that chest has no room for " + itemPrefab + "; he keeps it");
         }
 
+        // WHICH INVENTORY IS WHICH, RE-ESTABLISHED IMMEDIATELY BEFORE THE MOVE.
+        //
+        // The validator pins the SPELLING of the three calls, not the BINDING of
+        // the two locals they are spelled against. Renaming the parameters of
+        // `Move` would reverse the direction - emptying the chest into Gunnar -
+        // while leaving `to.MoveItemToThis(from, stack)` byte-identical and the
+        // audit green. A text audit cannot see that, so this is where "D15
+        // grants a deposit and not a take" stops being a spelling and becomes a
+        // property: the source must still be the worker's own inventory and the
+        // destination must still be the designated container's, by reference.
+        if (!ReferenceEquals(from, InventoryOf(worker))
+            || !ReferenceEquals(to, InventoryOf(destination)))
+        {
+            return new DepositResult(
+                DepositOutcome.Refused, null,
+                "the two inventories were not the ones this deposit is for, so nothing was moved");
+        }
+
         bool faulted = false;
+        MoveTally tally;
         try
         {
-            Move(from, to, itemPrefab, plan.Units);
+            tally = Move(from, to, itemPrefab, plan.Units);
         }
         catch (Exception)
         {
@@ -233,6 +282,7 @@ internal sealed class GunnarDepositPort
             // them - but a fault that also broke the counting lands on Uncertain
             // rather than on a guess.
             faulted = true;
+            tally = MoveTally.Inconsistent;
         }
 
         int? availableAfter = SafeCount(from, itemPrefab);
@@ -243,6 +293,23 @@ internal sealed class GunnarDepositPort
                 DepositOutcome.Uncertain, null,
                 "the move faulted or could not be counted afterwards, so whether it happened is not known; " +
                 "nothing is credited, nothing is retried and nothing is put right automatically");
+        }
+
+        if (tally.IsInconsistent)
+        {
+            // The engine said it moved something and the measurement could not
+            // see it - which happens when the destination already holds a stack
+            // of this material that the count does not recognise as the same
+            // thing (a null or instance-named drop prefab, say, built by another
+            // mod). Both deltas then read zero, and classifying from them alone
+            // would answer "nothing moved, and nothing was lost" while the chest
+            // has quietly gained a stack. That is the one wrong answer available
+            // here, so the disagreement is reported rather than measured away.
+            return new DepositResult(
+                DepositOutcome.Uncertain, null,
+                "the move reported putting something in and the count could not see it, so what " +
+                "happened is not known; nothing is credited, nothing is retried and nothing is put " +
+                "right automatically");
         }
 
         int left = availableBefore.Value - availableAfter.Value;
@@ -280,47 +347,69 @@ internal sealed class GunnarDepositPort
     /// units wanted, added, and then exactly what <b>arrived</b> is removed from
     /// the original. Never the other way round, and never the number asked
     /// for.</summary>
-    private void Move(Inventory from, Inventory to, string itemPrefab, int units)
+    private MoveTally Move(Inventory from, Inventory to, string itemPrefab, int units)
     {
         int remaining = units;
+        bool inconsistent = false;
         Matching(from, itemPrefab, _matching);
 
-        for (int index = 0; index < _matching.Count && remaining > 0; index++)
+        try
         {
-            ItemDrop.ItemData stack = _matching[index];
-            int before = CountIn(to, itemPrefab);
-
-            if (stack.m_stack <= remaining)
+            for (int index = 0; index < _matching.Count && remaining > 0; index++)
             {
-                int whole = stack.m_stack;
-                to.MoveItemToThis(from, stack);
-                int moved = CountIn(to, itemPrefab) - before;
-                remaining -= moved > 0 ? moved : 0;
-                if (moved < whole)
+                ItemDrop.ItemData stack = _matching[index];
+                int before = CountIn(to, itemPrefab);
+
+                if (stack.m_stack <= remaining)
                 {
-                    // The destination took less than the whole stack, so it is
-                    // full or refusing. Stopping here leaves the rest with him,
-                    // which is the only correct place for it.
+                    int whole = stack.m_stack;
+                    to.MoveItemToThis(from, stack);
+                    int moved = CountIn(to, itemPrefab) - before;
+                    remaining -= moved > 0 ? moved : 0;
+                    if (moved < whole)
+                    {
+                        // The destination took less than the whole stack, so it
+                        // is full or refusing. Stopping here leaves the rest with
+                        // him, which is the only correct place for it.
+                        break;
+                    }
+                }
+                else
+                {
+                    // Part of a stack, which vanilla has no single call for. The
+                    // clone is of THIS stack - the one the next line removes from
+                    // - so nothing is built from a name and total units are
+                    // conserved across the pair.
+                    ItemDrop.ItemData part = stack.Clone();
+                    part.m_stack = remaining;
+                    part.m_equipped = false;
+                    bool added = to.AddItem(part);
+                    int moved = CountIn(to, itemPrefab) - before;
+                    if (moved > 0)
+                    {
+                        from.RemoveItem(stack, moved);
+                    }
+                    else if (added)
+                    {
+                        // It went in and the count cannot see it. Never remove
+                        // from him on the strength of a number that disagrees
+                        // with the engine, and never let the caller read this as
+                        // "nothing happened".
+                        inconsistent = true;
+                    }
+
                     break;
                 }
             }
-            else
-            {
-                ItemDrop.ItemData part = stack.Clone();
-                part.m_stack = remaining;
-                part.m_equipped = false;
-                to.AddItem(part);
-                int moved = CountIn(to, itemPrefab) - before;
-                if (moved > 0)
-                {
-                    from.RemoveItem(stack, moved);
-                }
-
-                break;
-            }
+        }
+        finally
+        {
+            // In a finally so a throw does not leave the list holding references
+            // to stacks that are now in a player's chest.
+            _matching.Clear();
         }
 
-        _matching.Clear();
+        return inconsistent ? MoveTally.Inconsistent : MoveTally.Consistent;
     }
 
     // ------------------------------------------------------------------
@@ -371,7 +460,8 @@ internal sealed class GunnarDepositPort
     /// must not do is over-count, so a stack the game would refuse to merge into
     /// (a different quality, world level, or a cheated one) contributes
     /// nothing.</summary>
-    private static int? SafeRoom(Inventory inventory, string itemPrefab, int wanted)
+    private static int? SafeRoom(
+        Inventory inventory, string itemPrefab, int wanted, ItemDrop.ItemData? moving)
     {
         try
         {
@@ -386,13 +476,21 @@ internal sealed class GunnarDepositPort
             ItemDrop.ItemData template = drop.m_itemData;
             int maxStack = template.m_shared.m_maxStackSize > 0 ? template.m_shared.m_maxStackSize : 1;
 
+            // Vanilla merges on the MOVING item's quality and world level, not on
+            // the global level or on the ObjectDB template's. Using those meant
+            // the estimate missed stacks vanilla would merge into AND counted
+            // stacks it would refuse - in any world past a boss, which is the
+            // ordinary case rather than the exotic one.
+            int quality = moving != null ? moving.m_quality : template.m_quality;
+            int worldLevel = moving != null ? moving.m_worldLevel : Game.m_worldLevel;
+
             long room = 0;
             foreach (ItemDrop.ItemData existing in inventory.GetAllItems())
             {
                 if (existing.m_shared != null
                     && existing.m_shared.m_name == template.m_shared.m_name
-                    && existing.m_quality == template.m_quality
-                    && existing.m_worldLevel == Game.m_worldLevel
+                    && existing.m_quality == quality
+                    && existing.m_worldLevel == worldLevel
                     && !existing.m_cheated)
                 {
                     int headroom = existing.m_shared.m_maxStackSize - existing.m_stack;
@@ -415,13 +513,49 @@ internal sealed class GunnarDepositPort
         int total = 0;
         foreach (ItemDrop.ItemData stack in inventory.GetAllItems())
         {
-            if (string.Equals(PrefabNameOf(stack), itemPrefab, StringComparison.Ordinal))
+            if (Movable(stack, itemPrefab))
             {
                 total += stack.m_stack;
             }
         }
 
         return total;
+    }
+
+    /// <summary>Whether a stack is one this deposit may move.
+    ///
+    /// <b>One predicate, used by every side.</b> An earlier version had
+    /// <see cref="Carrying"/> exclude equipped stacks while the counting and the
+    /// moving did not, so "equipped items are never offered" was true of what was
+    /// REPORTED and false of what would actually have been taken - which is the
+    /// same shape as the tool defect the filter was added to fix, one layer
+    /// down.</summary>
+    private static bool Movable(ItemDrop.ItemData? stack, string itemPrefab) =>
+        stack != null
+        && stack.m_stack > 0
+        && !stack.m_equipped
+        && string.Equals(PrefabNameOf(stack), itemPrefab, StringComparison.Ordinal);
+
+    /// <summary>The first stack that would move, for asking the destination what
+    /// it would merge into.</summary>
+    private static ItemDrop.ItemData? FirstMatching(Inventory inventory, string itemPrefab)
+    {
+        try
+        {
+            foreach (ItemDrop.ItemData stack in inventory.GetAllItemsInGridOrder())
+            {
+                if (Movable(stack, itemPrefab))
+                {
+                    return stack;
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // Unreadable, so the caller falls back to the template's own values.
+        }
+
+        return null;
     }
 
     /// <summary>Matching stacks in grid order, copied into a list, so which
@@ -432,7 +566,7 @@ internal sealed class GunnarDepositPort
         into.Clear();
         foreach (ItemDrop.ItemData stack in inventory.GetAllItemsInGridOrder())
         {
-            if (string.Equals(PrefabNameOf(stack), itemPrefab, StringComparison.Ordinal))
+            if (Movable(stack, itemPrefab))
             {
                 into.Add(stack);
             }

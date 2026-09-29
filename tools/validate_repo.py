@@ -1330,6 +1330,73 @@ def check_container_permit_stays_unforgeable(errors: list[str]) -> list[str]:
     ]
 
 
+def check_teamster_deposit_adds_only_what_it_is_removing(errors: list[str]) -> list[str]:
+    """The clone the authorized `AddItem` puts in a chest comes from the stack
+    being removed from, and nothing in the deposit port builds an item from a
+    name (D15).
+
+    <b>Why this exists as a rule and not as a comment.</b> The scope audit pins
+    `to.AddItem(part)` verbatim - but `part` is a local, and its initializer is
+    two lines above and unpinned. Swapping that initializer for
+    `ObjectDB.instance.GetItemPrefab(name)...Clone()` leaves the pinned call
+    byte-identical and creates material out of a name, which is exactly what D15
+    lists under "no synthetic or replacement resources". An independent review
+    found that the validator's own comment asserted this property while nothing
+    checked it.
+
+    <b>What the measurement would already have done, stated so this rule is not
+    oversold.</b> A mint is not silent: the destination would gain units the
+    source never lost, `ContainerMoveResult.Record` would see the two deltas
+    disagree, and the leg would be `Uncertain` with nothing credited. So this
+    closes a hole whose consequence was already bounded - material appearing in
+    a chest and being reported as uncertain rather than as a deposit. It is
+    still worth closing, because "the port cannot mint" is a much easier
+    sentence to rely on than "the port can mint and the arithmetic notices"."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    port = teamster_dir.joinpath(*TEAMSTER_DEPOSIT_PORT_PATH)
+    label = "[interop] #381 deposit-mint audit"
+    if not port.is_file():
+        fail(f"{label}: missing {port.relative_to(ROOT)} - the deposit's authorized calls have no "
+             "file to be confined to", errors)
+        return []
+
+    code = _strip_cs_comments(port.read_text(encoding="utf-8"))
+
+    clone = re.compile(
+        r"ItemDrop\.ItemData" + SPACES + r"part" + SPACE + r"=" + SPACE
+        + r"stack" + SPACE + r"\." + SPACE + r"Clone" + SPACE + r"\(" + SPACE + r"\)")
+    clones = len(clone.findall(code))
+    if clones != 1:
+        fail(f"{label}: the partial-stack clone in {port.relative_to(ROOT)} is not exactly one "
+             "`ItemDrop.ItemData part = stack.Clone();`. That initializer is what makes the "
+             "authorized `to.AddItem(part)` a MOVE of a stack the next lines remove from rather "
+             "than an item built from a name - change it and the pinned call stays identical while "
+             "the meaning does not", errors)
+        return []
+
+    # One ObjectDB item lookup, in the one place that needs one: asking the
+    # destination what it would merge into. A second is how a mint gets next to
+    # the add.
+    lookups = len(re.findall(r"GetItemPrefab" + SPACE + r"\(", code))
+    if lookups != 1:
+        fail(f"{label}: {port.relative_to(ROOT)} looks an item prefab up {lookups} time(s); exactly "
+             "one is authorized, in SafeRoom, to ask the destination what it would merge into. "
+             "Every other lookup in this file is a way to build material from a name", errors)
+        return []
+
+    for token in ("Instantiate", "ObjectDB.instance.GetItemPrefab(", "m_dropPrefab.GetComponent"):
+        if token == "Instantiate" and _audit_token(token).search(code):
+            fail(f"{label}: {port.relative_to(ROOT)} spells `Instantiate`. The deposit moves items "
+                 "that already exist; creating one is outside D15", errors)
+            return []
+
+    return [
+        f"{label}: the deposit port clones exactly the stack it removes from and looks an item "
+        f"prefab up once, to ask the destination what it would merge into - so the authorized "
+        f"`AddItem` cannot carry material built from a name",
+    ]
+
+
 def check_npc_planning_decides_nothing_to_do_once(errors: list[str]) -> list[str]:
     """Fails unless exactly one place in the library decides a job is finished.
 
@@ -1661,6 +1728,210 @@ def _strip_cs_line_comment(line: str) -> str:
     return line
 
 
+def _strip_cs_comments(text: str) -> str:
+    """Mask C# comments while preserving literal text and interpolation code.
+
+    Whole-file token audits must see legal comment trivia between a member name
+    and its parenthesis. Literal string contents stay byte-for-byte unchanged,
+    while executable expressions inside interpolated strings are scanned as
+    code. Newlines in comments are retained for diagnostic line numbers.
+    """
+    out: list[str] = []
+    length = len(text)
+
+    def prefix_at(quote_at: int) -> tuple[bool, bool, int]:
+        start = quote_at
+        while start > 0 and text[start - 1] in "$@":
+            start -= 1
+        prefix = text[start:quote_at]
+        return "$" in prefix, "@" in prefix, prefix.count("$")
+
+    def mask_comment(index: int, block: bool) -> int:
+        out.extend((" ", " "))
+        index += 2
+        if block:
+            while index < length:
+                if text[index] == "*" and index + 1 < length and text[index + 1] == "/":
+                    out.extend((" ", " "))
+                    return index + 2
+                out.append(text[index] if text[index] in "\r\n" else " ")
+                index += 1
+            return index
+        while index < length and text[index] not in "\r\n":
+            out.append(" ")
+            index += 1
+        return index
+
+    def next_non_trivia(index: int) -> str:
+        """Return the next C# token character without changing output."""
+        while index < length:
+            if text[index].isspace():
+                index += 1
+                continue
+            if text.startswith("/*", index):
+                end = text.find("*/", index + 2)
+                return "" if end < 0 else next_non_trivia(end + 2)
+            if text.startswith("//", index):
+                newline = text.find("\n", index + 2)
+                return "" if newline < 0 else next_non_trivia(newline + 1)
+            return text[index]
+        return ""
+
+    def scan_string(index: int) -> int:
+        quote = text[index]
+        interpolated, verbatim, dollar_count = prefix_at(index)
+        run = 1
+        if quote == '"':
+            while index + run < length and text[index + run] == '"':
+                run += 1
+
+        if quote == '"' and run >= 3:
+            delimiter = '"' * run
+            out.append(delimiter)
+            index += run
+            opening = "{" * dollar_count if interpolated else ""
+            while index < length:
+                if text.startswith(delimiter, index):
+                    out.append(delimiter)
+                    return index + run
+                if opening and text.startswith(opening, index):
+                    out.append(opening)
+                    index = scan_interpolation(index + dollar_count, dollar_count)
+                    continue
+                out.append(text[index])
+                index += 1
+            return index
+
+        out.append(quote)
+        index += 1
+        while index < length:
+            char = text[index]
+            if char == "\\" and not verbatim:
+                out.append(char)
+                index += 1
+                if index < length:
+                    out.append(text[index])
+                    index += 1
+                continue
+            if char == quote:
+                out.append(char)
+                index += 1
+                if verbatim and index < length and text[index] == quote:
+                    out.append(text[index])
+                    index += 1
+                    continue
+                return index
+            if interpolated and quote == '"' and char == "{":
+                if index + 1 < length and text[index + 1] == "{":
+                    out.append("{{")
+                    index += 2
+                    continue
+                out.append("{")
+                index = scan_interpolation(index + 1, 1)
+                continue
+            out.append(char)
+            index += 1
+        return index
+
+    def scan_format(index: int, close_braces: int) -> int:
+        """Copy interpolation format text literally through its closing brace."""
+        closing = "}" * close_braces
+        while index < length:
+            if text.startswith(closing, index):
+                out.append(closing)
+                return index + close_braces
+            out.append(text[index])
+            index += 1
+        return index
+
+    def scan_interpolation(index: int, close_braces: int) -> int:
+        """Scan an interpolation expression, then preserve its format component."""
+        closing = "}" * close_braces
+        paren_depth = 0
+        bracket_depth = 0
+        conditional_depth = 0
+        while index < length:
+            if (paren_depth == 0 and bracket_depth == 0
+                    and text.startswith(closing, index)):
+                out.append(closing)
+                return index + close_braces
+
+            char = text[index]
+            if char == "/" and index + 1 < length:
+                if text[index + 1] == "/":
+                    index = mask_comment(index, block=False)
+                    continue
+                if text[index + 1] == "*":
+                    index = mask_comment(index, block=True)
+                    continue
+
+            if char == '"' or char == "'":
+                index = scan_string(index)
+                continue
+
+            if char == "(":
+                paren_depth += 1
+            elif char == ")" and paren_depth:
+                paren_depth -= 1
+            elif char == "[":
+                bracket_depth += 1
+            elif char == "]" and bracket_depth:
+                bracket_depth -= 1
+            elif char == "{":
+                out.append(char)
+                index = scan_code(index + 1, 1)
+                continue
+            elif char == "?" and paren_depth == 0 and bracket_depth == 0:
+                next_char = text[index + 1] if index + 1 < length else ""
+                previous = text[index - 1] if index else ""
+                if (next_char not in {"?", ".", "["}
+                        and previous != "?"
+                        and next_non_trivia(index + 1) not in {":", ","}):
+                    conditional_depth += 1
+            elif char == ":" and paren_depth == 0 and bracket_depth == 0:
+                if conditional_depth:
+                    conditional_depth -= 1
+                else:
+                    out.append(char)
+                    return scan_format(index + 1, close_braces)
+
+            out.append(char)
+            index += 1
+        return index
+
+    def scan_code(index: int, close_braces: int = 0) -> int:
+        closing = "}" * close_braces
+        while index < length:
+            if closing and text.startswith(closing, index):
+                out.append(closing)
+                return index + close_braces
+
+            char = text[index]
+            if char == "/" and index + 1 < length:
+                if text[index + 1] == "/":
+                    index = mask_comment(index, block=False)
+                    continue
+                if text[index + 1] == "*":
+                    index = mask_comment(index, block=True)
+                    continue
+
+            if char == '"' or char == "'":
+                index = scan_string(index)
+                continue
+
+            if close_braces and char == "{":
+                out.append("{")
+                index = scan_code(index + 1, 1)
+                continue
+
+            out.append(char)
+            index += 1
+        return index
+
+    scan_code(0)
+    return "".join(out)
+
+
 # CT-028: cooperative diagnostics help crews understand a cart without
 # adding "a newton of modded force". Teamster applies no physics force,
 # impulse, or velocity write anywhere — the only rigidbody touch is the
@@ -1763,13 +2034,12 @@ TEAMSTER_WORKER_FORBIDDEN_ASSIGNMENT = re.compile(
     r"\s*[-+*/&|^]?=(?!=)")
 TEAMSTER_WORKER_FORBIDDEN_TOKENS = (
     "Teleport",
-    # The three inventory calls D15 authorizes, forbidden here so that the
-    # allowance below is the only way any of them reaches the source tree. They
-    # were not audited at all before D15 - which #401 found and said plainly:
-    # "a list that stops at Interact and Pickup while AddItem is free is a list
-    # whose boundary is narrower than its rationale".
+    # Two of the three inventory calls D15 authorizes, forbidden here so that
+    # the allowance below is the only way any of them reaches the source tree.
+    # The third, `.AddItem(`, is already in this tuple lower down: #401 put it
+    # there and forbade it outright, which was right when Gunnar had nothing to
+    # deposit into. D15 gives it exactly one pinned exception and nothing wider.
     ".MoveItemToThis(",
-    ".AddItem(",
     ".RemoveItem(",
     "MovePosition",
     "MoveRotation",
@@ -1787,6 +2057,7 @@ TEAMSTER_WORKER_FORBIDDEN_TOKENS = (
     "RPC_RequestOwn",
     ".Interact(",
     ".Pickup(",
+    ".AddItem(",
     "SetExtraMass",
     "SetMass",
     "UpdateMass",
@@ -1812,9 +2083,24 @@ TEAMSTER_WORKER_FACTORY_ONLY_TOKENS = (
 )
 
 # Never anywhere in Teamster outside the worker runtime: using a cart, taking an
-# item into a character's inventory, applying vanilla's extra pull mass, or
-# writing a body's kinematic flag or joint link. (The parking brake's own
-# constraint write stays where CT-002 allows it.)
+# item into a character's inventory, reaching the vanilla network scene, applying
+# vanilla's extra pull mass, or writing a body's kinematic flag or joint link.
+# ZNetScene is intentionally broad here: outside the audited worker runtime there
+# is no authorized reason to destroy or otherwise mutate a network object.
+#
+# Direct Inventory.AddItem was forbidden EVERYWHERE in Teamster source when #401
+# wrote this line, and that was right: Gunnar had nothing to deposit into, so
+# there was no call it could have been for. `DECISIONS.md` D15 (owner,
+# 2026-09-29) then authorized the deposit, whose partial-stack case has no
+# single vanilla call - it is an AddItem of a clone followed by a RemoveItem of
+# exactly what arrived. So the token stays forbidden here and gains exactly one
+# pinned exception, in one file, matched verbatim, alongside MoveItemToThis and
+# RemoveItem. Everywhere else it still fails.
+#
+# Gunnar's only authorized take is the exact pinned Humanoid.Pickup call below,
+# whose internal inventory mutation and dropped-item destruction remain
+# vanilla-owned. (The parking brake's own constraint write stays where CT-002
+# allows it.)
 #
 # `.Pickup(` WAS MISSING FROM THIS TUPLE for one round, and four sentences said it
 # was here. Adding it to the worker list alone left `((dynamic)who).Pickup(...)`
@@ -1823,12 +2109,12 @@ TEAMSTER_WORKER_FACTORY_ONLY_TOKENS = (
 # away from where it was being corrected. Both authorized tokens are scanned in
 # both places now, and both are refused everywhere but the one pinned call each.
 TEAMSTER_OUTSIDE_WORKERS_TOKENS = (
-    ".Interact(", ".Pickup(", "SetExtraMass",
-    # Scanned in both places for the reason the comment above gives about
-    # `.Pickup(`: a token refused only inside Adapters/Workers is a token a
-    # helper in Adapters/ or Domain/ may spell, which is an enforcement claim
-    # wider than the enforcement.
-    ".MoveItemToThis(", ".AddItem(", ".RemoveItem(",
+    ".Interact(", ".Pickup(", ".AddItem(", "ZNetScene", "SetExtraMass",
+    # D15's other two inventory calls, scanned in both places for the reason
+    # the comment above gives about `.Pickup(`: a token refused only inside
+    # Adapters/Workers is a token a helper in Adapters/ or Domain/ may spell,
+    # which is an enforcement claim wider than the enforcement.
+    ".MoveItemToThis(", ".RemoveItem(",
 )
 
 # The one owner-authorized exception to the worker runtime's token list
@@ -1836,8 +2122,8 @@ TEAMSTER_OUTSIDE_WORKERS_TOKENS = (
 #
 # Gunnar's collection role has to pick up loose branches and stones, and
 # vanilla's only route to that is `Pickable.Interact`, which Foreman already
-# calls legitimately from its own sanctioned port because Foreman carries no
-# such audit. Rather than let Teamster's source avoid spelling a banned token
+# calls legitimately from its own separately audited and pinned port. Rather
+# than let Teamster's source avoid spelling a banned token
 # while the behaviour changed anyway - which would have left this audit green
 # and meaningless - the allowance is explicit, named, and here.
 #
@@ -1892,6 +2178,15 @@ TEAMSTER_COLLECTION_PORT_PATH = ("Adapters", "Workers", "GunnarCollectionPort.cs
 # call so the token on a different receiver still fails, and once each so a
 # second move in the port is a different program.
 TEAMSTER_DEPOSIT_PORT_PATH = ("Adapters", "Workers", "GunnarDepositPort.cs")
+
+# The shared source trees ConcernedTeamster.csproj COMPILES INTO the Teamster
+# assembly. They are part of the product and were outside this audit, while the
+# audit's own success sentence said "everywhere else in the product" - the same
+# overstatement #401 closed for the worker folder, one directory over.
+#
+# Read from the project file rather than written down, so a fourth linked tree
+# cannot appear without this rule following it.
+TEAMSTER_LINKED_SHARED_DIRS = ("Workers", "Interop", "Diagnostics")
 
 # Each authorized call: the token that is otherwise forbidden everywhere, the
 # exact call that token is allowed to be, and what it does. Anything else the
@@ -1989,13 +2284,41 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
             "sources, so the audit no longer covers Gunnar's runtime (was it moved?)", errors)
         return []
 
+    # Every source the Teamster assembly is built from: its own tree, plus the
+    # shared trees its project file links in. A token refused in one and not the
+    # other is an enforcement claim wider than the enforcement.
+    shared_root = ROOT / "src" / "Shared"
+    scanned_roots = [(teamster_dir, teamster_dir)]
+    linked = 0
+    for name in TEAMSTER_LINKED_SHARED_DIRS:
+        linked_dir = shared_root / name
+        if linked_dir.is_dir():
+            scanned_roots.append((linked_dir, shared_root))
+            linked += 1
+
+    if linked != len(TEAMSTER_LINKED_SHARED_DIRS):
+        fail(
+            "[interop] #313 worker-runtime scope audit: ConcernedTeamster links "
+            f"{len(TEAMSTER_LINKED_SHARED_DIRS)} shared source tree(s) and only {linked} were found, "
+            "so part of the product is not being audited", errors)
+        return []
+
     hits = 0
     worker_files = 0
-    for path in sorted(teamster_dir.rglob("*.cs")):
-        parts = path.relative_to(teamster_dir).parts
+    sources = []
+    for root, relative_to in scanned_roots:
+        for found_at in sorted(root.rglob("*.cs")):
+            sources.append((found_at, relative_to))
+
+    for path, relative_to in sources:
+        parts = path.relative_to(relative_to).parts
         if parts[0] in ("obj", "bin"):
             continue
-        in_workers = parts[:2] == TEAMSTER_WORKERS_DIR
+        # False for every linked shared source, whatever it is called. The
+        # shared tree's own folder is literally "Workers", which would otherwise
+        # match this tuple and hand src/Shared/Workers the worker runtime's
+        # allowances - a widening, from a rule added to close one.
+        in_workers = relative_to == teamster_dir and parts[:2] == TEAMSTER_WORKERS_DIR
         worker_files += 1 if in_workers else 0
         rel = path.relative_to(ROOT)
         for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
@@ -2034,8 +2357,7 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
         # Tokens are matched over the whole comment-stripped file rather than
         # line by line, because a space or a newline defeated the substring
         # match and the Release build was happy either way.
-        code_text = "\n".join(_strip_cs_line_comment(raw) for raw in
-                              path.read_text(encoding="utf-8").splitlines())
+        code_text = _strip_cs_comments(path.read_text(encoding="utf-8"))
         port_calls = TEAMSTER_AUTHORIZED_PORTS.get(tuple(parts), ())
         authorized = bool(port_calls)
         allowed_calls = {}
@@ -2087,8 +2409,254 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
         f"add-then-remove pair that moves part of one); all five refused everywhere else in the "
         f"product, inside Adapters/Workers and out; cart attach/detach/detach-all only "
         f"in Adapters/Workers, mass writes only in {TEAMSTER_WORKER_CALIBRATION_FILE}, network-object writes only "
+        f"(scanned across the product AND the {len(TEAMSTER_LINKED_SHARED_DIRS)} shared source tree(s) its "
+        f"project file compiles in, which were outside this audit until D15) "
         f"'tcc.worker.*' keys in {TEAMSTER_WORKER_IDENTITY_FILE}, no teleport/pose/velocity/constraint/joint/cart-"
-        f"tuning writes, no component surgery or reflection outside the prefab factory (inside Adapters/Workers only; reflection elsewhere in Teamster is not audited by this rule) ({hits} violations)",
+        f"tuning writes, no direct Inventory.AddItem outside the one pinned call above, and no ZNetScene reference outside "
+        f"Adapters/Workers; no component surgery or reflection outside the prefab factory (inside "
+        f"Adapters/Workers only; reflection elsewhere in Teamster is not audited by this rule) "
+        f"({hits} violations)",
+    ]
+
+
+# #400: Foreman's runtime can move a worker, move real inventory, animate and
+# equip that body, create/retire the body, drop its carried inventory on death,
+# and place a real piece through the host player. Those are narrow capabilities,
+# not permission to use another receiver, another argument list, or another
+# call site. Each existing use is therefore pinned below by its path, its full
+# whitespace-tolerant spelling, and its population. A new call that merely uses
+# the same API in the same file is still a different program and fails.
+#
+# This is deliberately a source-text audit of src/ConcernedForeman/Runtime. It
+# sees direct calls and property writes after comments are stripped. It does not
+# prove control flow, follow delegates/method groups, inspect vanilla's IL, or
+# cover code outside that directory. The PlacePiece pin is special because its
+# two false arguments are the source-level proof that vanilla's internal
+# SetTrigger branch and cheated placement stay unreachable.
+FOREMAN_RUNTIME_DIR = ("Runtime",)
+
+
+def _foreman_exact(pattern: str) -> re.Pattern:
+    return re.compile(pattern)
+
+
+# label, broad spelling, ((path under ConcernedForeman, exact spelling, count), ...)
+FOREMAN_AUDITED_CAPABILITIES = (
+    ("ZSyncAnimation.GetHash", re.compile(r"\bZSyncAnimation\s*\.\s*GetHash\s*\("), (
+        ("Runtime/Construction/BuildPose.cs", _foreman_exact(r'ZSyncAnimation\s*\.\s*GetHash\s*\(\s*"forward_speed"\s*\)'), 1),
+        ("Runtime/Construction/BuildPose.cs", _foreman_exact(r'ZSyncAnimation\s*\.\s*GetHash\s*\(\s*"sideway_speed"\s*\)'), 1),
+        ("Runtime/Construction/BuildPose.cs", _foreman_exact(r'ZSyncAnimation\s*\.\s*GetHash\s*\(\s*"turn_speed"\s*\)'), 1),
+        ("Runtime/Ladders/ClimbPose.cs", _foreman_exact(r'ZSyncAnimation\s*\.\s*GetHash\s*\(\s*"forward_speed"\s*\)'), 1),
+        ("Runtime/Ladders/ClimbPose.cs", _foreman_exact(r'ZSyncAnimation\s*\.\s*GetHash\s*\(\s*"sideway_speed"\s*\)'), 1),
+        ("Runtime/Ladders/ClimbPose.cs", _foreman_exact(r'ZSyncAnimation\s*\.\s*GetHash\s*\(\s*"turn_speed"\s*\)'), 1),
+    )),
+    ("ZSyncAnimation.SetFloat", re.compile(r"\.\s*SetFloat\s*\("), (
+        ("Runtime/Construction/BuildPose.cs", _foreman_exact(r"\banimation\s*\.\s*SetFloat\s*\(\s*ForwardSpeed\s*,\s*0f\s*\)"), 1),
+        ("Runtime/Construction/BuildPose.cs", _foreman_exact(r"\banimation\s*\.\s*SetFloat\s*\(\s*SidewaySpeed\s*,\s*0f\s*\)"), 1),
+        ("Runtime/Construction/BuildPose.cs", _foreman_exact(r"\banimation\s*\.\s*SetFloat\s*\(\s*TurnSpeed\s*,\s*0f\s*\)"), 1),
+        ("Runtime/Ladders/ClimbPose.cs", _foreman_exact(r"\b_animation\s*\.\s*SetFloat\s*\(\s*ForwardSpeed\s*,\s*ClimbPresentation\s*\.\s*AnimatorForwardSpeed\s*\(\s*telemetry\s*\)\s*\)"), 1),
+        ("Runtime/Ladders/ClimbPose.cs", _foreman_exact(r"\b_animation\s*\.\s*SetFloat\s*\(\s*ForwardSpeed\s*,\s*0f\s*\)"), 1),
+        ("Runtime/Ladders/ClimbPose.cs", _foreman_exact(r"\b_animation\s*\.\s*SetFloat\s*\(\s*SidewaySpeed\s*,\s*0f\s*\)"), 2),
+        ("Runtime/Ladders/ClimbPose.cs", _foreman_exact(r"\b_animation\s*\.\s*SetFloat\s*\(\s*TurnSpeed\s*,\s*0f\s*\)"), 2),
+    )),
+    ("Humanoid.EquipItem", re.compile(r"\.\s*EquipItem\s*\("), (
+        ("Runtime/Construction/BuildPose.cs", _foreman_exact(r"\bhumanoid\s*\.\s*EquipItem\s*\(\s*item\s*,\s*triggerEquipEffects\s*:\s*false\s*\)"), 1),
+        ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\b_humanoid\s*\.\s*EquipItem\s*\(\s*item\s*,\s*triggerEquipEffects\s*:\s*false\s*\)"), 1),
+        ("Runtime/Settlement/ToolHandover.cs", _foreman_exact(r"\bfrom\s*\.\s*EquipItem\s*\(\s*selected\s*,\s*triggerEquipEffects\s*:\s*false\s*\)"), 1),
+        ("Runtime/Settlement/ToolHandover.cs", _foreman_exact(r"\bto\s*\.\s*EquipItem\s*\(\s*selected\s*\)"), 1),
+    )),
+    ("Humanoid.UnequipItem", re.compile(r"\.\s*UnequipItem\s*\("), (
+        ("Runtime/Construction/BuildPose.cs", _foreman_exact(r"\bhumanoid\s*\.\s*UnequipItem\s*\(\s*item\s*,\s*triggerEquipEffects\s*:\s*false\s*\)"), 1),
+        ("Runtime/Settlement/ToolHandover.cs", _foreman_exact(r"\bfrom\s*\.\s*UnequipItem\s*\(\s*selected\s*,\s*triggerEquipEffects\s*:\s*false\s*\)"), 1),
+        ("Runtime/Settlement/ToolHandover.cs", _foreman_exact(r"\bworker\s*\.\s*UnequipItem\s*\(\s*held\s*,\s*triggerEquipEffects\s*:\s*false\s*\)"), 1),
+    )),
+    ("Player.PlacePiece", re.compile(r"\.\s*PlacePiece\s*\("), (
+        ("Runtime/Construction/WorldPiecePlacer.cs", _foreman_exact(r"\bplayer\s*\.\s*PlacePiece\s*\(\s*piece\s*,\s*at\s*,\s*facing\s*,\s*doAttack\s*:\s*false\s*,\s*cheated\s*:\s*false\s*\)"), 1),
+    )),
+    ("Pickable.Interact", re.compile(r"\.\s*Interact\s*\("), (
+        ("Runtime/Collection/WorldSourcePickupPort.cs", _foreman_exact(r"\bpickable\s*\.\s*Interact\s*\(\s*humanoid\s*,\s*repeat\s*:\s*false\s*,\s*alt\s*:\s*false\s*\)"), 1),
+    )),
+    ("Humanoid.Pickup", re.compile(r"\.\s*Pickup\s*\("), (
+        ("Runtime/Collection/WorldSourcePickupPort.cs", _foreman_exact(r"\bhumanoid\s*\.\s*Pickup\s*\(\s*itemDrop\s*\.\s*gameObject\s*,\s*autoequip\s*:\s*false\s*,\s*autoPickupDelay\s*:\s*false\s*\)"), 1),
+    )),
+    ("Inventory.AddItem", re.compile(r"\.\s*AddItem\s*\("), (
+        ("Runtime/Custody/EngineInventoryPorts.cs", _foreman_exact(r"\bdestination\s*\.\s*AddItem\s*\(\s*part\s*\)"), 1),
+        ("Runtime/Settlement/ToolHandover.cs", _foreman_exact(r"\b_inventory\s*\.\s*AddItem\s*\(\s*item\s*\)"), 1),
+    )),
+    ("Inventory.RemoveItem", re.compile(r"\.\s*RemoveItem\s*\("), (
+        ("Runtime/Custody/EngineInventoryPorts.cs", _foreman_exact(r"\binventory\s*\.\s*RemoveItem\s*\(\s*stack\s*,\s*take\s*\)"), 1),
+        ("Runtime/Custody/EngineInventoryPorts.cs", _foreman_exact(r"\bsourceInventory\s*\.\s*RemoveItem\s*\(\s*stack\s*,\s*moved\s*\)"), 1),
+        ("Runtime/Settlement/ToolHandover.cs", _foreman_exact(r"\b_inventory\s*\.\s*RemoveItem\s*\(\s*item\s*\)"), 1),
+    )),
+    ("Inventory.MoveItemToThis", re.compile(r"\.\s*MoveItemToThis\s*\("), (
+        ("Runtime/Custody/EngineInventoryPorts.cs", _foreman_exact(r"\bdestination\s*\.\s*MoveItemToThis\s*\(\s*sourceInventory\s*,\s*stack\s*\)"), 1),
+    )),
+    ("Humanoid.DropItem", re.compile(r"\.\s*DropItem\s*\("), (
+        ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\b_humanoid\s*\.\s*DropItem\s*\(\s*_inventory\s*,\s*item\s*,\s*count\s*\)"), 1),
+    )),
+    ("UnityEngine.Object.Instantiate", re.compile(
+        r"\bInstantiate\s*(?:<[^(){};]*>\s*)?\("), (
+        ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*_prefab\s*,\s*position\s*,\s*rotation\s*\)"), 1),
+    )),
+    ("UnityEngine.Object.DestroyImmediate", re.compile(r"\.\s*DestroyImmediate\s*\("), (
+        ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*clone\s*\)"), 1),
+        ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*vanillaAi\s*\)"), 1),
+        ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*tameable\s*\)"), 1),
+        ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*drop\s*\)"), 1),
+    )),
+    ("ZNetView.Destroy", re.compile(r"\.\s*Destroy\s*\("), (
+        ("Runtime/Settlement/SettlementRuntime.cs", _foreman_exact(r"\bview\s*\.\s*Destroy\s*\(\s*\)"), 1),
+    )),
+    ("worker ZDO.Set", re.compile(r"\bzdo\s*\.\s*Set\s*\("), (
+        ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\bzdo\s*\.\s*Set\s*\(\s*KeyField\s*,\s*key\s*\)"), 1),
+        ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\bzdo\s*\.\s*Set\s*\(\s*RevisionField\s*,\s*0\s*\)"), 1),
+        ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\bzdo\s*\.\s*Set\s*\(\s*InventoryField\s*,\s*package\s*\.\s*GetArray\s*\(\s*\)\s*\)"), 1),
+        ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\bzdo\s*\.\s*Set\s*\(\s*RevisionField\s*,\s*Revision\s*\)"), 1),
+    )),
+    ("BaseAI.MoveTo", re.compile(r"(?<![A-Za-z0-9_])MoveTo\s*\("), (
+        ("Runtime/Settlement/ForemanWorkerAI.cs", _foreman_exact(r"(?<![A-Za-z0-9_])MoveTo\s*\(\s*dt\s*,\s*goal\s*,\s*_planner\s*\.\s*Goal\s*\.\s*ArrivalTolerance\s*,\s*run\s*:\s*false\s*\)"), 1),
+    )),
+    ("physics position/velocity write", re.compile(
+        r"\.\s*(?:position|localPosition|rotation|localRotation|velocity|linearVelocity|angularVelocity|useGravity)\s*[-+*/&|^]?=(?!=)"), (
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*useGravity\s*=\s*false\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*useGravity\s*=\s*true\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*linearVelocity\s*=\s*velocity\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*linearVelocity\s*=\s*Vector3\s*\.\s*zero\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*angularVelocity\s*=\s*Vector3\s*\.\s*zero\s*;"), 2),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*rotation\s*=\s*Quaternion\s*\.\s*LookRotation\s*\(\s*new\s+Vector3\s*\(\s*step\s*\.\s*BodyFacing\s*\.\s*X\s*,\s*0f\s*,\s*step\s*\.\s*BodyFacing\s*\.\s*Z\s*\)\s*\)\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bplayer\s*\.\s*transform\s*\.\s*position\s*=\s*landing\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\b_body\s*\.\s*position\s*=\s*landing\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bplayer\s*\.\s*transform\s*\.\s*rotation\s*=\s*Quaternion\s*\.\s*LookRotation\s*\(\s*facing\s*\)\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\b_body\s*\.\s*rotation\s*=\s*player\s*\.\s*transform\s*\.\s*rotation\s*;"), 1),
+    )),
+)
+
+FOREMAN_ALWAYS_FORBIDDEN = (
+    ("ZSyncAnimation.SetTrigger", re.compile(r"\.\s*SetTrigger\s*\(")),
+    ("ownership takeover", re.compile(r"(?:\.\s*(?:SetOwner|ClaimOwnership|RequestOwn)\s*\(|\bRPC_RequestOwn\b)")),
+    ("teleport/direct movement", re.compile(r"\.\s*(?:Teleport[A-Za-z0-9_]*|MovePosition|MoveRotation|SetPosition|SetRotation|SetPositionAndRotation|Translate|Rotate|RotateAround)\s*\(")),
+    ("force injection", re.compile(r"\.\s*(?:AddForce|AddTorque|AddExplosionForce|AddRelativeForce|AddRelativeTorque|AddForceAtPosition|AddImpulse)\s*\(")),
+    ("arbitrary RPC", re.compile(r"(?:\.\s*(?:InvokeRPC|InvokeRoutedRPC|RegisterRPC)\s*\(|\bZRoutedRpc\b)")),
+)
+
+
+def _strip_cs_comments(text: str) -> str:
+    """Remove C# line and block comments while preserving strings and lines."""
+    out: list[str] = []
+    index = 0
+    length = len(text)
+    while index < length:
+        char = text[index]
+        next_char = text[index + 1] if index + 1 < length else ""
+        if char == "/" and next_char == "/":
+            out.extend((" ", " "))
+            index += 2
+            while index < length and text[index] not in "\r\n":
+                out.append(" ")
+                index += 1
+            continue
+        if char == "/" and next_char == "*":
+            out.extend((" ", " "))
+            index += 2
+            while index < length:
+                if text[index] == "*" and index + 1 < length and text[index + 1] == "/":
+                    out.extend((" ", " "))
+                    index += 2
+                    break
+                out.append(text[index] if text[index] in "\r\n" else " ")
+                index += 1
+            continue
+        if char in ('"', "'"):
+            quote = char
+            verbatim = quote == '"' and index > 0 and text[index - 1] == "@"
+            out.append(char)
+            index += 1
+            while index < length:
+                out.append(text[index])
+                if not verbatim and text[index] == "\\" and index + 1 < length:
+                    index += 1
+                    out.append(text[index])
+                elif text[index] == quote:
+                    if verbatim and index + 1 < length and text[index + 1] == quote:
+                        index += 1
+                        out.append(text[index])
+                    else:
+                        index += 1
+                        break
+                index += 1
+            continue
+        out.append(char)
+        index += 1
+    return "".join(out)
+
+
+def check_foreman_runtime_capabilities(errors: list[str]) -> list[str]:
+    """Pins Foreman's direct engine mutations and refuses every unlisted one."""
+    foreman_dir: Path = PRODUCTS["foreman"]["project_dir"]  # type: ignore[assignment]
+    runtime_dir = foreman_dir.joinpath(*FOREMAN_RUNTIME_DIR)
+    if not runtime_dir.is_dir():
+        fail(
+            "[foreman] #400 runtime capability audit: src/ConcernedForeman/Runtime is missing; "
+            "point the audit at the runtime's new home rather than leaving it green", errors)
+        return []
+
+    sources: dict[str, str] = {}
+    for path in sorted(runtime_dir.rglob("*.cs")):
+        parts = path.relative_to(foreman_dir).parts
+        if any(part in ("obj", "bin") for part in parts):
+            continue
+        sources[path.relative_to(foreman_dir).as_posix()] = _strip_cs_comments(
+            path.read_text(encoding="utf-8-sig"))
+
+    hits = 0
+    pinned = 0
+    for label, broad, allowances in FOREMAN_AUDITED_CAPABILITIES:
+        allowed_spans: dict[str, list[tuple[int, int]]] = {}
+        for rel, exact, expected in allowances:
+            code = sources.get(rel)
+            if code is None:
+                hits += 1
+                fail(
+                    f"[foreman] #400 runtime capability audit: pinned file {rel} for {label} "
+                    "is missing from the audited runtime", errors)
+                continue
+            matches = list(exact.finditer(code))
+            if len(matches) != expected:
+                hits += 1
+                fail(
+                    f"[foreman] #400 runtime capability audit: {rel} has {len(matches)} exact "
+                    f"{label} site(s); the pinned population is {expected}", errors)
+            else:
+                pinned += expected
+            allowed_spans.setdefault(rel, []).extend((match.start(), match.end()) for match in matches)
+
+        for rel, code in sources.items():
+            spans = allowed_spans.get(rel, ())
+            for match in broad.finditer(code):
+                if any(start <= match.start() < end for start, end in spans):
+                    continue
+                hits += 1
+                fail(
+                    f"[foreman] #400 runtime capability audit: unpinned {label} in "
+                    f"src/ConcernedForeman/{rel}:{code.count(chr(10), 0, match.start()) + 1}",
+                    errors)
+
+    for label, pattern in FOREMAN_ALWAYS_FORBIDDEN:
+        for rel, code in sources.items():
+            for match in pattern.finditer(code):
+                hits += 1
+                fail(
+                    f"[foreman] #400 runtime capability audit: forbidden {label} in "
+                    f"src/ConcernedForeman/{rel}:{code.count(chr(10), 0, match.start()) + 1}",
+                    errors)
+
+    return [
+        f"[foreman] #400 runtime capability audit: {len(sources)} source file(s) under "
+        f"src/ConcernedForeman/Runtime, {pinned} direct engine mutation/capability site(s) "
+        "pinned by full path and exact whitespace-tolerant spelling; SetTrigger, ownership "
+        "takeover, unpinned teleport/position/velocity/force writes, item spawning/drop calls, "
+        "and arbitrary RPC are refused. This source-text audit strips comments; it does not "
+        f"follow indirection or prove control flow ({hits} violations)",
     ]
 
 
@@ -2227,14 +2795,35 @@ TEAMSTER_RETIRE_ALLOWS = "WorkerRetirement.Allows("
 # local, `ZNetScene.instance` — moves a file's routed count.
 #
 # That is the whole claim, and it is narrower than "every way to reach the vanilla
-# scene's removal", which an earlier version of this comment said. Two things this
-# does not catch, both proved by a review rather than imagined:
+# scene's removal", which an earlier version of this comment said. One thing this
+# does not catch, proved by a review rather than imagined:
 #
 #   * a receiver hidden behind an indirection that spells no `Destroy…(` at all
 #     (`Action<GameObject> reap = UnityEngine.Object.Destroy; reap(go);`), which
-#     TEAMSTER_DESTRUCTION cannot see either;
-#   * a destruction outside Adapters/Workers entirely, since these pins only walk
-#     the worker folder. A helper in Adapters/ or Domain/ is not audited here.
+#     TEAMSTER_DESTRUCTION cannot see either.
+#
+# A SECOND LIMIT USED TO BE LISTED HERE and is now closed rather than described:
+# these pins walked only Adapters/Workers, so a helper in Adapters/ or Domain/
+# calling `ZNetScene.instance.Destroy(body)` passed at exit 0 with every pinned
+# count unchanged (#401). The folder was a convenient scope that got mistaken for
+# a boundary — the same shape as the two earlier corrections, which both stayed
+# inside the folder. The walk below is now the whole product source tree,
+# `src/ConcernedTeamster/**/*.cs` less `obj/` and `bin/`, keyed by path relative
+# to the product rather than to the worker folder.
+#
+# TWO THINGS THE PRODUCT TREE DOES NOT COVER, said here rather than left as the
+# next convenient scope for someone to mistake for a boundary:
+#
+#   * `obj/` and `bin/`, which hold generated and built output. Neither is in the
+#     project's Compile items (the SDK's own default excludes them), so a helper
+#     dropped there is not in the shipped assembly at all.
+#   * the shared source Teamster compiles in from `src/Shared/Workers`,
+#     `src/Shared/Interop` and `src/Shared/Diagnostics`, which IS in the shipped
+#     assembly. It cannot spell a destruction: the same files compile into
+#     ConcernedTeamster.Tests, a net10.0 project with no game assemblies at all,
+#     so `UnityEngine`, `ZNetScene` and every other game type are compile errors
+#     there. That is a stronger guarantee than this text audit, and it is the
+#     compiler's rather than this file's.
 #
 # It also cannot know a receiver's TYPE and does not claim to. What it guarantees
 # is that swapping which thing a WRITTEN destruction is routed through changes a
@@ -2297,17 +2886,17 @@ def _destruction_receiver(text: str, start: int) -> str:
     match = TEAMSTER_DESTRUCTION_RECEIVER.search(prefix[:-1].rstrip())
     return re.sub(r"\s+", "", match.group(0)) if match else "?"
 
-# Where anything may be destroyed at all in the worker folder, with how many
+# Where anything may be destroyed at all in Teamster's source, with how many
 # sites each file holds. A pinned population, like the pinned port calls. Most of
 # these are not bodies — a plugin component being removed, the prefab factory's
 # own component surgery — and the rule does not pretend to know which is which.
 # What it guarantees is narrower and still worth having: **a new call spelled
-# `Destroy…(`, anywhere under Adapters/Workers, fails this audit until a person
+# `Destroy…(`, anywhere in src/ConcernedTeamster, fails this audit until a person
 # records it here and says what guards it.**
 #
-# KEYED BY PATH RELATIVE TO THE WORKER FOLDER, NOT BY BASENAME, and by rglob
-# rather than glob. Both were defects a review proved. `glob("*.cs")` does not
-# descend, so the same planted `ZNetScene.instance.Destroy(body)` in a new
+# KEYED BY PATH RELATIVE TO THE PRODUCT, NOT BY BASENAME, and by rglob rather
+# than glob. Both were defects a review proved. `glob("*.cs")` does not descend,
+# so the same planted `ZNetScene.instance.Destroy(body)` in a new
 # `Workers/Sweep/ZzSweeper.cs` was invisible while the sentence still said
 # "anywhere in Adapters/Workers" — and the #313 scope audit over the very same
 # directory uses rglob and did count that file. Basename keying is the other half:
@@ -2315,20 +2904,27 @@ def _destruction_receiver(text: str, start: int) -> str:
 # allowance, which is the exact defect already fixed once in this carve-out for
 # GunnarCollectionPort.cs.
 #
-# - GunnarCollectionRuntime.cs: the plugin component in Uninstall.
-# - GunnarHaulingRuntime.cs: the plugin component in Uninstall, and the
-#   pointed-at body in the guarded retire verb.
-# - TeamsterWorkerBody.cs: the bound body, reachable only through
+# THE KEYS GAINED THEIR FOLDER in #401. They used to be bare basenames relative
+# to Adapters/Workers, which is what let a destruction in any other Teamster
+# folder be counted by nobody at all.
+#
+# - Adapters/Workers/GunnarCollectionRuntime.cs: the plugin component in Uninstall.
+# - Adapters/Workers/GunnarHaulingRuntime.cs: the plugin component in Uninstall,
+#   and the pointed-at body in the guarded retire verb.
+# - Adapters/Workers/TeamsterWorkerBody.cs: the bound body, reachable only through
 #   HaulExecutor.RetireBody() and so only from the guarded retire verb.
-# - TeamsterWorkerPrefab.cs: the prefab's own teardown, the factory's component
-#   surgery on the inactive clone (three sites), and the two ways a body that has
-#   JUST been created and came up invalid is cleaned up. That body has held
-#   nothing for any length of time.
+# - Adapters/Workers/TeamsterWorkerPrefab.cs: the prefab's own teardown, the
+#   factory's component surgery on the inactive clone (three sites), and the two
+#   ways a body that has JUST been created and came up invalid is cleaned up. That
+#   body has held nothing for any length of time.
+# - Plugin.cs: the plugin's own container facade component in OnDestroy. Unity's
+#   static, on a component this plugin created; no body and no network object.
 TEAMSTER_DESTRUCTION_SITES = {
-    "GunnarCollectionRuntime.cs": 1,
-    "GunnarHaulingRuntime.cs": 2,
-    "TeamsterWorkerBody.cs": 1,
-    "TeamsterWorkerPrefab.cs": 6,
+    "Adapters/Workers/GunnarCollectionRuntime.cs": 1,
+    "Adapters/Workers/GunnarHaulingRuntime.cs": 2,
+    "Adapters/Workers/TeamsterWorkerBody.cs": 1,
+    "Adapters/Workers/TeamsterWorkerPrefab.cs": 6,
+    "Plugin.cs": 1,
 }
 
 # How many of those destructions are routed through an INSTANCE rather than
@@ -2341,30 +2937,37 @@ TEAMSTER_DESTRUCTION_SITES = {
 # shape would mean writing an exception into the one rule whose job is to notice a
 # shape changing, and two counts over the same call cost nothing.
 #
-# - GunnarHaulingRuntime.cs: `view.Destroy()`, the pointed-at body in the guarded
-#   retire verb.
-# - TeamsterWorkerBody.cs: `view.Destroy()`, the bound body, reachable only
-#   through the guarded retire verb.
-# - TeamsterWorkerPrefab.cs: `view.Destroy()` on a body that came up invalid, and
-#   Jotunn's `PrefabManager.Instance.DestroyPrefab`, which unregisters the mod's
-#   own prefab and touches no body in a world.
+# - Adapters/Workers/GunnarHaulingRuntime.cs: `view.Destroy()`, the pointed-at
+#   body in the guarded retire verb.
+# - Adapters/Workers/TeamsterWorkerBody.cs: `view.Destroy()`, the bound body,
+#   reachable only through the guarded retire verb.
+# - Adapters/Workers/TeamsterWorkerPrefab.cs: `view.Destroy()` on a body that came
+#   up invalid, and Jotunn's `PrefabManager.Instance.DestroyPrefab`, which
+#   unregisters the mod's own prefab and touches no body in a world.
 #
-# GunnarCollectionRuntime.cs is absent on purpose: it destroys only its own plugin
-# component, through Unity's static. It is also the file the review's substitution
-# plant targeted, precisely because a zero here is what a swap has to break.
+# Adapters/Workers/GunnarCollectionRuntime.cs is absent on purpose: it destroys
+# only its own plugin component, through Unity's static. It is also the file the
+# review's substitution plant targeted, precisely because a zero here is what a
+# swap has to break.
 #
 # SO ITS ABSENCE IS THE LOAD-BEARING VALUE, and the obvious way to silence this
 # rule is to add it with a 1. If this audit ever fails on
-# GunnarCollectionRuntime.cs, the question is not "what number makes it pass" - it
-# is which call grew a receiver, and whether that call now takes a BODY out of the
-# world from a file that has no retirement guard anywhere in it. A static destroy
-# written unqualified is the benign cause and the fix is to spell it
-# `UnityEngine.Object.Destroy(x)`; anything else wants a person's decision, not a
-# bumped count.
+# Adapters/Workers/GunnarCollectionRuntime.cs, the question is not "what number
+# makes it pass" - it is which call grew a receiver, and whether that call now
+# takes a BODY out of the world from a file that has no retirement guard anywhere
+# in it. A static destroy written unqualified is the benign cause and the fix is to
+# spell it `UnityEngine.Object.Destroy(x)`; anything else wants a person's
+# decision, not a bumped count.
+#
+# EVERY FILE OUTSIDE Adapters/Workers IS ABSENT HERE FOR THE SAME REASON, and
+# that is what #401 bought. Plugin.cs's one destruction is Unity's own qualified
+# static, so it is pinned above and expects zero here; any Teamster file that
+# starts routing a destruction through an instance now fails until a person says
+# what it destroys.
 TEAMSTER_ROUTED_DESTRUCTION_SITES = {
-    "GunnarHaulingRuntime.cs": 1,
-    "TeamsterWorkerBody.cs": 1,
-    "TeamsterWorkerPrefab.cs": 2,
+    "Adapters/Workers/GunnarHaulingRuntime.cs": 1,
+    "Adapters/Workers/TeamsterWorkerBody.cs": 1,
+    "Adapters/Workers/TeamsterWorkerPrefab.cs": 2,
 }
 
 # A guard that is CONSULTED AND IGNORED passes a source-order check: a bare
@@ -2377,21 +2980,27 @@ TEAMSTER_RETIRE_ALLOWS_GUARD = re.compile(
 
 # Where a body may leave the world at all, with how many sites each file holds.
 # A pinned population, like the one pinned pickup call: any other count anywhere
-# in Adapters/Workers fails, so a new removal cannot appear without a person
+# in src/ConcernedTeamster fails, so a new removal cannot appear without a person
 # deciding what guards it.
 #
-# - GunnarHaulingRuntime.cs: the retire verb's two paths, the pointed-at
-#   duplicate and the bound body. Both guarded, checked below.
-# - TeamsterWorkerBody.cs: the bound body's actual destruction, reachable only
-#   through HaulExecutor.RetireBody(), which is reachable only from the guarded
-#   retire verb.
-# - TeamsterWorkerPrefab.cs: a body that has just been created and came up
-#   invalid. It has held nothing for any length of time, and refusing to clean it
-#   up would leave a broken object in the world.
+# - Adapters/Workers/GunnarHaulingRuntime.cs: the retire verb's two paths, the
+#   pointed-at duplicate and the bound body. Both guarded, checked below.
+# - Adapters/Workers/TeamsterWorkerBody.cs: the bound body's actual destruction,
+#   reachable only through HaulExecutor.RetireBody(), which is reachable only from
+#   the guarded retire verb.
+# - Adapters/Workers/TeamsterWorkerPrefab.cs: a body that has just been created
+#   and came up invalid. It has held nothing for any length of time, and refusing
+#   to clean it up would leave a broken object in the world.
+# - Domain/Hauling/Execution/HaulExecutor.cs: the DECLARATION of the game-free
+#   `RetireBody()` decision, which `\bRetireBody\s*\(` cannot tell from a call and
+#   is pinned rather than excepted. It removes nothing itself — it returns an
+#   outcome the adapter acts on — but a second `RetireBody(` appearing in this
+#   game-free layer means a new caller, which is a person's decision.
 TEAMSTER_BODY_REMOVAL_SITES = {
-    "GunnarHaulingRuntime.cs": 2,
-    "TeamsterWorkerBody.cs": 1,
-    "TeamsterWorkerPrefab.cs": 1,
+    "Adapters/Workers/GunnarHaulingRuntime.cs": 2,
+    "Adapters/Workers/TeamsterWorkerBody.cs": 1,
+    "Adapters/Workers/TeamsterWorkerPrefab.cs": 1,
+    "Domain/Hauling/Execution/HaulExecutor.cs": 1,
 }
 
 
@@ -2406,18 +3015,34 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
             f"{runtime.relative_to(ROOT)} — the audit no longer covers the retire verb", errors)
         return []
 
-    # First: the population. Every place in the worker folder where a body can
+    # First: the population. Every place in Teamster's source where a body can
     # leave the world, counted, against what this rule has been told to expect.
+    #
+    # THE WALK IS THE WHOLE PRODUCT (#401), not Adapters/Workers. The worker
+    # folder was never the boundary being defended; it was a convenient scope
+    # that the audit's own success sentence came to describe as one, which is how
+    # a reader comes to trust a guarantee that does not exist.
     workers_dir = teamster_dir.joinpath(*TEAMSTER_WORKERS_DIR)
+    if not workers_dir.is_dir() or not any(workers_dir.rglob("*.cs")):
+        fail(
+            "[interop] #381 carried-material audit: "
+            f"{'/'.join(TEAMSTER_WORKERS_DIR)} has no sources under "
+            f"{teamster_dir.relative_to(ROOT)} — the worker runtime this audit pins moved, and the "
+            "pinned populations below are keyed to where it was", errors)
     total_sites = 0
     total_destructions = 0
     total_routed = 0
-    for path in sorted(workers_dir.rglob("*.cs")):
-        # Relative to the worker folder, so a subdirectory is a different key
-        # rather than the same allowance seen twice.
-        key = path.relative_to(workers_dir).as_posix()
-        text = "\n".join(_strip_cs_line_comment(line) for line in
-                         path.read_text(encoding="utf-8").splitlines())
+    scanned_files = 0
+    for path in sorted(teamster_dir.rglob("*.cs")):
+        # Relative to the PRODUCT, so a subdirectory — and a folder outside
+        # Adapters/Workers — is a different key rather than the same allowance
+        # seen twice, or no key at all.
+        relative = path.relative_to(teamster_dir)
+        if relative.parts[0] in ("obj", "bin"):
+            continue
+        key = relative.as_posix()
+        scanned_files += 1
+        text = _strip_cs_comments(path.read_text(encoding="utf-8"))
         found = len(TEAMSTER_BODY_REMOVAL.findall(text))
         total_sites += found
         expected = TEAMSTER_BODY_REMOVAL_SITES.get(key, 0)
@@ -2464,8 +3089,7 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
                 "unchanged, which is why this one exists — say what it destroys and what guards it, "
                 "and record it in TEAMSTER_ROUTED_DESTRUCTION_SITES", errors)
 
-    code = "\n".join(_strip_cs_line_comment(line) for line in
-                     runtime.read_text(encoding="utf-8").splitlines())
+    code = _strip_cs_comments(runtime.read_text(encoding="utf-8"))
     match = TEAMSTER_RETIRE_BODY.search(code)
     if match is None:
         fail(
@@ -2520,17 +3144,21 @@ def check_teamster_retire_guards_carried_material(errors: list[str]) -> list[str
                 "spelled the forcing word", errors)
 
     return [
-        f"[interop] #381 carried-material audit: {total_destructions} destruction(s), {total_routed} of "
-        f"them routed through an instance, and {total_sites} unambiguous body removal(s) under "
-        "Adapters/Workers and its subdirectories, every one at a pinned site keyed by relative path — "
-        "so a new call spelled `Destroy…(` fails here, and so does re-routing an existing one through a "
-        f"different receiver. The {in_verb} REMOVALS in {'/'.join(TEAMSTER_RETIRE_FILE)} are inside the "
+        f"[interop] #381 carried-material audit: {scanned_files} Teamster source(s) scanned — the whole "
+        f"of {teamster_dir.relative_to(ROOT).as_posix()} and its subdirectories, less obj/ and bin/ "
+        "(neither is compiled) and less the shared source compiled in from src/Shared, which the "
+        "net10.0 test project proves cannot name a game type at all, not "
+        f"Adapters/Workers alone (#401) — holding {total_destructions} destruction(s), {total_routed} of "
+        f"them routed through an instance, and {total_sites} unambiguous body removal(s), every one at a "
+        "pinned site keyed by path relative to the product — so a new call spelled `Destroy…(`, in any "
+        "Teamster folder, fails here, and so does re-routing an existing one through a different "
+        f"receiver. The {in_verb} REMOVALS in {'/'.join(TEAMSTER_RETIRE_FILE)} are inside the "
         "retire verb with a refusing `if (!WorkerRetirement.Allows(...))` written above each (that "
         "file's other destruction is its own plugin component in Uninstall, nowhere near the verb). "
         "What that establishes is that the refusal is written above each removal — NOT that control "
         "flow obeys it, which is WorkerRetirementTests' job and a reviewer's. A destruction reached "
-        "through an indirection that spells no `Destroy…(` at all, and any destruction outside "
-        "Adapters/Workers, are both outside what this text audit sees",
+        "through an indirection that spells no `Destroy…(` at all is still outside what this text "
+        "audit sees",
     ]
 
 
@@ -4024,6 +4652,7 @@ def main() -> int:
     report.extend(check_the_npc_library_writes_no_file(errors))
     report.extend(check_container_permissions_stay_reachable(errors))
     report.extend(check_container_permit_stays_unforgeable(errors))
+    report.extend(check_teamster_deposit_adds_only_what_it_is_removing(errors))
     report.extend(check_console_failures_go_through_one_scrubber(errors))
     report.extend(check_npc_planning_decides_nothing_to_do_once(errors))
     report.extend(check_npc_planning_never_defaults_a_claim(errors))
@@ -4031,6 +4660,7 @@ def main() -> int:
     report.extend(check_teamster_integration_readonly(errors))
     report.extend(check_teamster_authority_policy(errors))
     report.extend(check_teamster_no_force_injection(errors))
+    report.extend(check_foreman_runtime_capabilities(errors))
     report.extend(check_teamster_collection_verbs(errors))
     report.extend(check_teamster_retire_guards_carried_material(errors))
     report.extend(check_teamster_no_internet_egress(errors))

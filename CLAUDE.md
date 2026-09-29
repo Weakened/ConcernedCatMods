@@ -43,15 +43,32 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   two lifecycle verbs in both directions, and the retire verb's carried-material guard — moving it below a
   removal, deleting the decision, consulting the verdict and ignoring it, lifting a removal into a helper,
   moving one to another file or a subdirectory, changing what a destruction is routed through, and using
-  the second spelling of removal that the no-argument pattern cannot see.
+  the second spelling of removal that the no-argument pattern cannot see. Since #401 they also cover the
+  product tree outside `Adapters/Workers` in the same four ways — a destruction, a routed destruction, a
+  body removal, and a basename inheriting another file's allowance — plus a subdirectory one folder down,
+  and `Inventory.AddItem` inside the worker folder and out.
 
-  Three limits of that harness are stated rather than left to be found. It is a **text** audit, so a
+  Two limits of that harness are stated rather than left to be found. It is a **text** audit, so a
   destruction reached through a delegate or a method group spells no `Destroy…(` and is invisible to it -
   and the narrower claim is deliberate, because an earlier version of this sentence blamed only *aliases*
-  while a receiver split across two lines spelled `Destroy(` in full and escaped anyway. It scans only
-  `Adapters/Workers`, so a destruction in another Teamster folder is outside it as well (#401). And the
+  while a receiver split across two lines spelled `Destroy(` in full and escaped anyway. And the
   population pins establish that each destruction sits at a recorded site with a refusal written above it
   — **not** that control flow obeys that refusal, which is `WorkerRetirementTests`' job and a reviewer's.
+
+  A **third limit was closed rather than restated** (#401). The destruction, routed-destruction and body-
+  removal pins used to walk `Adapters/Workers` alone, so `ZNetScene.instance.Destroy(body)` in a helper
+  under `Adapters/` or `Domain/` passed at exit 0 with every pinned count unchanged — the same shape as
+  the two corrections before it, both of which stayed inside that folder. The folder was never the
+  boundary; it was a convenient scope the audit's own success sentence came to describe as one. The walk
+  is now the whole of `src/ConcernedTeamster` less `obj/` and `bin/`, keyed by path relative to the
+  product, and `ZNetScene` is a forbidden token outside `Adapters/Workers` beside `.Interact(` and
+  `.Pickup(`. The same issue decided the other half: **`Inventory.AddItem` does not join the pinned set
+  and is refused everywhere in Teamster source**, the authorized port included. `Humanoid.Pickup` is the
+  authorized take and does vanilla's own inventory add inside vanilla; a direct `AddItem` is that same
+  material movement one layer lower, and pinning it would widen the grant rather than describe it. The
+  reasoning is written down in `docs/mods/concerned-teamster/AUTHORITY_POLICY.md` so the next reader does
+  not re-derive it. Nothing in Teamster calls it today; a future need (the #415 container deposit, say)
+  is its own owner decision.
 
   **Reachable now, behind an off-by-default switch, and never observed in game.** The port has a call
   site: `Adapters/Workers/GunnarCollectionRuntime.cs`, gated by `TeamsterFeature.GunnarCollection` and

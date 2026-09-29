@@ -504,7 +504,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
         // pick up. So widening one widens the other, in one edit, and a tool he
         // is ever issued is not swept into the chest with the stone.
         IReadOnlyList<KeyValuePair<string, int>> carried =
-            _deposit.Carrying(worker, GunnarCollectionAllowlist.IsCollectedYield);
+            _deposit.Carrying(worker, GunnarCollectionAllowlist.IsCollectedYield, out bool readable);
 
         var request = new DepositRequest(
             featureEnabled: OptedIn(),
@@ -516,7 +516,8 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
             workerRecordUnreadable: _recordUnreadable(),
             transferInFlight: _ordered || _port.Phase == PickPhase.Gathering,
             carryingSomething: carried.Count > 0,
-            destinationDesignated: _destination != null && _destinationKey.Length != 0);
+            destinationDesignated: _destination != null && _destinationKey.Length != 0,
+            carriedIsReadable: readable);
 
         DepositRefusal refusal = DepositOrderGate.Evaluate(request);
         if (refusal != DepositRefusal.None)

@@ -97,8 +97,10 @@ internal readonly struct DepositRequest
         bool workerRecordUnreadable,
         bool transferInFlight,
         bool carryingSomething,
-        bool destinationDesignated)
+        bool destinationDesignated,
+        bool carriedIsReadable = true)
     {
+        CarriedIsReadable = carriedIsReadable;
         FeatureEnabled = featureEnabled;
         WorldIsUp = worldIsUp;
         Authority = authority;
@@ -139,6 +141,16 @@ internal readonly struct DepositRequest
     /// <summary>Whether the job named a destination container. <b>Never a
     /// nearest-chest lookup.</b></summary>
     public bool DestinationDesignated { get; }
+
+    /// <summary>Whether what he is carrying could be read at all.
+    ///
+    /// <b>False is not "nothing".</b> An inventory that could not be enumerated
+    /// holds an unknown amount, and reporting that as an empty Gunnar is the same
+    /// falsehood the two record-state refusals exist to stop - the player is told
+    /// he is carrying nothing while he is standing there holding it. Defaults to
+    /// true, because every caller that does not distinguish the two has already
+    /// read something.</summary>
+    public bool CarriedIsReadable { get; }
 }
 
 /// <summary>Whether a deposit may start (#381, `DECISIONS.md` D15). The whole
@@ -206,6 +218,13 @@ internal static class DepositOrderGate
             return DepositRefusal.NoDestination;
         }
 
+        if (!request.CarriedIsReadable)
+        {
+            // Asked before the empty check, because an unreadable inventory looks
+            // exactly like an empty one from here and only one of them is true.
+            return DepositRefusal.Unreadable;
+        }
+
         return request.CarryingSomething ? DepositRefusal.None : DepositRefusal.NothingToDeposit;
     }
 }
@@ -255,7 +274,9 @@ internal static class DepositSentences
             case DepositRefusal.NoDestination:
                 return "No chest was chosen. Pick the one he should use - he never looks for the nearest one.";
             case DepositRefusal.Unreadable:
-                return "Something about the deposit could not be read, so nothing was moved.";
+                return "What Gunnar is carrying could not be read, so nothing was moved. He is not " +
+                    "empty - the amount is unknown, which is a different thing - and nothing is " +
+                    "assumed about it. The log says what could not be read.";
             default:
                 return "The deposit was refused for a reason nobody recorded, so nothing was moved.";
         }

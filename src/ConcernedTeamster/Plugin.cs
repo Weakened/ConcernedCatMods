@@ -149,7 +149,7 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void Update()
     {
-        bool worldIsUp = ZNetScene.instance != null;
+        bool worldIsUp = Adapters.Workers.GunnarHaulingRuntime.WorldIsUp;
         if (_haulWorldWasUp && !worldIsUp)
         {
             _haulPanel?.Forget();
