@@ -721,14 +721,14 @@ class DepositCarveOutIsNarrow(CarveOutFixture):
         # exact failure the measured-delta discipline exists to prevent - and it
         # is a one-word edit that compiles.
         self.swap_in_deposit(
-            "from.RemoveItem(stack, moved);",
+            "from.RemoveItem(stack, arrived);",
             "from.RemoveItem(stack, remaining);")
         self.assert_refused("a remove of the asked-for count passed inside the authorized file")
 
     def test_the_remove_may_not_target_the_destination(self):
         self.swap_in_deposit(
-            "from.RemoveItem(stack, moved);",
-            "to.RemoveItem(stack, moved);")
+            "from.RemoveItem(stack, arrived);",
+            "to.RemoveItem(stack, arrived);")
         self.assert_refused("a remove from the destination passed inside the authorized file")
 
     def test_a_remove_is_not_allowed_in_another_worker_file(self):

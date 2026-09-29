@@ -1460,7 +1460,9 @@ def check_teamster_deposit_adds_only_what_it_is_removing(errors: list[str]) -> l
                  f"`{spelling}` and exactly two are expected - the line that establishes that "
                  f"{role}, once where the counts are taken and once where the items move. Reversing "
                  "a deposit into a withdrawal needs no new call and no changed argument if these "
-                 "can move; it needs only their order", errors)
+                 "can move; it needs only their order. If a third legitimate call path needs one, "
+                 "raise this count deliberately in the same commit that adds the site - do not "
+                 "loosen the pattern", errors)
             return []
 
     return [
@@ -2313,8 +2315,10 @@ TEAMSTER_DEPOSIT_PORT_CALLS = (
      re.compile(r"\bto\s*\.\s*AddItem\s*\(\s*part\s*\)"),
      "the clone of a partial stack, added before anything is removed"),
     (".RemoveItem(",
-     re.compile(r"\bfrom\s*\.\s*RemoveItem\s*\(\s*stack\s*,\s*moved\s*\)"),
-     "exactly what arrived, taken off the original stack after the add"),
+     re.compile(r"\bfrom\s*\.\s*RemoveItem\s*\(\s*stack\s*,\s*arrived\s*\)"),
+     "exactly what arrived, taken off the original stack after the add - `arrived` is vanilla's own "
+     "number for the add, not the count asked for and not the destination's measured delta, which "
+     "has a blind spot the decompiled AddItem explains"),
 )
 
 # Which file may spell which authorized calls. A path absent from this table has

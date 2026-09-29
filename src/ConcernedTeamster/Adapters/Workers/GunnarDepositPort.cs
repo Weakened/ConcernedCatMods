@@ -76,16 +76,28 @@ internal sealed class GunnarDepositPort
     /// reported instead of measured away.</summary>
     private readonly struct MoveTally
     {
-        private MoveTally(bool inconsistent)
+        private MoveTally(bool attempted, bool inconsistent)
         {
+            WasAttempted = attempted;
             IsInconsistent = inconsistent;
         }
 
+        /// <summary>Whether either inventory was touched at all. <b>Kept apart
+        /// from <see cref="IsInconsistent"/> because the two deserve different
+        /// sentences</b>: "it may or may not have happened" and "it was never
+        /// attempted" are not the same thing to tell a player, and a review
+        /// caught the second being reported as the first.</summary>
+        public bool WasAttempted { get; }
+
         public bool IsInconsistent { get; }
 
-        public static MoveTally Consistent => new MoveTally(false);
+        public static MoveTally Consistent => new MoveTally(true, false);
 
-        public static MoveTally Inconsistent => new MoveTally(true);
+        public static MoveTally Inconsistent => new MoveTally(true, true);
+
+        /// <summary>Nothing was tried, because the inventories could not be read
+        /// at the moment of the move. Refuses, and says so honestly.</summary>
+        public static MoveTally NothingAttempted => new MoveTally(false, true);
     }
 
     private readonly List<ItemDrop.ItemData> _matching = new List<ItemDrop.ItemData>();
@@ -291,6 +303,17 @@ internal sealed class GunnarDepositPort
                 "nothing is credited, nothing is retried and nothing is put right automatically");
         }
 
+        if (!tally.WasAttempted)
+        {
+            // Neither inventory was touched. Refused rather than uncertain: an
+            // uncertain outcome asserts that something may have happened, and
+            // here provably nothing did.
+            return new DepositResult(
+                DepositOutcome.Refused, null,
+                "the two inventories could not be read at the moment of the move, so nothing was " +
+                "attempted and nothing changed");
+        }
+
         if (tally.IsInconsistent)
         {
             // The engine said it moved something and the measurement could not
@@ -367,7 +390,9 @@ internal sealed class GunnarDepositPort
         Inventory? to = InventoryOf(destination);
         if (from == null || to == null || ReferenceEquals(from, to))
         {
-            return MoveTally.Inconsistent;
+            // Nothing is touched on this path, so it must not be reported as a
+            // transfer whose outcome is unknown.
+            return MoveTally.NothingAttempted;
         }
 
         int remaining = units;
@@ -407,36 +432,69 @@ internal sealed class GunnarDepositPort
                     int offered = part.m_stack;
                     bool added = to.AddItem(part);
 
-                    // THREE READINGS OF ONE MOVE, AND THEY MUST AGREE.
+                    // HOW MANY UNITS VANILLA SAYS ARRIVED, DERIVED FROM WHAT
+                    // VANILLA ACTUALLY DOES RATHER THAN FROM WHAT IT SOUNDS LIKE
+                    // IT DOES.
                     //
-                    // `moved` is what the destination's count grew by. `taken` is
-                    // what the clone itself lost - vanilla decrements it as it
-                    // merges into existing stacks - and it does NOT depend on the
-                    // count recognising anything, which is exactly the blind spot
-                    // `moved` has. `added` is the engine's own yes.
+                    // Decompiled from the installed `assembly_valheim.dll`,
+                    // `Inventory.AddItem(ItemData)` merges unit by unit into
+                    // existing stacks and writes `item.m_stack` in ONE place
+                    // only - the iteration where merging stops:
                     //
-                    // A review found the pair `moved == 0 && added == false`
-                    // reachable with a partial merge into a destination stack the
-                    // count cannot match: the old code read that as "nothing
-                    // happened", the outer deltas both read zero, and the leg was
-                    // reported as `Nothing` - "nothing moved, and nothing was
-                    // lost" - while the chest had gained units Gunnar still had.
-                    // A mint, reported as a no-op. `taken` sees it.
-                    int taken = offered - (part.m_stack > 0 ? part.m_stack : 0);
+                    //     for (int i = 0; i < item.m_stack; i++) {
+                    //         var free = FindFreeStackItem(...);
+                    //         if (free != null) { free.m_stack++; continue; }
+                    //         item.m_stack = item.m_stack - i;      // here, once
+                    //         if (FindEmptySlot(...) found) m_inventory.Add(item);
+                    //         else flag = false;
+                    //         break;
+                    //     }
+                    //
+                    // Four cases, for an offered stack of N:
+                    //   A all N merge into existing stacks  -> m_stack N, flag true,  N arrived
+                    //   B no merge, clone placed in a slot  -> m_stack N, flag true,  N arrived
+                    //   C i merge, remainder placed         -> m_stack N-i, flag true, N arrived
+                    //   D i merge, no slot for the rest     -> m_stack N-i, flag false, i arrived
+                    //
+                    // So the engine's own number is `offered` when it returned
+                    // true, and the merged part - `offered - part.m_stack` - when
+                    // it returned false.
+                    //
+                    // THE PREVIOUS VERSION OF THIS BLOCK GOT IT WRONG AND MINTED.
+                    // It asserted that vanilla decrements the clone as it merges,
+                    // and computed `taken = offered - part.m_stack` as the amount
+                    // that moved. In cases A and B - the two ordinary successful
+                    // deposits - that is ZERO, so the removal was skipped while
+                    // the chest kept the units. Gunnar lost nothing, the chest
+                    // gained everything, and the player was told the outcome was
+                    // unknown. The premise was reasoned about; it should have been
+                    // decompiled, which is what the comment above now is.
+                    int arrived = added ? offered : offered - (part.m_stack > 0 ? part.m_stack : 0);
                     int moved = CountIn(to, itemPrefab) - before;
 
-                    if (moved > 0 && moved == taken)
+                    if (arrived > 0 && moved == arrived)
                     {
-                        from.RemoveItem(stack, moved);
+                        // The engine and the measurement agree. Remove exactly
+                        // that, never the count asked for.
+                        from.RemoveItem(stack, arrived);
                     }
-                    else if (moved > 0 || taken > 0 || added)
+                    else if (arrived > 0 || moved > 0)
                     {
-                        // Something went in and the three readings do not agree
-                        // on how much. Nothing is removed from him on the
-                        // strength of a number that is in dispute, and the caller
-                        // must not read this as "nothing happened".
+                        // They disagree. The case this catches that a count alone
+                        // cannot: the destination already holds a stack of this
+                        // material that `CountIn` does not recognise as the same
+                        // thing, so everything merges into it and `moved` reads
+                        // zero. Classifying from `moved` alone would answer
+                        // "nothing moved, and nothing was lost" while the chest
+                        // had gained. Nothing is removed from him on a number in
+                        // dispute, and the caller must not read this as nothing
+                        // happening.
                         inconsistent = true;
                     }
+
+                    // arrived == 0 && moved == 0: the chest had no room and took
+                    // nothing. An ordinary full chest, and the remainder stays
+                    // with him, which is where it should be.
 
                     break;
                 }
