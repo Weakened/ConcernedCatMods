@@ -122,11 +122,21 @@ internal sealed class GunnarDepositPort
         }
 
         var totals = new Dictionary<string, int>(StringComparer.Ordinal);
-        Inventory? inventory = InventoryOf(worker);
+        // Three situations come back null here and they are not the same: no
+        // body, a dead body, and an accessor that THREW. The first two are
+        // genuinely nothing to offer, and the gate has its own clause for an
+        // absent Gunnar. The third is an unknown amount, and reporting it as
+        // nothing is the falsehood the Unreadable clause exists to stop - reached
+        // one function over, which is where a review found it.
+        Inventory? inventory = ReadInventoryOf(worker, out bool accessorFailed);
+        if (accessorFailed)
+        {
+            readable = false;
+            return Array.Empty<KeyValuePair<string, int>>();
+        }
+
         if (inventory == null)
         {
-            // No body, or a dead one. Genuinely nothing to offer, and the gate
-            // has its own clause for an absent Gunnar.
             return Array.Empty<KeyValuePair<string, int>>();
         }
 
@@ -251,29 +261,15 @@ internal sealed class GunnarDepositPort
                     : "that chest has no room for " + itemPrefab + "; he keeps it");
         }
 
-        // WHICH INVENTORY IS WHICH, RE-ESTABLISHED IMMEDIATELY BEFORE THE MOVE.
-        //
-        // The validator pins the SPELLING of the three calls, not the BINDING of
-        // the two locals they are spelled against. Renaming the parameters of
-        // `Move` would reverse the direction - emptying the chest into Gunnar -
-        // while leaving `to.MoveItemToThis(from, stack)` byte-identical and the
-        // audit green. A text audit cannot see that, so this is where "D15
-        // grants a deposit and not a take" stops being a spelling and becomes a
-        // property: the source must still be the worker's own inventory and the
-        // destination must still be the designated container's, by reference.
-        if (!ReferenceEquals(from, InventoryOf(worker))
-            || !ReferenceEquals(to, InventoryOf(destination)))
-        {
-            return new DepositResult(
-                DepositOutcome.Refused, null,
-                "the two inventories were not the ones this deposit is for, so nothing was moved");
-        }
-
+        // The move takes the two ROLES, not two interchangeable `Inventory`
+        // parameters, and derives the inventories from them itself. See its own
+        // summary for why: a pair of same-typed parameters can be reversed by
+        // renaming them, which no text audit can see.
         bool faulted = false;
         MoveTally tally;
         try
         {
-            tally = Move(from, to, itemPrefab, plan.Units);
+            tally = Move(worker, destination, itemPrefab, plan.Units);
         }
         catch (Exception)
         {
@@ -347,8 +343,33 @@ internal sealed class GunnarDepositPort
     /// units wanted, added, and then exactly what <b>arrived</b> is removed from
     /// the original. Never the other way round, and never the number asked
     /// for.</summary>
-    private MoveTally Move(Inventory from, Inventory to, string itemPrefab, int units)
+    private MoveTally Move(Humanoid? worker, Container? destination, string itemPrefab, int units)
     {
+        // DERIVED HERE, FROM THE TWO ROLES, AND THIS IS THE POINT.
+        //
+        // This method used to take `(Inventory from, Inventory to, ...)`. An
+        // independent review showed that reversing the deposit into a withdrawal
+        // needed no new call and no changed argument: renaming those two
+        // parameters to `(Inventory to, Inventory from, ...)` leaves the call
+        // site positional and byte-identical, leaves
+        // `to.MoveItemToThis(from, stack)` byte-identical, and empties the
+        // player's chest into Gunnar with every validator pin green. The guard
+        // that was supposed to stop it lived in the caller, over the caller's own
+        // locals, so it passed too - and a comment there claimed the property was
+        // closed when it was not.
+        //
+        // Two same-typed parameters are reversible by renaming. Two ROLES are
+        // not: `from` can only be Gunnar because it is assigned from the worker,
+        // and `to` can only be the chest because it is assigned from the
+        // destination. Reversing it now means editing one of the two lines below,
+        // and `#381 deposit-mint audit` pins both verbatim.
+        Inventory? from = InventoryOf(worker);
+        Inventory? to = InventoryOf(destination);
+        if (from == null || to == null || ReferenceEquals(from, to))
+        {
+            return MoveTally.Inconsistent;
+        }
+
         int remaining = units;
         bool inconsistent = false;
         Matching(from, itemPrefab, _matching);
@@ -383,18 +404,37 @@ internal sealed class GunnarDepositPort
                     ItemDrop.ItemData part = stack.Clone();
                     part.m_stack = remaining;
                     part.m_equipped = false;
+                    int offered = part.m_stack;
                     bool added = to.AddItem(part);
+
+                    // THREE READINGS OF ONE MOVE, AND THEY MUST AGREE.
+                    //
+                    // `moved` is what the destination's count grew by. `taken` is
+                    // what the clone itself lost - vanilla decrements it as it
+                    // merges into existing stacks - and it does NOT depend on the
+                    // count recognising anything, which is exactly the blind spot
+                    // `moved` has. `added` is the engine's own yes.
+                    //
+                    // A review found the pair `moved == 0 && added == false`
+                    // reachable with a partial merge into a destination stack the
+                    // count cannot match: the old code read that as "nothing
+                    // happened", the outer deltas both read zero, and the leg was
+                    // reported as `Nothing` - "nothing moved, and nothing was
+                    // lost" - while the chest had gained units Gunnar still had.
+                    // A mint, reported as a no-op. `taken` sees it.
+                    int taken = offered - (part.m_stack > 0 ? part.m_stack : 0);
                     int moved = CountIn(to, itemPrefab) - before;
-                    if (moved > 0)
+
+                    if (moved > 0 && moved == taken)
                     {
                         from.RemoveItem(stack, moved);
                     }
-                    else if (added)
+                    else if (moved > 0 || taken > 0 || added)
                     {
-                        // It went in and the count cannot see it. Never remove
-                        // from him on the strength of a number that disagrees
-                        // with the engine, and never let the caller read this as
-                        // "nothing happened".
+                        // Something went in and the three readings do not agree
+                        // on how much. Nothing is removed from him on the
+                        // strength of a number that is in dispute, and the caller
+                        // must not read this as "nothing happened".
                         inconsistent = true;
                     }
 
@@ -417,14 +457,25 @@ internal sealed class GunnarDepositPort
     // refusal, never a zero.
     // ------------------------------------------------------------------
 
-    private static Inventory? InventoryOf(Humanoid? worker)
+    private static Inventory? InventoryOf(Humanoid? worker) => ReadInventoryOf(worker, out _);
+
+    /// <summary>The worker's inventory, telling an absent or dead body apart from
+    /// one whose accessor threw.
+    ///
+    /// <b>The distinction is not cosmetic.</b> A null from a throw means the
+    /// amount he is carrying is unknown; a null from a dead or missing body means
+    /// there is nothing to carry. Collapsing them is how "he is not carrying
+    /// anything" gets said about a Gunnar who is holding something.</summary>
+    private static Inventory? ReadInventoryOf(Humanoid? worker, out bool accessorFailed)
     {
+        accessorFailed = false;
         try
         {
             return worker == null || worker.IsDead() ? null : worker.GetInventory();
         }
         catch (Exception)
         {
+            accessorFailed = true;
             return null;
         }
     }

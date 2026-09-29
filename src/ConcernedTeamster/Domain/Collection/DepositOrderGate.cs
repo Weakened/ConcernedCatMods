@@ -98,7 +98,7 @@ internal readonly struct DepositRequest
         bool transferInFlight,
         bool carryingSomething,
         bool destinationDesignated,
-        bool carriedIsReadable = true)
+        bool carriedIsReadable)
     {
         CarriedIsReadable = carriedIsReadable;
         FeatureEnabled = featureEnabled;
@@ -147,9 +147,14 @@ internal readonly struct DepositRequest
     /// <b>False is not "nothing".</b> An inventory that could not be enumerated
     /// holds an unknown amount, and reporting that as an empty Gunnar is the same
     /// falsehood the two record-state refusals exist to stop - the player is told
-    /// he is carrying nothing while he is standing there holding it. Defaults to
-    /// true, because every caller that does not distinguish the two has already
-    /// read something.</summary>
+    /// he is carrying nothing while he is standing there holding it.
+    ///
+    /// <b>No default, deliberately.</b> It had one - <c>true</c> - and a review
+    /// pointed out what that buys: dropping the argument at the single call site
+    /// would compile, take the optimistic value, leave the whole suite green, and
+    /// put the falsehood straight back. A required parameter makes that a
+    /// compile error. A <c>default(DepositRequest)</c> still reads <c>false</c>
+    /// here, which is the refusing direction.</summary>
     public bool CarriedIsReadable { get; }
 }
 

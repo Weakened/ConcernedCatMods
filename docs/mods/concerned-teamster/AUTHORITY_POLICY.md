@@ -149,12 +149,15 @@ a name; a drop that failed is durable reconciliation evidence rather than a sile
   table, fail-closed resolution, and that the brake's authority gate equals
   the policy's.
 
-### Inventory-mutating vanilla calls are forbidden, not pinned (#401)
+### Inventory-mutating vanilla calls (#401, then D15)
+
+**This section was written before D15 and its conclusion has since been changed
+by an owner decision. Read the amendment at the end of it.**
 
 The owner's 2026-09-19 grant is a list of pinned calls, and #401 asked whether
-`Inventory.AddItem` belongs on it. **It does not, and it is refused everywhere
-in Teamster source — inside `Adapters/Workers/GunnarCollectionPort.cs` as well
-as out.**
+`Inventory.AddItem` belongs on it. **Under that grant it does not, and it is
+refused everywhere in Teamster source — inside
+`Adapters/Workers/GunnarCollectionPort.cs` as well as out.**
 
 The two pinned calls are the whole of the grant: `Pickable.Interact` drops the
 yield, and `Humanoid.Pickup` takes one dropped item. `Humanoid.Pickup` performs
@@ -167,9 +170,30 @@ cannot mint, because something has to have produced the item; the objection is
 that a list which stops at `Interact` and `Pickup` while `AddItem` is free has a
 boundary narrower than its rationale. Refusing it makes the two match.
 
-Nothing in Teamster calls it today, so this costs the product nothing. A future
-need for it — the container deposit of #415, say — is a separate owner decision
-and arrives with its own issue, not by relaxing this line.
+When #401 landed, nothing in Teamster called it, so refusing it cost the product
+nothing. #401 also said what would have to happen for that to change: a future
+need — "the container deposit of #415, say" — would be **a separate owner
+decision arriving with its own issue, not a relaxing of this line**.
+
+**Amendment (owner decision 2026-09-29, #415; `DECISIONS.md` D15).** That is
+exactly what happened. The deposit's partial-stack case has no single vanilla
+call: it is an `Inventory.AddItem` of a clone of the stack being removed from,
+followed by an `Inventory.RemoveItem` of exactly what arrived. So
+`Inventory.AddItem` now has **one** pinned exception, in
+`Adapters/Workers/GunnarDepositPort.cs`, matched verbatim and once. It remains
+refused in every other file of the product, in the three `src/Shared` trees the
+project file compiles in, and in the collection port — and the paragraph above
+remains the reason it is refused there.
+
+Two further rules exist because a pinned call is only as narrow as what it is
+pinned against. `#381 deposit-mint audit` requires the clone to come from the
+stack being removed from, `part` to be assigned exactly once, the file's single
+item-prefab lookup to be `database.GetItemPrefab(itemPrefab)` in `SafeRoom`, and
+no instantiation or inline database reach anywhere in it — so the authorized
+`AddItem` cannot be handed material built from a name. The same rule pins the two
+lines that derive which inventory is which, because an independent review showed
+the deposit could be reversed into a *withdrawal* by renaming two same-typed
+parameters, with every call left byte-identical and every other pin green.
 
 ## Changing this policy
 

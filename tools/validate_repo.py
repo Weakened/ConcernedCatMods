@@ -1374,26 +1374,102 @@ def check_teamster_deposit_adds_only_what_it_is_removing(errors: list[str]) -> l
              "the meaning does not", errors)
         return []
 
-    # One ObjectDB item lookup, in the one place that needs one: asking the
-    # destination what it would merge into. A second is how a mint gets next to
-    # the add.
+    # One ObjectDB item lookup, AND it must be the one that asks the destination
+    # what it would merge into.
+    #
+    # The count alone is not enough, and a review proved it: removing SafeRoom's
+    # legitimate lookup and adding one beside the authorized add keeps the count
+    # at one, keeps the clone regex at one match, and mints material from a name
+    # at exit 0. So the site is pinned as well as the count.
     lookups = len(re.findall(r"GetItemPrefab" + SPACE + r"\(", code))
-    if lookups != 1:
-        fail(f"{label}: {port.relative_to(ROOT)} looks an item prefab up {lookups} time(s); exactly "
-             "one is authorized, in SafeRoom, to ask the destination what it would merge into. "
-             "Every other lookup in this file is a way to build material from a name", errors)
+    authorized_lookup = re.compile(
+        r"database" + SPACE + r"\." + SPACE + r"GetItemPrefab" + SPACE + r"\(" + SPACE
+        + r"itemPrefab" + SPACE + r"\)")
+    if lookups != 1 or len(authorized_lookup.findall(code)) != 1:
+        fail(f"{label}: {port.relative_to(ROOT)} looks an item prefab up {lookups} time(s) and "
+             "exactly one `database.GetItemPrefab(itemPrefab)` is authorized, in SafeRoom, to ask the "
+             "destination what it would merge into. Every other lookup in this file is a way to "
+             "build material from a name, and pinning only the count let one be moved next to the "
+             "authorized add", errors)
         return []
 
-    for token in ("Instantiate", "ObjectDB.instance.GetItemPrefab(", "m_dropPrefab.GetComponent"):
-        if token == "Instantiate" and _audit_token(token).search(code):
-            fail(f"{label}: {port.relative_to(ROOT)} spells `Instantiate`. The deposit moves items "
-                 "that already exist; creating one is outside D15", errors)
+    # Each of these is a way to obtain an item this port did not already hold.
+    # THE LOOP USED TO EVALUATE ONE OF THEM: a stray `token == "Instantiate" and`
+    # made the body reachable for a single iteration, so a tuple that reads as a
+    # refusal list refused one thing. Every token is checked now, and each says
+    # what it is.
+    for token, why in (
+            ("Instantiate",
+             "instantiating anything - the deposit moves items that already exist"),
+            ("ObjectDB.instance.GetItemPrefab(",
+             "reaching the item database inline, which is how a lookup gets next to the "
+             "authorized add without moving SafeRoom's"),
+            ("m_dropPrefab.GetComponent",
+             "reaching an item's own prefab component, which yields a template to clone rather "
+             "than a stack he is holding")):
+        if _audit_token(token).search(code):
+            fail(f"{label}: {port.relative_to(ROOT)} spells `{token}`. That is {why}; creating or "
+                 "templating an item is outside D15, which authorizes moving what he already "
+                 "carries", errors)
+            return []
+
+    # `part` is assigned exactly once - by the pinned clone. A second assignment
+    # is how the clone becomes something else between the clone and the add.
+    assignments = len(re.findall(r"\bpart" + SPACE + r"=" + SPACE + r"(?!=)", code))
+    if assignments != 1:
+        fail(f"{label}: `part` is assigned {assignments} time(s) in {port.relative_to(ROOT)}; exactly "
+             "one is authorized, the pinned clone. A second assignment replaces what the authorized "
+             "`AddItem` adds while leaving that call byte-identical", errors)
+        return []
+
+    # The two lines that decide WHICH inventory is which. Pinned because the
+    # reversal a review found needed neither a new call nor a changed argument:
+    # `Move` took two same-typed parameters, and renaming them swapped the
+    # direction with every other pin green. It now derives both from the two
+    # roles, and these are those derivations.
+    # The mover's SHAPE, not only its body. Two same-typed parameters are
+    # reversible by renaming them; two roles are not. The derivation pins below
+    # already refuse the viable form of that attack - swapping the shape and
+    # dropping the derivations leaves only one of each - but a plant that changed
+    # the signature alone passed, so the shape is pinned outright rather than
+    # relied on to be implied.
+    shape = re.compile(
+        SPACE.join(re.escape(piece) for piece in
+                   ("private MoveTally Move(Humanoid? worker, Container? destination, "
+                    "string itemPrefab, int units)").split(" ")))
+    if len(shape.findall(code)) != 1:
+        fail(f"{label}: {port.relative_to(ROOT)} does not contain exactly one "
+             "`private MoveTally Move(Humanoid? worker, Container? destination, string itemPrefab, "
+             "int units)`. The mover takes the two ROLES and derives the inventories itself, because "
+             "a pair of same-typed `Inventory` parameters can be reversed by renaming them - which "
+             "empties the player's chest into Gunnar with every pinned call byte-identical", errors)
+        return []
+
+    # TWO of each, and the duplication is the defence rather than an oversight.
+    # The caller derives them to measure both sides; the mover derives them again
+    # to move. Both derivations read the same two roles, so a reversal has to
+    # survive being written twice - and each is pinned here, so it cannot be
+    # written even once without this rule seeing it.
+    for spelling, role in (
+            ("Inventory? from = InventoryOf(worker);", "the source is Gunnar"),
+            ("Inventory? to = InventoryOf(destination);", "the destination is the chosen chest")):
+        pattern = re.compile(SPACE.join(re.escape(piece) for piece in spelling.split(" ")))
+        found_here = len(pattern.findall(code))
+        if found_here != 2:
+            fail(f"{label}: {port.relative_to(ROOT)} contains {found_here} of "
+                 f"`{spelling}` and exactly two are expected - the line that establishes that "
+                 f"{role}, once where the counts are taken and once where the items move. Reversing "
+                 "a deposit into a withdrawal needs no new call and no changed argument if these "
+                 "can move; it needs only their order", errors)
             return []
 
     return [
-        f"{label}: the deposit port clones exactly the stack it removes from and looks an item "
-        f"prefab up once, to ask the destination what it would merge into - so the authorized "
-        f"`AddItem` cannot carry material built from a name",
+        f"{label}: the deposit port clones exactly the stack it removes from, assigns that clone "
+        f"once, looks an item prefab up once and only as `database.GetItemPrefab(itemPrefab)`, "
+        f"spells no instantiation or inline database reach, and derives its source from the worker "
+        f"and its destination from the chosen chest - so the authorized `AddItem` cannot carry "
+        f"material built from a name, and the move cannot be reversed into a withdrawal by renaming "
+        f"two parameters",
     ]
 
 

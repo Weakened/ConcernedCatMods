@@ -25,7 +25,8 @@ public sealed class DepositOrderGateTests
         bool workerRecordUnreadable = false,
         bool transferInFlight = false,
         bool carryingSomething = true,
-        bool destinationDesignated = true) =>
+        bool destinationDesignated = true,
+        bool carriedIsReadable = true) =>
         new DepositRequest(
             featureEnabled,
             worldIsUp,
@@ -36,7 +37,8 @@ public sealed class DepositOrderGateTests
             workerRecordUnreadable,
             transferInFlight,
             carryingSomething,
-            destinationDesignated);
+            destinationDesignated,
+            carriedIsReadable);
 
     [Fact]
     public void AReadyRequestIsAdmitted()
@@ -212,6 +214,45 @@ public sealed class DepositOrderGateTests
     // The sentences. Both vocabularies, with the property that caught two
     // falsehoods in the pick's own table.
     // ------------------------------------------------------------------
+
+    [Fact]
+    public void AnUnreadableInventoryIsNotReportedAsAnEmptyGunnar()
+    {
+        // The falsehood this clause exists to stop: an inventory that could not be
+        // enumerated holds an UNKNOWN amount, and `carried.Count == 0` looks
+        // exactly like an empty Gunnar from the gate's side. Before this, the
+        // player was told "He is not carrying anything" about a body holding
+        // something - the same shape as the two record-state refusals.
+        Assert.Equal(
+            DepositRefusal.Unreadable,
+            DepositOrderGate.Evaluate(Ready(carriedIsReadable: false, carryingSomething: false)));
+
+        string said = DepositSentences.Describe(
+            DepositRefusal.Unreadable, WorkAuthorityVerdict.Granted);
+        Assert.Contains("could not be read", said);
+        Assert.Contains("not empty", said);
+        Assert.DoesNotContain("force", said);
+    }
+
+    [Fact]
+    public void AnUnreadableInventoryRefusesEvenWhenSomethingWasRead()
+    {
+        // Partly read is still not known. The clause is asked before the empty
+        // check but must not be skipped just because a count came back non-zero.
+        Assert.Equal(
+            DepositRefusal.Unreadable,
+            DepositOrderGate.Evaluate(Ready(carriedIsReadable: false)));
+    }
+
+    [Fact]
+    public void AMissingChestIsStillAskedAboutBeforeAnUnreadableInventory()
+    {
+        // Both wrong at once: choosing a chest is the thing the player has to do
+        // either way, and it is actionable where "unknown amount" is not.
+        Assert.Equal(
+            DepositRefusal.NoDestination,
+            DepositOrderGate.Evaluate(Ready(destinationDesignated: false, carriedIsReadable: false)));
+    }
 
     [Fact]
     public void EveryDepositRefusalHasASentenceOfItsOwn()

@@ -811,3 +811,65 @@ class DepositCarveOutIsNarrow(CarveOutFixture):
         self.assert_refused(
             "a public constructor on the now-public permit passed the audit",
             marker="permit-mint")
+
+    # -- the mint rule's tokens, two of which were never evaluated --
+
+    def test_an_instantiate_in_the_deposit_port_is_refused(self):
+        # The loop that refuses these ran its body for ONE of three iterations,
+        # because of a stray `token == "Instantiate" and`. So the tuple read as a
+        # refusal list and refused one thing. No plant covered the other two.
+        self.edit_deposit("        var made = UnityEngine.Object.Instantiate(null);")
+        self.assert_refused("an Instantiate in the deposit port passed", marker="#381")
+
+    def test_an_inline_item_database_reach_in_the_deposit_port_is_refused(self):
+        # The escape the count-only lookup gate allowed: move SafeRoom's lookup
+        # away and put one next to the authorized add. `lookups` stays at one.
+        self.edit_deposit(
+            "        var template = ObjectDB.instance.GetItemPrefab(itemPrefab);")
+        self.assert_refused("an inline item-database reach passed", marker="#381")
+
+    def test_reaching_an_items_own_prefab_component_is_refused(self):
+        self.edit_deposit(
+            "        var templated = stack.m_dropPrefab.GetComponent<ItemDrop>();")
+        self.assert_refused("a template read off an item's own prefab passed", marker="#381")
+
+    def test_the_authorized_lookup_must_stay_in_its_place(self):
+        # The count was pinned and the SITE was not, so the one authorized lookup
+        # could be anywhere - including beside the add.
+        self.swap_in_deposit(
+            "database.GetItemPrefab(itemPrefab)",
+            "database.GetItemPrefab(SomethingElse())")
+        self.assert_refused("the authorized lookup changed what it looks up", marker="#381")
+
+    def test_the_clone_may_not_be_reassigned_before_the_add(self):
+        self.swap_in_deposit(
+            "                    part.m_equipped = false;",
+            "                    part.m_equipped = false;\n"
+            "                    part = SomethingElse();")
+        self.assert_refused("the clone was replaced between the clone and the add", marker="#381")
+
+    # -- which inventory is which, which no text audit saw before --
+
+    def test_the_source_derivation_may_not_be_reversed(self):
+        # THE REVERSAL THE FIRST FIX DID NOT CLOSE. `Move` took two same-typed
+        # parameters; renaming them swapped the direction with the call site, all
+        # three pinned calls and the caller's own guard byte-identical, and emptied
+        # the player's chest into Gunnar. It now derives both from the two roles,
+        # and both derivations are pinned - so a reversal has to edit one of them.
+        self.swap_in_deposit(
+            "        Inventory? from = InventoryOf(worker);\n"
+            "        Inventory? to = InventoryOf(destination);",
+            "        Inventory? from = InventoryOf(destination);\n"
+            "        Inventory? to = InventoryOf(worker);")
+        self.assert_refused("the deposit was reversed into a withdrawal", marker="#381")
+
+    def test_the_move_may_not_take_two_interchangeable_inventories(self):
+        # Going back to `(Inventory from, Inventory to, ...)` restores the
+        # rename attack, so the shape itself is refused: the derivations have to
+        # be inside the mover.
+        self.swap_in_deposit(
+            "    private MoveTally Move(Humanoid? worker, Container? destination, "
+            "string itemPrefab, int units)",
+            "    private MoveTally Move(Inventory from, Inventory to, string itemPrefab, int units)")
+        self.assert_refused(
+            "the mover went back to two interchangeable inventory parameters", marker="#381")

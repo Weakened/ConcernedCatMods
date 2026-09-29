@@ -62,13 +62,19 @@ You are working in a Valheim mod monorepo with multiple independent products. Th
   boundary; it was a convenient scope the audit's own success sentence came to describe as one. The walk
   is now the whole of `src/ConcernedTeamster` less `obj/` and `bin/`, keyed by path relative to the
   product, and `ZNetScene` is a forbidden token outside `Adapters/Workers` beside `.Interact(` and
-  `.Pickup(`. The same issue decided the other half: **`Inventory.AddItem` does not join the pinned set
-  and is refused everywhere in Teamster source**, the authorized port included. `Humanoid.Pickup` is the
-  authorized take and does vanilla's own inventory add inside vanilla; a direct `AddItem` is that same
-  material movement one layer lower, and pinning it would widen the grant rather than describe it. The
-  reasoning is written down in `docs/mods/concerned-teamster/AUTHORITY_POLICY.md` so the next reader does
-  not re-derive it. Nothing in Teamster calls it today; a future need (the #415 container deposit, say)
-  is its own owner decision.
+  `.Pickup(`. The same issue decided the other half: **`Inventory.AddItem` did not join the
+  2026-09-19 pinned set and was refused everywhere in Teamster source**, the collection port included.
+  `Humanoid.Pickup` is that grant's authorized take and does vanilla's own inventory add inside vanilla;
+  a direct `AddItem` is the same material movement one layer lower, so pinning it under *that* grant
+  would have widened it rather than described it. The reasoning is in
+  `docs/mods/concerned-teamster/AUTHORITY_POLICY.md`.
+
+  #401 said the future need it had in mind - "the #415 container deposit, say" - would be **its own owner
+  decision**. That decision was given on 2026-09-29 and is **D15 below**, so `Inventory.AddItem` now has
+  exactly one pinned exception, in `Adapters/Workers/GunnarDepositPort.cs`, for the partial-stack case
+  vanilla has no single call for. It is still refused in every other file of the product, in the three
+  `src/Shared` trees the project file compiles in, and in the collection port. The line moved because an
+  owner moved it, which is the only way it may move.
 
   **Reachable now, behind an off-by-default switch, and never observed in game.** The port has a call
   site: `Adapters/Workers/GunnarCollectionRuntime.cs`, gated by `TeamsterFeature.GunnarCollection` and
