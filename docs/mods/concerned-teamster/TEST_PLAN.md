@@ -108,7 +108,7 @@ CT-040 record, not updated in place.
 
 | Scenario | Bound exercised | Automated test |
 |---|---|---|
-| Trip sidecar at max retention | `TripRecorderOptions.MaxMaxTripsRetained` (500 trips, 20 samples each) | `Scale_MaxTripsRetainedRoundTrip_StaysCorrectAndReasonablyFast` |
+| Trip sidecar at max retention | `TripRecorderOptions.MaxMaxTripsRetained` (500 trips, 20 samples each) | `Scale_MaxTripsRetainedRoundTrip_StaysCorrectAndAllocationBounded` (correctness, file size and host-independent managed-allocation ceilings; historical timings remain measurements, not a CI clock gate) |
 | Cargo manifest, many distinct items | 200 synthetic entries (a generous stress input — see the test's own comment for why this is not a claim about vanilla's real cart capacity) | `Create_ManyDistinctEntries_StaysCorrectAndFast` |
 | Telemetry sampler, dense cart cluster, long session | `TelemetrySamplerOptions.MaxMaxTrackedCarts`/`MaxMaxCartsPerTick`, 50 candidates, 2,000+ due ticks | `Tick_MaxTrackedCartsOverALongSession_NeverExceedsTheCap_ReachesBeyondOnePerTickBatch`, `Tick_MaxScaleLongSession_AllocationPerTickDoesNotGrowOverTime` |
 
