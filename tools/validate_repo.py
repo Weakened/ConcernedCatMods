@@ -1700,8 +1700,8 @@ TEAMSTER_OUTSIDE_WORKERS_TOKENS = (".Interact(", ".Pickup(", "SetExtraMass")
 #
 # Gunnar's collection role has to pick up loose branches and stones, and
 # vanilla's only route to that is `Pickable.Interact`, which Foreman already
-# calls legitimately from its own sanctioned port because Foreman carries no
-# such audit. Rather than let Teamster's source avoid spelling a banned token
+# calls legitimately from its own separately audited and pinned port. Rather
+# than let Teamster's source avoid spelling a banned token
 # while the behaviour changed anyway - which would have left this audit green
 # and meaningless - the allowance is explicit, named, and here.
 #
@@ -1904,6 +1904,247 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
         f"in Adapters/Workers, mass writes only in {TEAMSTER_WORKER_CALIBRATION_FILE}, network-object writes only "
         f"'tcc.worker.*' keys in {TEAMSTER_WORKER_IDENTITY_FILE}, no teleport/pose/velocity/constraint/joint/cart-"
         f"tuning writes, no component surgery or reflection outside the prefab factory (inside Adapters/Workers only; reflection elsewhere in Teamster is not audited by this rule) ({hits} violations)",
+    ]
+
+
+# #400: Foreman's runtime can move a worker, move real inventory, animate and
+# equip that body, create/retire the body, drop its carried inventory on death,
+# and place a real piece through the host player. Those are narrow capabilities,
+# not permission to use another receiver, another argument list, or another
+# call site. Each existing use is therefore pinned below by its path, its full
+# whitespace-tolerant spelling, and its population. A new call that merely uses
+# the same API in the same file is still a different program and fails.
+#
+# This is deliberately a source-text audit of src/ConcernedForeman/Runtime. It
+# sees direct calls and property writes after comments are stripped. It does not
+# prove control flow, follow delegates/method groups, inspect vanilla's IL, or
+# cover code outside that directory. The PlacePiece pin is special because its
+# two false arguments are the source-level proof that vanilla's internal
+# SetTrigger branch and cheated placement stay unreachable.
+FOREMAN_RUNTIME_DIR = ("Runtime",)
+
+
+def _foreman_exact(pattern: str) -> re.Pattern:
+    return re.compile(pattern)
+
+
+# label, broad spelling, ((path under ConcernedForeman, exact spelling, count), ...)
+FOREMAN_AUDITED_CAPABILITIES = (
+    ("ZSyncAnimation.GetHash", re.compile(r"\bZSyncAnimation\s*\.\s*GetHash\s*\("), (
+        ("Runtime/Construction/BuildPose.cs", _foreman_exact(r'ZSyncAnimation\s*\.\s*GetHash\s*\(\s*"forward_speed"\s*\)'), 1),
+        ("Runtime/Construction/BuildPose.cs", _foreman_exact(r'ZSyncAnimation\s*\.\s*GetHash\s*\(\s*"sideway_speed"\s*\)'), 1),
+        ("Runtime/Construction/BuildPose.cs", _foreman_exact(r'ZSyncAnimation\s*\.\s*GetHash\s*\(\s*"turn_speed"\s*\)'), 1),
+        ("Runtime/Ladders/ClimbPose.cs", _foreman_exact(r'ZSyncAnimation\s*\.\s*GetHash\s*\(\s*"forward_speed"\s*\)'), 1),
+        ("Runtime/Ladders/ClimbPose.cs", _foreman_exact(r'ZSyncAnimation\s*\.\s*GetHash\s*\(\s*"sideway_speed"\s*\)'), 1),
+        ("Runtime/Ladders/ClimbPose.cs", _foreman_exact(r'ZSyncAnimation\s*\.\s*GetHash\s*\(\s*"turn_speed"\s*\)'), 1),
+    )),
+    ("ZSyncAnimation.SetFloat", re.compile(r"\.\s*SetFloat\s*\("), (
+        ("Runtime/Construction/BuildPose.cs", _foreman_exact(r"\banimation\s*\.\s*SetFloat\s*\(\s*ForwardSpeed\s*,\s*0f\s*\)"), 1),
+        ("Runtime/Construction/BuildPose.cs", _foreman_exact(r"\banimation\s*\.\s*SetFloat\s*\(\s*SidewaySpeed\s*,\s*0f\s*\)"), 1),
+        ("Runtime/Construction/BuildPose.cs", _foreman_exact(r"\banimation\s*\.\s*SetFloat\s*\(\s*TurnSpeed\s*,\s*0f\s*\)"), 1),
+        ("Runtime/Ladders/ClimbPose.cs", _foreman_exact(r"\b_animation\s*\.\s*SetFloat\s*\(\s*ForwardSpeed\s*,\s*ClimbPresentation\s*\.\s*AnimatorForwardSpeed\s*\(\s*telemetry\s*\)\s*\)"), 1),
+        ("Runtime/Ladders/ClimbPose.cs", _foreman_exact(r"\b_animation\s*\.\s*SetFloat\s*\(\s*ForwardSpeed\s*,\s*0f\s*\)"), 1),
+        ("Runtime/Ladders/ClimbPose.cs", _foreman_exact(r"\b_animation\s*\.\s*SetFloat\s*\(\s*SidewaySpeed\s*,\s*0f\s*\)"), 2),
+        ("Runtime/Ladders/ClimbPose.cs", _foreman_exact(r"\b_animation\s*\.\s*SetFloat\s*\(\s*TurnSpeed\s*,\s*0f\s*\)"), 2),
+    )),
+    ("Humanoid.EquipItem", re.compile(r"\.\s*EquipItem\s*\("), (
+        ("Runtime/Construction/BuildPose.cs", _foreman_exact(r"\bhumanoid\s*\.\s*EquipItem\s*\(\s*item\s*,\s*triggerEquipEffects\s*:\s*false\s*\)"), 1),
+        ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\b_humanoid\s*\.\s*EquipItem\s*\(\s*item\s*,\s*triggerEquipEffects\s*:\s*false\s*\)"), 1),
+        ("Runtime/Settlement/ToolHandover.cs", _foreman_exact(r"\bfrom\s*\.\s*EquipItem\s*\(\s*selected\s*,\s*triggerEquipEffects\s*:\s*false\s*\)"), 1),
+        ("Runtime/Settlement/ToolHandover.cs", _foreman_exact(r"\bto\s*\.\s*EquipItem\s*\(\s*selected\s*\)"), 1),
+    )),
+    ("Humanoid.UnequipItem", re.compile(r"\.\s*UnequipItem\s*\("), (
+        ("Runtime/Construction/BuildPose.cs", _foreman_exact(r"\bhumanoid\s*\.\s*UnequipItem\s*\(\s*item\s*,\s*triggerEquipEffects\s*:\s*false\s*\)"), 1),
+        ("Runtime/Settlement/ToolHandover.cs", _foreman_exact(r"\bfrom\s*\.\s*UnequipItem\s*\(\s*selected\s*,\s*triggerEquipEffects\s*:\s*false\s*\)"), 1),
+        ("Runtime/Settlement/ToolHandover.cs", _foreman_exact(r"\bworker\s*\.\s*UnequipItem\s*\(\s*held\s*,\s*triggerEquipEffects\s*:\s*false\s*\)"), 1),
+    )),
+    ("Player.PlacePiece", re.compile(r"\.\s*PlacePiece\s*\("), (
+        ("Runtime/Construction/WorldPiecePlacer.cs", _foreman_exact(r"\bplayer\s*\.\s*PlacePiece\s*\(\s*piece\s*,\s*at\s*,\s*facing\s*,\s*doAttack\s*:\s*false\s*,\s*cheated\s*:\s*false\s*\)"), 1),
+    )),
+    ("Pickable.Interact", re.compile(r"\.\s*Interact\s*\("), (
+        ("Runtime/Collection/WorldSourcePickupPort.cs", _foreman_exact(r"\bpickable\s*\.\s*Interact\s*\(\s*humanoid\s*,\s*repeat\s*:\s*false\s*,\s*alt\s*:\s*false\s*\)"), 1),
+    )),
+    ("Humanoid.Pickup", re.compile(r"\.\s*Pickup\s*\("), (
+        ("Runtime/Collection/WorldSourcePickupPort.cs", _foreman_exact(r"\bhumanoid\s*\.\s*Pickup\s*\(\s*itemDrop\s*\.\s*gameObject\s*,\s*autoequip\s*:\s*false\s*,\s*autoPickupDelay\s*:\s*false\s*\)"), 1),
+    )),
+    ("Inventory.AddItem", re.compile(r"\.\s*AddItem\s*\("), (
+        ("Runtime/Custody/EngineInventoryPorts.cs", _foreman_exact(r"\bdestination\s*\.\s*AddItem\s*\(\s*part\s*\)"), 1),
+        ("Runtime/Settlement/ToolHandover.cs", _foreman_exact(r"\b_inventory\s*\.\s*AddItem\s*\(\s*item\s*\)"), 1),
+    )),
+    ("Inventory.RemoveItem", re.compile(r"\.\s*RemoveItem\s*\("), (
+        ("Runtime/Custody/EngineInventoryPorts.cs", _foreman_exact(r"\binventory\s*\.\s*RemoveItem\s*\(\s*stack\s*,\s*take\s*\)"), 1),
+        ("Runtime/Custody/EngineInventoryPorts.cs", _foreman_exact(r"\bsourceInventory\s*\.\s*RemoveItem\s*\(\s*stack\s*,\s*moved\s*\)"), 1),
+        ("Runtime/Settlement/ToolHandover.cs", _foreman_exact(r"\b_inventory\s*\.\s*RemoveItem\s*\(\s*item\s*\)"), 1),
+    )),
+    ("Inventory.MoveItemToThis", re.compile(r"\.\s*MoveItemToThis\s*\("), (
+        ("Runtime/Custody/EngineInventoryPorts.cs", _foreman_exact(r"\bdestination\s*\.\s*MoveItemToThis\s*\(\s*sourceInventory\s*,\s*stack\s*\)"), 1),
+    )),
+    ("Humanoid.DropItem", re.compile(r"\.\s*DropItem\s*\("), (
+        ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\b_humanoid\s*\.\s*DropItem\s*\(\s*_inventory\s*,\s*item\s*,\s*count\s*\)"), 1),
+    )),
+    ("UnityEngine.Object.Instantiate", re.compile(
+        r"\bInstantiate\s*(?:<[^(){};]*>\s*)?\("), (
+        ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*_prefab\s*,\s*position\s*,\s*rotation\s*\)"), 1),
+    )),
+    ("UnityEngine.Object.DestroyImmediate", re.compile(r"\.\s*DestroyImmediate\s*\("), (
+        ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*clone\s*\)"), 1),
+        ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*vanillaAi\s*\)"), 1),
+        ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*tameable\s*\)"), 1),
+        ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*drop\s*\)"), 1),
+    )),
+    ("ZNetView.Destroy", re.compile(r"\.\s*Destroy\s*\("), (
+        ("Runtime/Settlement/SettlementRuntime.cs", _foreman_exact(r"\bview\s*\.\s*Destroy\s*\(\s*\)"), 1),
+    )),
+    ("worker ZDO.Set", re.compile(r"\bzdo\s*\.\s*Set\s*\("), (
+        ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\bzdo\s*\.\s*Set\s*\(\s*KeyField\s*,\s*key\s*\)"), 1),
+        ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\bzdo\s*\.\s*Set\s*\(\s*RevisionField\s*,\s*0\s*\)"), 1),
+        ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\bzdo\s*\.\s*Set\s*\(\s*InventoryField\s*,\s*package\s*\.\s*GetArray\s*\(\s*\)\s*\)"), 1),
+        ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\bzdo\s*\.\s*Set\s*\(\s*RevisionField\s*,\s*Revision\s*\)"), 1),
+    )),
+    ("BaseAI.MoveTo", re.compile(r"(?<![A-Za-z0-9_])MoveTo\s*\("), (
+        ("Runtime/Settlement/ForemanWorkerAI.cs", _foreman_exact(r"(?<![A-Za-z0-9_])MoveTo\s*\(\s*dt\s*,\s*goal\s*,\s*_planner\s*\.\s*Goal\s*\.\s*ArrivalTolerance\s*,\s*run\s*:\s*false\s*\)"), 1),
+    )),
+    ("physics position/velocity write", re.compile(
+        r"\.\s*(?:position|localPosition|rotation|localRotation|velocity|linearVelocity|angularVelocity|useGravity)\s*[-+*/&|^]?=(?!=)"), (
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*useGravity\s*=\s*false\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*useGravity\s*=\s*true\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*linearVelocity\s*=\s*velocity\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*linearVelocity\s*=\s*Vector3\s*\.\s*zero\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*angularVelocity\s*=\s*Vector3\s*\.\s*zero\s*;"), 2),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*rotation\s*=\s*Quaternion\s*\.\s*LookRotation\s*\(\s*new\s+Vector3\s*\(\s*step\s*\.\s*BodyFacing\s*\.\s*X\s*,\s*0f\s*,\s*step\s*\.\s*BodyFacing\s*\.\s*Z\s*\)\s*\)\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bplayer\s*\.\s*transform\s*\.\s*position\s*=\s*landing\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\b_body\s*\.\s*position\s*=\s*landing\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bplayer\s*\.\s*transform\s*\.\s*rotation\s*=\s*Quaternion\s*\.\s*LookRotation\s*\(\s*facing\s*\)\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\b_body\s*\.\s*rotation\s*=\s*player\s*\.\s*transform\s*\.\s*rotation\s*;"), 1),
+    )),
+)
+
+FOREMAN_ALWAYS_FORBIDDEN = (
+    ("ZSyncAnimation.SetTrigger", re.compile(r"\.\s*SetTrigger\s*\(")),
+    ("ownership takeover", re.compile(r"(?:\.\s*(?:SetOwner|ClaimOwnership|RequestOwn)\s*\(|\bRPC_RequestOwn\b)")),
+    ("teleport/direct movement", re.compile(r"\.\s*(?:Teleport[A-Za-z0-9_]*|MovePosition|MoveRotation|SetPosition|SetRotation|SetPositionAndRotation|Translate|Rotate|RotateAround)\s*\(")),
+    ("force injection", re.compile(r"\.\s*(?:AddForce|AddTorque|AddExplosionForce|AddRelativeForce|AddRelativeTorque|AddForceAtPosition|AddImpulse)\s*\(")),
+    ("arbitrary RPC", re.compile(r"(?:\.\s*(?:InvokeRPC|InvokeRoutedRPC|RegisterRPC)\s*\(|\bZRoutedRpc\b)")),
+)
+
+
+def _strip_cs_comments(text: str) -> str:
+    """Remove C# line and block comments while preserving strings and lines."""
+    out: list[str] = []
+    index = 0
+    length = len(text)
+    while index < length:
+        char = text[index]
+        next_char = text[index + 1] if index + 1 < length else ""
+        if char == "/" and next_char == "/":
+            out.extend((" ", " "))
+            index += 2
+            while index < length and text[index] not in "\r\n":
+                out.append(" ")
+                index += 1
+            continue
+        if char == "/" and next_char == "*":
+            out.extend((" ", " "))
+            index += 2
+            while index < length:
+                if text[index] == "*" and index + 1 < length and text[index + 1] == "/":
+                    out.extend((" ", " "))
+                    index += 2
+                    break
+                out.append(text[index] if text[index] in "\r\n" else " ")
+                index += 1
+            continue
+        if char in ('"', "'"):
+            quote = char
+            verbatim = quote == '"' and index > 0 and text[index - 1] == "@"
+            out.append(char)
+            index += 1
+            while index < length:
+                out.append(text[index])
+                if not verbatim and text[index] == "\\" and index + 1 < length:
+                    index += 1
+                    out.append(text[index])
+                elif text[index] == quote:
+                    if verbatim and index + 1 < length and text[index + 1] == quote:
+                        index += 1
+                        out.append(text[index])
+                    else:
+                        index += 1
+                        break
+                index += 1
+            continue
+        out.append(char)
+        index += 1
+    return "".join(out)
+
+
+def check_foreman_runtime_capabilities(errors: list[str]) -> list[str]:
+    """Pins Foreman's direct engine mutations and refuses every unlisted one."""
+    foreman_dir: Path = PRODUCTS["foreman"]["project_dir"]  # type: ignore[assignment]
+    runtime_dir = foreman_dir.joinpath(*FOREMAN_RUNTIME_DIR)
+    if not runtime_dir.is_dir():
+        fail(
+            "[foreman] #400 runtime capability audit: src/ConcernedForeman/Runtime is missing; "
+            "point the audit at the runtime's new home rather than leaving it green", errors)
+        return []
+
+    sources: dict[str, str] = {}
+    for path in sorted(runtime_dir.rglob("*.cs")):
+        parts = path.relative_to(foreman_dir).parts
+        if any(part in ("obj", "bin") for part in parts):
+            continue
+        sources[path.relative_to(foreman_dir).as_posix()] = _strip_cs_comments(
+            path.read_text(encoding="utf-8-sig"))
+
+    hits = 0
+    pinned = 0
+    for label, broad, allowances in FOREMAN_AUDITED_CAPABILITIES:
+        allowed_spans: dict[str, list[tuple[int, int]]] = {}
+        for rel, exact, expected in allowances:
+            code = sources.get(rel)
+            if code is None:
+                hits += 1
+                fail(
+                    f"[foreman] #400 runtime capability audit: pinned file {rel} for {label} "
+                    "is missing from the audited runtime", errors)
+                continue
+            matches = list(exact.finditer(code))
+            if len(matches) != expected:
+                hits += 1
+                fail(
+                    f"[foreman] #400 runtime capability audit: {rel} has {len(matches)} exact "
+                    f"{label} site(s); the pinned population is {expected}", errors)
+            else:
+                pinned += expected
+            allowed_spans.setdefault(rel, []).extend((match.start(), match.end()) for match in matches)
+
+        for rel, code in sources.items():
+            spans = allowed_spans.get(rel, ())
+            for match in broad.finditer(code):
+                if any(start <= match.start() < end for start, end in spans):
+                    continue
+                hits += 1
+                fail(
+                    f"[foreman] #400 runtime capability audit: unpinned {label} in "
+                    f"src/ConcernedForeman/{rel}:{code.count(chr(10), 0, match.start()) + 1}",
+                    errors)
+
+    for label, pattern in FOREMAN_ALWAYS_FORBIDDEN:
+        for rel, code in sources.items():
+            for match in pattern.finditer(code):
+                hits += 1
+                fail(
+                    f"[foreman] #400 runtime capability audit: forbidden {label} in "
+                    f"src/ConcernedForeman/{rel}:{code.count(chr(10), 0, match.start()) + 1}",
+                    errors)
+
+    return [
+        f"[foreman] #400 runtime capability audit: {len(sources)} source file(s) under "
+        f"src/ConcernedForeman/Runtime, {pinned} direct engine mutation/capability site(s) "
+        "pinned by full path and exact whitespace-tolerant spelling; SetTrigger, ownership "
+        "takeover, unpinned teleport/position/velocity/force writes, item spawning/drop calls, "
+        "and arbitrary RPC are refused. This source-text audit strips comments; it does not "
+        f"follow indirection or prove control flow ({hits} violations)",
     ]
 
 
@@ -3845,6 +4086,7 @@ def main() -> int:
     report.extend(check_teamster_integration_readonly(errors))
     report.extend(check_teamster_authority_policy(errors))
     report.extend(check_teamster_no_force_injection(errors))
+    report.extend(check_foreman_runtime_capabilities(errors))
     report.extend(check_teamster_collection_verbs(errors))
     report.extend(check_teamster_retire_guards_carried_material(errors))
     report.extend(check_teamster_no_internet_egress(errors))
