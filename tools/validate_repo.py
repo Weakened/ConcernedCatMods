@@ -2240,7 +2240,7 @@ FOREMAN_ALWAYS_FORBIDDEN = (
 )
 
 
-def _strip_cs_comments(text: str) -> str:
+def _strip_foreman_cs_comments(text: str) -> str:
     """Remove C# line and block comments while preserving strings and lines."""
     out: list[str] = []
     index = 0
@@ -2305,7 +2305,7 @@ def check_foreman_runtime_capabilities(errors: list[str]) -> list[str]:
         parts = path.relative_to(foreman_dir).parts
         if any(part in ("obj", "bin") for part in parts):
             continue
-        sources[path.relative_to(foreman_dir).as_posix()] = _strip_cs_comments(
+        sources[path.relative_to(foreman_dir).as_posix()] = _strip_foreman_cs_comments(
             path.read_text(encoding="utf-8-sig"))
 
     hits = 0
