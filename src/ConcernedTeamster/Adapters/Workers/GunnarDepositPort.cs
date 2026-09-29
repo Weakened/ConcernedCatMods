@@ -143,6 +143,10 @@ internal sealed class GunnarDepositPort
     /// One material, one container, one leg, one permit. A deposit of two kinds
     /// is two calls, because the player's permission is re-asked for each and a
     /// chest can close between them.</summary>
+    /// <param name="designatedIn">The world load the destination was chosen in.
+    /// Compared by the permit against <paramref name="world"/>, so a chest
+    /// chosen before a reload is refused rather than resolved to whatever
+    /// inherited its id.</param>
     /// <param name="expectedKey">The key the destination was designated under.
     /// A live container whose key differs is refused as
     /// <see cref="NpcContainerRefusal.NotThisContainer"/> - which is what stops
@@ -154,6 +158,7 @@ internal sealed class GunnarDepositPort
         string expectedKey,
         string itemPrefab,
         int wanted,
+        NpcWorldEpoch designatedIn,
         NpcWorldEpoch world,
         Func<Container?, NpcContainerUse> allowance,
         Func<Vector3?> workerPosition,
@@ -168,8 +173,12 @@ internal sealed class GunnarDepositPort
             return new DepositResult(DepositOutcome.Refused, null, "nothing to move, or Gunnar could not be read");
         }
 
+        // The epoch the destination was DESIGNATED in, not the one we are in
+        // now. Handing both the same value made the permit's own staleness check
+        // compare a value with itself, so it could never refuse - the guarantee
+        // was being relied on and was not running.
         var subject = new DesignatedContainer(
-            destination, expectedKey, world, allowance, workerPosition, reachMetres);
+            destination, expectedKey, designatedIn, allowance, workerPosition, reachMetres);
 
         // THE MINT. Re-asks the container's own access now - the player's mark,
         // this client's ownership, whether anybody has it open, the ward, the

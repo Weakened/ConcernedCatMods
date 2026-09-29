@@ -658,7 +658,17 @@ assembling its own position and prefab could easily assemble a different identit
 player had enabled, which looks exactly like the permission not working.
 
 That allowance, plus the world's own objections, goes to `NpcContainerPermit.Issue`, which re-asks the container's
-access itself and returns `null` for every refusal. **A refused container yields no token at all**, so there is no
+access itself and returns `null` for every refusal.
+
+**The staleness check inside that mint was tautological for one round, and saying so is the point.** `Issue` refuses
+when the container's own epoch does not match the world it is minted in - that is how a key from a previous world
+load, which now names whatever inherited that id, is refused rather than resolved
+(`ContainerTests.AContainerNamedInAnotherWorldLoadIsRefusedRatherThanResolved`,
+`APermitFromAPreviousWorldLoadRecordsNothing`). The port's first version handed the container the *same* epoch it
+then passed to `Issue`, so the comparison was a value against itself and could never refuse. The real check was one
+layer out in the runtime, which is fine until somebody writes a second caller. The container now carries the epoch it
+was **designated** in and the caller passes the epoch the world is in **now**, so the library's guarantee does the
+work it says it does and the runtime's check is a courtesy that gives the player a better sentence. **A refused container yields no token at all**, so there is no
 path from this product to a recorded transfer without one. That mint had to become public for this
 (ConcernedNPC 0.4.0); the property it protected — a permit cannot be *forged* — was never `internal`'s to give, it
 is the private constructor's, and it is now asserted directly by the validator's `D15 permit-mint audit` and by

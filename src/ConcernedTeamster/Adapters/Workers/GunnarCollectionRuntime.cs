@@ -554,6 +554,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
                     _destinationKey,
                     material.Key,
                     material.Value,
+                    _destinationEpoch,
                     world,
                     Allowance,
                     WorkerPosition,
