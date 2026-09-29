@@ -1982,7 +1982,8 @@ FOREMAN_AUDITED_CAPABILITIES = (
     ("Humanoid.DropItem", re.compile(r"\.\s*DropItem\s*\("), (
         ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\b_humanoid\s*\.\s*DropItem\s*\(\s*_inventory\s*,\s*item\s*,\s*count\s*\)"), 1),
     )),
-    ("UnityEngine.Object.Instantiate", re.compile(r"\bInstantiate\s*\("), (
+    ("UnityEngine.Object.Instantiate", re.compile(
+        r"\bInstantiate\s*(?:<[^(){};]*>\s*)?\("), (
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*_prefab\s*,\s*position\s*,\s*rotation\s*\)"), 1),
     )),
     ("UnityEngine.Object.DestroyImmediate", re.compile(r"\.\s*DestroyImmediate\s*\("), (
@@ -2005,16 +2006,16 @@ FOREMAN_AUDITED_CAPABILITIES = (
     )),
     ("physics position/velocity write", re.compile(
         r"\.\s*(?:position|localPosition|rotation|localRotation|velocity|linearVelocity|angularVelocity|useGravity)\s*[-+*/&|^]?=(?!=)"), (
-        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*useGravity\s*=\s*false"), 1),
-        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*useGravity\s*=\s*true"), 1),
-        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*linearVelocity\s*=\s*velocity"), 1),
-        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*linearVelocity\s*=\s*Vector3\s*\.\s*zero"), 1),
-        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*angularVelocity\s*=\s*Vector3\s*\.\s*zero"), 2),
-        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*rotation\s*=\s*Quaternion\s*\.\s*LookRotation\s*\(\s*new\s+Vector3\s*\(\s*step\s*\.\s*BodyFacing\s*\.\s*X\s*,\s*0f\s*,\s*step\s*\.\s*BodyFacing\s*\.\s*Z\s*\)\s*\)"), 1),
-        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bplayer\s*\.\s*transform\s*\.\s*position\s*=\s*landing"), 1),
-        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\b_body\s*\.\s*position\s*=\s*landing"), 1),
-        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bplayer\s*\.\s*transform\s*\.\s*rotation\s*=\s*Quaternion\s*\.\s*LookRotation\s*\(\s*facing\s*\)"), 1),
-        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\b_body\s*\.\s*rotation\s*=\s*player\s*\.\s*transform\s*\.\s*rotation"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*useGravity\s*=\s*false\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*useGravity\s*=\s*true\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*linearVelocity\s*=\s*velocity\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*linearVelocity\s*=\s*Vector3\s*\.\s*zero\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*angularVelocity\s*=\s*Vector3\s*\.\s*zero\s*;"), 2),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bbody\s*\.\s*rotation\s*=\s*Quaternion\s*\.\s*LookRotation\s*\(\s*new\s+Vector3\s*\(\s*step\s*\.\s*BodyFacing\s*\.\s*X\s*,\s*0f\s*,\s*step\s*\.\s*BodyFacing\s*\.\s*Z\s*\)\s*\)\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bplayer\s*\.\s*transform\s*\.\s*position\s*=\s*landing\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\b_body\s*\.\s*position\s*=\s*landing\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bplayer\s*\.\s*transform\s*\.\s*rotation\s*=\s*Quaternion\s*\.\s*LookRotation\s*\(\s*facing\s*\)\s*;"), 1),
+        ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\b_body\s*\.\s*rotation\s*=\s*player\s*\.\s*transform\s*\.\s*rotation\s*;"), 1),
     )),
 )
 

@@ -19,6 +19,7 @@ RUNTIME = os.path.join(FOREMAN, "Runtime")
 BUILD_POSE = os.path.join(RUNTIME, "Construction", "BuildPose.cs")
 PLACER = os.path.join(RUNTIME, "Construction", "WorldPiecePlacer.cs")
 PICKUP = os.path.join(RUNTIME, "Collection", "WorldSourcePickupPort.cs")
+CLIMB = os.path.join(RUNTIME, "Ladders", "ClimbController.cs")
 STUBS = os.path.join(ROOT, "src", "ConcernedForeman.Tests", "VanillaStubs.cs")
 
 
@@ -118,6 +119,14 @@ class ForemanRuntimeCapabilitiesArePinned(unittest.TestCase):
                    "            UnityEngine.Object.Instantiate(item.m_dropPrefab);")
         self.assert_refused("an item drop was spawned through Object.Instantiate")
 
+    def test_generic_item_prefab_instantiation_is_refused(self):
+        marker = "        animation.SetFloat(ForwardSpeed, 0f);"
+        self.after(
+            BUILD_POSE,
+            marker,
+            "        UnityEngine.Object.Instantiate<UnityEngine.GameObject>(item.m_dropPrefab);")
+        self.assert_refused("a generic Instantiate call hid item-drop spawning")
+
     def test_another_drop_call_is_refused(self):
         marker = "        animation.SetFloat(ForwardSpeed, 0f);"
         self.after(BUILD_POSE, marker,
@@ -154,6 +163,13 @@ class ForemanRuntimeCapabilitiesArePinned(unittest.TestCase):
         call = "        animation.SetFloat(ForwardSpeed, 0f);"
         self.after(BUILD_POSE, call, call)
         self.assert_refused("a second copy inherited an existing allowance")
+
+    def test_authorized_velocity_assignment_cannot_extend_its_expression(self):
+        self.swap_in(
+            CLIMB,
+            "body.linearVelocity = velocity;",
+            "body.linearVelocity = velocity + Vector3.up * 500f;")
+        self.assert_refused("a pinned movement seam accepted an extended velocity expression")
 
     def test_allowance_does_not_follow_a_basename_to_another_directory(self):
         self.plant_file(
