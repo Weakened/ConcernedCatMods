@@ -29,8 +29,19 @@ namespace TheConcernedCat.ConcernedNPC.Storage;
 ///
 /// <b>One world load.</b> A permit carries the epoch it was issued in, because
 /// the container key inside it is a name that a reload reassigns to something
-/// else.</summary>
-internal sealed class NpcContainerPermit
+/// else.
+///
+/// <b>Why this is public, as of 0.4.0.</b> It was internal while nothing
+/// consumed it, and "the permission model is complete" was therefore a statement
+/// about code no product could reach - the same shape of claim
+/// <c>NpcContainerDesk</c> was published to fix. Concerned Teamster's Gunnar is
+/// the first consumer: his deposit has to ask the player's own mark at the
+/// moment of the move (owner decision 2026-09-29, `DECISIONS.md` D15), and
+/// asking it through anything other than this mint would let a refused container
+/// still be handed to the thing that records the transfer. Publishing the mint
+/// is what makes "there is no way to hold one of these for a container that
+/// refused" true across an assembly boundary rather than inside one.</summary>
+public sealed class NpcContainerPermit
 {
     private NpcContainerPermit(string containerKey, string describe, NpcContainerUse use, NpcWorldEpoch epoch)
     {
@@ -42,30 +53,30 @@ internal sealed class NpcContainerPermit
 
     /// <summary>The container this authorises, as the role names it. Only
     /// meaningful inside <see cref="Epoch"/>.</summary>
-    internal string ContainerKey { get; }
+    public string ContainerKey { get; }
 
     /// <summary>What to call it in a sentence shown to a player.</summary>
-    internal string Describe { get; }
+    public string Describe { get; }
 
     /// <summary>Exactly one of take or deposit.</summary>
-    internal NpcContainerUse Use { get; }
+    public NpcContainerUse Use { get; }
 
     /// <summary>The world load this was issued in.</summary>
-    internal NpcWorldEpoch Epoch { get; }
+    public NpcWorldEpoch Epoch { get; }
 
     /// <summary>Whether the transfer this authorises has already been
     /// recorded.</summary>
-    internal bool IsSpent { get; private set; }
+    public bool IsSpent { get; private set; }
 
     /// <summary>Whether this permit still means anything in the world that is
     /// loaded now. False after a reload, always: the key it carries names a
     /// different object.</summary>
-    internal bool IsValidIn(NpcWorldEpoch world) => !IsSpent && world.Matches(Epoch);
+    public bool IsValidIn(NpcWorldEpoch world) => !IsSpent && world.Matches(Epoch);
 
     /// <summary>Spends it. True the first time and false every time after, so
     /// the caller that gets true is the only one that may record a
     /// transfer.</summary>
-    internal bool TryConsume()
+    public bool TryConsume()
     {
         if (IsSpent)
         {
@@ -85,7 +96,7 @@ internal sealed class NpcContainerPermit
     /// where that is made true. Between the tick that chose this chest and this
     /// one, the player can have walked into it, a ward can have gone up, the
     /// chest can have been destroyed.</summary>
-    internal static NpcContainerPermit? Issue(
+    public static NpcContainerPermit? Issue(
         INpcContainer? container, NpcContainerUse use, NpcWorldEpoch world, out NpcContainerRefusal refusal)
     {
         refusal = NpcContainerRefusal.Gone;

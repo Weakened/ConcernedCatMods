@@ -1,6 +1,6 @@
 # Cart pulling and resource collection: contracts
 
-Contract revision **C4** (C1 frozen 2026-09-17 before dependent coding; C2 is additive; C3 and C4 are documentation only, see §10). The compilable half lives in:
+Contract revision **C5** (C1 frozen 2026-09-17 before dependent coding; C2 is additive; C3, C4 and C5 are documentation only, see §10). The compilable half lives in:
 
 | Area | Source | Compiled into | Tests |
 |---|---|---|---|
@@ -517,6 +517,22 @@ player drops, graves, chests, piles, mine rocks, trees and logs, bushes and sapl
 - **Fault injection:** agent D's tests inject failures at every step of §5.2 and §5.3 and replay every journal prefix.
 
 ## 10. Revision log
+
+### C5 (2026-09-29): documentation only
+
+Two owner grants, recorded in `DECISIONS.md` as **D15** and **D16** and summarized in `CLAUDE.md`, `AGENTS.md` and
+`AUTHORITY_POLICY.md` in the same change:
+- **D15:** Gunnar's opted-in collection runtime may move items out of his own inventory into a vanilla `Container`
+  the player explicitly marked `Deposit` or `Both`, through three named vanilla inventory calls, with every gate
+  re-asked in the frame of the move and both sides measured. Closes #415.
+- **D16:** a Teamster worker body that genuinely dies may return what it carries through vanilla's own item drop -
+  on its own death and on no other lifecycle event.
+- **D9** amended: the Teamster worker body no longer "carries no inventory"; it stores its own, in its own network
+  object, in Foreman's format.
+
+Neither grant changes a name, value or transition in this document. **D15 is implemented and pinned** in the same
+change that records it; **D16 is decided and unimplemented** - `GunnarDeathDropPort.cs` does not exist and no
+validator rule pins its call, so a Gunnar who dies still loses what he is carrying.
 
 ### C4 (2026-09-17): documentation only
 

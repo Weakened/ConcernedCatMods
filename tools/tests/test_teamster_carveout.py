@@ -21,11 +21,13 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 VALIDATOR = os.path.join(ROOT, "tools", "validate_repo.py")
 WORKERS = os.path.join(ROOT, "src", "ConcernedTeamster", "Adapters", "Workers")
 PORT = os.path.join(WORKERS, "GunnarCollectionPort.cs")
+DEPOSIT = os.path.join(WORKERS, "GunnarDepositPort.cs")
 HAULING = os.path.join(WORKERS, "GunnarHaulingRuntime.cs")
 COLLECTION_RUNTIME = os.path.join(WORKERS, "GunnarCollectionRuntime.cs")
 TEAMSTER = os.path.join(ROOT, "src", "ConcernedTeamster")
 ADAPTERS = os.path.join(TEAMSTER, "Adapters")
 DOMAIN = os.path.join(TEAMSTER, "Domain")
+SHARED_WORKERS = os.path.join(ROOT, "src", "Shared", "Workers")
 UI = os.path.join(TEAMSTER, "Ui")
 
 STUB = """namespace TheConcernedCat.ConcernedTeamster.Zz;
@@ -46,8 +48,19 @@ def validate():
     return done.returncode, done.stdout + done.stderr
 
 
-class CarveOutIsNarrow(unittest.TestCase):
-    """Every way an independent review got past the first version."""
+class CarveOutFixture(unittest.TestCase):
+    """Plant a real violation into the real tree, run the real validator, require
+    it to refuse, then put the tree back.
+
+    Separated from the tests so a second allowance can reuse it without
+    re-running the first one's plants. The deposit class used to derive from
+    `CarveOutIsNarrow` and inherited its twenty-three tests along with these
+    helpers, so the whole suite ran twice for no extra coverage - and every one
+    of those runs is a full validator pass over the tree.
+
+    This class deliberately has no tests of its own: `unittest` would run them
+    here and again in every subclass.
+    """
 
     def setUp(self):
         code, _ = validate()
@@ -123,6 +136,10 @@ class CarveOutIsNarrow(unittest.TestCase):
             self.assertIn(contains, out, why + "\n" + out[-2000:])
         self.assertNotEqual(0, code, why + "\n" + out[-2000:])
         self.assertIn(marker, out, why)
+
+
+class CarveOutIsNarrow(CarveOutFixture):
+    """Every way an independent review got past the first version."""
 
     def test_a_space_before_the_paren_does_not_hide_a_cart_interaction(self):
         # `.Interact(` never appears in `Interact (`, and the Release build is
@@ -591,3 +608,268 @@ class CarveOutIsNarrow(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DepositCarveOutIsNarrow(CarveOutFixture):
+    """The D15 deposit allowance, proved the way the pickup allowance was.
+
+    Three calls move a player's material into a vanilla container, and each is
+    pinned verbatim in one file. Every plant below is an escape somebody could
+    actually write - most of them are the same shapes that got past the pickup
+    allowance, applied to the new one before rather than after a review found
+    them, plus two that are specific to a transfer: reversing its direction, and
+    removing the count that was ASKED FOR rather than the count that ARRIVED.
+
+    Inherits the fixture, so each plant also proves the tree is clean before and
+    after it.
+    """
+
+    _restore_path = DEPOSIT
+
+    def edit_deposit(self, extra):
+        """Adds a line right after the authorized whole-stack move."""
+        with open(DEPOSIT, encoding="utf-8-sig") as handle:
+            original = handle.read()
+        self._restore = original
+        self._restore_path = DEPOSIT
+        marker = "to.MoveItemToThis(from, stack);"
+        self.assertEqual(1, original.count(marker), "the authorized move call moved")
+        with open(DEPOSIT, "w", encoding="utf-8", newline="") as handle:
+            handle.write(original.replace(marker, marker + "\n" + extra))
+
+    def swap_in_deposit(self, old, new):
+        self.swap_in(DEPOSIT, old, new)
+
+    # -- the move itself --
+
+    def test_a_move_is_not_allowed_in_another_worker_file(self):
+        self.plant_file(os.path.join(WORKERS, "ZzMover.cs"),
+                        "        ((dynamic)cart).MoveItemToThis(who, null);")
+        self.assert_refused("a container move appeared in a file that was never authorized to have one")
+
+    def test_a_move_is_not_allowed_outside_adapters_workers(self):
+        # The escape #401 named: a token refused only inside Adapters/Workers is
+        # a token a helper in Domain/ may spell.
+        self.plant_file(os.path.join(DOMAIN, "Zz", "ZzDomainMover.cs"),
+                        "        ((dynamic)cart).MoveItemToThis(who, null);")
+        self.assert_refused("a container move in Domain/ passed the audit")
+
+    def test_the_allowance_does_not_follow_the_deposit_file_name_elsewhere(self):
+        self.plant_file(os.path.join(WORKERS, "Extra", "GunnarDepositPort.cs"),
+                        "        ((dynamic)cart).MoveItemToThis(who, null);")
+        self.assert_refused("a second file of the deposit port's name inherited the allowance")
+
+    def test_the_move_is_authorized_once_and_not_twice(self):
+        self.edit_deposit("        to.MoveItemToThis(from, stack);")
+        self.assert_refused("a second whole-stack move passed inside the authorized file")
+
+    def test_the_move_may_not_be_reversed_into_a_withdrawal(self):
+        # The one that turns a deposit into a take. `to.MoveItemToThis(from, ..)`
+        # puts Gunnar's material in the chest; swapping the receiver and the
+        # argument empties the chest into Gunnar - a capability D15 does not
+        # grant, spelled with the same token and the same argument names.
+        self.swap_in_deposit(
+            "to.MoveItemToThis(from, stack);",
+            "from.MoveItemToThis(to, stack);")
+        self.assert_refused("the move was reversed into a withdrawal and passed")
+
+    def test_a_space_before_the_paren_does_not_hide_a_move(self):
+        self.plant_file(os.path.join(WORKERS, "ZzSpacedMove.cs"),
+                        "        ((dynamic)cart).MoveItemToThis (who, null);")
+        self.assert_refused("a space before the paren got a container move past the audit")
+
+    def test_a_newline_between_receiver_and_member_does_not_hide_a_move(self):
+        self.plant_file(os.path.join(WORKERS, "ZzSplitMove.cs"),
+                        "        ((dynamic)cart).\n            MoveItemToThis(who, null);")
+        self.assert_refused("a line split got a container move past the audit")
+
+    # -- the add, which is the half that could put an arbitrary item anywhere --
+
+    def test_the_add_may_only_be_the_clone_of_the_stack_being_removed_from(self):
+        # THE ESCAPE THIS PIN EXISTS FOR. `AddItem` can put any ItemData into any
+        # inventory. Authorized here only as `to.AddItem(part)` - the clone of a
+        # stack the very next lines remove from - so an add of anything else is a
+        # product putting an item it got from somewhere else into a player's
+        # chest, which is not what D15 granted and is how cargo would be minted.
+        self.swap_in_deposit(
+            "to.AddItem(part);",
+            "to.AddItem(SomethingElse());")
+        self.assert_refused("an arbitrary add passed inside the authorized file")
+
+    def test_the_add_may_not_target_another_inventory(self):
+        self.swap_in_deposit(
+            "to.AddItem(part);",
+            "Player.m_localPlayer.GetInventory().AddItem(part);")
+        self.assert_refused("an add into the player's own inventory passed inside the authorized file")
+
+    def test_an_add_is_not_allowed_in_another_worker_file(self):
+        self.plant_file(os.path.join(WORKERS, "ZzAdder.cs"),
+                        "        ((dynamic)cart).AddItem(who);")
+        self.assert_refused("an add appeared in a file that was never authorized to have one")
+
+    def test_an_add_is_not_allowed_outside_adapters_workers(self):
+        self.plant_file(os.path.join(ADAPTERS, "Zz", "ZzAdapterAdder.cs"),
+                        "        ((dynamic)cart).AddItem(who);")
+        self.assert_refused("an add in Adapters/ passed the audit")
+
+    # -- the remove, which is where conservation is kept or lost --
+
+    def test_the_remove_may_not_take_the_count_that_was_asked_for(self):
+        # The conservation escape, and the subtlest one here. `moved` is what
+        # the destination was MEASURED to gain; `remaining` is what the caller
+        # wanted. Removing the second destroys whatever the chest refused - the
+        # exact failure the measured-delta discipline exists to prevent - and it
+        # is a one-word edit that compiles.
+        self.swap_in_deposit(
+            "from.RemoveItem(stack, arrived);",
+            "from.RemoveItem(stack, remaining);")
+        self.assert_refused("a remove of the asked-for count passed inside the authorized file")
+
+    def test_the_remove_may_not_target_the_destination(self):
+        self.swap_in_deposit(
+            "from.RemoveItem(stack, arrived);",
+            "to.RemoveItem(stack, arrived);")
+        self.assert_refused("a remove from the destination passed inside the authorized file")
+
+    def test_a_remove_is_not_allowed_in_another_worker_file(self):
+        self.plant_file(os.path.join(WORKERS, "ZzRemover.cs"),
+                        "        ((dynamic)cart).RemoveItem(who, 1);")
+        self.assert_refused("a remove appeared in a file that was never authorized to have one")
+
+    def test_a_remove_is_not_allowed_outside_adapters_workers(self):
+        self.plant_file(os.path.join(DOMAIN, "Zz", "ZzDomainRemover.cs"),
+                        "        ((dynamic)cart).RemoveItem(who, 1);")
+        self.assert_refused("a remove in Domain/ passed the audit")
+
+    # -- the deposit port has no allowance for the pickup calls, and vice versa --
+
+    def test_the_deposit_port_does_not_inherit_the_pickup_allowance(self):
+        self.edit_deposit("        ((dynamic)cart).Interact(who, repeat: false, alt: false);")
+        self.assert_refused("the deposit port inherited the collection port's allowance")
+
+    def test_the_collection_port_does_not_inherit_the_deposit_allowance(self):
+        self.edit_port("        to.MoveItemToThis(from, stack);")
+        self.assert_refused("the collection port inherited the deposit port's allowance")
+
+    # -- the shared sources the Teamster assembly is actually built from --
+
+    def test_a_move_is_not_allowed_in_shared_sources_teamster_compiles(self):
+        # `ConcernedTeamster.csproj` compiles `..\Shared\Workers` into the
+        # Teamster assembly, and the scope audit iterated only
+        # `src/ConcernedTeamster` - while its own success sentence said
+        # "everywhere else in the product". Same shape as the folder gap #401
+        # closed, one directory over. Nothing in src/Shared spells any of the
+        # five today, so this proves the rule rather than a defect.
+        self.plant_file(os.path.join(SHARED_WORKERS, "ZzSharedMover.cs"),
+                        "        ((dynamic)cart).MoveItemToThis(who, null);")
+        self.assert_refused("a container move in a shared source Teamster compiles passed the audit")
+
+    def test_an_add_is_not_allowed_in_shared_sources_teamster_compiles(self):
+        self.plant_file(os.path.join(SHARED_WORKERS, "ZzSharedAdder.cs"),
+                        "        ((dynamic)cart).AddItem(who);")
+        self.assert_refused("an add in a shared source Teamster compiles passed the audit")
+
+    def test_shared_workers_does_not_inherit_the_worker_runtime_allowances(self):
+        # The shared tree's own folder is literally "Workers", so a scope check
+        # written as `parts[:2] == ("Adapters", "Workers")` against the wrong
+        # root would hand src/Shared/Workers the worker runtime's allowances -
+        # a widening produced by the rule that closed one.
+        self.plant_file(os.path.join(SHARED_WORKERS, "ZzSharedPicker.cs"),
+                        "        ((dynamic)cart).Interact(who, false, false);")
+        self.assert_refused("a shared source inherited the worker runtime's allowance")
+
+    # -- the mint the authorized AddItem could otherwise have carried --
+
+    def test_the_clone_must_come_from_the_stack_being_removed_from(self):
+        # THE ESCAPE THIS RULE EXISTS FOR. `to.AddItem(part)` is pinned verbatim,
+        # but `part` is a local whose initializer is two lines above and was
+        # unpinned. An ObjectDB lookup in its place creates material from a name
+        # - what D15 lists under "no synthetic or replacement resources" - while
+        # the pinned call stays byte-identical.
+        self.swap_in_deposit(
+            "ItemDrop.ItemData part = stack.Clone();",
+            "                    ItemDrop.ItemData part = ObjectDB.instance"
+            ".GetItemPrefab(itemPrefab).GetComponent<ItemDrop>().m_itemData.Clone();")
+        self.assert_refused(
+            "an item built from a name rode the authorized add", marker="#381")
+
+    def test_a_second_item_lookup_in_the_deposit_port_is_refused(self):
+        self.swap_in_deposit(
+            "            ObjectDB database = ObjectDB.instance;",
+            "            ObjectDB database = ObjectDB.instance;\n"
+            "            GameObject? another = database.GetItemPrefab(itemPrefab);")
+        self.assert_refused(
+            "a second item-prefab lookup appeared in the deposit port", marker="#381")
+
+    # -- the permit mint stays unforgeable now that the type is public --
+
+    def test_a_public_constructor_on_the_permit_is_refused(self):
+        self.swap_in(
+            os.path.join(ROOT, "src", "ConcernedNPC", "Storage", "NpcContainerPermit.cs"),
+            "    private NpcContainerPermit(",
+            "    public NpcContainerPermit(")
+        self.assert_refused(
+            "a public constructor on the now-public permit passed the audit",
+            marker="permit-mint")
+
+    # -- the mint rule's tokens, two of which were never evaluated --
+
+    def test_an_instantiate_in_the_deposit_port_is_refused(self):
+        # The loop that refuses these ran its body for ONE of three iterations,
+        # because of a stray `token == "Instantiate" and`. So the tuple read as a
+        # refusal list and refused one thing. No plant covered the other two.
+        self.edit_deposit("        var made = UnityEngine.Object.Instantiate(null);")
+        self.assert_refused("an Instantiate in the deposit port passed", marker="#381")
+
+    def test_an_inline_item_database_reach_in_the_deposit_port_is_refused(self):
+        # The escape the count-only lookup gate allowed: move SafeRoom's lookup
+        # away and put one next to the authorized add. `lookups` stays at one.
+        self.edit_deposit(
+            "        var template = ObjectDB.instance.GetItemPrefab(itemPrefab);")
+        self.assert_refused("an inline item-database reach passed", marker="#381")
+
+    def test_reaching_an_items_own_prefab_component_is_refused(self):
+        self.edit_deposit(
+            "        var templated = stack.m_dropPrefab.GetComponent<ItemDrop>();")
+        self.assert_refused("a template read off an item's own prefab passed", marker="#381")
+
+    def test_the_authorized_lookup_must_stay_in_its_place(self):
+        # The count was pinned and the SITE was not, so the one authorized lookup
+        # could be anywhere - including beside the add.
+        self.swap_in_deposit(
+            "database.GetItemPrefab(itemPrefab)",
+            "database.GetItemPrefab(SomethingElse())")
+        self.assert_refused("the authorized lookup changed what it looks up", marker="#381")
+
+    def test_the_clone_may_not_be_reassigned_before_the_add(self):
+        self.swap_in_deposit(
+            "                    part.m_equipped = false;",
+            "                    part.m_equipped = false;\n"
+            "                    part = SomethingElse();")
+        self.assert_refused("the clone was replaced between the clone and the add", marker="#381")
+
+    # -- which inventory is which, which no text audit saw before --
+
+    def test_the_source_derivation_may_not_be_reversed(self):
+        # THE REVERSAL THE FIRST FIX DID NOT CLOSE. `Move` took two same-typed
+        # parameters; renaming them swapped the direction with the call site, all
+        # three pinned calls and the caller's own guard byte-identical, and emptied
+        # the player's chest into Gunnar. It now derives both from the two roles,
+        # and both derivations are pinned - so a reversal has to edit one of them.
+        self.swap_in_deposit(
+            "        Inventory? from = InventoryOf(worker);\n"
+            "        Inventory? to = InventoryOf(destination);",
+            "        Inventory? from = InventoryOf(destination);\n"
+            "        Inventory? to = InventoryOf(worker);")
+        self.assert_refused("the deposit was reversed into a withdrawal", marker="#381")
+
+    def test_the_move_may_not_take_two_interchangeable_inventories(self):
+        # Going back to `(Inventory from, Inventory to, ...)` restores the
+        # rename attack, so the shape itself is refused: the derivations have to
+        # be inside the mover.
+        self.swap_in_deposit(
+            "    private MoveTally Move(Humanoid? worker, Container? destination, "
+            "string itemPrefab, int units)",
+            "    private MoveTally Move(Inventory from, Inventory to, string itemPrefab, int units)")
+        self.assert_refused(
+            "the mover went back to two interchangeable inventory parameters", marker="#381")

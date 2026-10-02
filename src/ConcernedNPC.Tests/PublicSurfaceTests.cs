@@ -79,16 +79,33 @@ public class PublicSurfaceTests
     /// namespace, no player could set a permission, and "off by default" was a
     /// statement about dead code rather than about behaviour.
     ///
-    /// It is a facade on purpose, and the two types it does NOT bring with it
-    /// are the point: <c>NpcContainerPermit</c> stays unforgeable from outside
-    /// this package (<c>ContainerTests.NothingOutsideThisPackageCanForgeAPermit</c>
-    /// asserts it), and the gate, the assignment and the transfer recorder stay
-    /// in here with it. A role does not need to mint a permit; it needs to know
-    /// what the player allowed, to change it, and to write it down.
-    /// <c>NpcContainerPlace</c> is also held back, because a place is a
-    /// tolerance with a matching rule, and publishing it would publish the rule
-    /// as an API and invite a role to build one for a container that moves -
-    /// which that type's own documentation forbids and cannot enforce.
+    /// <b>The mint and the transfer recorder (#415, D15), as of 0.4.0.</b>
+    /// <c>NpcContainerPermit</c>, <c>NpcTransferPlan</c>,
+    /// <c>ContainerMoveOutcome</c> and <c>ContainerMoveResult</c> are public
+    /// because Gunnar's deposit is the first thing in this repository that moves
+    /// a player's material into a vanilla container from a role. It needs the
+    /// mint, so that a refused container yields no token and there is no path
+    /// from a product to a recorded transfer without one; and it needs the
+    /// recorder, so that "measured on both sides, and any disagreement is
+    /// Uncertain" has ONE implementation rather than a second copy inside a
+    /// product - which is how two sides stop agreeing about what uncertain means.
+    ///
+    /// <b>This did not weaken the property the earlier withholding protected.</b>
+    /// That property is that a permit cannot be FORGED, and it was never
+    /// <c>internal</c> that guaranteed it - <c>internal</c> was a proxy. The
+    /// guarantee is that the constructor is private and <c>Issue</c> is the only
+    /// mint, and <c>Issue</c> re-reads the container's own access rather than
+    /// trusting a caller. <c>ContainerTests.NothingOutsideThisPackageCanForgeAPermit</c>
+    /// asserts that by reflection here, and the repository validator's
+    /// <c>D15 permit-mint audit</c> asserts it against the source - two
+    /// independent checks on the one property the permission model rests on,
+    /// where before there was a visibility keyword and a comment.
+    ///
+    /// <c>NpcContainerGate</c>, the assignment, the book and the sighting stay
+    /// in here. <c>NpcContainerPlace</c> is held back for its own reason: a
+    /// place is a tolerance with a matching rule, and publishing it would publish
+    /// the rule as an API and invite a role to build one for a container that
+    /// moves - which that type's own documentation forbids and cannot enforce.
     ///
     /// <b>Durable interruption (#379).</b> The plan value, codec seam, journal,
     /// run and recovery decision are public because Concerned Steward is a
@@ -105,8 +122,8 @@ public class PublicSurfaceTests
     /// handing it over would let a caller reach past a rule the type exists to
     /// keep. The custody ledger and transfer executor remain internal; only the
     /// immutable material values carried by a durable plan cross the boundary.
-    /// All of <c>Storage/</c> bar the desk above - the permit, the place,
-    /// the gate, the sighting, the assignment, the book and the transfer. And the sequencing itself - the snapshot
+    /// Of <c>Storage/</c>, everything bar the desk and the four types above -
+    /// the place, the gate, the sighting, the assignment and the book. And the sequencing itself - the snapshot
     /// builder, the tour planner, the tour plan, the partitioner, the source
     /// selector, the manifest arithmetic, the budget, the commitments, the
     /// reservation books, the stop sequencer and the route execution - because
@@ -188,8 +205,12 @@ public class PublicSurfaceTests
         "TheConcernedCat.ConcernedNPC.Routing.IStopObserver",
         "TheConcernedCat.ConcernedNPC.Routing.RouteStop",
         "TheConcernedCat.ConcernedNPC.Routing.StopStatus",
+        "TheConcernedCat.ConcernedNPC.Storage.ContainerMoveOutcome",
+        "TheConcernedCat.ConcernedNPC.Storage.ContainerMoveResult",
         "TheConcernedCat.ConcernedNPC.Storage.NpcContainerDecision",
         "TheConcernedCat.ConcernedNPC.Storage.NpcContainerDesk",
+        "TheConcernedCat.ConcernedNPC.Storage.NpcContainerPermit",
+        "TheConcernedCat.ConcernedNPC.Storage.NpcTransferPlan",
         "TheConcernedCat.ConcernedNPC.Work.AreaRejection",
         "TheConcernedCat.ConcernedNPC.Work.AreaSample",
         "TheConcernedCat.ConcernedNPC.Work.AreaSampleVerdict",

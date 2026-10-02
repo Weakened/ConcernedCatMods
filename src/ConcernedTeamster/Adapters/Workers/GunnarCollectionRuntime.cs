@@ -1,5 +1,9 @@
 using System;
+using System.Collections.Generic;
 using BepInEx.Logging;
+using TheConcernedCat.ConcernedNPC.Containers;
+using TheConcernedCat.ConcernedNPC.Roles;
+using TheConcernedCat.ConcernedNPC.Work;
 using TheConcernedCat.ConcernedTeamster.Domain.Collection;
 using TheConcernedCat.Workers;
 using TheConcernedCat.ConcernedTeamster.Domain.Workers;
@@ -37,7 +41,23 @@ namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;
 internal sealed class GunnarCollectionRuntime : MonoBehaviour
 {
     private readonly GunnarCollectionPort _port = new GunnarCollectionPort();
+    private readonly GunnarDepositPort _deposit = new GunnarDepositPort();
     private readonly CollectionLimits _limits = CollectionLimits.Default.Validate();
+
+    /// <summary>What he has taken and where it has gone, this session. The
+    /// ledger never subtracts, so "was anything invented" is one comparison and
+    /// a deposit that measured more than is there leaves the discrepancy
+    /// visible instead of balancing itself.</summary>
+    private readonly CollectionAccount _account = new CollectionAccount();
+
+    /// <summary>The chest the player chose, and the world load they chose it in.
+    /// <b>There is no fallback.</b> With none designated the deposit refuses and
+    /// says so; nothing here looks for the nearest one (`DECISIONS.md` D15).
+    /// </summary>
+    private Container? _destination;
+    private string _destinationKey = string.Empty;
+    private NpcWorldEpoch _destinationEpoch;
+    private int _step;
 
     private CollectionLifecycle _lifecycle = null!;
     private TeamsterSettings _settings = null!;
@@ -54,6 +74,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
     private bool _faulted;
     private bool _ordered;
     private string _orderedSource = string.Empty;
+    private string _orderedYield = string.Empty;
 
     /// <summary>Installs the runtime and its development console command. Always
     /// installed, like the hauling runtime: the switch decides what runs, not
@@ -203,10 +224,19 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
                 // happen.
                 _lease.Release();
                 _ordered = false;
+                if (progress.Taken > 0 && _orderedYield.Length != 0)
+                {
+                    // Recorded under the name of the step that caused it, so a
+                    // retry re-states what it already did and is told so.
+                    _account.Record(
+                        NextStep("pick"), _orderedYield, progress.Taken, StopResult.Took());
+                }
+
                 _log?.LogInfo(
                     "Gunnar's collection: he took " + progress.Taken + " from " + _orderedSource +
                     (progress.Detail.Length == 0 ? "." : " (" + progress.Detail + ")."));
                 _orderedSource = string.Empty;
+                _orderedYield = string.Empty;
                 return;
             default:
                 _lease.Release();
@@ -281,6 +311,10 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
                 return OrderOnePick();
             case "cancel":
                 return Cancel();
+            case "destination":
+                return Designate();
+            case "deposit":
+                return Deposit();
             case "chest":
                 // #374: the containers a player has opened to him. A diagnostic;
                 // the key while looking at a chest is the player-facing surface.
@@ -289,6 +323,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
                     : _containers.Console(args != null && args.Length > 1 ? args[1] : "");
             default:
                 return "ct_collect: status, pick (the thing you are pointing at), cancel, "
+                    + "destination (the chest you are pointing at), deposit, "
                     + "chest [status|list|clear].";
         }
     }
@@ -313,7 +348,12 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
                     + "log says what could not be read"
                 : worker == null ? "is not here" : worker.IsDead() ? "is down" : "is here") +
             "; " + (_ordered ? "picking " + _orderedSource : "idle") +
-            " (phase " + _port.Phase + ").";
+            " (phase " + _port.Phase + ")" +
+            "; chest " + (_destination == null ? "NOT CHOSEN - he never looks for the nearest one"
+                : "chosen") +
+            "; the ledger records " + _account.Ledger.Acquired.ToString(
+                System.Globalization.CultureInfo.InvariantCulture) + " unit(s) taken this session" +
+            (_account.Ledger.IsConserved ? "" : "; THE LEDGER DOES NOT BALANCE - see the log") + ".";
     }
 
     private string Cancel()
@@ -397,8 +437,227 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
 
         _ordered = true;
         _orderedSource = CollectionOrderGate.PrefabNameOf(sourceName);
+        _orderedYield = CollectionOrderGate.PrefabNameOf(yieldName);
         return "He is picking up " + _orderedSource + ".";
     }
+
+    /// <summary>Chooses the chest the player is looking at as the one Gunnar
+    /// deposits into (#374/#381, `DECISIONS.md` D15).
+    ///
+    /// <b>The player points at it.</b> That is the whole designation, and it is
+    /// deliberately the same convention as ordering a pick and marking a
+    /// container: the explicit act is looking at the thing. Nothing in this
+    /// product searches for a chest, ranks chests by distance, or falls back to
+    /// one when none is chosen.
+    ///
+    /// The mark is checked here so a player finds out now rather than at the end
+    /// of a tour - but it is checked <b>again</b> at the moment of every move,
+    /// because between now and then they can change it.</summary>
+    private string Designate()
+    {
+        Player? player = Player.m_localPlayer;
+        GameObject? hover = player != null ? player.GetHoverObject() : null;
+        Container? chest = hover != null ? hover.GetComponentInParent<Container>() : null;
+        if (chest == null)
+        {
+            return "Look at the chest he should use, then run this again. He never looks for the " +
+                "nearest one.";
+        }
+
+        string key = GunnarDepositPort.KeyOf(chest);
+        if (key.Length == 0)
+        {
+            return "That chest has no network record this client can name, so it cannot be chosen.";
+        }
+
+        NpcContainerUse allowed = Allowance(chest);
+        if ((allowed & NpcContainerUse.Deposit) != NpcContainerUse.Deposit)
+        {
+            return DepositSentences.Describe(
+                allowed == NpcContainerUse.Off
+                    ? NpcContainerRefusal.NotEnabled
+                    : NpcContainerRefusal.UseNotAllowed);
+        }
+
+        _destination = chest;
+        _destinationKey = key;
+        _destinationEpoch = CurrentEpoch();
+        return "He will put things in that chest. The mark on it is re-checked every time he " +
+            "actually moves something, so changing it takes effect at once.";
+    }
+
+    /// <summary>Moves everything he is carrying into the designated chest, one
+    /// material at a time.
+    ///
+    /// <b>One material, one permit, one measured leg.</b> A deposit of stone and
+    /// wood is two authorizations, because the player's permission is re-asked
+    /// for each and a chest can be opened, warded or destroyed between them. A
+    /// leg that comes back <see cref="DepositOutcome.Uncertain"/> stops the
+    /// whole deposit where it stands: the legs that verifiably completed keep
+    /// their measured credit, and nothing after the uncertain one is
+    /// attempted.</summary>
+    private string Deposit()
+    {
+        Humanoid? worker = _worker();
+        // The cargo filter for an automatic collection deposit is what
+        // collecting yields, read off the same allowlist that decides what he may
+        // pick up. So widening one widens the other, in one edit, and a tool he
+        // is ever issued is not swept into the chest with the stone.
+        IReadOnlyList<KeyValuePair<string, int>> carried =
+            _deposit.Carrying(worker, GunnarCollectionAllowlist.IsCollectedYield, out bool readable);
+
+        var request = new DepositRequest(
+            featureEnabled: OptedIn(),
+            worldIsUp: _lifecycle.WorldIsUp,
+            authority: Authority(),
+            seamAvailable: _seamAvailable(),
+            workerPresent: worker != null && !worker.IsDead(),
+            workerRecordUnwritable: _recordUnwritable(),
+            workerRecordUnreadable: _recordUnreadable(),
+            transferInFlight: _ordered || _port.Phase == PickPhase.Gathering,
+            carryingSomething: carried.Count > 0,
+            destinationDesignated: _destination != null && _destinationKey.Length != 0,
+            carriedIsReadable: readable);
+
+        DepositRefusal refusal = DepositOrderGate.Evaluate(request);
+        if (refusal != DepositRefusal.None)
+        {
+            return DepositSentences.Describe(refusal, request.Authority);
+        }
+
+        NpcWorldEpoch world = CurrentEpoch();
+        if (world.IsUnknown || !world.Matches(_destinationEpoch))
+        {
+            // The chest was chosen in a world load that has ended, so the key
+            // names whatever inherited that id this time. Refused and forgotten,
+            // never resolved.
+            Forget("the world has been loaded again since you chose that chest");
+            return "That chest was chosen in a different world load, so the name no longer means " +
+                "the same object. Choose it again.";
+        }
+
+        if (!_lease.TryAcquire(_identity()))
+        {
+            return "Gunnar is busy with another job, or his job authority is unavailable. " +
+                "Finish or cancel that job first.";
+        }
+
+        var said = new System.Text.StringBuilder();
+        int legs = 0;
+        try
+        {
+            for (int index = 0; index < carried.Count; index++)
+            {
+                KeyValuePair<string, int> material = carried[index];
+                DepositResult result = _deposit.DepositOne(
+                    worker,
+                    _destination,
+                    _destinationKey,
+                    material.Key,
+                    material.Value,
+                    _destinationEpoch,
+                    world,
+                    Allowance,
+                    WorkerPosition,
+                    _limits.PickupReachMetres,
+                    out NpcContainerRefusal why);
+
+                // Refused and uncertain both move nothing in the ledger: he
+                // still has it, or nobody knows, and writing either down as
+                // fact is how material is lost or invented.
+                _account.RecordDeposit(NextStep("deposit"), result);
+                legs++;
+
+                said.Append(legs == 1 ? string.Empty : " ")
+                    .Append(Describe(material.Key, result, why));
+
+                if (result.Outcome == DepositOutcome.Uncertain)
+                {
+                    said.Append(" Nothing after this was attempted, and nothing is put right " +
+                        "automatically - a person decides.");
+                    break;
+                }
+            }
+        }
+        finally
+        {
+            _lease.Release();
+        }
+
+        return said.Length == 0 ? "He is not carrying anything." : said.ToString();
+    }
+
+    private static string Describe(string material, DepositResult result, NpcContainerRefusal why)
+    {
+        switch (result.Outcome)
+        {
+            case DepositOutcome.Deposited:
+                return "All the " + material + " went in.";
+            case DepositOutcome.PartlyDeposited:
+                return Moved(result) + " " + material + " went in; he keeps the rest.";
+            case DepositOutcome.Uncertain:
+                return "Whether the " + material + " moved could not be established: " +
+                    result.Detail;
+            default:
+                return why == NpcContainerRefusal.None
+                    ? "No " + material + " moved: " + result.Detail
+                    : "No " + material + " moved. " + DepositSentences.Describe(why);
+        }
+    }
+
+    private static string Moved(DepositResult result)
+    {
+        int total = 0;
+        for (int index = 0; index < result.Moved.Count; index++)
+        {
+            total += result.Moved[index].Value;
+        }
+
+        return total.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>Forgets the designated chest. Never called to recover from a
+    /// refusal - a chest that refused is still the chest the player chose - only
+    /// when the name itself has stopped meaning anything.</summary>
+    private void Forget(string why)
+    {
+        _destination = null;
+        _destinationKey = string.Empty;
+        _destinationEpoch = NpcWorldEpoch.Unknown;
+        _log?.LogInfo("Gunnar's collection: the chosen chest was forgotten - " + why + ".");
+    }
+
+    /// <summary>What the player allowed for this container, through the same
+    /// derivation that wrote the mark. A caller that assembled its own identity
+    /// could read OFF for a chest the player had enabled, which looks exactly
+    /// like the permission not working.</summary>
+    private NpcContainerUse Allowance(Container? container) =>
+        _containers == null ? NpcContainerUse.Off : _containers.Allowance(container);
+
+    private Vector3? WorkerPosition()
+    {
+        Humanoid? worker = _worker();
+        return worker == null ? (Vector3?)null : worker.transform.position;
+    }
+
+    private static NpcWorldEpoch CurrentEpoch()
+    {
+        try
+        {
+            return NpcRoleRegistry.Shared.CurrentWorld;
+        }
+        catch (Exception)
+        {
+            // An epoch nobody could read is unknown, which matches nothing.
+            return NpcWorldEpoch.Unknown;
+        }
+    }
+
+    /// <summary>A name for one movement, unique within this session. The ledger
+    /// refuses a name reused for something else, which is what makes a retry
+    /// answerable rather than applied twice.</summary>
+    private string NextStep(string what) =>
+        what + "-" + (++_step).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>Horizontal distance between Gunnar and the source, or not a
     /// number when either is missing - which the gate refuses as unreadable

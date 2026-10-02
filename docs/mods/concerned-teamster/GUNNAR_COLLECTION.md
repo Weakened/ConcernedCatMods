@@ -4,11 +4,15 @@ Status: **planning, eligibility and accounting implemented and tested; the picku
 allowance that confines it has landed, and the port now has a call site behind an off-by-default switch (§6a) with
 the two material-loss paths that wiring opened closed behind it — a deliberate retire (§6b) and every involuntary
 unload, logout and reload (§6c). **Two doors still lose material and are named rather than left to be found: death,
-which needs an owner decision, and the one change whose write to the network object failed** (§6c). The
+which now HAS an owner decision (`DECISIONS.md` D16, 2026-09-29) and no implementation, and the one change whose
+write to the network object failed** (§6c). The
 automatic survey-driven job is still unwired. A player can now mark which chests Gunnar may use, and those marks
-persist per world (§6d, #374), but **nothing consumes a permission yet**, so the deposit half of §5 remains unwired.
+persist per world (§6d, #374), and **a deposit now consumes one** (§6e, `DECISIONS.md` D15): `ct_collect destination`
+chooses the chest by pointing at it and `ct_collect deposit` moves what he carries into it, measured on both sides.
 The authoritative gate is green. Nothing has been observed in game** and nothing claims to have been. Concerned
-Teamster stays at **1.0.5** and ConcernedNPC moves to **0.2.0**; nothing is published, tagged or released.
+Teamster stays at **1.0.5** and ConcernedNPC moves to **0.4.0** - the deposit needed the permit mint and the
+measured-move recorder, which were `internal` and reachable by no product. Nothing is published, tagged or
+released.
 
 ## 1. What this is
 
@@ -346,10 +350,14 @@ settles this shape for a worker holding real material, and it settles it twice:
 - **death** drops everything through *vanilla's own* drop and records the units `Lost`;
 - **despawn** — the deliberate removal, which is what retire is — is **refused while he carries anything**.
 
-Death is vanilla acting on its own. A deliberate drop here would be this product spawning item instances, which is
-not one of the calls the 2026-09-19 carve-out granted and which no owner decision covers, so **the drop was not
-available to take** — reaching for it would have been inventing an authorization. The precedent for this verb is the
-refusal.
+Death is vanilla acting on its own. A deliberate drop here would be this product putting item instances into the
+world, which is not one of the calls the 2026-09-19 carve-out granted, so **the drop was not available to take** —
+reaching for it would have been inventing an authorization. The precedent for this verb is the refusal.
+
+**`DECISIONS.md` D16 (2026-09-29) has since authorized the death half, and deliberately not this one.** A body that
+genuinely dies may return what it carries through vanilla's own drop; a *retirement* is named in that decision as
+one of the seven lifecycle events it does not cover. So this row is unchanged: **retire still refuses while he
+carries anything**, and `retire force` still destroys and still says so.
 
 **And an escape hatch that can never be blocked, because otherwise the refusal is a trap.** Foreman pairs its
 refusal with recovery commands that empty the worker; this slice has none. A bare refusal would strand a body
@@ -508,9 +516,17 @@ than one they can.
 **The door this does NOT close, named rather than left to be found.** *Death.* If Gunnar is killed, his body is
 destroyed and what he holds goes with it. Foreman closes that by dropping every carried item through vanilla's own
 drop as the body dies (§5a, first bullet) — and that precedent does cover this event, unlike the deliberate retire.
-But implementing it means this product **spawning item instances**, which is a capability the 2026-09-19 carve-out
-does not grant and no other owner decision covers. It is one call and a handful of lines behind an owner decision;
-it is not being taken quietly. **Until it is: Gunnar dying loses what he is carrying.**
+Implementing it means this product putting item instances into the world, which the 2026-09-19 carve-out does not
+grant.
+
+**That decision has since been given.** `DECISIONS.md` **D16** (owner, 2026-09-29) authorizes exactly this: a
+Teamster worker body that **genuinely dies** may return what it carries through vanilla's own item drop — on its own
+death and on no other lifecycle event, never a retirement, a cancellation, a despawn, a zone unload, a logout, a
+world change or a plugin teardown. The cart detaches first under D4's ordering.
+
+**It is still not implemented, and this paragraph is not evidence that it is.** No port exists, no validator rule
+pins the call, and nothing has been observed in game. **Until it is built: Gunnar dying loses what he is
+carrying.**
 
 **A third way material is lost, excluded from "doors" for a reason worth stating.** `ct_haul retire force`
 destroys what a body is carrying. It is not counted among the doors above because **the player is told**: the
@@ -525,7 +541,8 @@ doors" is true with this paragraph attached, and not otherwise.
 
 ## 6d. The chests a player has opened to him (#374, first half)
 
-**The deposit half of §5 is still unwired, and this is the first piece of it that a player can touch.**
+**When this section was written the deposit half of §5 was unwired; §6e is where it stopped being. This is the
+first piece of it a player can touch.**
 
 Gunnar picking something up puts it in his own inventory and leaves it there: the only ways it comes back out today
 are a reload (§6c, which preserves it) and `ct_haul retire force` (§6b, which destroys it and says so). A deposit
@@ -604,6 +621,111 @@ reference net48 — and that is written in the csproj rather than left for a rea
   all OWNER GO-AROUND PENDING, like the rest of this document's live rows.
 - The **TAKE** half is stored and will be honoured when a transfer exists; only DEPOSIT is on the path to closing
   §6b's material-loss door.
+
+## 6e. He can put it down (#415, #374's last criterion, `DECISIONS.md` D15)
+
+**The dead end is closed.** Until this, the only ways material left Gunnar were a reload, which preserves it, and
+`ct_haul retire force`, which destroys it and says so. #415 asked the one question that ends that — may his opted-in
+collection runtime move items from his own inventory into a vanilla `Container` the player explicitly marked
+`Deposit` or `Both`? — and the owner answered yes, scoped to exactly that. D15 records it, and this is what was
+built against it.
+
+### What a player does
+
+`ct_collect destination` while looking at a chest, then `ct_collect deposit`. The chest is chosen **by pointing at
+it**, which is deliberately the same convention as ordering a pick and as marking a container: the explicit act is
+looking at the thing.
+
+`destination` refuses a chest the player has not marked `Deposit` or `Both`, so they find out now rather than at the
+end of a tour — but that is a courtesy, not the check. The mark is asked **again** at the moment of every single
+move, because between choosing and depositing the player can have unmarked it, walked into it, warded it or broken
+it.
+
+### There is no nearest-chest lookup, and that is structural rather than promised
+
+`GunnarDepositPort` takes its destination as an argument together with the key it was designated under. It has no
+scan, no radius, no distance sort and no fallback; with nothing designated, `DepositOrderGate` refuses with
+`NoDestination` and the port is never reached. #374 names "depositing into an arbitrary nearby one" as forbidden,
+and the way to make that true rather than stated is to give the code no way to find one.
+
+A live container whose key does not match the designated one is `NotThisContainer` — so a chest destroyed and
+rebuilt on the same spot does not inherit a decision made about a different object. A destination chosen in a
+previous world load is refused and forgotten rather than resolved, because the id it names now belongs to whatever
+inherited it.
+
+### Permission is minted, never re-derived
+
+The mark is read through `ContainerPermissionRuntime.Allowance` — **the same derivation that wrote it**. A caller
+assembling its own position and prefab could easily assemble a different identity and read OFF for a chest the
+player had enabled, which looks exactly like the permission not working.
+
+That allowance, plus the world's own objections, goes to `NpcContainerPermit.Issue`, which re-asks the container's
+access itself and returns `null` for every refusal.
+
+**The staleness check inside that mint was tautological for one round, and saying so is the point.** `Issue` refuses
+when the container's own epoch does not match the world it is minted in - that is how a key from a previous world
+load, which now names whatever inherited that id, is refused rather than resolved
+(`ContainerTests.AContainerNamedInAnotherWorldLoadIsRefusedRatherThanResolved`,
+`APermitFromAPreviousWorldLoadRecordsNothing`). The port's first version handed the container the *same* epoch it
+then passed to `Issue`, so the comparison was a value against itself and could never refuse. The real check was one
+layer out in the runtime, which is fine until somebody writes a second caller. The container now carries the epoch it
+was **designated** in and the caller passes the epoch the world is in **now**, so the library's guarantee does the
+work it says it does and the runtime's check is a courtesy that gives the player a better sentence. **A refused container yields no token at all**, so there is no
+path from this product to a recorded transfer without one. That mint had to become public for this
+(ConcernedNPC 0.4.0); the property it protected — a permit cannot be *forged* — was never `internal`'s to give, it
+is the private constructor's, and it is now asserted directly by the validator's `D15 permit-mint audit` and by
+`ContainerTests.NothingOutsideThisPackageCanForgeAPermit` from the other side.
+
+### Nine gates, every one re-asked in the frame of the move
+
+Both switches, the capability probe, the work-authority rule (host, not dedicated, **no peers connected**), a body
+whose inventory record `WorkerInventoryRecord.Trust` believes, the player's mark on that exact chest, this client
+owning it, nobody having it open (or a cart it rides being in use), the ward and the privacy setting, and reach.
+Nothing is cached from the tick that planned the deposit.
+
+### Measured on both sides, and the remainder stays in him
+
+Counts are taken on both inventories before and after, and `ContainerMoveResult.Record` classifies from **those
+deltas alone** — never from what the engine's add returned, never from what was asked for. Fewer arrived than left
+is material lost; more arrived than left is material minted, which is worse. Either is `Uncertain`: nothing
+credited, nothing retried, nothing compensated.
+
+A full chest is an ordinary Tuesday. `NpcTransferPlan` works out what may move, what stays, and that the two always
+add back up to what was wanted — the remainder stays **in him**, never on the floor and never deleted.
+
+**Add before remove**, always. A whole stack goes through vanilla's `MoveItemToThis`, which does both inside one
+call and keeps the moved instance, so a tool's wear and a crafter's name survive. A partial stack clones that
+stack's own data for exactly the units moving, adds the clone, and removes exactly what **arrived**. A crash
+between the two leaves a duplicate the counts expose; the reverse order would destroy real items with no evidence
+left.
+
+**One material, one permit, one leg.** A deposit of stone and wood is two authorizations, because a chest can be
+opened between them. A leg that comes back `Uncertain` stops the whole deposit where it stands — the legs that
+verifiably completed keep their measured credit, and nothing after it is attempted.
+
+### The pin, and what it refuses
+
+Three calls, in `Adapters/Workers/GunnarDepositPort.cs` and nowhere else, each matched **verbatim** and each once,
+refused everywhere else in the product — **inside `Adapters/Workers` and out**, which is the scope gap #401 named:
+a token refused only inside the worker folder is a token a helper in `Adapters/` or `Domain/` may spell.
+
+The argument names are part of the pin on purpose, and two of the plants in
+`tools/tests/test_teamster_carveout.py` are the reason:
+
+- `from.MoveItemToThis(to, stack)` — **the move reversed into a withdrawal**. Same token, same argument names,
+  emptying the chest into Gunnar instead of the other way round. D15 grants a deposit and not a take.
+- `from.RemoveItem(stack, remaining)` — **removing the count that was asked for instead of the count that
+  arrived**. A one-word edit that compiles and destroys whatever the chest refused, which is the exact failure the
+  measured-delta discipline exists to prevent.
+
+Every plant is run against the real validator on the real tree and required to refuse.
+
+### Not claimed
+
+Nothing here has been observed in a running game; §10 is the go-around. The **automatic** survey-driven loop is
+still unwired — this is one deposit a player explicitly orders, which is the other half of the ordered pick, not
+the tour of §1. And D16's death drop is decided and **not built**, so a Gunnar who dies still loses what he is
+carrying.
 
 ## 7. No portals
 
