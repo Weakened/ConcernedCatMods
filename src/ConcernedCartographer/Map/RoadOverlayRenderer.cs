@@ -257,39 +257,16 @@ internal sealed class RoadOverlayRenderer
 
             int textureSize = dirtOverlay.TextureSize;
 
-            Color32[] dirtPixels = new Color32[textureSize * textureSize];
-            Color32[] pavedPixels = new Color32[textureSize * textureSize];
+            // Sentry OutOfMemoryException in RedrawAll: this allocated two
+            // fresh full-texture Color32[] per redraw (16 MB each at 2048²).
+            // Mono's non-moving GC fragments under that churn until a 16 MB
+            // contiguous block cannot be found. One buffer is reused across
+            // redraws and across both kinds: SetPixels32 copies it into the
+            // texture, so it is cleared and refilled for the second kind.
+            // Mirrors RouteOverlayRenderer's RC12 buffer reuse.
+            Color32[] pixels = AcquirePixelBuffer(textureSize);
 
-            int drawnStrokes = 0;
-            foreach (RoadStroke stroke in atlas.Strokes)
-            {
-                if (stroke.Points.Count == 0 || stroke.Hidden)
-                {
-                    continue;
-                }
-
-                Color32[] target = stroke.Kind == RoadKind.Dirt ? dirtPixels : pavedPixels;
-                Color32 color = stroke.Kind == RoadKind.Dirt ? DirtColor : PavedColor;
-                drawnStrokes++;
-
-                if (stroke.Points.Count == 1)
-                {
-                    // Construction dabs and chunk-recovery hits can be lone
-                    // points; a zero-length line stamps a dot.
-                    DrawIntoBuffer(target, textureSize, stroke.Points[0], stroke.Points[0], color);
-                    continue;
-                }
-
-                for (int index = 1; index < stroke.Points.Count; index++)
-                {
-                    DrawIntoBuffer(
-                        target,
-                        textureSize,
-                        stroke.Points[index - 1],
-                        stroke.Points[index],
-                        color);
-                }
-            }
+            int drawnStrokes = DrawKindIntoBuffer(atlas, RoadKind.Dirt, pixels, textureSize);
 
             // RC15 item 8: the write may only proceed if the textures are
             // STILL alive (pure OverlayHandleRule.MayWrite). Unity's
@@ -302,9 +279,19 @@ internal sealed class RoadOverlayRenderer
                 return;
             }
 
-            dirtTexture!.SetPixels32(dirtPixels);
-            pavedTexture!.SetPixels32(pavedPixels);
+            dirtTexture!.SetPixels32(pixels);
             dirtTexture.Apply(false);
+
+            Array.Clear(pixels, 0, pixels.Length);
+            drawnStrokes += DrawKindIntoBuffer(atlas, RoadKind.Paved, pixels, textureSize);
+            if (!Atlas.OverlayHandleRule.MayWrite(
+                    aliveAtResolve, dirtTexture != null && pavedTexture != null))
+            {
+                HandleRedrawTeardown("between resolve and write");
+                return;
+            }
+
+            pavedTexture!.SetPixels32(pixels);
             pavedTexture.Apply(false);
 
             // RC15 lifecycle diagnostics (success trace, so debug-gated).
@@ -320,6 +307,61 @@ internal sealed class RoadOverlayRenderer
         }
 
         _vectorLayer.MarkDataDirty();
+    }
+
+    // Reused full-texture pixel buffer (see RedrawAll's OOM note).
+    private Color32[]? _pixelBuffer;
+    private int _pixelBufferSize;
+
+    private Color32[] AcquirePixelBuffer(int size)
+    {
+        if (_pixelBuffer is not null && _pixelBufferSize == size)
+        {
+            Array.Clear(_pixelBuffer, 0, _pixelBuffer.Length);
+            return _pixelBuffer;
+        }
+
+        // Drop the old buffer before allocating so a size change never
+        // holds two full-texture buffers at once.
+        _pixelBuffer = null;
+        _pixelBuffer = new Color32[size * size];
+        _pixelBufferSize = size;
+        return _pixelBuffer;
+    }
+
+    private int DrawKindIntoBuffer(RoadAtlas atlas, RoadKind kind, Color32[] pixels, int textureSize)
+    {
+        Color32 color = kind == RoadKind.Dirt ? DirtColor : PavedColor;
+        int drawnStrokes = 0;
+        foreach (RoadStroke stroke in atlas.Strokes)
+        {
+            if (stroke.Kind != kind || stroke.Points.Count == 0 || stroke.Hidden)
+            {
+                continue;
+            }
+
+            drawnStrokes++;
+
+            if (stroke.Points.Count == 1)
+            {
+                // Construction dabs and chunk-recovery hits can be lone
+                // points; a zero-length line stamps a dot.
+                DrawIntoBuffer(pixels, textureSize, stroke.Points[0], stroke.Points[0], color);
+                continue;
+            }
+
+            for (int index = 1; index < stroke.Points.Count; index++)
+            {
+                DrawIntoBuffer(
+                    pixels,
+                    textureSize,
+                    stroke.Points[index - 1],
+                    stroke.Points[index],
+                    color);
+            }
+        }
+
+        return drawnStrokes;
     }
 
     /// <summary>RC15 item 8 fail-soft: a map teardown invalidated the
