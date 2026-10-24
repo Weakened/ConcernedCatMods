@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using TheConcernedCat.ConcernedLadders.Domain;
+using TheConcernedCat.Diagnostics;
 using TheConcernedCat.Ladders;
 using UnityEngine;
 
@@ -470,7 +471,7 @@ internal sealed class LadderRuntime : IDisposable
     {
         try { Release(false, true); }
         catch { _mode = Mode.Off; _player = null; _body = null; }
-        try { _log("Ladder traversal stopped (" + exception.GetType().Name + "). Normal control was released."); }
+        try { _log("Ladder traversal stopped (" + SafeFailure.Brief(exception) + "). Normal control was released."); }
         catch { /* Logging cannot keep the motor captured. */ }
     }
 

@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using HarmonyLib;
+using TheConcernedCat.Diagnostics;
 using UnityEngine;
 
 namespace TheConcernedCat.ConcernedLadders.Runtime;
@@ -41,7 +42,7 @@ internal sealed class LadderMotor : IDisposable
         }
         catch (Exception exception)
         {
-            log("Ladder climbing unavailable: motor binding failed (" + exception.GetType().Name + ").");
+            log("Ladder climbing unavailable: motor binding failed (" + SafeFailure.Brief(exception) + ").");
             Dispose();
             return false;
         }

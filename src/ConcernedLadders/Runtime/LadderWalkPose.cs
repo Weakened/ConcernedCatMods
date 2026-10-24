@@ -1,4 +1,5 @@
 using System;
+using TheConcernedCat.Diagnostics;
 using UnityEngine;
 
 namespace TheConcernedCat.ConcernedLadders.Runtime;
@@ -33,7 +34,7 @@ internal sealed class LadderWalkPose
         catch (Exception exception)
         {
             _failed = true;
-            _log("Ladder walking pose unavailable (" + exception.GetType().Name + "); movement remains available.");
+            _log("Ladder walking pose unavailable (" + SafeFailure.Brief(exception) + "); movement remains available.");
         }
     }
 
