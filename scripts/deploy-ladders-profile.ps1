@@ -23,7 +23,6 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-if (-not $IsWindows) { throw "Actual profile deployment requires the Windows Valheim development machine." }
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $product = "ConcernedLadders"
 $dllName = "TheConcernedCat.ConcernedLadders.dll"
@@ -75,6 +74,7 @@ if ((Split-Path -Leaf $profile) -ne $profileName -or
     (Split-Path -Leaf (Split-Path -Parent $profilesDirectory)) -ne "Valheim") {
     throw "Use the existing manager-created Valheim\profiles\TCC-Ladders-Dev directory, never another profile."
 }
+if (-not $IsWindows) { throw "Actual profile deployment requires the Windows Valheim development machine." }
 Assert-NoLinks $profile
 if (-not (Test-Path -LiteralPath (Join-Path $profile "mods.yml") -PathType Leaf)) {
     throw "This is not an imported manager profile. Import the dependency-only r2z as a new profile first."
