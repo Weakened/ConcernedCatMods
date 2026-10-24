@@ -74,7 +74,8 @@ internal sealed class LadderRuntime : IDisposable
         try
         {
             // Update also releases when the physics loop has stopped during world unload.
-            if (_player == null || Player.m_localPlayer != _player || ZNetScene.instance == null || !Enabled)
+            if (_player == null || Player.m_localPlayer != _player || ZNetScene.instance == null || !Enabled ||
+                _view == null || !_view.IsValid() || !_view.IsOwner() || !Free(_player))
             {
                 Release(false, true);
                 return;
@@ -452,7 +453,7 @@ internal sealed class LadderRuntime : IDisposable
         }
         finally
         {
-            try { _pose.Clear(owned); } catch { /* Animation teardown never delays movement teardown. */ }
+            try { _pose.Clear(owned && !externalControl); } catch { /* Never overwrite a takeover's animation state. */ }
             _player = null;
             _body = null;
             _view = null;

@@ -29,8 +29,10 @@ internal sealed class LadderClearance
         Radius = capsule.radius * Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.z));
         float height = Mathf.Max(2f * Radius, capsule.height * Mathf.Abs(scale.y));
         _halfSegment = Mathf.Max(0f, height * 0.5f - Radius);
-        _centreOffset = capsule.transform.TransformPoint(capsule.center) - feet;
-        if (!LadderSegment.Finite(_centreOffset) || Mathf.Abs(_centreOffset.x) > 0.05f || Mathf.Abs(_centreOffset.z) > 0.05f ||
+        // Use the root-relative shape, not an interpolated Transform versus the physics position.
+        _centreOffset = capsule.transform.TransformPoint(capsule.center) - player.transform.position;
+        if (!LadderRulesFinite(Radius) || !LadderRulesFinite(height) || !LadderSegment.Finite(_centreOffset) ||
+            Mathf.Abs(_centreOffset.x) > 0.05f || Mathf.Abs(_centreOffset.z) > 0.05f ||
             Radius < 0.05f || Radius > 1f || height > 4f)
         {
             throw new InvalidOperationException("The player's capsule has unsupported dimensions.");
@@ -47,7 +49,10 @@ internal sealed class LadderClearance
         Vector3 scale = _capsule.transform.lossyScale;
         float radius = _capsule.radius * Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.z));
         float height = Mathf.Max(2f * radius, _capsule.height * Mathf.Abs(scale.y));
-        return Mathf.Abs(radius - Radius) < 0.001f && Mathf.Abs(height * 0.5f - radius - _halfSegment) < 0.001f;
+        Vector3 centreOffset = _capsule.transform.TransformPoint(_capsule.center) - _player.transform.position;
+        return LadderSegment.Finite(scale) && LadderRulesFinite(radius) && LadderRulesFinite(height) &&
+               LadderSegment.Finite(centreOffset) && Vector3.Distance(centreOffset, _centreOffset) < 0.001f &&
+               Mathf.Abs(radius - Radius) < 0.001f && Mathf.Abs(height * 0.5f - radius - _halfSegment) < 0.001f;
     }
 
     internal bool HasRoom(Vector3 feet)
@@ -134,6 +139,8 @@ internal sealed class LadderClearance
 
     private bool Solid(Collider collider) => collider != null && !collider.isTrigger &&
         !collider.transform.IsChildOf(_player.transform);
+
+    private static bool LadderRulesFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
     private void CapsuleAt(Vector3 feet, out Vector3 low, out Vector3 high)
     {
