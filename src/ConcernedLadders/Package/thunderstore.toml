@@ -1,0 +1,38 @@
+[config]
+schemaVersion = "0.0.1"
+
+[package]
+namespace = "TheConcernedCat"
+name = "ConcernedLadders"
+versionNumber = "0.1.0"
+description = "Stackable vertical wood, copper and iron ladders for compact builds. Development candidate; requires the mod on clients and server."
+websiteUrl = "https://github.com/Weakened/ConcernedCatMods"
+containsNsfwContent = false
+
+[package.dependencies]
+denikson-BepInExPack_Valheim = "5.4.2351"
+ValheimModding-Jotunn = "2.30.2"
+
+[build]
+icon = "./icon.png"
+readme = "./README.md"
+outdir = "../../../artifacts/thunderstore"
+
+[[build.copy]]
+source = "../bin/Release/net48/TheConcernedCat.ConcernedLadders.dll"
+target = "plugins/TheConcernedCat.ConcernedLadders.dll"
+
+[[build.copy]]
+source = "./CHANGELOG.md"
+target = "CHANGELOG.md"
+
+[[build.copy]]
+source = "../../../LICENSE"
+target = "LICENSE"
+
+[publish]
+repository = "https://thunderstore.io"
+communities = ["valheim"]
+
+[publish.categories]
+valheim = ["mods", "building", "utility", "ai-generated"]

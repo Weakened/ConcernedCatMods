@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Library</OutputType>
+    <RootNamespace>TheConcernedCat.ConcernedLadders</RootNamespace>
+    <AssemblyName>TheConcernedCat.ConcernedLadders</AssemblyName>
+    <Version>0.1.0</Version>
+    <FileAlignment>512</FileAlignment>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <Authors>Eren Cansunar</Authors>
+    <Company>The Concerned Cat</Company>
+    <Product>Concerned Ladders</Product>
+    <Copyright>Copyright © 2026 Eren Cansunar</Copyright>
+    <RepositoryUrl>https://github.com/Weakened/ConcernedCatMods</RepositoryUrl>
+  </PropertyGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="RepositoryUrl" Value="https://github.com/Weakened/ConcernedCatMods" />
+    <Compile Include="..\Shared\Ladders\**\*.cs" LinkBase="Ladders" />
+    <Compile Include="..\Shared\Diagnostics\**\*.cs" LinkBase="Diagnostics" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- This independent product targets the Valheim 1.0 build menu. Other
+         products retain their existing pins. Never bundle Jotunn or game DLLs. -->
+    <PackageReference Include="JotunnLib" Version="2.30.2" />
+  </ItemGroup>
+</Project>

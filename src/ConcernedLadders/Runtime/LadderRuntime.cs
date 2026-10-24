@@ -480,8 +480,8 @@ internal sealed class LadderRuntime : IDisposable
         if (message == _lastNotice && _noticeCooldown > 0f) { return; }
         _lastNotice = message;
         _noticeCooldown = 2f;
-        Player? player = Player.m_localPlayer;
-        if (player != null) { player.Message(MessageHud.MessageType.Center, message); }
+        MessageHud? hud = MessageHud.instance;
+        if (hud != null) { hud.ShowMessage(MessageHud.MessageType.Center, message); }
     }
 
     public void Dispose()
