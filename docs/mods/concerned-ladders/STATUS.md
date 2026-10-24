@@ -43,13 +43,14 @@ work in an actual Valheim session.
 | Repository validator | PASS | Full `python tools/validate_repo.py`, including new product, all existing products, solution and independence audits |
 | New C# policy tests | PASS | 31 passed, 0 failed, 0 skipped in Release; BCL-only production rules, not the Unity/plugin assembly |
 | New profile tests | PASS | 7 passed; deterministic archive and invalid destination/version/overwrite protections |
+| Existing product-path guards | PASS | 5 mutation tests passed in an isolated checkout at `83d772a`; confirms existing product path guards remain enforced after adding the new product |
 | C# syntax audit | PASS | Official Roslyn parser, C# 10, 10 product source files, 0 syntax errors; no semantic compilation or game stubs |
 | PowerShell parser | PASS | Deployment script has 0 syntax errors |
 | Deployment refusal probes | PASS | Wrong profile is refused; correctly named path on non-Windows is refused; no deployment occurs |
 | Independent source review | COMPLETED | Traversal and registration corrections reviewed; live-game API uncertainty remains |
 | Independent workflow review | COMPLETED | Dependency-before-build and package-before-final-verify ordering corrected |
-| Full Python mutation suite | NOT RUN | Must run in an isolated tree because existing tests temporarily edit product files |
-| Full solution restore | NOT PASSED | Attempt exited 1 without useful diagnostics in this environment; local game/reference setup required before retry |
+| Full Python mutation suite | INCOMPLETE | 12 cases passed before a deliberate interruption, exit 130; no full-suite/A02 pass. Unchanged legacy adapter cases remain for the local gate. The isolated checkout was clean afterward. |
+| Full solution restore | PASS | .NET SDK 10.0.402 restored the integrated solution successfully; this loads the project graph, not the game-dependent assemblies |
 | Mandatory `scripts/verify.ps1` | BLOCKED | Exited 1 before building: `Environment.props is missing. Copy Environment.props.example to Environment.props and edit the paths.` |
 | Valheim plugin DLL/package | NOT PRODUCED | No licensed game-reference build was completed |
 | Profile installation | NOT RUN | Import artifact prepared; manager/device access unavailable |
