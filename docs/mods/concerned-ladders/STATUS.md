@@ -40,7 +40,8 @@ Each was found by the real build or in game, fixed, and re-observed.
 | 693eb47 | At a blocked top the crosshair rested on the blocking wall, so Use could not request a dismount; transfers slid in a standing pose | Use (the player's own `Use`/`JoyUse` binding) while climbing with nothing interactable hovered requests the safe dismount; transfer legs drive the walk cycle |
 | 711e6c8 | With `ClimbingEnabled=false` a Use press reported a startup failure | Separate "turned off in settings" message |
 | 7c7017c, cc3240e | (diagnostics) | One log line per mount, release and refused mount; event-driven, numbers only |
-| freeze commit | Second review (P2): diagnostic numbers used the machine locale (unreadable in comma-decimal locales); lowering on a transfer leg animated forward | Invariant-culture formatting; transfer pose takes the sign of the vertical motion |
+| 114ea75 | Second review (P2): diagnostic numbers used the machine locale (unreadable in comma-decimal locales); lowering on a transfer leg animated forward | Invariant-culture formatting; transfer pose takes the sign of the vertical motion |
+| 28aff52 | On the frozen candidate, in the clean profile: an off-centre approach over ground rising toward the wall was refused "route blocked" | A step-height lift (0.3 m) is tried when the 6 cm route is blocked, still fully swept; the route ends on the floor under the climb line |
 
 ## Automated gates
 
@@ -77,6 +78,7 @@ tested separately with the hammer. "Released" lines are the mod's own log.
 | B11 | NOT RUN | Forced worn/damaged visuals |
 | B12 | PARTIAL | Repeated cold starts and menu → world re-entries never duplicated registration; a second world was not visited |
 | T01 | PASS | Mount from the front: "Ladder mounted: 1 section(s), 2.00 m run" |
+| T02 | PASS | Off-centre approach on uneven ground, ordinary inputs only, clean profile (no harness): refused before 28aff52, mounts after it |
 | T03 | PASS | From behind: "The route onto the ladder is blocked." |
 | T04 | PASS | Jump then Use beside the ladder: no midair catch |
 | T05 | PASS | 1.88 m/s; 10 s neutral hold drifts 0.000 m; reversal symmetric |
@@ -107,9 +109,10 @@ tested separately with the hammer. "Released" lines are the mod's own log.
 | L07 | PASS | `ClimbingEnabled=false` mid-climb releases; pieces stay registered and hoverable; re-enable works |
 | L08 | PASS | Pieces persist across save, quit and cold relaunch (many times) |
 | L09 | PASS | Log out mid-climb: external release; re-entry has a clean motor |
-| L10, L11 | NOT RUN | Real Foreman in a separate compatibility profile. The detector's owner id and method were checked against Foreman's source and exercised in game with a simulated owner (see the run log) |
+| L10, L11 | NOT RUN | Real Foreman in a separate compatibility profile. The detector's owner id and method were checked against Foreman's source and exercised in game with a simulated owner: a no-op `UpdateMotion` prefix under Foreman's owner id refused mounting with the Foreman message, released an active climb within a second, and mounting worked again once removed |
 | L12 | PARTIAL | Walking, sprinting, jumping and combat after leaving; stairs, doors and ships not exercised |
 | M01–M10 | BLOCKED | No second client or dedicated server is available on this machine |
+| VIDEO | Recorded | Animated captures (game window only) of mount → climb → hold → reverse → top exit, and of a blocked top holding then descending, on 114ea75 |
 | P02 | PASS (fallback) | Walk cycle plays while moving and stops while holding; no stuck pose after release |
 | P01, P03–P07 | NOT RUN | Lighting/weather review, observer view, performance captures |
 
