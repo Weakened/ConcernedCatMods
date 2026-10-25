@@ -124,9 +124,16 @@ internal sealed class LadderRuntime : IDisposable
         {
             Player? player = Player.m_localPlayer;
             if (player == null || ZNetScene.instance == null) { return false; }
-            if (!_motor.Ready || !Enabled)
+            if (!_motor.Ready)
             {
                 Notice("Ladder climbing is unavailable. Check Concerned Ladders' startup log.");
+                return true;
+            }
+
+            if (!Enabled)
+            {
+                // Observed in game: a deliberate setting change was being reported as a startup failure.
+                Notice("Ladder climbing is turned off in Concerned Ladders' settings (General / ClimbingEnabled).");
                 return true;
             }
 
