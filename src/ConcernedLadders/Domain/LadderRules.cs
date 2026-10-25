@@ -184,6 +184,12 @@ internal static class LadderRules
         bool segmentsPresent, bool segmentsUnmoved, float drift) =>
         !enabled || !owned || !alive || !free || !worldPresent || !segmentsPresent || !segmentsUnmoved ||
         !Finite(drift) || drift > 1.5f;
+
+    /// <summary>A release the ladder did not cause leaves velocity, fall reference and pose to whatever
+    /// moved the body: lost authority, a menu or attach, an unloaded world, death, a kinematic body, or a
+    /// displacement the motor did not make.</summary>
+    internal static bool IsExternalRelease(bool owned, bool alive, bool free, bool worldPresent, bool kinematic, float drift) =>
+        !owned || !alive || !free || !worldPresent || kinematic || !Finite(drift) || drift > 1.5f;
 }
 
 internal readonly struct LadderSample

@@ -1,6 +1,6 @@
 # Concerned Ladders: isolated profile and deployment
 
-**Work item:** CL-003. **Product:** Concerned Ladders 0.1.0.
+**Work item:** CL-003. **Product:** Concerned Ladders 0.1.1.
 **Profile:** `TCC-Ladders-Dev`. **Plugin:** `com.theconcernedcat.valheim.concernedladders`.
 
 ## What is prepared, and what is still local work

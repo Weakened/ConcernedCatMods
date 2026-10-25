@@ -187,4 +187,30 @@ public sealed class LadderRulesTests
         Assert.True(LadderRules.MustRelease(true, true, true, true, true, true, true, float.NaN));
         Assert.True(LadderRules.MustRelease(true, true, true, true, true, true, true, float.PositiveInfinity));
     }
+
+    [Theory]
+    [InlineData(2f)]
+    [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
+    public void ADisplacementTheMotorDidNotMakeIsReleasedAsExternalControl(float drift)
+    {
+        // The mover owns the new velocity and fall reference; the ladder must not zero or rewrite them.
+        Assert.True(LadderRules.MustRelease(true, true, true, true, true, true, true, drift));
+        Assert.True(LadderRules.IsExternalRelease(true, true, true, true, false, drift));
+    }
+
+    [Fact]
+    public void OnlyLadderCausedReleasesTakeTheControlledPath()
+    {
+        Assert.False(LadderRules.IsExternalRelease(true, true, true, true, false, 0f));
+        Assert.False(LadderRules.IsExternalRelease(true, true, true, true, false, 1.5f));
+        for (int missing = 0; missing < 4; missing++)
+        {
+            bool[] facts = Enumerable.Repeat(true, 4).ToArray();
+            facts[missing] = false;
+            Assert.True(LadderRules.IsExternalRelease(facts[0], facts[1], facts[2], facts[3], false, 0f));
+        }
+
+        Assert.True(LadderRules.IsExternalRelease(true, true, true, true, true, 0f));
+    }
 }

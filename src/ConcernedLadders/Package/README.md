@@ -3,9 +3,9 @@
 Vertical ladders for compact Valheim builds. Three 2 m hammer pieces: wood,
 copper and iron. Stack matching or mixed materials into a continuous run.
 
-**0.1.0 is a source development candidate.** A licensed-game build and the live
-acceptance matrix are still required. Do not present this package as a tested
-release merely because its pure tests pass.
+**0.1.1 is an owner-test candidate, not a release.** It is built against
+Valheim 1.0.20 and tested in single player. Multiplayer, dedicated-server and
+controller play have not been tested yet.
 
 ## Intended controls
 
@@ -39,7 +39,7 @@ mod is required. These dependency versions were checked against publisher
 sources; compatibility with the particular installed game must still be tested.
 
 Install the same candidate on the server and every client. This is a custom
-piece mod, not a client-only mod. The 0.1.0 candidate uses exact patch-version
+piece mod, not a client-only mod. This candidate uses exact patch-version
 matching. Do not rename the custom prefab IDs after worlds have been created.
 
 Foreman's existing ladder motor currently conflicts: Concerned Ladders refuses

@@ -287,7 +287,8 @@ internal sealed class LadderRuntime : IDisposable
                     present, unmoved, drift))
             {
                 // A teleport, knockback, death or authority change owns its new velocity/fall state.
-                Release(false, !owned || !free || !worldPresent || player.IsDead());
+                Release(false, LadderRules.IsExternalRelease(owned, !player.IsDead(), free, worldPresent,
+                    body == null || body.isKinematic, drift));
                 return false;
             }
 
