@@ -127,7 +127,9 @@ TCC-Ladders-Dev\BepInEx\plugins\ConcernedLadders\TheConcernedCat.ConcernedLadder
 
 If a different ladder candidate is already there, default behavior is refusal. `-ReplaceExisting` permits
 an update of this product only and first preserves the previous DLL under
-`artifacts/ladders-profile-backups/<old-sha256>/`. A duplicate in another plugin folder, any unknown
+`%LOCALAPPDATA%\TheConcernedCat\ConcernedLadders\profile-backups\<old-sha256>\`, outside every checkout:
+`validate_repo.py` refuses a DLL anywhere in the tree outside `bin/obj`, so a backup under `artifacts/`
+would fail the next `verify.ps1` of the same checkout. A duplicate in another plugin folder, any unknown
 receipt, or an unrelated plugin remains untouched and requires explicit local inspection.
 
 `ConcernedLadders.deployment.json` records the full source SHA, candidate hash, manifest hash, verification

@@ -196,7 +196,10 @@ try {
         throw "The installed candidate disappeared after preflight; inspect the profile before retrying."
     }
     if ($previousHash -and $previousHash -ne $candidateHash) {
-        $backup = Join-Path $root "artifacts/ladders-profile-backups/$previousHash/$dllName"
+        # Outside every checkout: validate_repo.py refuses any DLL in the tree outside bin/obj, and a
+        # backup inside artifacts/ would make the next verify of this same checkout fail.
+        $backupRelative = "TheConcernedCat\ConcernedLadders\profile-backups\$previousHash\$dllName"
+        $backup = Join-Path $env:LOCALAPPDATA $backupRelative
         Assert-NoLinks $backup
         if (Test-Path -LiteralPath $backup) {
             if ((Get-Sha256 $backup) -ne $previousHash) { throw "An existing candidate backup has unexpected bytes; preserving it." }
@@ -204,7 +207,7 @@ try {
             New-Item -ItemType Directory -Path (Split-Path -Parent $backup) -Force | Out-Null
             Copy-Item -LiteralPath $destination -Destination $backup
         }
-        $receipt['previousCandidateBackup'] = "artifacts/ladders-profile-backups/$previousHash/$dllName"
+        $receipt['previousCandidateBackup'] = "%LOCALAPPDATA%\$backupRelative"
     }
     New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
     Copy-Item -LiteralPath $candidate -Destination $temporaryDll
