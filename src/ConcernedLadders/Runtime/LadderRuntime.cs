@@ -156,7 +156,10 @@ internal sealed class LadderRuntime : IDisposable
                      " fallAbove=" + (_motor.FallHeight(player) - body.position.y).ToString("0.00") +
                      " reach=" + run.ReachFrom(feet).ToString("0.00") + " side=" + run.SidewaysOffsetOf(feet).ToString("0.00") +
                      " height=" + (body.position.y - run.Bottom.Y).ToString("0.00") +
-                     " capsuleGap=" + clearance.BottomGap.ToString("0.000") + ".");
+                     " capsuleGap=" + clearance.BottomGap.ToString("0.000") +
+                     " foot=(" + run.Bottom.X.ToString("0.00") + "," + run.Bottom.Y.ToString("0.00") + "," + run.Bottom.Z.ToString("0.00") +
+                     ") open=(" + run.StandingSide.X.ToString("0.00") + "," + run.StandingSide.Z.ToString("0.00") +
+                     ") player=(" + feet.X.ToString("0.00") + "," + feet.Y.ToString("0.00") + "," + feet.Z.ToString("0.00") + ").");
                 _segments.Clear();
                 return true;
             }
