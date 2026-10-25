@@ -67,6 +67,11 @@ def version_tuple(value: object) -> tuple[int, int, int]:
 
 
 def fingerprint(value: os.stat_result) -> tuple[int, ...]:
+    # On Windows a path stat and a handle fstat of the same unchanged file can
+    # report different st_ctime_ns (creation versus metadata-change time), so it
+    # cannot witness replacement there; device, file ID, size and mtime still do.
+    if os.name == "nt":
+        return value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns
     return value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns
 
 
