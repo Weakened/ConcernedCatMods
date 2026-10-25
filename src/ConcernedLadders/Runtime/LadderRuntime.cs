@@ -310,7 +310,7 @@ internal sealed class LadderRuntime : IDisposable
             float input = ReadInput(player);
             // A run whose foot stands above the ground (a wall on a slope) may be left by stepping down onto
             // that ground, as far as a mount may step up. Without real support below, the foot is the limit.
-            float lowest = _run.Bottom.Y;
+            float lowest = LadderRules.LowestHold(_run.Bottom.Y, body.position.y);
             if (input < 0f && body.position.y <= _run.Bottom.Y + LadderRules.BottomExitBand &&
                 clearance.TryFloorBelow(body.position, LadderRules.MaximumStepUpToFoot + 0.3f, out float floorBelow) &&
                 floorBelow >= _run.Bottom.Y - LadderRules.MaximumStepUpToFoot)

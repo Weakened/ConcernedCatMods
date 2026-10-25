@@ -199,6 +199,23 @@ public sealed class LadderRulesTests
         Assert.True(LadderRules.IsExternalRelease(true, true, true, true, false, drift));
     }
 
+    [Theory]
+    [InlineData(10f, 10f)]     // on the run: the foot
+    [InlineData(12f, 10f)]     // above the foot: the foot
+    [InlineData(9.6f, 9.6f)]   // stepped down below the foot: holds there, no pull back up
+    [InlineData(9f, 9.25f)]    // further than a step below: bounded at one step
+    public void NeutralInputBelowTheFootHoldsInsteadOfRising(float body, float expected) =>
+        Assert.Equal(expected, LadderRules.LowestHold(10f, body), 3);
+
+    [Fact]
+    public void NeutralHoldBelowTheFootDoesNotAdvance()
+    {
+        float lowest = LadderRules.LowestHold(10f, 9.6f);
+        Assert.Equal(9.6f, LadderRules.Advance(9.6f, 0f, 0.02f, lowest, 14f), 3);
+        Assert.True(LadderRules.Advance(9.6f, 1f, 0.02f, lowest, 14f) > 9.6f);
+        Assert.Equal(10f, LadderRules.LowestHold(10f, float.NaN));
+    }
+
     [Fact]
     public void OnlyLadderCausedReleasesTakeTheControlledPath()
     {

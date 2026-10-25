@@ -28,6 +28,12 @@ internal static class LadderRules
     /// <summary>Descending within this height of the run's foot onto real support ends the climb.</summary>
     internal const float BottomExitBand = 0.5f;
 
+    /// <summary>The lowest height the climb may rest at this frame. A body already stepped down below the
+    /// foot (or mounted from ground below it) holds where it is rather than being pulled back up to the
+    /// foot, but never lower than a step below it.</summary>
+    internal static float LowestHold(float bottom, float bodyHeight) =>
+        Finite(bodyHeight) ? Math.Min(bottom, Math.Max(bodyHeight, bottom - MaximumStepUpToFoot)) : bottom;
+
     internal static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
     internal static float FrameSeconds(float seconds) =>
