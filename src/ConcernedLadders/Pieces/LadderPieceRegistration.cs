@@ -15,6 +15,10 @@ namespace TheConcernedCat.ConcernedLadders.Pieces;
 /// three prefabs, never to a changed vanilla prefab or a renamed old product.</summary>
 internal sealed class LadderPieceRegistration : IDisposable
 {
+    /// <summary>Distance from a wall corner snap to the ladder origin: the 0.15 m half-thickness of a wood wall
+    /// less the 0.08 m between the origin and the back of the rails' collider, plus a 1 cm visual gap.</summary>
+    private const float WallSnapSetback = 0.08f;
+
     private readonly Action<string> _log;
     private readonly HashSet<string> _registered = new HashSet<string>(StringComparer.Ordinal);
     private bool _subscribed;
@@ -111,12 +115,16 @@ internal sealed class LadderPieceRegistration : IDisposable
 
             Snap(prefab.transform, "snap_bottom", Vector3.zero, layer);
             Snap(prefab.transform, "snap_top", new Vector3(0f, 2f, 0f), layer);
-            // Wall corners use the native 2m building grid; top and bottom
-            // centre points remain the exact stack-continuity contract.
-            Snap(prefab.transform, "snap_bottom_left", new Vector3(-1f, 0f, 0f), layer);
-            Snap(prefab.transform, "snap_bottom_right", new Vector3(1f, 0f, 0f), layer);
-            Snap(prefab.transform, "snap_top_left", new Vector3(-1f, 2f, 0f), layer);
-            Snap(prefab.transform, "snap_top_right", new Vector3(1f, 2f, 0f), layer);
+            // Wall corners use the native 2m building grid. A wall's own corner
+            // snaps lie on its centre plane, so these sit behind the ladder by
+            // WallSnapSetback: the rails' back then rests on a 0.3 m wood wall's
+            // face instead of 9 cm inside it (observed in game). Top and bottom
+            // centre points remain the exact stack-continuity contract, and every
+            // ladder carries the same setback, so stacked corners still coincide.
+            Snap(prefab.transform, "snap_bottom_left", new Vector3(-1f, 0f, -WallSnapSetback), layer);
+            Snap(prefab.transform, "snap_bottom_right", new Vector3(1f, 0f, -WallSnapSetback), layer);
+            Snap(prefab.transform, "snap_top_left", new Vector3(-1f, 2f, -WallSnapSetback), layer);
+            Snap(prefab.transform, "snap_top_right", new Vector3(1f, 2f, -WallSnapSetback), layer);
 
             LadderSegment segment = prefab.AddComponent<LadderSegment>();
             segment.LocalBottom = Vector3.zero;

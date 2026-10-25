@@ -19,6 +19,12 @@ internal static class LadderRules
     /// downhill side. The engine adapter still sweeps the whole rise; this is a step, not a jump.</summary>
     internal const float MaximumStepUpToFoot = 0.75f;
 
+    /// <summary>Every transfer route first lifts the body this far, so its lateral leg clears the floor it starts on.</summary>
+    internal const float RouteLift = 0.06f;
+
+    /// <summary>Descending within this height of the run's foot onto real support ends the climb.</summary>
+    internal const float BottomExitBand = 0.5f;
+
     internal static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
     internal static float FrameSeconds(float seconds) =>

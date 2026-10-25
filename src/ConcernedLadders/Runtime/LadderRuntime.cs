@@ -167,7 +167,7 @@ internal sealed class LadderRuntime : IDisposable
             float offset = LadderRules.BodyOffset(clearance.Radius, segment.FrontFaceDepth);
             float height = Mathf.Clamp(body.position.y, run.Bottom.Y, run.Top.Y);
             Vector3 line = LadderSegment.Vector(run.ClimbPositionAt(height - run.Bottom.Y, offset));
-            float raised = Mathf.Max(body.position.y, line.y) + 0.06f;
+            float raised = Mathf.Max(body.position.y, line.y) + LadderRules.RouteLift;
             Vector3[] route =
             {
                 new Vector3(body.position.x, raised, body.position.z),
@@ -264,8 +264,19 @@ internal sealed class LadderRuntime : IDisposable
             }
 
             float input = ReadInput(player);
-            float nextHeight = LadderRules.Advance(body.position.y, input, delta, _run.Bottom.Y, _run.Top.Y);
+            // A run whose foot stands above the ground (a wall on a slope) may be left by stepping down onto
+            // that ground, as far as a mount may step up. Without real support below, the foot is the limit.
+            float lowest = _run.Bottom.Y;
+            if (input < 0f && body.position.y <= _run.Bottom.Y + LadderRules.BottomExitBand &&
+                clearance.TryFloorBelow(body.position, LadderRules.MaximumStepUpToFoot + 0.3f, out float floorBelow) &&
+                floorBelow >= _run.Bottom.Y - LadderRules.MaximumStepUpToFoot)
+            {
+                lowest = Mathf.Min(lowest, floorBelow);
+            }
+
+            float nextHeight = LadderRules.Advance(body.position.y, input, delta, lowest, _run.Top.Y);
             Vector3 target = LadderSegment.Vector(_run.ClimbPositionAt(nextHeight - _run.Bottom.Y, _bodyOffset));
+            target.y = nextHeight; // ClimbPositionAt clamps to the run; the step-down above is allowed to go lower.
             if (input > 0f && body.position.y >= _run.Top.Y - 0.03f)
             {
                 if (TryExitTop()) { MoveRoute(delta, seconds); }
@@ -273,9 +284,17 @@ internal sealed class LadderRuntime : IDisposable
                 return IsClimbing;
             }
 
-            if (input < 0f && body.position.y <= _run.Bottom.Y + 0.03f)
+            // Descending onto real support near the foot is the bottom exit. A standing player's feet rest on the
+            // floor, which physics keeps above the run's nominal foot, so an exact-height test alone never fires.
+            if (input < 0f && body.position.y <= _run.Bottom.Y + LadderRules.BottomExitBand &&
+                clearance.Supported(body.position) && clearance.HasRoom(body.position))
             {
-                if (clearance.Supported(body.position)) { Release(false, false); return false; }
+                Release(false, false);
+                return false;
+            }
+
+            if (input < 0f && body.position.y <= lowest + 0.03f)
+            {
                 Hold(body.position, seconds, 0f);
                 Notice("There is no footing below the ladder. Climb back up, or jump to let go.");
                 return true;
@@ -339,7 +358,7 @@ internal sealed class LadderRuntime : IDisposable
     {
         if (!_clearance!.HasRoom(floor)) { return false; }
         Vector3 feet = _body!.position;
-        float raised = Mathf.Max(feet.y, floor.y) + 0.06f;
+        float raised = Mathf.Max(feet.y, floor.y) + LadderRules.RouteLift;
         Vector3[] path =
         {
             new Vector3(feet.x, raised, feet.z),
@@ -358,7 +377,7 @@ internal sealed class LadderRuntime : IDisposable
     {
         Vector3 current = _body!.position;
         Vector3 line = LadderSegment.Vector(_run.ClimbPositionAt(_transferStartHeight - _run.Bottom.Y, _bodyOffset));
-        float raised = Mathf.Max(current.y, line.y) + 0.06f;
+        float raised = Mathf.Max(current.y, line.y) + LadderRules.RouteLift;
         Vector3[] route =
         {
             new Vector3(current.x, raised, current.z),
@@ -371,6 +390,18 @@ internal sealed class LadderRuntime : IDisposable
         _routeIndex = 0;
     }
 
+    /// <summary>The last leg of a route lowers the body onto its destination. Ground contact holds a standing
+    /// capsule a few centimetres above a computed point, so that leg ends once the body is horizontally there
+    /// and within the route's own lift; requiring 2 cm vertically left a mount on terrain unfinishable.</summary>
+    private static bool Arrived(Vector3 body, Vector3 waypoint, bool last)
+    {
+        float dx = body.x - waypoint.x, dz = body.z - waypoint.z;
+        float horizontal = Mathf.Sqrt(dx * dx + dz * dz);
+        return last
+            ? horizontal < 0.02f && Mathf.Abs(body.y - waypoint.y) <= LadderRules.RouteLift + 0.02f
+            : Vector3.Distance(body, waypoint) < 0.02f;
+    }
+
     private void MoveRoute(float delta, float physicsSeconds)
     {
         Rigidbody body = _body!;
@@ -380,7 +411,7 @@ internal sealed class LadderRuntime : IDisposable
             Release(false, false); // A removed platform is never replaced by its cached destination.
             return;
         }
-        while (_routeIndex < _route.Length && Vector3.Distance(body.position, _route[_routeIndex]) < 0.02f)
+        while (_routeIndex < _route.Length && Arrived(body.position, _route[_routeIndex], _routeIndex == _route.Length - 1))
         {
             _routeIndex++;
         }

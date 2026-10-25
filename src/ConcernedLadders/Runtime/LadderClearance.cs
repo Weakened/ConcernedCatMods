@@ -121,6 +121,15 @@ internal sealed class LadderClearance
     internal bool TryTopSurface(Vector3 desired, out Vector3 floor) => TrySurface(desired, 0.5f, 0.5f, out floor);
     internal bool TryNearbySurface(Vector3 desired, out Vector3 floor) => TrySurface(desired, 0.15f, 0.25f, out floor);
 
+    /// <summary>The standing surface under the feet within <paramref name="maxDrop"/>, ladders and characters excluded.</summary>
+    internal bool TryFloorBelow(Vector3 feet, float maxDrop, out float floorY)
+    {
+        floorY = float.NaN;
+        if (!TrySurface(feet, 0.15f, maxDrop, out Vector3 floor)) { return false; }
+        floorY = floor.y;
+        return true;
+    }
+
     private bool TrySurface(Vector3 desired, float above, float below, out Vector3 floor)
     {
         floor = default;
