@@ -15,7 +15,7 @@ internal sealed class LadderSegment : MonoBehaviour, Hoverable, Interactable
     public float Width = 0.8f;
     public float RungPitch = 1f / 3f;
     public float FrontFaceDepth = 0.24f;
-    public string DisplayName = "Vertical ladder";
+    public string DisplayName = "Vertical Ladder";
 
     private static readonly HashSet<LadderSegment> Registered = new HashSet<LadderSegment>();
 

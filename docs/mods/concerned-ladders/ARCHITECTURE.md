@@ -1,141 +1,193 @@
-# Concerned Ladders — architecture and continuation map
+# Concerned Ladders — revision architecture and implementation boundaries
 
-## Product boundary
+This is the target design for [PROJECT.md](PROJECT.md), not proof that the
+current source implements it. See [STATUS.md](STATUS.md). The previous
+supported-only mount and fixed walk-speed adapter require revision.
 
-`Plugin.cs` binds the local climb enable setting, registers custom build pieces,
-installs the traversal adapter, updates it, and tears it down. Package identity
-and native save prefab IDs are listed in `PROJECT.md`. No compile-time reference
-to another Concerned Cat product or the Concerned NPC library exists.
+## Product and source boundaries
 
-The original Foreman ladder implementation remains in place. It supplies useful
-historical context and the pure `src/Shared/Ladders` primitives; its engine motor
-is not copied wholesale. Its existing tests are not proof of this product.
+| Area | Responsibility |
+|---|---|
+| `Plugin.cs` | Config, early native skill registration, piece/runtime lifecycle, startup build identity |
+| `Pieces/` | Inactive custom clones, original geometry, wear-state references, recipes, readable names/snaps |
+| `Domain/` | Game-free reach/face/mode/progression policy and bounded movement decisions |
+| `Runtime/LadderSegment.cs` | Custom marker, native hover/interaction and loaded segment registry |
+| `Runtime/` | Narrow native input/motor/skill/collision/presentation adapters; local ownership |
+| `src/Shared/Ladders/` | Existing BCL-only primitives; preserve other consumers |
+| `src/ConcernedLadders.Tests/` | Source-linked production policy tests; no invented game stubs |
+| `tools/prepare_ladders_profile.py` | Dependency-only profile archive, not the mod ZIP |
+| `scripts/deploy-ladders-profile.ps1` | Optional development DLL deployment; not final package acceptance |
+| `tools/verify_ladders_candidate.py` | Additional read-only artifact identity check; never gameplay proof |
 
-## Source map
+The local lead chooses small adapter names after inspecting actual native
+signatures. This map does not assert new classes already exist. Products do not
+reference one another at compile time. Foreman's old motor remains untouched;
+its tests cannot prove this product. The explicit conflict refusal remains.
 
-| Path | Responsibility | Allowed engine contact |
-|---|---|---|
-| `Pieces/LadderPieceRegistration.cs` | Three inactive prefab clones, original geometry/material references, snap points, recipes and registration | Yes, during registration |
-| `Pieces/LadderLocalization.cs` | Localized piece/menu strings | Jotunn localization only |
-| `Domain/` | Geometry, finite-value guards, chain connectivity and movement/exit decisions | None |
-| `Runtime/LadderSegment.cs` | Custom marker, native hover/interaction, loaded piece registry | Yes |
-| `Runtime/` | Local-owner runtime, input adapter, capsule queries, narrow motion hooks, walking pose | Yes, only the selected local climber |
-| `src/Shared/Ladders/` | Existing BCL points, geometry and other adopted primitives | None |
-| `src/ConcernedLadders.Tests/` | Source-linked pure-domain tests | No game assemblies |
-| `LaddersPaths.cs` | Canonical future diagnostic data-root contract | Does not create or write a folder |
-| `tools/prepare_ladders_profile.py` | Deterministic dependency-only `.r2z` | No device/profile mutation |
-| `scripts/deploy-ladders-profile.ps1` | Validated exact candidate install into explicitly selected profile | Own DLL only |
+## Prefab and skill lifecycle
 
-The local runtime code is the authority for method/property names; do not rebuild
-it from this map. Read the current source before changing it.
+Wait for `PrefabManager.OnVanillaPrefabsAvailable`. Clone `woodwall` and
+`woodiron_pole` under Jotunn's inactive parent. Keep required root components,
+native effects and support; replace clone-only geometry/colliders/LODs/snaps
+and rebind descendant wear references. Collision remains independent of visual
+state groups. Preserve saved prefab IDs and coordinate layout. Copy loaded
+materials before changing them; never mutate shared donors.
 
-## Prefab lifecycle
+Register three pieces with supported Jotunn Usage tags and the existing recipes.
+A partial failure is terminal for that registration attempt and reported;
+do not retry an already-reserved prefab ID. Keep pieces registered with climbing
+disabled. Title Case names apply to hammer, hover and native repair surfaces.
+Correct native snap labels without changing snap coordinates or replacing the
+whole hammer hint panel. Inspect current formatter expectations first.
 
-Wait for `PrefabManager.OnVanillaPrefabsAvailable`. Create a `CustomPiece` clone
-under Jotunn's inactive parent; keep `activeSelf` suitable for future placed
-instances. Never instantiate an active gameplay object and strip it later.
-Keep root Piece/ZNetView/WearNTear, native effects and structural support values.
-Remove clone-only donor geometry, colliders, LODs and snap children. Rebind wear
-visual/fragment references to the new roots. Use a separate always-active
-collision shape and direct-child `snappoint` transforms.
+Register the permanent skill once in plugin Awake, before player Skills.Awake,
+independent of the climb toggle. `AddSkill(SkillConfig)` returns the skill enum;
+`SkillManager.GetSkill` returns its definition. Player progress is native.
+Jotunn derives the saved UID from the identifier, so never rename it. There is
+no separate skill save or a custom death-loss exemption in this design.
 
-Use explicit `PieceConfig.Usage` tags supported in Jotunn 2.30.2. Add exactly
-three custom pieces, with stable IDs and explicit recipes/stations. Unsubscribe
-after success. Partial registration is an error; startup logs must identify the
-missing piece and cannot label the profile ready.
+## Admission, selection and feedback
 
-Never pick an arbitrary first material from a donor: snow/LOD/effects materials
-may come first. The initial named material donors are woodwall/woodwall,
-Copper/copper, and woodiron_pole/Ironbeam_mat. Clone before darkening for worn
-visuals. Local play must verify shader/lighting/UV appearance; source inspection
-cannot establish art quality.
+Process an explicit Use edge once. Native interaction takes priority; bounded
+ladder-only assistance cannot steal another interactable. Use one shared
+eligibility result for hints and admission, with a final recheck before
+committing state. Return distinct reasons for reach, unavailable control,
+geometry/ownership failure, obstruction and lack of a landing.
 
-## Traversal contract
+Compute chest-to-rung reach from the actual capsule and authored rung span.
+Airborne/rising/falling is permitted. Validate line of sight, full capsule sweep,
+destination room and bounded horizontal/vertical alignment before touching
+physics, fall tracking, animation, stamina or skill. Failed admission is inert.
+Successful catch commits the arrest of that fall once; later release uses the
+actual release position. Reachable low-rung hanging has explicit geometric
+bounds and must not become an endpoint-clamp hoist.
 
-One local player owns one temporary session. The ladder component is shared
-scene geometry, never the storage location for mutable per-player position or
-attachment transforms. Only this mod's dedicated marker is admitted; no vanilla
-Ladder component is attached to its prefabs. This keeps the generic Foreman
-Ladder.Interact prefix out of the interaction path.
+Select a physical face from the approach and lock it in the session. Derive
+stand-off independently from both collider surfaces. The original body box
+occupies local z=0.08..0.24; it is not centred at zero. A rear approach must
+remain on its rear lane. The audited runtime instead routed both approach
+signs to its front line, so the rear sweep crossed the ladder box. Correct the
+lane; do not suppress the error or generally ignore ladder collision.
 
-The runtime establishes ownership and capability before consuming movement. The
-native `Player.TakeInput` capability is bound once; unavailable input/motor APIs
-refuse mounting with a useful message. Do not introduce guessed compatibility
-fallbacks that bypass menus, wards, collision or network ownership.
+Obstruction classification is separate from clearance. A building-specific
+error requires the hit collider's actual blocking `Piece`, excluding the
+selected ladder and connected ladder run. A Piece behind the usable face,
+range failure, no floor, terrain or actor does not satisfy that predicate.
+Terrain/actors still participate in collision and get truthful feedback.
+Unknown classification or full query buffers fail safely with a neutral reason.
+Log query stage and bounded blocker identity on events, not every frame.
 
-A chain is an endpoint graph of loaded valid segments, subject to finite value,
-orientation, distance, upright and length limits. Connection tolerance only
-absorbs floating-point placement error. It cannot bridge visibly missing rungs,
-opposite-facing ladders or parallel neighboring shafts. A bounded connected run
-is discovered from the selected segment, rather than freezing a small nearby
-sphere around the original entry point.
+## Sessions, geometry and exits
 
-Sweep the actual scaled player capsule for every move and every stage of entry
-and exit, checking destination overlap too. Ignore the local player's own
-colliders and only the exact connected ladder pieces as appropriate; do not
-ignore the surrounding building, terrain or other characters. The collider
-remains enabled. Finite, bounded physics-step movement is the single writer.
+One locally owned player owns one temporary session; the shared ladder marker
+never owns mutable player anchors. The endpoint graph spans the whole loaded
+run under fixed registry/chain limits. Aligned mixed materials connect; missing,
+overlapping, parallel or physically incompatible lanes do not. Camera motion
+cannot change the chosen face. Keep collision enabled throughout traversal.
 
-Transitions above a ledge are multi-stage and checked again as the world changes.
-Headroom, support surface normal and reachable standing space are required. A
-blocked transition holds; disappearance/invalid geometry releases. Jump release
-uses normal fall semantics. Grounded-only mounts prevent fall-reset catches.
+Use the actual scaled capsule, centre and skin in movement and destination
+checks. Exclude only appropriate self-body contacts; preserve actual ladder,
+building, terrain and actor barriers. Do not ignore an entire building or all
+ladder colliders as a workaround. Any narrowly justified contact filtering
+needs a source explanation and both clear/blocked regression cases.
 
-## Narrow patches and restoration
+Top exit planning begins before the head meets a lip. Search a small bounded
+set of plausible floor heights and destinations. Require full standing room,
+supported footprint and an inboard endpoint, then sweep the complete clearance,
+rise, cross and settle route. Revalidate every multi-frame leg and landing.
+Closed roofs/hatches remain blocked. A safe intermediate Use exit cannot switch
+shafts. No cached removed platform may support the player.
 
-Patches are named and live under `com.theconcernedcat.valheim.concernedladders.motor`.
-They return immediately for all other actors and whenever no valid owned session
-exists. Only the chosen player's movement is overridden. Never change terrain,
-world saves, unrelated pieces, inventories, remote body ownership or global
-physics settings. Existing native player synchronization carries motion and
-locomotion parameters; no arbitrary custom RPC is needed.
+Jump has priority in every attached mode. Settle pending climb payment, resolve
+camera-relative movement direction (neutral outward), relinquish the motor,
+then apply a verified native-equivalent upward/directional jump once. Inspect
+forced/airborne native semantics; a normal Jump call after detachment may be
+refused as airborne. Never fake global ground contact or have the next tick
+zero the impulse. Insufficient stamina still allows ordinary deliberate release.
+Enforce 0.4 s plus a fresh Use edge across every ladder, not just the old anchor.
 
-Capture only state actually modified. Restore on every normal/error/lifecycle
-exit, and avoid writing into a player whose ownership or external attach/teleport
-state has changed. Clear stale references on world/character changes. Do not
-restore a stale pre-climb velocity, force the collider enabled, or leave gravity
-off. Fall-height handling must be narrowly justified and tested against the
-installed game: no global immunity and no nonfinite values.
+## Input, motion and accounting
 
-The initial product refuses a mount if the legacy Foreman ladder motor Harmony
-owner is installed. It neither unpatches it nor rewrites another mod's config.
-This is an explicit temporary limitation, not a claim of compatible coexistence.
+Bind current native input/control APIs once behind a narrow adapter. Read Run
+intent with remaps, controller and native toggle behavior; a stale running-state
+flag after motion suppression is not intent. Menus/chat/map/console/inventory
+neutralize intent. Consume each action once and preserve idle native controls.
 
-## Build and dependency boundary
+The selected normal/fast/slide speed must reach both planner and actual motor
+bounds. Alignment/exit has separate ordinary safe speed. Stamina costs apply
+to observed eligible displacement divided by full-input mode speed. Budget the
+maximum effective cost before a paid step; allow one pending step, settle once
+before the next paid step or voluntary Use/Jump, and before jump affordability.
+Bound settlement to that planned movement so knockback/teleport cannot earn XP
+or spend climb stamina. Native multipliers apply once. No eligible movement
+means no cost or XP. Exhaustion chooses normal/hold, not detach.
 
-New product JotunnLib NuGet: 2.30.2. BepInExPack profile pin: 5.4.2351.
-The package's MSBuild tooling still needs a licensed local Valheim installation
-and the matching mod-profile references from local Environment.props. A NuGet
-restore is not a product compile. The full local gate is `scripts/verify.ps1`.
+Award native RaiseSkill only for completed normal/fast climb distance, on the
+owner. Preserve sub-metre unawarded distance across mounts within the same
+character/world session; clear on logout/change. Native learned level and
+within-level XP use native persistence. Threshold reads learned level >=20,
+not effective buffs or an unlock flag. Death can relock slide under native
+settings; test exact installed behavior instead of inventing a percentage.
 
-Tests link game-free production code into net10.0. They can prove geometry and
-state decisions. They do not prove Unity collision execution, shader references,
-current private method signatures, network synchronization or animation output.
-Do not create large invented game stubs to turn those unknowns into a green build.
+## Presentation and networking
 
-Package only the mod's own DLL, README, CHANGELOG, LICENSE and original icon. The
-`.r2z` installs dependency references only; DLLs are rejected by the supported
-profile importer. Import/build/deploy are separate checked steps.
+The existing walking-parameter path is fallback. Inspect actual rig, controller,
+other animation modifications and Unity version before attempting original
+in-place clips or procedural limb movement. Prefer a scoped per-player override
+or a proven controller/clip Playables blend. Actual movement drives phase and
+cadence; no visual root motion controls travel. Restore only resources/state
+owned by this mod and respect later takeovers. Keep equipment intact.
 
-## Explicitly deferred
+Local Unity playback does not establish observer behavior. Document how the
+observer identifies mode/face and clears stale presentation. Prefer sufficient
+verified native replicated state. Independently review any minimal new
+presentation-only protocol before integration: owner validation, finite/bounded
+values, expiry, late join and disconnect cleanup. No remote movement authority,
+per-frame movement RPCs or persistent player-ZDO keys. Dedicated servers must
+not require graphical asset operations. Observers never spend stamina or XP.
 
-Bone appearance, authored animation/IK, sound polish, NPC traversal, moving
-structures, hatches, rope ladders, extra sizes, custom skills, stamina tuning,
-deep late-game progression and full Foreman motor arbitration. These must not
-delay a reliable test of the three requested pieces.
+If no sound custom animation can be completed, document the concrete inspected
+limitation/attempt or failed prototype, retain tested walking and use
+`CUSTOM_ANIMATION_DEFERRED`. This is the sole optional requested feature.
 
-## Verified external sources (2026-10-24)
+## Restoration, build and evidence
 
-- [Jotunn 2.30.2 changelog](https://github.com/Valheim-Modding/Jotunn/blob/v2.30.2/CHANGELOG.md)
-- [PieceConfig](https://github.com/Valheim-Modding/Jotunn/blob/v2.30.2/JotunnLib/Configs/PieceConfig.cs)
-- [CustomPiece](https://github.com/Valheim-Modding/Jotunn/blob/v2.30.2/JotunnLib/Entities/CustomPiece.cs)
-- [Piece registration tutorial](https://valheim-modding.github.io/Jotunn/tutorials/pieces.html)
-- [Network compatibility](https://valheim-modding.github.io/Jotunn/tutorials/networkcompatibility.html)
-- [Material names](https://github.com/Valheim-Modding/Jotunn/blob/v2.30.2/JotunnLib/Documentation/data/prefabs/material-list.md)
-- [BepInExPack publisher](https://thunderstore.io/c/valheim/p/denikson/BepInExPack_Valheim/)
-- [Jotunn publisher](https://thunderstore.io/c/valheim/p/ValheimModding/Jotunn/)
-- [r2modman profile import source](https://github.com/ebkr/r2modmanPlus/blob/9776867fff5411048a17bca3e9e7e34779737e56/src/utils/ProfileUtils.ts)
+Check ownership before every physics, pose, stamina and XP write. Death,
+teleport, external control, destruction, movement/rotation, invalid view,
+disabled climbing, unload, world switch and exceptions release safely. Restore
+only modified state; do not replay old velocity or overwrite another controller.
+Keep ordinary fall behavior, non-climbing play and other products unchanged.
 
-Primary-source use of game APIs informs the candidate; only the local licensed
-build establishes their current compatibility. No third-party ladder source is
-copied into this product.
+Compile against actual licensed installed assemblies and pinned dependencies
+under the machine-wide lock. Pure tests prove policy, not Unity execution.
+Test the regression that fails under the old policy before accepting the new
+one; avoid fake engine stubs and implementation-mirroring assertions.
+
+Freeze source/version, package, run the final full verify, compare exact bytes,
+manager-import the ZIP, cold-start and test it. The candidate verifier checks
+package/verified DLL/active plugins/current log/source/version/Downloads copy;
+`IDENTITY_MATCH_ONLY` explicitly has `gameplayVerified=false` and
+`binaryProvenanceVerified=false`; the log SHA is a claim, not binary attestation.
+Controlled build evidence and separate gameplay rows are required. Prefer owned assets embedded in the DLL. Loose assets must
+be declared, packaged, hashed and verified in the installed profile too; extend
+the current strict six-file checker first. Its restriction alone does not defer
+the requested animation investigation.
+
+See [TEST_PLAN.md](TEST_PLAN.md) for the final command and gates. No public release,
+tag or main merge is authorized by this architecture document.
+
+## Primary API references and limits
+
+- [SkillConfig v2.30.2](https://github.com/Valheim-Modding/Jotunn/blob/v2.30.2/JotunnLib/Configs/SkillConfig.cs)
+- [SkillManager v2.30.2](https://github.com/Valheim-Modding/Jotunn/blob/v2.30.2/JotunnLib/Managers/SkillManager.cs)
+- [InputManager v2.30.2](https://github.com/Valheim-Modding/Jotunn/blob/v2.30.2/JotunnLib/Managers/InputManager.cs)
+- [KeyHintManager v2.30.2](https://github.com/Valheim-Modding/Jotunn/blob/v2.30.2/JotunnLib/Managers/KeyHintManager.cs)
+- [Generated English tokens](https://github.com/Valheim-Modding/Jotunn/blob/v2.30.2/JotunnLib/Documentation/data/localization/translations/English.md)
+- [Unity AnimatorOverrideController](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/AnimatorOverrideController.html)
+- [Unity AnimationClip.SetCurve](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/AnimationClip.SetCurve.html)
+
+Generated Jotunn input/localization tables may describe older game versions.
+Check native formatter/control signatures locally. Runtime SetCurve supports
+legacy clips, not arbitrary new non-legacy Animator curves. These references
+establish API/design constraints; they are not current Valheim rig or network
+compatibility evidence.

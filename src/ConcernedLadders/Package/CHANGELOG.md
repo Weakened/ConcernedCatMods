@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Correct visible piece names to Wood Ladder, Copper Ladder and Iron Ladder;
+  stable prefab IDs and localization keys are unchanged. Source correction
+  only until the next verified candidate is built and tested.
+- Reconcile the owner feedback contract and package identity checks. The
+  requested movement/progression revision is still pending implementation;
+  this entry does not claim those gameplay changes are complete.
+
 ## 0.1.1
 
 - Owner-test candidate built against Valheim 1.0.20, BepInExPack 5.4.2351 and

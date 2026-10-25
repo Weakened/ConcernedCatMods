@@ -1,7 +1,37 @@
 # Concerned Ladders: isolated profile and deployment
 
-**Work item:** CL-003. **Product:** Concerned Ladders 0.1.1.
+**Work item:** CL-003. **Product:** Concerned Ladders; 0.1.1 is historical.
 **Profile:** `TCC-Ladders-Dev`. **Plugin:** `com.theconcernedcat.valheim.concernedladders`.
+
+## Current owner handoff: exact ZIP import is required
+
+The existing profile has already been created and used. Inspect and reuse the
+actual `TCC-Ladders-Dev` profile; do not create another copy just to follow the
+initial setup instructions below. The active feature contract is
+[OWNER_REVISION_2026_10_25.md](OWNER_REVISION_2026_10_25.md), with current status
+in [STATUS.md](STATUS.md). The earlier 0.1.1 tests do not satisfy that revision.
+
+For the final owner candidate, complete the revised implementation, freeze a
+new numeric version and full source SHA, package under the existing build lock,
+then run final full `verify.ps1`. Match the packaged DLL to that verified output;
+if needed, repackage the verified bytes without another build.
+
+Use the manager's **Import local mod from file** with the actual mod ZIP. The
+`.r2z` below is only for dependency-profile import and must not be imported as
+a local mod. Resolve this mod's known manual/managed duplicates first, backing
+up any known manual DLL outside all active `plugins` directories. Leave other
+profiles, saves, and unknown files intact.
+
+After **Start modded**, use `tools/verify_ladders_candidate.py` with the exact
+package, final verified DLL, observed profile plugins directory, fresh game log,
+full source SHA, numeric version and actual Downloads ZIP copy. Its
+`IDENTITY_MATCH_ONLY` result is a byte/log consistency check, not gameplay
+approval. The new behavior matrix and independent review are separate required
+gates. See its `--help` for the argument contract and limits.
+
+Sections 1–4 below describe initial dependency setup and the optional loose-DLL
+development workflow. A loose-DLL deployment receipt is not the final ZIP
+installation evidence and must never substitute for the sequence above.
 
 ## What is prepared, and what is still local work
 

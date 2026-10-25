@@ -1,169 +1,207 @@
-# Codex prompt — independent review, pieces and visual quality
+# Codex continuation prompt — independent scope, runtime and package review
 
-Paste this complete prompt into Codex on the development machine. Run alongside
-the Claude integration lead with disjoint worktrees and explicit file ownership.
+Paste this complete prompt into the existing local review session.
 
 ---
 
-You are the independent reviewer and presentation/build-piece engineer for
-**Concerned Ladders** in `Weakened/ConcernedCatMods`. The owner wants wall-placed
-vertical wood, copper and iron ladders, smooth traversal, optional genuine climb
-animation with walking accepted as fallback, and a separate ready-to-run
-Thunderstore profile. They want the implementing agents to find ordinary defects
-before asking them for another test cycle.
+Continue Concerned Ladders in `Weakened/ConcernedCatMods`. Claude integrates the
+owner revision and prepares the new tested ZIP. Your default is independent
+read-only review. Do not race the lead in source, builds, manager or game.
+Fixes require an agreed allowlist in a separate worktree and lead integration.
+Use isolated subagents for bounded reviews if helpful. Only the lead operates
+Valheim and imports packages; actual product builds use the existing lock.
 
-## Read and coordinate first
+## 1. Establish the current candidate and actual acceptance contract
 
-Read `AGENTS.md`, `CLAUDE.md`, `docs/NAMING_CONVENTIONS.md`, and the complete
-`docs/mods/concerned-ladders/` spec/test/status/profile documents. Inspect the
-actual candidate source; do not start another ladder PoC. Foreman's old ladder
-code was audited and its unobserved gates are not proof of this product. The
-current request permits an independent product and new material pieces.
+Read AGENTS.md, CLAUDE.md, naming conventions and this product's PROJECT,
+OWNER_REVISION_2026_10_25, ARCHITECTURE, TEST_PLAN and current STATUS. These
+explicitly replace the old supported-only/no-stamina/no-skill scope. Do not
+reject new behavior because an obsolete test required every falling grab to
+fail. Historical results live in STATUS_0_1_1_HISTORICAL and are not new passes.
 
-Confirm the lead's candidate SHA and file ownership. Use a dedicated worktree
-outside the canonical integration tree. You may use subagents for bounded
-read-only audits or disjoint code tasks, one writer per worktree. The lead alone
-integrates, serializes game-dependent builds, deploys and operates Valheim. Do
-not run competing publicizers or change a profile while the lead is testing.
-Preserve all existing profiles, saves, owner changes and the protected
-`Prepare-TCC-Screenshot-Profile.ps1`.
+Reconcile current local root, branch/full SHA/dirty work and lead ownership.
+The reported path was `C:\code\cc-integration\cl-ladders`; inspect it rather than
+resetting to an old bundle. Audited PR #433 head
+ce6bb7f7ac7b9862b35090baeed61b8ece39a825 only changes STATUS after tested product
+7e4e7357359ce9329e4274aec186740cddfea87e. Two different 0.1.1 ZIPs were reported.
+Neither an old NO P0/P1 nor a 0.1.1 filename identifies today's installed bytes.
+Keep unknown local source/ZIP/profile identity unverified until observed.
 
-Your default edit allowlist is `src/ConcernedLadders/Pieces/**` plus explicitly
-agreed piece/presentation tests and documentation corrections. Runtime motor
-changes belong to the lead or their assigned worker. Report a necessary
-out-of-allowlist change as a precise proposed diff; do not race another writer.
-Do not edit solution/CI/package pins or another product without coordination.
+Before a defect verdict, build a coverage table mapping every current request
+to implementation, production-policy tests and actual new game evidence.
+**Missing requested mechanics are NO_GO, not accepted P2s or optional polish.**
+A name-only patch, new log line or updated specification cannot fulfill them.
 
-## Workstream A — independent runtime review
+## 2. Verify every current feature
 
-Review the exact candidate before the live test. Identify defects with a file,
-path/condition, likely consequence and minimal corrective action. Distinguish
-confirmed source defects from hypotheses that need the installed game.
+- **Reach and air admission:** initial 1.5 m capsule-relative chest-to-usable-rung
+  maximum, not camera/prefab distance. First two latest photos are range
+  reproductions, not measured metres. Same hint/admission predicate, native
+  interaction priority, optional bounded ladder-only 45-degree assistance.
+  Fresh Use supports rising/falling; 0.25 m vertical/1 m horizontal alignment,
+  legitimate low-rung hang without endpoint hoist. LOS AND full capsule route
+  before all physics/fall/pose/stamina/XP writes. Failed catch is inert;
+  successful catch arrests its fall once. No global interaction/fall change.
+- **Both faces:** chosen approach face is locked; stand-off derives independently
+  from each real collider face. The old box at z=.08.. .24 is asymmetric. Pure
+  negative-plane admission is not proof: audited runtime routes it to front
+  through its own box. Require a same-face lane fix, not message suppression or
+  blanket ladder-collider exclusions. Camera cannot flip sides; mixed seams
+  need compatible physical lanes, no gaps/overlaps/parallel shortcuts.
+- **Space jump and usable floors:** upward plus camera-relative movement-directed
+  departure, including onto a side platform; neutral outward. Native force,
+  cost and modifiers once in every attached mode, no fake grounding or lost
+  next-tick impulse. Zero stamina deliberately releases. All ladders require
+  0.4 s plus fresh Use, Jump beats stale Use. Independently require a reliable
+  next-floor walk-off without Jump: early lip planning, bounded destinations,
+  full room/inboard footprint support and continuous swept-route revalidation.
+  A real closed roof/hatch must still block with responsive controls.
+- **Truthful reason:** building-blocked wording requires an actual other blocking
+  native Piece identified by the relevant query, not own connected ladder,
+  a Piece behind the clear face, range failure or no landing. Terrain/actors
+  still physically block and receive appropriate reasons; unknown/overflow
+  fails safely with neutral feedback. Reject a text-only repair masking the
+  wrong mount lane or removal of collision to make the error disappear.
+- **Run and accounting:** native processed Run/remap/controller/hold-toggle;
+  normal 1.8, fast 2.43 at base 6 stamina/s, learned level 20 down+Run slide 4.5 at base 2/s.
+  Below level 20 down+Run fast-descends. Neutral/Run-release/reverse brake predictably;
+  exhaustion returns to normal/hold. Mode speed reaches actual motion, no old
+  clamp charging for an absent boost. Native cost once from actual eligible
+  distance/full-input mode speed; one pre-budgeted bounded pending step settles
+  before the next paid step or voluntary Use/Jump, before jump affordability.
+  No blocked/hold/overlay/failed-grab/mount/exit cost, teleport credit, double
+  multiplier or writes after ownership loss; analog cost per metre consistent.
+- **Native skill:** stable ID
+  `com.theconcernedcat.valheim.concernedladders.climbing`, registered in Awake
+  even with climb disabled. Store AddSkill return, read actual learned native
+  level; SkillManager.GetSkill is a definition. `IncreaseStep=1`, native RaiseSkill
+  factor 0.25 per completed normal/fast metre, owner only. Fractions carry across
+  mounts in one character/world session and clear at logout/change. No XP from
+  hold/block/catch/slide/mount/exit/fall/correction/spam. Native UI/save/within-
+  level progress/death/protection/settings; no second save or production level
+  assignments. Learned 19.99/20.00/>20 and loss-below level 20 relock, not effective buff
+  or remembered unlock. Linear 0..25% fast/slide stamina saving over 0..100.
+- **Names and snapping:** Wood Ladder, Copper Ladder, Iron Ladder in all three
+  hammer/hover/repair surfaces, permanent IDs unchanged. Native snap panel,
+  modes/cycling/coordinates/bindings stay; localized Top/Bottom/corners, no raw
+  snap_bottom_left/$ tokens. Inspect actual formatter, no double-prefix guess
+  or whole-panel replacement. New hints/reasons localized, old no-midair text
+  removed only alongside actual new behavior.
+- **Animation:** inspect actual rig/controller/pipeline and an original in-place
+  or scoped procedural attempt with real limb motion, actual-travel cadence,
+  equipment integrity and restoration. Walking parameters are fallback, not
+  custom animation. A concrete inspected/attempted blocker or failed prototype
+  plus tested walking may be CUSTOM_ANIMATION_DEFERRED. Only this feature is
+  conditional. Existing packaging limits must be extended for needed owned
+  assets; they are not an excuse to skip the feasibility attempt.
 
-Review these boundaries:
+## 3. Audit the difficult runtime boundaries
 
-1. Only the current locally owned player can enter and remain controlled.
-   Check ownership before pose writes as well as physics writes. No shared
-   per-ladder anchor, remote-player mutation or ownership claim.
-2. Endpoint chains cover the complete loaded run, including ten mixed sections;
-   no initial small-radius truncation. Opposite sides, parallel shafts, gaps,
-   overlaps and differently rotated modules cannot join accidentally. Bounds and
-   nonfinite data fail safely without random neighbor selection.
-3. Mount and every movement/transfer stage sweep the actual capsule. Account for
-   radius, height, centre, scale and the authored ladder front face. Do not use
-   destination-only clearance or ignore a whole building's colliders. Own body
-   colliders are excluded; other actors and walls are not.
-4. Interact while attached seeks safe supported ground or stays attached;
-   Jump deliberately releases. Dangling bottom holds. Returning from a midspan
-   exit returns to that height, not the run's top. Removing a platform during
-   a transfer is revalidated.
-5. Menus/chat/map/controller/remapping feed no stale movement. Climbing direction
-   is consistent even as the camera turns. Input is consumed only while this
-   controller owns a valid session. Native binding failures refuse mounting.
-6. Death, teleport, world unload, invalid piece, disabled setting, exception and
-   ownership loss release control. State restoration does not overwrite an
-   external controller's new velocity/animation or leave gravity disabled.
-   Fall handling cannot create immunity or allow falling grabs to erase damage.
-7. Foreman motor detection is explicit and safe; no other mod is unpatched,
-   disabled or globally reconfigured. Idle hooks preserve ordinary gameplay.
-8. Error text uses the repository scrubber. Diagnostics are bounded and explain
-   action; no per-frame logs or machine paths. Registry entries clear on unload.
+Confirm each bug in current source before calling it fixed. Owner screenshots
+show layouts/messages, not a proven collision-free route or measured distance.
+Require positive valid-lip/rear-face/air-catch cases beside real roof/wall/
+range/occupied-route negatives. General collision bypass is never a fix.
 
-Known initial review defects were corrected in the supplied candidate: capsule
-offset overlapped the ladder, safe Interact was a freefall release, bottom
-departure ignored footing, failed clone registration retried an already cached
-ID, and midspan reversal selected the wrong height. Verify the corrections remain
-present; do not report historical code as the current implementation.
+Check local ownership BEFORE motion, pose, stamina and XP. Failed binding leaves
+pieces registered and native movement usable. Death/teleport/changed owner/
+destroyed or rotated piece/disabled setting/unload/logout/exception must clear
+sessions and pending accounting without rewriting an external controller.
+No remote actor, NPC or another product acquires this motor.
 
-Deliver a compact P0/P1/P2 report. A clean source review is not a gameplay PASS.
+Trace input order end to end. Native Interact plus assisted targeting must not
+dispatch Use twice. Jump wins simultaneous input, current Run survives native
+motion suppression, overlays stop intent. Controller/toggle works through real
+current actions, not a keyboard GetButton assumption. Idle hooks preserve
+native doors/chests/combat/build controls and ordinary ladders/stairs.
 
-## Workstream B — exact building-piece quality
+Inspect actual capsule centre/radius/scale and asymmetric ladder collision,
+allowed rotations, below-bottom hanging, headroom, footprint support, changing
+routes, actor blocking and full query buffers. Bounds cannot silently truncate
+a run or choose a random neighbor. No per-frame world scans/unbounded allocation.
 
-Read the current Jotunn 2.30.2 source/API where needed. The normal wooden-wall
-prefab is `woodwall`, not `wood_wall`; metal donor is `woodiron_pole`. Current
-build-menu usage tags are explicit. Keep the three permanent custom IDs:
-`tcc_ladder_wood`, `tcc_ladder_copper`, `tcc_ladder_iron`.
+Review jump's airborne guard, impulse handoff and exactly-once native payment.
+Successful catch changes fall accounting only after acceptance; failed catch is
+inert and later departure has normal fall semantics. Verify jump toward the
+camera-relative requested side platform, not only neutral outward release.
 
-Verify or improve the supplied original 2 m rails/rungs while preserving the
-geometry contract: 0.8 m width, bottom `(0,0,0)`, top `(0,2,0)`, open face +Z,
-matching rung pitch and `FrontFaceDepth` derived from actual collision. Do not
-quietly resize visuals without updating the motor clearance contract and tests.
+Audit observed displacement settlement, maximum effective budget and stale-step
+cleanup under long frames, collision, zero stamina, voluntary release and lost
+ownership. An intentional completed step cannot become free via an immediate
+Jump, but lost ownership cannot cause a remote write. Native learned level,
+not a definition/buff, gates slide. Do not claim native save/death behavior from
+Jotunn source alone; inspect/test the actual installed game.
 
-Keep the normal hammer workflow, costs (Wood4; Copper2+Wood1; Iron2+Wood1), native
-workbench/forge requirements, material discovery, ward checks, repair/demolition
-and support. Initial health is Wood200/Copper400/Iron800; metal donors retain
-their documented iron support class. These are design values, not claims about
-vanilla ladders. Do not replace existing stairs or change every native ladder.
+For custom animation inspect original ownership/license, runtime asset loading,
+per-character override/graph, no root-motion travel, restoration and observer
+presentation. Local playback is not network proof. Independently review any
+minimal presentation-only protocol before integration: owner validation,
+finite/bounded values, stale expiry, late join, disconnect; no remote movement,
+per-frame motor RPCs or persistent player-ZDO keys. Observers award no XP/cost.
 
-Inspect prefab lifecycle carefully: clone under the inactive Jotunn parent;
-do not instantiate a live world piece then strip it. Change the clone only.
-Remove donor visual/LOD/collider/snap children and repair all real descendant
-references; never invent unknown cache fields. Bind new/worn/damaged visual
-roots, keep collision independent of their visibility, and preserve appropriate
-vanilla structural logic/effects. Direct-child `snappoint` transforms must give
-useful wall and end-to-end snaps at normal rotations.
+## 4. Demand evidence that distinguishes the old candidate
 
-Use loaded material references by verified name, copied before modification.
-The donor may include snow/LOD/effects materials; its first renderer is not a
-safe selection rule. Don't tint shared native material instances, export game
-assets, or import another mod's GPL implementation casually. Materials must look
-coherent in daylight/night/rain and damage states. The initial runtime geometry
-is a functional art pass, not a claim of final visual approval.
+Inspect the active T03/T04/T17 expectations and R01–R35. Preserve useful original
+A/B/L/P/M checks. Tests must prove legal airborne/same-face behavior, not only
+assert existing constants; retain negative ownership/overlay/cooldown/collision/
+nonfinite cases. Old unsupported/falling-negative tests must be replaced where
+they conflict. Do not accept engine stubs or large unrelated test totals as a
+compiled/gameplay proof. Full Python mutation tests run separately in an
+isolated checkout; mandatory verify.ps1 uses actual licensed references.
 
-Stable piece registration must survive a cosmetic icon render/cache error.
-Keep a fallback icon, emit a useful diagnostic and fail the visual acceptance
-row until repaired; don't make the world lose its prefab because a thumbnail
-couldn't render. A partial actual prefab registration failure is terminal for
-that session and must be reported, not retried with a new save ID.
+Require measured reach, rising/falling catches and failed grab, twenty floor
+loops, all jump modes/zero stamina/remount, both faces, ten mixed seams, native
+interaction/remaps/controller/toggle, timed speed/stamina/XP, natural skill
+progress/save/death/isolation,19.99/20/relock, slide braking, readable snaps,
+all cleanup and current package import. Mark missing observations NOT RUN or
+BLOCKED, never PASS. Only custom animation can be conditionally DEFERRED.
 
-Ask the lead to run B01–B12 and the relevant P rows with your build. Inspect real
-screenshots/video and logs. A Unity asset viewer render is not in-game evidence.
+Inspect six final-version video segments in the owner's order: measured photo
+reach approaches; actual Space hop onto a side platform plus separate top-floor
+walk-off; rising/falling air catches and inert failed catch; Title Case names in
+hammer/hover/repair; both faces and correct building vs own-ladder/behind-face/
+range/terrain/actor reasons; every native Cycle Snap label/mode/binding.
+Also require sprint, skill/level-20 slide and actual animation or fallback evidence. A still or PNG named .gif proves no motion.
 
-## Workstream C — animation within the agreed scope
+Report defects with severity, source location, condition, consequence and minimal
+repair. Separate confirmed bugs from hypotheses/unrun tests. Review the repaired
+head, not an older diff. Do not let an old PASS survive a changed requirement.
 
-Begin by checking the existing walking fallback, on local and remote avatars.
-Movement should drive the cycle; neutral should hold still; reverse should read
-coherently; entry/exit/death must restore normal locomotion. Equipment must not
-vanish, duplicate, or remain stuck. A standing slide or unchanging idle is not
-the promised walking fallback and needs correction or an explicit limitation.
+## 5. Verify exact package identity, then issue the verdict
 
-Only after traversal works, investigate a more natural original climbing loop
-or procedural pose. Inspect the actual humanoid rig and legal asset pipeline.
-If a new clip is practical, specify/import it through the appropriate Unity
-asset bundle, document authorship/license, isolate its animator override, phase
-it from actual climb distance, blend in/out, and retain walking as fallback.
-If it is not practical, finish with the owner-accepted walking fallback. Do not
-block a usable ladder mod on perfect IK, add a heavy mandatory animation
-framework, rip a game clip, or trigger attack/emote gameplay events as a trick.
+The new feature version is >=0.2.0 and strictly newer than reconciled local work.
+GUID/assembly/package/prefab/skill identities remain permanent. Version metadata,
+changelog and manifest agree. Root metadata, own DLL under plugins, no outer
+wrapper/game/dependency/other-product binaries/source bundle/saves/credentials.
+Prefer owned assets embedded in DLL; any loose assets need explicit packaging,
+identity-gate extension and hash/install coverage. Do not quietly omit them.
 
-Bones are optional later visual variety. Do not add later-game spoiler materials,
-boss unlocks, custom skills, extra resources or broad progression changes.
+Verify sequence: freeze -> package (rebuild) -> full verify -> compare DLL ->
+repackage verified bytes without rebuild if needed -> manager-import exact ZIP
+-> cold-start -> final gameplay evidence. Exactly one active own DLL/GUID and
+expected dependencies; no loose development copy beside managed import. `.r2z`
+is a dependency profile file, not the local mod ZIP. Preserve unrelated profiles.
 
-## Workstream D — evidence, review and completion
+Inspect the actual Windows Downloads Known Folder and identical tested ZIP copy.
+Run/review `tools/verify_ladders_candidate.py` with all seven observed arguments:
+--package, --verified-dll, --plugins, --game-log, --source-commit (full 40-character build
+SHA), --version and --downloads-copy. Python 3.11+ and the strict six-file package
+contract apply; extend the verifier first for necessary loose assets. See
+TEST_PLAN for the PowerShell command.
+Success is IDENTITY_MATCH_ONLY, gameplayVerified=false and
+binaryProvenanceVerified=false. It checks identity consistency, not requested
+behavior or compiler provenance. Require the real controlled build record and
+fresh one-startup full-SHA log; a fabricated banner is not evidence. Record the
+tested build SHA separately from a later docs-only commit. Reject old/same-version
+confusion, stale logs, duplicate plugins, mismatched bytes or unverified assets.
 
-Run the relevant pure tests and validator. Coordinate any required licensed build
-with the lead's machine-wide lock. Review the actual final diff after your fixes;
-don't cite a review of an older head. Validate native API changes against the
-installed assemblies rather than letting fabricated test stubs bless them.
+Your verdict names exact reviewed source SHA, version and package SHA256:
+GO_FOR_OWNER_SOLO_TEST, GO_FOR_RELEASE_REVIEW or NO_GO. Required missing mechanics
+mean NO_GO. A genuinely unavailable controller or real network endpoint may be
+explicitly BLOCKED for solo testing; release review requires actual network/
+dedicated rows. Conditional animation fallback must be documented. Identity
+success and source-only review never become a gameplay PASS.
 
-For each visual/traversal defect, provide a minimal disposable-course repro,
-expected/observed result and exact candidate SHA/hash. The lead runs the full
-matrix, including keyboard/controller, closed top, removed platform, ten-section
-stack, death, reload and network roles. Help classify what really ran. Mark a
-missing second client BLOCKED; don't infer multiplayer from local code.
-
-Do not change test criteria to match a flawed implementation. If an effect cannot
-be observed with current access, record it and keep completing independent code
-work. Do not repeatedly ask the owner to check basic placement or movement while
-the implementing agents still have the tools to do so.
-
-Your final handoff to the lead contains: base/head SHA, allowlisted changed files,
-specific defects fixed, exact checks/results, remaining verified limitations,
-screenshots/video references actually captured, and a short owner visual-review
-list. It must say whether the actual plugin was built and run. No claim of
-profile installation, multiplayer support or release readiness without evidence.
-
-The lead integrates and prepares the final candidate. No public release,
-Thunderstore publication, tags, main merge or unrelated cleanup from your
-workstream. Continue to completion of your assigned tasks with subagents where
-useful, preserving the independent-product and one-writer boundaries.
+Keep reviewing concrete repairs until accessible gates are complete. No public
+publication, tag or main merge. The lead must return the exact reinstallable
+ZIP in actual Downloads, evidence and at most four preference checks for the
+owner; build/import/basic regression remain the agents' work.

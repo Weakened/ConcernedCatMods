@@ -1,5 +1,13 @@
 # CL-002 independent review and piece handoff
 
+**Historical review of the original candidate.** The source IDs and findings
+below describe that earlier scope. For the owner's later air-grab, real-jump,
+two-face, stamina/skill and snap revision, use
+[OWNER_REVISION_2026_10_25.md](OWNER_REVISION_2026_10_25.md), the current
+[TEST_PLAN.md](TEST_PLAN.md) and [STATUS.md](STATUS.md). This earlier review
+cannot establish acceptance of those new requirements. Its original evidence
+is retained below without being promoted into a current PASS.
+
 Reviewed 2026-10-25. Local work item CL-002 from the owner's handoff; this is not a GitHub issue number.
 
 **Source review complete; gameplay acceptance remains unobserved.** No confirmed P0/P1 was established in this review. One runtime P2 remains for the lead. The actual plugin was not built or run in this lane. No profile was installed or changed, no save was opened, and no screenshots or video were captured.

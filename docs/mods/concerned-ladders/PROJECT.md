@@ -1,214 +1,270 @@
-# Concerned Ladders — specification v0.1
+# Concerned Ladders — active owner revision, 2026-10-25
 
-Owner request: Eren, 2026-10-24. Source baseline: `89ce8b68e05c4494e5d14165482eca8d2486c786`.
-Status: development source candidate; see `STATUS.md` for evidence, not this specification.
+**Specification, not an implementation or playtest claim.** Current readiness is
+in [STATUS.md](STATUS.md). This contract includes the owner's playtest changes
+and later clarifications in [OWNER_REVISION_2026_10_25.md](OWNER_REVISION_2026_10_25.md).
+It replaces the previous ground-only, single-face, no-stamina/no-skill scope.
+The previous 0.1.1 results are [historical evidence](STATUS_0_1_1_HISTORICAL.md).
 
-## 1. Player outcome
+## 1. Player outcome and fixed scope
 
-Build a compact vertical route beside a wall using ordinary hammer placement.
-Approach from a supported landing, interact, climb continuously up or down,
-stop, reverse, and step onto a real landing without being teleported through
-the floor or wall. Wood, copper and iron are the required materials. A natural
-climbing animation is desirable; ordinary locomotion is an accepted fallback.
+Build compact vertical routes using **Wood Ladder**, **Copper Ladder** and
+**Iron Ladder**, placed with the normal hammer. Deliberately grab from a landing
+or while rising/falling, climb on either physically clear face, hold, reverse,
+walk onto a usable floor, or jump toward a nearby platform. Run makes climbing
+faster and spends stamina. A native Climbing skill progresses through use;
+controlled downward sliding unlocks at current learned level 20.
 
-The feature is an independent product in ConcernedCatMods. It does not depend
-on the settlement/NPC mods, and the owner can test it in a separate Thunderstore
-profile. The last release/test step is an actual disposable-world run.
+Attempt a genuine climbing animation. A tested walking fallback is permitted
+only after a documented feasibility attempt; label it honestly. Snap labels,
+key hints and obstruction messages must be readable and match actual reasons.
+The agents complete accessible regression tests and prepare a new importable
+ZIP before asking the owner for preference feedback.
 
-## 2. Decisions fixed for this candidate
+Do not add bones, more materials, wall/cliff climbing, NPC traversal, carts,
+ships, moving platforms or a general animation framework in this revision.
+Keep other Concerned Cat products independent and existing profiles unchanged.
 
-| ID | Decision |
+## 2. Identity, version and building
+
+| Item | Permanent contract |
 |---|---|
-| D01 | Product name Concerned Ladders, version 0.1.0, independent DLL/GUID/package. |
-| D02 | Three 2 m modules: wood, copper, iron. Same geometry and climb speed. |
-| D03 | Hammer placement, native material discovery/cost/station/ward/support/repair/refund. |
-| D04 | Explicit Interact mount. No auto-mount in the initial candidate. |
-| D05 | Forward/backward or remapped controller input climbs; neutral holds; camera remains free. |
-| D06 | Interact requests a safe landing; Jump deliberately releases. No blocked-exit teleport. |
-| D07 | 1.8 m/s climb speed, no stamina charge and no climbing skill for this candidate. |
-| D08 | Reuse BCL-only Shared/Ladders primitives; new narrow adapter for custom pieces. |
-| D09 | Walking locomotion fallback first. No claim of authored climbing/IK until implemented and observed. |
-| D10 | No NPC/carts/ships/moving-platform traversal in this work. No wall/cliff climbing. |
-| D11 | All participants, including a dedicated server, need the same candidate. Exact patch version check for alpha. |
-| D12 | Initial clean profile excludes Foreman. If its legacy ladder motor is present, refuse mounting with an explanation. |
-| D13 | Bones are a later optional wood-and-bone appearance, not an additional blocker or progression requirement. |
-| D14 | BepInExPack 5.4.2351 and Jotunn 2.30.2 are the new product's pins; preserve other products' pins. |
-| D15 | No publishing, tagging, main merge or ready-to-run claim without the required evidence. |
-
-All values above are design choices, not assertions about native Valheim values.
-Late-game material/biome/boss names are not needed in owner-facing instructions.
-
-## 3. Identity and persistence
-
-| Item | Contract |
-|---|---|
-| Source | `src/ConcernedLadders/` |
+| Product / source | Concerned Ladders / `src/ConcernedLadders/` |
 | Assembly | `TheConcernedCat.ConcernedLadders.dll` |
 | Plugin GUID | `com.theconcernedcat.valheim.concernedladders` |
-| Thunderstore | `TheConcernedCat-ConcernedLadders` |
+| Thunderstore package | `TheConcernedCat-ConcernedLadders` |
 | Prefabs | `tcc_ladder_wood`, `tcc_ladder_copper`, `tcc_ladder_iron` |
-| Clean development profile | `TCC-Ladders-Dev` |
-| Config | BepInEx's plugin-GUID `.cfg`; `General/ClimbingEnabled=true` |
-| Native saves | Ordinary custom build pieces; no climb sessions persisted into a save |
+| Climbing skill identifier | `com.theconcernedcat.valheim.concernedladders.climbing` |
+| Test profile | `TCC-Ladders-Dev` |
+| Climb setting | BepInEx plugin-GUID config, `General/ClimbingEnabled` |
 
-Prefab IDs are permanent after the first public placement. Never rename them to
-clean up code. Changing the climb setting must keep the prefab registration
-active. An unavailable climb adapter should leave the piece identifiable and
-removable. No hidden custom RPC, no network authority takeover and no new keys
-written into a vanilla player ZDO are part of this candidate.
+Use **0.2.0 or a newer appropriate numeric version**, strictly newer than the
+existing local candidate. Do not reuse 0.1.1: two different 0.1.1 ZIPs were
+reported previously. Synchronize plugin constant, project, TOML, generated
+manifest, assembly metadata and changelog. This document does not change them.
 
-Unlike Foreman's historical vanilla-piece idea, these are custom world objects.
-Removing the mod can remove its pieces when a world is loaded/saved. Document
-backup and removal with the mod still installed. Test only in disposable worlds;
-do not open or edit the owner's real world or character files.
-
-## 4. Building and artwork acceptance
-
-| Variant | Resources per section | Station | Initial health | Structural donor |
+| Visible name | Resources per 2 m section | Station | Health | Structural donor |
 |---|---|---|---:|---|
-| Wood | 4 Wood | Workbench | 200 | `woodwall` |
-| Copper | 2 Copper + 1 Wood | Forge | 400 | `woodiron_pole` |
-| Iron | 2 Iron + 1 Wood | Forge | 800 | `woodiron_pole` |
+| Wood Ladder | 4 Wood | Workbench | 200 | `woodwall` |
+| Copper Ladder | 2 Copper + 1 Wood | Forge | 400 | `woodiron_pole` |
+| Iron Ladder | 2 Iron + 1 Wood | Forge | 800 | `woodiron_pole` |
 
-Copper and iron intentionally inherit the iron pole's support behavior. The
-donor's ordinary support/decay logic is retained; no guessed Copper material enum
-or infinite support. These costs/health values can be tuned only after a concrete
-test shows a problem; they are not copied vanilla balance claims.
+Preserve native discovery, costs, wards, support, wear, repair and refunds.
+Both metal variants retain the iron-pole support class. Preserve saved prefab
+identities and geometry: 2 m span, 0.8 m visible width, one-third-metre rung
+pitch, endpoints `(0,0,0)` and `(0,2,0)`, and six native snap transforms.
+Collision stays outside the three durability visual groups. Existing original
+runtime geometry and copied materials remain the art baseline.
 
-Geometry: 2 m vertical span, 0.8 m visible width, fixed local endpoints `(0,0,0)`
-and `(0,2,0)`, open climb face local +Z. Rails stand off the wall; rung pitch is
-one third of a metre. The motor's actual capsule clearance determines the player
-offset. The physical shape and visual silhouette must align at every rotation.
+Current product pins are BepInExPack Valheim 5.4.2351 and Jotunn 2.30.2. Recheck
+the installed game before compiling; historical tests used Valheim 1.0.20 /
+Unity 6000.0.75. Preserve other products' pins. Register pieces and the skill
+even when climbing is off. Climb sessions are transient. Removing the mod can
+remove its pieces when a world is saved; use disposable worlds/characters.
 
-Six direct-child native `snappoint` transforms cover top/bottom centres and the
-four corners of the native 2 m wall grid. Verify their actual usefulness and
-remove a misleading snap only with a recorded placement reproduction. A snap
-must not accidentally attach a run through a wall or rotated face.
+## 3. Controls and initial balance
 
-Meshes are original runtime-created rails/rungs. Materials are referenced from
-loaded donors by known names, then copied before modification. Three durability
-visual groups are wired to WearNTear; collision must remain outside groups that
-are switched on/off. No copied game meshes, textures, animation clips or DLLs are
-shipped. This is a functional first art pass; its appearance is not owner-approved.
+These are design defaults, not measurements from photographs or claims about
+vanilla balance. Keep them in one policy surface; record measured tuning.
 
-Requirements B01–B08:
+| Action / parameter | Required behavior / default |
+|---|---|
+| Fresh Use / Interact | Mount or catch a reachable selected ladder; never auto-catch |
+| Use while attached | Swept exit to safe standing ground, or hold with a reason |
+| Forward / backward / neutral | Up / down / hold, independent of camera pitch |
+| Jump (default Space) | Real upward and directed departure when native jump conditions permit |
+| Run + movement | Fast climb; native binding, default Shift, including controller/toggle |
+| Backward + Run, learned level < 20 | Fast descent |
+| Backward + Run, learned level >= 20 | Controlled slide |
+| Normal / fast / slide speeds | 1.8 / 2.43 / 4.5 m/s at full input |
+| Fast / slide base stamina rate | 6 / 2 units per second of actual eligible travel |
+| Normal climb / hold | No additional mod stamina charge |
+| Skill stamina saving | Linear 0..25% at learned levels 0..100, fast/slide only |
+| Grab reach | Initial 1.5 m chest-to-usable-rung maximum, measured in game |
+| Air alignment limits | 1.0 m horizontal and 0.25 m vertical body adjustment |
+| Post-jump remount | At least 0.4 s across all these ladders AND a fresh Use edge |
+| Skill XP | Native RaiseSkill factor 0.25 per completed eligible metre; IncreaseStep 1 |
 
-1. Three unique readable hammer entries with correct icon, name and cost.
-2. Supported wall placement and rotation at native build increments.
-3. Two and ten stacked segments connect without seams; mixed materials work.
-4. Invalid support/collision and forbidden ward placements remain invalid.
-5. Real materials are charged once, repair works, dismantling refunds once.
-6. New/worn/damaged visuals never resurrect a donor wall or invisible collider.
-7. One cold start and world A → menu → world B do not duplicate registration.
-8. Save/reload and zone reload preserve the same pieces and prefab identities.
+Use processed game actions, current remaps and native hold/toggle sprint.
+Pause intent under chat, console, map, inventory and menus. Resolve input once:
+one Use press must not mount and immediately dismount; Jump takes precedence
+when Use and Jump arrive together.
 
-## 5. Traverse acceptance
+## 4. Reach, midair catch and both faces
 
-### Mount
+Measure from a stable capsule-relative chest/grip point to the nearest usable
+rung span, including authored offsets. Use the same eligibility for hints and
+final mount. The first two latest photos establish a reach complaint, not a
+measured distance. Recreate those approaches and record actual dimensions
+before accepting or adjusting the initial 1.5 m limit.
 
-Interact is deliberate and distance-limited. The player must be locally owned,
-alive, available for normal movement, outside construction/teleport/attach
-takeover, and standing on support. A grounded intermediate landing is allowed.
-Mid-air ladder catches are excluded from this version. A whole-capsule sweep
-must establish a clear route onto the climb line. Never pull a player through a
-wall, lock them into a ceiling, or snap them to the far end.
+Native targeting wins. Any assistance is limited to our registered ladders,
+inside the reach envelope and a maximum 45-degree aim cone, ranked
+predictably. Preserve nearer doors/chests/actors and construction controls.
+Do not increase global interaction range or scan every world object per frame.
 
-### Climb and hold
+Allow deliberate Use while rising or falling. Check ownership, available
+control, reach, line of sight and the full capsule route **before** changing
+velocity, gravity, fall reference, pose, stamina or XP. Rejected grabs change
+none of those. A successful catch arrests the existing fall once; departure
+then uses ordinary falling from the actual release height.
 
-The local player's processed movement actions drive vertical intent; camera yaw
-and pitch do not reverse the meaning of forward/back. Remapped keyboard and
-controller must both be tested. Neutral holds; reverse immediately changes
-direction; no gravity creep at rest. Menus/chat/map/inventory pause climb intent.
-Movement uses one owner and one bounded motor path. Colliders remain enabled.
+Keep air alignment within its separate limits. Allow reachable low-rung
+hanging using the real grip height/capsule; do not hoist feet to the module
+bottom or create invisible downward ladder length. Unsupported bottom limits
+hold. After Jump, held Use or an adjacent ladder cannot bypass cooldown/fresh
+edge. Busy/dead/teleporting/attached/debug-flight/overlay states remain gated;
+airborne state alone is not a refusal.
 
-Only exactly aligned, touching endpoint neighbors form a run. Nearby parallel
-ladders, opposite wall faces, gaps and turned modules do not connect. The initial
-run search must include the whole loaded chain, not just a small sphere at the
-foot. The runtime caps pathological chains and reports a refusal instead of
-continuing onto unknown geometry.
+Prefer and lock the approach face. Derive each face's stand-off from its actual
+collider surface and capsule radius/skin; the original collider is asymmetric,
+so negating the front offset is insufficient. Route to the **same face**.
+The audited rear bug accepted negative-plane feet in the pure policy but
+routed them to the front, crossing the ladder box. Fix that lane selection;
+do not merely hide the message or broadly ignore the ladder's collision.
+A freestanding ladder works on both faces. A wall blocks only the obstructed
+route; never pull through it or switch sides with the camera. Mixed-material
+seams need compatible physical lanes. Reject gaps, overlaps, incompatible
+rotations and parallel-shaft shortcuts.
 
-### Exit
+## 5. Jump and usable floor exits
 
-At a supported top: rise enough to clear the ledge, then cross into a validated
-standing destination through a clear path. Test headroom, floor lip and side
-railings. Destination-only overlap is insufficient. At a blocked top, remain
-attached and explain; descending and intentional release remain available.
+Space/Jump must visibly hop upward and toward the intended departure direction,
+including toward a side platform. Resolve movement relative to the horizontal
+camera view; neutral departure uses the selected face's outward direction.
+Keep collision enabled. Check an immediately blocked direction before any
+fallback; native physics owns the arc. Integrate native jump force, stamina
+and modifiers once through a verified adapter. Do not fake global grounding
+or let the next ladder/vanilla motor tick erase the impulse.
 
-At the bottom, require real support and capsule clearance. At an intermediate
-landing, Interact may leave only through a safe checked transition. Jump is a
-deliberate release, followed by ordinary falling and fall damage. Missing or
-destroyed ladder/platform releases the player safely; it never grants immunity.
+Jump works while mounting, holding, normal/fast climbing, sliding and exiting.
+At insufficient native jump stamina it still deliberately releases with
+ordinary gravity. Settle preceding climb stamina before jump affordability;
+never charge two jumps or trap an exhausted player.
 
-Revalidate the path during a multi-frame exit. A platform removed or placed
-during the transfer cannot leave a player floating or embedded.
+A correctly placed ladder also allows walking onto the next floor without
+Jump. Plan before the head hits a lip. Search bounded plausible floor heights
+and inboard destinations; require full standing room, footprint support and
+a swept clearance/rise/cross/settle route. Revalidate every stage. The normal
+up/onto-floor/walk-away/return/down loop must work without precision timing.
+Test thin/thick lips, both clear faces, rotations and intermediate landings.
+A closed roof/hatch/railing still blocks; reverse, safe Use and Jump remain
+responsive. Removed support is never retained as an invisible foothold.
 
-### Lifecycle and ownership
+## 6. Truthful obstruction feedback
 
-Requirements T01–T12:
+An error blaming **another building piece** is allowed only when the relevant
+query identifies an actual blocking native `Piece` other than the selected
+ladder/its connected run. Record blocker identity and query stage in bounded
+diagnostics. A piece behind the usable face, the ladder's own collider,
+distance failure or missing support is not that reason.
 
-1. Mount, ascend, hold, reverse, descend, both end exits, middle-landing exit.
-2. Smooth mount/transfer with no endpoint teleport.
-3. Continuous 10-section and mixed-material climbs.
-4. Closed ceilings, walls, doors/hatches and occupied landings block traversal.
-5. Proper local player ZNetView ownership; no other body movement.
-6. Destruction, removal, piece movement/rotation, unload and invalid network view release.
-7. Death, respawn, teleport, logout, world switch and plugin cleanup restore control.
-8. The pre-existing gravity/physics/animation state is restored deliberately;
-   do not blindly enable another system's disabled collider.
-9. Ordinary fall tracking after let-go; no mid-air re-mount exploit.
-10. Two simultaneous climbers never share mutable anchor/session state.
-11. No motor ownership conflict with Foreman; don't unpatch third-party code.
-12. Exceptions restore control and log a useful bounded diagnostic, without
-    raw local filesystem paths or per-frame spam.
+Terrain and actors still physically block unsafe routes; give appropriate
+terrain/occupied-path/general-clearance feedback without falsely blaming a
+building. Unknown classification or query overflow refuses safely with a
+neutral reason. Do not remove collision to eliminate an error. Localize
+separate reach, unavailable-control, obstructed-path and no-landing messages.
+Retire obsolete midair-unavailable text and repeated message spam.
 
-## 6. Animation and sound
+## 7. Stamina, skill and level-20 slide
 
-The acceptance baseline is the existing walking cycle: motion while moving,
-idle while holding, coherent direction/speed on reversal, no T-pose and no stuck
-animation after release. Observer clients must see coherent movement. The normal
-camera, equipment, emotes, attacks and movement must recover after traversal.
+Select mode from current input, **current learned** level and native stamina.
+Release movement to hold; release Run for normal descent; reverse to leave
+slide immediately. Exhaustion falls back to normal climb/hold, never forced
+detachment. Apply speed through planning and actual motion; the old 1.8 m/s
+clamp must not cancel the boost while stamina is charged.
 
-A custom loop is optional after traversal passes. If implemented, author an
-original clip or use a legally permitted asset, document provenance, isolate it
-to this player's climb state, match phase to real climb distance, blend in/out,
-and retain the tested walk fallback. Never use an attack animation with gameplay
-events, replace every player's controller globally, or present IK as complete
-without an in-game recording. Do not add a large animation dependency by default.
+Charge once for observed eligible distance divided by full-input mode speed,
+so analog input has consistent cost per metre. Budget maximum effective cost
+before issuing a paid step. Keep one bounded pending step and settle actual
+displacement once before another paid step or voluntary Use/Jump. Ownership
+loss discards pending state without a remote write. Apply native world/status
+multipliers once. No charge for blockage, holds, overlays, failed grabs or
+mount/exit alignment; teleports/knockback are not climbing distance.
 
-## 7. Multiplayer and compatibility
+Register the stable skill in plugin Awake using Jotunn `SkillConfig`:
+`Identifier` as above, `$cl_skill_climbing`, `$cl_skill_climbing_description`,
+an original readable icon, `IncreaseStep=1`. Store `AddSkill`'s returned
+`Skills.SkillType`; `SkillManager.GetSkill` returns a definition, not progress.
+Read the player's native learned level; do not assign levels in production.
+Use native skill UI, notifications, character save/load and death loss,
+protection and world settings. No parallel save or fixed death-loss percentage.
+Verify actual installed-game behavior on disposable characters.
 
-Custom pieces use native build placement/network persistence and Jotunn's
-network compatibility policy. The owner of each player's body drives only that
-body. The piece owner is not the authority to move another player's character.
-No ladder reservation, inventory transfer or shared per-ladder attachment point.
+Award native RaiseSkill once on the owner for actual normal/fast climb travel.
+Carry unawarded fractional metres across ordinary mounts within one character/
+world session; clear at logout or character/world change. No XP from holding,
+blocking, catch, slide, jump/fall, mount/exit, correction or button spam. Native
+earned within-level progress must survive normal save/load; transient
+unawarded distance need not survive a full exit.
 
-Test host and client separately, then both climbing, then late join, destruction,
-disconnect/rejoin and world restart. A second player blocking the route may
-cause a safe hold; no ghosting through that player. Dedicated-server behavior
-needs its own run. Missing or mismatched mod must produce a clear compatibility
-failure, not an unknown-prefab world or silent unmodded join.
+Slide requires learned level >=20.00, not a buffed level or past unlock. Test
+19.99, 20.00 and above; native loss below 20 relocks subsequent slides. Bound
+scaling to 0..100 and reject nonfinite input. No slide XP or base-speed skill
+bonus. Saving without the mod is not promised to retain unknown skills.
 
-Foreman's historical ladder hooks remain untouched. The initial safe coexistence
-policy detects its Harmony motor owner and refuses this mod's mount. Turning
-Foreman's ladder feature off and restarting is the supported interim remedy.
-Future arbitration is a separate bounded follow-up, not permission to globally
-disable or remove Foreman.
+## 8. Names, snapping and animation
 
-## 8. Evidence and handoff
+Use **Wood Ladder**, **Copper Ladder**, **Iron Ladder** in all current English
+display surfaces: hammer, hover and repair text. Preserve prefab IDs and
+translation keys. Other languages use proper localized equivalents.
 
-The local continuation agents use `CLAUDE_PROMPT.md`, `CODEX_PROMPT.md`,
-`ARCHITECTURE.md`, `TEST_PLAN.md`, and `PROFILE_SETUP.md` together. They may use
-subagents in isolated worktrees. The lead alone integrates, builds against the
-game under the existing machine-wide lock, installs and operates the test game.
+Preserve native hammer panel, snap modes, cycling, transforms and bound-key
+hints. Inspect the current formatter first. Use native Top/Bottom and native
+or product-localized corner labels; never expose `snap_bottom_left` or raw
+`$` tokens. Fix the narrow label integration, not the entire panel. Localize
+new skill/action/blocked hints too.
 
-GitHub issue and branch creation were refused by the integration (HTTP 403), so CL-001–003
-are local work-item identifiers, not invented issue numbers. Create/link real
-issues when authorized GitHub write access is available. Do not claim this source
-is on main until it is observed there.
+Inspect the installed rig/controller and compatible Unity asset pipeline.
+Attempt original in-place climb/hold/slide/transfer clips or scoped procedural
+limb animation. Phase/cadence follows actual signed travel. Physics owns
+movement; equipment stays intact. Overrides are per character and restore
+only our state on every exit/takeover. Prefer embedded owned assets; loose
+assets need package/hash/install coverage and extension of the current strict
+six-file verifier before they can pass its gate. That tooling change is not a
+reason by itself to defer animation. No extracted game assets ship.
 
-Ready for owner testing requires a real successful `scripts/verify.ps1` summary,
-exact source commit and DLL/package SHA256, installed dependency versions, the
-separate profile selected, an observed clean game load, and the critical single-
-player matrix completed by the implementing agent. Mark every unrun row. A pure
-math test, syntax check, running process, generated profile archive, or successful
-file copy is not evidence of a working game.
+Observer presentation needs a verified path; local playback alone does not
+replicate. Prefer sufficient existing replicated state. Necessary new
+presentation-only sync needs a documented independent design review, owner
+validation, bounded values and stale/late-join cleanup before integration.
+No remote motor authority, per-frame movement RPCs or persistent player-ZDO
+keys. If sound custom animation cannot be completed, record the concrete
+inspection/attempt or failed prototype, retain the tested walk fallback and
+mark `CUSTOM_ANIMATION_DEFERRED`. This never waives the required mechanics.
+
+## 9. Lifecycle, multiplayer and completion
+
+One locally owned player has one temporary session. Check ownership before
+physics, pose, stamina and XP writes. Destruction, moved/invalid pieces, death,
+teleport, lost ownership, logout, world switch, disabled climbing and exceptions
+restore control without overwriting another controller's new state. Preserve
+ordinary fall damage, idle vanilla play, bounded queries and bounded logging.
+
+All clients/server require the same candidate under product compatibility.
+Test host/client, simultaneous/opposite-face use, occupied routes, late join,
+reconnect, removal, restart, mismatch and dedicated operation. Missing real
+endpoints are BLOCKED. Foreman's legacy motor remains an explicit conflict
+refusal; do not unpatch or silently reconfigure it.
+
+Continue the actual local branch after reconciling dirty work and
+PR [#433](https://github.com/Weakened/ConcernedCatMods/pull/433), linked to issues
+[#430](https://github.com/Weakened/ConcernedCatMods/issues/430),
+[#431](https://github.com/Weakened/ConcernedCatMods/issues/431) and
+[#432](https://github.com/Weakened/ConcernedCatMods/issues/432). Separate worker
+worktrees are allowed; the lead alone integrates, builds under the existing
+lock, installs and operates Valheim. Never reset ongoing work to an old bundle.
+
+Follow [TEST_PLAN.md](TEST_PLAN.md): applicable A/B/T/L/P and R01–R35 before
+owner solo readiness, plus actual M/network rows before release review.
+Historical PASS rows do not transfer. Source review, artifact identity and
+gameplay are separate gates. `IDENTITY_MATCH_ONLY` with
+`gameplayVerified=false` and `binaryProvenanceVerified=false` are neither
+gameplay acceptance nor proof of which source compiled the DLL. Import the new mod ZIP,
+not the `.r2z` dependency profile.
+
+Return full source SHA, new version, verified/package/installed DLL hashes,
+current-profile startup fingerprint, final evidence, and the identical tested
+ZIP in the actual Windows Downloads Known Folder. No public publishing,
+release tag or main merge. Final status is `READY_FOR_OWNER_SOLO_TEST`,
+`READY_FOR_RELEASE_REVIEW` or `NOT_READY` with explicit remaining rows.

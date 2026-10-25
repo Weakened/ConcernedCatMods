@@ -1,187 +1,216 @@
-# Claude Code prompt — local integration, build and playable candidate
+# Claude continuation prompt — implement the owner revision and prove its ZIP
 
-Paste this complete prompt into Claude Code on BLD. Read it through before taking
-actions. It continues the supplied source candidate; it is not a request to start
-a second ladder implementation.
+Paste this complete prompt into the existing local integration session.
 
 ---
 
-You are the local integration lead for **Concerned Ladders**, an independent
-Valheim mod in `Weakened/ConcernedCatMods`. The owner wants real vertical ladders
-placed with the hammer like walls, in wood, copper and iron, with a genuine
-climb loop if practical and regular walking animation as an accepted fallback.
-They want a dedicated Thunderstore profile with dependencies installed and the
-candidate ready to run. They specifically want detailed execution and testing
-that avoids repeatedly handing obvious failures back to them.
+Continue our Concerned Ladders work in `Weakened/ConcernedCatMods`. Implement
+and verify the active owner revision; do not return another unchanged 0.1.1
+candidate or only a plan. You own integration, licensed builds, manager imports
+and game operation. Codex independently checks the current source and evidence.
+Use subagents where useful, with isolated worktrees and explicit file ownership.
+Never let two writers share a tree or run competing publicizer/build jobs.
 
-## Authority and operating rules
+## 1. Reconcile real state and scope before changing it
 
-The owner has authorized implementation, a new isolated development profile,
-dependency installation into that profile, and preparation/testing of the game
-there. Proceed through those reversible steps autonomously. Use only a newly
-created disposable character and world. Do not operate on real saves or change
-existing profiles. No Thunderstore publication, public release, tags, billing,
-global game reinstall, or broad cleanup is authorized by this task.
+Read AGENTS.md, CLAUDE.md, docs/NAMING_CONVENTIONS.md and this product's PROJECT,
+OWNER_REVISION_2026_10_25, ARCHITECTURE, TEST_PLAN and active STATUS. The owner
+revision replaces ground-only, single-face and no-stamina/no-skill rules.
+STATUS_0_1_1_HISTORICAL is evidence about the old scope, not current acceptance.
 
-Read `AGENTS.md`, `CLAUDE.md`, `docs/NAMING_CONVENTIONS.md`, then every document in
-`docs/mods/concerned-ladders/`. The current brief supersedes the older Foreman
-ladder scope: this is a new product with custom wood/copper/iron pieces. It does
-not authorize rebuilding NPC/settlement systems or silently changing shipped
-product identities. Preserve `Prepare-TCC-Screenshot-Profile.ps1` exactly.
+The reported working folder is `C:\code\cc-integration\cl-ladders`. Verify actual
+root, branch, full SHA, dirty work and worktree list; preserve work newer than
+the remote audit. Do not reset to an old source bundle or move the checkout to
+satisfy an obsolete path example. Inspect PR #433 and issues #430–432. The
+audited head ce6bb7f7ac7b9862b35090baeed61b8ece39a825 differs from tested build
+7e4e7357359ce9329e4274aec186740cddfea87e only in STATUS. Two different 0.1.1 ZIPs
+were reported. A matching filename/version or old NO P0/P1 is not new behavior.
 
-You may use subagents. Give each a finite task, separate worktree and file
-allowlist. Only you integrate, run product builds, deploy or operate Valheim.
-Never let two agents write the same tree. Keep a visible named console or
-readable progress log for this run, and update `STATUS.md` after each meaningful
-checkpoint. A PID is not proof of progress or a working game.
+Record the actual active TCC-Ladders-Dev profile, installed own DLL/hash, imported
+ZIP/hash, loaded plugin/version/source, Valheim/Unity and dependency versions.
+Unknown package/installation identity stays unknown. Do not ask the owner for
+paths discoverable locally. Do not retry a device service's explicit quota
+block; use your existing authorized local tools and finish accessible work.
 
-## Phase 0 — recover exactly what is already done
+Keep this independent product's GUID, DLL/package/prefab IDs and existing world
+geometry. Preserve other products, profiles, saves and the protected screenshot
+profile script. BepInExPack 5.4.2351/Jotunn 2.30.2 were the historical verified
+pins; recheck the current installed game, preserve other products' versions.
 
-1. Canonical checkout is `C:\code\ConcernedCatMods`. Inspect repo root, current
-   branch, dirty/untracked files, remote, recent commits and worktrees. Preserve
-   owner edits and other running jobs. Do not reset, clean, overwrite, stash-pop,
-   delete worktrees, or merge unrelated PRs.
-2. The cloud source baseline was
-   `89ce8b68e05c4494e5d14165482eca8d2486c786`. The supplied source candidate has
-   original custom-piece registration, new traversal adapters, pure tests,
-   package metadata, CI wiring, profile generator and deployment script. Read
-   the supplied status/manifest and import this work before writing replacements.
-3. If the feature branch is accessible on origin, fetch and inspect it. Otherwise
-   import the supplied Git bundle into a uniquely named local branch, or apply
-   the supplied patch after `git apply --check` in an isolated worktree. The
-   source ZIP is a review copy, not a reason to overwrite the canonical checkout.
-   If main advanced, reconcile only the feature's files in your worktree.
-4. CL-001, CL-002 and CL-003 are local work-item keys. The cloud GitHub connector
-   refused issue and branch creation with HTTP 403; they are not real issue numbers. If
-   your authorized local GitHub connection can write, create the small issue set
-   from `PROJECT.md`; otherwise keep accurate local tracking and continue.
-5. Current device status must be observed locally. The previous ChatGPT session
-   could read GitHub but Desktop Commander was paused by its monthly usage
-   allowance. Do not retry a known service limit, reconnect, change billing or
-   bypass it. A local CLI run uses its normal authorized local access.
+## 2. Implement the required mechanics
 
-Deliver this phase: source head and dirty status, active worker roles, actual
-Valheim install/version/build, manager/version/data path, and a short task graph.
-Do not ask the owner for paths that can be discovered read-only.
+**Reach and air catch.** Fresh Use can mount on support or catch while rising/
+falling. Initial reach is 1.5 m from capsule-relative chest to the nearest usable
+rung span, not camera or prefab origin. The first two latest photos are range
+reproductions, not metre measurements; recreate and measure them. Hints and
+final Use share eligibility. Native targeting wins; optional ladder-only
+assistance stays within reach/45-degree cone and cannot steal doors/chests/
+actors/building input. No global interaction-range change or per-frame world
+scan. Air alignment stays within 1.0 m horizontal/0.25 m vertical; implement real
+low-rung hanging without feet-clamp hoisting. Prove LOS, full capsule route and
+room before changing physics/fall/pose/stamina/XP. Failed catches change none
+of those; a successful catch arrests that fall once. Later departure falls
+normally. Keep ownership/busy/overlay/nonfinite gates.
 
-## Phase 1 — verify APIs and get an honest product build
+**Both physical faces and truthful reasons.** Select and lock the approach
+face and route onto that same face. At the audited source the pure policy
+accepts negative-plane feet but runtime aims at the front, sweeping through its
+own ladder box. Fix the lane, not only its message. Derive rear/front stand-off
+from each actual collider surface; old local z=.08.. .24 is asymmetric. Do not
+generally ignore ladder colliders, cross walls or flip faces with camera yaw.
+Keep mixed-stack lanes compatible; reject real gaps/overlaps/parallel shortcuts.
+A building-specific blocked error is legal only when the relevant query finds
+an actual other blocking native Piece. Own connected ladder, a piece behind a
+clear face, excessive range and absent support are different reasons. Terrain
+and actors still physically obstruct; classify them truthfully. Unknown/query-
+overflow cases refuse safely with a neutral reason. Localize bounded feedback.
 
-1. Inspect the installed licensed Valheim assemblies and current native method
-   signatures. Check Character.UpdateMotion(float), Character.Jump(bool),
-   Player.TakeInput(), m_moveDir, m_maxAirAltitude, ZNetView ownership, collider
-   shape, Rigidbody.linearVelocity, ZSyncAnimation floats, and every Piece/
-   WearNTear field used by the new registration. Keep private API access behind
-   `Runtime/LadderMotor.cs` or another narrow existing adapter.
-2. New product dependencies are **BepInExPack Valheim 5.4.2351** and **Jotunn
-   2.30.2**. These were verified as publisher releases, not tested against your
-   installation. Jotunn 2.30.x contains Valheim 1.0 menu changes; the old repo's
-   2.29.2 pin is not evidence that it suits this product. Preserve other products'
-   package pins. If current installed APIs require a change, document the exact
-   evidence and update this product's NuGet/package/profile pins together.
-3. Complete Phase 2 steps 1–2 first when the new dependency profile is needed
-   for the build. Verify its installed versions before choosing references.
-   Use the current private `Environment.props` according to the repo's workflow;
-   copy it into the feature worktree without committing it. Bind the worktree's
-   required references to the intended test setup. Never retarget another
-   product's deployment path or expose local account paths/tokens in a PR.
-4. Product builds must use the existing machine-wide build lock described in
-   `docs/settlement/cart-and-collection/TASKS.md`. Inspect that lock's path and
-   implementation; do not create competing publicizer jobs. Pure tests may run
-   independently. Run the real `scripts/verify.ps1`, which builds all product
-   assemblies, tests those outputs, and validates the repo.
-5. Fix actual API/compile errors within this feature; do not fabricate game
-   stubs, suppress compiler errors, skip product projects, change acceptance
-   criteria, or quote a bare `dotnet test` as a successful plugin build. A
-   pre-existing unrelated build failure must be isolated and reported honestly.
+**Real Space hop and floor exits.** Jump from mounting, hold, normal/fast climb,
+slide and exit transfer must have an upward component plus camera-relative
+movement-directed departure, including toward a side platform. Neutral defaults
+outward. Use actual installed native jump force/cost/modifiers once; inspect
+forced/airborne semantics so the call is not silently refused. Never fake global
+grounding or let the next tick erase the impulse. Settle previous climbing cost
+before affordability. Zero stamina still deliberately releases. All ladders
+require 0.4 s AND a new Use edge before remount; Jump wins simultaneous inputs.
+Separately make the next-floor walk-off reliable without Jump. Plan before the
+head reaches a lip, search bounded plausible landings, require full standing
+room/inboard footprint support and sweep clearance/rise/cross/settle. Revalidate
+every stage. Real roofs/hatches/railings block with responsive reverse/Use/Jump.
 
-Deliver this phase: successful real Release verify summary or exact blocker,
-API audit notes, source SHA and focused independent review of corrections.
+**Run, stamina and slide.** Read current processed Run intent with remaps,
+controller and native hold/toggle, not raw Shift or a stale running flag after
+motion suppression. Normal speed 1.8 m/s, fast 1.35x=2.43 at base 6 stamina/s.
+Down+Run below learned level 20 fast-descends; at >=20 it slides at 2.5x=4.5 at base 2/s.
+Release movement to hold, release Run for normal descent, reverse immediately.
+Exhaustion returns to normal/hold, never forces a fall. Remove the old 1.8 clamp
+from both planning and applied mode speed; mount/exit alignment stays ordinary.
+Pay native stamina once for observed eligible distance/full-input mode speed.
+Pre-budget maximum effective cost, allow one pending step, settle once before
+the next paid step or voluntary Use/Jump and before jump affordability. Apply
+native multipliers once; discard pending state on ownership loss without remote
+writes. No hold/blocked/overlay/failed-grab/mount/exit charge. Teleport/knockback
+is not climbing distance. Analog cost per metre must remain consistent.
 
-## Phase 2 — install one separate profile
+**Native skill.** Register in Awake regardless of climb toggle, permanent ID
+`com.theconcernedcat.valheim.concernedladders.climbing`, localized name/description,
+original readable icon, `IncreaseStep=1`. Keep AddSkill's returned Skills.SkillType;
+SkillManager.GetSkill is a definition, not learned progress. Native RaiseSkill
+factor 0.25 per completed normal/fast metre, owner only. Carry unawarded fractions
+across mounts in one character/world session; clear at logout/character/world
+change. No XP for hold/block/catch/slide/mount/exit/fall/correction/input spam.
+Native UI/save/load/death/protection/world settings; no second save, production
+level assignments or hardcoded death-loss percent. Current learned level 20 unlocks,
+loss below level 20 relocks. Linear 0..25% stamina saving over learned0..100 for fast/
+slide only. Verify natural first progress and native within-level persistence;
+transient unawarded distance need not survive a full exit.
 
-1. Run `python tools/prepare_ladders_profile.py`. Its `.r2z` contains dependency
-   references only. Import through Thunderstore Mod Manager's supported **new
-   profile** flow, selecting Valheim and `TCC-Ladders-Dev`. Inspect the imported
-   profile name/path and installed package versions. Do not hand-author manager
-   `mods.yml`, assume a cache exists, or import the unpublished ladder package
-   from a nonexistent online listing.
-2. Existing profiles must remain untouched. If this exact profile already
-   exists, inspect whether it is this task's clean candidate; preserve unknown
-   content and choose a clearly separate new test profile only with matching
-   explicit tooling changes. Never delete a profile to force the script green.
-3. The `.r2z` cannot carry this unpublished mod DLL: the supported importer
-   rejects DLLs/scripts. Build/package the mod locally. Run
-   `scripts/deploy-ladders-profile.ps1 -WhatIf` with the real profile path,
-   successful verify log, full source commit and exact own-DLL SHA256. Resolve
-   any duplicate/wrong-version/unrelated-plugin findings without mass deletion.
-4. After preflight passes, deploy the same bytes. Preserve an existing candidate
-   through the script's explicit replacement/backup route. Record its receipt.
-   `DEPLOYED_NOT_LAUNCHED` means exactly that, not ready to run.
-5. Configure the disposable save/test setup through supported manager options.
-   A mod profile does not isolate Valheim saves. If using `-savedir`, verify
-   current local/cloud save behavior; do not assume it hides real characters.
-6. Launch with this profile's **Start modded** or its manager-generated shortcut.
-   Do not invent a hardcoded Doorstop launch line; installed loader versions use
-   different arguments. Confirm the live loader log includes the expected own
-   assembly, version/commit and all three registered custom prefab IDs.
+**Names and snap UI.** All current English hammer/hover/repair names must be
+Wood Ladder, Copper Ladder and Iron Ladder. Retain any already-integrated source
+fix and verify all three surfaces in game. Preserve IDs. Inspect actual native
+snap formatter before changing labels; use native Top/Bottom plus localized
+corners, current bindings and existing panel/mode/cycling. No snap_bottom_left
+or raw $ token; do not replace the entire hint UI. Retire midair-unavailable
+feedback; separate range, genuine blockage, control and no-landing reasons.
 
-Deliver this phase: exact profile path/name, dependency inventory, candidate
-hash, startup log and visible successful menu/world load. If launch is blocked,
-report the exact last completed state, such as `DEPLOYED_NOT_LAUNCHED` when the
-copy succeeded, and finish independent work. Do not claim launch or readiness.
+**Conditional animation.** Inspect actual rig/controller and compatible Unity
+pipeline. Attempt original in-place clips or a scoped procedural limb solution:
+climb/hold/reverse/fast/slide/transfer, actual-travel cadence, equipment intact,
+per-player state and complete restoration. Walking-speed parameters alone are
+fallback. Runtime SetCurve does not author arbitrary non-legacy Animator clips.
+Prefer embedded owned assets; loose assets need packaging/hash coverage. Prove
+observer presentation; local playback does not automatically replicate. Any
+necessary minimal presentation-only sync needs documented independent review,
+owner validation/bounds/stale cleanup, no remote motor or persistent player-ZDO
+keys. If a sound solution cannot be completed, document concrete inspected
+blockers/attempt or failed prototype, keep tested walking and mark
+CUSTOM_ANIMATION_DEFERRED. Other requested mechanics remain required.
 
-## Phase 3 — repair through the acceptance matrix
+## 3. Implement, review and test in that order
 
-Execute `TEST_PLAN.md`. You, not the owner, perform the initial regression pass.
-Build the repeatable disposable tower course and record test IDs and evidence.
+Repair reach/face/jump/floor/blocker behavior first; then stamina/skill/slide,
+labels and animation attempt. Use narrow verified native adapters and existing
+production policy seams. Replace obsolete unsupported/falling rejection tests
+with legal airborne positives and blocked negatives; preserve ownership,
+overlay, cooldown, nonfinite and lifecycle protections. Add meaningful tests
+that reject the old behavior, not fake game stubs or self-fulfilling assertions.
 
-The must-work behaviors are: three material pieces; ordinary cost/station/ward/
-support rules; 2 m wall placement; two/ten-section mixed stacks; deliberate
-grounded mounting; up/down/neutral/reverse; top/bottom/intermediate landing entry
-and exit; blocked ceilings/doors/floor lips; ordinary fall after Jump; remapped
-keyboard and controller; menu/chat pause; destruction/teleport/death/reload
-cleanup; normal stairs/combat after leaving; valid save/reload identities.
+Request Codex review of the exact repaired source with requirement coverage,
+not only a generic bug verdict. Fix actual findings and obtain review of the
+new head. Source review does not substitute for running the plugin.
 
-For each defect, give the review agent a concrete repro and bounded source
-allowlist, integrate one correction, rerun the failed case and adjacent safety
-cases. Never solve clipping by disabling all collision, teleporting through
-walls, changing global player movement, or granting fall immunity. Never replace
-all source with a new climbing framework because one hook needs correction.
+Use disposable character/world/course. Profile isolation does not isolate
+native saves. Turn off cheats before stamina, fall, collision and natural skill
+observations. Execute applicable original A/B/T/L/P/M gates and R01–R35 in
+TEST_PLAN. Include 20 floor loops, all Jump modes/zero stamina/side platform,
+both clear faces, measured reach/rising/falling/failed catches, input priority,
+mixed seams, fast/slide speed and cost, native skill persistence/death/isolation,
+19.99/20 threshold/relock, snap text and every cleanup. Never carry an old PASS
+forward without applicable evidence. Real controller/network unavailable means
+BLOCKED with a reason; complete accessible work, do not invent a substitute.
 
-Run host/client and dedicated tests with legitimate available endpoints, including
-two simultaneous climbers, late join, destruction and mismatched versions. If a
-second endpoint is unavailable, mark those rows BLOCKED; solo/replication-source
-inspection is not a substitute. Do not publish with a fabricated network pass.
+Record the six latest-note video segments in the owner's order: measured photo
+reach approaches; actual upward/directed Space hop plus the separate top-floor
+walk-off; rising/falling midair catches and inert failed catch; Title Case names
+in hammer/hover/repair; both faces with truthful building vs own-ladder/behind-
+face/range/terrain/actor reasons; every native Cycle Snap label/mode/binding.
+Add earlier sprint/skill/level-20 slide and animation evidence. Stills,
+old clips or a PNG named .gif do not prove new movement.
 
-Foreman is deliberately absent from the clean profile. In a separate compatibility
-profile, verify the explicit conflict refusal, then Foreman ladders disabled and
-restart. Do not unpatch Foreman or silently rewrite its config.
+## 4. Freeze, package and prove the installed bytes
 
-## Phase 4 — presentation, freeze and handoff
+Choose >=0.2.0, strictly newer than the reconciled local candidate. Synchronize
+all version fields and release notes without changing permanent identities.
+Freeze clean source before final evidence. Run validator and focused production
+tests, the full Python suite separately in an isolated checkout, and mandatory
+full scripts/verify.ps1 with real licensed references. The existing lock was
+`C:\code\concernedcat-handoffs\2026-09-17-gunnar-thorstein-work\with-build-lock.ps1`;
+inspect its actual parameters and current path. Do not invent a competing lock.
 
-Coordinate with Codex using `CODEX_PROMPT.md`. The accepted minimum is the walking
-cycle: moves with actual climb, holds still, reverses coherently, restores after
-exit, and is visible coherently to an observer. Original authored animation is
-optional after movement works; it must not delay a reliable ladder candidate.
-No ripped clip or broad animator replacement. Bones remain optional follow-up.
+package.ps1 rebuilds: package ConcernedLadders under the lock, then FINAL full
+verify. Compare ZIP-entry DLL to verified DLL; if different, package those
+verified bytes through existing tcli/reproducible ZIP tools without rebuilding.
+Metadata belongs at ZIP root, own DLL under plugins; only declared owned assets
+beyond it. No wrapper/source bundle/game/dependency/other-product DLLs or saves.
 
-Freeze and commit the final source. Under the build lock, run
-`scripts/package.ps1 -Product ConcernedLadders` first: that script rebuilds.
-Then run the mandatory full `scripts/verify.ps1` and capture a fresh log.
-Compare the package's own DLL SHA256 with the final verified DLL. If they differ,
-package the verified bytes with the existing `tcli build` invocation and
-`tools/reproducible_zip.py` without another product rebuild, then compare again.
-Deploy exactly the verified DLL and complete the decisive smoke after deployment.
-Do not rebuild silently after recording evidence. Keep public publication and
-main merge separate from the candidate's test readiness.
+Import that exact ZIP through the manager's Import local mod from file in the
+observed TCC-Ladders-Dev. `.r2z` is a dependency profile archive, never this mod.
+Resolve only known own duplicates with supported manager operations or backups
+outside every active plugins tree. Do not hand-edit mods.yml/delete profiles.
+Start modded, observe one new version/full source fingerprint, and run final
+regression on those bytes. No post-test DLL replacement or rebuild silently.
 
-Final response to the owner must contain: exact source/branch/PR if actually
-created; what works with observed evidence; exact profile and how to start it;
-DLL/package paths and hashes; complete checks and remaining unrun rows; and no
-more than four short visual checks for the owner. Include video of mount →
-climb → hold → reverse → safe exit and at least one blocked top. Never describe
-an unfinished profile or source-only candidate as ready to run.
+Resolve the actual Windows Downloads Known Folder, including redirection, and
+copy the tested ZIP there. With variables set from observed existing files and
+the frozen full 40-character build SHA, run the read-only additional identity gate:
 
-Continue autonomously through normal fixes and local testing. Ask a question
-only for a real unresolved decision that cannot be safely inferred; explain the
-exact blocker and the concrete finished work awaiting that decision.
+```powershell
+python ./tools/verify_ladders_candidate.py `
+    --package $ladderPackagePath --verified-dll $ladderVerifiedDllPath `
+    --plugins $ladderActivePluginsPath --game-log $ladderFreshGameLogPath `
+    --source-commit $ladderFullBuildSha --version $ladderCandidateVersion `
+    --downloads-copy $ladderDownloadsZipPath
+```
+
+`IDENTITY_MATCH_ONLY` has `gameplayVerified=false` and
+`binaryProvenanceVerified=false`; keep actual R-row observations and controlled
+build evidence separate. Python 3.11+ is required. The helper currently accepts
+exactly six standard package files; needed loose assets require extending its
+package/install/hash contract first, not merely recording separate hashes or
+declaring animation deferred because of the checker. Record tested build SHA separately
+from a later docs-only evidence commit; recording hashes need not rebuild it.
+
+## 5. Finish the actual handoff
+
+Update active STATUS with only new observed facts, preserve historical evidence,
+and return exact source/PR, version, real package/Downloads paths and hashes,
+installed identity, profile/start route, complete tests/captures and independent
+review. Use READY_FOR_OWNER_SOLO_TEST, READY_FOR_RELEASE_REVIEW or NOT_READY with
+specific remaining rows. A missing core mechanic stays NOT_READY. Conditional
+animation deferral must be explicit; real network gates are needed for release
+review. No public upload, release tag or main merge in this assignment.
+
+Keep fixing until accessible requirements are complete or a concrete external
+blocker remains. Leave the owner at most four preference checks, not your
+build/import/regression duties. Do not describe current docs or a name-only
+patch as the finished requested runtime.
