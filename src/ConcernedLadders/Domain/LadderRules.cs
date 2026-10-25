@@ -14,6 +14,11 @@ internal static class LadderRules
     internal const float MaximumFrameSeconds = 0.05f;
     internal const float RemountDelay = 0.35f;
 
+    /// <summary>How far below the run's foot a supported player may stand and still mount. A wall on a
+    /// slope stands on its uphill ground, so the open face of its ladder can be this high above the
+    /// downhill side. The engine adapter still sweeps the whole rise; this is a step, not a jump.</summary>
+    internal const float MaximumStepUpToFoot = 0.75f;
+
     internal static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
     internal static float FrameSeconds(float seconds) =>
@@ -56,7 +61,7 @@ internal static class LadderRules
 
         // A supported intermediate landing may be on either side. The engine adapter must still prove
         // a swept route onto the open face; this decision never licenses moving through the wall.
-        return feet.Y >= run.Bottom.Y - 0.3f && feet.Y <= run.Top.Y + 0.5f &&
+        return feet.Y >= run.Bottom.Y - MaximumStepUpToFoot && feet.Y <= run.Top.Y + 0.5f &&
                Math.Abs(run.ReachFrom(feet)) <= 1.25f &&
                run.SidewaysOffsetOf(feet) <= run.Width * 0.5f + 0.3f;
     }

@@ -110,6 +110,17 @@ public sealed class LadderRulesTests
     }
 
     [Theory]
+    [InlineData(-0.71f, true)]   // Observed in game: a wall ladder on a slope, mounted from the downhill side.
+    [InlineData(-0.75f, true)]
+    [InlineData(-0.80f, false)]
+    [InlineData(-1.5f, false)]
+    public void MountAllowsAStepUpToTheFootButNotAJump(float feetBelowFoot, bool allowed)
+    {
+        Assert.Equal(allowed, LadderRules.CanMount(Segment(0), new ClimbPoint(0, feetBelowFoot, 0.5f), true, 0,
+            feetBelowFoot, true, true, false, 0));
+    }
+
+    [Theory]
     [InlineData(false, 0f, 0f, true, true, false, 0f)]
     [InlineData(true, -2f, 0f, true, true, false, 0f)]
     [InlineData(true, 0f, 5f, true, true, false, 0f)]
