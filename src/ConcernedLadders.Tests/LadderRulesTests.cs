@@ -216,6 +216,15 @@ public sealed class LadderRulesTests
         Assert.Equal(10f, LadderRules.LowestHold(10f, float.NaN));
     }
 
+    [Theory]
+    [InlineData(1.57f, 0f, true)]    // where the native prompt was observed and the old band refused
+    [InlineData(1.65f, 0f, false)]
+    [InlineData(0.9f, 0.78f, true)]  // side landing observed refused at 0.78 m
+    [InlineData(0.9f, 0.9f, false)]
+    public void MountBandCoversWhereThePromptShows(float reach, float side, bool allowed) =>
+        Assert.Equal(allowed, LadderRules.CanMount(Segment(0), new ClimbPoint(side, 0, reach), true, 0, 0,
+            true, true, false, 0));
+
     [Fact]
     public void OnlyLadderCausedReleasesTakeTheControlledPath()
     {

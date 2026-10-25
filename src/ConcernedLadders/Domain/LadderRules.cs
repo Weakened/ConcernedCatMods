@@ -19,6 +19,13 @@ internal static class LadderRules
     /// downhill side. The engine adapter still sweeps the whole rise; this is a step, not a jump.</summary>
     internal const float MaximumStepUpToFoot = 0.75f;
 
+    /// <summary>How far in front of or behind the climb line a supported player may mount. The native
+    /// hover prompt already shows at about 1.5 m, so a smaller band refused a mount the game offered.</summary>
+    internal const float MountReach = 1.6f;
+
+    /// <summary>How far beyond the rails' half width a side landing may be and still mount.</summary>
+    internal const float MountSideMargin = 0.45f;
+
     /// <summary>Every transfer route first lifts the body this far, so its lateral leg clears the floor it starts on.</summary>
     internal const float RouteLift = 0.06f;
 
@@ -77,8 +84,8 @@ internal static class LadderRules
         // A supported intermediate landing may be on either side. The engine adapter must still prove
         // a swept route onto the open face; this decision never licenses moving through the wall.
         return feet.Y >= run.Bottom.Y - MaximumStepUpToFoot && feet.Y <= run.Top.Y + 0.5f &&
-               Math.Abs(run.ReachFrom(feet)) <= 1.25f &&
-               run.SidewaysOffsetOf(feet) <= run.Width * 0.5f + 0.3f;
+               Math.Abs(run.ReachFrom(feet)) <= MountReach &&
+               run.SidewaysOffsetOf(feet) <= run.Width * 0.5f + MountSideMargin;
     }
 
     internal static bool Joins(in LadderGeometry below, in LadderGeometry above) =>
