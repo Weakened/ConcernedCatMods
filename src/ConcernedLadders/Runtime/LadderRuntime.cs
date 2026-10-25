@@ -174,9 +174,11 @@ internal sealed class LadderRuntime : IDisposable
             if (!room || !LadderRules.CanMount(run, LadderSegment.Point(body.position), supported,
                     body.linearVelocity.y, _motor.FallHeight(player), true, Free(player), false, _cooldown))
             {
-                Notice("Stand on a nearby landing in front of the ladder. Midair grabs are unavailable.");
                 // One line per refused Use press: which precondition failed, in metres. No paths, no per-frame output.
                 ClimbPoint feet = LadderSegment.Point(body.position);
+                Notice(room && supported && LadderRules.TooFarToMount(run, feet)
+                    ? "Move closer to the ladder to climb."
+                    : "Stand on a nearby landing in front of the ladder. Midair grabs are unavailable.");
                 _log("Ladder mount refused: room=" + room + " supported=" + supported +
                      " vy=" + body.linearVelocity.y.ToString("0.00", CultureInfo.InvariantCulture) +
                      " fallAbove=" + (_motor.FallHeight(player) - body.position.y).ToString("0.00", CultureInfo.InvariantCulture) +

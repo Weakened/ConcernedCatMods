@@ -225,6 +225,15 @@ public sealed class LadderRulesTests
         Assert.Equal(allowed, LadderRules.CanMount(Segment(0), new ClimbPoint(side, 0, reach), true, 0, 0,
             true, true, false, 0));
 
+    [Theory]
+    [InlineData(2.08f, 0f, 0f, true)]     // observed: prompt shown, refused for distance
+    [InlineData(1.0f, 1.2f, 0f, true)]    // too far to the side
+    [InlineData(1.0f, 0f, 0f, false)]     // inside the band: not a distance refusal
+    [InlineData(-0.41f, 0f, 0f, false)]   // behind the ladder: not "step closer"
+    [InlineData(2.08f, 0f, -1.5f, false)] // far below the foot: a fall/height problem, not distance
+    public void DistanceRefusalsAreToldToStepCloser(float reach, float side, float height, bool expected) =>
+        Assert.Equal(expected, LadderRules.TooFarToMount(Segment(0), new ClimbPoint(side, height, reach)));
+
     [Fact]
     public void OnlyLadderCausedReleasesTakeTheControlledPath()
     {

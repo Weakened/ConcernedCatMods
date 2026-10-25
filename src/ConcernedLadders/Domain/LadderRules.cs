@@ -88,6 +88,20 @@ internal static class LadderRules
                run.SidewaysOffsetOf(feet) <= run.Width * 0.5f + MountSideMargin;
     }
 
+    /// <summary>True when a player standing in front of the ladder, at a height it could be mounted from,
+    /// is refused only for being too far out or too far to the side. The game's own prompt shows from
+    /// further away than the mount band, so this case is told to step closer.</summary>
+    internal static bool TooFarToMount(in LadderGeometry run, ClimbPoint feet)
+    {
+        if (!run.IsClimbable || !feet.IsFinite || feet.Y < run.Bottom.Y - MaximumStepUpToFoot || feet.Y > run.Top.Y + 0.5f)
+        {
+            return false;
+        }
+
+        float reach = run.ReachFrom(feet);
+        return reach > 0f && (reach > MountReach || run.SidewaysOffsetOf(feet) > run.Width * 0.5f + MountSideMargin);
+    }
+
     internal static bool Joins(in LadderGeometry below, in LadderGeometry above) =>
         below.IsClimbable && above.IsClimbable &&
         Math.Abs(below.Top.Y - above.Bottom.Y) <= EndpointTolerance &&
