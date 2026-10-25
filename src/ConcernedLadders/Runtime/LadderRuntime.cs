@@ -205,6 +205,8 @@ internal sealed class LadderRuntime : IDisposable
             _routeIndex = 0;
             _mode = Mode.Mounting;
             _compatibilityTimer = 1f;
+            _log("Ladder mounted: " + _segments.Count + " section(s), " + (run.Top.Y - run.Bottom.Y).ToString("0.00") +
+                 " m run, entering at " + (height - run.Bottom.Y).ToString("0.00") + " m.");
             _pose.Begin(player);
             return true;
         }
@@ -453,7 +455,14 @@ internal sealed class LadderRuntime : IDisposable
         Player? player = _player;
         Rigidbody? body = _body;
         LadderClearance? clearance = _clearance;
+        Mode was = _mode;
         _mode = Mode.Off; // Release the motor before querying any native state that might already be destroyed.
+        if (was != Mode.Off)
+        {
+            // One line per release, never per frame: which kind of release, from which stage.
+            try { _log("Ladder released: " + (jump ? "jump" : externalControl ? "external" : "controlled") + " from " + was + "."); }
+            catch { /* Logging cannot keep the motor captured. */ }
+        }
         bool owned = false;
         try { owned = _view != null && _view.IsValid() && _view.IsOwner(); } catch { /* No verified authority, no writes. */ }
         Vector3 outward = new Vector3(_run.StandingSide.X, 0f, _run.StandingSide.Z);
