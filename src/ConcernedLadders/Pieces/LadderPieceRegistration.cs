@@ -114,8 +114,15 @@ internal sealed class LadderPieceRegistration : IDisposable
             wear.m_broken.SetActive(false);
 
             // Colliders survive damage-state visibility changes. They also
-            // provide the native support/hammer interaction geometry.
-            BoxCollider body = prefab.AddComponent<BoxCollider>();
+            // provide the native support/hammer interaction geometry. The
+            // collider lives on a child, as on native walls: the placement
+            // ghost's "blocked by player" test skips colliders on the ghost's
+            // root object, so a root collider let a ladder be placed into a
+            // character (observed in game).
+            var collision = new GameObject("collision");
+            collision.layer = layer;
+            collision.transform.SetParent(prefab.transform, false);
+            BoxCollider body = collision.AddComponent<BoxCollider>();
             body.center = new Vector3(0f, 1f, 0.16f);
             body.size = new Vector3(0.8f, 2f, 0.16f);
 
