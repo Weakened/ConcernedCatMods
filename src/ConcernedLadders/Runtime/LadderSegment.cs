@@ -32,6 +32,9 @@ internal sealed class LadderSegment : MonoBehaviour, Hoverable, Interactable
         return Localization.instance != null ? Localization.instance.Localize(text) : text;
     }
 
+    /// <summary>Valheim 1.0.20 adds this to the interact reach. Zero keeps the vanilla Ladder's default reach.</summary>
+    public float GetHoverOffset() => 0f;
+
     public bool Interact(Humanoid user, bool hold, bool alt)
     {
         if (hold || alt || user != Player.m_localPlayer)
