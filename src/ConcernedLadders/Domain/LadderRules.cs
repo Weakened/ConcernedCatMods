@@ -22,6 +22,9 @@ internal static class LadderRules
     /// <summary>Every transfer route first lifts the body this far, so its lateral leg clears the floor it starts on.</summary>
     internal const float RouteLift = 0.06f;
 
+    /// <summary>The second mount lift, a natural step over uneven ground. Used only when the low route is blocked.</summary>
+    internal const float StepLift = 0.3f;
+
     /// <summary>Descending within this height of the run's foot onto real support ends the climb.</summary>
     internal const float BottomExitBand = 0.5f;
 

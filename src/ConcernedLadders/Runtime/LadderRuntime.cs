@@ -193,14 +193,31 @@ internal sealed class LadderRuntime : IDisposable
             float offset = LadderRules.BodyOffset(clearance.Radius, segment.FrontFaceDepth);
             float height = Mathf.Clamp(body.position.y, run.Bottom.Y, run.Top.Y);
             Vector3 line = LadderSegment.Vector(run.ClimbPositionAt(height - run.Bottom.Y, offset));
-            float raised = Mathf.Max(body.position.y, line.y) + LadderRules.RouteLift;
-            Vector3[] route =
+            // On rising ground the climb line's own floor can be above the start height; end the route on it, never inside it.
+            if (clearance.TryFloorBelow(line + Vector3.up * LadderRules.StepLift, LadderRules.StepLift + 0.2f, out float lineFloor) &&
+                lineFloor > line.y && lineFloor <= run.Top.Y)
             {
-                new Vector3(body.position.x, raised, body.position.z),
-                new Vector3(line.x, raised, line.z),
-                line,
-            };
-            if (!clearance.CanFollow(body.position, route))
+                line.y = lineFloor;
+            }
+
+            // Observed in game: an off-centre approach over ground that rises toward the wall blocked the 6 cm
+            // lateral leg. A step-height lift is tried next; every leg is still swept with the real capsule.
+            float raised = 0f;
+            Vector3[] route = Array.Empty<Vector3>();
+            bool routeClear = false;
+            foreach (float lift in new[] { LadderRules.RouteLift, LadderRules.StepLift })
+            {
+                raised = Mathf.Max(body.position.y, line.y) + lift;
+                route = new[]
+                {
+                    new Vector3(body.position.x, raised, body.position.z),
+                    new Vector3(line.x, raised, line.z),
+                    line,
+                };
+                if (clearance.CanFollow(body.position, route)) { routeClear = true; break; }
+            }
+
+            if (!routeClear)
             {
                 Notice("The route onto the ladder is blocked.");
                 _log("Ladder mount refused: route blocked (rise " + (raised - body.position.y).ToString("0.00", CultureInfo.InvariantCulture) +
