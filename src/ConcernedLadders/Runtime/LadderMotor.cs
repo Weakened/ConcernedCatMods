@@ -12,6 +12,8 @@ internal sealed class LadderMotor : IDisposable
     private const string ForemanMotor = "com.theconcernedcat.valheim.concernedforeman.ladders";
     private AccessTools.FieldRef<Character, Vector3>? _move;
     private AccessTools.FieldRef<Character, float>? _fallHeight;
+    private AccessTools.FieldRef<Character, float>? _groundTouch;
+    private AccessTools.FieldRef<Character, Vector3>? _walkVelocity;
     private Func<Player, bool>? _takeInput;
     private Harmony? _harmony;
     private MethodInfo? _motion;
@@ -24,6 +26,10 @@ internal sealed class LadderMotor : IDisposable
         {
             _move = AccessTools.FieldRefAccess<Character, Vector3>("m_moveDir");
             _fallHeight = AccessTools.FieldRefAccess<Character, float>("m_maxAirAltitude");
+            // UpdateMotion, which this motor replaces while climbing, is the only place that ages
+            // m_lastGroundTouch; m_currentVel is the walk controller's remembered target velocity.
+            _groundTouch = AccessTools.FieldRefAccess<Character, float>("m_lastGroundTouch");
+            _walkVelocity = AccessTools.FieldRefAccess<Character, Vector3>("m_currentVel");
             _motion = AccessTools.Method(typeof(Character), "UpdateMotion", new[] { typeof(float) });
             MethodInfo jump = AccessTools.Method(typeof(Character), "Jump", new[] { typeof(bool) });
             MethodInfo input = AccessTools.Method(typeof(Player), "TakeInput", Type.EmptyTypes);
@@ -69,6 +75,15 @@ internal sealed class LadderMotor : IDisposable
     internal void SetFallReference(Player player, float height)
     {
         if (_fallHeight != null && LadderSegment.Finite(new Vector3(0f, height, 0f))) { _fallHeight(player) = height; }
+    }
+
+    /// <summary>A release off the rails starts airborne, as vanilla's own ForceJump does (m_lastGroundTouch = 1).
+    /// Ground contact resets it on the next physics step if the player really is standing on something, and
+    /// clearing the walk controller's stale target stops it cancelling the push-off or shoving back into the rails.</summary>
+    internal void BeginAirborne(Player player)
+    {
+        if (_groundTouch != null) { _groundTouch(player) = 1f; }
+        if (_walkVelocity != null) { _walkVelocity(player) = Vector3.zero; }
     }
 
     public void Dispose()

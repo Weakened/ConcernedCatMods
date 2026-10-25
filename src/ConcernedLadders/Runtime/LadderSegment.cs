@@ -37,14 +37,16 @@ internal sealed class LadderSegment : MonoBehaviour, Hoverable, Interactable
 
     public bool Interact(Humanoid user, bool hold, bool alt)
     {
-        if (hold || alt || user != Player.m_localPlayer)
+        // Alt-interact is Shift+Use, and Shift is also run: a sprinting player still means "climb".
+        if (hold || user != Player.m_localPlayer)
         {
             return false;
         }
 
-        LadderRuntime? runtime = LadderRuntime.Current;
-        if (runtime == null) { return false; }
-        return runtime.Use(this);
+        // Always false, like the vanilla Ladder. A true return makes Player.Interact play the interact
+        // animation, whose minor-action state would release the climb that this call just started.
+        LadderRuntime.Current?.Use(this);
+        return false;
     }
 
     public bool UseItem(Humanoid user, ItemDrop.ItemData item) => false;

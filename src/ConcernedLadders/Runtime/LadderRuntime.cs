@@ -132,7 +132,7 @@ internal sealed class LadderRuntime : IDisposable
             if (body == null || body.isKinematic || view == null || !view.IsValid() || !view.IsOwner() ||
                 capsule == null || !Free(player) || _cooldown > 0f)
             {
-                Notice("You cannot climb right now.");
+                Notice(player.InPlaceMode() ? "Put away the building tool to climb." : "You cannot climb right now.");
                 return true;
             }
 
@@ -266,6 +266,13 @@ internal sealed class LadderRuntime : IDisposable
 
             if (!clearance.CanMove(body.position, target))
             {
+                // Uneven ground can rise above the run's foot. Already standing on it is the bottom exit.
+                if (input < 0f && clearance.Supported(body.position) && clearance.HasRoom(body.position))
+                {
+                    Release(false, false);
+                    return false;
+                }
+
                 Hold(body.position, seconds, 0f);
                 Notice("The ladder route is blocked. Reverse or jump to let go.");
                 return true;
@@ -430,6 +437,7 @@ internal sealed class LadderRuntime : IDisposable
     {
         Player? player = _player;
         Rigidbody? body = _body;
+        LadderClearance? clearance = _clearance;
         _mode = Mode.Off; // Release the motor before querying any native state that might already be destroyed.
         bool owned = false;
         try { owned = _view != null && _view.IsValid() && _view.IsOwner(); } catch { /* No verified authority, no writes. */ }
@@ -448,6 +456,8 @@ internal sealed class LadderRuntime : IDisposable
                     if (player != null)
                     {
                         _motor.SetFallReference(player, Mathf.Max(body.position.y, _lastControlledHeight));
+                        bool standing = !jump && clearance != null && clearance.Supported(body.position);
+                        if (!standing) { _motor.BeginAirborne(player); }
                     }
                 }
             }
