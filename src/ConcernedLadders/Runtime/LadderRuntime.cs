@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using TheConcernedCat.ConcernedLadders.Domain;
 using TheConcernedCat.Diagnostics;
 using TheConcernedCat.Ladders;
@@ -177,14 +178,14 @@ internal sealed class LadderRuntime : IDisposable
                 // One line per refused Use press: which precondition failed, in metres. No paths, no per-frame output.
                 ClimbPoint feet = LadderSegment.Point(body.position);
                 _log("Ladder mount refused: room=" + room + " supported=" + supported +
-                     " vy=" + body.linearVelocity.y.ToString("0.00") +
-                     " fallAbove=" + (_motor.FallHeight(player) - body.position.y).ToString("0.00") +
-                     " reach=" + run.ReachFrom(feet).ToString("0.00") + " side=" + run.SidewaysOffsetOf(feet).ToString("0.00") +
-                     " height=" + (body.position.y - run.Bottom.Y).ToString("0.00") +
-                     " capsuleGap=" + clearance.BottomGap.ToString("0.000") +
-                     " foot=(" + run.Bottom.X.ToString("0.00") + "," + run.Bottom.Y.ToString("0.00") + "," + run.Bottom.Z.ToString("0.00") +
-                     ") open=(" + run.StandingSide.X.ToString("0.00") + "," + run.StandingSide.Z.ToString("0.00") +
-                     ") player=(" + feet.X.ToString("0.00") + "," + feet.Y.ToString("0.00") + "," + feet.Z.ToString("0.00") + ").");
+                     " vy=" + body.linearVelocity.y.ToString("0.00", CultureInfo.InvariantCulture) +
+                     " fallAbove=" + (_motor.FallHeight(player) - body.position.y).ToString("0.00", CultureInfo.InvariantCulture) +
+                     " reach=" + run.ReachFrom(feet).ToString("0.00", CultureInfo.InvariantCulture) + " side=" + run.SidewaysOffsetOf(feet).ToString("0.00", CultureInfo.InvariantCulture) +
+                     " height=" + (body.position.y - run.Bottom.Y).ToString("0.00", CultureInfo.InvariantCulture) +
+                     " capsuleGap=" + clearance.BottomGap.ToString("0.000", CultureInfo.InvariantCulture) +
+                     " foot=(" + run.Bottom.X.ToString("0.00", CultureInfo.InvariantCulture) + "," + run.Bottom.Y.ToString("0.00", CultureInfo.InvariantCulture) + "," + run.Bottom.Z.ToString("0.00", CultureInfo.InvariantCulture) +
+                     ") open=(" + run.StandingSide.X.ToString("0.00", CultureInfo.InvariantCulture) + "," + run.StandingSide.Z.ToString("0.00", CultureInfo.InvariantCulture) +
+                     ") player=(" + feet.X.ToString("0.00", CultureInfo.InvariantCulture) + "," + feet.Y.ToString("0.00", CultureInfo.InvariantCulture) + "," + feet.Z.ToString("0.00", CultureInfo.InvariantCulture) + ").");
                 _segments.Clear();
                 return true;
             }
@@ -202,8 +203,8 @@ internal sealed class LadderRuntime : IDisposable
             if (!clearance.CanFollow(body.position, route))
             {
                 Notice("The route onto the ladder is blocked.");
-                _log("Ladder mount refused: route blocked (rise " + (raised - body.position.y).ToString("0.00") +
-                     " m, across " + Vector3.Distance(route[0], route[1]).ToString("0.00") + " m).");
+                _log("Ladder mount refused: route blocked (rise " + (raised - body.position.y).ToString("0.00", CultureInfo.InvariantCulture) +
+                     " m, across " + Vector3.Distance(route[0], route[1]).ToString("0.00", CultureInfo.InvariantCulture) + " m).");
                 _segments.Clear();
                 return true;
             }
@@ -230,8 +231,8 @@ internal sealed class LadderRuntime : IDisposable
             _routeIndex = 0;
             _mode = Mode.Mounting;
             _compatibilityTimer = 1f;
-            _log("Ladder mounted: " + _segments.Count + " section(s), " + (run.Top.Y - run.Bottom.Y).ToString("0.00") +
-                 " m run, entering at " + (height - run.Bottom.Y).ToString("0.00") + " m.");
+            _log("Ladder mounted: " + _segments.Count + " section(s), " + (run.Top.Y - run.Bottom.Y).ToString("0.00", CultureInfo.InvariantCulture) +
+                 " m run, entering at " + (height - run.Bottom.Y).ToString("0.00", CultureInfo.InvariantCulture) + " m.");
             _pose.Begin(player);
             return true;
         }
@@ -463,7 +464,8 @@ internal sealed class LadderRuntime : IDisposable
         }
 
         // Transfer legs are mostly sideways: drive the walk cycle from the real path speed, not its vertical part.
-        Hold(target, physicsSeconds, Vector3.Distance(target, body.position) / physicsSeconds);
+        float pathSpeed = Vector3.Distance(target, body.position) / physicsSeconds;
+        Hold(target, physicsSeconds, target.y < body.position.y - 0.001f ? -pathSpeed : pathSpeed);
     }
 
     private void Hold(Vector3 target, float delta, float poseSpeed)
