@@ -14,7 +14,16 @@ internal sealed class LadderClearance
     private readonly int _mask;
     private readonly Vector3 _centreOffset;
     private readonly float _halfSegment;
+    private readonly float _groundLift;
     internal float Radius { get; }
+
+    /// <summary>Capsule bottom relative to the feet, before the query lift. Diagnostic only.</summary>
+    internal float BottomGap { get; }
+
+    /// <summary>The query capsule floats this far above the feet. A standing player's real capsule
+    /// rests on the floor, and terrain contact is support, not an obstruction; a step or lip
+    /// taller than this still blocks.</summary>
+    private const float GroundClearance = 0.05f;
 
     internal LadderClearance(Player player, CapsuleCollider capsule, Vector3 feet)
     {
@@ -37,6 +46,9 @@ internal sealed class LadderClearance
         {
             throw new InvalidOperationException("The player's capsule has unsupported dimensions.");
         }
+
+        BottomGap = _centreOffset.y - height * 0.5f;
+        _groundLift = Mathf.Max(0f, GroundClearance - BottomGap);
 
         _mask = LayerMask.GetMask("piece", "Default", "static_solid", "Default_small", "terrain", "blocker",
             "vehicle", "character", "character_net", "character_ghost");
@@ -144,7 +156,7 @@ internal sealed class LadderClearance
 
     private void CapsuleAt(Vector3 feet, out Vector3 low, out Vector3 high)
     {
-        Vector3 centre = feet + _centreOffset;
+        Vector3 centre = feet + _centreOffset + Vector3.up * _groundLift;
         low = centre - Vector3.up * _halfSegment;
         high = centre + Vector3.up * _halfSegment;
     }

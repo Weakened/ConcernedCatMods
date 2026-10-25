@@ -143,10 +143,20 @@ internal sealed class LadderRuntime : IDisposable
             }
 
             var clearance = new LadderClearance(player, capsule, body.position);
-            if (!clearance.HasRoom(body.position) || !LadderRules.CanMount(run, LadderSegment.Point(body.position), clearance.Supported(body.position),
+            bool room = clearance.HasRoom(body.position);
+            bool supported = clearance.Supported(body.position);
+            if (!room || !LadderRules.CanMount(run, LadderSegment.Point(body.position), supported,
                     body.linearVelocity.y, _motor.FallHeight(player), true, Free(player), false, _cooldown))
             {
                 Notice("Stand on a nearby landing in front of the ladder. Midair grabs are unavailable.");
+                // One line per refused Use press: which precondition failed, in metres. No paths, no per-frame output.
+                ClimbPoint feet = LadderSegment.Point(body.position);
+                _log("Ladder mount refused: room=" + room + " supported=" + supported +
+                     " vy=" + body.linearVelocity.y.ToString("0.00") +
+                     " fallAbove=" + (_motor.FallHeight(player) - body.position.y).ToString("0.00") +
+                     " reach=" + run.ReachFrom(feet).ToString("0.00") + " side=" + run.SidewaysOffsetOf(feet).ToString("0.00") +
+                     " height=" + (body.position.y - run.Bottom.Y).ToString("0.00") +
+                     " capsuleGap=" + clearance.BottomGap.ToString("0.000") + ".");
                 _segments.Clear();
                 return true;
             }
@@ -164,6 +174,8 @@ internal sealed class LadderRuntime : IDisposable
             if (!clearance.CanFollow(body.position, route))
             {
                 Notice("The route onto the ladder is blocked.");
+                _log("Ladder mount refused: route blocked (rise " + (raised - body.position.y).ToString("0.00") +
+                     " m, across " + Vector3.Distance(route[0], route[1]).ToString("0.00") + " m).");
                 _segments.Clear();
                 return true;
             }
