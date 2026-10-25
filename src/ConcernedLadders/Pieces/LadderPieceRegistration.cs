@@ -102,7 +102,13 @@ internal sealed class LadderPieceRegistration : IDisposable
             wear.m_new = Visual(prefab.transform, "new", material, 1f, layer);
             wear.m_worn = Visual(prefab.transform, "worn", material, 0.82f, layer);
             wear.m_broken = Visual(prefab.transform, "broken", material, 0.65f, layer);
-            wear.m_wet = null; // No retained reference into the removed donor hierarchy.
+            // These are real serialized WearNTear fields in the installed game.
+            // No references into the removed donor hierarchy may survive on the clone.
+            wear.m_wet = null;
+            wear.m_snow = null;
+            wear.m_snowWorn = null;
+            wear.m_snowBroken = null;
+            wear.m_nonSolidRenderers = new List<Renderer>();
             wear.m_fragmentRoots = new[] { wear.m_new };
             wear.m_worn.SetActive(false);
             wear.m_broken.SetActive(false);
@@ -142,7 +148,10 @@ internal sealed class LadderPieceRegistration : IDisposable
                 try
                 {
                     Sprite rendered = RenderManager.Instance.Render(prefab, RenderManager.IsometricRotation);
-                    if (rendered != null) piece.m_icon = rendered;
+                    if (rendered == null || rendered.texture == null ||
+                        rendered.rect.width <= 0f || rendered.rect.height <= 0f)
+                        throw new InvalidOperationException("Jotunn returned no usable ladder icon.");
+                    piece.m_icon = rendered;
                 }
                 catch (Exception exception)
                 {
