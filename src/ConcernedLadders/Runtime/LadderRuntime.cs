@@ -95,9 +95,27 @@ internal sealed class LadderRuntime : IDisposable
                 }
             }
 
-            _pose.Apply(_motor.TakesInput(_player) ? _poseSpeed : 0f);
+            bool takesInput = _motor.TakesInput(_player);
+            // Vanilla routes Use only to the hovered object. A climber who looks away from the rungs (at a wall,
+            // the sky, a blocked landing) would otherwise have no way to ask for a safe dismount. The player's own
+            // bindings are read; a hovered interactable (including this ladder) keeps vanilla's routing.
+            if (_mode == Mode.Climbing && takesInput && UsePressed() && !HoversInteractable(_player))
+            {
+                if (!TrySafeDismount()) { Notice("There is no safe landing within reach. Keep climbing, or jump to let go."); }
+            }
+
+            _pose.Apply(takesInput ? _poseSpeed : 0f);
         }
         catch (Exception exception) { Fault(exception); }
+    }
+
+    private static bool UsePressed() =>
+        (ZInput.GetButtonDown("Use") || ZInput.GetButtonDown("JoyUse")) && !Hud.InRadial();
+
+    private static bool HoversInteractable(Player player)
+    {
+        GameObject? hover = player.GetHoverObject();
+        return hover != null && hover.GetComponentInParent<Interactable>() != null;
     }
 
     internal bool Use(LadderSegment segment)
@@ -437,7 +455,8 @@ internal sealed class LadderRuntime : IDisposable
             return;
         }
 
-        Hold(target, physicsSeconds, (target.y - body.position.y) / physicsSeconds);
+        // Transfer legs are mostly sideways: drive the walk cycle from the real path speed, not its vertical part.
+        Hold(target, physicsSeconds, Vector3.Distance(target, body.position) / physicsSeconds);
     }
 
     private void Hold(Vector3 target, float delta, float poseSpeed)
