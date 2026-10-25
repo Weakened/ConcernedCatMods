@@ -77,7 +77,7 @@ internal sealed class LadderRuntime : IDisposable
         {
             // Update also releases when the physics loop has stopped during world unload.
             if (_player == null || Player.m_localPlayer != _player || ZNetScene.instance == null || !Enabled ||
-                _view == null || !_view.IsValid() || !_view.IsOwner() || !Free(_player))
+                _view == null || !_view.IsValid() || !_view.IsOwner() || !Free(_player, true))
             {
                 Release(false, true);
                 return;
@@ -281,7 +281,7 @@ internal sealed class LadderRuntime : IDisposable
             }
 
             float drift = body != null ? Vector3.Distance(body.position, _lastControlledPosition) : float.NaN;
-            bool free = Free(player);
+            bool free = Free(player, true);
             if (body == null || body.isKinematic || clearance == null || !clearance.IsUnchanged() ||
                 LadderRules.MustRelease(Enabled && !_foremanConflict, owned, !player.IsDead(), free, worldPresent,
                     present, unmoved, drift))
@@ -294,7 +294,9 @@ internal sealed class LadderRuntime : IDisposable
 
             float delta = LadderRules.FrameSeconds(seconds);
             if (delta <= 0f) { Release(false, false); return false; }
-            if (!_motor.TakesInput(player))
+            // Opening a door or hatch from the ladder plays the interact animation, a minor action. The
+            // climber holds still on the rungs for its duration rather than being let go to fall.
+            if (!_motor.TakesInput(player) || player.InMinorAction())
             {
                 Hold(body.position, seconds, 0f);
                 return true;
@@ -521,11 +523,13 @@ internal sealed class LadderRuntime : IDisposable
         return LadderRules.Input(Vector3.Dot(move, look.normalized), false);
     }
 
-    private static bool Free(Player player) =>
+    /// <summary>Mounting needs a completely free player. An active climb also survives a minor action
+    /// (the interact animation of opening a door or hatch), which holds the climb instead.</summary>
+    private static bool Free(Player player, bool minorActionAllowed = false) =>
         !player.IsDead() && !player.IsTeleporting() && !player.IsAttached() && !player.InBed() &&
         !player.IsRiding() && !player.InCutscene() && !player.IsSwimming() && !player.IsDebugFlying() &&
         !player.InPlaceMode() && !player.InAttack() && !player.InDodge() && !player.IsKnockedBack() &&
-        !player.IsStaggering() && !player.InMinorAction();
+        !player.IsStaggering() && (minorActionAllowed || !player.InMinorAction());
 
     private void Release(bool jump, bool externalControl)
     {
