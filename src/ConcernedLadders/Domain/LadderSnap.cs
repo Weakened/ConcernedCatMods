@@ -49,17 +49,64 @@ internal static class LadderSnap
     /// (observed in the owner's session: the game finds no snap point within its 0.5 m radius and leaves a valid ghost
     /// overlapping or beside the ladder). <paramref name="extend"/> comes from the selected snap mode: Above stacks on
     /// the column's top, Below hangs from its bottom, Nearest takes the end nearer <paramref name="aimHeight"/>.
-    /// <paramref name="runBottom"/>/<paramref name="runTop"/> are the connected column's centreline ends.</summary>
-    internal static bool TryExtendColumn(float aimHeight, ClimbPoint runBottom, ClimbPoint runTop, Extend extend,
+    /// <paramref name="runBottom"/>/<paramref name="runTop"/> are the connected column's centreline ends. A column
+    /// that stands on something (<paramref name="standsOnSomething"/>: ground or a floor right under its foot) is never
+    /// extended below by Auto, which would bury the new section; an explicit Top mode is the player's choice.</summary>
+    internal static bool TryExtendColumn(float aimHeight, ClimbPoint runBottom, ClimbPoint runTop, Extend extend, bool standsOnSomething,
         out ClimbPoint alignedOrigin, out bool above)
     {
         alignedOrigin = default;
         above = false;
         if (float.IsNaN(aimHeight) || float.IsInfinity(aimHeight) || runTop.Y - runBottom.Y < SectionHeight - Coincident) { return false; }
-        above = extend == Extend.Above || (extend == Extend.Nearest && aimHeight >= (runBottom.Y + runTop.Y) * 0.5f);
+        above = extend == Extend.Above || (extend == Extend.Nearest && (standsOnSomething || aimHeight >= (runBottom.Y + runTop.Y) * 0.5f));
         alignedOrigin = above ? runTop : new ClimbPoint(runBottom.X, runBottom.Y - SectionHeight, runBottom.Z);
         return true;
     }
+
+    /// <summary>The yaw for a ladder whose selected wall-corner snap point the game has put on another piece's snap
+    /// point (owner correction 2026-10-26: the ghost otherwise keeps whatever rotation the hammer last used and stands
+    /// skewed off the wall). Candidates are the target piece's yaw in right-angle steps; the chosen one faces the
+    /// ladder's climbing side towards <paramref name="viewer"/> and centres the ladder on the target piece (the corner
+    /// modes' promise), within <see cref="CentredOnWall"/> horizontally. False leaves the game's ghost unchanged.
+    /// <paramref name="corner"/> is the selected snap point in the ladder's local space (X sideways, Z outward).</summary>
+    internal static bool TryWallCornerYaw(float targetYawDegrees, ClimbPoint corner, ClimbPoint targetPoint, ClimbPoint pieceCentre,
+        ClimbPoint viewer, out float yawDegrees, out ClimbPoint origin)
+    {
+        yawDegrees = 0f;
+        origin = default;
+        if (!corner.IsFinite || !targetPoint.IsFinite || !pieceCentre.IsFinite || !viewer.IsFinite ||
+            float.IsNaN(targetYawDegrees) || float.IsInfinity(targetYawDegrees))
+        {
+            return false;
+        }
+
+        float best = CentredOnWall;
+        bool found = false;
+        for (int step = 0; step < 4; step++)
+        {
+            float yaw = targetYawDegrees + step * 90f;
+            double radians = yaw * Math.PI / 180.0;
+            float sin = (float)Math.Sin(radians), cos = (float)Math.Cos(radians);
+            // Unity's yaw: local (x, z) -> world (x cos + z sin, -x sin + z cos); local forward is the climbing side.
+            float cx = targetPoint.X - (corner.X * cos + corner.Z * sin);
+            float cz = targetPoint.Z - (-corner.X * sin + corner.Z * cos);
+            float toViewerX = viewer.X - cx, toViewerZ = viewer.Z - cz;
+            if (sin * toViewerX + cos * toViewerZ <= 0f) { continue; }
+            float dx = cx - pieceCentre.X, dz = cz - pieceCentre.Z;
+            float off = (float)Math.Sqrt(dx * dx + dz * dz);
+            if (off >= best) { continue; }
+            best = off;
+            found = true;
+            yawDegrees = ((yaw % 360f) + 360f) % 360f;
+            origin = new ClimbPoint(cx, targetPoint.Y - corner.Y, cz);
+        }
+
+        return found;
+    }
+
+    /// <summary>How far, horizontally, a corner-snapped ladder's centre may lie from the target piece's centre and
+    /// still count as centred on it (the wall-corner setback is 0.08 m).</summary>
+    internal const float CentredOnWall = 0.3f;
 
     private static float Distance(ClimbPoint a, ClimbPoint b)
     {
