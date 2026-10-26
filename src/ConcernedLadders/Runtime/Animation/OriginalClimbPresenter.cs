@@ -108,7 +108,7 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
         {
             if (ReferenceEquals(player, null) || ReferenceEquals(actor.Rig.Player, player))
             {
-                if (actor.Active) { actor.Fit.Report(this, actor.Frame.Motion, Time.time, true); }
+                if (actor.Active) { actor.Fit.Report(this, Time.time, true); }
                 actor.Active = false;
                 _closedPlayer = actor.Rig.Player; _closedSession = actor.Frame.Session;
             }

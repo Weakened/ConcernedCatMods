@@ -11,7 +11,7 @@ internal static class ClimbTuning
     internal static GaitShape Gait = new GaitShape();
 
     /// <summary>Pelvis height below the rig's standing pelvis estimate, and how far it leans in toward the rungs.</summary>
-    internal static float PelvisDrop = 0.06f;
+    internal static float PelvisDrop = 0.1f;
     internal static float PelvisToward = 0.3f;
 
     /// <summary>Torso pitch toward the ladder while climbing and while sliding; side tilt per unit of sway.</summary>

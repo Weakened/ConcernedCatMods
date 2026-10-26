@@ -31,6 +31,7 @@ internal sealed partial class OriginalClimbPresenter
         if (kind == NativeKind.Attack && frame.HammerEquipped) { native |= NativeActionParts.RightArm; }
         else if (kind != NativeKind.None) { native |= NativeActionParts.LeftArm | NativeActionParts.RightArm | NativeActionParts.UpperBody | NativeActionParts.Head; }
 
+        actor.Fit.Begin(this, frame.Motion, Time.time);
         float entry = Mathf.Clamp01(actor.Age / .15f);
         bool mount = frame.Motion == PresentedMotion.GroundMount || frame.Motion == PresentedMotion.AirCatch;
         bool exit = frame.Motion == PresentedMotion.TopFinish || frame.Motion == PresentedMotion.StepOff;
@@ -117,7 +118,7 @@ internal sealed partial class OriginalClimbPresenter
             actor.Lease.HintInIK(animator, limb, hint, weight * .75f);
         }
 
-        actor.Fit.Report(this, frame.Motion, Time.time, false);
+        actor.Fit.Report(this, Time.time, false);
         // Native look-at and equipment remain owned by the game. No controller parameters, animation speed,
         // root transforms, rigidbodies, capsule, gravity, input, skill or stamina are written.
     }
@@ -165,15 +166,23 @@ internal sealed partial class OriginalClimbPresenter
     {
         private readonly int[] _count = new int[4], _skips = new int[4];
         private readonly float[] _worst = new float[4], _sum = new float[4], _rootUp = new float[4], _rootOut = new float[4];
-        private float _next;
+        private PresentedMotion _motion;
+        private float _since;
         private int _lines;
 
         internal void Reset()
         {
-            Array.Clear(_count, 0, 4); Array.Clear(_skips, 0, 4); Array.Clear(_worst, 0, 4); Array.Clear(_sum, 0, 4);
-            Array.Clear(_rootUp, 0, 4); Array.Clear(_rootOut, 0, 4);
-            _next = 0f;
+            Clear();
             _lines = 0;
+        }
+
+        /// <summary>Counters cover one motion at a time: a change of motion first reports what was gathered.</summary>
+        internal void Begin(OriginalClimbPresenter owner, PresentedMotion motion, float now)
+        {
+            if (motion == _motion && _since > 0f) { return; }
+            if (Total > 0) { Report(owner, now, true); }
+            _motion = motion;
+            _since = now;
         }
 
         internal void Sample(int limb, float ratio, Vector3 root, Vector3 feet, in ClimbPresentationFrame frame, Vector3 outward)
@@ -189,26 +198,37 @@ internal sealed partial class OriginalClimbPresenter
 
         internal void Skip(int limb) => _skips[limb]++;
 
-        internal void Report(OriginalClimbPresenter owner, PresentedMotion motion, float now, bool final)
+        /// <summary>One line at most every three seconds of a long motion, one when the motion ends; 40 per attachment.</summary>
+        internal void Report(OriginalClimbPresenter owner, float now, bool final)
         {
-            if (_lines >= 40 || (!final && now < _next) || (_count[0] + _count[1] + _count[2] + _count[3]) == 0) { return; }
-            if (_next <= 0f && !final) { _next = now + 3f; return; }
-            _next = now + 3f;
-            _lines++;
-            var text = new System.Text.StringBuilder(final ? "Climb fit (end) " : "Climb fit ");
-            text.Append(motion);
-            string[] names = { "LH", "RH", "LF", "RF" };
-            for (int limb = 0; limb < 4; limb++)
+            if (Total == 0 || (!final && now - _since < 3f)) { return; }
+            if (_lines < 40)
             {
-                float mean = _count[limb] == 0 ? 0f : _sum[limb] / _count[limb];
-                text.Append(" | ").Append(names[limb]).Append(" n=").Append(_count[limb]).Append(" skip=").Append(_skips[limb])
-                    .Append(" worst=").Append(_worst[limb].ToString("0.00", CultureInfo.InvariantCulture))
-                    .Append(" mean=").Append(mean.ToString("0.00", CultureInfo.InvariantCulture))
-                    .Append(" root up=").Append(_rootUp[limb].ToString("0.00", CultureInfo.InvariantCulture))
-                    .Append(" out=").Append(_rootOut[limb].ToString("0.00", CultureInfo.InvariantCulture));
+                _lines++;
+                var text = new System.Text.StringBuilder("Climb fit ").Append(_motion)
+                    .Append(' ').Append((now - _since).ToString("0.0", CultureInfo.InvariantCulture)).Append('s');
+                string[] names = { "LH", "RH", "LF", "RF" };
+                for (int limb = 0; limb < 4; limb++)
+                {
+                    float mean = _count[limb] == 0 ? 0f : _sum[limb] / _count[limb];
+                    text.Append(" | ").Append(names[limb]).Append(" n=").Append(_count[limb]).Append(" skip=").Append(_skips[limb])
+                        .Append(" worst=").Append(_worst[limb].ToString("0.00", CultureInfo.InvariantCulture))
+                        .Append(" mean=").Append(mean.ToString("0.00", CultureInfo.InvariantCulture))
+                        .Append(" up=").Append(_rootUp[limb].ToString("0.00", CultureInfo.InvariantCulture))
+                        .Append(" out=").Append(_rootOut[limb].ToString("0.00", CultureInfo.InvariantCulture));
+                }
+
+                owner.Log(text.ToString());
             }
 
-            owner.Log(text.ToString());
+            Clear();
+            _since = now;
+        }
+
+        private int Total => _count[0] + _count[1] + _count[2] + _count[3];
+
+        private void Clear()
+        {
             Array.Clear(_count, 0, 4); Array.Clear(_skips, 0, 4); Array.Clear(_worst, 0, 4); Array.Clear(_sum, 0, 4);
         }
     }

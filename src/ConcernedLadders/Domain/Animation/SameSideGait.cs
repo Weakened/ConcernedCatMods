@@ -20,7 +20,7 @@ internal sealed class GaitShape
     internal float FootLag = 0.06f;
 
     /// <summary>Rung centre relative to the body root when a foot leaves it (the lowest a planted foot gets).</summary>
-    internal float FootLowRel = -0.02f;
+    internal float FootLowRel = 0.06f;
 
     /// <summary>The middle of a hand's planted range relative to the shoulder height the rig reports.</summary>
     internal float HandMidFromShoulder = 0.02f;
@@ -117,7 +117,10 @@ internal sealed class SameSideGait
         if (!Ready || !Finite(feetY) || !Finite(seconds) || seconds < 0f || seconds > 0.5f) { return false; }
         if (hold && !_holding)
         {
-            for (int limb = 0; limb < 4; limb++) { _settled[limb] = Target(limb, feetY, true, out _, out _); }
+            // In game 2026-10-26: settling a mid-swing limb onto the rung it left or the rung it was heading for put
+            // it up to half a swing (0.37 m with a four-rung stride) away from the body, out of reach. It takes the
+            // real rung nearest to where it is instead: never more than half a rung away.
+            for (int limb = 0; limb < 4; limb++) { _settled[limb] = NearestRung(_shown[limb]); }
         }
 
         _holding = hold;
@@ -185,6 +188,12 @@ internal sealed class SameSideGait
         swing = a == b ? 0f : Arc(w);
         clearance = swing;
         return _base + (a + (b - a) * Ease(w)) * _pitch;
+    }
+
+    private float NearestRung(float height)
+    {
+        long rung = (long)Math.Round((height - _base) / _pitch);
+        return _base + ClampRung(rung) * _pitch;
     }
 
     private int ClampRung(long rung) => (int)Math.Max(_first, Math.Min(_last, rung));
