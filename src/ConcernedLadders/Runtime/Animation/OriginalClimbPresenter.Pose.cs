@@ -135,6 +135,7 @@ internal sealed partial class OriginalClimbPresenter
             }
 
             float reach = Vector3.Distance(root, pivot);
+            if (weight <= .01f) { continue; } // Already handed to the native pose on purpose (mount/exit windows): not a fit.
             actor.Fit.Sample(limb, reach / rig.Reach[limb], root, feet, frame, outward);
             if (reach > rig.Reach[limb] * ClimbTuning.ReachLimit)
             {
