@@ -1,33 +1,72 @@
-# Original climbing motion source — procedural authoring
+# Original climbing motion — editable source
 
-Status: source-only internal prototype; live-rig fitting and final animation acceptance pending.
+Status: fitted in game for the 0.2.5 internal owner candidate (hold, interior climb up/down, fast,
+both faces, Jump, Drop, top finish, building with the hammer while attached). Owner acceptance pending.
 
-This is original authored contact/body motion. No Meshy purchase, stock exports, game clip/rig extraction or dependency binaries are used. The owner reference plans informed contact order; their numbered phases are not a60FPS clip. Native walking remains only Claude's contingency and is not this motion source.
+This motion is original and procedural. No purchased, stock or extracted game animation, rig or clip is
+used. The editable source is code: change a value, rebuild with `scripts/verify.ps1`, import the package,
+and the next attachment uses it.
 
-## Source and reproduction
+## Where everything lives
 
-- `Domain/Animation/OriginalContactTrack.cs`: diagonal support, signed completed-travel strokes, anatomical hold settling, reversal and extension continuity. Two-rung endpoint travel occurs over one rung of completed body travel. Constant travel follows the paired reference order; interrupted strokes use actual support/body position rather than restarting phase0.
-- `Domain/Animation/OriginalRungSurface.cs`: real visible front/rear surface coordinates and actor-relative lateral basis.
-- `Runtime/Animation/OriginalRigBinding.cs`: per-player measured limb chains, anatomical palm/sole landmarks and controller/avatar identity. Mesh contact offsets and normals are initial fitting values, not measured successful contacts.
-- `Runtime/Animation/OriginalClimbPresenter.Pose.cs`: original pelvis lean/support sway, limb clearance, bends, mount/catch/slide/exit choreography and native action handoff.
-- `Runtime/Animation/NativeIKLease.cs` and `OriginalIKCleanup.cs`: scoped input ownership/restoration.
+| What | File |
+|---|---|
+| Gait: which limbs move together, stride, swing timing, stop settling | `Domain/Animation/SameSideGait.cs` (`GaitShape` holds the values) |
+| Every pose value (pelvis, lean, grip, sole, rails, bends, finish) | `Runtime/Animation/ClimbTuning.cs` |
+| How values become hand/foot/body goals each IK pass | `Runtime/Animation/OriginalClimbPresenter.Pose.cs` |
+| Rung surface coordinates on both faces | `Domain/Animation/OriginalRungSurface.cs`, `Domain/ClimbPresentation.cs` (`RungShape`) |
+| Per-player rig measurements (chain lengths, pelvis/shoulder) | `Runtime/Animation/OriginalRigBinding.cs` |
+| Scoped IK ownership and restore | `Runtime/Animation/NativeIKLease.cs`, `OriginalIKCleanup.cs` |
 
-Reproduce game-free policy verification from the repository with `dotnet test src/ConcernedLadders.Tests/ConcernedLadders.Tests.csproj`; the test project links the production Domain source directly. It does not reference the game/Unity or compile the presenter. Run `python tools/validate_repo.py`. Claude alone runs the controlled licensed build and imports the resulting package.
+## The gait (owner reference 2026-10-26)
 
-The procedural functions are the editable original sources; no export step or proprietary animation asset is required. Evaluate them in the actual humanoid Fixed IK pass. Do not quantize targets to60 reference rows or advance phase from requested speed/frame time. Keep root movement and collision in Claude's motor.
+The right hand and right foot move up together, then the left hand and left foot half a cycle later,
+with overlapping timing (`HandSwing`/`FootSwing` above 0.5). Contacts are a pure function of the body's
+height on the run: the same height gives the same pose, climbing down retraces climbing up, nothing
+drifts and frame rate does not matter. Every planted contact is a real rung. A stop settles each moving
+limb onto the nearest rung; resuming rejoins the gait over `RejoinSeconds`.
 
-## Why this route is the available first prototype
+**Cadence.** Limb cadence = body speed ÷ (`StrideRungs` × pitch). The climbing speeds are gameplay
+(1.8 m/s, fast 2.43 m/s) and are not changed by animation. With pitch 1/3 m:
 
-Read-only tooling checks found no Unity Editor/Hub in PATH or the checked default installation directories. Blender Foundation directories2.93/5.1 exist, but no blender executable was found there. This is a bounded inventory, not proof no authoring tools exist anywhere. No compatible local humanoid-clip import/asset-bundle pipeline has been established.
+| StrideRungs | Each limb moves | Cycle at 1.8 m/s | Cycle at 2.43 m/s | Reach (measured in game) |
+|---|---|---|---|---|
+| 2 (0.2.3) | 0.67 m | 0.370 s | 0.274 s | fits |
+| **4 (0.2.5)** | 1.33 m | **0.741 s** | **0.549 s** | fits: worst 0.89–0.95 of chain, 0 skips in climb/fast/hold |
 
-Unity documents runtime SetCurve support for legacy clips, with non-legacy clip editing restricted to the editor: [Unity6 AnimationClip.SetCurve](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/AnimationClip.SetCurve.html). The observed native rig is a valid non-legacy humanoid with an existing IK callback. Original continuous contact/body authoring in that scoped per-player pass therefore gives a reproducible prototype using available tooling. This does not claim custom clips are impossible or rule out later original clip baking.
+The stride must be even so the two sides alternate evenly on real rungs. A slower-looking climb than
+0.741 s per cycle is not possible at 1.8 m/s within arm and leg reach; the alternative is a lower
+climbing speed, which is a gameplay decision for the owner.
 
-## Fitting procedure
+## Adjusting, step by step
 
-First demonstrate upward travel, a stable all-contact hold and departure restoring ordinary movement. Use a connected run long enough to inspect an interior loop, a clear side/front view and the installed player rig; no replacement mannequin is acceptance evidence. Compare target vs actual palm/sole positions and all four limbs plus pelvis/torso. Record normal and fast speeds actually completed by the motor.
+1. Change values in `ClimbTuning.cs` / `GaitShape`. Keep `ClimbTuning.ReachLimit` at 1.01: a contact
+   needing more of its chain is skipped and counted, never stretched.
+2. Rebuild and import (`scripts/verify.ps1`, `scripts/package.ps1`, manager import).
+3. Climb in game and read the `Climb fit` lines in `BepInEx/LogOutput.log`. One line per motion (and every
+   3 s of a long one) gives, per limb: passes, skips, worst/mean fraction of the measured chain needed,
+   where the posed shoulder/hip sat (`up` above the feet, `out` from the rung plane) and the solve error
+   (`err`, metres between the solved hand/foot and the goal; about one physics step of body travel while
+   moving, 0 when holding). A fitted motion has `skip=0` and `worst` under 0.96.
+4. Record normal-speed footage; frame sheets are diagnostics only.
 
-Measure/fit palm normal, contact-to-wrist offset, sole thickness/forefoot offset, lateral span, lean, pelvis support and hints. Current values are a prototype hypothesis. A reach warning yields that limb to native and is a failed fit to correct, never an accepted hidden substitute. Test rear independently, without negative skeleton scale.
+Conventions measured in game (do not re-derive from bones): humanoid IK goals are in the avatar's
+normalized space. A foot goal looks along the toes with up as up. A hand goal's forward runs along the
+fingers and its up is the back of the hand. The game's own foot IK runs in every animator layer's IK pass;
+the presenter re-asserts its goals after it in later layers.
 
-Then compare paired and deliberate candidates at actual normal/fast travel rates and record the chosen final gait. The current source implements the paired candidate; the deliberate actual-rig comparison is outstanding. Source samples alone do not establish fluidity. Do not slow the motor to hide excessive cadence.
+## Ownership rules kept by this source
 
-Finish up/down/hold/reverse/fast/slide, ground mount, air catch, supported top/side exit, immediate Jump/Drop, native hammer and equipment, lifecycle, scaffold refresh and real observers. The first fitted loop is only an internal checkpoint. Finger articulation currently remains native; original fitted grip closure is an explicit remaining presentation task.
+Movement, collision, stamina, skill and exits belong to the runtime; presentation only writes IK goals,
+hints and the body pose inside the player's own IK pass, and restores each owned field it still holds.
+With the hammer out, only the right arm yields to the game's own hammer animation. An interact (door,
+hatch) yields both arms, the upper body and the head. A top or side exit hands the limbs to the game's
+own walk early; the runtime drives that walk from the real exit path speed.
+
+## Known limits
+
+- The first few frames of a mount from the ground can exceed reach while contacts fade in.
+- At the very top of a run with no landing, the motor lets the feet reach the top; the hands then have
+  nothing within reach and yield to the native pose (a gameplay limit, unchanged).
+- Fingers keep the native hand pose; there is no fitted finger curl.
+- Other players see the native pose (no observer transport yet).

@@ -1,14 +1,30 @@
 # Changelog
 
+## 0.2.5
+
+Internal owner test candidate. Not a release.
+
+- Snapping: aim at a ladder to extend it; the new section lines up as one
+  straight column above (Bottom) or below (Top), and Auto picks the nearer end
+  without ever burying a section in the ground. A wall corner centres the
+  ladder on a 2 m wall at the wall's own angle, facing you. Corner modes aimed
+  at a ladder, and ends beyond your building reach, are refused (red ghost)
+  instead of showing a displaced ghost. All the game's own placement checks
+  still apply to the final position.
+- New climbing animation: right hand with right foot, then left with left,
+  every hand and foot on a real rung. Limbs cycle half as fast as 0.2.3 at the
+  same climbing speed (a four-rung stride). Stopping settles every limb on the
+  nearest rung; climbing down retraces the motion. Near a flush top the hands
+  take the rails and the step onto the floor uses the game's own walk.
+- With the hammer out only your right arm swings; the body, legs and left hand
+  keep holding the ladder.
+- Fixed: the game's own foot placement pulled the climber's feet to the
+  ground under the ladder.
+
 ## 0.2.4
 
-Internal development build for in-game checks. Not an owner candidate.
-
-- A ladder section placed on top of (or under) another ladder now always lines
-  up as one straight column, whatever rotation the hammer was left at.
-- Cycle Snap offers Top, Bottom and two wall corners that centre the ladder on
-  a 2 m wall. The old top corner points, which could snap a section diagonally
-  off the column, are gone.
+Internal development builds for in-game checks (several, one version number).
+Superseded by 0.2.5.
 
 ## 0.2.3
 

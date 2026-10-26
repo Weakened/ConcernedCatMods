@@ -4,7 +4,7 @@ Vertical ladders for compact Valheim builds. Three 2 m hammer pieces: Wood
 Ladder, Copper Ladder and Iron Ladder. Stack matching or mixed materials into a
 continuous run.
 
-**0.2.4 is an internal development build, not a release.** It is built against
+**0.2.5 is an internal owner test candidate, not a release.** It is built against
 Valheim 1.0.20 and tested in single player. Multiplayer, dedicated-server and
 controller play have not been tested yet.
 
@@ -28,8 +28,11 @@ levels make fast climbing and sliding cheaper (up to 25% at level 100); level 20
 unlocks sliding. The skill uses the game's own skill screen, saving and death
 rules.
 
-**Animation.** A first original climbing animation: hands and feet follow the rungs as you
-actually climb. It is still being fitted. Other players' clients do not show it yet.
+**Animation.** An original climbing animation: the right hand and right foot move up together,
+then the left hand and left foot, each hand and foot resting on a real rung. Stop and every limb
+settles on the nearest rung; climb down and the motion retraces itself. Near a flush top the hands
+take the rails, and stepping off onto the floor uses the game's own walk. Other players' clients
+do not show it yet.
 
 **Building from the ladder.** You can mount and climb with the hammer equipped and place,
 repair or remove pieces while holding on; your hammer arm uses the game's own animation. In build
@@ -45,8 +48,15 @@ climb; removing the section you hold lets you fall.
 | Iron Ladder | 2 Iron, 1 Wood | Forge |
 
 These are initial balance values. Recipes use native resource discovery and
-hammer placement, support, ward, repair and refund behavior. Cycle Snap shows
-Top, Bottom and the four corners. All three materials climb at the same speed.
+hammer placement, support, ward, repair and refund behavior. All three materials climb at the
+same speed. A free-standing stack follows the game's own structural support, so a very tall stack
+needs bracing against the building.
+
+**Snapping.** Aim at a ladder to extend it: a new section always lines up as one straight column,
+whatever rotation the hammer was left at. Cycle Snap offers Top (hang below), Bottom (stack above),
+Auto (the nearer end, never burying a section in the ground) and two wall corners that centre the
+ladder on a 2 m wall, facing you. A wall-corner mode aimed at a ladder is refused, and an end out of
+your building reach cannot be extended from where you stand.
 
 ## Installation and compatibility
 
