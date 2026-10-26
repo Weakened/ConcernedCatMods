@@ -4,6 +4,7 @@ using System.Linq;
 using Jotunn.Configs;
 using Jotunn.Entities;
 using Jotunn.Managers;
+using TheConcernedCat.ConcernedLadders.Domain;
 using TheConcernedCat.ConcernedLadders.Runtime;
 using TheConcernedCat.Diagnostics;
 using UnityEngine;
@@ -215,8 +216,9 @@ internal sealed class LadderPieceRegistration : IDisposable
         if (material.HasProperty("_Color")) material.color *= new Color(shade, shade, shade, 1f);
         Bar(root.transform, "left_rail", new Vector3(-0.34f, 1f, 0.16f), new Vector3(0.12f, 2f, 0.14f), material, layer);
         Bar(root.transform, "right_rail", new Vector3(0.34f, 1f, 0.16f), new Vector3(0.12f, 2f, 0.14f), material, layer);
-        for (int i = 0; i < 6; ++i)
-            Bar(root.transform, "rung_" + i, new Vector3(0f, (i + 0.5f) / 3f, 0.16f), new Vector3(0.62f, 0.08f, 0.12f), material, layer);
+        for (int i = 0; i < RungShape.PerSection; ++i)
+            Bar(root.transform, "rung_" + i, new Vector3(0f, (i + 0.5f) / 3f, RungShape.Plane),
+                new Vector3(2f * RungShape.HalfWidth, 2f * RungShape.HalfHeight, 2f * RungShape.HalfDepth), material, layer);
         return root;
     }
 

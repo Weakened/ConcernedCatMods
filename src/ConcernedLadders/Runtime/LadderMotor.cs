@@ -38,7 +38,17 @@ internal sealed class LadderMotor : IDisposable
             _motion = AccessTools.Method(typeof(Character), "UpdateMotion", new[] { typeof(float) });
             MethodInfo jump = AccessTools.Method(typeof(Character), "Jump", new[] { typeof(bool) });
             MethodInfo input = AccessTools.Method(typeof(Player), "TakeInput", Type.EmptyTypes);
-            if (_motion == null || jump == null || input == null || input.ReturnType != typeof(bool))
+            // Drop and the Jump/Drop/Use priority (N07) need the native control tick, before the game applies the
+            // crouch edge (sneak toggle) or turns a crouched Jump into a dodge; Use after a departure is held back
+            // at the game's own interaction call.
+            MethodInfo controls = AccessTools.Method(typeof(Player), "SetControls", new[]
+            {
+                typeof(Vector3), typeof(bool), typeof(bool), typeof(bool), typeof(bool), typeof(bool), typeof(bool),
+                typeof(bool), typeof(bool), typeof(bool), typeof(bool), typeof(bool),
+            });
+            MethodInfo interact = AccessTools.Method(typeof(Player), "Interact", new[] { typeof(GameObject), typeof(bool), typeof(bool) });
+            if (_motion == null || jump == null || input == null || input.ReturnType != typeof(bool) || controls == null ||
+                interact == null || interact.ReturnType != typeof(void) || !HasParameters(controls, "jump", "crouch"))
             {
                 log("Ladder climbing unavailable: the installed game's motor/input API did not match. Pieces remain registered.");
                 return false;
@@ -48,6 +58,8 @@ internal sealed class LadderMotor : IDisposable
             _harmony = new Harmony(id);
             _harmony.Patch(_motion, prefix: new HarmonyMethod(typeof(LadderMotor), nameof(BeforeMotion)));
             _harmony.Patch(jump, prefix: new HarmonyMethod(typeof(LadderMotor), nameof(BeforeJump)));
+            _harmony.Patch(controls, prefix: new HarmonyMethod(typeof(LadderMotor), nameof(BeforeControls)));
+            _harmony.Patch(interact, prefix: new HarmonyMethod(typeof(LadderMotor), nameof(BeforeInteract)));
             Ready = true;
             return true;
         }
@@ -112,4 +124,21 @@ internal sealed class LadderMotor : IDisposable
 
     private static bool BeforeJump(Character __instance) =>
         !(LadderRuntime.Current?.Jump(__instance) ?? false);
+
+    private static void BeforeControls(Player __instance, ref bool jump, ref bool crouch) =>
+        LadderRuntime.Current?.Controls(__instance, ref jump, ref crouch);
+
+    private static bool BeforeInteract(Player __instance) =>
+        !(ReferenceEquals(__instance, Player.m_localPlayer) && (LadderRuntime.Current?.SuppressInteract() ?? false));
+
+    private static bool HasParameters(MethodInfo method, params string[] names)
+    {
+        ParameterInfo[] parameters = method.GetParameters();
+        foreach (string name in names)
+        {
+            if (Array.FindIndex(parameters, parameter => parameter.Name == name && parameter.ParameterType == typeof(bool)) < 0) { return false; }
+        }
+
+        return true;
+    }
 }

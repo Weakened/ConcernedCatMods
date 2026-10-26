@@ -35,7 +35,13 @@ internal sealed class LadderSegment : MonoBehaviour, Hoverable, Interactable
     {
         LadderRuntime? runtime = LadderRuntime.Current;
         string text;
-        if (runtime?.IsClimbing == true) { text = GetHoverName() + "\n[<color=yellow><b>$KEY_Use</b></color>] $cl_ladder_dismount"; }
+        if (runtime?.IsClimbing == true)
+        {
+            // Current bindings, including remaps: $KEY_ tokens resolve through the game's own input map.
+            text = GetHoverName() + "\n[<color=yellow><b>$KEY_Use</b></color>] $cl_ladder_dismount" +
+                   "\n[<color=yellow><b>$KEY_Jump</b></color>] $cl_ladder_jump" +
+                   "\n[<color=yellow><b>$KEY_Crouch</b></color>] $cl_ladder_drop";
+        }
         else if (runtime != null && !runtime.InReach(this)) { text = GetHoverName() + "\n$cl_hover_reach"; }
         else { text = GetHoverName() + "\n[<color=yellow><b>$KEY_Use</b></color>] $cl_ladder_climb"; }
         return Localization.instance != null ? Localization.instance.Localize(text) : text;
