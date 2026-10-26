@@ -25,6 +25,13 @@ internal sealed class GaitShape
     /// <summary>The middle of a hand's planted range relative to the shoulder height the rig reports.</summary>
     internal float HandMidFromShoulder = 0.02f;
 
+    /// <summary>When the climber stops, each limb settles on the nearest rung within this band: hands relative to the
+    /// shoulder, feet relative to FootLowRel.</summary>
+    internal float HandSettleBelow = 0.5f;
+    internal float HandSettleAbove = 0.4f;
+    internal float FootSettleBelow = 0.1f;
+    internal float FootSettleAbove = 0.7f;
+
     /// <summary>Seconds for a swinging limb to settle onto the nearer rung when the climber stops.</summary>
     internal float SettleSeconds = 0.14f;
 
@@ -57,7 +64,7 @@ internal sealed class SameSideGait
     private readonly float[] _settled = new float[4];
     private readonly bool[] _synced = new bool[4];
     private GaitShape _shape = new GaitShape();
-    private float _base, _pitch, _origin, _cycle;
+    private float _base, _pitch, _origin, _cycle, _shoulderRel;
     private int _first, _last, _handGap;
     private bool _holding;
 
@@ -91,6 +98,7 @@ internal sealed class SameSideGait
         float handRange = (1f - _shape.HandSwing) * _cycle;
         float wanted = shoulderRel + _shape.HandMidFromShoulder - handRange * 0.5f - handLowRel;
         _handGap = Math.Max(1, Math.Min(12, (int)Math.Round(wanted / pitch)));
+        _shoulderRel = shoulderRel;
         _holding = false;
         Ready = true;
         Pose(feetY, true);
@@ -120,7 +128,15 @@ internal sealed class SameSideGait
             // In game 2026-10-26: settling a mid-swing limb onto the rung it left or the rung it was heading for put
             // it up to half a swing (0.37 m with a four-rung stride) away from the body, out of reach. It takes the
             // real rung nearest to where it is instead: never more than half a rung away.
-            for (int limb = 0; limb < 4; limb++) { _settled[limb] = NearestRung(_shown[limb]); }
+            // In game 2026-10-26 a hand stopping after a descent settled one rung past its reach; the rung chosen is the
+            // nearest one inside the limb's comfortable band relative to the body.
+            for (int limb = 0; limb < 4; limb++)
+            {
+                bool hand = limb == LeftHand || limb == RightHand;
+                float low = feetY + (hand ? _shoulderRel - _shape.HandSettleBelow : _shape.FootLowRel - _shape.FootSettleBelow);
+                float high = feetY + (hand ? _shoulderRel + _shape.HandSettleAbove : _shape.FootLowRel + _shape.FootSettleAbove);
+                _settled[limb] = NearestRung(_shown[limb], low, high);
+            }
         }
 
         _holding = hold;
@@ -190,9 +206,12 @@ internal sealed class SameSideGait
         return _base + (a + (b - a) * Ease(w)) * _pitch;
     }
 
-    private float NearestRung(float height)
+    private float NearestRung(float height, float low, float high)
     {
         long rung = (long)Math.Round((height - _base) / _pitch);
+        long lowest = (long)Math.Ceiling((low - _base) / _pitch - 1e-4);
+        long highest = (long)Math.Floor((high - _base) / _pitch + 1e-4);
+        if (lowest <= highest) { rung = Math.Max(lowest, Math.Min(highest, rung)); }
         return _base + ClampRung(rung) * _pitch;
     }
 

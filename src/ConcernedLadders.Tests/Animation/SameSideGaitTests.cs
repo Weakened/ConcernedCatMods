@@ -110,6 +110,24 @@ public sealed class SameSideGaitTests
     }
 
     [Fact]
+    public void AStopNeverSettlesAHandOutOfItsReachBand()
+    {
+        var shape = new GaitShape();
+        for (float feet = 12f; feet < 14f; feet += 0.037f)
+        {
+            var gait = Gait(feet: feet);
+            for (int i = 0; i < 20; i++) { Assert.True(gait.Update(feet, 0.02f, false)); }
+            for (int i = 0; i < 40; i++) { Assert.True(gait.Update(feet, 0.02f, true)); }
+            foreach (int hand in new[] { SameSideGait.LeftHand, SameSideGait.RightHand })
+            {
+                float rel = gait.Contact(hand).Height - feet - 1.45f;
+                Assert.InRange(rel, -shape.HandSettleBelow - 0.001f, shape.HandSettleAbove + 0.001f);
+                Assert.True(OnRung(gait.Contact(hand).Height));
+            }
+        }
+    }
+
+    [Fact]
     public void ResumingAfterAStopRejoinsTheGaitWithoutAJump()
     {
         var gait = Gait();
