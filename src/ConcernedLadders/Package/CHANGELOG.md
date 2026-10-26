@@ -1,13 +1,22 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
-- Correct visible piece names to Wood Ladder, Copper Ladder and Iron Ladder;
-  stable prefab IDs and localization keys are unchanged. Source correction
-  only until the next verified candidate is built and tested.
-- Reconcile the owner feedback contract and package identity checks. The
-  requested movement/progression revision is still pending implementation;
-  this entry does not claim those gameplay changes are complete.
+Owner-test candidate implementing the owner revision of 25 October 2026.
+
+- Grab from about 1.5 m, measured from the chest to the rungs (or, standing on a
+  floor at the top, the step onto the rails); the prompt says "Move closer" when
+  a press would be out of reach.
+- Climb either face; the route stays on the face you approached. Grab while
+  rising or falling; a refused grab leaves the fall untouched.
+- Jump hops off upward and in the steered direction with the game's own jump and
+  stamina; without stamina it simply lets go. Re-grabbing needs 0.4 s and a new
+  press.
+- Run climbs at 2.43 m/s for stamina; native Climbing skill; slide at level 20.
+- Stepping onto floors at the top now also works to either side and around a lip.
+- Refusals name the real reason; only another building piece is blamed as one.
+- Wood Ladder, Copper Ladder and Iron Ladder names; readable Cycle Snap labels.
+- Custom procedural climbing animation on the native rig.
 
 ## 0.1.1
 

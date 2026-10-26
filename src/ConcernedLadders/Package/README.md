@@ -1,32 +1,36 @@
 # Concerned Ladders
 
-Vertical ladders for compact Valheim builds. Three 2 m hammer pieces: wood,
-copper and iron. Stack matching or mixed materials into a continuous run.
+Vertical ladders for compact Valheim builds. Three 2 m hammer pieces: Wood
+Ladder, Copper Ladder and Iron Ladder. Stack matching or mixed materials into a
+continuous run.
 
-**0.1.1 is an owner-test candidate, not a release.** It is built against
+**0.2.0 is an owner-test candidate, not a release.** It is built against
 Valheim 1.0.20 and tested in single player. Multiplayer, dedicated-server and
 controller play have not been tested yet.
 
-**The owner's 25 October playtest revision is not implemented in 0.1.1.**
-Its midair catches, two-sided climbing, powered directional Jump, sprint/stamina,
-Climbing skill/slide and snap-text requirements are defined in
-`docs/mods/concerned-ladders/OWNER_REVISION_2026_10_25.md`. The controls below
-describe the earlier candidate; they are not acceptance criteria for its
-replacement. Do not repackage 0.1.1 as that replacement. A new candidate needs
-the implementation, new version, current behavior evidence and matching
-package/installed-DLL identity.
+## Controls
 
-## Earlier 0.1.1 controls
+| Action | What it does |
+|---|---|
+| **Interact** (Use) | Grab the ladder you are looking at: from the ground, an upper floor, beside or behind the rails, or in midair while jumping or falling. Within about 1.5 m of the rungs. While climbing, Interact steps off onto a safe landing. |
+| Forward / backward | Climb up / down. Neutral holds. Camera pitch does not matter. |
+| **Run** + movement | Climb faster (2.43 m/s instead of 1.8). Costs stamina; without stamina you keep climbing normally. |
+| Backward + **Run** at Climbing 20+ | Slide down at 4.5 m/s. Below level 20 it is a fast descent. |
+| **Jump** | Hop off upward and in the direction you are steering (away from the ladder when neutral). Uses the game's own jump and stamina; without enough stamina you simply let go. |
 
-Use your normal **Interact** binding to mount from a supported landing. Forward
-and backward climb up and down; neutral input holds. **Interact** requests a safe
-dismount. **Jump** deliberately lets go. A blocked top keeps you on the ladder so
-you can descend or release. Keyboard/controller remapping and all exits must pass
-the live test plan before a release.
+Climb either face of a freestanding ladder. At the top of a run the climber steps
+onto a floor beyond the rails or to either side; a closed roof or hatch keeps you
+on the ladder. All controls are the game's own bindings, including remaps.
 
-The initial animation is the player's existing locomotion cycle, driven while
-moving and stopped while holding. An authored climbing clip and hand/foot IK are
-not included. The camera remains under your control.
+**Climbing skill.** Normal and fast climbing raise a native Climbing skill. Higher
+levels make fast climbing and sliding cheaper (up to 25% at level 100); level 20
+unlocks sliding. The skill uses the game's own skill screen, saving and death
+rules.
+
+**Animation.** Climbers use a custom procedural climbing pose: hands and feet
+take hold of the actual rungs and move with the distance climbed. Other players'
+clients pose a climber from that player's position on the ladder; this has not
+yet been checked with a second player.
 
 ## Building and recipes
 
@@ -37,10 +41,8 @@ not included. The camera remains under your control.
 | Iron Ladder | 2 Iron, 1 Wood | Forge |
 
 These are initial balance values. Recipes use native resource discovery and
-hammer placement, support, ward, repair and refund behavior. No extra climbing
-skill or stamina drain in the earlier 0.1.1 implementation. The owner revision
-replaces that limitation; do not treat it as a prohibition on the new work.
-All three materials currently climb at the same speed.
+hammer placement, support, ward, repair and refund behavior. Cycle Snap shows
+Top, Bottom and the four corners. All three materials climb at the same speed.
 
 ## Installation and compatibility
 
@@ -60,10 +62,12 @@ The mod does not unpatch Foreman or change another mod's settings.
 
 ## Existing builds and removal
 
-Changing `General/ClimbingEnabled` stops climbing but keeps the pieces registered.
-Back up the world and remove these custom ladders with the mod still installed
-before uninstalling. Loading and saving a world without a custom-piece mod can
-remove its objects. Never use a personal world for candidate testing.
+Changing `General/ClimbingEnabled` stops climbing but keeps the pieces and the
+Climbing skill registered. Back up the world and remove these custom ladders
+with the mod still installed before uninstalling. Loading and saving a world
+without a custom-piece mod can remove its objects, and saving a character without
+the mod is not promised to keep the Climbing skill. Never use a personal world or
+character for candidate testing.
 
 ## Development
 
