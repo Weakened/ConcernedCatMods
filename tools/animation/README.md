@@ -8,7 +8,7 @@ Claude's existing dev harness can provide the baseline; it does not need to adop
 
 `tools/animation/NativeAnimationBaselineProbe.cs` is source-only dev tooling. It is deliberately outside the product's Compile glob. Integrate into a dev harness only if useful, with the actual game/Harmony references. It is not semantically compiled in this lane; no fake engine stubs are supplied.
 
-- Select the real local owning Player and its actual Animator, cross-checking CharacterAnimEvent/ZSyncAnimation. It refuses the known rejected .pose hook and stops if actor/controller/avatar/ownership changes.
+- Select the real local owning Player and its actual Animator, cross-checking CharacterAnimEvent/ZSyncAnimation. It refuses known own .pose, .presentation and original-ik-cleanup hooks and stops if actor/controller/avatar/ownership changes.
 - Begin requires action, game/source identity claims and a reference to actual native-isolation evidence. Caller claims never attest source provenance or installed hashes.
 - Call SampleLateFrame once from an explicitly documented LateUpdate hook. It observes that callback's current pose, not a guaranteed final rendered pose.
 - Optional SampleNativeIK calls occur only inside read-only native OnAnimatorIK prefix/postfix hooks. Humanoid bodyPosition/bodyRotation getters also belong only here. Do not call these or IK getters from arbitrary Update/LateUpdate. Label native pre/post order and list all remaining patches.

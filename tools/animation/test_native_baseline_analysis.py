@@ -47,10 +47,12 @@ class BaselineAnalysisTests(unittest.TestCase):
             module.summarize(data)
 
     def test_rejected_custom_hook_prevents_native_baseline_label(self):
-        data = fixture()
-        data[0]["nativeIKPatchOwners"] = ["com.theconcernedcat.valheim.concernedladders.pose"]
-        with self.assertRaisesRegex(ValueError, "not an isolated native"):
-            module.summarize(data)
+        for suffix in ("pose", "presentation", "original-ik-cleanup"):
+            with self.subTest(owner=suffix):
+                data = fixture()
+                data[0]["nativeIKPatchOwners"] = ["com.theconcernedcat.valheim.concernedladders." + suffix]
+                with self.assertRaisesRegex(ValueError, "not an isolated native"):
+                    module.summarize(data)
 
     def test_unknown_clip_identity_is_not_silently_joined_by_name(self):
         data = fixture()

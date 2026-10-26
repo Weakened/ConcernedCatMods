@@ -65,9 +65,11 @@ internal sealed class NativeAnimationBaselineProbe
         string[] owners = patches != null ? new List<string>(patches.Owners).ToArray() : Array.Empty<string>();
         foreach (string owner in owners)
         {
-            if (owner == "com.theconcernedcat.valheim.concernedladders.pose")
+            if (owner == "com.theconcernedcat.valheim.concernedladders.pose" ||
+                owner == "com.theconcernedcat.valheim.concernedladders.presentation" ||
+                owner == "com.theconcernedcat.valheim.concernedladders.original-ik-cleanup")
             {
-                throw new InvalidOperationException("Native baseline refused: the rejected ladder pose hook is installed.");
+                throw new InvalidOperationException("Native baseline refused: a known ladder presentation/cleanup hook is installed.");
             }
         }
 

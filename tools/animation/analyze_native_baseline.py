@@ -54,8 +54,12 @@ def summarize(records):
     header, end = headers[0], ends[0]
     if records[0] is not header or records[-1] is not end:
         raise ValueError("Header and end must bound one complete capture")
-    if "com.theconcernedcat.valheim.concernedladders.pose" in header.get("nativeIKPatchOwners", []):
-        raise ValueError("Rejected ladder IK patch is present; this is not an isolated native capture")
+    if set(header.get("nativeIKPatchOwners", [])) & {
+        "com.theconcernedcat.valheim.concernedladders.pose",
+        "com.theconcernedcat.valheim.concernedladders.presentation",
+        "com.theconcernedcat.valheim.concernedladders.original-ik-cleanup",
+    }:
+        raise ValueError("Known ladder IK presentation/cleanup is present; this is not an isolated native capture")
     if not header.get("isolationEvidenceClaim"):
         raise ValueError("Missing external native-isolation evidence reference")
 
