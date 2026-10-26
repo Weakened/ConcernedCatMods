@@ -20,6 +20,7 @@ internal sealed class NativeAnimationBaselineProbe
     private const double MaximumSeconds = 20;
     private const int MaximumLayers = 16;
     private const int MaximumClips = 512;
+    private const int MaximumClipReferences = 2048;
     private readonly Player _player;
     private readonly Animator _animator;
     private readonly Transform _root;
@@ -115,7 +116,10 @@ internal sealed class NativeAnimationBaselineProbe
             var pose = new List<BonePose>(_bones.Count);
             foreach (KeyValuePair<int, Transform> entry in _bones)
             {
-                if (entry.Value != null) { pose.Add(Pose(entry.Key, entry.Value)); }
+                // Inventory all mapped bones, but sample the body/limbs rather than every finger.
+                bool bodyBone = entry.Key <= (int)HumanBodyBones.RightToes ||
+                    entry.Key == (int)HumanBodyBones.UpperChest;
+                if (bodyBone && entry.Value != null) { pose.Add(Pose(entry.Key, entry.Value)); }
             }
 
             var frame = new FrameRecord
@@ -185,6 +189,9 @@ internal sealed class NativeAnimationBaselineProbe
                 frame = Time.frameCount,
                 elapsedSeconds = _clock.Elapsed.TotalSeconds,
                 layer = layerIndex,
+                // Unity body getters, like IK getters, require the Animator IK pass.
+                humanoidBodyPositionRoot = animator.isHuman ? _root.InverseTransformPoint(animator.bodyPosition) : Vector3.zero,
+                humanoidBodyRotationRoot = animator.isHuman ? Quaternion.Inverse(_root.rotation) * animator.bodyRotation : Quaternion.identity,
                 goals = goals,
                 hints = hints
             });
@@ -241,6 +248,7 @@ internal sealed class NativeAnimationBaselineProbe
             cullingMode = _animator.cullingMode.ToString(),
             rigidbodyInterpolation = body != null ? body.interpolation.ToString() : "unavailable",
             layerCount = _animator.layerCount,
+            playerRootScale = _root.lossyScale,
             targetFrameRateSetting = Application.targetFrameRate,
             vSyncCountSetting = QualitySettings.vSyncCount,
             unityCaptureFramerateSetting = Time.captureFramerate,
@@ -253,11 +261,12 @@ internal sealed class NativeAnimationBaselineProbe
         });
 
         AnimationClip[] clips = controller.animationClips;
-        if (clips.Length > MaximumClips) { throw new InvalidOperationException("Controller clip inventory exceeds diagnostic cap."); }
+        if (clips.Length > MaximumClipReferences) { throw new InvalidOperationException("Controller clip inventory exceeds diagnostic cap."); }
         var seen = new HashSet<int>();
         foreach (AnimationClip clip in clips)
         {
             if (clip == null || !seen.Add(clip.GetInstanceID())) { continue; }
+            if (seen.Count > MaximumClips) { throw new InvalidOperationException("Distinct clip count exceeds cap."); }
             Add(new ClipRecord
             {
                 kind = "clip",
@@ -272,7 +281,7 @@ internal sealed class NativeAnimationBaselineProbe
         }
         if (controller is AnimatorOverrideController overrides)
         {
-            if (overrides.overridesCount > MaximumClips) { throw new InvalidOperationException("Override inventory exceeds cap."); }
+            if (overrides.overridesCount > MaximumClipReferences) { throw new InvalidOperationException("Override inventory exceeds cap."); }
             var mappings = new List<KeyValuePair<AnimationClip, AnimationClip>>();
             overrides.GetOverrides(mappings);
             foreach (KeyValuePair<AnimationClip, AnimationClip> mapping in mappings)
@@ -304,6 +313,43 @@ internal sealed class NativeAnimationBaselineProbe
                     parentPath = bone != null && bone.parent != null ? Path(bone.parent) : "",
                     observedPose = bone != null ? Pose(i, bone) : null
                 });
+            }
+        }
+        CharacterAnimEvent animationEvents = _animator.GetComponent<CharacterAnimEvent>();
+        if (animationEvents != null)
+        {
+            Add(new FootSettingsRecord { kind = "native_foot_settings", footIK = animationEvents.m_footIK,
+                perFootValues = animationEvents.m_useFeetValues, offset = animationEvents.m_footOffset,
+                maxDown = animationEvents.m_footDownMax, stepHeight = animationEvents.m_footStepHeight,
+                stabilizeDistance = animationEvents.m_stabalizeDistance });
+            CharacterAnimEvent.Foot[] nativeFeet = animationEvents.m_feets ?? Array.Empty<CharacterAnimEvent.Foot>();
+            if (nativeFeet.Length > 8) { throw new InvalidOperationException("Native foot inventory exceeds cap."); }
+            foreach (CharacterAnimEvent.Foot foot in nativeFeet)
+            {
+                if (foot == null) { continue; }
+                Add(new FootSettingsRecord { kind = "native_foot", goal = foot.m_ikHandle.ToString(),
+                    path = foot.m_transform != null ? Path(foot.m_transform) : "",
+                    perFootValues = animationEvents.m_useFeetValues, offset = foot.m_footOffset,
+                    maxDown = foot.m_footDownMax, stepHeight = foot.m_footStepHeight,
+                    stabilizeDistance = foot.m_stabalizeDistance });
+            }
+        }
+        // Imported reference transforms are clearly separated from evaluated bone poses. These are
+        // local diagnostic numbers only, not rig/mesh assets or replacement motion to package.
+        if (avatar != null && avatar.isValid && avatar.isHuman)
+        {
+            SkeletonBone[] reference = avatar.humanDescription.skeleton;
+            if (reference != null)
+            {
+                if (reference.Length > 256) { throw new InvalidOperationException("Avatar reference inventory exceeds cap."); }
+                var requiredNames = new HashSet<string>();
+                foreach (Transform bone in _bones.Values) { if (bone != null) { requiredNames.Add(bone.name); } }
+                foreach (SkeletonBone bone in reference)
+                {
+                    if (!requiredNames.Contains(bone.name)) { continue; }
+                    Add(new ReferenceBoneRecord { kind = "avatar_import_reference", name = bone.name,
+                        localPosition = bone.position, localRotation = bone.rotation, localScale = bone.scale });
+                }
             }
         }
         MonoBehaviour[] scripts = _root.GetComponentsInChildren<MonoBehaviour>(true);
@@ -448,6 +494,7 @@ internal sealed class NativeAnimationBaselineProbe
         public int schema, animatorId, controllerId, layerCount, targetFrameRateSetting, vSyncCountSetting, unityCaptureFramerateSetting;
         public bool avatarValid, avatarHuman, animatorHuman, applyRootMotion, hasRootMotion;
         public float humanScale;
+        public Vector3 playerRootScale;
         public string[] nativeIKPatchOwners = Array.Empty<string>();
     }
     [Serializable] private sealed class ClipRecord
@@ -514,8 +561,22 @@ internal sealed class NativeAnimationBaselineProbe
         public string kind = "", stage = "";
         public int frame, layer;
         public double elapsedSeconds;
+        public Vector3 humanoidBodyPositionRoot;
+        public Quaternion humanoidBodyRotationRoot;
         public GoalRecord[] goals = Array.Empty<GoalRecord>();
         public HintRecord[] hints = Array.Empty<HintRecord>();
+    }
+    [Serializable] private sealed class FootSettingsRecord
+    {
+        public string kind = "", goal = "", path = "";
+        public bool footIK, perFootValues;
+        public float offset, maxDown, stepHeight, stabilizeDistance;
+    }
+    [Serializable] private sealed class ReferenceBoneRecord
+    {
+        public string kind = "", name = "";
+        public Vector3 localPosition, localScale;
+        public Quaternion localRotation;
     }
     [Serializable] private sealed class HintRecord { public string hint = ""; public Vector3 position; public float weight; }
     [Serializable] private sealed class TriggerRecord

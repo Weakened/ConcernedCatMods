@@ -1,61 +1,40 @@
-# Vanilla animation baseline — 2026-10-26
+# Vanilla animation baseline — execution record, 2026-10-26
 
-**Status: BLOCKED_NATIVE_ANIMATION_BASELINE — capture in progress, replacement authoring has not started.**
+**Status: COMPLETE — baseline accepted for original authoring with documented limitations.**
+Replacement motion was not authored before this gate closed.
 
-This is the local execution record for the mandatory first step in the owner reference pack. It is not the cloud template and does not claim completion from API inspection. The owner assigned original animation to Codex; Claude retains runtime, licensed builds, profile imports and game operation.
+This is the mandatory first-step record for the owner's reference pack. Actual installed metadata and recorded native motion now exist and have been analyzed. The owner explicitly authorized independent frame-and-timing review for this pre-authoring gate. Timestamped frame decoding and traces establish frame stepping and timing; they do not constitute continuous perceptual observation. Normal-speed fluidity approval remains a required exact-candidate check.
 
 ## Identity and ownership
 
 - Isolated branch: `feat/cl-431-original-animation`.
 - Worktree: `C:\Users\erenc\.codex\worktrees\ladders-original-animation\ConcernedCatMods`.
-- Runtime source inspected: `441ea830785a27920f4bad11c01f877ed94b7d28`, version 0.2.1.
-- Claude's documentation reconciliation `ec72119` was fast-forwarded into this lane without runtime changes.
-- Reference ZIP: `ConcernedLadders_Original_Animation_REFERENCE_AND_PROMPTS.zip`, SHA256 `8c7fae5a903ef0096c9a475c4ad4db5f56e330ee4ec476a319be038103d537b1`.
-- Scope and ownership acknowledged in shared `ANIMATION_LEAD_RESPONSE_2026_10_26.md`; interface clarifications sent in `CODEX_ANIMATION_INTERFACE_REPLY_2026_10_26.md`.
-- No replacement motion, rig-binding writes, controller overrides or motor implementation has been added by this lane.
+- Runtime build source `441ea830785a27920f4bad11c01f877ed94b7d28`, Concerned Ladders0.2.1; docs reconciliation `ec72119ad52de343eccdc709e31ed984fdcd28c7`.
+- Installed own DLL per lead: `287b825ad7cc97f94bfe95c47feccc3096627d616a657c148c29591013110f19`; package `01e3a766a104e4a680182891a7cc20c52375e29f3f8fada689b208ff015e7837`. These identify baseline context, not an original-animation build or compiler attestation by Codex.
+- Reference ZIP SHA256 `8c7fae5a903ef0096c9a475c4ad4db5f56e330ee4ec476a319be038103d537b1`.
+- Animation allowlist agreed in shared ANIMATION_LEAD_RESPONSE_2026_10_26.md; Claude owns all shared runtime/declarations, builds, profiles and game operation.
 
-## Observed facts
+## Completed observations and analysis
 
-| Fact | Source and limit |
-|---|---|
-| Current source has rejected custom IK | Plugin installs `LadderClimbAnimation` unconditionally; it patches `CharacterAnimEvent.OnAnimatorIK`. This identifies current code, not the unknown source behind the owner's earlier uploaded still. |
-| Climb toggle does not remove that hook | Observer inference is independent of the local climb toggle. Lead must positively remove/disable the pose hook for native capture. |
-| Native hooks exist | Read-only installed-assembly inspection confirms OnAnimatorIK calls UpdateLookat then UpdateFootIK; CustomLateUpdate adjusts head/shoulders afterward. API availability is not live rig/controller metadata. |
-| Clip/state inspection route exists | Installed Unity metadata exposes controller clips, frameRate/length/loop, current/next state and weighted clips, bone mapping, IK inputs and update modes. |
-| Native sync is parameter-based | Installed ZSyncAnimation does not transmit a custom controller, graph or bone transform automatically. Observers require a verified signal or reviewed protocol. |
-| Engine log | Existing Player.log reports Unity 6000.0.75f1; native capture must re-record Application.unityVersion. CoreModule Windows version metadata is 0.0.0.0 and cannot substitute. |
-| Ladder geometry in source | 2m modules, pitch 1/3m, six rung centres +1/6 through +11/6m; visible rung faces Z=.10/.22, collider faces .08/.24. These are source-derived, pending live geometry/rig fitting. |
-| Reference contents | ZIP contains docs/CSVs, no game clips/rigs/GIFs. Five named GIFs were not found in bounded Downloads/attachments searches. Existing written/CSV references suffice; no owner reference request is needed. |
+See [NATIVE_ANIMATION_BASELINE.md](NATIVE_ANIMATION_BASELINE.md), [per-motion CSV](native_animation_baseline.csv), [evidence fingerprints](native_baseline_evidence_manifest.csv) and [repair path inspection](REPAIR_NATIVE_PATH_INSPECTION.md).
 
-## Lead capture underway
+- Actual valid male humanoid Avatar, Player_animator,53 mapped bones, Fixed update mode, native capsule and Rigidbody interpolation inspected.
+-434 distinct native clips inventoried. Representative idle/locomotion/JumpTweaked/swim/hammer metadata is30Hz, distinct from actual keys, measured state rates, roughly50Hz pose changes, roughly120Hz CPU callbacks and recorder request60FPS.
+- Native walk/jog/run/crouch/jump/swim/hammer frames and traces analyzed, with all four limbs and pelvis/torso discussed. Grass, water, clipping and sample order limit contact claims.
+- Session2/3 isolation receipts confirm rejected pose removal, including after the separate rejected-reference take. Swim session1 has weaker retained provenance and is supplementary.
+- Repair trigger path independently inspected in the actual installed assembly. Captured place/remove is the representative native hammer motion; actual repair invocation remains untested.
+- Hammer moves both arms and torso; right-arm-only ownership was rejected. Source sampling metadata is not literal keys/s. Foot-pivot backward motion is not sole plant/slip evidence.
+- Initial paired two-rung procedural contact/body plan, continuous distance phase, Fixed IK evaluation, provisional quintic easing and short native-scale blends are documented as the chosen first authoring approach. Its5.4/7.29 paired events/s is an explicit visual risk. Final gait requires actual-rig fitting and comparison; no motor-speed change is authorized.
+- Uninvolved reviewer independently examined captures/traces and corrected the report. The uninvolved reviewer accepted the baseline after the owner's narrow authorization; see BASELINE_REVIEW_2026_10_26.md.
 
-Claude acknowledged the request and is producing a dev-harness native dump, frame traces and synchronized gameplay videos in:
-`C:\code\cc-integration\cl-ladders-review-evidence\native-baseline`.
+## Owner authorization and gate closure
 
-Planned native actions: idle, walk, run, crouch idle/walk, standing/running Jump with landing, swim, hammer idle/place/repair/remove. The rejected ladder view is a separate reference capture, never native baseline. A transient test capture or a file still being written is not delivered evidence. Capture paths, hashes, source/DLL identity and actual isolation log will be recorded after delivery.
+The reference pack VANILLA_ANIMATION_BASELINE_2026_10_26.md section3 says, “Codex reviews normal playback and frame stepping.” Available tools expose still screenshots/frames and timing, not a continuous video observation interface. The uninvolved reviewer verified this limitation. Starting playback in a player would not let either reviewer claim to have perceived continuous motion.
 
-The harness must identify its actual sample phase/order, avoid calling an evaluated idle pose a rest pose, separate state speed/multiplier/Animator speed, and report recorder drops/duplicates independently of CPU render-update cadence. Claude has received those corrections. No game operation is performed by this lane.
+The owner answered the explicit question about substituting independent frame-and-timing review: **Allow frame-and-timing baseline review (Recommended)**. This authorizes only the pre-authoring review change; it does not waive normal-speed fluidity approval on the integrated animation. The uninvolved reviewer then returned **BASELINE ACCEPTED FOR AUTHORING WITH DOCUMENTED LIMITATIONS**, finding no other pre-authoring blocker. This record closes the baseline before original motion implementation. Lead READY alone was not used as acceptance.
 
-## Inferences and provisional analysis
+## Unknowns and later checks
 
-With source pitch 1/3m, two-rung travel at normal 1.8m/s lasts .3704s; fast 2.43m/s lasts .2743s. Paired swings last .1852/.1372s; sequential single-limb swings .0926/.0686s. Under the provisional quintic easing, paired peak vertical world contact-target rates are 6.75/9.1125m/s; sequential peaks 13.5/18.225m/s.
+Imported reference axes, evaluated body COM, native per-instance foot settings and fitted palm/sole offsets remain binding checks. They are not additional timing-baseline prerequisites. Raw curves/editor import settings and actual unique keys are unavailable. Female rigs, equipment variations, lifecycle, scaffolds, final gait/fast motion, slides, every transition, observers and cleanup remain exact-integrated-candidate checks.
 
-These are consequences of the reference formulas and current source defaults. They are not native limb-speed measurements and do not select a final gait. A deliberate four-beat pattern has a credible flailing risk at full speed; actual rig reach/playback must resolve it. The CSV body travel is already motor travel and will never be added to the root.
-
-## Unavailable / pending evidence
-
-- Actual loaded native Animator/controller/Avatar identity, required bone mappings and valid axes/scale/limb lengths.
-- Native clip sampling/duration/loop inventory tied to the actual selected player.
-- Isolated native playback and contact/body/blend observations for every requested action.
-- Measured effective playback and render-update cadence, separate capture metadata and drops/duplicates.
-- Rest/reference-pose data and raw-curve availability, labelled separately from evaluated pose.
-- Final authoring sampling, gait, easing, contact fit and blend durations justified by observations.
-- Uninvolved baseline review.
-
-Raw curves are optional. Missing actual native metadata/playback is the current blocking prerequisite; it does not establish animation impossibility or justify CUSTOM_ANIMATION_DEFERRED.
-
-## Completion rule
-
-Fill `NATIVE_ANIMATION_BASELINE.md` and `native_animation_baseline.csv` with observed facts, measured playback and explicit unknowns; include visual analysis of all four limbs and pelvis/torso. Compare paired and deliberate motion rates against the native evidence. Obtain uninvolved baseline review before any replacement pose/clip implementation.
-
-Only then change this gate to COMPLETE and begin original motion. First fitted loop remains an internal checkpoint; the full mount/up/down/hold/reverse/fast/slide/catch/top-exit/Jump/Drop/hammer, lifecycle, scaffold and observer set remains required. Original animation is not delivered by this preparatory commit.
+The first fitted loop will be an internal checkpoint after the gate. Ground mount, up/down, hold, reversal, fast, slide, air catch, supported top finish, immediate Jump/Drop, native hammer handoff and restoration all remain required. No replacement source or finished game build is delivered by baseline preparation.
