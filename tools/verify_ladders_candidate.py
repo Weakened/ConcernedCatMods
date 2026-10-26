@@ -264,8 +264,10 @@ def check_log(log: FileSnapshot, version: str, commit: str, candidate_files: lis
                          r"([0-9]+\.[0-9]+\.[0-9]+)\+([0-9a-fA-F]{40}) loaded\.(?: .*)?", banner)
     require(match is not None and match.group(1) == version and match.group(2).lower() == commit,
             "Startup banner must claim the exact requested version and full 40-character source SHA.")
+    # BepInEx 5.4.23 (the installed BepInExPack 5.4.2351) appends its plugin counts to this line, e.g.
+    # "Chainloader startup complete (2 loaded, 0 skipped, 0 failed)"; the bare form is accepted as well.
     complete = [i for i, line in enumerate(lines) if re.fullmatch(
-        r"\[Message\s*:\s*BepInEx\s*\]\s+Chainloader startup complete", line)]
+        r"\[Message\s*:\s*BepInEx\s*\]\s+Chainloader startup complete(?: \(\d+ loaded, \d+ skipped, \d+ failed\))?", line)]
     require(len(complete) == 1 and starts[0] < index < complete[0],
             "Game log must include a single completed startup after the plugin banner.")
     require(all(log.mtime_ns >= item.mtime_ns for item in candidate_files),

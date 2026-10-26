@@ -315,6 +315,17 @@ class LadderCandidateTests(unittest.TestCase):
                 self.log.write_text(log, encoding="utf-8")
                 self.refused()
 
+    def test_real_bepinex_completion_line_with_plugin_counts_is_accepted(self) -> None:
+        # Observed in the installed BepInExPack 5.4.2351 log (0.2.0 cold start): the completion line carries counts.
+        real = "[Message:   BepInEx] Chainloader startup complete (2 loaded, 0 skipped, 0 failed)\n"
+        self.log.write_text(self.cold_log().replace("[Message:   BepInEx] Chainloader startup complete\n", real), encoding="utf-8")
+        self.assertEqual(0, self.run_cli()[0])
+        for bad in ("[Message:   BepInEx] Chainloader startup complete (2 loaded, 0 skipped, 1 failed) extra\n",
+                    "[Message:   BepInEx] Chainloader startup completed\n"):
+            with self.subTest(line=bad):
+                self.log.write_text(self.cold_log().replace("[Message:   BepInEx] Chainloader startup complete\n", bad), encoding="utf-8")
+                self.refused()
+
     def test_log_predating_candidate_files_is_refused_but_old_matching_evidence_does_not_expire(self) -> None:
         latest = max(path.stat().st_mtime_ns for path in (self.package, self.verified, self.installed))
         os.utime(self.log, ns=(latest - 2_000_000_000, latest - 2_000_000_000))
