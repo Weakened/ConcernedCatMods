@@ -154,14 +154,14 @@
  },
  "dwellSlow": 0.55,
  "footLowRel": 0.06,
- "handMidFromShoulder": 0.0,
+ "handMidFromShoulder": 0.1,
  "hints": {
   "elbow_down": 0.25,
   "elbow_out": 0.22,
   "elbow_side": 0.2,
-  "knee_down": 0.2,
-  "knee_side": 0.1,
-  "knee_toward": 0.3
+  "knee_down": 0.1,
+  "knee_side": -0.03,
+  "knee_toward": 0.45
  },
  "length": [
   0.3,
@@ -170,7 +170,7 @@
   0.28
  ],
  "source": "LadderGait.blend",
- "sourceSha256": "96379e0c0dd599ea5a84e3ab423cd7679798cdaf14f543c3c46e4ab08b486ba4",
+ "sourceSha256": "4393031837c3c89563ac54a8aa4a4b432fbdeae5e58c8fb4b09a2963a24559c7",
  "start": [
   0.5,
   0.0,
