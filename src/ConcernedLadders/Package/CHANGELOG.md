@@ -2,8 +2,16 @@
 
 ## 0.2.6
 
-Internal development build. Not a release.
+Internal owner test candidate. Not a release.
 
+- Climbing is slower and more natural (owner decision): 0.9 m/s, 1.2 m/s with
+  Run (were 1.8 and 2.43). Sliding, stamina and the Climbing skill are
+  unchanged.
+- New climbing animation authored in Blender: hands and feet move one at a
+  time on their own timing (a hand reaches, the opposite foot recovers knee
+  first, then the other pair), knees point into the ladder, and the body rises
+  more slowly while a foot comes up. Grabbing the ladder sets hands and feet in
+  turn; a midair catch grabs with the hands first.
 - Snapping redone (owner decision): Cycle Snap offers Auto, Bottom and Top.
   Aimed at a floor, the ladder centres on the floor edge nearest your aim,
   flush against it, hanging below so you climb up onto the floor (Auto, Top;

@@ -1,72 +1,82 @@
-# Original climbing motion — editable source
+# Climbing animation — editable source and guide
 
-Status: fitted in game for the 0.2.5 internal owner candidate (hold, interior climb up/down, fast,
-both faces, Jump, Drop, top finish, building with the hammer while attached). Owner acceptance pending.
+Status: 0.2.6 internal owner candidate. Fitted and checked in game (hold, climb up/down, stop/reverse, fast, both
+faces, mount, catch, Jump, Drop, top exit, building with the hammer). Owner acceptance pending.
 
-This motion is original and procedural. No purchased, stock or extracted game animation, rig or clip is
-used. The editable source is code: change a value, rebuild with `scripts/verify.ps1`, import the package,
-and the next attachment uses it.
+The motion is original. No purchased, stock or extracted game animation, rig or clip is used.
 
-## Where everything lives
+## What to edit
 
-| What | File |
+| What | Where |
 |---|---|
-| Gait: which limbs move together, stride, swing timing, stop settling | `Domain/Animation/SameSideGait.cs` (`GaitShape` holds the values) |
-| Every pose value (pelvis, lean, grip, sole, rails, bends, finish) | `Runtime/Animation/ClimbTuning.cs` |
-| How values become hand/foot/body goals each IK pass | `Runtime/Animation/OriginalClimbPresenter.Pose.cs` |
-| Rung surface coordinates on both faces | `Domain/Animation/OriginalRungSurface.cs`, `Domain/ClimbPresentation.cs` (`RungShape`) |
-| Per-player rig measurements (chain lengths, pelvis/shoulder) | `Runtime/Animation/OriginalRigBinding.cs` |
-| Scoped IK ownership and restore | `Runtime/Animation/NativeIKLease.cs`, `OriginalIKCleanup.cs` |
+| Gait: per-limb timing, stride, swing ease, hand/foot arcs, torso dwell, posture, elbow/knee bend | **`LadderGait.blend`** (Blender 5.1) |
+| Values measured against the game rig (grip/sole offsets, rails, finish, mount/catch timing, reach limit) | `Runtime/Animation/ClimbTuning.cs` |
+| How the values become IK goals each frame | `Runtime/Animation/OriginalClimbPresenter.Pose.cs` |
+| The gait model (pure, unit-tested) | `Domain/Animation/LimbGait.cs` |
 
-## The gait (owner reference 2026-10-26)
+Generated from the .blend (do not edit by hand): `ladder_gait.json`, `ladder_gait_phases.csv`,
+`Domain/Animation/GeneratedGait.cs`. The plugin logs the live source at startup:
+`Climbing gait source LadderGait.blend <sha12> (Blender 5.1.2)`.
 
-The right hand and right foot move up together, then the left hand and left foot half a cycle later,
-with overlapping timing (`HandSwing`/`FootSwing` above 0.5). Contacts are a pure function of the body's
-height on the run: the same height gives the same pose, climbing down retraces climbing up, nothing
-drifts and frame rate does not matter. Every planted contact is a real rung. A stop settles each moving
-limb onto the nearest rung; resuming rejoins the gait over `RejoinSeconds`.
+## The scene
 
-**Cadence.** Limb cadence = body speed ÷ (`StrideRungs` × pitch). The climbing speeds are gameplay
-(1.8 m/s, fast 2.43 m/s) and are not changed by animation. With pitch 1/3 m:
+All values are metres, degrees or fractions of a climbing cycle. Curves are keyed on frames 0–100, which always mean
+0–1 of the curve's input; scrub the timeline or use the Graph Editor.
 
-| StrideRungs | Each limb moves | Cycle at 1.8 m/s | Cycle at 2.43 m/s | Reach (measured in game) |
-|---|---|---|---|---|
-| 2 (0.2.3) | 0.67 m | 0.370 s | 0.274 s | fits |
-| **4 (0.2.5)** | 1.33 m | **0.741 s** | **0.549 s** | fits: worst 0.89–0.95 of chain, 0 skips in climb/fast/hold |
+- **GAIT** (custom properties): `stride_rungs` (rungs per limb move and per body cycle; 3 = 1 m), `foot_low_rel`
+  (rung height under a foot as it leaves, above the feet), `hand_mid_from_shoulder` (middle of a hand's grip range),
+  `dwell_slow` (0–0.9: how much the torso slows while a foot recovers).
+- **LH, RH, LF, RF**: `start` (when in the cycle the limb lets go) and `length` (how long it is off the rung). Windows
+  may overlap; the default follows the mannequin loop: RH 0.00, LF 0.20, LH 0.50, RF 0.70.
+- **SWING**: property `progress` keyed 0→1 — the ease of a reach (leave slowly, travel, settle).
+- **ARC_HAND / ARC_FOOT**: location Y = clearance away from the rungs, Z = clearance upward, keyed over the swing.
+  The foot arc draws back first (knee-led recovery), then rises.
+- **BODY**: `pelvis_drop`, `pelvis_toward` (how close the hips hang to the rungs), `lean`, `slide_lean`, `sway_tilt`,
+  `sway_shift`.
+- **HINTS**: elbow and knee bend directions: `elbow_out/side/down`, `knee_toward/side/down`.
 
-The stride must be even so the two sides alternate evenly on real rungs. A slower-looking climb than
-0.741 s per cycle is not possible at 1.8 m/s within arm and leg reach; the alternative is a lower
-climbing speed, which is a gameplay decision for the owner.
+## Edit → game
 
-## Adjusting, step by step
+```powershell
+# 1. Edit in Blender and save (or set properties from the command line):
+pwsh tools/animation/gait/regenerate.ps1 HINTS.knee_side=-0.03 GAIT.dwell_slow=0.5
+#    (with no arguments it only exports the saved scene and regenerates the C#)
+# 2. Gate, package, import through the manager, cold start:
+pwsh scripts/verify.ps1
+pwsh scripts/package.ps1 -Product ConcernedLadders
+python tools/animation/gait/compile_gait.py --check   # fails if GeneratedGait.cs is stale
+```
 
-1. Change values in `ClimbTuning.cs` / `GaitShape`. Keep `ClimbTuning.ReachLimit` at 1.01: a contact
-   needing more of its chain is skipped and counted, never stretched.
-2. Rebuild and import (`scripts/verify.ps1`, `scripts/package.ps1`, manager import).
-3. Climb in game and read the `Climb fit` lines in `BepInEx/LogOutput.log`. One line per motion (and every
-   3 s of a long one) gives, per limb: passes, skips, worst/mean fraction of the measured chain needed,
-   where the posed shoulder/hip sat (`up` above the feet, `out` from the rung plane) and the solve error
-   (`err`, metres between the solved hand/foot and the goal; about one physics step of body travel while
-   moving, 0 when holding). A fitted motion has `skip=0` and `worst` under 0.96.
-4. Record normal-speed footage; frame sheets are diagnostics only.
+`build_gait_blend.py` recreates the scene with the defaults and **overwrites manual edits**; use it only to start over.
+The round trip was demonstrated on 2026-10-26 (foot arc, hand timing, dwell and knee bend edited in the .blend, then
+measured in the installed game): `artifacts/ladders-0.2.6-dev/BLENDER_ROUND_TRIP_RECEIPT.md`.
 
-Conventions measured in game (do not re-derive from bones): humanoid IK goals are in the avatar's
-normalized space. A foot goal looks along the toes with up as up. A hand goal's forward runs along the
-fingers and its up is the back of the hand. The game's own foot IK runs in every animator layer's IK pass;
-the presenter re-asserts its goals after it in later layers.
+## Frame/phase reference
 
-## Ownership rules kept by this source
+`ladder_gait_phases.csv` lists, per authoring frame of a cycle (60 rows): phase, body travel, torso dwell offset and,
+for each limb, its state (planted / release / reach / approach), swing progress, rungs climbed and arc. These are the
+authored TARGETS. Post-solver positions come from the in-game per-frame trace and the `Climb fit` log lines (per limb:
+passes, unreachable skips, worst/mean fraction of the chain, solve error); a fitted motion has `skip=0`.
 
-Movement, collision, stamina, skill and exits belong to the runtime; presentation only writes IK goals,
-hints and the body pose inside the player's own IK pass, and restores each owned field it still holds.
-With the hammer out, only the right arm yields to the game's own hammer animation. An interact (door,
-hatch) yields both arms, the upper body and the head. A top or side exit hands the limbs to the game's
-own walk early; the runtime drives that walk from the real exit path speed.
+## Reference choices (2026-10-26)
+
+- Mannequin loop (ScreenRecording 17-00-36): limb order and staggered hand/foot timing, knee-led foot recovery.
+- Real climbers (IMG_1944–1947): quieter torso during foot recovery, the larger rise as the leg extends (`dwell_slow`).
+- Mannequin start (17-00-06): staggered contact entry on mount (`ClimbTuning.MountEntry*`).
+- Game comparison (16-59-05) and playground (17-01-40): the top exit hands the step to the game's own walk; a deep
+  mantle crouch is not used for an ordinary floor.
+
+Cadence: one cycle = `stride_rungs` × 1/3 m of travel. At 0.9 m/s (owner decision) that is 1.11 s; with Run (1.2 m/s)
+0.83 s. Climbing speed is gameplay and lives in `Domain/ClimbPolicy.cs`.
+
+## Ownership rules
+
+Movement, collision, stamina, skill and exits belong to the runtime; presentation only writes IK goals, hints and the
+body pose inside the player's own IK pass and restores each owned field it still holds. With the hammer out only the
+right arm yields to the game's hammer animation. An interact yields both arms, the upper body and the head.
 
 ## Known limits
 
-- The first few frames of a mount from the ground can exceed reach while contacts fade in.
-- At the very top of a run with no landing, the motor lets the feet reach the top; the hands then have
-  nothing within reach and yield to the native pose (a gameplay limit, unchanged).
-- Fingers keep the native hand pose; there is no fitted finger curl.
+- Fingers keep the native hand pose (no fitted finger curl).
 - Other players see the native pose (no observer transport yet).
+- The very first frames of a ground mount can be out of reach while contacts fade in (counted, never stretched).

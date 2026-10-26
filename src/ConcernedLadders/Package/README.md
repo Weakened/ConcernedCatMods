@@ -4,7 +4,7 @@ Vertical ladders for compact Valheim builds. Three 2 m hammer pieces: Wood
 Ladder, Copper Ladder and Iron Ladder. Stack matching or mixed materials into a
 continuous run.
 
-**0.2.6 is an internal development build, not a release.** It is built against
+**0.2.6 is an internal owner test candidate, not a release.** It is built against
 Valheim 1.0.20 and tested in single player. Multiplayer, dedicated-server and
 controller play have not been tested yet.
 
@@ -14,7 +14,7 @@ controller play have not been tested yet.
 |---|---|
 | **Interact** (Use) | Grab the ladder you are looking at: from the ground, an upper floor, beside or behind the rails, or in midair while jumping or falling. Within about 1.5 m of the rungs, measured from your chest; standing on a floor at the top, within about 1.5 m of the rail tops. While climbing, Interact steps off onto a safe landing. |
 | Forward / backward | Climb up / down. Neutral holds. Camera pitch does not matter. |
-| **Run** + movement | Climb faster (2.43 m/s instead of 1.8). Costs stamina; without stamina you keep climbing normally. |
+| **Run** + movement | Climb faster (1.2 m/s instead of 0.9). Costs stamina; without stamina you keep climbing normally. |
 | Backward + **Run** at Climbing 20+ | Slide down at 4.5 m/s. Below level 20 it is a fast descent. |
 | **Jump** | Hop off upward and in the direction you are steering (away from the ladder when neutral). Uses the game's own jump and stamina; without enough stamina you simply let go. |
 | **Crouch** | Drop: let go where you are and fall normally. No hop, no stamina. |
@@ -28,11 +28,12 @@ levels make fast climbing and sliding cheaper (up to 25% at level 100); level 20
 unlocks sliding. The skill uses the game's own skill screen, saving and death
 rules.
 
-**Animation.** An original climbing animation: the right hand and right foot move up together,
-then the left hand and left foot, each hand and foot resting on a real rung. Stop and every limb
-settles on the nearest rung; climb down and the motion retraces itself. Near a flush top the hands
-take the rails, and stepping off onto the floor uses the game's own walk. Other players' clients
-do not show it yet.
+**Animation.** An original climbing animation authored in Blender: each hand and foot takes its own turn - a hand
+reaches up, the opposite foot recovers knee first, then the other hand and foot - every grip and step on a real rung.
+The body rises a little more slowly while a foot comes up and catches up as the leg pushes. Grabbing the ladder places
+a hand, a low foot, the other hand and the other foot in turn; a midair catch grabs with the hands first. Stop and
+every limb settles on the nearest rung; climb down and the motion retraces itself. Near a flush top the hands take
+the rails and the step onto the floor uses the game's own walk. Other players' clients do not show it yet.
 
 **Building from the ladder.** You can mount and climb with the hammer equipped and place,
 repair or remove pieces while holding on; your hammer arm uses the game's own animation. In build
