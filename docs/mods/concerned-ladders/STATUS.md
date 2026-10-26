@@ -5,9 +5,11 @@ skill and the level-20 slide. Most accessible solo rows below were observed in g
 NOT_READY:
 
 1. **Animation.** The owner rejected the procedural climbing presentation shipped in 0.2.0 and 0.2.1. Original
-   replacement animation is assigned to Codex and is not delivered yet. The native animation baseline it must
-   follow is complete and independently reviewed (2026-10-26).
-2. **Drop and scaffolding (N07/N08).** Implemented in `075f14b`, which builds and passes its tests. It has
+   replacement animation is assigned to Codex and is not delivered yet. The native animation baseline is **not
+   closed**. One uninvolved review accepted it with notes (`native-baseline/BASELINE_REVIEW.md`), but Codex's
+   uninvolved review keeps it BLOCKED (`CODEX_NATIVE_BASELINE_REVIEW_OPEN_2026_10_26.md`). Two items are still owed:
+   actual repair playback on a damaged piece, and Codex's own gait and blend rationale.
+2. **Drop and scaffolding (N07/N08).** Implemented in `075f14b`; Codex's NO_GO findings on it are fixed in `85713d6`, which is under re-review. It builds and passes its tests. It has
    **not** been packaged or run in game.
 3. **Controller and network.** Every controller row and every multiplayer/observer row is BLOCKED: no
    controller and no second endpoint were available.
@@ -43,24 +45,24 @@ teleport and aim, read-only state, and setting skill level and stamina. It patch
 
 | Row(s) | Build | Observed | Evidence |
 |---|---|---|---|
-| N01 reach (R09–R11) | 0.2.0 | Chest-to-rung reach of 1.5 m, with the hover prompt agreeing with Use. The owner's photographed approaches mount. The boundary is 1.44 m mounts, 1.59 m refused. | gameplay session log |
+| N01 reach (R09–R11) | 0.2.0 | Chest-to-rung reach of 1.5 m, with the hover prompt agreeing with Use. The owner's photographed approaches mount. Boundary: at 1.44 m the **prompt** accepts (`promptInReach=True`); a matching mount at that distance is not separately recorded. At 1.59 m it is refused. | gameplay session log |
 | R14 speeds and stamina | 0.2.0 | Normal 1.80 m/s at 0 stamina/s; fast 2.43 m/s at 5.6–5.8/s | measurements log |
 | R15 exhaustion | 0.2.0 | Natural drain to 0 falls back to normal; Jump at 0 stamina is a push (2 × `Push from Climbing (Normal)`) | measurements and session logs |
 | R20/R21 slide | 0.2.0 | Learned 19.99: Run+S is a fast descent at 2.43. Learned 20.00: slide at 4.50 m/s, 1.8–2.0/s. Releasing Run during a slide returns to normal descent. | measurements log |
 | R23 frame rate | 0.2.0 | Fast climb still 2.43 m/s at measured 30.0 and 141.5 fps | measurements log |
-| R05–R07 Jump | 0.2.0 | Jump from Mounting, Hold, Fast and Slide: native 8.1 m/s up, 5.3 m/s away, with one stamina payment. Held Use after a jump does not regrab. | measurements log |
-| R17/R18 skill | 0.2.0 | A fresh character went 0 → level 1 from natural climbing (accumulator 0.75) and kept it across relog. A new character starts at 0. Native death loss 20.40 → 19.38 → 18.41. | measurements and session logs |
+| R05–R07 Jump | 0.2.0 | Jump from Mounting, Hold, Fast and Slide: native 8.1 m/s up, 5.3 m/s away. Held Use after a jump does not regrab. The stamina payment per mode was **not** measured before and after. | measurements log |
+| R17/R18 skill | 0.2.0 | A fresh character went 0 → level 1 from natural climbing (accumulator 0.75) and kept it across relog. A new character starts at 0. Native death loss: 19.38, set by a setup command, became 18.411 after death and respawn. Only that one step is evidenced. | measurements and session logs |
 | R03 floor loops | 0.2.0 | Up, step off onto the floor, back on, down. The procedure **teleported the character between the walk-off and the remount**, so these are traversal loops, not walk-away/return loops. Counts: 20/20 wall tower front face; 5/5 front and 5/5 rear on the slot ladder; 5/5 on a rotated copper/iron tower. | `R03-*loops*.log` |
-| R13 seams | 0.2.0 | Reversing at every seam works on both faces of a 14 m mixed run. A gap or a parallel ladder does not join. | R03-R13 session log |
+| R13 seams | 0.2.0 | PARTIAL. On both faces the 10-section, 20 m mixed run was traversed from bottom to top (feet at 49.99/50.12) and back to the floor. The scripted reversal past each of the 9 seams is not logged seam by seam. Invalid joins: a section 0.15 m above the run stays out of it (the run stops at 3 sections, 6 m); a parallel ladder 0.9 m aside mounts as its own 1-section run. | measurements log ("R13 …", "T23/R13 invalid joins") |
 | R34 terrain | 0.2.0 | A real terrain mound refuses with "The ground is in the way." | `R34-terrain-refusal.png` |
-| N04 names | 0.2.0 | Wood, Copper and Iron Ladder in the hammer menu, hover and native repair text | session logs |
-| N06 snap labels | 0.2.0 | Native Cycle Snap shows Top, Bottom and four corner labels in both directions | session log |
+| N04 names | 0.2.0 | PARTIAL. Sampled video frames show the names in the hammer menu and on hover. The repair calls in the retained log target only the Wood Ladder and do not record the text shown. Copper/Iron repair text is not evidenced. | `VIDEO-0.2.0-six-owner-notes-678f65a.mp4` |
+| N06 snap labels | 0.2.0 | PARTIAL. Sampled video frames show the native Cycle Snap labels. A full both-direction cycle is not retained frame by frame. | `VIDEO-0.2.0-…mp4` |
 | B03–B05, B09–B11 pieces | 0.2.0 | B03 discovery: wood only for a fresh character, copper after copper plus a forge, iron after iron. B04/B05: exact costs, and refusals without material or station. B09: blocked by a player, and by a foreign ward. B10: exact refunds. B11: worn and broken visuals. | `B*.png`, B03-B10 session log |
 | T14, T18, T21, L02, L04 | 0.2.0 | Water releases to swimming. A camera turn and an inventory hold keep the climb. Removing the floor mid-exit releases safely. A nudged ladder releases. | T14…B11 session log |
 | L10/L11 Foreman | 0.2.0 | With real Foreman 0.1.0 installed, its refusal message shows (L10). With Foreman's ladders off, our climb works (L11). | `L10/L11-*.png`, compat logs |
 | P05 load | 0.2.0 | Frame time 8.33 → 8.44 ms mean with 100 extra ladders | measurements log |
-| P06 stability | 0.2.0 | 20 fast up/down cycles on a 20 m mixed tower: pieces stable, 0 errors | measurements log |
-| P07 / R26 world switches | 0.2.0 | 10 world switches: no re-registration, 0 errors, registry stable. Managed heap grows by the same amount **without** the mod (forced GC: 305 → 764 MB over six switches, against 326 → 784 MB with it), so the growth is not caused by the mod. | `P07-*.log` |
+| P06 stability | 0.2.0 | PARTIAL. 20 fast up/down cycles on a **7-section, 14 m** mixed tower: piece count stable (181 before and after), 0 errors. After a reload, native structural support broke the top three freestanding sections, so the dense 20 m run remains open. | measurements log |
+| P07 / R26 world switches | 0.2.0 | 10 world switches: no re-registration, 0 errors, registry stable. Prefab and hammer counts stay stable, and 0 climbers are sampled. Heap growth reproduces **without** the mod and is similar in size: forced GC 304.7 → 764.4 MB (+459.7) without it, against 325.7 → 784.0 MB (+458.3) with it. That supports native origin; it does not prove the mod contributes nothing. The harness's `segments=-1` is not a measured segment count. | `P07-*.log` |
 | A02 / A07 | tools at `e400292` | Python suite: 138 tests, 2 skipped, clean checkout. The profile generator is byte-identical across two runs. | `a02-python-suite-e400292.log`, `*.r2z` |
 
 ## Open rows
@@ -68,8 +70,11 @@ teleport and aim, read-only state, and setting skill level and stamina. It patch
 | Row(s) | State | Reason and next action |
 |---|---|---|
 | R25, P02–P04 original animation | NOT DELIVERED | The owner rejected the procedural look. Codex is authoring original motion against the reviewed native baseline (`C:\code\cc-integration\cl-ladders-review-evidence\native-baseline\`). The lead integrates it through `IClimbPresenter`. |
-| R36–R42 Drop and scaffolding | IMPLEMENTED, NOT RUN | `075f14b`. Needs a packaged candidate and game runs. |
+| R36–R42 Drop and scaffolding | IMPLEMENTED, NOT RUN | `075f14b` + `85713d6`. Mounting with the hammer out is not supported (in build mode the game clears the hover target and E is also snap cycling), so this is an owner preference check. Needs a packaged candidate and game runs. |
 | T16, T13, T22 on 0.2.1 | NOT RUN | The fix was not re-observed in game after packaging. |
+| R22 negative XP matrix; R23 long-frame, obstruction and pending-step settlement; R19 protection and world-setting cases | NOT EVIDENCED | Not run, or not retained, on this revision |
+| P06 dense 20 m run | OPEN | The 20 m tower lost sections to native support after a reload |
+| N04 copper/iron repair text, N06 full cycle, Jump stamina per mode | OPEN | Needs a visual or measured record |
 | R03 walk-away/return | PARTIAL | Run with a teleport between walk-off and remount; a pure walking loop is still to do. |
 | R16/T19 keyboard remap | NOT EVIDENCED | A Run remap was tried during the 0.2.0 session, but no log or capture of it was kept; re-run it on the next candidate |
 | T20 controller | BLOCKED | No physical controller |
@@ -86,6 +91,6 @@ loaded DLL was correct throughout.
 
 Codex read-only reviews: `da8c5a2`, `27528f0`, `4926903` and `7726fe3` were NO_GO, each fixed. `b3c20a6` and
 `441ea83` were GO. The 0.2.0 STATUS draft was REJECTED for overclaiming; this rewrite answers it row by row.
-`075f14b` is under review. Reports are in `C:\code\cc-integration\cl-ladders-review-evidence\`.
+`075f14b` was NO_GO with 6 P1s, fixed in `85713d6`, which is under re-review. The first version of this STATUS (`866a800`) was REJECTED with 7 must-fixes, each corrected here. Reports are in `C:\code\cc-integration\cl-ladders-review-evidence\`.
 
 No publication, release tag or main merge.
