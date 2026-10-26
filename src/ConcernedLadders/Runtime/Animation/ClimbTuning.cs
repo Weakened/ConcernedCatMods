@@ -65,6 +65,15 @@ internal static class ClimbTuning
     internal static float ExitFold = 28f;
 
 
+    /// <summary>Attaching: seconds after the attachment each limb (LH, RH, LF, RF) starts taking its contact, how long
+    /// each takes, and how long the body takes to settle into the climbing posture; a ground mount and a midair catch.</summary>
+    internal static float[] MountEntryDelay = { 0.14f, 0.0f, 0.26f, 0.40f };
+    internal static float MountEntryLimb = 0.28f;
+    internal static float MountEntryBody = 0.55f;
+    internal static float[] CatchEntryDelay = { 0.0f, 0.04f, 0.12f, 0.18f };
+    internal static float CatchEntryLimb = 0.14f;
+    internal static float CatchEntryBody = 0.25f;
+
     /// <summary>A contact needing more than FadeFrom of its chain fades out toward ReachLimit instead of popping.</summary>
     internal static float FadeFrom = 0.96f;
 
@@ -72,7 +81,7 @@ internal static class ClimbTuning
     internal const float ReachLimit = 1.01f;
 
     /// <summary>Development diagnostics: log each change of the ladder snap decision (off in normal play).</summary>
-    internal static bool LogSnapDecisions;
+    internal static bool LogSnapDecisions = false;
 
     internal static int Version { get; private set; }
 

@@ -32,13 +32,17 @@ internal sealed partial class OriginalClimbPresenter
         else if (kind != NativeKind.None) { native |= NativeActionParts.LeftArm | NativeActionParts.RightArm | NativeActionParts.UpperBody | NativeActionParts.Head; }
 
         actor.Fit.Begin(this, frame.Motion, Time.time);
-        float entry = Mathf.Clamp01(actor.Age / .15f);
+        // Owner reference 17-00-06 (grounded mount): contacts are established one at a time - a hand reaches, a low foot
+        // plants, the other hand goes higher, the other foot rises - while the body stays quiet at first. A midair catch
+        // grabs hands first, quickly. Timed from the attachment, never waiting on it: the motor already climbs.
+        float[] delays = actor.Caught ? ClimbTuning.CatchEntryDelay : ClimbTuning.MountEntryDelay;
+        float limbEntry = actor.Caught ? ClimbTuning.CatchEntryLimb : ClimbTuning.MountEntryLimb;
+        float entry = Mathf.Clamp01(actor.Age / (actor.Caught ? ClimbTuning.CatchEntryBody : ClimbTuning.MountEntryBody));
         bool mount = frame.Motion == PresentedMotion.GroundMount || frame.Motion == PresentedMotion.AirCatch;
         bool exit = frame.Motion == PresentedMotion.TopFinish || frame.Motion == PresentedMotion.StepOff;
         float route = Mathf.Clamp01(frame.Transition);
-        if (mount || exit) { entry = 1f; }
+        if (exit) { entry = 1f; }
         float bodyWeight = LimbGait.Ease(entry);
-        if (mount) { bodyWeight *= Window(route, 0f, frame.Motion == PresentedMotion.AirCatch ? .35f : .7f); }
         if (exit) { bodyWeight *= 1f - Window(route, .05f, .45f); }
         if ((native & NativeActionParts.UpperBody) != 0) { bodyWeight = 0f; }
         float sway = actor.Gait.Sway * (1f - actor.SlideBlend);
@@ -100,18 +104,7 @@ internal sealed partial class OriginalClimbPresenter
                 surface = Vector3.Lerp(surface, rail, LimbGait.Ease(actor.SlideBlend));
             }
 
-            float weight = LimbGait.Ease(entry);
-            if (mount)
-            {
-                if (frame.Motion == PresentedMotion.AirCatch)
-                { weight *= hand ? Window(route, 0f, .25f) : Window(route, .1f, .9f); }
-                else
-                {
-                    float start = limb == 0 ? 0f : limb == 1 ? .1f : limb == 2 ? .25f : .15f;
-                    float finish = hand ? start + .45f : 1f;
-                    weight *= Window(route, start, finish);
-                }
-            }
+            float weight = exit ? 1f : LimbGait.Ease((actor.Age - delays[limb]) / limbEntry);
 
             if (exit)
             {

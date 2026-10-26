@@ -83,6 +83,7 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
                 {
                     if (actor.Frame.Session != frame.Session) { actor.Fit.Reset(); }
                     actor.Age = 0f; actor.SlideBlend = 0f; actor.TuningVersion = ClimbTuning.Version;
+                    actor.Caught = frame.Motion == PresentedMotion.AirCatch;
                 }
             }
             else if (frame.GeometryRevision != actor.Frame.GeometryRevision &&
@@ -228,6 +229,7 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
         internal readonly OriginalRigBinding Rig;
         internal readonly LimbGait Gait = new LimbGait();
         internal float Dwell;
+        internal bool Caught;
         internal readonly FitCounters Fit = new FitCounters();
         internal readonly bool[] Asked = new bool[4];
         internal readonly Vector3[] LastPivot = new Vector3[4];
