@@ -235,7 +235,17 @@ internal sealed class LadderClimbAnimation : IDisposable
         if (character == null || !_climbers.TryGetValue(character, out Climber climber)) { return; }
         Animator animator = events.GetComponent<Animator>();
         if (animator == null || !animator.isHuman) { return; }
-        float weight = Mathf.Clamp01(climber.Weight);
+        // Native action ownership is checked here, at the IK pass itself: a hammer swing or interact that started
+        // after the last physics sample owns the limbs from its first evaluated frame (Codex review of d913e26).
+        if (climber.Local && character is Player owner && NativeActionNow(owner) && !climber.Yielding)
+        {
+            climber.Weight = 0f;
+            climber.Target = 0f;
+            climber.Yielding = true;
+            climber.YieldCleared = false;
+        }
+
+        float weight = climber.Yielding ? 0f : Mathf.Clamp01(climber.Weight);
         if (weight <= 0f)
         {
             // A candidate that never posed writes nothing, so vanilla's own foot IK and look-at stand. A released
@@ -314,6 +324,14 @@ internal sealed class LadderClimbAnimation : IDisposable
         Hint(animator, AvatarIKHint.RightKnee, body + Vector3.up * 0.7f + toward * 0.6f + right * 0.2f, weight);
         animator.SetLookAtPosition(Contact(feet + climber.HandHeight + (climber.VerticalSpeed < -0.1f ? -0.6f : 0.6f), 0f));
         animator.SetLookAtWeight(0.6f * weight, 0f, 0.7f, 0.7f, 0.5f);
+    }
+
+    /// <summary>InAttack reads the current or next animator state's attack tag on every layer, so a swing that has
+    /// just been triggered counts. In build mode no combat attack starts, so an attack there is the hammer's.</summary>
+    private static bool NativeActionNow(Player player)
+    {
+        try { return (player.InPlaceMode() && player.InAttack()) || player.InMinorAction(); }
+        catch { return true; } // Unknown state: leave the limbs to the game.
     }
 
     private static readonly AvatarIKGoal[] Goals = { AvatarIKGoal.LeftHand, AvatarIKGoal.RightHand, AvatarIKGoal.LeftFoot, AvatarIKGoal.RightFoot };
