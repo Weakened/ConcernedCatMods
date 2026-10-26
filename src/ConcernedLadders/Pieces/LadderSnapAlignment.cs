@@ -14,8 +14,8 @@ namespace TheConcernedCat.ConcernedLadders.Pieces;
 /// hammer last used. The selected snap mode is classified first:
 /// <list type="bullet">
 /// <item>a wall-corner mode keeps corner semantics: when the game has put the selected corner on another piece's snap
-/// point, the ladder takes that piece's orientation, faces the player and is centred on it; otherwise the game's own
-/// ghost stands, aimed at a ladder or not;</item>
+/// point, the ladder takes that piece's orientation, faces the player and is centred on it; aimed at or snapped onto
+/// one of this product's ladders (which has no wall corner) it is refused; otherwise the game's own ghost stands;</item>
 /// <item>Auto, Bottom and Top: when the game has snapped the ghost's bottom-centre onto exactly one placed ladder's
 /// top-centre (or its top-centre onto a bottom-centre), the ghost takes that ladder's rotation and lies exactly on it;
 /// otherwise, when the game's own placement ray hits a placed ladder's rails (the game found no snap point within its
@@ -152,8 +152,16 @@ internal sealed class LadderSnapAlignment : IDisposable
         if (section == null || piece == null || !TrySelectedMode(player, section, out Transform? corner, out LadderSnap.Extend extend)) { return false; }
         Transform g = ghost.transform;
 
-        // A wall-corner mode keeps its own semantics and never becomes a centre stack or a column extension.
-        if (corner != null) { return TryWallCorner(player, g, corner, out aligned); }
+        // A wall-corner mode keeps its own semantics and never becomes a centre stack or a column extension. A ladder
+        // has no wall corner: in game 2026-10-26 the game put the selected corner on a placed ladder's centre anchor
+        // and showed the displaced ghost the owner rejected. Aimed at, or snapped onto, a ladder, a corner mode is
+        // refused (the ghost is marked invalid); Auto, Bottom and Top extend ladders.
+        if (corner != null)
+        {
+            if (TryWallCorner(player, g, corner, out aligned)) { return true; }
+            if (CornerOnLadder(player, corner) || AimedLadder(out _) != null) { _refused = player; }
+            return false;
+        }
 
         Vector3 bottom = g.TransformPoint(section.LocalBottom);
         Vector3 top = g.TransformPoint(section.LocalTop);
@@ -190,16 +198,8 @@ internal sealed class LadderSnapAlignment : IDisposable
         // Owner session 2026-10-26: aimed at the rails of a placed ladder, the game finds no snap point within its
         // 0.5 m radius and leaves the ghost overlapping or beside the ladder. The game's own placement ray (same
         // origin, direction, length and layers) says which piece is aimed at.
-        if (GameCamera.instance == null) { return false; }
-        Transform camera = GameCamera.instance.transform;
-        if (!Physics.Raycast(camera.position, camera.forward, out RaycastHit hit, 50f, _placeMask) || hit.collider == null ||
-            hit.collider.attachedRigidbody != null)
-        {
-            return false;
-        }
-
-        LadderSegment? column = hit.collider.GetComponentInParent<LadderSegment>();
-        if (column == null || !column.IsLive || !LadderSegment.TryRun(column, Run, out var run)) { return false; }
+        LadderSegment? column = AimedLadder(out RaycastHit hit);
+        if (column == null || !LadderSegment.TryRun(column, Run, out var run)) { return false; }
         if (!LadderSnap.TryExtendColumn(hit.point.y, run.Bottom, run.Top, extend, StandsOnSomething(LadderSegment.Vector(run.Bottom)),
                 out var end, out bool extendsAbove))
         {
@@ -253,6 +253,39 @@ internal sealed class LadderSnapAlignment : IDisposable
         }
 
         return found && Place(ghost, Quaternion.Euler(0f, chosenYaw, 0f), LadderSegment.Vector(chosenOrigin), out aligned);
+    }
+
+    /// <summary>The placed ladder the game's own placement ray (same origin, direction, length and layers) hits first.</summary>
+    private static LadderSegment? AimedLadder(out RaycastHit hit)
+    {
+        hit = default;
+        if (GameCamera.instance == null) { return null; }
+        Transform camera = GameCamera.instance.transform;
+        if (!Physics.Raycast(camera.position, camera.forward, out hit, 50f, _placeMask) || hit.collider == null ||
+            hit.collider.attachedRigidbody != null)
+        {
+            return null;
+        }
+
+        LadderSegment? column = hit.collider.GetComponentInParent<LadderSegment>();
+        return column != null && column.IsLive ? column : null;
+    }
+
+    /// <summary>The game has put the selected corner on a snap point of one of this product's ladders.</summary>
+    private static bool CornerOnLadder(Player player, Transform corner)
+    {
+        if (_targets == null) { return false; }
+        List<Transform> targets = _targets(player);
+        if (targets == null) { return false; }
+        Vector3 at = corner.position;
+        foreach (Transform target in targets)
+        {
+            if (target == null || (target.position - at).sqrMagnitude > LadderSnap.Coincident * LadderSnap.Coincident) { continue; }
+            LadderSegment? ladder = target.GetComponentInParent<LadderSegment>();
+            if (ladder != null && ladder.IsLive) { return true; }
+        }
+
+        return false;
     }
 
     private static readonly RaycastHit[] Under = new RaycastHit[16];
