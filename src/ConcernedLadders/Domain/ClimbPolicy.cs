@@ -130,6 +130,36 @@ internal static class ClimbPolicy
 
     internal static bool InReach(float reach) => Finite(reach) && reach <= MaxReach;
 
+    /// <summary>A supported player this close to the run's top (feet at most this far below it) steps onto the
+    /// ladder from that landing rather than reaching for a rung.</summary>
+    internal const float TopEntryBelow = 0.3f;
+
+    /// <summary>Stepping onto the ladder from a floor at its top: measured in game (0.2.0), a 1.85 m capsule
+    /// of radius 0.49 standing on a floor 0.10 m above the rails' top cannot bring its chest within 1.5 m of
+    /// them, so the chest metric refused every remount from an upper floor. A standing player there is measured
+    /// from the feet instead: the horizontal step to the rails' top ends, with the feet within a step's height
+    /// of them. Airborne players and every other height keep the chest-to-span measure.</summary>
+    internal static float TopStepReach(in LadderGeometry run, ClimbPoint feet, float planeDepth)
+    {
+        if (!run.IsClimbable || !feet.IsFinite || !Finite(planeDepth) ||
+            feet.Y < run.Top.Y - TopEntryBelow || feet.Y > run.Top.Y + LadderRules.MaximumStepUpToFoot)
+        {
+            return float.PositiveInfinity;
+        }
+
+        float depth = run.ReachFrom(feet) - planeDepth;
+        float sideways = Math.Max(0f, run.SidewaysOffsetOf(feet) - RungHalfWidth);
+        return (float)Math.Sqrt(depth * depth + sideways * sideways);
+    }
+
+    /// <summary>The reach a mount is judged by: the top step for a supported player at the top, else chest to span.</summary>
+    internal static float MountReach(in LadderGeometry run, ClimbPoint feet, ClimbPoint chest, float planeDepth,
+        float firstRungHeight, bool supported)
+    {
+        float chestReach = ChestReach(run, chest, planeDepth, firstRungHeight);
+        return supported ? Math.Min(chestReach, TopStepReach(run, feet, planeDepth)) : chestReach;
+    }
+
     /// <summary>The lowest feet height at which the hands still hold the lowest rung.</summary>
     internal static float LowestHang(float bottom, float firstRungHeight, float gripHeight) =>
         bottom + firstRungHeight - gripHeight;
@@ -212,6 +242,7 @@ internal sealed class ClimbLedger
     private ClimbGait _gait = ClimbGait.Hold;
     private float _planned;
     private float _start;
+    private float _direction;
     private bool _pending;
 
     /// <summary>Unawarded normal/fast metres carried across mounts in one character/world session.</summary>
@@ -219,9 +250,11 @@ internal sealed class ClimbLedger
 
     internal bool Pending => _pending;
 
-    internal void Plan(ClimbGait gait, float startHeight, float plannedDistance)
+    /// <summary>Plans one step of signed vertical travel (up positive). Only travel in that direction, up to
+    /// its length, can be settled: a body moved the other way by anything else earns nothing.</summary>
+    internal void Plan(ClimbGait gait, float startHeight, float plannedTravel)
     {
-        if (!ClimbPolicy.Finite(startHeight) || !ClimbPolicy.Finite(plannedDistance) || plannedDistance < 0f)
+        if (!ClimbPolicy.Finite(startHeight) || !ClimbPolicy.Finite(plannedTravel))
         {
             Discard();
             return;
@@ -229,7 +262,8 @@ internal sealed class ClimbLedger
 
         _gait = gait;
         _start = startHeight;
-        _planned = Math.Min(plannedDistance, 1f);
+        _direction = Math.Sign(plannedTravel);
+        _planned = Math.Min(Math.Abs(plannedTravel), 1f);
         _pending = gait != ClimbGait.Hold && _planned > 0f;
     }
 
@@ -242,8 +276,8 @@ internal sealed class ClimbLedger
         if (!_pending) { return; }
         _pending = false;
         if (!ClimbPolicy.Finite(observedHeight)) { return; }
-        float travelled = Math.Min(Math.Abs(observedHeight - _start), _planned);
-        if (travelled <= 0f) { return; }
+        float travelled = Math.Min((observedHeight - _start) * _direction, _planned);
+        if (!(travelled > 0f)) { return; }
         stamina = ClimbPolicy.StaminaPerMetre(_gait, learnedLevel) * travelled;
         if (_gait == ClimbGait.Normal || _gait == ClimbGait.Fast)
         {

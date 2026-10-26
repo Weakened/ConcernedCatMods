@@ -16,6 +16,10 @@ internal sealed class LadderRuntime : IDisposable
     /// <summary>How far below the run's top an upward climb starts looking for a floor to walk onto.</summary>
     private const float TopPlanBand = 0.6f;
 
+    /// <summary>A body further than this from the motor's last command at release has been moved by something
+    /// else; the release then makes no physics or fall-reference writes.</summary>
+    private const float TakeoverDistance = 0.5f;
+
     /// <summary>A blocked upward climb this close to the top also tries the top exit: a lip overhead.</summary>
     private const float TopBlockedBand = 2.2f;
 
@@ -184,16 +188,18 @@ internal sealed class LadderRuntime : IDisposable
             CapsuleCollider capsule = player.GetCollider();
             if (!_hoverValid || capsule == null) { return false; }
             float height = capsule.height * Mathf.Abs(capsule.transform.lossyScale.y);
-            return ClimbPolicy.InReach(Reach(_hoverRun, segment, player.transform.position, height));
+            // Native ground contact stands in for the swept support test here: hover runs every frame.
+            return ClimbPolicy.InReach(Reach(_hoverRun, segment, player.transform.position, height, player.IsOnGround()));
         }
         catch { return false; }
     }
 
-    private static float Reach(in LadderGeometry geometry, LadderSegment segment, Vector3 feet, float capsuleHeight)
+    private static float Reach(in LadderGeometry geometry, LadderSegment segment, Vector3 feet, float capsuleHeight, bool supported)
     {
         Vector3 chest = feet + Vector3.up * (capsuleHeight * ClimbPolicy.ChestFraction);
         float plane = (segment.BackFaceDepth + segment.FrontFaceDepth) * 0.5f;
-        return ClimbPolicy.ChestReach(geometry, LadderSegment.Point(chest), plane, segment.RungPitch * 0.5f);
+        return ClimbPolicy.MountReach(geometry, LadderSegment.Point(feet), LadderSegment.Point(chest), plane,
+            segment.RungPitch * 0.5f, supported);
     }
 
     internal bool Use(LadderSegment segment)
@@ -282,11 +288,11 @@ internal sealed class LadderRuntime : IDisposable
         plan = default;
         refusal = ClimbRefusal.None;
         Vector3 feet = body.position;
-        float reach = Reach(run, segment, feet, clearance.Height);
+        bool supported = clearance.Supported(feet);
+        float reach = Reach(run, segment, feet, clearance.Height, supported);
         float grip = clearance.Height * ClimbPolicy.GripFraction;
         float firstRung = segment.RungPitch * 0.5f;
         float hangLowest = ClimbPolicy.LowestHang(run.Bottom.Y, firstRung, grip);
-        bool supported = clearance.Supported(feet);
         float depth = run.ReachFrom(LadderSegment.Point(feet));
         LadderFace approach = ClimbPolicy.FaceOf(depth, segment.BackFaceDepth, segment.FrontFaceDepth);
         detail = "reach=" + reach.ToString("0.00", Invariant) + " supported=" + supported + " vy=" +
@@ -300,7 +306,7 @@ internal sealed class LadderRuntime : IDisposable
 
         // Standing at the top on a landing, the usable face is the one with room to climb down: the approach
         // side there is usually the floor itself. Everywhere else the climber stays on the face they reached.
-        bool topEntry = supported && feet.y >= run.Top.Y - 0.3f;
+        bool topEntry = supported && feet.y >= run.Top.Y - ClimbPolicy.TopEntryBelow;
         LadderFace[] faces = topEntry ? new[] { approach, Opposite(approach) } : new[] { approach };
         Vector3 chest = feet + Vector3.up * (clearance.Height * ClimbPolicy.ChestFraction);
         ClimbRefusal first = ClimbRefusal.None;
@@ -592,7 +598,7 @@ internal sealed class LadderRuntime : IDisposable
                 return true;
             }
 
-            _ledger.Plan(gait, body.position.y, Mathf.Abs(nextHeight - body.position.y));
+            _ledger.Plan(gait, body.position.y, nextHeight - body.position.y);
             _plannedScale = scale; // The step is charged at the basis it was budgeted with.
             Hold(target, seconds, (target.y - body.position.y) / seconds, Mathf.Max(LadderRules.Speed, ClimbPolicy.SpeedOf(gait)));
             Present(true);
@@ -883,6 +889,21 @@ internal sealed class LadderRuntime : IDisposable
         }
         bool owned = false;
         try { owned = _view != null && _view.IsValid() && _view.IsOwner(); } catch { /* No verified authority, no writes. */ }
+        // Whatever asked for this release (a setting change, a dismount, a jump), a body that something else has
+        // already moved away from the motor's last command, made kinematic or killed belongs to that controller:
+        // its velocity, gravity and fall reference are left exactly as they are (Codex review of 4926903).
+        if (departure != Departure.External)
+        {
+            try
+            {
+                if (body == null || body.isKinematic || player == null || player.IsDead() ||
+                    Vector3.Distance(body.position, _lastControlledPosition) > TakeoverDistance)
+                {
+                    departure = Departure.External;
+                }
+            }
+            catch { departure = Departure.External; }
+        }
         _cooldown = ClimbPolicy.RemountDelay;
         _poseSpeed = 0f;
         _gait = ClimbGait.Hold;

@@ -164,10 +164,19 @@ internal sealed class LadderClimbAnimation : IDisposable
         if (found == null || !LadderSegment.TryRun(found, _scratch, out run)) { return false; }
         plane = (found.BackFaceDepth + found.FrontFaceDepth) * 0.5f;
         pitch = found.RungPitch;
-        return !FloorUnder(feet);
+        // Any floor under the centre or under the capsule's rim (a player at a floor's edge) reads as standing.
+        if (FloorUnder(feet)) { return false; }
+        foreach (Vector3 direction in Rim)
+        {
+            if (FloorUnder(feet + direction * (radius * 0.9f))) { return false; }
+        }
+
+        return true;
     }
 
-    /// <summary>A standing surface within a few centimetres under the feet, ladders and characters excluded.</summary>
+    private static readonly Vector3[] Rim = { Vector3.forward, Vector3.back, Vector3.left, Vector3.right };
+
+    /// <summary>A standing surface within a few centimetres under the point, ladders and characters excluded.</summary>
     private bool FloorUnder(Vector3 feet)
     {
         int found = Physics.RaycastNonAlloc(feet + Vector3.up * 0.15f, Vector3.down, _ground, 0.3f, _groundMask, QueryTriggerInteraction.Ignore);

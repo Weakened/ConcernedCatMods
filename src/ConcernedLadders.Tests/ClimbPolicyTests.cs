@@ -105,6 +105,29 @@ public sealed class ClimbPolicyTests
         Assert.Equal(expected, ClimbPolicy.InReach(ClimbPolicy.ChestReach(Run(), chest, Plane, FirstRung)));
     }
 
+    [Theory]
+    [InlineData(0.10f, -0.41f, true)]   // Measured: floor 0.10 m above the top, body against the rails' back.
+    [InlineData(0.10f, -1.30f, true)]
+    [InlineData(0.10f, -1.70f, false)]
+    [InlineData(0.80f, -0.41f, false)]  // Higher than a step above the top.
+    [InlineData(-0.40f, -0.41f, false)] // Below the top band: the chest measure applies instead.
+    public void AStandingPlayerAtTheTopIsMeasuredByTheStepOntoTheRails(float aboveTop, float depth, bool expected)
+    {
+        var feet = new ClimbPoint(0f, 2f + aboveTop, depth);
+        Assert.Equal(expected, ClimbPolicy.InReach(ClimbPolicy.TopStepReach(Run(), feet, Plane)));
+    }
+
+    [Fact]
+    public void OnlySupportedPlayersStepOnFromTheTop()
+    {
+        var feet = new ClimbPoint(0f, 2.10f, -0.41f);
+        var chest = new ClimbPoint(0f, 2.10f + 1.85f * ClimbPolicy.ChestFraction, -0.41f);
+        // The 0.2.0 dev build refused this measured upper-floor remount: chest reach is 1.56 m.
+        Assert.False(ClimbPolicy.InReach(ClimbPolicy.ChestReach(Run(), chest, Plane, FirstRung)));
+        Assert.True(ClimbPolicy.InReach(ClimbPolicy.MountReach(Run(), feet, chest, Plane, FirstRung, true)));
+        Assert.False(ClimbPolicy.InReach(ClimbPolicy.MountReach(Run(), feet, chest, Plane, FirstRung, false)));
+    }
+
     [Fact]
     public void LowHangUsesTheRealGripHeightInsteadOfTheModuleFoot()
     {
@@ -238,6 +261,24 @@ public sealed class ClimbPolicyTests
     }
 
     [Fact]
+    public void TravelInTheOtherDirectionSettlesNothing()
+    {
+        // Codex review of 4926903: an upward fast step from 5.000 left at 4.900 by something else charged a full step.
+        var ledger = new ClimbLedger();
+        ledger.Plan(ClimbGait.Fast, 5f, 0.0486f);
+        ledger.Settle(4.9f, 0f, out float stamina, out int metres);
+        Assert.Equal(0f, stamina);
+        Assert.Equal(0, metres);
+        Assert.Equal(0f, ledger.CarriedMetres);
+        ledger.Plan(ClimbGait.Fast, 5f, -0.0486f);
+        ledger.Settle(5.03f, 0f, out float up, out _);
+        Assert.Equal(0f, up);
+        ledger.Plan(ClimbGait.Fast, 5f, -0.0486f);
+        ledger.Settle(4.97f, 0f, out float down, out _);
+        Assert.Equal(ClimbPolicy.StaminaPerMetre(ClimbGait.Fast, 0f) * 0.03f, down, 5);
+    }
+
+    [Fact]
     public void SkillDistanceCarriesFractionsAndNeverCountsSlides()
     {
         var ledger = new ClimbLedger();
@@ -253,7 +294,7 @@ public sealed class ClimbPolicyTests
 
         Assert.Equal(2, awarded);
         Assert.Equal(0.5f, ledger.CarriedMetres, 3);
-        ledger.Plan(ClimbGait.Slide, height, 0.09f);
+        ledger.Plan(ClimbGait.Slide, height, -0.09f);
         ledger.Settle(height - 0.09f, 20f, out float slideStamina, out int slideMetres);
         Assert.Equal(0, slideMetres);
         Assert.True(slideStamina > 0f);
