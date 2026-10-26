@@ -104,7 +104,7 @@ internal sealed partial class OriginalClimbPresenter
 
             Quaternion rotation;
             Vector3 pivot;
-            if (hand) { pivot = GripGoal(limb, surface, toward, out rotation); }
+            if (hand) { pivot = GripGoal(surface, toward, out rotation); }
             else
             {
                 // A humanoid foot goal: forward is the toes, up is up. The ankle sits behind and above the ball of the foot.
@@ -134,17 +134,15 @@ internal sealed partial class OriginalClimbPresenter
     }
 
     /// <summary>A palm resting on a rung, fingers tilted from vertical toward the ladder and the palm facing it.
-    /// Humanoid hand goals are in the avatar's normalized space (not the hand bone's): x runs along the fingers
-    /// (toward the little finger side's opposite for the left hand), y is the back of the hand. Returns the wrist
-    /// pivot for a palm centre at <paramref name="contact"/>.</summary>
-    private static Vector3 GripGoal(int limb, Vector3 contact, Vector3 toward, out Quaternion rotation)
+    /// Humanoid hand goals are in the avatar's normalized space, not the hand bone's. Measured in game 2026-10-26
+    /// (solved finger bones against the goal): the goal's forward runs along the fingers and its up is the back of
+    /// the hand. Returns the wrist pivot for a palm centre at <paramref name="contact"/>.</summary>
+    private static Vector3 GripGoal(Vector3 contact, Vector3 toward, out Quaternion rotation)
     {
         float pitch = ClimbTuning.HandFingerPitch * Mathf.Deg2Rad;
         Vector3 fingers = Vector3.up * Mathf.Cos(pitch) + toward * Mathf.Sin(pitch);
         Vector3 palm = toward * Mathf.Cos(pitch) - Vector3.up * Mathf.Sin(pitch);
-        Vector3 x = fingers * (limb == 0 ? -ClimbTuning.HandFingerAxis : ClimbTuning.HandFingerAxis);
-        Vector3 y = -palm * ClimbTuning.HandNormalSign;
-        rotation = Quaternion.LookRotation(Vector3.Cross(x, y), y);
+        rotation = Quaternion.LookRotation(fingers, -palm * ClimbTuning.HandNormalSign);
         return contact - fingers * ClimbTuning.HandPalmAlong - palm * ClimbTuning.HandPalmDepth;
     }
 
