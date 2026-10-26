@@ -318,46 +318,4 @@ public sealed class ClimbPolicyTests
 
     [Fact]
     public void RemountNeedsAtLeastFourTenthsOfASecond() => Assert.True(ClimbPolicy.RemountDelay >= 0.4f);
-
-    [Fact]
-    public void HoldingStillKeepsEveryLimbOnItsRung()
-    {
-        var cycle = new LimbCycle();
-        cycle.Reset(2f, 0f, 1f / 3f, 10f, 1.57f, 0.05f);
-        int[] before = Enumerable.Range(0, 4).Select(cycle.Rung).ToArray();
-        for (int frame = 0; frame < 300; frame++) { cycle.Step(2f, 0.02f); }
-        Assert.Equal(before, Enumerable.Range(0, 4).Select(cycle.Rung).ToArray());
-        Assert.NotEqual(cycle.Rung(LimbCycle.LeftHand), cycle.Rung(LimbCycle.RightHand));
-    }
-
-    [Fact]
-    public void ClimbingMovesTheHandsAlternatelyWithTravel()
-    {
-        var cycle = new LimbCycle();
-        cycle.Reset(2f, 0f, 1f / 3f, 10f, 1.57f, 0.05f);
-        int firstMover = -1, changes = 0;
-        int left = cycle.Rung(LimbCycle.LeftHand), right = cycle.Rung(LimbCycle.RightHand);
-        for (float feet = 2f; feet < 4f; feet += 0.01f)
-        {
-            cycle.Step(feet, 0f);
-            Assert.NotEqual(cycle.Rung(LimbCycle.LeftHand), cycle.Rung(LimbCycle.RightHand));
-            if (cycle.Rung(LimbCycle.LeftHand) != left) { changes++; if (firstMover < 0) firstMover = 0; else Assert.NotEqual(0, LastMover); LastMover = 0; left = cycle.Rung(LimbCycle.LeftHand); }
-            if (cycle.Rung(LimbCycle.RightHand) != right) { changes++; if (firstMover < 0) firstMover = 1; else Assert.NotEqual(1, LastMover); LastMover = 1; right = cycle.Rung(LimbCycle.RightHand); }
-        }
-
-        Assert.InRange(changes, 4, 8); // Two metres is six rungs: three two-rung moves per hand.
-        Assert.True(cycle.Height(LimbCycle.LeftHand) > 2f + 1.57f - 0.7f);
-    }
-
-    private int LastMover = -1;
-
-    [Fact]
-    public void DescendingMovesLimbsDownTheRungs()
-    {
-        var cycle = new LimbCycle();
-        cycle.Reset(6f, 0f, 1f / 3f, 10f, 1.57f, 0.05f);
-        int start = cycle.Rung(LimbCycle.LeftFoot);
-        for (float feet = 6f; feet > 4f; feet -= 0.01f) { cycle.Step(feet, 0f); }
-        Assert.True(cycle.Rung(LimbCycle.LeftFoot) < start);
-    }
 }

@@ -27,7 +27,6 @@ internal sealed class LadderRuntime : IDisposable
     private readonly Action<string> _log;
     private readonly LadderMotor _motor = new LadderMotor();
     private readonly LadderWalkPose _pose;
-    private readonly LadderClimbAnimation _animation;
     private readonly LadderSkill _skill;
     private readonly ClimbLedger _ledger = new ClimbLedger();
     private readonly List<LadderSegment> _segments = new List<LadderSegment>();
@@ -101,11 +100,10 @@ internal sealed class LadderRuntime : IDisposable
         set { _enabled = value; if (!value && IsClimbing) { Release(Departure.Controlled); } }
     }
 
-    internal LadderRuntime(Action<string> log, LadderSkill skill, LadderClimbAnimation animation)
+    internal LadderRuntime(Action<string> log, LadderSkill skill)
     {
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _skill = skill ?? throw new ArgumentNullException(nameof(skill));
-        _animation = animation ?? throw new ArgumentNullException(nameof(animation));
         _pose = new LadderWalkPose(log);
     }
 
@@ -138,7 +136,6 @@ internal sealed class LadderRuntime : IDisposable
             _sessionOwner = Player.m_localPlayer;
         }
 
-        _animation.Update(delta);
         try { _presenter?.Update(delta); } catch (Exception exception) { PresenterFault(exception); }
         if (!IsClimbing)
         {
@@ -185,7 +182,7 @@ internal sealed class LadderRuntime : IDisposable
 
             // UpdateMotion no longer runs, so nothing else resets the locomotion floats: under the custom IK
             // pose the base layer is held at idle; without it, the walking fallback follows actual travel.
-            _pose.Apply(_animation.Ready || !takesInput ? 0f : _poseSpeed);
+            _pose.Apply(_presenter != null || !takesInput ? 0f : _poseSpeed);
         }
         catch (Exception exception) { Fault(exception); }
     }
@@ -866,10 +863,11 @@ internal sealed class LadderRuntime : IDisposable
     private void Present(bool attached)
     {
         if (_player == null) { return; }
-        // The built-in pose lets go of the limbs for the duration of a native hammer swing or interact, so it never
-        // pins the arms against the game's own action (Codex review of 075f14b).
-        _animation.SetLocal(_player, _run, _face, _plane, _pitch, _gripHeight, _gait == ClimbGait.Slide && _mode == Mode.Climbing, attached, NativeOwnership(_player));
-        if (_animation.Ready) { _poseSpeed = 0f; }
+        // With the original presenter installed the walking contingency stays idle; it drives the legs only when
+        // no presenter is bound (install failed or a presentation fault removed it). Exit routes publish with
+        // attached=false only through their PresentedMotion; the frame carries everything the presenter uses.
+        if (_presenter != null) { _poseSpeed = 0f; }
+        _ = attached;
         Publish(_player);
     }
 
@@ -1329,7 +1327,6 @@ internal sealed class LadderRuntime : IDisposable
         finally
         {
             try { _pose.Clear(owned && departure != Departure.External); } catch { /* Never overwrite a takeover's animation state. */ }
-            try { _animation.ReleaseLocal(player); } catch { /* Presentation cannot keep the motor captured. */ }
             _player = null;
             _body = null;
             _view = null;

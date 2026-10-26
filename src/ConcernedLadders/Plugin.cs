@@ -5,6 +5,7 @@ using BepInEx.Configuration;
 using Jotunn.Utils;
 using TheConcernedCat.ConcernedLadders.Pieces;
 using TheConcernedCat.ConcernedLadders.Runtime;
+using TheConcernedCat.ConcernedLadders.Runtime.Animation;
 using TheConcernedCat.Diagnostics;
 using UnityEngine;
 
@@ -26,7 +27,7 @@ public sealed class Plugin : BaseUnityPlugin
     private LadderRuntime? _runtime;
     private LadderPieceRegistration? _pieces;
     private LadderSkill? _skill;
-    private LadderClimbAnimation? _animation;
+    private OriginalClimbPresenter? _presenter;
 
     private void Awake()
     {
@@ -37,9 +38,20 @@ public sealed class Plugin : BaseUnityPlugin
         // The skill registers before any player's Skills awake and whether or not climbing is enabled.
         _skill = new LadderSkill(message => Logger.LogInfo(message));
         _skill.Register();
-        _animation = new LadderClimbAnimation(message => Logger.LogInfo(message));
-        _animation.Install(PluginGuid + ".pose");
-        _runtime = new LadderRuntime(message => Logger.LogInfo(message), _skill, _animation);
+        _runtime = new LadderRuntime(message => Logger.LogInfo(message), _skill);
+        // Original climbing animation (Codex, #431). It only reads the runtime's frames; if it cannot bind to the
+        // installed rig, the runtime keeps its walking-pose contingency.
+        _presenter = new OriginalClimbPresenter(message => Logger.LogInfo(message));
+        bool presenting;
+        try { presenting = _presenter.Install(PluginGuid + ".presentation"); }
+        catch (Exception exception)
+        {
+            Logger.LogInfo("Original climbing animation unavailable (" + SafeFailure.Brief(exception) + "); the walking pose is used.");
+            presenting = false;
+        }
+
+        if (presenting) { _runtime.SetPresenter(_presenter); }
+        else { try { _presenter.Dispose(); } catch { /* Presentation cleanup only. */ } _presenter = null; }
         _runtime.Enabled = _enabled.Value && _pieces.IsReady;
         _runtime.Install(PluginGuid + ".motor");
         string revision = typeof(Plugin).Assembly
@@ -56,7 +68,7 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void OnDestroy()
     {
-        try { _runtime?.Dispose(); _animation?.Dispose(); }
+        try { _runtime?.Dispose(); _presenter?.Dispose(); }
         catch (Exception exception)
         {
             Logger.LogError("Ladder cleanup failed: " + SafeFailure.Brief(exception));
