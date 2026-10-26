@@ -182,7 +182,9 @@ internal sealed class LadderRuntime : IDisposable
 
             // UpdateMotion no longer runs, so nothing else resets the locomotion floats: under the custom IK
             // pose the base layer is held at idle; without it, the walking fallback follows actual travel.
-            _pose.Apply(_presenter != null || !takesInput ? 0f : _poseSpeed);
+            // A top or side exit walks onto the landing: the game's own walk cycle follows the real path speed there,
+            // presenter or not (in game 2026-10-26 the climbing contacts have nothing left to hold at a flush top).
+            _pose.Apply(_mode == Mode.Exiting ? _poseSpeed : _presenter != null || !takesInput ? 0f : _poseSpeed);
         }
         catch (Exception exception) { Fault(exception); }
     }
@@ -866,7 +868,7 @@ internal sealed class LadderRuntime : IDisposable
         // With the original presenter installed the walking contingency stays idle; it drives the legs only when
         // no presenter is bound (install failed or a presentation fault removed it). Exit routes publish with
         // attached=false only through their PresentedMotion; the frame carries everything the presenter uses.
-        if (_presenter != null) { _poseSpeed = 0f; }
+        if (_presenter != null && _mode != Mode.Exiting) { _poseSpeed = 0f; }
         _ = attached;
         Publish(_player);
     }

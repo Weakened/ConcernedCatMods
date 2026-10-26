@@ -39,12 +39,12 @@ internal sealed partial class OriginalClimbPresenter
         if (mount || exit) { entry = 1f; }
         float bodyWeight = SameSideGait.Ease(entry);
         if (mount) { bodyWeight *= Window(route, 0f, frame.Motion == PresentedMotion.AirCatch ? .35f : .7f); }
-        if (exit) { bodyWeight *= 1f - Window(route, .65f, 1f); }
+        if (exit) { bodyWeight *= 1f - Window(route, .05f, .45f); }
         if ((native & NativeActionParts.UpperBody) != 0) { bodyWeight = 0f; }
         float sway = actor.Gait.Sway * (1f - actor.SlideBlend);
         float lean = Mathf.Lerp(ClimbTuning.Lean, ClimbTuning.SlideLean, actor.SlideBlend);
         // Finishing over the top folds the torso forward over the landing, then straightens (owner reference finish).
-        if (frame.Motion == PresentedMotion.TopFinish) { lean += ClimbTuning.ExitFold * Mathf.Sin(Mathf.PI * route); }
+        if (frame.Motion == PresentedMotion.TopFinish) { lean += ClimbTuning.ExitFold * Mathf.Sin(Mathf.PI * Mathf.Clamp01(route / .45f)); }
         Vector3 pelvis = feet + Vector3.up * (rig.PelvisHeight - ClimbTuning.PelvisDrop) + toward * ClimbTuning.PelvisToward +
                          right * (ClimbTuning.SwayShift * sway);
         Quaternion bodyRotation = Quaternion.LookRotation(toward, Vector3.up) *
@@ -92,7 +92,6 @@ internal sealed partial class OriginalClimbPresenter
             }
 
             float weight = SameSideGait.Ease(entry);
-            float palmDown = 0f;
             if (mount)
             {
                 if (frame.Motion == PresentedMotion.AirCatch)
@@ -109,31 +108,25 @@ internal sealed partial class OriginalClimbPresenter
             {
                 if (hand)
                 {
-                    // In game 2026-10-26: the finish carries the body about a metre past the rungs onto the landing, so a
-                    // hand left on the ladder ends up behind it. The hands pull on the rail tops, then press on the
-                    // landing just ahead of the shoulder (at the motor's accepted destination height), then let go as
-                    // the climber stands.
-                    Vector3 across = new Vector3(frame.TransitionTo.X - frame.TransitionFrom.X, 0f, frame.TransitionTo.Z - frame.TransitionFrom.Z);
-                    Vector3 ahead = across.sqrMagnitude > .0001f ? across.normalized : toward;
-                    Vector3 landing = new Vector3(root.x, frame.TransitionTo.Y + ClimbTuning.HandAbove * .5f, root.z) + ahead * ClimbTuning.ExitHandAhead;
-                    palmDown = Window(route, .15f, .4f);
-                    surface = Vector3.Lerp(surface, landing, palmDown);
-                    weight *= 1f - Window(route, limb == 0 ? .55f : .62f, limb == 0 ? .85f : .92f);
+                    // In game 2026-10-26: the finish lifts the feet to the landing, then walks about a metre onto it. A
+                    // flush top leaves nothing for the hands to hold, so they let go early and the game's own walk
+                    // (driven by the runtime at the real path speed) carries the step.
+                    weight *= 1f - Window(route, limb == 0 ? 0f : .05f, limb == 0 ? .25f : .3f);
                 }
                 else
                 {
                     // Only the motor's accepted supported destination is used. No floor query or landing choice.
-                    float step = Window(route, limb == 2 ? .05f : .2f, limb == 2 ? .5f : .65f);
+                    float step = Window(route, limb == 2 ? 0f : .1f, limb == 2 ? .3f : .4f);
                     Vector3 supported = Vector(frame.TransitionTo) + right * (side * .13f);
                     surface = Vector3.Lerp(surface, supported, step);
                     surface += Vector3.up * .09f * Mathf.Sin(Mathf.PI * step);
-                    weight *= 1f - Window(route, .85f, 1f);
+                    weight *= 1f - Window(route, limb == 2 ? .2f : .3f, limb == 2 ? .45f : .55f);
                 }
             }
 
             Quaternion rotation;
             Vector3 pivot;
-            if (hand) { pivot = GripGoal(surface, toward, Mathf.Lerp(ClimbTuning.HandFingerPitch, 90f, palmDown), out rotation); }
+            if (hand) { pivot = GripGoal(surface, toward, ClimbTuning.HandFingerPitch, out rotation); }
             else
             {
                 // A humanoid foot goal: forward is the toes, up is up. The ankle sits behind and above the ball of the foot.
