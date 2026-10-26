@@ -54,7 +54,12 @@ public sealed class Plugin : BaseUnityPlugin
             presenting = false;
         }
 
-        if (presenting) { _runtime.SetPresenter(_presenter); }
+        if (presenting)
+        {
+            _runtime.SetPresenter(_presenter);
+            Logger.LogInfo("Climbing gait source LadderGait.blend " + Domain.Animation.GeneratedGait.BlendSha256.Substring(0, 12) +
+                           " (Blender " + Domain.Animation.GeneratedGait.Blender + ").");
+        }
         else { try { _presenter.Dispose(); } catch { /* Presentation cleanup only. */ } _presenter = null; }
         _runtime.Enabled = _enabled.Value && _pieces.IsReady;
         _runtime.Install(PluginGuid + ".motor");

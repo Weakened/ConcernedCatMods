@@ -167,4 +167,13 @@ public sealed class LimbGaitTests
         Assert.Equal(1.111f, cycle / 0.9f, 3);
         Assert.Equal(0.833f, cycle / 1.2f, 3);
     }
+
+    [Fact]
+    public void TheExportedBlenderGaitIsValidAndBindsToARealRun()
+    {
+        GaitShape shape = GeneratedGait.Shape();
+        Assert.True(shape.Valid);
+        Assert.Equal(64, GeneratedGait.BlendSha256.Length);
+        Assert.True(new LimbGait().Bind(shape, Base, Pitch, 0, 100, 1.38f, 12f));
+    }
 }

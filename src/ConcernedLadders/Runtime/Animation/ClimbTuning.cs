@@ -2,23 +2,23 @@ using TheConcernedCat.ConcernedLadders.Domain.Animation;
 
 namespace TheConcernedCat.ConcernedLadders.Runtime.Animation;
 
-/// <summary>Every editable presentation value in one place (owner correction 2026-10-26). Metres and degrees; the
-/// gait's own values are in <see cref="Gait"/>. These are the authored motion source: change a value, rebuild, and
-/// the next attachment uses it. A development harness may change them at runtime and bump <see cref="Version"/>,
+/// <summary>Every presentation value in one place (owner correction 2026-10-26). Metres and degrees. The gait, body
+/// and bend values come from the Blender source (AnimationSources/LadderGait.blend, exported to GeneratedGait); the
+/// fit values below are measured in game and edited here. A development harness may change them at runtime and bump <see cref="Version"/>,
 /// which re-fits the current climb; shipped builds never do. See AnimationSources/README.md.</summary>
 internal static class ClimbTuning
 {
-    internal static GaitShape Gait = new GaitShape();
+    internal static GaitShape Gait = GeneratedGait.Shape();
 
     /// <summary>Pelvis height below the rig's standing pelvis estimate, and how far it leans in toward the rungs.</summary>
-    internal static float PelvisDrop = 0.1f;
-    internal static float PelvisToward = 0.3f;
+    internal static float PelvisDrop = GeneratedGait.PelvisDrop;
+    internal static float PelvisToward = GeneratedGait.PelvisToward;
 
     /// <summary>Torso pitch toward the ladder while climbing and while sliding; side tilt per unit of sway.</summary>
-    internal static float Lean = 10f;
-    internal static float SlideLean = 6f;
-    internal static float SwayTilt = 3f;
-    internal static float SwayShift = 0.03f;
+    internal static float Lean = GeneratedGait.Lean;
+    internal static float SlideLean = GeneratedGait.SlideLean;
+    internal static float SwayTilt = GeneratedGait.SwayTilt;
+    internal static float SwayShift = GeneratedGait.SwayShift;
 
     /// <summary>Hand grip on a rung: the palm centre sits this far above the rung's centre and this far toward the
     /// climber from the rung's centre plane; hands sit this far either side of the centreline.</summary>
@@ -47,12 +47,12 @@ internal static class ClimbTuning
     internal static float FootSpan = 0.14f;
 
     /// <summary>Elbow and knee bend hints, relative to the shoulder and hip.</summary>
-    internal static float ElbowOut = 0.22f;
-    internal static float ElbowSide = 0.2f;
-    internal static float ElbowDown = 0.25f;
-    internal static float KneeToward = 0.3f;
-    internal static float KneeSide = 0.1f;
-    internal static float KneeDown = 0.2f;
+    internal static float ElbowOut = GeneratedGait.ElbowOut;
+    internal static float ElbowSide = GeneratedGait.ElbowSide;
+    internal static float ElbowDown = GeneratedGait.ElbowDown;
+    internal static float KneeToward = GeneratedGait.KneeToward;
+    internal static float KneeSide = GeneratedGait.KneeSide;
+    internal static float KneeDown = GeneratedGait.KneeDown;
 
     /// <summary>Near the top: a hand whose rung lies more than RailFromBelow below its shoulder blends (over RailBlend)
     /// onto the rail, RailBelowShoulder under the shoulder, RailSide from the centreline, RailOut in front of the rail
