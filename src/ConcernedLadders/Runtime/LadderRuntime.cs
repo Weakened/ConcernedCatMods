@@ -34,6 +34,8 @@ internal sealed class LadderRuntime : IDisposable
     private LadderGeometry _hoverRun;
     private bool _hoverValid;
     private float _hoverTime;
+    private int _hoverRevision = -1;
+    private float _plannedScale = 1f;
     private Player? _player;
     private Player? _sessionOwner;
     private Rigidbody? _body;
@@ -170,9 +172,10 @@ internal sealed class LadderRuntime : IDisposable
         {
             Player? player = Player.m_localPlayer;
             if (player == null || segment == null) { return false; }
-            if (!ReferenceEquals(segment, _hoverSegment) || Time.time - _hoverTime > 0.5f)
+            if (!ReferenceEquals(segment, _hoverSegment) || _hoverRevision != LadderSegment.Revision || Time.time - _hoverTime > 0.5f)
             {
                 _hoverSegment = segment;
+                _hoverRevision = LadderSegment.Revision;
                 _hoverTime = Time.time;
                 _hoverValid = LadderSegment.TryRun(segment, _hoverParts, out _hoverRun);
                 _hoverParts.Clear();
@@ -517,8 +520,9 @@ internal sealed class LadderRuntime : IDisposable
 
             float input = ReadInput(player);
             float level = _skill.LearnedLevel(player, delta);
+            float scale = StaminaScale(player);
             ClimbGait gait = ClimbPolicy.SelectGait(input, _motor.RunIntent(player), level, player.GetStamina(), delta,
-                StaminaScale(player) * Game.m_staminaRate);
+                scale * Game.m_staminaRate);
             float velocity = ClimbPolicy.StepSpeed(gait, input);
             _gait = gait;
             // Without footing the hands can still hold the lowest rung: the body hangs that far below the foot.
@@ -589,6 +593,7 @@ internal sealed class LadderRuntime : IDisposable
             }
 
             _ledger.Plan(gait, body.position.y, Mathf.Abs(nextHeight - body.position.y));
+            _plannedScale = scale; // The step is charged at the basis it was budgeted with.
             Hold(target, seconds, (target.y - body.position.y) / seconds, Mathf.Max(LadderRules.Speed, ClimbPolicy.SpeedOf(gait)));
             Present(true);
             return true;
@@ -602,10 +607,16 @@ internal sealed class LadderRuntime : IDisposable
     {
         if (!_ledger.Pending) { return; }
         bool owned = _view != null && _view.IsValid() && _view.IsOwner();
-        if (!owned) { _ledger.Discard(); return; }
+        Rigidbody? body = _body;
+        // Only the motor's own step is paid for: a body moved away from where that step was sent (a shove,
+        // a teleport, a takeover), a kinematic body or a dead one settles nothing.
+        bool ours = body != null && !body.isKinematic && !player.IsDead() &&
+                    Vector3.Distance(body.position, _lastControlledPosition) <= 0.25f;
+        if (!owned || !ours) { _ledger.Discard(); return; }
         _ledger.Settle(height, _skill.LearnedLevel(player, delta), out float stamina, out int metres);
-        // UseStamina applies the world stamina rate itself; the movement rate and status effects apply here.
-        float charge = stamina * StaminaScale(player);
+        // UseStamina applies the world stamina rate itself; the movement rate and status effects apply here,
+        // at the basis the step was budgeted with.
+        float charge = stamina * _plannedScale;
         if (ClimbPolicy.Finite(charge) && charge > 0f) { player.UseStamina(charge); }
         if (metres > 0) { _skill.Raise(player, metres); }
     }

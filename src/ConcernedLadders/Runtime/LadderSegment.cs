@@ -20,9 +20,12 @@ internal sealed class LadderSegment : MonoBehaviour, Hoverable, Interactable
 
     private static readonly HashSet<LadderSegment> Registered = new HashSet<LadderSegment>();
 
-    private void OnEnable() => Registered.Add(this);
-    private void OnDisable() => Registered.Remove(this);
-    private void OnDestroy() => Registered.Remove(this);
+    /// <summary>Changes whenever a section joins or leaves the loaded registry, so cached runs are rebuilt.</summary>
+    internal static int Revision { get; private set; }
+
+    private void OnEnable() { Registered.Add(this); Revision++; }
+    private void OnDisable() { Registered.Remove(this); Revision++; }
+    private void OnDestroy() { Registered.Remove(this); Revision++; }
 
     public string GetHoverName() => Localization.instance != null ? Localization.instance.Localize(DisplayName) : DisplayName;
 

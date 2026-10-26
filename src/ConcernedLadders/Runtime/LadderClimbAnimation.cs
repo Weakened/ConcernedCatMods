@@ -102,7 +102,9 @@ internal sealed class LadderClimbAnimation : IDisposable
             {
                 Climber climber = pair.Value;
                 climber.Weight = Mathf.MoveTowards(climber.Weight, climber.Target, FadeRate * delta);
-                if (pair.Key == null || (climber.Target <= 0f && climber.Weight <= 0f && climber.ClearedFrames > 1))
+                // Only a released pose is forgotten after its restoration pass. A candidate still waiting for its
+                // second observation stays (with no IK written) until it matches or misses.
+                if (pair.Key == null || (climber.Released && climber.Weight <= 0f && climber.ClearedFrames > 1))
                 {
                     _expired.Add(pair.Key!);
                 }
@@ -227,12 +229,23 @@ internal sealed class LadderClimbAnimation : IDisposable
         float weight = Mathf.Clamp01(climber.Weight);
         if (weight <= 0f)
         {
-            // Restoration pass: every goal and hint this class owns is written back to zero weight before the
-            // climber is forgotten, whatever vanilla's own pass did or skipped this frame.
-            ZeroOwned(animator);
-            climber.ClearedFrames++;
+            // A candidate that never posed writes nothing, so vanilla's own foot IK and look-at stand. A released
+            // pose gets a restoration pass: every goal, hint and the look-at weight this class wrote are set back
+            // to zero before the climber is forgotten.
+            if (climber.Released && climber.Posed)
+            {
+                ZeroOwned(animator);
+                climber.ClearedFrames++;
+            }
+            else if (climber.Released)
+            {
+                climber.ClearedFrames = 2;
+            }
+
             return;
         }
+
+        climber.Posed = true;
 
         climber.ClearedFrames = 0;
         float feet = character.transform.position.y;
@@ -301,6 +314,7 @@ internal sealed class LadderClimbAnimation : IDisposable
         }
 
         foreach (AvatarIKHint hint in Hints) { animator.SetIKHintPositionWeight(hint, 0f); }
+        animator.SetLookAtWeight(0f);
     }
 
     private static void Goal(Animator animator, AvatarIKGoal goal, Vector3 position, float weight, Quaternion? rotation)
@@ -343,6 +357,9 @@ internal sealed class LadderClimbAnimation : IDisposable
         catch { /* Presentation failure never affects movement. */ }
     }
 
+    /// <summary>BepInEx destroys plugins only when the application quits, so this runs after the last frame
+    /// any climber would be drawn in; there is no later IK pass to restore. Releases during play (exits, jumps,
+    /// deaths, a disabled setting, faults) all go through the restoration pass above instead.</summary>
     public void Dispose()
     {
         Ready = false;
@@ -367,6 +384,7 @@ internal sealed class LadderClimbAnimation : IDisposable
         internal float Target;
         internal bool Slide;
         internal bool Released;
+        internal bool Posed;
         internal float Seen;
         internal float LastFeet;
         internal float VerticalSpeed;
