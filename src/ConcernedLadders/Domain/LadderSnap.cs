@@ -42,6 +42,30 @@ internal static class LadderSnap
         return false;
     }
 
+    /// <summary>Which end of a column a ghost that overlaps it should extend.</summary>
+    internal enum Extend { Nearest, Above, Below }
+
+    /// <summary>A ghost aimed at the body of a placed ladder (observed in the owner's session: the game found no
+    /// snap point within its 0.5 m radius and left a green ghost overlapping the ladder) extends the connected column
+    /// instead: above its top or below its bottom. Only a ghost whose own section span overlaps the column's span by
+    /// more than <see cref="Coincident"/> and whose origin lies within <paramref name="columnRadius"/> of the column's
+    /// centreline qualifies; anything else stays native. <paramref name="runBottom"/>/<paramref name="runTop"/> are the
+    /// column's centreline ends; the returned origin is the ghost's bottom-centre.</summary>
+    internal static bool TryExtendColumn(ClimbPoint ghostOrigin, ClimbPoint runBottom, ClimbPoint runTop, float columnRadius,
+        Extend extend, out ClimbPoint alignedOrigin, out bool above)
+    {
+        alignedOrigin = default;
+        above = false;
+        float dx = ghostOrigin.X - runBottom.X, dz = ghostOrigin.Z - runBottom.Z;
+        if (dx * dx + dz * dz > columnRadius * columnRadius) { return false; }
+        float overlap = Math.Min(ghostOrigin.Y + SectionHeight, runTop.Y) - Math.Max(ghostOrigin.Y, runBottom.Y);
+        if (!(overlap > Coincident)) { return false; }
+        above = extend == Extend.Above ||
+                (extend == Extend.Nearest && ghostOrigin.Y + SectionHeight * 0.5f >= (runBottom.Y + runTop.Y) * 0.5f);
+        alignedOrigin = above ? runTop : new ClimbPoint(runBottom.X, runBottom.Y - SectionHeight, runBottom.Z);
+        return true;
+    }
+
     private static float Distance(ClimbPoint a, ClimbPoint b)
     {
         float dx = a.X - b.X, dy = a.Y - b.Y, dz = a.Z - b.Z;

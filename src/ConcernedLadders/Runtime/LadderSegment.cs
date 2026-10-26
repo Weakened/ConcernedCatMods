@@ -181,6 +181,25 @@ internal sealed class LadderSegment : MonoBehaviour, Hoverable, Interactable
         return null;
     }
 
+    /// <summary>A placed section whose centreline passes within <paramref name="radius"/> of a ghost's origin and whose
+    /// span overlaps the ghost's 2 m span, for extending its column instead of overlapping it. Bounded; ghosts never match.</summary>
+    internal static LadderSegment? FindColumnAt(Vector3 origin, float radius)
+    {
+        if (!Finite(origin) || Registered.Count > LadderRules.MaximumRegisteredSegments) { return null; }
+        foreach (LadderSegment candidate in Registered)
+        {
+            if (candidate == null || !candidate.IsLive || !candidate.TryGeometry(out LadderGeometry geometry)) { continue; }
+            float dx = origin.x - geometry.Bottom.X, dz = origin.z - geometry.Bottom.Z;
+            if (dx * dx + dz * dz > radius * radius) { continue; }
+            if (Math.Min(origin.y + LadderSnap.SectionHeight, geometry.Top.Y) - Math.Max(origin.y, geometry.Bottom.Y) > LadderSnap.Coincident)
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
     internal static ClimbPoint Point(Vector3 point) => new ClimbPoint(point.x, point.y, point.z);
     internal static Vector3 Vector(ClimbPoint point) => new Vector3(point.X, point.Y, point.Z);
     internal static bool Finite(Vector3 point) => LadderRules.Finite(point.x) && LadderRules.Finite(point.y) && LadderRules.Finite(point.z);
