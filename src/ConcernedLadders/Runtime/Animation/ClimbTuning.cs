@@ -68,6 +68,9 @@ internal static class ClimbTuning
     internal static float RailOut = 0.08f;
     internal static float ExitFold = 28f;
 
+    /// <summary>How far ahead of its shoulder a hand presses on the landing while finishing over the top.</summary>
+    internal static float ExitHandAhead = 0.3f;
+
     /// <summary>A contact needing more than FadeFrom of its chain fades out toward ReachLimit instead of popping.</summary>
     internal static float FadeFrom = 0.96f;
 

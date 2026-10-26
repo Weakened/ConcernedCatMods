@@ -92,6 +92,7 @@ internal sealed partial class OriginalClimbPresenter
             }
 
             float weight = SameSideGait.Ease(entry);
+            float palmDown = 0f;
             if (mount)
             {
                 if (frame.Motion == PresentedMotion.AirCatch)
@@ -106,21 +107,33 @@ internal sealed partial class OriginalClimbPresenter
 
             if (exit)
             {
-                if (hand) { weight *= 1f - Window(route, limb == 0 ? .45f : .6f, limb == 0 ? .8f : .95f); }
+                if (hand)
+                {
+                    // In game 2026-10-26: the finish carries the body about a metre past the rungs onto the landing, so a
+                    // hand left on the ladder ends up behind it. The hands pull on the rail tops, then press on the
+                    // landing just ahead of the shoulder (at the motor's accepted destination height), then let go as
+                    // the climber stands.
+                    Vector3 across = new Vector3(frame.TransitionTo.X - frame.TransitionFrom.X, 0f, frame.TransitionTo.Z - frame.TransitionFrom.Z);
+                    Vector3 ahead = across.sqrMagnitude > .0001f ? across.normalized : toward;
+                    Vector3 landing = new Vector3(root.x, frame.TransitionTo.Y + ClimbTuning.HandAbove * .5f, root.z) + ahead * ClimbTuning.ExitHandAhead;
+                    palmDown = Window(route, .15f, .4f);
+                    surface = Vector3.Lerp(surface, landing, palmDown);
+                    weight *= 1f - Window(route, limb == 0 ? .55f : .62f, limb == 0 ? .85f : .92f);
+                }
                 else
                 {
                     // Only the motor's accepted supported destination is used. No floor query or landing choice.
-                    float step = Window(route, limb == 2 ? .08f : .35f, limb == 2 ? .65f : .95f);
+                    float step = Window(route, limb == 2 ? .05f : .2f, limb == 2 ? .5f : .65f);
                     Vector3 supported = Vector(frame.TransitionTo) + right * (side * .13f);
                     surface = Vector3.Lerp(surface, supported, step);
                     surface += Vector3.up * .09f * Mathf.Sin(Mathf.PI * step);
-                    weight *= 1f - Window(route, .9f, 1f);
+                    weight *= 1f - Window(route, .85f, 1f);
                 }
             }
 
             Quaternion rotation;
             Vector3 pivot;
-            if (hand) { pivot = GripGoal(surface, toward, out rotation); }
+            if (hand) { pivot = GripGoal(surface, toward, Mathf.Lerp(ClimbTuning.HandFingerPitch, 90f, palmDown), out rotation); }
             else
             {
                 // A humanoid foot goal: forward is the toes, up is up. The ankle sits behind and above the ball of the foot.
@@ -155,9 +168,9 @@ internal sealed partial class OriginalClimbPresenter
     /// Humanoid hand goals are in the avatar's normalized space, not the hand bone's. Measured in game 2026-10-26
     /// (solved finger bones against the goal): the goal's forward runs along the fingers and its up is the back of
     /// the hand. Returns the wrist pivot for a palm centre at <paramref name="contact"/>.</summary>
-    private static Vector3 GripGoal(Vector3 contact, Vector3 toward, out Quaternion rotation)
+    private static Vector3 GripGoal(Vector3 contact, Vector3 toward, float fingerPitch, out Quaternion rotation)
     {
-        float pitch = ClimbTuning.HandFingerPitch * Mathf.Deg2Rad;
+        float pitch = fingerPitch * Mathf.Deg2Rad;
         Vector3 fingers = Vector3.up * Mathf.Cos(pitch) + toward * Mathf.Sin(pitch);
         Vector3 palm = toward * Mathf.Cos(pitch) - Vector3.up * Mathf.Sin(pitch);
         rotation = Quaternion.LookRotation(fingers, -palm * ClimbTuning.HandNormalSign);
