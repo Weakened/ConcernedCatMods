@@ -186,16 +186,16 @@ public sealed class ClimbPolicyTests
     }
 
     [Fact]
-    public void SpeedsAreTheOwnerDefaultsAndTheOld18ClampIsGone()
+    public void SpeedsAreTheOwnersNaturalClimbAndSlideIsUnchanged()
     {
-        Assert.Equal(1.8f, ClimbPolicy.StepSpeed(ClimbGait.Normal, 1f), 4);
-        Assert.Equal(2.43f, ClimbPolicy.StepSpeed(ClimbGait.Fast, 1f), 4);
-        Assert.Equal(-2.43f, ClimbPolicy.StepSpeed(ClimbGait.Fast, -1f), 4);
+        Assert.Equal(0.9f, ClimbPolicy.StepSpeed(ClimbGait.Normal, 1f), 4);
+        Assert.Equal(1.2f, ClimbPolicy.StepSpeed(ClimbGait.Fast, 1f), 4);
+        Assert.Equal(-1.2f, ClimbPolicy.StepSpeed(ClimbGait.Fast, -1f), 4);
         Assert.Equal(-4.5f, ClimbPolicy.StepSpeed(ClimbGait.Slide, -0.3f), 4);
-        Assert.Equal(0.9f, ClimbPolicy.StepSpeed(ClimbGait.Normal, 0.5f), 4);
+        Assert.Equal(0.45f, ClimbPolicy.StepSpeed(ClimbGait.Normal, 0.5f), 4);
         Assert.Equal(0f, ClimbPolicy.StepSpeed(ClimbGait.Hold, 1f));
-        // A fast frame really moves 2.43 m/s worth: Advance no longer caps at 1.8.
-        Assert.Equal(1f + 2.43f * 0.02f, LadderRules.Advance(1f, 2.43f, 0.02f, 0f, 10f), 4);
+        // A fast frame really moves 1.2 m/s worth, and a slide 4.5 m/s: Advance caps at the slide speed.
+        Assert.Equal(1f + 1.2f * 0.02f, LadderRules.Advance(1f, 1.2f, 0.02f, 0f, 10f), 4);
         Assert.Equal(1f - 4.5f * 0.02f, LadderRules.Advance(1f, -4.5f, 0.02f, 0f, 10f), 4);
     }
 

@@ -8,7 +8,8 @@ namespace TheConcernedCat.ConcernedLadders.Domain;
 internal static class LadderRules
 {
     /// <summary>Ordinary speed of mount, exit and transfer legs; climb gaits are in ClimbPolicy.</summary>
-    internal const float Speed = ClimbPolicy.NormalSpeed;
+    /// <summary>Walking pace of the mount, catch and exit routes (unchanged when the climb slowed in 0.2.6).</summary>
+    internal const float Speed = 1.8f;
     internal const float EndpointTolerance = 0.03f;
     internal const int MaximumSegments = 64;
     internal const int MaximumRegisteredSegments = 2048;

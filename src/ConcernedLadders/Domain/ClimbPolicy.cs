@@ -70,11 +70,11 @@ internal static class ClimbPolicy
     /// <summary>Lane clearance between the capsule and the rails' collider face.</summary>
     internal const float LaneGap = 0.06f;
 
-    internal const float NormalSpeed = 1.8f;
-    internal const float FastFactor = 1.35f;
-    internal const float SlideFactor = 2.5f;
-    internal const float FastSpeed = NormalSpeed * FastFactor;
-    internal const float SlideSpeed = NormalSpeed * SlideFactor;
+    /// <summary>Owner decision 2026-10-26: a slower, natural climb (it was 1.8 / 2.43 m/s) so hands and feet can move
+    /// one at a time like the reference climbers. Slide, stamina per second and skill rules are unchanged.</summary>
+    internal const float NormalSpeed = 0.9f;
+    internal const float FastSpeed = 1.2f;
+    internal const float SlideSpeed = 4.5f;
     internal const float FastStaminaPerSecond = 6f;
     internal const float SlideStaminaPerSecond = 2f;
     internal const float MaximumStaminaSaving = 0.25f;

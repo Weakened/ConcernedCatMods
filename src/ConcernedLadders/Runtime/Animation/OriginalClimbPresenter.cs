@@ -183,11 +183,11 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
 
     private static void Validate(in ClimbPresentationFrame frame)
     {
-        if (frame.Sample < 0 || !SameSideGait.Finite(frame.SampleTime) || !SameSideGait.Finite(frame.Travel) ||
-            !SameSideGait.Finite(frame.StepTravel) || !frame.Feet.IsFinite || !frame.Run.IsClimbable ||
+        if (frame.Sample < 0 || !LimbGait.Finite(frame.SampleTime) || !LimbGait.Finite(frame.Travel) ||
+            !LimbGait.Finite(frame.StepTravel) || !frame.Feet.IsFinite || !frame.Run.IsClimbable ||
             !frame.Run.Bottom.IsFinite || !frame.Run.Top.IsFinite || !frame.TransitionFrom.IsFinite || !frame.TransitionTo.IsFinite ||
-            !SameSideGait.Finite(frame.RungPlane) || !SameSideGait.Finite(frame.RungOrigin) ||
-            !SameSideGait.Finite(frame.Transition) || frame.LastRung < 1 || frame.LastRung > 4096 ||
+            !LimbGait.Finite(frame.RungPlane) || !LimbGait.Finite(frame.RungOrigin) ||
+            !LimbGait.Finite(frame.Transition) || frame.LastRung < 1 || frame.LastRung > 4096 ||
             (frame.Face != LadderFace.Front && frame.Face != LadderFace.Rear) ||
             (int)frame.Motion < 0 || (int)frame.Motion > (int)PresentedMotion.StepOff ||
             ((int)frame.NativeAction & ~15) != 0)
@@ -226,7 +226,8 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
     {
         internal Actor(OriginalRigBinding rig) { Rig = rig; }
         internal readonly OriginalRigBinding Rig;
-        internal readonly SameSideGait Gait = new SameSideGait();
+        internal readonly LimbGait Gait = new LimbGait();
+        internal float Dwell;
         internal readonly FitCounters Fit = new FitCounters();
         internal readonly bool[] Asked = new bool[4];
         internal readonly Vector3[] LastPivot = new Vector3[4];

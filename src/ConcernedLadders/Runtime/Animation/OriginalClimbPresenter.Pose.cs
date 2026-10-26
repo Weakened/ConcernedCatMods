@@ -37,7 +37,7 @@ internal sealed partial class OriginalClimbPresenter
         bool exit = frame.Motion == PresentedMotion.TopFinish || frame.Motion == PresentedMotion.StepOff;
         float route = Mathf.Clamp01(frame.Transition);
         if (mount || exit) { entry = 1f; }
-        float bodyWeight = SameSideGait.Ease(entry);
+        float bodyWeight = LimbGait.Ease(entry);
         if (mount) { bodyWeight *= Window(route, 0f, frame.Motion == PresentedMotion.AirCatch ? .35f : .7f); }
         if (exit) { bodyWeight *= 1f - Window(route, .05f, .45f); }
         if ((native & NativeActionParts.UpperBody) != 0) { bodyWeight = 0f; }
@@ -45,7 +45,11 @@ internal sealed partial class OriginalClimbPresenter
         float lean = Mathf.Lerp(ClimbTuning.Lean, ClimbTuning.SlideLean, actor.SlideBlend);
         // Finishing over the top folds the torso forward over the landing, then straightens (owner reference finish).
         if (frame.Motion == PresentedMotion.TopFinish) { lean += ClimbTuning.ExitFold * Mathf.Sin(Mathf.PI * Mathf.Clamp01(route / .45f)); }
-        Vector3 pelvis = feet + Vector3.up * (rig.PelvisHeight - ClimbTuning.PelvisDrop) + toward * ClimbTuning.PelvisToward +
+        // The torso dwell: the visible body rises more slowly while a foot recovers and catches up as the leg extends
+        // (bounded, zero mean, presentation only; the gameplay body moves steadily).
+        float dwell = frame.Motion == PresentedMotion.Climb || frame.Motion == PresentedMotion.Fast ? actor.Gait.BodyOffset(frame.Feet.Y) : 0f;
+        actor.Dwell = Mathf.MoveTowards(actor.Dwell, dwell, Time.deltaTime * .5f);
+        Vector3 pelvis = feet + Vector3.up * (rig.PelvisHeight - ClimbTuning.PelvisDrop + actor.Dwell) + toward * ClimbTuning.PelvisToward +
                          right * (ClimbTuning.SwayShift * sway);
         Quaternion bodyRotation = Quaternion.LookRotation(toward, Vector3.up) *
             Quaternion.AngleAxis(lean, Vector3.right) * Quaternion.AngleAxis(-sway * ClimbTuning.SwayTilt, Vector3.forward) * rig.BodyInPlayer;
@@ -69,7 +73,12 @@ internal sealed partial class OriginalClimbPresenter
             float above = hand ? ClimbTuning.HandAbove : ClimbTuning.FootAbove;
             float outOffset = hand ? ClimbTuning.HandOut : ClimbTuning.FootOut;
             Vector3 surface = RungSurface(frame, contact.Height + above, outOffset, span * side);
-            surface += outward * contact.Clearance * (hand ? ClimbTuning.HandClearance : ClimbTuning.FootClearance);
+            if (contact.Swing > 0f)
+            {
+                // The swing arc from the gait source: away from the rungs and upward, shaped per limb kind.
+                actor.Gait.Arc(limb, contact.Swing, out float arcOut, out float arcUp);
+                surface += outward * arcOut + Vector3.up * arcUp;
+            }
             if (hand)
             {
                 // Near the top there is no rung left within reach above: the hand takes the rail instead, at a height
@@ -88,10 +97,10 @@ internal sealed partial class OriginalClimbPresenter
                 // A distinct rail-braking pose: these contacts slide by design, not fake planted rung grips.
                 float height = feet.y + (hand ? rig.ShoulderHeight - .16f : .24f);
                 Vector3 rail = RungSurface(frame, height, ClimbPresentationFrame.HalfDepth + (hand ? .02f : .11f), side * (hand ? .32f : .25f));
-                surface = Vector3.Lerp(surface, rail, SameSideGait.Ease(actor.SlideBlend));
+                surface = Vector3.Lerp(surface, rail, LimbGait.Ease(actor.SlideBlend));
             }
 
-            float weight = SameSideGait.Ease(entry);
+            float weight = LimbGait.Ease(entry);
             if (mount)
             {
                 if (frame.Motion == PresentedMotion.AirCatch)
@@ -176,7 +185,7 @@ internal sealed partial class OriginalClimbPresenter
 
     private static float Smooth01(float value) { float t = Mathf.Clamp01(value); return t * t * (3f - 2f * t); }
 
-    private static float Window(float progress, float from, float to) => SameSideGait.Ease((progress - from) / (to - from));
+    private static float Window(float progress, float from, float to) => LimbGait.Ease((progress - from) / (to - from));
     private static Vector3 Vector(ClimbPoint point) => new Vector3(point.X, point.Y, point.Z);
 
     private static NativeKind NativeActionNow(Animator animator)

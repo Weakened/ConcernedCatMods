@@ -46,10 +46,6 @@ internal static class ClimbTuning
     internal static float FootOut = 0.0f;
     internal static float FootSpan = 0.14f;
 
-    /// <summary>How far a swinging hand or foot clears the rungs at the top of its arc.</summary>
-    internal static float HandClearance = 0.09f;
-    internal static float FootClearance = 0.12f;
-
     /// <summary>Elbow and knee bend hints, relative to the shoulder and hip.</summary>
     internal static float ElbowOut = 0.22f;
     internal static float ElbowSide = 0.2f;
