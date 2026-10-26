@@ -195,7 +195,7 @@ internal sealed class LadderRuntime : IDisposable
 
     private static bool JumpPressed() => ZInput.GetButtonDown("Jump") || ZInput.GetButtonDown("JoyJump");
 
-    private readonly RaycastHit[] _buildHover = new RaycastHit[16];
+    private readonly RaycastHit[] _buildHover = new RaycastHit[64]; // The game's own hover buffer size.
 
     /// <summary>Mounting with the hammer equipped (owner decision 2026-10-26). In build mode the game clears its
     /// hover target, so Use never reaches the ladder. This repeats the game's own hover test (camera ray, the game's
@@ -213,6 +213,8 @@ internal sealed class LadderRuntime : IDisposable
             if (mask == -1) { return; }
             Transform camera = GameCamera.instance.transform;
             int count = Physics.RaycastNonAlloc(camera.position, camera.forward, _buildHover, 50f, mask);
+            // A full buffer need not hold the nearest hits; never mount past an object normal hover would select.
+            if (count >= _buildHover.Length) { return; }
             float nearest = float.MaxValue;
             RaycastHit? first = null;
             for (int index = 0; index < count && index < _buildHover.Length; index++)
