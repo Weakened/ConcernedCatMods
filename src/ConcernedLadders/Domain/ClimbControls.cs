@@ -46,6 +46,40 @@ internal static class ClimbControls
         return feetHeight >= lowestHang - Slack && feetHeight <= refreshed.Top.Y + Slack;
     }
 
+    /// <summary>The section the hands hold: the hand height clamped onto the current run (a climber near the top
+    /// reaches above it), then the section whose span contains it. Returns -1 when no listed section contains it,
+    /// i.e. the supporting section is gone.</summary>
+    internal static int SupportingSection(float handHeight, float runBottom, float runTop, float[] sectionBottoms, float[] sectionTops)
+    {
+        if (!ClimbPolicy.Finite(handHeight) || sectionBottoms.Length != sectionTops.Length) { return -1; }
+        float clamped = Math.Min(Math.Max(handHeight, runBottom), runTop);
+        int found = -1;
+        for (int index = 0; index < sectionBottoms.Length; index++)
+        {
+            if (clamped >= sectionBottoms[index] - 0.001f && clamped <= sectionTops[index] + 0.001f)
+            {
+                // At a seam the upper section holds the hands.
+                if (found < 0 || sectionBottoms[index] > sectionBottoms[found]) { found = index; }
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>The part of the motor's last commanded velocity that physics actually kept, along the command's
+    /// direction and never beyond it. A Drop removes only this: a command that a landing or collision already
+    /// cancelled is never subtracted again (which would launch the body the other way).</summary>
+    internal static void SurvivingCommand(float vx, float vy, float vz, float cx, float cy, float cz,
+        out float sx, out float sy, out float sz)
+    {
+        sx = sy = sz = 0f;
+        float length = (float)Math.Sqrt(cx * cx + cy * cy + cz * cz);
+        if (!(length > 1e-5f) || !ClimbPolicy.Finite(vx) || !ClimbPolicy.Finite(vy) || !ClimbPolicy.Finite(vz)) { return; }
+        float dx = cx / length, dy = cy / length, dz = cz / length;
+        float along = Math.Min(Math.Max(vx * dx + vy * dy + vz * dz, 0f), length);
+        sx = dx * along; sy = dy * along; sz = dz * along;
+    }
+
     /// <summary>Horizontal tolerance for "the same foot line", metres.</summary>
     internal const float SameLine = 0.02f;
 
@@ -64,22 +98,38 @@ internal sealed class DropTrigger
     private bool _armed;
 
     /// <summary>Called on mount: a Crouch already held then is not a request to drop.</summary>
-    internal void Arm(bool crouchHeld) => _armed = !crouchHeld;
+    internal void Arm(bool crouchHeld) { _armed = !crouchHeld; _pending = false; }
 
     /// <summary>Called every frame while attached with the raw held state and whether gameplay has focus.</summary>
     internal void Observe(bool crouchHeld, bool gameplayFocus)
     {
+        if (!gameplayFocus) { _pending = false; } // A press never survives a menu taking focus.
         if (!crouchHeld) { _armed = true; }
         else if (!gameplayFocus) { _armed = false; }
     }
 
-    /// <summary>The native crouch edge for this input tick; true only for an armed press.</summary>
+    /// <summary>A Crouch button-down seen with gameplay focus on a rendered frame. It counts even when the game's own
+    /// crouch edge is missing: the native edge is stale after a console or menu had focus (the controller does not
+    /// update its last-crouch state then), so a fresh press there would otherwise be lost.</summary>
+    internal void Press(bool pressedDown, bool gameplayFocus)
+    {
+        if (pressedDown && gameplayFocus && _armed) { _pending = true; }
+    }
+
+    /// <summary>The native crouch edge for this input tick, or a pending fresh press; true once per armed press.</summary>
     internal bool Take(bool nativeCrouchEdge)
     {
-        if (!nativeCrouchEdge || !_armed) { return false; }
+        bool wanted = nativeCrouchEdge || _pending;
+        _pending = false;
+        if (!wanted || !_armed) { return false; }
         _armed = false;
         return true;
     }
 
+    /// <summary>A drop is pending or the trigger is armed and a press is arriving this frame.</summary>
+    internal bool Pending => _pending;
+
     internal bool Armed => _armed;
+
+    private bool _pending;
 }

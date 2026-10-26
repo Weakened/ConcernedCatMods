@@ -48,7 +48,8 @@ internal sealed class LadderMotor : IDisposable
             });
             MethodInfo interact = AccessTools.Method(typeof(Player), "Interact", new[] { typeof(GameObject), typeof(bool), typeof(bool) });
             if (_motion == null || jump == null || input == null || input.ReturnType != typeof(bool) || controls == null ||
-                interact == null || interact.ReturnType != typeof(void) || !HasParameters(controls, "jump", "crouch"))
+                interact == null || interact.ReturnType != typeof(void) || !HasParameters(controls, "jump", "crouch") ||
+                Array.FindIndex(controls.GetParameters(), parameter => parameter.Name == "movedir" && parameter.ParameterType == typeof(Vector3)) < 0)
             {
                 log("Ladder climbing unavailable: the installed game's motor/input API did not match. Pieces remain registered.");
                 return false;
@@ -125,8 +126,8 @@ internal sealed class LadderMotor : IDisposable
     private static bool BeforeJump(Character __instance) =>
         !(LadderRuntime.Current?.Jump(__instance) ?? false);
 
-    private static void BeforeControls(Player __instance, ref bool jump, ref bool crouch) =>
-        LadderRuntime.Current?.Controls(__instance, ref jump, ref crouch);
+    private static void BeforeControls(Player __instance, Vector3 movedir, ref bool jump, ref bool crouch) =>
+        LadderRuntime.Current?.Controls(__instance, movedir, ref jump, ref crouch);
 
     private static bool BeforeInteract(Player __instance) =>
         !(ReferenceEquals(__instance, Player.m_localPlayer) && (LadderRuntime.Current?.SuppressInteract() ?? false));

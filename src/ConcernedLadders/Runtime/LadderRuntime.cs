@@ -33,6 +33,8 @@ internal sealed class LadderRuntime : IDisposable
     private readonly List<LadderSegment> _segments = new List<LadderSegment>();
     private readonly List<Vector3> _positions = new List<Vector3>();
     private readonly List<Quaternion> _rotations = new List<Quaternion>();
+    private readonly List<float> _spanBottoms = new List<float>();
+    private readonly List<float> _spanTops = new List<float>();
     private readonly List<LadderSegment> _hoverParts = new List<LadderSegment>();
     private LadderSegment? _hoverSegment;
     private LadderGeometry _hoverRun;
@@ -163,8 +165,9 @@ internal sealed class LadderRuntime : IDisposable
             }
 
             bool takesInput = _motor.TakesInput(_player);
-            bool focus = takesInput && !InventoryGui.IsVisible() && !Hud.InRadial();
+            bool focus = GameplayFocus(_player);
             _drop.Observe(CrouchHeld(), focus);
+            _drop.Press(CrouchPressed(), focus);
             // Vanilla routes Use only to the hovered object. A climber who looks away from the rungs (at a wall,
             // the sky, a blocked landing) would otherwise have no way to ask for a safe dismount. The player's own
             // bindings are read; a hovered interactable (including this ladder) keeps vanilla's routing. Jump and
@@ -196,26 +199,48 @@ internal sealed class LadderRuntime : IDisposable
     /// While attached with gameplay input, Jump wins and departs; otherwise an armed fresh Crouch edge drops.
     /// Both consume the crouch edge so the native sneak toggle never flips while attached, and a Jump never
     /// becomes the game's crouch-dodge. Nothing is changed for a player who is not attached.</summary>
-    internal void Controls(Player player, ref bool jump, ref bool crouch)
+    internal void Controls(Player player, Vector3 movedir, ref bool jump, ref bool crouch)
     {
         if (!IsClimbing || _player == null || !ReferenceEquals(player, _player)) { return; }
         try
         {
-            bool focus = _motor.TakesInput(player) && !InventoryGui.IsVisible() && !Hud.InRadial();
-            bool drop = crouch && _drop.Take(focus && crouch);
+            bool focus = GameplayFocus(player);
+            // The native edge, or a fresh press seen on a rendered frame whose native edge went stale behind a menu.
+            bool drop = focus && _drop.Take(crouch);
             ClimbAction action = ClimbControls.Resolve(focus, jump, drop, false, false);
             jump = false;
             crouch = false;
-            if (action == ClimbAction.Jump) { JumpOff(player); }
+            // This tick's movement, the way SetControls is about to derive it, so Jump+direction pressed together
+            // departs that way (the stored move direction is still the previous tick's).
+            if (action == ClimbAction.Jump) { JumpOff(player, CameraRelative(player, movedir)); }
             else if (action == ClimbAction.Drop) { DropOff(player); }
         }
         catch (Exception exception) { Fault(exception); }
     }
 
-    /// <summary>A world interaction arriving in the same frame as a Jump or Drop departure is not delivered:
-    /// the game reads Use after the physics step that released, so it would otherwise act on whatever the
-    /// detached player now hovers.</summary>
-    internal bool SuppressInteract() => Time.frameCount == _departFrame;
+    private static Vector3 CameraRelative(Player player, Vector3 movedir)
+    {
+        Vector3 look = player.GetLookDir();
+        look.y = 0f;
+        if (!LadderSegment.Finite(movedir) || !LadderSegment.Finite(look) || look.sqrMagnitude < 1e-6f) { return Vector3.zero; }
+        look.Normalize();
+        return movedir.z * look + movedir.x * Vector3.Cross(Vector3.up, look);
+    }
+
+    /// <summary>Gameplay has the player's input: no menu, console, inventory, radial or build palette has focus.
+    /// Player.TakeInput alone does not exclude the radial or the piece-selection palette.</summary>
+    private bool GameplayFocus(Player player) =>
+        _motor.TakesInput(player) && !InventoryGui.IsVisible() && !Hud.InRadial() && !Hud.IsPieceSelectionVisible();
+
+    /// <summary>A world interaction is not delivered in the frame of a Jump or Drop departure, nor while attached
+    /// when a Jump or fresh Crouch press arrives in the same frame: the game reads Use in its Update, which can run
+    /// before the physics tick that departs, and the departure wins (Jump &gt; Drop &gt; Use).</summary>
+    internal bool SuppressInteract()
+    {
+        if (Time.frameCount == _departFrame) { return true; }
+        if (!IsClimbing || _player == null || !GameplayFocus(_player)) { return false; }
+        return JumpPressed() || (CrouchPressed() && (_drop.Armed || _drop.Pending));
+    }
 
     private static bool HoversInteractable(Player player)
     {
@@ -497,14 +522,7 @@ internal sealed class LadderRuntime : IDisposable
         _wrotePhysics = false;
         _lastControlledHeight = body.position.y;
         _lastControlledPosition = body.position;
-        _positions.Clear();
-        _rotations.Clear();
-        foreach (LadderSegment part in _segments)
-        {
-            _positions.Add(part.transform.position);
-            _rotations.Add(part.transform.rotation);
-        }
-
+        CaptureSegments();
         _route = plan.Route;
         _routeIndex = 0;
         _mode = Mode.Mounting;
@@ -554,12 +572,24 @@ internal sealed class LadderRuntime : IDisposable
             bool owned = _view != null && _view.IsValid() && _view.IsOwner();
             bool worldPresent = ZNetScene.instance != null && ReferenceEquals(Player.m_localPlayer, player);
             // A ladder section was built or removed somewhere (N08): rebuild this shaft's connected run once and
-            // keep climbing on it if it is the same shaft and still holds the climber; otherwise let go normally.
-            if (_runRevision != LadderSegment.Revision && body != null && clearance != null && !RefreshRun(body.position, clearance))
+            // keep climbing on it if it is the same shaft and the section under the hands still stands; otherwise
+            // let go. A takeover in progress (knockback, stagger, teleport, authority loss) is classified first, so
+            // a refresh failure never writes over it (Codex review of 075f14b).
+            if (_runRevision != LadderSegment.Revision && body != null && clearance != null)
             {
-                _endHint = ClimbEnd.Destroyed;
-                Release(Departure.Controlled);
-                return false;
+                float driftNow = Vector3.Distance(body.position, _lastControlledPosition);
+                if (LadderRules.IsExternalRelease(owned, !player.IsDead(), Free(player, true), worldPresent, body.isKinematic, driftNow))
+                {
+                    Release(Departure.External);
+                    return false;
+                }
+
+                if (!RefreshRun(body.position, clearance))
+                {
+                    _endHint = ClimbEnd.Destroyed;
+                    Release(Departure.Controlled);
+                    return false;
+                }
             }
 
             bool present = _segments.Count > 0;
@@ -596,7 +626,7 @@ internal sealed class LadderRuntime : IDisposable
             // Opening a door or hatch from the ladder plays the interact animation, a minor action; a hammer
             // placement, repair or removal plays the tool swing (N08). The climber holds still on the rungs for
             // their duration rather than being let go to fall. Holding costs no stamina and earns no skill.
-            if (!_motor.TakesInput(player) || player.InMinorAction() || BuildAction(player))
+            if (!GameplayFocus(player) || player.InMinorAction() || BuildAction(player))
             {
                 Hold(body.position, seconds, 0f, LadderRules.Speed);
                 Present(true);
@@ -701,17 +731,26 @@ internal sealed class LadderRuntime : IDisposable
     private bool RefreshRun(Vector3 feet, LadderClearance clearance)
     {
         _runRevision = LadderSegment.Revision;
-        float hands = feet.y + _gripHeight;
-        LadderSegment? anchor = null;
-        float nearest = float.MaxValue;
-        foreach (LadderSegment segment in _segments)
+        // Every section that is still standing must be where it was: a moved section ends the climb, it is never
+        // hidden by re-capturing its new pose (Codex review of 075f14b).
+        for (int index = 0; index < _segments.Count; index++)
         {
-            if (segment == null || !segment.TryGeometry(out LadderGeometry part)) { continue; }
-            float distance = hands < part.Bottom.Y ? part.Bottom.Y - hands : hands > part.Top.Y ? hands - part.Top.Y : 0f;
-            if (distance < nearest) { nearest = distance; anchor = segment; }
+            LadderSegment old = _segments[index];
+            if (old == null) { continue; }
+            if (Vector3.Distance(old.transform.position, _positions[index]) > 0.01f ||
+                Quaternion.Angle(old.transform.rotation, _rotations[index]) > 0.25f)
+            {
+                return false;
+            }
         }
 
-        if (anchor == null || nearest > anchor.RungPitch) { return false; }
+        // The section the hands hold, from the spans recorded when the run was accepted; if that one is gone the
+        // support is gone, even when a neighbouring section survives.
+        int holding = ClimbControls.SupportingSection(feet.y + _gripHeight, _run.Bottom.Y, _run.Top.Y,
+            _spanBottoms.ToArray(), _spanTops.ToArray());
+        if (holding < 0) { return false; }
+        LadderSegment anchor = _segments[holding];
+        if (anchor == null || !anchor.TryGeometry(out _)) { return false; }
         var refreshed = new List<LadderSegment>();
         if (!LadderSegment.TryRun(anchor, refreshed, out LadderGeometry run)) { return false; }
         float lowest = ClimbPolicy.LowestHang(run.Bottom.Y, anchor.RungPitch * 0.5f, _gripHeight);
@@ -721,20 +760,31 @@ internal sealed class LadderRuntime : IDisposable
         if (!changed) { return true; }
         _segments.Clear();
         _segments.AddRange(refreshed);
-        _positions.Clear();
-        _rotations.Clear();
-        foreach (LadderSegment part in _segments)
-        {
-            _positions.Add(part.transform.position);
-            _rotations.Add(part.transform.rotation);
-        }
-
+        CaptureSegments();
         _run = run;
         _hangLowest = lowest;
         _geometryRevision++; // The span changed; the climber, face and planted contacts did not.
         clearance.SetRun(_segments);
         _log("Ladder run refreshed while climbing: " + _segments.Count + " section(s), " + run.Height.ToString("0.00", Invariant) + " m.");
         return true;
+    }
+
+    /// <summary>Records each accepted section's pose and vertical span, so later checks can tell a moved or
+    /// removed section from the ones still standing.</summary>
+    private void CaptureSegments()
+    {
+        _positions.Clear();
+        _rotations.Clear();
+        _spanBottoms.Clear();
+        _spanTops.Clear();
+        foreach (LadderSegment part in _segments)
+        {
+            _positions.Add(part.transform.position);
+            _rotations.Add(part.transform.rotation);
+            bool measured = part.TryGeometry(out LadderGeometry span);
+            _spanBottoms.Add(measured ? span.Bottom.Y : float.NaN);
+            _spanTops.Add(measured ? span.Top.Y : float.NaN);
+        }
     }
 
     /// <summary>Pays the previous paid step once, from the body's observed travel; skill metres go to the owner.
@@ -771,7 +821,10 @@ internal sealed class LadderRuntime : IDisposable
     private void Present(bool attached)
     {
         if (_player == null) { return; }
-        _animation.SetLocal(_player, _run, _face, _plane, _pitch, _gripHeight, _gait == ClimbGait.Slide && _mode == Mode.Climbing, attached);
+        // The built-in pose lets go of the limbs for the duration of a native hammer swing or interact, so it never
+        // pins the arms against the game's own action (Codex review of 075f14b).
+        bool nativeAction = BuildAction(_player) || _player.InMinorAction();
+        _animation.SetLocal(_player, _run, _face, _plane, _pitch, _gripHeight, _gait == ClimbGait.Slide && _mode == Mode.Climbing, attached && !nativeAction);
         if (_animation.Ready) { _poseSpeed = 0f; }
         Publish(_player);
     }
@@ -814,7 +867,7 @@ internal sealed class LadderRuntime : IDisposable
                 motion, _gait, _travel, step, LadderSegment.Point(feet), _run, _face, _plane, origin,
                 ClimbPresentationFrame.LastRungOf(_run.Height, origin, _pitch), routed ? RouteProgress(feet) : -1f,
                 LadderSegment.Point(routed ? _routeStart : feet), LadderSegment.Point(end), action, player.InPlaceMode(),
-                !_motor.TakesInput(player));
+                !GameplayFocus(player));
             presenter.Publish(player, frame);
         }
         catch (Exception exception) { PresenterFault(exception); }
@@ -844,12 +897,12 @@ internal sealed class LadderRuntime : IDisposable
     /// <summary>Jump from every attached mode: settle the climb, choose a camera-relative departure (neutral is
     /// away from the rails), let go, then apply the native jump once. Without the stamina for a jump the climber
     /// still lets go, pushed just clear of the rails, and falls normally.</summary>
-    private void JumpOff(Player player)
+    private void JumpOff(Player player, Vector3? thisTick = null)
     {
         Rigidbody body = _body!;
         SettlePending(player, body.position.y, Time.fixedDeltaTime);
         Vector3 away = Away();
-        Vector3 move = _motor.MoveDirection(player);
+        Vector3 move = thisTick ?? _motor.MoveDirection(player);
         ClimbPolicy.DepartureDirection(move.x, move.z, away.x, away.z, out float x, out float z);
         Vector3 direction = new Vector3(x, 0f, z);
         if (direction != away && _clearance != null &&
@@ -1199,8 +1252,12 @@ internal sealed class LadderRuntime : IDisposable
                     {
                         // Only the motion this motor commanded is taken away; anything applied independently since
                         // (a hit, a push) stays. No impulse, no kick: gravity takes over from here.
-                        Vector3 own = _wrotePhysics && LadderSegment.Finite(_commanded) ? _commanded : Vector3.zero;
-                        Vector3 left = body.linearVelocity - own;
+                        // Only what physics kept of that command, along its direction: a command a landing or
+                        // collision already cancelled is never subtracted again (Codex review of 075f14b).
+                        Vector3 v = body.linearVelocity;
+                        Vector3 c = _wrotePhysics && LadderSegment.Finite(_commanded) ? _commanded : Vector3.zero;
+                        ClimbControls.SurvivingCommand(v.x, v.y, v.z, c.x, c.y, c.z, out float sx, out float sy, out float sz);
+                        Vector3 left = v - new Vector3(sx, sy, sz);
                         if (!LadderSegment.Finite(left)) { left = Vector3.zero; }
                         body.linearVelocity = left;
                         _motor.BeginAirborne(player, left);
@@ -1227,6 +1284,8 @@ internal sealed class LadderRuntime : IDisposable
             _segments.Clear();
             _positions.Clear();
             _rotations.Clear();
+            _spanBottoms.Clear();
+            _spanTops.Clear();
             _route = Array.Empty<Vector3>();
         }
     }

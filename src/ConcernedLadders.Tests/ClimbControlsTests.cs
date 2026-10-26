@@ -79,6 +79,72 @@ public sealed class ClimbControlsTests
         Assert.True(trigger.Armed);
     }
 
+    [Fact]
+    public void AFreshPressAfterAConsoleStillDropsWithoutTheStaleNativeEdge()
+    {
+        // Codex review of 075f14b: mounted with Crouch held, released it while the console had focus, then pressed
+        // again; the game's own edge is stale (its last-crouch state was not updated behind the console).
+        var trigger = new DropTrigger();
+        trigger.Arm(true);
+        trigger.Observe(true, false);
+        trigger.Observe(false, false);
+        trigger.Observe(true, true);
+        trigger.Press(true, true);
+        Assert.True(trigger.Take(false));
+    }
+
+    [Fact]
+    public void APressNeverSurvivesAMenuTakingFocus()
+    {
+        var trigger = new DropTrigger();
+        trigger.Arm(false);
+        trigger.Press(true, true);
+        trigger.Observe(true, false); // The build palette opened before the physics tick.
+        trigger.Observe(false, false);
+        Assert.False(trigger.Take(false));
+    }
+
+    [Fact]
+    public void RemovingTheUpperSectionUnderTheHandsIsLossOfSupport()
+    {
+        // Codex review of 075f14b: hands at 2.1 m on sections 0-2 and 2-4; the upper one holds them.
+        float[] bottoms = { 0f, 2f }, tops = { 2f, 4f };
+        Assert.Equal(1, ClimbControls.SupportingSection(2.1f, 0f, 4f, bottoms, tops));
+    }
+
+    [Fact]
+    public void NearTheTopTheHandsAreOnTheTopSectionNotNowhere()
+    {
+        // Feet at 3 m on a 4 m run: the hands reach above the top and still hold the top section.
+        float[] bottoms = { 0f, 2f }, tops = { 2f, 4f };
+        Assert.Equal(1, ClimbControls.SupportingSection(4.57f, 0f, 4f, bottoms, tops));
+        Assert.Equal(0, ClimbControls.SupportingSection(1.2f, 0f, 4f, bottoms, tops));
+    }
+
+    [Fact]
+    public void ADropNeverSubtractsACommandPhysicsAlreadyCancelled()
+    {
+        // A downward exit leg reached the floor: the body is still, the last command was 1.8 m/s down.
+        ClimbControls.SurvivingCommand(0f, 0f, 0f, 0f, -1.8f, 0f, out float x, out float y, out float z);
+        Assert.Equal(0f, x); Assert.Equal(0f, y); Assert.Equal(0f, z);
+        // A shove opposite to the command survives untouched: nothing of the command is left to remove.
+        ClimbControls.SurvivingCommand(0f, 0.5f, 0f, 0f, -1.8f, 0f, out _, out y, out _);
+        Assert.Equal(0f, y);
+    }
+
+    [Fact]
+    public void ADropRemovesOnlyTheCommandedPartThatSurvived()
+    {
+        // Climbing up at 1.8 m/s while a hit added 2 m/s sideways: only the climb is removed.
+        ClimbControls.SurvivingCommand(2f, 1.8f, 0f, 0f, 1.8f, 0f, out float x, out float y, out float z);
+        Assert.Equal(0f, x, 4); Assert.Equal(1.8f, y, 4); Assert.Equal(0f, z, 4);
+        // Physics kept only half of it: only that half is removed, never more than was commanded.
+        ClimbControls.SurvivingCommand(0f, 0.9f, 0f, 0f, 1.8f, 0f, out _, out y, out _);
+        Assert.Equal(0.9f, y, 4);
+        ClimbControls.SurvivingCommand(0f, 3f, 0f, 0f, 1.8f, 0f, out _, out y, out _);
+        Assert.Equal(1.8f, y, 4);
+    }
+
     [Theory]
     [InlineData(true, true, true, true)]
     [InlineData(false, true, true, false)]  // A swing outside build mode is combat.
