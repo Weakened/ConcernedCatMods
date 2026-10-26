@@ -164,27 +164,23 @@ internal sealed class LadderClimbAnimation : IDisposable
         if (found == null || !LadderSegment.TryRun(found, _scratch, out run)) { return false; }
         plane = (found.BackFaceDepth + found.FrontFaceDepth) * 0.5f;
         pitch = found.RungPitch;
-        // Any floor under the centre or under the capsule's rim (a player at a floor's edge) reads as standing.
-        if (FloorUnder(feet)) { return false; }
-        foreach (Vector3 direction in Rim)
-        {
-            if (FloorUnder(feet + direction * (radius * 0.9f))) { return false; }
-        }
-
-        return true;
+        // Anything under any part of the capsule's footprint (a floor, its edge, a beam) reads as standing.
+        return !FloorUnder(feet, radius);
     }
 
-    private static readonly Vector3[] Rim = { Vector3.forward, Vector3.back, Vector3.left, Vector3.right };
-
-    /// <summary>A standing surface within a few centimetres under the point, ladders and characters excluded.</summary>
-    private bool FloorUnder(Vector3 feet)
+    /// <summary>A sphere of nine tenths of the capsule radius swept a few centimetres below the feet: it meets a
+    /// floor under any part of the footprint, edges and diagonals included (Codex review of 7726fe3). Ladders
+    /// and characters are ignored; an overflowing query keeps the native pose.</summary>
+    private bool FloorUnder(Vector3 feet, float radius)
     {
-        int found = Physics.RaycastNonAlloc(feet + Vector3.up * 0.15f, Vector3.down, _ground, 0.3f, _groundMask, QueryTriggerInteraction.Ignore);
-        if (found >= _ground.Length) { return true; } // Unknown: keep the native pose.
+        float sphere = radius * 0.9f;
+        Vector3 origin = feet + Vector3.up * (sphere + 0.15f);
+        int found = Physics.SphereCastNonAlloc(origin, sphere, Vector3.down, _ground, 0.3f, _groundMask, QueryTriggerInteraction.Ignore);
+        if (found >= _ground.Length) { return true; }
         for (int index = 0; index < found; index++)
         {
             Collider collider = _ground[index].collider;
-            if (collider == null || collider.isTrigger || _ground[index].normal.y < 0.65f) { continue; }
+            if (collider == null || collider.isTrigger) { continue; }
             if (collider.GetComponentInParent<LadderSegment>() != null || collider.GetComponentInParent<Character>() != null) { continue; }
             return true;
         }

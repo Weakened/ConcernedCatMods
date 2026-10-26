@@ -288,7 +288,9 @@ internal sealed class LadderRuntime : IDisposable
         plan = default;
         refusal = ClimbRefusal.None;
         Vector3 feet = body.position;
-        bool supported = clearance.Supported(feet);
+        // Standing or airborne is the game's own ground contact, the same reading the hover prompt uses, so a
+        // body a few centimetres above a floor is airborne here too and keeps the chest reach and air limits.
+        bool supported = player.IsOnGround();
         float reach = Reach(run, segment, feet, clearance.Height, supported);
         float grip = clearance.Height * ClimbPolicy.GripFraction;
         float firstRung = segment.RungPitch * 0.5f;
@@ -917,7 +919,9 @@ internal sealed class LadderRuntime : IDisposable
         {
             if (owned && body != null && (_wrotePhysics || departure == Departure.Jump || departure == Departure.Push))
             {
-                if (_wrotePhysics) { body.useGravity = _gravityBefore; }
+                // An external release writes nothing at all, gravity included: vanilla's own motor sets gravity
+                // on every tick it runs (UpdateWalking/UpdateSwimming), and whatever took over owns the rest.
+                if (_wrotePhysics && departure != Departure.External) { body.useGravity = _gravityBefore; }
                 if (departure != Departure.External && player != null)
                 {
                     body.angularVelocity = Vector3.zero;
