@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.3
+
+Internal animation checkpoint, replacing 0.2.2 before any gameplay use.
+
+- Fixed: 0.2.2 let go of every ladder the moment you mounted. It called a
+  game method that is not accessible at runtime (found in game).
+
 ## 0.2.2
 
 Internal animation checkpoint for the owner test lane. Not a release.

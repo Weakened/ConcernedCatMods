@@ -922,8 +922,10 @@ internal sealed class LadderRuntime : IDisposable
     private static NativeActionParts NativeOwnership(Player player) =>
         ClimbControls.Ownership(player.InMinorAction(), HoldsBuildTool(player));
 
-    private static bool HoldsBuildTool(Player player) =>
-        player.InPlaceMode() && player.GetRightItem()?.m_shared?.m_buildPieces != null;
+    /// <summary>Player.InPlaceMode is the game's own test for an equipped building tool (its piece table is set).
+    /// Humanoid.GetRightItem is protected in the shipped game: publicized build references compile it, the game
+    /// then throws MethodAccessException (observed in game on 0.2.2 b90b345).</summary>
+    private static bool HoldsBuildTool(Player player) => player.InPlaceMode();
 
     /// <summary>A presenter fault disables presentation only; the climb and the built-in pose continue.</summary>
     private void PresenterFault(Exception exception)
@@ -1229,8 +1231,7 @@ internal sealed class LadderRuntime : IDisposable
     /// animation playing. The game never starts a combat attack in build mode.</summary>
     private static bool BuildAction(Player player)
     {
-        ItemDrop.ItemData? tool = player.GetRightItem();
-        return ClimbControls.IsNativeBuildAction(player.InPlaceMode(), tool?.m_shared?.m_buildPieces != null, player.InAttack());
+        return ClimbControls.IsNativeBuildAction(player.InPlaceMode(), HoldsBuildTool(player), player.InAttack());
     }
 
     private enum Departure { Controlled, External, Jump, Push, Drop }
