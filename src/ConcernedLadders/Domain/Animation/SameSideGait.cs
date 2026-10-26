@@ -27,8 +27,8 @@ internal sealed class GaitShape
 
     /// <summary>When the climber stops, each limb settles on the nearest rung within this band: hands relative to the
     /// shoulder, feet relative to FootLowRel.</summary>
-    internal float HandSettleBelow = 0.5f;
-    internal float HandSettleAbove = 0.4f;
+    internal float HandSettleBelow = 0.38f;
+    internal float HandSettleAbove = 0.38f;
     internal float FootSettleBelow = 0.1f;
     internal float FootSettleAbove = 0.7f;
 
