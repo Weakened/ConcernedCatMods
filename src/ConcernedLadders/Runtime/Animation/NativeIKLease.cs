@@ -52,6 +52,28 @@ internal sealed class NativeIKLease
         _bodyOwned = false; Pending = false;
     }
 
+    /// <summary>In game 2026-10-26: the game's own foot IK runs again in every later layer's IK pass and re-plants the
+    /// feet on the ground below. After it, the goals and hints this lease owns are written again, unchanged.</summary>
+    internal void ReassertInIK(Animator animator)
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            Goal goal = _goals[i];
+            if (goal.Owned)
+            {
+                AvatarIKGoal id = Goals[i];
+                animator.SetIKPosition(id, goal.LastPosition); animator.SetIKRotation(id, goal.LastRotation);
+                animator.SetIKPositionWeight(id, goal.LastWeight); animator.SetIKRotationWeight(id, goal.LastRotationWeight);
+            }
+
+            Hint hint = _hints[i];
+            if (hint.Owned)
+            {
+                animator.SetIKHintPosition(Hints[i], hint.LastPosition); animator.SetIKHintPositionWeight(Hints[i], hint.LastWeight);
+            }
+        }
+    }
+
     internal void GoalInIK(Animator animator, int limb, Vector3 position, Quaternion rotation, float weight)
     {
         if (weight <= 0f) { return; }

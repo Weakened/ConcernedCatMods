@@ -141,7 +141,19 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
     private static void AfterNativeIK(CharacterAnimEvent __instance, int layerIndex)
     {
         OriginalClimbPresenter? self = _current;
-        if (self == null || layerIndex != 0 || !self._actors.TryGetValue(__instance, out Actor actor)) { return; }
+        if (self == null || !self._actors.TryGetValue(__instance, out Actor actor)) { return; }
+        if (layerIndex != 0)
+        {
+            // A later layer's IK pass: the game's foot IK just ran again. Keep this frame's owned goals.
+            if (actor.Active && self._ready && !self._disposing)
+            {
+                try { actor.Lease.ReassertInIK(actor.Rig.Animator); }
+                catch (Exception error) { self.Fail("Original climbing pose stopped", error); }
+            }
+
+            return;
+        }
+
         if (actor.Active && self._ready && !self._disposing && LocalOwner(actor.Rig.Player))
         {
             try { self.PoseInIK(actor); }
@@ -209,6 +221,8 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
         internal readonly OriginalRigBinding Rig;
         internal readonly SameSideGait Gait = new SameSideGait();
         internal readonly FitCounters Fit = new FitCounters();
+        internal readonly bool[] Asked = new bool[4];
+        internal readonly Vector3[] LastPivot = new Vector3[4];
         internal int TuningVersion = -1;
         internal readonly NativeIKLease Lease = new NativeIKLease();
         internal ClimbPresentationFrame Frame;

@@ -54,6 +54,13 @@ internal sealed partial class OriginalClimbPresenter
         Vector3 posedBody = animator.bodyPosition;
         Quaternion bodyDelta = animator.bodyRotation * Quaternion.Inverse(nativeRotation);
 
+        // The end bones still hold the pose the solver produced last frame: how far it landed from what was asked.
+        for (int limb = 0; limb < 4; limb++)
+        {
+            if (actor.Asked[limb]) { actor.Fit.Solved(limb, Vector3.Distance(rig.Ends[limb].position, actor.LastPivot[limb])); }
+            actor.Asked[limb] = false;
+        }
+
         for (int limb = 0; limb < 4; limb++)
         {
             bool hand = limb < 2;
@@ -113,6 +120,7 @@ internal sealed partial class OriginalClimbPresenter
             }
 
             actor.Lease.GoalInIK(animator, limb, pivot, rotation, weight);
+            if (weight >= .999f) { actor.Asked[limb] = true; actor.LastPivot[limb] = pivot; }
             Vector3 hint = hand ? root + outward * ClimbTuning.ElbowOut + right * (side * ClimbTuning.ElbowSide) - Vector3.up * ClimbTuning.ElbowDown :
                 root + toward * ClimbTuning.KneeToward + right * (side * ClimbTuning.KneeSide) - Vector3.up * ClimbTuning.KneeDown;
             actor.Lease.HintInIK(animator, limb, hint, weight * .75f);
@@ -166,6 +174,8 @@ internal sealed partial class OriginalClimbPresenter
     {
         private readonly int[] _count = new int[4], _skips = new int[4];
         private readonly float[] _worst = new float[4], _sum = new float[4], _rootUp = new float[4], _rootOut = new float[4];
+        private readonly float[] _error = new float[4], _errorSum = new float[4];
+        private readonly int[] _errorCount = new int[4];
         private PresentedMotion _motion;
         private float _since;
         private int _lines;
@@ -198,6 +208,15 @@ internal sealed partial class OriginalClimbPresenter
 
         internal void Skip(int limb) => _skips[limb]++;
 
+        /// <summary>Distance between the solved end bone and the goal asked for at full weight on the previous pass.</summary>
+        internal void Solved(int limb, float error)
+        {
+            if (float.IsNaN(error) || float.IsInfinity(error)) { return; }
+            _errorCount[limb]++;
+            _errorSum[limb] += error;
+            _error[limb] = Math.Max(_error[limb], error);
+        }
+
         /// <summary>One line at most every three seconds of a long motion, one when the motion ends; 40 per attachment.</summary>
         internal void Report(OriginalClimbPresenter owner, float now, bool final)
         {
@@ -215,7 +234,9 @@ internal sealed partial class OriginalClimbPresenter
                         .Append(" worst=").Append(_worst[limb].ToString("0.00", CultureInfo.InvariantCulture))
                         .Append(" mean=").Append(mean.ToString("0.00", CultureInfo.InvariantCulture))
                         .Append(" up=").Append(_rootUp[limb].ToString("0.00", CultureInfo.InvariantCulture))
-                        .Append(" out=").Append(_rootOut[limb].ToString("0.00", CultureInfo.InvariantCulture));
+                        .Append(" out=").Append(_rootOut[limb].ToString("0.00", CultureInfo.InvariantCulture))
+                        .Append(" err=").Append(_error[limb].ToString("0.000", CultureInfo.InvariantCulture))
+                        .Append('/').Append((_errorCount[limb] == 0 ? 0f : _errorSum[limb] / _errorCount[limb]).ToString("0.000", CultureInfo.InvariantCulture));
                 }
 
                 owner.Log(text.ToString());
@@ -230,6 +251,7 @@ internal sealed partial class OriginalClimbPresenter
         private void Clear()
         {
             Array.Clear(_count, 0, 4); Array.Clear(_skips, 0, 4); Array.Clear(_worst, 0, 4); Array.Clear(_sum, 0, 4);
+            Array.Clear(_error, 0, 4); Array.Clear(_errorSum, 0, 4); Array.Clear(_errorCount, 0, 4);
         }
     }
 }
