@@ -95,75 +95,23 @@ public sealed class LadderRulesTests
     }
 
     [Fact]
-    public void SupportedLandingsCanMountAtBottomTopOrIntermediateHeight()
-    {
-        Assert.True(LadderGeometry.TryMeasure(new ClimbPoint(0, 0, 0), new ClimbPoint(0, 10, 0),
-            ClimbHeading.FromXz(0, 1), 0.8f, 1f / 3f, out LadderGeometry run));
-        foreach (float height in new[] { 0f, 4f, 10f })
-        {
-            foreach (float side in new[] { -0.6f, 0.6f })
-            {
-                Assert.True(LadderRules.CanMount(run, new ClimbPoint(0, height, side), true, 0, height,
-                    true, true, false, 0));
-            }
-        }
-    }
-
-    [Theory]
-    [InlineData(-0.71f, true)]   // Observed in game: a wall ladder on a slope, mounted from the downhill side.
-    [InlineData(-0.75f, true)]
-    [InlineData(-0.80f, false)]
-    [InlineData(-1.5f, false)]
-    public void MountAllowsAStepUpToTheFootButNotAJump(float feetBelowFoot, bool allowed)
-    {
-        Assert.Equal(allowed, LadderRules.CanMount(Segment(0), new ClimbPoint(0, feetBelowFoot, 0.5f), true, 0,
-            feetBelowFoot, true, true, false, 0));
-    }
-
-    [Theory]
-    [InlineData(false, 0f, 0f, true, true, false, 0f)]
-    [InlineData(true, -2f, 0f, true, true, false, 0f)]
-    [InlineData(true, 0f, 5f, true, true, false, 0f)]
-    [InlineData(true, 0f, 0f, false, true, false, 0f)]
-    [InlineData(true, 0f, 0f, true, false, false, 0f)]
-    [InlineData(true, 0f, 0f, true, true, true, 0f)]
-    [InlineData(true, 0f, 0f, true, true, false, 0.2f)]
-    public void MountRejectsUnsupportedFallingUnownedBusyOverlayAndCooldown(bool support, float speed, float peak,
-        bool owned, bool free, bool overlay, float cooldown)
-    {
-        Assert.False(LadderRules.CanMount(Segment(0), new ClimbPoint(0, 0, 0.5f), support, speed, peak,
-            owned, free, overlay, cooldown));
-    }
-
-    [Fact]
-    public void NonfiniteMountEvidenceNeverPasses()
-    {
-        foreach (float bad in new[] { float.NaN, float.NegativeInfinity, float.PositiveInfinity })
-        {
-            Assert.False(LadderRules.CanMount(Segment(0), new ClimbPoint(0, bad, 0.5f), true, 0, 0, true, true, false, 0));
-            Assert.False(LadderRules.CanMount(Segment(0), new ClimbPoint(0, 0, 0.5f), true, bad, 0, true, true, false, 0));
-            Assert.False(LadderRules.CanMount(Segment(0), new ClimbPoint(0, 0, 0.5f), true, 0, bad, true, true, false, 0));
-        }
-    }
-
-    [Fact]
     public void StopReverseAndEndClampsArePredictable()
     {
         Assert.Equal(1f, LadderRules.Advance(1, 0, .02f, 0, 2));
-        float up = LadderRules.Advance(1, 1, .02f, 0, 2);
+        float up = LadderRules.Advance(1, 1.8f, .02f, 0, 2);
         Assert.Equal(1.036f, up, 5);
-        Assert.Equal(1f, LadderRules.Advance(up, -1, .02f, 0, 2), 5);
-        Assert.Equal(2f, LadderRules.Advance(1.99f, 1, .02f, 0, 2));
-        Assert.Equal(0f, LadderRules.Advance(.01f, -1, .02f, 0, 2));
+        Assert.Equal(1f, LadderRules.Advance(up, -1.8f, .02f, 0, 2), 5);
+        Assert.Equal(2f, LadderRules.Advance(1.99f, 1.8f, .02f, 0, 2));
+        Assert.Equal(0f, LadderRules.Advance(.01f, -1.8f, .02f, 0, 2));
     }
 
     [Fact]
     public void LongOrInvalidFrameCannotPlanAnUnboundedMove()
     {
-        Assert.Equal(1.09f, LadderRules.Advance(1, 1, 10f, 0, 10), 5);
-        Assert.Equal(1f, LadderRules.Advance(1, 1, float.PositiveInfinity, 0, 10));
+        Assert.Equal(1.09f, LadderRules.Advance(1, 1.8f, 10f, 0, 10), 5);
+        Assert.Equal(1f, LadderRules.Advance(1, 1.8f, float.PositiveInfinity, 0, 10));
         Assert.Equal(1f, LadderRules.Advance(1, float.NaN, .02f, 0, 10));
-        Assert.Equal(1f, LadderRules.Advance(1, 1, -.02f, 0, 10));
+        Assert.Equal(1f, LadderRules.Advance(1, 1.8f, -.02f, 0, 10));
     }
 
     [Theory]
@@ -198,41 +146,6 @@ public sealed class LadderRulesTests
         Assert.True(LadderRules.MustRelease(true, true, true, true, true, true, true, drift));
         Assert.True(LadderRules.IsExternalRelease(true, true, true, true, false, drift));
     }
-
-    [Theory]
-    [InlineData(10f, 10f)]     // on the run: the foot
-    [InlineData(12f, 10f)]     // above the foot: the foot
-    [InlineData(9.6f, 9.6f)]   // stepped down below the foot: holds there, no pull back up
-    [InlineData(9f, 9.25f)]    // further than a step below: bounded at one step
-    public void NeutralInputBelowTheFootHoldsInsteadOfRising(float body, float expected) =>
-        Assert.Equal(expected, LadderRules.LowestHold(10f, body), 3);
-
-    [Fact]
-    public void NeutralHoldBelowTheFootDoesNotAdvance()
-    {
-        float lowest = LadderRules.LowestHold(10f, 9.6f);
-        Assert.Equal(9.6f, LadderRules.Advance(9.6f, 0f, 0.02f, lowest, 14f), 3);
-        Assert.True(LadderRules.Advance(9.6f, 1f, 0.02f, lowest, 14f) > 9.6f);
-        Assert.Equal(10f, LadderRules.LowestHold(10f, float.NaN));
-    }
-
-    [Theory]
-    [InlineData(1.57f, 0f, true)]    // where the native prompt was observed and the old band refused
-    [InlineData(1.65f, 0f, false)]
-    [InlineData(0.9f, 0.78f, true)]  // side landing observed refused at 0.78 m
-    [InlineData(0.9f, 0.9f, false)]
-    public void MountBandCoversWhereThePromptShows(float reach, float side, bool allowed) =>
-        Assert.Equal(allowed, LadderRules.CanMount(Segment(0), new ClimbPoint(side, 0, reach), true, 0, 0,
-            true, true, false, 0));
-
-    [Theory]
-    [InlineData(2.08f, 0f, 0f, true)]     // observed: prompt shown, refused for distance
-    [InlineData(1.0f, 1.2f, 0f, true)]    // too far to the side
-    [InlineData(1.0f, 0f, 0f, false)]     // inside the band: not a distance refusal
-    [InlineData(-0.41f, 0f, 0f, false)]   // behind the ladder: not "step closer"
-    [InlineData(2.08f, 0f, -1.5f, false)] // far below the foot: a fall/height problem, not distance
-    public void DistanceRefusalsAreToldToStepCloser(float reach, float side, float height, bool expected) =>
-        Assert.Equal(expected, LadderRules.TooFarToMount(Segment(0), new ClimbPoint(side, height, reach)));
 
     [Fact]
     public void OnlyLadderCausedReleasesTakeTheControlledPath()

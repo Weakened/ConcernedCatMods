@@ -7,24 +7,17 @@ namespace TheConcernedCat.ConcernedLadders.Domain;
 /// <summary>Policies used by the real controller. No engine stand-ins are needed to test them.</summary>
 internal static class LadderRules
 {
-    internal const float Speed = 1.8f;
+    /// <summary>Ordinary speed of mount, exit and transfer legs; climb gaits are in ClimbPolicy.</summary>
+    internal const float Speed = ClimbPolicy.NormalSpeed;
     internal const float EndpointTolerance = 0.03f;
     internal const int MaximumSegments = 64;
     internal const int MaximumRegisteredSegments = 2048;
     internal const float MaximumFrameSeconds = 0.05f;
-    internal const float RemountDelay = 0.35f;
 
     /// <summary>How far below the run's foot a supported player may stand and still mount. A wall on a
     /// slope stands on its uphill ground, so the open face of its ladder can be this high above the
     /// downhill side. The engine adapter still sweeps the whole rise; this is a step, not a jump.</summary>
     internal const float MaximumStepUpToFoot = 0.75f;
-
-    /// <summary>How far in front of or behind the climb line a supported player may mount. The native
-    /// hover prompt already shows at about 1.5 m, so a smaller band refused a mount the game offered.</summary>
-    internal const float MountReach = 1.6f;
-
-    /// <summary>How far beyond the rails' half width a side landing may be and still mount.</summary>
-    internal const float MountSideMargin = 0.45f;
 
     /// <summary>Every transfer route first lifts the body this far, so its lateral leg clears the floor it starts on.</summary>
     internal const float RouteLift = 0.06f;
@@ -34,12 +27,6 @@ internal static class LadderRules
 
     /// <summary>Descending within this height of the run's foot onto real support ends the climb.</summary>
     internal const float BottomExitBand = 0.5f;
-
-    /// <summary>The lowest height the climb may rest at this frame. A body already stepped down below the
-    /// foot (or mounted from ground below it) holds where it is rather than being pulled back up to the
-    /// foot, but never lower than a step below it.</summary>
-    internal static float LowestHold(float bottom, float bodyHeight) =>
-        Finite(bodyHeight) ? Math.Min(bottom, Math.Max(bodyHeight, bottom - MaximumStepUpToFoot)) : bottom;
 
     internal static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
@@ -59,47 +46,16 @@ internal static class LadderRules
         return radius + frontFaceDepth + 0.06f;
     }
 
-    internal static float Advance(float height, float input, float seconds, float bottom, float top)
+    /// <summary>The next height for a signed climb velocity, inside the span.</summary>
+    internal static float Advance(float height, float velocity, float seconds, float bottom, float top)
     {
         if (!Finite(height) || !Finite(bottom) || !Finite(top) || top < bottom)
         {
             throw new ArgumentOutOfRangeException(nameof(height), "The climb span must be finite and ordered.");
         }
 
-        return Math.Max(bottom, Math.Min(top, height + Input(input, false) * Speed * FrameSeconds(seconds)));
-    }
-
-    /// <summary>Mounts start from a supported surface. Grabbing a ladder cannot erase an existing fall.</summary>
-    internal static bool CanMount(
-        in LadderGeometry run, ClimbPoint feet, bool supported, float verticalSpeed,
-        float recordedFallHeight, bool owned, bool free, bool overlayOpen, float cooldown)
-    {
-        if (!run.IsClimbable || !feet.IsFinite || !supported || !owned || !free || overlayOpen ||
-            !Finite(verticalSpeed) || verticalSpeed < -0.5f || !Finite(recordedFallHeight) ||
-            recordedFallHeight - feet.Y > 0.75f || !Finite(cooldown) || cooldown > 0f)
-        {
-            return false;
-        }
-
-        // A supported intermediate landing may be on either side. The engine adapter must still prove
-        // a swept route onto the open face; this decision never licenses moving through the wall.
-        return feet.Y >= run.Bottom.Y - MaximumStepUpToFoot && feet.Y <= run.Top.Y + 0.5f &&
-               Math.Abs(run.ReachFrom(feet)) <= MountReach &&
-               run.SidewaysOffsetOf(feet) <= run.Width * 0.5f + MountSideMargin;
-    }
-
-    /// <summary>True when a player standing in front of the ladder, at a height it could be mounted from,
-    /// is refused only for being too far out or too far to the side. The game's own prompt shows from
-    /// further away than the mount band, so this case is told to step closer.</summary>
-    internal static bool TooFarToMount(in LadderGeometry run, ClimbPoint feet)
-    {
-        if (!run.IsClimbable || !feet.IsFinite || feet.Y < run.Bottom.Y - MaximumStepUpToFoot || feet.Y > run.Top.Y + 0.5f)
-        {
-            return false;
-        }
-
-        float reach = run.ReachFrom(feet);
-        return reach > 0f && (reach > MountReach || run.SidewaysOffsetOf(feet) > run.Width * 0.5f + MountSideMargin);
+        float speed = Finite(velocity) ? Math.Max(-ClimbPolicy.SlideSpeed, Math.Min(ClimbPolicy.SlideSpeed, velocity)) : 0f;
+        return Math.Max(bottom, Math.Min(top, height + speed * FrameSeconds(seconds)));
     }
 
     internal static bool Joins(in LadderGeometry below, in LadderGeometry above) =>

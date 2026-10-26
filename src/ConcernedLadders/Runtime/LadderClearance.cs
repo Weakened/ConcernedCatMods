@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using TheConcernedCat.ConcernedLadders.Domain;
 using UnityEngine;
 
 namespace TheConcernedCat.ConcernedLadders.Runtime;
@@ -15,7 +17,16 @@ internal sealed class LadderClearance
     private readonly Vector3 _centreOffset;
     private readonly float _halfSegment;
     private readonly float _groundLift;
+    private readonly HashSet<LadderSegment> _run = new HashSet<LadderSegment>();
     internal float Radius { get; }
+
+    /// <summary>Capsule height and the centre's height above the feet, both scaled.</summary>
+    internal float Height { get; }
+
+    /// <summary>What the last refused query hit, and which collider. Diagnostic and message selection only;
+    /// the refusal itself never depends on the classification.</summary>
+    internal BlockerKind LastBlocker { get; private set; }
+    internal string LastBlockerName { get; private set; } = string.Empty;
 
     /// <summary>Capsule bottom relative to the feet, before the query lift. Diagnostic only.</summary>
     internal float BottomGap { get; }
@@ -37,6 +48,7 @@ internal sealed class LadderClearance
 
         Radius = capsule.radius * Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.z));
         float height = Mathf.Max(2f * Radius, capsule.height * Mathf.Abs(scale.y));
+        Height = height;
         _halfSegment = Mathf.Max(0f, height * 0.5f - Radius);
         // Use the root-relative shape, not an interpolated Transform versus the physics position.
         _centreOffset = capsule.transform.TransformPoint(capsule.center) - player.transform.position;
@@ -54,6 +66,16 @@ internal sealed class LadderClearance
             "vehicle", "character", "character_net", "character_ghost");
         if (_mask == 0) { throw new InvalidOperationException("Collision layers were unavailable."); }
     }
+
+    /// <summary>The selected run's own sections, so a hit on them is reported as the ladder itself and
+    /// never as "another building piece". They still collide.</summary>
+    internal void SetRun(IEnumerable<LadderSegment> segments)
+    {
+        _run.Clear();
+        foreach (LadderSegment segment in segments) { if (segment != null) { _run.Add(segment); } }
+    }
+
+    internal void ClearBlocker() { LastBlocker = BlockerKind.None; LastBlockerName = string.Empty; }
 
     internal bool IsUnchanged()
     {
@@ -73,10 +95,10 @@ internal sealed class LadderClearance
         CapsuleAt(feet, out Vector3 low, out Vector3 high);
         int found = Physics.OverlapCapsuleNonAlloc(low, high, Mathf.Max(0.02f, Radius - Skin), _overlaps, _mask,
             QueryTriggerInteraction.Ignore);
-        if (found >= _overlaps.Length) { return false; }
+        if (found >= _overlaps.Length) { Blocked(BlockerKind.Overflow, "query overflow"); return false; }
         for (int index = 0; index < found; index++)
         {
-            if (Solid(_overlaps[index])) { return false; }
+            if (Solid(_overlaps[index])) { Classify(_overlaps[index]); return false; }
         }
 
         return true;
@@ -92,13 +114,14 @@ internal sealed class LadderClearance
         Vector3 direction = delta / distance;
         int found = Physics.CapsuleCastNonAlloc(low, high, Mathf.Max(0.02f, Radius - Skin), direction, _hits,
             distance, _mask, QueryTriggerInteraction.Ignore);
-        if (found >= _hits.Length) { return false; }
+        if (found >= _hits.Length) { Blocked(BlockerKind.Overflow, "query overflow"); return false; }
         for (int index = 0; index < found; index++)
         {
             RaycastHit hit = _hits[index];
             if (!Solid(hit.collider)) { continue; }
             // Existing surface contact may be left or followed; moving into that surface is still refused.
             if (hit.distance <= Skin && Vector3.Dot(hit.normal, direction) >= -0.01f) { continue; }
+            Classify(hit.collider);
             return false;
         }
 
@@ -116,9 +139,32 @@ internal sealed class LadderClearance
         return true;
     }
 
+    /// <summary>Whether a straight line reaches <paramref name="to"/> (a rung) without crossing anything but
+    /// the selected run itself: a grab through a wall or floor is refused and the blocker recorded.</summary>
+    internal bool HasLineOfSight(Vector3 from, Vector3 to)
+    {
+        Vector3 delta = to - from;
+        float distance = delta.magnitude;
+        if (!LadderSegment.Finite(from) || !LadderSegment.Finite(to)) { Blocked(BlockerKind.Overflow, "not finite"); return false; }
+        if (distance < 0.001f) { return true; }
+        int found = Physics.RaycastNonAlloc(from, delta / distance, _hits, distance, _mask, QueryTriggerInteraction.Ignore);
+        if (found >= _hits.Length) { Blocked(BlockerKind.Overflow, "query overflow"); return false; }
+        for (int index = 0; index < found; index++)
+        {
+            Collider collider = _hits[index].collider;
+            if (!Solid(collider) || OwnRun(collider)) { continue; }
+            Classify(collider);
+            return false;
+        }
+
+        return true;
+    }
+
     internal bool Supported(Vector3 feet) => TrySurface(feet, 0.15f, 0.2f, out _);
 
-    internal bool TryTopSurface(Vector3 desired, out Vector3 floor) => TrySurface(desired, 0.5f, 0.5f, out floor);
+    /// <summary>A floor near the run's top: up to a step above it (a ladder ending below a thick floor) or
+    /// half a metre below it (a ladder standing proud of the floor).</summary>
+    internal bool TryTopSurface(Vector3 desired, out Vector3 floor) => TrySurface(desired, 0.75f, 0.5f, out floor);
     internal bool TryNearbySurface(Vector3 desired, out Vector3 floor) => TrySurface(desired, 0.15f, 0.25f, out floor);
 
     /// <summary>The standing surface under the feet within <paramref name="maxDrop"/>, ladders and characters excluded.</summary>
@@ -157,6 +203,38 @@ internal sealed class LadderClearance
 
         return available;
     }
+
+    private bool OwnRun(Collider collider)
+    {
+        LadderSegment segment = collider.GetComponentInParent<LadderSegment>();
+        return segment != null && _run.Contains(segment);
+    }
+
+    /// <summary>Only a hit whose collider belongs to a native Piece other than this run is a building.</summary>
+    private void Classify(Collider collider)
+    {
+        if (OwnRun(collider)) { Blocked(BlockerKind.OwnLadder, collider.name); return; }
+        Character actor = collider.GetComponentInParent<Character>();
+        if (actor != null) { Blocked(BlockerKind.Actor, actor.m_name); return; }
+        Piece piece = collider.GetComponentInParent<Piece>();
+        if (piece != null) { Blocked(BlockerKind.Building, piece.m_name); return; }
+        if (collider.GetComponent<Heightmap>() != null || collider.gameObject.layer == TerrainLayer)
+        {
+            Blocked(BlockerKind.Terrain, "terrain");
+            return;
+        }
+
+        Blocked(BlockerKind.Other, collider.name);
+    }
+
+    private void Blocked(BlockerKind kind, string name)
+    {
+        LastBlocker = kind;
+        string text = name ?? string.Empty;
+        LastBlockerName = text.Length > 48 ? text.Substring(0, 48) : text;
+    }
+
+    private static readonly int TerrainLayer = LayerMask.NameToLayer("terrain");
 
     private bool Solid(Collider collider) => collider != null && !collider.isTrigger &&
         !collider.transform.IsChildOf(_player.transform);

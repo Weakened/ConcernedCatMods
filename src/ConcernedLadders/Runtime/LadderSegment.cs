@@ -15,6 +15,7 @@ internal sealed class LadderSegment : MonoBehaviour, Hoverable, Interactable
     public float Width = 0.8f;
     public float RungPitch = 1f / 3f;
     public float FrontFaceDepth = 0.24f;
+    public float BackFaceDepth = 0.08f;
     public string DisplayName = "Vertical Ladder";
 
     private static readonly HashSet<LadderSegment> Registered = new HashSet<LadderSegment>();
@@ -68,7 +69,8 @@ internal sealed class LadderSegment : MonoBehaviour, Hoverable, Interactable
             top.y - bottom.y < 1.95f || top.y - bottom.y > 2.05f ||
             Math.Abs(top.x - bottom.x) > 0.02f || Math.Abs(top.z - bottom.z) > 0.02f ||
             Math.Abs(outward.y) > 0.01f || !LadderRules.Finite(Width) || !LadderRules.Finite(RungPitch) ||
-            !LadderRules.Finite(FrontFaceDepth) || FrontFaceDepth < 0f || FrontFaceDepth > 0.5f)
+            !LadderRules.Finite(FrontFaceDepth) || FrontFaceDepth < 0f || FrontFaceDepth > 0.5f ||
+            !LadderRules.Finite(BackFaceDepth) || BackFaceDepth < -0.5f || BackFaceDepth >= FrontFaceDepth)
         {
             return false;
         }
@@ -95,6 +97,38 @@ internal sealed class LadderSegment : MonoBehaviour, Hoverable, Interactable
         if (!LadderRules.TryBuildRun(samples, anchor.GetInstanceID(), out List<int> ids, out run)) { return false; }
         foreach (int id in ids) { segments.Add(instances[id]); }
         return true;
+    }
+
+    /// <summary>Observer-side lane test: the loaded section whose climbing lane, on either face, this body
+    /// stands in while facing the rails. Bounded by the registry limit; called a few times a second.</summary>
+    internal static LadderSegment? FindLane(Vector3 feet, Vector3 forward, float radius, out LadderFace face)
+    {
+        face = LadderFace.Front;
+        if (!Finite(feet) || !Finite(forward) || !LadderRules.Finite(radius) || radius < 0.05f || radius > 1f ||
+            Registered.Count > LadderRules.MaximumRegisteredSegments)
+        {
+            return null;
+        }
+
+        ClimbPoint point = Point(feet);
+        foreach (LadderSegment candidate in Registered)
+        {
+            if (candidate == null || !candidate.TryGeometry(out LadderGeometry geometry)) { continue; }
+            if (feet.y < geometry.Bottom.Y - 1.6f || feet.y > geometry.Top.Y + 0.1f) { continue; }
+            if (geometry.SidewaysOffsetOf(point) > 0.25f) { continue; }
+            float depth = geometry.ReachFrom(point);
+            foreach (LadderFace side in new[] { LadderFace.Front, LadderFace.Rear })
+            {
+                float lane = ClimbPolicy.LaneDepth(side, radius, candidate.BackFaceDepth, candidate.FrontFaceDepth);
+                if (Math.Abs(depth - lane) > 0.15f) { continue; }
+                float facing = -(float)side;
+                if (forward.x * geometry.StandingSide.X * facing + forward.z * geometry.StandingSide.Z * facing < 0.85f) { continue; }
+                face = side;
+                return candidate;
+            }
+        }
+
+        return null;
     }
 
     internal static ClimbPoint Point(Vector3 point) => new ClimbPoint(point.x, point.y, point.z);

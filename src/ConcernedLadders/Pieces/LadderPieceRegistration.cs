@@ -126,18 +126,21 @@ internal sealed class LadderPieceRegistration : IDisposable
             body.center = new Vector3(0f, 1f, 0.16f);
             body.size = new Vector3(0.8f, 2f, 0.16f);
 
-            Snap(prefab.transform, "snap_bottom", Vector3.zero, layer);
-            Snap(prefab.transform, "snap_top", new Vector3(0f, 2f, 0f), layer);
+            // The native Cycle Snap message prints "$msg_snapping " + the snap point's name through the
+            // localizer, so each name is a localization token: the game's own Top/Bottom, and readable
+            // corner labels of this product. Positions are the unchanged placement contract.
+            Snap(prefab.transform, "$hud_snappoint_bottom", Vector3.zero, layer);
+            Snap(prefab.transform, "$hud_snappoint_top", new Vector3(0f, 2f, 0f), layer);
             // Wall corners use the native 2m building grid. A wall's own corner
             // snaps lie on its centre plane, so these sit behind the ladder by
             // WallSnapSetback: the rails' back then rests on a 0.3 m wood wall's
             // face instead of 9 cm inside it (observed in game). Top and bottom
             // centre points remain the exact stack-continuity contract, and every
             // ladder carries the same setback, so stacked corners still coincide.
-            Snap(prefab.transform, "snap_bottom_left", new Vector3(-1f, 0f, -WallSnapSetback), layer);
-            Snap(prefab.transform, "snap_bottom_right", new Vector3(1f, 0f, -WallSnapSetback), layer);
-            Snap(prefab.transform, "snap_top_left", new Vector3(-1f, 2f, -WallSnapSetback), layer);
-            Snap(prefab.transform, "snap_top_right", new Vector3(1f, 2f, -WallSnapSetback), layer);
+            Snap(prefab.transform, "$cl_snap_bottom_left", new Vector3(-1f, 0f, -WallSnapSetback), layer);
+            Snap(prefab.transform, "$cl_snap_bottom_right", new Vector3(1f, 0f, -WallSnapSetback), layer);
+            Snap(prefab.transform, "$cl_snap_top_left", new Vector3(-1f, 2f, -WallSnapSetback), layer);
+            Snap(prefab.transform, "$cl_snap_top_right", new Vector3(1f, 2f, -WallSnapSetback), layer);
 
             LadderSegment segment = prefab.AddComponent<LadderSegment>();
             segment.LocalBottom = Vector3.zero;
@@ -147,6 +150,7 @@ internal sealed class LadderPieceRegistration : IDisposable
             segment.RungPitch = 1f / 3f;
             segment.DisplayName = token;
             segment.FrontFaceDepth = body.center.z + body.size.z / 2f;
+            segment.BackFaceDepth = body.center.z - body.size.z / 2f;
 
             // Dedicated servers cannot render icons. Keep the donor's existing
             // icon there; render an exact ladder thumbnail on graphical clients.

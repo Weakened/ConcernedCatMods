@@ -20,11 +20,13 @@ public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernedladders";
     public const string PluginName = "Concerned Ladders";
-    public const string PluginVersion = "0.1.1";
+    public const string PluginVersion = "0.2.0";
 
     private ConfigEntry<bool>? _enabled;
     private LadderRuntime? _runtime;
     private LadderPieceRegistration? _pieces;
+    private LadderSkill? _skill;
+    private LadderClimbAnimation? _animation;
 
     private void Awake()
     {
@@ -32,7 +34,12 @@ public sealed class Plugin : BaseUnityPlugin
             "Enable climbing on Concerned Ladders. Disabling restores player control; placed ladder prefabs remain registered. Restart after changing the installed plugin set.");
         _pieces = new LadderPieceRegistration(message => Logger.LogInfo(message));
         _pieces.Install();
-        _runtime = new LadderRuntime(message => Logger.LogInfo(message));
+        // The skill registers before any player's Skills awake and whether or not climbing is enabled.
+        _skill = new LadderSkill(message => Logger.LogInfo(message));
+        _skill.Register();
+        _animation = new LadderClimbAnimation(message => Logger.LogInfo(message));
+        _animation.Install(PluginGuid + ".pose");
+        _runtime = new LadderRuntime(message => Logger.LogInfo(message), _skill, _animation);
         _runtime.Enabled = _enabled.Value && _pieces.IsReady;
         _runtime.Install(PluginGuid + ".motor");
         string revision = typeof(Plugin).Assembly
@@ -49,7 +56,7 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void OnDestroy()
     {
-        try { _runtime?.Dispose(); }
+        try { _runtime?.Dispose(); _animation?.Dispose(); }
         catch (Exception exception)
         {
             Logger.LogError("Ladder cleanup failed: " + SafeFailure.Brief(exception));
