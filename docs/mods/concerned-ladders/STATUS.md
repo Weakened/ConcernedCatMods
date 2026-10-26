@@ -9,7 +9,12 @@ NOT_READY:
    closed**. One uninvolved review accepted it with notes (`native-baseline/BASELINE_REVIEW.md`), but Codex's
    uninvolved review keeps it BLOCKED (`CODEX_NATIVE_BASELINE_REVIEW_OPEN_2026_10_26.md`). Two items are still owed:
    actual repair playback on a damaged piece, and Codex's own gait and blend rationale.
-2. **Drop and scaffolding (N07/N08).** Implemented in `075f14b`; Codex's NO_GO findings on it are fixed in `85713d6`, which is under re-review. It builds and passes its tests. It has
+2. **Drop and scaffolding (N07/N08).** Implemented in `075f14b`. The Codex reviews so far:
+   - `075f14b`: NO_GO, 6 P1s.
+   - `85713d6`: NO_GO, with P1-06 (Drop velocity) partial, a pending-Drop focus race, hammer IK overlap, and the hammer-mount gap.
+   - `d913e26`: addresses the three code findings and is **under re-review**.
+
+   **Mounting with the hammer out is NOT IMPLEMENTED and awaits an owner contract decision.** In build mode the game clears the hover target and E is also snap cycling. The build and policy-test logs for `d913e26` and `2c810ab` (127 passed each, 0 build errors) are in `artifacts/ladders-0.3-dev/`. It has
    **not** been packaged or run in game.
 3. **Controller and network.** Every controller row and every multiplayer/observer row is BLOCKED: no
    controller and no second endpoint were available.
@@ -55,8 +60,8 @@ teleport and aim, read-only state, and setting skill level and stamina. It patch
 | R03 floor loops | 0.2.0 | Up, step off onto the floor, back on, down. The procedure **teleported the character between the walk-off and the remount**, so these are traversal loops, not walk-away/return loops. Counts: 20/20 wall tower front face; 5/5 front and 5/5 rear on the slot ladder; 5/5 on a rotated copper/iron tower. | `R03-*loops*.log` |
 | R13 seams | 0.2.0 | PARTIAL. On both faces the 10-section, 20 m mixed run was traversed from bottom to top (feet at 49.99/50.12) and back to the floor. The scripted reversal past each of the 9 seams is not logged seam by seam. Invalid joins: a section 0.15 m above the run stays out of it (the run stops at 3 sections, 6 m); a parallel ladder 0.9 m aside mounts as its own 1-section run. | measurements log ("R13 …", "T23/R13 invalid joins") |
 | R34 terrain | 0.2.0 | A real terrain mound refuses with "The ground is in the way." | `R34-terrain-refusal.png` |
-| N04 names | 0.2.0 | PARTIAL. Sampled video frames show the names in the hammer menu and on hover. The repair calls in the retained log target only the Wood Ladder and do not record the text shown. Copper/Iron repair text is not evidenced. | `VIDEO-0.2.0-six-owner-notes-678f65a.mp4` |
-| N06 snap labels | 0.2.0 | PARTIAL. Sampled video frames show the native Cycle Snap labels. A full both-direction cycle is not retained frame by frame. | `VIDEO-0.2.0-…mp4` |
+| N04 names | 0.2.0 | PARTIAL. Sampled video frames show the names in the hammer menu: Wood Ladder at about 1:36 and Copper Ladder at about 1:42, and the Iron Ladder hover at about 2:06–2:12. Times are from a 6-second contact sheet. The repair calls in the retained log target only the Wood Ladder and do not record the text shown. Copper/Iron repair text is not evidenced. | `artifacts/ladders-0.2.0/VIDEO-0.2.0-six-owner-notes-678f65a.mp4` |
+| N06 snap labels | 0.2.0 | PARTIAL. The video shows the native "Snapping: Bottom left corner" message at about 2:06–2:12 (6-second contact sheet). A full both-direction cycle is not retained frame by frame. | `artifacts/ladders-0.2.0/VIDEO-0.2.0-six-owner-notes-678f65a.mp4` |
 | B03–B05, B09–B11 pieces | 0.2.0 | B03 discovery: wood only for a fresh character, copper after copper plus a forge, iron after iron. B04/B05: exact costs, and refusals without material or station. B09: blocked by a player, and by a foreign ward. B10: exact refunds. B11: worn and broken visuals. | `B*.png`, B03-B10 session log |
 | T14, T18, T21, L02, L04 | 0.2.0 | Water releases to swimming. A camera turn and an inventory hold keep the climb. Removing the floor mid-exit releases safely. A nudged ladder releases. | T14…B11 session log |
 | L10/L11 Foreman | 0.2.0 | With real Foreman 0.1.0 installed, its refusal message shows (L10). With Foreman's ladders off, our climb works (L11). | `L10/L11-*.png`, compat logs |
@@ -70,7 +75,10 @@ teleport and aim, read-only state, and setting skill level and stamina. It patch
 | Row(s) | State | Reason and next action |
 |---|---|---|
 | R25, P02–P04 original animation | NOT DELIVERED | The owner rejected the procedural look. Codex is authoring original motion against the reviewed native baseline (`C:\code\cc-integration\cl-ladders-review-evidence\native-baseline\`). The lead integrates it through `IClimbPresenter`. |
-| R36–R42 Drop and scaffolding | IMPLEMENTED, NOT RUN | `075f14b` + `85713d6`. Mounting with the hammer out is not supported (in build mode the game clears the hover target and E is also snap cycling), so this is an owner preference check. Needs a packaged candidate and game runs. |
+| R36–R42 Drop and scaffolding | IMPLEMENTED (code review pending), NOT RUN | `075f14b` → `85713d6` → `d913e26` → `2c810ab`. Needs a packaged candidate and game runs. |
+| R39 mount with the hammer out | NOT IMPLEMENTED, awaiting contract decision | The admission check still refuses build mode. The native hover target is cleared there, and the hammer owns E. |
+| R05 Jump during exit/transfer; R20 slide relocking after a death drops the level below 20 | NOT OBSERVED | Retained jumps cover Mounting, Hold, Fast and Slide only. The death record ends at 18.411, with no slide attempt after it. |
+| R13 reversal at each seam | PARTIAL | The scripted reversals were not logged seam by seam. |
 | T16, T13, T22 on 0.2.1 | NOT RUN | The fix was not re-observed in game after packaging. |
 | R22 negative XP matrix; R23 long-frame, obstruction and pending-step settlement; R19 protection and world-setting cases | NOT EVIDENCED | Not run, or not retained, on this revision |
 | P06 dense 20 m run | OPEN | The 20 m tower lost sections to native support after a reload |
@@ -91,6 +99,6 @@ loaded DLL was correct throughout.
 
 Codex read-only reviews: `da8c5a2`, `27528f0`, `4926903` and `7726fe3` were NO_GO, each fixed. `b3c20a6` and
 `441ea83` were GO. The 0.2.0 STATUS draft was REJECTED for overclaiming; this rewrite answers it row by row.
-`075f14b` was NO_GO with 6 P1s, fixed in `85713d6`, which is under re-review. The first version of this STATUS (`866a800`) was REJECTED with 7 must-fixes, each corrected here. Reports are in `C:\code\cc-integration\cl-ladders-review-evidence\`.
+Reviews of the N07/N08 code: `075f14b` NO_GO (6 P1s); `85713d6` NO_GO (4 findings); `d913e26` NO_GO (hammer IK onset); `2c810ab` under re-review. The first version of this STATUS (`866a800`) was REJECTED with 7 must-fixes, each corrected here. Reports are in `C:\code\cc-integration\cl-ladders-review-evidence\`.
 
 No publication, release tag or main merge.
