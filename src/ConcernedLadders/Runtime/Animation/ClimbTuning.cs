@@ -75,6 +75,9 @@ internal static class ClimbTuning
     /// <summary>A contact needing more than this fraction of the measured chain is skipped and counted; never stretched.</summary>
     internal const float ReachLimit = 1.01f;
 
+    /// <summary>Development diagnostics: log each change of the ladder snap decision (off in normal play).</summary>
+    internal static bool LogSnapDecisions;
+
     internal static int Version { get; private set; }
 
     /// <summary>Re-fit the current climb after values changed (development harness only).</summary>

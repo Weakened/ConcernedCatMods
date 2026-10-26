@@ -39,6 +39,8 @@ internal sealed class LadderSnapAlignment : IDisposable
     private static Action<Player, bool>? _paintGhost;
     private static Player? _updating;
     private static Player? _refused;
+    private static Action<string>? _say;
+    private static string _decision = "";
     private static int _placeMask;
     private static readonly List<LadderSegment> Run = new List<LadderSegment>();
     private static readonly List<Transform> TargetPoints = new List<Transform>();
@@ -72,6 +74,7 @@ internal sealed class LadderSnapAlignment : IDisposable
             _paintGhost = AccessTools.MethodDelegate<Action<Player, bool>>(
                 AccessTools.Method(typeof(Player), "SetPlacementGhostValid", new[] { typeof(bool) }));
             _placeMask = LayerMask.GetMask(PlaceRayLayers);
+            _say = _log;
             _harmony = new Harmony(harmonyId);
             _harmony.Patch(update, prefix: new HarmonyMethod(typeof(LadderSnapAlignment), nameof(BeforeGhostUpdate)),
                 finalizer: new HarmonyMethod(typeof(LadderSnapAlignment), nameof(AfterGhostUpdate)));
@@ -132,6 +135,7 @@ internal sealed class LadderSnapAlignment : IDisposable
         try
         {
             if (Align(player, out Vector3 aligned)) { __0 = aligned; }
+            else if (_refused == null) { Decide("native"); }
         }
         catch
         {
@@ -175,11 +179,12 @@ internal sealed class LadderSnapAlignment : IDisposable
                     origin = onTop;
                 }
 
+                Decide("stack on " + partner.name);
                 return Place(g, p.rotation, LadderSegment.Vector(origin), out aligned);
             }
         }
 
-        if (!AimedPiece(out RaycastHit hit, out Piece? aimed) || aimed == null) { return false; }
+        if (!AimedPiece(out RaycastHit hit, out Piece? aimed) || aimed == null) { Decide("native: aim hits no piece"); return false; }
 
         // 2. Aimed at a placed ladder's rails: extend that column.
         LadderSegment? column = aimed.GetComponent<LadderSegment>();
@@ -194,7 +199,8 @@ internal sealed class LadderSnapAlignment : IDisposable
                 return false;
             }
 
-            if (!LadderSnap.WithinPlacementReach(eye, extendsAbove ? run.Top : run.Bottom, reach)) { _refused = player; return false; }
+            if (!LadderSnap.WithinPlacementReach(eye, extendsAbove ? run.Top : run.Bottom, reach)) { _refused = player; Decide("refused: column end out of reach"); return false; }
+            Decide("extend column " + (extendsAbove ? "above" : "below"));
             return Place(g, column.transform.rotation, LadderSegment.Vector(end), out aligned);
         }
 
@@ -212,6 +218,7 @@ internal sealed class LadderSnapAlignment : IDisposable
         if (!LadderEdgeSnap.TryPlace(Corners, LadderSegment.Point(t.InverseTransformPoint(hit.point)), LadderSegment.Point(t.InverseTransformPoint(viewer)),
                 mode, out ClimbPoint localOrigin, out float facingX, out float facingZ, out ClimbPoint localJoint))
         {
+            Decide("native: " + aimed.name + " is neither floor nor wall (" + Corners.Count + " snap points)");
             return false;
         }
 
@@ -231,11 +238,19 @@ internal sealed class LadderSnapAlignment : IDisposable
             joint = t.TransformPoint(LadderSegment.Vector(localJoint));
         }
 
-        if (!LadderSnap.WithinPlacementReach(eye, LadderSegment.Point(joint), reach)) { _refused = player; return false; }
+        if (!LadderSnap.WithinPlacementReach(eye, LadderSegment.Point(joint), reach)) { _refused = player; Decide("refused: " + aimed.name + " edge out of reach"); return false; }
         Vector3 facing = t.TransformDirection(new Vector3(facingX, 0f, facingZ));
         facing.y = 0f;
         if (facing.sqrMagnitude < 0.0001f) { return false; }
+        Decide("centre on " + aimed.name + " at " + t.TransformPoint(LadderSegment.Vector(localOrigin)).ToString("F2"));
         return Place(g, Quaternion.LookRotation(facing.normalized, Vector3.up), t.TransformPoint(LadderSegment.Vector(localOrigin)), out aligned);
+    }
+
+    private static void Decide(string decision)
+    {
+        if (!Runtime.Animation.ClimbTuning.LogSnapDecisions || decision == _decision) { return; }
+        _decision = decision;
+        try { _say?.Invoke("Ladder snap: " + decision); } catch { /* Diagnostics only. */ }
     }
 
     /// <summary>The piece the game's own placement ray (same origin, direction, length and layers) hits first.</summary>
@@ -318,5 +333,6 @@ internal sealed class LadderSnapAlignment : IDisposable
         _paintGhost = null;
         _updating = null;
         _refused = null;
+        _say = null;
     }
 }
