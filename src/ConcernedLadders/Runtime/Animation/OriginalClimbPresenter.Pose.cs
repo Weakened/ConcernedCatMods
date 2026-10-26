@@ -54,13 +54,7 @@ internal sealed partial class OriginalClimbPresenter
         Vector3 posedBody = animator.bodyPosition;
         Quaternion bodyDelta = animator.bodyRotation * Quaternion.Inverse(nativeRotation);
 
-        // The end bones still hold the pose the solver produced last frame: how far it landed from what was asked.
-        for (int limb = 0; limb < 4; limb++)
-        {
-            if (actor.Asked[limb]) { actor.Fit.Solved(limb, Vector3.Distance(rig.Ends[limb].position, actor.LastPivot[limb])); }
-            actor.Asked[limb] = false;
-        }
-
+        for (int limb = 0; limb < 4; limb++) { actor.Asked[limb] = false; }
         for (int limb = 0; limb < 4; limb++)
         {
             bool hand = limb < 2;
@@ -108,8 +102,16 @@ internal sealed partial class OriginalClimbPresenter
                 }
             }
 
-            Quaternion rotation = hand ? rig.GoalRotation(limb, GripFrame(toward)) : rig.GoalRotation(limb, Quaternion.LookRotation(toward, Vector3.up));
-            Vector3 pivot = rig.PivotForContact(limb, surface, rotation);
+            Quaternion rotation;
+            Vector3 pivot;
+            if (hand) { pivot = GripGoal(limb, surface, toward, out rotation); }
+            else
+            {
+                // A humanoid foot goal: forward is the toes, up is up. The ankle sits behind and above the ball of the foot.
+                rotation = Quaternion.LookRotation(toward, Vector3.up);
+                pivot = surface - toward * ClimbTuning.FootBallForward + Vector3.up * ClimbTuning.FootAnkleHeight;
+            }
+
             Vector3 root = posedBody + bodyDelta * (rig.Roots[limb].position - nativeBody);
             float reach = Vector3.Distance(root, pivot);
             actor.Fit.Sample(limb, reach / rig.Reach[limb], root, feet, frame, outward);
@@ -131,13 +133,19 @@ internal sealed partial class OriginalClimbPresenter
         // root transforms, rigidbodies, capsule, gravity, input, skill or stamina are written.
     }
 
-    /// <summary>A palm resting on a rung: fingers tilted from vertical toward the ladder, palm facing down onto it.</summary>
-    private static Quaternion GripFrame(Vector3 toward)
+    /// <summary>A palm resting on a rung, fingers tilted from vertical toward the ladder and the palm facing it.
+    /// Humanoid hand goals are in the avatar's normalized space (not the hand bone's): x runs along the fingers
+    /// (toward the little finger side's opposite for the left hand), y is the back of the hand. Returns the wrist
+    /// pivot for a palm centre at <paramref name="contact"/>.</summary>
+    private static Vector3 GripGoal(int limb, Vector3 contact, Vector3 toward, out Quaternion rotation)
     {
         float pitch = ClimbTuning.HandFingerPitch * Mathf.Deg2Rad;
         Vector3 fingers = Vector3.up * Mathf.Cos(pitch) + toward * Mathf.Sin(pitch);
         Vector3 palm = toward * Mathf.Cos(pitch) - Vector3.up * Mathf.Sin(pitch);
-        return Quaternion.LookRotation(fingers, palm * ClimbTuning.HandNormalSign);
+        Vector3 x = fingers * (limb == 0 ? -ClimbTuning.HandFingerAxis : ClimbTuning.HandFingerAxis);
+        Vector3 y = -palm * ClimbTuning.HandNormalSign;
+        rotation = Quaternion.LookRotation(Vector3.Cross(x, y), y);
+        return contact - fingers * ClimbTuning.HandPalmAlong - palm * ClimbTuning.HandPalmDepth;
     }
 
     private static Vector3 RungSurface(in ClimbPresentationFrame frame, float worldY, float faceOffset, float lateral) =>

@@ -29,8 +29,17 @@ internal static class ClimbTuning
     /// <summary>Fingers' angle from vertical toward the ladder (0 = fingers up, 90 = fingers level into the ladder).</summary>
     internal static float HandFingerPitch = 70f;
 
-    /// <summary>+1 or -1: which side of the rig's measured palm frame faces the rung.</summary>
+    /// <summary>+1 or -1: orientation conventions of the humanoid hand goal (fingers axis, back of hand).</summary>
     internal static float HandNormalSign = 1f;
+    internal static float HandFingerAxis = 1f;
+
+    /// <summary>Palm centre from the wrist joint: along the fingers, and toward the palm side.</summary>
+    internal static float HandPalmAlong = 0.07f;
+    internal static float HandPalmDepth = 0.02f;
+
+    /// <summary>Ankle joint from the ball of the foot: behind it toward the heel, and above the sole.</summary>
+    internal static float FootBallForward = 0.13f;
+    internal static float FootAnkleHeight = 0.09f;
 
     /// <summary>Sole contact: the ball of the foot sits this far above the rung centre and this far toward the
     /// climber from the rung's centre plane; feet sit this far either side of the centreline.</summary>

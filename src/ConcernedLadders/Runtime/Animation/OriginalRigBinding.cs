@@ -16,8 +16,6 @@ internal sealed class OriginalRigBinding
     internal readonly Transform[] Joints = new Transform[4];
     internal readonly Transform[] Roots = new Transform[4];
     internal readonly float[] Reach = new float[4];
-    internal readonly Vector3[] ContactOffset = new Vector3[4];
-    internal readonly Quaternion[] ContactFrame = new Quaternion[4];
     internal readonly float PelvisHeight;
     internal readonly float ShoulderHeight;
     private readonly int _controller, _avatar;
@@ -49,9 +47,6 @@ internal sealed class OriginalRigBinding
         // neutral pelvis ~.839m. The .93 ratio does not copy an evaluated jump/crouch as a rest pose.
         PelvisHeight = Math.Min(Reach[2], Reach[3]) * .93f;
         ShoulderHeight = PelvisHeight + Vector3.Distance(Hips.position, (Roots[0].position + Roots[1].position) * .5f);
-        BindPalm(0, HumanBodyBones.LeftMiddleProximal, HumanBodyBones.LeftIndexProximal, HumanBodyBones.LeftLittleProximal);
-        BindPalm(1, HumanBodyBones.RightMiddleProximal, HumanBodyBones.RightIndexProximal, HumanBodyBones.RightLittleProximal);
-        BindSole(2, HumanBodyBones.LeftToes); BindSole(3, HumanBodyBones.RightToes);
     }
 
     internal static OriginalRigBinding Create(Player player)
@@ -90,37 +85,6 @@ internal sealed class OriginalRigBinding
         BodyFromPelvis = Quaternion.Inverse(Animator.bodyRotation) * (Animator.bodyPosition - Hips.position);
         NativePelvisInBody = Quaternion.Inverse(Animator.bodyRotation) * (Hips.position - Animator.bodyPosition);
         BodyBound = true;
-    }
-
-    /// <summary>The hand or foot rotation that puts this limb's measured contact frame (forward = fingers or toes,
-    /// up = palm or sole normal) onto <paramref name="surface"/>.</summary>
-    internal Quaternion GoalRotation(int limb, Quaternion surface) => surface * Quaternion.Inverse(ContactFrame[limb]);
-
-    internal Vector3 PivotForContact(int limb, Vector3 contact, Quaternion rotation) => contact - rotation * ContactOffset[limb];
-
-    private void BindPalm(int limb, HumanBodyBones middleBone, HumanBodyBones indexBone, HumanBodyBones littleBone)
-    {
-        Transform hand = Ends[limb], middle = Bone(middleBone), index = Bone(indexBone), little = Bone(littleBone);
-        Vector3 fingers = (middle.position - hand.position).normalized;
-        Vector3 across = (index.position - little.position).normalized;
-        Vector3 normal = Vector3.Cross(across, fingers).normalized * (limb == 0 ? 1f : -1f);
-        if (fingers.sqrMagnitude < .9f || normal.sqrMagnitude < .9f) { throw new InvalidOperationException("Native palm landmarks are degenerate."); }
-        Vector3 palm = Vector3.Lerp(hand.position, middle.position, .6f);
-        ContactOffset[limb] = Quaternion.Inverse(hand.rotation) * (palm - hand.position); //world metres in hand orientation, preserving imported bone scale.
-        ContactFrame[limb] = Quaternion.Inverse(hand.rotation) * Quaternion.LookRotation(fingers, normal);
-    }
-
-    private void BindSole(int limb, HumanBodyBones toeBone)
-    {
-        Transform foot = Ends[limb], toe = Bone(toeBone);
-        Vector3 forward = (toe.position - foot.position).normalized;
-        Vector3 up = Vector3.ProjectOnPlane(Player.transform.up, forward).normalized;
-        if (forward.sqrMagnitude < .9f || up.sqrMagnitude < .9f) { throw new InvalidOperationException("Native sole landmarks need a neutral binding observation."); }
-        // Toe/ankle pivots are landmarks, not a measured sole mesh. This initial contact is an explicit
-        // prototype fit; evidence must confirm sole height/palm normal with equipment on both faces.
-        Vector3 sole = Vector3.Lerp(foot.position, toe.position, .7f) - up * .025f;
-        ContactOffset[limb] = Quaternion.Inverse(foot.rotation) * (sole - foot.position);
-        ContactFrame[limb] = Quaternion.Inverse(foot.rotation) * Quaternion.LookRotation(forward, up);
     }
 
     private Transform Bone(HumanBodyBones bone)

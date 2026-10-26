@@ -123,6 +123,13 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
         foreach (KeyValuePair<CharacterAnimEvent, Actor> pair in _actors)
         {
             Actor actor = pair.Value;
+            if (actor.Active && actor.Rig.Valid)
+            {
+                // After the animator's evaluation the end bones hold the solved pose: how far each landed from its goal.
+                for (int limb = 0; limb < 4; limb++)
+                { if (actor.Asked[limb]) { actor.Fit.Solved(limb, Vector3.Distance(actor.Rig.Ends[limb].position, actor.LastPivot[limb])); } }
+            }
+
             if (!actor.Rig.Valid || !LocalOwner(actor.Rig.Player) || (Time.time - actor.Seen > 1f)) { actor.Active = false; }
             if (pair.Key == null || actor.Rig.Player == null || (!actor.Active && !actor.Lease.Pending)) { _remove.Add(pair.Key!); } // Unity's destroyed-object null; the dictionary key is still removable.
         }
