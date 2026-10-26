@@ -100,6 +100,13 @@ public sealed class LadderSnapTests
         Assert.False(LadderSnap.TryWallCornerYaw(0f, P(-1f, 0f, -0.08f), P(11f, 0f, 20f), P(14f, 0f, 20f), P(10f, 1f, 24f), out _, out _));
 
     [Theory]
+    [InlineData(38f, true)]   // Column top 2.3 m above the eye: reachable.
+    [InlineData(43.5f, false)] // Aimed at the lower rails of a tall column whose top is 7.8 m up: refused.
+    [InlineData(float.NaN, false)]
+    public void ExtensionHonoursTheGamesPlacementReach(float jointHeight, bool expected) =>
+        Assert.Equal(expected, LadderSnap.WithinPlacementReach(P(220f, 35.7f, -279f), P(220f, jointHeight, -276.2f), 5f));
+
+    [Theory]
     [InlineData(199f, 36f, -296.08f)] // The reproduced defect: a corner-to-corner snap one metre off the column.
     [InlineData(200f, 34f, -296f)]    // Bottom on bottom is an overlap, not a stack.
     [InlineData(200.05f, 36f, -296f)] // Five centimetres off is not the game's exact snap.

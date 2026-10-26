@@ -162,23 +162,28 @@ internal sealed class LadderSegment : MonoBehaviour, Hoverable, Interactable
 
     private static readonly LadderFace[] Faces = { LadderFace.Front, LadderFace.Rear };
 
-    /// <summary>A placed section whose bottom-centre or top-centre anchor lies within <paramref name="tolerance"/> of
-    /// <paramref name="point"/>, for stacking a ghost on it. Bounded by the registry limit; ghosts never match.</summary>
-    internal static LadderSegment? FindEndAt(Vector3 point, float tolerance)
+    /// <summary>The one placed section a ghost is stacked on: its top-centre coincides with the ghost's bottom-centre
+    /// (<paramref name="above"/>), or its bottom-centre with the ghost's top-centre. Only opposite ends count; a
+    /// same-end coincidence is not a stack. More than one eligible section is ambiguous and returns null, so the
+    /// result never depends on registry order. Bounded by the registry limit; ghosts never match.</summary>
+    internal static LadderSegment? FindStackPartner(Vector3 ghostBottom, Vector3 ghostTop, float tolerance, out bool above)
     {
-        if (!Finite(point) || Registered.Count > LadderRules.MaximumRegisteredSegments) { return null; }
+        above = false;
+        if (!Finite(ghostBottom) || !Finite(ghostTop) || Registered.Count > LadderRules.MaximumRegisteredSegments) { return null; }
+        LadderSegment? found = null;
         foreach (LadderSegment candidate in Registered)
         {
             if (candidate == null || !candidate.IsLive) { continue; }
             Transform t = candidate.transform;
-            if (Vector3.Distance(t.TransformPoint(candidate.LocalTop), point) <= tolerance ||
-                Vector3.Distance(t.TransformPoint(candidate.LocalBottom), point) <= tolerance)
-            {
-                return candidate;
-            }
+            bool under = Vector3.Distance(t.TransformPoint(candidate.LocalTop), ghostBottom) <= tolerance;
+            bool over = Vector3.Distance(t.TransformPoint(candidate.LocalBottom), ghostTop) <= tolerance;
+            if (!under && !over) { continue; }
+            if (found != null || (under && over)) { return null; }
+            found = candidate;
+            above = under;
         }
 
-        return null;
+        return found;
     }
 
     internal static ClimbPoint Point(Vector3 point) => new ClimbPoint(point.x, point.y, point.z);

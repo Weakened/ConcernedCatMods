@@ -108,6 +108,16 @@ internal static class LadderSnap
     /// still count as centred on it (the wall-corner setback is 0.08 m).</summary>
     internal const float CentredOnWall = 0.3f;
 
+    /// <summary>The game's placement reach (Player.PieceRayTest: eye to aimed point under the build tool's place
+    /// distance plus the piece's extra distance), applied to the joint a column extension attaches at, so aiming at
+    /// reachable lower rails never builds at an unreachable far end of a tall column.</summary>
+    internal static bool WithinPlacementReach(ClimbPoint eye, ClimbPoint joint, float reach)
+    {
+        if (!eye.IsFinite || !joint.IsFinite || float.IsNaN(reach) || float.IsInfinity(reach) || reach <= 0f) { return false; }
+        float dx = joint.X - eye.X, dy = joint.Y - eye.Y, dz = joint.Z - eye.Z;
+        return dx * dx + dy * dy + dz * dz < reach * reach;
+    }
+
     private static float Distance(ClimbPoint a, ClimbPoint b)
     {
         float dx = a.X - b.X, dy = a.Y - b.Y, dz = a.Z - b.Z;
