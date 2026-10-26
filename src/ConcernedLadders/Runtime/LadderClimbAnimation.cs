@@ -237,7 +237,7 @@ internal sealed class LadderClimbAnimation : IDisposable
         if (animator == null || !animator.isHuman) { return; }
         // Native action ownership is checked here, at the IK pass itself: a hammer swing or interact that started
         // after the last physics sample owns the limbs from its first evaluated frame (Codex review of d913e26).
-        if (climber.Local && character is Player owner && NativeActionNow(owner) && !climber.Yielding)
+        if (climber.Local && character is Player owner && NativeActionNow(owner, animator) && !climber.Yielding)
         {
             climber.Weight = 0f;
             climber.Target = 0f;
@@ -326,11 +326,26 @@ internal sealed class LadderClimbAnimation : IDisposable
         animator.SetLookAtWeight(0.6f * weight, 0f, 0.7f, 0.7f, 0.5f);
     }
 
-    /// <summary>InAttack reads the current or next animator state's attack tag on every layer, so a swing that has
-    /// just been triggered counts. In build mode no combat attack starts, so an attack there is the hammer's.</summary>
-    private static bool NativeActionNow(Player player)
+    private static readonly int AttackTag = ZSyncAnimation.GetHash("attack");
+
+    /// <summary>Reads the animator being evaluated right now: the current state, or the next state while a
+    /// transition runs, on every layer, for the game's attack tag. Player.InAttack caches its answer per update
+    /// tick and can be stale at this pass (Codex review of 825f16c). In build mode no combat attack starts, so an
+    /// attack there is the hammer's. Interact animations are minor actions.</summary>
+    private static bool NativeActionNow(Player player, Animator animator)
     {
-        try { return (player.InPlaceMode() && player.InAttack()) || player.InMinorAction(); }
+        try
+        {
+            if (player.InMinorAction()) { return true; }
+            if (!player.InPlaceMode()) { return false; }
+            for (int layer = 0; layer < animator.layerCount; layer++)
+            {
+                int tag = animator.IsInTransition(layer) ? animator.GetNextAnimatorStateInfo(layer).tagHash : animator.GetCurrentAnimatorStateInfo(layer).tagHash;
+                if (tag == AttackTag) { return true; }
+            }
+
+            return false;
+        }
         catch { return true; } // Unknown state: leave the limbs to the game.
     }
 
