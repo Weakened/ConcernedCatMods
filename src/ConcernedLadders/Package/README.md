@@ -4,7 +4,7 @@ Vertical ladders for compact Valheim builds. Three 2 m hammer pieces: Wood
 Ladder, Copper Ladder and Iron Ladder. Stack matching or mixed materials into a
 continuous run.
 
-**0.2.5 is an internal owner test candidate, not a release.** It is built against
+**0.2.6 is an internal development build, not a release.** It is built against
 Valheim 1.0.20 and tested in single player. Multiplayer, dedicated-server and
 controller play have not been tested yet.
 
@@ -52,11 +52,12 @@ hammer placement, support, ward, repair and refund behavior. All three materials
 same speed. A free-standing stack follows the game's own structural support, so a very tall stack
 needs bracing against the building.
 
-**Snapping.** Aim at a ladder to extend it: a new section always lines up as one straight column,
-whatever rotation the hammer was left at. Cycle Snap offers Top (hang below), Bottom (stack above),
-Auto (the nearer end, never burying a section in the ground) and two wall corners that centre the
-ladder on a 2 m wall, facing you. A wall-corner mode aimed at a ladder is refused, and an end out of
-your building reach cannot be extended from where you stand.
+**Snapping.** Cycle Snap offers Auto, Bottom and Top, and the ladder snaps to the middle of floors and walls the
+way walls snap to floors. Aimed at a floor, it centres on the floor edge nearest your aim, hanging below it (Auto,
+Top; Auto stands it on the edge when there is no room below) or standing on it (Bottom). Aimed at a wall, it centres
+on the wall face toward you, standing on the wall's bottom edge (Auto, Bottom) or hanging from its top edge (Top).
+Aimed at a ladder, it extends that column into one straight line. The game's own placement rules and building
+reach still apply.
 
 ## Installation and compatibility
 

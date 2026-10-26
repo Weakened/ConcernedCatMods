@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.6
+
+Internal development build. Not a release.
+
+- Snapping redone (owner decision): Cycle Snap offers Auto, Bottom and Top.
+  Aimed at a floor, the ladder centres on the floor edge nearest your aim,
+  flush against it, hanging below so you climb up onto the floor (Auto, Top;
+  Auto stands it on the edge when there is no room below) or standing on the
+  edge (Bottom). Aimed at a wall, it centres on the wall face toward you,
+  standing on the wall's bottom edge (Auto, Bottom) or hanging from its top
+  edge (Top). Aimed at a ladder, it extends that column. Any hammer rotation.
+- The two wall-corner snap modes are removed.
+
 ## 0.2.5
 
 Internal owner test candidate. Not a release.
