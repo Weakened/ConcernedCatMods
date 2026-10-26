@@ -26,10 +26,15 @@ internal sealed class LadderSegment : MonoBehaviour, Hoverable, Interactable
 
     public string GetHoverName() => Localization.instance != null ? Localization.instance.Localize(DisplayName) : DisplayName;
 
+    /// <summary>The prompt uses the same connected-run reach result as the Use press, so "Climb" is offered
+    /// exactly where a press can reach the rungs, and a player too far away is told to step closer.</summary>
     public string GetHoverText()
     {
-        string action = LadderRuntime.Current?.IsClimbing == true ? "Dismount" : "Climb";
-        string text = GetHoverName() + "\n[<color=yellow><b>$KEY_Use</b></color>] " + action;
+        LadderRuntime? runtime = LadderRuntime.Current;
+        string text;
+        if (runtime?.IsClimbing == true) { text = GetHoverName() + "\n[<color=yellow><b>$KEY_Use</b></color>] $cl_ladder_dismount"; }
+        else if (runtime != null && !runtime.InReach(this)) { text = GetHoverName() + "\n$cl_hover_reach"; }
+        else { text = GetHoverName() + "\n[<color=yellow><b>$KEY_Use</b></color>] $cl_ladder_climb"; }
         return Localization.instance != null ? Localization.instance.Localize(text) : text;
     }
 
@@ -117,7 +122,7 @@ internal sealed class LadderSegment : MonoBehaviour, Hoverable, Interactable
             if (feet.y < geometry.Bottom.Y - 1.6f || feet.y > geometry.Top.Y + 0.1f) { continue; }
             if (geometry.SidewaysOffsetOf(point) > 0.25f) { continue; }
             float depth = geometry.ReachFrom(point);
-            foreach (LadderFace side in new[] { LadderFace.Front, LadderFace.Rear })
+            foreach (LadderFace side in Faces)
             {
                 float lane = ClimbPolicy.LaneDepth(side, radius, candidate.BackFaceDepth, candidate.FrontFaceDepth);
                 if (Math.Abs(depth - lane) > 0.15f) { continue; }
@@ -130,6 +135,8 @@ internal sealed class LadderSegment : MonoBehaviour, Hoverable, Interactable
 
         return null;
     }
+
+    private static readonly LadderFace[] Faces = { LadderFace.Front, LadderFace.Rear };
 
     internal static ClimbPoint Point(Vector3 point) => new ClimbPoint(point.x, point.y, point.z);
     internal static Vector3 Vector(ClimbPoint point) => new Vector3(point.X, point.Y, point.Z);

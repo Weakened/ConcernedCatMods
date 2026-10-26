@@ -110,8 +110,9 @@ internal static class ClimbPolicy
         return face == LadderFace.Front ? frontDepth + radius + LaneGap : backDepth - radius - LaneGap;
     }
 
-    /// <summary>Distance from the chest to the nearest point of the usable rung span: the rectangle in
-    /// the rails' mid-plane between the lowest and highest rung, a rung's half length either side.</summary>
+    /// <summary>Distance from the chest to the nearest point of the usable span: the rectangle in the rails'
+    /// mid-plane from the lowest rung up to the rails' top ends, a rung's half length either side. The rail
+    /// tops count because a climber stepping on from an upper floor takes hold of them, not of a rung below.</summary>
     internal static float ChestReach(in LadderGeometry run, ClimbPoint chest, float planeDepth, float firstRungHeight)
     {
         if (!run.IsClimbable || !chest.IsFinite || !Finite(planeDepth) || !Finite(firstRungHeight))
@@ -122,7 +123,7 @@ internal static class ClimbPolicy
         float depth = run.ReachFrom(chest) - planeDepth;
         float sideways = Math.Max(0f, run.SidewaysOffsetOf(chest) - RungHalfWidth);
         float low = run.Bottom.Y + firstRungHeight;
-        float high = run.Top.Y - firstRungHeight;
+        float high = run.Top.Y;
         float vertical = chest.Y < low ? low - chest.Y : chest.Y > high ? chest.Y - high : 0f;
         return (float)Math.Sqrt(depth * depth + sideways * sideways + vertical * vertical);
     }
@@ -166,15 +167,21 @@ internal static class ClimbPolicy
     }
 
     /// <summary>The gait for this step. Run is a request: without the stamina for the step it falls back to
-    /// a normal climb (never a forced fall), and slide needs the current learned level.</summary>
-    internal static ClimbGait SelectGait(float input, bool run, float learnedLevel, float stamina, float seconds)
+    /// a normal climb (never a forced fall), and slide needs the current learned level. The budget is the
+    /// effective cost of the step actually issued: its real distance (a slide always runs at full speed)
+    /// times every native multiplier the charge will see, passed in as <paramref name="costScale"/>.</summary>
+    internal static ClimbGait SelectGait(float input, bool run, float learnedLevel, float stamina, float seconds, float costScale = 1f)
     {
         if (!Finite(input) || input == 0f) { return ClimbGait.Hold; }
-        if (!run || !Finite(stamina) || !Finite(seconds) || seconds <= 0f) { return ClimbGait.Normal; }
+        if (!run || !Finite(stamina) || !Finite(seconds) || seconds <= 0f || !Finite(costScale) || costScale < 0f) { return ClimbGait.Normal; }
         ClimbGait wanted = input < 0f && SlideUnlocked(learnedLevel) ? ClimbGait.Slide : ClimbGait.Fast;
-        float budget = StaminaPerMetre(wanted, learnedLevel) * SpeedOf(wanted) * Math.Abs(input) * seconds;
+        float budget = StepCost(wanted, input, learnedLevel, seconds) * costScale;
         return stamina > budget ? wanted : ClimbGait.Normal;
     }
+
+    /// <summary>Base stamina for one step of <paramref name="seconds"/> in a gait, before native multipliers.</summary>
+    internal static float StepCost(ClimbGait gait, float input, float learnedLevel, float seconds) =>
+        StaminaPerMetre(gait, learnedLevel) * Math.Abs(StepSpeed(gait, input)) * (Finite(seconds) && seconds > 0f ? seconds : 0f);
 
     /// <summary>Climb speed for an analog input in a gait; a slide always runs at full speed downward.</summary>
     internal static float StepSpeed(ClimbGait gait, float input) =>

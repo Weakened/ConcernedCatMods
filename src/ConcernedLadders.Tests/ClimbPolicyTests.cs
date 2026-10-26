@@ -62,8 +62,8 @@ public sealed class ClimbPolicyTests
     [Fact]
     public void ReachCountsHeightAboveTheTopRungAndSidewaysBeyondTheRung()
     {
-        // Chest 1 m above the top rung and 0.5 m out: sqrt(1 + 0.25).
-        float above = ClimbPolicy.ChestReach(Run(), new ClimbPoint(0f, 2f - FirstRung + 1f, Plane + 0.5f), Plane, FirstRung);
+        // Chest 1 m above the rails' top ends and 0.5 m out: sqrt(1 + 0.25).
+        float above = ClimbPolicy.ChestReach(Run(), new ClimbPoint(0f, 2f + 1f, Plane + 0.5f), Plane, FirstRung);
         Assert.Equal((float)Math.Sqrt(1.25), above, 3);
         float side = ClimbPolicy.ChestReach(Run(), new ClimbPoint(ClimbPolicy.RungHalfWidth + 0.6f, 1f, Plane + 0.8f), Plane, FirstRung);
         Assert.Equal(1f, side, 3);
@@ -91,6 +91,18 @@ public sealed class ClimbPolicyTests
     {
         float lowest = ClimbPolicy.LowestHang(0f, FirstRung, 1.57f);
         Assert.Equal(expected, ClimbPolicy.GrabHeight(feet, lowest, 2f), 4);
+    }
+
+    [Theory]
+    [InlineData(1.85f, 0.45f, true)]
+    [InlineData(1.85f, 0.7f, false)]
+    [InlineData(1.8f, 0.6f, true)]
+    public void AnUpperFloorRemountReachesTheRailTops(float capsule, float behindPlane, bool expected)
+    {
+        // Feet 2 cm above the run's top on the floor behind it: the 0.1.1-era span ended at the top rung and
+        // refused every such remount on vertical distance alone (Codex review of da8c5a2).
+        var chest = new ClimbPoint(0f, 2.02f + capsule * ClimbPolicy.ChestFraction, Plane - behindPlane);
+        Assert.Equal(expected, ClimbPolicy.InReach(ClimbPolicy.ChestReach(Run(), chest, Plane, FirstRung)));
     }
 
     [Fact]
@@ -133,6 +145,21 @@ public sealed class ClimbPolicyTests
         Assert.Equal(wanted, ClimbPolicy.SelectGait(input, true, level, 1f, 0.02f));
         Assert.Equal(ClimbGait.Normal, ClimbPolicy.SelectGait(input, true, level, 0f, 0.02f));
         Assert.Equal(ClimbGait.Normal, ClimbPolicy.SelectGait(input, true, level, float.NaN, 0.02f));
+    }
+
+    [Fact]
+    public void BudgetUsesTheEffectiveCostOfTheStepActuallyIssued()
+    {
+        float fast = ClimbPolicy.StepCost(ClimbGait.Fast, 1f, 0f, 0.02f);
+        Assert.Equal(0.12f, fast, 4);
+        // A doubled native stamina rate makes 0.15 too little for a 0.24 step (Codex review of da8c5a2).
+        Assert.Equal(ClimbGait.Fast, ClimbPolicy.SelectGait(1f, true, 0f, 0.15f, 0.02f, 1f));
+        Assert.Equal(ClimbGait.Normal, ClimbPolicy.SelectGait(1f, true, 0f, 0.15f, 0.02f, 2f));
+        // A slide runs at full speed whatever the analog input, so it is budgeted at full speed too.
+        float slide = ClimbPolicy.StepCost(ClimbGait.Slide, -0.2f, 20f, 0.02f);
+        Assert.Equal(ClimbPolicy.StaminaPerMetre(ClimbGait.Slide, 20f) * ClimbPolicy.SlideSpeed * 0.02f, slide, 5);
+        Assert.Equal(ClimbGait.Normal, ClimbPolicy.SelectGait(-0.2f, true, 20f, slide * 0.9f, 0.02f));
+        Assert.Equal(ClimbGait.Normal, ClimbPolicy.SelectGait(1f, true, 0f, 100f, 0.02f, float.NaN));
     }
 
     [Fact]

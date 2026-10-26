@@ -29,6 +29,11 @@ internal sealed class LadderRuntime : IDisposable
     private readonly List<LadderSegment> _segments = new List<LadderSegment>();
     private readonly List<Vector3> _positions = new List<Vector3>();
     private readonly List<Quaternion> _rotations = new List<Quaternion>();
+    private readonly List<LadderSegment> _hoverParts = new List<LadderSegment>();
+    private LadderSegment? _hoverSegment;
+    private LadderGeometry _hoverRun;
+    private bool _hoverValid;
+    private float _hoverTime;
     private Player? _player;
     private Player? _sessionOwner;
     private Rigidbody? _body;
@@ -139,7 +144,9 @@ internal sealed class LadderRuntime : IDisposable
                 if (!TrySafeDismount()) { Notice("$cl_msg_nolanding"); }
             }
 
-            if (!_animation.Ready) { _pose.Apply(takesInput ? _poseSpeed : 0f); }
+            // UpdateMotion no longer runs, so nothing else resets the locomotion floats: under the custom IK
+            // pose the base layer is held at idle; without it, the walking fallback follows actual travel.
+            _pose.Apply(_animation.Ready || !takesInput ? 0f : _poseSpeed);
         }
         catch (Exception exception) { Fault(exception); }
     }
@@ -155,17 +162,26 @@ internal sealed class LadderRuntime : IDisposable
         return hover != null && hover.GetComponentInParent<Interactable>() != null;
     }
 
-    /// <summary>The same reach test the Use press applies, for the hover prompt. Pure arithmetic: no queries.</summary>
+    /// <summary>The same reach test the Use press applies, for the hover prompt: chest to the connected
+    /// run's usable span. The run is rebuilt only when the hovered section changes or every half second.</summary>
     internal bool InReach(LadderSegment segment)
     {
         try
         {
             Player? player = Player.m_localPlayer;
-            if (player == null || segment == null || !segment.TryGeometry(out LadderGeometry geometry)) { return false; }
+            if (player == null || segment == null) { return false; }
+            if (!ReferenceEquals(segment, _hoverSegment) || Time.time - _hoverTime > 0.5f)
+            {
+                _hoverSegment = segment;
+                _hoverTime = Time.time;
+                _hoverValid = LadderSegment.TryRun(segment, _hoverParts, out _hoverRun);
+                _hoverParts.Clear();
+            }
+
             CapsuleCollider capsule = player.GetCollider();
-            if (capsule == null) { return false; }
+            if (!_hoverValid || capsule == null) { return false; }
             float height = capsule.height * Mathf.Abs(capsule.transform.lossyScale.y);
-            return ClimbPolicy.InReach(Reach(geometry, segment, player.transform.position, height));
+            return ClimbPolicy.InReach(Reach(_hoverRun, segment, player.transform.position, height));
         }
         catch { return false; }
     }
@@ -317,6 +333,10 @@ internal sealed class LadderRuntime : IDisposable
                 continue;
             }
 
+            // Beside or behind the rails (the owner's photographed approaches), a straight leg onto the lane
+            // clips the rails' end. The second shape first steps out to the lane's depth at the current
+            // sideways offset, then slides across onto the lane; both are swept with the real capsule.
+            Vector3 aside = DepthFirst(run, lane, feet, line);
             Vector3[]? route = null;
             if (supported)
             {
@@ -325,18 +345,30 @@ internal sealed class LadderRuntime : IDisposable
                 foreach (float lift in new[] { LadderRules.RouteLift, LadderRules.StepLift })
                 {
                     float raised = Mathf.Max(feet.y, line.y) + lift;
-                    Vector3[] candidate =
+                    Vector3[] direct =
                     {
                         new Vector3(feet.x, raised, feet.z),
                         new Vector3(line.x, raised, line.z),
                         line,
                     };
-                    if (clearance.CanFollow(feet, candidate)) { route = candidate; break; }
+                    Vector3[] around =
+                    {
+                        new Vector3(feet.x, raised, feet.z),
+                        new Vector3(aside.x, raised, aside.z),
+                        new Vector3(line.x, raised, line.z),
+                        line,
+                    };
+                    if (clearance.CanFollow(feet, direct)) { route = direct; break; }
+                    if (clearance.CanFollow(feet, around)) { route = around; break; }
                 }
             }
             else if (clearance.CanMove(feet, line))
             {
                 route = new[] { line };
+            }
+            else if (clearance.CanFollow(feet, new[] { new Vector3(aside.x, feet.y, aside.z), line }))
+            {
+                route = new[] { new Vector3(aside.x, feet.y, aside.z), line };
             }
 
             if (route == null) { first = Keep(first, FromBlocker(clearance.LastBlocker)); continue; }
@@ -347,6 +379,16 @@ internal sealed class LadderRuntime : IDisposable
         refusal = first == ClimbRefusal.None ? ClimbRefusal.Obstacle : first;
         detail += " blocker=" + clearance.LastBlocker + ":" + clearance.LastBlockerName;
         return false;
+    }
+
+    /// <summary>The point at the lane's depth with the body's current sideways offset from the run.</summary>
+    private static Vector3 DepthFirst(in LadderGeometry run, float lane, Vector3 feet, Vector3 line)
+    {
+        Vector3 outward = new Vector3(run.StandingSide.X, 0f, run.StandingSide.Z);
+        Vector3 offset = feet - line;
+        offset.y = 0f;
+        Vector3 sideways = offset - outward * Vector3.Dot(offset, outward);
+        return new Vector3(line.x + sideways.x, line.y, line.z + sideways.z);
     }
 
     private static ClimbRefusal Keep(ClimbRefusal first, ClimbRefusal next) => first == ClimbRefusal.None ? next : first;
@@ -475,7 +517,8 @@ internal sealed class LadderRuntime : IDisposable
 
             float input = ReadInput(player);
             float level = _skill.LearnedLevel(player, delta);
-            ClimbGait gait = ClimbPolicy.SelectGait(input, _motor.RunIntent(player), level, player.GetStamina(), delta);
+            ClimbGait gait = ClimbPolicy.SelectGait(input, _motor.RunIntent(player), level, player.GetStamina(), delta,
+                StaminaScale(player) * Game.m_staminaRate);
             float velocity = ClimbPolicy.StepSpeed(gait, input);
             _gait = gait;
             // Without footing the hands can still hold the lowest rung: the body hangs that far below the foot.
@@ -553,19 +596,29 @@ internal sealed class LadderRuntime : IDisposable
         catch (Exception exception) { Fault(exception); return false; }
     }
 
-    /// <summary>Pays the previous paid step once, from the body's observed travel; skill metres go to the owner.</summary>
+    /// <summary>Pays the previous paid step once, from the body's observed travel; skill metres go to the owner.
+    /// Every voluntary exit, release and jump settles first, so completed travel is never free.</summary>
     private void SettlePending(Player player, float height, float delta)
     {
         if (!_ledger.Pending) { return; }
+        bool owned = _view != null && _view.IsValid() && _view.IsOwner();
+        if (!owned) { _ledger.Discard(); return; }
         _ledger.Settle(height, _skill.LearnedLevel(player, delta), out float stamina, out int metres);
-        if (stamina > 0f && _view != null && _view.IsValid() && _view.IsOwner())
-        {
-            float charge = stamina * Game.m_moveStaminaRate;
-            player.GetSEMan()?.ModifyRunStaminaDrain(charge, ref charge, Vector3.up);
-            if (ClimbPolicy.Finite(charge) && charge > 0f) { player.UseStamina(charge); }
-        }
+        // UseStamina applies the world stamina rate itself; the movement rate and status effects apply here.
+        float charge = stamina * StaminaScale(player);
+        if (ClimbPolicy.Finite(charge) && charge > 0f) { player.UseStamina(charge); }
+        if (metres > 0) { _skill.Raise(player, metres); }
+    }
 
-        if (metres > 0 && _view != null && _view.IsValid() && _view.IsOwner()) { _skill.Raise(player, metres); }
+    /// <summary>The native multipliers a climb charge sees before UseStamina's own world rate: the world's
+    /// movement stamina rate and the run-drain status effects (potions, set bonuses), applied once.</summary>
+    private static float StaminaScale(Player player)
+    {
+        float factor = 1f;
+        try { player.GetSEMan()?.ModifyRunStaminaDrain(1f, ref factor, Vector3.up); }
+        catch { factor = 1f; }
+        float scale = Game.m_moveStaminaRate * factor;
+        return ClimbPolicy.Finite(scale) && scale >= 0f ? scale : 1f;
     }
 
     private void Present(bool attached)
@@ -616,21 +669,38 @@ internal sealed class LadderRuntime : IDisposable
 
     private Vector3 Toward() => -Away();
 
+    /// <summary>A bounded set of floors around the run's top: straight over the rails first, then a landing to
+    /// either side (a ladder set in a slot between two floors, as the owner photographed), then behind the
+    /// climber. Each candidate needs room, support and a fully swept rise/cross/settle route.</summary>
     private bool TryExitTop()
     {
         Vector3 inward = Toward();
+        Vector3 side = Vector3.Cross(Vector3.up, inward);
         Vector3 top = LadderSegment.Vector(_run.Top);
-        foreach (float distance in new[] { _clearance!.Radius + 0.45f, _clearance.Radius + 0.85f })
+        Vector3 lane = LanePoint(_run, _laneDepth, _run.Top.Y);
+        float radius = _clearance!.Radius;
+        foreach (float distance in new[] { radius + 0.45f, radius + 0.85f })
         {
-            Vector3 desired = top + inward * distance;
-            if (_clearance.TryTopSurface(desired, out Vector3 floor) && PlanExitTo(floor)) { return true; }
+            if (TryTopLanding(top + inward * distance)) { return true; }
         }
 
-        return false;
+        float sideways = _run.Width * 0.5f + radius + 0.15f;
+        foreach (float sign in new[] { 1f, -1f })
+        {
+            foreach (float distance in new[] { sideways, sideways + 0.4f })
+            {
+                if (TryTopLanding(lane + side * (sign * distance)) || TryTopLanding(top + side * (sign * distance))) { return true; }
+            }
+        }
+
+        return TryTopLanding(lane + Away() * 0.6f);
     }
+
+    private bool TryTopLanding(Vector3 desired) => _clearance!.TryTopSurface(desired, out Vector3 floor) && PlanExitTo(floor);
 
     private bool TrySafeDismount()
     {
+        if (_player != null) { SettlePending(_player, _body!.position.y, Time.fixedDeltaTime); }
         Vector3 feet = _body!.position;
         if (_clearance!.Supported(feet) && _clearance.HasRoom(feet)) { Release(Departure.Controlled); return true; }
         if (feet.y >= _run.Top.Y - 0.5f && TryExitTop()) { return true; }
@@ -645,20 +715,23 @@ internal sealed class LadderRuntime : IDisposable
         return false;
     }
 
-    /// <summary>Rise, cross, settle: each leg swept with the real capsule, two lift heights tried.</summary>
+    /// <summary>Rise, cross, settle: each leg swept with the real capsule, two lift heights tried. Where a lip
+    /// or roof edge overhangs the climb lane, a clearance leg first steps back from the rails (up to half a
+    /// metre) so the head can rise past the edge before crossing onto the floor. The destination needs room
+    /// and a supported footprint, not a single support ray.</summary>
     private bool PlanExitTo(Vector3 floor)
     {
-        if (!_clearance!.HasRoom(floor)) { return false; }
+        if (!_clearance!.HasRoom(floor) || !_clearance.SupportedFootprint(floor)) { return false; }
         Vector3 feet = _body!.position;
+        Vector3 away = Away();
+        foreach (float back in new[] { 0f, 0.25f, 0.5f })
         foreach (float lift in new[] { LadderRules.RouteLift, LadderRules.StepLift })
         {
             float raised = Mathf.Max(feet.y, floor.y) + lift;
-            Vector3[] path =
-            {
-                new Vector3(feet.x, raised, feet.z),
-                new Vector3(floor.x, raised, floor.z),
-                floor,
-            };
+            Vector3 clear = feet + away * back;
+            Vector3[] path = back <= 0f
+                ? new[] { new Vector3(feet.x, raised, feet.z), new Vector3(floor.x, raised, floor.z), floor }
+                : new[] { clear, new Vector3(clear.x, raised, clear.z), new Vector3(floor.x, raised, floor.z), floor };
             if (!_clearance.CanFollow(feet, path)) { continue; }
             _route = path;
             _routeIndex = 0;
@@ -704,7 +777,7 @@ internal sealed class LadderRuntime : IDisposable
     {
         Rigidbody body = _body!;
         LadderClearance clearance = _clearance!;
-        if (_mode == Mode.Exiting && !clearance.Supported(_route[_route.Length - 1]))
+        if (_mode == Mode.Exiting && !clearance.SupportedFootprint(_route[_route.Length - 1]))
         {
             Release(Departure.Controlled); // A removed platform is never replaced by its cached destination.
             return;
@@ -802,7 +875,12 @@ internal sealed class LadderRuntime : IDisposable
         _cooldown = ClimbPolicy.RemountDelay;
         _poseSpeed = 0f;
         _gait = ClimbGait.Hold;
-        if (departure == Departure.External || !owned) { _ledger.Discard(); }
+        if (departure == Departure.External || !owned || player == null || body == null) { _ledger.Discard(); }
+        else
+        {
+            try { SettlePending(player, body.position.y, Time.fixedDeltaTime); }
+            catch { _ledger.Discard(); }
+        }
         try
         {
             if (owned && body != null && (_wrotePhysics || departure == Departure.Jump || departure == Departure.Push))

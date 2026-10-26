@@ -29,9 +29,12 @@ internal sealed class LadderClimbAnimation : IDisposable
     private readonly Dictionary<Character, Climber> _climbers = new Dictionary<Character, Climber>();
     private readonly List<Character> _expired = new List<Character>();
     private readonly List<LadderSegment> _scratch = new List<LadderSegment>();
+    private readonly RaycastHit[] _ground = new RaycastHit[16];
     private Harmony? _harmony;
     private float _observeTimer;
     private bool _failed;
+    private bool _restoring;
+    private int _groundMask;
 
     internal LadderClimbAnimation(Action<string> log) => _log = log;
 
@@ -50,6 +53,7 @@ internal sealed class LadderClimbAnimation : IDisposable
                 return false;
             }
 
+            _groundMask = LayerMask.GetMask("piece", "Default", "static_solid", "Default_small", "terrain", "vehicle");
             _harmony = new Harmony(id);
             _harmony.Patch(target, postfix: new HarmonyMethod(typeof(LadderClimbAnimation), nameof(AfterIK)));
             _current = this;
@@ -68,7 +72,7 @@ internal sealed class LadderClimbAnimation : IDisposable
     internal void SetLocal(Player player, in LadderGeometry run, LadderFace face, float plane, float pitch,
         float handHeight, bool slide, bool attached)
     {
-        if (!Ready || player == null) { return; }
+        if (!Ready || _restoring || player == null) { return; }
         Climber climber = Get(player, true, run, face, plane, pitch, handHeight);
         climber.Slide = slide;
         climber.Target = attached ? 1f : 0f;
@@ -87,7 +91,7 @@ internal sealed class LadderClimbAnimation : IDisposable
         try
         {
             _observeTimer -= delta;
-            if (_observeTimer <= 0f)
+            if (_observeTimer <= 0f && !_restoring)
             {
                 _observeTimer = ObserveInterval;
                 Observe();
@@ -105,16 +109,18 @@ internal sealed class LadderClimbAnimation : IDisposable
             }
 
             foreach (Character character in _expired) { _climbers.Remove(character); }
+            if (_restoring && _climbers.Count == 0) { Ready = false; }
         }
         catch (Exception exception) { Fail(exception); }
     }
 
     internal void Clear() => _climbers.Clear();
 
-    /// <summary>Observers: a remote player standing in a ladder's climbing lane, facing the rails and off the
-    /// floor (or moving along the ladder) is climbing. Replicated position and facing are enough; the climber
-    /// sends nothing new. A lane match is required on two consecutive checks to start and missing on two to
-    /// stop, so a player walking past is not posed.</summary>
+    /// <summary>Observers: a remote player standing in a ladder's climbing lane, facing the rails, with no
+    /// floor directly under the feet, is climbing. Replicated position and facing are enough; the climber
+    /// sends nothing new. Anyone with a floor underfoot (an intermediate landing, the ground at the foot,
+    /// a climber who has just stepped off) is standing, so ambiguity resolves to the native pose. A match is
+    /// required on two consecutive checks to start and missing on two to stop.</summary>
     private void Observe()
     {
         Player local = Player.m_localPlayer;
@@ -125,12 +131,9 @@ internal sealed class LadderClimbAnimation : IDisposable
             _climbers.TryGetValue(player, out Climber? climber);
             if (matched)
             {
-                if (climber == null || climber.Local)
-                {
-                    climber = Get(player, false, run, face, plane, pitch, Grip(player));
-                    climber.Target = 0f;
-                }
-
+                bool fresh = climber == null || climber.Local;
+                climber = Get(player, false, run, face, plane, pitch, Grip(player)); // Refreshes a changed run.
+                if (fresh) { climber.Target = 0f; }
                 climber.Matches++;
                 climber.Misses = 0;
                 climber.Slide = climber.VerticalSpeed < -ClimbPolicy.FastSpeed - 0.3f;
@@ -159,13 +162,23 @@ internal sealed class LadderClimbAnimation : IDisposable
         if (found == null || !LadderSegment.TryRun(found, _scratch, out run)) { return false; }
         plane = (found.BackFaceDepth + found.FrontFaceDepth) * 0.5f;
         pitch = found.RungPitch;
-        if (_climbers.TryGetValue(player, out Climber? climber))
+        return !FloorUnder(feet);
+    }
+
+    /// <summary>A standing surface within a few centimetres under the feet, ladders and characters excluded.</summary>
+    private bool FloorUnder(Vector3 feet)
+    {
+        int found = Physics.RaycastNonAlloc(feet + Vector3.up * 0.15f, Vector3.down, _ground, 0.3f, _groundMask, QueryTriggerInteraction.Ignore);
+        if (found >= _ground.Length) { return true; } // Unknown: keep the native pose.
+        for (int index = 0; index < found; index++)
         {
-            // On the floor at the foot and not moving along the ladder is standing, not climbing.
-            if (feet.y - run.Bottom.Y < 0.25f && Mathf.Abs(climber.VerticalSpeed) < 0.15f && climber.Weight <= 0f) { return false; }
+            Collider collider = _ground[index].collider;
+            if (collider == null || collider.isTrigger || _ground[index].normal.y < 0.65f) { continue; }
+            if (collider.GetComponentInParent<LadderSegment>() != null || collider.GetComponentInParent<Character>() != null) { continue; }
+            return true;
         }
 
-        return true;
+        return false;
     }
 
     private Climber Get(Player player, bool local, in LadderGeometry run, LadderFace face, float plane, float pitch, float handHeight)
@@ -214,8 +227,11 @@ internal sealed class LadderClimbAnimation : IDisposable
         float weight = Mathf.Clamp01(climber.Weight);
         if (weight <= 0f)
         {
+            // Restoration pass: every goal and hint this class owns is written back to zero weight before the
+            // climber is forgotten, whatever vanilla's own pass did or skipped this frame.
+            ZeroOwned(animator);
             climber.ClearedFrames++;
-            return; // Goals are not carried between frames: vanilla's own pass already set this frame's.
+            return;
         }
 
         climber.ClearedFrames = 0;
@@ -273,6 +289,20 @@ internal sealed class LadderClimbAnimation : IDisposable
         animator.SetLookAtWeight(0.6f * weight, 0f, 0.7f, 0.7f, 0.5f);
     }
 
+    private static readonly AvatarIKGoal[] Goals = { AvatarIKGoal.LeftHand, AvatarIKGoal.RightHand, AvatarIKGoal.LeftFoot, AvatarIKGoal.RightFoot };
+    private static readonly AvatarIKHint[] Hints = { AvatarIKHint.LeftElbow, AvatarIKHint.RightElbow, AvatarIKHint.LeftKnee, AvatarIKHint.RightKnee };
+
+    private static void ZeroOwned(Animator animator)
+    {
+        foreach (AvatarIKGoal goal in Goals)
+        {
+            animator.SetIKPositionWeight(goal, 0f);
+            animator.SetIKRotationWeight(goal, 0f);
+        }
+
+        foreach (AvatarIKHint hint in Hints) { animator.SetIKHintPositionWeight(hint, 0f); }
+    }
+
     private static void Goal(Animator animator, AvatarIKGoal goal, Vector3 position, float weight, Quaternion? rotation)
     {
         animator.SetIKPosition(goal, position);
@@ -294,12 +324,21 @@ internal sealed class LadderClimbAnimation : IDisposable
         animator.SetIKHintPositionWeight(hint, weight);
     }
 
+    /// <summary>A presentation fault never touches movement. The first fault keeps the patch for one
+    /// restoration pass (every tracked climber's owned weights written to zero), then stops; a second fault
+    /// stops at once.</summary>
     private void Fail(Exception exception)
     {
-        if (_failed) { return; }
+        if (_failed)
+        {
+            _climbers.Clear();
+            Ready = false;
+            return;
+        }
+
         _failed = true;
-        _climbers.Clear();
-        Ready = false;
+        _restoring = true;
+        foreach (Climber climber in _climbers.Values) { climber.Target = 0f; climber.Weight = 0f; climber.Released = true; }
         try { _log("Custom climbing animation stopped (" + SafeFailure.Brief(exception) + "); the walking fallback is used."); }
         catch { /* Presentation failure never affects movement. */ }
     }

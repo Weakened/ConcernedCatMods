@@ -162,6 +162,24 @@ internal sealed class LadderClearance
 
     internal bool Supported(Vector3 feet) => TrySurface(feet, 0.15f, 0.2f, out _);
 
+    /// <summary>A landing's whole footprint: the centre plus at least three of four points around it, a little
+    /// over half a capsule radius out, find standing surface at the same height. A post or a sliver under the
+    /// centre alone is not a landing.</summary>
+    internal bool SupportedFootprint(Vector3 feet)
+    {
+        if (!TrySurface(feet, 0.15f, 0.2f, out Vector3 centre)) { return false; }
+        float offset = Radius * 0.6f;
+        int found = 0;
+        foreach (Vector3 direction in Footprint)
+        {
+            if (TrySurface(feet + direction * offset, 0.15f, 0.2f, out Vector3 floor) && Mathf.Abs(floor.y - centre.y) <= 0.15f) { found++; }
+        }
+
+        return found >= 3;
+    }
+
+    private static readonly Vector3[] Footprint = { Vector3.forward, Vector3.back, Vector3.left, Vector3.right };
+
     /// <summary>A floor near the run's top: up to a step above it (a ladder ending below a thick floor) or
     /// half a metre below it (a ladder standing proud of the floor).</summary>
     internal bool TryTopSurface(Vector3 desired, out Vector3 floor) => TrySurface(desired, 0.75f, 0.5f, out floor);
