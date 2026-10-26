@@ -9,25 +9,23 @@ using UnityEngine;
 
 namespace TheConcernedCat.ConcernedLadders.Pieces;
 
-/// <summary>Scoped placement adapter (owner correction 2026-10-26). A ghost of one of this product's ladders is moved
-/// onto the connected column it belongs to, so a stacked section is always one aligned column whatever rotation the
-/// hammer last used. The selected snap mode is classified first:
+/// <summary>Scoped placement adapter (owner decisions 2026-10-26). Cycle Snap offers Auto, Bottom and Top. A ghost of
+/// one of this product's ladders is placed, in order:
 /// <list type="bullet">
-/// <item>a wall-corner mode keeps corner semantics: when the game has put the selected corner on another piece's snap
-/// point, the ladder takes that piece's orientation, faces the player and is centred on it; aimed at or snapped onto
-/// one of this product's ladders (which has no wall corner) it is refused; otherwise the game's own ghost stands;</item>
-/// <item>Auto, Bottom and Top: when the game has snapped the ghost's bottom-centre onto exactly one placed ladder's
-/// top-centre (or its top-centre onto a bottom-centre), the ghost takes that ladder's rotation and lies exactly on it;
-/// otherwise, when the game's own placement ray hits a placed ladder's rails (the game found no snap point within its
-/// 0.5 m radius and would leave the ghost overlapping or beside the ladder), the ghost extends that column at the end
-/// the mode names (Bottom stacks on top, Top hangs below, Auto takes the nearer end and never buries a section under a
-/// column that stands on the ground).</item>
+/// <item>on a ladder the game has snapped it to end to end (bottom-centre on a placed ladder's top-centre, or top on
+/// bottom): it takes that ladder's rotation and lies exactly on it, one straight column;</item>
+/// <item>aimed at a placed ladder's rails: it extends that column at the end the mode names (Bottom stacks on top, Top
+/// hangs below, Auto takes the nearer end and never buries a section under a column that stands on the ground);</item>
+/// <item>aimed at a floor or a wall: in the middle of it, the way walls snap to floors (<see cref="LadderEdgeSnap"/>):
+/// centred on the floor edge nearest the aim, hanging below it (Auto, Top) or standing on it (Bottom); or centred on the
+/// wall face toward the player, standing on its bottom edge (Auto, Bottom) or hanging from its top edge (Top). Flush
+/// against the surface, climbing side outward, whatever rotation the hammer was left at.</item>
 /// </list>
-/// An extension whose joint lies beyond the game's own placement reach is refused: the ghost is marked invalid rather
-/// than moved out of reach. The move happens inside the game's placement update, after its snapping and its earlier
-/// surface and duplicate-overlap checks, and before its no-build, ward, player-overlap, biome and clipping checks, which
-/// all read the moved ghost. Held "toggle snapping" (free placement) is respected. Other pieces, costs and rules are the
-/// game's. Any mismatch in the installed game's placement API leaves native snapping untouched.</summary>
+/// Anything else stays the game's own placement. A placement whose joint lies beyond the game's own placement reach
+/// is refused: the ghost is marked invalid rather than moved out of reach. The move happens inside the game's placement
+/// update, after its snapping and its earlier surface and duplicate-overlap checks, and before its no-build, ward,
+/// player-overlap, biome and clipping checks, which all read the moved ghost. Held "toggle snapping" (free placement) is
+/// respected. Any mismatch in the installed game's placement API leaves native snapping untouched.</summary>
 internal sealed class LadderSnapAlignment : IDisposable
 {
     /// <summary>The game's placement ray layers (Player.m_placeRayMask, 1.0.20).</summary>
@@ -37,13 +35,14 @@ internal sealed class LadderSnapAlignment : IDisposable
     private static AccessTools.FieldRef<Player, int>? _manual;
     private static AccessTools.FieldRef<Player, List<Transform>>? _snapPoints;
     private static AccessTools.FieldRef<Player, bool>? _altPlace;
-    private static AccessTools.FieldRef<Player, List<Transform>>? _targets;
     private static AccessTools.FieldRef<Player, Player.PlacementStatus>? _status;
     private static Action<Player, bool>? _paintGhost;
     private static Player? _updating;
     private static Player? _refused;
     private static int _placeMask;
     private static readonly List<LadderSegment> Run = new List<LadderSegment>();
+    private static readonly List<Transform> TargetPoints = new List<Transform>();
+    private static readonly List<ClimbPoint> Corners = new List<ClimbPoint>();
     private readonly Action<string> _log;
     private Harmony? _harmony;
 
@@ -57,11 +56,11 @@ internal sealed class LadderSnapAlignment : IDisposable
             var noBuild = AccessTools.Method(typeof(Location), "IsInsideNoBuildLocation", new[] { typeof(Vector3) });
             if (update == null || noBuild == null || noBuild.ReturnType != typeof(bool) ||
                 !Is<GameObject>("m_placementGhost") || !Is<int>("m_manualSnapPoint") ||
-                !Is<List<Transform>>("m_tempSnapPoints1") || !Is<List<Transform>>("m_tempSnapPoints2") || !Is<bool>("m_altPlace") ||
+                !Is<List<Transform>>("m_tempSnapPoints1") || !Is<bool>("m_altPlace") ||
                 !Is<Player.PlacementStatus>("m_placementStatus") ||
                 AccessTools.Method(typeof(Player), "SetPlacementGhostValid", new[] { typeof(bool) }) == null)
             {
-                _log("Ladder stack alignment unavailable: the installed game's placement API did not match. Native snapping is unchanged.");
+                _log("Ladder snapping unavailable: the installed game's placement API did not match. Native snapping is unchanged.");
                 return false;
             }
 
@@ -69,7 +68,6 @@ internal sealed class LadderSnapAlignment : IDisposable
             _manual = AccessTools.FieldRefAccess<Player, int>("m_manualSnapPoint");
             _snapPoints = AccessTools.FieldRefAccess<Player, List<Transform>>("m_tempSnapPoints1");
             _altPlace = AccessTools.FieldRefAccess<Player, bool>("m_altPlace");
-            _targets = AccessTools.FieldRefAccess<Player, List<Transform>>("m_tempSnapPoints2");
             _status = AccessTools.FieldRefAccess<Player, Player.PlacementStatus>("m_placementStatus");
             _paintGhost = AccessTools.MethodDelegate<Action<Player, bool>>(
                 AccessTools.Method(typeof(Player), "SetPlacementGhostValid", new[] { typeof(bool) }));
@@ -82,7 +80,7 @@ internal sealed class LadderSnapAlignment : IDisposable
         }
         catch (Exception exception)
         {
-            _log("Ladder stack alignment unavailable (" + SafeFailure.Brief(exception) + "). Native snapping is unchanged.");
+            _log("Ladder snapping unavailable (" + SafeFailure.Brief(exception) + "). Native snapping is unchanged.");
             Dispose();
             return false;
         }
@@ -100,8 +98,8 @@ internal sealed class LadderSnapAlignment : IDisposable
         _refused = null;
     }
 
-    /// <summary>A refused extension (its joint beyond the game's placement reach) leaves the game's ghost where it
-    /// was and marks it invalid, so neither the overlap the game would allow nor a far placement can be built.</summary>
+    /// <summary>A refused placement (its joint beyond the game's placement reach) leaves the game's ghost where it
+    /// was and marks it invalid, so neither the game's own overlap nor a far placement can be built.</summary>
     private static Exception? AfterGhostUpdate(Player __instance, Exception? __exception)
     {
         _updating = null;
@@ -149,23 +147,14 @@ internal sealed class LadderSnapAlignment : IDisposable
         if (ghost == null || !ghost.activeSelf) { return false; }
         LadderSegment? section = ghost.GetComponent<LadderSegment>();
         Piece? piece = ghost.GetComponent<Piece>();
-        if (section == null || piece == null || !TrySelectedMode(player, section, out Transform? corner, out LadderSnap.Extend extend)) { return false; }
+        if (section == null || piece == null || !TrySelectedMode(player, section, out LadderSnapMode mode)) { return false; }
         Transform g = ghost.transform;
+        float reach = player.m_maxPlaceDistance + piece.m_extraPlacementDistance;
+        ClimbPoint eye = LadderSegment.Point(player.GetEyePoint());
 
-        // A wall-corner mode keeps its own semantics and never becomes a centre stack or a column extension. A ladder
-        // has no wall corner: in game 2026-10-26 the game put the selected corner on a placed ladder's centre anchor
-        // and showed the displaced ghost the owner rejected. Aimed at, or snapped onto, a ladder, a corner mode is
-        // refused (the ghost is marked invalid); Auto, Bottom and Top extend ladders.
-        if (corner != null)
-        {
-            if (TryWallCorner(player, g, corner, out aligned)) { return true; }
-            if (CornerOnLadder(player, corner) || AimedLadder(out _) != null) { _refused = player; }
-            return false;
-        }
-
+        // 1. Snapped end to end onto exactly one placed ladder: one straight column.
         Vector3 bottom = g.TransformPoint(section.LocalBottom);
         Vector3 top = g.TransformPoint(section.LocalTop);
-        float reach = player.m_maxPlaceDistance + piece.m_extraPlacementDistance;
         LadderSegment? partner = LadderSegment.FindStackPartner(bottom, top, LadderSnap.Coincident, out _);
         if (partner != null)
         {
@@ -178,16 +167,11 @@ internal sealed class LadderSnapAlignment : IDisposable
                 // In game 2026-10-26: Auto paired the ghost's top with the foot of a ladder standing on the ground and
                 // buried the new section. Auto then stacks on the column's top instead, within the game's reach; an
                 // explicit Top mode is honoured.
-                if (!stacked && extend == LadderSnap.Extend.Nearest && StandsOnSomething(partnerBottom) &&
+                if (!stacked && mode == LadderSnapMode.Auto && StandsOnSomething(partnerBottom) &&
                     LadderSegment.TryRun(partner, Run, out var grounded) &&
                     LadderSnap.TryExtendColumn(grounded.Top.Y, grounded.Bottom, grounded.Top, LadderSnap.Extend.Above, true, out var onTop, out _))
                 {
-                    if (!LadderSnap.WithinPlacementReach(LadderSegment.Point(player.GetEyePoint()), grounded.Top, reach))
-                    {
-                        _refused = player;
-                        return false;
-                    }
-
+                    if (!LadderSnap.WithinPlacementReach(eye, grounded.Top, reach)) { _refused = player; return false; }
                     origin = onTop;
                 }
 
@@ -195,134 +179,82 @@ internal sealed class LadderSnapAlignment : IDisposable
             }
         }
 
-        // Owner session 2026-10-26: aimed at the rails of a placed ladder, the game finds no snap point within its
-        // 0.5 m radius and leaves the ghost overlapping or beside the ladder. The game's own placement ray (same
-        // origin, direction, length and layers) says which piece is aimed at.
-        // In game 2026-10-26 (Auto, aimed just above a ladder against a wall): the game paired one of the ghost's
-        // wall-corner points with the placed ladder's top-centre anchor and left a valid ghost displaced beside the
-        // column, the owner's original complaint. A corner point on a ladder's snap point is never a meaningful snap
-        // outside a corner mode: the ghost extends that ladder's column instead.
-        float aimHeight;
-        LadderSegment? column = CornerSnappedToLadder(player, section, out aimHeight);
-        if (column == null)
+        if (!AimedPiece(out RaycastHit hit, out Piece? aimed) || aimed == null) { return false; }
+
+        // 2. Aimed at a placed ladder's rails: extend that column.
+        LadderSegment? column = aimed.GetComponent<LadderSegment>();
+        if (column != null)
         {
-            column = AimedLadder(out RaycastHit hit);
-            aimHeight = hit.point.y;
-        }
-
-        if (column == null || !LadderSegment.TryRun(column, Run, out var run)) { return false; }
-        if (!LadderSnap.TryExtendColumn(aimHeight, run.Bottom, run.Top, extend, StandsOnSomething(LadderSegment.Vector(run.Bottom)),
-                out var end, out bool extendsAbove))
-        {
-            return false;
-        }
-
-        if (!LadderSnap.WithinPlacementReach(LadderSegment.Point(player.GetEyePoint()), extendsAbove ? run.Top : run.Bottom, reach))
-        {
-            _refused = player;
-            return false;
-        }
-
-        return Place(g, column.transform.rotation, LadderSegment.Vector(end), out aligned);
-    }
-
-    /// <summary>A corner mode whose snap point the game has put on another piece's snap point: the ladder takes that
-    /// piece's orientation, faces the viewer and is centred on it (owner correction 2026-10-26). Every coincident target
-    /// is considered, not just the first: targets on this product's ladders and targets that cannot centre the ladder
-    /// are skipped, and two suitable targets that disagree are ambiguous. Anything else stays native.</summary>
-    private static bool TryWallCorner(Player player, Transform ghost, Transform corner, out Vector3 aligned)
-    {
-        aligned = default;
-        if (_targets == null || GameCamera.instance == null) { return false; }
-        List<Transform> targets = _targets(player);
-        if (targets == null) { return false; }
-        Vector3 at = corner.position;
-        ClimbPoint viewer = LadderSegment.Point(GameCamera.instance.transform.position);
-        bool found = false;
-        float chosenYaw = 0f;
-        ClimbPoint chosenOrigin = default;
-        foreach (Transform target in targets)
-        {
-            if (target == null || (target.position - at).sqrMagnitude > LadderSnap.Coincident * LadderSnap.Coincident) { continue; }
-            Piece piece = target.GetComponentInParent<Piece>();
-            if (piece == null || piece.GetComponent<LadderSegment>() != null) { continue; }
-            Transform t = piece.transform;
-            if (!LadderSnap.TryWallCornerYaw(t.eulerAngles.y, LadderSegment.Point(corner.localPosition), LadderSegment.Point(target.position),
-                    LadderSegment.Point(t.position), viewer, out float yaw, out var origin))
-            {
-                continue;
-            }
-
-            if (found && (Math.Abs(Mathf.DeltaAngle(yaw, chosenYaw)) > 0.5f || origin.HorizontalDistanceTo(chosenOrigin) > LadderSnap.Coincident))
+            if (!column.IsLive || !LadderSegment.TryRun(column, Run, out var run)) { return false; }
+            LadderSnap.Extend extend = mode == LadderSnapMode.Bottom ? LadderSnap.Extend.Above :
+                mode == LadderSnapMode.Top ? LadderSnap.Extend.Below : LadderSnap.Extend.Nearest;
+            if (!LadderSnap.TryExtendColumn(hit.point.y, run.Bottom, run.Top, extend, StandsOnSomething(LadderSegment.Vector(run.Bottom)),
+                    out var end, out bool extendsAbove))
             {
                 return false;
             }
 
-            found = true;
-            chosenYaw = yaw;
-            chosenOrigin = origin;
+            if (!LadderSnap.WithinPlacementReach(eye, extendsAbove ? run.Top : run.Bottom, reach)) { _refused = player; return false; }
+            return Place(g, column.transform.rotation, LadderSegment.Vector(end), out aligned);
         }
 
-        return found && Place(ghost, Quaternion.Euler(0f, chosenYaw, 0f), LadderSegment.Vector(chosenOrigin), out aligned);
+        // 3. Aimed at a floor or a wall: in the middle of it, the way walls snap to floors.
+        Transform t = aimed.transform;
+        TargetPoints.Clear();
+        aimed.GetSnapPoints(TargetPoints);
+        Corners.Clear();
+        foreach (Transform point in TargetPoints)
+        {
+            if (point != null) { Corners.Add(LadderSegment.Point(t.InverseTransformPoint(point.position))); }
+        }
+
+        Vector3 viewer = GameCamera.instance != null ? GameCamera.instance.transform.position : player.GetEyePoint();
+        if (!LadderEdgeSnap.TryPlace(Corners, LadderSegment.Point(t.InverseTransformPoint(hit.point)), LadderSegment.Point(t.InverseTransformPoint(viewer)),
+                mode, out ClimbPoint localOrigin, out float facingX, out float facingZ, out ClimbPoint localJoint))
+        {
+            return false;
+        }
+
+        Vector3 joint = t.TransformPoint(LadderSegment.Vector(localJoint));
+        Vector3 facingWorld = t.TransformDirection(new Vector3(facingX, 0f, facingZ));
+        if (mode == LadderSnapMode.Auto && localOrigin.Y < localJoint.Y - 1f &&
+            Physics.Raycast(joint + facingWorld * 0.15f + Vector3.up * 0.05f, Vector3.down, LadderEdgeSnap.SectionHeight - 0.1f, _placeMask, QueryTriggerInteraction.Ignore))
+        {
+            // Auto would hang the ladder below a floor edge with no room under it (a floor on the ground): it stands
+            // on the edge instead, like Bottom.
+            if (!LadderEdgeSnap.TryPlace(Corners, LadderSegment.Point(t.InverseTransformPoint(hit.point)), LadderSegment.Point(t.InverseTransformPoint(viewer)),
+                    LadderSnapMode.Bottom, out localOrigin, out facingX, out facingZ, out localJoint))
+            {
+                return false;
+            }
+
+            joint = t.TransformPoint(LadderSegment.Vector(localJoint));
+        }
+
+        if (!LadderSnap.WithinPlacementReach(eye, LadderSegment.Point(joint), reach)) { _refused = player; return false; }
+        Vector3 facing = t.TransformDirection(new Vector3(facingX, 0f, facingZ));
+        facing.y = 0f;
+        if (facing.sqrMagnitude < 0.0001f) { return false; }
+        return Place(g, Quaternion.LookRotation(facing.normalized, Vector3.up), t.TransformPoint(LadderSegment.Vector(localOrigin)), out aligned);
     }
 
-    /// <summary>The placed ladder the game's own placement ray (same origin, direction, length and layers) hits first.</summary>
-    private static LadderSegment? AimedLadder(out RaycastHit hit)
+    /// <summary>The piece the game's own placement ray (same origin, direction, length and layers) hits first.</summary>
+    private static bool AimedPiece(out RaycastHit hit, out Piece? piece)
     {
         hit = default;
-        if (GameCamera.instance == null) { return null; }
+        piece = null;
+        if (GameCamera.instance == null) { return false; }
         Transform camera = GameCamera.instance.transform;
         if (!Physics.Raycast(camera.position, camera.forward, out hit, 50f, _placeMask) || hit.collider == null ||
             hit.collider.attachedRigidbody != null)
         {
-            return null;
+            return false;
         }
 
-        LadderSegment? column = hit.collider.GetComponentInParent<LadderSegment>();
-        return column != null && column.IsLive ? column : null;
-    }
-
-    /// <summary>The placed ladder whose snap point the game has paired with one of the ghost's wall-corner points
-    /// (outside a corner mode), and that snap point's height.</summary>
-    private static LadderSegment? CornerSnappedToLadder(Player player, LadderSegment section, out float height)
-    {
-        height = 0f;
-        if (_snapPoints == null || _targets == null) { return null; }
-        List<Transform> points = _snapPoints(player);
-        List<Transform> targets = _targets(player);
-        if (points == null || targets == null) { return null; }
-        foreach (Transform point in points)
-        {
-            if (point == null) { continue; }
-            Vector3 local = point.localPosition;
-            if ((local - section.LocalBottom).sqrMagnitude < 1e-4f || (local - section.LocalTop).sqrMagnitude < 1e-4f) { continue; }
-            Vector3 at = point.position;
-            foreach (Transform target in targets)
-            {
-                if (target == null || (target.position - at).sqrMagnitude > LadderSnap.Coincident * LadderSnap.Coincident) { continue; }
-                LadderSegment? ladder = target.GetComponentInParent<LadderSegment>();
-                if (ladder != null && ladder.IsLive) { height = target.position.y; return ladder; }
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>The game has put the selected corner on a snap point of one of this product's ladders.</summary>
-    private static bool CornerOnLadder(Player player, Transform corner)
-    {
-        if (_targets == null) { return false; }
-        List<Transform> targets = _targets(player);
-        if (targets == null) { return false; }
-        Vector3 at = corner.position;
-        foreach (Transform target in targets)
-        {
-            if (target == null || (target.position - at).sqrMagnitude > LadderSnap.Coincident * LadderSnap.Coincident) { continue; }
-            LadderSegment? ladder = target.GetComponentInParent<LadderSegment>();
-            if (ladder != null && ladder.IsLive) { return true; }
-        }
-
-        return false;
+        piece = hit.collider.GetComponentInParent<Piece>();
+        if (piece == null) { return false; }
+        LadderSegment? ladder = piece.GetComponent<LadderSegment>();
+        return ladder == null || ladder.IsLive; // The ghost itself never counts.
     }
 
     private static readonly RaycastHit[] Under = new RaycastHit[16];
@@ -358,23 +290,20 @@ internal sealed class LadderSnapAlignment : IDisposable
         return true;
     }
 
-    /// <summary>The selected snap mode, from the selected snap point's authored position: Auto (-1) takes the nearer
-    /// end of an aimed-at column, bottom-centre stacks above, top-centre hangs below, and any other point is a wall
-    /// corner (<paramref name="corner"/>). False when the game's selection could not be read.</summary>
-    private static bool TrySelectedMode(Player player, LadderSegment section, out Transform? corner, out LadderSnap.Extend extend)
+    /// <summary>The selected snap mode, from the selected snap point's authored position: Auto (-1), bottom-centre or
+    /// top-centre. False when the game's selection could not be read.</summary>
+    private static bool TrySelectedMode(Player player, LadderSegment section, out LadderSnapMode mode)
     {
-        corner = null;
-        extend = LadderSnap.Extend.Nearest;
+        mode = LadderSnapMode.Auto;
         if (_manual == null || _snapPoints == null) { return false; }
         int index = _manual(player);
         if (index == -1) { return true; }
         List<Transform> points = _snapPoints(player);
         if (index < 0 || points == null || index >= points.Count || points[index] == null) { return false; }
         Vector3 local = points[index].localPosition;
-        if ((local - section.LocalBottom).sqrMagnitude < 1e-4f) { extend = LadderSnap.Extend.Above; }
-        else if ((local - section.LocalTop).sqrMagnitude < 1e-4f) { extend = LadderSnap.Extend.Below; }
-        else { corner = points[index]; }
-        return true;
+        if ((local - section.LocalBottom).sqrMagnitude < 1e-4f) { mode = LadderSnapMode.Bottom; return true; }
+        if ((local - section.LocalTop).sqrMagnitude < 1e-4f) { mode = LadderSnapMode.Top; return true; }
+        return false;
     }
 
     public void Dispose()
@@ -385,7 +314,6 @@ internal sealed class LadderSnapAlignment : IDisposable
         _manual = null;
         _snapPoints = null;
         _altPlace = null;
-        _targets = null;
         _status = null;
         _paintGhost = null;
         _updating = null;

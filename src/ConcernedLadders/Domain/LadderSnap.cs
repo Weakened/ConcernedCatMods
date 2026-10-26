@@ -63,54 +63,9 @@ internal static class LadderSnap
         return true;
     }
 
-    /// <summary>The yaw for a ladder whose selected wall-corner snap point the game has put on another piece's snap
-    /// point (owner correction 2026-10-26: the ghost otherwise keeps whatever rotation the hammer last used and stands
-    /// skewed off the wall). Candidates are the target piece's yaw in right-angle steps; the chosen one faces the
-    /// ladder's climbing side towards <paramref name="viewer"/> and centres the ladder on the target piece (the corner
-    /// modes' promise), within <see cref="CentredOnWall"/> horizontally. False leaves the game's ghost unchanged.
-    /// <paramref name="corner"/> is the selected snap point in the ladder's local space (X sideways, Z outward).</summary>
-    internal static bool TryWallCornerYaw(float targetYawDegrees, ClimbPoint corner, ClimbPoint targetPoint, ClimbPoint pieceCentre,
-        ClimbPoint viewer, out float yawDegrees, out ClimbPoint origin)
-    {
-        yawDegrees = 0f;
-        origin = default;
-        if (!corner.IsFinite || !targetPoint.IsFinite || !pieceCentre.IsFinite || !viewer.IsFinite ||
-            float.IsNaN(targetYawDegrees) || float.IsInfinity(targetYawDegrees))
-        {
-            return false;
-        }
-
-        float best = CentredOnWall;
-        bool found = false;
-        for (int step = 0; step < 4; step++)
-        {
-            float yaw = targetYawDegrees + step * 90f;
-            double radians = yaw * Math.PI / 180.0;
-            float sin = (float)Math.Sin(radians), cos = (float)Math.Cos(radians);
-            // Unity's yaw: local (x, z) -> world (x cos + z sin, -x sin + z cos); local forward is the climbing side.
-            float cx = targetPoint.X - (corner.X * cos + corner.Z * sin);
-            float cz = targetPoint.Z - (-corner.X * sin + corner.Z * cos);
-            float toViewerX = viewer.X - cx, toViewerZ = viewer.Z - cz;
-            if (sin * toViewerX + cos * toViewerZ <= 0f) { continue; }
-            float dx = cx - pieceCentre.X, dz = cz - pieceCentre.Z;
-            float off = (float)Math.Sqrt(dx * dx + dz * dz);
-            if (off >= best) { continue; }
-            best = off;
-            found = true;
-            yawDegrees = ((yaw % 360f) + 360f) % 360f;
-            origin = new ClimbPoint(cx, targetPoint.Y - corner.Y, cz);
-        }
-
-        return found;
-    }
-
-    /// <summary>How far, horizontally, a corner-snapped ladder's centre may lie from the target piece's centre and
-    /// still count as centred on it (the wall-corner setback is 0.08 m).</summary>
-    internal const float CentredOnWall = 0.3f;
-
     /// <summary>The game's placement reach (Player.PieceRayTest: eye to aimed point under the build tool's place
-    /// distance plus the piece's extra distance), applied to the joint a column extension attaches at, so aiming at
-    /// reachable lower rails never builds at an unreachable far end of a tall column.</summary>
+    /// distance plus the piece's extra distance), applied to the joint a snapped ladder attaches at, so aiming at
+    /// something reachable never builds at an unreachable far end.</summary>
     internal static bool WithinPlacementReach(ClimbPoint eye, ClimbPoint joint, float reach)
     {
         if (!eye.IsFinite || !joint.IsFinite || float.IsNaN(reach) || float.IsInfinity(reach) || reach <= 0f) { return false; }

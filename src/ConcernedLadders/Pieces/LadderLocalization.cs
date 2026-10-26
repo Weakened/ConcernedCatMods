@@ -20,8 +20,6 @@ internal static class LadderLocalization
             ["cl_ladder_drop"] = "Drop",
             ["cl_ladder_blocked"] = "The landing is blocked. Descend or jump to let go.",
             ["cl_hover_reach"] = "Move closer to climb",
-            ["cl_snap_wall_left"] = "Left wall corner (centres the ladder on a 2 m wall)",
-            ["cl_snap_wall_right"] = "Right wall corner (centres the ladder on a 2 m wall)",
             ["cl_skill_climbing"] = "Climbing",
             ["cl_skill_climbing_description"] = "Climbing ladders. Practice lowers the stamina cost of fast climbing and sliding; at level 20 you can slide down with Run.",
             ["cl_msg_reach"] = "Move closer to the ladder to climb.",

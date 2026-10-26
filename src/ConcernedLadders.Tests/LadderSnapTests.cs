@@ -74,32 +74,6 @@ public sealed class LadderSnapTests
         Assert.False(LadderSnap.TryExtendColumn(aim, P(220f, 34f, -276.47f), P(220f, top, -276.47f), LadderSnap.Extend.Nearest, false, out _, out _));
 
     [Theory]
-    [InlineData(0f, -1f, false)]   // Left corner, viewer in front of the wall.
-    [InlineData(0f, 1f, false)]    // Right corner.
-    [InlineData(0f, -1f, true)]    // Viewer behind the wall: the ladder turns to face him.
-    [InlineData(90f, 1f, false)]   // Wall built at 90 degrees: the ladder follows the wall, not the hammer.
-    [InlineData(247.5f, -1f, true)]
-    public void AWallCornerSnapCentresTheLadderOnTheWallFacingTheViewer(float wallYaw, float cornerSide, bool viewerBehind)
-    {
-        // A 2 m wall centred at (10, 0, 20) with its corner snap points on its local X axis.
-        double r = wallYaw * Math.PI / 180.0;
-        float sin = (float)Math.Sin(r), cos = (float)Math.Cos(r);
-        float targetSide = viewerBehind ? -cornerSide : cornerSide;
-        float facing = viewerBehind ? -4f : 4f;
-        var target = P(10f + targetSide * cos, 0f, 20f - targetSide * sin);
-        var viewer = P(10f + facing * sin, 1f, 20f + facing * cos);
-        Assert.True(LadderSnap.TryWallCornerYaw(wallYaw, P(cornerSide, 0f, -0.08f), target, P(10f, 0f, 20f), viewer, out float yaw, out ClimbPoint origin));
-        Assert.Equal(((wallYaw + (viewerBehind ? 180f : 0f)) % 360f + 360f) % 360f, yaw, 3);
-        Assert.True(origin.HorizontalDistanceTo(P(10f, 0f, 20f)) < 0.1f);
-        Assert.Equal(0f, origin.Y, 4);
-    }
-
-    [Fact]
-    public void ACornerThatCannotCentreTheLadderOnTheWallStaysNative() =>
-        // The target piece's centre is 3 m from its snap point: nothing to centre on.
-        Assert.False(LadderSnap.TryWallCornerYaw(0f, P(-1f, 0f, -0.08f), P(11f, 0f, 20f), P(14f, 0f, 20f), P(10f, 1f, 24f), out _, out _));
-
-    [Theory]
     [InlineData(38f, true)]   // Column top 2.3 m above the eye: reachable.
     [InlineData(43.5f, false)] // Aimed at the lower rails of a tall column whose top is 7.8 m up: refused.
     [InlineData(float.NaN, false)]
