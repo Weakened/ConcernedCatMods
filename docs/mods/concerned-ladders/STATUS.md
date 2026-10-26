@@ -1,5 +1,43 @@
 # Concerned Ladders — current readiness
 
+**NOT_READY — 0.2.6 internal owner candidate awaiting owner review.** Updated 2026-10-26.
+
+| Item | 0.2.6 |
+|---|---|
+| Source | `4fe029cefe705de8fef23e1abc64fbb177fa1519` (`feat/cl-001-vertical-ladders`) |
+| Verify | `scripts/verify.ps1` PASSED: 16 assemblies, 5353 tests, validator exit 0 (`artifacts/ladders-0.2.6/verify-4fe029c.log`) |
+| ZIP | `TheConcernedCat-ConcernedLadders-0.2.6.zip`, SHA256 `4a1de02524abcb89bcd3bc7267ed5b89bae2217a3229a09e5d4afc6fb3f0b4fc` (artifacts and Downloads, identical) |
+| DLL | `d04f38cc3cf658fb4f55a02f3f1954bd1b6a02149f5181730b763e745bcdd0eb` (verified = packaged = installed) |
+| Access check | 74 game member references, 0 inaccessible |
+| Install | Manager "Import local mod", TCC-Ladders-Dev; cold start logs `0.2.6+4fe029c…` and gait source `LadderGait.blend 4393031837c3` |
+| A11 | `IDENTITY_MATCH_ONLY` (`artifacts/ladders-0.2.6/A11-identity-receipt-0.2.6.json`) |
+
+**What changed for the owner's 2026-10-26 corrections**
+
+- **Snapping redone** (owner decision): Cycle Snap offers Auto, Bottom and Top. Aimed at a floor, the ladder centres on
+  the nearest floor edge (hangs below it for Auto/Top, stands on it for Bottom); aimed at a wall, it centres on the face
+  toward the player (stands on the bottom edge for Auto/Bottom, hangs from the top edge for Top); aimed at a ladder, it
+  extends the column. Wall-corner modes removed. Game reach and placement checks still apply.
+- **Climb speed** (owner decision): 0.9 m/s, 1.2 m/s with Run (were 1.8/2.43); slide, stamina and skill unchanged.
+- **Animation**: independent per-limb timing from the mannequin loop, knees into the ladder, torso dwell during foot
+  recovery, staggered mount and hands-first catch, rail grip and game walk for the top exit, right-arm-only hammer.
+  Authored in `AnimationSources/LadderGait.blend` with an export/compile pipeline; Blender-to-game round trip proven
+  (`artifacts/ladders-0.2.6-dev/BLENDER_ROUND_TRIP_RECEIPT.md`). Guide: `src/ConcernedLadders/AnimationSources/README.md`.
+
+**Recordings (normal speed, this exact install)** in `artifacts/ladders-0.2.6/recordings/`: R1a floor snap, R1b wall
+snap, R1c column extension, R2 front/side climb, R3a hold/stop/reverse, R3b rear face, R4a fast + Jump, R4b midair
+catch + Drop, R4c top exit, R5 building a floor while attached (right arm only). Each has a per-frame trace CSV.
+
+**Known remaining issues (measured, not hidden)**
+
+- Mount: the right hand is out of reach for the first ~0.1 s while the body walks in (3–7 skipped passes), then fits.
+- Top finish: hands are out of reach for the first part of the finish (skipped, never stretched) before handing to the
+  game's walk.
+- Fingers keep the native pose; other players see the native pose; controller and multiplayer rows remain BLOCKED.
+- Owner visual acceptance of the motion is outstanding.
+
+## History before 0.2.6
+
 **NOT_READY.** The installed candidate **0.2.1** implements owner notes N01–N06, Run/stamina, the native Climbing
 skill and the level-20 slide. Most accessible solo rows below were observed in game. Three things keep it
 NOT_READY:
