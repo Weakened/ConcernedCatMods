@@ -15,28 +15,40 @@ internal sealed class NativeIKLease
     private Quaternion _rotationBefore, _rotationLast;
     internal bool Pending { get; private set; }
 
+    /// <summary>Codex review A2: each owned field is restored on its own when it still holds our last write. A field
+    /// something else changed since is left as it is, but that never stops the other owned fields from restoring.</summary>
     internal void RestoreInIK(Animator animator)
     {
         for (int i = 0; i < 4; i++)
         {
             Goal goal = _goals[i];
-            if (goal.Owned && Same(animator.GetIKPosition(Goals[i]), goal.LastPosition) &&
-                Same(animator.GetIKRotation(Goals[i]), goal.LastRotation) &&
-                Mathf.Abs(animator.GetIKPositionWeight(Goals[i]) - goal.LastWeight) < .00001f &&
-                Mathf.Abs(animator.GetIKRotationWeight(Goals[i]) - goal.LastRotationWeight) < .00001f)
+            if (goal.Owned)
             {
-                animator.SetIKPosition(Goals[i], goal.BeforePosition); animator.SetIKRotation(Goals[i], goal.BeforeRotation);
-                animator.SetIKPositionWeight(Goals[i], goal.BeforeWeight); animator.SetIKRotationWeight(Goals[i], goal.BeforeRotationWeight);
+                AvatarIKGoal id = Goals[i];
+                if (Same(animator.GetIKPosition(id), goal.LastPosition)) { animator.SetIKPosition(id, goal.BeforePosition); }
+                if (Same(animator.GetIKRotation(id), goal.LastRotation)) { animator.SetIKRotation(id, goal.BeforeRotation); }
+                if (Mathf.Abs(animator.GetIKPositionWeight(id) - goal.LastWeight) < .00001f) { animator.SetIKPositionWeight(id, goal.BeforeWeight); }
+                if (Mathf.Abs(animator.GetIKRotationWeight(id) - goal.LastRotationWeight) < .00001f) { animator.SetIKRotationWeight(id, goal.BeforeRotationWeight); }
             }
+
             _goals[i] = default;
             Hint hint = _hints[i];
-            if (hint.Owned && Same(animator.GetIKHintPosition(Hints[i]), hint.LastPosition) &&
-                Mathf.Abs(animator.GetIKHintPositionWeight(Hints[i]) - hint.LastWeight) < .00001f)
-            { animator.SetIKHintPosition(Hints[i], hint.BeforePosition); animator.SetIKHintPositionWeight(Hints[i], hint.BeforeWeight); }
+            if (hint.Owned)
+            {
+                AvatarIKHint id = Hints[i];
+                if (Same(animator.GetIKHintPosition(id), hint.LastPosition)) { animator.SetIKHintPosition(id, hint.BeforePosition); }
+                if (Mathf.Abs(animator.GetIKHintPositionWeight(id) - hint.LastWeight) < .00001f) { animator.SetIKHintPositionWeight(id, hint.BeforeWeight); }
+            }
+
             _hints[i] = default;
         }
-        if (_bodyOwned && Same(animator.bodyPosition, _bodyLast) && Same(animator.bodyRotation, _rotationLast))
-        { animator.bodyPosition = _bodyBefore; animator.bodyRotation = _rotationBefore; }
+
+        if (_bodyOwned)
+        {
+            if (Same(animator.bodyPosition, _bodyLast)) { animator.bodyPosition = _bodyBefore; }
+            if (Same(animator.bodyRotation, _rotationLast)) { animator.bodyRotation = _rotationBefore; }
+        }
+
         _bodyOwned = false; Pending = false;
     }
 

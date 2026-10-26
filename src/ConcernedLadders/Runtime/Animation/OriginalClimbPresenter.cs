@@ -65,7 +65,8 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
                 actor = new Actor(rig); _actors.Add(rig.Events, actor);
             }
             if (!actor.Rig.Valid) { throw new InvalidOperationException("Player rig/controller/scale changed; a fresh binding is required."); }
-            bool fresh = !actor.Active || actor.Frame.Session != frame.Session || actor.Frame.Discontinuity != frame.Discontinuity;
+            bool fresh = !actor.Active || actor.Frame.Session != frame.Session || actor.Frame.Discontinuity != frame.Discontinuity ||
+                actor.TuningVersion != ClimbTuning.Version;
             if (!fresh && frame.Sample <= actor.Frame.Sample) { return; } //one accepted sample at most once.
             float dt = fresh ? 0f : frame.SampleTime - actor.Frame.SampleTime;
             if (dt < 0f || dt > .5f) { throw new InvalidOperationException("Accepted presentation clock changed or stalled."); }
@@ -75,15 +76,20 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
             if (fresh || (wasSlide && !slide))
             {
                 float fitFeet = frame.Motion == PresentedMotion.GroundMount || frame.Motion == PresentedMotion.AirCatch ? frame.TransitionTo.Y : frame.Feet.Y;
-                if (!actor.Track.Bind(fitFeet, frame.Run.Bottom.Y + frame.RungOrigin, frame.Run.RungPitch, frame.LastRung, actor.Rig.HandGap(frame.Run.RungPitch)))
+                if (!actor.Gait.Bind(ClimbTuning.Gait, frame.Run.Bottom.Y + frame.RungOrigin, frame.Run.RungPitch, 0, frame.LastRung,
+                        actor.Rig.ShoulderHeight - ClimbTuning.PelvisDrop, fitFeet))
                 { throw new InvalidOperationException("No real rung span can bind the original contacts."); }
-                if (fresh) { actor.Age = 0f; actor.SlideBlend = 0f; }
+                if (fresh)
+                {
+                    if (actor.Frame.Session != frame.Session) { actor.Fit.Reset(); }
+                    actor.Age = 0f; actor.SlideBlend = 0f; actor.TuningVersion = ClimbTuning.Version;
+                }
             }
             else if (frame.GeometryRevision != actor.Frame.GeometryRevision &&
-                !actor.Track.RefreshBounds(frame.Run.Bottom.Y + frame.RungOrigin, frame.LastRung))
+                !actor.Gait.RefreshBounds(frame.Run.Bottom.Y + frame.RungOrigin, 0, frame.LastRung))
             { throw new InvalidOperationException("Run refresh removed a contact or changed rung alignment."); }
             bool loop = frame.Motion == PresentedMotion.Climb || frame.Motion == PresentedMotion.Fast || frame.Motion == PresentedMotion.Hold;
-            if (loop && !actor.Track.Advance(travel, frame.Feet.Y, dt, (frame.MenuHold || frame.Motion == PresentedMotion.Hold) && Mathf.Abs(travel) < .000001f))
+            if (loop && !actor.Gait.Update(frame.Feet.Y, dt, (frame.MenuHold || frame.Motion == PresentedMotion.Hold) && Mathf.Abs(travel) < .000001f))
             { throw new InvalidOperationException("Invalid completed-travel sample for original contacts."); }
             actor.SlideBlend = Mathf.MoveTowards(actor.SlideBlend, slide ? 1f : 0f, dt / (slide ? .08f : .12f));
             actor.Age += dt; actor.Frame = frame; actor.Active = true; actor.Seen = Time.time;
@@ -102,6 +108,7 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
         {
             if (ReferenceEquals(player, null) || ReferenceEquals(actor.Rig.Player, player))
             {
+                if (actor.Active) { actor.Fit.Report(this, actor.Frame.Motion, Time.time, true); }
                 actor.Active = false;
                 _closedPlayer = actor.Rig.Player; _closedSession = actor.Frame.Session;
             }
@@ -117,7 +124,7 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
         {
             Actor actor = pair.Value;
             if (!actor.Rig.Valid || !LocalOwner(actor.Rig.Player) || (Time.time - actor.Seen > 1f)) { actor.Active = false; }
-            if (pair.Key == null || actor.Rig.Player == null || (!actor.Active && !actor.Lease.Pending)) { _remove.Add(pair.Key); }
+            if (pair.Key == null || actor.Rig.Player == null || (!actor.Active && !actor.Lease.Pending)) { _remove.Add(pair.Key!); } // Unity's destroyed-object null; the dictionary key is still removable.
         }
         foreach (CharacterAnimEvent key in _remove) { _actors.Remove(key); }
         if (_closedPlayer == null) { _closedPlayer = null; }
@@ -157,11 +164,11 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
 
     private static void Validate(in ClimbPresentationFrame frame)
     {
-        if (frame.Sample < 0 || !OriginalContactTrack.Finite(frame.SampleTime) || !OriginalContactTrack.Finite(frame.Travel) ||
-            !OriginalContactTrack.Finite(frame.StepTravel) || !frame.Feet.IsFinite || !frame.Run.IsClimbable ||
+        if (frame.Sample < 0 || !SameSideGait.Finite(frame.SampleTime) || !SameSideGait.Finite(frame.Travel) ||
+            !SameSideGait.Finite(frame.StepTravel) || !frame.Feet.IsFinite || !frame.Run.IsClimbable ||
             !frame.Run.Bottom.IsFinite || !frame.Run.Top.IsFinite || !frame.TransitionFrom.IsFinite || !frame.TransitionTo.IsFinite ||
-            !OriginalContactTrack.Finite(frame.RungPlane) || !OriginalContactTrack.Finite(frame.RungOrigin) ||
-            !OriginalContactTrack.Finite(frame.Transition) || frame.LastRung < 1 || frame.LastRung > 4096 ||
+            !SameSideGait.Finite(frame.RungPlane) || !SameSideGait.Finite(frame.RungOrigin) ||
+            !SameSideGait.Finite(frame.Transition) || frame.LastRung < 1 || frame.LastRung > 4096 ||
             (frame.Face != LadderFace.Front && frame.Face != LadderFace.Rear) ||
             (int)frame.Motion < 0 || (int)frame.Motion > (int)PresentedMotion.StepOff ||
             ((int)frame.NativeAction & ~15) != 0)
@@ -200,9 +207,10 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
     {
         internal Actor(OriginalRigBinding rig) { Rig = rig; }
         internal readonly OriginalRigBinding Rig;
-        internal readonly OriginalContactTrack Track = new OriginalContactTrack();
+        internal readonly SameSideGait Gait = new SameSideGait();
+        internal readonly FitCounters Fit = new FitCounters();
+        internal int TuningVersion = -1;
         internal readonly NativeIKLease Lease = new NativeIKLease();
-        internal readonly bool[] ReachWarning = new bool[4];
         internal ClimbPresentationFrame Frame;
         internal bool Active;
         internal float Seen, Age, SlideBlend;

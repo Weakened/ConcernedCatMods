@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using TheConcernedCat.ConcernedLadders.Domain;
 using TheConcernedCat.ConcernedLadders.Domain.Animation;
 using TheConcernedCat.Ladders;
@@ -8,10 +9,12 @@ namespace TheConcernedCat.ConcernedLadders.Runtime.Animation;
 
 internal sealed partial class OriginalClimbPresenter
 {
+    private enum NativeKind { None, Attack, Minor }
+
     private void PoseInIK(Actor actor)
     {
         OriginalRigBinding rig = actor.Rig;
-        if (!rig.Valid || !actor.Track.Ready) { actor.Active = false; return; }
+        if (!rig.Valid || !actor.Gait.Ready) { actor.Active = false; return; }
         rig.BindBodyInIK();
         Animator animator = rig.Animator;
         ClimbPresentationFrame frame = actor.Frame;
@@ -20,24 +23,29 @@ internal sealed partial class OriginalClimbPresenter
         Vector3 right = Vector3.Cross(Vector3.up, toward);
         Vector3 feet = rig.Player.transform.position; //rendered/interpolated root; never written by presentation.
         NativeActionParts native = frame.NativeAction;
-        // A native action can start after the last producer tick: reconcile current/next native attack tags
-        // at this actual IK pass, without reading input or inventing trigger names.
-        if (NativeActionNow(animator))
-        { native |= NativeActionParts.LeftArm | NativeActionParts.RightArm | NativeActionParts.UpperBody | NativeActionParts.Head; }
+        // A native action can start after the last producer tick: reconcile current/next native tags at this actual
+        // IK pass. Owner decision 2026-10-26: with the building tool out, only the hammer (right) arm swings natively,
+        // from the first frame; the body, legs and left hand keep climbing. Any other action (an interact) owns both
+        // arms, the upper body and the head.
+        NativeKind kind = NativeActionNow(animator);
+        if (kind == NativeKind.Attack && frame.HammerEquipped) { native |= NativeActionParts.RightArm; }
+        else if (kind != NativeKind.None) { native |= NativeActionParts.LeftArm | NativeActionParts.RightArm | NativeActionParts.UpperBody | NativeActionParts.Head; }
+
         float entry = Mathf.Clamp01(actor.Age / .15f);
         bool mount = frame.Motion == PresentedMotion.GroundMount || frame.Motion == PresentedMotion.AirCatch;
         bool exit = frame.Motion == PresentedMotion.TopFinish || frame.Motion == PresentedMotion.StepOff;
         float route = Mathf.Clamp01(frame.Transition);
         if (mount || exit) { entry = 1f; }
-        float bodyWeight = OriginalContactTrack.Ease(entry);
+        float bodyWeight = SameSideGait.Ease(entry);
         if (mount) { bodyWeight *= Window(route, 0f, frame.Motion == PresentedMotion.AirCatch ? .35f : .7f); }
         if (exit) { bodyWeight *= 1f - Window(route, .65f, 1f); }
         if ((native & NativeActionParts.UpperBody) != 0) { bodyWeight = 0f; }
-        float sway = .025f * actor.Track.SupportShift * (1f - actor.SlideBlend);
-        float lean = Mathf.Lerp(12f, 7f, actor.SlideBlend);
-        Vector3 pelvis = feet + Vector3.up * (rig.PelvisHeight - .035f) + toward * .055f + right * sway;
+        float sway = actor.Gait.Sway * (1f - actor.SlideBlend);
+        float lean = Mathf.Lerp(ClimbTuning.Lean, ClimbTuning.SlideLean, actor.SlideBlend);
+        Vector3 pelvis = feet + Vector3.up * (rig.PelvisHeight - ClimbTuning.PelvisDrop) + toward * ClimbTuning.PelvisToward +
+                         right * (ClimbTuning.SwayShift * sway);
         Quaternion bodyRotation = Quaternion.LookRotation(toward, Vector3.up) *
-            Quaternion.AngleAxis(lean, Vector3.right) * Quaternion.AngleAxis(-actor.Track.SupportShift * 2.5f, Vector3.forward) * rig.BodyInPlayer;
+            Quaternion.AngleAxis(lean, Vector3.right) * Quaternion.AngleAxis(-sway * ClimbTuning.SwayTilt, Vector3.forward) * rig.BodyInPlayer;
         Vector3 bodyPosition = pelvis + bodyRotation * rig.BodyFromPelvis;
         Vector3 nativeBody = animator.bodyPosition;
         Quaternion nativeRotation = animator.bodyRotation;
@@ -50,22 +58,22 @@ internal sealed partial class OriginalClimbPresenter
             bool hand = limb < 2;
             if ((limb == 0 && (native & (NativeActionParts.LeftArm | NativeActionParts.UpperBody)) != 0) ||
                 (limb == 1 && (native & (NativeActionParts.RightArm | NativeActionParts.UpperBody)) != 0)) { continue; }
-            OriginalLimbContact contact = actor.Track.Contact(limb);
+            OriginalLimbContact contact = actor.Gait.Contact(limb);
             float side = limb == 0 || limb == 2 ? -1f : 1f;
-            float halfSpan = Math.Min(ClimbPresentationFrame.HalfWidth - .04f, hand ? .18f : .13f);
-            float planeOffset = hand ? ClimbPresentationFrame.HalfDepth : ClimbPresentationFrame.HalfDepth * .25f;
-            float surfaceY = contact.Height + (hand ? ClimbPresentationFrame.HalfHeight * .3f : ClimbPresentationFrame.HalfHeight);
-            Vector3 surface = RungSurface(frame, surfaceY, planeOffset, halfSpan * side, outward, right);
-            surface += outward * contact.Clearance * (hand ? .09f : .12f);
+            float span = Math.Min(ClimbPresentationFrame.HalfWidth - .04f, hand ? ClimbTuning.HandSpan : ClimbTuning.FootSpan);
+            float above = hand ? ClimbTuning.HandAbove : ClimbTuning.FootAbove;
+            float outOffset = hand ? ClimbTuning.HandOut : ClimbTuning.FootOut;
+            Vector3 surface = RungSurface(frame, contact.Height + above, outOffset, span * side);
+            surface += outward * contact.Clearance * (hand ? ClimbTuning.HandClearance : ClimbTuning.FootClearance);
             if (actor.SlideBlend > 0f)
             {
                 // A distinct rail-braking pose: these contacts slide by design, not fake planted rung grips.
                 float height = feet.y + (hand ? rig.ShoulderHeight - .16f : .24f);
-                Vector3 rail = RungSurface(frame, height, ClimbPresentationFrame.HalfDepth + (hand ? .02f : .11f),
-                    side * (hand ? .32f : .25f), outward, right);
-                surface = Vector3.Lerp(surface, rail, OriginalContactTrack.Ease(actor.SlideBlend));
+                Vector3 rail = RungSurface(frame, height, ClimbPresentationFrame.HalfDepth + (hand ? .02f : .11f), side * (hand ? .32f : .25f));
+                surface = Vector3.Lerp(surface, rail, SameSideGait.Ease(actor.SlideBlend));
             }
-            float weight = OriginalContactTrack.Ease(entry);
+
+            float weight = SameSideGait.Ease(entry);
             if (mount)
             {
                 if (frame.Motion == PresentedMotion.AirCatch)
@@ -77,6 +85,7 @@ internal sealed partial class OriginalClimbPresenter
                     weight *= Window(route, start, finish);
                 }
             }
+
             if (exit)
             {
                 if (hand) { weight *= 1f - Window(route, limb == 0 ? .45f : .6f, limb == 0 ? .8f : .95f); }
@@ -90,49 +99,117 @@ internal sealed partial class OriginalClimbPresenter
                     weight *= 1f - Window(route, .9f, 1f);
                 }
             }
-            Quaternion rotation = rig.GoalRotation(limb, toward);
+
+            Quaternion rotation = hand ? rig.GoalRotation(limb, GripFrame(toward)) : rig.GoalRotation(limb, Quaternion.LookRotation(toward, Vector3.up));
             Vector3 pivot = rig.PivotForContact(limb, surface, rotation);
             Vector3 root = posedBody + bodyDelta * (rig.Roots[limb].position - nativeBody);
             float reach = Vector3.Distance(root, pivot);
-            if (reach > rig.Reach[limb] * 1.01f)
+            actor.Fit.Sample(limb, reach / rig.Reach[limb], root, feet, frame, outward);
+            if (reach > rig.Reach[limb] * ClimbTuning.ReachLimit)
             {
-                if (!actor.ReachWarning[limb])
-                {
-                    actor.ReachWarning[limb] = true;
-                    Log("Original contact needs rig/route fitting: limb=" + limb + ", required=" + reach.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture) +
-                        ", reach=" + rig.Reach[limb].ToString("0.000", System.Globalization.CultureInfo.InvariantCulture) +
-                        ", motion=" + frame.Motion + ". That limb yields to native; no movement change.");
-                }
+                actor.Fit.Skip(limb);
                 continue; //never stretch a limb or pretend the unreachable target is a successful plant.
             }
+
             actor.Lease.GoalInIK(animator, limb, pivot, rotation, weight);
-            Vector3 hint = hand ? root + outward * .2f + right * (side * .18f) - Vector3.up * .25f :
-                root + toward * .28f + right * (side * .08f) - Vector3.up * .28f;
+            Vector3 hint = hand ? root + outward * ClimbTuning.ElbowOut + right * (side * ClimbTuning.ElbowSide) - Vector3.up * ClimbTuning.ElbowDown :
+                root + toward * ClimbTuning.KneeToward + right * (side * ClimbTuning.KneeSide) - Vector3.up * ClimbTuning.KneeDown;
             actor.Lease.HintInIK(animator, limb, hint, weight * .75f);
         }
+
+        actor.Fit.Report(this, frame.Motion, Time.time, false);
         // Native look-at and equipment remain owned by the game. No controller parameters, animation speed,
         // root transforms, rigidbodies, capsule, gravity, input, skill or stamina are written.
     }
 
-    private static Vector3 RungSurface(in ClimbPresentationFrame frame, float worldY, float faceOffset,
-        float lateral, Vector3 outward, Vector3 right)
+    /// <summary>A palm resting on a rung: fingers tilted from vertical toward the ladder, palm facing down onto it.</summary>
+    private static Quaternion GripFrame(Vector3 toward)
     {
-        return Vector(OriginalRungSurface.At(frame.Run, frame.Face, frame.RungPlane, worldY, faceOffset, lateral));
+        float pitch = ClimbTuning.HandFingerPitch * Mathf.Deg2Rad;
+        Vector3 fingers = Vector3.up * Mathf.Cos(pitch) + toward * Mathf.Sin(pitch);
+        Vector3 palm = toward * Mathf.Cos(pitch) - Vector3.up * Mathf.Sin(pitch);
+        return Quaternion.LookRotation(fingers, palm * ClimbTuning.HandNormalSign);
     }
 
-    private static float Window(float progress, float from, float to) => OriginalContactTrack.Ease((progress - from) / (to - from));
+    private static Vector3 RungSurface(in ClimbPresentationFrame frame, float worldY, float faceOffset, float lateral) =>
+        Vector(OriginalRungSurface.At(frame.Run, frame.Face, frame.RungPlane, worldY, faceOffset, lateral));
+
+    private static float Window(float progress, float from, float to) => SameSideGait.Ease((progress - from) / (to - from));
     private static Vector3 Vector(ClimbPoint point) => new Vector3(point.X, point.Y, point.Z);
-    private static bool NativeActionNow(Animator animator)
+
+    private static NativeKind NativeActionNow(Animator animator)
     {
         // Player.InAttack caches by MonoUpdaters.UpdateCount and can be stale at this boundary.
         // These actual native tags were inspected in Humanoid/Player; do not touch their cached fields.
+        NativeKind kind = NativeKind.None;
         for (int layer = 0; layer < animator.layerCount; layer++)
         {
-            if (ActionTag(animator.GetCurrentAnimatorStateInfo(layer))) { return true; }
-            if (animator.IsInTransition(layer) && ActionTag(animator.GetNextAnimatorStateInfo(layer))) { return true; }
+            kind = Strongest(kind, Tag(animator.GetCurrentAnimatorStateInfo(layer)));
+            if (animator.IsInTransition(layer)) { kind = Strongest(kind, Tag(animator.GetNextAnimatorStateInfo(layer))); }
         }
-        return false;
+
+        return kind;
     }
-    private static bool ActionTag(AnimatorStateInfo state) => state.IsTag("attack") ||
-        state.IsTag("minoraction") || state.IsTag("minoraction_fast");
+
+    private static NativeKind Tag(AnimatorStateInfo state) =>
+        state.IsTag("minoraction") || state.IsTag("minoraction_fast") ? NativeKind.Minor : state.IsTag("attack") ? NativeKind.Attack : NativeKind.None;
+
+    private static NativeKind Strongest(NativeKind a, NativeKind b) => a == NativeKind.Minor || b == NativeKind.Minor ? NativeKind.Minor :
+        a == NativeKind.Attack || b == NativeKind.Attack ? NativeKind.Attack : NativeKind.None;
+
+    /// <summary>Bounded fitting counters (owner correction 2026-10-26): per limb, how many IK passes evaluated a contact,
+    /// how many skipped it as unreachable and the worst and mean fraction of the measured chain it needed, plus where
+    /// the posed shoulders and hips sat relative to the root and the rung plane. One summary line at most every
+    /// three seconds while presenting, and one at the end; at most 40 lines per attachment.</summary>
+    internal sealed class FitCounters
+    {
+        private readonly int[] _count = new int[4], _skips = new int[4];
+        private readonly float[] _worst = new float[4], _sum = new float[4], _rootUp = new float[4], _rootOut = new float[4];
+        private float _next;
+        private int _lines;
+
+        internal void Reset()
+        {
+            Array.Clear(_count, 0, 4); Array.Clear(_skips, 0, 4); Array.Clear(_worst, 0, 4); Array.Clear(_sum, 0, 4);
+            Array.Clear(_rootUp, 0, 4); Array.Clear(_rootOut, 0, 4);
+            _next = 0f;
+            _lines = 0;
+        }
+
+        internal void Sample(int limb, float ratio, Vector3 root, Vector3 feet, in ClimbPresentationFrame frame, Vector3 outward)
+        {
+            if (float.IsNaN(ratio) || float.IsInfinity(ratio)) { return; }
+            _count[limb]++;
+            _sum[limb] += ratio;
+            _worst[limb] = Math.Max(_worst[limb], ratio);
+            _rootUp[limb] = root.y - feet.y;
+            Vector3 plane = Vector(OriginalRungSurface.At(frame.Run, frame.Face, frame.RungPlane, root.y, 0f, 0f));
+            _rootOut[limb] = Vector3.Dot(root - plane, outward);
+        }
+
+        internal void Skip(int limb) => _skips[limb]++;
+
+        internal void Report(OriginalClimbPresenter owner, PresentedMotion motion, float now, bool final)
+        {
+            if (_lines >= 40 || (!final && now < _next) || (_count[0] + _count[1] + _count[2] + _count[3]) == 0) { return; }
+            if (_next <= 0f && !final) { _next = now + 3f; return; }
+            _next = now + 3f;
+            _lines++;
+            var text = new System.Text.StringBuilder(final ? "Climb fit (end) " : "Climb fit ");
+            text.Append(motion);
+            string[] names = { "LH", "RH", "LF", "RF" };
+            for (int limb = 0; limb < 4; limb++)
+            {
+                float mean = _count[limb] == 0 ? 0f : _sum[limb] / _count[limb];
+                text.Append(" | ").Append(names[limb]).Append(" n=").Append(_count[limb]).Append(" skip=").Append(_skips[limb])
+                    .Append(" worst=").Append(_worst[limb].ToString("0.00", CultureInfo.InvariantCulture))
+                    .Append(" mean=").Append(mean.ToString("0.00", CultureInfo.InvariantCulture))
+                    .Append(" root up=").Append(_rootUp[limb].ToString("0.00", CultureInfo.InvariantCulture))
+                    .Append(" out=").Append(_rootOut[limb].ToString("0.00", CultureInfo.InvariantCulture));
+            }
+
+            owner.Log(text.ToString());
+            Array.Clear(_count, 0, 4); Array.Clear(_skips, 0, 4); Array.Clear(_worst, 0, 4); Array.Clear(_sum, 0, 4);
+        }
+    }
 }

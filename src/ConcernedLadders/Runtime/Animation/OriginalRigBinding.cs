@@ -84,14 +84,9 @@ internal sealed class OriginalRigBinding
         BodyBound = true;
     }
 
-    internal int HandGap(float pitch) => Math.Max(1, Math.Min(8, (int)Math.Round((ShoulderHeight + .1f - pitch) / pitch)));
-
-    internal Quaternion GoalRotation(int limb, Vector3 toward)
-    {
-        // Contact frame forward is fingers for palms, toes for soles. Frame up is the contact normal.
-        Quaternion surface = limb < 2 ? Quaternion.LookRotation(Vector3.down, toward) : Quaternion.LookRotation(toward, Vector3.up);
-        return surface * Quaternion.Inverse(ContactFrame[limb]);
-    }
+    /// <summary>The hand or foot rotation that puts this limb's measured contact frame (forward = fingers or toes,
+    /// up = palm or sole normal) onto <paramref name="surface"/>.</summary>
+    internal Quaternion GoalRotation(int limb, Quaternion surface) => surface * Quaternion.Inverse(ContactFrame[limb]);
 
     internal Vector3 PivotForContact(int limb, Vector3 contact, Quaternion rotation) => contact - rotation * ContactOffset[limb];
 
