@@ -28,41 +28,39 @@ public sealed class LadderSnapTests
     }
 
     [Fact]
-    public void AGhostAimedAtTheLadderBodyExtendsTheColumnAbove()
+    public void BottomModeAimedAtTheRailsStacksOnTheColumnTop()
     {
-        // Owner session 2026-10-26: Bottom mode, ghost origin at 36.4 on a 34-38 column: it overlapped the ladder.
-        Assert.True(LadderSnap.TryExtendColumn(P(220.05f, 36.4f, -276.47f), P(220f, 34f, -276.47f), P(220f, 38f, -276.47f), 0.4f,
-            LadderSnap.Extend.Above, out ClimbPoint origin, out bool above));
+        // Owner session 2026-10-26: Bottom mode aimed at a 34-38 column left a ghost overlapping it.
+        Assert.True(LadderSnap.TryExtendColumn(35.5f, P(220f, 34f, -276.47f), P(220f, 38f, -276.47f), LadderSnap.Extend.Above,
+            out ClimbPoint origin, out bool above));
         Assert.True(above);
-        Assert.Equal(220f, origin.X, 4); Assert.Equal(38f, origin.Y, 4);
+        Assert.Equal(220f, origin.X, 4); Assert.Equal(38f, origin.Y, 4); Assert.Equal(-276.47f, origin.Z, 4);
     }
 
     [Fact]
     public void TopModeHangsTheNewSectionBelowTheColumn()
     {
-        Assert.True(LadderSnap.TryExtendColumn(P(220f, 37.5f, -276.47f), P(220f, 34f, -276.47f), P(220f, 38f, -276.47f), 0.4f,
-            LadderSnap.Extend.Below, out ClimbPoint origin, out bool above));
+        Assert.True(LadderSnap.TryExtendColumn(37.5f, P(220f, 34f, -276.47f), P(220f, 38f, -276.47f), LadderSnap.Extend.Below,
+            out ClimbPoint origin, out bool above));
         Assert.False(above);
         Assert.Equal(32f, origin.Y, 4);
     }
 
     [Theory]
-    [InlineData(34.3f, false)] // Low on the column: the nearer end is the bottom.
-    [InlineData(37.2f, true)]  // High on the column: the top.
-    public void AutoExtendsTheNearerEnd(float y, bool expectedAbove)
+    [InlineData(34.3f, false)] // Aimed low on the column: the nearer end is the bottom.
+    [InlineData(37.2f, true)]  // Aimed high: the top.
+    public void AutoExtendsTheNearerEnd(float aim, bool expectedAbove)
     {
-        Assert.True(LadderSnap.TryExtendColumn(P(220f, y, -276.47f), P(220f, 34f, -276.47f), P(220f, 40f, -276.47f), 0.4f,
-            LadderSnap.Extend.Nearest, out _, out bool above));
+        Assert.True(LadderSnap.TryExtendColumn(aim, P(220f, 34f, -276.47f), P(220f, 40f, -276.47f), LadderSnap.Extend.Nearest,
+            out _, out bool above));
         Assert.Equal(expectedAbove, above);
     }
 
     [Theory]
-    [InlineData(220.6f, 36f)] // Beside the column, not on it: native placement.
-    [InlineData(220f, 38f)]   // Already exactly on top: no overlap, the stack rule handles it.
-    [InlineData(220f, 31.5f)] // Clear below the column.
-    public void AGhostNotOverlappingTheColumnStaysNative(float x, float y) =>
-        Assert.False(LadderSnap.TryExtendColumn(P(x, y, -276.47f), P(220f, 34f, -276.47f), P(220f, 38f, -276.47f), 0.4f,
-            LadderSnap.Extend.Nearest, out _, out _));
+    [InlineData(float.NaN, 38f)]
+    [InlineData(35f, 35f)] // Not a measured column.
+    public void AnUnmeasurableAimOrColumnStaysNative(float aim, float top) =>
+        Assert.False(LadderSnap.TryExtendColumn(aim, P(220f, 34f, -276.47f), P(220f, top, -276.47f), LadderSnap.Extend.Nearest, out _, out _));
 
     [Theory]
     [InlineData(199f, 36f, -296.08f)] // The reproduced defect: a corner-to-corner snap one metre off the column.
