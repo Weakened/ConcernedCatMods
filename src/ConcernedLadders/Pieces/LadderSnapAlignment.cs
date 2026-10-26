@@ -198,9 +198,20 @@ internal sealed class LadderSnapAlignment : IDisposable
         // Owner session 2026-10-26: aimed at the rails of a placed ladder, the game finds no snap point within its
         // 0.5 m radius and leaves the ghost overlapping or beside the ladder. The game's own placement ray (same
         // origin, direction, length and layers) says which piece is aimed at.
-        LadderSegment? column = AimedLadder(out RaycastHit hit);
+        // In game 2026-10-26 (Auto, aimed just above a ladder against a wall): the game paired one of the ghost's
+        // wall-corner points with the placed ladder's top-centre anchor and left a valid ghost displaced beside the
+        // column, the owner's original complaint. A corner point on a ladder's snap point is never a meaningful snap
+        // outside a corner mode: the ghost extends that ladder's column instead.
+        float aimHeight;
+        LadderSegment? column = CornerSnappedToLadder(player, section, out aimHeight);
+        if (column == null)
+        {
+            column = AimedLadder(out RaycastHit hit);
+            aimHeight = hit.point.y;
+        }
+
         if (column == null || !LadderSegment.TryRun(column, Run, out var run)) { return false; }
-        if (!LadderSnap.TryExtendColumn(hit.point.y, run.Bottom, run.Top, extend, StandsOnSomething(LadderSegment.Vector(run.Bottom)),
+        if (!LadderSnap.TryExtendColumn(aimHeight, run.Bottom, run.Top, extend, StandsOnSomething(LadderSegment.Vector(run.Bottom)),
                 out var end, out bool extendsAbove))
         {
             return false;
@@ -269,6 +280,32 @@ internal sealed class LadderSnapAlignment : IDisposable
 
         LadderSegment? column = hit.collider.GetComponentInParent<LadderSegment>();
         return column != null && column.IsLive ? column : null;
+    }
+
+    /// <summary>The placed ladder whose snap point the game has paired with one of the ghost's wall-corner points
+    /// (outside a corner mode), and that snap point's height.</summary>
+    private static LadderSegment? CornerSnappedToLadder(Player player, LadderSegment section, out float height)
+    {
+        height = 0f;
+        if (_snapPoints == null || _targets == null) { return null; }
+        List<Transform> points = _snapPoints(player);
+        List<Transform> targets = _targets(player);
+        if (points == null || targets == null) { return null; }
+        foreach (Transform point in points)
+        {
+            if (point == null) { continue; }
+            Vector3 local = point.localPosition;
+            if ((local - section.LocalBottom).sqrMagnitude < 1e-4f || (local - section.LocalTop).sqrMagnitude < 1e-4f) { continue; }
+            Vector3 at = point.position;
+            foreach (Transform target in targets)
+            {
+                if (target == null || (target.position - at).sqrMagnitude > LadderSnap.Coincident * LadderSnap.Coincident) { continue; }
+                LadderSegment? ladder = target.GetComponentInParent<LadderSegment>();
+                if (ladder != null && ladder.IsLive) { height = target.position.y; return ladder; }
+            }
+        }
+
+        return null;
     }
 
     /// <summary>The game has put the selected corner on a snap point of one of this product's ladders.</summary>
