@@ -15,7 +15,7 @@ NOT_READY:
    - `d913e26`: NO_GO, hammer IK at action onset.
    - `2c810ab`: NO_GO, a cached `InAttack` could miss onset.
    - `c32e6b5`: reads the animator's state tags at the IK pass. **GO** (`CODEX_REVIEW_93119e7.md`).
-   - `125c9b0`: owner decision 2026-10-26. Mounting with the hammer equipped is allowed, and only the hammer (right) arm animates natively while the body keeps its climbing pose. `d4c0017` review: NO_GO on a 16-hit buffer, fixed in `38964c8` (64 hits, saturated ray refused). **Under review.**
+   - `125c9b0`: owner decision 2026-10-26. Mounting with the hammer equipped is allowed, and only the hammer (right) arm animates natively while the body keeps its climbing pose. `d4c0017` review: NO_GO on a 16-hit buffer, fixed in `38964c8` (64 hits, saturated ray refused). **GO** (`CODEX_REVIEW_2bef0d9.md`), with STATUS ACCEPTED.
 
    **Mounting with the hammer equipped is implemented in `125c9b0` (owner decision 2026-10-26), not yet run in game.** The build and policy-test logs for `d913e26`, `2c810ab` and `c32e6b5` (127 passed each, 0 build errors) are in `artifacts/ladders-0.3-dev/`; `125c9b0` passes 128 tests (logs in the same folder). None of it has been packaged or run in game.
 3. **Controller and network.** Every controller row and every multiplayer/observer row is BLOCKED: no
@@ -101,6 +101,6 @@ loaded DLL was correct throughout.
 
 Codex read-only reviews: `da8c5a2`, `27528f0`, `4926903` and `7726fe3` were NO_GO, each fixed. `b3c20a6` and
 `441ea83` were GO. The 0.2.0 STATUS draft was REJECTED for overclaiming; this rewrite answers it row by row.
-Reviews of the N07/N08 code: `075f14b` NO_GO (6 P1s); `85713d6` NO_GO (4 findings); `d913e26` NO_GO (hammer IK onset); `2c810ab` NO_GO (cached `InAttack`); `c32e6b5` GO; `125c9b0` NO_GO (hover buffer); `38964c8` under review. The first version of this STATUS (`866a800`) was REJECTED with 7 must-fixes, each corrected here. Reports are in `C:\code\cc-integration\cl-ladders-review-evidence\`.
+Reviews of the N07/N08 code: `075f14b` NO_GO (6 P1s); `85713d6` NO_GO (4 findings); `d913e26` NO_GO (hammer IK onset); `2c810ab` NO_GO (cached `InAttack`); `c32e6b5` GO; `125c9b0` NO_GO (hover buffer); `38964c8` **GO**. This STATUS was ACCEPTED at `2bef0d9`. The first version of this STATUS (`866a800`) was REJECTED with 7 must-fixes, each corrected here. Reports are in `C:\code\cc-integration\cl-ladders-review-evidence\`.
 
 No publication, release tag or main merge.
