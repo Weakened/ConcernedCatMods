@@ -205,6 +205,8 @@ internal sealed class LadderRuntime : IDisposable
         try
         {
             bool focus = GameplayFocus(player);
+            // Lost focus seen here too clears a pending press, whichever of the frame's updates saw the menu first.
+            if (!focus) { _drop.Observe(CrouchHeld(), false); }
             // The native edge, or a fresh press seen on a rendered frame whose native edge went stale behind a menu.
             bool drop = focus && _drop.Take(crouch);
             ClimbAction action = ClimbControls.Resolve(focus, jump, drop, false, false);
@@ -824,7 +826,7 @@ internal sealed class LadderRuntime : IDisposable
         // The built-in pose lets go of the limbs for the duration of a native hammer swing or interact, so it never
         // pins the arms against the game's own action (Codex review of 075f14b).
         bool nativeAction = BuildAction(_player) || _player.InMinorAction();
-        _animation.SetLocal(_player, _run, _face, _plane, _pitch, _gripHeight, _gait == ClimbGait.Slide && _mode == Mode.Climbing, attached && !nativeAction);
+        _animation.SetLocal(_player, _run, _face, _plane, _pitch, _gripHeight, _gait == ClimbGait.Slide && _mode == Mode.Climbing, attached, nativeAction);
         if (_animation.Ready) { _poseSpeed = 0f; }
         Publish(_player);
     }

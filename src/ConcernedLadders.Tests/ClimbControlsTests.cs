@@ -133,6 +133,28 @@ public sealed class ClimbControlsTests
     }
 
     [Fact]
+    public void ADiagonalCommandWhoseVerticalPartAFloorCancelledNeverBecomesAHop()
+    {
+        // Codex re-review of 85713d6: command (1, -1, 0), the floor cancelled the vertical part, velocity (1, 0, 0).
+        ClimbControls.SurvivingCommand(1f, 0f, 0f, 1f, -1f, 0f, out float x, out float y, out float z);
+        float leftX = 1f - x, leftY = 0f - y, leftZ = 0f - z;
+        Assert.Equal(0f, leftX, 4);
+        Assert.True(leftY <= 0f);
+        Assert.Equal(0f, leftZ, 4);
+    }
+
+    [Fact]
+    public void LostFocusObservedByTheControlsTickClearsAPendingPress()
+    {
+        var trigger = new DropTrigger();
+        trigger.Arm(false);
+        trigger.Press(true, true);      // Seen on a rendered frame.
+        trigger.Observe(false, false);  // The controls tick then saw a menu (key already released).
+        trigger.Observe(false, true);   // Focus back before the next rendered frame.
+        Assert.False(trigger.Take(false));
+    }
+
+    [Fact]
     public void ADropRemovesOnlyTheCommandedPartThatSurvived()
     {
         // Climbing up at 1.8 m/s while a hit added 2 m/s sideways: only the climb is removed.

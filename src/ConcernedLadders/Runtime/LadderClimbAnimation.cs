@@ -70,12 +70,16 @@ internal sealed class LadderClimbAnimation : IDisposable
 
     /// <summary>The local climber's state, set by the ladder runtime every physics step it drives.</summary>
     internal void SetLocal(Player player, in LadderGeometry run, LadderFace face, float plane, float pitch,
-        float handHeight, bool slide, bool attached)
+        float handHeight, bool slide, bool attached, bool nativeAction = false)
     {
         if (!Ready || _restoring || player == null) { return; }
         Climber climber = Get(player, true, run, face, plane, pitch, handHeight);
         climber.Slide = slide;
-        climber.Target = attached ? 1f : 0f;
+        // A native action (hammer swing, interact) takes the limbs at once, not after a fade: the pose's weight
+        // drops to zero this step and the next IK pass clears what it wrote, once (Codex re-review of 85713d6).
+        if (nativeAction && !climber.Yielding) { climber.Weight = 0f; climber.Yielding = true; climber.YieldCleared = false; }
+        else if (!nativeAction) { climber.Yielding = false; }
+        climber.Target = attached && !nativeAction ? 1f : 0f;
         climber.Seen = 0f;
     }
 
@@ -242,6 +246,11 @@ internal sealed class LadderClimbAnimation : IDisposable
                 ZeroOwned(animator);
                 climber.ClearedFrames++;
             }
+            else if (climber.Yielding && climber.Posed && !climber.YieldCleared)
+            {
+                ZeroOwned(animator); // Once: afterwards the native pass's own foot IK and look-at stand.
+                climber.YieldCleared = true;
+            }
             else if (climber.Released)
             {
                 climber.ClearedFrames = 2;
@@ -397,5 +406,7 @@ internal sealed class LadderClimbAnimation : IDisposable
         internal int Matches;
         internal int Misses;
         internal int ClearedFrames;
+        internal bool Yielding;
+        internal bool YieldCleared;
     }
 }

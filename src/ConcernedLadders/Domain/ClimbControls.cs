@@ -72,12 +72,20 @@ internal static class ClimbControls
     internal static void SurvivingCommand(float vx, float vy, float vz, float cx, float cy, float cz,
         out float sx, out float sy, out float sz)
     {
-        sx = sy = sz = 0f;
-        float length = (float)Math.Sqrt(cx * cx + cy * cy + cz * cz);
-        if (!(length > 1e-5f) || !ClimbPolicy.Finite(vx) || !ClimbPolicy.Finite(vy) || !ClimbPolicy.Finite(vz)) { return; }
-        float dx = cx / length, dy = cy / length, dz = cz / length;
-        float along = Math.Min(Math.Max(vx * dx + vy * dy + vz * dz, 0f), length);
-        sx = dx * along; sy = dy * along; sz = dz * along;
+        // Per axis: only the part of the velocity that still moves the way the command did on that axis, never
+        // more than the command. A component a floor or wall cancelled (or reversed) contributes nothing, so no
+        // axis can be pushed the other way (Codex re-review of 85713d6: a diagonal command whose vertical part a
+        // floor cancelled must not become an upward hop).
+        sx = Surviving(vx, cx);
+        sy = Surviving(vy, cy);
+        sz = Surviving(vz, cz);
+    }
+
+    private static float Surviving(float velocity, float command)
+    {
+        if (!ClimbPolicy.Finite(velocity) || !ClimbPolicy.Finite(command) || command == 0f) { return 0f; }
+        float sign = command > 0f ? 1f : -1f;
+        return sign * Math.Min(Math.Abs(command), Math.Max(0f, velocity * sign));
     }
 
     /// <summary>Horizontal tolerance for "the same foot line", metres.</summary>
