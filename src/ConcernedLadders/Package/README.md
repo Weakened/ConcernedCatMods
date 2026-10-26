@@ -4,7 +4,7 @@ Vertical ladders for compact Valheim builds. Three 2 m hammer pieces: Wood
 Ladder, Copper Ladder and Iron Ladder. Stack matching or mixed materials into a
 continuous run.
 
-**0.2.0 is an owner-test candidate, not a release.** It is built against
+**0.2.1 is an owner-test candidate, not a release.** It is built against
 Valheim 1.0.20 and tested in single player. Multiplayer, dedicated-server and
 controller play have not been tested yet.
 
@@ -12,7 +12,7 @@ controller play have not been tested yet.
 
 | Action | What it does |
 |---|---|
-| **Interact** (Use) | Grab the ladder you are looking at: from the ground, an upper floor, beside or behind the rails, or in midair while jumping or falling. Within about 1.5 m of the rungs. While climbing, Interact steps off onto a safe landing. |
+| **Interact** (Use) | Grab the ladder you are looking at: from the ground, an upper floor, beside or behind the rails, or in midair while jumping or falling. Within about 1.5 m of the rungs, measured from your chest; standing on a floor at the top, within about 1.5 m of the rail tops. While climbing, Interact steps off onto a safe landing. |
 | Forward / backward | Climb up / down. Neutral holds. Camera pitch does not matter. |
 | **Run** + movement | Climb faster (2.43 m/s instead of 1.8). Costs stamina; without stamina you keep climbing normally. |
 | Backward + **Run** at Climbing 20+ | Slide down at 4.5 m/s. Below level 20 it is a fast descent. |

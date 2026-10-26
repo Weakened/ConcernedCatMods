@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- Pressing Use partway up now steps off onto a landing beside the ladder. In
+  0.2.0 the safe-dismount search looked only 0.75 m to the side, where a standing
+  footprint still overlapped the rails, so a real side landing was refused.
+
 ## 0.2.0
 
 Owner-test candidate implementing the owner revision of 25 October 2026.

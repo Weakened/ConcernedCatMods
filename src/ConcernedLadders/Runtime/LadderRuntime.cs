@@ -715,6 +715,8 @@ internal sealed class LadderRuntime : IDisposable
         return TryTopLanding(lane + Away() * 0.6f);
     }
 
+    private bool TryLandingNear(Vector3 desired) => _clearance!.TryNearbySurface(desired, out Vector3 floor) && PlanExitTo(floor);
+
     private bool TryTopLanding(Vector3 desired) => _clearance!.TryTopSurface(desired, out Vector3 floor) && PlanExitTo(floor);
 
     private bool TrySafeDismount()
@@ -723,12 +725,26 @@ internal sealed class LadderRuntime : IDisposable
         Vector3 feet = _body!.position;
         if (_clearance!.Supported(feet) && _clearance.HasRoom(feet)) { Release(Departure.Controlled); return true; }
         if (feet.y >= _run.Top.Y - 0.5f && TryExitTop()) { return true; }
+        // A landing beside or behind the climber, at about the height the feet are at now. The candidates
+        // are the top exit's: far enough to the side that a whole standing footprint clears the rails (a
+        // fixed 0.75 m probe put the footprint half over the rails, so a real side landing was refused -
+        // observed in game on 0.2.0, T16), then out from the face. Each still needs room, a supported
+        // footprint and a fully swept route.
         Vector3 outward = Away();
         Vector3 side = Vector3.Cross(Vector3.up, outward);
-        foreach (Vector3 direction in new[] { outward, side, -side, -outward })
+        float radius = _clearance.Radius;
+        float sideways = _run.Width * 0.5f + radius + 0.15f;
+        foreach (float sign in new[] { 1f, -1f })
         {
-            Vector3 desired = feet + direction * 0.75f;
-            if (_clearance.TryNearbySurface(desired, out Vector3 floor) && PlanExitTo(floor)) { return true; }
+            foreach (float distance in new[] { sideways, sideways + 0.4f })
+            {
+                if (TryLandingNear(feet + side * (sign * distance))) { return true; }
+            }
+        }
+
+        foreach (float distance in new[] { radius + 0.45f, radius + 0.85f })
+        {
+            if (TryLandingNear(feet + outward * distance)) { return true; }
         }
 
         return false;

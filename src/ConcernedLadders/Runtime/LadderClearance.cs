@@ -187,7 +187,8 @@ internal sealed class LadderClearance
     /// <summary>A floor near the run's top: up to a step above it (a ladder ending below a thick floor) or
     /// half a metre below it (a ladder standing proud of the floor).</summary>
     internal bool TryTopSurface(Vector3 desired, out Vector3 floor) => TrySurface(desired, 0.75f, 0.5f, out floor);
-    internal bool TryNearbySurface(Vector3 desired, out Vector3 floor) => TrySurface(desired, 0.15f, 0.25f, out floor);
+    /// <summary>A floor within a step of the climber's feet, above or below, for a mid-ladder dismount.</summary>
+    internal bool TryNearbySurface(Vector3 desired, out Vector3 floor) => TrySurface(desired, 0.45f, 0.45f, out floor);
 
     /// <summary>The standing surface under the feet within <paramref name="maxDrop"/>, ladders and characters excluded.</summary>
     internal bool TryFloorBelow(Vector3 feet, float maxDrop, out float floorY)
