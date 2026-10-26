@@ -16,6 +16,7 @@ internal sealed class LadderMotor : IDisposable
     private AccessTools.FieldRef<Character, Vector3>? _walkVelocity;
     private AccessTools.FieldRef<Character, bool>? _run;
     private Func<Player, bool>? _takeInput;
+    private AccessTools.FieldRef<Player, int>? _interactMask;
     private Harmony? _harmony;
     private MethodInfo? _motion;
 
@@ -56,6 +57,16 @@ internal sealed class LadderMotor : IDisposable
             }
 
             _takeInput = AccessTools.MethodDelegate<Func<Player, bool>>(input);
+            // Optional: the game's own interaction raycast mask, for mounting with the hammer out (owner decision
+            // 2026-10-26). Without it only that route is unavailable; every other mount works.
+            try
+            {
+                if (AccessTools.Field(typeof(Player), "m_interactMask")?.FieldType == typeof(int))
+                {
+                    _interactMask = AccessTools.FieldRefAccess<Player, int>("m_interactMask");
+                }
+            }
+            catch { _interactMask = null; }
             _harmony = new Harmony(id);
             _harmony.Patch(_motion, prefix: new HarmonyMethod(typeof(LadderMotor), nameof(BeforeMotion)));
             _harmony.Patch(jump, prefix: new HarmonyMethod(typeof(LadderMotor), nameof(BeforeJump)));
@@ -89,6 +100,9 @@ internal sealed class LadderMotor : IDisposable
     internal Vector3 MoveDirection(Player player) => _move != null ? _move(player) : Vector3.zero;
     internal float FallHeight(Player player) => _fallHeight != null ? _fallHeight(player) : float.NaN;
     internal bool RunIntent(Player player) => _run != null && _run(player);
+
+    /// <summary>The game's interaction raycast mask, or -1 when the installed game does not expose it.</summary>
+    internal int InteractMask(Player player) => _interactMask != null ? _interactMask(player) : -1;
 
     /// <summary>Only the valid owner while climbing, or a normal release, may rebase the fall reference.</summary>
     internal void SetFallReference(Player player, float height)

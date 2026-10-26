@@ -33,6 +33,14 @@ internal static class ClimbControls
     internal static bool IsNativeBuildAction(bool placeMode, bool holdsBuildTool, bool inAttack) =>
         placeMode && holdsBuildTool && inAttack;
 
+    /// <summary>Limbs the game's own animation owns while attached (owner decision 2026-10-26). An interact takes
+    /// both arms and the upper body for its short animation; the building tool out takes only the hammer (right)
+    /// arm, for its native hold and every swing, while the body, legs and left hand keep the climbing pose.</summary>
+    internal static NativeActionParts Ownership(bool interacting, bool buildToolOut) =>
+        interacting ? NativeActionParts.LeftArm | NativeActionParts.RightArm | NativeActionParts.UpperBody
+        : buildToolOut ? NativeActionParts.RightArm
+        : NativeActionParts.None;
+
     /// <summary>A refreshed connected run may replace the session's run only if it is the same shaft: the same
     /// foot line and standing side, width and rung pitch, and the climber's current height is still on it (from
     /// the lowest hang to the top). A different alignment, a removed section under the climber or a run that

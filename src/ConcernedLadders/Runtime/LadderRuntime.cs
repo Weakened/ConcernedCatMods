@@ -140,7 +140,11 @@ internal sealed class LadderRuntime : IDisposable
 
         _animation.Update(delta);
         try { _presenter?.Update(delta); } catch (Exception exception) { PresenterFault(exception); }
-        if (!IsClimbing) { return; }
+        if (!IsClimbing)
+        {
+            TryBuildModeMount();
+            return;
+        }
         try
         {
             // Update also releases when the physics loop has stopped during world unload.
@@ -190,6 +194,43 @@ internal sealed class LadderRuntime : IDisposable
         (ZInput.GetButtonDown("Use") || ZInput.GetButtonDown("JoyUse")) && !Hud.InRadial();
 
     private static bool JumpPressed() => ZInput.GetButtonDown("Jump") || ZInput.GetButtonDown("JoyJump");
+
+    private readonly RaycastHit[] _buildHover = new RaycastHit[16];
+
+    /// <summary>Mounting with the hammer equipped (owner decision 2026-10-26). In build mode the game clears its
+    /// hover target, so Use never reaches the ladder. This repeats the game's own hover test (camera ray, the game's
+    /// interaction mask, nearest hit, within the interact distance of the eyes) and, on a Use press with gameplay
+    /// focus, sends the hovered ladder through the same Use path as any other mount: reach, room, route and every
+    /// refusal are unchanged. Use is also the hammer's snap-cycle key; that native action still happens.</summary>
+    private void TryBuildModeMount()
+    {
+        try
+        {
+            Player? player = Player.m_localPlayer;
+            if (player == null || !player.InPlaceMode() || _cooldown > 0f || !_motor.Ready || !UsePressed() || JumpPressed()) { return; }
+            if (!GameplayFocus(player) || GameCamera.instance == null) { return; }
+            int mask = _motor.InteractMask(player);
+            if (mask == -1) { return; }
+            Transform camera = GameCamera.instance.transform;
+            int count = Physics.RaycastNonAlloc(camera.position, camera.forward, _buildHover, 50f, mask);
+            float nearest = float.MaxValue;
+            RaycastHit? first = null;
+            for (int index = 0; index < count && index < _buildHover.Length; index++)
+            {
+                RaycastHit hit = _buildHover[index];
+                if (hit.collider == null) { continue; }
+                Rigidbody attached = hit.collider.attachedRigidbody;
+                if (attached != null && attached.gameObject == player.gameObject) { continue; }
+                if (hit.distance < nearest) { nearest = hit.distance; first = hit; }
+            }
+
+            if (first == null) { return; }
+            LadderSegment? segment = first.Value.collider.GetComponentInParent<LadderSegment>();
+            if (segment == null || Vector3.Distance(player.GetEyePoint(), first.Value.point) >= player.m_maxInteractDistance) { return; }
+            Use(segment);
+        }
+        catch (Exception exception) { Fault(exception); }
+    }
 
     private static bool CrouchPressed() => ZInput.GetButtonDown("Crouch") || ZInput.GetButtonDown("JoyCrouch");
 
@@ -326,7 +367,7 @@ internal sealed class LadderRuntime : IDisposable
             if (body == null || body.isKinematic || view == null || !view.IsValid() || capsule == null ||
                 !ClimbPolicy.MayAdmit(view.IsOwner(), Free(player), false, _cooldown))
             {
-                Notice(player.InPlaceMode() ? "$cl_msg_buildtool" : "$cl_msg_unavailable");
+                Notice("$cl_msg_unavailable");
                 return true;
             }
 
@@ -825,8 +866,7 @@ internal sealed class LadderRuntime : IDisposable
         if (_player == null) { return; }
         // The built-in pose lets go of the limbs for the duration of a native hammer swing or interact, so it never
         // pins the arms against the game's own action (Codex review of 075f14b).
-        bool nativeAction = BuildAction(_player) || _player.InMinorAction();
-        _animation.SetLocal(_player, _run, _face, _plane, _pitch, _gripHeight, _gait == ClimbGait.Slide && _mode == Mode.Climbing, attached, nativeAction);
+        _animation.SetLocal(_player, _run, _face, _plane, _pitch, _gripHeight, _gait == ClimbGait.Slide && _mode == Mode.Climbing, attached, NativeOwnership(_player));
         if (_animation.Ready) { _poseSpeed = 0f; }
         Publish(_player);
     }
@@ -862,9 +902,7 @@ internal sealed class LadderRuntime : IDisposable
             bool routed = _mode == Mode.Mounting || _mode == Mode.Exiting;
             Vector3 end = routed && _route.Length > 0 ? _route[_route.Length - 1] : feet;
             float origin = _pitch * 0.5f;
-            NativeActionParts action = BuildAction(player) || player.InMinorAction()
-                ? NativeActionParts.LeftArm | NativeActionParts.RightArm | NativeActionParts.UpperBody
-                : NativeActionParts.None;
+            NativeActionParts action = NativeOwnership(player);
             var frame = new ClimbPresentationFrame(_session, _discontinuity, _geometryRevision, ++_sample, Time.fixedTime,
                 motion, _gait, _travel, step, LadderSegment.Point(feet), _run, _face, _plane, origin,
                 ClimbPresentationFrame.LastRungOf(_run.Height, origin, _pitch), routed ? RouteProgress(feet) : -1f,
@@ -874,6 +912,18 @@ internal sealed class LadderRuntime : IDisposable
         }
         catch (Exception exception) { PresenterFault(exception); }
     }
+
+    /// <summary>Which limbs the game's own animation owns while attached (owner decision 2026-10-26):
+    /// <list type="bullet">
+    /// <item>With the building tool out (build mode), only the hammer arm, the right one: it shows the native
+    /// hammer hold and swings, while the body, legs and left hand keep the climbing pose on the rungs.</item>
+    /// <item>An interact (door, hatch) takes both arms and the upper body for its short animation.</item>
+    /// </list></summary>
+    private static NativeActionParts NativeOwnership(Player player) =>
+        ClimbControls.Ownership(player.InMinorAction(), HoldsBuildTool(player));
+
+    private static bool HoldsBuildTool(Player player) =>
+        player.InPlaceMode() && player.GetRightItem()?.m_shared?.m_buildPieces != null;
 
     /// <summary>A presenter fault disables presentation only; the climb and the built-in pose continue.</summary>
     private void PresenterFault(Exception exception)
@@ -1171,7 +1221,7 @@ internal sealed class LadderRuntime : IDisposable
     private static bool Free(Player player, bool attached = false) =>
         !player.IsDead() && !player.IsTeleporting() && !player.IsAttached() && !player.InBed() &&
         !player.IsRiding() && !player.InCutscene() && !player.IsSwimming() && !player.IsDebugFlying() &&
-        (attached || !player.InPlaceMode()) &&
+        // Build mode with the hammer never refuses a mount or ends a climb (owner decision 2026-10-26).
         (!player.InAttack() || (attached && BuildAction(player))) &&
         !player.InDodge() && !player.IsKnockedBack() && !player.IsStaggering() && (attached || !player.InMinorAction());
 

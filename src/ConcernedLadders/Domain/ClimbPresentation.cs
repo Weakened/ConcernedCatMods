@@ -46,9 +46,10 @@ internal enum ClimbEnd
     Fault,
 }
 
-/// <summary>Body parts a native action (hammer swing, interact) currently owns. The values come from the native
-/// baseline (hammer_Swing plays on the 'upperbody' layer; both hands move, the hips do not). Presentation must
-/// release its own influence on these parts while set.</summary>
+/// <summary>Body parts the game's own animation currently owns. Owner decision 2026-10-26: with the building tool
+/// out only the hammer (right) arm is native, for its hold and every swing, while the body, legs and left hand keep
+/// the climbing pose; an interact (door, hatch) owns both arms and the upper body. Presentation must release its own
+/// influence on these parts while set, from the first frame.</summary>
 [Flags]
 internal enum NativeActionParts
 {
@@ -146,7 +147,8 @@ internal readonly struct ClimbPresentationFrame
     internal ClimbPoint TransitionFrom { get; }
     internal ClimbPoint TransitionTo { get; }
 
-    /// <summary>Body parts a native action owns this step (hammer place/repair/remove, interact).</summary>
+    /// <summary>Body parts the game owns this step: RightArm while the building tool is out (its hold and every
+    /// place/repair/remove swing); LeftArm | RightArm | UpperBody during an interact.</summary>
     internal NativeActionParts NativeAction { get; }
 
     /// <summary>Build mode with the hammer out, whether or not a swing is in flight.</summary>

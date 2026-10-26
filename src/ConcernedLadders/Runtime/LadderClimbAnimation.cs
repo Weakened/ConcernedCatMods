@@ -70,16 +70,18 @@ internal sealed class LadderClimbAnimation : IDisposable
 
     /// <summary>The local climber's state, set by the ladder runtime every physics step it drives.</summary>
     internal void SetLocal(Player player, in LadderGeometry run, LadderFace face, float plane, float pitch,
-        float handHeight, bool slide, bool attached, bool nativeAction = false)
+        float handHeight, bool slide, bool attached, NativeActionParts native = NativeActionParts.None)
     {
         if (!Ready || _restoring || player == null) { return; }
         Climber climber = Get(player, true, run, face, plane, pitch, handHeight);
         climber.Slide = slide;
-        // A native action (hammer swing, interact) takes the limbs at once, not after a fade: the pose's weight
-        // drops to zero this step and the next IK pass clears what it wrote, once (Codex re-review of 85713d6).
-        if (nativeAction && !climber.Yielding) { climber.Weight = 0f; climber.Yielding = true; climber.YieldCleared = false; }
-        else if (!nativeAction) { climber.Yielding = false; }
-        climber.Target = attached && !nativeAction ? 1f : 0f;
+        // An interact takes the whole pose at once, not after a fade: the weight drops to zero this step and the next
+        // IK pass clears what it wrote, once (Codex re-review of 85713d6). The hammer arm is handled per IK pass.
+        bool interact = (native & NativeActionParts.LeftArm) != 0;
+        if (interact && !climber.Yielding) { climber.Weight = 0f; climber.Yielding = true; climber.YieldCleared = false; }
+        else if (!interact) { climber.Yielding = false; }
+        climber.HammerArm = (native & NativeActionParts.RightArm) != 0 && !interact;
+        climber.Target = attached && !interact ? 1f : 0f;
         climber.Seen = 0f;
     }
 
@@ -237,12 +239,20 @@ internal sealed class LadderClimbAnimation : IDisposable
         if (animator == null || !animator.isHuman) { return; }
         // Native action ownership is checked here, at the IK pass itself: a hammer swing or interact that started
         // after the last physics sample owns the limbs from its first evaluated frame (Codex review of d913e26).
-        if (climber.Local && character is Player owner && NativeActionNow(owner, animator) && !climber.Yielding)
+        bool hammerArm = climber.HammerArm;
+        if (climber.Local && character is Player owner)
         {
-            climber.Weight = 0f;
-            climber.Target = 0f;
-            climber.Yielding = true;
-            climber.YieldCleared = false;
+            NativeActionParts now = NativeActionNow(owner);
+            if ((now & NativeActionParts.LeftArm) != 0 && !climber.Yielding)
+            {
+                climber.Weight = 0f;
+                climber.Target = 0f;
+                climber.Yielding = true;
+                climber.YieldCleared = false;
+            }
+
+            // The hammer arm belongs to the game from the first evaluated frame the hammer is out.
+            hammerArm |= (now & NativeActionParts.RightArm) != 0;
         }
 
         float weight = climber.Yielding ? 0f : Mathf.Clamp01(climber.Weight);
@@ -313,40 +323,33 @@ internal sealed class LadderClimbAnimation : IDisposable
 
         Vector3 body = character.transform.position;
         Quaternion footRotation = Quaternion.LookRotation(toward, Vector3.up);
+        // With the hammer out the right arm is left to the game's own hold and swing (owner decision 2026-10-26):
+        // its goal and elbow hint are written at zero weight every pass; the body, legs and left hand keep climbing.
+        float rightArm = hammerArm ? 0f : weight;
         Goal(animator, AvatarIKGoal.LeftHand, leftHand, weight, null);
-        Goal(animator, AvatarIKGoal.RightHand, rightHand, weight, null);
+        Goal(animator, AvatarIKGoal.RightHand, rightHand, rightArm, null);
         Goal(animator, AvatarIKGoal.LeftFoot, leftFoot, weight, footRotation);
         Goal(animator, AvatarIKGoal.RightFoot, rightFoot, weight, footRotation);
         float chest = climber.HandHeight * 0.8f;
         Hint(animator, AvatarIKHint.LeftElbow, body + Vector3.up * chest - right * 0.55f + away * 0.15f, weight);
-        Hint(animator, AvatarIKHint.RightElbow, body + Vector3.up * chest + right * 0.55f + away * 0.15f, weight);
+        Hint(animator, AvatarIKHint.RightElbow, body + Vector3.up * chest + right * 0.55f + away * 0.15f, rightArm);
         Hint(animator, AvatarIKHint.LeftKnee, body + Vector3.up * 0.7f + toward * 0.6f - right * 0.2f, weight);
         Hint(animator, AvatarIKHint.RightKnee, body + Vector3.up * 0.7f + toward * 0.6f + right * 0.2f, weight);
         animator.SetLookAtPosition(Contact(feet + climber.HandHeight + (climber.VerticalSpeed < -0.1f ? -0.6f : 0.6f), 0f));
         animator.SetLookAtWeight(0.6f * weight, 0f, 0.7f, 0.7f, 0.5f);
     }
 
-    private static readonly int AttackTag = ZSyncAnimation.GetHash("attack");
-
-    /// <summary>Reads the animator being evaluated right now: the current state, or the next state while a
-    /// transition runs, on every layer, for the game's attack tag. Player.InAttack caches its answer per update
-    /// tick and can be stale at this pass (Codex review of 825f16c). In build mode no combat attack starts, so an
-    /// attack there is the hammer's. Interact animations are minor actions.</summary>
-    private static bool NativeActionNow(Player player, Animator animator)
+    /// <summary>Native ownership read at the IK pass itself (owner decision 2026-10-26): an interact owns both arms
+    /// and the upper body; the building tool out (build mode) owns only the right, hammer arm, for its hold and
+    /// every swing, without depending on attack-state timing. An unreadable state leaves all limbs to the game.</summary>
+    private static NativeActionParts NativeActionNow(Player player)
     {
         try
         {
-            if (player.InMinorAction()) { return true; }
-            if (!player.InPlaceMode()) { return false; }
-            for (int layer = 0; layer < animator.layerCount; layer++)
-            {
-                int tag = animator.IsInTransition(layer) ? animator.GetNextAnimatorStateInfo(layer).tagHash : animator.GetCurrentAnimatorStateInfo(layer).tagHash;
-                if (tag == AttackTag) { return true; }
-            }
-
-            return false;
+            return ClimbControls.Ownership(player.InMinorAction(),
+                player.InPlaceMode() && player.GetRightItem()?.m_shared?.m_buildPieces != null);
         }
-        catch { return true; } // Unknown state: leave the limbs to the game.
+        catch { return NativeActionParts.LeftArm | NativeActionParts.RightArm | NativeActionParts.UpperBody; }
     }
 
     private static readonly AvatarIKGoal[] Goals = { AvatarIKGoal.LeftHand, AvatarIKGoal.RightHand, AvatarIKGoal.LeftFoot, AvatarIKGoal.RightFoot };
@@ -441,5 +444,6 @@ internal sealed class LadderClimbAnimation : IDisposable
         internal int ClearedFrames;
         internal bool Yielding;
         internal bool YieldCleared;
+        internal bool HammerArm;
     }
 }

@@ -176,6 +176,17 @@ public sealed class ClimbControlsTests
         Assert.Equal(expected, ClimbControls.IsNativeBuildAction(placeMode, tool, inAttack));
 
     [Fact]
+    public void WithTheHammerOutOnlyTheHammerArmIsNative()
+    {
+        // Owner decision 2026-10-26: the body keeps the climbing position; only the hammer-holding arm animates natively.
+        Assert.Equal(NativeActionParts.RightArm, ClimbControls.Ownership(false, true));
+        Assert.Equal(NativeActionParts.None, ClimbControls.Ownership(false, false));
+        // A door or hatch interact still takes both arms and the upper body for its short animation.
+        Assert.Equal(NativeActionParts.LeftArm | NativeActionParts.RightArm | NativeActionParts.UpperBody,
+            ClimbControls.Ownership(true, true));
+    }
+
+    [Fact]
     public void AnAlignedExtensionAboveIsAdoptedWithoutMovingTheClimber()
     {
         LadderGeometry current = Run(0f, 2f);
