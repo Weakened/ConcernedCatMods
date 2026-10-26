@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.4
+
+Internal development build for in-game checks. Not an owner candidate.
+
+- A ladder section placed on top of (or under) another ladder now always lines
+  up as one straight column, whatever rotation the hammer was left at.
+- Cycle Snap offers Top, Bottom and two wall corners that centre the ladder on
+  a 2 m wall. The old top corner points, which could snap a section diagonally
+  off the column, are gone.
+
 ## 0.2.3
 
 Internal animation checkpoint, replacing 0.2.2 before any gameplay use.
