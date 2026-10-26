@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.2
+
+Internal animation checkpoint for the owner test lane. Not a release.
+
+- New original climbing animation: hands and feet follow the rungs with your
+  actual climbing, replacing the 0.2.x limb pose. It is a first prototype and
+  still being fitted.
+- Crouch while climbing drops straight off the ladder, with no hop and no
+  stamina cost. Jump still hops off.
+- You can mount, climb and build with the hammer equipped. While the hammer is
+  out your right arm uses the game's own hammer animation; the rest of the body
+  stays on the ladder.
+- Building a new ladder section above you while climbing extends the climb
+  without getting off. Removing the section you are holding lets you fall
+  normally.
 ## 0.2.1
 
 - Pressing Use partway up now steps off onto a landing beside the ladder. In

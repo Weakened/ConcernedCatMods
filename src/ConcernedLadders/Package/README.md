@@ -4,7 +4,7 @@ Vertical ladders for compact Valheim builds. Three 2 m hammer pieces: Wood
 Ladder, Copper Ladder and Iron Ladder. Stack matching or mixed materials into a
 continuous run.
 
-**0.2.1 is an owner-test candidate, not a release.** It is built against
+**0.2.2 is an internal owner-test checkpoint, not a release.** It is built against
 Valheim 1.0.20 and tested in single player. Multiplayer, dedicated-server and
 controller play have not been tested yet.
 
@@ -17,6 +17,7 @@ controller play have not been tested yet.
 | **Run** + movement | Climb faster (2.43 m/s instead of 1.8). Costs stamina; without stamina you keep climbing normally. |
 | Backward + **Run** at Climbing 20+ | Slide down at 4.5 m/s. Below level 20 it is a fast descent. |
 | **Jump** | Hop off upward and in the direction you are steering (away from the ladder when neutral). Uses the game's own jump and stamina; without enough stamina you simply let go. |
+| **Crouch** | Drop: let go where you are and fall normally. No hop, no stamina. |
 
 Climb either face of a freestanding ladder. At the top of a run the climber steps
 onto a floor beyond the rails or to either side; a closed roof or hatch keeps you
@@ -27,10 +28,13 @@ levels make fast climbing and sliding cheaper (up to 25% at level 100); level 20
 unlocks sliding. The skill uses the game's own skill screen, saving and death
 rules.
 
-**Animation.** Climbers use a custom procedural climbing pose: hands and feet
-take hold of the actual rungs and move with the distance climbed. Other players'
-clients pose a climber from that player's position on the ladder; this has not
-yet been checked with a second player.
+**Animation.** A first original climbing animation: hands and feet follow the rungs as you
+actually climb. It is still being fitted. Other players' clients do not show it yet.
+
+**Building from the ladder.** You can mount and climb with the hammer equipped and place,
+repair or remove pieces while holding on; your hammer arm uses the game's own animation. In build
+mode Interact also cycles snap points, as usual. A new ladder section built above you extends the
+climb; removing the section you hold lets you fall.
 
 ## Building and recipes
 
