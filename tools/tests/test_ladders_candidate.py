@@ -320,7 +320,9 @@ class LadderCandidateTests(unittest.TestCase):
         real = "[Message:   BepInEx] Chainloader startup complete (2 loaded, 0 skipped, 0 failed)\n"
         self.log.write_text(self.cold_log().replace("[Message:   BepInEx] Chainloader startup complete\n", real), encoding="utf-8")
         self.assertEqual(0, self.run_cli()[0])
-        for bad in ("[Message:   BepInEx] Chainloader startup complete (2 loaded, 0 skipped, 1 failed) extra\n",
+        for bad in ("[Message:   BepInEx] Chainloader startup complete (2 loaded, 0 skipped, 0 failed) extra\n",
+                    "[Message:   BepInEx] Chainloader startup complete (2 loaded, 0 skipped, 1 failed)\n",
+                    "[Message:   BepInEx] Chainloader startup complete (0 loaded, 2 skipped, 9 failed)\n",
                     "[Message:   BepInEx] Chainloader startup completed\n"):
             with self.subTest(line=bad):
                 self.log.write_text(self.cold_log().replace("[Message:   BepInEx] Chainloader startup complete\n", bad), encoding="utf-8")
