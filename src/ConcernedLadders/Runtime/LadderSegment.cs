@@ -23,6 +23,21 @@ internal sealed class LadderSegment : MonoBehaviour, Hoverable, Interactable
     /// <summary>Changes whenever a section joins or leaves the loaded registry, so cached runs are rebuilt.</summary>
     internal static int Revision { get; private set; }
 
+    private ZNetView? _view;
+
+    /// <summary>A placed, networked section. The game's placement ghost is an instance of the same prefab created with
+    /// network initialisation forced off; it carries this component but no network object, and it must never join a
+    /// climbable run (a ghost aligned on a run would otherwise extend it, then read as a moved section the moment the
+    /// cursor moves, releasing a climber who is building).</summary>
+    internal bool IsLive
+    {
+        get
+        {
+            if (_view == null) { _view = GetComponent<ZNetView>(); }
+            return _view != null && _view.GetZDO() != null;
+        }
+    }
+
     private void OnEnable() { Registered.Add(this); Revision++; }
     private void OnDisable() { Registered.Remove(this); Revision++; }
     private void OnDestroy() { Registered.Remove(this); Revision++; }
@@ -102,7 +117,7 @@ internal sealed class LadderSegment : MonoBehaviour, Hoverable, Interactable
         var instances = new Dictionary<int, LadderSegment>();
         foreach (LadderSegment candidate in Registered)
         {
-            if (candidate == null || !candidate.TryGeometry(out LadderGeometry geometry)) { continue; }
+            if (candidate == null || !candidate.IsLive || !candidate.TryGeometry(out LadderGeometry geometry)) { continue; }
             int id = candidate.GetInstanceID();
             samples.Add(new LadderSample(id, geometry));
             instances[id] = candidate;
@@ -127,7 +142,7 @@ internal sealed class LadderSegment : MonoBehaviour, Hoverable, Interactable
         ClimbPoint point = Point(feet);
         foreach (LadderSegment candidate in Registered)
         {
-            if (candidate == null || !candidate.TryGeometry(out LadderGeometry geometry)) { continue; }
+            if (candidate == null || !candidate.IsLive || !candidate.TryGeometry(out LadderGeometry geometry)) { continue; }
             if (feet.y < geometry.Bottom.Y - 1.6f || feet.y > geometry.Top.Y + 0.1f) { continue; }
             if (geometry.SidewaysOffsetOf(point) > 0.25f) { continue; }
             float depth = geometry.ReachFrom(point);
@@ -146,6 +161,25 @@ internal sealed class LadderSegment : MonoBehaviour, Hoverable, Interactable
     }
 
     private static readonly LadderFace[] Faces = { LadderFace.Front, LadderFace.Rear };
+
+    /// <summary>A placed section whose bottom-centre or top-centre anchor lies within <paramref name="tolerance"/> of
+    /// <paramref name="point"/>, for stacking a ghost on it. Bounded by the registry limit; ghosts never match.</summary>
+    internal static LadderSegment? FindEndAt(Vector3 point, float tolerance)
+    {
+        if (!Finite(point) || Registered.Count > LadderRules.MaximumRegisteredSegments) { return null; }
+        foreach (LadderSegment candidate in Registered)
+        {
+            if (candidate == null || !candidate.IsLive) { continue; }
+            Transform t = candidate.transform;
+            if (Vector3.Distance(t.TransformPoint(candidate.LocalTop), point) <= tolerance ||
+                Vector3.Distance(t.TransformPoint(candidate.LocalBottom), point) <= tolerance)
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
 
     internal static ClimbPoint Point(Vector3 point) => new ClimbPoint(point.x, point.y, point.z);
     internal static Vector3 Vector(ClimbPoint point) => new Vector3(point.X, point.Y, point.Z);

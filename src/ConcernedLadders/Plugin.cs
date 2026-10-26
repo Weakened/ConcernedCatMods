@@ -21,13 +21,14 @@ public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernedladders";
     public const string PluginName = "Concerned Ladders";
-    public const string PluginVersion = "0.2.3";
+    public const string PluginVersion = "0.2.4";
 
     private ConfigEntry<bool>? _enabled;
     private LadderRuntime? _runtime;
     private LadderPieceRegistration? _pieces;
     private LadderSkill? _skill;
     private OriginalClimbPresenter? _presenter;
+    private LadderSnapAlignment? _snap;
 
     private void Awake()
     {
@@ -35,6 +36,9 @@ public sealed class Plugin : BaseUnityPlugin
             "Enable climbing on Concerned Ladders. Disabling restores player control; placed ladder prefabs remain registered. Restart after changing the installed plugin set.");
         _pieces = new LadderPieceRegistration(message => Logger.LogInfo(message));
         _pieces.Install();
+        // Ladder-on-ladder stacking takes the lower ladder's rotation; every other snap stays native.
+        _snap = new LadderSnapAlignment(message => Logger.LogInfo(message));
+        if (!_snap.Install(PluginGuid + ".snap")) { _snap = null; }
         // The skill registers before any player's Skills awake and whether or not climbing is enabled.
         _skill = new LadderSkill(message => Logger.LogInfo(message));
         _skill.Register();
@@ -73,7 +77,9 @@ public sealed class Plugin : BaseUnityPlugin
         {
             Logger.LogError("Ladder cleanup failed: " + SafeFailure.Brief(exception));
         }
+        _snap?.Dispose();
         _pieces?.Dispose();
+        _snap = null;
         _runtime = null;
         _pieces = null;
     }

@@ -132,16 +132,19 @@ internal sealed class LadderPieceRegistration : IDisposable
             // corner labels of this product. Positions are the unchanged placement contract.
             Snap(prefab.transform, "$hud_snappoint_bottom", Vector3.zero, layer);
             Snap(prefab.transform, "$hud_snappoint_top", new Vector3(0f, 2f, 0f), layer);
-            // Wall corners use the native 2m building grid. A wall's own corner
-            // snaps lie on its centre plane, so these sit behind the ladder by
-            // WallSnapSetback: the rails' back then rests on a 0.3 m wood wall's
-            // face instead of 9 cm inside it (observed in game). Top and bottom
-            // centre points remain the exact stack-continuity contract, and every
-            // ladder carries the same setback, so stacked corners still coincide.
-            Snap(prefab.transform, "$cl_snap_bottom_left", new Vector3(-1f, 0f, -WallSnapSetback), layer);
-            Snap(prefab.transform, "$cl_snap_bottom_right", new Vector3(1f, 0f, -WallSnapSetback), layer);
-            Snap(prefab.transform, "$cl_snap_top_left", new Vector3(-1f, 2f, -WallSnapSetback), layer);
-            Snap(prefab.transform, "$cl_snap_top_right", new Vector3(1f, 2f, -WallSnapSetback), layer);
+            // Wall corners: anchors on the native 2 m building grid that centre the
+            // ladder on a 2 m wall. They are NOT corners of the ladder (its rails
+            // end at x = +/-0.4); a wall's corner snaps lie on its centre plane, so
+            // they sit WallSnapSetback behind the origin and the rails' back rests
+            // on a 0.3 m wood wall's face (observed in game). Only the bottom pair
+            // exists: matched to a wall's bottom or top corners it covers the
+            // ground and the upper floor. The former top pair cross-matched other
+            // ladders' corners (a ghost's bottom-right onto a placed ladder's
+            // top-left), snapping a section diagonally off the column (reproduced
+            // in game 2026-10-26); the top/bottom centre points are the only
+            // ladder-to-ladder stack contract.
+            Snap(prefab.transform, "$cl_snap_wall_left", new Vector3(-1f, 0f, -WallSnapSetback), layer);
+            Snap(prefab.transform, "$cl_snap_wall_right", new Vector3(1f, 0f, -WallSnapSetback), layer);
 
             LadderSegment segment = prefab.AddComponent<LadderSegment>();
             segment.LocalBottom = Vector3.zero;
