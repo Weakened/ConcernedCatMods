@@ -58,6 +58,19 @@ internal static class ClimbTuning
     internal static float KneeSide = 0.1f;
     internal static float KneeDown = 0.2f;
 
+    /// <summary>Near the top: a hand whose rung lies more than RailFromBelow below its shoulder blends (over RailBlend)
+    /// onto the rail, RailBelowShoulder under the shoulder, RailSide from the centreline, RailOut in front of the rail
+    /// centre plane. ExitFold is the torso's extra forward pitch at the middle of a top finish.</summary>
+    internal static float RailFromBelow = 0.42f;
+    internal static float RailBlend = 0.12f;
+    internal static float RailBelowShoulder = 0.3f;
+    internal static float RailSide = 0.34f;
+    internal static float RailOut = 0.08f;
+    internal static float ExitFold = 28f;
+
+    /// <summary>A contact needing more than FadeFrom of its chain fades out toward ReachLimit instead of popping.</summary>
+    internal static float FadeFrom = 0.96f;
+
     /// <summary>A contact needing more than this fraction of the measured chain is skipped and counted; never stretched.</summary>
     internal const float ReachLimit = 1.01f;
 

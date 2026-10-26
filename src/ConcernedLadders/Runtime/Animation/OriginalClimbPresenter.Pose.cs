@@ -43,6 +43,8 @@ internal sealed partial class OriginalClimbPresenter
         if ((native & NativeActionParts.UpperBody) != 0) { bodyWeight = 0f; }
         float sway = actor.Gait.Sway * (1f - actor.SlideBlend);
         float lean = Mathf.Lerp(ClimbTuning.Lean, ClimbTuning.SlideLean, actor.SlideBlend);
+        // Finishing over the top folds the torso forward over the landing, then straightens (owner reference finish).
+        if (frame.Motion == PresentedMotion.TopFinish) { lean += ClimbTuning.ExitFold * Mathf.Sin(Mathf.PI * route); }
         Vector3 pelvis = feet + Vector3.up * (rig.PelvisHeight - ClimbTuning.PelvisDrop) + toward * ClimbTuning.PelvisToward +
                          right * (ClimbTuning.SwayShift * sway);
         Quaternion bodyRotation = Quaternion.LookRotation(toward, Vector3.up) *
@@ -62,11 +64,25 @@ internal sealed partial class OriginalClimbPresenter
                 (limb == 1 && (native & (NativeActionParts.RightArm | NativeActionParts.UpperBody)) != 0)) { continue; }
             OriginalLimbContact contact = actor.Gait.Contact(limb);
             float side = limb == 0 || limb == 2 ? -1f : 1f;
+            Vector3 root = posedBody + bodyDelta * (rig.Roots[limb].position - nativeBody);
             float span = Math.Min(ClimbPresentationFrame.HalfWidth - .04f, hand ? ClimbTuning.HandSpan : ClimbTuning.FootSpan);
             float above = hand ? ClimbTuning.HandAbove : ClimbTuning.FootAbove;
             float outOffset = hand ? ClimbTuning.HandOut : ClimbTuning.FootOut;
             Vector3 surface = RungSurface(frame, contact.Height + above, outOffset, span * side);
             surface += outward * contact.Clearance * (hand ? ClimbTuning.HandClearance : ClimbTuning.FootClearance);
+            if (hand)
+            {
+                // Near the top there is no rung left within reach above: the hand takes the rail instead, at a height
+                // the arm reaches, never above the rail's real top.
+                float rail = Smooth01((root.y - contact.Height - ClimbTuning.RailFromBelow) / ClimbTuning.RailBlend);
+                if (rail > 0f)
+                {
+                    float railY = Mathf.Min(frame.Run.Top.Y - .04f, root.y - ClimbTuning.RailBelowShoulder);
+                    Vector3 railGrip = RungSurface(frame, railY, ClimbTuning.RailOut, side * ClimbTuning.RailSide);
+                    surface = Vector3.Lerp(surface, railGrip, rail);
+                }
+            }
+
             if (actor.SlideBlend > 0f)
             {
                 // A distinct rail-braking pose: these contacts slide by design, not fake planted rung grips.
@@ -112,7 +128,6 @@ internal sealed partial class OriginalClimbPresenter
                 pivot = surface - toward * ClimbTuning.FootBallForward + Vector3.up * ClimbTuning.FootAnkleHeight;
             }
 
-            Vector3 root = posedBody + bodyDelta * (rig.Roots[limb].position - nativeBody);
             float reach = Vector3.Distance(root, pivot);
             actor.Fit.Sample(limb, reach / rig.Reach[limb], root, feet, frame, outward);
             if (reach > rig.Reach[limb] * ClimbTuning.ReachLimit)
@@ -120,6 +135,9 @@ internal sealed partial class OriginalClimbPresenter
                 actor.Fit.Skip(limb);
                 continue; //never stretch a limb or pretend the unreachable target is a successful plant.
             }
+
+            // A contact nearing the limit hands over to the native pose gradually instead of popping off at it.
+            weight *= 1f - Smooth01((reach / rig.Reach[limb] - ClimbTuning.FadeFrom) / (ClimbTuning.ReachLimit - ClimbTuning.FadeFrom));
 
             actor.Lease.GoalInIK(animator, limb, pivot, rotation, weight);
             if (weight >= .999f) { actor.Asked[limb] = true; actor.LastPivot[limb] = pivot; }
@@ -148,6 +166,8 @@ internal sealed partial class OriginalClimbPresenter
 
     private static Vector3 RungSurface(in ClimbPresentationFrame frame, float worldY, float faceOffset, float lateral) =>
         Vector(OriginalRungSurface.At(frame.Run, frame.Face, frame.RungPlane, worldY, faceOffset, lateral));
+
+    private static float Smooth01(float value) { float t = Mathf.Clamp01(value); return t * t * (3f - 2f * t); }
 
     private static float Window(float progress, float from, float to) => SameSideGait.Ease((progress - from) / (to - from));
     private static Vector3 Vector(ClimbPoint point) => new Vector3(point.X, point.Y, point.Z);
