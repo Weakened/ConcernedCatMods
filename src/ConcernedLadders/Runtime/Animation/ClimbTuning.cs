@@ -12,7 +12,7 @@ internal static class ClimbTuning
 
     /// <summary>Pelvis height below the rig's standing pelvis estimate, and how far it leans in toward the rungs.</summary>
     internal static float PelvisDrop = 0.06f;
-    internal static float PelvisToward = 0.07f;
+    internal static float PelvisToward = 0.3f;
 
     /// <summary>Torso pitch toward the ladder while climbing and while sliding; side tilt per unit of sway.</summary>
     internal static float Lean = 10f;

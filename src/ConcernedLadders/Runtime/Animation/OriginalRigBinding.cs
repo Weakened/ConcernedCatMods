@@ -25,6 +25,9 @@ internal sealed class OriginalRigBinding
     internal bool BodyBound { get; private set; }
     internal Vector3 BodyFromPelvis { get; private set; }
     internal Quaternion BodyInPlayer { get; private set; }
+
+    /// <summary>Degrees between the root and the native body rotation when the climb was bound (diagnostic only).</summary>
+    internal float LiveBodyTwist { get; private set; }
     internal Vector3 NativePelvisInBody { get; private set; }
 
     private OriginalRigBinding(Player player, Animator animator, CharacterAnimEvent events)
@@ -78,7 +81,12 @@ internal sealed class OriginalRigBinding
     {
         if (BodyBound) { return; }
         Quaternion root = Player.transform.rotation;
-        BodyInPlayer = Quaternion.Inverse(root) * Animator.bodyRotation;
+        // In game 2026-10-26: copying the live body rotation baked whatever native pose ran first (the hammer idle,
+        // a jump) into every climbing frame, turning the hips about 30 degrees off the ladder. A humanoid's neutral
+        // body rotation faces its root, so the climbing pose is built from that, and only the measured centre-of-mass
+        // offset is kept.
+        BodyInPlayer = Quaternion.identity;
+        LiveBodyTwist = Quaternion.Angle(root, Animator.bodyRotation);
         BodyFromPelvis = Quaternion.Inverse(Animator.bodyRotation) * (Animator.bodyPosition - Hips.position);
         NativePelvisInBody = Quaternion.Inverse(Animator.bodyRotation) * (Hips.position - Animator.bodyPosition);
         BodyBound = true;
