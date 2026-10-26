@@ -73,6 +73,8 @@ vanilla balance. Keep them in one policy surface; record measured tuning.
 | Use while attached | Swept exit to safe standing ground, or hold with a reason |
 | Forward / backward / neutral | Up / down / hold, independent of camera pitch |
 | Jump (default Space) | Real upward and directed departure when native jump conditions permit |
+| Fresh Crouch action while attached | Drop: release immediately without a jump impulse or a landing requirement; works at zero stamina |
+| Hammer while attached | Aim, select, rotate/snap, place, repair and remove through native controls; hold the anchor during building actions and focused menus |
 | Run + movement | Fast climb; native binding, default Shift, including controller/toggle |
 | Backward + Run, learned level < 20 | Fast descent |
 | Backward + Run, learned level >= 20 | Controlled slide |
@@ -82,13 +84,17 @@ vanilla balance. Keep them in one policy surface; record measured tuning.
 | Skill stamina saving | Linear 0..25% at learned levels 0..100, fast/slide only |
 | Grab reach | Initial 1.5 m chest-to-usable-rung maximum, measured in game |
 | Air alignment limits | 1.0 m horizontal and 0.25 m vertical body adjustment |
-| Post-jump remount | At least 0.4 s across all these ladders AND a fresh Use edge |
+| Post-Jump/Drop remount | At least 0.4 s across all these ladders AND a fresh Use edge |
 | Skill XP | Native RaiseSkill factor 0.25 per completed eligible metre; IncreaseStep 1 |
 
 Use processed game actions, current remaps and native hold/toggle sprint.
 Pause intent under chat, console, map, inventory and menus. Resolve input once:
-one Use press must not mount and immediately dismount; Jump takes precedence
-when Use and Jump arrive together.
+one Use press must not mount and immediately dismount. Resolve simultaneous
+eligible ladder actions as Jump > Crouch/Drop > Use > travel, with one departure only.
+Native hammer actions own their bindings before ladder Use-to-dismount; a
+shared snap-cycle/Use binding must not detach the player. Crouch
+means a fresh press of the player's actual bound action, not a raw key or an
+already-toggled sneak state. A button held before mounting must not auto-drop.
 
 ## 4. Reach, midair catch and both faces
 
@@ -112,7 +118,7 @@ then uses ordinary falling from the actual release height.
 Keep air alignment within its separate limits. Allow reachable low-rung
 hanging using the real grip height/capsule; do not hoist feet to the module
 bottom or create invisible downward ladder length. Unsupported bottom limits
-hold. After Jump, held Use or an adjacent ladder cannot bypass cooldown/fresh
+hold. After Jump or Drop, held Use or an adjacent ladder cannot bypass cooldown/fresh
 edge. Busy/dead/teleporting/attached/debug-flight/overlay states remain gated;
 airborne state alone is not a refusal.
 
@@ -127,7 +133,7 @@ route; never pull through it or switch sides with the camera. Mixed-material
 seams need compatible physical lanes. Reject gaps, overlaps, incompatible
 rotations and parallel-shaft shortcuts.
 
-## 5. Jump and usable floor exits
+## 5. Jump, Drop and usable floor exits
 
 Space/Jump must visibly hop upward and toward the intended departure direction,
 including toward a side platform. Resolve movement relative to the horizontal
@@ -142,16 +148,63 @@ At insufficient native jump stamina it still deliberately releases with
 ordinary gravity. Settle preceding climb stamina before jump affordability;
 never charge two jumps or trap an exhausted player.
 
+Fresh Crouch while a ladder session is active means **Drop**. It works during
+mounting, holding, normal/fast travel, sliding and an exit transfer. Release
+immediately at the current safe body position, with ordinary gravity and no
+upward or sideways launch. Do not require ground below, a safe landing, stamina
+or an unobstructed top exit. Keep collision enabled; there is no teleport or
+extra outward shove. Remove only ladder-commanded motion, including horizontal
+mount/exit transfer motion, without erasing independently applied motion or
+writing after ownership loss. Do not simply zero the complete velocity vector.
+
+Drop has no stamina cost or skill award of its own. Settle any preceding earned
+climb payment/progress exactly once; an exhausted player still releases.
+Ordinary fall damage starts from the actual release height after an accepted
+catch. Clear ladder animation/control and enforce the same 0.4 s plus fresh Use
+remount guard as Jump. Consume the attached Crouch press so it does not also
+toggle native sneak. Preserve pre-existing native crouch state and all normal
+crouch behavior outside a ladder session. Do not replay presses made in an
+overlay when it closes. Localized hints show separate bound Jump and Drop
+actions. See [DROP_AND_SCAFFOLDING_ADDENDUM_2026_10_25.md](DROP_AND_SCAFFOLDING_ADDENDUM_2026_10_25.md).
+
 A correctly placed ladder also allows walking onto the next floor without
 Jump. Plan before the head hits a lip. Search bounded plausible floor heights
 and inboard destinations; require full standing room, footprint support and
 a swept clearance/rise/cross/settle route. Revalidate every stage. The normal
 up/onto-floor/walk-away/return/down loop must work without precision timing.
 Test thin/thick lips, both clear faces, rotations and intermediate landings.
-A closed roof/hatch/railing still blocks; reverse, safe Use and Jump remain
+A closed roof/hatch/railing still blocks; reverse, safe Use, Jump and Drop remain
 responsive. Removed support is never retained as an invisible foothold.
 
-## 6. Truthful obstruction feedback
+## 6. Scaffolding and obstruction feedback
+
+### Building from the ladder
+
+A stationary attached ladder is usable as a scaffold. Equip/switch the hammer,
+aim freely, open/close its menu, choose/rotate/snap/place pieces, repair and remove
+using the game's native controls. The hammer itself does not forbid mounting
+or climbing. With no travel intent, or while a native building action/menu owns
+input, hold the current anchor without passive climb cost or XP. Resume travel
+only from deliberate valid input after the action; never replay queued menu
+movement. Hammer animations may move the arms, not the physical anchor.
+
+Preserve native building range, materials, costs, stations, wards, support,
+placement validity, collision and refunds. Do not fake grounding, enlarge reach,
+disable the player's collider or bypass an invalid-placement result. Allow only
+verified native hammer actions through busy/action gates, not general combat.
+Focused menus continue to own input; with gameplay focus Jump and Drop still
+depart deliberately. Hammer snap/menu/selection actions must not fall through
+to ladder Use-to-dismount. Other controls work normally outside the session.
+
+After placing a connected ladder extension, refresh the bounded connected run
+while preserving the current face and anchor. The player can climb into the
+new section without remounting; no per-frame world scan or crossing a gap,
+ambiguous join or parallel shaft. Removing the active supporting ladder releases
+normally; removing an unrelated piece does not. Custom climb pose/IK must allow
+native hammer presentation and restore correctly afterward. See the addendum
+for exact source risks and R36–R43 acceptance.
+
+### Obstruction wording
 
 An error blaming **another building piece** is allowed only when the relevant
 query identifies an actual blocking native `Piece` other than the selected
@@ -177,7 +230,7 @@ clamp must not cancel the boost while stamina is charged.
 Charge once for observed eligible distance divided by full-input mode speed,
 so analog input has consistent cost per metre. Budget maximum effective cost
 before issuing a paid step. Keep one bounded pending step and settle actual
-displacement once before another paid step or voluntary Use/Jump. Ownership
+displacement once before another paid step or voluntary Use/Jump/Drop. Ownership
 loss discards pending state without a remote write. Apply native world/status
 multipliers once. No charge for blockage, holds, overlays, failed grabs or
 mount/exit alignment; teleports/knockback are not climbing distance.
@@ -215,11 +268,27 @@ or product-localized corner labels; never expose `snap_bottom_left` or raw
 `$` tokens. Fix the narrow label integration, not the entire panel. Localize
 new skill/action/blocked hints too.
 
+Complete [VANILLA_ANIMATION_BASELINE_2026_10_26.md](VANILLA_ANIMATION_BASELINE_2026_10_26.md)
+before implementing replacement motion. Analyze genuine native metadata and
+playback so sampling, cadence, blends and fluidity fit the installed game.
+Use [LIMB_FRAME_REFERENCE_2026_10_26.md](LIMB_FRAME_REFERENCE_2026_10_26.md) and
+its per-frame CSVs for original limb/body contact planning and capture comparison;
+finalize the provisional gait/easing after the native baseline. The reference
+sample count is not gameplay FPS or an instruction to quantize pose updates.
 Inspect the installed rig/controller and compatible Unity asset pipeline.
-Attempt original in-place climb/hold/slide/transfer clips or scoped procedural
-limb animation. Phase/cadence follows actual signed travel. Physics owns
+Codex authors original climb/hold/slide/transfer motion from the supplied visual
+references, fitted to the installed rig. Use original clips adapted for in-place
+presentation or a scoped original procedural solution. Meshy purchase and stock
+animation exports are outside the selected route; the GIFs are reference only.
+Follow [ANIMATION_REVIEW_2026_10_26.md](ANIMATION_REVIEW_2026_10_26.md): the owner
+rejected the submitted arm/leg motion and then selected original authoring.
+Claude keeps gameplay authority and lead integration; Codex owns animation in
+an isolated worktree. An uninvolved reviewer assesses its work. R25 must prove the
+replacement on the actual character and rungs, including supported top exit.
+Traversal phase/cadence follows actual signed travel; mount/catch/finish also
+follow accepted transition progress. Physics owns
 movement; equipment stays intact. Overrides are per character and restore
-only our state on every exit/takeover. Prefer embedded owned assets; loose
+only our state on every exit/takeover. Prefer embedded original animation assets; loose
 assets need package/hash/install coverage and extension of the current strict
 six-file verifier before they can pass its gate. That tooling change is not a
 reason by itself to defer animation. No extracted game assets ship.
@@ -255,7 +324,7 @@ PR [#433](https://github.com/Weakened/ConcernedCatMods/pull/433), linked to issu
 worktrees are allowed; the lead alone integrates, builds under the existing
 lock, installs and operates Valheim. Never reset ongoing work to an old bundle.
 
-Follow [TEST_PLAN.md](TEST_PLAN.md): applicable A/B/T/L/P and R01–R35 before
+Follow [TEST_PLAN.md](TEST_PLAN.md): applicable A/B/T/L/P and R01–R43 before
 owner solo readiness, plus actual M/network rows before release review.
 Historical PASS rows do not transfer. Source review, artifact identity and
 gameplay are separate gates. `IDENTITY_MATCH_ONLY` with

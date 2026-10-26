@@ -26,6 +26,87 @@ are additive. The photos do not measure metres or identify the installed DLL.
 | N05 — both faces and real blockers | Mount/climb/exit on either clear face, staying on that face's lane. Building-blocked wording requires an actual other blocking native Piece on the queried route. Own ladder, a Piece behind the clear face, range and missing support do not qualify. Terrain/actors still collide and get truthful reasons. | T03, R08/R13/R34, video segment 5 |
 | N06 — Cycle Snap | Cycle every native snap point/mode with readable localized Top/Bottom/corner labels and current bindings; no internal snap_ names or raw tokens. | B06, R24, video segment 6 |
 
+## Additional owner request: Crouch drops from the ladder
+
+N07 adds a distinct deliberate Drop on a fresh native Crouch press, while Jump
+remains the powered hop and Use retains its safe-exit behavior. Drop works in
+every attached mode, including at zero stamina or without a landing below.
+It supplies no upward/outward impulse, restores ordinary gravity/collision/fall
+behavior and the player's normal animation, and uses the shared 0.4 s plus
+fresh Use remount guard. Respect remaps/controllers; a pre-held or already-toggled
+Crouch is not a new release request. Jump > Drop > Use resolves simultaneous
+input once. The release press cannot also toggle sneak or leak through an overlay.
+
+Full contract: [DROP_AND_SCAFFOLDING_ADDENDUM_2026_10_25.md](DROP_AND_SCAFFOLDING_ADDENDUM_2026_10_25.md).
+Evidence: R36–R38 and an added Drop segment after the original six demonstrations.
+This request is required and additive; no runtime implementation is claimed here.
+
+## Additional owner request: build while holding the ladder
+
+N08 makes the ladder usable as a scaffold. While attached, equip the hammer,
+aim, select/rotate/snap/place, repair and remove through native controls; opening
+menus keeps the player anchored. Equipping the hammer alone does not forbid
+mounting or climbing. Building actions and focused menus hold the anchor with
+no passive climb cost/XP. Normal range, materials, station/ward/support and
+placement/collision rules still apply. No combat-wide busy-state exemption.
+
+Native hammer bindings win over a conflicting ladder Use-to-dismount action;
+in particular snap cycling must not detach the player. Jump and Crouch/Drop
+remain separate deliberate departures when gameplay input has focus. A newly
+built connected ladder section becomes usable without remounting, through
+bounded run refresh. Removing the current support causes ordinary release;
+removing an unrelated piece does not. Preserve native hammer animation and
+equipment alongside ladder pose, and restore them on all exits.
+
+Evidence: R39–R43 and an added scaffolding demonstration. Both N07 and N08
+are required additions to the original six notes and earlier features.
+
+## Later animation review — 26 October 2026
+
+N09 records the owner's rejection of the submitted arm/leg motion and the Meshy
+mount/climb/top-finish references. Its source and installed package identity are
+unknown here; do not attribute that preview to the historical audited commit.
+Follow [ANIMATION_REVIEW_2026_10_26.md](ANIMATION_REVIEW_2026_10_26.md).
+The subsequent N10 decision below selects original authoring. GIFs define the
+visual target but are not importable skeletal clips. Original motion still
+requires actual rig fitting and gameplay integration. Expand R25/P02–P04 evidence as
+specified there. Do not mark the rejected presentation accepted or silently
+reuse it under the conditional walking-fallback allowance.
+
+## Original animation ownership — later decision on 26 October 2026
+
+N10 supersedes the prior Meshy acquisition option. Use the GIFs as references and
+author original motion. No Meshy purchase or stock animation export is required
+or selected. Existing references are sufficient to begin; ask for another only
+if a specific unresolved visual choice would materially change the result.
+
+Codex owns animation implementation in an isolated worktree while Claude keeps
+runtime mechanics, shared integration files, builds, packaging and game operation.
+Follow the new CODEX_PROMPT.md. Preserve the former full review matrix in
+CODEX_REVIEW_CHECKLIST_2026_10_26.md, using an uninvolved reviewer for animation.
+A small read-only presentation interface carries accepted movement and state;
+it does not grant Codex a second movement/input controller. The supplied GIFs
+remove no requirement to inspect the actual rig, contacts and gameplay result.
+
+## Frame reference and native fluidity — additional decisions on 26 October
+
+N11 requires a written frame-by-frame reference for the hands, feet, elbows,
+knees, pelvis and torso during ascent/descent. Use
+LIMB_FRAME_REFERENCE_2026_10_26.md and the per-frame CSVs. These are provisional
+original contact plans, with exact offsets and swing/plant labels rather than
+guessed bone angles. Compare implementation captures against the chosen plan.
+
+N12 requires native animation analysis BEFORE replacement implementation.
+Follow VANILLA_ANIMATION_BASELINE_2026_10_26.md: inspect actual native rig/clip
+metadata and playback, including transitions and hammer actions, then choose
+sampling, cadence, easing and blends consistent with vanilla. Separate asset
+sampling, playback speed, screen FPS and capture FPS. Do not infer 30/60 FPS from
+references, hide missing access or require a full curve dump unnecessarily.
+Claude runs the game; Codex analyzes; an uninvolved reviewer checks the baseline.
+Both requests extend R25/P02–P04 and retain all earlier features.
+
+## Earlier requirements retained
+
 The earlier Run, stamina, skill, slide and snap-text requests remain required.
 Normal/fast/slide defaults are 1.8/2.43/4.5 m/s; fast/slide cost 6/2 stamina per
 second of eligible travel, with a learned-level stamina saving up to 25%.
@@ -59,7 +140,7 @@ completion of the runtime revision.
 The prior tests explicitly required falling-grab refusal; rear-face refusal
 was recorded PASS. Those results are preserved in
 [STATUS_0_1_1_HISTORICAL.md](STATUS_0_1_1_HISTORICAL.md) and cannot satisfy the
-new T03/T04/T17 or R01–R35 cases. No current profile, installed DLL, ZIP hash
+new T03/T04/T17 or R01–R43 cases. No current profile, installed DLL, ZIP hash
 or moving-game evidence was independently reverified by this repository audit.
 
 ## Implementation and review obligations

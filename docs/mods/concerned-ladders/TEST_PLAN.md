@@ -122,8 +122,8 @@ Record which convenience was used. No third-party gameplay mod is required.
 | T16 | Interact halfway at a supported landing | swept safe dismount; normal movement immediately resumes |
 | T17 | Space/Jump low/high, neutral and toward a side platform, in every attached mode | visible upward/directed hop when affordable, one native payment; zero stamina still releases; 0.4 s plus fresh Use before remount |
 | T18 | Turn camera upward/downward/180° during climb | forward still up; backward still down; no camera seizure |
-| T19 | Remap movement, Run, Interact and Jump; toggle sprint | all use current processed actions; no hardcoded E/W/Shift/Space-only path |
-| T20 | Controller catch, analog normal/fast/slide, hold, exit and Jump | complete loop without keyboard, current hints/toggle/deadzone; record BLOCKED if no real controller |
+| T19 | Remap movement, Run, Interact, Jump and Crouch; toggle sprint | all use current processed actions; no hardcoded E/W/Shift/Space-only path |
+| T20 | Controller catch, analog normal/fast/slide, hold, exit, Jump and Drop | complete loop without keyboard, current hints/toggle/deadzone; record BLOCKED if no real controller |
 | T21 | Open chat/console/map/inventory/menu while moving | intent pauses; no typing-driven motion, no stuck movement after close |
 | T22 | Attack/dodge/stagger/knockback during approach or climb | defined safe refusal/release; no locked controls or duplicate combat action |
 | T23 | Nearby parallel, reversed, gap and rotated ladder segments | no false joins, shortcuts or transfer to wrong shaft |
@@ -172,7 +172,7 @@ the limitation before release; solo tests cannot substitute.
 | ID | Procedure | Required result |
 |---|---|---|
 | P01 | Inspect all variants day/night/rain, near/far | readable silhouette and material, no absent state/pink shader |
-| P02 | Record catch/normal/fast/slide/hold/reverse/exits and Jump | custom animation meets active contract, or documented CUSTOM_ANIMATION_DEFERRED plus motion-linked tested walk fallback |
+| P02 | Record catch/normal/fast/slide/hold/reverse/exits, Jump, Drop and hammer work | custom animation meets active contract, or documented CUSTOM_ANIMATION_DEFERRED plus motion-linked tested walk fallback |
 | P03 | Observe another player's animation | no local-only success disguised as multiplayer proof |
 | P04 | Test equipment/stowing, normal animation after release/death | no persistent override; equipment inventory unchanged |
 | P05 | 100+ pieces, nobody climbing | no per-frame world scans/log spam; compare same-base frame-time capture |
@@ -192,10 +192,10 @@ All start NOT RUN for this revision. A prior 0.1.1 PASS cannot populate them.
 | R01 | Reconcile actual local branch/dirty work, full build SHA, installed/package identity and active profile; preserve old candidate without treating it as the revision. |
 | R02 | Recreate the reported upper-floor layout. Record geometry; a valid lip exits without Jump, a closed shaft still blocks. |
 | R03 | Twenty up/onto-floor/walk-away/return/down loops across three materials, both clear faces and rotations; no snag, edge fall or precision timing. |
-| R04 | Thin/thick lip, railing, intermediate landing, low roof and closed hatch: valid routes pass, true barriers hold; down/Use/Jump remain responsive. |
+| R04 | Thin/thick lip, railing, intermediate landing, low roof and closed hatch: valid routes pass, true barriers hold; down/Use/Jump/Drop remain responsive. |
 | R05 | Jump neutral and with camera-relative movement from mounting/hold/climb/exit; upward and intended horizontal departure, including onto a side platform; one native payment. |
 | R06 | Jump during fast climb/slide and at zero stamina; real affordable hop or deliberate exhausted release, no retained motor/automatic regrab, ordinary falling. |
-| R07 | All ladders enforce 0.4 s plus fresh Use after Jump; held Use, adjacent ladder, same-frame Jump/Use and remaps cannot double-dispatch. |
+| R07 | All ladders enforce 0.4 s plus fresh Use after Jump or Drop; held Use, adjacent ladder, same-frame Jump/Drop/Use and remaps cannot double-dispatch. |
 | R08 | Both freestanding faces mount/climb/exit on their own lanes. Wall blocks only its actual route; camera never flips sides. Do not solve rear routing by ignoring ladder colliders. |
 | R09 | Reproduce the two range photos without inferring their metres. Measure chest-to-rung probes at 0.5/1.0/1.5 m and just outside the configured boundary, including offsets; hints agree with Use. |
 | R10 | Deliberate rising/falling catches high/low preserve bounded alignment; legal low-rung hang works without feet-clamp hoisting or invisible extension. |
@@ -204,7 +204,7 @@ All start NOT RUN for this revision. A prior 0.1.1 PASS cannot populate them.
 | R13 | Ten-section mixed run on each face, reverse at every seam; reject gaps, overlaps and physically incompatible lanes. |
 | R14 | Timed full-input normal/fast travel proves 1.8/2.43 m/s; stamina matches eligible distance/time, not held intent or frame count. |
 | R15 | Exhaustion during fast/slide returns to normal/hold. Blocked/neutral/overlay states have no mod drain or XP. |
-| R16 | Remapped Run/Use/Jump/movement, real controller, native sprint toggle, device switch and analog deadzone; no keyboard-only inference. |
+| R16 | Remapped Run/Use/Jump/Crouch/movement, real controller, native sprint toggle, device switch and analog deadzone; no keyboard-only inference. |
 | R17 | Natural practice earns Climbing; native UI, readable original icon/name/description and notifications appear without synthetic initial XP. |
 | R18 | Save, exit and reload preserve native learned level/within-level progress; other character is independent; one definition. Unawarded sub-metre carry need not persist across exit. |
 | R19 | Native death loss and applicable protection/world settings observed; exact outcomes recorded, no fixed-percent assumption. |
@@ -213,9 +213,9 @@ All start NOT RUN for this revision. A prior 0.1.1 PASS cannot populate them.
 | R22 | No XP from hold, blockage, failed/correct catch, slide, mount/exit, fall, teleport or repeated input without travel; fractional normal/fast travel accumulates once on owner. |
 | R23 | Different frame rates, long frame, short obstruction and pending-step release settle stamina/XP once; analog cost per metre stable, no old 1.8 speed clamp or double modifiers. |
 | R24 | Cycle every snap point/mode: native-style localized Top/Bottom/corners and current key/controller hints; no snap_ or raw $ token. |
-| R25 | Actual custom-animation prototype and completed presentation, or concrete inspected/attempted blocker plus CUSTOM_ANIMATION_DEFERRED and tested fallback; both faces/equipment/hold/reverse/fast/slide/exits. |
-| R26 | Jump/death/teleport/disabled climb/destruction/lost owner/logout and ten world/profile cycles restore presentation/control and clear pending accounting. |
-| R27 | Real host/client each catch/jump/fast-climb/slide while observed; coherent motion/presentation, no remote XP/stamina writes. |
+| R25 | Complete the native-animation baseline before replacement implementation; separate sampling/playback/render/capture rates and justify vanilla-like fluidity. Cross-check the written per-frame contact/body reference against actual footage. Rework the owner-rejected limb presentation under ANIMATION_REVIEW_2026_10_26.md. Actual-character evidence must prove fitted rung contacts, grounded mount, continuous travel/hold/reverse/fast/slide, accepted midair catch, supported top step and blocked-top hold, immediate Jump/Drop and hammer work on both faces, with equipment/cleanup intact. Original authored motion from the supplied GIF references is required for the selected implementation route; no Meshy acquisition or mannequin/GIF-only acceptance. An uninvolved reviewer assesses Codex-authored animation. A concrete inspected/attempted blocker plus CUSTOM_ANIMATION_DEFERRED and tested walking remains conditional; the rejected limb implementation cannot pass. |
+| R26 | Jump/Drop/death/teleport/disabled climb/destruction/lost owner/logout and ten world/profile cycles restore presentation/control and clear pending accounting. |
+| R27 | Real host/client each catch/jump/drop/build/fast-climb/slide while observed; coherent motion/presentation, no remote XP/stamina writes. |
 | R28 | Real simultaneous/opposite-face users, occupied exit, remote ladder removal, late join/reconnect and stale-presentation cleanup. |
 | R29 | Dedicated server and missing/mismatched candidate; complete original M matrix for release review. |
 | R30 | Exact final ZIP imported in observed TCC-Ladders-Dev; one active own DLL/GUID, new version/full source startup and dependencies/assets; A11 identity chain passes. |
@@ -223,7 +223,15 @@ All start NOT RUN for this revision. A prior 0.1.1 PASS cannot populate them.
 | R32 | Independent reviewer checks final source against every requested behavior and exact package/evidence; no in-scope P0/P1, precise readiness verdict. |
 | R33 | All three English names read Wood Ladder / Copper Ladder / Iron Ladder in hammer, hover and repair text; saved IDs unchanged. |
 | R34 | Building-block reason appears only for an actual other blocking Piece on the queried route. Own ladder, Piece behind clear face, distance, terrain, actor and missing support never falsely report it; real collision still blocks unsafe routes. |
-| R35 | One final-version evidence set contains all six latest-note demonstrations below plus earlier sprint/skill/slide/snap/animation results; source and installed identity are tied to captures. |
+| R35 | One final-version evidence set contains all six original-note demonstrations below, later Drop/scaffolding demonstrations and earlier sprint/skill/slide/snap/animation results; source and installed identity are tied to captures. |
+| R36 | Fresh Crouch/Drop during mounting, hold, up/down/fast climb, slide, transfer and hammer use on both faces releases without hop, outward kick, landing requirement or release charge; repeat at zero stamina. |
+| R37 | Remapped keyboard/controller Crouch, pre-held/toggled state, overlay closure and simultaneous Jump/Drop/Use: one intentional departure, no buffered drop or native sneak/world-use leakage; native crouch works off ladder. |
+| R38 | Drop removes only ladder-commanded motion, settles preceding climb cost/progress once, restores animation/control and ordinary fall from release height; independent motion/ownership preserved, no fall XP, 0.4 s plus fresh Use guard across same/adjacent ladders. |
+| R39 | Mount with/equip hammer, aim, choose/rotate/snap/place, repair/remove, hotbar and build/inventory menus while held; both faces/materials. Anchor remains still with no passive climb cost/XP; deliberate traversal resumes without putting the hammer away. |
+| R40 | Hammer operations retain native range/material/station/ward/support/collision/placement/refund rules and execute once. Shared native snap/Use binding does not dismount; gameplay-focused Jump/Drop still works; no combat-wide busy exemption. |
+| R41 | Build aligned same/mixed-material extensions while attached, then climb into the new run without remounting. Bounded refresh preserves face/anchor; gaps, ambiguous joins and parallel shafts do not create a shortcut. |
+| R42 | Remove the active ladder and observe clean ordinary falling/control; unrelated removal leaves attachment intact. Changed geometry never leaves invisible cached support. Hammer/climb animation and equipment restore after actions, Jump/Drop, death and logout. |
+| R43 | Real host/client scaffold building, extension, removal and Drop show native world changes and coherent held/hammer presentation; no remote motor/XP/stamina writes or duplicate actions. Required for release review; explicitly BLOCKED if no second endpoint. |
 
 Boundary skill levels may be set by recorded disposable-course setup commands;
 natural progression is tested separately. Turn off no-cost/infinite-stamina,
@@ -295,6 +303,18 @@ Also capture timed normal/fast/slide movement, exhaustion, skill level 20 thresh
 relock, native snap text and actual animation or the documented fallback. Keep
 full R-row observations; this short demonstration does not replace them.
 
+Add two further final-version segments for the later owner requests:
+
+7. **Drop:** contrast powered Jump with Crouch release; show zero stamina,
+   fresh/remapped input, ordinary fall, cleanup and deliberate later regrab.
+8. **Scaffolding:** hammer menu/snap/place/repair/remove while held, build an
+   extension and climb it without remounting, then remove current support.
+   Show normal costs/collision, no passive climb drain/XP, and intact equipment.
+
+R43 is a real network row alongside R27–R29; unavailable endpoints are BLOCKED
+for solo testing and required for release review. See the full addition in
+[DROP_AND_SCAFFOLDING_ADDENDUM_2026_10_25.md](DROP_AND_SCAFFOLDING_ADDENDUM_2026_10_25.md).
+
 ## 11. Finish and retest rules
 
 On a failure, record the test ID, exact source/DLL hash, repro and log/capture,
@@ -304,7 +324,7 @@ or required gate warrants it. Run the full mandatory gate once on the final
 candidate and deploy exactly that build.
 
 Ready for owner solo testing requires all applicable A01–A12, B01–B12,
-T01–T23, L/P and non-network R01–R35 rows, current scope review, no in-scope
+T01–T23, L/P and non-network R01–R43 rows, current scope review, no in-scope
 P0/P1 and exact importable package identity. Required controller evidence may
 be BLOCKED only when a real controller is unavailable and that limitation is
 explicit; complete every accessible solo case. Real network rows may likewise

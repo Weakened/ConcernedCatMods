@@ -7,7 +7,10 @@ Paste this complete prompt into the existing local integration session.
 Continue our Concerned Ladders work in `Weakened/ConcernedCatMods`. Implement
 and verify the active owner revision; do not return another unchanged 0.1.1
 candidate or only a plan. You own integration, licensed builds, manager imports
-and game operation. Codex independently checks the current source and evidence.
+and game operation. Codex now owns original animation implementation in an
+isolated worktree. Keep motor/input/collision/stamina/skill/building and shared
+integration files with you. Arrange an uninvolved animation reviewer; Codex may
+still independently review runtime code it did not author.
 Use subagents where useful, with isolated worktrees and explicit file ownership.
 Never let two writers share a tree or run competing publicizer/build jobs.
 
@@ -78,6 +81,30 @@ head reaches a lip, search bounded plausible landings, require full standing
 room/inboard footprint support and sweep clearance/rise/cross/settle. Revalidate
 every stage. Real roofs/hatches/railings block with responsive reverse/Use/Jump.
 
+**Additional owner requests: Crouch/Drop and scaffolding.** Follow
+DROP_AND_SCAFFOLDING_ADDENDUM_2026_10_25.md as required scope. A fresh native
+Crouch press deliberately drops from every attached mode without a launch,
+landing check or release stamina cost. Settle preceding earned climb cost once;
+remove only ladder-commanded motion, including transfer motion, and preserve
+external impulses, collision and ordinary falling. Respect native remaps and
+controller actions. Pre-held/toggled crouch and menu-buffered presses must not
+drop a new attachment. Jump > Drop > eligible Use resolves once; consume losing
+edges to prevent sneak or world interaction from also firing. Use the shared
+0.4 s plus fresh Use remount guard. Off-ladder native crouch stays unchanged.
+
+Build while attached through native hammer controls: equip/mount with a hammer,
+aim, open menus, choose/rotate/snap/place, repair and remove. Hammer alone does
+not prevent climbing; native building actions and focused menus hold the anchor
+with no passive climb cost/XP. Native hammer actions own shared Use bindings
+before ladder dismount, so snap cycling cannot drop the player. Keep native
+costs, range, stations, wards, support, placement, collision and refunds. Allow
+only verified hammer action states through busy gates, not general combat.
+New aligned ladder extensions must refresh the bounded session run and become
+climbable without remounting. Do not keep the old InPlaceMode refusal or cached
+mount-only run. Removing current support releases normally; unrelated removal
+does not. Allow native hammer arm/action animation while preserving the anchor.
+Complete R36–R43 and the Drop/scaffolding demonstrations on the final package.
+
 **Run, stamina and slide.** Read current processed Run intent with remaps,
 controller and native hold/toggle, not raw Shift or a stale running flag after
 motion suppression. Normal speed 1.8 m/s, fast 1.35x=2.43 at base 6 stamina/s.
@@ -87,7 +114,7 @@ Exhaustion returns to normal/hold, never forces a fall. Remove the old 1.8 clamp
 from both planning and applied mode speed; mount/exit alignment stays ordinary.
 Pay native stamina once for observed eligible distance/full-input mode speed.
 Pre-budget maximum effective cost, allow one pending step, settle once before
-the next paid step or voluntary Use/Jump and before jump affordability. Apply
+the next paid step or voluntary Use/Jump/Drop and before jump affordability. Apply
 native multipliers once; discard pending state on ownership loss without remote
 writes. No hold/blocked/overlay/failed-grab/mount/exit charge. Teleport/knockback
 is not climbing distance. Analog cost per metre must remain consistent.
@@ -113,12 +140,30 @@ corners, current bindings and existing panel/mode/cycling. No snap_bottom_left
 or raw $ token; do not replace the entire hint UI. Retire midair-unavailable
 feedback; separate range, genuine blockage, control and no-landing reasons.
 
-**Conditional animation.** Inspect actual rig/controller and compatible Unity
-pipeline. Attempt original in-place clips or a scoped procedural limb solution:
+**Native analysis is required before animation implementation.** Follow
+VANILLA_ANIMATION_BASELINE_2026_10_26.md. Codex supplies read-only inspection;
+you run the diagnostic/native gameplay session and captures under the existing
+lead/build rules. Record genuine native clip metadata and playback for walk/run/
+jump/crouch/swim/hammer, distinguish sampling from rendered/capture FPS, and
+review the chosen cadence/blend approach before replacement motion is authored.
+Optional curve access may be unavailable; do not invent it or block a sufficient
+metadata-plus-playback baseline. Missing native access/playback is an explicit
+BLOCKED_NATIVE_ANIMATION_BASELINE. Continue unrelated runtime work meanwhile.
+
+**Written frame reference.** Use LIMB_FRAME_REFERENCE_2026_10_26.md and both
+animation-reference CSVs with Codex. These provisional frames express contact
+order and actual-travel phase, not a mandated FPS or a second root-motion path.
+Require frame-to-capture comparison of hands, feet, knees/elbows and torso on
+the actual character. Finalize gait/timing after the native baseline.
+
+**Original animation — Codex owns implementation.** Follow the new
+CODEX_PROMPT.md and agree a narrow file boundary plus read-only presentation
+interface. Integrate Codex's original rig-fitted clips or scoped original
+procedural motion:
 climb/hold/reverse/fast/slide/transfer, actual-travel cadence, equipment intact,
 per-player state and complete restoration. Walking-speed parameters alone are
 fallback. Runtime SetCurve does not author arbitrary non-legacy Animator clips.
-Prefer embedded owned assets; loose assets need packaging/hash coverage. Prove
+Prefer embedded original animation assets; loose assets need packaging/hash coverage. Prove
 observer presentation; local playback does not automatically replicate. Any
 necessary minimal presentation-only sync needs documented independent review,
 owner validation/bounds/stale cleanup, no remote motor or persistent player-ZDO
@@ -126,22 +171,36 @@ keys. If a sound solution cannot be completed, document concrete inspected
 blockers/attempt or failed prototype, keep tested walking and mark
 CUSTOM_ANIMATION_DEFERRED. Other requested mechanics remain required.
 
+**Owner rejected the submitted limbs.** Read ANIMATION_REVIEW_2026_10_26.md.
+The owner subsequently chose original animation from the GIF references, with
+Codex implementing it while you continue runtime work. Meshy Mount Start / Climb
+Loop / Climb Finish are visual references only; no purchase or stock clip import.
+Do not treat GIF previews as skeletal assets or assume rig compatibility.
+Coordinate the first fitted loop on the actual
+player and ladder, then mount/hold/descent/top transfer and all interruptions.
+Ground mount and midair catch differ; the motor validates every real exit.
+Fit rung contacts, use actual-travel cadence and preserve hammer work. Diagnose
+mapping/blending/root-motion defects before declaring a feasibility blocker.
+Supply the expanded R25 in-game evidence; the rejected implementation cannot pass.
+
 ## 3. Implement, review and test in that order
 
 Repair reach/face/jump/floor/blocker behavior first; then stamina/skill/slide,
-labels and animation attempt. Use narrow verified native adapters and existing
+labels. Codex owns original presentation. Use narrow verified native adapters and existing
 production policy seams. Replace obsolete unsupported/falling rejection tests
 with legal airborne positives and blocked negatives; preserve ownership,
 overlay, cooldown, nonfinite and lifecycle protections. Add meaningful tests
 that reject the old behavior, not fake game stubs or self-fulfilling assertions.
 
-Request Codex review of the exact repaired source with requirement coverage,
-not only a generic bug verdict. Fix actual findings and obtain review of the
+Request independent review of the exact repaired source with requirement coverage;
+Codex may review parts it did not author. Use an uninvolved animation reviewer.
+Require explicit coverage and evidence for each requested behavior. Fix actual
+findings and obtain review of the
 new head. Source review does not substitute for running the plugin.
 
 Use disposable character/world/course. Profile isolation does not isolate
 native saves. Turn off cheats before stamina, fall, collision and natural skill
-observations. Execute applicable original A/B/T/L/P/M gates and R01–R35 in
+observations. Execute applicable original A/B/T/L/P/M gates and R01–R43 in
 TEST_PLAN. Include 20 floor loops, all Jump modes/zero stamina/side platform,
 both clear faces, measured reach/rising/falling/failed catches, input priority,
 mixed seams, fast/slide speed and cost, native skill persistence/death/isolation,

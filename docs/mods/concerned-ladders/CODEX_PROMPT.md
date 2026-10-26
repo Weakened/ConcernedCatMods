@@ -1,207 +1,233 @@
-# Codex continuation prompt — independent scope, runtime and package review
+# Codex continuation prompt — author the original ladder animations
 
-Paste this complete prompt into the existing local review session.
+Owner decision: 2026-10-26. Paste this complete prompt into the existing local
+Codex session. This replaces its former default read-only animation-review role.
 
 ---
 
-Continue Concerned Ladders in `Weakened/ConcernedCatMods`. Claude integrates the
-owner revision and prepares the new tested ZIP. Your default is independent
-read-only review. Do not race the lead in source, builds, manager or game.
-Fixes require an agreed allowlist in a separate worktree and lead integration.
-Use isolated subagents for bounded reviews if helpful. Only the lead operates
-Valheim and imports packages; actual product builds use the existing lock.
+Continue Concerned Ladders in `Weakened/ConcernedCatMods`. You own original
+animation implementation while Claude continues the ladder runtime and remains
+integration lead. The owner chose the supplied GIFs as visual references and
+does not want to buy Meshy or use its stock animation exports. Author our own
+motion against the actual installed Valheim character. Do not stop at a plan,
+a generic mannequin demonstration or a walking-speed parameter change.
 
-## 1. Establish the current candidate and actual acceptance contract
+The previous arm/leg presentation was rejected. Its candidate identity is not
+established by the uploaded image; inspect current local code before diagnosing
+it. The references are sufficient to begin. Additional owner references and
+paid assets are not prerequisites.
 
-Read AGENTS.md, CLAUDE.md, naming conventions and this product's PROJECT,
-OWNER_REVISION_2026_10_25, ARCHITECTURE, TEST_PLAN and current STATUS. These
-explicitly replace the old supported-only/no-stamina/no-skill scope. Do not
-reject new behavior because an obsolete test required every falling grab to
-fail. Historical results live in STATUS_0_1_1_HISTORICAL and are not new passes.
+## 0. Mandatory native analysis and written frame reference
 
-Reconcile current local root, branch/full SHA/dirty work and lead ownership.
-The reported path was `C:\code\cc-integration\cl-ladders`; inspect it rather than
-resetting to an old bundle. Audited PR #433 head
-ce6bb7f7ac7b9862b35090baeed61b8ece39a825 only changes STATUS after tested product
-7e4e7357359ce9329e4274aec186740cddfea87e. Two different 0.1.1 ZIPs were reported.
-Neither an old NO P0/P1 nor a 0.1.1 filename identifies today's installed bytes.
-Keep unknown local source/ZIP/profile identity unverified until observed.
+The owner requires native animation analysis BEFORE replacement animation
+implementation. Complete VANILLA_ANIMATION_BASELINE_2026_10_26.md first. Inspect
+the actual loaded native rig/controller and available clip metadata, then have
+Claude capture native walk/run/jump/crouch/swim/hammer behavior. Distinguish clip
+sampling rate, effective state speed, rendered FPS and capture FPS. Inspect
+curves only if available safely in local editor tooling; metadata plus real
+playback can suffice when raw curves are unavailable. Never invent native FPS
+or copy game clips into the mod. Read-only diagnostic tooling may be written now.
+If native access or actual playback evidence is missing, report
+BLOCKED_NATIVE_ANIMATION_BASELINE rather than silently skipping this gate.
 
-Before a defect verdict, build a coverage table mapping every current request
-to implementation, production-policy tests and actual new game evidence.
-**Missing requested mechanics are NO_GO, not accepted P2s or optional polish.**
-A name-only patch, new log line or updated specification cannot fulfill them.
+Produce NATIVE_ANIMATION_BASELINE.md and native_animation_baseline.csv with
+observed metadata, measured playback, inferences and unknowns clearly separated.
+Record the supported choice of authoring sampling, easing, cadence and blending.
+An uninvolved reviewer checks the evidence; then proceed without another owner
+scope confirmation. Match actual vanilla fluidity, not just a nominal FPS label.
 
-## 2. Verify every current feature
+Read LIMB_FRAME_REFERENCE_2026_10_26.md and both animation-reference CSVs. They
+provide every 0–60 ascent/descent sample for paired and three-contact plans,
+hand/foot contact targets and body progression. They are provisional original
+plans, not measurements of Meshy's or Valheim's skeleton. Frame numbers are
+normalized distance phases, not 60-FPS playback. Resolve actual rig dimensions,
+contacts, easing and the chosen gait after the native baseline. The one-limb-at-
+a-time variant is not mandatory at full speed; compare cadence before committing
+to it. Never apply the body-travel reference again as root movement.
 
-- **Reach and air admission:** initial 1.5 m capsule-relative chest-to-usable-rung
-  maximum, not camera/prefab distance. First two latest photos are range
-  reproductions, not measured metres. Same hint/admission predicate, native
-  interaction priority, optional bounded ladder-only 45-degree assistance.
-  Fresh Use supports rising/falling; 0.25 m vertical/1 m horizontal alignment,
-  legitimate low-rung hang without endpoint hoist. LOS AND full capsule route
-  before all physics/fall/pose/stamina/XP writes. Failed catch is inert;
-  successful catch arrests its fall once. No global interaction/fall change.
-- **Both faces:** chosen approach face is locked; stand-off derives independently
-  from each real collider face. The old box at z=.08.. .24 is asymmetric. Pure
-  negative-plane admission is not proof: audited runtime routes it to front
-  through its own box. Require a same-face lane fix, not message suppression or
-  blanket ladder-collider exclusions. Camera cannot flip sides; mixed seams
-  need compatible physical lanes, no gaps/overlaps/parallel shortcuts.
-- **Space jump and usable floors:** upward plus camera-relative movement-directed
-  departure, including onto a side platform; neutral outward. Native force,
-  cost and modifiers once in every attached mode, no fake grounding or lost
-  next-tick impulse. Zero stamina deliberately releases. All ladders require
-  0.4 s plus fresh Use, Jump beats stale Use. Independently require a reliable
-  next-floor walk-off without Jump: early lip planning, bounded destinations,
-  full room/inboard footprint support and continuous swept-route revalidation.
-  A real closed roof/hatch must still block with responsive controls.
-- **Truthful reason:** building-blocked wording requires an actual other blocking
-  native Piece identified by the relevant query, not own connected ladder,
-  a Piece behind the clear face, range failure or no landing. Terrain/actors
-  still physically block and receive appropriate reasons; unknown/overflow
-  fails safely with neutral feedback. Reject a text-only repair masking the
-  wrong mount lane or removal of collision to make the error disappear.
-- **Run and accounting:** native processed Run/remap/controller/hold-toggle;
-  normal 1.8, fast 2.43 at base 6 stamina/s, learned level 20 down+Run slide 4.5 at base 2/s.
-  Below level 20 down+Run fast-descends. Neutral/Run-release/reverse brake predictably;
-  exhaustion returns to normal/hold. Mode speed reaches actual motion, no old
-  clamp charging for an absent boost. Native cost once from actual eligible
-  distance/full-input mode speed; one pre-budgeted bounded pending step settles
-  before the next paid step or voluntary Use/Jump, before jump affordability.
-  No blocked/hold/overlay/failed-grab/mount/exit cost, teleport credit, double
-  multiplier or writes after ownership loss; analog cost per metre consistent.
-- **Native skill:** stable ID
-  `com.theconcernedcat.valheim.concernedladders.climbing`, registered in Awake
-  even with climb disabled. Store AddSkill return, read actual learned native
-  level; SkillManager.GetSkill is a definition. `IncreaseStep=1`, native RaiseSkill
-  factor 0.25 per completed normal/fast metre, owner only. Fractions carry across
-  mounts in one character/world session and clear at logout/change. No XP from
-  hold/block/catch/slide/mount/exit/fall/correction/spam. Native UI/save/within-
-  level progress/death/protection/settings; no second save or production level
-  assignments. Learned 19.99/20.00/>20 and loss-below level 20 relock, not effective buff
-  or remembered unlock. Linear 0..25% fast/slide stamina saving over 0..100.
-- **Names and snapping:** Wood Ladder, Copper Ladder, Iron Ladder in all three
-  hammer/hover/repair surfaces, permanent IDs unchanged. Native snap panel,
-  modes/cycling/coordinates/bindings stay; localized Top/Bottom/corners, no raw
-  snap_bottom_left/$ tokens. Inspect actual formatter, no double-prefix guess
-  or whole-panel replacement. New hints/reasons localized, old no-midair text
-  removed only alongside actual new behavior.
-- **Animation:** inspect actual rig/controller/pipeline and an original in-place
-  or scoped procedural attempt with real limb motion, actual-travel cadence,
-  equipment integrity and restoration. Walking parameters are fallback, not
-  custom animation. A concrete inspected/attempted blocker or failed prototype
-  plus tested walking may be CUSTOM_ANIMATION_DEFERRED. Only this feature is
-  conditional. Existing packaging limits must be extended for needed owned
-  assets; they are not an excuse to skip the feasibility attempt.
+Maintain a frame-to-capture comparison recording LH/RH/LF/RF contacts, knee/elbow
+bends and pelvis/torso behavior. Interpolate between reference samples, preserve
+unwrapped rung indices at loop seams and retain planted contacts on stop/reverse.
+Mount/catch/top-finish use validated transition progress. The first good loop is
+an internal checkpoint; finish the complete motion set below.
 
-## 3. Audit the difficult runtime boundaries
+## 1. Reconcile ongoing work and establish ownership
 
-Confirm each bug in current source before calling it fixed. Owner screenshots
-show layouts/messages, not a proven collision-free route or measured distance.
-Require positive valid-lip/rear-face/air-catch cases beside real roof/wall/
-range/occupied-route negatives. General collision bypass is never a fix.
+Read AGENTS.md, CLAUDE.md, naming conventions, this product's PROJECT,
+ARCHITECTURE, OWNER_REVISION_2026_10_25, ANIMATION_REVIEW_2026_10_26,
+DROP_AND_SCAFFOLDING_ADDENDUM_2026_10_25, TEST_PLAN and active STATUS. Reconcile
+the actual local branch, full SHA, worktrees and dirty work. The cloud audit is
+historical, not a reset target. Preserve Claude's work and all earlier mechanics.
 
-Check local ownership BEFORE motion, pose, stamina and XP. Failed binding leaves
-pieces registered and native movement usable. Death/teleport/changed owner/
-destroyed or rotated piece/disabled setting/unload/logout/exception must clear
-sessions and pending accounting without rewriting an external controller.
-No remote actor, NPC or another product acquires this motor.
+Use a separate animation branch/worktree from the reconciled integration point.
+Establish a narrow file allowlist from the current tree. You own original motion
+sources, rig binding, scoped presentation, contacts and animation validation.
+A product-local Runtime/Animation area and original authoring sources are
+reasonable if they fit the current structure.
 
-Trace input order end to end. Native Interact plus assisted targeting must not
-dispatch Use twice. Jump wins simultaneous input, current Run survives native
-motion suppression, overlays stop intent. Controller/toggle works through real
-current actions, not a keyboard GetButton assumption. Idle hooks preserve
-native doors/chests/combat/build controls and ordinary ladders/stairs.
+Claude retains LadderRuntime/motor, admission, inputs, collisions, landing
+choices, stamina, skill, build actions, lifecycle authority, shared project
+resource declarations, versioning, package scripts, profile imports and game
+operation. Supply proposed hook/resource changes for Claude to integrate; do
+not concurrently edit those files or create a second gameplay controller.
+Ordinary agent coordination needs no new owner scope approval.
 
-Inspect actual capsule centre/radius/scale and asymmetric ladder collision,
-allowed rotations, below-bottom hanging, headroom, footprint support, changing
-routes, actor blocking and full query buffers. Bounds cannot silently truncate
-a run or choose a random neighbor. No per-frame world scans/unbounded allocation.
+Use subagents for bounded authoring/review in separate worktrees with explicit
+file ownership. An uninvolved reviewer must assess your animation; you cannot
+provide its sole independent acceptance. Preserve general review duties in
+CODEX_REVIEW_CHECKLIST_2026_10_26.md. You may independently review Claude's motor
+where you did not author it.
 
-Review jump's airborne guard, impulse handoff and exactly-once native payment.
-Successful catch changes fall accounting only after acceptance; failed catch is
-inert and later departure has normal fall semantics. Verify jump toward the
-camera-relative requested side platform, not only neutral outward release.
+## 2. Reference and target inspection
 
-Audit observed displacement settlement, maximum effective budget and stale-step
-cleanup under long frames, collision, zero stamina, voluntary release and lost
-ownership. An intentional completed step cannot become free via an immediate
-Jump, but lost ownership cannot cause a remote write. Native learned level,
-not a definition/buff, gates slide. Do not claim native save/death behavior from
-Jotunn source alone; inspect/test the actual installed game.
+Visual reference: https://www.meshy.ai/animation-library/body-movements/climbing
 
-For custom animation inspect original ownership/license, runtime asset loading,
-per-character override/graph, no root-motion travel, restoration and observer
-presentation. Local playback is not network proof. Independently review any
-minimal presentation-only protocol before integration: owner validation,
-finite/bounded values, stale expiry, late join, disconnect; no remote movement,
-per-frame motor RPCs or persistent player-ZDO keys. Observers award no XP/cost.
+Use Ladder Mount Start, Ladder Climb Loop and Ladder Climb Finish to understand
+the grounded approach/hop, coordinated climbing and upper-floor transition.
+Fast Ladder Climb is an additional cadence reference. Create original keyframes
+or original procedural motion; do not download or extract Meshy skeletal assets.
 
-## 4. Demand evidence that distinguishes the old candidate
+The supplied files are valheim_0YqMtj2yNo.gif (rejected), chrome_CCFS3rFAiU.gif
+(mount), chrome_PwrevvFic4.gif (loop), chrome_IhKvXoS72v.gif (fast reference), and
+chrome_1IXDLInCG2.gif (finish/loop/mount). In the cloud copies the first three
+are single-frame PNGs despite their filenames; the final two contain animation.
+Use task attachments or their observed local location, not an assumed cloud
+path on the PC. A still proves no motion. The previews contain no ladder, so
+fit contacts to our actual geometry.
 
-Inspect the active T03/T04/T17 expectations and R01–R35. Preserve useful original
-A/B/L/P/M checks. Tests must prove legal airborne/same-face behavior, not only
-assert existing constants; retain negative ownership/overlay/cooldown/collision/
-nonfinite cases. Old unsupported/falling-negative tests must be replaced where
-they conflict. Do not accept engine stubs or large unrelated test totals as a
-compiled/gameplay proof. Full Python mutation tests run separately in an
-isolated checkout; mandatory verify.ps1 uses actual licensed references.
+Inspect and record the installed player rig/avatar type, required bones, rest
+pose, local axes, scale, limb proportions, Animator/controller, equipment and
+other pose writers. Inspect rung spacing, usable span, both physical faces and
+physical anchor. Missing bones or incompatible binding must fail cleanly.
+Do not guess a skeleton from names or package extracted game/player assets.
 
-Require measured reach, rising/falling catches and failed grab, twenty floor
-loops, all jump modes/zero stamina/remount, both faces, ten mixed seams, native
-interaction/remaps/controller/toggle, timed speed/stamina/XP, natural skill
-progress/save/death/isolation,19.99/20/relock, slide braking, readable snaps,
-all cleanup and current package import. Mark missing observations NOT RUN or
-BLOCKED, never PASS. Only custom animation can be conditionally DEFERRED.
+Choose a compatible original authoring path from installed tools and observed
+rig facts. Prefer editable authored clips with limited contact correction where
+useful. Scoped original procedural motion is acceptable if it meets the same
+visual standard; arbitrary limb oscillations or blind bone rotations do not.
+Retain editable keyframes/curves or authoring projects and reproducible export
+instructions. Do not invent a runtime non-legacy SetCurve pipeline: Unity
+supports that method at runtime only for legacy clips.
 
-Inspect six final-version video segments in the owner's order: measured photo
-reach approaches; actual Space hop onto a side platform plus separate top-floor
-walk-off; rising/falling air catches and inert failed catch; Title Case names in
-hammer/hover/repair; both faces and correct building vs own-ladder/behind-face/
-range/terrain/actor reasons; every native Cycle Snap label/mode/binding.
-Also require sprint, skill/level-20 slide and actual animation or fallback evidence. A still or PNG named .gif proves no motion.
+## 3. Small read-only presentation interface
 
-Report defects with severity, source location, condition, consequence and minimal
-repair. Separate confirmed bugs from hypotheses/unrun tests. Review the repaired
-head, not an older diff. Do not let an old PASS survive a changed requirement.
+Agree concrete names/types with Claude from current code. This is a semantic
+contract, not an asserted native API or permission to implement another motor:
 
-## 5. Verify exact package identity, then issue the verdict
+| Accepted runtime fact | Presentation use |
+|---|---|
+| Attachment/session and discontinuity/reset identity | Bind once and clear stale presentation |
+| Ground mount, accepted air catch, hold, up/down, fast, slide, transfer | Select original motion |
+| Actual completed signed travel with sample identity or cumulative measure | Advance once, not on every repeated render frame |
+| Physical face, stable ladder basis, rung geometry and anchor | Fit contacts without moving the player |
+| Validated mount/catch/top-exit state and progress | Blend along accepted gameplay |
+| Equipment, native hammer/action ownership and focused-menu hold | Preserve native arm/action animation and stable hold |
+| Release, death, destruction, teleport, disable, owner loss or takeover | Restore only presentation state still owned by this mod |
 
-The new feature version is >=0.2.0 and strictly newer than reconciled local work.
-GUID/assembly/package/prefab/skill identities remain permanent. Version metadata,
-changelog and manifest agree. Root metadata, own DLL under plugins, no outer
-wrapper/game/dependency/other-product binaries/source bundle/saves/credentials.
-Prefer owned assets embedded in DLL; any loose assets need explicit packaging,
-identity-gate extension and hash/install coverage. Do not quietly omit them.
+Only traversal-loop phase follows actual signed distance. Mount, catch and top
+finish also need accepted transition progress; do not reduce all modes to one
+vertical-speed float. A timer cannot infer a successful landing. Do not retain
+an obsolete 1.8 speed clamp when the motor supports faster travel.
 
-Verify sequence: freeze -> package (rebuild) -> full verify -> compare DLL ->
-repackage verified bytes without rebuild if needed -> manager-import exact ZIP
--> cold-start -> final gameplay evidence. Exactly one active own DLL/GUID and
-expected dependencies; no loose development copy beside managed import. `.r2z`
-is a dependency profile file, not the local mod ZIP. Preserve unrelated profiles.
+Presentation does not consume inputs, mount/release the player, move the capsule,
+alter gravity, select collision paths, reset falls, spend stamina, award skill
+or write remote movement. Validate finite data and session identity before
+presentation writes. Claude supplies the accepted gameplay outcomes.
 
-Inspect the actual Windows Downloads Known Folder and identical tested ZIP copy.
-Run/review `tools/verify_ladders_candidate.py` with all seven observed arguments:
---package, --verified-dll, --plugins, --game-log, --source-commit (full 40-character build
-SHA), --version and --downloads-copy. Python 3.11+ and the strict six-file package
-contract apply; extend the verifier first for necessary loose assets. See
-TEST_PLAN for the PowerShell command.
-Success is IDENTITY_MATCH_ONLY, gameplayVerified=false and
-binaryProvenanceVerified=false. It checks identity consistency, not requested
-behavior or compiler provenance. Require the real controlled build record and
-fresh one-startup full-SHA log; a fabricated banner is not evidence. Record the
-tested build SHA separately from a later docs-only commit. Reject old/same-version
-confusion, stale logs, duplicate plugins, mismatched bytes or unverified assets.
+## 4. Complete original motion set
 
-Your verdict names exact reviewed source SHA, version and package SHA256:
-GO_FOR_OWNER_SOLO_TEST, GO_FOR_RELEASE_REVIEW or NO_GO. Required missing mechanics
-mean NO_GO. A genuinely unavailable controller or real network endpoint may be
-explicitly BLOCKED for solo testing; release review requires actual network/
-dedicated rows. Conditional animation fallback must be documented. Identity
-success and source-only review never become a gameplay PASS.
+| State | Required presentation |
+|---|---|
+| Ground mount | Reach into a believable grip; a small hop only follows the admitted motor transition |
+| Upward loop | Coordinated hand/foot contacts and natural torso motion on actual rungs |
+| Hold | Stable planted contacts at arbitrary stops; no walking in place, drift or rung change to finish a clip |
+| Descent | Deliberate downward movement and smooth reversal; adapted upward motion must pass actual-character inspection |
+| Fast travel | Cadence follows real faster travel; blocked players never cycle through imaginary movement |
+| Learned slide | Intentional slide pose and clean transitions to/from hold or climbing |
+| Midair catch | Blend from accepted airborne pose to a reachable grip without replaying a ground launch or adding a hoist |
+| Top finish | Step onto the validated supported floor; blocked or missing landings retain responsive hold |
+| Jump / Crouch Drop | Immediate handoff to powered jump versus unpowered drop when gameplay has focus; no waiting for clip completion |
+| Hammer/scaffold work | Hold the body while required native hammer arm/upper-body actions remain visible and functional |
 
-Keep reviewing concrete repairs until accessible gates are complete. No public
-publication, tag or main merge. The lead must return the exact reinstallable
-ZIP in actual Downloads, evidence and at most four preference checks for the
-owner; build/import/basic regression remain the agents' work.
+First fit one full climb loop on the real player and ladder, then finish all
+transitions/modes. This is an internal implementation sequence, not a separate
+unfinished proof of concept for the owner.
+
+Normalize authored travel for the physics-owned character. Inspect root and
+skeletal displacement so the visible body cannot leave its capsule, double its
+movement or teleport through a lip. Use coherent pose/blending ownership per
+body part. Scope changes per character; never mutate shared donor controllers.
+
+Require consistent knee/elbow bends, no joint flips, stretched limbs, repeated
+rung penetration or obvious sliding through planted contacts. Use bounded
+correction only for reachable contacts. Derive tolerances from actual geometry;
+no metre values come from the GIFs. Both faces work without negative-scale
+limb inversion. Keep phase through mixed-material seams and newly built
+extensions. Stop on real blockage and reverse coherently.
+
+The motor's normal/fast/slide defaults remain 1.8/2.43/4.5 m/s. Animation sets
+none of the speeds, costs or unlocks. Preserve all accounting and input rules.
+During hammer actions release the required hand/upper-body grip influence while
+retaining a credible supported hold. Do not freeze the hammer, cancel actions,
+change inventory/equipment ownership or require stowing it to resume climbing.
+Focused menus remain a hold and do not replay queued input.
+
+## 5. Cleanup, observers and packaging
+
+Restore only owned animation resources on every release, destruction, death,
+teleport, disable, logout, ownership change or external takeover. Do not restore
+stale state over a newer controller. Ordinary walking, combat, jump, swimming,
+crouch and equipment must remain correct afterward.
+
+Prove actual observer presentation. Prefer sufficient verified native replicated
+state. Any new presentation-only protocol needs independent design review,
+bounded values and stale/late-join cleanup under the existing constraints.
+No remote motor, stamina or XP authority. Dedicated operation must not require
+graphics loading. Local playback alone is not multiplayer evidence.
+
+Prefer original assets embedded in the mod DLL. The current candidate checker
+rejects undeclared loose files. If separate assets are necessary, Claude must
+extend package declarations, installed hashes and identity verification
+explicitly. Do not weaken the checker globally or abandon animation because of
+its current format. Preserve all package and saved prefab identities.
+
+## 6. Finish through actual-character verification
+
+Use meaningful tests where appropriate for phase continuity, duplicate samples,
+transitions and cleanup. Such tests do not prove contacts or visual quality.
+Do not invent engine stubs or tests that merely repeat implementation constants.
+
+Claude alone performs licensed engine builds under the existing lock, manager
+imports and game operation. Supply concrete code/assets and a capture list for
+lead integration; do not take over the running profile/game. Basic regression
+work belongs to the agents, not the owner.
+
+Complete R25/P02–P04 on the real Valheim character, front/side views, both faces:
+mount, several loops, arbitrary stop/hold, reversal, fast climb, seams, supported
+top step and blocked-top hold. Also show accepted/rejected air grabs, distinct
+Jump versus Drop, slide, hammer placement/repair/removal and normal animation
+and equipment after release. Inspect footage for contact sliding, joint flips,
+pose snapping and body/capsule separation. Retain lifecycle, scaffolding and
+real host/client observer gates; unavailable endpoints are BLOCKED.
+
+Have an uninvolved reviewer assess your source and actual-character evidence.
+The rejected limb implementation cannot pass under a new name. Meshy purchase
+or export is no longer a dependency or blocker. Any genuine technical blocker
+needs inspected evidence, the attempted solution and a concrete next step.
+The prior conditional tested walking fallback remains a transparent contingency,
+never proof that the selected original animation was delivered.
+
+Return committed original sources and export instructions, source SHA, changed
+file allowlist, exact integration hooks/resource needs, verification results and
+remaining limitations. Claude integrates, builds a new uniquely versioned ZIP,
+imports that exact package into TCC-Ladders-Dev and ties source, installed
+DLL/assets, startup and captures to it. Record later documentation commits
+separately from the tested build SHA. No public release/tag/main merge is
+authorized. Continue until accessible work is complete or a concrete external
+blocker remains; further reference collection is not a default reason to stop.
+
+## Primary technical constraints
+
+- [Unity Avatar retargeting](https://docs.unity3d.com/6000.0/Documentation/Manual/Retargeting.html): configured humanoid Avatars are required for that route; inspect the actual target.
+- [Unity AnimationClip.SetCurve](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/AnimationClip.SetCurve.html): runtime support is legacy-only; non-legacy authoring requires the appropriate editor pipeline.
+- [Unity AnimatorOverrideController](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/AnimatorOverrideController.html): clip replacement exists, but target compatibility and scoped ownership require inspection.
