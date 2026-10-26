@@ -12,9 +12,11 @@ NOT_READY:
 2. **Drop and scaffolding (N07/N08).** Implemented in `075f14b`. The Codex reviews so far:
    - `075f14b`: NO_GO, 6 P1s.
    - `85713d6`: NO_GO, with P1-06 (Drop velocity) partial, a pending-Drop focus race, hammer IK overlap, and the hammer-mount gap.
-   - `d913e26`: addresses the three code findings and is **under re-review**.
+   - `d913e26`: NO_GO, hammer IK at action onset.
+   - `2c810ab`: NO_GO, a cached `InAttack` could miss onset.
+   - `c32e6b5`: reads the animator's current and next state tags at the IK pass, and is **under re-review**.
 
-   **Mounting with the hammer out is NOT IMPLEMENTED and awaits an owner contract decision.** In build mode the game clears the hover target and E is also snap cycling. The build and policy-test logs for `d913e26` and `2c810ab` (127 passed each, 0 build errors) are in `artifacts/ladders-0.3-dev/`. It has
+   **Mounting with the hammer out is NOT IMPLEMENTED and awaits an owner contract decision.** In build mode the game clears the hover target and E is also snap cycling. The build and policy-test logs for `d913e26`, `2c810ab` and `c32e6b5` (127 passed each, 0 build errors) are in `artifacts/ladders-0.3-dev/`. It has
    **not** been packaged or run in game.
 3. **Controller and network.** Every controller row and every multiplayer/observer row is BLOCKED: no
    controller and no second endpoint were available.
@@ -75,7 +77,7 @@ teleport and aim, read-only state, and setting skill level and stamina. It patch
 | Row(s) | State | Reason and next action |
 |---|---|---|
 | R25, P02–P04 original animation | NOT DELIVERED | The owner rejected the procedural look. Codex is authoring original motion against the reviewed native baseline (`C:\code\cc-integration\cl-ladders-review-evidence\native-baseline\`). The lead integrates it through `IClimbPresenter`. |
-| R36–R42 Drop and scaffolding | IMPLEMENTED (code review pending), NOT RUN | `075f14b` → `85713d6` → `d913e26` → `2c810ab`. Needs a packaged candidate and game runs. |
+| R36–R42 Drop and scaffolding | IMPLEMENTED (code review pending), NOT RUN | `075f14b` → `85713d6` → `d913e26` → `2c810ab` → `c32e6b5`. Needs a packaged candidate and game runs. |
 | R39 mount with the hammer out | NOT IMPLEMENTED, awaiting contract decision | The admission check still refuses build mode. The native hover target is cleared there, and the hammer owns E. |
 | R05 Jump during exit/transfer; R20 slide relocking after a death drops the level below 20 | NOT OBSERVED | Retained jumps cover Mounting, Hold, Fast and Slide only. The death record ends at 18.411, with no slide attempt after it. |
 | R13 reversal at each seam | PARTIAL | The scripted reversals were not logged seam by seam. |
@@ -99,6 +101,6 @@ loaded DLL was correct throughout.
 
 Codex read-only reviews: `da8c5a2`, `27528f0`, `4926903` and `7726fe3` were NO_GO, each fixed. `b3c20a6` and
 `441ea83` were GO. The 0.2.0 STATUS draft was REJECTED for overclaiming; this rewrite answers it row by row.
-Reviews of the N07/N08 code: `075f14b` NO_GO (6 P1s); `85713d6` NO_GO (4 findings); `d913e26` NO_GO (hammer IK onset); `2c810ab` under re-review. The first version of this STATUS (`866a800`) was REJECTED with 7 must-fixes, each corrected here. Reports are in `C:\code\cc-integration\cl-ladders-review-evidence\`.
+Reviews of the N07/N08 code: `075f14b` NO_GO (6 P1s); `85713d6` NO_GO (4 findings); `d913e26` NO_GO (hammer IK onset); `2c810ab` NO_GO (cached `InAttack`); `c32e6b5` under re-review. The first version of this STATUS (`866a800`) was REJECTED with 7 must-fixes, each corrected here. Reports are in `C:\code\cc-integration\cl-ladders-review-evidence\`.
 
 No publication, release tag or main merge.
