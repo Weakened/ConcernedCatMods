@@ -62,7 +62,7 @@ internal sealed partial class OriginalClimbPresenter
         float overTop = Smooth01((feet.y - (frame.Run.Top.Y - ClimbTuning.TopApproachFrom)) / ClimbTuning.TopApproachSpan);
         // The top exit releases this crouch as a pull-up once the hands press on the lip; a descending entry walks to
         // the lip upright and takes the crouch only once the hands catch the rungs (owner 2026-10-27: legs over-bent).
-        if (action != null && action.Kind == TransitionKind.TopExit) { overTop *= 1f - Smooth01((progress - 0.2f) / 0.25f); }
+        if (action != null && action.Kind == TransitionKind.TopExit) { overTop *= 1f - Smooth01((progress - 0.05f) / 0.3f); }
         if (action != null && action.Kind == TransitionKind.TopEntry) { overTop *= Smooth01((progress - 0.55f) / 0.3f); }
         actionUp -= ClimbTuning.TopApproachDrop * overTop;
         actionToward += ClimbTuning.TopApproachToward * overTop;

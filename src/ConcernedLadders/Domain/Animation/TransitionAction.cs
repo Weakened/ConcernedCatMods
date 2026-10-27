@@ -187,12 +187,12 @@ internal static class DefaultTransitions
         new TransitionAction.Builder(TransitionKind.TopExit, 1f)
             // Owner 2026-10-27: "pulls themselves up and does a nice step onto the platform", an athletic hop rather than
             // a rung-by-rung crouch. The hands press on the lip, the climb's top crouch releases so the body pops up
-            // (pull-up), the hands let go as the shoulders pass over, both feet tuck and land on the platform together
-            // (lead foot 3% ahead), a short landing dip, then the climber stands and walks on.
+            // (pull-up), the hands let go as the shoulders pass over, the high foot steps up onto the platform at once and
+            // the low foot follows in the same hop, a short landing dip, then the climber stands and walks on.
             .Reach(LH, 0f, 0f, 0.08f, 1f).Arc(LH, 0f, 0.08f, 0f, 0.04f, 0.06f).Weight(LH, 0.08f, 1f, 0.15f, 0f)
             .Reach(RH, 0.02f, 0f, 0.1f, 1f).Arc(RH, 0.02f, 0.1f, 0f, 0.04f, 0.06f).Weight(RH, 0.1f, 1f, 0.17f, 0f)
-            .Reach(LF, 0.16f, 0f, 0.36f, 1f).Arc(LF, 0.16f, 0.36f, 0f, 0.1f, 0.16f).Weight(LF, 0.44f, 1f, 0.6f, 0f)
-            .Reach(RF, 0.19f, 0f, 0.39f, 1f).Arc(RF, 0.19f, 0.39f, 0f, 0.1f, 0.16f).Weight(RF, 0.48f, 1f, 0.64f, 0f)
+            .Reach(LF, 0.04f, 0f, 0.3f, 1f).Arc(LF, 0.04f, 0.3f, 0f, 0.1f, 0.16f).Weight(LF, 0.44f, 1f, 0.6f, 0f)
+            .Reach(RF, 0.14f, 0f, 0.36f, 1f).Arc(RF, 0.14f, 0.36f, 0f, 0.1f, 0.16f).Weight(RF, 0.48f, 1f, 0.64f, 0f)
             .Body(0f, 1f, 0.75f, 1f, 0.95f, 0f).BodyUp(0f, 0f, 0.3f, 0.04f, 0.42f, -0.12f, 0.6f, 0f)
             .BodyToward(0f, 0f, 0.3f, 0.12f, 0.6f, 0.05f, 0.9f, 0f).Lean(0f, 0f, 0.2f, 12f, 0.38f, 18f, 0.65f, 4f, 0.9f, 0f).Build(),
         // Intermediate-floor exit: the same support transfer sideways or behind at the current height.
