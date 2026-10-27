@@ -202,6 +202,11 @@ dotnet test src/ConcernedLadders.Tests/ConcernedLadders.Tests.csproj -c Release
 not exported, or when the C# was edited by hand. Blender is expected at
 `C:\Program Files\Blender Foundation\Blender 5.1\blender.exe` (set `$env:BLENDER` otherwise).
 
+The round trip (five edits across two loops, an exit and a bend value, then a restore that regenerates every file
+byte-identically) was demonstrated on 2026-10-26 with `round_trip_edit.py`; the receipt is
+`artifacts/ladders-0.2.7-dev/BLENDER_ROUND_TRIP_RECEIPT.md` in the development worktree (artifacts are not
+committed).
+
 ### When a test fails after an edit
 
 `GeneratedGaitTests.TheExportMatchesTheCodeDefaults` pins the exported data to the C# defaults it was seeded from
