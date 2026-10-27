@@ -549,13 +549,6 @@ internal sealed class LadderRuntime : IDisposable
 
             if (route == null) { first = Keep(first, FromBlocker(clearance.LastBlocker)); continue; }
             bool entering = topEntry && route.Length > 0 && route[route.Length - 1].y < line.y - 0.05f;
-            if (topEntry && entryLow < line.y - 0.05f && !entering)
-            {
-                // The lip sight line clears a closed floor or hatch over the ladder, but the body cannot lower past it
-                // (review 2026-10-27): refuse as before instead of attaching the climber on top of the floor.
-                first = Keep(first, FromBlocker(clearance.LastBlocker));
-                continue;
-            }
             plan = new Plan { Face = face, Lane = lane, Height = entering ? entryLow : target, Route = route, Airborne = !supported, Reach = reach, TopEntry = entering };
             return true;
         }
