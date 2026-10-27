@@ -4,10 +4,10 @@ namespace ConcernedCartographer.Tests;
 
 /// <summary>Sentry OutOfMemoryException in RoadOverlayRenderer.RedrawAll:
 /// every full road redraw allocated two fresh full-texture pixel arrays
-/// (16 MB each at 2048 texels). The renderers now share one reused buffer;
-/// these tests pin the reuse, the clearing the dirt-then-paved sequence
-/// depends on, and that neither renderer allocates a full-texture array of
-/// its own again.</summary>
+/// (16 MB each at 2048 texels). Each overlay renderer now holds one reused
+/// buffer of its own; these tests pin the reuse, the clearing the
+/// dirt-then-paved sequence depends on, and that neither renderer allocates
+/// a full-texture array of its own again.</summary>
 public class RoadRedrawBufferTests
 {
     private struct Texel
@@ -88,6 +88,24 @@ public class RoadRedrawBufferTests
 
         Assert.DoesNotContain("new Color32[", source, StringComparison.Ordinal);
         Assert.Contains("ReusableSquareBuffer<Color32>", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheRoadRendererReacquiresTheZeroedBufferBetweenTheDirtWriteAndThePavedDraw()
+    {
+        // The zeroing above only protects the paved layer if the renderer
+        // actually asks for the buffer again after the dirt write; reusing
+        // `pixels` as it stands would carry dirt ink into the paved texture.
+        string source = File.ReadAllText(Path.Combine(
+            RepoRoot, "src", "ConcernedCartographer", "Map", "RoadOverlayRenderer.cs"));
+
+        int dirtWrite = source.IndexOf("dirtTexture!.SetPixels32(pixels);", StringComparison.Ordinal);
+        int pavedDraw = source.IndexOf("DrawKindIntoBuffer(atlas, RoadKind.Paved,", StringComparison.Ordinal);
+        Assert.True(dirtWrite >= 0, "dirt write not found");
+        Assert.True(pavedDraw > dirtWrite, "paved draw not found after the dirt write");
+
+        string between = source.Substring(dirtWrite, pavedDraw - dirtWrite);
+        Assert.Contains("pixels = _pixelBuffer.Acquire(textureSize);", between, StringComparison.Ordinal);
     }
 
     private static string RepoRoot

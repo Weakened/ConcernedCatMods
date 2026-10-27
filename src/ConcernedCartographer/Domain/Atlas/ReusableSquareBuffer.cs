@@ -36,8 +36,9 @@ internal sealed class ReusableSquareBuffer<T>
             return _buffer;
         }
 
-        // Release first: the allocation below may collect, and the old
-        // array must not be reachable from here when it does.
+        // Release first: the allocation below may collect, and this field
+        // should no longer keep the old array alive when it does (best
+        // effort: Mono scans the stack conservatively).
         _buffer = null;
         _size = 0;
         T[] fresh = new T[checked(size * size)];
