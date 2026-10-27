@@ -243,6 +243,22 @@ public sealed class LadderPiecesTests
     }
 
     [Fact]
+    public void TheMotorHarmonyIdIsTheOneConcernedLaddersLooksFor()
+    {
+        // #436. Concerned Ladders refuses to run while a patch owned by this
+        // exact id sits on the player's motor (LadderMotor.HasForemanMotor), so an
+        // opted-in Foreman must keep it. Read as text on both sides: there is no
+        // compile-time reference between the two products, and none is allowed.
+        const string id = "com.theconcernedcat.valheim.concernedforeman.ladders";
+        string plugin = ReadShippedFile(Path.Combine("src", "ConcernedForeman", "Plugin.cs"));
+        string ladders = ReadShippedFile(Path.Combine("src", "ConcernedLadders", "Runtime", "LadderMotor.cs"));
+
+        Assert.Contains("PluginGuid = \"com.theconcernedcat.valheim.concernedforeman\";", plugin);
+        Assert.Contains("_ladders.Install(PluginGuid + \".ladders\")", plugin);
+        Assert.Contains("\"" + id + "\"", ladders);
+    }
+
+    [Fact]
     public void TheClimbsOwnDefaultsStillMatchTheOptInRow()
     {
         // Somebody who opts in gets the spec's climb: binding the section must
