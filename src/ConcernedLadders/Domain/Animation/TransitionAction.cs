@@ -179,28 +179,17 @@ internal static class DefaultTransitions
             .Weight(LH, 0f, 0f, 0.35f, 1f).Weight(RH, 0.1f, 0f, 0.45f, 1f).Weight(LF, 0.3f, 0f, 0.8f, 1f).Weight(RF, 0.45f, 0f, 1f, 1f)
             .Arc(LF, 0.3f, 0.8f, 0f, 0.12f, 0.05f).Arc(RF, 0.45f, 1f, 0f, 0.12f, 0.05f)
             .Body(0f, 0.2f, 0.8f, 1f).Build(),
-        // Upper-floor exit (16-59-05 22.3-23.9 s, frames 669-717; 17-01-40 7.0-10.8 s): the hands go from the rail tops
-        // onto the floor past the lip while the body is still low, the leading knee and foot clear the lip onto the
-        // floor, the chest and hips come over it in a crouch, the trailing leg comes through, then the climber stands
-        // and the game's walk takes over. In game 2026-10-27 the capsule rises to the floor in the first third, so the
-        // visible body stays low (kneeling over the lip) while it does.
         new TransitionAction.Builder(TransitionKind.TopExit, 1f)
-            // Owner 2026-10-27: "pulls themselves up and does a nice step onto the platform", an athletic hop rather than
-            // a rung-by-rung crouch. The hands slap onto the lip and push as the climb's top crouch
-            // releases and the body pops up (pull-up), letting go as the shoulders rise past them, the high foot steps up onto the platform at once and
-            // the low foot follows in the same hop, a short landing dip, then the climber stands and walks on.
-            .Reach(LH, 0f, 0f, 0.05f, 1f).Arc(LH, 0f, 0.05f, 0f, 0.04f, 0.05f).Weight(LH, 0.06f, 1f, 0.13f, 0f)
-            .Reach(RH, 0.02f, 0f, 0.07f, 1f).Arc(RH, 0.02f, 0.07f, 0f, 0.04f, 0.05f).Weight(RH, 0.08f, 1f, 0.15f, 0f)
-            .Reach(LF, 0.01f, 0f, 0.28f, 1f).Arc(LF, 0.01f, 0.28f, 0f, 0.1f, 0.16f).Weight(LF, 0.44f, 1f, 0.6f, 0f)
-            .Reach(RF, 0.14f, 0f, 0.36f, 1f).Arc(RF, 0.14f, 0.36f, 0f, 0.1f, 0.16f).Weight(RF, 0.48f, 1f, 0.64f, 0f)
-            .Body(0f, 1f, 0.75f, 1f, 0.95f, 0f).BodyUp(0f, 0f, 0.3f, 0.04f, 0.42f, -0.12f, 0.6f, 0f)
-            .BodyToward(0f, 0f, 0.3f, 0.12f, 0.6f, 0.05f, 0.9f, 0f).Lean(0f, 0f, 0.2f, 12f, 0.38f, 18f, 0.65f, 4f, 0.9f, 0f).Build(),
+            // Owner 2026-10-27: no distinct animation - the climber comes off the ladder super fast (the runtime route
+            // takes about 0.45 s) and each limb simply hands back to the game's own pose, a few hundredths apart.
+            .Weight(LH, 0f, 1f, 0.4f, 0f).Weight(RH, 0.02f, 1f, 0.42f, 0f).Weight(LF, 0.04f, 1f, 0.44f, 0f).Weight(RF, 0.06f, 1f, 0.46f, 0f)
+            .Body(0f, 1f, 0.5f, 0f).Build(),
         // Intermediate-floor exit: the same support transfer sideways or behind at the current height.
         new TransitionAction.Builder(TransitionKind.SideExit, 1f)
-            .Reach(LF, 0.1f, 0f, 0.45f, 1f).Arc(LF, 0.1f, 0.45f, 0f, 0.1f, 0.18f).Weight(LF, 0.6f, 1f, 0.82f, 0f)
-            .Reach(RF, 0.4f, 0f, 0.75f, 1f).Arc(RF, 0.4f, 0.75f, 0f, 0.1f, 0.18f).Weight(RF, 0.66f, 1f, 0.9f, 0f)
-            .Weight(LH, 0.28f, 1f, 0.4f, 0f).Weight(RH, 0.32f, 1f, 0.45f, 0f)
-            .Body(0f, 1f, 0.8f, 1f, 1f, 0f).Lean(0f, 0f, 0.4f, 12f, 1f, 0f).Build(),
+            // Owner 2026-10-27: no distinct animation - the climber comes off the ladder super fast (the runtime route
+            // takes about 0.45 s) and each limb simply hands back to the game's own pose, a few hundredths apart.
+            .Weight(LH, 0f, 1f, 0.4f, 0f).Weight(RH, 0.02f, 1f, 0.42f, 0f).Weight(LF, 0.04f, 1f, 0.44f, 0f).Weight(RF, 0.06f, 1f, 0.46f, 0f)
+            .Body(0f, 1f, 0.5f, 0f).Build(),
         // Bottom step-off: the leading foot lowers back onto the ground, support transfers, the hands let go as the
         // body leaves the ladder (in game 2026-10-27 the route is a 0.7 m step back at ground level, so they must be
         // free by a quarter of it), the second foot follows, then normal standing.
@@ -209,17 +198,10 @@ internal static class DefaultTransitions
             .Reach(RF, 0.4f, 0f, 0.72f, 1f).Arc(RF, 0.4f, 0.72f, 0f, 0.06f, 0.03f).Weight(RF, 0.66f, 1f, 0.85f, 0f)
             .Weight(RH, 0f, 1f, 0.09f, 0f).Weight(LH, 0.04f, 1f, 0.13f, 0f)
             .Body(0f, 1f, 0.4f, 0.9f, 0.9f, 0f).Build(),
-        // Descending entry from an upper floor: face the ladder, hands down onto the top, one foot lowers to a rung,
-        // the body transfers into the climbing stance, the second foot follows (reach 1 = the floor it starts from).
         new TransitionAction.Builder(TransitionKind.TopEntry, 1f)
-            // Owner 2026-10-27: an athletic hop down, not a squat. The climber walks to the lip upright on the game's own
-            // walk (progress 0-0.4; the feet are taken over only for the hop),
-            // both feet hop off the floor together onto the rungs (lead foot 3% ahead) with a small dip, the hands catch
-            // the top rungs once they are in reach, and the climbing posture blends in last.
-            .Weight(LH, 0.82f, 0f, 0.93f, 1f).Weight(RH, 0.85f, 0f, 0.96f, 1f)
-            .Reach(LF, 0f, 1f, 0.42f, 1f, 0.78f, 0f).Arc(LF, 0.42f, 0.78f, 0f, 0.12f, 0.08f).Weight(LF, 0.36f, 0f, 0.42f, 1f)
-            .Reach(RF, 0f, 1f, 0.45f, 1f, 0.82f, 0f).Arc(RF, 0.45f, 0.82f, 0f, 0.12f, 0.08f).Weight(RF, 0.39f, 0f, 0.45f, 1f)
-            .Body(0f, 0f, 0.12f, 1f, 1f, 1f).BodyUp(0f, 0f, 0.3f, -0.04f, 0.58f, -0.16f, 0.75f, -0.06f, 0.95f, 0f)
-            .BodyToward(0f, 0f, 0.4f, 0.06f, 0.7f, 0.08f, 0.95f, 0f).Lean(0f, 0f, 0.35f, 15f, 0.6f, 20f, 0.85f, 8f, 1f, 0f).Build(),
+            // Owner 2026-10-27: no distinct animation - the climber is put onto the ladder super fast (about 0.45 s)
+            // from the game's own pose, and each limb takes its rung as the body arrives, a few hundredths apart.
+            .Weight(LF, 0.5f, 0f, 0.9f, 1f).Weight(RF, 0.52f, 0f, 0.92f, 1f).Weight(LH, 0.54f, 0f, 0.94f, 1f).Weight(RH, 0.56f, 0f, 0.96f, 1f)
+            .Body(0f, 0f, 0.5f, 0f, 1f, 1f).Build(),
     };
 }

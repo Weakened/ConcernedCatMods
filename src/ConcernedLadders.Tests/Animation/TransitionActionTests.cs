@@ -95,7 +95,9 @@ public sealed class TransitionActionTests
         var kind = (TransitionKind)kindValue;
         TransitionAction action = Get(kind);
         for (int limb = 0; limb < 4; limb++) { Assert.True(action.WeightAt(limb, 1f) < Tolerance, kind + " limb " + limb + " still held"); }
-        // Feet reach the landing before they are released.
+        // The bottom step-off sets the feet down on the landing before releasing them. The top and side exits are quick
+        // hand-backs to the game's pose with no authored step (owner 2026-10-27).
+        if (kind != TransitionKind.BottomStepOff) { return; }
         for (int limb = 2; limb < 4; limb++)
         {
             float released = Enumerable.Range(0, 101).Select(i => i / 100f).First(p => action.WeightAt(limb, p) < 0.5f);
@@ -104,10 +106,11 @@ public sealed class TransitionActionTests
     }
 
     [Fact]
-    public void ATopEntryStartsWithTheFeetOnTheFloor()
+    public void ATopEntryStartsFromTheGamesOwnPose()
     {
+        // Owner 2026-10-27: no distinct animation onto the ladder from a floor; every limb starts as the game left it.
         TransitionAction action = Get(TransitionKind.TopEntry);
-        for (int limb = 2; limb < 4; limb++) { Assert.True(action.ReachAt(limb, 0f) > 0.9f, "foot " + limb); }
+        for (int limb = 0; limb < 4; limb++) { Assert.True(action.WeightAt(limb, 0f) < Tolerance, "limb " + limb); }
     }
 
     [Fact]

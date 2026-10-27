@@ -110,13 +110,14 @@ internal static class ClimbTuning
     /// <summary>On a top exit the feet step onto the floor this much further past the palms.</summary>
     internal static float FootOnto = 0.2f;
 
-    /// <summary>Over the top: from this far below the run's top the climber begins to crouch (pelvis down and toward
+    /// <summary>(Owner 2026-10-27: no squat on the ladder. The climb now exits or stops 1.05 m below the top, where the
+    /// hands still reach the top rungs, so the crouch is off.) Over the top: from this far below the run's top the climber begins to crouch (pelvis down and toward
     /// the ladder) and fold forward, reaching the full amount TopApproachSpan higher.</summary>
     internal static float TopApproachFrom = 1.15f;
     internal static float TopApproachSpan = 0.5f;
-    internal static float TopApproachDrop = 0.34f;
-    internal static float TopApproachToward = 0.12f;
-    internal static float TopApproachLean = 22f;
+    internal static float TopApproachDrop = 0f;
+    internal static float TopApproachToward = 0f;
+    internal static float TopApproachLean = 0f;
 
     /// <summary>A contact needing more than FadeFrom of its chain fades out toward ReachLimit instead of popping.</summary>
     internal static float FadeFrom = 0.96f;

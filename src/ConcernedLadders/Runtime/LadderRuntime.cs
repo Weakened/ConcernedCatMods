@@ -14,10 +14,10 @@ internal sealed class LadderRuntime : IDisposable
     private enum Mode { Off, Mounting, Climbing, Exiting }
 
     /// <summary>How far below the run's top an upward climb starts looking for a floor to walk onto.</summary>
-    private const float TopPlanBand = 0.6f;
+    private const float TopPlanBand = 1.05f;
 
     /// <summary>Descending entry ends this far below the run's top (hands on the top rungs, feet on real rungs).</summary>
-    private const float TopEntryDrop = 0.9f;
+    private const float TopEntryDrop = 1.15f;
 
     /// <summary>A descending entry checks its line of sight to this height above the run's top (above a floor that
     /// sits a little over the rails, measured 0.12 m in game).</summary>
@@ -1254,14 +1254,18 @@ internal sealed class LadderRuntime : IDisposable
         float seconds = _mode == Mode.Exiting ? (_exitIsTop ? TopExitSeconds : _exitIsBottom ? BottomStepSeconds : SideExitSeconds)
             : _mode == Mode.Mounting && _mountFromTop ? TopEntrySeconds : 0f;
         if (seconds <= 0f || _routeLength <= 0.01f) { return LadderRules.Speed; }
-        return Mathf.Clamp(_routeLength / seconds, 0.35f, LadderRules.Speed);
+        return Mathf.Clamp(_routeLength / seconds, 0.35f, seconds <= QuickSeconds ? QuickRouteSpeed : LadderRules.Speed);
     }
 
-    private const float TopExitSeconds = 1.8f, SideExitSeconds = 1.5f, BottomStepSeconds = 1.1f, TopEntrySeconds = 1.7f;
+    private const float TopExitSeconds = QuickSeconds, SideExitSeconds = QuickSeconds, BottomStepSeconds = 1.1f, TopEntrySeconds = QuickSeconds;
+
+    /// <summary>Owner 2026-10-27: on and off at the top and at an intermediate floor "super fast" - not a teleport,
+    /// the capsule still follows its swept route, at up to QuickRouteSpeed.</summary>
+    private const float QuickSeconds = 0.45f, QuickRouteSpeed = 6f;
 
     /// <summary>Climbing with no landing at the top stops with the feet this far below the run's top: the hands still
     /// hold the top rungs there (owner 2026-10-27: "stop climbing right before the hand contacts leave the rungs").</summary>
-    private const float NoLandingStop = 0.75f;
+    private const float NoLandingStop = 1.05f;
 
     /// <summary>Remembers where an accepted mount/exit move started and its full length, for transition progress.</summary>
     private void BeginRoute(Vector3 start)
