@@ -10,8 +10,8 @@ namespace TheConcernedCat.ConcernedLadders.Domain.Animation;
 /// in LimbGait.cs and DefaultTransitions remain the fallbacks.</summary>
 internal static class GeneratedGait
 {
-    internal const string BlendSha256 = "783ae5f3ce468dbed31a07e0026b5bf5c4f3f2bdedcaf998c44ee59e6573b374";
-    internal const string JsonSha256 = "21767143b2c1e802c3eb649a977d24b5c31cf60cf688fc29e978cba4193a198e";
+    internal const string BlendSha256 = "2c60744e381b464b4cc8ccf220420a6b93b355015d3347d1a066edb65a737fd0";
+    internal const string JsonSha256 = "bcd063a101db294cc901e7aae94164cb112a99582be42c2ffb358bad5cd8347a";
     internal const string Blender = "5.1.2";
 
     internal const float PelvisDrop = 0f;
@@ -712,7 +712,7 @@ internal static class GeneratedGait
                 new[]
                 {
                     1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
-                    1f, 1f, 1f, 1f, 0.925926f, 0.740741f, 0.5f, 0.259259f, 0.074074f, 0f, 0f,
+                    1f, 0.925926f, 0.683594f, 0.376157f, 0.112124f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f
                 },
@@ -720,7 +720,7 @@ internal static class GeneratedGait
                 new[]
                 {
                     1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
-                    1f, 1f, 1f, 1f, 1f, 1f, 0.925926f, 0.740741f, 0.5f, 0.259259f, 0.074074f,
+                    1f, 1f, 0.995676f, 0.864816f, 0.614474f, 0.329995f, 0.096723f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f
                 },

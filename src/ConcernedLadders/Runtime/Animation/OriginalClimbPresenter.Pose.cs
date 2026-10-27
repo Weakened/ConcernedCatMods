@@ -68,7 +68,7 @@ internal sealed partial class OriginalClimbPresenter
             // A landing below the feet (in game 2026-10-27: a side floor 0.18 m down) is reached by the capsule only at
             // the route's end; the visible body lowers as the feet transfer onto it, so the stepping leg never overreaches.
             float transfer = 0f;
-            for (int foot = 2; foot < 4; foot++) { transfer = Mathf.Max(transfer, action!.ReachAt(foot, progress) * action.WeightAt(foot, progress)); }
+            for (int foot = 2; foot < 4; foot++) { transfer = Mathf.Max(transfer, action!.ReachAt(foot, progress)); }
             actionUp += (landing.y - feet.y) * transfer;
         }
 

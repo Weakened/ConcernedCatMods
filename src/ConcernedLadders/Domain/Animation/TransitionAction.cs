@@ -195,7 +195,7 @@ internal static class DefaultTransitions
         new TransitionAction.Builder(TransitionKind.SideExit, 1f)
             .Reach(LF, 0.1f, 0f, 0.45f, 1f).Arc(LF, 0.1f, 0.45f, 0f, 0.1f, 0.18f).Weight(LF, 0.7f, 1f, 0.95f, 0f)
             .Reach(RF, 0.4f, 0f, 0.75f, 1f).Arc(RF, 0.4f, 0.75f, 0f, 0.1f, 0.18f).Weight(RF, 0.75f, 1f, 1f, 0f)
-            .Weight(LH, 0.35f, 1f, 0.5f, 0f).Weight(RH, 0.4f, 1f, 0.55f, 0f)
+            .Weight(LH, 0.28f, 1f, 0.4f, 0f).Weight(RH, 0.32f, 1f, 0.45f, 0f)
             .Body(0f, 1f, 0.55f, 1f, 0.95f, 0f).Lean(0f, 0f, 0.4f, 12f, 1f, 0f).Build(),
         // Bottom step-off: the leading foot lowers back onto the ground, support transfers, the hands let go as the
         // body leaves the ladder (in game 2026-10-27 the route is a 0.7 m step back at ground level, so they must be
