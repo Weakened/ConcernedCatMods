@@ -8,20 +8,17 @@ Internal owner playtest candidate. Not a release.
   the hips and chest square to it, steps two rungs at a time with the support
   leg nearly straight, and the knees stay in line instead of folding to the
   chest or falling outward.
-- Upper exit: a quick pull-up and step onto the platform. The hands push off
-  the floor's edge, the body rises, the high foot steps up, the other follows,
-  and the climber stands and walks on.
-- Descending entry: walk to the edge upright and drop onto the ladder, feet
-  onto the rungs first, hands catching the top rungs.
-- Intermediate-floor exit and the bottom step-off are smoother and take their
-  time (about 1.4 s and 1.0 s) instead of snapping through.
-- Climbing a ladder with nowhere to step off at the top now stops while both
-  hands still hold the top rungs.
+- Getting on and off is quick and clean (owner decision): mounting from the
+  ground, catching in midair, stepping off at the top, onto an intermediate
+  floor or at the bottom, and getting on from a floor above all take about a
+  quarter to half a second, with the limbs simply taking or leaving the rungs.
+- No squat near the top: climbing stops (or steps off onto a floor) about 1.3 m
+  below the top, with both hands on the top rungs; getting on from a floor
+  above ends in the same normal climbing stance.
 - Mounting from a floor no longer refuses a step or two back from the edge;
   a jump that brushes a rung is still caught as a midair grab; top landings
   are found along a floor's edge, and small floors beside the ladder are found
   for the intermediate exit.
-
 - Snapping (owner revision): Cycle Snap now offers Auto, Bottom, Top,
   **Left side** and **Right side**. Left side and Right side line the ladder's
   left or right rail up with the left or right corner of the floor edge or wall
