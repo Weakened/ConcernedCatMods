@@ -167,7 +167,8 @@ internal sealed class LadderSnapAlignment : IDisposable
                 _refused = player;
                 Decide("refused: the game's snap put the ghost inside a placed section");
             }
-            else if (_refused == null) { Decide(side ? "side mode: nothing to align to, origin on the aimed point" : "native"); }
+            // Align has already named its own native reason; a bare "native" here made the dev log flap every frame.
+            else if (_refused == null && side) { Decide("side mode: nothing to align to, origin on the aimed point"); }
         }
         catch
         {
