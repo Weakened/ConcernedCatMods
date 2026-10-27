@@ -49,11 +49,16 @@ internal sealed partial class OriginalClimbPresenter
         float lean = Mathf.Lerp(ClimbTuning.Lean, ClimbTuning.SlideLean, actor.SlideBlend);
         // Finishing over the top folds the torso forward over the landing, then straightens (owner reference finish).
         if (frame.Motion == PresentedMotion.TopFinish) { lean += ClimbTuning.ExitFold * Mathf.Sin(Mathf.PI * Mathf.Clamp01(route / .45f)); }
-        // The torso dwell: the visible body rises more slowly while a foot recovers and catches up as the leg extends
-        // (bounded, zero mean, presentation only; the gameplay body moves steadily).
-        float dwell = frame.Motion == PresentedMotion.Climb || frame.Motion == PresentedMotion.Fast ? actor.Gait.BodyOffset(frame.Feet.Y) : 0f;
-        actor.Dwell = Mathf.MoveTowards(actor.Dwell, dwell, Time.deltaTime * .5f);
-        Vector3 pelvis = feet + Vector3.up * (rig.PelvisHeight - ClimbTuning.PelvisDrop + actor.Dwell) + toward * ClimbTuning.PelvisToward +
+        // The authored body curve: the visible body rises more slowly while a foot recovers and catches up as the leg
+        // extends (bounded, zero mean, presentation only; the gameplay body moves steadily). Faded in and out with travel
+        // so a stop or a reversal never jumps.
+        bool moving = frame.Motion == PresentedMotion.Climb || frame.Motion == PresentedMotion.Fast;
+        actor.Gait.Body(frame.Feet.Y, out float bodyUp, out float bodyToward, out float bodyLean);
+        actor.BodyBlend = Mathf.MoveTowards(actor.BodyBlend, moving ? 1f : 0f, Time.deltaTime / .25f);
+        float blend = LimbGait.Ease(actor.BodyBlend);
+        lean += bodyLean * blend;
+        Vector3 pelvis = feet + Vector3.up * (rig.PelvisHeight - ClimbTuning.PelvisDrop + bodyUp * blend) +
+                         toward * (ClimbTuning.PelvisToward + bodyToward * blend) +
                          right * (ClimbTuning.SwayShift * sway);
         Quaternion bodyRotation = Quaternion.LookRotation(toward, Vector3.up) *
             Quaternion.AngleAxis(lean, Vector3.right) * Quaternion.AngleAxis(-sway * ClimbTuning.SwayTilt, Vector3.forward) * rig.BodyInPlayer;
@@ -83,9 +88,9 @@ internal sealed partial class OriginalClimbPresenter
             Vector3 surface = RungSurface(frame, contact.Height + above, outOffset, span * side);
             if (contact.Swing > 0f)
             {
-                // The swing arc from the gait source: away from the rungs and upward, shaped per limb kind.
-                actor.Gait.Arc(limb, contact.Swing, out float arcOut, out float arcUp);
-                surface += outward * arcOut + Vector3.up * arcUp;
+                // The authored swing arc for this limb: toward its own side, away from the rungs, upward.
+                actor.Gait.Arc(limb, contact.Swing, out float arcLat, out float arcOut, out float arcUp);
+                surface += right * (side * arcLat) + outward * arcOut + Vector3.up * arcUp;
             }
             float railBlend = 0f;
             if (hand)

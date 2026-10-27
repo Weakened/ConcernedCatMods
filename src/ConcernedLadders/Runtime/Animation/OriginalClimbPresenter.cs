@@ -146,7 +146,8 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
         for (int limb = 0; limb < 4; limb++)
         {
             ContactRecord record = actor.Record[limb];
-            if (!record.Has) { actor.Anchored[limb] = false; continue; }
+            // A skipped or fully faded plant was not solved: it is counted (pskip/pfade), never measured as a contact.
+            if (!record.Has || record.Skipped || record.Effective <= .01f) { actor.Anchored[limb] = false; if (ClimbTuning.TraceContacts && record.Has) { ContactTrace.Row(actor.Frame, limb, record, Vector3.zero, -1f, 0f); } continue; }
             Vector3 patch = actor.Rig.Patch(limb);
             float error = Vector3.Distance(patch, record.Target);
             // Gap to the rung's real box (half height x half depth around its centre): for a palm, the distance from the
@@ -263,7 +264,7 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
         internal Actor(OriginalRigBinding rig) { Rig = rig; }
         internal readonly OriginalRigBinding Rig;
         internal readonly LimbGait Gait = new LimbGait();
-        internal float Dwell;
+        internal float BodyBlend;
         internal bool Caught;
         internal readonly FitCounters Fit = new FitCounters();
         internal readonly bool[] Asked = new bool[4];

@@ -37,7 +37,7 @@ internal static class ClimbTuning
     internal static float HandPalmDepth = -0.01f;
 
     /// <summary>Ankle joint from the ball of the foot: behind it toward the heel, and above the sole.</summary>
-    internal static float FootBallForward = 0.15f;
+    internal static float FootBallForward = 0.165f;
     internal static float FootAnkleHeight = 0.146f;
 
     /// <summary>Half the palm's thickness: palm patch (bone centre) to skin. The gap measure's zero for hands.</summary>
@@ -50,7 +50,7 @@ internal static class ClimbTuning
     /// climber from the rung's centre plane; feet sit this far either side of the centreline.</summary>
     internal static float FootAbove = 0.045f;
     internal static float FootOut = 0.0f;
-    internal static float FootSpan = 0.14f;
+    internal static float FootSpan = 0.128f;
 
     /// <summary>Elbow and knee bend hints, relative to the shoulder and hip.</summary>
     internal static float ElbowOut = GeneratedGait.ElbowOut;
