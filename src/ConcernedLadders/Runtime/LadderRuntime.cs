@@ -1374,7 +1374,7 @@ internal sealed class LadderRuntime : IDisposable
 
         // Transfer legs are mostly sideways: drive the walk cycle from the real path speed, not its vertical part.
         float pathSpeed = Vector3.Distance(target, body.position) / physicsSeconds;
-        Hold(target, physicsSeconds, target.y < body.position.y - 0.001f ? -pathSpeed : pathSpeed, LadderRules.Speed);
+        Hold(target, physicsSeconds, target.y < body.position.y - 0.001f ? -pathSpeed : pathSpeed, Mathf.Max(LadderRules.Speed, RouteSpeed()));
     }
 
     private void Hold(Vector3 target, float delta, float poseSpeed, float maximumSpeed)
