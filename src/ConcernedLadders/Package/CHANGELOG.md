@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.0.0
+
+First public release.
+
+- Vertical Wood, Copper and Iron Ladders: 2 m hammer pieces in the Building
+  tab that stack into one continuous climb, with Auto, Bottom, Top, Left side
+  and Right side snapping onto floors, walls and other ladders.
+- An original climbing animation: each hand and foot takes its own rung going
+  up and coming down.
+- Get on from the ground, from a floor above, in midair, or out of the water.
+  Step off at the top, onto a floor beside the ladder partway up, or at the
+  bottom. Jump off, let go, or slide down.
+- Climbing skill: earned per metre climbed, makes fast climbing and sliding
+  cheaper, and unlocks the slide at level 20.
+- Fixed: a climber who grabbed the ladder from the water showed the swimming
+  pose under the climbing arms and legs. The game's swimming and falling
+  animation states are now cleared while on the ladder.
+- Multiplayer, dedicated servers and controllers are not tested yet. See the
+  README for what uninstalling does to placed ladders and the skill.
+
+The entries below are internal development candidates. None of them was
+published.
+
 ## 0.2.7
 
 Internal owner playtest candidate. Not a release.

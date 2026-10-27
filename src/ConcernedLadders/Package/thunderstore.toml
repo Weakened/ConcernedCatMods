@@ -4,8 +4,8 @@ schemaVersion = "0.0.1"
 [package]
 namespace = "TheConcernedCat"
 name = "ConcernedLadders"
-versionNumber = "0.2.7"
-description = "Stackable vertical wood, copper and iron ladders for compact builds. Development candidate; requires the mod on clients and server."
+versionNumber = "1.0.0"
+description = "Vertical wood, copper and iron ladders with an animated climb, top exits, water and midair grabs, jump-off, slide and a Climbing skill."
 websiteUrl = "https://github.com/Weakened/ConcernedCatMods"
 containsNsfwContent = false
 

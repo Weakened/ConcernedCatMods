@@ -21,7 +21,7 @@ public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernedladders";
     public const string PluginName = "Concerned Ladders";
-    public const string PluginVersion = "0.2.7";
+    public const string PluginVersion = "1.0.0";
 
     private ConfigEntry<bool>? _enabled;
     private LadderRuntime? _runtime;
@@ -66,7 +66,7 @@ public sealed class Plugin : BaseUnityPlugin
         _runtime.Install(PluginGuid + ".motor");
         string revision = typeof(Plugin).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? PluginVersion;
-        Logger.LogInfo(PluginName + " " + revision + " loaded. Development candidate: gameplay verification required.");
+        Logger.LogInfo(PluginName + " " + revision + " loaded.");
     }
 
     private void Update()
