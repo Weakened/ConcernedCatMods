@@ -60,6 +60,10 @@ internal sealed partial class OriginalClimbPresenter
         // the floor lip; a descending entry starts from the same crouch on the floor. By feet height, so it is continuous
         // across climb, hold, exit and entry; faded with the body weight like every body offset.
         float overTop = Smooth01((feet.y - (frame.Run.Top.Y - ClimbTuning.TopApproachFrom)) / ClimbTuning.TopApproachSpan);
+        // The top exit releases this crouch as a pull-up once the hands press on the lip; a descending entry walks to
+        // the lip upright and takes the crouch only once the hands catch the rungs (owner 2026-10-27: legs over-bent).
+        if (action != null && action.Kind == TransitionKind.TopExit) { overTop *= 1f - Smooth01((progress - 0.2f) / 0.25f); }
+        if (action != null && action.Kind == TransitionKind.TopEntry) { overTop *= Smooth01((progress - 0.6f) / 0.3f); }
         actionUp -= ClimbTuning.TopApproachDrop * overTop;
         actionToward += ClimbTuning.TopApproachToward * overTop;
         lean += ClimbTuning.TopApproachLean * overTop;

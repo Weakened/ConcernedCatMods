@@ -1257,7 +1257,7 @@ internal sealed class LadderRuntime : IDisposable
         return Mathf.Clamp(_routeLength / seconds, 0.35f, LadderRules.Speed);
     }
 
-    private const float TopExitSeconds = 2.2f, SideExitSeconds = 1.5f, BottomStepSeconds = 1.1f, TopEntrySeconds = 2.0f;
+    private const float TopExitSeconds = 1.8f, SideExitSeconds = 1.5f, BottomStepSeconds = 1.1f, TopEntrySeconds = 1.7f;
 
     /// <summary>Climbing with no landing at the top stops with the feet this far below the run's top: the hands still
     /// hold the top rungs there (owner 2026-10-27: "stop climbing right before the hand contacts leave the rungs").</summary>
