@@ -159,6 +159,14 @@ internal sealed class LadderSnapAlignment : IDisposable
         try
         {
             if (Align(player, out Vector3 aligned)) { __0 = aligned; }
+            else if (_refused == null && !side && DuplicatesPlacedSection(player))
+            {
+                // In game 2026-10-27: every section carries the side points at the same depth below its origin, so in
+                // Auto, Top and Bottom the game's own search can pair a ghost's side point with a placed section's and
+                // put the ghost exactly inside that section. Refused instead of building a duplicate.
+                _refused = player;
+                Decide("refused: the game's snap put the ghost inside a placed section");
+            }
             else if (_refused == null) { Decide(side ? "side mode: nothing to align to, origin on the aimed point" : "native"); }
         }
         catch
@@ -168,6 +176,17 @@ internal sealed class LadderSnapAlignment : IDisposable
             if (side) { _refused = player; }
         }
     }
+
+    private static bool DuplicatesPlacedSection(Player player)
+    {
+        if (_ghost == null) { return false; }
+        GameObject ghost = _ghost(player);
+        LadderSegment? section = ghost != null && ghost.activeSelf ? ghost.GetComponent<LadderSegment>() : null;
+        return section != null && LadderSegment.FindOverlapping(ghost!.transform.TransformPoint(section.LocalBottom), DuplicateTolerance) != null;
+    }
+
+    /// <summary>A ghost whose foot is this close to a placed section's foot occupies that section.</summary>
+    private const float DuplicateTolerance = 0.3f;
 
     /// <summary>The game places a manual-snap ghost so the selected snap point lies on the aimed point. A side point
     /// lies 100 m or 200 m below the section, so the ghost is first moved back to put its origin on the aimed point,

@@ -203,6 +203,19 @@ internal sealed class LadderSegment : MonoBehaviour, Hoverable, Interactable
         return found;
     }
 
+    /// <summary>A placed live section whose foot lies within <paramref name="tolerance"/> of <paramref name="bottom"/>.</summary>
+    internal static LadderSegment? FindOverlapping(Vector3 bottom, float tolerance)
+    {
+        if (!Finite(bottom) || Registered.Count > LadderRules.MaximumRegisteredSegments) { return null; }
+        foreach (LadderSegment candidate in Registered)
+        {
+            if (candidate == null || !candidate.IsLive) { continue; }
+            if (Vector3.Distance(candidate.transform.TransformPoint(candidate.LocalBottom), bottom) <= tolerance) { return candidate; }
+        }
+
+        return null;
+    }
+
     internal static ClimbPoint Point(Vector3 point) => new ClimbPoint(point.x, point.y, point.z);
     internal static Vector3 Vector(ClimbPoint point) => new Vector3(point.X, point.Y, point.Z);
     internal static bool Finite(Vector3 point) => LadderRules.Finite(point.x) && LadderRules.Finite(point.y) && LadderRules.Finite(point.z);
