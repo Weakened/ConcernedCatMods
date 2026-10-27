@@ -258,7 +258,9 @@ bonus. Saving without the mod is not promised to retain unknown skills.
 
 ## 8. Names, snapping and animation
 
-Use **Wood Ladder**, **Copper Ladder**, **Iron Ladder** in all current English
+Owner decision 2026-10-27: the English names are **Vertical Wood Ladder**, **Vertical Copper Ladder** and
+**Vertical Iron Ladder** (the plain "Wood Ladder" collided with the vanilla Wood ladder in the hammer menu). Earlier
+rule, superseded for the names only: use **Wood Ladder**, **Copper Ladder**, **Iron Ladder** in all current English
 display surfaces: hammer, hover and repair text. Preserve prefab IDs and
 translation keys. Other languages use proper localized equivalents.
 

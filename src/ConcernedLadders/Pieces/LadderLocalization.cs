@@ -9,9 +9,11 @@ internal static class LadderLocalization
     {
         LocalizationManager.Instance.GetLocalization().AddTranslation("English", new Dictionary<string, string>
         {
-            ["cl_ladder_wood"] = "Wood Ladder",
-            ["cl_ladder_copper"] = "Copper Ladder",
-            ["cl_ladder_iron"] = "Iron Ladder",
+            // Owner 2026-10-27: "Wood Ladder" collided with the game's own Wood ladder in the hammer menu; all three
+            // say Vertical. Prefab IDs are unchanged, so placed ladders keep working.
+            ["cl_ladder_wood"] = "Vertical Wood Ladder",
+            ["cl_ladder_copper"] = "Vertical Copper Ladder",
+            ["cl_ladder_iron"] = "Vertical Iron Ladder",
             ["cl_ladder_description"] = "A vertical 2 m ladder. Snap sections end to end, then interact to climb.",
             ["cl_ladder_climb"] = "Climb",
             ["cl_ladder_dismount"] = "Dismount",

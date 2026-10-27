@@ -1,7 +1,8 @@
 # Concerned Ladders
 
-Vertical ladders for compact Valheim builds. Three 2 m hammer pieces: Wood
-Ladder, Copper Ladder and Iron Ladder. Stack matching or mixed materials into a
+Vertical ladders for compact Valheim builds. Three 2 m hammer pieces: Vertical
+Wood Ladder, Vertical Copper Ladder and Vertical Iron Ladder (named apart from
+the game's own sloped Wood ladder). Stack matching or mixed materials into a
 continuous run.
 
 **0.2.7 is an internal owner playtest candidate, not a release.** It is built against
@@ -46,9 +47,9 @@ climb; removing the section you hold lets you fall.
 
 | Piece | Per 2 m segment | Station |
 |---|---|---|
-| Wood Ladder | 4 Wood | Workbench |
-| Copper Ladder | 2 Copper, 1 Wood | Forge |
-| Iron Ladder | 2 Iron, 1 Wood | Forge |
+| Vertical Wood Ladder | 4 Wood | Workbench |
+| Vertical Copper Ladder | 2 Copper, 1 Wood | Forge |
+| Vertical Iron Ladder | 2 Iron, 1 Wood | Forge |
 
 These are initial balance values. Recipes use native resource discovery and
 hammer placement, support, ward, repair and refund behavior. All three materials climb at the

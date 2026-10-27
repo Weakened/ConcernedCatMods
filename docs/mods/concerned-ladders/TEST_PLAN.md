@@ -88,7 +88,7 @@ Record which convenience was used. No third-party gameplay mod is required.
 | ID | Procedure | Required result |
 |---|---|---|
 | B01 | Cold Start modded into menu | expected new version/full source fingerprint loads once, no missing dependency or Harmony exception |
-| B02 | Inspect all three hammer entries, hover and native repair text | exactly Wood Ladder / Copper Ladder / Iron Ladder in English, correct icon/recipe, no duplicate/donor icon |
+| B02 | Inspect all three hammer entries, hover and native repair text | exactly Vertical Wood Ladder / Vertical Copper Ladder / Vertical Iron Ladder in English (owner 2026-10-27), correct icon/recipe, no duplicate/donor icon |
 | B03 | New character has not discovered Copper/Iron | native discovery/progression policy preserved; no spoiler unlock grant |
 | B04 | Build wood with exactly four wood | cost once; station requirement applies |
 | B05 | Build copper/iron with exact cost; repeat insufficient cost and missing forge | valid build succeeds; invalid builds do not consume or place |
@@ -221,7 +221,7 @@ All start NOT RUN for this revision. A prior 0.1.1 PASS cannot populate them.
 | R30 | Exact final ZIP imported in observed TCC-Ladders-Dev; one active own DLL/GUID, new version/full source startup and dependencies/assets; A11 identity chain passes. |
 | R31 | Normal walking/jump/sprint/swimming/combat, stairs/doors/building, saved pieces, recipes/support/repair/refunds remain correct. |
 | R32 | Independent reviewer checks final source against every requested behavior and exact package/evidence; no in-scope P0/P1, precise readiness verdict. |
-| R33 | All three English names read Wood Ladder / Copper Ladder / Iron Ladder in hammer, hover and repair text; saved IDs unchanged. |
+| R33 | All three English names read Vertical Wood Ladder / Vertical Copper Ladder / Vertical Iron Ladder (owner 2026-10-27) in hammer, hover and repair text; saved IDs unchanged. |
 | R34 | Building-block reason appears only for an actual other blocking Piece on the queried route. Own ladder, Piece behind clear face, distance, terrain, actor and missing support never falsely report it; real collision still blocks unsafe routes. |
 | R35 | One final-version evidence set contains all six original-note demonstrations below, later Drop/scaffolding demonstrations and earlier sprint/skill/slide/snap/animation results; source and installed identity are tied to captures. |
 | R36 | Fresh Crouch/Drop during mounting, hold, up/down/fast climb, slide, transfer and hammer use on both faces releases without hop, outward kick, landing requirement or release charge; repeat at zero stamina. |
