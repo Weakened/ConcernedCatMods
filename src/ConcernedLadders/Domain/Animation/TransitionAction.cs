@@ -179,15 +179,18 @@ internal static class DefaultTransitions
             .Weight(LH, 0f, 0f, 0.35f, 1f).Weight(RH, 0.1f, 0f, 0.45f, 1f).Weight(LF, 0.3f, 0f, 0.8f, 1f).Weight(RF, 0.45f, 0f, 1f, 1f)
             .Arc(LF, 0.3f, 0.8f, 0f, 0.12f, 0.05f).Arc(RF, 0.45f, 1f, 0f, 0.12f, 0.05f)
             .Body(0f, 0.2f, 0.8f, 1f).Build(),
-        // Upper-floor exit (16-59-05 22.3-23.9 s, frames 669-717; 17-01-40 7.0-10.8 s): last supported rise with the
-        // hands on the rails, leading knee and foot clear the lip onto the landing, chest and hips move over it, hands
-        // move ahead onto the floor, trailing leg comes through, then the game's walk takes over.
+        // Upper-floor exit (16-59-05 22.3-23.9 s, frames 669-717; 17-01-40 7.0-10.8 s): the hands go from the rail tops
+        // onto the floor past the lip while the body is still low, the leading knee and foot clear the lip onto the
+        // floor, the chest and hips come over it in a crouch, the trailing leg comes through, then the climber stands
+        // and the game's walk takes over. In game 2026-10-27 the capsule rises to the floor in the first third, so the
+        // visible body stays low (kneeling over the lip) while it does.
         new TransitionAction.Builder(TransitionKind.TopExit, 1f)
-            .Reach(LF, 0.15f, 0f, 0.5f, 1f).Arc(LF, 0.15f, 0.5f, 0f, -0.05f, 0.22f).Weight(LF, 0.75f, 1f, 0.95f, 0f)
-            .Reach(RF, 0.45f, 0f, 0.8f, 1f).Arc(RF, 0.45f, 0.8f, 0f, -0.05f, 0.22f).Weight(RF, 0.8f, 1f, 1f, 0f)
-            .Reach(LH, 0.3f, 0f, 0.55f, 1f).Arc(LH, 0.3f, 0.55f, 0f, 0.05f, 0.1f).Weight(LH, 0.55f, 1f, 0.8f, 0f)
-            .Reach(RH, 0.35f, 0f, 0.6f, 1f).Arc(RH, 0.35f, 0.6f, 0f, 0.05f, 0.1f).Weight(RH, 0.6f, 1f, 0.85f, 0f)
-            .Body(0f, 1f, 0.55f, 1f, 0.95f, 0f).Lean(0f, 0f, 0.4f, 25f, 0.75f, 10f, 1f, 0f).Build(),
+            .Reach(LH, 0f, 0f, 0.2f, 1f).Arc(LH, 0f, 0.2f, 0f, 0.04f, 0.08f).Weight(LH, 0.6f, 1f, 0.85f, 0f)
+            .Reach(RH, 0.05f, 0f, 0.25f, 1f).Arc(RH, 0.05f, 0.25f, 0f, 0.04f, 0.08f).Weight(RH, 0.65f, 1f, 0.9f, 0f)
+            .Reach(LF, 0.15f, 0f, 0.45f, 1f).Arc(LF, 0.15f, 0.45f, 0f, 0.06f, 0.2f).Weight(LF, 0.72f, 1f, 0.92f, 0f)
+            .Reach(RF, 0.4f, 0f, 0.7f, 1f).Arc(RF, 0.4f, 0.7f, 0f, 0.06f, 0.2f).Weight(RF, 0.8f, 1f, 1f, 0f)
+            .Body(0f, 1f, 0.7f, 1f, 1f, 0f).BodyUp(0f, 0f, 0.25f, -0.4f, 0.55f, -0.4f, 0.95f, 0f)
+            .BodyToward(0f, 0f, 0.3f, 0.1f, 0.6f, 0.1f, 1f, 0f).Lean(0f, 0f, 0.25f, 25f, 0.55f, 25f, 0.9f, 0f).Build(),
         // Intermediate-floor exit: the same support transfer sideways or behind at the current height.
         new TransitionAction.Builder(TransitionKind.SideExit, 1f)
             .Reach(LF, 0.1f, 0f, 0.45f, 1f).Arc(LF, 0.1f, 0.45f, 0f, 0.1f, 0.18f).Weight(LF, 0.7f, 1f, 0.95f, 0f)
