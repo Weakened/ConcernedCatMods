@@ -100,6 +100,7 @@ internal sealed class LadderRuntime : IDisposable
     private bool _exitIsBottom;
     private bool _mountFromTop;
     private Vector3 _routeStart;
+    private float _routeRise;
     private float _routeLength;
     private ClimbEnd _endHint;
 
@@ -939,7 +940,7 @@ internal sealed class LadderRuntime : IDisposable
             if (_profilesRevision != _geometryRevision || _profilesSession != _session) { _profiles = BuildProfiles(); _profilesRevision = _geometryRevision; _profilesSession = _session; }
             var frame = new ClimbPresentationFrame(_session, _discontinuity, _geometryRevision, ++_sample, Time.fixedTime,
                 motion, _gait, _travel, step, LadderSegment.Point(feet), _run, _face, _plane, origin,
-                ClimbPresentationFrame.LastRungOf(_run.Height, origin, _pitch), routed ? RouteProgress(feet) : -1f,
+                ClimbPresentationFrame.LastRungOf(_run.Height, origin, _pitch), routed ? PresentedProgress(feet) : -1f,
                 LadderSegment.Point(routed ? _routeStart : feet), LadderSegment.Point(end), action, player.InPlaceMode(),
                 !GameplayFocus(player), _profiles);
             presenter.Publish(player, frame);
@@ -1209,6 +1210,31 @@ internal sealed class LadderRuntime : IDisposable
         Vector3 from = start;
         foreach (Vector3 point in _route) { length += Vector3.Distance(from, point); from = point; }
         _routeLength = length;
+        // The rise: the leading legs that move more up or down than across (an exit lifts onto the floor, then walks).
+        float rise = 0f;
+        from = start;
+        foreach (Vector3 point in _route)
+        {
+            Vector3 leg = point - from;
+            float across = new Vector2(leg.x, leg.z).magnitude;
+            if (Mathf.Abs(leg.y) <= across) { break; }
+            rise += leg.magnitude;
+            from = point;
+        }
+
+        _routeRise = rise;
+    }
+
+    /// <summary>Exit progress as published to presentation: the rise always spans the first RiseShare and the walk
+    /// the rest, whatever the route's proportions, so an authored exit lines its hand release up with the walk.</summary>
+    private float PresentedProgress(Vector3 position)
+    {
+        float plain = RouteProgress(position);
+        if (_mode != Mode.Exiting || _routeRise < 0.1f || _routeRise >= _routeLength - 0.05f) { return plain; }
+        float travelled = plain * _routeLength;
+        return travelled <= _routeRise
+            ? ClimbPresentationFrame.RiseShare * travelled / _routeRise
+            : ClimbPresentationFrame.RiseShare + (1f - ClimbPresentationFrame.RiseShare) * (travelled - _routeRise) / (_routeLength - _routeRise);
     }
 
     /// <summary>Route progress 0..1 from the remaining path, not from elapsed time.</summary>

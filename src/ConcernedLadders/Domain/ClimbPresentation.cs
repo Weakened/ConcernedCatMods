@@ -186,6 +186,9 @@ internal readonly struct ClimbPresentationFrame
     /// <summary>The accepted move's start and its validated end: for TopFinish/StepOff, the supported feet
     /// position the motor chose. Presentation may fit a sole there but never selects or validates a landing.</summary>
     internal ClimbPoint TransitionFrom { get; }
+
+    /// <summary>On an exit route that lifts before it walks, the share of Transition the lift takes.</summary>
+    internal const float RiseShare = 0.4f;
     internal ClimbPoint TransitionTo { get; }
 
     /// <summary>Body parts the game owns this step: RightArm while the building tool is out (its hold and every
