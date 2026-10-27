@@ -171,8 +171,8 @@ internal static class DefaultTransitions
         // Grounded mount (17-00-06 frames 90-150): a hand reaches, a low foot plants, the other hand goes higher, the
         // other foot rises; the body stays quiet at first, then settles into the climbing posture.
         new TransitionAction.Builder(TransitionKind.GroundMount, 0.9f)
-            .Weight(RH, 0f, 0f, 0.35f, 1f).Weight(LF, 0.15f, 0f, 0.5f, 1f).Weight(LH, 0.3f, 0f, 0.65f, 1f).Weight(RF, 0.5f, 0f, 0.95f, 1f)
-            .Arc(RH, 0f, 0.4f, 0f, 0.08f, 0.04f).Arc(LH, 0.3f, 0.7f, 0f, 0.08f, 0.04f).Arc(LF, 0.15f, 0.55f, 0f, 0.1f, 0.06f).Arc(RF, 0.5f, 1f, 0f, 0.12f, 0.08f)
+            .Weight(RH, 0.08f, 0f, 0.4f, 1f).Weight(LF, 0.15f, 0f, 0.5f, 1f).Weight(LH, 0.3f, 0f, 0.65f, 1f).Weight(RF, 0.5f, 0f, 0.95f, 1f)
+            .Arc(RH, 0.08f, 0.45f, 0f, 0.08f, 0.04f).Arc(LH, 0.3f, 0.7f, 0f, 0.08f, 0.04f).Arc(LF, 0.15f, 0.55f, 0f, 0.1f, 0.06f).Arc(RF, 0.5f, 1f, 0f, 0.12f, 0.08f)
             .Body(0f, 0f, 0.25f, 0.2f, 0.9f, 1f).Build(),
         // Midair catch: hands first from the airborne pose, feet find rungs after.
         new TransitionAction.Builder(TransitionKind.AirCatch, 0.35f)
@@ -211,11 +211,11 @@ internal static class DefaultTransitions
             // In game 2026-10-27: the climber starts standing on the floor, so the body crouches at once, the hands take
             // the lip once the shoulders are over it (30%) and the feet are held on the floor through the crouch, then lowered one at a time onto rungs. Progress:
             // the walk over the lip spans 0-0.4, the lowering the rest.
-            .Weight(LH, 0.3f, 0f, 0.38f, 1f).Weight(RH, 0.33f, 0f, 0.41f, 1f)
+            .Weight(LH, 0.38f, 0f, 0.46f, 1f).Weight(RH, 0.41f, 0f, 0.49f, 1f)
             .Reach(LH, 0f, 1f, 0.55f, 1f, 0.75f, 0f).Reach(RH, 0f, 1f, 0.6f, 1f, 0.8f, 0f)
             .Reach(LF, 0f, 1f, 0.4f, 1f, 0.62f, 0f).Arc(LF, 0.4f, 0.62f, 0f, 0.06f, 0.12f).Weight(LF, 0.06f, 0f, 0.16f, 1f)
             .Reach(RF, 0f, 1f, 0.58f, 1f, 0.85f, 0f).Arc(RF, 0.58f, 0.85f, 0f, 0.06f, 0.12f).Weight(RF, 0.09f, 0f, 0.19f, 1f)
-            .Body(0f, 0f, 0.12f, 1f, 1f, 1f).BodyUp(0f, 0f, 0.2f, -0.5f, 0.5f, -0.45f, 0.9f, 0f)
+            .Body(0f, 0f, 0.12f, 1f, 1f, 1f).BodyUp(0f, 0f, 0.2f, -0.5f, 0.45f, -0.62f, 0.75f, -0.55f, 0.95f, 0f)
             .BodyToward(0f, 0f, 0.25f, 0.1f, 0.6f, 0.1f, 0.9f, 0f).Lean(0f, 0f, 0.25f, 35f, 0.6f, 15f, 1f, 0f).Build(),
     };
 }
