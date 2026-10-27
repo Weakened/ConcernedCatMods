@@ -14,6 +14,7 @@ products.
 from __future__ import annotations
 
 import argparse
+import difflib
 import re
 import struct
 import sys
@@ -4682,6 +4683,73 @@ def check_no_mojibake(errors: list[str]) -> list[str]:
     return [f"[encoding] {scanned} text files scanned, none double-encoded"]
 
 
+CONSOLE_COMMAND_COPIES = (
+    "src/ConcernedCartographer/Runtime/VanillaConsoleCommands.cs",
+    "src/ConcernedForeman/Runtime/VanillaConsoleCommands.cs",
+    "src/ConcernedSteward/Runtime/VanillaConsoleCommands.cs",
+    "src/ConcernedTeamster/Adapters/VanillaConsoleCommands.cs",
+)
+
+# What each copy is allowed to differ in, and nothing else: its own namespace and
+# usings, its comments, and the one call that turns an exception into log text,
+# which each product spells through its own scrubber.
+CONSOLE_COPY_SCRUBBER_CALL = re.compile(
+    r"\b(?:Diagnostics\s*\.\s*)?(?:SafeFailure|SafeLogText)\s*\.\s*Brief\s*\(")
+CONSOLE_COPY_BRIEF_MEMBER = re.compile(
+    r"^private static string Brief\(Exception exception\) =>\nBrief\(exception\);$\n?", re.M)
+
+
+def _console_copy_body(text: str) -> list[str]:
+    code = CONSOLE_COPY_SCRUBBER_CALL.sub("Brief(", _strip_cs_comments(text))
+    kept = []
+    for line in code.splitlines():
+        line = " ".join(line.split())
+        if not line or line.startswith("using ") or line.startswith("namespace "):
+            continue
+        kept.append(line)
+    return CONSOLE_COPY_BRIEF_MEMBER.sub("", "\n".join(kept) + "\n").splitlines()
+
+
+def check_console_command_copies_agree(errors: list[str]) -> list[str]:
+    """#391: the four VanillaConsoleCommands copies are one implementation.
+
+    They exist because Jotunn's console commands are dead on Valheim 1.0.x - a
+    constructor mismatch silently removes every cc_/cf_/ct_/cs_ command - and each
+    product must register through the game's own Terminal.ConsoleCommand. Products
+    never reference each other and src/Shared may hold no game type (D2), so the
+    code is copied rather than shared. A fix that reaches one copy and not the others
+    reproduces that silent, total outage in the products it missed, so the copies
+    are compared after removing only what each is allowed to own: usings, the
+    namespace, comments and whitespace, and its own scrubber's spelling of Brief."""
+    label = "[interop] #391 console-command copies"
+    bodies = {}
+    for relative in CONSOLE_COMMAND_COPIES:
+        path = ROOT.joinpath(*relative.split("/"))
+        if not path.is_file():
+            fail(f"{label}: {relative} is missing; update CONSOLE_COMMAND_COPIES if it moved", errors)
+            return []
+        bodies[relative] = _console_copy_body(path.read_text(encoding="utf-8-sig"))
+
+    found = sorted(
+        path.relative_to(ROOT).as_posix()
+        for path in (ROOT / "src").rglob("VanillaConsoleCommands*.cs")
+        if "obj" not in path.parts and "bin" not in path.parts)
+    unknown = [relative for relative in found if relative not in CONSOLE_COMMAND_COPIES]
+    if unknown:
+        fail(f"{label}: unpinned copies {unknown}; add them to CONSOLE_COMMAND_COPIES", errors)
+
+    reference = CONSOLE_COMMAND_COPIES[0]
+    for relative in CONSOLE_COMMAND_COPIES[1:]:
+        diff = list(difflib.unified_diff(
+            bodies[reference], bodies[relative], reference, relative, n=0, lineterm=""))
+        if diff:
+            shown = "\n    ".join(diff[2:12])
+            fail(f"{label}: {relative} has diverged from {reference}; carry the change "
+                 f"to every copy:\n    {shown}", errors)
+    return [f"{label}: {len(CONSOLE_COMMAND_COPIES)} copies agree outside namespace, usings, "
+            "comments and their scrubber's spelling"]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -4734,6 +4802,7 @@ def main() -> int:
     report.extend(check_container_permit_stays_unforgeable(errors))
     report.extend(check_teamster_deposit_adds_only_what_it_is_removing(errors))
     report.extend(check_console_failures_go_through_one_scrubber(errors))
+    report.extend(check_console_command_copies_agree(errors))
     report.extend(check_npc_planning_decides_nothing_to_do_once(errors))
     report.extend(check_npc_planning_never_defaults_a_claim(errors))
     report.extend(check_teamster_cartographer_contract(errors))
