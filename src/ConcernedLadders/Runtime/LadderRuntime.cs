@@ -1261,7 +1261,7 @@ internal sealed class LadderRuntime : IDisposable
 
     /// <summary>Climbing with no landing at the top stops with the feet this far below the run's top: the hands still
     /// hold the top rungs there (owner 2026-10-27: "stop climbing right before the hand contacts leave the rungs").</summary>
-    private const float NoLandingStop = 0.5f;
+    private const float NoLandingStop = 0.75f;
 
     /// <summary>Remembers where an accepted mount/exit move started and its full length, for transition progress.</summary>
     private void BeginRoute(Vector3 start)
