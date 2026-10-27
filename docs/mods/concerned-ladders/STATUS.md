@@ -4,31 +4,31 @@
 
 | Item | 0.2.7 |
 |---|---|
-| Source | `c0cc1a79fb92898e8b4049391ca8daadf292b2e0` (`feat/cl-001-vertical-ladders`) |
-| Verify | `scripts/verify.ps1` PASSED: 16 assemblies, 5416 passed / 0 failed, validator exit 0 (`artifacts/ladders-0.2.7/verify-c0cc1a7.log`) |
-| ZIP | `TheConcernedCat-ConcernedLadders-0.2.7.zip`, SHA256 `8d89d6c529f812ff377bfe931be23c6e24b5039ad8588534334e0099b96576a1` (artifacts and Downloads, identical) |
-| DLL | `5847886bddf241c4b7675deb9291abb0529a343ef2a7b7bcf9162010fd203a14` (built = packaged = installed) |
-| Install | Manager "Import local mod", TCC-Ladders-Dev, dev probe parked; cold start logs `0.2.7+c0cc1a7…`, 2 loaded / 0 failed, gait source `LadderGait.blend 10a709c922c5` |
+| Source | `93a1dea21098858b04eb9dea03e7a75664547477` (`feat/cl-001-vertical-ladders`) |
+| Verify | `scripts/verify.ps1` PASSED: 16 assemblies, 5416 passed / 0 failed, validator exit 0 (`artifacts/ladders-0.2.7/verify-93a1dea.log`) |
+| ZIP | `TheConcernedCat-ConcernedLadders-0.2.7.zip`, SHA256 `d21837cbef32710c315403369ffecd96c4a7de6a4464a30bb680b466eb953543` (artifacts and Downloads, identical) |
+| DLL | `6ec177a122782357cc45f5e658efe0df4611d03f17cdfe00b4117f27eb87eaf4` (built = packaged = installed) |
+| Install | Manager "Import local mod", TCC-Ladders-Dev, dev probe parked; cold start logs `0.2.7+93a1dea…`, 2 loaded / 0 failed, gait source `LadderGait.blend 50bc77aeab20` |
 | Test world | `TCCLadderHammer` (no build cost, passive enemies) |
 
-**Owner decisions 2026-10-27:** climbing animation (ascent and descent) is approved ("perfect") and locked, as are the
-mount, catch, intermediate-floor exit and bottom step-off. The upper exit and descending entry were reworked as an
-athletic pull-up/step and an upright hop down; they are the open items for this playtest.
+**Owner decisions 2026-10-27:** climbing (ascent and descent) is approved and locked. Getting on and off has no
+distinct animation: every mount and dismount is quick (ground mount 0.3 s, catch 0.2 s, upper exit and upper mount
+0.5 s, intermediate and bottom dismounts 0.4 s), the capsule still following its swept route and the limbs taking or
+leaving the rungs. No squat near the top: the climb exits or stops 1.3 m below the top with both hands on the top
+rungs, and an upper mount ends in the same stance.
 
-**Measured on the installed build (side-view recordings and per-frame traces, `artifacts/ladders-0.2.7-dev/`)**
+**Measured on the installed build (side-view recordings and per-frame traces, `artifacts/ladders-0.2.7-dev/quick4/`)**
 
 - Climbing: 0 skips / 0 fades on all limbs, up, down, holding and across five section seams; knee splay p90 6-9 cm.
-- Transitions: target speeds 1.5-5 m/s per pose update, grip changes at most ~8/s (one 15.6/s); exits take 1.0-1.8 s.
-  Upper exit leg extension median 0.71/0.81 (was 0.23/0.34), descending entry 0.85/0.61 (was 0.30/0.28). Hands
-  remain out of reach for 3-5 pose updates at the start of the upper exit (skipped, never stretched).
-- With no landing at the top the climb stops 0.75 m below the top with all four contacts planted.
+- Every hold after a mount and at the no-landing stop: all four contacts planted, 0 skips (no squat).
+- Quick transitions: limbs hand to the game's pose within the first quarter; a few frames of each fall back to the
+  native pose early (skipped, never stretched).
 - Snapping: Auto, Bottom, Top, Left side, Right side on floors and walls, rotated, all three materials: preview equals
   placement. A native snap into an existing section is refused.
 - Height: a 10-section iron stack stands; wood holds 10 only until a reload, then collapses to 5 (the game's own
   structural support for wood). The iron stack after a reload is still to be confirmed in the playtest.
 
-**Still open:** owner acceptance of the upper exit and descending entry; controller and multiplayer rows remain
-BLOCKED (no controller, no second endpoint).
+**Still open:** the owner playtest; controller and multiplayer rows remain BLOCKED (no controller, no second endpoint).
 
 ## 0.2.6 (superseded)
 
