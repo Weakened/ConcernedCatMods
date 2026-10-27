@@ -2,7 +2,25 @@
 
 ## 0.2.7
 
-Internal development build. Not a release.
+Internal owner playtest candidate. Not a release.
+
+- Climbing posture (owner-approved): the climber stands off the ladder with
+  the hips and chest square to it, steps two rungs at a time with the support
+  leg nearly straight, and the knees stay in line instead of folding to the
+  chest or falling outward.
+- Upper exit: a quick pull-up and step onto the platform. The hands push off
+  the floor's edge, the body rises, the high foot steps up, the other follows,
+  and the climber stands and walks on.
+- Descending entry: walk to the edge upright and drop onto the ladder, feet
+  onto the rungs first, hands catching the top rungs.
+- Intermediate-floor exit and the bottom step-off are smoother and take their
+  time (about 1.4 s and 1.0 s) instead of snapping through.
+- Climbing a ladder with nowhere to step off at the top now stops while both
+  hands still hold the top rungs.
+- Mounting from a floor no longer refuses a step or two back from the edge;
+  a jump that brushes a rung is still caught as a midair grab; top landings
+  are found along a floor's edge, and small floors beside the ladder are found
+  for the intermediate exit.
 
 - Snapping (owner revision): Cycle Snap now offers Auto, Bottom, Top,
   **Left side** and **Right side**. Left side and Right side line the ladder's
