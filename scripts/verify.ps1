@@ -54,6 +54,16 @@ Assert-PathValue -Name "BEPINEX_PATH" -Path $environment.BepInExPath
 
 $solution = Join-Path $root "ConcernedCatMods.sln"
 $started = Get-Date
+
+# Every run keeps its own full output (#413). A gate that failed once and passed
+# on the rerun left nothing to diagnose, because the only copy of the failing
+# assembly's summary had scrolled out of a terminal. One folder per run, never
+# overwritten, so the first sighting of an intermittent red is enough.
+$runCommit = (& git -C $root rev-parse --short HEAD 2>$null)
+if ($LASTEXITCODE -ne 0) { $runCommit = "unknown" }
+$runDirectory = Join-Path $root ("artifacts/verify/{0:yyyyMMdd-HHmmss}-{1}-{2}" -f $started, $runCommit, $PID)
+New-Item -ItemType Directory -Force -Path $runDirectory | Out-Null
+Write-Host "[verify] This run's full output is kept in $runDirectory" -ForegroundColor Cyan
 $steps = [System.Collections.Generic.List[object]]::new()
 
 function Add-Step {
@@ -66,9 +76,11 @@ try {
     # --- 1. Every project in the solution, products included -----------------
     Write-Host "[verify] Building the solution ($Configuration). This is the step dotnet test skips." -ForegroundColor Cyan
     $buildLog = & dotnet build $solution --configuration $Configuration --nologo -v m 2>&1
+    $buildExit = $LASTEXITCODE
+    $buildLog | Set-Content -Path (Join-Path $runDirectory "build.log") -Encoding utf8
     $buildLog | ForEach-Object { Write-Host $_ }
-    if ($LASTEXITCODE -ne 0) {
-        throw "Solution build FAILED. Nothing below this line ran, and no test result from this tree means anything."
+    if ($buildExit -ne 0) {
+        throw "Solution build FAILED. Nothing below this line ran, and no test result from this tree means anything. Full log: $runDirectory"
     }
 
     $projects = (Select-String -InputObject ($buildLog -join "`n") -Pattern '-> .+\.dll' -AllMatches).Matches.Count
@@ -83,10 +95,41 @@ try {
         # --no-build is load-bearing: it guarantees these are the assemblies the
         # step above produced, and stops a test run from building its own way
         # around a product that does not compile.
-        $testLog = & dotnet test $solution --configuration $Configuration --no-build --nologo 2>&1
+        # The TRX files name every test and its outcome per assembly, which is
+        # what the console summary alone could not do once it had scrolled away.
+        $testResults = Join-Path $runDirectory "TestResults"
+        $testLog = & dotnet test $solution --configuration $Configuration --no-build --nologo `
+            --logger "trx" --results-directory $testResults 2>&1
+        $testExit = $LASTEXITCODE
+        $testLog | Set-Content -Path (Join-Path $runDirectory "tests.log") -Encoding utf8
         $testLog | ForEach-Object { Write-Host $_ }
-        if ($LASTEXITCODE -ne 0) {
-            throw "Tests FAILED."
+        if ($testExit -ne 0) {
+            # Name what failed on the first sighting, from the console lines and
+            # from the TRX files, so a rerun is never needed just to find out.
+            $failedLines = @($testLog | Where-Object { "$_" -match '^\s*Failed\s+\S|\[FAIL\]|error\s+\w*\d+:' })
+            $failedTrx = @()
+            # -LiteralPath: the logger names files "...net10.0[1].trx", and
+            # brackets are wildcards to -Path. Reading a TRX is best effort and
+            # must never replace the failure being reported with its own error.
+            foreach ($trx in @(Get-ChildItem -LiteralPath $testResults -Filter *.trx -Recurse -ErrorAction SilentlyContinue)) {
+                try {
+                    [xml]$document = Get-Content -Raw -LiteralPath $trx.FullName
+                    foreach ($result in @($document.TestRun.Results.UnitTestResult)) {
+                        if ($null -ne $result -and $result.outcome -eq "Failed") {
+                            $failedTrx += "$($result.testName)  ($($trx.Name))"
+                        }
+                    }
+                }
+                catch {
+                    $failedTrx += "could not read $($trx.Name): $($_.Exception.GetType().Name)"
+                }
+            }
+            $summary = @($failedTrx + $failedLines | Select-Object -Unique)
+            $summary | Set-Content -Path (Join-Path $runDirectory "failures.txt") -Encoding utf8
+            Write-Host ""
+            Write-Host "[verify] Failing tests ($($failedTrx.Count) from TRX):" -ForegroundColor Red
+            $summary | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+            throw "Tests FAILED. Full output, TRX results and failures.txt: $runDirectory"
         }
 
         $passed = 0
@@ -103,9 +146,12 @@ try {
     # --- 3. Everything a compiler cannot see ---------------------------------
     Write-Host "[verify] Validating the repository." -ForegroundColor Cyan
     $python = if (Get-Command python -ErrorAction SilentlyContinue) { "python" } else { "python3" }
-    & $python (Join-Path $root "tools/validate_repo.py")
-    if ($LASTEXITCODE -ne 0) {
-        throw "Repository validation FAILED."
+    $validatorLog = & $python (Join-Path $root "tools/validate_repo.py") 2>&1
+    $validatorExit = $LASTEXITCODE
+    $validatorLog | Set-Content -Path (Join-Path $runDirectory "validator.log") -Encoding utf8
+    $validatorLog | ForEach-Object { Write-Host $_ }
+    if ($validatorExit -ne 0) {
+        throw "Repository validation FAILED. Full log: $runDirectory"
     }
 
     Add-Step "Validator" "tools/validate_repo.py, exit 0"
@@ -126,4 +172,5 @@ foreach ($step in $steps) {
     Write-Host ("{0,-16}{1}" -f $step.Name, $step.Detail)
 }
 Write-Host "elapsed     ${elapsed}s"
+Write-Host "output      $runDirectory"
 Write-Host "===============================================" -ForegroundColor Green
