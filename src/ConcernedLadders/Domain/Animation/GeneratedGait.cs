@@ -10,8 +10,8 @@ namespace TheConcernedCat.ConcernedLadders.Domain.Animation;
 /// in LimbGait.cs and DefaultTransitions remain the fallbacks.</summary>
 internal static class GeneratedGait
 {
-    internal const string BlendSha256 = "096cbbef07e4ac8ad531c15df91f11e51ea3d7d8b6161efba802465fba20fd65";
-    internal const string JsonSha256 = "7fc44139e9eb4a6a2287bf0921c6cc26477e907d43e95f9d8eaf5a1e5c3d6725";
+    internal const string BlendSha256 = "783ae5f3ce468dbed31a07e0026b5bf5c4f3f2bdedcaf998c44ee59e6573b374";
+    internal const string JsonSha256 = "21767143b2c1e802c3eb649a977d24b5c31cf60cf688fc29e978cba4193a198e";
     internal const string Blender = "5.1.2";
 
     internal const float PelvisDrop = 0f;
@@ -549,8 +549,8 @@ internal static class GeneratedGait
                 // left hand
                 new[]
                 {
-                    1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
-                    1f, 0.912847f, 0.634861f, 0.300526f, 0.050714f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 0.965706f,
+                    0.663923f, 0.259259f, 0.008916f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f
                 },
@@ -558,7 +558,7 @@ internal static class GeneratedGait
                 new[]
                 {
                     1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
-                    1f, 1f, 0.86852f, 0.567994f, 0.239294f, 0.023291f, 0f, 0f, 0f, 0f, 0f,
+                    0.991084f, 0.740741f, 0.336077f, 0.034294f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f
                 },
@@ -873,7 +873,7 @@ internal static class GeneratedGait
                 // left hand
                 new[]
                 {
-                    1f, 1f, 1f, 1f, 1f, 1f, 0.972f, 0.71825f, 0.352f, 0.06075f, 0f,
+                    1f, 1f, 0.965706f, 0.663923f, 0.259259f, 0.008916f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f
@@ -881,7 +881,7 @@ internal static class GeneratedGait
                 // right hand
                 new[]
                 {
-                    1f, 1f, 1f, 1f, 1f, 0.84375f, 0.5f, 0.15625f, 0f, 0f, 0f,
+                    1f, 0.811385f, 0.41701f, 0.074074f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f
@@ -924,8 +924,8 @@ internal static class GeneratedGait
                 // left foot
                 new[]
                 {
-                    0f, 0.008916f, 0.034294f, 0.074074f, 0.1262f, 0.188615f, 0.259259f, 0.336077f, 0.41701f, 0.5f, 0.58299f,
-                    0.663923f, 0.740741f, 0.811385f, 0.8738f, 0.925926f, 0.965706f, 0.991084f, 1f, 1f, 1f, 1f,
+                    0f, 0f, 0f, 0f, 0.00845f, 0.040777f, 0.093835f, 0.163919f, 0.24733f, 0.340365f, 0.439322f,
+                    0.540501f, 0.640199f, 0.734715f, 0.820346f, 0.893392f, 0.950151f, 0.986921f, 1f, 1f, 1f, 1f,
                     1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
                     1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f
                 },
@@ -970,11 +970,11 @@ internal static class GeneratedGait
                 ),
                 // left foot: { lat, out, up } over progress
                 Rows(3,
-                    0f, 0f, 0f, 0f, 0.001809f, 0.000905f, 0f, 0.007019f, 0.003509f, 0f, 0.015f, 0.0075f,
-                    0f, 0.024791f, 0.012395f, 0f, 0.035209f, 0.017605f, 0f, 0.045f, 0.0225f, 0f, 0.052981f, 0.026491f,
-                    0f, 0.058191f, 0.029095f, 0f, 0.06f, 0.03f, 0f, 0.058191f, 0.029095f, 0f, 0.052981f, 0.026491f,
-                    0f, 0.045f, 0.0225f, 0f, 0.035209f, 0.017605f, 0f, 0.024791f, 0.012395f, 0f, 0.015f, 0.0075f,
-                    0f, 0.007019f, 0.003509f, 0f, 0.001809f, 0.000905f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    0f, 0.001714f, 0.000857f, 0f, 0.008341f, 0.004171f, 0f, 0.018814f, 0.009407f, 0f, 0.031273f, 0.015637f,
+                    0f, 0.043506f, 0.021753f, 0f, 0.053341f, 0.026671f, 0f, 0.059032f, 0.029516f, 0f, 0.059568f, 0.029784f,
+                    0f, 0.054855f, 0.027428f, 0f, 0.045729f, 0.022865f, 0f, 0.033811f, 0.016905f, 0f, 0.021215f, 0.010608f,
+                    0f, 0.01018f, 0.00509f, 0f, 0.002663f, 0.001332f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
