@@ -86,6 +86,21 @@ internal sealed partial class OriginalClimbPresenter
         actor.Lease.BodyInIK(animator, bodyPosition, bodyRotation, bodyWeight);
         Vector3 posedBody = animator.bodyPosition;
         Quaternion bodyDelta = animator.bodyRotation * Quaternion.Inverse(nativeRotation);
+        // The native chest is twisted against the hips (measured 25 degrees once the hips are square): turn the chest
+        // so the shoulder line also runs along the rungs, scaled with the body weight like every body change.
+        if (ClimbTuning.SquareChest > 0f && bodyWeight > 0f)
+        {
+            Transform? chest = animator.GetBoneTransform(HumanBodyBones.Chest);
+            Vector3 shoulders = bodyDelta * (rig.Roots[1].position - rig.Roots[0].position);
+            shoulders.y = 0f;
+            if (chest != null && chest.parent != null && shoulders.sqrMagnitude > 1e-4f)
+            {
+                float twist = Mathf.Clamp(Vector3.SignedAngle(shoulders, right, Vector3.up), -40f, 40f) * ClimbTuning.SquareChest * bodyWeight;
+                Quaternion world = Quaternion.AngleAxis(twist, Vector3.up) * chest.rotation;
+                animator.SetBoneLocalRotation(HumanBodyBones.Chest, Quaternion.Inverse(chest.parent.rotation) * world);
+                actor.ChestTwist = twist;
+            }
+        }
 
         for (int limb = 0; limb < 4; limb++) { actor.Asked[limb] = false; actor.Record[limb] = default; }
         for (int limb = 0; limb < 4; limb++)

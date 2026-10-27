@@ -340,6 +340,7 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
         internal float BodyBlend;
         internal bool Caught;
         internal TransitionAction? Transition;
+        internal float ChestTwist;
         internal float TransitionProgress;
         internal bool EntryTimed;
         internal readonly FitCounters Fit = new FitCounters();
