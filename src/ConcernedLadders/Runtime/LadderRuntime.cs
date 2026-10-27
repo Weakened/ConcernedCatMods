@@ -330,7 +330,7 @@ internal sealed class LadderRuntime : IDisposable
             if (!_hoverValid || capsule == null) { return false; }
             float height = capsule.height * Mathf.Abs(capsule.transform.lossyScale.y);
             // Native ground contact stands in for the swept support test here: hover runs every frame.
-            return ClimbPolicy.InReach(Reach(_hoverRun, segment, player.transform.position, height, player.IsOnGround()));
+            return ClimbPolicy.InReach(Reach(_hoverRun, segment, player.transform.position, height, player.IsOnGround() && !StandsOnLadder(player)));
         }
         catch { return false; }
     }
@@ -432,7 +432,9 @@ internal sealed class LadderRuntime : IDisposable
         Vector3 feet = body.position;
         // Standing or airborne is the game's own ground contact, the same reading the hover prompt uses, so a
         // body a few centimetres above a floor is airborne here too and keeps the chest reach and air limits.
-        bool supported = player.IsOnGround();
+        // A jump beside the ladder can brush a rung, which the game reports as ground contact (in game 2026-10-27: a
+        // midair grab 1.6 m up planned as a standing mount). Standing on the ladder itself is not standing.
+        bool supported = player.IsOnGround() && !StandsOnLadder(player);
         float reach = Reach(run, segment, feet, clearance.Height, supported);
         float grip = clearance.Height * ClimbPolicy.GripFraction;
         float firstRung = segment.RungPitch * 0.5f;
@@ -549,6 +551,12 @@ internal sealed class LadderRuntime : IDisposable
         refusal = first == ClimbRefusal.None ? ClimbRefusal.Obstacle : first;
         detail += " blocker=" + clearance.LastBlocker + ":" + clearance.LastBlockerName;
         return false;
+    }
+
+    private static bool StandsOnLadder(Player player)
+    {
+        Collider? ground = player.GetLastGroundCollider();
+        return ground != null && ground.GetComponentInParent<LadderSegment>() != null;
     }
 
     /// <summary>The point at the lane's depth with the body's current sideways offset from the run.</summary>
