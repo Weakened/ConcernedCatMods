@@ -1,15 +1,15 @@
 {
  "format": 2,
  "source": "LadderGait.blend",
- "sourceSha256": "24d1c2346496c135fd093b51a7ad3cfa1881d35558b2cc55cc25f8706150bc3e",
+ "sourceSha256": "c15d56251fbde53c100641b6e1200147cba8c14e518ed2caa722de1cfd85341f",
  "blender": "5.1.2",
  "shape": {
   "foot_low_rel": 0.0,
   "hand_mid_from_shoulder": -0.02,
   "hand_settle_below": 0.38,
   "hand_settle_above": 0.38,
-  "foot_settle_below": 0.1,
-  "foot_settle_above": 0.75,
+  "foot_settle_below": 0.0,
+  "foot_settle_above": 0.4,
   "settle_seconds": 0.18,
   "rejoin_seconds": 0.12,
   "reverse_seconds": 0.3,

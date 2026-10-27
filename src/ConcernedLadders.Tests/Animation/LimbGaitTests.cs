@@ -92,7 +92,7 @@ public sealed class LimbGaitTests
     {
         var gait = Gait();
         Climb(gait, 12f, 12.3f);
-        for (int i = 0; i < 30; i++) { Assert.True(gait.Update(12.3f, 0.02f, false)); } // Let any blend finish.
+        for (int i = 0; i < 60; i++) { Assert.True(gait.Update(12.3f, 0.02f, false)); } // Let any blend and stall settle finish.
         float[] before = new float[4];
         for (int limb = 0; limb < 4; limb++) { before[limb] = gait.Contact(limb).Height; }
         for (int i = 0; i < 200; i++) { Assert.True(gait.Update(12.3f, 0.02f, false)); } // Blocked: input held, body stuck.

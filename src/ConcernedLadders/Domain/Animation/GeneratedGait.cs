@@ -10,8 +10,8 @@ namespace TheConcernedCat.ConcernedLadders.Domain.Animation;
 /// in LimbGait.cs and DefaultTransitions remain the fallbacks.</summary>
 internal static class GeneratedGait
 {
-    internal const string BlendSha256 = "24d1c2346496c135fd093b51a7ad3cfa1881d35558b2cc55cc25f8706150bc3e";
-    internal const string JsonSha256 = "b1d68668339bb745a7abd88f0a94c2be4129d450ee207a4250daac5e036ddc4c";
+    internal const string BlendSha256 = "c15d56251fbde53c100641b6e1200147cba8c14e518ed2caa722de1cfd85341f";
+    internal const string JsonSha256 = "a0bf54ab191a0d5b79cb81f486b2730aefa6922d09966ec52e74eebeb604f7e8";
     internal const string Blender = "5.1.2";
 
     internal const float PelvisDrop = 0f;
@@ -207,8 +207,8 @@ internal static class GeneratedGait
         HandMidFromShoulder = -0.02f,
         HandSettleBelow = 0.38f,
         HandSettleAbove = 0.38f,
-        FootSettleBelow = 0.1f,
-        FootSettleAbove = 0.75f,
+        FootSettleBelow = 0f,
+        FootSettleAbove = 0.4f,
         SettleSeconds = 0.18f,
         RejoinSeconds = 0.12f,
         ReverseSeconds = 0.3f,

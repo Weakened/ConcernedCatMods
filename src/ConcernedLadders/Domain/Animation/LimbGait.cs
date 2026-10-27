@@ -173,8 +173,10 @@ internal sealed class GaitShape
     /// shoulder, feet relative to FootLowRel.</summary>
     internal float HandSettleBelow = 0.38f;
     internal float HandSettleAbove = 0.38f;
-    internal float FootSettleBelow = 0.1f;
-    internal float FootSettleAbove = 0.75f;
+    // Feet settle between the straight leg and 0.4 m above it (in game 2026-10-27: a band to 0.75 m let a stopped foot
+    // rest at hip height, the knee folding down and back to reach it). Always holds at least one rung.
+    internal float FootSettleBelow = 0f;
+    internal float FootSettleAbove = 0.4f;
 
     /// <summary>Seconds for a swinging limb to settle when the climber stops, and to rejoin the gait on resuming or
     /// reversing.</summary>
