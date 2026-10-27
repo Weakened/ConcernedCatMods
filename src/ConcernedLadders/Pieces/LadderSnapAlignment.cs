@@ -9,23 +9,35 @@ using UnityEngine;
 
 namespace TheConcernedCat.ConcernedLadders.Pieces;
 
-/// <summary>Scoped placement adapter (owner decisions 2026-10-26). Cycle Snap offers Auto, Bottom and Top. A ghost of
-/// one of this product's ladders is placed, in order:
+/// <summary>Scoped placement adapter (owner decisions 2026-10-26). Cycle Snap offers Auto, Bottom, Top, Left side and
+/// Right side. A ghost of one of this product's ladders is placed, in order:
 /// <list type="bullet">
 /// <item>on a ladder the game has snapped it to end to end (bottom-centre on a placed ladder's top-centre, or top on
 /// bottom): it takes that ladder's rotation and lies exactly on it, one straight column;</item>
 /// <item>aimed at a placed ladder's rails: it extends that column at the end the mode names (Bottom stacks on top, Top
-/// hangs below, Auto takes the nearer end and never buries a section under a column that stands on the ground);</item>
-/// <item>aimed at a floor or a wall: in the middle of it, the way walls snap to floors (<see cref="LadderEdgeSnap"/>):
-/// centred on the floor edge nearest the aim, hanging below it (Auto, Top) or standing on it (Bottom); or centred on the
-/// wall face toward the player, standing on its bottom edge (Auto, Bottom) or hanging from its top edge (Top). Flush
-/// against the surface, climbing side outward, whatever rotation the hammer was left at.</item>
+/// hangs below, Auto takes the nearer end and never buries a section under a column that stands on the ground); the
+/// side modes refuse here (they align to floors and walls only);</item>
+/// <item>aimed at a floor or a wall (<see cref="LadderEdgeSnap"/>): on the floor edge nearest the aim, hanging below it
+/// (Auto, Top, side modes; Auto and the side modes stand on it when there is no room below) or standing on it
+/// (Bottom); or on the wall face toward the player, standing on its bottom edge or hanging from its top edge (Top).
+/// Auto, Top and Bottom centre it on the edge; Left side and Right side put the ladder's visible left or right rail on
+/// the target's left or right corner. Flush against the real face.</item>
 /// </list>
-/// Anything else stays the game's own placement. A placement whose joint lies beyond the game's own placement reach
-/// is refused: the ghost is marked invalid rather than moved out of reach. The move happens inside the game's placement
-/// update, after its snapping and its earlier surface and duplicate-overlap checks, and before its no-build, ward,
-/// player-overlap, biome and clipping checks, which all read the moved ghost. Held "toggle snapping" (free placement) is
-/// respected. Any mismatch in the installed game's placement API leaves native snapping untouched.</summary>
+///
+/// <para>Rotation: ladder-on-ladder placements (the first two) always take the column's rotation, whatever the
+/// hammer's rotation: a turned section would not join the climbing run (<see cref="LadderRules.Joins"/> requires the
+/// same climbing side), so rotation input is ignored there. On floors and walls the player's build rotation is kept,
+/// turned by whole quarter turns to face within ±45° of straight out, and the origin is recomputed about the selected
+/// anchor (<see cref="LadderEdgeSnap"/>). The game's own collision and clipping checks run after this hook, so they see
+/// the rotated ghost.</para>
+///
+/// <para>Anything else stays the game's own placement; a side-mode ghost with nothing to align to is placed with its
+/// origin on the aimed point (the game itself would put it 100 m above it, <see cref="LadderSnapPoints"/>). A placement
+/// whose joint lies beyond the game's own placement reach is refused: the ghost is marked invalid rather than moved out
+/// of reach. The move happens inside the game's placement update, after its snapping and its earlier surface and
+/// duplicate-overlap checks, and before its no-build, ward, player-overlap, biome and clipping checks, which all read
+/// the moved ghost. Held "toggle snapping" (free placement) is respected. Any mismatch in the installed game's
+/// placement API leaves native snapping untouched, and the side snap points are then not added at all.</para></summary>
 internal sealed class LadderSnapAlignment : IDisposable
 {
     /// <summary>The game's placement ray layers (Player.m_placeRayMask, 1.0.20).</summary>
@@ -101,8 +113,9 @@ internal sealed class LadderSnapAlignment : IDisposable
         _refused = null;
     }
 
-    /// <summary>A refused placement (its joint beyond the game's placement reach) leaves the game's ghost where it
-    /// was and marks it invalid, so neither the game's own overlap nor a far placement can be built.</summary>
+    /// <summary>A refused placement (its joint beyond the game's placement reach, a side mode aimed at a ladder, or a
+    /// fault while a side mode is selected) leaves the ghost where it was and marks it invalid, so it cannot be
+    /// built.</summary>
     private static Exception? AfterGhostUpdate(Player __instance, Exception? __exception)
     {
         _updating = null;
@@ -132,15 +145,45 @@ internal sealed class LadderSnapAlignment : IDisposable
         Player? player = _updating;
         _updating = null; // Once per update; any other caller of the no-build test is untouched.
         if (player == null) { return; }
+        bool side;
+        Vector3 free;
+        try { side = RestoreSideGhost(player, out free); }
+        catch
+        {
+            // A side-mode ghost may still be where the game put it, far above the aim: never buildable.
+            _refused = player;
+            return;
+        }
+
+        if (side) { __0 = free; }
         try
         {
             if (Align(player, out Vector3 aligned)) { __0 = aligned; }
-            else if (_refused == null) { Decide("native"); }
+            else if (_refused == null) { Decide(side ? "side mode: nothing to align to, origin on the aimed point" : "native"); }
         }
         catch
         {
-            // On any fault the game's own ghost stands unchanged.
+            // On any fault the game's own ghost stands unchanged; a side-mode ghost is refused instead (it may be
+            // half-moved).
+            if (side) { _refused = player; }
         }
+    }
+
+    /// <summary>The game places a manual-snap ghost so the selected snap point lies on the aimed point. A side point
+    /// lies 100 m or 200 m below the section, so the ghost is first moved back to put its origin on the aimed point,
+    /// which is where every later step starts and what free placement (held "toggle snapping") builds.</summary>
+    private static bool RestoreSideGhost(Player player, out Vector3 free)
+    {
+        free = default;
+        if (_ghost == null) { return false; }
+        GameObject ghost = _ghost(player);
+        if (ghost == null || !ghost.activeSelf || ghost.GetComponent<LadderSegment>() == null) { return false; }
+        if (!TrySelectedPoint(player, out LadderSnapMode mode, out Vector3 local) || !LadderSnapPoints.IsSide(mode)) { return false; }
+        Transform g = ghost.transform;
+        free = g.position + g.rotation * local;
+        if (!LadderSegment.Finite(free)) { throw new InvalidOperationException("Side-mode ghost position is not finite."); }
+        g.position = free;
+        return true;
     }
 
     private static bool Align(Player player, out Vector3 aligned)
@@ -151,15 +194,17 @@ internal sealed class LadderSnapAlignment : IDisposable
         if (ghost == null || !ghost.activeSelf) { return false; }
         LadderSegment? section = ghost.GetComponent<LadderSegment>();
         Piece? piece = ghost.GetComponent<Piece>();
-        if (section == null || piece == null || !TrySelectedMode(player, section, out LadderSnapMode mode)) { return false; }
+        if (section == null || piece == null || !TrySelectedPoint(player, out LadderSnapMode mode, out _)) { return false; }
+        bool side = LadderSnapPoints.IsSide(mode);
         Transform g = ghost.transform;
         float reach = player.m_maxPlaceDistance + piece.m_extraPlacementDistance;
         ClimbPoint eye = LadderSegment.Point(player.GetEyePoint());
 
-        // 1. Snapped end to end onto exactly one placed ladder: one straight column.
+        // 1. Snapped end to end onto exactly one placed ladder: one straight column. The game never pairs a side
+        // point with a centre point, so a side-mode ghost is never here.
         Vector3 bottom = g.TransformPoint(section.LocalBottom);
         Vector3 top = g.TransformPoint(section.LocalTop);
-        LadderSegment? partner = LadderSegment.FindStackPartner(bottom, top, LadderSnap.Coincident, out _);
+        LadderSegment? partner = side ? null : LadderSegment.FindStackPartner(bottom, top, LadderSnap.Coincident, out _);
         if (partner != null)
         {
             Transform p = partner.transform;
@@ -186,10 +231,19 @@ internal sealed class LadderSnapAlignment : IDisposable
 
         if (!AimedPiece(out RaycastHit hit, out Piece? aimed) || aimed == null) { Decide("native: aim hits no piece"); return false; }
 
-        // 2. Aimed at a placed ladder's rails: extend that column.
+        // 2. Aimed at a placed ladder's rails: extend that column, in the column's rotation.
         LadderSegment? column = aimed.GetComponent<LadderSegment>();
         if (column != null)
         {
+            if (side)
+            {
+                // Left side / Right side align to floors and walls. Next to a ladder they would put a section beside
+                // or into the column; refuse visibly instead (Auto, Top or Bottom extend the column).
+                _refused = player;
+                Decide("refused: side mode aimed at a ladder");
+                return false;
+            }
+
             if (!column.IsLive || !LadderSegment.TryRun(column, Run, out var run)) { return false; }
             LadderSnap.Extend extend = mode == LadderSnapMode.Bottom ? LadderSnap.Extend.Above :
                 mode == LadderSnapMode.Top ? LadderSnap.Extend.Below : LadderSnap.Extend.Nearest;
@@ -204,7 +258,7 @@ internal sealed class LadderSnapAlignment : IDisposable
             return Place(g, column.transform.rotation, LadderSegment.Vector(end), out aligned);
         }
 
-        // 3. Aimed at a floor or a wall: in the middle of it, the way walls snap to floors.
+        // 3. Aimed at a floor or a wall.
         Transform t = aimed.transform;
         TargetPoints.Clear();
         aimed.GetSnapPoints(TargetPoints);
@@ -215,35 +269,108 @@ internal sealed class LadderSnapAlignment : IDisposable
         }
 
         Vector3 viewer = GameCamera.instance != null ? GameCamera.instance.transform.position : player.GetEyePoint();
-        if (!LadderEdgeSnap.TryPlace(Corners, LadderSegment.Point(t.InverseTransformPoint(hit.point)), LadderSegment.Point(t.InverseTransformPoint(viewer)),
-                mode, out ClimbPoint localOrigin, out float facingX, out float facingZ, out ClimbPoint localJoint))
+        Vector3 playerFacing = t.InverseTransformDirection(g.rotation * Vector3.forward); // The hammer's rotation.
+        var request = new LadderEdgeRequest
+        {
+            Corners = Corners,
+            Aim = LadderSegment.Point(t.InverseTransformPoint(hit.point)),
+            Viewer = LadderSegment.Point(t.InverseTransformPoint(viewer)),
+            Mode = mode,
+            Footprint = Footprint(section),
+            HasPlayerFacing = true,
+            PlayerFacingX = playerFacing.x,
+            PlayerFacingZ = playerFacing.z,
+        };
+        if (TryBodyBounds(hit.collider, t, out Vector3 bodyMin, out Vector3 bodyMax))
+        {
+            request.HasBody = true;
+            request.BodyMin = LadderSegment.Point(bodyMin);
+            request.BodyMax = LadderSegment.Point(bodyMax);
+        }
+
+        if (!LadderEdgeSnap.TryPlace(request, out LadderEdgePlacement placement))
         {
             Decide("native: " + aimed.name + " is neither floor nor wall (" + Corners.Count + " snap points)");
             return false;
         }
 
-        Vector3 joint = t.TransformPoint(LadderSegment.Vector(localJoint));
-        Vector3 facingWorld = t.TransformDirection(new Vector3(facingX, 0f, facingZ));
-        if (mode == LadderSnapMode.Auto && localOrigin.Y < localJoint.Y - 1f &&
-            Physics.Raycast(joint + facingWorld * 0.15f + Vector3.up * 0.05f, Vector3.down, LadderEdgeSnap.SectionHeight - 0.1f, _placeMask, QueryTriggerInteraction.Ignore))
+        Vector3 joint = t.TransformPoint(LadderSegment.Vector(placement.Joint));
+        Vector3 normal = t.TransformDirection(new Vector3(placement.NormalX, 0f, placement.NormalZ));
+        bool hangs = placement.OnFloor && placement.Origin.Y < placement.Joint.Y - 1f;
+        if (hangs && mode != LadderSnapMode.Top &&
+            Physics.Raycast(joint + normal * 0.15f + Vector3.up * 0.05f, Vector3.down, LadderEdgeSnap.SectionHeight - 0.1f, _placeMask, QueryTriggerInteraction.Ignore))
         {
-            // Auto would hang the ladder below a floor edge with no room under it (a floor on the ground): it stands
-            // on the edge instead, like Bottom.
-            if (!LadderEdgeSnap.TryPlace(Corners, LadderSegment.Point(t.InverseTransformPoint(hit.point)), LadderSegment.Point(t.InverseTransformPoint(viewer)),
-                    LadderSnapMode.Bottom, out localOrigin, out facingX, out facingZ, out localJoint))
-            {
-                return false;
-            }
-
-            joint = t.TransformPoint(LadderSegment.Vector(localJoint));
+            // Auto or a side mode would hang the ladder below a floor edge with no room under it (a floor on the
+            // ground): it stands on the edge instead, like Bottom.
+            request.StandOnFloorEdge = true;
+            if (!LadderEdgeSnap.TryPlace(request, out placement)) { return false; }
+            joint = t.TransformPoint(LadderSegment.Vector(placement.Joint));
         }
 
         if (!LadderSnap.WithinPlacementReach(eye, LadderSegment.Point(joint), reach)) { _refused = player; Decide("refused: " + aimed.name + " edge out of reach"); return false; }
-        Vector3 facing = t.TransformDirection(new Vector3(facingX, 0f, facingZ));
+        Vector3 facing = t.TransformDirection(new Vector3(placement.FacingX, 0f, placement.FacingZ));
         facing.y = 0f;
         if (facing.sqrMagnitude < 0.0001f) { return false; }
-        Decide("centre on " + aimed.name + " at " + t.TransformPoint(LadderSegment.Vector(localOrigin)).ToString("F2"));
-        return Place(g, Quaternion.LookRotation(facing.normalized, Vector3.up), t.TransformPoint(LadderSegment.Vector(localOrigin)), out aligned);
+        Vector3 origin3 = t.TransformPoint(LadderSegment.Vector(placement.Origin));
+        Decide(mode + " on " + aimed.name + " at " + origin3.ToString("F2") + ", turned " + placement.TurnDegrees.ToString("F1") + " deg");
+        return Place(g, Quaternion.LookRotation(facing.normalized, Vector3.up), origin3, out aligned);
+    }
+
+    /// <summary>The section's footprint from its own collider-derived faces and rails (0.8 m wide, z 0.08 to 0.24 for
+    /// every material); the authored default when any value is out of range.</summary>
+    private static LadderFootprint Footprint(LadderSegment section)
+    {
+        var footprint = new LadderFootprint(section.RailCentre + section.RailWidth * 0.5f, section.BackFaceDepth, section.FrontFaceDepth);
+        return footprint.IsValid ? footprint : LadderFootprint.Section;
+    }
+
+    /// <summary>The aimed collider's box in the target piece's local space: the piece's real body, whose faces can
+    /// lie outside its corner snap points. Box and mesh colliders exactly (their local box), spheres and capsules by
+    /// their enclosing box; anything else is not used.</summary>
+    private static bool TryBodyBounds(Collider collider, Transform target, out Vector3 min, out Vector3 max)
+    {
+        min = default;
+        max = default;
+        if (collider == null || collider.isTrigger) { return false; }
+        Vector3 centre, size;
+        switch (collider)
+        {
+            case BoxCollider box:
+                centre = box.center;
+                size = box.size;
+                break;
+            case MeshCollider mesh when mesh.sharedMesh != null:
+                centre = mesh.sharedMesh.bounds.center;
+                size = mesh.sharedMesh.bounds.size;
+                break;
+            case SphereCollider sphere:
+                centre = sphere.center;
+                size = Vector3.one * (2f * sphere.radius);
+                break;
+            case CapsuleCollider capsule when capsule.direction >= 0 && capsule.direction <= 2:
+                centre = capsule.center;
+                size = Vector3.one * (2f * capsule.radius);
+                size[capsule.direction] = Math.Max(capsule.height, 2f * capsule.radius);
+                break;
+            default:
+                return false;
+        }
+
+        Transform c = collider.transform;
+        min = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
+        max = new Vector3(float.MinValue, float.MinValue, float.MinValue);
+        for (int corner = 0; corner < 8; corner++)
+        {
+            var local = new Vector3(
+                centre.x + ((corner & 1) == 0 ? -0.5f : 0.5f) * size.x,
+                centre.y + ((corner & 2) == 0 ? -0.5f : 0.5f) * size.y,
+                centre.z + ((corner & 4) == 0 ? -0.5f : 0.5f) * size.z);
+            Vector3 p = target.InverseTransformPoint(c.TransformPoint(local));
+            min = Vector3.Min(min, p);
+            max = Vector3.Max(max, p);
+        }
+
+        return LadderSegment.Finite(min) && LadderSegment.Finite(max);
     }
 
     private static void Decide(string decision)
@@ -305,20 +432,19 @@ internal sealed class LadderSnapAlignment : IDisposable
         return true;
     }
 
-    /// <summary>The selected snap mode, from the selected snap point's authored position: Auto (-1), bottom-centre or
-    /// top-centre. False when the game's selection could not be read.</summary>
-    private static bool TrySelectedMode(Player player, LadderSegment section, out LadderSnapMode mode)
+    /// <summary>The selected snap mode and the selected point's authored local position (zero for Auto, index -1),
+    /// from the game's selection. False when the selection could not be read or names no known point.</summary>
+    private static bool TrySelectedPoint(Player player, out LadderSnapMode mode, out Vector3 local)
     {
         mode = LadderSnapMode.Auto;
+        local = Vector3.zero;
         if (_manual == null || _snapPoints == null) { return false; }
         int index = _manual(player);
         if (index == -1) { return true; }
         List<Transform> points = _snapPoints(player);
         if (index < 0 || points == null || index >= points.Count || points[index] == null) { return false; }
-        Vector3 local = points[index].localPosition;
-        if ((local - section.LocalBottom).sqrMagnitude < 1e-4f) { mode = LadderSnapMode.Bottom; return true; }
-        if ((local - section.LocalTop).sqrMagnitude < 1e-4f) { mode = LadderSnapMode.Top; return true; }
-        return false;
+        local = points[index].localPosition;
+        return LadderSnapPoints.TryModeOf(LadderSegment.Point(local), out mode);
     }
 
     public void Dispose()
