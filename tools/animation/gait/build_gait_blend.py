@@ -180,7 +180,7 @@ def build_rig(coll, widgets):
     sw.custom_shape = widgets['WGT_Panel']
     sw.location = (-0.9, 0.6, 1.0)
     g = pose[gb.GAIT]
-    g['stride_rungs'] = 3
+    g['stride_rungs'] = gm.default_shape()['up']['strideRungs']
     g.id_properties_ui('stride_rungs').update(min=1, max=6, description='Rungs per limb move and per body cycle (both loops)')
     for name, key, value in gm.SHAPE_SCALARS:
         g[key] = float(value)

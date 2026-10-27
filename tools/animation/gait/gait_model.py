@@ -28,7 +28,7 @@ TRANSITION_KINDS = ('GroundMount', 'AirCatch', 'TopExit', 'SideExit', 'BottomSte
 EXIT_KINDS = ('TopExit', 'SideExit', 'BottomStepOff')
 
 SHAPE_SCALARS = (  # GaitShape field, json key, default (LimbGait.cs + the GeneratedGait override)
-    ('FootLowRel', 'foot_low_rel', 0.06),
+    ('FootLowRel', 'foot_low_rel', -0.06),
     ('HandMidFromShoulder', 'hand_mid_from_shoulder', -0.02),
     ('HandSettleBelow', 'hand_settle_below', 0.38),
     ('HandSettleAbove', 'hand_settle_above', 0.38),
@@ -40,9 +40,9 @@ SHAPE_SCALARS = (  # GaitShape field, json key, default (LimbGait.cs + the Gener
 )
 
 POSTURE_CONSTANTS = (  # GeneratedGait constant, property on CTL_Pelvis, default
-    ('PelvisDrop', 'pelvis_drop', 0.1),
-    ('PelvisToward', 'pelvis_toward', 0.2),
-    ('Lean', 'lean', 10.0),
+    ('PelvisDrop', 'pelvis_drop', 0.0),
+    ('PelvisToward', 'pelvis_toward', 0.12),
+    ('Lean', 'lean', 12.0),
     ('SlideLean', 'slide_lean', 6.0),
     ('SwayTilt', 'sway_tilt', 3.0),
     ('SwayShift', 'sway_shift', 0.03),
@@ -102,16 +102,16 @@ def dwell(samples, amount, foot_starts, foot_length, slow_at, cycle_metres=1.0):
     return table
 
 
-def loop(name, start, length, arcs, body, stride=3):
+def loop(name, start, length, arcs, body, stride=2):
     return {'name': name, 'strideRungs': stride, 'start': list(start), 'length': list(length),
             'swing': smooth(ARC_SAMPLES), 'arc': arcs, 'body': body, 'lean': flat(BODY_SAMPLES, 0.0)}
 
 
 def default_up():
-    return loop('climb_up', (0.50, 0.00, 0.20, 0.70), (0.40, 0.40, 0.46, 0.46),
+    return loop('climb_up', (0.50, 0.00, 0.20, 0.70), (0.40, 0.40, 0.50, 0.50),
                 [arc3(ARC_SAMPLES, 0.0, 0.07, 0.02), arc3(ARC_SAMPLES, 0.0, 0.07, 0.02),
                  arc3(ARC_SAMPLES, 0.01, 0.14, 0.05), arc3(ARC_SAMPLES, 0.01, 0.14, 0.05)],
-                dwell(BODY_SAMPLES, 0.6, (0.20, 0.70), 0.46, 0.3))
+                dwell(BODY_SAMPLES, 0.6, (0.20, 0.70), 0.50, 0.3))
 
 
 def default_down():

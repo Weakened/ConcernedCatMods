@@ -11,11 +11,13 @@ namespace TheConcernedCat.ConcernedLadders.Domain.Animation;
 internal sealed class ClimbLoop
 {
     internal string Name = "climb_up";
-    internal int StrideRungs = 3;
+    // Two rungs (in game 2026-10-27, owner): three put a landing foot 0.6 m above the body root, so the knee rode up
+    // to the chest in a squat; two keep the support leg near straight and the stepping thigh below the hip.
+    internal int StrideRungs = 2;
 
     /// <summary>Release phase and swing length per limb as fractions of a cycle (windows may overlap).</summary>
     internal float[] Start = { 0.50f, 0.00f, 0.20f, 0.70f };
-    internal float[] Length = { 0.40f, 0.40f, 0.46f, 0.46f };
+    internal float[] Length = { 0.40f, 0.40f, 0.50f, 0.50f };
 
     /// <summary>Swing progress → fraction of the rung-to-rung travel (the ease of a reach), shared by all limbs.</summary>
     internal float[] Swing = Smooth(33);
@@ -25,7 +27,7 @@ internal sealed class ClimbLoop
 
     /// <summary>Body offset over the cycle, [sample][0 up, 1 toward the ladder], relative to steady travel. Zero mean
     /// upward; the body rises slowly while a foot clears and seats, then faster as the supporting leg extends.</summary>
-    internal float[][] Body = Dwell(61, 0.6f, new[] { 0.20f, 0.70f }, 0.46f, 0.3f);
+    internal float[][] Body = Dwell(61, 0.6f, new[] { 0.20f, 0.70f }, 0.50f, 0.3f);
 
     /// <summary>Extra torso pitch toward the ladder over the cycle, degrees.</summary>
     internal float[] Lean = Flat(61, 0f);
@@ -162,7 +164,7 @@ internal sealed class GaitShape
     internal ClimbLoop Down = DefaultDown();
 
     /// <summary>Rung centre relative to the body root when a foot leaves it climbing up (its lowest planted height).</summary>
-    internal float FootLowRel = 0.06f;
+    internal float FootLowRel = -0.06f;
 
     /// <summary>The middle of a hand's planted range relative to the shoulder height the rig reports.</summary>
     internal float HandMidFromShoulder = 0.0f;

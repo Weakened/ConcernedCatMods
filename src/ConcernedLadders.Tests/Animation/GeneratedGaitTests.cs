@@ -15,7 +15,7 @@ public sealed class GeneratedGaitTests
     private static readonly string[] Limbs = { "LH", "RH", "LF", "RF" };
 
     /// <summary>The C# defaults the .blend was seeded from (GaitShape defaults plus the fitted hand stance).</summary>
-    private static GaitShape Defaults() => new GaitShape { FootLowRel = 0.06f, HandMidFromShoulder = -0.02f };
+    private static GaitShape Defaults() => new GaitShape { FootLowRel = -0.06f, HandMidFromShoulder = -0.02f };
 
     [Fact]
     public void TheExportIsValid()
@@ -57,9 +57,10 @@ public sealed class GeneratedGaitTests
         for (int i = 0; i < defaults.Length; i++) { Transition(moved, defaults[i], generated[i]); }
 
         // The posture and bend constants were these literals before the Blender source carried them.
-        Near(moved, "PelvisDrop", 0.1f, GeneratedGait.PelvisDrop);
-        Near(moved, "PelvisToward", 0.2f, GeneratedGait.PelvisToward);
-        Near(moved, "Lean", 10f, GeneratedGait.Lean);
+        // Owner 2026-10-27 (climber too close, knees folded): pelvis up and back, chest leaning in.
+        Near(moved, "PelvisDrop", 0f, GeneratedGait.PelvisDrop);
+        Near(moved, "PelvisToward", 0.12f, GeneratedGait.PelvisToward);
+        Near(moved, "Lean", 12f, GeneratedGait.Lean);
         Near(moved, "SlideLean", 6f, GeneratedGait.SlideLean);
         Near(moved, "SwayTilt", 3f, GeneratedGait.SwayTilt);
         Near(moved, "SwayShift", 0.03f, GeneratedGait.SwayShift);

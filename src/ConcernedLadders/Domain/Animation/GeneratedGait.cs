@@ -10,13 +10,13 @@ namespace TheConcernedCat.ConcernedLadders.Domain.Animation;
 /// in LimbGait.cs and DefaultTransitions remain the fallbacks.</summary>
 internal static class GeneratedGait
 {
-    internal const string BlendSha256 = "7e6b5c159b5030ec7810c25133a242ff0010d29ae1199517c714f213b84fad5e";
-    internal const string JsonSha256 = "f7d808fe89c276bd9eb105da05fcf7e9230bae73cb330d9e5c3bc80650e631e0";
+    internal const string BlendSha256 = "bfbeb3cb7a84b1b1c7a11441e3736b741a8e7c697a44441332533d1749116d05";
+    internal const string JsonSha256 = "fc40de7b71390502f13e427f4f5b83acda470d6879885a9231a1ebf6f1607825";
     internal const string Blender = "5.1.2";
 
-    internal const float PelvisDrop = 0.1f;
-    internal const float PelvisToward = 0.2f;
-    internal const float Lean = 10f;
+    internal const float PelvisDrop = 0f;
+    internal const float PelvisToward = 0.12f;
+    internal const float Lean = 12f;
     internal const float SlideLean = 6f;
     internal const float SwayTilt = 3f;
     internal const float SwayShift = 0.03f;
@@ -32,9 +32,9 @@ internal static class GeneratedGait
         Up = new ClimbLoop
         {
             Name = "climb_up",
-            StrideRungs = 3,
+            StrideRungs = 2,
             Start = new[] { 0.5f, 0f, 0.2f, 0.7f },
-            Length = new[] { 0.4f, 0.4f, 0.46f, 0.46f },
+            Length = new[] { 0.4f, 0.4f, 0.5f, 0.5f },
             Swing = new[]
             {
                 0f, 0.002869f, 0.01123f, 0.024719f, 0.042969f, 0.065613f, 0.092285f, 0.12262f, 0.15625f, 0.19281f, 0.231934f,
@@ -94,17 +94,17 @@ internal static class GeneratedGait
             },
             // { up, toward } over the cycle phase
             Body = Rows(2,
-                -0.037743f, 0f, -0.033012f, 0f, -0.024688f, 0f, -0.015328f, 0f, -0.005415f, 0f, 0.00454f, 0f,
-                0.014022f, 0f, 0.022542f, 0f, 0.029661f, 0f, 0.035012f, 0f, 0.038318f, 0f, 0.038318f, 0f,
-                0.038318f, 0f, 0.040308f, 0f, 0.040035f, 0f, 0.037512f, 0f, 0.032871f, 0f, 0.026351f, 0f,
-                0.018288f, 0f, 0.009098f, 0f, -0.000745f, 0f, -0.010733f, 0f, -0.020349f, 0f, -0.029099f, 0f,
-                -0.036531f, 0f, -0.04226f, 0f, -0.045992f, 0f, -0.047534f, 0f, -0.046806f, 0f, -0.043846f, 0f,
-                -0.038807f, 0f, -0.031948f, 0f, -0.023624f, 0f, -0.014264f, 0f, -0.004351f, 0f, 0.005603f, 0f,
-                0.015085f, 0f, 0.023606f, 0f, 0.030725f, 0f, 0.036075f, 0f, 0.039381f, 0f, 0.039381f, 0f,
-                0.039381f, 0f, 0.041371f, 0f, 0.041098f, 0f, 0.038576f, 0f, 0.033935f, 0f, 0.027415f, 0f,
-                0.019351f, 0f, 0.010161f, 0f, 0.000318f, 0f, -0.009669f, 0f, -0.019286f, 0f, -0.028036f, 0f,
-                -0.035467f, 0f, -0.041197f, 0f, -0.044929f, 0f, -0.046471f, 0f, -0.045743f, 0f, -0.042783f, 0f,
-                -0.037743f, 0f
+                -0.045493f, 0f, -0.041425f, 0f, -0.035547f, 0f, -0.028116f, 0f, -0.019456f, 0f, -0.009945f, 0f,
+                0f, 0f, 0.009945f, 0f, 0.019456f, 0f, 0.028116f, 0f, 0.035547f, 0f, 0.041425f, 0f,
+                0.045493f, 0f, 0.047572f, 0f, 0.047572f, 0f, 0.045493f, 0f, 0.041425f, 0f, 0.035547f, 0f,
+                0.028116f, 0f, 0.019456f, 0f, 0.009945f, 0f, 0f, 0f, -0.009945f, 0f, -0.019456f, 0f,
+                -0.028116f, 0f, -0.035547f, 0f, -0.041425f, 0f, -0.045493f, 0f, -0.047572f, 0f, -0.047572f, 0f,
+                -0.045493f, 0f, -0.041425f, 0f, -0.035547f, 0f, -0.028116f, 0f, -0.019456f, 0f, -0.009945f, 0f,
+                0f, 0f, 0.009945f, 0f, 0.019456f, 0f, 0.028116f, 0f, 0.035547f, 0f, 0.041425f, 0f,
+                0.045493f, 0f, 0.047572f, 0f, 0.047572f, 0f, 0.045493f, 0f, 0.041425f, 0f, 0.035547f, 0f,
+                0.028116f, 0f, 0.019456f, 0f, 0.009945f, 0f, 0f, 0f, -0.009945f, 0f, -0.019456f, 0f,
+                -0.028116f, 0f, -0.035547f, 0f, -0.041425f, 0f, -0.045493f, 0f, -0.047572f, 0f, -0.047572f, 0f,
+                -0.045493f, 0f
             ),
             Lean = new[]
             {
@@ -119,7 +119,7 @@ internal static class GeneratedGait
         Down = new ClimbLoop
         {
             Name = "climb_down",
-            StrideRungs = 3,
+            StrideRungs = 2,
             Start = new[] { 0.1f, 0.6f, 0.62f, 0.12f },
             Length = new[] { 0.4f, 0.4f, 0.44f, 0.44f },
             Swing = new[]
@@ -203,7 +203,7 @@ internal static class GeneratedGait
                 0f, 0f, 0f, 0f, 0f, 0f
             },
         },
-        FootLowRel = 0.06f,
+        FootLowRel = -0.06f,
         HandMidFromShoulder = -0.02f,
         HandSettleBelow = 0.38f,
         HandSettleAbove = 0.38f,

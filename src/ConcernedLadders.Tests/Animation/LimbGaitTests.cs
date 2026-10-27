@@ -193,7 +193,9 @@ public sealed class LimbGaitTests
     {
         ClimbLoop loop = new GaitShape().Up;
         LimbGait.Recovery(loop, LimbGait.LeftFoot, Pitch, speed, out float seconds, out float mean, out float peak);
-        Assert.True(seconds >= 0.35f, "foot recovery " + seconds + " s");
+        // A two-rung stride (owner, 2026-10-27: knees folded to the chest on three) makes the cycle 0.67 m, so a
+        // foot moves in 0.37 s at 0.9 m/s and 0.28 s at Run; the 0.35 s floor still holds at normal speed.
+        Assert.True(seconds >= (speed <= 1f ? 0.35f : 0.27f), "foot recovery " + seconds + " s");
         Assert.True(peak <= 4.0f, "foot peak " + peak + " m/s");
         Assert.True(mean <= peak);
     }
