@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.2.7
+
+Internal development build. Not a release.
+
+- Snapping (owner revision): Cycle Snap now offers Auto, Bottom, Top,
+  **Left side** and **Right side**. Left side and Right side line the ladder's
+  left or right rail up with the left or right corner of the floor edge or wall
+  you aim at (left and right as you face the ladder's climbing side), standing
+  on a wall's bottom edge or hanging below a floor edge like Auto. Auto, Top and
+  Bottom still centre the ladder. Every mode sits the rails against the real
+  face of the wall or floor edge, including wood walls whose snap points lie
+  inside the wall.
+- Rotate while snapped: the hammer's rotation now turns a ladder snapped to a
+  floor or wall about the chosen anchor (the middle, or the left or right
+  corner), up to 45 degrees either way, and never into the surface. Square to
+  the building it faces straight out, as before. A turned section does not join
+  the climbing run of the ladder below it. Ladders stacked on ladders always
+  line up with the column.
+- Copper and Iron Ladders have new artwork: slim metal rails and round rungs.
+  Copper has rounded tube rails and a warmer colour; iron has sharp flat-bar
+  rails and a cooler colour. The Wood Ladder is unchanged. Height, rung
+  spacing, recipes, durability and placed ladders are unchanged.
+
 ## 0.2.6
 
 Internal owner test candidate. Not a release.

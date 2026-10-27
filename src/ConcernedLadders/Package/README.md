@@ -53,12 +53,18 @@ hammer placement, support, ward, repair and refund behavior. All three materials
 same speed. A free-standing stack follows the game's own structural support, so a very tall stack
 needs bracing against the building.
 
-**Snapping.** Cycle Snap offers Auto, Bottom and Top, and the ladder snaps to the middle of floors and walls the
-way walls snap to floors. Aimed at a floor, it centres on the floor edge nearest your aim, hanging below it (Auto,
-Top; Auto stands it on the edge when there is no room below) or standing on it (Bottom). Aimed at a wall, it centres
-on the wall face toward you, standing on the wall's bottom edge (Auto, Bottom) or hanging from its top edge (Top).
-Aimed at a ladder, it extends that column into one straight line. The game's own placement rules and building
-reach still apply.
+**Snapping.** Cycle Snap offers Auto, Bottom, Top, Left side and Right side. Aimed at a floor, the ladder goes on
+the floor edge nearest your aim, hanging below it (Auto, Top, Left side, Right side; they stand it on the edge when
+there is no room below) or standing on it (Bottom). Aimed at a wall, it goes on the wall face toward you, standing on
+the wall's bottom edge or hanging from its top edge (Top). Auto, Top and Bottom centre it; Left side and Right side
+line its left or right rail up with that corner of the edge or wall, as you face the climbing side. The rails rest
+against the real face. Aimed at a ladder, Auto, Top and Bottom extend that column into one straight line (the side
+modes refuse there). Rotating the hammer turns a ladder snapped to a floor or wall about the middle or the chosen
+corner, up to 45 degrees either way and never into the surface; a turned section does not join the run below it.
+The game's own placement rules and building reach still apply.
+
+**Materials.** The Wood Ladder has square timber rails and rungs. The Copper Ladder has slim rounded copper rails,
+the Iron Ladder slim flat iron bars, both with round rungs at the same spacing. All three climb the same.
 
 ## Installation and compatibility
 
