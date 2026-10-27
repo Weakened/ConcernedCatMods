@@ -19,6 +19,10 @@ internal sealed class LadderRuntime : IDisposable
     /// <summary>Descending entry ends this far below the run's top (hands on the top rungs, feet on real rungs).</summary>
     private const float TopEntryDrop = 0.9f;
 
+    /// <summary>A descending entry checks its line of sight to this height above the run's top (above a floor that
+    /// sits a little over the rails, measured 0.12 m in game).</summary>
+    private const float TopEntrySightAbove = 0.2f;
+
     /// <summary>Intermediate-floor dismount search: a landing from this far below the feet to this far above them.</summary>
     private const float IntermediateAbove = 1.15f;
     private const float IntermediateBelow = 0.45f;
@@ -476,7 +480,11 @@ internal sealed class LadderRuntime : IDisposable
             }
 
             // The hands must reach the rungs without passing through a wall or floor.
-            Vector3 rung = LanePoint(run, (segment.BackFaceDepth + segment.FrontFaceDepth) * 0.5f, Mathf.Clamp(chest.y, run.Bottom.Y + firstRung, run.Top.Y - firstRung));
+            // From a floor at the top the hands go to the lip, not a rung under it: in game 2026-10-27 the line from a
+            // chest a step back from the edge down to the top rung passed through the floor and refused the mount,
+            // while a step closer it cleared the edge.
+            float sightY = topEntry ? run.Top.Y + TopEntrySightAbove : Mathf.Clamp(chest.y, run.Bottom.Y + firstRung, run.Top.Y - firstRung);
+            Vector3 rung = LanePoint(run, (segment.BackFaceDepth + segment.FrontFaceDepth) * 0.5f, sightY);
             if (!clearance.HasLineOfSight(chest, rung)) { first = Keep(first, FromBlocker(clearance.LastBlocker)); continue; }
 
             if (topEntry && !clearance.HasRoom(LanePoint(run, lane, Mathf.Max(run.Bottom.Y, run.Top.Y - 1f))))

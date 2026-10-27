@@ -193,7 +193,7 @@ internal sealed partial class OriginalClimbPresenter
             var record = new ContactRecord
             {
                 Has = true, Target = surface, Planted = planted, Requested = weight, Ratio = reach / rig.Reach[limb],
-                Root = root, Chain = rig.Reach[limb], Progress = action != null ? progress : -1f,
+                Root = root, Chain = rig.Reach[limb], Progress = action != null ? progress : -1f, Descending = actor.Gait.Descending,
                 RungCentre = RungSurface(frame, contact.Height, 0f, span * side), Hand = hand, Outward = outward, Profile = profile,
             };
             if (weight <= .01f) { actor.Record[limb] = record; continue; } // Handed to the native pose on purpose (mount/exit windows).
@@ -390,5 +390,6 @@ internal sealed partial class OriginalClimbPresenter
         internal Vector3 Target, RungCentre, Outward, Root;
         internal RungProfile Profile;
         internal float Requested, Effective, Ratio, Chain, Progress;
+        internal bool Descending;
     }
 }

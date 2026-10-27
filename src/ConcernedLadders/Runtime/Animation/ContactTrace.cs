@@ -18,7 +18,8 @@ internal static class ContactTrace
     private static bool _failed;
     private static readonly string[] Names = { "LH", "RH", "LF", "RF" };
 
-    internal static void Row(in ClimbPresentationFrame frame, int limb, OriginalClimbPresenter.ContactRecord record, Vector3 patch, float error, float gap)
+    internal static void Row(in ClimbPresentationFrame frame, int limb, OriginalClimbPresenter.ContactRecord record, Vector3 patch, float error, float gap,
+        float kneeOut = 0f, float kneeToward = 0f)
     {
         if (_failed || _rows >= MaximumRows) { return; }
         try
@@ -27,7 +28,7 @@ internal static class ContactTrace
             {
                 string path = Path.Combine(BepInEx.Paths.BepInExRootPath, "ladder_contact_trace.csv");
                 _writer = new StreamWriter(path, false, new UTF8Encoding(false));
-                _writer.WriteLine("time,motion,face,feetY,limb,planted,skipped,native,requested,effective,reach,targetX,targetY,targetZ,patchX,patchY,patchZ,error,gap,rootX,rootY,rootZ,chain,progress");
+                _writer.WriteLine("time,motion,face,feetY,limb,planted,skipped,native,requested,effective,reach,targetX,targetY,targetZ,patchX,patchY,patchZ,error,gap,rootX,rootY,rootZ,chain,progress,kneeOut,kneeToward,descending");
             }
 
             var inv = CultureInfo.InvariantCulture;
@@ -41,6 +42,7 @@ internal static class ContactTrace
                 error.ToString("0.0000", inv), gap.ToString("0.0000", inv),
                 record.Root.x.ToString("0.0000", inv), record.Root.y.ToString("0.0000", inv), record.Root.z.ToString("0.0000", inv),
                 record.Chain.ToString("0.000", inv), record.Progress.ToString("0.000", inv),
+                kneeOut.ToString("0.0000", inv), kneeToward.ToString("0.0000", inv), record.Descending ? "1" : "0",
             }));
             if (++_rows % 200 == 0) { _writer.Flush(); }
         }

@@ -218,8 +218,33 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
             }
             else { actor.Anchored[limb] = false; }
 
-            if (ClimbTuning.TraceContacts) { ContactTrace.Row(actor.Frame, limb, record, patch, error, gap); }
+            if (ClimbTuning.TraceContacts)
+            {
+                float kneeOut = 0f, kneeToward = 0f;
+                if (!record.Hand) { Knee(actor, limb, record.Outward, out kneeOut, out kneeToward); }
+                ContactTrace.Row(actor.Frame, limb, record, patch, error, gap, kneeOut, kneeToward);
+            }
         }
+    }
+
+    /// <summary>Development diagnostics (owner 2026-10-27, "right knee opens to the side"): the solved knee's offset from
+    /// its hip-ankle line, sideways away from the body's midline and toward the ladder.</summary>
+    private static void Knee(Actor actor, int limb, Vector3 outward, out float sideways, out float toward)
+    {
+        sideways = toward = 0f;
+        Animator animator = actor.Rig.Animator;
+        bool left = limb == 2;
+        Transform? hip = animator.GetBoneTransform(left ? HumanBodyBones.LeftUpperLeg : HumanBodyBones.RightUpperLeg);
+        Transform? knee = animator.GetBoneTransform(left ? HumanBodyBones.LeftLowerLeg : HumanBodyBones.RightLowerLeg);
+        Transform? ankle = animator.GetBoneTransform(left ? HumanBodyBones.LeftFoot : HumanBodyBones.RightFoot);
+        if (hip == null || knee == null || ankle == null) { return; }
+        Vector3 line = ankle.position - hip.position;
+        float t = line.sqrMagnitude > 1e-6f ? Mathf.Clamp01(Vector3.Dot(knee.position - hip.position, line) / line.sqrMagnitude) : 0f;
+        Vector3 offset = knee.position - (hip.position + line * t);
+        Vector3 inward = -outward;
+        Vector3 right = Vector3.Cross(Vector3.up, inward);
+        sideways = Vector3.Dot(offset, right) * (left ? -1f : 1f);
+        toward = Vector3.Dot(offset, inward);
     }
 
     private static void BeforeNativeIK(CharacterAnimEvent __instance, int layerIndex)
