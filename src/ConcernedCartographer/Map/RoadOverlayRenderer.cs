@@ -264,7 +264,7 @@ internal sealed class RoadOverlayRenderer
             // redraws and across both kinds: SetPixels32 copies it into the
             // texture, so it is cleared and refilled for the second kind.
             // Mirrors RouteOverlayRenderer's RC12 buffer reuse.
-            Color32[] pixels = AcquirePixelBuffer(textureSize);
+            Color32[] pixels = _pixelBuffer.Acquire(textureSize);
 
             int drawnStrokes = DrawKindIntoBuffer(atlas, RoadKind.Dirt, pixels, textureSize);
 
@@ -282,12 +282,14 @@ internal sealed class RoadOverlayRenderer
             dirtTexture!.SetPixels32(pixels);
             dirtTexture.Apply(false);
 
-            Array.Clear(pixels, 0, pixels.Length);
+            // Same array again, zeroed: the dirt ink is already copied into
+            // its texture and must not bleed into the paved layer.
+            pixels = _pixelBuffer.Acquire(textureSize);
             drawnStrokes += DrawKindIntoBuffer(atlas, RoadKind.Paved, pixels, textureSize);
             if (!Atlas.OverlayHandleRule.MayWrite(
                     aliveAtResolve, dirtTexture != null && pavedTexture != null))
             {
-                HandleRedrawTeardown("between resolve and write");
+                HandleRedrawTeardown("between the dirt and paved writes");
                 return;
             }
 
@@ -310,24 +312,7 @@ internal sealed class RoadOverlayRenderer
     }
 
     // Reused full-texture pixel buffer (see RedrawAll's OOM note).
-    private Color32[]? _pixelBuffer;
-    private int _pixelBufferSize;
-
-    private Color32[] AcquirePixelBuffer(int size)
-    {
-        if (_pixelBuffer is not null && _pixelBufferSize == size)
-        {
-            Array.Clear(_pixelBuffer, 0, _pixelBuffer.Length);
-            return _pixelBuffer;
-        }
-
-        // Drop the old buffer before allocating so a size change never
-        // holds two full-texture buffers at once.
-        _pixelBuffer = null;
-        _pixelBuffer = new Color32[size * size];
-        _pixelBufferSize = size;
-        return _pixelBuffer;
-    }
+    private readonly Atlas.ReusableSquareBuffer<Color32> _pixelBuffer = new();
 
     private int DrawKindIntoBuffer(RoadAtlas atlas, RoadKind kind, Color32[] pixels, int textureSize)
     {
