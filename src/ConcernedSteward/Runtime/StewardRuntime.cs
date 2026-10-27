@@ -63,7 +63,9 @@ internal sealed class StewardRuntime
     private readonly WorldFuelTargets _fires;
     private readonly StewardDesignationSite _site = new StewardDesignationSite();
     private readonly StewardVoice _voice;
-    private string? _thresholdRefusal;
+    private bool _hasThresholds;
+    private (float Below, float To, int Most) _thresholdInputs;
+    private MaintenanceThresholds _thresholds;
 
     private string _epoch = string.Empty;
     private bool _installed;
@@ -337,18 +339,29 @@ internal sealed class StewardRuntime
     /// tick, so a changed setting applies to the next round.</summary>
     private MaintenanceThresholds CurrentThresholds()
     {
-        MaintenanceThresholds thresholds = MaintenanceThresholds.FromSettings(
-            _settings.RefuelBelowSeconds.Value,
-            _settings.RefuelToSeconds.Value,
-            _settings.MostUnitsPerLight.Value,
-            out string? refusal);
-        if (refusal != null && !string.Equals(refusal, _thresholdRefusal, StringComparison.Ordinal))
+        float below = _settings.RefuelBelowSeconds.Value;
+        float to = _settings.RefuelToSeconds.Value;
+        int most = _settings.MostUnitsPerLight.Value;
+
+        // Asked every frame, so worked out only when a setting moved: an
+        // invalid setting would otherwise build its refusal sentence sixty
+        // times a second.
+        if (_hasThresholds && below.Equals(_thresholdInputs.Below) && to.Equals(_thresholdInputs.To)
+            && most == _thresholdInputs.Most)
+        {
+            return _thresholds;
+        }
+
+        _thresholds = MaintenanceThresholds.FromSettings(
+            below, to, most, out string? refusal, _loop.Limits.MaxUnitsPerTrip);
+        _thresholdInputs = (below, to, most);
+        _hasThresholds = true;
+        if (refusal != null)
         {
             _log(refusal);
         }
 
-        _thresholdRefusal = refusal;
-        return thresholds;
+        return _thresholds;
     }
 
     private void RefreshCensus()
@@ -555,7 +568,7 @@ internal sealed class StewardRuntime
 
         if (_introduction.IsEngaged)
         {
-            return EnsureBody(StewardSentences.AlreadyAtStage(IntroductionStage.Engaged));
+            return MoveIn(EnsureBody(StewardSentences.AlreadyAtStage(IntroductionStage.Engaged)));
         }
 
         // #382: taking her on is moving her in, so it is asked from inside the
@@ -563,7 +576,7 @@ internal sealed class StewardRuntime
         // said, so "she has set her pack down by the hearth" is never told
         // about a body that did not appear.
         RefreshCensus();
-        if (_census.Verdict == StewardCensusVerdict.Missing && !PlayerIsInsideSettlement())
+        if (_census.Verdict != StewardCensusVerdict.Present && !PlayerIsInsideSettlement())
         {
             return "Stand inside your marked settlement to take her on; she moves in where you " +
                 "are. Nothing was agreed yet.";
@@ -608,16 +621,24 @@ internal sealed class StewardRuntime
             }
         }
 
-        // She has been taken on. The last beat of her introduction is that she
-        // does not treat it as a posting: she moves in. Told after the
-        // recruitment sentences and never instead of them, and it costs nothing
-        // if it refuses — the employment is already recorded.
-        foreach (string line in AdvanceQuest(StewardQuestStage.Settled))
+        return MoveIn(EnsureBody(string.Join(" ", said.ToArray())));
+    }
+
+    /// <summary>The last beat of her introduction: she does not treat it as a
+    /// posting, she moves in. Told only once her body is actually standing in
+    /// the settlement - after <see cref="EnsureBody"/>, never before it - so the
+    /// beat is never said about a body that did not appear. Re-asked by a later
+    /// recruit, so a first attempt whose body failed still gets its beat.
+    /// Costs nothing if it refuses: the employment is already recorded.</summary>
+    private string MoveIn(string answer)
+    {
+        if (_census.Verdict != StewardCensusVerdict.Present)
         {
-            said.Add(line);
+            return answer;
         }
 
-        return EnsureBody(string.Join(" ", said.ToArray()));
+        string[] settled = AdvanceQuest(StewardQuestStage.Settled);
+        return settled.Length == 0 ? answer : answer + " " + string.Join(" ", settled);
     }
 
     // ------------------------------------------------------------------

@@ -207,6 +207,7 @@ internal sealed class UpkeepLoop
     private int _jobFetched;
     private string _attention = string.Empty;
     private float _now;
+    private string _shortSubject = string.Empty;
 
     /// <summary>Builds the loop.
     ///
@@ -245,6 +246,10 @@ internal sealed class UpkeepLoop
     }
 
     public UpkeepPhase Phase => _phase;
+
+    /// <summary>The limits this loop was built with, so a caller can hold its
+    /// own settings to the same carry.</summary>
+    public UpkeepLimits Limits => _limits;
 
     /// <summary>What he is doing, or the reason he is not. Always a sentence a
     /// player can act on: a Steward standing still without an explanation and a
@@ -633,9 +638,12 @@ internal sealed class UpkeepLoop
         {
             SayShort(tick, whole);
         }
-        else
+        else if (_shortSubject.Length != 0)
         {
-            _voice?.Forget(UpkeepSpeech.ShortSubject(whole.Shortfall));
+            // The shortage has been met. Forget the subject that was actually
+            // said, so if it comes back it is said at once.
+            _voice?.Forget(_shortSubject);
+            _shortSubject = string.Empty;
         }
 
         if (!whole.IsActionable)
@@ -693,7 +701,14 @@ internal sealed class UpkeepLoop
     private void SayShort(in UpkeepTick tick, in RoundPlan whole)
     {
         string line = UpkeepSpeech.Short(whole.Shortfall, whole.DeferredForMaterial);
-        _voice?.Say(UpkeepSpeech.ShortSubject(whole.Shortfall), line, tick.Now);
+        string subject = UpkeepSpeech.ShortSubject(whole.Shortfall);
+        if (_shortSubject.Length != 0 && !string.Equals(_shortSubject, subject, StringComparison.Ordinal))
+        {
+            _voice?.Forget(_shortSubject);
+        }
+
+        _shortSubject = subject;
+        _voice?.Say(subject, line, tick.Now);
         if (_throttle.ShouldNotify("short", tick.Now))
         {
             _report?.Invoke(line);
@@ -1142,10 +1157,12 @@ internal sealed class UpkeepLoop
             }
 
             LightVerdict verdict;
+            FuelTargetObservation? seen = null;
             try
             {
+                seen = LookDriven(stop.Light.Key);
                 verdict = LightRevalidation.Look(
-                    stop, LookDriven(stop.Light.Key), _liveScope.Settlement, _liveScope.Epoch, _roundThresholds);
+                    stop, seen, _liveScope.Settlement, _liveScope.Epoch, _roundThresholds);
             }
             catch (Exception)
             {
@@ -1159,8 +1176,17 @@ internal sealed class UpkeepLoop
             }
             else if (verdict == LightVerdict.Refused)
             {
+                // The revalidation's "refused" also covers a light that left
+                // the area or changed fuel. Only a permission refusal is one she
+                // "may not touch"; the rest are skips, exactly as the arrival
+                // path classes them, so one light gets one sentence whichever
+                // side noticed it.
+                FuelTargetStatus why = seen == null
+                    ? FuelTargetStatus.Unavailable
+                    : LightNeeds.Assess(
+                        seen.Value, _liveScope.Settlement, _liveScope.Epoch, _roundThresholds).Status;
                 decided.Add(stop);
-                results.Add(new StopResult(stop.Light.Key, StopOutcome.Refused, 0));
+                results.Add(new StopResult(stop.Light.Key, OutcomeFor(why), 0));
             }
             else
             {
@@ -2026,6 +2052,8 @@ internal sealed class UpkeepLoop
         _jobRound = default;
         _jobFetched = 0;
         _attention = string.Empty;
+        _shortSubject = string.Empty;
+        LastOutcome = null;
         _reservation.Release(StewardRole.UpkeepJobId);
         _nextScanAt = 0f;
         _retry.Reset();

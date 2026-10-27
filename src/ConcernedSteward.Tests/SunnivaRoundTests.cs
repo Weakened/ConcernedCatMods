@@ -284,6 +284,56 @@ public sealed class SunnivaRoundTests
     // ------------------------------------------------------------------
 
     [Fact]
+    public void A_shortage_that_was_met_and_comes_back_is_said_again_at_once()
+    {
+        StewardFixture f = Camp();
+        FuelTargetObservation torch = f.AddFire("torch", fuel: 1f, x: 4f, z: 0f, fuelName: Resin);
+
+        f.Run();
+        Assert.Single(f.Spoken, line => line.Contains("I need", StringComparison.Ordinal));
+
+        // A player fills it by hand: nothing is short any more.
+        f.Fires.Replace(FakeFires.Fuelled(torch, 10f));
+        f.Run();
+
+        // It burns down again well inside the cooldown, and the chest still has
+        // no resin: that is a new occasion, and it is said.
+        f.Fires.Replace(FakeFires.Fuelled(torch, 1f));
+        f.Run();
+        Assert.True(f.Now < StewardVoice.DefaultCooldownSeconds);
+        Assert.Equal(2, f.Spoken.Count(line => line.Contains("I need", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void A_carry_smaller_than_one_light_still_tends_it_because_the_light_is_held_to_the_carry()
+    {
+        StewardFixture f = Camp(carry: 5);
+        f.Thresholds = MaintenanceThresholds.FromSettings(
+            300f, 1200f, 10, out string? why, carryPerTrip: 5);
+        Assert.NotNull(why);
+        f.AddFire("campfire", fuel: 1f, x: 4f, z: 0f);
+
+        f.RunUntilTripEnds(cap: 40);
+
+        Assert.Equal(5, f.Loop.Custody.Burned);
+        f.AssertConserved(startingStock: 50);
+    }
+
+    [Fact]
+    public void A_reload_forgets_the_last_worlds_round()
+    {
+        StewardFixture f = Camp();
+        f.AddFire("only", fuel: 1f, x: 4f, z: 0f);
+        f.RunUntilTripEnds(cap: 40);
+        Assert.NotNull(f.Loop.LastOutcome);
+
+        f.Loop.OnWorldLoaded(f.Pack, Wood);
+
+        Assert.Null(f.Loop.LastOutcome);
+        Assert.Equal(string.Empty, f.Loop.Attention);
+    }
+
+    [Fact]
     public void Ten_torches_and_no_resin_is_a_sentence_on_screen_that_names_the_resin()
     {
         StewardFixture f = Camp();
@@ -582,6 +632,21 @@ public sealed class StewardConfigurationTests
     }
 
     [Fact]
+    public void No_light_may_need_more_than_one_trip_carries()
+    {
+        MaintenanceThresholds held = MaintenanceThresholds.FromSettings(
+            300f, 1200f, 10, out string? why, carryPerTrip: 5);
+
+        Assert.Equal(5, held.MostUnitsPerLight);
+        Assert.Contains("CarryPerTrip", why);
+
+        MaintenanceThresholds fits = MaintenanceThresholds.FromSettings(
+            300f, 1200f, 10, out why, carryPerTrip: 50);
+        Assert.Null(why);
+        Assert.Equal(10, fits.MostUnitsPerLight);
+    }
+
+    [Fact]
     public void Sensible_thresholds_are_used_exactly()
     {
         MaintenanceThresholds used = MaintenanceThresholds.FromSettings(900f, 3600f, 4, out string? why);
@@ -732,8 +797,10 @@ public sealed class SunnivaReachabilityTests
     public void She_moves_in_only_inside_the_ground_marked_as_home()
     {
         string runtime = ProductSources.WithoutComments(Source("Runtime", "StewardRuntime.cs"));
-        int guard = runtime.IndexOf("home.Contains(", StringComparison.Ordinal);
-        int spawn = runtime.IndexOf("StewardWorkerPrefab.Spawn(", StringComparison.Ordinal);
+        int ensure = runtime.IndexOf("private string EnsureBody(", StringComparison.Ordinal);
+        int guard = runtime.IndexOf("home.Contains(", ensure, StringComparison.Ordinal);
+        int spawn = runtime.IndexOf("StewardWorkerPrefab.Spawn(", ensure, StringComparison.Ordinal);
+        Assert.True(ensure > 0, "EnsureBody is gone");
 
         Assert.True(guard > 0, "the settlement check is gone");
         Assert.True(spawn > guard, "the body is spawned before the settlement is checked");
@@ -746,10 +813,20 @@ public sealed class SunnivaReachabilityTests
         int recruit = runtime.IndexOf("internal string Recruit()", StringComparison.Ordinal);
         int guard = runtime.IndexOf("!PlayerIsInsideSettlement()", recruit, StringComparison.Ordinal);
         int advance = runtime.IndexOf("_introduction.Advance(", recruit, StringComparison.Ordinal);
-        int settled = runtime.IndexOf("AdvanceQuest(StewardQuestStage.Settled)", recruit, StringComparison.Ordinal);
+        int end = runtime.IndexOf("private string MoveIn(", StringComparison.Ordinal);
+        string recruitBody = runtime.Substring(recruit, end - recruit);
 
         Assert.True(recruit > 0 && guard > recruit, "Recruit no longer asks where the player stands");
         Assert.True(advance > guard, "a stage is recorded before the settlement check");
-        Assert.True(settled > guard, "the move-in beat is said before the settlement check");
+        Assert.Contains("_census.Verdict != StewardCensusVerdict.Present && !PlayerIsInsideSettlement()", recruitBody);
+
+        // The move-in beat is never said inside Recruit itself, only by MoveIn,
+        // and MoveIn says it only for a body that is present - after EnsureBody.
+        Assert.DoesNotContain("StewardQuestStage.Settled", recruitBody);
+        Assert.Contains("MoveIn(EnsureBody(", recruitBody);
+        string moveIn = runtime.Substring(end);
+        int present = moveIn.IndexOf("StewardCensusVerdict.Present", StringComparison.Ordinal);
+        int beat = moveIn.IndexOf("AdvanceQuest(StewardQuestStage.Settled)", StringComparison.Ordinal);
+        Assert.True(present > 0 && beat > present, "the move-in beat is not gated on a present body");
     }
 }

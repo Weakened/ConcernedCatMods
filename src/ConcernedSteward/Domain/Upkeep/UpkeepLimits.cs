@@ -109,14 +109,6 @@ internal readonly struct UpkeepLimits
     /// neither hammers the game nor retries forever.</summary>
     public int MaxFailuresPerPhase { get; }
 
-    /// <summary>The shipped values.
-    ///
-    /// Thirty-two fires is a generous village and a cheap sort. Ten units is
-    /// one vanilla hearth's entire capacity, so a single trip can always finish
-    /// a hearth and can never strip a chest. Fifteen seconds between scans is
-    /// five times faster than a hearth burns one unit. Ninety seconds is far
-    /// longer than any walk inside a settlement and short enough that a stuck
-    /// Steward is noticed in the same play session.</summary>
     /// <summary>The most a configured carry may be. One body carries what
     /// fits in its pack, and the pack is the real limit; this only stops a
     /// typing slip turning one trip into a whole chest.</summary>
@@ -150,6 +142,14 @@ internal readonly struct UpkeepLimits
             shipped.MaxFailuresPerPhase);
     }
 
+    /// <summary>The shipped values.
+    ///
+    /// Thirty-two fires is a generous village and a cheap sort. Ten units is
+    /// one vanilla hearth's entire capacity, so a single trip can always finish
+    /// a hearth and can never strip a chest. Fifteen seconds between scans is
+    /// five times faster than a hearth burns one unit. Ninety seconds is far
+    /// longer than any walk inside a settlement and short enough that a stuck
+    /// Steward is noticed in the same play session.</summary>
     public static UpkeepLimits Default => new(
         maxTargetsScanned: 32,
         maxUnitsPerTrip: 10,
