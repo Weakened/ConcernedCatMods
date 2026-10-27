@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.0
+
+A worker can rest as a presentation figure, under the same one-body rule (#295, #298).
+
+* `NpcBodyContract.ForWorkerWithPresentation(prefab, keyPrefix)` and `NpcBodyContract.Admits(kind)` are new. The
+  contract is still a worker contract: the same prefab name and key prefix, validated the same way. A shipped role
+  that switches to it therefore changes nothing on disk, and its saved bodies are found exactly as before.
+* The arbiter now grants such an identity either kind of body, but **never both at once**. A presentation claim is
+  refused while a worker body is held, and a worker claim is refused while the figure is held
+  (`RefusedOtherKindExists`). A presentation claim also still needs the identity to be resting. A hand-over is
+  release-then-claim by whoever holds the body now. Nothing in the library tears a body down on anyone else's behalf.
+* A role registered with `ForWorker` or `ForPresentation` behaves exactly as in 0.4.0.
+* This is an additive minor version that widens the public surface by two members. Every in-repository consumer pin
+  moves with it, so no product can compile against one contract and install another.
+
 ## 0.3.0
 
 The durable interruption machinery becomes an actual consumer API and Concerned Steward adopts it around its shipped
