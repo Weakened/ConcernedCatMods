@@ -36,7 +36,7 @@ internal sealed partial class OriginalClimbPresenter
         // entry) plays from the attachment until it completes; an exit (top, side, bottom) plays over the runtime's own
         // route progress, so visual contacts never lead the real capsule.
         TransitionAction? action = actor.Transition;
-        float progress = actor.TransitionProgress;
+        float progress = action != null ? actor.ProgressNow(Time.time, Time.deltaTime) : 0f;
         bool exit = action != null && (action.Kind == TransitionKind.TopExit || action.Kind == TransitionKind.SideExit || action.Kind == TransitionKind.BottomStepOff);
         float bodyWeight = action != null ? action.BodyWeightAt(progress) : 1f;
         if ((native & NativeActionParts.UpperBody) != 0) { bodyWeight = 0f; }
@@ -245,6 +245,9 @@ internal sealed partial class OriginalClimbPresenter
                 Root = root, Chain = rig.Reach[limb], Progress = action != null ? progress : -1f, Descending = actor.Gait.Descending,
                 RungCentre = RungSurface(frame, contact.Height, 0f, span * side), Hand = hand, Outward = outward, Profile = profile,
             };
+            if (action != null) { weight = Mathf.MoveTowards(actor.ShownWeight[limb], weight, Time.deltaTime / ClimbTuning.WeightRiseSeconds); }
+            actor.ShownWeight[limb] = weight;
+            record.Requested = weight;
             if (weight <= .01f) { actor.Record[limb] = record; continue; } // Handed to the native pose on purpose (mount/exit windows).
             actor.Fit.Sample(limb, reach / rig.Reach[limb], root, feet, frame, outward);
             if (reach > rig.Reach[limb] * ClimbTuning.ReachLimit)
@@ -257,10 +260,8 @@ internal sealed partial class OriginalClimbPresenter
 
             // A contact nearing the limit hands over to the native pose gradually instead of popping off at it.
             weight *= 1f - Smooth01((reach / rig.Reach[limb] - ClimbTuning.FadeFrom) / (ClimbTuning.ReachLimit - ClimbTuning.FadeFrom));
-            // During a transition a limb takes hold or lets go over at least WeightRiseSeconds, never in one frame (in game
-            // 2026-10-27: both hands snapped onto the lip from weight 0 to 1). Climbing itself is unchanged.
-            if (action != null) { weight = Mathf.MoveTowards(actor.ShownWeight[limb], weight, Time.deltaTime / ClimbTuning.WeightRiseSeconds); }
-            actor.ShownWeight[limb] = weight;
+            // (During a transition the requested weight above changes by at most 1 per WeightRiseSeconds: in game
+            // 2026-10-27 both hands snapped onto the lip from 0 to 1 in a frame. Climbing itself is unchanged.)
             record.Effective = weight;
             actor.Record[limb] = record;
 

@@ -124,22 +124,25 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
             {
                 actor.Transition = ClimbTuning.Action(routed.Value);
                 actor.EntryTimed = false;
+                actor.TransitionProgress = actor.ShownProgress = published;
+                actor.ProgressRate = 0f;
+            }
+            else if (dt > 1e-4f)
+            {
+                actor.ProgressRate = Mathf.Max(0f, (published - actor.TransitionProgress) / dt);
                 actor.TransitionProgress = published;
             }
-            else
-            {
-                // Progress arrives once per physics step (50 Hz) and rendering runs faster: follow it smoothly so the
-                // limbs move every rendered frame instead of stair-stepping (in game 2026-10-27: foot targets jumped at
-                // up to 20 m/s on alternate frames).
-                actor.TransitionProgress += (published - actor.TransitionProgress) * (1f - Mathf.Exp(-dt / ClimbTuning.ProgressSmoothing));
-            }
+
+            actor.ProgressAt = Time.time;
             return;
         }
 
         if (fresh && (frame.Motion == PresentedMotion.GroundMount || frame.Motion == PresentedMotion.AirCatch))
         {
             actor.Transition = ClimbTuning.Action(frame.Motion == PresentedMotion.AirCatch ? TransitionKind.AirCatch : TransitionKind.GroundMount);
-            actor.TransitionProgress = 0f;
+            actor.TransitionProgress = actor.ShownProgress = 0f;
+            actor.ProgressRate = 1f / Mathf.Max(.05f, actor.Transition.Seconds);
+            actor.ProgressAt = Time.time;
             actor.EntryTimed = true;
             return;
         }
@@ -147,7 +150,8 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
         if (actor.Transition != null && actor.EntryTimed)
         {
             actor.TransitionProgress = Mathf.Clamp01(actor.TransitionProgress + dt / Mathf.Max(.05f, actor.Transition.Seconds));
-            if (actor.TransitionProgress >= 1f) { actor.Transition = null; }
+            actor.ProgressAt = Time.time;
+            if (actor.TransitionProgress >= 1f && actor.ShownProgress >= .999f) { actor.Transition = null; }
             return;
         }
 
@@ -364,6 +368,18 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
         internal TransitionAction? Transition;
         internal float ChestTwist;
         internal readonly float[] ShownWeight = { 1f, 1f, 1f, 1f };
+        internal float ShownProgress, ProgressRate, ProgressAt;
+
+        /// <summary>Transition progress for this rendered frame. Progress is published once per physics step (50 Hz)
+        /// while rendering runs faster, so it is extrapolated from the last step at its own rate and approached
+        /// smoothly, never backwards (in game 2026-10-27: foot targets stair-stepped at up to 20 m/s).</summary>
+        internal float ProgressNow(float now, float renderDelta)
+        {
+            float ahead = TransitionProgress + ProgressRate * Mathf.Clamp(now - ProgressAt, 0f, .05f);
+            float target = Mathf.Clamp01(ahead);
+            ShownProgress += (target - ShownProgress) * (1f - Mathf.Exp(-Mathf.Max(0f, renderDelta) / ClimbTuning.ProgressSmoothing));
+            return ShownProgress;
+        }
         internal float TransitionProgress;
         internal bool EntryTimed;
         internal readonly FitCounters Fit = new FitCounters();
