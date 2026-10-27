@@ -1143,9 +1143,15 @@ internal sealed class LadderRuntime : IDisposable
         var candidates = new List<(Vector3 Point, float Score)>();
         foreach (float sign in new[] { 1f, -1f })
         {
-            foreach (float distance in new[] { sideways, sideways + 0.4f })
+            // Three distances, each also shifted away from and in toward the ladder's plane (in game 2026-10-27: a 2x2
+            // floor beside the ladder was only found at its edge, half the footprint off it).
+            foreach (float distance in new[] { sideways, sideways + 0.4f, sideways + 0.8f })
             {
-                candidates.Add((feet + side * (sign * distance), Vector3.Dot(side * sign, look) - distance * 0.01f));
+                foreach (float depth in new[] { 0f, 0.4f, -0.3f })
+                {
+                    candidates.Add((feet + side * (sign * distance) + outward * depth,
+                        Vector3.Dot(side * sign, look) - distance * 0.01f - Mathf.Abs(depth) * 0.02f));
+                }
             }
         }
 
