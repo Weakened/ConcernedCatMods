@@ -228,7 +228,7 @@ internal sealed class LimbGait
     private readonly bool[] _synced = new bool[4];
     private readonly bool[] _planted = new bool[4];
     private readonly float[] _shift = new float[2];
-    private float _reverseUntil, _clock;
+    private float _reverseUntil, _clock, _stillSince;
     private readonly int[][] _baseRung = { new int[4], new int[4] };
     private GaitShape _shape = new GaitShape();
     private float _base, _pitch, _cycle, _shoulderRel, _lastFeet;
@@ -241,6 +241,10 @@ internal sealed class LimbGait
     /// <summary>The loop currently driving contacts.</summary>
     internal ClimbLoop Loop => _descending ? _shape.Down : _shape.Up;
     internal bool Descending => _descending;
+
+    /// <summary>Less than this travel per 0.02 s for StallSeconds counts as blocked.</summary>
+    internal const float StallTravel = 0.002f;
+    internal const float StallSeconds = 0.15f;
 
     /// <summary>+1 while the right side is mid-swing more than the left (weight shifts left), −1 the other way.</summary>
     internal float Sway { get; private set; }
@@ -271,6 +275,7 @@ internal sealed class LimbGait
         _lastFeet = feetY;
         _shift[0] = _shift[1] = 0f;
         _clock = 0f;
+        _stillSince = 0f;
         _reverseUntil = -1f;
         Ready = true;
         Pose(feetY, true);
@@ -315,6 +320,10 @@ internal sealed class LimbGait
         _clock += seconds;
         float moved = feetY - _lastFeet;
         _lastFeet = feetY;
+        // Blocked (input held, body not progressing): after StallSeconds without real travel the limbs settle onto rungs
+        // as in a hold instead of hanging mid-reach (in game 2026-10-27: a foot stayed suspended under a floor).
+        if (Math.Abs(moved) > StallTravel * Math.Max(seconds, 0.001f) / 0.02f) { _stillSince = _clock; }
+        if (!hold && _clock - _stillSince > StallSeconds) { hold = true; }
         if (!hold && Math.Abs(moved) > 0.0005f)
         {
             bool down = moved < 0f;

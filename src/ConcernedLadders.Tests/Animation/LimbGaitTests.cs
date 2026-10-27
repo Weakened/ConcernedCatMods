@@ -100,6 +100,19 @@ public sealed class LimbGaitTests
     }
 
     [Fact]
+    public void ABlockedClimberSettlesEveryLimbOnARung()
+    {
+        var gait = Gait();
+        Climb(gait, 12f, 12.55f);
+        for (int i = 0; i < 60; i++) { Assert.True(gait.Update(12.55f + i * 0.0002f, 0.02f, false)); } // Creeping, blocked.
+        for (int limb = 0; limb < 4; limb++)
+        {
+            Assert.True(gait.Contact(limb).Planted, "limb " + limb + " left hanging while blocked");
+            Assert.True(OnRung(gait.Contact(limb).Height));
+        }
+    }
+
+    [Fact]
     public void ReversingMidClimbBlendsWithoutAJump()
     {
         var gait = Gait();
