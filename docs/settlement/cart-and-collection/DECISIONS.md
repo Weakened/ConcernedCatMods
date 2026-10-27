@@ -389,7 +389,40 @@ decision.
 The ledger records the transition; nothing is re-credited and nothing is re-acquired. An interrupted death-drop
 fails closed and keeps its evidence.
 
-**Where it will be enforced, and it is not yet.** `Adapters/Workers/GunnarDeathDropPort.cs`, to be pinned verbatim
-like D15's, with the death predicate and the verb it may be called from both audited. The pin is authored with the
-implementation, in the same change. Until then the behaviour is simply absent: **a Gunnar who dies today still loses
-what he is carrying**, exactly as `GUNNAR_COLLECTION.md` §6c says.
+**Where it is enforced.** `Adapters/Workers/GunnarDeathDropPort.cs`, a component on Gunnar's body, subscribed to
+the body's own `Character.m_onDeath` - vanilla's death callback, which vanilla runs from `Character.OnDeath` only on
+the owner, after it has marked the body dead and before it destroys it. One call, pinned verbatim and once by
+`tools/validate_repo.py`: `Humanoid.DropItem(_inventory, item, count)`, the stack's own count from the body's own
+inventory - what Foreman's worker body does on its own death (#400 pins that one). The validator's
+`D16 death-drop audit` pins the rest: the call sits inside the death handler, behind the body's own `IsDead()` and a
+refusing `WorkerDeathDrop` verdict; the handler is named only by its declaration and the subscription; and
+`m_onDeath` is touched nowhere else in the product - so no retire, cancel, unload or teardown verb can reach it.
+The planted escapes in `tools/tests/test_teamster_carveout.py`'s `DeathDropIsNarrow`, each verified to pass the
+validator from before this change, are refused.
+
+**How the paragraphs above were read where they leave a choice**, so a reader can disagree with the reading rather
+than discover it:
+
+- *Gates.* The drop runs only when Teamster's master switch and the collection switch are on, the start-up probe
+  verified every member it binds, the shared work-authority rule grants (D3), and the body had read its own stored
+  inventory. Each of those failing leaves the material **unresolved** - recorded, not dropped. That is narrower than
+  "its runtime may use vanilla's own drop" and never wider: a drop is a world write, and every other world write this
+  product makes fails closed on the same four questions.
+- *The cart.* The detach runs through the hauling runtime's own frame observation (the D4 teardown that would have
+  run on the next frame anyway, run now). If a cart's joint still holds the body afterwards, **nothing is dropped**:
+  "only then does the drop run" is read as a precondition, and an interrupted death drop fails closed and keeps its
+  evidence.
+- *Measurement.* Each stack is counted before and after its drop; the ground is credited only when vanilla answered
+  that it dropped, nothing threw, and exactly the stack's count left him. Anything else is unresolved, and a count
+  that cannot be reconciled is never balanced away.
+- *Durable evidence.* Every genuine death - dropped, refused or interrupted - appends one row for the death and one
+  per stack to a per-world, append-only file beside Teamster's other sidecars
+  (`teamster_worker_deaths_<world>.tsv`), and the same rows go to the log at warning level. The log alone is replaced
+  on the next launch, so it is not "durable". An existing file that cannot be read is left alone and the rows go to
+  the log only.
+- *The ledger.* `CollectionAccount.RecordDeath` moves what this session saw him take from `Carried` to
+  `DroppedOnDeath` or `UnresolvedAtDeath`. Units he carried from an earlier session were never acquired by this
+  session's ledger and are not acquired on paper to make it balance; the death record has them.
+
+**Never observed in game.** The port binds Unity; the decision, the classification, the accounting and the record
+format are unit-tested (`WorkerDeathDropTests`), the shape is pinned, and nothing has been watched happening.

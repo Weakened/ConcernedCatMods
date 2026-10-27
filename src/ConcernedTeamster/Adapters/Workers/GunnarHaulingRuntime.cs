@@ -205,6 +205,39 @@ internal sealed class GunnarHaulingRuntime : MonoBehaviour, IHaulClock, IHaulExe
 
     public float Now => Time.time;
 
+    /// <summary>D16's first step, at the moment Gunnar dies: any cart hitched to
+    /// this body is told to let go through the executor's own frame observation -
+    /// the D4 teardown that would have run on the next frame anyway, run now so
+    /// the cart is free before anything is dropped. Answers whether no cart
+    /// holds the body afterwards.
+    ///
+    /// <b>Not knowing is held.</b> A faulted runtime, a release that threw, or a
+    /// joint that could not be read all answer false, which refuses the drop
+    /// rather than dropping beside a cart that may still be attached.</summary>
+    internal bool ReleaseCartFromDyingBody(Humanoid? body)
+    {
+        Rigidbody? rigidbody = body != null ? body.GetComponent<Rigidbody>() : null;
+        if (rigidbody == null || _seam == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            if (!_faulted && _executor != null)
+            {
+                _executor.ObserveFrame();
+            }
+        }
+        catch (Exception exception)
+        {
+            _log.LogError("Gunnar died and the cart could not be told to let go: " + SafeFailure.Describe(exception));
+            return false;
+        }
+
+        return !_seam.IsHeldByAnyCart(rigidbody);
+    }
+
     /// <summary>The entry point: registers the worker prefab for every session,
     /// adds the runtime to the plugin's object and registers <c>ct_haul</c>.
     /// </summary>

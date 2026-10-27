@@ -182,6 +182,17 @@ internal static class HaulingCapabilityProbe
                 new("ItemDrop", itemDrop, "m_itemData", GameMemberKind.InstanceField, itemData),
                 new("ItemDrop+ItemData", itemData, "m_stack", GameMemberKind.InstanceField, typeof(int)),
 
+                // D16: what a dying Gunnar carries goes on the ground through
+                // vanilla's own drop, from vanilla's own death callback. Verified
+                // here so a changed game refuses the drop (and says so) rather
+                // than throwing inside the game's death path.
+                new("Character", character, "m_onDeath", GameMemberKind.InstanceField, typeof(Action)),
+                new("Humanoid", humanoid, "DropItem", GameMemberKind.InstanceMethod, typeof(bool),
+                    new[] { inventory!, itemData!, typeof(int) }),
+                new("Inventory", inventory, "GetAllItems", GameMemberKind.InstanceMethod,
+                    typeof(List<>).MakeGenericType(itemData!)),
+                new("ItemDrop+ItemData", itemData, "m_dropPrefab", GameMemberKind.InstanceField, gameObject),
+
                 // Engine members the joint and body checks read.
                 new("Joint", joint, "connectedBody", GameMemberKind.InstanceProperty, rigidbody),
                 new("Joint", joint, "currentForce", GameMemberKind.InstanceProperty, vector3),

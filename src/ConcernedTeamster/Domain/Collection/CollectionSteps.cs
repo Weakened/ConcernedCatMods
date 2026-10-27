@@ -277,5 +277,52 @@ internal sealed class CollectionAccount
     /// nothing is re-acquired, and the totals do not move.</summary>
     public CargoOutcome CartDestroyed(string step) => _ledger.CartDestroyed(step);
 
+    /// <summary>He died (`DECISIONS.md` D16). What was measured onto the ground
+    /// moves off his back to <see cref="CargoPlace.DroppedOnDeath"/>; what is not
+    /// proven to be there moves to <see cref="CargoPlace.UnresolvedAtDeath"/>.
+    ///
+    /// <b>The cart is not touched.</b> D16 detaches it first and leaves it, and
+    /// everything in it, exactly as the game left it, so nothing recorded
+    /// <see cref="CargoPlace.InCart"/> moves here.
+    ///
+    /// <b>Bounded by what this session's ledger saw him take, never by what he
+    /// held.</b> The ledger starts empty every session, and a stone he picked up
+    /// last night is in him and not in it. Units the ledger never acquired are
+    /// reported by the death record and stay out of the ledger, rather than being
+    /// acquired here to make the totals agree - which would be minting on paper.
+    /// So <see cref="CargoLedger.IsConserved"/> holds after this whatever the
+    /// report says.</summary>
+    public void RecordDeath(string step, DeathDropReport report)
+    {
+        if (report == null)
+        {
+            return;
+        }
+
+        IReadOnlyList<DeathDropTotal> totals = report.Totals();
+        for (int index = 0; index < totals.Count; index++)
+        {
+            DeathDropTotal total = totals[index];
+            if (total.Item.Length == 0)
+            {
+                continue;
+            }
+
+            int dropped = Least(total.Dropped, _ledger.At(total.Item, CargoPlace.Carried));
+            if (dropped > 0)
+            {
+                _ledger.Move(step + ":dropped:" + total.Item, total.Item, dropped,
+                    CargoPlace.Carried, CargoPlace.DroppedOnDeath);
+            }
+
+            int unresolved = Least(total.Unresolved, _ledger.At(total.Item, CargoPlace.Carried));
+            if (unresolved > 0)
+            {
+                _ledger.Move(step + ":unresolved:" + total.Item, total.Item, unresolved,
+                    CargoPlace.Carried, CargoPlace.UnresolvedAtDeath);
+            }
+        }
+    }
+
     private static int Least(int left, int right) => left < right ? left : right;
 }

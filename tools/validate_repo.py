@@ -2136,6 +2136,12 @@ TEAMSTER_WORKER_FORBIDDEN_TOKENS = (
     ".Interact(",
     ".Pickup(",
     ".AddItem(",
+    # D16's drop, forbidden here so the one pinned call below is the only way
+    # it reaches the source tree. The token covers vanilla's static
+    # `ItemDrop.DropItem(` too, which would build a ground item from an
+    # ItemData this product chose - the "spawning of item instances" D15 and
+    # D16 both refuse.
+    ".DropItem(",
     "SetExtraMass",
     "SetMass",
     "UpdateMass",
@@ -2193,6 +2199,9 @@ TEAMSTER_OUTSIDE_WORKERS_TOKENS = (
     # Adapters/Workers is a token a helper in Adapters/ or Domain/ may spell,
     # which is an enforcement claim wider than the enforcement.
     ".MoveItemToThis(", ".RemoveItem(",
+    # D16's drop, for the same reason: a helper in Adapters/ or Domain/ must not
+    # be able to spell what the worker folder may spell once.
+    ".DropItem(",
 )
 
 # The one owner-authorized exception to the worker runtime's token list
@@ -2321,11 +2330,31 @@ TEAMSTER_DEPOSIT_PORT_CALLS = (
      "has a blind spot the decompiled AddItem explains"),
 )
 
+# The death drop (owner decision 2026-09-29; `DECISIONS.md` D16). One call,
+# vanilla's own `Humanoid.DropItem`, of one carried stack with that stack's own
+# count, from the body's own inventory - the same call Foreman's worker body
+# makes on its own death (#400 pins that one). The argument names are the pin:
+# `_inventory` is the dying body's own inventory and `count` is the stack's own
+# `m_stack`, so dropping from another inventory, or dropping a number that is not
+# what the body holds, is a different call and fails.
+#
+# Which VERB may reach it is the other half, and a token pin cannot say that.
+# `check_teamster_death_drop_verb` below does: the call sits inside the handler
+# subscribed to the body's own `m_onDeath`, behind the body's own `IsDead()` and
+# a refusing verdict, and nothing else in the product names the handler.
+TEAMSTER_DEATH_DROP_PORT_PATH = ("Adapters", "Workers", "GunnarDeathDropPort.cs")
+TEAMSTER_DEATH_DROP_PORT_CALLS = (
+    (".DropItem(",
+     re.compile(r"\b_humanoid\s*\.\s*DropItem\s*\(\s*_inventory\s*,\s*item\s*,\s*count\s*\)"),
+     "vanilla's own drop of one carried stack, with its own count, on Gunnar's genuine death only"),
+)
+
 # Which file may spell which authorized calls. A path absent from this table has
-# no allowance at all, which is every file in the product bar these two.
+# no allowance at all, which is every file in the product bar these three.
 TEAMSTER_AUTHORIZED_PORTS = {
     TEAMSTER_COLLECTION_PORT_PATH: TEAMSTER_COLLECTION_PORT_CALLS,
     TEAMSTER_DEPOSIT_PORT_PATH: TEAMSTER_DEPOSIT_PORT_CALLS,
+    TEAMSTER_DEATH_DROP_PORT_PATH: TEAMSTER_DEATH_DROP_PORT_CALLS,
 }
 
 
@@ -2486,7 +2515,10 @@ def check_teamster_worker_runtime_scope(errors: list[str]) -> list[str]:
         f"{' and '.join(repr(token) for token, _p, _w in TEAMSTER_DEPOSIT_PORT_CALLS)} "
         f"owner-authorized as three pinned calls, each verbatim and each once, in "
         f"{'/'.join(TEAMSTER_DEPOSIT_PORT_PATH)} alone (D15's deposit: the whole-stack move, and the "
-        f"add-then-remove pair that moves part of one); all five refused everywhere else in the "
+        f"add-then-remove pair that moves part of one); "
+        f"{' and '.join(repr(token) for token, _p, _w in TEAMSTER_DEATH_DROP_PORT_CALLS)} "
+        f"owner-authorized as one pinned call, verbatim and once, in "
+        f"{'/'.join(TEAMSTER_DEATH_DROP_PORT_PATH)} alone (D16's death drop); all six refused everywhere else in the "
         f"product, inside Adapters/Workers and out; cart attach/detach/detach-all only "
         f"in Adapters/Workers, mass writes only in {TEAMSTER_WORKER_CALIBRATION_FILE}, network-object writes only "
         f"(scanned across the product AND the {len(TEAMSTER_LINKED_SHARED_DIRS)} shared source tree(s) its "
@@ -2803,6 +2835,150 @@ def check_teamster_collection_verbs(errors: list[str]) -> list[str]:
         f"[interop] #381 collection lifecycle audit: {checked} verb(s) pinned in "
         f"{'/'.join(TEAMSTER_COLLECTION_PORT_PATH)}; the job verb keeps the unconfirmed-source "
         "record and only the world verb drops it",
+    ]
+
+
+# D16: the death drop runs on Gunnar's GENUINE death and on no other lifecycle
+# event. `DECISIONS.md` D16 says "the validator refuses a death-drop call from any
+# other verb", and the token pin above cannot: it says where `.DropItem(` may be
+# spelled, not what reaches it. So this pins the path to the call.
+#
+# - The handler is subscribed to the body's own `m_onDeath` - vanilla's death
+#   callback, which vanilla runs only from `Character.OnDeath`, only on the owner,
+#   after marking the body dead and before destroying it - and unsubscribed in
+#   OnDestroy. Exactly those two statements, verbatim, in the port; `m_onDeath`
+#   anywhere else in the product (an invoke, a second subscription, a
+#   subscription of something else) fails.
+# - `OnDeath` is named exactly twice in the whole product: its own declaration,
+#   and the method group handed to that subscription. A call to it from a retire,
+#   a cancel, an unload or a teardown is a third mention, and fails; so does a
+#   call to vanilla's own `Character.OnDeath()`, which would be this product
+#   killing something.
+# - Inside the handler, the body's own `IsDead()` refuses above the drop, and the
+#   game-free `WorkerDeathDrop.Decide` is asked and its verdict REFUSES above the
+#   drop - the refusing shape, so a verdict consulted and ignored fails, the
+#   lesson of the retire guard.
+#
+# A source-text audit, and it says so: it does not follow a delegate or prove
+# control flow. `WorkerDeathDropTests` proves the decision; a reviewer and the
+# owner's go-around prove the rest.
+TEAMSTER_DEATH_DROP_SUBSCRIBE = re.compile(
+    r"\b_humanoid\s*\.\s*m_onDeath\s*=\s*\(\s*Action\s*\)\s*Delegate\s*\.\s*Combine\s*\("
+    r"\s*_humanoid\s*\.\s*m_onDeath\s*,\s*_onDeath\s*\)\s*;")
+TEAMSTER_DEATH_DROP_UNSUBSCRIBE = re.compile(
+    r"\b_humanoid\s*\.\s*m_onDeath\s*=\s*\(\s*Action\s*\)\s*Delegate\s*\.\s*Remove\s*\("
+    r"\s*_humanoid\s*\.\s*m_onDeath\s*,\s*_onDeath\s*\)\s*;")
+TEAMSTER_DEATH_DROP_HANDLER_GROUP = re.compile(r"\b_onDeath\s*=\s*OnDeath\s*;")
+TEAMSTER_DEATH_DROP_HANDLER = re.compile(
+    r"private\s+void\s+OnDeath\s*\(\s*\)\s*\{(.*?)\n    \}", re.DOTALL)
+TEAMSTER_DEATH_DROP_PREDICATE = re.compile(
+    r"if\s*\(\s*_humanoid\s*==\s*null\s*\|\|\s*!\s*_humanoid\s*\.\s*IsDead\s*\(\s*\)\s*\)\s*\{")
+TEAMSTER_DEATH_DROP_DECIDES = re.compile(r"\bWorkerDeathDrop\s*\.\s*Decide\s*\(")
+TEAMSTER_DEATH_DROP_REFUSES = re.compile(
+    r"if\s*\(\s*verdict\s*!=\s*DeathDropVerdict\s*\.\s*Drop\s*\)\s*\{[^{}]*\bcontinue\s*;\s*\}")
+TEAMSTER_DEATH_DROP_DROP = re.compile(r"\.\s*DropItem\s*\(")
+
+
+def check_teamster_death_drop_verb(errors: list[str]) -> list[str]:
+    """Fails when anything but Gunnar's own genuine death can reach the D16 drop."""
+    teamster_dir: Path = PRODUCTS["teamster"]["project_dir"]  # type: ignore[assignment]
+    port = teamster_dir.joinpath(*TEAMSTER_DEATH_DROP_PORT_PATH)
+    label = "[interop] D16 death-drop audit"
+    if not port.is_file():
+        fail(f"{label}: missing {port.relative_to(ROOT)} — the death drop has no pinned home", errors)
+        return []
+
+    hits = 0
+    port_rel = Path(*TEAMSTER_DEATH_DROP_PORT_PATH).as_posix()
+    on_death_mentions = 0
+    for path in sorted(teamster_dir.rglob("*.cs")):
+        parts = path.relative_to(teamster_dir).parts
+        if parts[0] in ("obj", "bin"):
+            continue
+        rel = path.relative_to(teamster_dir).as_posix()
+        code = _strip_cs_comments(path.read_text(encoding="utf-8-sig"))
+        mentions = len(re.findall(r"\bOnDeath\b", code))
+        # The probe names the field as a string literal to verify it exists; a
+        # bare quoted name is not a touch. Reflection that could use the name is
+        # refused outside the prefab factory by the #313 audit.
+        callbacks = len(re.findall(r'(?<!")\bm_onDeath\b', code))
+        if rel == port_rel:
+            on_death_mentions += mentions
+            continue
+        if mentions:
+            hits += 1
+            fail(
+                f"{label}: src/ConcernedTeamster/{rel} names OnDeath — only vanilla's own death "
+                "callback may reach the death drop, and calling vanilla's Character.OnDeath() would be "
+                "this product killing something", errors)
+        if callbacks:
+            hits += 1
+            fail(
+                f"{label}: src/ConcernedTeamster/{rel} touches m_onDeath — the death callback is "
+                f"subscribed in {port_rel} alone", errors)
+
+    code = _strip_cs_comments(port.read_text(encoding="utf-8-sig"))
+    if on_death_mentions != 2 or len(TEAMSTER_DEATH_DROP_HANDLER_GROUP.findall(code)) != 1:
+        hits += 1
+        fail(
+            f"{label}: {port_rel} names OnDeath {on_death_mentions} time(s); the handler may be "
+            "declared and handed to the death callback once (`_onDeath = OnDeath;`) and named nowhere "
+            "else, so no other verb can call it", errors)
+
+    callbacks = len(re.findall(r"\bm_onDeath\b", code))
+    subscribed = len(TEAMSTER_DEATH_DROP_SUBSCRIBE.findall(code))
+    unsubscribed = len(TEAMSTER_DEATH_DROP_UNSUBSCRIBE.findall(code))
+    if subscribed != 1 or unsubscribed != 1 or callbacks != 4:
+        hits += 1
+        fail(
+            f"{label}: {port_rel} must subscribe the handler to the body's own m_onDeath once and "
+            f"unsubscribe it once, and touch m_onDeath nowhere else (found {subscribed} "
+            f"subscription(s), {unsubscribed} removal(s), {callbacks} mention(s); expected 1, 1, 4)",
+            errors)
+
+    drops = list(TEAMSTER_DEATH_DROP_DROP.finditer(code))
+    handler = TEAMSTER_DEATH_DROP_HANDLER.search(code)
+    if handler is None:
+        hits += 1
+        fail(f"{label}: could not read `private void OnDeath()` in {port_rel}", errors)
+    else:
+        start, end = handler.span(1)
+        body = handler.group(1)
+        inside = [drop for drop in drops if start <= drop.start() < end]
+        if len(drops) != 1 or len(inside) != 1:
+            hits += 1
+            fail(
+                f"{label}: {port_rel} has {len(drops)} drop call(s), {len(inside)} inside OnDeath(); "
+                "the one drop belongs inside the death handler and nowhere else", errors)
+        else:
+            at = inside[0].start() - start
+            predicate = TEAMSTER_DEATH_DROP_PREDICATE.search(body)
+            decides = TEAMSTER_DEATH_DROP_DECIDES.search(body)
+            refuses = TEAMSTER_DEATH_DROP_REFUSES.search(body)
+            if predicate is None or predicate.start() > at:
+                hits += 1
+                fail(
+                    f"{label}: OnDeath() in {port_rel} does not refuse on the body's own IsDead() above "
+                    "the drop — the death predicate is half of what D16 pins", errors)
+            if decides is None or decides.start() > at:
+                hits += 1
+                fail(
+                    f"{label}: OnDeath() in {port_rel} does not ask WorkerDeathDrop.Decide above the "
+                    "drop", errors)
+            if refuses is None or refuses.start() > at or (decides is not None and refuses.start() < decides.start()):
+                hits += 1
+                fail(
+                    f"{label}: OnDeath() in {port_rel} does not REFUSE on a verdict other than Drop "
+                    "above the drop (`if (verdict != DeathDropVerdict.Drop) {{ ... continue; }}`) — a "
+                    "verdict consulted and ignored is no guard", errors)
+
+    return [
+        f"{label}: the one pinned drop sits inside OnDeath() in {port_rel}, behind the body's own "
+        "IsDead() and a refusing WorkerDeathDrop verdict; OnDeath is named only by its declaration "
+        "and the subscription to the body's own m_onDeath (subscribed once, removed once, touched "
+        "nowhere else in src/ConcernedTeamster), so no retire, cancel, unload or teardown verb can "
+        "reach it. A source-text audit: it does not follow delegates or prove control flow "
+        f"({hits} violations)",
     ]
 
 
@@ -4742,6 +4918,7 @@ def main() -> int:
     report.extend(check_teamster_no_force_injection(errors))
     report.extend(check_foreman_runtime_capabilities(errors))
     report.extend(check_teamster_collection_verbs(errors))
+    report.extend(check_teamster_death_drop_verb(errors))
     report.extend(check_teamster_retire_guards_carried_material(errors))
     report.extend(check_teamster_no_internet_egress(errors))
     report.extend(check_companion_body_fails_closed(errors))

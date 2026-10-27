@@ -237,6 +237,20 @@ $requirements = @(
     @("Humanoid", "game", "Pickup DESTROYS the item and answers true for a character with no network record", 'public bool Pickup\(GameObject go, bool autoequip = true, bool autoPickupDelay = true\).*if \(m_nview\.GetZDO\(\) == null\) \{ UnityEngine\.Object\.Destroy\(go\); return true; \}'),
     @("Character", "game", "Character.m_nview", 'protected ZNetView m_nview;'),
 
+    # D16: a dying Gunnar's carried inventory goes on the ground through vanilla's
+    # own drop, from vanilla's own death callback. The FACTS the port depends on,
+    # each pinned so a game update that changes one fails here rather than in a
+    # player's world: the callback exists, vanilla runs it only on the owner and
+    # only from its own death path, after marking the body dead and before
+    # destroying it; and the drop removes the stack from the inventory and
+    # builds the ground item from the stack's own data.
+    @("Character", "game", "Character.m_onDeath", 'public Action m_onDeath;'),
+    @("Character", "game", "the body is marked dead before vanilla's death path runs", 'private void CheckDeath\(\) \{ if \(!IsDead\(\) && GetHealth\(\) <= 0f\) \{ m_isDead = true;'),
+    @("Character", "game", "OnDeath runs m_onDeath on the owner only, then destroys the body", 'public virtual void OnDeath\(\).*if \(\(bool\)m_nview && !m_nview\.IsOwner\(\)\) \{ return; \}.*if \(m_onDeath != null\) \{ m_onDeath\(\); \}.*ZNetScene\.instance\.Destroy\(base\.gameObject\);'),
+    @("Humanoid", "game", "Humanoid.DropItem(Inventory, ItemData, int)", 'public bool DropItem\(Inventory inventory, ItemDrop\.ItemData item, int amount\)'),
+    @("Humanoid", "game", "DropItem removes the stack, then drops the stack's own data", 'public bool DropItem\(Inventory inventory, ItemDrop\.ItemData item, int amount\).*inventory\.RemoveItem\(item\).*ItemDrop\.DropItem\(item, amount, '),
+    @("Inventory", "game", "Inventory.GetAllItems()", 'public List<ItemDrop\.ItemData> GetAllItems\(\)'),
+
     # Jotunn: registering the worker prefab for every session.
     @("Jotunn.Managers.PrefabManager", "jotunn", "PrefabManager.OnVanillaPrefabsAvailable", 'public static event Action OnVanillaPrefabsAvailable;'),
     @("Jotunn.Managers.PrefabManager", "jotunn", "PrefabManager.CreateClonedPrefab(string, GameObject)", 'public GameObject CreateClonedPrefab\(string name, GameObject prefab\)'),
@@ -318,6 +332,8 @@ function Assert-OnlyIn {
 
 Assert-OnlyIn 'Vagon::AttachTo' { param($h) $h.Type.StartsWith($workersNamespace) } "the cart's attach is called only by Gunnar's worker runtime" 1
 Assert-OnlyIn 'Vagon::Detach(' { param($h) $h.Type.StartsWith($workersNamespace) } "the cart's detach is called only by Gunnar's worker runtime" 2
+# D16: vanilla's own drop, called once, by the death-drop port alone.
+Assert-OnlyIn 'Humanoid::DropItem' { param($h) $h.Type -eq ($workersNamespace + "GunnarDeathDropPort") } "a carried stack is dropped only by the death-drop port, on Gunnar's own death" 1
 Assert-OnlyIn 'Vagon::DetachAll' { param($h) $false } "no Teamster code detaches every cart on the client" 0
 Assert-OnlyIn 'Rigidbody::set_mass' { param($h) $h.Type -eq ($workersNamespace + "TeamsterWorkerBody") } "a mass is written only by Gunnar's own calibration" 1
 Assert-OnlyIn 'stfld float32 [assembly_valheim]Character::m_originalMass' { param($h) $h.Type -eq ($workersNamespace + "TeamsterWorkerBody") } "the base mass is written only by Gunnar's own calibration" 1

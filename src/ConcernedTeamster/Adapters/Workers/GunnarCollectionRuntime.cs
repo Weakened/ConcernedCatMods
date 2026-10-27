@@ -38,7 +38,7 @@ namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;
 /// re-opens the mint the port exists to close, so the decision lives somewhere a
 /// test can drive rather than in a <c>MonoBehaviour</c> no test here can
 /// load.</summary>
-internal sealed class GunnarCollectionRuntime : MonoBehaviour
+internal sealed class GunnarCollectionRuntime : MonoBehaviour, IGunnarDeathDropHost
 {
     private readonly GunnarCollectionPort _port = new GunnarCollectionPort();
     private readonly GunnarDepositPort _deposit = new GunnarDepositPort();
@@ -49,6 +49,10 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
     /// a deposit that measured more than is there leaves the discrepancy
     /// visible instead of balancing itself.</summary>
     private readonly CollectionAccount _account = new CollectionAccount();
+
+    /// <summary>The durable record of what he carried when he died (D16).
+    /// </summary>
+    private readonly GunnarDeathRecordStore _deaths = new GunnarDeathRecordStore();
 
     /// <summary>The chest the player chose, and the world load they chose it in.
     /// <b>There is no fallback.</b> With none designated the deposit refuses and
@@ -68,6 +72,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
     private Func<bool> _recordUnwritable = null!;
     private Func<bool> _recordUnreadable = null!;
     private Func<bool> _seamAvailable = null!;
+    private Func<Humanoid?, bool> _releaseCartFromDyingBody = _ => false;
 
     private ContainerPermissionRuntime? _containers;
 
@@ -88,12 +93,20 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
         Func<bool> recordUnwritable,
         Func<bool> recordUnreadable,
         Func<bool> seamAvailable,
+        Func<Humanoid?, bool> releaseCartFromDyingBody,
         ContainerPermissionRuntime? containers,
         ManualLogSource log)
     {
         GunnarCollectionRuntime runtime = host.AddComponent<GunnarCollectionRuntime>();
         runtime.Initialize(settings, worker, identity, recordUnwritable, recordUnreadable, seamAvailable, log);
         runtime._containers = containers;
+        runtime._releaseCartFromDyingBody = releaseCartFromDyingBody
+            ?? throw new ArgumentNullException(nameof(releaseCartFromDyingBody));
+
+        // D16: the runtime that can have put anything in him is the one a death
+        // reports to. Installed with it, removed with it.
+        GunnarDeathDropPort.ErrorLog = message => log.LogError(message);
+        GunnarDeathDropPort.Host = runtime;
         var command = new CollectConsoleCommand(runtime);
         VanillaConsoleCommands.Register(command, log);
         log.LogInfo(VanillaConsoleCommands.Describe(new[] { command.Name }));
@@ -270,6 +283,11 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
     /// pick afterwards, so dropping the record cannot mint.</summary>
     private void TearDown(string why)
     {
+        if (ReferenceEquals(GunnarDeathDropPort.Host, this))
+        {
+            GunnarDeathDropPort.Host = null;
+        }
+
         _ordered = false;
         _orderedSource = string.Empty;
         if (_lifecycle != null)
@@ -295,6 +313,95 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour
 
     private WorkAuthorityVerdict Authority() =>
         WorkAuthorityPolicy.Evaluate(GunnarWorkAuthority.ReadWorldFacts(OptedIn()));
+
+    // ------------------------------------------------------------------
+    // D16: he died. Called from vanilla's own death path through the port.
+    // ------------------------------------------------------------------
+
+    /// <summary>The cart first, through the hauling runtime's D4 teardown, then
+    /// the switches and the work-authority rule, read now rather than cached.
+    /// A release is attempted for every genuine death whatever the switches say:
+    /// letting a dead body's cart go is the hauling runtime's own behaviour, and
+    /// running it now only moves it ahead of the drop.</summary>
+    DeathDropFacts IGunnarDeathDropHost.Prepare(Humanoid body, bool genuineDeath, bool inventoryLoaded)
+    {
+        bool released = false;
+        if (genuineDeath)
+        {
+            try
+            {
+                released = _releaseCartFromDyingBody(body);
+            }
+            catch (Exception exception)
+            {
+                _log?.LogError("Gunnar died and whether a cart still holds him could not be established: " +
+                    SafeFailure.Describe(exception));
+                released = false;
+            }
+        }
+
+        return new DeathDropFacts(genuineDeath, released, OptedIn(), Authority(), _seamAvailable(), inventoryLoaded);
+    }
+
+    /// <summary>The ledger, the durable record and the log, in that order, each
+    /// on its own so one failing cannot cost the others. An order in flight ends
+    /// with the job verb: the source he was picking still exists.</summary>
+    void IGunnarDeathDropHost.Died(DeathDropReport report, Vector3 where)
+    {
+        try
+        {
+            _account.RecordDeath(NextStep("death"), report);
+        }
+        catch (Exception exception)
+        {
+            _log?.LogError("Gunnar died and the session ledger could not record it: " + SafeFailure.Describe(exception));
+        }
+
+        try
+        {
+            if (_ordered)
+            {
+                EndOrder("Gunnar died");
+            }
+        }
+        catch (Exception exception)
+        {
+            _log?.LogError("Gunnar died and his order could not be ended cleanly: " + SafeFailure.Describe(exception));
+        }
+
+        string rows = WorkerDeathRows.Serialize(DateTime.UtcNow, WorkerKey.Gunnar.Value, where.x, where.y, where.z, report);
+        string kept;
+        try
+        {
+            _deaths.TryAppend(CurrentWorldUid(), rows, out kept);
+        }
+        catch (Exception exception)
+        {
+            kept = "the death record could not be written, so this one is in the log only: " + SafeFailure.Brief(exception);
+        }
+
+        _log?.LogWarning(
+            "Gunnar died: " + WorkerDeathRows.Summary(report) + ". He held " + report.Held + ", " + report.Dropped +
+            " went on the ground and " + report.Unresolved + " are unresolved; " + kept + "." + Environment.NewLine + rows.TrimEnd('\n'));
+    }
+
+    private static long? CurrentWorldUid()
+    {
+        try
+        {
+            if (ZNet.instance == null)
+            {
+                return null;
+            }
+
+            long uid = ZNet.instance.GetWorldUID();
+            return uid == 0L ? (long?)null : uid;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
 
     // ------------------------------------------------------------------
     // ct_collect (a development aid, the way ct_haul is for #313)

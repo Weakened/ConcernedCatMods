@@ -531,8 +531,8 @@ Two owner grants, recorded in `DECISIONS.md` as **D15** and **D16** and summariz
   object, in Foreman's format.
 
 Neither grant changes a name, value or transition in this document. **D15 is implemented and pinned** in the same
-change that records it; **D16 is decided and unimplemented** - `GunnarDeathDropPort.cs` does not exist and no
-validator rule pins its call, so a Gunnar who dies still loses what he is carrying.
+change that records it; **D16 was implemented later in #381** (`GunnarDeathDropPort.cs`, the `D16 death-drop audit`),
+and neither has been observed in game.
 
 ### C4 (2026-09-17): documentation only
 

@@ -68,12 +68,11 @@ without local authority.
 
 ### The two 2026-09-29 grants (`DECISIONS.md` D15, D16)
 
-**D15 is implemented and pinned. D16 is decided and NOT implemented** - `GunnarDeathDropPort.cs` does not exist, no
-rule in `tools/validate_repo.py` pins or refuses its call, and a Gunnar who dies loses what he is carrying. Read D16's
-paragraph as a description of what is authorized, not of what runs.
+**Both are implemented and pinned.** D15's three inventory calls live in `GunnarDepositPort.cs`; D16's one drop
+lives in `GunnarDeathDropPort.cs`, behind the validator's `D16 death-drop audit`. Neither has been observed in game.
 
 **D15, the deposit.** The only way material leaves Gunnar other than a reload, an explicitly forced retirement, or
-D16's death drop once that is built.
+D16's death drop.
 It is a write into a **vanilla object's inventory**, so it is disclosed here rather than folded into "collection":
 `Inventory.MoveItemToThis` for a whole stack and, for part of one, `Inventory.AddItem` of a clone of that stack's
 own data followed by `Inventory.RemoveItem` of exactly what arrived - on a `Container` the player marked. Three
@@ -87,12 +86,18 @@ never retried blind, compensated or minted; the permit is spent by the transfer 
 inference exists in the path at all.
 
 **D16, the death drop.** A write of item instances into the world, and therefore the widest thing on this page. It
-runs on **one** event: a worker body's own death, observed from the body. Every other lifecycle path - retire,
-`retire force`, cancel, despawn, zone unload, logout, world change, plugin teardown - is unchanged and will be
-refused this call by the validator, which is to pin the death-drop call verbatim to one file and audit which verb
-may reach it. Until that lands, a Gunnar who dies loses what he is carrying.
-The cart detaches first under D4's teardown ordering. Exactly what the body holds, once; nothing is recreated from
-a name; a drop that failed is durable reconciliation evidence rather than a silent deletion.
+runs on **one** event: a worker body's own death, observed from the body - the handler hangs off the body's own
+`Character.m_onDeath`, which vanilla runs from its death path on the owner only, and asks the body's own `IsDead()`
+first. Every other lifecycle path - retire, `retire force`, cancel, despawn, zone unload, logout, world change, plugin
+teardown - is unchanged, and the validator refuses the drop call from any of them: `Humanoid.DropItem(_inventory,
+item, count)` is pinned verbatim and once in `Adapters/Workers/GunnarDeathDropPort.cs`, `.DropItem(` is refused
+everywhere else in the product (vanilla's static `ItemDrop.DropItem`, which would build an item from data this
+product chose, included), and the handler is named only by its subscription. It runs only when both switches are on,
+the probe verified it, the work-authority rule grants and the body had read its own inventory; otherwise what he
+carried is recorded unresolved. The cart detaches first through the hauling runtime's own D4 teardown, and if a joint
+still holds him nothing is dropped. Exactly what the body holds, once, measured per stack; nothing is recreated from
+a name; every death - dropped, refused or interrupted - is appended to a per-world death record beside Teamster's
+sidecars as durable reconciliation evidence.
 
 ## Per-actor summary
 
