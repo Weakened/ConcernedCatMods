@@ -763,6 +763,7 @@ public sealed class SunnivaReachabilityTests
         Assert.Contains("_npc, _voice)", runtime);
         Assert.Contains("_voice.Narrate(", runtime);
         Assert.Contains("CurrentThresholds()", runtime);
+        Assert.Contains("out string? refusal, _loop.Limits.MaxUnitsPerTrip)", runtime);
         Assert.Contains("UpkeepLimits.WithCarry(_settings.CarryPerTrip.Value)", runtime);
         Assert.Contains("hairItem: _settings.HairStyle.Value", runtime);
     }

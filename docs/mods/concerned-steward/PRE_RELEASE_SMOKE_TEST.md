@@ -61,6 +61,9 @@ Record PASS / FAIL / note against each numbered row.
 5. Walk back inside and `cs_steward recruit` again. **Expect:** her body appears
    next to you, and the settled beat ("set her pack down by the hearth… not going
    anywhere"; "Keep the wood where I can reach it…").
+   If the body appears but the settled beat does not, run `cs_steward recruit`
+   once more: the beat is only said once the census sees her body, and is never
+   said twice.
 6. `cs_steward recruit` once more: no second body. `cs_steward status` shows one
    body.
 7. Save, quit, reload: she is still there, in the same place, one of her;
