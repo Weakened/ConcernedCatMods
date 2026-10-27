@@ -4,11 +4,11 @@
 
 | Item | 0.2.7 |
 |---|---|
-| Source | `93a1dea21098858b04eb9dea03e7a75664547477` (`feat/cl-001-vertical-ladders`) |
-| Verify | `scripts/verify.ps1` PASSED: 16 assemblies, 5416 passed / 0 failed, validator exit 0 (`artifacts/ladders-0.2.7/verify-93a1dea.log`) |
-| ZIP | `TheConcernedCat-ConcernedLadders-0.2.7.zip`, SHA256 `d21837cbef32710c315403369ffecd96c4a7de6a4464a30bb680b466eb953543` (artifacts and Downloads, identical) |
-| DLL | `6ec177a122782357cc45f5e658efe0df4611d03f17cdfe00b4117f27eb87eaf4` (built = packaged = installed) |
-| Install | Manager "Import local mod", TCC-Ladders-Dev, dev probe parked; cold start logs `0.2.7+93a1dea…`, 2 loaded / 0 failed, gait source `LadderGait.blend 50bc77aeab20` |
+| Source | `c0904cd1e0f813bb7f631472071b09ebe877f270` (`feat/cl-001-vertical-ladders`) |
+| Verify | `scripts/verify.ps1` PASSED: 16 assemblies, 5423 passed / 0 failed, validator exit 0 (`artifacts/ladders-0.2.7/verify-c0904cd.log`) |
+| ZIP | `TheConcernedCat-ConcernedLadders-0.2.7.zip`, SHA256 `b68796bb95437e82542f11196a340243adcca573232721301912e3f5aef30ff2` (artifacts and Downloads, identical) |
+| DLL | `d75659047201826579e62713dbb627e1c921342eef6cecfe461952a4a3c858ed` (built = packaged = installed) |
+| Install | Manager "Import local mod", TCC-Ladders-Dev, dev probe parked; cold start logs `0.2.7+c0904cd…`, 2 loaded / 0 failed |
 | Test world | `TCCLadderHammer` (no build cost, passive enemies) |
 
 **Owner decisions 2026-10-27:** climbing (ascent and descent) is approved and locked. Getting on and off has no
@@ -25,8 +25,16 @@ rungs, and an upper mount ends in the same stance.
   native pose early (skipped, never stretched).
 - Snapping: Auto, Bottom, Top, Left side, Right side on floors and walls, rotated, all three materials: preview equals
   placement. A native snap into an existing section is refused.
-- Height: a 10-section iron stack stands; wood holds 10 only until a reload, then collapses to 5 (the game's own
-  structural support for wood). The iron stack after a reload is still to be confirmed in the playtest.
+- Height: a 10-section iron stack stands and survives a reload (checked 2026-10-27); wood holds 10 only until a
+  reload, then collapses to 5 (the game's own structural support for wood).
+- Swimming (owner 2026-10-27): Interact grabs a ladder from the water like boarding a boat (pull up to 1.2 m); checked
+  in game on an 8-section wood ladder standing in a lake.
+- Names (owner 2026-10-27): Vertical Wood Ladder / Vertical Copper Ladder / Vertical Iron Ladder, apart from the
+  vanilla Wood ladder; prefab IDs unchanged.
+- Independent code review of 4fe029c..fe61e03: no P1. Its P2s (no-landing stop searching every physics step, landing
+  diagnostics building text when off, route rise share) and the P3 rig/log/pose items are fixed; the closed-hatch top
+  entry (mount succeeds, Down releases) is kept as a known, harmless limit because refusing it broke entries from
+  further back on the lip.
 
 **Still open:** the owner playtest; controller and multiplayer rows remain BLOCKED (no controller, no second endpoint).
 
