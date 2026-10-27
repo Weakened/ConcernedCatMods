@@ -186,11 +186,11 @@ internal static class DefaultTransitions
         // visible body stays low (kneeling over the lip) while it does.
         new TransitionAction.Builder(TransitionKind.TopExit, 1f)
             // Owner 2026-10-27: "pulls themselves up and does a nice step onto the platform", an athletic hop rather than
-            // a rung-by-rung crouch. The hands push down on the top rungs as the climb's top crouch
+            // a rung-by-rung crouch. The hands slap onto the lip and push as the climb's top crouch
             // releases and the body pops up (pull-up), letting go as the shoulders rise past them, the high foot steps up onto the platform at once and
             // the low foot follows in the same hop, a short landing dip, then the climber stands and walks on.
-            .Weight(LH, 0.06f, 1f, 0.14f, 0f)
-            .Weight(RH, 0.09f, 1f, 0.17f, 0f)
+            .Reach(LH, 0f, 0f, 0.05f, 1f).Arc(LH, 0f, 0.05f, 0f, 0.04f, 0.05f).Weight(LH, 0.06f, 1f, 0.13f, 0f)
+            .Reach(RH, 0.02f, 0f, 0.07f, 1f).Arc(RH, 0.02f, 0.07f, 0f, 0.04f, 0.05f).Weight(RH, 0.08f, 1f, 0.15f, 0f)
             .Reach(LF, 0.01f, 0f, 0.28f, 1f).Arc(LF, 0.01f, 0.28f, 0f, 0.1f, 0.16f).Weight(LF, 0.44f, 1f, 0.6f, 0f)
             .Reach(RF, 0.14f, 0f, 0.36f, 1f).Arc(RF, 0.14f, 0.36f, 0f, 0.1f, 0.16f).Weight(RF, 0.48f, 1f, 0.64f, 0f)
             .Body(0f, 1f, 0.75f, 1f, 0.95f, 0f).BodyUp(0f, 0f, 0.3f, 0.04f, 0.42f, -0.12f, 0.6f, 0f)
