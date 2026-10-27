@@ -434,7 +434,9 @@ internal sealed class LadderRuntime : IDisposable
         // body a few centimetres above a floor is airborne here too and keeps the chest reach and air limits.
         // A jump beside the ladder can brush a rung, which the game reports as ground contact (in game 2026-10-27: a
         // midair grab 1.6 m up planned as a standing mount). Standing on the ladder itself is not standing.
-        bool supported = player.IsOnGround() && !StandsOnLadder(player);
+        // The game's contact can also linger a moment after leaving a rung; the feet must have a real (non-ladder)
+        // surface just under them.
+        bool supported = player.IsOnGround() && !StandsOnLadder(player) && clearance.TryFloorBelow(body.position, 0.35f, out _);
         float reach = Reach(run, segment, feet, clearance.Height, supported);
         float grip = clearance.Height * ClimbPolicy.GripFraction;
         float firstRung = segment.RungPitch * 0.5f;
