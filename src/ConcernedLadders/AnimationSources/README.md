@@ -161,10 +161,14 @@ Progress 0 → 1 runs over frames 0–120. For the exits and the top entry, prog
 * **Extra path: location** on each limb control (a knee-led foot over the lip, a hand moving ahead onto the floor).
 * **Body: `CTL_Pelvis`** location Z / Y and rotation X, added to the climbing posture.
 
-Example: to make the lead foot clear the lip higher on the upper exit, select `CTL_Foot.L` in `TopExit`, in the Graph
-Editor show only *Z Location*, select the keys of the bump (frames 18–60) and scale them up.
+**Owner decision 2026-10-27:** getting on and off has no distinct animation. `TopExit`, `SideExit`, `BottomStepOff`
+and `TopEntry` are quick grip hand-overs (only `["weight"]` is keyed, a few hundredths apart per limb) and the runtime
+runs their routes in about 0.45 s; `GroundMount` lasts 0.3 s and `AirCatch` 0.25 s. The `reach`, path and body
+channels are still exported and still work if a future decision brings an authored move back.
 
-![Upper exit](guide/TopExit_f045_side.png)
+Example: to make the hands let go later on the upper exit, select `CTL_Hand.L` and `CTL_Hand.R` in `TopExit`, show
+only the `["weight"]` curve in the Graph Editor and move the keys where it falls to 0 to the right. Then run
+`regenerate.ps1` and accept the change in `GeneratedGaitTests` (the pin names what moved).
 
 ## Edit the posture, bend and stance values
 
@@ -286,9 +290,12 @@ runtime's reversal match picks (`LimbGait.MatchPhase`).
 - Mannequin start (17-00-06): staggered contact entry on mount.
 - Game comparison (16-59-05) and playground (17-01-40): the top exit hands the step to the game's own walk; a deep
   mantle crouch is not used for an ordinary floor.
+- Owner 2026-10-27: the climbing posture (2-rung stride, hips and chest square, pelvis off the rungs) is approved and
+  locked; mounts and dismounts are quick hand-overs; there is no crouch near the top (the runtime exits or stops
+  1.3 m below the top instead).
 
-Cadence: one cycle = `stride_rungs` × 1/3 m of travel. At 0.9 m/s (owner decision) that is 1.11 s; with Run
-(1.2 m/s) 0.83 s. Climbing speed is gameplay and lives in `Domain/ClimbPolicy.cs`.
+Cadence: one cycle = `stride_rungs` × 1/3 m of travel; with the owner-approved 2-rung stride that is 0.67 m. At
+0.9 m/s (owner decision) one cycle takes 0.74 s; with Run (1.2 m/s) 0.56 s. Climbing speed is gameplay and lives in `Domain/ClimbPolicy.cs`.
 
 ## Ownership rules
 
@@ -300,5 +307,6 @@ right arm yields to the game's hammer animation. An interact yields both arms, t
 
 - Fingers keep the native hand pose (no fitted finger curl).
 - Other players see the native pose (no observer transport yet).
-- The very first frames of a ground mount can be out of reach while contacts fade in (counted, never stretched).
+- During a quick mount or dismount a limb can fall back to the game's pose a frame or two early (counted, never
+  stretched).
 - The preview runs only when Blender is allowed to run the file's script; exporting never needs it.
