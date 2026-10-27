@@ -168,7 +168,10 @@ internal sealed class LadderClearance
     internal bool SupportedFootprint(Vector3 feet) => SupportedFootprint(feet, out _);
 
     /// <summary>As <see cref="SupportedFootprint(Vector3)"/>, naming the first footprint point that failed.</summary>
-    internal bool SupportedFootprint(Vector3 feet, out string why)
+    internal bool SupportedFootprint(Vector3 feet, out string why) => SupportedFootprint(feet, 0.15f, out why);
+
+    /// <summary>As <see cref="SupportedFootprint(Vector3)"/>, allowing <paramref name="step"/> of height across it.</summary>
+    internal bool SupportedFootprint(Vector3 feet, float step, out string why)
     {
         why = "";
         if (!TrySurface(feet, 0.15f, 0.2f, out Vector3 centre)) { why = "no surface under the centre"; return false; }
@@ -176,7 +179,7 @@ internal sealed class LadderClearance
         foreach (Vector3 direction in Footprint)
         {
             if (!TrySurface(feet + direction * offset, 0.15f, 0.2f, out Vector3 floor)) { why = "no surface at " + direction.ToString("F1"); return false; }
-            if (Mathf.Abs(floor.y - centre.y) > 0.15f) { why = "step " + (floor.y - centre.y).ToString("F2") + " at " + direction.ToString("F1"); return false; }
+            if (Mathf.Abs(floor.y - centre.y) > step) { why = "step " + (floor.y - centre.y).ToString("F2") + " at " + direction.ToString("F1"); return false; }
         }
 
         return true;

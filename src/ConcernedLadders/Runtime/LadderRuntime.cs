@@ -1171,7 +1171,9 @@ internal sealed class LadderRuntime : IDisposable
     {
         string kind = _exitIsTop ? "top" : _exitIsBottom ? "bottom" : "side";
         if (!_clearance!.HasRoom(floor)) { Landing(kind, floor, "refused: no standing room"); return false; }
-        if (!_clearance.SupportedFootprint(floor, out string why)) { Landing(kind, floor, "refused: unsupported footprint (" + why + ")"); return false; }
+        // Ground at the foot of the ladder (in game 2026-10-27: a grass bump) may rise a step across the footprint, as
+        // the game itself walks; floors keep the strict tolerance.
+        if (!_clearance.SupportedFootprint(floor, _exitIsBottom ? LadderRules.StepLift : 0.15f, out string why)) { Landing(kind, floor, "refused: unsupported footprint (" + why + ")"); return false; }
         Vector3 feet = _body!.position;
         Vector3 away = Away();
         foreach (float back in new[] { 0f, 0.25f, 0.5f })
@@ -1290,7 +1292,7 @@ internal sealed class LadderRuntime : IDisposable
     {
         Rigidbody body = _body!;
         LadderClearance clearance = _clearance!;
-        if (_mode == Mode.Exiting && !clearance.SupportedFootprint(_route[_route.Length - 1]))
+        if (_mode == Mode.Exiting && !clearance.SupportedFootprint(_route[_route.Length - 1], _exitIsBottom ? LadderRules.StepLift : 0.15f, out _))
         {
             Release(Departure.Controlled); // A removed platform is never replaced by its cached destination.
             return;
