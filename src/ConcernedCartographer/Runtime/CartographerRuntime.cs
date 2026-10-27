@@ -397,6 +397,7 @@ internal sealed class CartographerRuntime : IDisposable
         // the live map instead of the destroyed one.
         _renderer.ResetMapSession();
         _routeRenderer.ResetMapSession();
+        _reshapeProbe.Reset();
         // The GUI objects the companion owns died with the previous scene;
         // drop the references before anything tries to reuse them, then start
         // this world's companion state from scratch.

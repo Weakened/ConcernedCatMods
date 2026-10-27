@@ -45,6 +45,9 @@ case-insensitive but exact, so a similarly named mod is never mistaken for one o
 - **Ownership of hand-placed markers.** Its "Share Placed Markers" option is synced and on by default. With it, every
   marker placed through the vanilla naming flow is *adopted*: the `OnPinTextEntered` postfix, or the naming box closing,
   calls `ClientPins.AdoptLocalPin`, which starts tracking that very `PinData` and shares it with the server.
+- **`AddPin` prefix.** It returns no pin only while a cartography table is being read **and** "Table Carries Player
+  Markers" is off, and only for hand-placeable types. Cartographer never adds pins inside a table read (that read is one
+  synchronous vanilla call), so its `AddPin` calls are unaffected.
 - **It removes pins it does not own.** Two console commands do this:
   - `tgm_clearlocal` calls `Minimap.RemovePin(PinData)` on **every** hand-placeable pin that is not its own.
   - `tgm_import` adopts such pins, and removes any that sit within 1 m of one of its own markers.
@@ -104,6 +107,7 @@ case-insensitive but exact, so a similarly named mod is never mistaken for one o
 | Vanilla rail hiding (`EnforceVanillaPaletteVisibility`, `OrphanChromeSweep`) | TheGreatestMap's toggles | TGM clones the vanilla icon button and moves the clone to `m_largeRoot`. The sweep only hides ancestors of vanilla rail objects and never the large root, so TGM's buttons are not hidden. With TGM present the rail is kept visible anyway (below). |
 | Enhanced palette (claims pins placed through the vanilla naming flow) | TGM's adoption of the same flow | **Two owners for one pin.** Both would track the same `PinData`. TGM would then refuse Cartographer's own re-render removals of it with "Right-click the marker for its menu…" messages, and the marker could double. **Fixed below.** |
 | `PinDeletionWatch` (vanilla `RemovePin(PinData)`; until now the only evidence that tombstones a managed marker) | `tgm_clearlocal`, `tgm_import`, and TGM's refusal prefix | `tgm_clearlocal` would have **deleted the player's Cartographer markers for good**. A removal TGM refused would still have been reported, because the report ran in a prefix. **Fixed below.** |
+| Managed marker renderings | `tgm_import` | **Not fixable from Cartographer's side; documented instead.** `tgm_import` adopts every saved hand-placeable pin that is not TGM's own, and that includes Cartographer's renderings. Afterwards both mods claim the same pin. TGM then refuses Cartographer's own re-render removals with "Right-click the marker for its menu…", which can leave a TGM-owned copy beside Cartographer's. A delete from TGM's marker menu is not a pointed-at removal, so Cartographer redraws the marker. No data is lost. The `cc_atlas compat` line tells players not to run `tgm_import` while they have Cartographer markers (L14). |
 | `MapInputGate` click prefixes | TGM's click prefixes | Cartographer skips vanilla clicks **only** while an explicit route-drawing mode is on. Otherwise the clicks pass untouched and TGM's "map out to edit" gate applies normally. |
 | `MapInputGate` wheel prefix and postfix on `UpdateMap` | TGM's transpiler on `UpdateMap` | Different patch kinds on the same method compose; nothing is replaced. |
 | Large-map vector ink (`RoadVectorLayer`), a child of `m_mapImageLarge` | TGM's resizable map frame | The ink is map-extent geometry and was not clipped, so on a shrunk or moved map it could draw past the map's edge. **Fixed below** (clip frame). |
@@ -142,7 +146,8 @@ reflected into.
    - The large-map vector ink now lives in a frame that covers exactly the map image and clips to it with a
      `RectMask2D`. That also fixes the spill on a resized TGM map.
    - With `AbovePins`, the frame becomes the sibling directly after `m_pinRootLarge`, laid over the image every
-     frame, so it is drawn over the pin icons and under anything later (the pin names are expected there).
+     frame. It is drawn over the pin icons and under anything the map draws later. The pin names are *expected* to be
+     later, but this has not been verified; L7 checks it.
    - It falls back to the shipped placement if the pin root is missing or is not inside the large map
      (`RoadLayerPlacement`).
 4. **Round Minimap** (`Map/ReshapedMinimapRoads`, default `Hide`):
@@ -206,3 +211,4 @@ Run in a disposable profile and world with TheGreatestMap 4.5.2+, HUDCompass 1.2
 | L11 | HUDCompass compass bar | Cartographer markers listed; HUDCompass's Ignore → Pin Names hides them; its cart, ship and portal markers are unaffected | THIRD-PARTY LIVE TEST PENDING |
 | L12 | Large map open with TGM's map pause | Cartographer toolbar, panels and vector ink keep working while paused | THIRD-PARTY LIVE TEST PENDING |
 | L13 | BepInEx log over a 15-minute session | No Harmony errors and no repeated Cartographer warnings | THIRD-PARTY LIVE TEST PENDING |
+| L14 | `tgm_import` with Cartographer markers present (documenting a known limit) | Record what happens: expect TGM to adopt them, "Right-click…" messages when Cartographer re-renders, and no Cartographer marker lost | THIRD-PARTY LIVE TEST PENDING |

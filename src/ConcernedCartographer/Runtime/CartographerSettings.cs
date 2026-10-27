@@ -371,7 +371,7 @@ internal sealed class CartographerSettings
             config.Bind("Companions", "DoorAccessHotkey", KeyCode.F8,
                 "While looking at a door, press this to let companions use it, or to stop them. The door's own prompt shows it. None disables the key and the prompt."),
             config.Bind("Map", "RoadLayerPosition", Atlas.RoadLayerPosition.BelowPins,
-                "Where road and route ink sits on the LARGE map. BelowPins (default): under every marker. AbovePins: over the marker icons but still under their names, so roads stay readable on a busy map. Applies to the high-precision layer (Map/HighPrecisionLargeMapRoads); the minimap always draws ink under its markers."),
+                "Where road and route ink sits on the LARGE map. BelowPins (default): under every marker. AbovePins: over the marker icons, so roads stay readable on a busy map (marker names are expected to stay on top). Applies to the high-precision layer (Map/HighPrecisionLargeMapRoads); the minimap always draws ink under its markers."),
             config.Bind("Map", "ReshapedMinimapRoads", Atlas.ReshapedMinimapRoads.Hide,
                 "Only matters with Round Minimap installed. Its round, rotating minimap turns the terrain and the markers, but the overlay layer road and route ink is drawn in keeps its square, north-up shape. Hide (default): leave the ink off the minimap while the round shape is on, rather than show it pointing the wrong way. Show: draw it anyway. The large map is never affected."));
     }

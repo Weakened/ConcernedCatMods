@@ -303,10 +303,15 @@ internal sealed class RoadVectorLayer
     {
         RectTransform frame = _frame!;
         Transform? parent = frame.parent;
-        int wantedIndex = pinRoot.GetSiblingIndex() + 1;
-        if (parent != null && frame.GetSiblingIndex() != wantedIndex && wantedIndex < parent.childCount)
+        int pinIndex = pinRoot.GetSiblingIndex();
+        int frameIndex = frame.GetSiblingIndex();
+        if (frameIndex != pinIndex + 1)
         {
-            frame.SetSiblingIndex(wantedIndex);
+            // SetSiblingIndex names the final position: from before the pin
+            // root that is the pin root's current index (it shifts down by
+            // one), from anywhere after it the slot right behind it. This
+            // also holds when the pin root is the last child.
+            frame.SetSiblingIndex(frameIndex < pinIndex ? pinIndex : pinIndex + 1);
         }
 
         var center = new Vector2(0.5f, 0.5f);

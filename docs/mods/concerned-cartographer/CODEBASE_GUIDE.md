@@ -1064,9 +1064,11 @@ The pure core of the RC15 final beta blocker fix (regressions in
 
 The explicit-delete capture behind `PinTombstoneRule`, mirroring the
 `PlayerInputGate` pattern (install in the runtime constructor,
-`Uninstall()` on dispose, fail-soft with one warning). One Harmony
-prefix on `Minimap.RemovePin(PinData)` reports every non-self removal
-to the runtime; decompile-verified: the user-facing delete paths
+`Uninstall()` on dispose, fail-soft with one warning). A Harmony
+prefix and postfix on `Minimap.RemovePin(PinData)` report every non-self
+removal to the runtime, after the call and only if the pin really left
+the list (#419). A finalizer-closed scope around
+`RemovePin(Vector3, float)` marks the removals the player pointed at; decompile-verified: the user-facing delete paths
 (large-map right click, gamepad JoyTabRight) both route through
 `RemovePin(Vector3, float) → RemovePin(PinData)`, while map
 reconstruction (`ClearPins`) bypasses `RemovePin` entirely, so a

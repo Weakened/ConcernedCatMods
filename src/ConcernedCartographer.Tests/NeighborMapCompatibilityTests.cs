@@ -277,6 +277,19 @@ public class NeighborMapCompatibilityTests
     }
 
     [Fact]
+    public void TheCompatReportNamesTheThreeModsOnlyOnAnExactGuid()
+    {
+        // Review of 5dc885c: the report used substring matching, so a
+        // "DeathMonger.TheGreatestMapAddon" would have been listed as The
+        // Greatest Map with none of its behaviour applied.
+        string registry = Source("Runtime", "CompatibilityRegistry.cs");
+        Assert.Contains("\"The Greatest Map\", exact: true,", registry, StringComparison.Ordinal);
+        Assert.Contains("\"HUDCompass\", exact: true,", registry, StringComparison.Ordinal);
+        Assert.Contains("\"Round Minimap\", exact: true,", registry, StringComparison.Ordinal);
+        Assert.Contains("string.Equals(guid, known.GuidFragment, StringComparison.Ordinal)", registry, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DetectionNeverReachesIntoAnotherModsTypes()
     {
         foreach (string file in new[]

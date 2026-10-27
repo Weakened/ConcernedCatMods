@@ -3,8 +3,9 @@ namespace TheConcernedCat.ConcernedCartographer.Atlas;
 /// <summary>#419: where the high-precision road and route ink sits relative
 /// to the map's pins on the LARGE map. BelowPins is the shipped behaviour
 /// (ink under the map image's pins, so every marker stays on top);
-/// AbovePins lifts the ink over the pin icons — still under the pin names,
-/// so a label is never covered by a road.</summary>
+/// AbovePins lifts the ink over the pin icons. It is placed directly after
+/// the pin icons' root, so anything the map draws later (the pin names are
+/// expected to be) stays on top; that ordering is checked live (L7).</summary>
 public enum RoadLayerPosition
 {
     BelowPins = 0,

@@ -106,13 +106,24 @@ internal static class PinDeletionWatch
             }
             else
             {
-                // A finalizer, not a postfix: it runs even if the call
-                // throws, so the scope can never stay open.
-                _harmony.Patch(
-                    removeAtPointer,
-                    prefix: new HarmonyMethod(typeof(PinDeletionWatch), nameof(EnterPointerRemoval)),
-                    finalizer: new HarmonyMethod(typeof(PinDeletionWatch), nameof(LeavePointerRemoval)));
-                PointerScopeInstalled = true;
+                // Its own try: a failure here must not unwind the deletion
+                // patch above, which is installed and stays owned.
+                try
+                {
+                    // A finalizer, not a postfix: it runs even if the call
+                    // throws, so the scope can never stay open.
+                    _harmony.Patch(
+                        removeAtPointer,
+                        prefix: new HarmonyMethod(typeof(PinDeletionWatch), nameof(EnterPointerRemoval)),
+                        finalizer: new HarmonyMethod(typeof(PinDeletionWatch), nameof(LeavePointerRemoval)));
+                    PointerScopeInstalled = true;
+                }
+                catch (Exception pointerException)
+                {
+                    log.LogWarning(
+                        $"Pointed-at pin removal could not be watched ({SafeLogText.Brief(pointerException)}); " +
+                        "while a mod that clears other mods' pins is installed, removed Cartographer markers will be redrawn rather than deleted.");
+                }
             }
         }
         catch (Exception exception)
