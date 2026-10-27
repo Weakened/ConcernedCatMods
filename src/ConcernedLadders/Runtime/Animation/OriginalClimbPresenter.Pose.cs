@@ -63,7 +63,16 @@ internal sealed partial class OriginalClimbPresenter
         actionUp -= ClimbTuning.TopApproachDrop * overTop;
         actionToward += ClimbTuning.TopApproachToward * overTop;
         lean += ClimbTuning.TopApproachLean * overTop;
-        Vector3 pelvis = feet + Vector3.up * (rig.PelvisHeight - ClimbTuning.PelvisDrop + bodyUp * blend + actionUp) +
+        if (exit && landing.y < feet.y)
+        {
+            // A landing below the feet (in game 2026-10-27: a side floor 0.18 m down) is reached by the capsule only at
+            // the route's end; the visible body lowers as the feet transfer onto it, so the stepping leg never overreaches.
+            float transfer = 0f;
+            for (int foot = 2; foot < 4; foot++) { transfer = Mathf.Max(transfer, action!.ReachAt(foot, progress) * action.WeightAt(foot, progress)); }
+            actionUp += (landing.y - feet.y) * transfer;
+        }
+
+        Vector3 pelvis =feet + Vector3.up * (rig.PelvisHeight - ClimbTuning.PelvisDrop + bodyUp * blend + actionUp) +
                          toward * (ClimbTuning.PelvisToward + bodyToward * blend + actionToward) +
                          right * (ClimbTuning.SwayShift * sway);
         Quaternion bodyRotation = Quaternion.LookRotation(toward, Vector3.up) *
