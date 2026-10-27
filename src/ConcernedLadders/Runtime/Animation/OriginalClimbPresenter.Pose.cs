@@ -64,12 +64,16 @@ internal sealed partial class OriginalClimbPresenter
         Vector3 posedBody = animator.bodyPosition;
         Quaternion bodyDelta = animator.bodyRotation * Quaternion.Inverse(nativeRotation);
 
-        for (int limb = 0; limb < 4; limb++) { actor.Asked[limb] = false; }
+        for (int limb = 0; limb < 4; limb++) { actor.Asked[limb] = false; actor.Record[limb] = default; }
         for (int limb = 0; limb < 4; limb++)
         {
             bool hand = limb < 2;
             if ((limb == 0 && (native & (NativeActionParts.LeftArm | NativeActionParts.UpperBody)) != 0) ||
-                (limb == 1 && (native & (NativeActionParts.RightArm | NativeActionParts.UpperBody)) != 0)) { continue; }
+                (limb == 1 && (native & (NativeActionParts.RightArm | NativeActionParts.UpperBody)) != 0))
+            {
+                actor.Record[limb] = new ContactRecord { Native = true };
+                continue;
+            }
             OriginalLimbContact contact = actor.Gait.Contact(limb);
             float side = limb == 0 || limb == 2 ? -1f : 1f;
             Vector3 root = posedBody + bodyDelta * (rig.Roots[limb].position - nativeBody);
@@ -83,6 +87,7 @@ internal sealed partial class OriginalClimbPresenter
                 actor.Gait.Arc(limb, contact.Swing, out float arcOut, out float arcUp);
                 surface += outward * arcOut + Vector3.up * arcUp;
             }
+            float railBlend = 0f;
             if (hand)
             {
                 // Near the top there is no rung left within reach above: the hand takes the rail instead, at a height
@@ -93,6 +98,7 @@ internal sealed partial class OriginalClimbPresenter
                     float railY = Mathf.Min(frame.Run.Top.Y - .04f, root.y - ClimbTuning.RailBelowShoulder);
                     Vector3 railGrip = RungSurface(frame, railY, ClimbTuning.RailOut, side * ClimbTuning.RailSide);
                     surface = Vector3.Lerp(surface, railGrip, rail);
+                    railBlend = rail;
                 }
             }
 
@@ -137,16 +143,28 @@ internal sealed partial class OriginalClimbPresenter
             }
 
             float reach = Vector3.Distance(root, pivot);
-            if (weight <= .01f) { continue; } // Already handed to the native pose on purpose (mount/exit windows): not a fit.
+            // A contact is planted when the gait holds it on a rung and nothing else (entry, exit, rail, slide) blends
+            // it: that is when the 2 cm error / 1 cm drift targets apply.
+            bool planted = contact.Planted && !exit && railBlend <= 0f && actor.SlideBlend <= 0f && weight >= .999f;
+            var record = new ContactRecord
+            {
+                Has = true, Target = surface, Planted = planted, Requested = weight, Ratio = reach / rig.Reach[limb],
+                RungCentre = RungSurface(frame, contact.Height, 0f, span * side), Hand = hand,
+            };
+            if (weight <= .01f) { actor.Record[limb] = record; continue; } // Handed to the native pose on purpose (mount/exit windows).
             actor.Fit.Sample(limb, reach / rig.Reach[limb], root, feet, frame, outward);
             if (reach > rig.Reach[limb] * ClimbTuning.ReachLimit)
             {
-                actor.Fit.Skip(limb);
+                actor.Fit.Skip(limb, planted);
+                record.Skipped = true;
+                actor.Record[limb] = record;
                 continue; //never stretch a limb or pretend the unreachable target is a successful plant.
             }
 
             // A contact nearing the limit hands over to the native pose gradually instead of popping off at it.
             weight *= 1f - Smooth01((reach / rig.Reach[limb] - ClimbTuning.FadeFrom) / (ClimbTuning.ReachLimit - ClimbTuning.FadeFrom));
+            record.Effective = weight;
+            actor.Record[limb] = record;
 
             actor.Lease.GoalInIK(animator, limb, pivot, rotation, weight);
             if (weight >= .999f) { actor.Asked[limb] = true; actor.LastPivot[limb] = pivot; }
@@ -211,6 +229,8 @@ internal sealed partial class OriginalClimbPresenter
         private readonly float[] _worst = new float[4], _sum = new float[4], _rootUp = new float[4], _rootOut = new float[4];
         private readonly float[] _error = new float[4], _errorSum = new float[4];
         private readonly int[] _errorCount = new int[4];
+        private readonly int[] _planted = new int[4], _plantedSkips = new int[4], _plantedFades = new int[4];
+        private readonly float[] _patchWorst = new float[4], _patchSum = new float[4], _gapMin = new float[4], _gapMax = new float[4], _drift = new float[4];
         private PresentedMotion _motion;
         private float _since;
         private int _lines;
@@ -241,7 +261,26 @@ internal sealed partial class OriginalClimbPresenter
             _rootOut[limb] = Vector3.Dot(root - plane, outward);
         }
 
-        internal void Skip(int limb) => _skips[limb]++;
+        internal void Skip(int limb, bool planted)
+        {
+            _skips[limb]++;
+            if (planted) { _plantedSkips[limb]++; }
+        }
+
+        /// <summary>A planted contact measured after the solve: patch error to its target, surface gap (negative =
+        /// penetration), drift since it was planted, and whether reach fading weakened it.</summary>
+        internal void Planted(int limb, float patchError, float gap, float drift, bool faded)
+        {
+            if (float.IsNaN(patchError) || float.IsNaN(gap) || float.IsNaN(drift)) { return; }
+            if (_planted[limb] == 0) { _gapMin[limb] = gap; _gapMax[limb] = gap; }
+            _planted[limb]++;
+            _patchSum[limb] += patchError;
+            _patchWorst[limb] = Math.Max(_patchWorst[limb], patchError);
+            _gapMin[limb] = Math.Min(_gapMin[limb], gap);
+            _gapMax[limb] = Math.Max(_gapMax[limb], gap);
+            _drift[limb] = Math.Max(_drift[limb], drift);
+            if (faded) { _plantedFades[limb]++; }
+        }
 
         /// <summary>Distance between the solved end bone and the goal asked for at full weight on the previous pass.</summary>
         internal void Solved(int limb, float error)
@@ -271,7 +310,14 @@ internal sealed partial class OriginalClimbPresenter
                         .Append(" up=").Append(_rootUp[limb].ToString("0.00", CultureInfo.InvariantCulture))
                         .Append(" out=").Append(_rootOut[limb].ToString("0.00", CultureInfo.InvariantCulture))
                         .Append(" err=").Append(_error[limb].ToString("0.000", CultureInfo.InvariantCulture))
-                        .Append('/').Append((_errorCount[limb] == 0 ? 0f : _errorSum[limb] / _errorCount[limb]).ToString("0.000", CultureInfo.InvariantCulture));
+                        .Append('/').Append((_errorCount[limb] == 0 ? 0f : _errorSum[limb] / _errorCount[limb]).ToString("0.000", CultureInfo.InvariantCulture))
+                        .Append(" planted=").Append(_planted[limb])
+                        .Append(" patch=").Append(_patchWorst[limb].ToString("0.000", CultureInfo.InvariantCulture))
+                        .Append('/').Append((_planted[limb] == 0 ? 0f : _patchSum[limb] / _planted[limb]).ToString("0.000", CultureInfo.InvariantCulture))
+                        .Append(" gap=").Append(_gapMin[limb].ToString("0.000", CultureInfo.InvariantCulture))
+                        .Append("..").Append(_gapMax[limb].ToString("0.000", CultureInfo.InvariantCulture))
+                        .Append(" drift=").Append(_drift[limb].ToString("0.000", CultureInfo.InvariantCulture))
+                        .Append(" pfade=").Append(_plantedFades[limb]).Append(" pskip=").Append(_plantedSkips[limb]);
                 }
 
                 owner.Log(text.ToString());
@@ -287,6 +333,16 @@ internal sealed partial class OriginalClimbPresenter
         {
             Array.Clear(_count, 0, 4); Array.Clear(_skips, 0, 4); Array.Clear(_worst, 0, 4); Array.Clear(_sum, 0, 4);
             Array.Clear(_error, 0, 4); Array.Clear(_errorSum, 0, 4); Array.Clear(_errorCount, 0, 4);
+            Array.Clear(_planted, 0, 4); Array.Clear(_plantedSkips, 0, 4); Array.Clear(_plantedFades, 0, 4);
+            Array.Clear(_patchWorst, 0, 4); Array.Clear(_patchSum, 0, 4); Array.Clear(_gapMin, 0, 4); Array.Clear(_gapMax, 0, 4); Array.Clear(_drift, 0, 4);
         }
+    }
+
+    /// <summary>What one limb was asked for in the last IK pass (measurement only).</summary>
+    internal struct ContactRecord
+    {
+        internal bool Has, Planted, Skipped, Native, Hand;
+        internal Vector3 Target, RungCentre;
+        internal float Requested, Effective, Ratio;
     }
 }

@@ -109,7 +109,7 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
         {
             if (ReferenceEquals(player, null) || ReferenceEquals(actor.Rig.Player, player))
             {
-                if (actor.Active) { actor.Fit.Report(this, Time.time, true); }
+                if (actor.Active) { actor.Fit.Report(this, Time.time, true); ContactTrace.Flush(); }
                 actor.Active = false;
                 _closedPlayer = actor.Rig.Player; _closedSession = actor.Frame.Session;
             }
@@ -129,6 +129,7 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
                 // After the animator's evaluation the end bones hold the solved pose: how far each landed from its goal.
                 for (int limb = 0; limb < 4; limb++)
                 { if (actor.Asked[limb]) { actor.Fit.Solved(limb, Vector3.Distance(actor.Rig.Ends[limb].position, actor.LastPivot[limb])); } }
+                MeasureContacts(actor);
             }
 
             if (!actor.Rig.Valid || !LocalOwner(actor.Rig.Player) || (Time.time - actor.Seen > 1f)) { actor.Active = false; }
@@ -136,6 +137,37 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
         }
         foreach (CharacterAnimEvent key in _remove) { _actors.Remove(key); }
         if (_closedPlayer == null) { _closedPlayer = null; }
+    }
+
+    /// <summary>Planted-contact measurement (owner spec 2026-10-27, section 3): the solved palm patch or sole against
+    /// its target, the surface gap to the rung (negative = into the rung), and drift while the same target holds.</summary>
+    private void MeasureContacts(Actor actor)
+    {
+        for (int limb = 0; limb < 4; limb++)
+        {
+            ContactRecord record = actor.Record[limb];
+            if (!record.Has) { actor.Anchored[limb] = false; continue; }
+            Vector3 patch = actor.Rig.Patch(limb);
+            float error = Vector3.Distance(patch, record.Target);
+            float gap = record.Hand
+                ? Vector3.Distance(patch, record.RungCentre) - ClimbTuning.HandRungClearance
+                : patch.y - (record.RungCentre.y + ClimbPresentationFrame.HalfHeight);
+            bool faded = record.Effective < record.Requested - .01f;
+            if (record.Planted && actor.Anchored[limb] && (record.Target - actor.AnchorTarget[limb]).sqrMagnitude < 1e-6f)
+            {
+                actor.Fit.Planted(limb, error, gap, Vector3.Distance(patch, actor.AnchorPatch[limb]), faded);
+            }
+            else if (record.Planted)
+            {
+                actor.Anchored[limb] = true;
+                actor.AnchorTarget[limb] = record.Target;
+                actor.AnchorPatch[limb] = patch;
+                actor.Fit.Planted(limb, error, gap, 0f, faded);
+            }
+            else { actor.Anchored[limb] = false; }
+
+            if (ClimbTuning.TraceContacts) { ContactTrace.Row(actor.Frame, limb, record, patch, error, gap); }
+        }
     }
 
     private static void BeforeNativeIK(CharacterAnimEvent __instance, int layerIndex)
@@ -232,6 +264,10 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
         internal bool Caught;
         internal readonly FitCounters Fit = new FitCounters();
         internal readonly bool[] Asked = new bool[4];
+        internal readonly ContactRecord[] Record = new ContactRecord[4];
+        internal readonly Vector3[] AnchorTarget = new Vector3[4];
+        internal readonly Vector3[] AnchorPatch = new Vector3[4];
+        internal readonly bool[] Anchored = new bool[4];
         internal readonly Vector3[] LastPivot = new Vector3[4];
         internal int TuningVersion = -1;
         internal readonly NativeIKLease Lease = new NativeIKLease();

@@ -40,6 +40,12 @@ internal static class ClimbTuning
     internal static float FootBallForward = 0.15f;
     internal static float FootAnkleHeight = 0.09f;
 
+    /// <summary>Palm patch to rung centre when gripping (rung half-depth plus palm thickness): the gap measure's zero.</summary>
+    internal static float HandRungClearance = 0.075f;
+
+    /// <summary>Distance from the toe-base joint down to the sole surface (measurement definition of the sole patch).</summary>
+    internal static float SoleThickness = 0.03f;
+
     /// <summary>Sole contact: the ball of the foot sits this far above the rung centre and this far toward the
     /// climber from the rung's centre plane; feet sit this far either side of the centreline.</summary>
     internal static float FootAbove = 0.045f;
@@ -82,6 +88,10 @@ internal static class ClimbTuning
 
     /// <summary>Development diagnostics: log each change of the ladder snap decision (off in normal play).</summary>
     internal static bool LogSnapDecisions = false;
+
+    /// <summary>Development diagnostics: write one CSV row per limb per frame to BepInEx/ladder_contact_trace.csv
+    /// (bounded; off in normal play).</summary>
+    internal static bool TraceContacts = false;
 
     internal static int Version { get; private set; }
 

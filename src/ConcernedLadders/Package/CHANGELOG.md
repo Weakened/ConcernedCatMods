@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.7
+
+Internal development build. Not a release.
+
 ## 0.2.6
 
 Internal owner test candidate. Not a release.

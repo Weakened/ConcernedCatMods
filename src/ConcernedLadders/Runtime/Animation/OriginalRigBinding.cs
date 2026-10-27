@@ -16,6 +16,10 @@ internal sealed class OriginalRigBinding
     internal readonly Transform[] Joints = new Transform[4];
     internal readonly Transform[] Roots = new Transform[4];
     internal readonly float[] Reach = new float[4];
+
+    /// <summary>Contact landmarks for measurement: the middle finger's base knuckle for each hand (the palm patch lies on
+    /// the wrist→knuckle line) and the toe base for each foot (the ball of the foot). Index 0/1 hands, 2/3 feet.</summary>
+    internal readonly Transform[] Landmark = new Transform[4];
     internal readonly float PelvisHeight;
     internal readonly float ShoulderHeight;
     private readonly int _controller, _avatar;
@@ -43,6 +47,8 @@ internal sealed class OriginalRigBinding
             Reach[i] = Vector3.Distance(Roots[i].position, Joints[i].position) + Vector3.Distance(Joints[i].position, Ends[i].position);
             if (Reach[i] < 0.2f || Reach[i] > 2f) { throw new InvalidOperationException("Live humanoid limb dimensions are incompatible."); }
         }
+        Landmark[0] = Bone(HumanBodyBones.LeftMiddleProximal); Landmark[1] = Bone(HumanBodyBones.RightMiddleProximal);
+        Landmark[2] = Bone(HumanBodyBones.LeftToes); Landmark[3] = Bone(HumanBodyBones.RightToes);
         // A dimension-based initial stance, subject to actual-rig fitting. Native male leg chain ~.896m,
         // neutral pelvis ~.839m. The .93 ratio does not copy an evaluated jump/crouch as a rest pose.
         PelvisHeight = Math.Min(Reach[2], Reach[3]) * .93f;
@@ -85,6 +91,21 @@ internal sealed class OriginalRigBinding
         BodyFromPelvis = Quaternion.Inverse(Animator.bodyRotation) * (Animator.bodyPosition - Hips.position);
         NativePelvisInBody = Quaternion.Inverse(Animator.bodyRotation) * (Hips.position - Animator.bodyPosition);
         BodyBound = true;
+    }
+
+    /// <summary>The solved palm patch (the point HandPalmAlong from the wrist toward the middle knuckle) or ball of the
+    /// foot (the toe base, lowered by the sole thickness). Read after the animator evaluated.</summary>
+    internal Vector3 Patch(int limb)
+    {
+        Transform end = Ends[limb], mark = Landmark[limb];
+        if (limb < 2)
+        {
+            Vector3 along = mark.position - end.position;
+            float length = along.magnitude;
+            return length < 1e-4f ? end.position : end.position + along * (Mathf.Min(ClimbTuning.HandPalmAlong, length) / length);
+        }
+
+        return mark.position - Vector3.up * ClimbTuning.SoleThickness;
     }
 
     private Transform Bone(HumanBodyBones bone)
