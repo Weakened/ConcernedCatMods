@@ -126,6 +126,7 @@ internal sealed class CartographerRuntime : IDisposable
     private readonly SyncTransport _syncTransport;
     private string _authorId = "";
     private readonly CompatibilityRegistry _compatibility = new();
+    private readonly MinimapReshapeProbe _reshapeProbe = new();
     private readonly AtlasBackupTools _backupTools;
     private long? _worldUid;
     private bool _mapReady;
@@ -303,6 +304,9 @@ internal sealed class CartographerRuntime : IDisposable
         // managed pin. Absence of a rendering never tombstones again.
         PinDeletionWatch.Install(log);
         PinDeletionWatch.ExplicitDelete = HandleExplicitVanillaDelete;
+        // #419: a removal another mod refused leaves the pin listed and is
+        // not a deletion.
+        PinDeletionWatch.StillListed = pin => _pinAdapter.ContainsPin(pin);
 
         // RC11 blocker 7: the wheel over any CC panel/list/field scrolls
         // that UI only — the map zoom underneath nets to zero.
@@ -458,14 +462,15 @@ internal sealed class CartographerRuntime : IDisposable
     /// <summary>RC15: sink for <see cref="Map.PinDeletionWatch"/> — the
     /// explicit vanilla RemovePin event, the only evidence that may
     /// tombstone a managed pin.</summary>
-    private void HandleExplicitVanillaDelete(Minimap.PinData pin)
+    private void HandleExplicitVanillaDelete(Minimap.PinData pin, bool pointerInitiated)
     {
         if (_disposed || !_mapReady)
         {
             return;
         }
 
-        _pinAdapter.HandleExplicitVanillaDelete(_pinStore, pin);
+        _pinAdapter.HandleExplicitVanillaDelete(
+            _pinStore, pin, pointerInitiated, _compatibility.Neighbors.RemovesForeignPinsWithoutPointing);
     }
 
     private void HandleWalkingManualLook(Player player)
@@ -965,6 +970,7 @@ internal sealed class CartographerRuntime : IDisposable
             StopSailingRouteFollow();
             if (!_settings.Enabled.Value)
             {
+                _renderer.MinimapTextureHeld = false;
                 _renderer.EnsureTextureFallback();
                 _routeRenderer.TickVisibility(vectorRoutesActive: false);
                 _overlayRelabel.Restore();
@@ -1215,8 +1221,18 @@ internal sealed class CartographerRuntime : IDisposable
 
         // DEF-v1.0-006: the sub-texel large-map road+route layer follows
         // pan/zoom every frame and rebakes only on data/zoom-step changes.
+        // #419: a minimap another mod has made round and rotating cannot
+        // carry the texture ink (its overlay layer stays square and
+        // north-up), so it is held off the minimap unless the player asked
+        // for it; the large map is never affected.
+        Minimap? minimapForReshape = Minimap.instance;
+        _renderer.MinimapTextureHeld = MinimapReshapeRule.SuppressTexture(
+            reshaperInstalled: _compatibility.Neighbors.ReshapesSmallMap,
+            reshapeActive: _compatibility.Neighbors.ReshapesSmallMap && _reshapeProbe.IsReshaped(minimapForReshape),
+            policy: _settings.ReshapedMinimapRoads.Value,
+            largeMapOpen: minimapForReshape != null && minimapForReshape.m_mode == Minimap.MapMode.Large);
         _renderer.TickVectorLayer(unscaledDeltaTime, _atlas, _routeStore);
-        _routeRenderer.TickVisibility(_renderer.VectorLayerActive);
+        _routeRenderer.TickVisibility(_renderer.VectorLayerActive || _renderer.MinimapTextureHeld);
 
         // RC10 feedback 7: keep Jötunn's overlay button reading
         // "Map Overlays" (reversible, exact-match rename; ~1 Hz).

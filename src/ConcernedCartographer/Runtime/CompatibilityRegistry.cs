@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BepInEx.Bootstrap;
 using BepInEx.Logging;
+using TheConcernedCat.ConcernedCartographer.Atlas;
 using TheConcernedCat.ConcernedCartographer.Reporting;
 
 namespace TheConcernedCat.ConcernedCartographer.Runtime;
@@ -44,6 +45,14 @@ internal sealed class CompatibilityRegistry
             "Table mod detected: Concerned Cartographer sharing stays on its own cc_sync channel and never touches table data."),
         new KnownMod("onemap", "OneMap",
             "Shared-map mod detected: vanilla shared pins carry owner IDs and remain foreign/untouchable to Concerned Cartographer."),
+        // #419: exact GUIDs, verified against each mod (see
+        // GREATESTMAP_COMPATIBILITY.md); NeighborMapMods matches them exactly.
+        new KnownMod(NeighborMapMods.TheGreatestMapGuid.ToLowerInvariant(), "The Greatest Map",
+            "Map mod detected: it owns hand-placed markers (it shares them), so Concerned Cartographer's palette and adopt prompts step aside and its own markers are made only from the CC toolbar, Quick Pin and survey. A Cartographer marker removed by The Greatest Map's commands (tgm_clearlocal, tgm_import) is kept and redrawn rather than deleted; delete it with a right-click or from the Pin Workbench."),
+        new KnownMod(NeighborMapMods.HudCompassGuid, "HUDCompass",
+            "Compass mod detected: Cartographer markers are ordinary map pins, so they appear on its compass bar; hide them there with its own Ignore settings if you prefer. Its dynamic cart, ship and portal markers are its own and are never touched."),
+        new KnownMod(NeighborMapMods.RoundMinimapGuid, "Round Minimap",
+            "Minimap mod detected: Cartographer markers turn with the round minimap. Road and route ink cannot (the overlay layer it is drawn in keeps its square, north-up shape), so it is left off the minimap while the round shape is on; Map/ReshapedMinimapRoads = Show draws it anyway. The large map is unaffected."),
     };
 
     private bool _evaluated;
@@ -54,6 +63,11 @@ internal sealed class CompatibilityRegistry
     /// workbench hotkey's adopt-prompt for unadopted vanilla pins into a
     /// read-only info panel (explicit cc_pins adopt still works).</summary>
     public bool PinManagerPresent { get; private set; }
+
+    /// <summary>#419: the map mods detected by exact GUID. Empty until
+    /// <see cref="Evaluate"/> has run.</summary>
+    public NeighborMapModPresence Neighbors { get; private set; } =
+        NeighborMapMods.Detect(null);
 
     public void Evaluate(ManualLogSource log)
     {
@@ -85,6 +99,14 @@ internal sealed class CompatibilityRegistry
                 {
                     PinManagerPresent = true;
                 }
+            }
+
+            Neighbors = NeighborMapMods.Detect(Chainloader.PluginInfos.Keys);
+            if (Neighbors.OwnsVanillaPinFlow)
+            {
+                // A mod that adopts hand-placed markers is a pin manager for
+                // this purpose: one pin, one owner.
+                PinManagerPresent = true;
             }
         }
         catch (Exception exception)

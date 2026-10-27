@@ -989,7 +989,7 @@ Skippable Harmony prefixes on the public `Minimap.OnMapLeftClick`/`OnMapDblClick
 
 ### `Map/RoadVectorLayer.cs` (#98, DEF-v1.0-006)
 
-The high-precision large-map road layer: road vertices are baked once into zoom-independent map space (`Domain/RoadVectorMath`) as batched quads under `m_mapImageLarge` — above Jötunn's overlay (its first child), below pins and the player marker — and a per-frame container transform reproduces vanilla's `((m − uvMin)/uvSize)·rectSize` exactly for any pan/zoom. Rebakes only on road-data changes (debounced), zoom-step drift, palette change, or a slow fog/resolution parity timer; unexplored segments are skipped at bake. Kind-split visibility mirrors `SetOverlayEnabled`. Budgeted (16k quads), fail-soft: any error disables the layer for the session and the texture overlay continues. `Map/HighPrecisionLargeMapRoads` toggles it.
+The high-precision large-map road layer: road vertices are baked once into zoom-independent map space (`Domain/RoadVectorMath`) as batched quads under `m_mapImageLarge` — above Jötunn's overlay (its first child), below pins and the player marker — and a per-frame container transform reproduces vanilla's `((m − uvMin)/uvSize)·rectSize` exactly for any pan/zoom. Rebakes only on road-data changes (debounced), zoom-step drift, palette change, or a slow fog/resolution parity timer; unexplored segments are skipped at bake. Kind-split visibility mirrors `SetOverlayEnabled`. Budgeted (16k quads), fail-soft: any error disables the layer for the session and the texture overlay continues. `Map/HighPrecisionLargeMapRoads` toggles it. #419: the container sits inside a `CcRoadVectorFrame` that covers exactly the map image and clips to it (`RectMask2D`). With `Map/RoadLayerPosition = AbovePins`, that frame becomes the sibling directly after `m_pinRootLarge` and is laid over the image each frame (`Domain/Atlas/MapLayerOrder.cs` decides the placement and its fallback).
 
 ### `Map/LiveAlignmentProbe.cs` + `Domain/AlignmentVerdicts.cs` + `Domain/RoadVectorMath.cs` (#98)
 
@@ -1285,6 +1285,13 @@ Peer-to-peer share transport over `ZRoutedRpc` (`CC_AtlasShare`, protocol versio
 ### `Runtime/CompatibilityRegistry.cs` (v0.8)
 
 Detects known neighbor mods by BepInEx GUID and applies coexistence policies (e.g. with another pin manager present the workbench hotkey never prompts adoption). Backs `cc_atlas compat`.
+
+#419 adds TheGreatestMap, HUDCompass and Round Minimap by their exact, verified GUIDs (`Domain/Atlas/NeighborMapMods.cs`). Each detected mod contributes a behaviour flag on `Neighbors`:
+- `OwnsVanillaPinFlow` (TheGreatestMap) makes it a pin manager.
+- `RemovesForeignPinsWithoutPointing` (TheGreatestMap) feeds `PinTombstoneRule`'s five-input overload, so only a pointed-at removal tombstones a managed marker.
+- `ReshapesSmallMap` (Round Minimap), together with `Map/MinimapReshapeProbe`, holds the road and route texture ink off a round minimap (`Map/ReshapedMinimapRoads`).
+
+`PinDeletionWatch` now reports after `RemovePin(PinData)`, and only when the pin really left the list. A scope around `RemovePin(Vector3, float)` marks removals the player pointed at. Evidence and the live matrix: `GREATESTMAP_COMPATIBILITY.md`.
 
 ## 12. Tests
 
