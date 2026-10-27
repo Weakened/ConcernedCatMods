@@ -17,7 +17,9 @@ using TheConcernedCat.ConcernedSteward.Domain.Persistence;
 using TheConcernedCat.ConcernedSteward.Domain.Quest;
 using TheConcernedCat.ConcernedSteward.Domain.Recruitment;
 using TheConcernedCat.ConcernedSteward.Domain.Scope;
+using TheConcernedCat.ConcernedSteward.Domain.Speech;
 using TheConcernedCat.ConcernedSteward.Domain.Upkeep;
+using TheConcernedCat.ConcernedSteward.Domain.Upkeep.Round;
 using TheConcernedCat.Interop;
 using TheConcernedCat.Interop.Haul;
 using TheConcernedCat.Settlement.Designations;
@@ -60,6 +62,8 @@ internal sealed class StewardRuntime
     private readonly DepotStore _depot;
     private readonly WorldFuelTargets _fires;
     private readonly StewardDesignationSite _site = new StewardDesignationSite();
+    private readonly StewardVoice _voice;
+    private string? _thresholdRefusal;
 
     private string _epoch = string.Empty;
     private bool _installed;
@@ -97,11 +101,21 @@ internal sealed class StewardRuntime
                 _settings.ModelIndex.Value,
                 _settings.Garment.Value,
                 _settings.GarmentLegs.Value,
-                hairItem: string.Empty,
+                hairItem: _settings.HairStyle.Value,
                 hairColour: _settings.HairColour.Value,
                 skinColour: string.Empty),
             message => _log(message));
-        _loop = new UpkeepLoop(UpkeepLimits.Default, _journal, Report, _plan, _npc);
+        // #382: what she says reaches the screen, not only the log. The sink
+        // reads the setting on every line, so muting her takes effect at once.
+        _voice = new StewardVoice((line, weight) =>
+        {
+            if (_settings.SpeakOnScreen.Value)
+            {
+                HudSpeech.Say(line, weight);
+            }
+        });
+        _loop = new UpkeepLoop(
+            UpkeepLimits.WithCarry(_settings.CarryPerTrip.Value), _journal, Report, _plan, _npc, _voice);
         _motion = new StewardMotion(() => _body);
         _pack = new StewardPackStore(() => _census.Live);
         _depot = new DepotStore(() => _scope.Resolve().DepotKey);
@@ -164,6 +178,12 @@ internal sealed class StewardRuntime
         {
             _log("The Steward is registered with Concerned NPC as " +
                 registration.Identity.Value + ".");
+        }
+
+        if (!HudSpeech.Available)
+        {
+            _log("This game build has no message display the Steward recognises, so what she " +
+                "says is written to this log only.");
         }
 
         StewardBody.ErrorLog = message => _log(message);
@@ -271,6 +291,7 @@ internal sealed class StewardRuntime
         // The baseline was about a pack that has gone. Kept, the next world's
         // first reading would be compared against somebody else's inventory.
         _resin.Forget();
+        _voice.Reset();
         _body = null;
         _census = new StewardCensus(StewardCensusVerdict.Unknown, 0, 0, null);
         StewardBody.ForgetAll();
@@ -307,7 +328,27 @@ internal sealed class StewardRuntime
             _depot,
             _pack,
             _motion,
-            _npc.World));
+            _npc.World,
+            CurrentThresholds()));
+    }
+
+    /// <summary>The refuel thresholds as configured, or the shipped ones and a
+    /// single log line when the configuration describes a loop. Read every
+    /// tick, so a changed setting applies to the next round.</summary>
+    private MaintenanceThresholds CurrentThresholds()
+    {
+        MaintenanceThresholds thresholds = MaintenanceThresholds.FromSettings(
+            _settings.RefuelBelowSeconds.Value,
+            _settings.RefuelToSeconds.Value,
+            _settings.MostUnitsPerLight.Value,
+            out string? refusal);
+        if (refusal != null && !string.Equals(refusal, _thresholdRefusal, StringComparison.Ordinal))
+        {
+            _log(refusal);
+        }
+
+        _thresholdRefusal = refusal;
+        return thresholds;
     }
 
     private void RefreshCensus()
@@ -517,6 +558,17 @@ internal sealed class StewardRuntime
             return EnsureBody(StewardSentences.AlreadyAtStage(IntroductionStage.Engaged));
         }
 
+        // #382: taking her on is moving her in, so it is asked from inside the
+        // settlement or not at all - before any stage is recorded or any beat is
+        // said, so "she has set her pack down by the hearth" is never told
+        // about a body that did not appear.
+        RefreshCensus();
+        if (_census.Verdict == StewardCensusVerdict.Missing && !PlayerIsInsideSettlement())
+        {
+            return "Stand inside your marked settlement to take her on; she moves in where you " +
+                "are. Nothing was agreed yet.";
+        }
+
         bool returning = _introduction.HasEverEngaged;
         var facts = new IntroductionFacts(
             authorised: StewardWorldFacts.EvaluateAuthority(_settings.RuntimeEnabled.Value)
@@ -671,15 +723,25 @@ internal sealed class StewardRuntime
             _log(line);
         }
 
+        // On screen as well: the beat that arrives from the tick (she turns
+        // up when the settlement is marked) has no console to land in.
+        _voice.Narrate(lines);
         return lines;
     }
 
+    /// <summary>The discovery, said where the player will see it. Its first
+    /// line - the sentence #382 specifies word for word - goes to the middle of
+    /// the screen; the rest follow in the corner.</summary>
     private void SayQuest(StewardQuestStage stage)
     {
-        foreach (string line in StewardQuestSentences.LinesFor(stage))
+        string[] lines = StewardQuestSentences.LinesFor(stage);
+        foreach (string line in lines)
         {
             _log(line);
         }
+
+        _voice.Narrate(
+            lines, stage == StewardQuestStage.Found ? SpeechWeight.Important : SpeechWeight.Aside);
     }
 
     private StewardQuestFacts QuestFacts() =>
@@ -733,6 +795,14 @@ internal sealed class StewardRuntime
         return answer;
     }
 
+    private bool PlayerIsInsideSettlement()
+    {
+        Vector3? at = StewardTargets.LocalPlayerPosition();
+        Designation? home = _scope.Resolve().Settlement;
+        return at != null && home != null
+            && home.Contains(new SitePoint(at.Value.x, at.Value.y, at.Value.z));
+    }
+
     /// <summary>Spawns his body if there is not one. Refuses rather than
     /// spawning a second: two bodies with one identity is the state the census
     /// exists to notice, and creating it deliberately would be worse than any
@@ -759,6 +829,16 @@ internal sealed class StewardRuntime
         if (at == null)
         {
             return prefix + " There is no local player, so there is nowhere for her to stand.";
+        }
+
+        // #382: she moves INTO the settlement. Her body is saved where it
+        // first stands, so it first stands inside the ground the player marked
+        // as home, never wherever the player happened to type the command.
+        Designation? home = _scope.Resolve().Settlement;
+        if (home == null || !home.Contains(new SitePoint(at.Value.x, at.Value.y, at.Value.z)))
+        {
+            return prefix + " She will move in once you are standing inside your marked " +
+                "settlement; run \"cs_steward recruit\" again from there.";
         }
 
         StewardWorkerAI? spawned = StewardWorkerPrefab.Spawn(at.Value, Quaternion.identity);
@@ -802,6 +882,17 @@ internal sealed class StewardRuntime
         text.AppendLine("  Scope: " + _scope.Resolve().Describe());
         text.AppendLine("  Body: " + _census.Describe());
         text.AppendLine("  Doing: " + _loop.Phase + " — " + _loop.Explanation);
+        if (_loop.Attention.Length != 0)
+        {
+            text.AppendLine("  Needs you: " + _loop.Attention);
+        }
+
+        if (_loop.LastOutcome != null)
+        {
+            text.AppendLine("  Last round: " + _loop.LastOutcome.Value.Describe());
+        }
+
+        text.AppendLine("  Quest: " + StewardQuestSentences.Describe(_quest.Stage));
         text.AppendLine("  Wood: " + _loop.Custody.Describe());
         text.AppendLine("  Trips: " + _loop.TripsCompleted.ToString(CultureInfo.InvariantCulture) +
             ", fuel added: " + _loop.UnitsBurnedTotal.ToString(CultureInfo.InvariantCulture));

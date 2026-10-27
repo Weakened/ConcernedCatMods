@@ -1,51 +1,64 @@
 # Concerned Steward
 
-A settlement steward who keeps your fires burning.
+Sunniva keeps your settlement's fires burning.
 
-This is an **early slice**. It does one job — tending the fires you marked,
-with wood from the chest you marked — and it does that job honestly rather
-than doing many jobs approximately.
+This is an **early slice**. It does one job — tending the fuel-burning lights
+inside the settlement you marked, with fuel from the chest you marked — and it
+does that job honestly rather than doing many jobs approximately.
 
-## What he actually does
+**Requires Concerned NPC** (`TheConcernedCat-ConcernedNPC`), the shared runtime
+her identity and job planning come from. Without it the mod reports the missing
+dependency at load and does nothing.
+
+## Who she is
+
+A warrior-priestess who fell in battle, whose calling was carrying light into
+dark places. The first time you pick up resin with her story unstarted, you also
+find a flint and steel with runes carved into the metal. There is one of it for
+the life of that world; it is a discovery the mod remembers, never an item put
+into your inventory, and your resin pickup is untouched. Read the runes, mark a
+settlement, and she turns up. Recruit her and she moves in.
+
+## What she actually does
 
 1. You mark a settlement area and one supply chest.
-2. You recruit him.
-3. He looks at the fires inside your settlement area, picks the one closest to
-   going out, walks to your chest, takes real wood out of it, walks to the
-   fire, and puts the wood in — one piece at a time, through the game's own
-   "use item on fire" path, the same one your own character uses.
-4. Anything he did not burn, he walks back and puts in the chest.
+2. You recruit her, standing inside the settlement.
+3. She looks at every fuel-burning light inside the area (anything built on
+   vanilla's fireplace component, such as campfires, hearths and standing
+   torches; decorative lights with no fuel are never touched), works
+   out which are closest to going out and how much the whole round needs, and
+   walks to your chest **once** for all of them.
+4. She walks a circuit of the lights. At each one she checks it again — if you
+   filled it yourself, or it was destroyed, she moves on — and puts real fuel
+   in, one piece at a time, through the game's own "use item on fire" path.
+5. Whatever she did not use, she walks back and puts in the chest.
 
-He walks the whole way. He is never teleported, never shoved, and his position
-is never written by this mod — he moves with Valheim's own motor and its own
-pathfinding, like any other creature.
+She walks the whole way. She is never teleported, never shoved, and her
+position is never written by this mod.
 
-## What he will not do
+## What she will not do
 
-- **He will not create wood.** Every piece of wood he puts on a fire came out
-  of your chest first, and that was measured, not assumed. Valheim has two
-  methods that would let a mod set a fire's fuel level directly with no item
-  consumed; this mod calls neither, and a test proves their names appear
-  nowhere in it.
-- **He will not take from any chest but the one you marked.** Not the nearest
-  one, not whichever is handy, not one he passes on the way.
-- **He will not work outside the area you marked.**
-- **He will not touch a fire or a chest that this game session does not own.**
-  (If you are curious: on an unowned fire, Valheim's own code takes the wood
-  out of your hands and then throws the fuel away. He refuses rather than
-  meeting that.)
-- **He will not take ownership of anything**, claim a bed, block a doorway,
+- **She will not create fuel.** Every piece she puts on a fire came out of your
+  chest first, and that was measured, not assumed. If the lights need resin and
+  the chest has none, she tells you what she needs instead of tending anything
+  with nothing.
+- **She will not take from, or put into, any chest but the one you marked.**
+- **She will not work outside the area you marked**, and she will not touch a
+  light under a ward that is not yours — she tells you it is burning low instead.
+- **She will not touch a fire or a chest that this game session does not own.**
+- **She will not take ownership of anything**, claim a bed, block a doorway,
   fight, carry loot, or open a door.
-- **He will not run in multiplayer yet.** He works when you are the host, not
-  on a dedicated server, and with nobody else connected. Otherwise he stops and
+- **She will not run in multiplayer yet.** She works when you are the host, not
+  on a dedicated server, and with nobody else connected. Otherwise she stops and
   says so.
 
-## Turning him on
+## Turning her on
 
-He is **off by default** and stays off until you turn him on:
+She is **off by default**. In `com.theconcernedcat.valheim.concernedsteward.cfg`:
 
 ```
-[Steward] StewardRuntimeEnabled = true
+[Steward] StewardRuntimeEnabled = true   # she exists
+[Steward] TendFiresEnabled = true        # she may reach into your chest
 ```
 
 Installing the mod changes nothing until you do that.
@@ -54,29 +67,45 @@ Then, in the console (F5):
 
 ```
 cs_steward area 32       mark a settlement area, 32 m around you
-cs_steward depot         mark the chest you are looking at as the supply depot
-cs_steward recruit       invite him in
-cs_steward status        what he is doing, and why he is not doing anything
-cs_steward tend on       let him tend fires
-cs_steward tend off      stop him
+cs_steward depot         mark the chest you are looking at as the supply chest
+cs_steward runes         look at the flint and steel properly
+cs_steward recruit       take her on (stand inside the settlement)
+cs_steward status        what she is doing, and why she is not doing anything
+cs_steward resolve       after she stops and asks you to look
+cs_steward dismiss       let her go; her body stays and nothing is destroyed
+cs_fires                 every light she looked at, and her verdict on each
 ```
 
-`cs_steward status` always explains itself. If he is standing still, it will
-tell you which of the checks refused and what to do about it.
+`cs_steward status` always explains itself.
 
-## His name
+## Settings worth knowing
 
-He does not have one yet. He is "the Steward" until he is named, and this build
-uses a neutral placeholder on purpose rather than inventing one that would then
-be stuck in your save. His internal identity is the role, not the name, so
-naming him later will not lose his work.
+| Setting | Default | What it does |
+|---|---|---|
+| `[Upkeep] RefuelBelowSeconds` | 300 | A light with less burning time left than this is due. |
+| `[Upkeep] RefuelToSeconds` | 1200 | What a tended light is topped up to (never past its capacity). |
+| `[Upkeep] MostUnitsPerLight` | 10 | The most one light gets in one round. |
+| `[Upkeep] CarryPerTrip` | 50 | How much fuel she takes in one trip (read at start-up). |
+| `[Steward] SpeakOnScreen` | true | Show what she says on screen as well as in the log. |
+| `[Appearance] Garment` | (empty) | A vanilla dress or robe prefab to try before the leather. |
+| `[Appearance] HairStyle` | `$customization_hair12` | Her hair (vanilla's "Matronly"). |
+
+Thresholds are measured in burning time, not fuel, because pieces burn at
+different rates. A threshold that would make her loop is refused and logged.
+
+**One fuel kind per trip.** A settlement with both wood and resin lights gets
+one trip for each kind, never one trip per light.
+
+**Her look.** She wears a leather tunic and leather pants. Vanilla only draws
+hair, hair colour, skin colour and the female model on a player-style body; on
+the default base creature those settings may have no visible effect, and the
+log says so.
 
 ## Compatibility
 
-Concerned Steward is its own mod. It does not require, reference, or interfere
-with Concerned Cartographer, Concerned Teamster or Concerned Foreman, and it
-works with any of them installed or none. It is client-side and it makes no
-network calls of its own.
+Concerned Steward does not require, reference or interfere with Concerned
+Cartographer, Concerned Teamster or Concerned Foreman. It needs Concerned NPC.
+It makes no network calls of its own and patches nothing.
 
 ## Reporting a problem
 

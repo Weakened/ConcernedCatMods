@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using TheConcernedCat.ConcernedSteward.Domain;
 using TheConcernedCat.ConcernedSteward.Domain.Npc;
 using TheConcernedCat.ConcernedSteward.Domain.Scope;
+using TheConcernedCat.ConcernedSteward.Domain.Speech;
+using TheConcernedCat.ConcernedSteward.Domain.Upkeep.Round;
 using TheConcernedCat.ConcernedNPC.Roles;
 using TheConcernedCat.ConcernedSteward.Domain.Upkeep;
 using TheConcernedCat.ConcernedNPC.Work;
@@ -162,6 +164,25 @@ internal sealed class FakeFires : IFuelTargetPort
     internal bool FeedThrows { get; set; }
 
     internal void Add(FuelTargetObservation target) => _targets.Add(target);
+
+    /// <summary>One fire destroyed: gone from the survey and from every
+    /// lookup, while the rest of the settlement stays.</summary>
+    internal void Remove(string key) => _targets.RemoveAll(target => target.Key.Value == key);
+
+    /// <summary>The fuel level a fire stands at now, for asserting what a
+    /// round actually put into it.</summary>
+    internal float FuelOf(string key)
+    {
+        foreach (FuelTargetObservation target in _targets)
+        {
+            if (target.Key.Value == key)
+            {
+                return target.Fuel;
+            }
+        }
+
+        return float.NaN;
+    }
 
     internal void Replace(FuelTargetObservation target)
     {
@@ -326,12 +347,14 @@ internal sealed class StewardFixture
             }
         }
 
+        Voice = new StewardVoice((line, weight) => Spoken.Add(line));
         Loop = new UpkeepLoop(
             limits ?? UpkeepLimits.Default,
             Journal,
             message => Reported.Add(message),
             plan,
-            Adoption);
+            Adoption,
+            Voice);
         PlanWorld = planWorld;
         Depot = new FakeStore("the supply chest", (Wood, 50));
         Pack = new FakeStore("the Steward's pack");
@@ -365,6 +388,17 @@ internal sealed class StewardFixture
 
     internal List<string> Reported { get; } = new List<string>();
 
+    /// <summary>What she said to the player's screen, as opposed to the log.
+    /// </summary>
+    internal List<string> Spoken { get; } = new List<string>();
+
+    internal StewardVoice Voice { get; }
+
+    /// <summary>The refuel thresholds the next tick carries; null is the
+    /// shipped defaults, exactly as a runtime with no settings would send.
+    /// </summary>
+    internal MaintenanceThresholds? Thresholds { get; set; }
+
     internal bool TendingEnabled { get; set; } = true;
 
     internal WorkAuthorityVerdict Authority { get; set; } = WorkAuthorityVerdict.Granted;
@@ -397,7 +431,7 @@ internal sealed class StewardFixture
     }
 
     internal UpkeepTick Tick() => new UpkeepTick(
-        Now, TendingEnabled, Authority, Scope.Resolve(), Fires, Depot, Pack, Motion, PlanWorld);
+        Now, TendingEnabled, Authority, Scope.Resolve(), Fires, Depot, Pack, Motion, PlanWorld, Thresholds);
 
     /// <summary>Advances the loop, moving the clock past the scan interval each
     /// time so an idle tick is never blocked on it.</summary>

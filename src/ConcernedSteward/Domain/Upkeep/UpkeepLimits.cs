@@ -117,6 +117,39 @@ internal readonly struct UpkeepLimits
     /// five times faster than a hearth burns one unit. Ninety seconds is far
     /// longer than any walk inside a settlement and short enough that a stuck
     /// Steward is noticed in the same play session.</summary>
+    /// <summary>The most a configured carry may be. One body carries what
+    /// fits in its pack, and the pack is the real limit; this only stops a
+    /// typing slip turning one trip into a whole chest.</summary>
+    public const int MostUnitsPerTripAllowed = 500;
+
+    /// <summary>The carry a player gets without touching the settings: one
+    /// vanilla stack of wood or resin (#382).</summary>
+    public const int ShippedCarryPerTrip = 50;
+
+    /// <summary>The shipped limits with the carry the player configured
+    /// (#382), clamped into a range that cannot be a mistake.
+    ///
+    /// <b>Why the carry is a setting at all.</b> The round is provisioned once
+    /// for every stop it covers, and the planner splits it into trips only by
+    /// what one trip can hold. With ten units a trip, five low campfires that
+    /// want nine each are five visits to the chest - precisely the
+    /// chest-fire-chest-fire shape the round exists to replace. A vanilla stack
+    /// of wood or resin is fifty, which is the shipped setting.</summary>
+    public static UpkeepLimits WithCarry(int unitsPerTrip)
+    {
+        UpkeepLimits shipped = Default;
+        int carry = unitsPerTrip < 1
+            ? 1
+            : unitsPerTrip > MostUnitsPerTripAllowed ? MostUnitsPerTripAllowed : unitsPerTrip;
+        return new UpkeepLimits(
+            shipped.MaxTargetsScanned,
+            carry,
+            shipped.MaxConcurrentJobs,
+            shipped.ScanIntervalSeconds,
+            shipped.PhaseLimitSeconds,
+            shipped.MaxFailuresPerPhase);
+    }
+
     public static UpkeepLimits Default => new(
         maxTargetsScanned: 32,
         maxUnitsPerTrip: 10,
