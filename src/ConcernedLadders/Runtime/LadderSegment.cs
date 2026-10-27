@@ -18,6 +18,23 @@ internal sealed class LadderSegment : MonoBehaviour, Hoverable, Interactable
     public float BackFaceDepth = 0.08f;
     public string DisplayName = "Vertical Ladder";
 
+    /// <summary>Rung contact geometry of this section's material, in section-local metres, for presentation (read
+    /// only; nothing in gameplay reads it). Rung i's centre is unchanged for every material: (i + 0.5) ×
+    /// <see cref="RungPitch"/> above <see cref="LocalBottom"/>, on the <see cref="RungShape.Plane"/> plane. A rung's top
+    /// is <see cref="RungHalfHeight"/> above its centre and its climbing-side face <see cref="RungHalfDepth"/> in front
+    /// of it; it reaches <see cref="RungHalfLength"/> to each side. <see cref="RungRadius"/> is 0 for a box rung (wood:
+    /// the <see cref="RungShape"/> values) and the radius of a round rung (copper 0.025 m, iron 0.02 m), in which case
+    /// half height and half depth equal it. See <see cref="LadderStyle"/>.</summary>
+    public float RungHalfHeight = RungShape.HalfHeight;
+    public float RungHalfDepth = RungShape.HalfDepth;
+    public float RungHalfLength = RungShape.HalfWidth;
+    public float RungRadius;
+
+    /// <summary>The rails' centres sit at ±<see cref="RailCentre"/> along local x; each is <see cref="RailWidth"/>
+    /// wide. Their outer edges are at ±0.40 m for every material.</summary>
+    public float RailCentre = 0.34f;
+    public float RailWidth = 0.12f;
+
     private static readonly HashSet<LadderSegment> Registered = new HashSet<LadderSegment>();
 
     /// <summary>Changes whenever a section joins or leaves the loaded registry, so cached runs are rebuilt.</summary>

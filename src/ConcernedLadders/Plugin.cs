@@ -34,11 +34,12 @@ public sealed class Plugin : BaseUnityPlugin
     {
         _enabled = Config.Bind("General", "ClimbingEnabled", true,
             "Enable climbing on Concerned Ladders. Disabling restores player control; placed ladder prefabs remain registered. Restart after changing the installed plugin set.");
-        _pieces = new LadderPieceRegistration(message => Logger.LogInfo(message));
-        _pieces.Install();
-        // Ladder-on-ladder stacking takes the lower ladder's rotation; every other snap stays native.
+        // Placement first: the Left side / Right side snap points exist only when the adapter that owns their
+        // placement is installed (without it the game would put a side-mode ghost 100 m above the aim).
         _snap = new LadderSnapAlignment(message => Logger.LogInfo(message));
         if (!_snap.Install(PluginGuid + ".snap")) { _snap = null; }
+        _pieces = new LadderPieceRegistration(message => Logger.LogInfo(message), sideModes: _snap != null);
+        _pieces.Install();
         // The skill registers before any player's Skills awake and whether or not climbing is enabled.
         _skill = new LadderSkill(message => Logger.LogInfo(message));
         _skill.Register();
