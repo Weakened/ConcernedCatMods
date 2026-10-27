@@ -178,8 +178,8 @@ internal sealed class LadderClearance
         float offset = Radius * 0.9f;
         foreach (Vector3 direction in Footprint)
         {
-            if (!TrySurface(feet + direction * offset, 0.15f, 0.2f, out Vector3 floor)) { why = "no surface at " + direction.ToString("F1"); return false; }
-            if (Mathf.Abs(floor.y - centre.y) > step) { why = "step " + (floor.y - centre.y).ToString("F2") + " at " + direction.ToString("F1"); return false; }
+            if (!TrySurface(feet + direction * offset, 0.15f, 0.2f, out Vector3 floor)) { why = "no surface at an edge"; return false; }
+            if (Mathf.Abs(floor.y - centre.y) > step) { why = "a step at an edge"; return false; }
         }
 
         return true;

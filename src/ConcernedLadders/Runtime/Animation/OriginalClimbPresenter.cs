@@ -198,7 +198,7 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
                 // After the animator's evaluation the end bones hold the solved pose: how far each landed from its goal.
                 for (int limb = 0; limb < 4; limb++)
                 { if (actor.Asked[limb]) { actor.Fit.Solved(limb, Vector3.Distance(actor.Rig.Ends[limb].position, actor.LastPivot[limb])); } }
-                MeasureContacts(actor);
+                if (ClimbTuning.LogFit || ClimbTuning.TraceContacts) { MeasureContacts(actor); }
             }
 
             if (!actor.Rig.Valid || !LocalOwner(actor.Rig.Player) || (Time.time - actor.Seen > 1f)) { actor.Active = false; }

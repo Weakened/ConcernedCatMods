@@ -136,6 +136,10 @@ internal static class ClimbTuning
     /// why it was accepted or refused (off in normal play).</summary>
     internal static bool LogLandingQueries = false;
 
+    /// <summary>Development diagnostics: measure planted contacts and log a "Climb fit" summary every 3 s of climbing
+    /// (off in normal play; the trace implies it).</summary>
+    internal static bool LogFit = false;
+
     internal static int Version { get; private set; }
 
     /// <summary>Re-fit the current climb after values changed (development harness only).</summary>

@@ -47,8 +47,11 @@ internal sealed class OriginalRigBinding
             Reach[i] = Vector3.Distance(Roots[i].position, Joints[i].position) + Vector3.Distance(Joints[i].position, Ends[i].position);
             if (Reach[i] < 0.2f || Reach[i] > 2f) { throw new InvalidOperationException("Live humanoid limb dimensions are incompatible."); }
         }
-        Landmark[0] = Bone(HumanBodyBones.LeftMiddleProximal); Landmark[1] = Bone(HumanBodyBones.RightMiddleProximal);
-        Landmark[2] = Bone(HumanBodyBones.LeftToes); Landmark[3] = Bone(HumanBodyBones.RightToes);
+        // Measurement-only landmarks: optional, so a rig without finger or toe bones still climbs (review 2026-10-27).
+        Landmark[0] = animator.GetBoneTransform(HumanBodyBones.LeftMiddleProximal) ?? Ends[0];
+        Landmark[1] = animator.GetBoneTransform(HumanBodyBones.RightMiddleProximal) ?? Ends[1];
+        Landmark[2] = animator.GetBoneTransform(HumanBodyBones.LeftToes) ?? Ends[2];
+        Landmark[3] = animator.GetBoneTransform(HumanBodyBones.RightToes) ?? Ends[3];
         // A dimension-based initial stance, subject to actual-rig fitting. Native male leg chain ~.896m,
         // neutral pelvis ~.839m. The .93 ratio does not copy an evaluated jump/crouch as a rest pose.
         PelvisHeight = Math.Min(Reach[2], Reach[3]) * .93f;

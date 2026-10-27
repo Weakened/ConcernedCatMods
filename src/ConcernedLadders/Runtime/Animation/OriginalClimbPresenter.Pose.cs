@@ -255,7 +255,9 @@ internal sealed partial class OriginalClimbPresenter
                 Root = root, Chain = rig.Reach[limb], Progress = action != null ? progress : -1f, Descending = actor.Gait.Descending,
                 RungCentre = RungSurface(frame, contact.Height, 0f, span * side), Hand = hand, Outward = outward, Profile = profile,
             };
-            if (action != null) { weight = Mathf.MoveTowards(actor.ShownWeight[limb], weight, Time.deltaTime / ClimbTuning.WeightRiseSeconds); }
+            // Also while a limb is still easing back after a transition ended or was cancelled (review 2026-10-27: a cancelled
+            // exit popped every limb back to the rungs in one frame).
+            if (action != null || actor.ShownWeight[limb] < .999f) { weight = Mathf.MoveTowards(actor.ShownWeight[limb], weight, Time.deltaTime / ClimbTuning.WeightRiseSeconds); }
             actor.ShownWeight[limb] = weight;
             record.Requested = weight;
             if (weight <= .01f) { actor.Record[limb] = record; continue; } // Handed to the native pose on purpose (mount/exit windows).
@@ -412,7 +414,7 @@ internal sealed partial class OriginalClimbPresenter
         internal void Report(OriginalClimbPresenter owner, float now, bool final)
         {
             if (Total == 0 || (!final && now - _since < 3f)) { return; }
-            if (_lines < 40)
+            if (_lines < 40 && ClimbTuning.LogFit)
             {
                 _lines++;
                 var text = new System.Text.StringBuilder("Climb fit ").Append(_motion)
