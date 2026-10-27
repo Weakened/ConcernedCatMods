@@ -248,6 +248,14 @@ internal sealed partial class OriginalClimbPresenter
             if (weight >= .999f) { actor.Asked[limb] = true; actor.LastPivot[limb] = pivot; }
             Vector3 hint = hand ? root + outward * ClimbTuning.ElbowOut + right * (side * ClimbTuning.ElbowSide) - Vector3.up * ClimbTuning.ElbowDown :
                 root + toward * ClimbTuning.KneeToward + right * (side * ClimbTuning.KneeSide) - Vector3.up * ClimbTuning.KneeDown;
+            if (!hand && !actor.Gait.Descending && ClimbTuning.KneeMidAscent > 0f)
+            {
+                // Climbing up, a raised foot under a hint fixed 0.15 m below the hip pushed the knee 25 cm sideways (in game
+                // 2026-10-27, both legs at p90). The knee aims halfway down to the foot instead, forward toward the rungs.
+                // The descent keeps its hint (owner: "climb down is PERFECT").
+                float mid = Mathf.Lerp(root.y - ClimbTuning.KneeDown, (root.y + pivot.y) * 0.5f, ClimbTuning.KneeMidAscent);
+                hint.y = Mathf.Min(hint.y, mid);
+            }
             actor.Lease.HintInIK(animator, limb, hint, weight * .75f);
         }
 

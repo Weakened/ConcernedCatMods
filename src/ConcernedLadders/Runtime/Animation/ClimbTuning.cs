@@ -91,6 +91,9 @@ internal static class ClimbTuning
     /// <summary>How much of the native chest twist against the hips is removed (1 = shoulders square to the rungs).</summary>
     internal static float SquareChest = 1f;
 
+    /// <summary>Climbing up, how far the knee hint moves from just below the hip toward halfway down to the foot.</summary>
+    internal static float KneeMidAscent = 1f;
+
     /// <summary>On a top exit or entry the palms press on the floor this far past the ladder's plane.</summary>
     internal static float LipOnto = 0.18f;
 
