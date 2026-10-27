@@ -1,7 +1,10 @@
 # Concerned Ladders — current readiness
 
-**1.0.0 release package prepared, awaiting the owner's publication decision.** Updated 2026-10-27.
-Nothing has been uploaded, tagged, released or merged.
+**1.0.0 is live on Thunderstore** (`TheConcernedCat/ConcernedLadders`, uploaded by the owner 2026-10-27
+17:12 UTC). The store's download is byte-identical to the package below (ZIP SHA256 `0727ddb5…f880`, 378,052 B; DLL
+`0dbc03f5…897f`), checked by downloading it the same day. Released source is `4cb5e56` on this branch: no release
+tag exists and nothing is merged to `main` yet. Merge with a merge commit, not a squash, and keep `4cb5e56` and
+`48a6c59` reachable: the published README loads its GIFs from `48a6c59`. Updated 2026-10-27.
 
 | Item | 1.0.0 |
 |---|---|
@@ -33,6 +36,13 @@ The ladder motor replaces the game's movement update, which is what writes the a
 | Skill | 0 → 1 after about 7 m; 8 s holding earns nothing; level persists across restart |
 | Uninstall (TCCLadderHammer, disposable) | Ladders deleted by the game on load (`Destroyed invalid prefab ZDO`), not restored on reinstall; Climbing reset to 0 (vanilla `Skills.Load` drops unknown skills); floors, poles and other skills unaffected - documented in the README |
 | Multiplayer, dedicated server, observers, mixed modded/unmodded, version mismatch, controller | NOT TESTED (no second endpoint, no controller) |
+
+**Independent review of the released source (2026-10-27, head `f1ec7e6`, src identical to `4cb5e56`): GO, no P1/P2.**
+P3 items left for a later version, not changed here so the branch source stays the released source:
+`LadderSegment.FindLane` has no caller although its comment describes it as live; `Plugin.OnDestroy` disposes the
+runtime and the presenter in one `try`, so a throw in the runtime's release skips the presenter's unpatch (shutdown
+only); the 1.0.0 changelog lists a "Fixed" swim-pose bullet that public users never saw; snapping beside another
+building-helper mod that moves the ghost (e.g. Gizmo) is untested.
 
 ## 0.2.7 (superseded)
 
@@ -213,4 +223,4 @@ Codex read-only reviews: `da8c5a2`, `27528f0`, `4926903` and `7726fe3` were NO_G
 `441ea83` were GO. The 0.2.0 STATUS draft was REJECTED for overclaiming; this rewrite answers it row by row.
 Reviews of the N07/N08 code: `075f14b` NO_GO (6 P1s); `85713d6` NO_GO (4 findings); `d913e26` NO_GO (hammer IK onset); `2c810ab` NO_GO (cached `InAttack`); `c32e6b5` GO; `125c9b0` NO_GO (hover buffer); `38964c8` **GO**. This STATUS was ACCEPTED at `2bef0d9`. The first version of this STATUS (`866a800`) was REJECTED with 7 must-fixes, each corrected here. Reports are in `C:\code\cc-integration\cl-ladders-review-evidence\`.
 
-No publication, release tag or main merge.
+No publication, release tag or main merge at the time of this record (1.0.0 was published later; see the top).
