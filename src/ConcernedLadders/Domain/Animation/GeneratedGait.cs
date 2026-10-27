@@ -10,8 +10,8 @@ namespace TheConcernedCat.ConcernedLadders.Domain.Animation;
 /// in LimbGait.cs and DefaultTransitions remain the fallbacks.</summary>
 internal static class GeneratedGait
 {
-    internal const string BlendSha256 = "ebc166d78876985414dc264146167b5a615cc37c8092e34b3e05ac232ac6e830";
-    internal const string JsonSha256 = "0cdf7950448428e01bb40d6161b444d5a8bd85a17a9f36e244b17def8a4ccf6c";
+    internal const string BlendSha256 = "4cb95224379296e656b0b99d24450057d25e2ead1ce197231504ef38b989f049";
+    internal const string JsonSha256 = "8d23c48b2c82ed46701364908b4bc14c43f509c176b5df3eb1105ca8c0747aaf";
     internal const string Blender = "5.1.2";
 
     internal const float PelvisDrop = 0f;
@@ -549,7 +549,7 @@ internal static class GeneratedGait
                 // left hand
                 new[]
                 {
-                    1f, 1f, 1f, 1f, 1f, 0.768066f, 0.316406f, 0.01123f, 0f, 0f, 0f,
+                    1f, 1f, 1f, 1f, 0.801749f, 0.291545f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f
@@ -557,7 +557,7 @@ internal static class GeneratedGait
                 // right hand
                 new[]
                 {
-                    1f, 1f, 1f, 1f, 1f, 0.98877f, 0.683594f, 0.231934f, 0f, 0f, 0f,
+                    1f, 1f, 1f, 1f, 1f, 0.708455f, 0.198251f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f
@@ -1087,16 +1087,16 @@ internal static class GeneratedGait
                 new[]
                 {
                     1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
-                    1f, 1f, 1f, 1f, 1f, 1f, 0.997728f, 0.925926f, 0.776963f, 0.58299f, 0.376157f,
-                    0.188615f, 0.052512f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    1f, 1f, 1f, 1f, 1f, 1f, 0.999427f, 0.980324f, 0.937109f, 0.8738f, 0.794416f,
+                    0.702975f, 0.603497f, 0.5f, 0.396503f, 0.297025f, 0.205584f, 0.1262f, 0.062891f, 0.019676f, 0.000573f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f
                 },
                 // right foot
                 new[]
                 {
                     1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
-                    1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 0.947488f, 0.811385f, 0.623843f,
-                    0.41701f, 0.223037f, 0.074074f, 0.002272f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 0.986921f, 0.950151f, 0.893392f,
+                    0.820346f, 0.734715f, 0.640199f, 0.540501f, 0.439322f, 0.340365f, 0.24733f, 0.163919f, 0.093835f, 0.040777f, 0.00845f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f
                 },
             },
@@ -1136,10 +1136,10 @@ internal static class GeneratedGait
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
-                    0f, 0f, 0f, 0f, 0.000912f, 0.000608f, 0f, 0.03f, 0.02f, 0f, 0.080521f, 0.053681f,
-                    0f, 0.116382f, 0.077588f, 0f, 0.111962f, 0.074641f, 0f, 0.070419f, 0.046946f, 0f, 0.021433f, 0.014288f,
-                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
-                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 0f, 0.000228f, 0.000152f, 0f, 0.008038f, 0.005359f, 0f, 0.025585f, 0.017057f,
+                    0f, 0.049581f, 0.033054f, 0f, 0.075529f, 0.050353f, 0f, 0.098567f, 0.065712f, 0f, 0.114378f, 0.076252f,
+                    0f, 0.12f, 0.08f, 0f, 0.114378f, 0.076252f, 0f, 0.098567f, 0.065712f, 0f, 0.075529f, 0.050353f,
+                    0f, 0.049581f, 0.033054f, 0f, 0.025585f, 0.017057f, 0f, 0.008038f, 0.005359f, 0f, 0.000228f, 0.000152f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f
@@ -1150,11 +1150,11 @@ internal static class GeneratedGait
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
-                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0.021433f, 0.014288f,
-                    0f, 0.070419f, 0.046946f, 0f, 0.111962f, 0.074641f, 0f, 0.116382f, 0.077588f, 0f, 0.080521f, 0.053681f,
-                    0f, 0.03f, 0.02f, 0f, 0.000912f, 0.000608f, 0f, 0f, 0f, 0f, 0f, 0f,
-                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
-                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0.005326f, 0.003551f,
+                    0f, 0.02036f, 0.013573f, 0f, 0.042431f, 0.028287f, 0f, 0.067621f, 0.045081f, 0f, 0.091458f, 0.060972f,
+                    0f, 0.109711f, 0.07314f, 0f, 0.119137f, 0.079425f, 0f, 0.118064f, 0.078709f, 0f, 0.106682f, 0.071121f,
+                    0f, 0.087012f, 0.058008f, 0f, 0.062546f, 0.041698f, 0f, 0.037629f, 0.025086f, 0f, 0.016683f, 0.011122f,
+                    0f, 0.003427f, 0.002285f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f
                 ),
