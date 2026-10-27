@@ -1,7 +1,7 @@
 # Ladders: climbing, not teleporting
 
 > **Superseded for players (#436, 2026-10-27).** Player ladder climbing is owned by **Concerned Ladders**, published as
-> `TheConcernedCat/ConcernedLadders` 1.0.0 on 2026-10-27 (docs under `docs/mods/concerned-ladders/`). Concerned Ladders
+> `TheConcernedCat/ConcernedLadders` 1.0.0 on 2026-10-27 (its docs, `docs/mods/concerned-ladders/`, arrive on `main` with PR #433). Concerned Ladders
 > refuses to run while Foreman's motor is installed — it looks for the Harmony owner
 > `com.theconcernedcat.valheim.concernedforeman.ladders` on the player's motor — so Foreman's player climb is **off by
 > default** and must not ship enabled:
