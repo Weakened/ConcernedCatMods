@@ -95,7 +95,7 @@ internal static class ClimbTuning
     /// the ladder) and fold forward, reaching the full amount TopApproachSpan higher.</summary>
     internal static float TopApproachFrom = 1.15f;
     internal static float TopApproachSpan = 0.5f;
-    internal static float TopApproachDrop = 0.28f;
+    internal static float TopApproachDrop = 0.34f;
     internal static float TopApproachToward = 0.12f;
     internal static float TopApproachLean = 22f;
 

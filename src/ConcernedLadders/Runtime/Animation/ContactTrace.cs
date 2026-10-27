@@ -27,7 +27,7 @@ internal static class ContactTrace
             {
                 string path = Path.Combine(BepInEx.Paths.BepInExRootPath, "ladder_contact_trace.csv");
                 _writer = new StreamWriter(path, false, new UTF8Encoding(false));
-                _writer.WriteLine("time,motion,face,feetY,limb,planted,skipped,native,requested,effective,reach,targetX,targetY,targetZ,patchX,patchY,patchZ,error,gap");
+                _writer.WriteLine("time,motion,face,feetY,limb,planted,skipped,native,requested,effective,reach,targetX,targetY,targetZ,patchX,patchY,patchZ,error,gap,rootX,rootY,rootZ,chain,progress");
             }
 
             var inv = CultureInfo.InvariantCulture;
@@ -39,6 +39,8 @@ internal static class ContactTrace
                 record.Target.x.ToString("0.0000", inv), record.Target.y.ToString("0.0000", inv), record.Target.z.ToString("0.0000", inv),
                 patch.x.ToString("0.0000", inv), patch.y.ToString("0.0000", inv), patch.z.ToString("0.0000", inv),
                 error.ToString("0.0000", inv), gap.ToString("0.0000", inv),
+                record.Root.x.ToString("0.0000", inv), record.Root.y.ToString("0.0000", inv), record.Root.z.ToString("0.0000", inv),
+                record.Chain.ToString("0.000", inv), record.Progress.ToString("0.000", inv),
             }));
             if (++_rows % 200 == 0) { _writer.Flush(); }
         }
