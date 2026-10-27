@@ -1,8 +1,29 @@
 # Ladders: climbing, not teleporting
 
+> **Superseded for players (#436, 2026-10-27).** Player ladder climbing is owned by **Concerned Ladders**, published as
+> `TheConcernedCat/ConcernedLadders` 1.0.0 on 2026-10-27 (docs under `docs/mods/concerned-ladders/`). Concerned Ladders
+> refuses to run while Foreman's motor is installed — it looks for the Harmony owner
+> `com.theconcernedcat.valheim.concernedforeman.ladders` on the player's motor — so Foreman's player climb is **off by
+> default** and must not ship enabled:
+>
+> - the switch is `Ladders/PlayerClimbing`, default `false` (`LadderSettingValues.Defaults`, pinned by
+>   `LadderPiecesTests.PlayerClimbingIsOffByDefaultBecauseConcernedLaddersOwnsIt`);
+> - it was renamed from `Ladders/Enabled` on purpose. Every development build before #436 wrote `Enabled = true` as its
+>   default; reading a new key orphans that line, so an old dev profile is off like a new one. Foreman was never
+>   published, so no player config exists. The rename is pinned by
+>   `ThePlayerClimbSwitchIsNotReadFromTheKeyOldBuildsWroteTrueInto` and `TheBindingReadsTheSwitchFromTheNewKeyAndTheDomainDefault`;
+> - with it off, `Plugin.InstallLadders` installs no patch at all, so the Harmony owner Concerned Ladders checks for is
+>   absent. The Harmony id itself is unchanged, so an opted-in Foreman is still detected;
+> - nothing was deleted. The player motor stays available behind the opt-in, and the worker-traversal seam (#334:
+>   `src/Shared/Workers/Traversal`, `LadderNavigationLink`, `NpcClimbing`) is untouched and does not read the switch;
+> - Foreman has no compile-time reference to Concerned Ladders, and none is permitted.
+>
+> Issues #324–#328 are superseded by Concerned Ladders; #334 stays the worker-routing question. The rest of this
+> document is the original record and describes the climb a player gets only after opting in.
+
 **Owner brief:** 2026-09-17, "Concerned Foreman — Functional Ladder System". This document is the spec, the decision
-record and the work breakdown. It belongs to Concerned Foreman; there is no separate ladder product, package or
-repository.
+record and the work breakdown for Foreman's climb. When it was written there was no separate ladder product; since
+2026-10-27 there is (above).
 
 The promise, in the owner's words:
 
@@ -103,7 +124,7 @@ cloned from the vanilla prefab with added snap points — and that decision is t
 makes a world depend on the mod: uninstalling would delete those ladders from the world. It will not be done silently.
 
 **How it will be observed** (CF-LAD-004, #328). The steps below are the procedure of record; there is no fuller script
-anywhere else. Run them in a disposable world, with `Ladders/Enabled = false` so the answer is about the game and not
+anywhere else. Run them in a disposable world, with `Ladders/PlayerClimbing = false` (the default) so the answer is about the game and not
 about this mod. `cf_ladders` reads and never places, moves or damages a piece, so every placement here is yours with
 the hammer.
 
@@ -255,7 +276,7 @@ needs a human in Unity.
 
 | Setting | Default | Why |
 |---|---|---|
-| `Enabled` | `true` | Zero configuration for the default experience; one switch to return to vanilla. |
+| `PlayerClimbing` (was `Enabled`) | `false` | Off since #436: Concerned Ladders owns player climbing and will not run beside this motor. One switch to opt in. |
 | `AutoMount` | `true` | Walking into a ladder climbs it. Off means `Use` only. |
 | `ClimbSpeed` | `1.0` | Multiplier on the tuned speed. |
 | `StaminaCost` | `0` per second | Vanilla charges nothing to walk up stairs. |
@@ -270,7 +291,7 @@ everything else. What the values mean, and what happens to a silly one, is in
 
 | Setting | Reaches | Range |
 |---|---|---|
-| `Enabled` | `ClimbOptions.Enabled`, read live every frame | — |
+| `PlayerClimbing` | `ClimbOptions.Enabled`, read live every frame | — |
 | `AutoMount` | `ClimbOptions.AutoMount` | — |
 | `ClimbSpeed` | `ClimbOptions.ClimbSpeedMultiplier` → `ClimbLimits.SpeedMultiplier` | 0.25 – 3 |
 | `StaminaCost` | `ClimbOptions.StaminaPerSecond` → `ClimbLimits.StaminaPerSecond` | 0 – 10 |
@@ -282,7 +303,7 @@ test fails if they ever drift apart — otherwise a number a config file accepts
 walks into a ladder. And a value outside them is **clamped, never thrown**: `LadderSettingValues.Sanitised` and
 `ClimbOptions.ToLimits` agree, so a hand-edited `NaN` costs a player nothing.
 
-`Enabled` has two different meanings by design, and both are "vanilla": **false at startup means no patch is installed
+`PlayerClimbing` has two different meanings by design, and both are "vanilla": **false at startup means no patch is installed
 at all**, and false later means every patch falls straight through and a climb in progress ends on the next frame.
 
 ---

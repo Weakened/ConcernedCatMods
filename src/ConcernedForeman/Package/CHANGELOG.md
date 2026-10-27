@@ -3,13 +3,34 @@
 All notable changes to Concerned Foreman are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
-## 0.1.0 - The worker actor spike, and ladders you can climb (unreleased)
+## 0.1.0 - The worker actor spike, with an opt-in ladder climb (unreleased)
 
 The first code this product has ever had. **Not published, and not a
 playable release**: it is the worker actor spike from CF-SET-002 (#279)
 plus the ladder feature from CF-LAD-001..005 (#324), and **nothing in it
 has been observed working in a game**. The version has deliberately not
 moved: 0.1.0 has never shipped, so these are still its notes.
+
+### Changed — player ladder climbing is off by default (#436)
+
+- **Player ladder climbing now belongs to Concerned Ladders**, which is
+  published as its own mod. Concerned Ladders deliberately will not run
+  while Foreman's climb is installed, so a Foreman that climbed by default
+  would switch the published mod off for everybody who has both. Foreman's
+  climb is therefore **off by default**: at the defaults Foreman patches no
+  ladder, and Concerned Ladders works beside it.
+- **The switch has a new name: `Ladders/PlayerClimbing`.** Development
+  builds before this one wrote `Ladders/Enabled = true` into their config
+  as the default, without anybody choosing it. That line is no longer
+  read, so an old config is off like a new one. Nobody outside
+  development has a Foreman config, because Foreman has never been
+  published.
+- **Nothing was removed.** Turning `PlayerClimbing` on gives exactly the
+  climb described under "Added — climbable ladders" below. The pieces
+  workers may one day use to traverse a ladder (#334) are untouched and
+  do not depend on this switch.
+- Foreman has **no build-time reference to Concerned Ladders**, in either
+  direction.
 
 ### Changed — Thorstein's identity comes from Concerned NPC (#380)
 
@@ -57,6 +78,7 @@ moved: 0.1.0 has never shipped, so these are still its notes.
 
 ### Added — climbable ladders (#324)
 
+- *Off by default since #436; see above.* With `Ladders/PlayerClimbing = true`:
 - **Valheim's ladders are climbable instead of teleporting.** Walk into
   one, or press Use, and your character takes hold of it: forward climbs
   up, back climbs down, releasing stops, and you step off at the bottom,
@@ -66,11 +88,10 @@ moved: 0.1.0 has never shipped, so these are still its notes.
   measures like one. No new piece, no new recipe, no new entry in the
   hammer, and nothing of this mod's written into a world: uninstall and
   every ladder you built is still standing, teleporting again.
-- **The `Ladders` configuration section**: `Enabled`, `AutoMount`,
-  `ClimbSpeed`, `StaminaCost`, `UseTeleport`, `NpcClimbing`. The defaults
-  are the whole feature — a player who never opens the config file
-  climbs ladders.
-- **Off is off.** With `Ladders/Enabled = false` at startup, nothing is
+- **The `Ladders` configuration section**: `PlayerClimbing` (originally
+  `Enabled`; see #436 above), `AutoMount`, `ClimbSpeed`, `StaminaCost`,
+  `UseTeleport`, `NpcClimbing`.
+- **Off is off.** With `Ladders/PlayerClimbing = false` at startup, nothing is
   patched at all — not the player's motor, not the ladder's Use — and
   the game behaves as if Concerned Foreman were not installed.
   `UseTeleport = true` hands the Use key back to vanilla's teleport in

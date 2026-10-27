@@ -182,7 +182,7 @@ public sealed class LadderPiecesTests
         // exactly this.
         LadderSettingValues defaults = LadderSettingValues.Defaults;
 
-        Assert.True(defaults.Enabled);
+        Assert.False(defaults.Enabled);
         Assert.True(defaults.AutoMount);
         Assert.Equal(1f, defaults.ClimbSpeed);
         Assert.Equal(0f, defaults.StaminaCost);
@@ -191,12 +191,71 @@ public sealed class LadderPiecesTests
     }
 
     [Fact]
-    public void TheDefaultsAreAlreadyTheClimbsOwnDefaults()
+    public void PlayerClimbingIsOffByDefaultBecauseConcernedLaddersOwnsIt()
     {
-        // Binding the section must not change the behaviour a player who never
-        // configures anything gets.
+        // #436. Concerned Ladders (published separately) refuses to run while
+        // Foreman's motor is installed, so a Foreman that climbs by default
+        // switches off the published product for everybody who has both. This
+        // is the pin: flip the default back and this fails.
+        LadderSettingValues defaults = LadderSettingValues.Defaults;
+        Assert.False(defaults.Enabled);
+
+        // And off at load is what keeps the motor uninstalled: the plugin
+        // installs nothing unless the options say enabled after ApplyTo.
         var options = new ClimbOptions();
-        LadderSettingValues.Defaults.ApplyTo(options);
+        defaults.ApplyTo(options);
+        Assert.False(options.Enabled);
+
+        // Off by default means Use is vanilla's teleport, untouched.
+        Assert.Equal(
+            LadderUseOutcome.VanillaTeleport,
+            LadderUse.Decide(defaults.Enabled, defaults.UseTeleport, alreadyClimbing: false));
+    }
+
+    [Fact]
+    public void ThePlayerClimbSwitchIsNotReadFromTheKeyOldBuildsWroteTrueInto()
+    {
+        // #436. Every development build before this one wrote
+        // `Ladders/Enabled = true` into its config as the default. Reading the
+        // switch from a different key orphans that line, so those profiles are
+        // off too rather than silently keeping a motor that disables Concerned
+        // Ladders.
+        Assert.Equal("Ladders", LadderSettingValues.Section);
+        Assert.Equal("PlayerClimbing", LadderSettingValues.PlayerClimbingKey);
+        Assert.NotEqual(LadderSettingValues.RetiredEnabledKey, LadderSettingValues.PlayerClimbingKey);
+    }
+
+    [Fact]
+    public void TheBindingReadsTheSwitchFromTheNewKeyAndTheDomainDefault()
+    {
+        // The binding is BepInEx and cannot run here, so its source is read: the
+        // switch must be bound under PlayerClimbingKey with defaults.Enabled, and
+        // nothing may bind the retired key or hard-code a default of true.
+        string source = ReadShippedFile(Path.Combine(
+            "src", "ConcernedForeman", "Runtime", "Ladders", "LadderSettings.cs"));
+
+        string collapsed = System.Text.RegularExpressions.Regex.Replace(source, @"\s+", " ");
+        Assert.Contains(
+            "LadderSettingValues.Section, LadderSettingValues.PlayerClimbingKey, defaults.Enabled,",
+            collapsed);
+        Assert.DoesNotContain("\"Enabled\"", source);
+        Assert.DoesNotContain("RetiredEnabledKey", source);
+    }
+
+    [Fact]
+    public void TheClimbsOwnDefaultsStillMatchTheOptInRow()
+    {
+        // Somebody who opts in gets the spec's climb: binding the section must
+        // not change anything else about it.
+        var options = new ClimbOptions();
+        LadderSettingValues defaults = LadderSettingValues.Defaults;
+        new LadderSettingValues(
+            enabled: true,
+            defaults.AutoMount,
+            defaults.ClimbSpeed,
+            defaults.StaminaCost,
+            defaults.UseTeleport,
+            defaults.NpcClimbing).ApplyTo(options);
 
         Assert.True(options.Enabled);
         Assert.True(options.AutoMount);
@@ -337,13 +396,13 @@ public sealed class LadderPiecesTests
     }
 
     [Fact]
-    public void ByDefaultUseStartsAClimb()
+    public void OnceOptedInUseStartsAClimb()
     {
         LadderSettingValues defaults = LadderSettingValues.Defaults;
 
         Assert.Equal(
             LadderUseOutcome.TryToClimb,
-            LadderUse.Decide(defaults.Enabled, defaults.UseTeleport, alreadyClimbing: false));
+            LadderUse.Decide(laddersEnabled: true, defaults.UseTeleport, alreadyClimbing: false));
     }
 
     [Fact]
@@ -354,5 +413,24 @@ public sealed class LadderPiecesTests
         Assert.Equal(
             LadderUseOutcome.AlreadyClimbing,
             LadderUse.Decide(laddersEnabled: true, useTeleport: false, alreadyClimbing: true));
+    }
+
+    /// <summary>A shipped source file, found by walking up from the test
+    /// assembly to the repository root.</summary>
+    private static string ReadShippedFile(string relative)
+    {
+        var here = new DirectoryInfo(AppContext.BaseDirectory);
+        while (here != null)
+        {
+            string candidate = Path.Combine(here.FullName, relative);
+            if (File.Exists(candidate))
+            {
+                return File.ReadAllText(candidate);
+            }
+
+            here = here.Parent;
+        }
+
+        throw new FileNotFoundException("Shipped source not found above the test assembly.", relative);
     }
 }

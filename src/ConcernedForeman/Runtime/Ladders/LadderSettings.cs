@@ -14,8 +14,13 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Ladders;
 /// is in <see cref="LadderSettingValues"/>, which has no BepInEx in it and is
 /// tested; this class exists so that the rules have somewhere to be read from.
 ///
-/// <b>Zero configuration is the default experience.</b> Every default is the
-/// spec's, so a player who never opens the config file climbs ladders.</summary>
+/// <b>Off unless somebody opts in (#436).</b> Player ladder climbing is owned by
+/// Concerned Ladders, which refuses to run while this motor is installed, so a
+/// player who never opens the config file gets nothing patched by this section.
+/// The switch is bound as <c>Ladders/PlayerClimbing</c>, not the old
+/// <c>Ladders/Enabled</c>, so a <c>true</c> an older development build wrote as
+/// its default is never read (<see cref="LadderSettingValues.PlayerClimbingKey"/>).
+/// The worker-traversal seam (#334) does not depend on this switch.</summary>
 internal sealed class LadderSettings
 {
     private LadderSettings(
@@ -34,9 +39,10 @@ internal sealed class LadderSettings
         NpcClimbing = npcClimbing;
     }
 
-    /// <summary>The master switch. Off restores vanilla exactly: with it off at
-    /// load nothing is patched at all, and switched off later every patch falls
-    /// straight through and a climb in progress ends on the next frame.</summary>
+    /// <summary>The master switch, <c>Ladders/PlayerClimbing</c>, off by
+    /// default. Off restores vanilla exactly: with it off at load nothing is
+    /// patched at all, and switched off later every patch falls straight through
+    /// and a climb in progress ends on the next frame.</summary>
     public ConfigEntry<bool> Enabled { get; }
 
     /// <summary>Walking into a ladder climbs it.</summary>
@@ -72,16 +78,19 @@ internal sealed class LadderSettings
         LadderSettingValues defaults = LadderSettingValues.Defaults;
 
         ConfigEntry<bool> enabled = config.Bind(
-            "Ladders",
-            "Enabled",
+            LadderSettingValues.Section,
+            LadderSettingValues.PlayerClimbingKey,
             defaults.Enabled,
-            "Climb the game's own ladders instead of being teleported up them. " +
-            "Turning this off restores vanilla exactly: with it off when the game " +
-            "starts, Concerned Foreman patches nothing at all and every ladder " +
-            "behaves as it does without the mod installed.");
+            "Off by default. Player ladder climbing now belongs to the separate " +
+            "Concerned Ladders mod, and Concerned Ladders refuses to run while " +
+            "this is on. Turn it on only if you want Foreman's older climb on the " +
+            "game's own ladders instead. Off restores vanilla exactly: with it off " +
+            "when the game starts, Concerned Foreman patches nothing at all and every " +
+            "ladder behaves as it does without the mod installed. (An older " +
+            "development build used the key Enabled; that line is no longer read.)");
 
         ConfigEntry<bool> autoMount = config.Bind(
-            "Ladders",
+            LadderSettingValues.Section,
             "AutoMount",
             defaults.AutoMount,
             "Walking into a ladder starts the climb. Turn this off if you would " +
@@ -89,7 +98,7 @@ internal sealed class LadderSettings
             "either way.");
 
         ConfigEntry<float> climbSpeed = config.Bind(
-            "Ladders",
+            LadderSettingValues.Section,
             "ClimbSpeed",
             defaults.ClimbSpeed,
             new ConfigDescription(
@@ -99,7 +108,7 @@ internal sealed class LadderSettings
                     LadderSettingValues.MinimumClimbSpeed, LadderSettingValues.MaximumClimbSpeed)));
 
         ConfigEntry<float> staminaCost = config.Bind(
-            "Ladders",
+            LadderSettingValues.Section,
             "StaminaCost",
             defaults.StaminaCost,
             new ConfigDescription(
@@ -110,7 +119,7 @@ internal sealed class LadderSettings
                     LadderSettingValues.MinimumStaminaCost, LadderSettingValues.MaximumStaminaCost)));
 
         ConfigEntry<bool> useTeleport = config.Bind(
-            "Ladders",
+            LadderSettingValues.Section,
             "UseTeleport",
             defaults.UseTeleport,
             "Give the Use key back to vanilla's teleport. Some players use it " +
@@ -119,7 +128,7 @@ internal sealed class LadderSettings
             "unless AutoMount is off as well.");
 
         ConfigEntry<bool> npcClimbing = config.Bind(
-            "Ladders",
+            LadderSettingValues.Section,
             "NpcClimbing",
             defaults.NpcClimbing,
             "Let a settlement worker climb a ladder. Off until NPC traversal has " +
