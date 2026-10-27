@@ -249,7 +249,7 @@ internal static class TourPartitioner
                 continue;
             }
 
-            if (!capacity.RoomFor(0, target.Units))
+            if (!capacity.RoomFor(0, target.TripLoad))
             {
                 // No partition at all, so every target offered is waiting - not
                 // just the one that did not fit.
@@ -412,7 +412,7 @@ internal static class TourPartitioner
                 continue;
             }
 
-            if (!capacity.RoomFor(carried, candidate.Units))
+            if (!capacity.RoomFor(carried, candidate.TripLoad))
             {
                 continue;
             }
@@ -435,7 +435,7 @@ internal static class TourPartitioner
         JobTarget target = left[index];
         left.RemoveAt(index);
         carrying.Add(target);
-        units += target.Units;
+        units += target.TripLoad;
         cursor = target.At;
     }
 }

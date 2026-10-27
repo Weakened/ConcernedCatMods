@@ -108,8 +108,16 @@ public sealed class Plugin : BaseUnityPlugin
             () => _hauling?.BoundBodyRecordUnwritable ?? false,
             () => _hauling?.BoundBodyRecordUnreadable ?? false,
             () => _hauling?.SeamAvailable ?? false,
+            // A tour is on foot. No hauling runtime is "held": unknown refuses.
+            () => _hauling?.HoldsACart ?? true,
             _containers,
             Logger);
+        if (_hauling != null)
+        {
+            // #381: a collection tour drives Gunnar's body from the same worker
+            // tick the haul executor uses, and only while no cart is his.
+            _hauling.CollectionDrive = _collection.DriveWorker;
+        }
 
         // #317: publish Gunnar's real service through concernedcat.haul/1.
         _haulCapability = new Adapters.Interop.HaulCapabilityPublisher(
@@ -135,6 +143,11 @@ public sealed class Plugin : BaseUnityPlugin
         _haulCapability?.Shutdown();
         // Collection first: it acts through the hauling runtime's bound body, so
         // it stands down before the thing that owns that body does.
+        if (_hauling != null)
+        {
+            _hauling.CollectionDrive = null;
+        }
+
         Adapters.Workers.GunnarCollectionRuntime.Uninstall(_collection);
         Adapters.Workers.GunnarHaulingRuntime.Uninstall(_hauling);
         // #374: last, and its own OnDestroy flushes an unsaved permission. A

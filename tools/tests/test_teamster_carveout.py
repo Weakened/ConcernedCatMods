@@ -873,3 +873,86 @@ class DepositCarveOutIsNarrow(CarveOutFixture):
             "    private MoveTally Move(Inventory from, Inventory to, string itemPrefab, int units)")
         self.assert_refused(
             "the mover went back to two interchangeable inventory parameters", marker="#381")
+
+
+SURVEY = os.path.join(WORKERS, "GunnarCollectionSurvey.cs")
+TOUR_RUNTIME = os.path.join(WORKERS, "GunnarCollectionRuntime.Tour.cs")
+QUIET_WARD = "PrivateArea.CheckAccess(position, 0f, flash: false, wardCheck: false)"
+
+
+class CollectionTourIsBounded(CarveOutFixture):
+    """The collection tour (#381) adds a survey over every loaded network object
+    and a walk to a chest. Two things that would have been one line long are
+    pinned rather than promised: a ward query that lights the guard stone up -
+    an RPC to every peer, sent from inside vanilla - and a chest found rather
+    than pointed at. Each plant below was run against the validator from before
+    this change (origin/main 89ce8b6), which let every one of them through.
+    """
+
+    _restore_path = SURVEY
+
+    # -- asking about a ward is a read, only when it says so --
+
+    def test_a_ward_query_with_the_default_flash_is_refused(self):
+        # Vanilla's default is flash: true.
+        self.swap_in(SURVEY, QUIET_WARD, "PrivateArea.CheckAccess(position)")
+        self.assert_refused("a ward query with vanilla's default flash passed",
+                            marker="#381 ward-query audit", contains="does not say `flash: false`")
+
+    def test_a_flashing_ward_query_is_refused(self):
+        self.swap_in(SURVEY, QUIET_WARD, "PrivateArea.CheckAccess(position, 0f, flash: true, wardCheck: false)")
+        self.assert_refused("a flashing ward query passed",
+                            marker="#381 ward-query audit", contains="does not say `flash: false`")
+
+    def test_a_positional_flash_is_refused(self):
+        self.swap_in(SURVEY, QUIET_WARD, "PrivateArea.CheckAccess(position, 0f, false, false)")
+        self.assert_refused("a positional flash argument passed",
+                            marker="#381 ward-query audit", contains="does not say `flash: false`")
+
+    def test_a_ward_query_elsewhere_in_teamster_is_held_to_the_same_rule(self):
+        self.plant_file(os.path.join(DOMAIN, "Zz", "ZzWard.cs"),
+                        "        PrivateArea.CheckAccess(default);")
+        self.assert_refused("a flashing ward query in Domain/ passed",
+                            marker="#381 ward-query audit", contains="does not say `flash: false`")
+
+    # -- the chest is pointed at, never found --
+
+    def test_a_nearest_chest_search_is_refused_by_name(self):
+        self.plant_file(os.path.join(WORKERS, "ZzChests.cs"),
+                        "        var chest = FindNearestChest(cart);")
+        self.assert_refused("a nearest-chest search passed", marker="#381 destination audit",
+                            contains="FindNearestChest")
+
+    def test_the_survey_may_not_reach_a_container_out_of_the_scene(self):
+        # The fallback a reviewer would worry about: the survey already walks
+        # every loaded network object, so a container is one GetComponent away.
+        self.swap_in(
+            SURVEY,
+            "            Vector3 position = view.transform.position;",
+            "            Container? found = view.GetComponent<Container>();\n"
+            "            Vector3 position = view.transform.position;")
+        self.assert_refused("the survey reached a container out of the scene", marker="#381 destination audit",
+                            contains="reaches a container")
+
+    def test_a_scene_wide_object_search_is_refused(self):
+        self.plant_file(os.path.join(WORKERS, "ZzSearch.cs"),
+                        "        var all = UnityEngine.Object.FindObjectsOfType<Humanoid>();")
+        self.assert_refused("a scene-wide object search passed", marker="#381 destination audit",
+                            contains="reaches a container")
+
+    def test_the_tour_may_not_choose_its_own_chest(self):
+        # The partial class can reach the field; a tour that set it would be a
+        # chest the player never pointed at.
+        self.swap_in(
+            TOUR_RUNTIME,
+            "            Vector3 chest = _destination!.transform.position;",
+            "            _destination = _destination;\n"
+            "            Vector3 chest = _destination!.transform.position;")
+        self.assert_refused("the tour assigned the destination", marker="#381 destination audit",
+                            contains="assigns the runtime's _destination")
+
+    def test_the_destination_may_not_be_set_from_anything_but_the_pointed_chest(self):
+        runtime = os.path.join(WORKERS, "GunnarCollectionRuntime.cs")
+        self.swap_in(runtime, "        _destination = chest;", "        _destination = chest ?? _destination;")
+        self.assert_refused("the destination was set from something else", marker="#381 destination audit",
+                            contains="assigns _destination")

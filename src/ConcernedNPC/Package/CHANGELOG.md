@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.0
+
+A job can now say that doing a target leaves the NPC carrying something, so a collecting job is planned in loads
+(#381, Concerned Teamster's Gunnar).
+
+* `JobTarget` gains an additive constructor taking `carries`: the units doing that target leaves the NPC holding - a
+  loose stone picked up, a branch gathered. Every existing constructor call means exactly what it meant before
+  (`carries` is zero), so no consumer changes behaviour by upgrading.
+* The tour partitioner fills a trip with what a target leaves him carrying exactly as it fills one with what a trip
+  fetches. Before this, a collecting job's targets cost a trip nothing, so a whole area of loose stones came back as
+  one trip whatever the NPC could carry. It now comes back as the fewest loads that fit, never one target a trip, and
+  `PlannedStep.Tour` says which load each stop belongs to.
+* The library still never learns what was gathered or where it goes: what happens at the end of a load is the role's.
+* An additive minor version that widens the public surface by one constructor and one property. Every in-repository
+  consumer pin moves with it, so no product can compile against one contract and install another.
+
 ## 0.3.0
 
 The durable interruption machinery becomes an actual consumer API and Concerned Steward adopts it around its shipped
