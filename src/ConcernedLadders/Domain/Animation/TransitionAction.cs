@@ -189,10 +189,10 @@ internal static class DefaultTransitions
             // a rung-by-rung crouch. The hands press on the lip, the climb's top crouch releases so the body pops up
             // (pull-up), the hands let go as the shoulders pass over, both feet tuck and land on the platform together
             // (lead foot 3% ahead), a short landing dip, then the climber stands and walks on.
-            .Reach(LH, 0f, 0f, 0.1f, 1f).Arc(LH, 0f, 0.1f, 0f, 0.04f, 0.08f).Weight(LH, 0.26f, 1f, 0.36f, 0f)
-            .Reach(RH, 0.03f, 0f, 0.13f, 1f).Arc(RH, 0.03f, 0.13f, 0f, 0.04f, 0.08f).Weight(RH, 0.29f, 1f, 0.39f, 0f)
-            .Reach(LF, 0.16f, 0f, 0.36f, 1f).Arc(LF, 0.16f, 0.36f, 0f, 0.1f, 0.16f).Weight(LF, 0.6f, 1f, 0.8f, 0f)
-            .Reach(RF, 0.19f, 0f, 0.39f, 1f).Arc(RF, 0.19f, 0.39f, 0f, 0.1f, 0.16f).Weight(RF, 0.64f, 1f, 0.84f, 0f)
+            .Reach(LH, 0f, 0f, 0.1f, 1f).Arc(LH, 0f, 0.1f, 0f, 0.04f, 0.08f).Weight(LH, 0.13f, 1f, 0.23f, 0f)
+            .Reach(RH, 0.03f, 0f, 0.13f, 1f).Arc(RH, 0.03f, 0.13f, 0f, 0.04f, 0.08f).Weight(RH, 0.16f, 1f, 0.26f, 0f)
+            .Reach(LF, 0.16f, 0f, 0.36f, 1f).Arc(LF, 0.16f, 0.36f, 0f, 0.1f, 0.16f).Weight(LF, 0.44f, 1f, 0.6f, 0f)
+            .Reach(RF, 0.19f, 0f, 0.39f, 1f).Arc(RF, 0.19f, 0.39f, 0f, 0.1f, 0.16f).Weight(RF, 0.48f, 1f, 0.64f, 0f)
             .Body(0f, 1f, 0.75f, 1f, 0.95f, 0f).BodyUp(0f, 0f, 0.3f, 0.04f, 0.42f, -0.12f, 0.6f, 0f)
             .BodyToward(0f, 0f, 0.3f, 0.12f, 0.6f, 0.05f, 0.9f, 0f).Lean(0f, 0f, 0.2f, 12f, 0.38f, 18f, 0.65f, 4f, 0.9f, 0f).Build(),
         // Intermediate-floor exit: the same support transfer sideways or behind at the current height.
@@ -212,12 +212,13 @@ internal static class DefaultTransitions
         // Descending entry from an upper floor: face the ladder, hands down onto the top, one foot lowers to a rung,
         // the body transfers into the climbing stance, the second foot follows (reach 1 = the floor it starts from).
         new TransitionAction.Builder(TransitionKind.TopEntry, 1f)
-            // Owner 2026-10-27: an athletic hop down, not a squat. The climber walks to the lip upright (progress 0-0.4),
+            // Owner 2026-10-27: an athletic hop down, not a squat. The climber walks to the lip upright on the game's own
+            // walk (progress 0-0.4; the feet are taken over only for the hop),
             // both feet hop off the floor together onto the rungs (lead foot 3% ahead) with a small dip, the hands catch
             // the top rungs once they are in reach, and the climbing posture blends in last.
-            .Weight(LH, 0.7f, 0f, 0.84f, 1f).Weight(RH, 0.73f, 0f, 0.87f, 1f)
-            .Reach(LF, 0f, 1f, 0.42f, 1f, 0.6f, 0f).Arc(LF, 0.42f, 0.6f, 0f, 0.12f, 0.08f).Weight(LF, 0.06f, 0f, 0.16f, 1f)
-            .Reach(RF, 0f, 1f, 0.45f, 1f, 0.63f, 0f).Arc(RF, 0.45f, 0.63f, 0f, 0.12f, 0.08f).Weight(RF, 0.09f, 0f, 0.19f, 1f)
+            .Weight(LH, 0.82f, 0f, 0.93f, 1f).Weight(RH, 0.85f, 0f, 0.96f, 1f)
+            .Reach(LF, 0f, 1f, 0.42f, 1f, 0.6f, 0f).Arc(LF, 0.42f, 0.6f, 0f, 0.12f, 0.08f).Weight(LF, 0.36f, 0f, 0.42f, 1f)
+            .Reach(RF, 0f, 1f, 0.45f, 1f, 0.63f, 0f).Arc(RF, 0.45f, 0.63f, 0f, 0.12f, 0.08f).Weight(RF, 0.39f, 0f, 0.45f, 1f)
             .Body(0f, 0f, 0.12f, 1f, 1f, 1f).BodyUp(0f, 0f, 0.3f, -0.04f, 0.58f, -0.16f, 0.75f, -0.06f, 0.95f, 0f)
             .BodyToward(0f, 0f, 0.4f, 0.06f, 0.7f, 0.08f, 0.95f, 0f).Lean(0f, 0f, 0.35f, 15f, 0.6f, 20f, 0.85f, 8f, 1f, 0f).Build(),
     };
