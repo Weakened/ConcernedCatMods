@@ -183,40 +183,34 @@ class Builder:
 
 
 def default_transitions():
-    """DefaultTransitions.All(), in its order."""
-    LH, RH, LF, RF = 0, 1, 2, 3
-    B = Builder
-    return [
-        B('GroundMount', 0.9)
-        .weight(RH, 0, 0, 0.35, 1).weight(LF, 0.15, 0, 0.5, 1).weight(LH, 0.3, 0, 0.65, 1).weight(RF, 0.5, 0, 0.95, 1)
-        .arc(RH, 0, 0.4, 0, 0.08, 0.04).arc(LH, 0.3, 0.7, 0, 0.08, 0.04).arc(LF, 0.15, 0.55, 0, 0.1, 0.06).arc(RF, 0.5, 1, 0, 0.12, 0.08)
-        .body(0, 0, 0.25, 0.2, 0.9, 1).build(),
-        B('AirCatch', 0.35)
-        .weight(LH, 0, 0, 0.35, 1).weight(RH, 0.1, 0, 0.45, 1).weight(LF, 0.3, 0, 0.8, 1).weight(RF, 0.45, 0, 1, 1)
-        .arc(LF, 0.3, 0.8, 0, 0.12, 0.05).arc(RF, 0.45, 1, 0, 0.12, 0.05)
-        .body(0, 0.2, 0.8, 1).build(),
-        B('TopExit', 1.0)
-        .reach(LF, 0.15, 0, 0.5, 1).arc(LF, 0.15, 0.5, 0, -0.05, 0.22).weight(LF, 0.75, 1, 0.95, 0)
-        .reach(RF, 0.45, 0, 0.8, 1).arc(RF, 0.45, 0.8, 0, -0.05, 0.22).weight(RF, 0.8, 1, 1, 0)
-        .reach(LH, 0.3, 0, 0.55, 1).arc(LH, 0.3, 0.55, 0, 0.05, 0.1).weight(LH, 0.55, 1, 0.8, 0)
-        .reach(RH, 0.35, 0, 0.6, 1).arc(RH, 0.35, 0.6, 0, 0.05, 0.1).weight(RH, 0.6, 1, 0.85, 0)
-        .body(0, 1, 0.55, 1, 0.95, 0).lean(0, 0, 0.4, 25, 0.75, 10, 1, 0).build(),
-        B('SideExit', 1.0)
-        .reach(LF, 0.1, 0, 0.45, 1).arc(LF, 0.1, 0.45, 0, 0.1, 0.18).weight(LF, 0.7, 1, 0.95, 0)
-        .reach(RF, 0.4, 0, 0.75, 1).arc(RF, 0.4, 0.75, 0, 0.1, 0.18).weight(RF, 0.75, 1, 1, 0)
-        .weight(LH, 0.45, 1, 0.75, 0).weight(RH, 0.55, 1, 0.85, 0)
-        .body(0, 1, 0.55, 1, 0.95, 0).lean(0, 0, 0.4, 12, 1, 0).build(),
-        B('BottomStepOff', 1.0)
-        .reach(LF, 0, 0, 0.35, 1).arc(LF, 0, 0.35, 0, 0.06, 0.03).weight(LF, 0.75, 1, 1, 0)
-        .reach(RF, 0.3, 0, 0.65, 1).arc(RF, 0.3, 0.65, 0, 0.06, 0.03).weight(RF, 0.8, 1, 1, 0)
-        .weight(RH, 0.45, 1, 0.7, 0).weight(LH, 0.6, 1, 0.9, 0)
-        .body(0, 1, 0.5, 0.9, 1, 0).build(),
-        B('TopEntry', 1.0)
-        .weight(LH, 0, 0, 0.2, 1).weight(RH, 0.05, 0, 0.25, 1)
-        .reach(LF, 0, 1, 0.25, 1, 0.6, 0).arc(LF, 0.25, 0.6, 0, -0.04, 0.12).weight(LF, 0.1, 0, 0.25, 1)
-        .reach(RF, 0, 1, 0.55, 1, 0.95, 0).arc(RF, 0.55, 0.95, 0, -0.04, 0.12).weight(RF, 0.15, 0, 0.3, 1)
-        .body(0, 0, 0.2, 0.3, 0.8, 1).lean(0, 0, 0.3, 20, 0.6, 15, 1, 0).build(),
-    ]
+    """DefaultTransitions.All(), in its order, read from the C# source (Domain/Animation/TransitionAction.cs) so
+    the transitions are authored in one place until the .blend takes over: each Builder chain is replayed here."""
+    import os
+    import re
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'src', 'ConcernedLadders',
+                        'Domain', 'Animation', 'TransitionAction.cs')
+    source = open(path, encoding='utf-8').read()
+    body = source[source.index('internal static TransitionAction[] All()'):]
+    limbs = {'LH': 0, 'RH': 1, 'LF': 2, 'RF': 3}
+    methods = {'Weight': 'weight', 'Reach': 'reach', 'Arc': 'arc', 'Body': 'body', 'BodyUp': 'body_up',
+               'BodyToward': 'body_toward', 'Lean': 'lean'}
+
+    def number(token):
+        token = token.strip()
+        return limbs[token] if token in limbs else float(token.rstrip('fF'))
+
+    actions = []
+    for chain in re.finditer(r'new TransitionAction\.Builder\(TransitionKind\.(\w+),\s*([-\d.]+)f?\)(.*?)\.Build\(\)', body, re.S):
+        builder = Builder(chain.group(1), float(chain.group(2)))
+        code = re.sub(r'//[^\n]*', '', chain.group(3))
+        for call in re.finditer(r'\.(\w+)\(([^)]*)\)', code):
+            if call.group(1) not in methods:
+                raise ValueError('unknown Builder call ' + call.group(1))
+            getattr(builder, methods[call.group(1)])(*[number(a) for a in call.group(2).split(',')])
+        actions.append(builder.build())
+    if [a['kind'] for a in actions] != list(TRANSITION_KINDS):
+        raise ValueError('DefaultTransitions order changed: ' + str([a['kind'] for a in actions]))
+    return actions
 
 
 def default_gait():
