@@ -349,6 +349,64 @@ public sealed class CollectionTourTests
         Assert.False(tour.CollectedSinceDeposit);
     }
 
+    /// <summary>A driver that keeps saying "wait".</summary>
+    private sealed class WaitingPump : ITourPump
+    {
+        public int Asked { get; private set; }
+
+        public int Abandoned { get; private set; }
+
+        public TourAdvance Next(CollectionPoint standingAt)
+        {
+            Asked++;
+            return new TourAdvance(TourProgress.Waiting, default, false, "held by another job");
+        }
+
+        public void Done() { }
+
+        public void Skipped() { }
+
+        public void Failed() { }
+
+        public void Abandon() => Abandoned++;
+    }
+
+    [Fact]
+    public void Waiting_is_asked_about_at_most_once_a_second_not_every_tick()
+    {
+        // Every ask is a whole new look at the area; twenty a second is a frame
+        // the player feels.
+        var pump = new WaitingPump();
+        var tour = new CollectionTour(pump, Limits, Chest, startWithDeposit: false);
+        var at = new CollectionPoint(0f, 0f, 0f);
+        for (int tick = 0; tick < 200; tick++)
+        {
+            Assert.Equal(TourOrder.Hold, tour.Tick(at, tick * 0.05f).Order);
+        }
+
+        Assert.InRange(pump.Asked, 1, 11);
+    }
+
+    [Fact]
+    public void Waiting_for_ever_stops_the_tour_and_says_why()
+    {
+        var pump = new WaitingPump();
+        var tour = new CollectionTour(pump, Limits, Chest, startWithDeposit: false);
+        var at = new CollectionPoint(0f, 0f, 0f);
+        float now = 0f;
+        while (!tour.IsOver && now < 1000f)
+        {
+            tour.Tick(at, now);
+            now += 0.5f;
+        }
+
+        Assert.Equal(TourPhase.Stopped, tour.Phase);
+        Assert.Contains("waited too long", tour.Reason, StringComparison.Ordinal);
+        Assert.Contains("held by another job", tour.Reason, StringComparison.Ordinal);
+        Assert.True(now <= Limits.MostWaitingSeconds + 2f);
+        Assert.Equal(1, pump.Abandoned);
+    }
+
     [Fact]
     public void The_step_cap_stops_a_tour_that_never_ends()
     {

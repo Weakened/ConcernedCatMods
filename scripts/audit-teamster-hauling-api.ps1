@@ -247,6 +247,7 @@ $requirements = @(
     @("ZDOVars", "game", "ZDOVars.s_creator", 'public static readonly int s_creator\b'),
     @("ZDOID", "game", "ZDOID.UserID", 'public long UserID =>'),
     @("ZDOID", "game", "ZDOID.ID", 'public uint ID \{ get; private set; \}'),
+    @("ZDOID", "game", "ZDOID.None, the tour's 'no body' identity", 'public static readonly ZDOID None = new ZDOID\(0L, 0u\);'),
     @("Pickable", "game", "Pickable.m_extraDrops", 'public DropTable m_extraDrops = new DropTable\(\);'),
     @("Pickable", "game", "Pickable.m_respawnTimeMinutes", 'public float m_respawnTimeMinutes;'),
     @("Pickable", "game", "Pickable.m_hideWhenPicked", 'public GameObject m_hideWhenPicked;'),

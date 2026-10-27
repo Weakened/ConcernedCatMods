@@ -165,6 +165,37 @@ public sealed class CollectingJobTests : IDisposable
         Assert.Equal(new[] { 0, 0, 0, 1, 1, 1, 2 }, tours.ToArray());
     }
 
+    [Fact]
+    public void A_ground_probe_does_not_strip_what_a_target_leaves_him_carrying()
+    {
+        // The snapshot rebuilds every target a probe moves onto the ground. A
+        // rebuild through the old constructor dropped Carries back to nothing,
+        // and the whole job became one load again for any role with a probe.
+        var role = new CollectorRole(_world, probe: true);
+        for (int index = 0; index < 7; index++)
+        {
+            role.Wants("s" + index, Point(3f + index, 0f), 2);
+        }
+
+        var order = new NpcJobOrder(
+            Who, "collect-probed", role.Area, _world, new NpcCarryCapacity(6), new JobStepActions("take", "pick"));
+        NpcJobDriver driver = NpcJobDriver.For(order, role, _registry);
+
+        var tours = new List<int>();
+        int guard = 0;
+        NpcJobAdvance advance = driver.Next(Point(0f, 0f));
+        while (advance.Progress == NpcJobProgress.Do && guard++ < 100)
+        {
+            tours.Add(advance.Step.Tour);
+            role.Complete(advance.Step.Target.Key);
+            driver.Done();
+            advance = driver.Next(advance.Step.Step.At);
+        }
+
+        Assert.Equal(NpcJobProgress.Finished, advance.Progress);
+        Assert.Equal(new[] { 0, 0, 0, 1, 1, 1, 2 }, tours.ToArray());
+    }
+
     private JobTarget Stone(string key, float x, float z, int carries) =>
         new JobTarget(key, _world, Point(x, z), string.Empty, 0, JobManifest.Empty, carries);
 
@@ -203,20 +234,27 @@ public sealed class CollectingJobTests : IDisposable
         public string Describe => "the work area";
     }
 
+    private sealed class StandableGround : INpcAreaProbe
+    {
+        public AreaSample Probe(NpcPoint point) =>
+            new AreaSample(AreaSampleVerdict.Standable, point, AreaRejection.None);
+    }
+
     private sealed class CollectorRole : INpcJobRole
     {
         private readonly NpcWorldEpoch _world;
         private readonly List<JobTarget> _targets = new List<JobTarget>();
         private readonly HashSet<string> _done = new HashSet<string>(StringComparer.Ordinal);
 
-        internal CollectorRole(NpcWorldEpoch world)
+        internal CollectorRole(NpcWorldEpoch world, bool probe = false)
         {
             _world = world;
+            Probe = probe ? new StandableGround() : null;
         }
 
         internal CollectorArea Area { get; } = new CollectorArea();
 
-        public INpcAreaProbe? Probe => null;
+        public INpcAreaProbe? Probe { get; }
 
         public INpcSourceAvailability? Availability => null;
 

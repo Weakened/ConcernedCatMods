@@ -117,6 +117,19 @@ public sealed class CollectionTourGateTests
     }
 
     [Fact]
+    public void A_mixed_load_holds_a_slot_back_for_every_material_after_the_first()
+    {
+        CollectionLimits limits = CollectionLimits.Default.Validate();
+        var carry = new CarryFacts(300f, 150f, 0f, true);
+
+        // Three free slots of fifty: one material fills all three, two materials
+        // need a slot each, so only two are free for the bulk of the load.
+        Assert.Equal(150, CollectionCapacity.UnitsPerLoad(carry, limits, 2f, 3, 50, materials: 1));
+        Assert.Equal(100, CollectionCapacity.UnitsPerLoad(carry, limits, 2f, 3, 50, materials: 2));
+        Assert.Equal(0, CollectionCapacity.UnitsPerLoad(carry, limits, 2f, 1, 50, materials: 2));
+    }
+
+    [Fact]
     public void Every_unreadable_number_is_a_load_of_nothing()
     {
         CollectionLimits limits = CollectionLimits.Default.Validate();

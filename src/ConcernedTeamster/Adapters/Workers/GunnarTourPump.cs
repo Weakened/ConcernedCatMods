@@ -21,14 +21,57 @@ namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;
 /// </summary>
 internal sealed class GunnarTourPump : ITourPump
 {
-    private readonly NpcJobDriver _driver;
+    /// <summary>How many fresh looks one tour may take at an area whose look was
+    /// cut short at the candidate ceiling, before it stops and says so.</summary>
+    internal const int MostLooks = 16;
 
-    internal GunnarTourPump(NpcJobDriver driver)
+    private readonly Func<NpcJobDriver> _start;
+    private readonly Func<SurveyOutcome> _lastLook;
+    private NpcJobDriver _driver;
+    private int _generation;
+
+    /// <param name="start">Starts a fresh job over the same area, chest and
+    /// capacity - the next look.</param>
+    /// <param name="lastLook">How the most recent survey went.</param>
+    internal GunnarTourPump(Func<NpcJobDriver> start, Func<SurveyOutcome> lastLook)
     {
-        _driver = driver ?? throw new ArgumentNullException(nameof(driver));
+        _start = start ?? throw new ArgumentNullException(nameof(start));
+        _lastLook = lastLook ?? throw new ArgumentNullException(nameof(lastLook));
+        _driver = _start();
     }
 
     internal NpcJobDriver Driver => _driver;
+
+    /// <summary>The driver's "finished" is only this tour's finished when the
+    /// look it planned from was complete. A look cut short at the ceiling means
+    /// there is more: a fresh job looks again. A look that met unloaded ground,
+    /// or could not read the area, cannot say the area is done, so the tour
+    /// stops and says so rather than reporting an empty area that is not one.
+    /// </summary>
+    private TourAdvance Finished()
+    {
+        switch (_lastLook())
+        {
+            case SurveyOutcome.Finished:
+                return new TourAdvance(TourProgress.Finished, default, false, string.Empty);
+            case SurveyOutcome.Truncated when _generation + 1 < MostLooks:
+                _generation++;
+                _driver = _start();
+                return _driver.Progress == NpcJobProgress.Stopped
+                    ? new TourAdvance(TourProgress.Stopped, default, false, _driver.Reason)
+                    : new TourAdvance(TourProgress.Waiting, default, false, "looking at the rest of the area");
+            case SurveyOutcome.Truncated:
+                return new TourAdvance(TourProgress.Stopped, default, false,
+                    "the area held more than one tour may look at; start him again to carry on");
+            case SurveyOutcome.NotLoaded:
+                return new TourAdvance(TourProgress.Stopped, default, false,
+                    "part of the area is not loaded, so whether anything is left there could not be established; " +
+                    "stand nearer its middle and start him again");
+            default:
+                return new TourAdvance(TourProgress.Stopped, default, false,
+                    "the area could not be read, so it is not reported as done");
+        }
+    }
 
     public TourAdvance Next(CollectionPoint standingAt)
     {
@@ -45,13 +88,16 @@ internal sealed class GunnarTourPump : ITourPump
                 }
 
                 NpcPoint at = step.Step.At;
+                // A load is the same load only within one round of one look:
+                // both restart their numbering, so both go into the round.
+                int round = (_generation * 10000) + _driver.Rounds;
                 return new TourAdvance(
                     TourProgress.Do,
-                    new TourStep(step.Target.Key, _driver.Rounds, step.Tour, new CollectionPoint(at.X, at.Y, at.Z)),
+                    new TourStep(step.Target.Key, round, step.Tour, new CollectionPoint(at.X, at.Y, at.Z)),
                     true,
                     string.Empty);
             case NpcJobProgress.Finished:
-                return new TourAdvance(TourProgress.Finished, default, false, string.Empty);
+                return Finished();
             case NpcJobProgress.Waiting:
                 return new TourAdvance(TourProgress.Waiting, default, false, advance.Reason);
             case NpcJobProgress.Stopped:

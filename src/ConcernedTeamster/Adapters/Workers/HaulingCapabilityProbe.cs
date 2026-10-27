@@ -204,6 +204,7 @@ internal static class HaulingCapabilityProbe
                 new("ZDOVars", zdoVars, "s_creator", GameMemberKind.StaticField, typeof(int)),
                 new("ZDOID", zdoId, "UserID", GameMemberKind.InstanceProperty, typeof(long)),
                 new("ZDOID", zdoId, "ID", GameMemberKind.InstanceProperty, typeof(uint)),
+                new("ZDOID", zdoId, "None", GameMemberKind.StaticField, zdoId),
                 new("Pickable", pickable, "m_extraDrops", GameMemberKind.InstanceField, dropTable),
                 new("DropTable", dropTable, "IsEmpty", GameMemberKind.InstanceMethod, typeof(bool)),
                 new("Pickable", pickable, "m_respawnTimeMinutes", GameMemberKind.InstanceField, typeof(float)),

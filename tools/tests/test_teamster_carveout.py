@@ -956,3 +956,57 @@ class CollectionTourIsBounded(CarveOutFixture):
         self.swap_in(runtime, "        _destination = chest;", "        _destination = chest ?? _destination;")
         self.assert_refused("the destination was set from something else", marker="#381 destination audit",
                             contains="assigns _destination")
+
+    # -- the spellings a review found around the two audits (review of a6aaf9f) --
+
+    def test_a_ward_query_may_not_hide_behind_using_static(self):
+        self.plant_file(os.path.join(WORKERS, "ZzStaticWard.cs"),
+                        "        // nothing\n    }\n}\n// using static PrivateArea;\nnamespace Zz2 { using static PrivateArea; class Q { void P() {")
+        self.assert_refused("using static PrivateArea passed", marker="#381 ward-query audit",
+                            contains="using static PrivateArea")
+
+    def test_a_ward_query_may_not_hide_behind_an_alias(self):
+        self.plant_file(os.path.join(WORKERS, "ZzWardAlias.cs"),
+                        "        // nothing\n    }\n}\nnamespace Zz3 { using Ward = PrivateArea; class Q { void P() {")
+        self.assert_refused("a PrivateArea alias passed", marker="#381 ward-query audit",
+                            contains="= PrivateArea;")
+
+    def test_a_container_may_not_be_reached_through_an_alias(self):
+        self.plant_file(os.path.join(WORKERS, "ZzChestAlias.cs"),
+                        "        // nothing\n    }\n}\nnamespace Zz4 { using Chest = Container; class Q { void P() {")
+        self.assert_refused("a Container alias passed", marker="#381 destination audit",
+                            contains="reaches a container")
+
+    def test_a_container_may_not_be_reached_by_a_cast(self):
+        self.plant_file(os.path.join(WORKERS, "ZzChestCast.cs"),
+                        "        var chest = cart as Container;")
+        self.assert_refused("a cast to Container passed", marker="#381 destination audit",
+                            contains="reaches a container")
+
+    def test_a_container_may_not_be_reached_by_name(self):
+        self.plant_file(os.path.join(WORKERS, "ZzChestByName.cs"),
+                        "        var chest = ((UnityEngine.Component)cart).GetComponent(\"Container\");")
+        self.assert_refused("a string-named GetComponent passed", marker="#381 destination audit",
+                            contains="reaches a container")
+
+    def test_every_scene_wide_search_is_refused(self):
+        self.plant_file(os.path.join(ADAPTERS, "ZzSearchAll.cs"),
+                        "        var all = UnityEngine.Resources.FindObjectsOfTypeAll(typeof(object));")
+        self.assert_refused("FindObjectsOfTypeAll passed", marker="#381 destination audit",
+                            contains="reaches a container")
+
+    def test_the_destination_may_not_be_filled_in_by_null_coalescing(self):
+        runtime = os.path.join(WORKERS, "GunnarCollectionRuntime.cs")
+        self.swap_in(runtime, "        _destination = null;", "        _destination ??= null;\n        _destination = null;")
+        self.assert_refused("a ??= write to the destination passed", marker="#381 destination audit",
+                            contains="assigns _destination")
+
+    def test_a_part_of_the_runtime_under_another_name_may_not_choose_the_chest(self):
+        path = os.path.join(WORKERS, "ZzRuntimePart.cs")
+        with open(path, "w", encoding="utf-8", newline="") as handle:
+            handle.write("namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;\n"
+                         "internal sealed partial class GunnarCollectionRuntime\n{\n"
+                         "    private void Choose(Container found) { _destination = found; }\n}\n")
+        self._planted.append(path)
+        self.assert_refused("a runtime part in a differently named file chose the chest",
+                            marker="#381 destination audit", contains="assigns the runtime's _destination")

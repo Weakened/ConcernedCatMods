@@ -230,6 +230,17 @@ internal sealed class CollectionTourLimits
     /// liveness bound over and above the driver's own rounds cap.</summary>
     public int MostSteps { get; }
 
+    /// <summary>How long to leave the driver alone after it answers "wait":
+    /// asking again is a whole new look at the area, so it is not done twenty
+    /// times a second.</summary>
+    public float WaitRetrySeconds => 1f;
+
+    /// <summary>How long the tour may wait, without a single step, before it
+    /// stops and says so. The driver bounds its own kind of waiting; this bounds
+    /// every kind, including "something this round needs is held by another
+    /// job", which the driver does not count.</summary>
+    public float MostWaitingSeconds => 120f;
+
     public static CollectionTourLimits Default(CollectionLimits limits) =>
         new CollectionTourLimits(limits.PickupReachMetres, stallSeconds: 12f, mostSteps: 512);
 }
@@ -277,6 +288,15 @@ internal sealed class CollectionTour
     private float _bestDistance = float.PositiveInfinity;
     private float _bestAt = float.NaN;
     private bool _orderIssued;
+    private float _askAfter = float.NegativeInfinity;
+    private float _waitingSince = float.NaN;
+
+    // Cached once: the walk takes these on every tick, and a method group
+    // allocates a delegate each time it is passed.
+    private readonly Action _toPicking;
+    private readonly Action _toDepositing;
+    private readonly Action _sourceUnreachable;
+    private readonly Action _chestUnreachable;
 
     public CollectionTour(ITourPump pump, CollectionTourLimits limits, CollectionPoint chest, bool startWithDeposit)
     {
@@ -284,6 +304,10 @@ internal sealed class CollectionTour
         _limits = limits ?? throw new ArgumentNullException(nameof(limits));
         _chest = chest;
         Reason = string.Empty;
+        _toPicking = EnterPicking;
+        _toDepositing = EnterDepositing;
+        _sourceUnreachable = SourceUnreachable;
+        _chestUnreachable = ChestUnreachable;
 
         // He may already be carrying what an earlier, interrupted tour
         // collected. That is emptied first, so every load this tour plans
@@ -328,9 +352,9 @@ internal sealed class CollectionTour
             case TourPhase.Asking:
                 return Ask(standingAt, now);
             case TourPhase.ToSource:
-                return Walk(standingAt, now, _step.At, arrived: EnterPicking, unreachable: SourceUnreachable);
+                return Walk(standingAt, now, _step.At, _toPicking, _sourceUnreachable);
             case TourPhase.ToChest:
-                return Walk(standingAt, now, _chest, arrived: EnterDepositing, unreachable: ChestUnreachable);
+                return Walk(standingAt, now, _chest, _toDepositing, _chestUnreachable);
             case TourPhase.Picking:
                 return Issue(TourOrder.Pick, _step.At, _step.Key);
             case TourPhase.Depositing:
@@ -427,7 +451,30 @@ internal sealed class CollectionTour
             return TourInstruction.Nothing;
         }
 
+        if (now < _askAfter)
+        {
+            return TourInstruction.Hold;
+        }
+
         TourAdvance advance = _pump.Next(standingAt);
+        if (advance.Progress == TourProgress.Waiting)
+        {
+            if (float.IsNaN(_waitingSince))
+            {
+                _waitingSince = now;
+            }
+            else if (now - _waitingSince >= _limits.MostWaitingSeconds)
+            {
+                Stop("he waited too long for the job to give him something to do" +
+                    (advance.Reason.Length == 0 ? "" : " (" + advance.Reason + ")"));
+                return TourInstruction.Nothing;
+            }
+
+            _askAfter = now + _limits.WaitRetrySeconds;
+            return TourInstruction.Hold;
+        }
+
+        _waitingSince = float.NaN;
         switch (advance.Progress)
         {
             case TourProgress.Do when advance.HasStep:
@@ -446,18 +493,16 @@ internal sealed class CollectionTour
                     // A new load begins: this one goes to the chest first, and
                     // the stop that announced the new load waits for him.
                     EnterToChest();
-                    return Walk(standingAt, now, _chest, EnterDepositing, ChestUnreachable);
+                    return Walk(standingAt, now, _chest, _toDepositing, _chestUnreachable);
                 }
 
                 Phase = TourPhase.ToSource;
                 ResetWalk();
-                return Walk(standingAt, now, _step.At, EnterPicking, SourceUnreachable);
+                return Walk(standingAt, now, _step.At, _toPicking, _sourceUnreachable);
             case TourProgress.Finished:
                 return End(standingAt, now, string.Empty);
             case TourProgress.Stopped:
                 return End(standingAt, now, advance.Reason.Length != 0 ? advance.Reason : "the job stopped");
-            case TourProgress.Waiting:
-                return TourInstruction.Hold;
             default:
                 Stop("the job driver gave an answer nobody recorded, so he stopped");
                 return TourInstruction.Nothing;
@@ -474,7 +519,7 @@ internal sealed class CollectionTour
         {
             _finishing = true;
             EnterToChest();
-            return Walk(standingAt, now, _chest, EnterDepositing, ChestUnreachable);
+            return Walk(standingAt, now, _chest, _toDepositing, _chestUnreachable);
         }
 
         Close();

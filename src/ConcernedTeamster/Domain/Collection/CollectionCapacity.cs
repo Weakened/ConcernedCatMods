@@ -20,26 +20,32 @@ namespace TheConcernedCat.ConcernedTeamster.Domain.Collection;
 /// than sized on a guess.</summary>
 internal static class CollectionCapacity
 {
+    /// <param name="materials">How many different yields a load can mix. A load
+    /// of stone and wood needs a slot per material even when one of them is a
+    /// single unit, so a slot is held back for every material after the first.
+    /// </param>
     public static int UnitsPerLoad(
         CarryFacts carry,
         CollectionLimits limits,
         float heaviestUnitKilograms,
         int freeSlots,
-        int smallestStack)
+        int smallestStack,
+        int materials = 1)
     {
         if (limits == null)
         {
             throw new ArgumentNullException(nameof(limits));
         }
 
-        if (freeSlots <= 0 || smallestStack <= 0)
+        int usableSlots = freeSlots - (materials > 1 ? materials - 1 : 0);
+        if (usableSlots <= 0 || smallestStack <= 0)
         {
             return 0;
         }
 
         CarryBudget budget = CarryBudget.From(carry, limits);
         int byWeight = budget.HowManyFit(heaviestUnitKilograms, int.MaxValue);
-        long byRoom = (long)freeSlots * smallestStack;
+        long byRoom = (long)usableSlots * smallestStack;
         long units = byWeight < byRoom ? byWeight : byRoom;
         return units > int.MaxValue ? int.MaxValue : (int)units;
     }

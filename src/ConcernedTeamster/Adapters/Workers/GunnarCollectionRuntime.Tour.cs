@@ -53,6 +53,18 @@ internal sealed partial class GunnarCollectionRuntime
     private string _tourPickSource = string.Empty;
     private float _tourLoadKilograms;
     private string _lastTour = "none this session";
+    private ZDOID _tourBody = ZDOID.None;
+    private float _lastDriveAt;
+
+    /// <summary>How long a tour may go without its body's worker tick before it
+    /// is ended: a body that died, unloaded or stopped being Gunnar's stops
+    /// ticking, and the tour must not hold his job for ever.</summary>
+    private const float TourBodySilenceSeconds = 5f;
+
+    /// <summary>What one round of a tour may spend looking and planning: a full
+    /// survey's worth of candidates in the snapshot and again in the partition,
+    /// with room to spare, rather than exactly at the library's default.</summary>
+    private static readonly int TourAllowance = (4 * CollectionLimits.Default.MostCandidatesPerSurvey) + 128;
 
     private Func<bool> _cartHeld = () => true;
 
@@ -71,6 +83,7 @@ internal sealed partial class GunnarCollectionRuntime
             return false;
         }
 
+        _lastDriveAt = Time.time;
         try
         {
             TickTour(ai);
@@ -93,8 +106,20 @@ internal sealed partial class GunnarCollectionRuntime
             return;
         }
 
+        // The containment of GUNNAR_COLLECTION.md §6c: a body whose last change
+        // did not reach its record, or that never read its record, is handed
+        // nothing more. Asked by name, before anything else, so the sentence is
+        // the true one.
+        if (_recordUnwritable() || _recordUnreadable())
+        {
+            CancelTour("Gunnar's body could not write down, or has not read, what he is carrying, so he is " +
+                "handed nothing more; what he holds stays in him");
+            SafeHalt(ai);
+            return;
+        }
+
         Humanoid? worker = _worker();
-        if (worker == null || worker.IsDead() || worker.gameObject != ai.gameObject)
+        if (worker == null || worker.IsDead() || BodyOf(ai) != _tourBody)
         {
             CancelTour("Gunnar's body is no longer the one the tour began with, or is not working");
             SafeHalt(ai);
@@ -236,7 +261,9 @@ internal sealed partial class GunnarCollectionRuntime
             workerPresent: !worker.IsDead(),
             workerRecordUnwritable: _recordUnwritable(),
             workerRecordUnreadable: _recordUnreadable(),
-            transferInFlight: false,
+            // The tour itself is what is moving material, so it does not count
+            // against itself; anything else in flight still does.
+            transferInFlight: _ordered || _port.Phase == PickPhase.Gathering,
             carryingSomething: carried.Count > 0,
             destinationDesignated: _destination != null && _destinationKey.Length != 0,
             carriedIsReadable: readable);
@@ -278,11 +305,21 @@ internal sealed partial class GunnarCollectionRuntime
             return TourDepositEnd.Emptied;
         }
 
-        return tally.Moved > 0 ? TourDepositEnd.ChestFull : TourDepositEnd.Refused;
+        // Something stayed in him. "Full" only when a leg measured the chest
+        // taking part and no more; a leg the chest REFUSED (unmarked, opened,
+        // warded between legs) is a refusal, and saying "full" would send the
+        // player to the wrong fix.
+        return tally.AnyPartial && !tally.AnyRefused ? TourDepositEnd.ChestFull : TourDepositEnd.Refused;
     }
 
     private void FinishTour(CollectionTour tour)
     {
+        if (!ReferenceEquals(_tour, tour))
+        {
+            // Already finished by an earlier report in the same tick.
+            return;
+        }
+
         _lastTour = DescribeTour(tour);
         _log?.LogInfo("Gunnar's collection tour " + (tour.Phase == TourPhase.Finished ? "finished" : "stopped") +
             ": " + _lastTour);
@@ -340,6 +377,36 @@ internal sealed partial class GunnarCollectionRuntime
         _lease.Release();
     }
 
+    /// <summary>The tour runs on frames too: a body that stops ticking (died,
+    /// unloaded, no longer bound) and a record that stops being trusted both end
+    /// it from here, because neither produces another worker tick to end it from.
+    /// </summary>
+    private void WatchTourFromFrame()
+    {
+        if (_tour == null)
+        {
+            return;
+        }
+
+        if (_recordUnwritable() || _recordUnreadable())
+        {
+            CancelTour("Gunnar's body could not write down, or has not read, what he is carrying, so he is " +
+                "handed nothing more; what he holds stays in him");
+            return;
+        }
+
+        if (Time.time - _lastDriveAt > TourBodySilenceSeconds)
+        {
+            CancelTour("Gunnar's body stopped working (it died, unloaded or is no longer the one bound)");
+        }
+    }
+
+    private static ZDOID BodyOf(Component? body)
+    {
+        ZNetView? view = body != null ? body.GetComponent<ZNetView>() : null;
+        return view != null && view.IsValid() ? view.GetZDO().m_uid : ZDOID.None;
+    }
+
     private static string DescribeTour(CollectionTour tour) =>
         tour.Picks.ToString(CultureInfo.InvariantCulture) + " source(s) picked over " +
         tour.Loads.ToString(CultureInfo.InvariantCulture) + " load(s), " +
@@ -365,6 +432,12 @@ internal sealed partial class GunnarCollectionRuntime
 
     private string SetArea(string[]? args)
     {
+        if (TourRunning)
+        {
+            return "He is on a tour of the area you set. Stop it first (ct_collect stop) - the area is never " +
+                "changed under a tour that is working it.";
+        }
+
         Player? player = Player.m_localPlayer;
         if (player == null)
         {
@@ -403,11 +476,12 @@ internal sealed partial class GunnarCollectionRuntime
     {
         Humanoid? worker = _worker();
         NpcWorldEpoch world = CurrentEpoch();
+        int materials = 2;
         bool areaThisWorld = _area != null && !world.IsUnknown && world.Matches(_areaEpoch);
         bool chestThisWorld = _destination != null && _destinationKey.Length != 0 &&
             !world.IsUnknown && world.Matches(_destinationEpoch);
         NpcContainerUse allowed = chestThisWorld ? Allowance(_destination) : NpcContainerUse.Off;
-        int capacity = worker != null ? CapacityFor(worker, out _tourLoadKilograms) : 0;
+        int capacity = worker != null ? CapacityFor(worker, materials, out _tourLoadKilograms) : 0;
 
         var request = new TourRequest(
             featureEnabled: OptedIn(),
@@ -440,6 +514,7 @@ internal sealed partial class GunnarCollectionRuntime
             return "Gunnar is busy with another job, or his job authority is unavailable. Finish or cancel that job first.";
         }
 
+        GunnarTourPump? pump = null;
         try
         {
             CollectionArea area = _area!;
@@ -447,31 +522,37 @@ internal sealed partial class GunnarCollectionRuntime
                 () => _survey.Look(area, _tourLoadKilograms),
                 () => Array.Empty<SourceStock>(),
                 key => _survey.Observe(key));
-            var order = new NpcJobOrder(
-                identity,
-                "teamster-collect-" + (++_tourCounter).ToString(CultureInfo.InvariantCulture),
-                area,
-                world,
-                new NpcCarryCapacity(capacity),
-                new JobStepActions("take", "pick"));
-            NpcJobDriver driver = NpcJobDriver.For(order, job, NpcRoleRegistry.Shared);
-            if (driver.Progress == NpcJobProgress.Stopped)
+            NpcJobDriver StartJob() => NpcJobDriver.For(
+                new NpcJobOrder(
+                    identity,
+                    "teamster-collect-" + (++_tourCounter).ToString(CultureInfo.InvariantCulture),
+                    area,
+                    world,
+                    new NpcCarryCapacity(capacity),
+                    new JobStepActions("take", "pick"),
+                    allowance: TourAllowance),
+                job,
+                NpcRoleRegistry.Shared);
+            pump = new GunnarTourPump(StartJob, () => job.LastLook);
+            if (pump.Driver.Progress == NpcJobProgress.Stopped)
             {
                 _lease.Release();
-                return "The tour could not start: " + driver.Reason + ".";
+                return "The tour could not start: " + pump.Driver.Reason + ".";
             }
 
             IReadOnlyList<KeyValuePair<string, int>> carrying =
                 _deposit.Carrying(worker, GunnarCollectionAllowlist.IsCollectedYield, out bool readable);
             if (!readable)
             {
-                driver.Abandon();
+                pump.Abandon();
                 _lease.Release();
                 return "What Gunnar is carrying could not be read, so no tour starts.";
             }
 
             Vector3 chest = _destination!.transform.position;
-            _tourPump = new GunnarTourPump(driver);
+            _tourBody = BodyOf(worker);
+            _lastDriveAt = Time.time;
+            _tourPump = pump;
             _tour = new CollectionTour(
                 _tourPump,
                 CollectionTourLimits.Default(_limits),
@@ -486,6 +567,9 @@ internal sealed partial class GunnarCollectionRuntime
         }
         catch
         {
+            // Every hold the start took is given back, the job's own included.
+            try { pump?.Abandon(); }
+            catch (Exception) { /* already failing */ }
             _tour = null;
             _tourPump = null;
             _lease.Release();
@@ -528,7 +612,7 @@ internal sealed partial class GunnarCollectionRuntime
     /// vanilla player's base carry limit plus Megingjord's bonus, less whatever
     /// he holds that is not going in the chest; and his inventory's room. Zero
     /// for anything unreadable.</summary>
-    private int CapacityFor(Humanoid worker, out float loadKilograms)
+    private int CapacityFor(Humanoid worker, int materials, out float loadKilograms)
     {
         loadKilograms = 0f;
         try
@@ -582,7 +666,7 @@ internal sealed partial class GunnarCollectionRuntime
             var facts = new CarryFacts(player.m_maxCarryWeight, belt, otherKilograms, beltEquipped: belt > 0f);
             loadKilograms = CarryBudget.From(facts, _limits).FreeKilograms;
             return CollectionCapacity.UnitsPerLoad(
-                facts, _limits, heaviest, inventory.GetEmptySlots() + yieldSlots, smallestStack);
+                facts, _limits, heaviest, inventory.GetEmptySlots() + yieldSlots, smallestStack, materials);
         }
         catch (Exception)
         {

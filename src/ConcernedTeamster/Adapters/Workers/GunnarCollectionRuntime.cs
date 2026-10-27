@@ -198,6 +198,11 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour
 
         if (worldUp && _tour != null)
         {
+            WatchTourFromFrame();
+        }
+
+        if (worldUp && _tour != null)
+        {
             WorkAuthorityVerdict tourAuthority = Authority();
             if (tourAuthority != WorkAuthorityVerdict.Granted)
             {
@@ -485,6 +490,12 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour
     /// because between now and then they can change it.</summary>
     private string Designate()
     {
+        if (TourRunning)
+        {
+            return "He is on a tour to the chest you chose. Stop it first (ct_collect stop) - the chest is " +
+                "never changed under a tour that is walking to it.";
+        }
+
         Player? player = Player.m_localPlayer;
         GameObject? hover = player != null ? player.GetHoverObject() : null;
         Container? chest = hover != null ? hover.GetComponentInParent<Container>() : null;
@@ -589,13 +600,21 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour
     /// decide what happens next.</summary>
     private readonly struct DepositTally
     {
-        public DepositTally(int legs, int moved, bool uncertain, string refused)
+        public DepositTally(int legs, int moved, bool uncertain, string refused, bool anyPartial = false, bool anyRefused = false)
         {
             Legs = legs;
             Moved = moved;
             Uncertain = uncertain;
             Refused = refused ?? string.Empty;
+            AnyPartial = anyPartial;
+            AnyRefused = anyRefused;
         }
+
+        /// <summary>A leg moved some and the chest would take no more.</summary>
+        public bool AnyPartial { get; }
+
+        /// <summary>A leg moved nothing because the chest refused.</summary>
+        public bool AnyRefused { get; }
 
         /// <summary>How many legs were attempted.</summary>
         public int Legs { get; }
@@ -629,6 +648,8 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour
 
         int legs = 0;
         int moved = 0;
+        bool anyPartial = false;
+        bool anyRefused = false;
         for (int index = 0; index < carried.Count; index++)
         {
             KeyValuePair<string, int> material = carried[index];
@@ -650,6 +671,8 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour
             // fact is how material is lost or invented.
             _account.RecordDeposit(NextStep("deposit"), result);
             legs++;
+            anyPartial |= result.Outcome == DepositOutcome.PartlyDeposited;
+            anyRefused |= result.Outcome == DepositOutcome.Refused;
             if (result.Outcome == DepositOutcome.Deposited || result.Outcome == DepositOutcome.PartlyDeposited)
             {
                 for (int part = 0; part < result.Moved.Count; part++)
@@ -665,11 +688,11 @@ internal sealed partial class GunnarCollectionRuntime : MonoBehaviour
             {
                 said.Append(" Nothing after this was attempted, and nothing is put right " +
                     "automatically - a person decides.");
-                return new DepositTally(legs, moved, true, string.Empty);
+                return new DepositTally(legs, moved, true, string.Empty, anyPartial, anyRefused);
             }
         }
 
-        return new DepositTally(legs, moved, false, string.Empty);
+        return new DepositTally(legs, moved, false, string.Empty, anyPartial, anyRefused);
     }
 
     private static string Describe(string material, DepositResult result, NpcContainerRefusal why)

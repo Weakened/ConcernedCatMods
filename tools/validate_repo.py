@@ -2820,6 +2820,10 @@ def check_teamster_collection_verbs(errors: list[str]) -> list[str]:
 # position meaning `flash` is a fact about one game version's signature, and a
 # named argument is the only spelling that cannot drift onto another parameter.
 TEAMSTER_WARD_QUERY = re.compile(r"\bPrivateArea\s*\.\s*CheckAccess\s*\(")
+# The two spellings that would hide a ward query from the rule above: calling it
+# unqualified through `using static PrivateArea;`, or through an alias. Neither
+# is needed for anything, so both are refused outright.
+TEAMSTER_WARD_HIDDEN = re.compile(r"\busing\s+static\s+PrivateArea\b|\busing\s+\w+\s*=\s*PrivateArea\s*;")
 TEAMSTER_WARD_QUIET = re.compile(r"\bflash\s*:\s*false\b")
 
 
@@ -2850,6 +2854,12 @@ def check_teamster_ward_queries_are_quiet(errors: list[str]) -> list[str]:
         if parts[0] in ("obj", "bin"):
             continue
         code = _strip_cs_comments(path.read_text(encoding="utf-8-sig"))
+        for hidden in TEAMSTER_WARD_HIDDEN.finditer(code):
+            hits += 1
+            fail(
+                f"{label}: src/ConcernedTeamster/{path.relative_to(teamster_dir).as_posix()}:"
+                f"{code.count(chr(10), 0, hidden.start()) + 1} spells '{hidden.group(0)}', which would let a ward "
+                "query be written so this rule cannot see it", errors)
         for match in TEAMSTER_WARD_QUERY.finditer(code):
             queries += 1
             arguments = _teamster_call_arguments(code, match.end() - 1)
@@ -2886,8 +2896,12 @@ def check_teamster_ward_queries_are_quiet(errors: list[str]) -> list[str]:
 # delegate is invisible to it; what it does establish is that the obvious
 # fallback cannot be written without editing this rule.
 TEAMSTER_CONTAINER_REACH = re.compile(
-    r"<\s*Container\s*>|\btypeof\s*\(\s*Container\s*\)|\bFindObjects?OfType\b|\bFindAnyObjectByType\b|"
-    r"\bFindObjectsByType\b")
+    r"<\s*Container\s*>|\btypeof\s*\(\s*Container\s*\)|"
+    # Every scene-wide search Unity offers, "...All" and "...ByType" included.
+    r"\bFind(?:Any|First)?Objects?(?:OfType|ByType)(?:All)?\b|"
+    # A container reached by a cast, a type test, a string, or an alias.
+    r"\bas\s+Container\b|\bis\s+Container\b|\bGetComponent\w*\s*\(\s*\"|"
+    r"\busing\s+\w+\s*=\s*Container\s*;")
 TEAMSTER_CONTAINER_REACH_SITES = (
     ("Adapters/Workers/ContainerPermissionRuntime.cs",
      re.compile(r"\bhovered\s*\.\s*GetComponentInParent\s*<\s*Container\s*>\s*\(\s*\)"), 1),
@@ -2898,7 +2912,7 @@ TEAMSTER_CONTAINER_REACH_SITES = (
 )
 TEAMSTER_CHEST_SEARCH_NAME = re.compile(r"\b\w*(?:Nearest|Closest|FindContainer|BestContainer|AnyContainer)\w*\b")
 TEAMSTER_DESTINATION_FILE = "Adapters/Workers/GunnarCollectionRuntime.cs"
-TEAMSTER_DESTINATION_WRITE = re.compile(r"\b_destination\s*=(?!=)")
+TEAMSTER_DESTINATION_WRITE = re.compile(r"\b_destination\s*(?:\?\?)?=(?!=)")
 TEAMSTER_DESTINATION_WRITES = (
     re.compile(r"\b_destination\s*=\s*chest\s*;"),
     re.compile(r"\b_destination\s*=\s*null\s*;"),
@@ -2950,11 +2964,12 @@ def check_teamster_destination_is_pointed_at(errors: list[str]) -> list[str]:
         hits += 1
         fail(f"{label}: src/ConcernedTeamster/{TEAMSTER_DESTINATION_FILE} assigns _destination {writes} time(s) "
              f"({pinned} pinned); the chosen chest is set from the pointed-at chest once and cleared once", errors)
-    # The runtime is a partial class, so its other files can reach the field;
-    # other files' own `_destination` fields (a haul's target point) are not it.
-    partial_prefix = TEAMSTER_DESTINATION_FILE[:-len(".cs")] + "."
+    # The runtime is a partial class, so any file declaring a part of it can
+    # reach the field - whatever that file is called. Other classes' own
+    # `_destination` fields (a haul's target point) are not it.
+    runtime_part = re.compile(r"\bpartial\s+class\s+GunnarCollectionRuntime\b")
     for rel, code in sources.items():
-        if rel != TEAMSTER_DESTINATION_FILE and rel.startswith(partial_prefix) and TEAMSTER_DESTINATION_WRITE.search(code):
+        if rel != TEAMSTER_DESTINATION_FILE and runtime_part.search(code) and TEAMSTER_DESTINATION_WRITE.search(code):
             hits += 1
             fail(f"{label}: src/ConcernedTeamster/{rel} assigns the runtime's _destination - the chosen chest "
                  f"is set in {TEAMSTER_DESTINATION_FILE} alone", errors)

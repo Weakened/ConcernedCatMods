@@ -747,9 +747,12 @@ ct_collect stop           (or cancel)
 
 1. **Survey a bounded area.** `GunnarCollectionSurvey` walks the scene's own instance table
    (`ZNetScene.m_instances` - every loaded network object, picked or not, which a physics query cannot say) for the
-   two allowlisted network prefabs, inside the circle the player stood in. At most
-   `CollectionLimits.MostCandidatesPerSurvey` sources are described per look; reaching the ceiling is `Truncated`,
-   and a circle that reaches into unloaded ground is `NotLoaded` - never an empty area.
+   two allowlisted network prefabs, inside the circle the player stood in, **nearest the centre first**. At most
+   `CollectionLimits.MostCandidatesPerSurvey` **takeable** sources are kept per look (warded, temple and foreign
+   stones do not crowd them out) and at most four times that many are judged at all. A look cut short at either
+   ceiling is `Truncated`, and when that job finishes the tour **looks again** for the rest (up to 16 looks) rather
+   than reporting the area done; a circle that reaches into unloaded ground is `NotLoaded`, and a job planned from
+   such a look ends **Stopped** with that reason, never "finished".
 2. **Classify.** Every source goes through `GunnarTargetPredicate` - identity, shape, food, yield, provenance,
    state - and its site: owned here, inside the area, **not inside a location** (the world's own location registry,
    because a location's component can appear a frame after its stones), **not denied by a ward** (asked with
@@ -787,7 +790,9 @@ ct_collect stop           (or cancel)
 | reverses a deposit, mints a partial stack, takes from a chest | the deposit port's pins are unchanged; a plan step that would take from a chest is refused by the pump and ends the tour |
 | walks him away from a cart | a tour refuses to start, and stops, while any cart is assigned to him or hitched to him. Moving material into a cart's container is not an authorized call, and the container permissions refuse a container that moves, so the tour is on foot and a load is what **he** carries |
 | teleports, portals | every movement is his own body walking through the vanilla motor - the pathfinding of his own body the Teamster carve-out allows. A walk that stops getting closer for 12 s is given up: a source is reported failed (still owed - the driver decides), an unreachable chest stops the tour with the load still on him |
-| runs two jobs | one tour at a time; the identity lease refuses a haul and a tour together; the ordered pick and deposit refuse while a tour runs |
+| runs two jobs | one tour at a time; the identity lease refuses a haul and a tour together; the ordered pick and deposit refuse while a tour runs, and so do choosing another chest or another area |
+| keeps picking into a body it cannot trust | the §6c containment holds for a tour too: a body whose last change did not reach its record, or that never read it, ends the tour at once (checked by name, every tick and every frame), and he is handed nothing more |
+| holds Gunnar after his body is gone | the tour remembers the body it began with (its network id) and ends when the bound body is another, when it is dead, or when no worker tick has come for 5 s - a body that unloaded or died produces no tick to end it from |
 | loses material on a reload | what he carries is persisted in his own body (§6c). A reload ends the tour (the world verb runs); after the chest and the area are chosen again in the new world load, the next `start` begins by taking what he carries to the chest |
 | lights a guard stone | vanilla's `PrivateArea.CheckAccess` defaults `flash` to **true**, and a flashing query sends `FlashShield` to every peer. Every ward query in Teamster says `flash: false` by name, pinned by the `#381 ward-query audit`; the hauling API audit pins the fact that a flash is an RPC |
 
@@ -810,9 +815,20 @@ game's. Every unreadable number is a load of nothing, and a tour that would carr
   as 24, taken to the chest, and the rest is the next load. Still a batch, never one source a trip; with vanilla's
   numbers (225 units a load, one unit a source) this cap, not the weight, is usually what sizes a trip. The driver's
   round cap (8) bounds one tour at about 8 x 24 sources, after which it stops and says so; `start` again carries on.
+- **Asking again is throttled.** When the driver says "wait", the tour asks again after a second, not every tick
+  (each ask is a fresh look at the area), and gives up after two minutes without a step, saying why.
+- **A mixed load holds a slot back** for every material after the first, so a load of stone and wood is never sized
+  to more stacks than he has room for.
 - **The chest's position is read once, at start.** A chest is a fixed piece; one that is moved or rebuilt is
   refused at the deposit (`NotThisContainer`), never followed.
 - **No cart.** Above.
+- **A tour needs the hauling runtime's bound body** (`GunnarHaulingEnabled` on, Gunnar spawned), exactly as the
+  ordered pick does: collection never finds or builds a body of its own.
+- **Owner questions, not settled here:** whether the Teamster carve-out's "pathfind his own body" (written for the
+  hauling runtime) is meant to cover walking him for collection; on-foot only; a load sized like a vanilla player
+  wearing Megingjord (225 units) regardless of what he wears; the effective 24-source trip; and whether a tiny load
+  (one or two units, when he is carrying something heavy that is not going in the chest) should be refused rather
+  than walked.
 - **Nothing here has been observed in a running game.** §10's tour rows are OWNER GO-AROUND PENDING.
 
 ### Tested and pinned
@@ -827,8 +843,11 @@ game's. Every unreadable number is a load of nothing, and a tour that would carr
   ever places him anywhere.
 - `CollectionTourGateTests`: every start clause refuses on its own, a defaulted request refuses, the record states
   never read as "not here", and the load and the area arithmetic.
-- `tools/tests/test_teamster_carveout.py` `CollectionTourIsBounded`: nine plants against the two new audits, each
-  verified to pass the validator from before this change and refused by this one.
+- `tools/tests/test_teamster_carveout.py` `CollectionTourIsBounded`: plants against the two new audits - the
+  flashing ward query in each spelling, `using static`/alias, a nearest-chest search, the survey reaching a container,
+  a cast, a string-named `GetComponent`, every scene-wide search, the destination set or `??=`-filled from anything
+  but the pointed chest, a runtime part under another file name - each verified to pass the validator from before
+  this change and refused by this one.
 
 ## 7. No portals
 

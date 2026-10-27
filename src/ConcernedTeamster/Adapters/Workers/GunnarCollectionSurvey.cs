@@ -23,10 +23,12 @@ namespace TheConcernedCat.ConcernedTeamster.Adapters.Workers;
 /// scene's own table holds every instantiated network object in loaded ground,
 /// and a prefab-hash comparison is the cheapest identity test there is.
 ///
-/// <b>Bounded.</b> At most <see cref="CollectionLimits.MostCandidatesPerSurvey"/>
-/// candidates are described per look; a look that reaches the ceiling says
-/// <see cref="SurveyOutcome.Truncated"/>, so the rest are worked in later rounds
-/// and never mistaken for an empty area. Ground in the area that is not loaded
+/// <b>Bounded, nearest first.</b> At most
+/// <see cref="CollectionLimits.MostCandidatesPerSurvey"/> takeable sources are kept
+/// per look, nearest the centre first, and at most four times that many are
+/// judged at all; a look that reaches either ceiling says
+/// <see cref="SurveyOutcome.Truncated"/>, and the tour looks again for the rest
+/// rather than mistaking it for an empty area. Ground in the area that is not loaded
 /// makes the look <see cref="SurveyOutcome.NotLoaded"/>: what is there could not
 /// be established.
 ///
@@ -40,6 +42,7 @@ internal sealed class GunnarCollectionSurvey
     private readonly CollectionLimits _limits;
     private readonly List<ZNetView> _scene = new List<ZNetView>();
     private readonly List<CollectionCandidate> _found = new List<CollectionCandidate>();
+    private readonly List<KeyValuePair<float, ZNetView>> _inArea = new List<KeyValuePair<float, ZNetView>>();
     private readonly Dictionary<string, ZNetView> _views = new Dictionary<string, ZNetView>(StringComparer.Ordinal);
 
     public GunnarCollectionSurvey(CollectionLimits limits)
@@ -75,11 +78,15 @@ internal sealed class GunnarCollectionSurvey
         _views.Clear();
         _found.Clear();
         _scene.Clear();
+        _inArea.Clear();
         _scene.AddRange(scene.m_instances.Values);
 
+        // First, only where: every allowlisted source inside the circle, which is
+        // a hash compare and a distance per entry. Then nearest first, so a look
+        // cut short keeps the sources he would reach first rather than whichever
+        // the scene table happened to list early.
         CollectionPoint centre = area.Centre;
         float reach = area.BoundingRadiusMetres;
-        bool truncated = false;
         for (int index = 0; index < _scene.Count; index++)
         {
             ZNetView view = _scene[index];
@@ -88,26 +95,51 @@ internal sealed class GunnarCollectionSurvey
                 continue;
             }
 
-            ZDO zdo = view.GetZDO();
-            int hash = zdo.GetPrefab();
+            int hash = view.GetZDO().GetPrefab();
             if (hash != StoneHash && hash != BranchHash)
             {
                 continue;
             }
 
             Vector3 position = view.transform.position;
-            var where = new CollectionPoint(position.x, position.y, position.z);
-            if (centre.FlatDistanceTo(where) > reach)
+            float distance = centre.FlatDistanceSquaredTo(new CollectionPoint(position.x, position.y, position.z));
+            if (distance > reach * reach)
             {
                 continue;
             }
 
-            if (_found.Count >= _limits.MostCandidatesPerSurvey)
+            _inArea.Add(new KeyValuePair<float, ZNetView>(distance, view));
+        }
+
+        _inArea.Sort((left, right) => left.Key.CompareTo(right.Key));
+
+        // Then judge them, nearest first. Only a TAKEABLE source counts toward
+        // the ceiling - warded, temple and foreign stones must not crowd out the
+        // ones he may take - and the work of judging is bounded separately, so a
+        // field of refusals cannot make a look unbounded either.
+        int takeable = 0;
+        int judged = 0;
+        int mostJudged = 4 * _limits.MostCandidatesPerSurvey;
+        bool truncated = false;
+        for (int index = 0; index < _inArea.Count; index++)
+        {
+            if (takeable >= _limits.MostCandidatesPerSurvey || judged >= mostJudged)
             {
                 truncated = true;
                 break;
             }
 
+            ZNetView view = _inArea[index].Value;
+            if (view == null || !view.IsValid())
+            {
+                continue;
+            }
+
+            judged++;
+            ZDO zdo = view.GetZDO();
+            int hash = zdo.GetPrefab();
+            Vector3 position = view.transform.position;
+            var where = new CollectionPoint(position.x, position.y, position.z);
             string key = KeyOf(zdo.m_uid);
             string prefab = hash == StoneHash ? GunnarCollectionAllowlist.LooseStonePrefab : GunnarCollectionAllowlist.BranchPrefab;
             CollectableFacts facts = ReadFacts(view, zdo, prefab, out Pickable? pickable, out float unitKilograms);
@@ -120,15 +152,20 @@ internal sealed class GunnarCollectionSurvey
                 location: TeamsterLocationSense.At(position),
                 fitsCarryLimit: units > 0 && unitKilograms > 0f && units * unitKilograms <= loadKilograms);
 
-            _found.Add(new CollectionCandidate(
+            var candidate = new CollectionCandidate(
                 key,
                 where,
                 verdict,
                 GunnarTargetPredicate.CheckSite(site),
                 facts.YieldItemPrefabName ?? string.Empty,
                 units,
-                unitKilograms));
+                unitKilograms);
+            _found.Add(candidate);
             _views[key] = view;
+            if (candidate.IsTakeable)
+            {
+                takeable++;
+            }
         }
 
         // The deterministic order the driver's tie-break relies on: nearest the
