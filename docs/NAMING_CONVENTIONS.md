@@ -104,6 +104,18 @@ issue key `CS-###` / profiles `TCS-Clean/Dev/Compat`.
 
 Each product is fully independent: its own DLL, plugin GUID, package, changelog, versions, tags, and release lifecycle. Products never reference each other at compile time.
 
+**Concerned Ladders** (owner request 2026-10-24, local work items CL-001–003):
+`Concerned Ladders` / `src/ConcernedLadders` / `ConcernedLadders.csproj` /
+`ConcernedLadders.Tests` / `TheConcernedCat.ConcernedLadders` /
+`TheConcernedCat.ConcernedLadders.dll` /
+`com.theconcernedcat.valheim.concernedladders` / `TheConcernedCat` /
+`ConcernedLadders` / `docs/mods/concerned-ladders` /
+`concerned-ladders/v0.1.0` / issue keys `CL-###` /
+profile `TCC-Ladders-Dev`. This new product owns custom vertical pieces. It does
+not rename, replace or compile against Foreman's historical ladder implementation.
+Cloud work uses an isolated checkout/worktrees named after this repository;
+`C:\code\ConcernedCatMods` remains the canonical BLD integration checkout.
+
 ### Library packages
 
 A **library** is the second kind of shipped package, added by CNPC-000 (#371), and the difference from a product is

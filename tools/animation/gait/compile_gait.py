@@ -1,0 +1,215 @@
+"""Turn AnimationSources/ladder_gait.json into Domain/Animation/GeneratedGait.cs (the values the game uses).
+
+    python tools/animation/gait/compile_gait.py           # write the C#
+    python tools/animation/gait/compile_gait.py --check   # exit 1 if anything is stale
+
+--check fails when GeneratedGait.cs is not exactly what this JSON compiles to, or when LadderGait.blend is not the
+file the JSON was exported from (saved in Blender but not exported: run regenerate.ps1).
+
+The output is deterministic: the same JSON always gives the same bytes.
+"""
+import hashlib
+import json
+import os
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+
+import gait_model as gm  # noqa: E402
+
+ROOT = os.path.abspath(os.path.join(HERE, '..', '..', '..'))
+SRC = os.path.join(ROOT, 'src', 'ConcernedLadders', 'AnimationSources')
+JSON = os.path.join(SRC, 'ladder_gait.json')
+BLEND = os.path.join(SRC, 'LadderGait.blend')
+OUT = os.path.join(ROOT, 'src', 'ConcernedLadders', 'Domain', 'Animation', 'GeneratedGait.cs')
+
+
+def f(value):
+    text = ('%.6f' % value).rstrip('0').rstrip('.')
+    if text in ('-0', ''):
+        text = '0'
+    return text + 'f'
+
+
+def wrap(values, per_line, indent):
+    """Values in rows of `per_line`, each line indented, trailing commas between lines."""
+    pad = ' ' * indent
+    lines = []
+    for i in range(0, len(values), per_line):
+        lines.append(pad + ', '.join(values[i:i + per_line]) + ',')
+    lines[-1] = lines[-1][:-1]
+    return lines
+
+
+def floats(values, indent, per_line=11):
+    """new[] { ... } over several lines."""
+    pad = ' ' * indent
+    return ['new[]', pad + '{'] + wrap([f(v) for v in values], per_line, indent + 4) + [pad + '}']
+
+
+def rows(table, indent, per_line):
+    """Rows(width, flat...) for a table of equal-width rows."""
+    width = len(table[0])
+    flat = [f(v) for row in table for v in row]
+    return ['Rows(%d,' % width] + wrap(flat, per_line * width, indent + 4) + [' ' * indent + ')']
+
+
+def assign(name, expr_lines, indent):
+    pad = ' ' * indent
+    if len(expr_lines) == 1:
+        return [pad + '%s = %s,' % (name, expr_lines[0])]
+    return [pad + '%s = %s' % (name, expr_lines[0])] + expr_lines[1:-1] + [expr_lines[-1] + ',']
+
+
+def inline(values):
+    return 'new[] { ' + ', '.join(f(v) for v in values) + ' }'
+
+
+def render_loop(loop, field, indent):
+    pad = ' ' * indent
+    inner = indent + 4
+    out = [pad + '%s = new ClimbLoop' % field, pad + '{']
+    out.append(' ' * inner + 'Name = "%s",' % loop['name'])
+    out.append(' ' * inner + 'StrideRungs = %d,' % loop['strideRungs'])
+    out.append(' ' * inner + 'Start = %s,' % inline(loop['start']))
+    out.append(' ' * inner + 'Length = %s,' % inline(loop['length']))
+    out += assign('Swing', floats(loop['swing'], inner), inner)
+    out.append(' ' * inner + 'Arc = new[]')
+    out.append(' ' * inner + '{')
+    for limb, name in enumerate(gm.LIMB_NAMES):
+        out.append(' ' * (inner + 4) + '// %s: { lat, out, up } over its swing progress' % name)
+        lines = rows(loop['arc'][limb], inner + 4, 4)
+        out += [' ' * (inner + 4) + lines[0]] + lines[1:-1] + [lines[-1] + ',']
+    out.append(' ' * inner + '},')
+    out.append(' ' * inner + '// { up, toward } over the cycle phase')
+    out += assign('Body', rows(loop['body'], inner, 6), inner)
+    out += assign('Lean', floats(loop['lean'], inner), inner)
+    out.append(pad + '},')
+    return out
+
+
+def render_transition(action, indent):
+    pad = ' ' * indent
+    inner = indent + 4
+    out = [pad + 'new TransitionAction', pad + '{']
+    out.append(' ' * inner + 'Kind = TransitionKind.%s,' % action['kind'])
+    out.append(' ' * inner + 'Seconds = %s,' % f(action['seconds']))
+    for field, key in (('Weight', 'weight'), ('Reach', 'reach')):
+        out.append(' ' * inner + '%s = new[]' % field)
+        out.append(' ' * inner + '{')
+        for limb, name in enumerate(gm.LIMB_NAMES):
+            out.append(' ' * (inner + 4) + '// %s' % name)
+            lines = floats(action[key][limb], inner + 4)
+            out += [' ' * (inner + 4) + lines[0]] + lines[1:-1] + [lines[-1] + ',']
+        out.append(' ' * inner + '},')
+    out.append(' ' * inner + 'Arc = new[]')
+    out.append(' ' * inner + '{')
+    for limb, name in enumerate(gm.LIMB_NAMES):
+        out.append(' ' * (inner + 4) + '// %s: { lat, out, up } over progress' % name)
+        lines = rows(action['arc'][limb], inner + 4, 4)
+        out += [' ' * (inner + 4) + lines[0]] + lines[1:-1] + [lines[-1] + ',']
+    out.append(' ' * inner + '},')
+    for field, key in (('BodyWeight', 'bodyWeight'), ('BodyUp', 'bodyUp'), ('BodyToward', 'bodyToward'), ('Lean', 'lean')):
+        out += assign(field, floats(action[key], inner), inner)
+    out.append(pad + '},')
+    return out
+
+
+def render(data, json_hash):
+    shape = data['shape']
+    lines = [
+        '// <auto-generated>',
+        '//     Generated by tools/animation/gait/compile_gait.py from AnimationSources/ladder_gait.json, which',
+        '//     export_gait.py wrote from AnimationSources/LadderGait.blend. Edit the .blend and run',
+        '//     tools/animation/gait/regenerate.ps1; never edit this file by hand (compile_gait.py --check fails).',
+        '// </auto-generated>',
+        'namespace TheConcernedCat.ConcernedLadders.Domain.Animation;',
+        '',
+        '/// <summary>The authored climbing animation exported from AnimationSources/LadderGait.blend: both climbing loops,',
+        '/// the six transitions, and the posture and bend values the presenter reads through ClimbTuning. The C# defaults',
+        '/// in LimbGait.cs and DefaultTransitions remain the fallbacks.</summary>',
+        'internal static class GeneratedGait',
+        '{',
+        '    internal const string BlendSha256 = "%s";' % data['sourceSha256'],
+        '    internal const string JsonSha256 = "%s";' % json_hash,
+        '    internal const string Blender = "%s";' % data['blender'],
+        '',
+    ]
+    for name, key, _ in gm.POSTURE_CONSTANTS + gm.BEND_CONSTANTS:
+        lines.append('    internal const float %s = %s;' % (name, f(data['constants'][name])))
+    lines += ['', '    internal static GaitShape Shape() => new GaitShape', '    {']
+    lines += render_loop(shape['up'], 'Up', 8)
+    lines += render_loop(shape['down'], 'Down', 8)
+    for field, key, _ in gm.SHAPE_SCALARS:
+        lines.append('        %s = %s,' % (field, f(shape[key])))
+    lines += ['    };', '', '    internal static TransitionAction[] Transitions() => new[]', '    {']
+    for action in data['transitions']:
+        lines += render_transition(action, 8)
+    lines += ['    };', '',
+              '    private static float[][] Rows(int width, params float[] flat)',
+              '    {',
+              '        var table = new float[flat.Length / width][];',
+              '        for (int i = 0; i < table.Length; i++)',
+              '        {',
+              '            table[i] = new float[width];',
+              '            System.Array.Copy(flat, i * width, table[i], 0, width);',
+              '        }',
+              '',
+              '        return table;',
+              '    }',
+              '}']
+    return '\n'.join(lines) + '\n'
+
+
+def validate(data):
+    problems = []
+    if data.get('format') != 2:
+        problems.append('ladder_gait.json is not format 2: re-export with export_gait.py')
+    shape = data['shape']
+    if [shape['up']['name'], shape['down']['name']] != list(gm.LOOP_NAMES):
+        problems.append('loops must be %s' % (gm.LOOP_NAMES,))
+    if [t['kind'] for t in data['transitions']] != list(gm.TRANSITION_KINDS):
+        problems.append('transitions must be %s in that order' % (gm.TRANSITION_KINDS,))
+    for loop in (shape['up'], shape['down']):
+        if len(loop['swing']) != gm.ARC_SAMPLES or len(loop['body']) != gm.BODY_SAMPLES or len(loop['lean']) != gm.BODY_SAMPLES:
+            problems.append('%s has the wrong table sizes' % loop['name'])
+        for limb in range(4):
+            if not 0.05 <= loop['length'][limb] <= 0.7:
+                problems.append('%s %s window %.3f of a cycle is outside 0.05..0.7' % (loop['name'], gm.LIMBS[limb], loop['length'][limb]))
+    return problems
+
+
+def main():
+    with open(JSON, 'rb') as handle:
+        raw = handle.read()
+    data = json.loads(raw.decode('utf-8'))
+    problems = validate(data)
+    if problems:
+        for problem in problems:
+            print(problem)
+        return 1
+    text = render(data, hashlib.sha256(raw).hexdigest())
+    if '--check' in sys.argv:
+        failed = False
+        with open(BLEND, 'rb') as handle:
+            blend = hashlib.sha256(handle.read()).hexdigest()
+        if blend != data['sourceSha256']:
+            print('LadderGait.blend (%s) is not the file ladder_gait.json was exported from (%s): run regenerate.ps1'
+                  % (blend[:12], data['sourceSha256'][:12]))
+            failed = True
+        current = open(OUT, encoding='utf-8').read() if os.path.exists(OUT) else ''
+        if current.replace('\r\n', '\n') != text:
+            print('GeneratedGait.cs is stale: run compile_gait.py')
+            failed = True
+        if failed:
+            return 1
+        print('GeneratedGait.cs matches ladder_gait.json, which matches LadderGait.blend')
+        return 0
+    with open(OUT, 'w', encoding='utf-8', newline='\n') as handle:
+        handle.write(text)
+    print('wrote', OUT)
+    return 0
+
+
+sys.exit(main())

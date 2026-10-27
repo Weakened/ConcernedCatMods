@@ -73,6 +73,20 @@ PRODUCTS: dict[str, dict[str, object]] = {
         "package_name": "ConcernedSteward",
         "dll_name": "TheConcernedCat.ConcernedSteward.dll",
     },
+    "ladders": {
+        "display": "Concerned Ladders",
+        "project_dir": ROOT / "src" / "ConcernedLadders",
+        "csproj": "ConcernedLadders.csproj",
+        "package_name": "ConcernedLadders",
+        "dll_name": "TheConcernedCat.ConcernedLadders.dll",
+        # Independent product: Valheim 1.0's usage-tag menu requires Jotunn
+        # 2.30.x. Keep shipped products' older pins and checks unchanged.
+        "dependencies": {
+            "denikson-BepInExPack_Valheim": "5.4.2351",
+            "ValheimModding-Jotunn": "2.30.2",
+        },
+        "categories": ("mods", "building", "utility", "ai-generated"),
+    },
 }
 
 # CNPC-000 (#371): a LIBRARY is a second kind of shipped package, and the
@@ -199,12 +213,13 @@ def validate_product(key: str, errors: list[str], require_binary: bool,
     if not description or len(description) > 250:
         fail(f"{prefix} Thunderstore description must be 1-250 characters", errors)
 
-    for dependency, pin in EXPECTED_DEPENDENCIES.items():
+    expected_dependencies = spec.get("dependencies", EXPECTED_DEPENDENCIES)
+    for dependency, pin in expected_dependencies.items():
         if dependencies.get(dependency) != pin:
             fail(f"{prefix} {dependency} dependency must be pinned to {pin}", errors)
 
     categories = publish.get("categories", {}).get("valheim", [])
-    for category in EXPECTED_CATEGORIES:
+    for category in spec.get("categories", EXPECTED_CATEGORIES):
         if category not in categories:
             fail(f"{prefix} Missing Valheim publish category: {category}", errors)
 
@@ -364,6 +379,27 @@ CROSS_PRODUCT_RULES: tuple[tuple[str, str, str], ...] = (
     ("interop", "src/Interop.Tests", "ConcernedSteward"),
     ("interop", "src/Interop.Tests/Provider", "ConcernedSteward"),
     ("interop", "src/Interop.Tests/Consumer", "ConcernedSteward"),
+    # CL-001: the fifth product must be independent in both directions, and
+    # the harness must not acquire a hidden compile-time ladder dependency.
+    ("ladders", "src/ConcernedLadders", "ConcernedCartographer"),
+    ("ladders", "src/ConcernedLadders", "ConcernedTeamster"),
+    ("ladders", "src/ConcernedLadders", "ConcernedForeman"),
+    ("ladders", "src/ConcernedLadders", "ConcernedSteward"),
+    ("ladders", "src/ConcernedLadders.Tests", "ConcernedCartographer"),
+    ("ladders", "src/ConcernedLadders.Tests", "ConcernedTeamster"),
+    ("ladders", "src/ConcernedLadders.Tests", "ConcernedForeman"),
+    ("ladders", "src/ConcernedLadders.Tests", "ConcernedSteward"),
+    ("cartographer", "src/ConcernedCartographer", "ConcernedLadders"),
+    ("cartographer", "src/ConcernedCartographer.Tests", "ConcernedLadders"),
+    ("teamster", "src/ConcernedTeamster", "ConcernedLadders"),
+    ("teamster", "src/ConcernedTeamster.Tests", "ConcernedLadders"),
+    ("foreman", "src/ConcernedForeman", "ConcernedLadders"),
+    ("foreman", "src/ConcernedForeman.Tests", "ConcernedLadders"),
+    ("steward", "src/ConcernedSteward", "ConcernedLadders"),
+    ("steward", "src/ConcernedSteward.Tests", "ConcernedLadders"),
+    ("interop", "src/Interop.Tests", "ConcernedLadders"),
+    ("interop", "src/Interop.Tests/Provider", "ConcernedLadders"),
+    ("interop", "src/Interop.Tests/Consumer", "ConcernedLadders"),
 )
 
 
@@ -381,8 +417,7 @@ def check_cross_product_independence(errors: list[str]) -> list[str]:
             r"^\s*(?:global\s+)?using\s+(?:static\s+)?(?:\w+\s*=\s*)?"
             r"TheConcernedCat\." + target + r"\b|"
             r"InternalsVisibleTo\(\s*\"TheConcernedCat\." + target + r"\b")
-        for target in {
-            "ConcernedCartographer", "ConcernedTeamster", "ConcernedForeman", "ConcernedSteward"}
+        for target in {str(spec["package_name"]) for spec in PRODUCTS.values()}
     }
     checked_projects = 0
     for owner, project_rel, target in CROSS_PRODUCT_RULES:
