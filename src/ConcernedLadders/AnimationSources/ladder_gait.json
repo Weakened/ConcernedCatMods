@@ -147,7 +147,7 @@
  "body": {
   "lean": 10.0,
   "pelvis_drop": 0.1,
-  "pelvis_toward": 0.3,
+  "pelvis_toward": 0.2,
   "slide_lean": 6.0,
   "sway_shift": 0.03,
   "sway_tilt": 3.0
@@ -156,12 +156,12 @@
  "footLowRel": 0.06,
  "handMidFromShoulder": 0.1,
  "hints": {
-  "elbow_down": 0.25,
-  "elbow_out": 0.22,
-  "elbow_side": 0.2,
-  "knee_down": 0.1,
-  "knee_side": -0.03,
-  "knee_toward": 0.45
+  "elbow_down": 0.32,
+  "elbow_out": 0.18,
+  "elbow_side": 0.08,
+  "knee_down": 0.15,
+  "knee_side": 0.04,
+  "knee_toward": 0.22
  },
  "length": [
   0.3,
@@ -170,7 +170,7 @@
   0.28
  ],
  "source": "LadderGait.blend",
- "sourceSha256": "4393031837c3c89563ac54a8aa4a4b432fbdeae5e58c8fb4b09a2963a24559c7",
+ "sourceSha256": "591dc86d6fd4a1e57719c21da67efa46d4689a5978ba0ff2aa59b9d3733b110f",
  "start": [
   0.5,
   0.0,

@@ -149,7 +149,7 @@ internal sealed partial class OriginalClimbPresenter
             var record = new ContactRecord
             {
                 Has = true, Target = surface, Planted = planted, Requested = weight, Ratio = reach / rig.Reach[limb],
-                RungCentre = RungSurface(frame, contact.Height, 0f, span * side), Hand = hand,
+                RungCentre = RungSurface(frame, contact.Height, 0f, span * side), Hand = hand, Outward = outward,
             };
             if (weight <= .01f) { actor.Record[limb] = record; continue; } // Handed to the native pose on purpose (mount/exit windows).
             actor.Fit.Sample(limb, reach / rig.Reach[limb], root, feet, frame, outward);
@@ -342,7 +342,7 @@ internal sealed partial class OriginalClimbPresenter
     internal struct ContactRecord
     {
         internal bool Has, Planted, Skipped, Native, Hand;
-        internal Vector3 Target, RungCentre;
+        internal Vector3 Target, RungCentre, Outward;
         internal float Requested, Effective, Ratio;
     }
 }

@@ -22,8 +22,8 @@ internal static class ClimbTuning
 
     /// <summary>Hand grip on a rung: the palm centre sits this far above the rung's centre and this far toward the
     /// climber from the rung's centre plane; hands sit this far either side of the centreline.</summary>
-    internal static float HandAbove = 0.035f;
-    internal static float HandOut = 0.045f;
+    internal static float HandAbove = 0.055f;
+    internal static float HandOut = 0.025f;
     internal static float HandSpan = 0.19f;
 
     /// <summary>Fingers' angle from vertical toward the ladder (0 = fingers up, 90 = fingers level into the ladder).</summary>
@@ -34,14 +34,14 @@ internal static class ClimbTuning
 
     /// <summary>Palm centre from the wrist joint: along the fingers, and toward the palm side.</summary>
     internal static float HandPalmAlong = 0.07f;
-    internal static float HandPalmDepth = 0.02f;
+    internal static float HandPalmDepth = -0.01f;
 
     /// <summary>Ankle joint from the ball of the foot: behind it toward the heel, and above the sole.</summary>
     internal static float FootBallForward = 0.15f;
-    internal static float FootAnkleHeight = 0.09f;
+    internal static float FootAnkleHeight = 0.146f;
 
-    /// <summary>Palm patch to rung centre when gripping (rung half-depth plus palm thickness): the gap measure's zero.</summary>
-    internal static float HandRungClearance = 0.075f;
+    /// <summary>Half the palm's thickness: palm patch (bone centre) to skin. The gap measure's zero for hands.</summary>
+    internal static float PalmThickness = 0.02f;
 
     /// <summary>Distance from the toe-base joint down to the sole surface (measurement definition of the sole patch).</summary>
     internal static float SoleThickness = 0.03f;

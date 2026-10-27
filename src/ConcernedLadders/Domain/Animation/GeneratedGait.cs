@@ -5,8 +5,8 @@ namespace TheConcernedCat.ConcernedLadders.Domain.Animation;
 
 internal static class GeneratedGait
 {
-    internal const string BlendSha256 = "4393031837c3c89563ac54a8aa4a4b432fbdeae5e58c8fb4b09a2963a24559c7";
-    internal const string JsonSha256 = "72d639a77d78091d982fc34d76623b9e3b76099aa195d440084400d6bfa1a81c";
+    internal const string BlendSha256 = "591dc86d6fd4a1e57719c21da67efa46d4689a5978ba0ff2aa59b9d3733b110f";
+    internal const string JsonSha256 = "b869d3ad805aff301f48bf0876f16ab94516801f92ed4306289eaec8ebeaaf94";
     internal const string Blender = "5.1.2";
 
     internal static GaitShape Shape() => new GaitShape
@@ -23,15 +23,15 @@ internal static class GeneratedGait
     };
 
     internal const float PelvisDrop = 0.1f;
-    internal const float PelvisToward = 0.3f;
+    internal const float PelvisToward = 0.2f;
     internal const float Lean = 10f;
     internal const float SlideLean = 6f;
     internal const float SwayTilt = 3f;
     internal const float SwayShift = 0.03f;
-    internal const float ElbowOut = 0.22f;
-    internal const float ElbowSide = 0.2f;
-    internal const float ElbowDown = 0.25f;
-    internal const float KneeToward = 0.45f;
-    internal const float KneeSide = -0.03f;
-    internal const float KneeDown = 0.1f;
+    internal const float ElbowOut = 0.18f;
+    internal const float ElbowSide = 0.08f;
+    internal const float ElbowDown = 0.32f;
+    internal const float KneeToward = 0.22f;
+    internal const float KneeSide = 0.04f;
+    internal const float KneeDown = 0.15f;
 }
