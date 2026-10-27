@@ -1,6 +1,40 @@
 # Concerned Ladders — current readiness
 
-**NOT_READY — 0.2.7 owner playtest candidate installed, awaiting the owner's playtest.** Updated 2026-10-27.
+**1.0.0 release package prepared, awaiting the owner's publication decision.** Updated 2026-10-27.
+Nothing has been uploaded, tagged, released or merged.
+
+| Item | 1.0.0 |
+|---|---|
+| Source | `4cb5e566ea8878970be7135d6319de5e7ee1fe14` (`feat/cl-001-vertical-ladders`) |
+| Verify | `scripts/verify.ps1` PASSED: 16 assemblies, 5423 passed / 0 failed, validator passed (`artifacts/ladders-1.0.0/verify-4cb5e56-run2.log`). Run 1 failed only on a Teamster timing test (104 ms against a 100 ms budget, under load); this branch does not touch Teamster (`verify-4cb5e56.log`). |
+| ZIP | `TheConcernedCat-ConcernedLadders-1.0.0.zip`, 378,052 B, SHA256 `0727ddb57e0062d4aafe3fdd3f58072250da2579daf8095a063d903a802ff880` (artifacts/thunderstore, artifacts/ladders-1.0.0 and Downloads, identical) |
+| DLL | 202,752 B, SHA256 `0dbc03f5d356967292f01406e9de4fec3b89cd358dd038197feb1f43673a897f` (built = packaged = installed), stamp `1.0.0+4cb5e56…` |
+| Contents | `manifest.json`, `README.md`, `CHANGELOG.md`, `LICENSE` (MIT), `icon.png` (256x256, owner-approved artwork), `plugins/TheConcernedCat.ConcernedLadders.dll`. No other DLL, no PDB, no local paths, no animation sources, no media. |
+| Install | Manager "Import local mod" into TCC-Ladders-Dev (BepInExPack 5.4.2351 + Jötunn 2.30.2 only; dev probe parked). Not a newly created profile. Cold start: banner `1.0.0+4cb5e56…`, 2 loaded / 0 skipped / 0 failed, three prefabs, 0 exceptions. |
+| Smoke | LadderShowcase, no probe: hover "Vertical Wood Ladder", E mounts, W climbs, prompts "[E] Dismount / [Space] Jump off / [Ctrl] Drop", S descends and steps off at the bottom (`LogOutput-smoke-1.0.0.log`, `smoke-*.png`). |
+
+**Fixed for 1.0.0 (`a7fc978`):** a ladder grabbed from the water showed the swimming pose under the climbing limbs.
+The ladder motor replaces the game's movement update, which is what writes the animator's `inWater`, `onGround` and
+`falling`; the walking-pose writer now clears them every attached frame.
+
+**Release test matrix (2026-10-27, dev build `a7fc978`, behaviour identical to 1.0.0)**
+
+| Area | Result |
+|---|---|
+| Ground entry, climb, top exit; top entry, descend, ground exit; side dismount; jump-off; drop; slide (Climbing 20) | PASS (showcase recordings, `artifacts/ladders-1.0.0/showcase/`) |
+| Water: swim, grab, climb, dock exit | PASS, upright (was the swim pose before the fix) |
+| Midair catch valid / out of reach | PASS / refused `OutOfReach` |
+| No safe top landing / closed top | PASS: stops 1.3 m below the top |
+| Copper 2 sections, iron 2 sections, wood 1 section | PASS: mount, climb, hold, descend, step-off, 0 skipped climbing frames |
+| Tall stacks | Iron 10 sections survive reload; wood collapses to 5 on reload (vanilla support) - documented |
+| Removing the held section | PASS: released (External), falls, controls return |
+| Death on the ladder | PASS: released (External), ragdoll falls, Climbing 20 → 19 (native penalty), respawn, remount works |
+| Quit mid-climb and relaunch | PASS: released at shutdown, spawns standing at the ladder foot, skill kept |
+| Skill | 0 → 1 after about 7 m; 8 s holding earns nothing; level persists across restart |
+| Uninstall (TCCLadderHammer, disposable) | Ladders deleted by the game on load (`Destroyed invalid prefab ZDO`), not restored on reinstall; Climbing reset to 0 (vanilla `Skills.Load` drops unknown skills); floors, poles and other skills unaffected - documented in the README |
+| Multiplayer, dedicated server, observers, mixed modded/unmodded, version mismatch, controller | NOT TESTED (no second endpoint, no controller) |
+
+## 0.2.7 (superseded)
 
 | Item | 0.2.7 |
 |---|---|
