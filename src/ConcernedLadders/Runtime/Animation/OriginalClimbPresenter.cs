@@ -75,7 +75,10 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
             bool slide = frame.Motion == PresentedMotion.Slide;
             if (fresh || (wasSlide && !slide))
             {
-                float fitFeet = frame.Motion == PresentedMotion.GroundMount || frame.Motion == PresentedMotion.AirCatch ? frame.TransitionTo.Y : frame.Feet.Y;
+                // An entry binds the contacts where the route ends on the ladder. In game 2026-10-27 a descending entry bound them at
+                // the floor, so the feet landed on rungs 0.2 m below the hips as the body lowered: knees up to the chest.
+                float fitFeet = frame.Motion == PresentedMotion.GroundMount || frame.Motion == PresentedMotion.AirCatch || frame.Motion == PresentedMotion.TopEntry
+                    ? frame.TransitionTo.Y : frame.Feet.Y;
                 if (!actor.Gait.Bind(ClimbTuning.Gait, frame.Run.Bottom.Y + frame.RungOrigin, frame.Run.RungPitch, 0, frame.LastRung,
                         actor.Rig.ShoulderHeight - ClimbTuning.PelvisDrop, fitFeet))
                 { throw new InvalidOperationException("No real rung span can bind the original contacts."); }

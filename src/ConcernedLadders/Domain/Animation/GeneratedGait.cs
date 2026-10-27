@@ -10,8 +10,8 @@ namespace TheConcernedCat.ConcernedLadders.Domain.Animation;
 /// in LimbGait.cs and DefaultTransitions remain the fallbacks.</summary>
 internal static class GeneratedGait
 {
-    internal const string BlendSha256 = "e5dd2dfb17094877aafeed550edb049c5692ad9c8b568c248fa94eb59d5cfb09";
-    internal const string JsonSha256 = "a84659d5a3cbcfeeb62b297035b5eb88edbeca5f10d89180db52a619f4a32e30";
+    internal const string BlendSha256 = "ebc166d78876985414dc264146167b5a615cc37c8092e34b3e05ac232ac6e830";
+    internal const string JsonSha256 = "0cdf7950448428e01bb40d6161b444d5a8bd85a17a9f36e244b17def8a4ccf6c";
     internal const string Blender = "5.1.2";
 
     internal const float PelvisDrop = 0f;
@@ -549,7 +549,7 @@ internal static class GeneratedGait
                 // left hand
                 new[]
                 {
-                    1f, 1f, 1f, 1f, 1f, 1f, 0.896f, 0.57475f, 0.216f, 0.00725f, 0f,
+                    1f, 1f, 1f, 1f, 1f, 0.768066f, 0.316406f, 0.01123f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f
@@ -557,7 +557,7 @@ internal static class GeneratedGait
                 // right hand
                 new[]
                 {
-                    1f, 1f, 1f, 1f, 1f, 1f, 1f, 0.93925f, 0.648f, 0.28175f, 0.028f,
+                    1f, 1f, 1f, 1f, 1f, 0.98877f, 0.683594f, 0.231934f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f
@@ -584,7 +584,7 @@ internal static class GeneratedGait
                 // left hand
                 new[]
                 {
-                    0f, 0.15625f, 0.5f, 0.84375f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
+                    0f, 0.231934f, 0.683594f, 0.98877f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
                     1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
                     1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
                     1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f
@@ -592,7 +592,7 @@ internal static class GeneratedGait
                 // right hand
                 new[]
                 {
-                    0f, 0f, 0.104f, 0.42525f, 0.784f, 0.99275f, 1f, 1f, 1f, 1f, 1f,
+                    0f, 0.01123f, 0.316406f, 0.768066f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
                     1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
                     1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
                     1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f
@@ -618,7 +618,7 @@ internal static class GeneratedGait
             {
                 // left hand: { lat, out, up } over progress
                 Rows(3,
-                    0f, 0f, 0f, 0f, 0.02f, 0.04f, 0f, 0.04f, 0.08f, 0f, 0.02f, 0.04f,
+                    0f, 0f, 0f, 0f, 0.027654f, 0.041481f, 0f, 0.034142f, 0.051213f, 0f, 0.001522f, 0.002284f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
@@ -632,8 +632,8 @@ internal static class GeneratedGait
                 ),
                 // right hand: { lat, out, up } over progress
                 Rows(3,
-                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0.01382f, 0.027639f, 0f, 0.039021f, 0.078042f,
-                    0f, 0.02618f, 0.052361f, 0f, 0.000979f, 0.001958f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 0f, 0.001522f, 0.002284f, 0f, 0.034142f, 0.051213f, 0f, 0.027654f, 0.041481f,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
