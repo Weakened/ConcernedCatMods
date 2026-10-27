@@ -119,8 +119,20 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
         };
         if (routed != null)
         {
-            if (actor.Transition == null || actor.Transition.Kind != routed.Value) { actor.Transition = ClimbTuning.Action(routed.Value); actor.EntryTimed = false; }
-            actor.TransitionProgress = Mathf.Clamp01(frame.Transition);
+            float published = Mathf.Clamp01(frame.Transition);
+            if (actor.Transition == null || actor.Transition.Kind != routed.Value)
+            {
+                actor.Transition = ClimbTuning.Action(routed.Value);
+                actor.EntryTimed = false;
+                actor.TransitionProgress = published;
+            }
+            else
+            {
+                // Progress arrives once per physics step (50 Hz) and rendering runs faster: follow it smoothly so the
+                // limbs move every rendered frame instead of stair-stepping (in game 2026-10-27: foot targets jumped at
+                // up to 20 m/s on alternate frames).
+                actor.TransitionProgress += (published - actor.TransitionProgress) * (1f - Mathf.Exp(-dt / ClimbTuning.ProgressSmoothing));
+            }
             return;
         }
 
@@ -351,6 +363,7 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
         internal bool Caught;
         internal TransitionAction? Transition;
         internal float ChestTwist;
+        internal readonly float[] ShownWeight = { 1f, 1f, 1f, 1f };
         internal float TransitionProgress;
         internal bool EntryTimed;
         internal readonly FitCounters Fit = new FitCounters();

@@ -257,6 +257,10 @@ internal sealed partial class OriginalClimbPresenter
 
             // A contact nearing the limit hands over to the native pose gradually instead of popping off at it.
             weight *= 1f - Smooth01((reach / rig.Reach[limb] - ClimbTuning.FadeFrom) / (ClimbTuning.ReachLimit - ClimbTuning.FadeFrom));
+            // During a transition a limb takes hold or lets go over at least WeightRiseSeconds, never in one frame (in game
+            // 2026-10-27: both hands snapped onto the lip from weight 0 to 1). Climbing itself is unchanged.
+            if (action != null) { weight = Mathf.MoveTowards(actor.ShownWeight[limb], weight, Time.deltaTime / ClimbTuning.WeightRiseSeconds); }
+            actor.ShownWeight[limb] = weight;
             record.Effective = weight;
             actor.Record[limb] = record;
 

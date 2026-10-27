@@ -88,6 +88,11 @@ internal static class ClimbTuning
     /// <summary>How much of the native pose's hip yaw is removed so the hips face the ladder square (1 = fully).</summary>
     internal static float SquareHips = 1f;
 
+    /// <summary>Time constant for following route progress between physics steps, and the fastest a transition limb
+    /// takes hold or lets go (0 to 1).</summary>
+    internal static float ProgressSmoothing = 0.05f;
+    internal static float WeightRiseSeconds = 0.15f;
+
     /// <summary>How much of the native chest twist against the hips is removed (1 = shoulders square to the rungs).</summary>
     internal static float SquareChest = 1f;
 

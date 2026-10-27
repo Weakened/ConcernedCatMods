@@ -757,6 +757,17 @@ internal sealed class LadderRuntime : IDisposable
                 if (TryExitTop()) { MoveRoute(delta, seconds); Present(false); return IsClimbing; }
             }
 
+            if (velocity > 0f && body.position.y >= _run.Top.Y - NoLandingStop && body.position.y < _run.Top.Y - 0.03f)
+            {
+                // The last chance to find a landing before the hands would run out of rungs.
+                _topPlanTimer = 0.2f;
+                if (TryExitTop()) { MoveRoute(delta, seconds); Present(false); return IsClimbing; }
+                Hold(body.position, seconds, 0f, LadderRules.Speed);
+                Notice("$cl_msg_notop");
+                Present(true);
+                return true;
+            }
+
             if (velocity > 0f && body.position.y >= _run.Top.Y - 0.03f)
             {
                 Hold(body.position, seconds, 0f, LadderRules.Speed);
@@ -1235,6 +1246,23 @@ internal sealed class LadderRuntime : IDisposable
         BeginRoute(current);
     }
 
+    /// <summary>Owner 2026-10-27 (exits "act weird for a bit", reference finish about 2.5 s): an exit or a descending
+    /// entry takes a set time, so the authored support transfer has room; at the general route speed (1.8 m/s) a side
+    /// exit was over in 0.7 s. Ground mounts and catches keep the route speed.</summary>
+    private float RouteSpeed()
+    {
+        float seconds = _mode == Mode.Exiting ? (_exitIsTop ? TopExitSeconds : _exitIsBottom ? BottomStepSeconds : SideExitSeconds)
+            : _mode == Mode.Mounting && _mountFromTop ? TopEntrySeconds : 0f;
+        if (seconds <= 0f || _routeLength <= 0.01f) { return LadderRules.Speed; }
+        return Mathf.Clamp(_routeLength / seconds, 0.35f, LadderRules.Speed);
+    }
+
+    private const float TopExitSeconds = 2.2f, SideExitSeconds = 1.5f, BottomStepSeconds = 1.1f, TopEntrySeconds = 2.0f;
+
+    /// <summary>Climbing with no landing at the top stops with the feet this far below the run's top: the hands still
+    /// hold the top rungs there (owner 2026-10-27: "stop climbing right before the hand contacts leave the rungs").</summary>
+    private const float NoLandingStop = 0.5f;
+
     /// <summary>Remembers where an accepted mount/exit move started and its full length, for transition progress.</summary>
     private void BeginRoute(Vector3 start)
     {
@@ -1331,7 +1359,7 @@ internal sealed class LadderRuntime : IDisposable
             return;
         }
 
-        Vector3 target = Vector3.MoveTowards(body.position, _route[_routeIndex], LadderRules.Speed * delta);
+        Vector3 target = Vector3.MoveTowards(body.position, _route[_routeIndex], RouteSpeed() * delta);
         clearance.ClearBlocker();
         if (!clearance.CanMove(body.position, target))
         {
