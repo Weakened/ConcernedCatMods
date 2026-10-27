@@ -170,12 +170,12 @@ internal static class DefaultTransitions
     {
         // Grounded mount (17-00-06 frames 90-150): a hand reaches, a low foot plants, the other hand goes higher, the
         // other foot rises; the body stays quiet at first, then settles into the climbing posture.
-        new TransitionAction.Builder(TransitionKind.GroundMount, 0.9f)
+        new TransitionAction.Builder(TransitionKind.GroundMount, 0.3f)
             .Weight(RH, 0.08f, 0f, 0.4f, 1f).Weight(LF, 0.15f, 0f, 0.5f, 1f).Weight(LH, 0.3f, 0f, 0.65f, 1f).Weight(RF, 0.5f, 0f, 0.95f, 1f)
             .Arc(RH, 0.08f, 0.45f, 0f, 0.08f, 0.04f).Arc(LH, 0.3f, 0.7f, 0f, 0.08f, 0.04f).Arc(LF, 0.15f, 0.55f, 0f, 0.1f, 0.06f).Arc(RF, 0.5f, 1f, 0f, 0.12f, 0.08f)
             .Body(0f, 0f, 0.25f, 0.2f, 0.9f, 1f).Build(),
         // Midair catch: hands first from the airborne pose, feet find rungs after.
-        new TransitionAction.Builder(TransitionKind.AirCatch, 0.35f)
+        new TransitionAction.Builder(TransitionKind.AirCatch, 0.25f)
             .Weight(LH, 0f, 0f, 0.35f, 1f).Weight(RH, 0.1f, 0f, 0.45f, 1f).Weight(LF, 0.3f, 0f, 0.8f, 1f).Weight(RF, 0.45f, 0f, 1f, 1f)
             .Arc(LF, 0.3f, 0.8f, 0f, 0.12f, 0.05f).Arc(RF, 0.45f, 1f, 0f, 0.12f, 0.05f)
             .Body(0f, 0.2f, 0.8f, 1f).Build(),
@@ -194,10 +194,9 @@ internal static class DefaultTransitions
         // body leaves the ladder (in game 2026-10-27 the route is a 0.7 m step back at ground level, so they must be
         // free by a quarter of it), the second foot follows, then normal standing.
         new TransitionAction.Builder(TransitionKind.BottomStepOff, 1f)
-            .Reach(LF, 0.08f, 0f, 0.45f, 1f).Arc(LF, 0.08f, 0.45f, 0f, 0.06f, 0.03f).Weight(LF, 0.5f, 1f, 0.68f, 0f)
-            .Reach(RF, 0.4f, 0f, 0.72f, 1f).Arc(RF, 0.4f, 0.72f, 0f, 0.06f, 0.03f).Weight(RF, 0.66f, 1f, 0.85f, 0f)
-            .Weight(RH, 0f, 1f, 0.09f, 0f).Weight(LH, 0.04f, 1f, 0.13f, 0f)
-            .Body(0f, 1f, 0.4f, 0.9f, 0.9f, 0f).Build(),
+            // Owner 2026-10-27: mount and dismount faster - a quick hand-back to the game's pose like the other exits.
+            .Weight(LH, 0f, 1f, 0.2f, 0f).Weight(RH, 0.02f, 1f, 0.22f, 0f).Weight(LF, 0.04f, 1f, 0.24f, 0f).Weight(RF, 0.06f, 1f, 0.26f, 0f)
+            .Body(0f, 1f, 0.3f, 0f).Build(),
         new TransitionAction.Builder(TransitionKind.TopEntry, 1f)
             // Owner 2026-10-27: no distinct animation - the climber is put onto the ladder super fast (about 0.45 s)
             // from the game's own pose, and each limb takes its rung as the body arrives, a few hundredths apart.

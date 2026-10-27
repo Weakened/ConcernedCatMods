@@ -95,14 +95,9 @@ public sealed class TransitionActionTests
         var kind = (TransitionKind)kindValue;
         TransitionAction action = Get(kind);
         for (int limb = 0; limb < 4; limb++) { Assert.True(action.WeightAt(limb, 1f) < Tolerance, kind + " limb " + limb + " still held"); }
-        // The bottom step-off sets the feet down on the landing before releasing them. The top and side exits are quick
-        // hand-backs to the game's pose with no authored step (owner 2026-10-27).
-        if (kind != TransitionKind.BottomStepOff) { return; }
-        for (int limb = 2; limb < 4; limb++)
-        {
-            float released = Enumerable.Range(0, 101).Select(i => i / 100f).First(p => action.WeightAt(limb, p) < 0.5f);
-            Assert.True(action.ReachAt(limb, released) > 0.9f, kind + " foot " + limb + " released before landing");
-        }
+        // Every exit is a quick hand-back to the game's pose with no authored step (owner 2026-10-27: "mount and
+        // dismount faster"), so it is over in the first third of the route.
+        for (int limb = 0; limb < 4; limb++) { Assert.True(action.WeightAt(limb, 0.35f) < Tolerance, kind + " limb " + limb + " held past a third"); }
     }
 
     [Fact]

@@ -1252,12 +1252,12 @@ internal sealed class LadderRuntime : IDisposable
     private float RouteSpeed()
     {
         float seconds = _mode == Mode.Exiting ? (_exitIsTop ? TopExitSeconds : _exitIsBottom ? BottomStepSeconds : SideExitSeconds)
-            : _mode == Mode.Mounting && _mountFromTop ? TopEntrySeconds : 0f;
+            : _mode == Mode.Mounting ? (_mountFromTop ? TopEntrySeconds : QuickSeconds) : 0f;
         if (seconds <= 0f || _routeLength <= 0.01f) { return LadderRules.Speed; }
         return Mathf.Clamp(_routeLength / seconds, 0.35f, seconds <= QuickSeconds ? QuickRouteSpeed : LadderRules.Speed);
     }
 
-    private const float TopExitSeconds = QuickSeconds, SideExitSeconds = QuickSeconds, BottomStepSeconds = 1.1f, TopEntrySeconds = QuickSeconds;
+    private const float TopExitSeconds = QuickSeconds, SideExitSeconds = QuickSeconds, BottomStepSeconds = QuickSeconds, TopEntrySeconds = QuickSeconds;
 
     /// <summary>Owner 2026-10-27: on and off at the top and at an intermediate floor "super fast" - not a teleport,
     /// the capsule still follows its swept route, at up to QuickRouteSpeed.</summary>

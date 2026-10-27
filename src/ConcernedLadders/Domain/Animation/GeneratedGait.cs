@@ -10,8 +10,8 @@ namespace TheConcernedCat.ConcernedLadders.Domain.Animation;
 /// in LimbGait.cs and DefaultTransitions remain the fallbacks.</summary>
 internal static class GeneratedGait
 {
-    internal const string BlendSha256 = "76eb3233f805afaa74e8fb2b81cb9c0d99ecbbefccc5719a355ff67a65ebb073";
-    internal const string JsonSha256 = "11887f34409306b888790247996a719a068e74c62aad1853d68a9abadc651fa6";
+    internal const string BlendSha256 = "50bc77aeab206126c363b88bd8b3801e5bd1b471a018c447a310344df2b20a16";
+    internal const string JsonSha256 = "df6aad1cfc71de974c1c06b30fef7ad68d537f6fb59bfbfe21b6943899477f80";
     internal const string Blender = "5.1.2";
 
     internal const float PelvisDrop = 0f;
@@ -219,7 +219,7 @@ internal static class GeneratedGait
         new TransitionAction
         {
             Kind = TransitionKind.GroundMount,
-            Seconds = 0.9f,
+            Seconds = 0.3f,
             Weight = new[]
             {
                 // left hand
@@ -381,7 +381,7 @@ internal static class GeneratedGait
         new TransitionAction
         {
             Kind = TransitionKind.AirCatch,
-            Seconds = 0.35f,
+            Seconds = 0.25f,
             Weight = new[]
             {
                 // left hand
@@ -873,7 +873,7 @@ internal static class GeneratedGait
                 // left hand
                 new[]
                 {
-                    1f, 1f, 0.965706f, 0.663923f, 0.259259f, 0.008916f, 0f, 0f, 0f, 0f, 0f,
+                    1f, 0.957031f, 0.84375f, 0.683594f, 0.5f, 0.316406f, 0.15625f, 0.042969f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f
@@ -881,7 +881,7 @@ internal static class GeneratedGait
                 // right hand
                 new[]
                 {
-                    1f, 0.811385f, 0.41701f, 0.074074f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    1f, 0.998156f, 0.93925f, 0.814719f, 0.648f, 0.462531f, 0.28175f, 0.129094f, 0.028f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f
@@ -889,18 +889,18 @@ internal static class GeneratedGait
                 // left foot
                 new[]
                 {
-                    1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
-                    1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 0.947488f,
-                    0.811385f, 0.623843f, 0.41701f, 0.223037f, 0.074074f, 0.002272f, 0f, 0f, 0f, 0f, 0f,
+                    1f, 1f, 0.99275f, 0.918844f, 0.784f, 0.611656f, 0.42525f, 0.248219f, 0.104f, 0.016031f, 0f,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f
                 },
                 // right foot
                 new[]
                 {
-                    1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
-                    1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
-                    1f, 1f, 1f, 1f, 1f, 0.982286f, 0.885698f, 0.728969f, 0.539437f, 0.344438f, 0.171308f,
-                    0.047383f, 0f, 0f, 0f, 0f, 0f, 0f, 0f
+                    1f, 1f, 1f, 0.983969f, 0.896f, 0.751781f, 0.57475f, 0.388344f, 0.216f, 0.081156f, 0.00725f,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f
                 },
             },
             Reach = new[]
@@ -924,18 +924,18 @@ internal static class GeneratedGait
                 // left foot
                 new[]
                 {
-                    0f, 0f, 0f, 0f, 0.00845f, 0.040777f, 0.093835f, 0.163919f, 0.24733f, 0.340365f, 0.439322f,
-                    0.540501f, 0.640199f, 0.734715f, 0.820346f, 0.893392f, 0.950151f, 0.986921f, 1f, 1f, 1f, 1f,
-                    1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
-                    1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f
                 },
                 // right foot
                 new[]
                 {
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
-                    0f, 0f, 0f, 0f, 0f, 0f, 0.017357f, 0.065613f, 0.139046f, 0.231934f, 0.338554f,
-                    0.453186f, 0.570107f, 0.683594f, 0.787926f, 0.87738f, 0.946236f, 0.98877f, 1f, 1f, 1f, 1f,
-                    1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f
                 },
             },
             Arc = new[]
@@ -971,10 +971,10 @@ internal static class GeneratedGait
                 // left foot: { lat, out, up } over progress
                 Rows(3,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
-                    0f, 0.001714f, 0.000857f, 0f, 0.008341f, 0.004171f, 0f, 0.018814f, 0.009407f, 0f, 0.031273f, 0.015637f,
-                    0f, 0.043506f, 0.021753f, 0f, 0.053341f, 0.026671f, 0f, 0.059032f, 0.029516f, 0f, 0.059568f, 0.029784f,
-                    0f, 0.054855f, 0.027428f, 0f, 0.045729f, 0.022865f, 0f, 0.033811f, 0.016905f, 0f, 0.021215f, 0.010608f,
-                    0f, 0.01018f, 0.00509f, 0f, 0.002663f, 0.001332f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
@@ -988,10 +988,10 @@ internal static class GeneratedGait
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
-                    0f, 0f, 0f, 0f, 0.003542f, 0.001771f, 0f, 0.013333f, 0.006666f, 0f, 0.027059f, 0.01353f,
-                    0f, 0.041481f, 0.02074f, 0f, 0.05319f, 0.026595f, 0f, 0.059424f, 0.029712f, 0f, 0.058708f, 0.029354f,
-                    0f, 0.051213f, 0.025607f, 0f, 0.038709f, 0.019354f, 0f, 0.024147f, 0.012074f, 0f, 0.010968f, 0.005484f,
-                    0f, 0.002284f, 0.001142f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f
@@ -999,10 +999,10 @@ internal static class GeneratedGait
             },
             BodyWeight = new[]
             {
-                1f, 0.998877f, 0.995703f, 0.990771f, 0.984375f, 0.976807f, 0.968359f, 0.959326f, 0.95f, 0.940674f, 0.931641f,
-                0.923193f, 0.915625f, 0.909229f, 0.904297f, 0.901123f, 0.9f, 0.893475f, 0.8748f, 0.845325f, 0.8064f, 0.759375f,
-                0.7056f, 0.646425f, 0.5832f, 0.517275f, 0.45f, 0.382725f, 0.3168f, 0.253575f, 0.1944f, 0.140625f, 0.0936f,
-                0.054675f, 0.0252f, 0.006525f, 0f, 0f, 0f, 0f, 0f
+                1f, 0.980324f, 0.925926f, 0.84375f, 0.740741f, 0.623843f, 0.5f, 0.376157f, 0.259259f, 0.15625f, 0.074074f,
+                0.019676f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f
             },
             BodyUp = new[]
             {
