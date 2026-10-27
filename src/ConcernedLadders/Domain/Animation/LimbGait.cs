@@ -289,7 +289,10 @@ internal sealed class LimbGait
             float plantedRange = (1f - loop.Length[limb]) * _cycle;
             float lowRel = hand ? _shoulderRel + _shape.HandMidFromShoulder - plantedRange * 0.5f : _shape.FootLowRel;
             float phase = ReferenceEquals(loop, _shape.Down) ? loop.Start[limb] + loop.Length[limb] : loop.Start[limb];
-            rungs[limb] = (int)Math.Round((_cycle * phase + lowRel) / _pitch) - (ReferenceEquals(loop, _shape.Down) ? loop.StrideRungs : 0);
+            // Hands round down: with an odd stride the two hands sit half a rung apart in phase, and rounding up put one of
+            // them 17 cm out of reach (in game 2026-10-27, left hand fading a third of the climb).
+            float exact = (_cycle * phase + lowRel) / _pitch;
+            rungs[limb] = (int)(hand ? Math.Floor(exact + 1e-4) : Math.Round(exact)) - (ReferenceEquals(loop, _shape.Down) ? loop.StrideRungs : 0);
         }
     }
 
