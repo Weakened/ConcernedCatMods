@@ -4691,23 +4691,36 @@ CONSOLE_COMMAND_COPIES = (
 )
 
 # What each copy is allowed to differ in, and nothing else: its own namespace and
-# usings, its comments, and the one call that turns an exception into log text,
-# which each product spells through its own scrubber.
+# plain using directives in the file header, its comments, and the one call that
+# turns an exception into log text, which each product spells through its own
+# scrubber. The scrubber call is rewritten to a name no C# source can contain, so a
+# local `Brief` helper that calls itself instead of the scrubber stays visible.
 CONSOLE_COPY_SCRUBBER_CALL = re.compile(
     r"\b(?:Diagnostics\s*\.\s*)?(?:SafeFailure|SafeLogText)\s*\.\s*Brief\s*\(")
+CONSOLE_COPY_SCRUBBED = "<scrubber>("
 CONSOLE_COPY_BRIEF_MEMBER = re.compile(
-    r"^private static string Brief\(Exception exception\) =>\nBrief\(exception\);$\n?", re.M)
+    r"^private static string Brief\(Exception exception\) =>\n<scrubber>\(exception\);$\n?", re.M)
+CONSOLE_COPY_LOCAL_BRIEF = re.compile(r"(?<![\w.])Brief\s*\(")
+CONSOLE_COPY_HEADER_LINE = re.compile(r"^(?:using [A-Za-z_][\w.]*;|namespace [A-Za-z_][\w.]*;)$")
+CONSOLE_COPY_DISCOVERY = re.compile(
+    r"\btypeof\s*\(\s*Terminal\s*\.\s*ConsoleCommand\s*\)\s*\.\s*GetConstructors\b")
 
 
 def _console_copy_body(text: str) -> list[str]:
-    code = CONSOLE_COPY_SCRUBBER_CALL.sub("Brief(", _strip_cs_comments(text))
+    code = CONSOLE_COPY_SCRUBBER_CALL.sub(CONSOLE_COPY_SCRUBBED, _strip_cs_comments(text))
     kept = []
+    header = True
     for line in code.splitlines():
         line = " ".join(line.split())
-        if not line or line.startswith("using ") or line.startswith("namespace "):
+        if not line:
             continue
+        if header and CONSOLE_COPY_HEADER_LINE.match(line):
+            continue
+        header = False
         kept.append(line)
-    return CONSOLE_COPY_BRIEF_MEMBER.sub("", "\n".join(kept) + "\n").splitlines()
+    body = CONSOLE_COPY_BRIEF_MEMBER.sub("", "\n".join(kept) + "\n")
+    # With its own helper gone, a copy's remaining calls to it mean the scrubber.
+    return CONSOLE_COPY_LOCAL_BRIEF.sub(CONSOLE_COPY_SCRUBBED, body).splitlines()
 
 
 def check_console_command_copies_agree(errors: list[str]) -> list[str]:
@@ -4719,8 +4732,11 @@ def check_console_command_copies_agree(errors: list[str]) -> list[str]:
     never reference each other and src/Shared may hold no game type (D2), so the
     code is copied rather than shared. A fix that reaches one copy and not the others
     reproduces that silent, total outage in the products it missed, so the copies
-    are compared after removing only what each is allowed to own: usings, the
-    namespace, comments and whitespace, and its own scrubber's spelling of Brief."""
+    are compared after removing only what each is allowed to own: the plain using
+    directives and file-scoped namespace in its header, comments, whitespace (which
+    includes runs of spaces inside log strings - accepted, since collapsing never
+    joins two tokens), and its own scrubber's spelling of Brief. Any source file that
+    enumerates Terminal.ConsoleCommand's constructors is a copy, whatever its name."""
     label = "[interop] #391 console-command copies"
     bodies = {}
     for relative in CONSOLE_COMMAND_COPIES:
@@ -4730,10 +4746,14 @@ def check_console_command_copies_agree(errors: list[str]) -> list[str]:
             return []
         bodies[relative] = _console_copy_body(path.read_text(encoding="utf-8-sig"))
 
+    # Found by name AND by what the file does, so a renamed copy is still a copy.
     found = sorted(
         path.relative_to(ROOT).as_posix()
-        for path in (ROOT / "src").rglob("VanillaConsoleCommands*.cs")
-        if "obj" not in path.parts and "bin" not in path.parts)
+        for path in (ROOT / "src").rglob("*.cs")
+        if "obj" not in path.parts and "bin" not in path.parts
+        and (path.name.startswith("VanillaConsoleCommands")
+             or CONSOLE_COPY_DISCOVERY.search(
+                 _strip_cs_comments(path.read_text(encoding="utf-8-sig", errors="replace")))))
     unknown = [relative for relative in found if relative not in CONSOLE_COMMAND_COPIES]
     if unknown:
         fail(f"{label}: unpinned copies {unknown}; add them to CONSOLE_COMMAND_COPIES", errors)

@@ -11,8 +11,11 @@ Each plant below edits one real copy in the real tree, runs the real validator, 
 requires it to refuse, then restores the file. The plants are the divergences that
 matter: the constructor-shape logic changed in one copy, a statement added to one, a
 statement removed from one, the scrubbed failure text replaced by the raw message in
-one (which the `Brief` normalisation must not hide), a fifth unpinned copy, and a
-pinned copy that disappears. Two plants require the validator to PASS, because a pin
+one (which the `Brief` normalisation must not hide), a `Brief` helper that calls
+itself instead of the scrubber, a `using` statement inside a method and an alias
+directive in the header (only plain header directives are a copy's own), a fifth
+unpinned copy, a renamed copy found by what it does, and a pinned copy that
+disappears. Two plants require the validator to PASS, because a pin
 that refused a reworded comment or a product's own namespace could never be kept on.
 
 No count is given on purpose: what the harness covers is the list above, and that is
@@ -29,7 +32,8 @@ TEAMSTER = os.path.join(ROOT, "src", "ConcernedTeamster", "Adapters", "VanillaCo
 FOREMAN = os.path.join(ROOT, "src", "ConcernedForeman", "Runtime", "VanillaConsoleCommands.cs")
 STEWARD = os.path.join(ROOT, "src", "ConcernedSteward", "Runtime", "VanillaConsoleCommands.cs")
 EXTRA = os.path.join(ROOT, "src", "ConcernedSteward", "Domain", "VanillaConsoleCommandsCopy.cs")
-LABEL = "#391 console-command copies"
+RENAMED = os.path.join(ROOT, "src", "ConcernedSteward", "Domain", "ConsoleRegistrar.cs")
+LABEL ="#391 console-command copies"
 
 
 def run_validator():
@@ -84,6 +88,28 @@ class ConsoleCommandCopyPinTests(unittest.TestCase):
         # Brief(...) is normalised across products; the raw message must not be.
         self.plant(TEAMSTER, b"falling back to J\xc3\xb6tunn: \" +\n                Brief(exception)",
                    b"falling back to J\xc3\xb6tunn: \" +\n                exception.Message")
+        self.assert_refused()
+
+    def test_brief_helper_that_calls_itself_is_refused(self):
+        # Review of 95e73af: normalising the scrubber to the local name made a
+        # helper that recurses forever look identical to one that scrubs.
+        self.plant(FOREMAN, b"=>\n        SafeFailure.Brief(exception);",
+                   b"=>\n        Brief(exception);")
+        self.assert_refused()
+
+    def test_using_statement_inside_a_method_is_refused(self):
+        self.plant(STEWARD, b"arguments[1] = command.Help;",
+                   b"arguments[1] = command.Help;\n        using var scope = new System.IO.MemoryStream();")
+        self.assert_refused()
+
+    def test_alias_directive_in_the_header_is_refused(self):
+        self.plant(TEAMSTER, b"using System;", b"using System;\nusing Exception = System.ArgumentException;")
+        self.assert_refused()
+
+    def test_renamed_copy_is_found_by_what_it_does(self):
+        write(RENAMED, read(STEWARD).replace(
+            b"class VanillaConsoleCommands", b"class ConsoleRegistrar"))
+        self.addCleanup(os.remove, RENAMED)
         self.assert_refused()
 
     def test_unpinned_fifth_copy_is_refused(self):
