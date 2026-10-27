@@ -58,6 +58,7 @@ running.
 | Setting | Default | What it does |
 |---|---|---|
 | `PlayerClimbing` | `false` | Foreman's climb instead of vanilla's teleport. Off: nothing is patched at all. |
+| `Enabled` | `true` | Off switch only: `false` turns the climb off whatever `PlayerClimbing` says. |
 | `AutoMount` | `true` | With the climb on, walking into a ladder starts it. Off means Use only. |
 | `ClimbSpeed` | `1.0` | Multiplier on the climb speed (0.25–3). |
 | `StaminaCost` | `0` | Stamina per second of climbing. |

@@ -19,7 +19,7 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Ladders;
 /// player who never opens the config file gets nothing patched by this section.
 /// The switch is bound as <c>Ladders/PlayerClimbing</c>, not the old
 /// <c>Ladders/Enabled</c>, so a <c>true</c> an older development build wrote as
-/// its default is never read (<see cref="LadderSettingValues.PlayerClimbingKey"/>).
+/// its default never turns the climb on (<see cref="LadderSettingValues.PlayerClimbingKey"/>).
 /// The worker-traversal seam (#334) does not depend on this switch.
 ///
 /// <c>Ladders/Enabled</c> is still bound, as a <b>veto only</b>: false turns
@@ -77,7 +77,7 @@ internal sealed class LadderSettings
     /// (opted in, host, no other peers).</summary>
     public ConfigEntry<bool> NpcClimbing { get; }
 
-    /// <summary>The six settings as values, already brought into range.</summary>
+    /// <summary>The settings as values, with the climb switch already combined with its veto, already brought into range.</summary>
     public LadderSettingValues Values => new LadderSettingValues(
         LadderSettingValues.Effective(Enabled.Value, LegacyEnabled.Value),
         AutoMount.Value,

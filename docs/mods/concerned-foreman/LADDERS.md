@@ -280,6 +280,7 @@ needs a human in Unity.
 
 | Setting | Default | Why |
 |---|---|---|
+| `Enabled` | `true` | Veto only since #436: `false` turns the climb off; `true` grants nothing. Kept for Concerned Ladders' published message. |
 | `PlayerClimbing` (was `Enabled`) | `false` | Off since #436: Concerned Ladders owns player climbing and will not run beside this motor. One switch to opt in. |
 | `AutoMount` | `true` | Walking into a ladder climbs it. Off means `Use` only. |
 | `ClimbSpeed` | `1.0` | Multiplier on the tuned speed. |
