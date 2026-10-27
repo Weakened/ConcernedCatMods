@@ -9,9 +9,13 @@
 > - the switch is `Ladders/PlayerClimbing`, default `false` (`LadderSettingValues.Defaults`, pinned by
 >   `LadderPiecesTests.PlayerClimbingIsOffByDefaultBecauseConcernedLaddersOwnsIt`);
 > - it was renamed from `Ladders/Enabled` on purpose. Every development build before #436 wrote `Enabled = true` as its
->   default; reading a new key orphans that line, so an old dev profile is off like a new one. Foreman was never
->   published, so no player config exists. The rename is pinned by
->   `ThePlayerClimbSwitchIsNotReadFromTheKeyOldBuildsWroteTrueInto` and `TheBindingReadsTheSwitchFromTheNewKeyAndTheDomainDefault`;
+>   default. Reading a new key means that line never turns the climb on, so an old dev profile is off like a new one.
+>   Foreman was never published, so no player config exists. `Ladders/Enabled` is still bound, **as a veto only**: the
+>   climb runs when `PlayerClimbing && Enabled` (`LadderSettingValues.Effective`). This is because the published Concerned
+>   Ladders 1.0.0 message `cl_msg_foreman`, which cannot be changed, tells the player to "Disable Foreman's
+>   Ladders/Enabled". Pinned by `ThePlayerClimbSwitchIsNotReadFromTheKeyOldBuildsWroteTrueInto`,
+>   `TheOldKeyIsAVetoAndNeverAGrant`, `TheBindingReadsTheSwitchFromTheNewKeyAndTheOldOneOnlyAsAVeto` and
+>   `ConcernedLaddersInstructionNamesTheKeyForemanStillHonoursAsAVeto`;
 > - with it off, `Plugin.InstallLadders` installs no patch at all, so the Harmony owner Concerned Ladders checks for is
 >   absent. The Harmony id itself is unchanged, so an opted-in Foreman is still detected;
 > - nothing was deleted. The player motor stays available behind the opt-in, and the worker-traversal seam (#334:

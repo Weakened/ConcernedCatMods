@@ -21,10 +21,15 @@ moved: 0.1.0 has never shipped, so these are still its notes.
   ladder, and Concerned Ladders works beside it.
 - **The switch has a new name: `Ladders/PlayerClimbing`.** Development
   builds before this one wrote `Ladders/Enabled = true` into their config
-  as the default, without anybody choosing it. That line is no longer
-  read, so an old config is off like a new one. Nobody outside
-  development has a Foreman config, because Foreman has never been
-  published.
+  as the default, without anybody choosing it. That value no longer
+  turns the climb on, so an old config is off like a new one. Nobody
+  outside development has a Foreman config, because Foreman has never
+  been published.
+- **`Ladders/Enabled` is kept as an off switch only.** `Enabled = false`
+  turns the climb off whatever `PlayerClimbing` says, and `true` does
+  nothing on its own. It is kept because Concerned Ladders 1.0.0's message
+  tells a player who opted in to disable `Ladders/Enabled`, and that text
+  is published and cannot change.
 - **Nothing was removed.** Turning `PlayerClimbing` on gives exactly the
   climb described under "Added — climbable ladders" below. The pieces
   workers may one day use to traverse a ladder (#334) are untouched and

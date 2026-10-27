@@ -49,8 +49,11 @@ PlayerClimbing = true    # off by default; Concerned Ladders stops working while
 ```
 
 An early development build of Foreman used a setting called `Enabled` here and
-wrote `Enabled = true` into its config file. That line is **no longer read**, so
-an old config does not switch the climb back on. You can delete it.
+wrote `Enabled = true` into its config file. That value **no longer turns the climb
+on**, so an old config stays off. `Enabled` is still there for one job:
+**`Enabled = false` switches the climb off** whatever `PlayerClimbing` says. That is
+the setting Concerned Ladders tells you to change if it finds Foreman's climb
+running.
 
 | Setting | Default | What it does |
 |---|---|---|

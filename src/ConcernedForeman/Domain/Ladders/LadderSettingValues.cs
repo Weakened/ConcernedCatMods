@@ -51,15 +51,29 @@ internal readonly struct LadderSettingValues
     /// It is deliberately <b>not</b> <see cref="RetiredEnabledKey"/>. Every
     /// development build before #436 wrote <c>Ladders/Enabled = true</c> into
     /// its profile's config file simply because that was the default; nobody
-    /// chose it. Reading the switch from a new key leaves that stale line
-    /// orphaned, so a profile that ran an old build is off like a new one
+    /// chose it. Reading the switch from a new key means that stale line never
+    /// turns the climb on, so a profile that ran an old build is off like a new one
     /// instead of silently keeping a motor that disables Concerned Ladders.
-    /// A player who really wants Foreman's climb sets this key, on purpose.</summary>
+    /// A player who really wants Foreman's climb sets this key, on purpose.
+    /// The old key is still read, as a veto only (<see cref="Effective"/>).</summary>
     internal const string PlayerClimbingKey = "PlayerClimbing";
 
-    /// <summary>The key the switch used to live under, and which nothing reads
-    /// any more. Named so a test can hold the two apart.</summary>
+    /// <summary>The key the switch used to live under. It is still bound, but
+    /// only as a veto (<see cref="Effective"/>): a <c>true</c> in it never turns
+    /// the climb on.</summary>
     internal const string RetiredEnabledKey = "Enabled";
+
+    /// <summary>Whether Foreman's player climb runs: only when
+    /// <c>PlayerClimbing</c> is on AND the old <c>Enabled</c> key has not been
+    /// set to false.
+    ///
+    /// The second half exists for one reason. Concerned Ladders 1.0.0 is
+    /// published, and when it finds Foreman's motor it tells the player to
+    /// "disable Foreman's Ladders/Enabled and restart". That text cannot be
+    /// changed in the published package, so the key it names must still
+    /// switch the climb off. It can never switch it on: the dev builds that
+    /// wrote <c>Enabled = true</c> as a default must stay off.</summary>
+    internal static bool Effective(bool playerClimbing, bool legacyEnabled) => playerClimbing && legacyEnabled;
 
     internal LadderSettingValues(
         bool enabled,

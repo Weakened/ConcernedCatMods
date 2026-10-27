@@ -20,7 +20,14 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Ladders;
 /// The switch is bound as <c>Ladders/PlayerClimbing</c>, not the old
 /// <c>Ladders/Enabled</c>, so a <c>true</c> an older development build wrote as
 /// its default is never read (<see cref="LadderSettingValues.PlayerClimbingKey"/>).
-/// The worker-traversal seam (#334) does not depend on this switch.</summary>
+/// The worker-traversal seam (#334) does not depend on this switch.
+///
+/// <c>Ladders/Enabled</c> is still bound, as a <b>veto only</b>: false turns
+/// the climb off whatever <c>PlayerClimbing</c> says, and true (its default,
+/// and what old builds wrote) grants nothing. It stays because Concerned
+/// Ladders 1.0.0, which is published and cannot change, tells a player who
+/// opted in to "disable Foreman's Ladders/Enabled and restart"; that
+/// instruction has to work (<see cref="LadderSettingValues.Effective"/>).</summary>
 internal sealed class LadderSettings
 {
     private LadderSettings(
@@ -29,9 +36,11 @@ internal sealed class LadderSettings
         ConfigEntry<float> climbSpeed,
         ConfigEntry<float> staminaCost,
         ConfigEntry<bool> useTeleport,
-        ConfigEntry<bool> npcClimbing)
+        ConfigEntry<bool> npcClimbing,
+        ConfigEntry<bool> legacyEnabled)
     {
         Enabled = enabled;
+        LegacyEnabled = legacyEnabled;
         AutoMount = autoMount;
         ClimbSpeed = climbSpeed;
         StaminaCost = staminaCost;
@@ -44,6 +53,10 @@ internal sealed class LadderSettings
     /// patched at all, and switched off later every patch falls straight through
     /// and a climb in progress ends on the next frame.</summary>
     public ConfigEntry<bool> Enabled { get; }
+
+    /// <summary><c>Ladders/Enabled</c>: a veto, never a grant. See the class
+    /// remarks.</summary>
+    public ConfigEntry<bool> LegacyEnabled { get; }
 
     /// <summary>Walking into a ladder climbs it.</summary>
     public ConfigEntry<bool> AutoMount { get; }
@@ -66,7 +79,7 @@ internal sealed class LadderSettings
 
     /// <summary>The six settings as values, already brought into range.</summary>
     public LadderSettingValues Values => new LadderSettingValues(
-        Enabled.Value,
+        LadderSettingValues.Effective(Enabled.Value, LegacyEnabled.Value),
         AutoMount.Value,
         ClimbSpeed.Value,
         StaminaCost.Value,
@@ -87,7 +100,8 @@ internal sealed class LadderSettings
             "game's own ladders instead. Off restores vanilla exactly: with it off " +
             "when the game starts, Concerned Foreman patches nothing at all and every " +
             "ladder behaves as it does without the mod installed. (An older " +
-            "development build used the key Enabled; that line is no longer read.)");
+            "development build used the key Enabled; a true there no longer turns this on, and a false " +
+            "there still turns it off.)");
 
         ConfigEntry<bool> autoMount = config.Bind(
             LadderSettingValues.Section,
@@ -134,7 +148,16 @@ internal sealed class LadderSettings
             "Let a settlement worker climb a ladder. Off until NPC traversal has " +
             "passed its own test; nothing in this build reads it.");
 
-        return new LadderSettings(enabled, autoMount, climbSpeed, staminaCost, useTeleport, npcClimbing);
+        ConfigEntry<bool> legacyEnabled = config.Bind(
+            LadderSettingValues.Section,
+            LadderSettingValues.RetiredEnabledKey,
+            true,
+            "Kept only so an older instruction still works. Setting this to false turns Foreman's ladder " +
+            "climbing off whatever PlayerClimbing says; true does nothing on its own. Concerned Ladders " +
+            "asks you to set this to false if you turned PlayerClimbing on.");
+
+        return new LadderSettings(
+            enabled, autoMount, climbSpeed, staminaCost, useTeleport, npcClimbing, legacyEnabled);
     }
 
     /// <summary>Copies the live values onto the climb's options. Called every

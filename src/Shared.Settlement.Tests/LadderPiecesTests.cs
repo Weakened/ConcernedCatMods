@@ -216,21 +216,32 @@ public sealed class LadderPiecesTests
     public void ThePlayerClimbSwitchIsNotReadFromTheKeyOldBuildsWroteTrueInto()
     {
         // #436. Every development build before this one wrote
-        // `Ladders/Enabled = true` into its config as the default. Reading the
-        // switch from a different key orphans that line, so those profiles are
-        // off too rather than silently keeping a motor that disables Concerned
-        // Ladders.
+        // `Ladders/Enabled = true` into its config as the default. The switch is
+        // read from a different key, so those profiles are off too rather than
+        // silently keeping a motor that disables Concerned Ladders.
         Assert.Equal("Ladders", LadderSettingValues.Section);
         Assert.Equal("PlayerClimbing", LadderSettingValues.PlayerClimbingKey);
+        Assert.Equal("Enabled", LadderSettingValues.RetiredEnabledKey);
         Assert.NotEqual(LadderSettingValues.RetiredEnabledKey, LadderSettingValues.PlayerClimbingKey);
     }
 
+    [Theory]
+    [InlineData(false, true, false)]  // the default, and every old dev profile: off
+    [InlineData(false, false, false)]
+    [InlineData(true, true, true)]    // opted in
+    [InlineData(true, false, false)]  // opted in, then followed Concerned Ladders' instruction
+    public void TheOldKeyIsAVetoAndNeverAGrant(bool playerClimbing, bool legacyEnabled, bool climbs)
+    {
+        Assert.Equal(climbs, LadderSettingValues.Effective(playerClimbing, legacyEnabled));
+    }
+
     [Fact]
-    public void TheBindingReadsTheSwitchFromTheNewKeyAndTheDomainDefault()
+    public void TheBindingReadsTheSwitchFromTheNewKeyAndTheOldOneOnlyAsAVeto()
     {
         // The binding is BepInEx and cannot run here, so its source is read: the
-        // switch must be bound under PlayerClimbingKey with defaults.Enabled, and
-        // nothing may bind the retired key or hard-code a default of true.
+        // switch is bound under PlayerClimbingKey with the domain default, the
+        // old key with a default of true (which grants nothing), and the live
+        // value is the conjunction of the two. No key name is spelled inline.
         string source = ReadShippedFile(Path.Combine(
             "src", "ConcernedForeman", "Runtime", "Ladders", "LadderSettings.cs"));
 
@@ -238,8 +249,23 @@ public sealed class LadderPiecesTests
         Assert.Contains(
             "LadderSettingValues.Section, LadderSettingValues.PlayerClimbingKey, defaults.Enabled,",
             collapsed);
+        Assert.Contains("LadderSettingValues.Section, LadderSettingValues.RetiredEnabledKey, true,", collapsed);
+        Assert.Contains("LadderSettingValues.Effective(Enabled.Value, LegacyEnabled.Value)", collapsed);
         Assert.DoesNotContain("\"Enabled\"", source);
-        Assert.DoesNotContain("RetiredEnabledKey", source);
+    }
+
+    [Fact]
+    public void ConcernedLaddersInstructionNamesTheKeyForemanStillHonoursAsAVeto()
+    {
+        // Concerned Ladders 1.0.0 is published and tells a player to "Disable
+        // Foreman's Ladders/Enabled". That text is frozen in the package, so the
+        // key it names must keep switching Foreman's climb off.
+        string ladders = ReadShippedFile(Path.Combine(
+            "src", "ConcernedLadders", "Pieces", "LadderLocalization.cs"));
+
+        Assert.Contains(
+            LadderSettingValues.Section + "/" + LadderSettingValues.RetiredEnabledKey, ladders);
+        Assert.False(LadderSettingValues.Effective(playerClimbing: true, legacyEnabled: false));
     }
 
     [Fact]
