@@ -10,8 +10,8 @@ namespace TheConcernedCat.ConcernedLadders.Domain.Animation;
 /// in LimbGait.cs and DefaultTransitions remain the fallbacks.</summary>
 internal static class GeneratedGait
 {
-    internal const string BlendSha256 = "2c60744e381b464b4cc8ccf220420a6b93b355015d3347d1a066edb65a737fd0";
-    internal const string JsonSha256 = "bcd063a101db294cc901e7aae94164cb112a99582be42c2ffb358bad5cd8347a";
+    internal const string BlendSha256 = "738873e259245531c0f31525674fef445e521bc57d338e67307d9c1c07c09345";
+    internal const string JsonSha256 = "c77b3fc168404edbdb667cf2eba1e2a822b38bc758df99fd5c49f8f5c4f48abb";
     internal const string Blender = "5.1.2";
 
     internal const float PelvisDrop = 0f;
@@ -729,16 +729,16 @@ internal static class GeneratedGait
                 {
                     1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
                     1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
-                    1f, 1f, 1f, 1f, 1f, 1f, 1f, 0.972f, 0.896f, 0.784f, 0.648f,
-                    0.5f, 0.352f, 0.216f, 0.104f, 0.028f, 0f, 0f, 0f
+                    1f, 1f, 1f, 0.964195f, 0.86852f, 0.730583f, 0.567994f, 0.398361f, 0.239294f, 0.108401f, 0.023291f,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f
                 },
                 // right foot
                 new[]
                 {
                     1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
                     1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
-                    1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 0.972f, 0.896f,
-                    0.784f, 0.648f, 0.5f, 0.352f, 0.216f, 0.104f, 0.028f, 0f
+                    1f, 1f, 1f, 1f, 1f, 0.98877f, 0.925926f, 0.81968f, 0.683594f, 0.531232f, 0.376157f,
+                    0.231934f, 0.112124f, 0.030292f, 0f, 0f, 0f, 0f, 0f
                 },
             },
             Reach = new[]
@@ -839,8 +839,8 @@ internal static class GeneratedGait
             {
                 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
                 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
-                1f, 0.98877f, 0.957031f, 0.907715f, 0.84375f, 0.768066f, 0.683594f, 0.593262f, 0.5f, 0.406738f, 0.316406f,
-                0.231934f, 0.15625f, 0.092285f, 0.042969f, 0.01123f, 0f, 0f, 0f
+                1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
+                0.957031f, 0.84375f, 0.683594f, 0.5f, 0.316406f, 0.15625f, 0.042969f, 0f
             },
             BodyUp = new[]
             {

@@ -193,10 +193,10 @@ internal static class DefaultTransitions
             .BodyToward(0f, 0f, 0.3f, 0.1f, 0.45f, 0.1f, 0.8f, 0f).Lean(0f, 0f, 0.22f, 25f, 0.45f, 15f, 0.75f, 0f).Build(),
         // Intermediate-floor exit: the same support transfer sideways or behind at the current height.
         new TransitionAction.Builder(TransitionKind.SideExit, 1f)
-            .Reach(LF, 0.1f, 0f, 0.45f, 1f).Arc(LF, 0.1f, 0.45f, 0f, 0.1f, 0.18f).Weight(LF, 0.7f, 1f, 0.95f, 0f)
-            .Reach(RF, 0.4f, 0f, 0.75f, 1f).Arc(RF, 0.4f, 0.75f, 0f, 0.1f, 0.18f).Weight(RF, 0.75f, 1f, 1f, 0f)
+            .Reach(LF, 0.1f, 0f, 0.45f, 1f).Arc(LF, 0.1f, 0.45f, 0f, 0.1f, 0.18f).Weight(LF, 0.6f, 1f, 0.82f, 0f)
+            .Reach(RF, 0.4f, 0f, 0.75f, 1f).Arc(RF, 0.4f, 0.75f, 0f, 0.1f, 0.18f).Weight(RF, 0.66f, 1f, 0.9f, 0f)
             .Weight(LH, 0.28f, 1f, 0.4f, 0f).Weight(RH, 0.32f, 1f, 0.45f, 0f)
-            .Body(0f, 1f, 0.55f, 1f, 0.95f, 0f).Lean(0f, 0f, 0.4f, 12f, 1f, 0f).Build(),
+            .Body(0f, 1f, 0.8f, 1f, 1f, 0f).Lean(0f, 0f, 0.4f, 12f, 1f, 0f).Build(),
         // Bottom step-off: the leading foot lowers back onto the ground, support transfers, the hands let go as the
         // body leaves the ladder (in game 2026-10-27 the route is a 0.7 m step back at ground level, so they must be
         // free by a quarter of it), the second foot follows, then normal standing.
