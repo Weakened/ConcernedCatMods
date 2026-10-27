@@ -164,7 +164,7 @@ internal sealed class GaitShape
     internal ClimbLoop Down = DefaultDown();
 
     /// <summary>Rung centre relative to the body root when a foot leaves it climbing up (its lowest planted height).</summary>
-    internal float FootLowRel = -0.06f;
+    internal float FootLowRel = 0f;
 
     /// <summary>The middle of a hand's planted range relative to the shoulder height the rig reports.</summary>
     internal float HandMidFromShoulder = 0.0f;
@@ -299,7 +299,12 @@ internal sealed class LimbGait
             // Hands round down: with an odd stride the two hands sit half a rung apart in phase, and rounding up put one of
             // them 17 cm out of reach (in game 2026-10-27, left hand fading a third of the climb).
             float exact = (_cycle * phase + lowRel) / _pitch;
-            rungs[limb] = (int)(hand ? Math.Floor(exact + 1e-4) : Math.Round(exact)) - (ReferenceEquals(loop, _shape.Down) ? loop.StrideRungs : 0);
+            // Ascending feet round up (in game 2026-10-27): rounding to the nearest rung left the support foot up to half
+            // a rung below FootLowRel, beyond the straight leg, and it was skipped. The descent keeps its rounding (owner:
+            // "climb down is PERFECT").
+            bool down = ReferenceEquals(loop, _shape.Down);
+            double rung = hand ? Math.Floor(exact + 1e-4) : down ? Math.Round(exact) : Math.Ceiling(exact - 1e-4);
+            rungs[limb] = (int)rung - (down ? loop.StrideRungs : 0);
         }
     }
 

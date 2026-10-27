@@ -1,10 +1,10 @@
 {
  "format": 2,
  "source": "LadderGait.blend",
- "sourceSha256": "bfbeb3cb7a84b1b1c7a11441e3736b741a8e7c697a44441332533d1749116d05",
+ "sourceSha256": "24d1c2346496c135fd093b51a7ad3cfa1881d35558b2cc55cc25f8706150bc3e",
  "blender": "5.1.2",
  "shape": {
-  "foot_low_rel": -0.06,
+  "foot_low_rel": 0.0,
   "hand_mid_from_shoulder": -0.02,
   "hand_settle_below": 0.38,
   "hand_settle_above": 0.38,
@@ -1608,7 +1608,7 @@
  ],
  "constants": {
   "PelvisDrop": 0.0,
-  "PelvisToward": 0.12,
+  "PelvisToward": 0.16,
   "Lean": 12.0,
   "SlideLean": 6.0,
   "SwayTilt": 3.0,

@@ -28,7 +28,7 @@ TRANSITION_KINDS = ('GroundMount', 'AirCatch', 'TopExit', 'SideExit', 'BottomSte
 EXIT_KINDS = ('TopExit', 'SideExit', 'BottomStepOff')
 
 SHAPE_SCALARS = (  # GaitShape field, json key, default (LimbGait.cs + the GeneratedGait override)
-    ('FootLowRel', 'foot_low_rel', -0.06),
+    ('FootLowRel', 'foot_low_rel', 0.0),
     ('HandMidFromShoulder', 'hand_mid_from_shoulder', -0.02),
     ('HandSettleBelow', 'hand_settle_below', 0.38),
     ('HandSettleAbove', 'hand_settle_above', 0.38),
@@ -41,7 +41,7 @@ SHAPE_SCALARS = (  # GaitShape field, json key, default (LimbGait.cs + the Gener
 
 POSTURE_CONSTANTS = (  # GeneratedGait constant, property on CTL_Pelvis, default
     ('PelvisDrop', 'pelvis_drop', 0.0),
-    ('PelvisToward', 'pelvis_toward', 0.12),
+    ('PelvisToward', 'pelvis_toward', 0.16),
     ('Lean', 'lean', 12.0),
     ('SlideLean', 'slide_lean', 6.0),
     ('SwayTilt', 'sway_tilt', 3.0),
@@ -304,7 +304,7 @@ class Gait:
             low_rel = (SHOULDER_REL + shape['hand_mid_from_shoulder'] - planted_range * 0.5) if hand else shape['foot_low_rel']
             phase = lp['start'][limb] + lp['length'][limb] if down else lp['start'][limb]
             exact = (self.cycle * phase + low_rel) / PITCH
-            rung = math.floor(exact + 1e-4) if hand else _round_half_even(exact)
+            rung = math.floor(exact + 1e-4) if hand else (_round_half_even(exact) if down else math.ceil(exact - 1e-4))
             self.base_rung.append(int(rung) - (lp['strideRungs'] if down else 0))
         self.shift = 0
         if down:
