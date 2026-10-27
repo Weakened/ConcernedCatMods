@@ -95,6 +95,10 @@ internal static class ClimbTuning
     internal static float KneeMidAscent = 1f;
     internal static float KneeAhead = 0.35f;
 
+    /// <summary>With no landing, the hands release from this far below the run's top over TopHandsFreeSpan above it.</summary>
+    internal static float TopHandsFree = 0.42f;
+    internal static float TopHandsFreeSpan = 0.25f;
+
     /// <summary>On a top exit or entry the palms press on the floor this far past the ladder's plane.</summary>
     internal static float LipOnto = 0.18f;
 

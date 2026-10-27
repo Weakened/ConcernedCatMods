@@ -1058,9 +1058,14 @@ internal sealed class LadderRuntime : IDisposable
         Vector3 top = LadderSegment.Vector(_run.Top);
         Vector3 lane = LanePoint(_run, _laneDepth, _run.Top.Y);
         float radius = _clearance!.Radius;
-        foreach (float distance in new[] { radius + 0.45f, radius + 0.85f })
+        // Straight over the rails first, then the same distances shifted along the lip (in game 2026-10-27: the owner's
+        // ladder stands at a floor's corner, so every point straight in from it was on the floor's edge).
+        foreach (float shift in new[] { 0f, 0.4f, -0.4f, 0.8f, -0.8f })
         {
-            if (TryTopLanding(top + inward * distance)) { return true; }
+            foreach (float distance in new[] { radius + 0.45f, radius + 0.85f })
+            {
+                if (TryTopLanding(top + inward * distance + side * shift)) { return true; }
+            }
         }
 
         float sideways = _run.Width * 0.5f + radius + 0.15f;
@@ -1166,7 +1171,7 @@ internal sealed class LadderRuntime : IDisposable
     {
         string kind = _exitIsTop ? "top" : _exitIsBottom ? "bottom" : "side";
         if (!_clearance!.HasRoom(floor)) { Landing(kind, floor, "refused: no standing room"); return false; }
-        if (!_clearance.SupportedFootprint(floor)) { Landing(kind, floor, "refused: unsupported footprint"); return false; }
+        if (!_clearance.SupportedFootprint(floor, out string why)) { Landing(kind, floor, "refused: unsupported footprint (" + why + ")"); return false; }
         Vector3 feet = _body!.position;
         Vector3 away = Away();
         foreach (float back in new[] { 0f, 0.25f, 0.5f })

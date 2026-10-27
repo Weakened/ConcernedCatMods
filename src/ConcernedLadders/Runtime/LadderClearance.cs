@@ -165,13 +165,18 @@ internal sealed class LadderClearance
     /// <summary>A landing's whole footprint: the centre and eight points around it at nine tenths of the
     /// capsule radius all find standing surface at the same height. A destination at a floor's edge, on a post
     /// or on a beam narrower than the body is not a landing (Codex review of 27528f0).</summary>
-    internal bool SupportedFootprint(Vector3 feet)
+    internal bool SupportedFootprint(Vector3 feet) => SupportedFootprint(feet, out _);
+
+    /// <summary>As <see cref="SupportedFootprint(Vector3)"/>, naming the first footprint point that failed.</summary>
+    internal bool SupportedFootprint(Vector3 feet, out string why)
     {
-        if (!TrySurface(feet, 0.15f, 0.2f, out Vector3 centre)) { return false; }
+        why = "";
+        if (!TrySurface(feet, 0.15f, 0.2f, out Vector3 centre)) { why = "no surface under the centre"; return false; }
         float offset = Radius * 0.9f;
         foreach (Vector3 direction in Footprint)
         {
-            if (!TrySurface(feet + direction * offset, 0.15f, 0.2f, out Vector3 floor) || Mathf.Abs(floor.y - centre.y) > 0.15f) { return false; }
+            if (!TrySurface(feet + direction * offset, 0.15f, 0.2f, out Vector3 floor)) { why = "no surface at " + direction.ToString("F1"); return false; }
+            if (Mathf.Abs(floor.y - centre.y) > 0.15f) { why = "step " + (floor.y - centre.y).ToString("F2") + " at " + direction.ToString("F1"); return false; }
         }
 
         return true;

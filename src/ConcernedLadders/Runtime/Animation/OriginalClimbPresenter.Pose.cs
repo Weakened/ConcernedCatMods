@@ -206,6 +206,13 @@ internal sealed partial class OriginalClimbPresenter
 
                 surface += right * (side * action.ArcAt(limb, progress, 0)) + outward * action.ArcAt(limb, progress, 1) + Vector3.up * action.ArcAt(limb, progress, 2);
             }
+            else if (hand)
+            {
+                // Standing at the very top of a run with no landing (gameplay allows it), nothing is left within reach:
+                // the hands let go deliberately instead of straining at the rail tops (in game 2026-10-27: every frame
+                // skipped at ratio 2). They take hold again as the climber goes back down.
+                weight *= 1f - Smooth01((feet.y - (frame.Run.Top.Y - ClimbTuning.TopHandsFree)) / ClimbTuning.TopHandsFreeSpan);
+            }
 
             Quaternion rotation;
             Vector3 pivot;
