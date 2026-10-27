@@ -1,3 +1,4 @@
+using System;
 using TheConcernedCat.ConcernedLadders.Domain.Animation;
 
 namespace TheConcernedCat.ConcernedLadders.Runtime.Animation;
@@ -74,14 +75,18 @@ internal static class ClimbTuning
     internal static float ExitFold = 28f;
 
 
-    /// <summary>Attaching: seconds after the attachment each limb (LH, RH, LF, RF) starts taking its contact, how long
-    /// each takes, and how long the body takes to settle into the climbing posture; a ground mount and a midair catch.</summary>
-    internal static float[] MountEntryDelay = { 0.14f, 0.0f, 0.26f, 0.40f };
-    internal static float MountEntryLimb = 0.28f;
-    internal static float MountEntryBody = 0.55f;
-    internal static float[] CatchEntryDelay = { 0.0f, 0.04f, 0.12f, 0.18f };
-    internal static float CatchEntryLimb = 0.14f;
-    internal static float CatchEntryBody = 0.25f;
+    /// <summary>Authored transitions (mount, catch, top entry, top/side exit, bottom step-off), from the Blender source.</summary>
+    internal static TransitionAction[] Transitions = GeneratedGait.Transitions();
+
+    internal static TransitionAction Action(TransitionKind kind)
+    {
+        foreach (TransitionAction action in Transitions) { if (action.Kind == kind) { return action; } }
+        foreach (TransitionAction action in DefaultTransitions.All()) { if (action.Kind == kind) { return action; } }
+        throw new InvalidOperationException("No authored transition " + kind + ".");
+    }
+
+    /// <summary>On a top exit the palms press this far ahead of the landing point (toward the floor).</summary>
+    internal static float ExitHandAhead = -0.45f;
 
     /// <summary>A contact needing more than FadeFrom of its chain fades out toward ReachLimit instead of popping.</summary>
     internal static float FadeFrom = 0.96f;
@@ -95,6 +100,10 @@ internal static class ClimbTuning
     /// <summary>Development diagnostics: write one CSV row per limb per frame to BepInEx/ladder_contact_trace.csv
     /// (bounded; off in normal play).</summary>
     internal static bool TraceContacts = false;
+
+    /// <summary>Development diagnostics: log every landing query of a dismount, step-off, top exit or top entry and
+    /// why it was accepted or refused (off in normal play).</summary>
+    internal static bool LogLandingQueries = false;
 
     internal static int Version { get; private set; }
 

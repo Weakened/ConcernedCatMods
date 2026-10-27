@@ -11,6 +11,8 @@ internal static class GeneratedGait
 
     internal static GaitShape Shape() => new GaitShape { FootLowRel = 0.06f, HandMidFromShoulder = -0.02f };
 
+    internal static TransitionAction[] Transitions() => DefaultTransitions.All();
+
     internal const float PelvisDrop = 0.1f;
     internal const float PelvisToward = 0.2f;
     internal const float Lean = 10f;

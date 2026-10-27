@@ -93,6 +93,7 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
             if (loop && !actor.Gait.Update(frame.Feet.Y, dt, (frame.MenuHold || frame.Motion == PresentedMotion.Hold) && Mathf.Abs(travel) < .000001f))
             { throw new InvalidOperationException("Invalid completed-travel sample for original contacts."); }
             actor.SlideBlend = Mathf.MoveTowards(actor.SlideBlend, slide ? 1f : 0f, dt / (slide ? .08f : .12f));
+            AdvanceTransition(actor, frame, fresh, dt);
             actor.Age += dt; actor.Frame = frame; actor.Active = true; actor.Seen = Time.time;
         }
         catch (Exception error)
@@ -101,6 +102,45 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
             // The motor's presenter boundary handles this and keeps gameplay running. No motor call here.
             throw new InvalidOperationException("Original animation binding/frame failed: " + SafeFailure.Brief(error));
         }
+    }
+
+    /// <summary>Picks and advances the authored transition: an exit (top, side, bottom) or a top entry follows the
+    /// runtime's route progress; a ground mount or a catch runs on time from the attachment until it completes, while the
+    /// climber may already be climbing.</summary>
+    private static void AdvanceTransition(Actor actor, in ClimbPresentationFrame frame, bool fresh, float dt)
+    {
+        TransitionKind? routed = frame.Motion switch
+        {
+            PresentedMotion.TopFinish => TransitionKind.TopExit,
+            PresentedMotion.StepOff => TransitionKind.SideExit,
+            PresentedMotion.BottomStepOff => TransitionKind.BottomStepOff,
+            PresentedMotion.TopEntry => TransitionKind.TopEntry,
+            _ => null,
+        };
+        if (routed != null)
+        {
+            if (actor.Transition == null || actor.Transition.Kind != routed.Value) { actor.Transition = ClimbTuning.Action(routed.Value); actor.EntryTimed = false; }
+            actor.TransitionProgress = Mathf.Clamp01(frame.Transition);
+            return;
+        }
+
+        if (fresh && (frame.Motion == PresentedMotion.GroundMount || frame.Motion == PresentedMotion.AirCatch))
+        {
+            actor.Transition = ClimbTuning.Action(frame.Motion == PresentedMotion.AirCatch ? TransitionKind.AirCatch : TransitionKind.GroundMount);
+            actor.TransitionProgress = 0f;
+            actor.EntryTimed = true;
+            return;
+        }
+
+        if (actor.Transition != null && actor.EntryTimed)
+        {
+            actor.TransitionProgress = Mathf.Clamp01(actor.TransitionProgress + dt / Mathf.Max(.05f, actor.Transition.Seconds));
+            if (actor.TransitionProgress >= 1f) { actor.Transition = null; }
+            return;
+        }
+
+        // A routed entry finished (the climber is on the ladder) or an exit was abandoned back onto the ladder.
+        actor.Transition = null;
     }
 
     public void End(Player? player, ClimbEnd reason)
@@ -234,7 +274,7 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
             !LimbGait.Finite(frame.RungPlane) || !LimbGait.Finite(frame.RungOrigin) ||
             !LimbGait.Finite(frame.Transition) || frame.LastRung < 1 || frame.LastRung > 4096 ||
             (frame.Face != LadderFace.Front && frame.Face != LadderFace.Rear) ||
-            (int)frame.Motion < 0 || (int)frame.Motion > (int)PresentedMotion.StepOff ||
+            (int)frame.Motion < 0 || (int)frame.Motion > (int)PresentedMotion.TopEntry ||
             ((int)frame.NativeAction & ~15) != 0)
         { throw new InvalidOperationException("Non-finite or unsupported accepted presentation frame."); }
     }
@@ -274,6 +314,9 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
         internal readonly LimbGait Gait = new LimbGait();
         internal float BodyBlend;
         internal bool Caught;
+        internal TransitionAction? Transition;
+        internal float TransitionProgress;
+        internal bool EntryTimed;
         internal readonly FitCounters Fit = new FitCounters();
         internal readonly bool[] Asked = new bool[4];
         internal readonly ContactRecord[] Record = new ContactRecord[4];

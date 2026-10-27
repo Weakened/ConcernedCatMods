@@ -48,6 +48,12 @@ internal enum PresentedMotion
     AirCatch,
     TopFinish,
     StepOff,
+
+    /// <summary>A supported step off the foot of the ladder onto the ground (owner spec 2026-10-27).</summary>
+    BottomStepOff,
+
+    /// <summary>A supported descending entry from an upper or intermediate floor (owner spec 2026-10-27).</summary>
+    TopEntry,
 }
 
 /// <summary>Why an attachment ended. Delivered once, synchronously, before any departure impulse is applied.</summary>

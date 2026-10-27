@@ -32,23 +32,20 @@ internal sealed partial class OriginalClimbPresenter
         else if (kind != NativeKind.None) { native |= NativeActionParts.LeftArm | NativeActionParts.RightArm | NativeActionParts.UpperBody | NativeActionParts.Head; }
 
         actor.Fit.Begin(this, frame.Motion, Time.time);
-        // Owner reference 17-00-06 (grounded mount): contacts are established one at a time - a hand reaches, a low foot
-        // plants, the other hand goes higher, the other foot rises - while the body stays quiet at first. A midair catch
-        // grabs hands first, quickly. Timed from the attachment, never waiting on it: the motor already climbs.
-        float[] delays = actor.Caught ? ClimbTuning.CatchEntryDelay : ClimbTuning.MountEntryDelay;
-        float limbEntry = actor.Caught ? ClimbTuning.CatchEntryLimb : ClimbTuning.MountEntryLimb;
-        float entry = Mathf.Clamp01(actor.Age / (actor.Caught ? ClimbTuning.CatchEntryBody : ClimbTuning.MountEntryBody));
-        bool mount = frame.Motion == PresentedMotion.GroundMount || frame.Motion == PresentedMotion.AirCatch;
-        bool exit = frame.Motion == PresentedMotion.TopFinish || frame.Motion == PresentedMotion.StepOff;
-        float route = Mathf.Clamp01(frame.Transition);
-        if (exit) { entry = 1f; }
-        float bodyWeight = LimbGait.Ease(entry);
-        if (exit) { bodyWeight *= 1f - Window(route, .05f, .45f); }
+        // The authored transition playing now (owner spec 2026-10-27 section 5), if any: an entry (mount, catch, top
+        // entry) plays from the attachment until it completes; an exit (top, side, bottom) plays over the runtime's own
+        // route progress, so visual contacts never lead the real capsule.
+        TransitionAction? action = actor.Transition;
+        float progress = actor.TransitionProgress;
+        bool exit = action != null && (action.Kind == TransitionKind.TopExit || action.Kind == TransitionKind.SideExit || action.Kind == TransitionKind.BottomStepOff);
+        float bodyWeight = action != null ? action.BodyWeightAt(progress) : 1f;
         if ((native & NativeActionParts.UpperBody) != 0) { bodyWeight = 0f; }
         float sway = actor.Gait.Sway * (1f - actor.SlideBlend);
         float lean = Mathf.Lerp(ClimbTuning.Lean, ClimbTuning.SlideLean, actor.SlideBlend);
-        // Finishing over the top folds the torso forward over the landing, then straightens (owner reference finish).
-        if (frame.Motion == PresentedMotion.TopFinish) { lean += ClimbTuning.ExitFold * Mathf.Sin(Mathf.PI * Mathf.Clamp01(route / .45f)); }
+        if (action != null) { lean += action.LeanAt(progress); }
+        Vector3 landing = Vector(frame.TransitionTo), start = Vector(frame.TransitionFrom);
+        Vector3 across = landing - start; across.y = 0f;
+        Vector3 travel = across.sqrMagnitude > .0004f ? across.normalized : toward;
         // The authored body curve: the visible body rises more slowly while a foot recovers and catches up as the leg
         // extends (bounded, zero mean, presentation only; the gameplay body moves steadily). Faded in and out with travel
         // so a stop or a reversal never jumps.
@@ -57,8 +54,9 @@ internal sealed partial class OriginalClimbPresenter
         actor.BodyBlend = Mathf.MoveTowards(actor.BodyBlend, moving ? 1f : 0f, Time.deltaTime / .25f);
         float blend = LimbGait.Ease(actor.BodyBlend);
         lean += bodyLean * blend;
-        Vector3 pelvis = feet + Vector3.up * (rig.PelvisHeight - ClimbTuning.PelvisDrop + bodyUp * blend) +
-                         toward * (ClimbTuning.PelvisToward + bodyToward * blend) +
+        float actionUp = action != null ? action.BodyUpAt(progress) : 0f, actionToward = action != null ? action.BodyTowardAt(progress) : 0f;
+        Vector3 pelvis = feet + Vector3.up * (rig.PelvisHeight - ClimbTuning.PelvisDrop + bodyUp * blend + actionUp) +
+                         toward * (ClimbTuning.PelvisToward + bodyToward * blend + actionToward) +
                          right * (ClimbTuning.SwayShift * sway);
         Quaternion bodyRotation = Quaternion.LookRotation(toward, Vector3.up) *
             Quaternion.AngleAxis(lean, Vector3.right) * Quaternion.AngleAxis(-sway * ClimbTuning.SwayTilt, Vector3.forward) * rig.BodyInPlayer;
@@ -133,42 +131,42 @@ internal sealed partial class OriginalClimbPresenter
                 surface = Vector3.Lerp(surface, rail, LimbGait.Ease(actor.SlideBlend));
             }
 
-            float weight = exit ? 1f : LimbGait.Ease((actor.Age - delays[limb]) / limbEntry);
-
-            if (exit)
+            float weight = 1f, toDestination = 0f;
+            if (action != null)
             {
-                if (hand)
+                // Authored transition channels: how much this limb is ours, how far from its ladder contact to its
+                // destination contact, and its extra arc. Destinations come only from the runtime's validated route:
+                // feet stand on the landing (or start on the floor for a top entry), hands press onto the floor beyond
+                // the lip on a top exit. No floor query or landing choice here.
+                weight = action.WeightAt(limb, progress);
+                toDestination = action.ReachAt(limb, progress);
+                if (toDestination > 0f)
                 {
-                    // In game 2026-10-26: the finish lifts the feet to the landing, then walks about a metre onto it. A
-                    // flush top leaves nothing for the hands to hold, so they let go early and the game's own walk
-                    // (driven by the runtime at the real path speed) carries the step.
-                    weight *= 1f - Window(route, limb == 0 ? 0f : .05f, limb == 0 ? .25f : .3f);
+                    Vector3 destination = action.Kind == TransitionKind.TopEntry ? start : landing;
+                    destination += Vector3.Cross(Vector3.up, travel) * (hand ? side * -ClimbTuning.HandSpan : side * -ClimbTuning.FootSpan);
+                    if (hand) { destination += Vector3.up * ClimbTuning.PalmThickness + travel * ClimbTuning.ExitHandAhead; }
+                    surface = Vector3.Lerp(surface, destination, toDestination);
                 }
-                else
-                {
-                    // Only the motor's accepted supported destination is used. No floor query or landing choice.
-                    float step = Window(route, limb == 2 ? 0f : .1f, limb == 2 ? .3f : .4f);
-                    Vector3 supported = Vector(frame.TransitionTo) + right * (side * .13f);
-                    surface = Vector3.Lerp(surface, supported, step);
-                    surface += Vector3.up * .09f * Mathf.Sin(Mathf.PI * step);
-                    weight *= 1f - Window(route, limb == 2 ? .2f : .3f, limb == 2 ? .45f : .55f);
-                }
+
+                surface += right * (side * action.ArcAt(limb, progress, 0)) + outward * action.ArcAt(limb, progress, 1) + Vector3.up * action.ArcAt(limb, progress, 2);
             }
 
             Quaternion rotation;
             Vector3 pivot;
-            if (hand) { pivot = GripGoal(surface, toward, ClimbTuning.HandFingerPitch, out rotation); }
+            if (hand) { pivot = GripGoal(surface, Vector3.Slerp(toward, travel, toDestination), Mathf.Lerp(ClimbTuning.HandFingerPitch, 90f, toDestination), out rotation); }
             else
             {
                 // A humanoid foot goal: forward is the toes, up is up. The ankle sits behind and above the ball of the foot.
-                rotation = Quaternion.LookRotation(toward, Vector3.up);
-                pivot = surface - toward * ClimbTuning.FootBallForward + Vector3.up * ClimbTuning.FootAnkleHeight;
+                // On a landing the foot turns to the walking direction.
+                Vector3 forward = Vector3.Slerp(toward, travel, toDestination);
+                rotation = Quaternion.LookRotation(forward, Vector3.up);
+                pivot = surface - forward * ClimbTuning.FootBallForward + Vector3.up * ClimbTuning.FootAnkleHeight;
             }
 
             float reach = Vector3.Distance(root, pivot);
             // A contact is planted when the gait holds it on a rung and nothing else (entry, exit, rail, slide) blends
             // it: that is when the 2 cm error / 1 cm drift targets apply.
-            bool planted = contact.Planted && !exit && railBlend <= 0f && actor.SlideBlend <= 0f && weight >= .999f;
+            bool planted = contact.Planted && action == null && railBlend <= 0f && actor.SlideBlend <= 0f && weight >= .999f;
             var record = new ContactRecord
             {
                 Has = true, Target = surface, Planted = planted, Requested = weight, Ratio = reach / rig.Reach[limb],

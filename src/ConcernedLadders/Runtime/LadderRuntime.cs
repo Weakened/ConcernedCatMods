@@ -16,6 +16,13 @@ internal sealed class LadderRuntime : IDisposable
     /// <summary>How far below the run's top an upward climb starts looking for a floor to walk onto.</summary>
     private const float TopPlanBand = 0.6f;
 
+    /// <summary>Descending entry ends this far below the run's top (hands on the top rungs, feet on real rungs).</summary>
+    private const float TopEntryDrop = 0.9f;
+
+    /// <summary>Intermediate-floor dismount search: a landing from this far below the feet to this far above them.</summary>
+    private const float IntermediateAbove = 1.15f;
+    private const float IntermediateBelow = 0.45f;
+
     /// <summary>A body further than this from the motor's last command at release has been moved by something
     /// else; the release then makes no physics or fall-reference writes.</summary>
     private const float TakeoverDistance = 0.5f;
@@ -90,6 +97,8 @@ internal sealed class LadderRuntime : IDisposable
     private Mode _lastSampleMode;
     private bool _mountAirborne;
     private bool _exitIsTop;
+    private bool _exitIsBottom;
+    private bool _mountFromTop;
     private Vector3 _routeStart;
     private float _routeLength;
     private ClimbEnd _endHint;
@@ -404,6 +413,7 @@ internal sealed class LadderRuntime : IDisposable
         internal float Height;
         internal Vector3[] Route;
         internal bool Airborne;
+        internal bool TopEntry;
         internal float Reach;
     }
 
@@ -444,6 +454,9 @@ internal sealed class LadderRuntime : IDisposable
             clearance.ClearBlocker();
             float lane = ClimbPolicy.LaneDepth(face, clearance.Radius, segment.BackFaceDepth, segment.FrontFaceDepth);
             float target = supported ? Mathf.Clamp(feet.y, hangLowest, run.Top.Y) : ClimbPolicy.GrabHeight(feet.y, hangLowest, run.Top.Y);
+            // Owner spec 2026-10-27: a descending entry from an upper floor lowers onto the ladder (hands on the top
+            // rungs, feet onto real rungs below the lip) instead of standing on the run's top.
+            float entryLow = Mathf.Max(hangLowest, run.Top.Y - TopEntryDrop);
             Vector3 line = LanePoint(run, lane, target);
             if (supported)
             {
@@ -496,6 +509,15 @@ internal sealed class LadderRuntime : IDisposable
                         new Vector3(line.x, raised, line.z),
                         line,
                     };
+                    if (topEntry && entryLow < line.y - 0.05f)
+                    {
+                        Vector3 lowered = LanePoint(run, lane, entryLow);
+                        Vector3[] down = { direct[0], direct[1], line, lowered };
+                        Vector3[] downAround = { around[0], around[1], around[2], line, lowered };
+                        if (clearance.CanFollow(feet, down)) { route = down; break; }
+                        if (clearance.CanFollow(feet, downAround)) { route = downAround; break; }
+                    }
+
                     if (clearance.CanFollow(feet, direct)) { route = direct; break; }
                     if (clearance.CanFollow(feet, around)) { route = around; break; }
                 }
@@ -510,7 +532,8 @@ internal sealed class LadderRuntime : IDisposable
             }
 
             if (route == null) { first = Keep(first, FromBlocker(clearance.LastBlocker)); continue; }
-            plan = new Plan { Face = face, Lane = lane, Height = target, Route = route, Airborne = !supported, Reach = reach };
+            bool entering = topEntry && route.Length > 0 && route[route.Length - 1].y < line.y - 0.05f;
+            plan = new Plan { Face = face, Lane = lane, Height = entering ? entryLow : target, Route = route, Airborne = !supported, Reach = reach, TopEntry = entering };
             return true;
         }
 
@@ -585,6 +608,7 @@ internal sealed class LadderRuntime : IDisposable
         _lastSampleY = body.position.y;
         _lastSampleMode = Mode.Mounting;
         _mountAirborne = plan.Airborne;
+        _mountFromTop = plan.TopEntry;
         _endHint = ClimbEnd.None;
         BeginRoute(body.position);
         _ledger.Discard();
@@ -725,6 +749,9 @@ internal sealed class LadderRuntime : IDisposable
             if (velocity < 0f && body.position.y <= _run.Bottom.Y + LadderRules.BottomExitBand &&
                 clearance.Supported(body.position) && clearance.HasRoom(body.position))
             {
+                // Owner spec 2026-10-27: a supported step off onto the ground (lead foot, support transfer, second
+                // foot, last hand), not a release where the climber stands; without a reachable spot behind, release.
+                if (TryBottomStepOff()) { MoveRoute(delta, seconds); Present(false); return IsClimbing; }
                 Release(Departure.Controlled);
                 return false;
             }
@@ -743,6 +770,7 @@ internal sealed class LadderRuntime : IDisposable
                 // Uneven ground can rise above the run's foot. Already standing on it is the bottom exit.
                 if (velocity < 0f && clearance.Supported(body.position) && clearance.HasRoom(body.position))
                 {
+                    if (TryBottomStepOff()) { MoveRoute(delta, seconds); Present(false); return IsClimbing; }
                     Release(Departure.Controlled);
                     return false;
                 }
@@ -894,8 +922,8 @@ internal sealed class LadderRuntime : IDisposable
             _lastSampleMode = _mode;
             PresentedMotion motion = _mode switch
             {
-                Mode.Mounting => _mountAirborne ? PresentedMotion.AirCatch : PresentedMotion.GroundMount,
-                Mode.Exiting => _exitIsTop ? PresentedMotion.TopFinish : PresentedMotion.StepOff,
+                Mode.Mounting => _mountAirborne ? PresentedMotion.AirCatch : _mountFromTop ? PresentedMotion.TopEntry : PresentedMotion.GroundMount,
+                Mode.Exiting => _exitIsTop ? PresentedMotion.TopFinish : _exitIsBottom ? PresentedMotion.BottomStepOff : PresentedMotion.StepOff,
                 _ => _gait switch
                 {
                     ClimbGait.Normal => PresentedMotion.Climb,
@@ -1039,12 +1067,33 @@ internal sealed class LadderRuntime : IDisposable
     private bool TryLandingNear(Vector3 desired)
     {
         _exitIsTop = false;
-        return _clearance!.TryNearbySurface(desired, out Vector3 floor) && PlanExitTo(floor);
+        _exitIsBottom = false;
+        if (!_clearance!.TryLandingSurface(desired, IntermediateAbove, IntermediateBelow, out Vector3 floor)) { Landing("side", desired, "no surface"); return false; }
+        return PlanExitTo(floor);
+    }
+
+    /// <summary>A step back off the foot of the ladder onto supported ground behind the climber.</summary>
+    private bool TryBottomStepOff()
+    {
+        Vector3 feet = _body!.position;
+        Vector3 away = Away();
+        float radius = _clearance!.Radius;
+        foreach (float distance in new[] { radius + 0.25f, radius + 0.45f })
+        {
+            _exitIsTop = false;
+            _exitIsBottom = true;
+            if (!_clearance.TryLandingSurface(feet + away * distance, 0.35f, 0.45f, out Vector3 floor)) { Landing("bottom", feet + away * distance, "no surface"); continue; }
+            if (PlanExitTo(floor)) { return true; }
+        }
+
+        _exitIsBottom = false;
+        return false;
     }
 
     private bool TryTopLanding(Vector3 desired)
     {
         _exitIsTop = true;
+        _exitIsBottom = false;
         return _clearance!.TryTopSurface(desired, out Vector3 floor) && PlanExitTo(floor);
     }
 
@@ -1059,21 +1108,32 @@ internal sealed class LadderRuntime : IDisposable
         // fixed 0.75 m probe put the footprint half over the rails, so a real side landing was refused -
         // observed in game on 0.2.0, T16), then out from the face. Each still needs room, a supported
         // footprint and a fully swept route.
+        // Owner spec 2026-10-27 (intermediate floors beside a ladder that continues above them): the landing may be
+        // from a step below the feet to about waist height above them, and the side the camera faces is tried first.
         Vector3 outward = Away();
         Vector3 side = Vector3.Cross(Vector3.up, outward);
         float radius = _clearance.Radius;
         float sideways = _run.Width * 0.5f + radius + 0.15f;
+        Vector3 look = GameCamera.instance != null ? GameCamera.instance.transform.forward : outward;
+        look.y = 0f;
+        var candidates = new List<(Vector3 Point, float Score)>();
         foreach (float sign in new[] { 1f, -1f })
         {
             foreach (float distance in new[] { sideways, sideways + 0.4f })
             {
-                if (TryLandingNear(feet + side * (sign * distance))) { return true; }
+                candidates.Add((feet + side * (sign * distance), Vector3.Dot(side * sign, look) - distance * 0.01f));
             }
         }
 
         foreach (float distance in new[] { radius + 0.45f, radius + 0.85f })
         {
-            if (TryLandingNear(feet + outward * distance)) { return true; }
+            candidates.Add((feet + outward * distance, Vector3.Dot(outward, look) - 0.05f - distance * 0.01f));
+        }
+
+        candidates.Sort((a, b) => b.Score.CompareTo(a.Score));
+        foreach (var candidate in candidates)
+        {
+            if (TryLandingNear(candidate.Point)) { return true; }
         }
 
         return false;
@@ -1083,9 +1143,19 @@ internal sealed class LadderRuntime : IDisposable
     /// or roof edge overhangs the climb lane, a clearance leg first steps back from the rails (up to half a
     /// metre) so the head can rise past the edge before crossing onto the floor. The destination needs room
     /// and a supported footprint, not a single support ray.</summary>
+    private void Landing(string kind, Vector3 desired, string outcome)
+    {
+        if (!Animation.ClimbTuning.LogLandingQueries) { return; }
+        Vector3 feet = _body != null ? _body.position : Vector3.zero;
+        try { _log("Ladder landing " + kind + " at " + desired.ToString("F2") + " (feet " + feet.ToString("F2") + "): " + outcome); }
+        catch { /* Diagnostics only. */ }
+    }
+
     private bool PlanExitTo(Vector3 floor)
     {
-        if (!_clearance!.HasRoom(floor) || !_clearance.SupportedFootprint(floor)) { return false; }
+        string kind = _exitIsTop ? "top" : _exitIsBottom ? "bottom" : "side";
+        if (!_clearance!.HasRoom(floor)) { Landing(kind, floor, "refused: no standing room"); return false; }
+        if (!_clearance.SupportedFootprint(floor)) { Landing(kind, floor, "refused: unsupported footprint"); return false; }
         Vector3 feet = _body!.position;
         Vector3 away = Away();
         foreach (float back in new[] { 0f, 0.25f, 0.5f })
@@ -1103,9 +1173,11 @@ internal sealed class LadderRuntime : IDisposable
             _transferStartHeight = Mathf.Clamp(feet.y, _hangLowest, _run.Top.Y);
             _mode = Mode.Exiting;
             _ledger.Discard();
+            Landing(kind, floor, "accepted (back " + back.ToString("F2") + ", lift " + lift.ToString("F2") + ")");
             return true;
         }
 
+        Landing(kind, floor, "refused: no clear path");
         return false;
     }
 
@@ -1123,6 +1195,7 @@ internal sealed class LadderRuntime : IDisposable
         if (!_clearance!.CanFollow(current, route)) { return; }
         _mode = Mode.Mounting;
         _mountAirborne = false;
+        _mountFromTop = false;
         _route = route;
         _routeIndex = 0;
         BeginRoute(current);
