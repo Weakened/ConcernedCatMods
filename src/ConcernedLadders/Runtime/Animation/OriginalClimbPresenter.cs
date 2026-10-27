@@ -222,6 +222,16 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
             {
                 float kneeOut = 0f, kneeToward = 0f;
                 if (!record.Hand) { Knee(actor, limb, record.Outward, out kneeOut, out kneeToward); }
+                else
+                {
+                    // For hands the column carries the solved shoulder line's yaw against the rungs (degrees).
+                    Transform? l = actor.Rig.Animator.GetBoneTransform(HumanBodyBones.LeftUpperArm), r = actor.Rig.Animator.GetBoneTransform(HumanBodyBones.RightUpperArm);
+                    if (l != null && r != null)
+                    {
+                        Vector3 line = r.position - l.position; line.y = 0f;
+                        kneeOut = Vector3.SignedAngle(line, Vector3.Cross(Vector3.up, -record.Outward), Vector3.up);
+                    }
+                }
                 ContactTrace.Row(actor.Frame, limb, record, patch, error, gap, kneeOut, kneeToward);
             }
         }

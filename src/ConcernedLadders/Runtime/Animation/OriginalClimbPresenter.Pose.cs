@@ -88,6 +88,8 @@ internal sealed partial class OriginalClimbPresenter
         Quaternion bodyDelta = animator.bodyRotation * Quaternion.Inverse(nativeRotation);
         // The native chest is twisted against the hips (measured 25 degrees once the hips are square): turn the chest
         // so the shoulder line also runs along the rungs, scaled with the body weight like every body change.
+        float chestTwist = 0f;
+        Vector3 chestPivot = posedBody;
         if (ClimbTuning.SquareChest > 0f && bodyWeight > 0f)
         {
             Transform? chest = animator.GetBoneTransform(HumanBodyBones.Chest);
@@ -99,6 +101,8 @@ internal sealed partial class OriginalClimbPresenter
                 Quaternion world = Quaternion.AngleAxis(twist, Vector3.up) * chest.rotation;
                 animator.SetBoneLocalRotation(HumanBodyBones.Chest, Quaternion.Inverse(chest.parent.rotation) * world);
                 actor.ChestTwist = twist;
+                chestTwist = twist;
+                chestPivot = posedBody + bodyDelta * (chest.position - nativeBody);
             }
         }
 
@@ -115,6 +119,8 @@ internal sealed partial class OriginalClimbPresenter
             OriginalLimbContact contact = actor.Gait.Contact(limb);
             float side = limb == 0 || limb == 2 ? -1f : 1f;
             Vector3 root = posedBody + bodyDelta * (rig.Roots[limb].position - nativeBody);
+            // The shoulders turn with the chest.
+            if (hand && chestTwist != 0f) { root = chestPivot + Quaternion.AngleAxis(chestTwist, Vector3.up) * (root - chestPivot); }
             float span = Math.Min(ClimbPresentationFrame.HalfWidth - .04f, hand ? ClimbTuning.HandSpan : ClimbTuning.FootSpan);
             // Fit the palm / sole to this section's real rung: a wooden box rung (calibrated offsets) or a round metal
             // rung (palm wrapped over its top-front, sole on its crown).
