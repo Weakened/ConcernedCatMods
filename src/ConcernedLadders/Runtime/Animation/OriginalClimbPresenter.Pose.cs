@@ -157,10 +157,11 @@ internal sealed partial class OriginalClimbPresenter
                         float floorY = action.Kind == TransitionKind.TopEntry ? start.y : landing.y;
                         destination = RungSurface(frame, floorY + ClimbTuning.PalmThickness, -ClimbTuning.LipOnto, side * ClimbTuning.HandSpan);
                     }
-                    else if (action.Kind == TransitionKind.TopExit)
+                    else if (action.Kind == TransitionKind.TopExit || action.Kind == TransitionKind.TopEntry)
                     {
-                        // Feet step onto the floor just past the lip; the game's walk carries the rest of the route.
-                        destination = RungSurface(frame, landing.y, -(ClimbTuning.LipOnto + ClimbTuning.FootOnto), side * ClimbTuning.FootSpan);
+                        // Feet step onto (or off) the floor just past the lip; the game's walk carries the rest.
+                        float floorY = action.Kind == TransitionKind.TopEntry ? start.y : landing.y;
+                        destination = RungSurface(frame, floorY, -(ClimbTuning.LipOnto + ClimbTuning.FootOnto), side * ClimbTuning.FootSpan);
                     }
                     else
                     {

@@ -707,7 +707,9 @@ internal sealed class LadderRuntime : IDisposable
 
             if (_mode == Mode.Mounting || _mode == Mode.Exiting)
             {
-                if (_mode == Mode.Exiting && ReadInput(player) < -0.15f) { ReturnToLadder(); }
+                // Input back toward the ladder abandons an exit: Down for a top or side exit, Up for a bottom step-off
+                // (in game 2026-10-27: Down, which starts a step-off, cancelled it every frame).
+                if (_mode == Mode.Exiting && (_exitIsBottom ? ReadInput(player) : -ReadInput(player)) > 0.15f) { ReturnToLadder(); }
                 MoveRoute(delta, seconds);
                 Present(_mode != Mode.Exiting);
                 return IsClimbing;
@@ -1210,14 +1212,19 @@ internal sealed class LadderRuntime : IDisposable
         Vector3 from = start;
         foreach (Vector3 point in _route) { length += Vector3.Distance(from, point); from = point; }
         _routeLength = length;
-        // The rise: the leading legs that move more up or down than across (an exit lifts onto the floor, then walks).
+        // The lead: the leading legs of one kind - an exit lifts onto the floor (more up than across) then walks; a
+        // descending entry walks over the lip (more across than down) then lowers onto the ladder.
         float rise = 0f;
         from = start;
+        bool? vertical = null;
         foreach (Vector3 point in _route)
         {
             Vector3 leg = point - from;
             float across = new Vector2(leg.x, leg.z).magnitude;
-            if (Mathf.Abs(leg.y) <= across) { break; }
+            if (leg.magnitude < 0.001f) { from = point; continue; }
+            bool kind = Mathf.Abs(leg.y) > across;
+            if (vertical.HasValue && vertical.Value != kind) { break; }
+            vertical = kind;
             rise += leg.magnitude;
             from = point;
         }
@@ -1225,12 +1232,14 @@ internal sealed class LadderRuntime : IDisposable
         _routeRise = rise;
     }
 
-    /// <summary>Exit progress as published to presentation: the rise always spans the first RiseShare and the walk
-    /// the rest, whatever the route's proportions, so an authored exit lines its hand release up with the walk.</summary>
+    /// <summary>Exit and descending-entry progress as published to presentation: the route's lead (an exit's lift, an
+    /// entry's walk over the lip) always spans the first RiseShare and the rest the remainder, whatever the route's
+    /// proportions, so an authored transition lines its contacts up with the real capsule.</summary>
     private float PresentedProgress(Vector3 position)
     {
         float plain = RouteProgress(position);
-        if (_mode != Mode.Exiting || _routeRise < 0.1f || _routeRise >= _routeLength - 0.05f) { return plain; }
+        bool shaped = _mode == Mode.Exiting || (_mode == Mode.Mounting && _mountFromTop);
+        if (!shaped || _routeRise < 0.1f || _routeRise >= _routeLength - 0.05f) { return plain; }
         float travelled = plain * _routeLength;
         return travelled <= _routeRise
             ? ClimbPresentationFrame.RiseShare * travelled / _routeRise
