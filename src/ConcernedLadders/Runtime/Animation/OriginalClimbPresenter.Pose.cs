@@ -203,7 +203,13 @@ internal sealed partial class OriginalClimbPresenter
                         float floorY = action.Kind == TransitionKind.TopEntry ? start.y : landing.y;
                         destination = RungSurface(frame, floorY + ClimbTuning.PalmThickness, -ClimbTuning.LipOnto, side * ClimbTuning.HandSpan);
                     }
-                    else if (action.Kind == TransitionKind.TopExit || action.Kind == TransitionKind.TopEntry)
+                    else if (action.Kind == TransitionKind.TopEntry)
+                    {
+                        // Before the hop the feet stand where the body stands (in game 2026-10-27: a target at the lip,
+                        // 0.6 m from the walking body, overreached); the hop carries them down onto the rungs.
+                        destination = new Vector3(feet.x, start.y, feet.z) + right * (side * ClimbTuning.FootSpan);
+                    }
+                    else if (action.Kind == TransitionKind.TopExit)
                     {
                         // Feet step onto (or off) the floor just past the lip; the game's walk carries the rest.
                         float floorY = action.Kind == TransitionKind.TopEntry ? start.y : landing.y;
