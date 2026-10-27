@@ -126,6 +126,7 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
                 actor.EntryTimed = false;
                 actor.TransitionProgress = actor.ShownProgress = published;
                 actor.ProgressRate = 0f;
+                SeedWeights(actor, published);
             }
             else if (dt > 1e-4f)
             {
@@ -144,6 +145,7 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
             actor.ProgressRate = 1f / Mathf.Max(.05f, actor.Transition.Seconds);
             actor.ProgressAt = Time.time;
             actor.EntryTimed = true;
+            SeedWeights(actor, 0f);
             return;
         }
 
@@ -157,6 +159,14 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
 
         // A routed entry finished (the climber is on the ladder) or an exit was abandoned back onto the ladder.
         actor.Transition = null;
+    }
+
+    /// <summary>A new transition starts each limb from the action's own weight (an entry from the native pose), not from
+    /// whatever the limb last showed.</summary>
+    private static void SeedWeights(Actor actor, float progress)
+    {
+        if (actor.Transition == null) { return; }
+        for (int limb = 0; limb < 4; limb++) { actor.ShownWeight[limb] = actor.Transition.WeightAt(limb, progress); }
     }
 
     public void End(Player? player, ClimbEnd reason)
