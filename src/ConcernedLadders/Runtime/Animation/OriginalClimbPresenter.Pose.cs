@@ -55,6 +55,14 @@ internal sealed partial class OriginalClimbPresenter
         float blend = LimbGait.Ease(actor.BodyBlend);
         lean += bodyLean * blend;
         float actionUp = action != null ? action.BodyUpAt(progress) : 0f, actionToward = action != null ? action.BodyTowardAt(progress) : 0f;
+        // Over the top (in game 2026-10-27: hands ran out of reach on the last rungs): the run leaves nothing above the
+        // hands, so the climber crouches and folds the chest forward over the top while the hands keep the rail tops or
+        // the floor lip; a descending entry starts from the same crouch on the floor. By feet height, so it is continuous
+        // across climb, hold, exit and entry; faded with the body weight like every body offset.
+        float overTop = Smooth01((feet.y - (frame.Run.Top.Y - ClimbTuning.TopApproachFrom)) / ClimbTuning.TopApproachSpan);
+        actionUp -= ClimbTuning.TopApproachDrop * overTop;
+        actionToward += ClimbTuning.TopApproachToward * overTop;
+        lean += ClimbTuning.TopApproachLean * overTop;
         Vector3 pelvis = feet + Vector3.up * (rig.PelvisHeight - ClimbTuning.PelvisDrop + bodyUp * blend + actionUp) +
                          toward * (ClimbTuning.PelvisToward + bodyToward * blend + actionToward) +
                          right * (ClimbTuning.SwayShift * sway);
@@ -142,9 +150,18 @@ internal sealed partial class OriginalClimbPresenter
                 toDestination = action.ReachAt(limb, progress);
                 if (toDestination > 0f)
                 {
-                    Vector3 destination = action.Kind == TransitionKind.TopEntry ? start : landing;
-                    destination += Vector3.Cross(Vector3.up, travel) * (hand ? side * -ClimbTuning.HandSpan : side * -ClimbTuning.FootSpan);
-                    if (hand) { destination += Vector3.up * ClimbTuning.PalmThickness + travel * ClimbTuning.ExitHandAhead; }
+                    Vector3 destination;
+                    if (hand)
+                    {
+                        // Palms flat on the floor just past the lip, where the ladder meets it (16-59-05, 17-01-40).
+                        float floorY = action.Kind == TransitionKind.TopEntry ? start.y : landing.y;
+                        destination = RungSurface(frame, floorY + ClimbTuning.PalmThickness, -ClimbTuning.LipOnto, side * ClimbTuning.HandSpan);
+                    }
+                    else
+                    {
+                        destination = (action.Kind == TransitionKind.TopEntry ? start : landing) +
+                                      Vector3.Cross(Vector3.up, travel) * (side * -ClimbTuning.FootSpan);
+                    }
                     surface = Vector3.Lerp(surface, destination, toDestination);
                 }
 

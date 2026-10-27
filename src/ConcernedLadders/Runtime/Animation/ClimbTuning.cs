@@ -85,8 +85,16 @@ internal static class ClimbTuning
         throw new InvalidOperationException("No authored transition " + kind + ".");
     }
 
-    /// <summary>On a top exit the palms press this far ahead of the landing point (toward the floor).</summary>
-    internal static float ExitHandAhead = -0.45f;
+    /// <summary>On a top exit or entry the palms press on the floor this far past the ladder's plane.</summary>
+    internal static float LipOnto = 0.18f;
+
+    /// <summary>Over the top: from this far below the run's top the climber begins to crouch (pelvis down and toward
+    /// the ladder) and fold forward, reaching the full amount TopApproachSpan higher.</summary>
+    internal static float TopApproachFrom = 1.15f;
+    internal static float TopApproachSpan = 0.5f;
+    internal static float TopApproachDrop = 0.28f;
+    internal static float TopApproachToward = 0.12f;
+    internal static float TopApproachLean = 22f;
 
     /// <summary>A contact needing more than FadeFrom of its chain fades out toward ReachLimit instead of popping.</summary>
     internal static float FadeFrom = 0.96f;

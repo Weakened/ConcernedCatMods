@@ -205,6 +205,7 @@ internal static class DefaultTransitions
         // the body transfers into the climbing stance, the second foot follows (reach 1 = the floor it starts from).
         new TransitionAction.Builder(TransitionKind.TopEntry, 1f)
             .Weight(LH, 0f, 0f, 0.2f, 1f).Weight(RH, 0.05f, 0f, 0.25f, 1f)
+            .Reach(LH, 0f, 1f, 0.35f, 1f, 0.7f, 0f).Reach(RH, 0f, 1f, 0.45f, 1f, 0.8f, 0f)
             .Reach(LF, 0f, 1f, 0.25f, 1f, 0.6f, 0f).Arc(LF, 0.25f, 0.6f, 0f, -0.04f, 0.12f).Weight(LF, 0.1f, 0f, 0.25f, 1f)
             .Reach(RF, 0f, 1f, 0.55f, 1f, 0.95f, 0f).Arc(RF, 0.55f, 0.95f, 0f, -0.04f, 0.12f).Weight(RF, 0.15f, 0f, 0.3f, 1f)
             .Body(0f, 0f, 0.2f, 0.3f, 0.8f, 1f).Lean(0f, 0f, 0.3f, 20f, 0.6f, 15f, 1f, 0f).Build(),
