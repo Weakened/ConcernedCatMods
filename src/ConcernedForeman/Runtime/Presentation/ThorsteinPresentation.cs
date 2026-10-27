@@ -42,6 +42,7 @@ internal sealed class ThorsteinPresentation
 {
     private const float PassSeconds = 0.5f;
     private const float CensusSeconds = 30f;
+    private const float FollowUpCountSeconds = 3f;
     private const float ShowWithinMetres = 48f;
     private const float KeepWithinMetres = 64f;
     private const float HomeMovedMetres = 2f;
@@ -64,6 +65,7 @@ internal sealed class ThorsteinPresentation
     private int _census = -1;
     private bool _censusDue = true;
     private float _sinceCensus;
+    private float _followUpIn;
     private float _sincePass;
     private bool _faulted;
     private int _blockMask;
@@ -97,6 +99,15 @@ internal sealed class ThorsteinPresentation
 
         _sincePass += deltaTime;
         _sinceCensus += deltaTime;
+        if (_followUpIn > 0f)
+        {
+            _followUpIn -= deltaTime;
+            if (_followUpIn <= 0f)
+            {
+                _censusDue = true;
+            }
+        }
+
         _dresser?.VerifyOnce();
         if (_sincePass < PassSeconds)
         {
@@ -115,7 +126,7 @@ internal sealed class ThorsteinPresentation
             _faulted = true;
             TakeDown();
             _bodies.Reconcile(ThorsteinBodyKind.None);
-            _log("Thorstein's presentation stopped after a fault and will not be shown again this session: " +
+            _log("Thorstein's presentation stopped after a fault and will not be shown again in this world: " +
                 SafeFailure.Brief(exception));
         }
     }
@@ -158,6 +169,12 @@ internal sealed class ThorsteinPresentation
     {
         _censusDue = true;
         _sincePass = PassSeconds;
+
+        // And once more a few seconds later: a body that has just died or been
+        // despawned can still be counted for a moment, and the safe answer to
+        // that moment is "worker", which would otherwise last until the next
+        // 30-second count.
+        _followUpIn = FollowUpCountSeconds;
     }
 
     internal void OnWorldLoaded()
@@ -178,6 +195,7 @@ internal sealed class ThorsteinPresentation
         _bodies.Forget();
         _census = -1;
         _censusDue = true;
+        _followUpIn = 0f;
     }
 
     /// <summary>Plugin teardown.</summary>
@@ -192,12 +210,12 @@ internal sealed class ThorsteinPresentation
     {
         string held = _bodies.Held switch
         {
-            ThorsteinBodyKind.Worker => "his worker body",
-            ThorsteinBodyKind.Presentation => _figure != null ? "the figure at home" : "the figure's lease, no figure",
-            _ => "no body",
+            ThorsteinBodyKind.Worker => "the worker body's",
+            ThorsteinBodyKind.Presentation => _figure != null ? "the figure at home's" : "the figure's, not built",
+            _ => "none",
         };
 
-        string text = "Thorstein's body: " + held + ". Wanted: " + _last + ".";
+        string text = "Thorstein's body lease held: " + held + ". Wanted: " + _last + ".";
         if (_bodies.LastRefusal.Length != 0)
         {
             text += " Concerned NPC refused: " + _bodies.LastRefusal + ".";

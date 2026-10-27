@@ -417,6 +417,11 @@ public sealed class Plugin : BaseUnityPlugin
         if (worldIsUp)
         {
             _construction?.Tick();
+        }
+
+        // #295: Thorstein's body at home, a pass every half second inside.
+        if (worldIsUp)
+        {
             _presentation?.Tick(Time.deltaTime);
         }
 

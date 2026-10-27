@@ -162,7 +162,7 @@ has been observed in game. OWNER GO-AROUND PENDING**:
 
 1. Opt in to the settlement runtime, then run `cf_settle recruit` with no worker
    body: he appears near your bed, facing you, with Mullet and Mustache, and
-   `cf_worker status` says "the figure at home".
+   `cf_worker status` says the lease held is "the figure at home's".
 2. Walk through him: there is no collision. Walk 70 m away: he goes. Come back:
    he returns.
 3. Run `cf_worker spawn`: the figure goes, and the worker body appears where he
