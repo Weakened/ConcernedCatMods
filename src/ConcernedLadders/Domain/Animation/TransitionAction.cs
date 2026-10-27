@@ -199,19 +199,19 @@ internal static class DefaultTransitions
             .Body(0f, 1f, 0.55f, 1f, 0.95f, 0f).Lean(0f, 0f, 0.4f, 12f, 1f, 0f).Build(),
         // Bottom step-off: the leading foot lowers back onto the ground, support transfers, the hands let go as the
         // body leaves the ladder (in game 2026-10-27 the route is a 0.7 m step back at ground level, so they must be
-        // free by 40%), the second foot follows, then normal standing.
+        // free by a quarter of it), the second foot follows, then normal standing.
         new TransitionAction.Builder(TransitionKind.BottomStepOff, 1f)
-            .Reach(LF, 0f, 0f, 0.3f, 1f).Arc(LF, 0f, 0.3f, 0f, 0.06f, 0.03f).Weight(LF, 0.55f, 1f, 0.75f, 0f)
-            .Reach(RF, 0.35f, 0f, 0.65f, 1f).Arc(RF, 0.35f, 0.65f, 0f, 0.06f, 0.03f).Weight(RF, 0.7f, 1f, 0.9f, 0f)
-            .Weight(RH, 0.12f, 1f, 0.32f, 0f).Weight(LH, 0.2f, 1f, 0.42f, 0f)
+            .Reach(LF, 0f, 0f, 0.45f, 1f).Arc(LF, 0f, 0.45f, 0f, 0.06f, 0.03f).Weight(LF, 0.5f, 1f, 0.68f, 0f)
+            .Reach(RF, 0.4f, 0f, 0.72f, 1f).Arc(RF, 0.4f, 0.72f, 0f, 0.06f, 0.03f).Weight(RF, 0.66f, 1f, 0.85f, 0f)
+            .Weight(RH, 0.1f, 1f, 0.2f, 0f).Weight(LH, 0.14f, 1f, 0.24f, 0f)
             .Body(0f, 1f, 0.4f, 0.9f, 0.9f, 0f).Build(),
         // Descending entry from an upper floor: face the ladder, hands down onto the top, one foot lowers to a rung,
         // the body transfers into the climbing stance, the second foot follows (reach 1 = the floor it starts from).
         new TransitionAction.Builder(TransitionKind.TopEntry, 1f)
-            // In game 2026-10-27: the climber starts standing on the floor, so the body crouches at once (hands to the
-            // lip at floor level) and the feet are held on the floor through the crouch, then lowered one at a time onto rungs. Progress:
+            // In game 2026-10-27: the climber starts standing on the floor, so the body crouches at once, the hands take
+            // the lip once the shoulders are over it (30%) and the feet are held on the floor through the crouch, then lowered one at a time onto rungs. Progress:
             // the walk over the lip spans 0-0.4, the lowering the rest.
-            .Weight(LH, 0f, 0f, 0.12f, 1f).Weight(RH, 0.03f, 0f, 0.15f, 1f)
+            .Weight(LH, 0.3f, 0f, 0.38f, 1f).Weight(RH, 0.33f, 0f, 0.41f, 1f)
             .Reach(LH, 0f, 1f, 0.55f, 1f, 0.75f, 0f).Reach(RH, 0f, 1f, 0.6f, 1f, 0.8f, 0f)
             .Reach(LF, 0f, 1f, 0.4f, 1f, 0.62f, 0f).Arc(LF, 0.4f, 0.62f, 0f, 0.06f, 0.12f).Weight(LF, 0.06f, 0f, 0.16f, 1f)
             .Reach(RF, 0f, 1f, 0.58f, 1f, 0.85f, 0f).Arc(RF, 0.58f, 0.85f, 0f, 0.06f, 0.12f).Weight(RF, 0.09f, 0f, 0.19f, 1f)
