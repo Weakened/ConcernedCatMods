@@ -423,6 +423,12 @@ than discover it:
 - *The ledger.* `CollectionAccount.RecordDeath` moves what this session saw him take from `Carried` to
   `DroppedOnDeath` or `UnresolvedAtDeath`. Units he carried from an earlier session were never acquired by this
   session's ledger and are not acquired on paper to make it balance; the death record has them.
+- *Nothing may cause the death.* "Voluntary cancellation and retirement must never reach the death path" is read
+  to cover causing a death as well as calling the handler: every way to take health away (`SetHealth`, `UseHealth`,
+  `SetMaxHealth`, `.Damage(`, `ApplyDamage`, `RPC_Damage`) is refused anywhere in Teamster.
+- *Vanilla inside the call.* `Humanoid.DropItem` also plays the body's `interact` trigger and the drop effects, and
+  places each stack a metre in front of the body with a small push. Those are vanilla's, inside the one pinned call,
+  as `Pickup`'s destruction of the item it takes is; nothing in this product calls `SetTrigger`.
 
 **Never observed in game.** The port binds Unity; the decision, the classification, the accounting and the record
 format are unit-tested (`WorkerDeathDropTests`), the shape is pinned, and nothing has been watched happening.

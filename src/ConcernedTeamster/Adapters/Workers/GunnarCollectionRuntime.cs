@@ -106,6 +106,7 @@ internal sealed class GunnarCollectionRuntime : MonoBehaviour, IGunnarDeathDropH
         // D16: the runtime that can have put anything in him is the one a death
         // reports to. Installed with it, removed with it.
         GunnarDeathDropPort.ErrorLog = message => log.LogError(message);
+        GunnarDeathDropPort.MayListen = seamAvailable;
         GunnarDeathDropPort.Host = runtime;
         var command = new CollectConsoleCommand(runtime);
         VanillaConsoleCommands.Register(command, log);

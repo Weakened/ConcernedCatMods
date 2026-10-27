@@ -2142,6 +2142,18 @@ TEAMSTER_WORKER_FORBIDDEN_TOKENS = (
     # ItemData this product chose - the "spawning of item instances" D15 and
     # D16 both refuse.
     ".DropItem(",
+    # D16's other half: nothing in this product may CAUSE a death. The drop
+    # runs on vanilla's genuine death path, so a retire rewritten as "set his
+    # health to nothing" or "hit him" would reach it through vanilla with
+    # every gate green - a voluntary verb reaching the death path, which D16
+    # says the validator refuses. Every way to take health away is refused,
+    # inside the worker runtime and out.
+    "SetHealth",
+    "UseHealth",
+    "SetMaxHealth",
+    ".Damage(",
+    "ApplyDamage",
+    "RPC_Damage",
     "SetExtraMass",
     "SetMass",
     "UpdateMass",
@@ -2202,6 +2214,9 @@ TEAMSTER_OUTSIDE_WORKERS_TOKENS = (
     # D16's drop, for the same reason: a helper in Adapters/ or Domain/ must not
     # be able to spell what the worker folder may spell once.
     ".DropItem(",
+    # ...and nothing may cause the death that reaches it (see the worker list),
+    # including by sending vanilla's own damage message.
+    "SetHealth", "UseHealth", "SetMaxHealth", ".Damage(", "ApplyDamage", "RPC_Damage", "InvokeRPC",
 )
 
 # The one owner-authorized exception to the worker runtime's token list
@@ -2869,10 +2884,22 @@ TEAMSTER_DEATH_DROP_UNSUBSCRIBE = re.compile(
     r"\b_humanoid\s*\.\s*m_onDeath\s*=\s*\(\s*Action\s*\)\s*Delegate\s*\.\s*Remove\s*\("
     r"\s*_humanoid\s*\.\s*m_onDeath\s*,\s*_onDeath\s*\)\s*;")
 TEAMSTER_DEATH_DROP_HANDLER_GROUP = re.compile(r"\b_onDeath\s*=\s*OnDeath\s*;")
+# The handler's own delegate field: declared, assigned, combined in, checked
+# and removed in OnDestroy - five mentions and no sixth. A sixth is somebody
+# invoking it.
+TEAMSTER_DEATH_DROP_DELEGATE = re.compile(r"\b_onDeath\b")
+# What the drop empties is the dying body's own inventory: assigned once, from
+# the body, and nowhere else.
+TEAMSTER_DEATH_DROP_INVENTORY_WRITE = re.compile(r"\b_inventory\s*=(?!=)")
+TEAMSTER_DEATH_DROP_INVENTORY_SOURCE = re.compile(r"\b_inventory\s*=\s*_humanoid\s*\.\s*GetInventory\s*\(\s*\)\s*;")
+# The decision is told whether he is dead by the body itself, never by a literal.
+TEAMSTER_DEATH_DROP_GENUINE = re.compile(r"\bgenuineDeath\s*:\s*_humanoid\s*\.\s*IsDead\s*\(\s*\)")
 TEAMSTER_DEATH_DROP_HANDLER = re.compile(
     r"private\s+void\s+OnDeath\s*\(\s*\)\s*\{(.*?)\n    \}", re.DOTALL)
+# The predicate must RETURN: a guard whose block does anything else is a guard
+# consulted and ignored (comments are stripped before this is matched).
 TEAMSTER_DEATH_DROP_PREDICATE = re.compile(
-    r"if\s*\(\s*_humanoid\s*==\s*null\s*\|\|\s*!\s*_humanoid\s*\.\s*IsDead\s*\(\s*\)\s*\)\s*\{")
+    r"if\s*\(\s*_humanoid\s*==\s*null\s*\|\|\s*!\s*_humanoid\s*\.\s*IsDead\s*\(\s*\)\s*\)\s*\{\s*return\s*;\s*\}")
 TEAMSTER_DEATH_DROP_DECIDES = re.compile(r"\bWorkerDeathDrop\s*\.\s*Decide\s*\(")
 TEAMSTER_DEATH_DROP_REFUSES = re.compile(
     r"if\s*\(\s*verdict\s*!=\s*DeathDropVerdict\s*\.\s*Drop\s*\)\s*\{[^{}]*\bcontinue\s*;\s*\}")
@@ -2899,8 +2926,12 @@ def check_teamster_death_drop_verb(errors: list[str]) -> list[str]:
         code = _strip_cs_comments(path.read_text(encoding="utf-8-sig"))
         mentions = len(re.findall(r"\bOnDeath\b", code))
         # The probe names the field as a string literal to verify it exists; a
-        # bare quoted name is not a touch. Reflection that could use the name is
-        # refused outside the prefab factory by the #313 audit.
+        # `"` straight before an identifier can only be inside a string, so the
+        # exemption is no code escape. Reflection that could USE the name is a
+        # different matter and is only partly covered: `GetField(` is refused
+        # inside Adapters/Workers (outside the prefab factory) and NOT elsewhere
+        # in Teamster. Setting the delegate that way could only narrow the drop,
+        # and invoking it is still gated by the body's own IsDead().
         callbacks = len(re.findall(r'(?<!")\bm_onDeath\b', code))
         if rel == port_rel:
             on_death_mentions += mentions
@@ -2924,6 +2955,29 @@ def check_teamster_death_drop_verb(errors: list[str]) -> list[str]:
             f"{label}: {port_rel} names OnDeath {on_death_mentions} time(s); the handler may be "
             "declared and handed to the death callback once (`_onDeath = OnDeath;`) and named nowhere "
             "else, so no other verb can call it", errors)
+
+    delegates = len(TEAMSTER_DEATH_DROP_DELEGATE.findall(code))
+    if delegates != 5:
+        hits += 1
+        fail(
+            f"{label}: {port_rel} names its _onDeath delegate {delegates} time(s); it is declared, assigned, "
+            "combined into m_onDeath, null-checked and removed from it - 5 - and invoked by nobody but vanilla", errors)
+
+    inventory_writes = len(TEAMSTER_DEATH_DROP_INVENTORY_WRITE.findall(code))
+    inventory_pinned = len(TEAMSTER_DEATH_DROP_INVENTORY_SOURCE.findall(code))
+    if inventory_writes != 1 or inventory_pinned != 1:
+        hits += 1
+        fail(
+            f"{label}: {port_rel} assigns _inventory {inventory_writes} time(s) ({inventory_pinned} from the dying "
+            "body's own GetInventory()); the drop empties the body's own inventory and nothing else", errors)
+
+    genuine = len(TEAMSTER_DEATH_DROP_GENUINE.findall(code))
+    if genuine < 1 or re.search(r"\bgenuineDeath\s*:\s*true\b", code) or re.search(
+            r"new\s+DeathDropFacts\s*\(\s*true\b", code):
+        hits += 1
+        fail(
+            f"{label}: {port_rel} tells the decision the body died without asking the body - pass "
+            "`genuineDeath: _humanoid.IsDead()`, never a literal", errors)
 
     callbacks = len(re.findall(r"\bm_onDeath\b", code))
     subscribed = len(TEAMSTER_DEATH_DROP_SUBSCRIBE.findall(code))
@@ -2959,7 +3013,7 @@ def check_teamster_death_drop_verb(errors: list[str]) -> list[str]:
                 hits += 1
                 fail(
                     f"{label}: OnDeath() in {port_rel} does not refuse on the body's own IsDead() above "
-                    "the drop — the death predicate is half of what D16 pins", errors)
+                    "the drop with a bare `return;` — the death predicate is half of what D16 pins", errors)
             if decides is None or decides.start() > at:
                 hits += 1
                 fail(
@@ -2976,8 +3030,11 @@ def check_teamster_death_drop_verb(errors: list[str]) -> list[str]:
         f"{label}: the one pinned drop sits inside OnDeath() in {port_rel}, behind the body's own "
         "IsDead() and a refusing WorkerDeathDrop verdict; OnDeath is named only by its declaration "
         "and the subscription to the body's own m_onDeath (subscribed once, removed once, touched "
-        "nowhere else in src/ConcernedTeamster), so no retire, cancel, unload or teardown verb can "
-        "reach it. A source-text audit: it does not follow delegates or prove control flow "
+        "nowhere else in src/ConcernedTeamster), its _onDeath delegate is invoked by nobody but vanilla, "
+        "it is told the body died by IsDead() and never by a literal, and it empties only the body's own "
+        "inventory; and nothing in Teamster may take health away (SetHealth/UseHealth/Damage/RPC_Damage are "
+        "refused by the #313 token pin), so no retire, cancel, unload or teardown verb can reach it or cause "
+        "the death that does. A source-text audit: it does not follow delegates or prove control flow "
         f"({hits} violations)",
     ]
 

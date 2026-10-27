@@ -73,6 +73,13 @@ internal sealed class GunnarDeathDropPort : MonoBehaviour
     /// settings say.</summary>
     internal static Action<string>? ErrorLog { get; set; }
 
+    /// <summary>Whether the start-up probe verified every game member the drop
+    /// binds. Asked before subscribing, not only in the verdict: a game that
+    /// renamed <c>DropItem</c> would fail the handler's JIT inside vanilla's
+    /// own death path, before any of this file's guards could run, and leave a
+    /// dead body undestroyed. Unset is no.</summary>
+    internal static Func<bool>? MayListen { get; set; }
+
     private void Start()
     {
         try
@@ -80,6 +87,14 @@ internal sealed class GunnarDeathDropPort : MonoBehaviour
             _humanoid = GetComponent<Humanoid>();
             if (_humanoid == null)
             {
+                return;
+            }
+
+            Func<bool>? mayListen = MayListen;
+            if (mayListen == null || !mayListen())
+            {
+                Report("Gunnar's death drop is off: this build of the game does not offer everything it needs, " +
+                    "so what he carries would go with his body if he died.");
                 return;
             }
 
@@ -114,16 +129,10 @@ internal sealed class GunnarDeathDropPort : MonoBehaviour
         Vector3 where = transform.position;
         IGunnarDeathDropHost? host = Host;
         DeathDropReport report = new DeathDropReport(DeathDropVerdict.Unspecified);
+        List<ItemDrop.ItemData>? held = null;
+        int visited = 0;
         try
         {
-            TeamsterWorkerRecord? record = TeamsterWorkerRecord.On(this);
-            bool loaded = record != null && record.IsLoaded;
-            DeathDropFacts facts = host != null
-                ? host.Prepare(_humanoid, genuineDeath: true, inventoryLoaded: loaded)
-                : new DeathDropFacts(true, false, false, WorkAuthorityVerdict.Unspecified, false, loaded);
-            DeathDropVerdict verdict = WorkerDeathDrop.Decide(facts);
-            report = new DeathDropReport(verdict);
-
             _inventory = _humanoid.GetInventory();
             if (_inventory == null)
             {
@@ -131,8 +140,20 @@ internal sealed class GunnarDeathDropPort : MonoBehaviour
                 return;
             }
 
-            foreach (ItemDrop.ItemData item in new List<ItemDrop.ItemData>(_inventory.GetAllItems()))
+            held = new List<ItemDrop.ItemData>(_inventory.GetAllItems());
+            TeamsterWorkerRecord? record = TeamsterWorkerRecord.On(this);
+            bool loaded = record != null && record.IsLoaded;
+            DeathDropFacts facts = host != null
+                ? host.Prepare(_humanoid, genuineDeath: _humanoid.IsDead(), inventoryLoaded: loaded)
+                : new DeathDropFacts(_humanoid.IsDead(), false, false, WorkAuthorityVerdict.Unspecified, false, loaded);
+            DeathDropVerdict verdict = WorkerDeathDrop.Decide(facts);
+            report = new DeathDropReport(verdict);
+
+            // Indexed, so an interruption knows exactly which stack it stopped
+            // at: that one and every one after it are accounted for below.
+            for (visited = 0; visited < held.Count; visited++)
             {
+                ItemDrop.ItemData item = held[visited];
                 string prefab = NameOf(item);
                 int count = item.m_stack;
                 if (verdict != DeathDropVerdict.Drop)
@@ -161,6 +182,10 @@ internal sealed class GunnarDeathDropPort : MonoBehaviour
         catch (Exception exception)
         {
             report.MarkInterrupted(SafeFailure.Brief(exception));
+
+            // Every carried unit is on the ground or accounted unresolved: the
+            // stacks the walk never reached are recorded, not forgotten.
+            AccountForUnvisited(report, held, visited);
         }
         finally
         {
@@ -181,6 +206,30 @@ internal sealed class GunnarDeathDropPort : MonoBehaviour
             {
                 Report("Gunnar died and what became of what he carried could not all be recorded: " +
                     SafeFailure.Describe(exception));
+            }
+        }
+    }
+
+    /// <summary>Records every stack the interrupted walk never reached as kept,
+    /// which is unresolved. Best effort: a stack that cannot even be read is
+    /// left to the interruption sentence.</summary>
+    private static void AccountForUnvisited(DeathDropReport report, List<ItemDrop.ItemData>? held, int visited)
+    {
+        if (held == null)
+        {
+            return;
+        }
+
+        for (int index = visited; index < held.Count; index++)
+        {
+            try
+            {
+                ItemDrop.ItemData item = held[index];
+                report.Add(DeathDropLeg.NotAttempted(NameOf(item), item.m_stack, "the drop was interrupted before this stack"));
+            }
+            catch (Exception)
+            {
+                // Already interrupted; the record says so.
             }
         }
     }

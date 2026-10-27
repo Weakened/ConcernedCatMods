@@ -769,10 +769,33 @@ touched anywhere else, the `IsDead()` predicate removed, and the verdict consult
 refuses `.DropItem(` everywhere but the one call - inside `Adapters/Workers` and out, in `src/Shared` too, and
 vanilla's static `ItemDrop.DropItem` with it.
 
+**Nothing in this product may cause the death that reaches it.** An independent review found the first version's
+hole: the audit pinned who may *name* the handler, and nothing stopped `ct_haul retire` being rewritten as "set his
+health to nothing", which reaches the drop through vanilla's genuine death path with every gate green.
+`SetHealth`, `UseHealth`, `SetMaxHealth`, `.Damage(`, `ApplyDamage` and `RPC_Damage` are now refused everywhere in
+Teamster (and `InvokeRPC` outside the worker folder, as it already was inside), the `IsDead()` guard must be a bare
+`return;`, the decision is told the body died by `IsDead()` and never by a literal, the handler's own delegate is
+invoked by nobody but vanilla, and the inventory it empties is assigned once, from the dying body.
+
+**Where things land, and what vanilla does inside the call.** Vanilla's drop places each stack at the body's
+position plus one metre forward and up, with a small push - not exactly under him - and the ground items are ordinary
+dropped items: anyone can pick them up, and outside a base with nobody near they despawn after an hour, as any
+creature's drop does. Inside `DropItem` vanilla also plays the body's `interact` animation trigger and the drop
+effects; those are vanilla's, inside the one pinned call, the same way `Pickup`'s destruction of the item it takes
+is (§6). Nothing in this product calls `SetTrigger`.
+
+**It is listened for only when it can run.** A game that renamed `DropItem` would fail the handler's JIT inside
+vanilla's own death path, before any of this file's guards ran, and leave a dead body undestroyed. So the port
+subscribes only when the start-up probe verified every member it binds - which means, as for collection, that a game
+changing one of them turns the whole worker runtime off (the probe is one list) rather than half of it.
+
+**An interrupted walk still accounts for everything.** If anything throws part-way, every stack not yet reached is
+recorded unresolved, so the death record never understates what he held.
+
 **Not claimed.** Nothing here has been watched happening. The port binds Unity and no test here loads it; what is
 tested is the decision, the per-stack classification, the ledger and the record format (`WorkerDeathDropTests`),
 and what is pinned is the shape. A body that dies while inert, or while a cart cannot be released, still
-loses what it carries - recorded rather than silent. §10 rows 27 and 40-42 are the go-around.
+loses what it carries - recorded rather than silent. §10 rows 27-30 are the go-around.
 
 ## 7. No portals
 
@@ -937,14 +960,14 @@ claim that nobody who has not opted in is affected, and step 17 is the one that 
     His body must come back with his identity, an empty inventory, no fault line and no `Destroyed invalid prefab
     ZDO`. This is the zero-migration row and it is the one that is irreversible if it is wrong.
 27. **Death (§6g).** With collection on, let something kill Gunnar while he carries a few Stone. Expect them **on
-    the ground where he fell**, the log's warning `Gunnar died: what he carried went on the ground ...`, and two or
+    the ground about a metre in front of where he fell** (vanilla's own drop position), the log's warning `Gunnar died: what he carried went on the ground ...`, and two or
     more rows appended to `teamster_worker_deaths_<world>.tsv` in Teamster's config folder. Pick them up: the count
     must equal what he held - not one more.
-40. **Death while hitched.** Assign and hitch a cart, give him a Stone, kill him. The cart must be let go and left
+28. **Death while hitched.** Assign and hitch a cart, give him a Stone, kill him. The cart must be let go and left
     exactly where it was with its contents untouched, and the Stone on the ground.
-41. **Death with collection off.** Turn `GunnarCollectionEnabled` off, kill a Gunnar who is carrying something.
+29. **Death with collection off.** Turn `GunnarCollectionEnabled` off, kill a Gunnar who is carrying something.
     Nothing drops; the log and the death record say it is unresolved because collection is off.
-42. **Retire is not death.** `ct_haul retire force` a carrying Gunnar: the message still says what he carried was
+30. **Retire is not death.** `ct_haul retire force` a carrying Gunnar: the message still says what he carried was
     destroyed, nothing drops, and **no** death row is written.
 
 Evidence rows for `docs/settlement/cart-and-collection/EVIDENCE.md` stay **pending** until observed, with the

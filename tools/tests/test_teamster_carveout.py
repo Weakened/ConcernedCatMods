@@ -1046,3 +1046,51 @@ class DeathDropIsNarrow(CarveOutFixture):
         ])
         self.assert_refused("the drop was lifted into a helper and passed",
                             marker="D16 death-drop audit", contains="inside OnDeath()")
+
+    # -- what may CAUSE the death that reaches it (review of 7330ef9) --
+
+    def test_a_retire_may_not_be_rewritten_as_a_death(self):
+        # The blocker an independent review found: `ct_haul retire` rewritten as
+        # "set his health to nothing" goes through vanilla's genuine death path
+        # with every gate green.
+        self.plant_file(os.path.join(WORKERS, "ZzRetireByDeath.cs"),
+                        "        ((dynamic)who).SetHealth(0f);")
+        self.assert_refused("a retire by SetHealth(0) passed", contains="'SetHealth'")
+
+    def test_nothing_may_hit_him_from_domain(self):
+        self.plant_file(os.path.join(DOMAIN, "Zz", "ZzHit.cs"),
+                        "        ((dynamic)who).Damage(cart);")
+        self.assert_refused("a damage call in Domain/ passed", contains="'.Damage('")
+
+    def test_nothing_may_send_vanillas_damage_message(self):
+        self.plant_file(os.path.join(ADAPTERS, "ZzRpc.cs"),
+                        "        ((dynamic)who).InvokeRPC(\"RPC_Damage\", cart);")
+        self.assert_refused("a damage message outside the worker folder passed", contains="'RPC_Damage'")
+
+    def test_the_death_predicate_must_return(self):
+        self.swap_in_death(
+            "        if (_humanoid == null || !_humanoid.IsDead())\n        {\n",
+            "        if (_humanoid == null || !_humanoid.IsDead())\n        {\n            Report(\"not dead\");\n")
+        self.assert_refused("an IsDead() guard that does not return passed",
+                            marker="D16 death-drop audit", contains="bare `return;`")
+
+    def test_the_decision_is_told_by_the_body_never_by_a_literal(self):
+        self.swap_in_death(
+            "host.Prepare(_humanoid, genuineDeath: _humanoid.IsDead(), inventoryLoaded: loaded)",
+            "host.Prepare(_humanoid, genuineDeath: true, inventoryLoaded: loaded)")
+        self.assert_refused("a literal genuineDeath passed", marker="D16 death-drop audit",
+                            contains="without asking the body")
+
+    def test_the_handlers_own_delegate_may_not_be_invoked(self):
+        self.swap_in_death(
+            "    private void OnDestroy()\n    {\n",
+            "    private void OnDestroy()\n    {\n        _onDeath?.Invoke();\n")
+        self.assert_refused("the handler's delegate was invoked from OnDestroy and passed",
+                            marker="D16 death-drop audit", contains="_onDeath delegate")
+
+    def test_the_drop_empties_only_the_dying_bodys_own_inventory(self):
+        self.swap_in_death(
+            "_inventory = _humanoid.GetInventory();",
+            "_inventory = Player.m_localPlayer.GetInventory();")
+        self.assert_refused("the drop was pointed at the player's inventory and passed",
+                            marker="D16 death-drop audit", contains="assigns _inventory")
