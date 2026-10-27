@@ -172,6 +172,15 @@ internal static class ClimbPolicy
     internal static bool AirAlignmentAllowed(float horizontal, float vertical) =>
         Finite(horizontal) && Finite(vertical) && horizontal <= AirHorizontalLimit && Math.Abs(vertical) <= AirVerticalLimit;
 
+    /// <summary>Owner 2026-10-27: a swimmer can grab a ladder, like climbing aboard a boat. The water holds them up, so
+    /// the grab may pull the body up out of the water by as much as <see cref="SwimRiseLimit"/> onto the lowest rungs it
+    /// can hang from, but never pushes it further down than an airborne catch would.</summary>
+    internal static bool SwimAlignmentAllowed(float horizontal, float vertical) =>
+        Finite(horizontal) && Finite(vertical) && horizontal <= AirHorizontalLimit && vertical >= -AirVerticalLimit && vertical <= SwimRiseLimit;
+
+    /// <summary>How far a grab from the water may lift the body onto the ladder.</summary>
+    internal const float SwimRiseLimit = 1.2f;
+
     /// <summary>Admission gates that do not depend on geometry. Being airborne is not one of them.</summary>
     internal static bool MayAdmit(bool owned, bool free, bool overlayOpen, float cooldown) =>
         owned && free && !overlayOpen && Finite(cooldown) && cooldown <= 0f;

@@ -145,6 +145,18 @@ public sealed class ClimbPolicyTests
     public void AirAlignmentIsBoundedSeparately(float horizontal, float vertical, bool allowed) =>
         Assert.Equal(allowed, ClimbPolicy.AirAlignmentAllowed(horizontal, vertical));
 
+    // Owner 2026-10-27: grab a ladder while swimming, like boarding a boat - a pull up out of the water, never further down.
+    [Theory]
+    [InlineData(0.9f, 1.1f, true)]
+    [InlineData(0.5f, 1.2f, true)]
+    [InlineData(0.5f, 1.3f, false)]
+    [InlineData(0.5f, -0.25f, true)]
+    [InlineData(0.5f, -0.4f, false)]
+    [InlineData(1.05f, 0.5f, false)]
+    [InlineData(float.NaN, 0f, false)]
+    public void SwimmingGrabMayPullUpOutOfTheWater(float horizontal, float vertical, bool allowed) =>
+        Assert.Equal(allowed, ClimbPolicy.SwimAlignmentAllowed(horizontal, vertical));
+
     [Theory]
     [InlineData(1f, false, 0f, 1)]
     [InlineData(1f, true, 0f, 2)]

@@ -480,7 +480,10 @@ internal sealed class LadderRuntime : IDisposable
             else
             {
                 float horizontal = new Vector2(line.x - feet.x, line.z - feet.z).magnitude;
-                if (!ClimbPolicy.AirAlignmentAllowed(horizontal, target - feet.y)) { first = Keep(first, ClimbRefusal.OutOfReach); continue; }
+                bool aligned = player.IsSwimming()
+                    ? ClimbPolicy.SwimAlignmentAllowed(horizontal, target - feet.y)
+                    : ClimbPolicy.AirAlignmentAllowed(horizontal, target - feet.y);
+                if (!aligned) { first = Keep(first, ClimbRefusal.OutOfReach); continue; }
             }
 
             // The hands must reach the rungs without passing through a wall or floor.
@@ -1415,7 +1418,9 @@ internal sealed class LadderRuntime : IDisposable
     /// and stagger still release it.</summary>
     private static bool Free(Player player, bool attached = false) =>
         !player.IsDead() && !player.IsTeleporting() && !player.IsAttached() && !player.InBed() &&
-        !player.IsRiding() && !player.InCutscene() && !player.IsSwimming() && !player.IsDebugFlying() &&
+        // Swimming does not refuse a grab (owner 2026-10-27: mount from the water like boarding a boat), and while
+        // attached the ladder motor replaces the game's swim movement, so a body at the waterline is not released.
+        !player.IsRiding() && !player.InCutscene() && !player.IsDebugFlying() &&
         // Build mode with the hammer never refuses a mount or ends a climb (owner decision 2026-10-26).
         (!player.InAttack() || (attached && BuildAction(player))) &&
         !player.InDodge() && !player.IsKnockedBack() && !player.IsStaggering() && (attached || !player.InMinorAction());
