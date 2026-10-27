@@ -40,6 +40,9 @@ internal static class ClimbTuning
     internal static float FootBallForward = 0.165f;
     internal static float FootAnkleHeight = 0.146f;
 
+    /// <summary>On a round rung the palm centre sits this many degrees from the rung's top toward the climber.</summary>
+    internal static float HandWrapDegrees = 35f;
+
     /// <summary>Half the palm's thickness: palm patch (bone centre) to skin. The gap measure's zero for hands.</summary>
     internal static float PalmThickness = 0.02f;
 

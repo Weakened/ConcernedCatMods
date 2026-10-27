@@ -81,6 +81,9 @@ internal sealed class LadderRuntime : IDisposable
     private int _session;
     private int _discontinuity;
     private int _geometryRevision;
+    private RungProfile[]? _profiles;
+    private int _profilesRevision = -1;
+    private int _profilesSession = -1;
     private long _sample;
     private float _travel;
     private float _lastSampleY;
@@ -905,14 +908,31 @@ internal sealed class LadderRuntime : IDisposable
             Vector3 end = routed && _route.Length > 0 ? _route[_route.Length - 1] : feet;
             float origin = _pitch * 0.5f;
             NativeActionParts action = NativeOwnership(player);
+            if (_profilesRevision != _geometryRevision || _profilesSession != _session) { _profiles = BuildProfiles(); _profilesRevision = _geometryRevision; _profilesSession = _session; }
             var frame = new ClimbPresentationFrame(_session, _discontinuity, _geometryRevision, ++_sample, Time.fixedTime,
                 motion, _gait, _travel, step, LadderSegment.Point(feet), _run, _face, _plane, origin,
                 ClimbPresentationFrame.LastRungOf(_run.Height, origin, _pitch), routed ? RouteProgress(feet) : -1f,
                 LadderSegment.Point(routed ? _routeStart : feet), LadderSegment.Point(end), action, player.InPlaceMode(),
-                !GameplayFocus(player));
+                !GameplayFocus(player), _profiles);
             presenter.Publish(player, frame);
         }
         catch (Exception exception) { PresenterFault(exception); }
+    }
+
+    /// <summary>Each section's rung shape (material art), bottom to top, for presentation only.</summary>
+    private RungProfile[] BuildProfiles()
+    {
+        var profiles = new RungProfile[_segments.Count];
+        for (int i = 0; i < _segments.Count; i++)
+        {
+            LadderSegment segment = _segments[i];
+            float bottom = segment != null ? segment.transform.TransformPoint(segment.LocalBottom).y : 0f;
+            float top = segment != null ? segment.transform.TransformPoint(segment.LocalTop).y : 0f;
+            profiles[i] = segment == null ? RungProfile.Wood :
+                new RungProfile(bottom, top, segment.RungHalfHeight, segment.RungHalfDepth, segment.RungRadius);
+        }
+
+        return profiles;
     }
 
     /// <summary>Which limbs the game's own animation owns while attached (owner decision 2026-10-26):

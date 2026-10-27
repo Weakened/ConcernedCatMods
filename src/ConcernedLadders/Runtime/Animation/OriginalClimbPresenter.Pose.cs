@@ -83,8 +83,26 @@ internal sealed partial class OriginalClimbPresenter
             float side = limb == 0 || limb == 2 ? -1f : 1f;
             Vector3 root = posedBody + bodyDelta * (rig.Roots[limb].position - nativeBody);
             float span = Math.Min(ClimbPresentationFrame.HalfWidth - .04f, hand ? ClimbTuning.HandSpan : ClimbTuning.FootSpan);
-            float above = hand ? ClimbTuning.HandAbove : ClimbTuning.FootAbove;
-            float outOffset = hand ? ClimbTuning.HandOut : ClimbTuning.FootOut;
+            // Fit the palm / sole to this section's real rung: a wooden box rung (calibrated offsets) or a round metal
+            // rung (palm wrapped over its top-front, sole on its crown).
+            RungProfile profile = frame.ProfileAt(contact.Height);
+            float above, outOffset;
+            if (!profile.Round)
+            {
+                above = hand ? ClimbTuning.HandAbove + profile.HalfHeight - ClimbPresentationFrame.HalfHeight : ClimbTuning.FootAbove + profile.HalfHeight - ClimbPresentationFrame.HalfHeight;
+                outOffset = hand ? ClimbTuning.HandOut : ClimbTuning.FootOut;
+            }
+            else if (hand)
+            {
+                float wrap = ClimbTuning.HandWrapDegrees * Mathf.Deg2Rad, reachOut = profile.Radius + ClimbTuning.PalmThickness;
+                above = reachOut * Mathf.Cos(wrap);
+                outOffset = reachOut * Mathf.Sin(wrap);
+            }
+            else
+            {
+                above = profile.Radius + ClimbTuning.FootAbove - ClimbPresentationFrame.HalfHeight;
+                outOffset = ClimbTuning.FootOut;
+            }
             Vector3 surface = RungSurface(frame, contact.Height + above, outOffset, span * side);
             if (contact.Swing > 0f)
             {
@@ -154,7 +172,7 @@ internal sealed partial class OriginalClimbPresenter
             var record = new ContactRecord
             {
                 Has = true, Target = surface, Planted = planted, Requested = weight, Ratio = reach / rig.Reach[limb],
-                RungCentre = RungSurface(frame, contact.Height, 0f, span * side), Hand = hand, Outward = outward,
+                RungCentre = RungSurface(frame, contact.Height, 0f, span * side), Hand = hand, Outward = outward, Profile = profile,
             };
             if (weight <= .01f) { actor.Record[limb] = record; continue; } // Handed to the native pose on purpose (mount/exit windows).
             actor.Fit.Sample(limb, reach / rig.Reach[limb], root, feet, frame, outward);
@@ -348,6 +366,7 @@ internal sealed partial class OriginalClimbPresenter
     {
         internal bool Has, Planted, Skipped, Native, Hand;
         internal Vector3 Target, RungCentre, Outward;
+        internal RungProfile Profile;
         internal float Requested, Effective, Ratio;
     }
 }

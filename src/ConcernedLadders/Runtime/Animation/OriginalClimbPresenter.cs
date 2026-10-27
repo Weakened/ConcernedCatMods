@@ -152,10 +152,18 @@ internal sealed partial class OriginalClimbPresenter : IClimbPresenter
             float error = Vector3.Distance(patch, record.Target);
             // Gap to the rung's real box (half height x half depth around its centre): for a palm, the distance from the
             // palm patch (bone centre) to the box minus the palm's thickness; for a sole, height above the rung top.
-            float up = Mathf.Abs(patch.y - record.RungCentre.y) - ClimbPresentationFrame.HalfHeight;
-            float across = Mathf.Abs(Vector3.Dot(patch - record.RungCentre, record.Outward)) - ClimbPresentationFrame.HalfDepth;
-            float box = up > 0f && across > 0f ? Mathf.Sqrt(up * up + across * across) : Mathf.Max(up, across);
-            float gap = record.Hand ? box - ClimbTuning.PalmThickness : patch.y - (record.RungCentre.y + ClimbPresentationFrame.HalfHeight);
+            RungProfile rung = record.Profile;
+            Vector3 rel = patch - record.RungCentre;
+            float relUp = rel.y, relOut = Vector3.Dot(rel, record.Outward);
+            float surface;
+            if (rung.Round) { surface = Mathf.Sqrt(relUp * relUp + relOut * relOut) - rung.Radius; }
+            else
+            {
+                float up = Mathf.Abs(relUp) - rung.HalfHeight, across = Mathf.Abs(relOut) - rung.HalfDepth;
+                surface = up > 0f && across > 0f ? Mathf.Sqrt(up * up + across * across) : Mathf.Max(up, across);
+            }
+
+            float gap = record.Hand ? surface - ClimbTuning.PalmThickness : relUp - (rung.Round ? rung.Radius : rung.HalfHeight);
             bool faded = record.Effective < record.Requested - .01f;
             if (record.Planted && actor.Anchored[limb] && (record.Target - actor.AnchorTarget[limb]).sqrMagnitude < 1e-6f)
             {

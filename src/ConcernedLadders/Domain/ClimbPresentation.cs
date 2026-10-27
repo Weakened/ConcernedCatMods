@@ -18,6 +18,25 @@ internal static class RungShape
     internal const int PerSection = 6;
 }
 
+/// <summary>The rung of one section: box (Radius 0: half height and half depth) or round (Radius), between BottomY and
+/// TopY in world height. Presentation fits palms and soles to it and measures contact gaps against it.</summary>
+internal readonly struct RungProfile
+{
+    internal RungProfile(float bottomY, float topY, float halfHeight, float halfDepth, float radius)
+    {
+        BottomY = bottomY; TopY = topY; HalfHeight = halfHeight; HalfDepth = halfDepth; Radius = radius;
+    }
+
+    internal float BottomY { get; }
+    internal float TopY { get; }
+    internal float HalfHeight { get; }
+    internal float HalfDepth { get; }
+    internal float Radius { get; }
+    internal bool Round => Radius > 0f;
+
+    internal static RungProfile Wood => new RungProfile(float.MinValue, float.MaxValue, RungShape.HalfHeight, RungShape.HalfDepth, 0f);
+}
+
 /// <summary>What accepted gameplay is doing, for presentation only.</summary>
 internal enum PresentedMotion
 {
@@ -77,7 +96,7 @@ internal readonly struct ClimbPresentationFrame
     internal ClimbPresentationFrame(int session, int discontinuity, int geometryRevision, long sample, float sampleTime,
         PresentedMotion motion, ClimbGait gait, float travel, float stepTravel, ClimbPoint feet, LadderGeometry run, LadderFace face,
         float rungPlane, float rungOrigin, int lastRung, float transition, ClimbPoint transitionFrom, ClimbPoint transitionTo,
-        NativeActionParts nativeAction, bool hammerEquipped, bool menuHold)
+        NativeActionParts nativeAction, bool hammerEquipped, bool menuHold, RungProfile[]? profiles = null)
     {
         Session = session;
         Discontinuity = discontinuity;
@@ -100,6 +119,22 @@ internal readonly struct ClimbPresentationFrame
         NativeAction = nativeAction;
         HammerEquipped = hammerEquipped;
         MenuHold = menuHold;
+        Profiles = profiles;
+    }
+
+    /// <summary>The rung shape of each section of the run, bottom to top (sections may be different materials).</summary>
+    internal RungProfile[]? Profiles { get; }
+
+    /// <summary>The rung shape at a height on the run; the wooden box rung when unknown.</summary>
+    internal RungProfile ProfileAt(float worldY)
+    {
+        RungProfile[]? profiles = Profiles;
+        if (profiles != null)
+        {
+            foreach (RungProfile profile in profiles) { if (worldY >= profile.BottomY - 0.001f && worldY < profile.TopY + 0.001f) { return profile; } }
+        }
+
+        return RungProfile.Wood;
     }
 
     internal int Session { get; }
