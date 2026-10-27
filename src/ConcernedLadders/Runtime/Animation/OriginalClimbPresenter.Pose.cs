@@ -68,9 +68,21 @@ internal sealed partial class OriginalClimbPresenter
                          right * (ClimbTuning.SwayShift * sway);
         Quaternion bodyRotation = Quaternion.LookRotation(toward, Vector3.up) *
             Quaternion.AngleAxis(lean, Vector3.right) * Quaternion.AngleAxis(-sway * ClimbTuning.SwayTilt, Vector3.forward) * rig.BodyInPlayer;
-        Vector3 bodyPosition = pelvis + bodyRotation * rig.BodyFromPelvis;
         Vector3 nativeBody = animator.bodyPosition;
         Quaternion nativeRotation = animator.bodyRotation;
+        // Square the hips to the ladder (owner 2026-10-27: "right knee opens towards the side"; measured: the posed hip
+        // line yawed 18 degrees, right hip 6 cm further from the rungs, right knee 7-10 cm further out than the left).
+        // The native pose's own hip twist is carried into the body rotation; turn it so the hip line runs along the rungs.
+        Vector3 hipLine = Quaternion.Inverse(nativeRotation) * (rig.Roots[3].position - rig.Roots[2].position);
+        Vector3 posedHips = bodyRotation * hipLine;
+        posedHips.y = 0f;
+        if (posedHips.sqrMagnitude > 1e-4f)
+        {
+            float yawError = Vector3.SignedAngle(posedHips, right, Vector3.up);
+            bodyRotation = Quaternion.AngleAxis(Mathf.Clamp(yawError, -40f, 40f) * ClimbTuning.SquareHips, Vector3.up) * bodyRotation;
+        }
+
+        Vector3 bodyPosition = pelvis + bodyRotation * rig.BodyFromPelvis;
         actor.Lease.BodyInIK(animator, bodyPosition, bodyRotation, bodyWeight);
         Vector3 posedBody = animator.bodyPosition;
         Quaternion bodyDelta = animator.bodyRotation * Quaternion.Inverse(nativeRotation);

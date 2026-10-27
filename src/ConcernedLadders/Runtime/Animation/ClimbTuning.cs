@@ -85,6 +85,9 @@ internal static class ClimbTuning
         throw new InvalidOperationException("No authored transition " + kind + ".");
     }
 
+    /// <summary>How much of the native pose's hip yaw is removed so the hips face the ladder square (1 = fully).</summary>
+    internal static float SquareHips = 1f;
+
     /// <summary>On a top exit or entry the palms press on the floor this far past the ladder's plane.</summary>
     internal static float LipOnto = 0.18f;
 
