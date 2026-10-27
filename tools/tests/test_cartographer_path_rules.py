@@ -8,6 +8,14 @@ with that one rule's registration removed, and the refusal must disappear - so
 the test proves *that* rule is what refuses, not a neighbour catching it by
 accident. Every plant is removed again and the tree is required to be clean.
 
+Not planted here, on purpose:
+- the root rule's ban on composing `Paths.ConfigPath` directly. The
+  `[product-paths]` rule refuses the same plant, so it cannot be proved in
+  isolation; test_product_data_paths.py covers it;
+- the fail-closed branches (an unreadable list, no declarations found, a
+  missing CartographerPaths.cs);
+- the case-insensitive extension match.
+
 The rules:
 
 - check_cartographer_prior_names_stay_known_to_the_probe: a name an older build
@@ -172,6 +180,16 @@ class RootHoldsOnlyKnownNames(PathRuleFixture):
                      'string path = CartographerPaths.InState("support-report.txt");')
         self.assert_refused_by(ROOT_CONTENTS, "a mod manager's configuration editor opens that",
                                "a generated .txt file under state/")
+
+    def test_an_editor_extension_in_the_probed_root_is_refused(self):
+        # #304's literal regression: the report goes back to being a .txt in
+        # the root. The probe still knows that name, so only the editor-
+        # extension branch can refuse it, which proves that branch reads InRoot
+        # as well as InState.
+        self.swap_in(BACKUP, self.REPORT,
+                     'string path = CartographerPaths.InRoot("support-report.txt");')
+        self.assert_refused_by(ROOT_CONTENTS, "a mod manager's configuration editor opens that",
+                               "a generated .txt file back in the probed root")
 
     def test_the_shared_companion_sources_are_audited_too(self):
         # The shared layer is compiled into this product and writes into the
