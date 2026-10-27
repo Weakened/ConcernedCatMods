@@ -15,6 +15,8 @@ Internal owner playtest candidate. Not a release.
 - No squat near the top: climbing stops (or steps off onto a floor) about 1.3 m
   below the top, with both hands on the top rungs; getting on from a floor
   above ends in the same normal climbing stance.
+- Grab a ladder while swimming, like climbing aboard a boat: Interact pulls
+  you up out of the water onto the rungs.
 - Renamed to Vertical Wood Ladder, Vertical Copper Ladder and Vertical Iron
   Ladder so they no longer share a name with the game's own Wood ladder.
   Placed ladders are unaffected.

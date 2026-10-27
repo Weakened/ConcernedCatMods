@@ -13,7 +13,7 @@ controller play have not been tested yet.
 
 | Action | What it does |
 |---|---|
-| **Interact** (Use) | Grab the ladder you are looking at: from the ground, an upper floor, beside or behind the rails, or in midair while jumping or falling. Within about 1.5 m of the rungs, measured from your chest; standing on a floor at the top, within about 1.5 m of the rail tops. While climbing, Interact steps off onto a safe landing. |
+| **Interact** (Use) | Grab the ladder you are looking at: from the ground, an upper floor, beside or behind the rails, in midair while jumping or falling, or while swimming (like climbing aboard a boat). Within about 1.5 m of the rungs, measured from your chest; standing on a floor at the top, within about 1.5 m of the rail tops. While climbing, Interact steps off onto a safe landing. |
 | Forward / backward | Climb up / down. Neutral holds. Camera pitch does not matter. |
 | **Run** + movement | Climb faster (1.2 m/s instead of 0.9). Costs stamina; without stamina you keep climbing normally. |
 | Backward + **Run** at Climbing 20+ | Slide down at 4.5 m/s. Below level 20 it is a fast descent. |
