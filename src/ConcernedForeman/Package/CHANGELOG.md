@@ -11,6 +11,44 @@ plus the ladder feature from CF-LAD-001..005 (#324), and **nothing in it
 has been observed working in a game**. The version has deliberately not
 moved: 0.1.0 has never shipped, so these are still its notes.
 
+### Added — Thorstein at home, and one body at a time (#295, #298)
+
+- **While Thorstein rests and has no worker body, he stands near your bed**
+  as a local figure: the game's own character, with the owner's reference
+  look, a **Mullet** and a **Mustache**, and a deeper complexion than Hulgi.
+  He also wears working leathers, which are this build's proposal. Nobody
+  else sees him. He is never saved, has no collision, and changes nothing
+  in the world. He appears only on the host, only with the settlement runtime
+  on, and only once he is recruited.
+- **He never has two bodies.** A saved worker body anywhere in the world is
+  his body, and while one exists the figure is never shown. `cf_worker
+  spawn` takes the figure down before the worker body exists and puts the
+  body where he stood. `cf_worker despawn` gives the figure back.
+  Concerned NPC's arbiter refuses the second kind of body while the first
+  is held.
+- **`cf_worker spawn` now asks Concerned NPC first.** If the library did not
+  accept Thorstein, the spawn is refused and the reason is given. Before
+  this, the spawn went ahead without the library.
+- New `[Thorstein]` settings: `ShowAtHome` (on), plus `Hair`, `Beard`,
+  `ChestGarment` and `LegsGarment` overrides, which are empty for the
+  reference. A player's own choice is never overwritten.
+- **Requires Concerned NPC 0.5.0.** Thorstein's role now admits a figure as
+  well as a worker body, with the **same prefab name and keys**, so no saved
+  body is affected.
+
+### Known limits — Thorstein's figure
+
+- **Not observed in game.** The decision and the leases are tested. The
+  figure, its fit and its colouring are not.
+- **While he works he still looks like the `Dverger` clone.** That body
+  cannot wear the reference hair or beard. Once he has been given a worker
+  body with his tools in it, that body stays until it is despawned.
+- **No routine yet:** no sitting, no dialogue, no quest, no hand-over
+  window. He stands at home and faces you.
+- If the character screen's colour palette was not read this session, his
+  hair uses a stated dark-brown fallback and his skin is the model's own.
+  The status line says which was used.
+
 ### Changed — Thorstein's identity comes from Concerned NPC (#380)
 
 - Concerned Foreman now requires **Concerned NPC**, which ships as its own

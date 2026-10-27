@@ -144,6 +144,30 @@ That is the interesting part, not the walking.
 
 ---
 
+## Thorstein at home
+
+Recruit Thorstein (`cf_settle recruit`) with the settlement runtime on, and
+before he has a worker body he stands near your bed as a local figure. He has the
+owner's reference look: a **Mullet**, a **Mustache**, and a deeper complexion.
+Nobody else sees him, nothing is saved, and you can walk through him.
+
+He never has two bodies. `cf_worker spawn` takes the figure away before his
+worker body appears where he stood, and `cf_worker despawn` brings the figure
+back. While he works, his body is still the plain dwarf the worker is made from.
+
+```
+[Thorstein]
+ShowAtHome = true      # false: never show the figure
+Hair =                 # empty: the reference "Mullet"; or a hair label or prefab name
+Beard =                # empty: the reference "Mustache"
+ChestGarment =         # empty: leather tunic
+LegsGarment =          # empty: leather pants
+```
+
+**Not yet seen working in a game.**
+
+---
+
 ## What the worker will not do
 
 - **No offscreen work.** The worker acts only in loaded ground, and tells you so

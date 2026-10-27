@@ -63,6 +63,8 @@ public sealed class Plugin : BaseUnityPlugin
     private ClimbSounds? _climbSounds;
     private Runtime.Construction.BuildOrderRuntime? _buildOrders;
     private Runtime.Construction.ShelterConstructionRuntime? _construction;
+    private Runtime.Presentation.ThorsteinPresentation? _presentation;
+    private Action<string>? _paletteLog;
     private bool _worldWasUp;
 
     private void Awake()
@@ -87,6 +89,22 @@ public sealed class Plugin : BaseUnityPlugin
         // The worker prefab must be registered before any world's objects are
         // created, or a saved worker body is destroyed as an unknown prefab (D9).
         _settlement.Install();
+
+        // #295 step 1: Thorstein at home while he rests, as a local figure, and
+        // the hand-over to his worker body when one is created. One body at a
+        // time, through the same arbiter that holds his mode.
+        _presentation = new Runtime.Presentation.ThorsteinPresentation(
+            settings,
+            Runtime.Presentation.ThorsteinSettings.Bind(Config),
+            npc,
+            _settlement,
+            message => Logger.LogInfo(message));
+        Runtime.Presentation.ThorsteinPresentation presentation = _presentation;
+        _paletteLog = message => Logger.LogInfo(message);
+        _settlement.TakeWorkerBody = presentation.TakeWorkerBody;
+        _settlement.ReleaseWorkerBody = presentation.ReleaseWorkerBody;
+        _settlement.BodiesChanged = presentation.NoteBodiesChanged;
+        _settlement.DescribeBodies = presentation.Describe;
 
         // #315/#316: Thorstein's collection runs on the custody runtime and shares its
         // world-load epoch, so every key made during one load agrees.
@@ -366,6 +384,9 @@ public sealed class Plugin : BaseUnityPlugin
             // ladder that is about to stop existing.
             _ladders?.OnWorldUnloaded();
 
+            // The figure comes down before Concerned NPC ends its lease below.
+            _presentation?.OnWorldUnloaded();
+
             // Last, so the collection loop has already released Thorstein's mode
             // by name. This only has to catch what a fault or a crash left
             // behind: a job id nothing still holds a copy of, which no ordinary
@@ -385,6 +406,7 @@ public sealed class Plugin : BaseUnityPlugin
 
             // Before net time advances, custody reads the loaded world time.
             _settlement?.OnWorldLoaded();
+            _presentation?.OnWorldLoaded();
         }
 
         _collection?.Update();
@@ -395,6 +417,15 @@ public sealed class Plugin : BaseUnityPlugin
         if (worldIsUp)
         {
             _construction?.Tick();
+            _presentation?.Tick(Time.deltaTime);
+        }
+
+        // Only the character screen carries the colours Thorstein's sliders are
+        // converted through, so this polls in every scene until it has them.
+        // The delegate is made once: this line runs every frame of the session.
+        if (_paletteLog != null)
+        {
+            Runtime.Presentation.ThorsteinPalette.Poll(Time.unscaledDeltaTime, _paletteLog);
         }
 
         _worldWasUp = worldIsUp;
@@ -412,6 +443,7 @@ public sealed class Plugin : BaseUnityPlugin
     /// One of the nine ways a climb ends.</summary>
     private void OnDestroy()
     {
+        _presentation?.Dispose();
         _cooperativeDelivery?.OnWorldUnloaded();
         _haulProvider?.Forget();
         _ladders?.Stop();

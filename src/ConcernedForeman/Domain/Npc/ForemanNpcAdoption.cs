@@ -20,22 +20,20 @@ namespace TheConcernedCat.ConcernedForeman.Domain.Npc;
 /// refusals were unreachable for him. Now they are not.
 ///
 /// <b>Exactly how much the never-coexist rule gains, stated precisely.</b>
-/// Thorstein is registered with a <i>worker</i> body contract, and an identity has
-/// one contract; a presentation-body claim for him is therefore refused as
-/// <c>RefusedKindNotContracted</c> whatever his mode is, and it would be refused
-/// that way with or without this adoption. What the adoption actually adds is the
-/// refusal that was missing: while a collection order holds him, <b>nothing else
-/// in the process may take his body</b> — not another runtime, not another
-/// product, not a second copy of this one — because the arbiter can now see the
-/// hold. And if a presentation contract for him is ever written, the mode gate is
-/// already the thing that will stop the camp figure appearing while he works,
-/// without anybody having to remember to add it. That is the difference between a
-/// rule enforced and a rule agreed to.
+/// Since #295 step 1, Thorstein is registered with a worker contract that also
+/// admits a presentation figure while he rests
+/// (<c>NpcBodyContract.ForWorkerWithPresentation</c>, Concerned NPC 0.5.0). The
+/// arbiter grants one kind at a time. <see cref="ThorsteinBodies"/> holds the
+/// worker lease whenever his saved body exists and the figure's lease only when
+/// it does not, so a figure is refused for as long as his body stands. While a
+/// collection order holds him, <b>nothing else in the process may take his
+/// body</b>, and the mode gate refuses the figure: presentation is what he is
+/// when nobody has ordered him to do anything.
 ///
-/// <b>What is deliberately NOT here.</b> No body claim and no prefab handover.
-/// Foreman still registers its own prefab, from its own plugin start, under its
-/// own name — a prefab registered late, or under a different name, deletes every
-/// existing saved worker on the next load. Moving Thorstein's body onto
+/// <b>What is deliberately NOT here.</b> No prefab handover. Foreman still
+/// registers its own prefab, from its own plugin start, under its own name. A
+/// prefab registered late, or under a different name, deletes every existing
+/// saved worker on the next load. Moving Thorstein's body onto
 /// <c>NpcWorkerPrefabFactory</c> is a separate adoption.
 ///
 /// <b>Registration is per process, not per world.</b> The library says so, and it

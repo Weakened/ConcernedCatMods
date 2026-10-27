@@ -2577,15 +2577,24 @@ FOREMAN_AUDITED_CAPABILITIES = (
     ("UnityEngine.Object.Instantiate", re.compile(
         r"\bInstantiate\s*(?:<[^(){};]*>\s*)?\("), (
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*_prefab\s*,\s*position\s*,\s*rotation\s*\)"), 1),
+        # #295: one attachment mesh (an item's attach child, never the item) cloned
+        # under an INACTIVE holder for Thorstein's local presentation figure.
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Instantiate\s*\(\s*source\s*,\s*holder\s*\.\s*transform\s*\)"), 1),
     )),
     ("UnityEngine.Object.DestroyImmediate", re.compile(r"\.\s*DestroyImmediate\s*\("), (
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*clone\s*\)"), 1),
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*vanillaAi\s*\)"), 1),
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*tameable\s*\)"), 1),
         ("Runtime/Settlement/ForemanWorkerPrefab.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*drop\s*\)"), 1),
+        # #295: the figure's own dark parts - an inactive holder, a refused
+        # piece, or a component on a piece that has never woken.
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*DestroyImmediate\s*\(\s*target\s*\)"), 1),
     )),
     ("ZNetView.Destroy", re.compile(r"\.\s*Destroy\s*\("), (
         ("Runtime/Settlement/SettlementRuntime.cs", _foreman_exact(r"\bview\s*\.\s*Destroy\s*\(\s*\)"), 1),
+        # #295: the local figure, a misfitting piece of it, or its material
+        # instance. Never a network view: the figure has none.
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bUnityEngine\s*\.\s*Object\s*\.\s*Destroy\s*\(\s*target\s*\)"), 1),
     )),
     ("worker ZDO.Set", re.compile(r"\bzdo\s*\.\s*Set\s*\("), (
         ("Runtime/Custody/WorkerBody.cs", _foreman_exact(r"\bzdo\s*\.\s*Set\s*\(\s*KeyField\s*,\s*key\s*\)"), 1),
@@ -2608,6 +2617,15 @@ FOREMAN_AUDITED_CAPABILITIES = (
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\b_body\s*\.\s*position\s*=\s*landing\s*;"), 1),
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\bplayer\s*\.\s*transform\s*\.\s*rotation\s*=\s*Quaternion\s*\.\s*LookRotation\s*\(\s*facing\s*\)\s*;"), 1),
         ("Runtime/Ladders/ClimbController.cs", _foreman_exact(r"\b_body\s*\.\s*rotation\s*=\s*player\s*\.\s*transform\s*\.\s*rotation\s*;"), 1),
+        # #295: Thorstein's local presentation figure, which has no collider, no
+        # rigidbody and no network view: seating a preset or garment piece on a
+        # joint, the game's equipoffset nudge, and standing the figure at home.
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bpiece\s*\.\s*localPosition\s*=\s*Vector3\s*\.\s*zero\s*;"), 1),
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bpiece\s*\.\s*localRotation\s*=\s*Quaternion\s*\.\s*identity\s*;"), 1),
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\battached\s*\.\s*localPosition\s*\+=\s*offset\s*\.\s*position\s*;"), 1),
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\battached\s*\.\s*localRotation\s*\*=\s*offset\s*\.\s*rotation\s*;"), 1),
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bfigure\s*\.\s*position\s*=\s*spot\s*;"), 1),
+        ("Runtime/Presentation/FigureParts.cs", _foreman_exact(r"\bfigure\s*\.\s*rotation\s*=\s*facing\s*;"), 1),
     )),
 )
 

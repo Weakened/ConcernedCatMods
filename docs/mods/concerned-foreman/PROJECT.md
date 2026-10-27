@@ -109,6 +109,72 @@ Its first bounded proof is [`FIRST_COTTAGE_GRAPH.md`](FIRST_COTTAGE_GRAPH.md).
 - Grow into a hundred-resident town. One cottage, one resident, and then a
   decision about whether that was worth it.
 
+### Thorstein's two bodies (#295 step 1, #298)
+
+Thorstein has a **worker body** and, since #295 step 1, a **presentation body**,
+and never both. The rule is CLAUDE.md's, and three things enforce it:
+
+1. **The decision** (`Domain/Npc/ThorsteinBodyPlan.cs`, tested). His worker body
+   (`CF_SettlementWorker`) is persistent. It holds his issued axe and hammer and
+   anything he has gathered, so a saved worker body anywhere in the world is his
+   body, loaded or not, and the figure is never asked for while one exists. The
+   figure is shown only when all of these hold: no saved body, he is recruited
+   (`cf_settle recruit`), he is resting, the settlement runtime is on,
+   `Thorstein/ShowAtHome` is on, a respawn anchor is known, and you are within
+   48 m of it. It is shown on the host only, because only the host can count every
+   saved body. Every unknown fails towards showing nothing.
+2. **The leases** (`Domain/Npc/ThorsteinBodies.cs`, tested against the real
+   library). His role contract is `NpcBodyContract.ForWorkerWithPresentation`
+   (Concerned NPC 0.5.0), with the same prefab name and key prefix as before.
+   Foreman holds the worker lease whenever his saved body exists and the figure's
+   lease only when it does not. The arbiter refuses the second kind while the
+   first is held, from any runtime in the process, and refuses the figure while
+   a job holds him.
+3. **The runtime** (`Runtime/Presentation/ThorsteinPresentation.cs`). The figure
+   is built only after its lease is granted and is taken down before anything
+   that could release that lease. `cf_worker spawn` hands over in this order:
+   figure down, figure lease released, worker lease claimed, body created where
+   the figure stood. `cf_worker despawn`, which still refuses while he holds
+   anything, releases the worker lease, and the figure may return.
+
+**What the figure is.** It is the game's own character, extracted dark by
+Concerned NPC's `NpcPresentationBody`: no network view, no character, no AI, no
+collider, and every game script removed before it was enabled. It is never saved
+and nobody else sees it. It is dressed with the owner's reference (#298): the
+**Mullet** hair and **Mustache** beard, resolved by the game's own UI label and
+then by the documented 1.0.7 ids `Hair32` and `Beard22`. His colouring comes from
+the slider readings (skin about 0.68, hair tone about 0.94, blondness about 0.22),
+converted through the character screen's own palette when it was read this
+session. Otherwise his hair uses a stated dark-brown fallback and his skin is the
+model's own. The leather tunic and trousers are this build's proposal, not the
+owner's; the reference does not lock clothes. All four slots can be overridden
+in the `[Thorstein]` config section. The attachment rules, including binding a
+skinned preset to the body's own bone array and taking off any piece that is not
+drawn where it was put, are Hulgi's, copied from Cartographer rather than
+referenced.
+
+**What this is not yet.** There is no idle routine, no sitting, no dialogue, no
+quest and no hand-over UI. He stands at home facing you. His worker body is still
+the `Dverger` clone, which cannot wear Mullet or Mustache, so while he works he
+looks like a dwarf. Because his issued tools live in that body, a Thorstein who has
+been given a worker body stays a worker body until it is despawned. **Nothing here
+has been observed in game. OWNER GO-AROUND PENDING**:
+
+1. Opt in to the settlement runtime, then run `cf_settle recruit` with no worker
+   body: he appears near your bed, facing you, with Mullet and Mustache, and
+   `cf_worker status` says "the figure at home".
+2. Walk through him: there is no collision. Walk 70 m away: he goes. Come back:
+   he returns.
+3. Run `cf_worker spawn`: the figure goes, and the worker body appears where he
+   stood, never both at once.
+4. Run `cf_worker despawn` with nothing held: the worker body goes, and the
+   figure returns.
+5. Quit and reload, both with a worker body and without one: there is exactly one
+   of him each time.
+6. Check the hair, beard and colouring against the owner's reference in daylight
+   and by firelight. Read the "Look:" part of `cf_worker status` for any
+   fallback or removed piece.
+
 ---
 
 ## Research the contract owed — done
