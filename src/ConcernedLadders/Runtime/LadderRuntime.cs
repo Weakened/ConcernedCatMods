@@ -14,10 +14,10 @@ internal sealed class LadderRuntime : IDisposable
     private enum Mode { Off, Mounting, Climbing, Exiting }
 
     /// <summary>How far below the run's top an upward climb starts looking for a floor to walk onto.</summary>
-    private const float TopPlanBand = 1.05f;
+    private const float TopPlanBand = 1.3f;
 
     /// <summary>Descending entry ends this far below the run's top (hands on the top rungs, feet on real rungs).</summary>
-    private const float TopEntryDrop = 1.15f;
+    private const float TopEntryDrop = 1.3f;
 
     /// <summary>A descending entry checks its line of sight to this height above the run's top (above a floor that
     /// sits a little over the rails, measured 0.12 m in game).</summary>
@@ -1265,7 +1265,7 @@ internal sealed class LadderRuntime : IDisposable
 
     /// <summary>Climbing with no landing at the top stops with the feet this far below the run's top: the hands still
     /// hold the top rungs there (owner 2026-10-27: "stop climbing right before the hand contacts leave the rungs").</summary>
-    private const float NoLandingStop = 1.05f;
+    private const float NoLandingStop = 1.3f;
 
     /// <summary>Remembers where an accepted mount/exit move started and its full length, for transition progress.</summary>
     private void BeginRoute(Vector3 start)

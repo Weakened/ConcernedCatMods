@@ -110,7 +110,7 @@ internal static class ClimbTuning
     /// <summary>On a top exit the feet step onto the floor this much further past the palms.</summary>
     internal static float FootOnto = 0.2f;
 
-    /// <summary>(Owner 2026-10-27: no squat on the ladder. The climb now exits or stops 1.05 m below the top, where the
+    /// <summary>(Owner 2026-10-27: no squat on the ladder. The climb now exits or stops 1.3 m below the top, where the
     /// hands still reach the top rungs, so the crouch is off.) Over the top: from this far below the run's top the climber begins to crouch (pelvis down and toward
     /// the ladder) and fold forward, reaching the full amount TopApproachSpan higher.</summary>
     internal static float TopApproachFrom = 1.15f;

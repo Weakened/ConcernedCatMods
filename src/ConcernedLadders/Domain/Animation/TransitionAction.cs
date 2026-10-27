@@ -182,14 +182,14 @@ internal static class DefaultTransitions
         new TransitionAction.Builder(TransitionKind.TopExit, 1f)
             // Owner 2026-10-27: no distinct animation - the climber comes off the ladder super fast (the runtime route
             // takes about 0.45 s) and each limb simply hands back to the game's own pose, a few hundredths apart.
-            .Weight(LH, 0f, 1f, 0.4f, 0f).Weight(RH, 0.02f, 1f, 0.42f, 0f).Weight(LF, 0.04f, 1f, 0.44f, 0f).Weight(RF, 0.06f, 1f, 0.46f, 0f)
-            .Body(0f, 1f, 0.5f, 0f).Build(),
+            .Weight(LH, 0f, 1f, 0.2f, 0f).Weight(RH, 0.02f, 1f, 0.22f, 0f).Weight(LF, 0.04f, 1f, 0.24f, 0f).Weight(RF, 0.06f, 1f, 0.26f, 0f)
+            .Body(0f, 1f, 0.3f, 0f).Build(),
         // Intermediate-floor exit: the same support transfer sideways or behind at the current height.
         new TransitionAction.Builder(TransitionKind.SideExit, 1f)
             // Owner 2026-10-27: no distinct animation - the climber comes off the ladder super fast (the runtime route
             // takes about 0.45 s) and each limb simply hands back to the game's own pose, a few hundredths apart.
-            .Weight(LH, 0f, 1f, 0.4f, 0f).Weight(RH, 0.02f, 1f, 0.42f, 0f).Weight(LF, 0.04f, 1f, 0.44f, 0f).Weight(RF, 0.06f, 1f, 0.46f, 0f)
-            .Body(0f, 1f, 0.5f, 0f).Build(),
+            .Weight(LH, 0f, 1f, 0.2f, 0f).Weight(RH, 0.02f, 1f, 0.22f, 0f).Weight(LF, 0.04f, 1f, 0.24f, 0f).Weight(RF, 0.06f, 1f, 0.26f, 0f)
+            .Body(0f, 1f, 0.3f, 0f).Build(),
         // Bottom step-off: the leading foot lowers back onto the ground, support transfers, the hands let go as the
         // body leaves the ladder (in game 2026-10-27 the route is a 0.7 m step back at ground level, so they must be
         // free by a quarter of it), the second foot follows, then normal standing.
