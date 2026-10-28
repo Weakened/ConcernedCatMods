@@ -2,9 +2,9 @@
 
 Sunniva keeps your settlement's fires burning.
 
-This is an **early slice**. It does one job — tending the fuel-burning lights
-inside the settlement you marked, with fuel from the chest you marked — and it
-does that job honestly rather than doing many jobs approximately.
+She does one job — tending the fuel-burning lights inside the settlement you
+marked, with fuel from the chest you marked — and she does that job honestly
+rather than doing many jobs approximately.
 
 **Requires Concerned NPC** (`TheConcernedCat-ConcernedNPC`), the shared runtime
 her identity and job planning come from. Without it the mod reports the missing
