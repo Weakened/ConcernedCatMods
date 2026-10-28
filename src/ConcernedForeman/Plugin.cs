@@ -43,7 +43,11 @@ namespace TheConcernedCat.ConcernedForeman;
 // Spelled out rather than referred to by constant on purpose: the validator reads
 // this file as text (check_library_consumers), and a constant would leave the rule
 // looking satisfied to a reader and unsatisfied to the gate.
-[BepInDependency("com.theconcernedcat.valheim.concernednpc")]
+// The minimum version is 0.5.0 because Thorstein's role contract
+// (NpcBodyContract.ForWorkerWithPresentation) first exists there; an older
+// library would fail this plugin's start with a missing method instead of a
+// clear dependency error at load.
+[BepInDependency("com.theconcernedcat.valheim.concernednpc", "0.5.0")]
 public sealed class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "com.theconcernedcat.valheim.concernedforeman";
@@ -428,7 +432,7 @@ public sealed class Plugin : BaseUnityPlugin
         // Only the character screen carries the colours Thorstein's sliders are
         // converted through, so this polls in every scene until it has them.
         // The delegate is made once: this line runs every frame of the session.
-        if (_paletteLog != null)
+        if (_paletteLog != null && !worldIsUp)
         {
             Runtime.Presentation.ThorsteinPalette.Poll(Time.unscaledDeltaTime, _paletteLog);
         }

@@ -165,9 +165,11 @@ internal sealed class NpcBodyArbiter
                 // role contracted for the kind it is asking for. Both would
                 // refuse, and which refusal a caller is told matters: "a
                 // presentation body already exists" is the rule, while "you did
-                // not contract for this" is an accident of a role having
-                // exactly one contracted kind today. A rule that holds only
-                // because of an unrelated restriction is not a rule.
+                // not contract for this" is an accident of which kinds a role
+                // contracted for - and since 0.5.0 a role may contract for both
+                // (ForWorkerWithPresentation), so for such a role this check is
+                // the only thing that refuses. A rule that holds only because
+                // of an unrelated restriction is not a rule.
                 return Refuse(BodyClaimStatus.RefusedOtherKindExists, identity, kind, holder,
                     "a " + record.BodyKind + " body already exists for this identity, held by '" +
                     record.BodyHolder + "'; it is released, never replaced");

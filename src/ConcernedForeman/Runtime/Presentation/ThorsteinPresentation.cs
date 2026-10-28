@@ -68,6 +68,7 @@ internal sealed class ThorsteinPresentation
     private float _followUpIn;
     private float _sincePass;
     private bool _faulted;
+    private bool _gateWasOpen;
     private int _blockMask;
 
     private ThorsteinBodyDecision _last = new ThorsteinBodyDecision(ThorsteinBodyKind.None, "not asked yet");
@@ -196,6 +197,7 @@ internal sealed class ThorsteinPresentation
         _census = -1;
         _censusDue = true;
         _followUpIn = 0f;
+        _gateWasOpen = false;
     }
 
     /// <summary>Plugin teardown.</summary>
@@ -238,6 +240,37 @@ internal sealed class ThorsteinPresentation
 
     private void Pass()
     {
+        // Nothing is counted, read or held unless the figure could be shown at
+        // all: a player who has not opted in pays for no world scan. Turning the
+        // gate on forces a fresh count, so a stale zero can never show the
+        // figure beside a body.
+        bool gate = IsHost(ZNet.instance) && _settlementSettings.SettlementRuntimeEnabled.Value
+            && _settings.ShowAtHome.Value && _npc.IsRegistered;
+        if (!gate)
+        {
+            if (_gateWasOpen)
+            {
+                _gateWasOpen = false;
+                _census = -1;
+                _censusDue = true;
+            }
+
+            TakeDown();
+            _bodies.Reconcile(ThorsteinBodyKind.None);
+            _last = new ThorsteinBodyDecision(
+                ThorsteinBodyKind.None,
+                "not shown here: needs the host, Settlement/SettlementRuntimeEnabled, Thorstein/ShowAtHome " +
+                "and his Concerned NPC registration");
+            return;
+        }
+
+        if (!_gateWasOpen)
+        {
+            _gateWasOpen = true;
+            _census = -1;
+            _censusDue = true;
+        }
+
         if (_censusDue || _sinceCensus >= CensusSeconds)
         {
             Count();
@@ -309,7 +342,11 @@ internal sealed class ThorsteinPresentation
 
         try
         {
-            _census = WorldCustodyObjects.Census(ForemanRole.Worker.Value).Bodies.Count;
+            WorkerBodyCensus census = WorldCustodyObjects.Census(ForemanRole.Worker.Value);
+
+            // A worker body with no identity stamped (an older build, or a stamp
+            // that failed) might be his. Unknown, so nothing is shown.
+            _census = census.Bodies.Count > 0 ? census.Bodies.Count : census.Unidentified > 0 ? -1 : 0;
         }
         catch (Exception)
         {

@@ -12,6 +12,9 @@ A worker can rest as a presentation figure, under the same one-body rule (#295, 
   (`RefusedOtherKindExists`). A presentation claim also still needs the identity to be resting. A hand-over is
   release-then-claim by whoever holds the body now. Nothing in the library tears a body down on anyone else's behalf.
 * A role registered with `ForWorker` or `ForPresentation` behaves exactly as in 0.4.0.
+* Stated limit: "resting only" is checked when the figure is claimed. A job entering the identity's mode while a
+  figure's lease is held is not refused by the library; the role holding the figure must take it down when its
+  identity stops resting. Concerned Foreman does so on its next pass (at most half a second).
 * This is an additive minor version that widens the public surface by two members. Every in-repository consumer pin
   moves with it, so no product can compile against one contract and install another.
 

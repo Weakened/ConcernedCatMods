@@ -42,7 +42,7 @@ one object for the whole game process, and Concerned Foreman reaches it through 
 | Piece | File | What it is |
 | --- | --- | --- |
 | Durable facts | `Domain/Npc/ForemanRole.cs` | the identity slug, prefab name and ZDO key prefix already on a player's disk, in one place |
-| Role declaration | `Domain/Npc/ForemanNpcRole.cs` | `INpcRole`: `NpcBodyContract.ForWorker(CF_SettlementWorker, tcc.worker.)` and a data root |
+| Role declaration | `Domain/Npc/ForemanNpcRole.cs` | `INpcRole`: `NpcBodyContract.ForWorkerWithPresentation(CF_SettlementWorker, tcc.worker.)` (since #295 step 1; same prefab and keys) and a data root |
 | Registration and epochs | `Domain/Npc/ForemanNpcAdoption.cs` | registers once per process; `BeginWorldLoad`/`EndWorldLoad` per world |
 | The mode itself | `Domain/Npc/ArbiterActorMode.cs` | `IActorModeHold` over `NpcRoleRegistry.EnterMode`/`ReleaseMode`/`ModeOf` |
 
