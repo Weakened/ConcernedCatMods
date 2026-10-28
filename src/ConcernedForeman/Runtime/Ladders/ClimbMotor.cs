@@ -12,7 +12,7 @@ namespace TheConcernedCat.ConcernedForeman.Runtime.Ladders;
 ///
 /// LADDERS.md L7 allows exactly this much: the local player's own motor, and
 /// nothing else. Both patches are prefixes that only ever say "this body is on
-/// a ladder this frame"; with <c>Ladders/Enabled = false</c>, with no climb in
+/// a ladder this frame"; with <c>Ladders/PlayerClimbing = false</c>, with no climb in
 /// progress, or for any character that is not the local climber, they fall
 /// straight through to vanilla, so the game behaves exactly as it does without
 /// the mod.

@@ -89,7 +89,7 @@ internal readonly struct TraversalActor
 /// </list>
 ///
 /// The player passes through both: their climbing is governed by
-/// <c>Ladders/Enabled</c>, which is not this class's business. Putting the
+/// <c>Ladders/PlayerClimbing</c>, which is not this class's business. Putting the
 /// player through the NPC switch would be a bug that turns a setting about
 /// workers into a setting about the person playing.</summary>
 internal sealed class TraversalCapabilities
