@@ -19,14 +19,17 @@ Added
     while you have Cartographer markers.
   - New setting `Map/RoadLayerPosition`: roads and routes below the markers on
     the large map (`BelowPins`, the default and the look you know) or over the
-    marker icons (`AbovePins`).
-  - Road and route lines on the large map now stay inside the map's frame when
-    another mod resizes or moves it.
+    marker icons (`AbovePins`). It applies with `Map/HighPrecisionLargeMapRoads`
+    on, which is the default.
+  - Road and route lines on the large map (same setting) now stay inside the
+    map's frame when another mod resizes or moves it.
   - New setting `Map/ReshapedMinimapRoads`, which only matters with Round Minimap
-    installed. Its round minimap turns, but the layer road and route lines are
-    drawn in cannot turn with it. By default (`Hide`) the lines are left off the
-    round minimap rather than shown pointing the wrong way. `Show` draws them
-    anyway. The large map is never affected.
+    installed. Its round minimap can turn, but the layer road and route lines
+    are drawn in keeps its square, north-up shape. By default (`Hide`) the lines
+    are left off the minimap while the round shape is on, rather than shown
+    pointing the wrong way or spilling past the circle. `Show` draws them anyway.
+    The large map is never affected.
+  - `cc_atlas compat` lists which of the three it found, and what that means.
   - HUDCompass needed no changes. Cartographer markers appear on its compass bar
     like any map pin, and its own Ignore settings can hide them.
 
@@ -48,7 +51,7 @@ Fixed
 - **No console command prints your user name when it fails** (#389). Every
   `cc_*` command now names what failed and scrubs file paths out of the reply.
 - **Paths with spaces, network and relative paths are scrubbed properly**
-  (#388, #410, #411). Crash and support text used to stop scrubbing a path at
+  (#388, #408, #410). Crash and support text used to stop scrubbing a path at
   its first space, which could leave a profile name or a surname in it.
 - **Hulgi no longer gets up and down every time something changes in camp**
   (#306). He still looks for a better seat at most twice a minute, and at once
@@ -56,8 +59,10 @@ Fixed
 
 Known
 
-- None of the #419 behaviour has been tested in game with those mods yet. The
-  checklist is in `docs/mods/concerned-cartographer/GREATESTMAP_COMPATIBILITY.md`.
+- Nothing in this section has been seen in game yet; it is confirmed from tests
+  and the code. The #419 behaviour in particular has not been tried with those
+  mods installed. Its checklist is in
+  `docs/mods/concerned-cartographer/GREATESTMAP_COMPATIBILITY.md`.
 
 ## 1.3.1 - An out-of-memory crash while the map redrew its roads
 
