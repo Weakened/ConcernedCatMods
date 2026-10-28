@@ -1094,3 +1094,12 @@ class DeathDropIsNarrow(CarveOutFixture):
             "_inventory = Player.m_localPlayer.GetInventory();")
         self.assert_refused("the drop was pointed at the player's inventory and passed",
                             marker="D16 death-drop audit", contains="assigns _inventory")
+
+    def test_the_handlers_delegate_may_not_be_invoked_in_place_of_its_null_check(self):
+        # A review's residual: the mention count stays at five if the null check
+        # is swapped for an invocation.
+        self.swap_in_death(
+            "        if (_humanoid != null && _onDeath != null)\n        {\n",
+            "        _onDeath?.Invoke();\n        if (_humanoid != null)\n        {\n")
+        self.assert_refused("the delegate was invoked in place of its null check and passed",
+                            marker="D16 death-drop audit", contains="invokes its _onDeath delegate")

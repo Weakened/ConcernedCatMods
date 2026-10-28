@@ -2888,6 +2888,11 @@ TEAMSTER_DEATH_DROP_HANDLER_GROUP = re.compile(r"\b_onDeath\s*=\s*OnDeath\s*;")
 # and removed in OnDestroy - five mentions and no sixth. A sixth is somebody
 # invoking it.
 TEAMSTER_DEATH_DROP_DELEGATE = re.compile(r"\b_onDeath\b")
+# A count can be kept while one mention is swapped for another, so the null
+# check is pinned as itself and every way of invoking the delegate is refused.
+TEAMSTER_DEATH_DROP_NULL_CHECK = re.compile(r"\b_onDeath\s*!=\s*null\b")
+TEAMSTER_DEATH_DROP_INVOKE = re.compile(
+    r"\b_onDeath\s*(?:\?\s*\.|\.|!\s*\.)?\s*(?:\(|(?:Invoke|DynamicInvoke|BeginInvoke)\b)")
 # What the drop empties is the dying body's own inventory: assigned once, from
 # the body, and nowhere else.
 TEAMSTER_DEATH_DROP_INVENTORY_WRITE = re.compile(r"\b_inventory\s*=(?!=)")
@@ -2957,6 +2962,12 @@ def check_teamster_death_drop_verb(errors: list[str]) -> list[str]:
             "else, so no other verb can call it", errors)
 
     delegates = len(TEAMSTER_DEATH_DROP_DELEGATE.findall(code))
+    invoked = TEAMSTER_DEATH_DROP_INVOKE.search(code)
+    if invoked is not None or len(TEAMSTER_DEATH_DROP_NULL_CHECK.findall(code)) != 1:
+        hits += 1
+        fail(
+            f"{label}: {port_rel} invokes its _onDeath delegate itself, or no longer checks it for null once "
+            "before removing it - only vanilla's death callback may invoke the handler", errors)
     if delegates != 5:
         hits += 1
         fail(
